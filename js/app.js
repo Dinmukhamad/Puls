@@ -668,7 +668,8 @@ function renderEditor() {
           </td>
           ${cells}
           <td>
-            <button class="editor-icon-btn danger" onclick="clearOperatorMetrics(${fi}, ${oi})" title="Очистить показатели оператора">×</button>
+            <button class="editor-icon-btn danger" onclick="clearOperatorMetrics(${fi}, ${oi})" title="Очистить показатели оператора">⊘</button>
+            <button class="editor-icon-btn danger" onclick="removeOperator(${fi}, ${oi})" title="Удалить оператора полностью">🗑</button>
           </td>
         </tr>`;
     }).join('');
@@ -777,7 +778,23 @@ async function clearOperatorMetrics(facIdx, opIdx) {
 }
 
 async function removeOperator(facIdx, opIdx) {
-  await clearOperatorMetrics(facIdx, opIdx);
+  if (!requireAdmin()) return;
+  const name = FACULTIES[facIdx].operators[opIdx];
+  if (!confirm(`Удалить оператора "${name}" полностью? Все его данные за все недели будут удалены без возможности восстановления.`)) return;
+
+  // Удаляем оператора из всех недель
+  WEEKLY_DATA.forEach(week => {
+    if (week[facIdx]) {
+      week[facIdx].splice(opIdx, 1);
+    }
+  });
+
+  // Удаляем имя из списка операторов факультета
+  FACULTIES[facIdx].operators.splice(opIdx, 1);
+
+  await saveEditableData();
+  renderEditor();
+  refreshDashboard();
 }
 async function clearFacultyMetrics(facIdx, weekIdx = currentWeek < 4 ? currentWeek : 0) {
   if (!requireAdmin()) return;
