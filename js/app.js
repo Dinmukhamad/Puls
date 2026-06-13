@@ -1,142 +1,91 @@
 /* ============================================================
-   Дивергент: Конкурс Операторов — app.js
-   ============================================================
-   Архитектура рассчитана на подключение FastAPI + PostgreSQL.
-
-   Чтобы перейти на реальный бэкенд:
-     1. Создайте файл api.js (шаблон в конце этого файла)
-     2. Подключите его в index.html ДО app.js
-     3. Установите USE_MOCK = false
+   Дивергент: Конкурс Операторов — app.js v2
+   Одна конкурсная неделя, две публикации: промежуточная и итоговая.
    ============================================================ */
 
 'use strict';
 
-/* ── Config ─────────────────────────────────────────────────
-   USE_MOCK = true  → данные берутся из MOCK_DATA ниже
-   USE_MOCK = false → данные запрашиваются через API (api.js)
-   ---------------------------------------------------------- */
+/* ── Config ────────────────────────────────────────────────── */
 const USE_MOCK = false;
-
-/* ── API Base URL — укажите URL вашего бэкенда ───────────
-   Локально:    'http://localhost:3000'
-   На сервере:  'https://your-app.railway.app'  (и т.п.)
-   -------------------------------------------------------- */
 const API_BASE = window.location.origin;
 
-/* Дивергент — три фракции */
-const HOUSE_CRESTS = {
-  dauntless: null,
-  erudite:   null,
-  candor:    null,
+/* ── Фракции Дивергента ───────────────────────────────────── */
+const FACTION_DESC = {
+  dauntless: 'Воплощают храбрость, отвагу и силу. Отвечают за безопасность и охраняют границы.',
+  erudite:   'Стремятся к знаниям, мудрости и интеллекту. Занимаются наукой и технологиями.',
+  candor:    'Ставят во главу угла честность и правду. Выполняют функции судей и дипломатов.',
 };
 
-/* ============================================================
-   MOCK DATA
-   Замените реальными вызовами через api.js когда будет готов бэкенд.
-
-   Структура данных для одного оператора за неделю:
-   [Качество, Выработка, Эффективность, Доп.баллы, Опозд.(мин), Сайты, Итого]
-   ============================================================ */
 let FACULTIES = [
-  { id: 'dauntless', cls: 'dauntless', icon: '🔥', crest: null, name: 'Бесстрашие',  tagCls: 'tag-dauntless', scoreCls: 'dauntless-score', operators: [] },
-  { id: 'erudite',   cls: 'erudite',   icon: '⚡', crest: null, name: 'Эрудиция',    tagCls: 'tag-erudite',   scoreCls: 'erudite-score',   operators: [] },
-  { id: 'candor',    cls: 'candor',    icon: '⚖',  crest: null, name: 'Искренность', tagCls: 'tag-candor',    scoreCls: 'candor-score',    operators: [] },
+  { id: 'dauntless', cls: 'dauntless', icon: '🔥', crest: null, name: 'Бесстрашие', enName: 'Dauntless', tagCls: 'tag-dauntless', scoreCls: 'dauntless-score', operators: [] },
+  { id: 'erudite',   cls: 'erudite',   icon: '⚡', crest: null, name: 'Эрудиция',   enName: 'Erudite',   tagCls: 'tag-erudite',   scoreCls: 'erudite-score',   operators: [] },
+  { id: 'candor',    cls: 'candor',    icon: '⚖',  crest: null, name: 'Искренность',enName: 'Candor',    tagCls: 'tag-candor',    scoreCls: 'candor-score',    operators: [] },
 ];
 
-/* Weekly data: [week][faculty][operator] → [...метрики, Баллы]
-   Заполняется исключительно через сервер (POST /api/state).
-   Не хранится в localStorage. */
-let WEEKLY_DATA = [ [], [], [], [] ];
+/* Два слота: 0 = промежуточные (18.06), 1 = итоговые (23.06) */
+let WEEKLY_DATA = [ [], [] ];
 
-
-/* Метрики соответствуют колонкам Excel «Таблица_для_конкурса.xlsx»:
-   - 5 обычных показателей (количество звонков, оценка, выработка, эффективность)
-   - 2 штрафа (опоздания в минутах, посторонние сайты — факты)
-   - 1 итоговый балл (приходит из Excel, не вычисляется на сайте)
-   Порядок в массиве задаёт порядок колонок в таблицах. */
+/* Метрики */
 const DEFAULT_METRICS = [
-  { label: 'Качество',     type: 'metric'  },  // 0: качество работы
-  { label: 'Выработка',    type: 'metric'  },  // 1: выработка часов
-  { label: 'Эфф. %',       type: 'metric'  },  // 2: эффективность %
-  { label: 'Доп. баллы',   type: 'metric'  },  // 3: дополнительные баллы за переработки
-  { label: 'Опозд. (мин)', type: 'penalty' },  // 4: минуты опозданий
-  { label: 'Нарушения',    type: 'penalty' },  // 5: дисциплинарные нарушения
-  { label: 'Сайты',        type: 'penalty' },  // 6: посещение посторонних сайтов
-  { label: 'Итого',        type: 'score'   },  // 7: итоговый балл
+  { label: 'Качество',     type: 'metric'  },
+  { label: 'Выработка',    type: 'metric'  },
+  { label: 'Эфф. %',       type: 'metric'  },
+  { label: 'Доп. баллы',   type: 'metric'  },
+  { label: 'Опозд. (мин)', type: 'penalty' },
+  { label: 'Нарушения',    type: 'penalty' },
+  { label: 'Сайты',        type: 'penalty' },
+  { label: 'Итого',        type: 'score'   },
+];
+
+const PUB_LABELS = [
+  { date: '18.06', name: 'Промежуточные результаты', badge: 'Результаты предварительные' },
+  { date: '23.06', name: 'Итоговые результаты',       badge: 'Финальные результаты конкурсной недели' },
 ];
 
 const ADMIN_SESSION_KEY = 'divergentContestAdminUnlocked';
 const ADMIN_PASSWORD_KEY = 'divergentContestAdminToken';
 let isAdmin = false;
 
-/* Возвращает пароль администратора из sessionStorage.
-   Пароль НЕ хранится в коде — он попадает сюда после ввода в модалке
-   и существует только до закрытия вкладки. */
 function getAdminPassword() {
   return sessionStorage.getItem(ADMIN_PASSWORD_KEY) || '';
 }
 
 let METRICS = DEFAULT_METRICS.map(m => ({ ...m }));
 
-function cloneData(value) {
-  return JSON.parse(JSON.stringify(value));
-}
-
-/* ── Debounce ───────────────────────────────────────────────
-   При частом редактировании (например, оператор быстро вводит
-   цифры) не хочется бить по серверу на каждое нажатие клавиши.
-   Откладываем сохранение на 500мс после последнего изменения.
-   Метод .flush() вызывает накопленный вызов немедленно — нужен
-   на beforeunload, чтобы не потерять последние правки. */
+/* ── Debounce ───────────────────────────────────────────────── */
 function debounce(fn, delay = 500) {
-  let timer = null;
-  let lastArgs = null;
-  let pendingResolve = null;
-  let pendingReject = null;
+  let timer = null, lastArgs = null, pendingResolve = null, pendingReject = null;
 
   function fire() {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
-    }
+    if (timer) { clearTimeout(timer); timer = null; }
     if (!pendingResolve) return Promise.resolve();
-    const args = lastArgs;
-    const resolve = pendingResolve;
-    const reject = pendingReject;
-    pendingResolve = null;
-    pendingReject = null;
-    return Promise.resolve()
-      .then(() => fn.apply(null, args))
-      .then(resolve, reject);
+    const args = lastArgs, resolve = pendingResolve, reject = pendingReject;
+    pendingResolve = null; pendingReject = null;
+    return Promise.resolve().then(() => fn.apply(null, args)).then(resolve, reject);
   }
 
   function debounced(...args) {
     lastArgs = args;
     if (timer) clearTimeout(timer);
-
     return new Promise((resolve, reject) => {
       if (pendingResolve) pendingResolve({ debounced: true });
-      pendingResolve = resolve;
-      pendingReject = reject;
+      pendingResolve = resolve; pendingReject = reject;
       timer = setTimeout(() => { fire(); }, delay);
     });
   }
-
   debounced.flush = fire;
   debounced.hasPending = () => timer !== null;
   return debounced;
 }
 
-let savePending = false;
-
+/* ── Save indicator ─────────────────────────────────────────── */
 function setSaveIndicator(state) {
-  // state: 'idle' | 'pending' | 'saved' | 'error'
   let el = document.getElementById('save-indicator');
   if (!el) {
     el = document.createElement('div');
     el.id = 'save-indicator';
     el.style.cssText = [
-      'position:fixed','bottom:16px','left:16px','z-index:9998',
+      'position:fixed','bottom:72px','left:16px','z-index:9998',
       'padding:8px 14px','border-radius:6px','font-family:Rajdhani,sans-serif',
       'font-size:12px','letter-spacing:.06em','pointer-events:none',
       'transition:opacity .25s ease','opacity:0',
@@ -144,64 +93,35 @@ function setSaveIndicator(state) {
     document.body.appendChild(el);
   }
   const palette = {
-    pending: ['rgba(80,60,100,.85)', '#f4e8c1', '⟳ Сохраняю…'],
-    saved:   ['rgba(40,100,60,.85)', '#f4e8c1', '✓ Сохранено'],
-    error:   ['rgba(180,40,40,.9)',  '#f4e8c1', '✗ Ошибка сохранения'],
-    idle:    ['', '', ''],
+    pending: ['rgba(30,60,120,.9)',  '#e4e4f0', '⟳ Сохраняю…'],
+    saved:   ['rgba(30,100,55,.9)',  '#e4e4f0', '✓ Сохранено'],
+    error:   ['rgba(160,30,30,.95)', '#e4e4f0', '✗ Ошибка сохранения'],
+    idle:    ['','',''],
   };
   const [bg, fg, text] = palette[state] || palette.idle;
-  if (state === 'idle') {
-    el.style.opacity = '0';
-    return;
-  }
-  el.style.background = bg;
-  el.style.color = fg;
-  el.textContent = text;
-  el.style.opacity = '1';
-  if (state === 'saved') {
-    setTimeout(() => { el.style.opacity = '0'; }, 1500);
-  }
+  if (state === 'idle') { el.style.opacity = '0'; return; }
+  el.style.background = bg; el.style.color = fg; el.textContent = text; el.style.opacity = '1';
+  if (state === 'saved') setTimeout(() => { el.style.opacity = '0'; }, 1500);
 }
 
 function getScoreMetricIndex() {
-  const idx = METRICS.findIndex(metric => metric.type === 'score');
+  const idx = METRICS.findIndex(m => m.type === 'score');
   return idx === -1 ? METRICS.length - 1 : idx;
-}
-
-function getPublicMetrics() {
-  return METRICS
-    .map((metric, index) => ({ metric, index }))
-    .filter(item => item.metric.type !== 'score');
-}
-
-function resetAllOperatorScores() {
-  const scoreIdx = getScoreMetricIndex();
-  WEEKLY_DATA.forEach(week => {
-    week.forEach(facultyRows => {
-      facultyRows.forEach(row => {
-        row[scoreIdx] = 0;
-      });
-    });
-  });
 }
 
 function normalizeEditableData() {
   const metricCount = METRICS.length;
+  FACULTIES.forEach(fac => { fac.crest = null; });
 
-  FACULTIES.forEach(fac => {
-    fac.crest = null; // фракции используют emoji-иконки, не изображения
-    // Операторы загружаются только с сервера — авто-дополнение отключено
-  });
+  // Убедиться что у нас ровно 2 слота
+  while (WEEKLY_DATA.length < 2) WEEKLY_DATA.push([]);
 
   WEEKLY_DATA.forEach((week, wi) => {
     if (!week) WEEKLY_DATA[wi] = [];
-
     FACULTIES.forEach((fac, fi) => {
       if (!WEEKLY_DATA[wi][fi]) WEEKLY_DATA[wi][fi] = [];
-
       fac.operators.forEach((_, oi) => {
         if (!WEEKLY_DATA[wi][fi][oi]) WEEKLY_DATA[wi][fi][oi] = Array(metricCount).fill(0);
-
         while (WEEKLY_DATA[wi][fi][oi].length < metricCount) {
           WEEKLY_DATA[wi][fi][oi].splice(getScoreMetricIndex(), 0, 0);
         }
@@ -209,7 +129,6 @@ function normalizeEditableData() {
           WEEKLY_DATA[wi][fi][oi].length = metricCount;
         }
       });
-
       if (WEEKLY_DATA[wi][fi].length > fac.operators.length) {
         WEEKLY_DATA[wi][fi].length = fac.operators.length;
       }
@@ -218,172 +137,112 @@ function normalizeEditableData() {
 }
 
 async function loadEditableData() {
-  // Единственный источник данных — сервер. localStorage не используется.
-  const state = await api.loadState(); // выбросит исключение если сервер недоступен
-
+  const state = await api.loadState();
   if (state && Array.isArray(state.faculties) && Array.isArray(state.weeklyData) && Array.isArray(state.metrics)) {
     FACULTIES   = state.faculties;
     WEEKLY_DATA = state.weeklyData;
     METRICS     = state.metrics;
     console.log('✅ Данные загружены с сервера');
   }
-  // state === null означает: сервер работает, но данных ещё нет (первый запуск)
-  // FACULTIES и WEEKLY_DATA остаются пустыми — это нормально
-
-  if (!METRICS.some(m => m.type === 'score')) METRICS.push({ label: 'Баллы', type: 'score' });
+  if (!METRICS.some(m => m.type === 'score')) METRICS.push({ label: 'Итого', type: 'score' });
   normalizeEditableData();
 }
 
 async function saveEditableData() {
   normalizeEditableData();
-  const state = { faculties: FACULTIES, weeklyData: WEEKLY_DATA, metrics: METRICS };
-
   setSaveIndicator('pending');
-
-  // Только сервер — никакого localStorage
   try {
-    await api.saveState(state, getAdminPassword());
-    console.log('✅ Данные сохранены на сервере');
+    await api.saveState({ faculties: FACULTIES, weeklyData: WEEKLY_DATA, metrics: METRICS }, getAdminPassword());
     setSaveIndicator('saved');
   } catch (err) {
-    console.error('❌ Ошибка сохранения:', err.message);
     setSaveIndicator('error');
-
-    // Пароль протух или его подменили — выкидываем админа
     if (/пароль/i.test(err.message) || err.message.includes('403')) {
       sessionStorage.removeItem(ADMIN_SESSION_KEY);
       sessionStorage.removeItem(ADMIN_PASSWORD_KEY);
-      isAdmin = false;
-      updateAdminGate();
-      renderEditor();
+      isAdmin = false; updateAdminGate(); renderEditor();
       alert('⚠ Сессия администратора истекла. Войдите заново.');
       openAdminModal();
     } else {
-      alert('⚠ Не удалось сохранить данные на сервере:\n' + err.message);
+      alert('⚠ Не удалось сохранить:\n' + err.message);
     }
     throw err;
   }
 }
 
-/* Debounced-версия сохранения. Используется при быстром вводе цифр
-   в редакторе, чтобы не слать POST на каждое нажатие клавиши.
-   Возвращает Promise, но при «отмене» (новый вызов до истечения delay)
-   старый Promise резолвится с { debounced: true } — это нормально. */
 const debouncedSave = debounce(() => saveEditableData(), 500);
 
-/* Лёгкий refresh дашборда без перерисовки самого редактора —
-   чтобы фокус инпута не терялся при наборе цифры. */
 async function refreshDashboardOnly() {
   await Promise.all([
+    renderStats(currentWeek),
     renderScoreboard(currentWeek),
     renderFacultyCards(currentWeek),
   ]);
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+function escapeHtml(v) {
+  return String(v)
+    .replaceAll('&','&amp;').replaceAll('<','&lt;')
+    .replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
+}
+
+function fmtPts(v) {
+  const n = Number(v) || 0;
+  return Number.isInteger(n) ? n.toString() : n.toFixed(1);
 }
 
 function formatMetricValue(value, metric) {
-  const number = Number(value) || 0;
-  if (metric.type === 'penalty' && number > 0) return `-${fmtPts(number)}`;
-  return fmtPts(number);
+  const n = Number(value) || 0;
+  if (metric.type === 'penalty' && n > 0) return `-${fmtPts(n)}`;
+  return fmtPts(n);
 }
 
+/* ── Admin Session ──────────────────────────────────────────── */
 function loadAdminSession() {
   const flag = sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
-  const hasPassword = !!sessionStorage.getItem(ADMIN_PASSWORD_KEY);
-  isAdmin = flag && hasPassword;
-  if (flag && !hasPassword) {
-    // Несогласованное состояние (например, после обновления страницы из старой версии)
-    sessionStorage.removeItem(ADMIN_SESSION_KEY);
-  }
+  const hasPwd = !!sessionStorage.getItem(ADMIN_PASSWORD_KEY);
+  isAdmin = flag && hasPwd;
+  if (flag && !hasPwd) sessionStorage.removeItem(ADMIN_SESSION_KEY);
 }
 
 function updateAdminGate() {
-  const gateBtn = document.getElementById('admin-gate-btn');
-  const loginArea = document.getElementById('admin-login-area');
-  const activeArea = document.getElementById('admin-active-area');
-  const error = document.getElementById('admin-error');
-
-  if (gateBtn) {
-    gateBtn.classList.toggle('unlocked', isAdmin);
-    gateBtn.setAttribute('aria-label', isAdmin ? 'Режим администратора открыт' : 'Открыть режим администратора');
-  }
-  if (loginArea) loginArea.hidden = isAdmin;
-  if (activeArea) activeArea.hidden = !isAdmin;
-  if (error) error.textContent = '';
+  const btn = document.getElementById('admin-gate-btn');
+  const login = document.getElementById('admin-login-area');
+  const active = document.getElementById('admin-active-area');
+  const err = document.getElementById('admin-error');
+  if (btn) { btn.classList.toggle('unlocked', isAdmin); }
+  if (login) login.hidden = isAdmin;
+  if (active) active.hidden = !isAdmin;
+  if (err) err.textContent = '';
 }
 
 function openAdminModal() {
-  const popover = document.getElementById('admin-popover');
-  if (!popover) return;
-  updateAdminGate();
-  popover.hidden = false;
-
-  if (!isAdmin) {
-    const input = document.getElementById('admin-password');
-    if (input) setTimeout(() => input.focus(), 0);
-  }
+  const p = document.getElementById('admin-popover');
+  if (!p) return;
+  updateAdminGate(); p.hidden = false;
+  if (!isAdmin) { const i = document.getElementById('admin-password'); if (i) setTimeout(() => i.focus(), 0); }
 }
-
-function closeAdminModal() {
-  const popover = document.getElementById('admin-popover');
-  if (popover) popover.hidden = true;
-}
-
-function requireAdmin() {
-  if (isAdmin) return true;
-  openAdminModal();
-  renderEditor();
-  return false;
-}
+function closeAdminModal() { const p = document.getElementById('admin-popover'); if (p) p.hidden = true; }
+function requireAdmin() { if (isAdmin) return true; openAdminModal(); return false; }
 
 async function loginAdmin() {
   const input = document.getElementById('admin-password');
   const error = document.getElementById('admin-error');
-  const submitBtn = document.querySelector('.admin-popover-submit');
-  const password = input ? input.value : '';
-
-  if (!password) {
-    if (error) error.textContent = 'Введите пароль';
-    return;
-  }
-
-  if (submitBtn) {
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Проверка…';
-  }
+  const btn = document.querySelector('.admin-popover-submit');
+  const pwd = input ? input.value : '';
+  if (!pwd) { if (error) error.textContent = 'Введите пароль'; return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Проверка…'; }
   if (error) error.textContent = '';
-
   try {
-    const ok = await api.verifyPassword(password);
-    if (!ok) {
-      if (error) error.textContent = 'Неверный пароль';
-      if (input) input.value = '';
-      return;
-    }
-
+    const ok = await api.verifyPassword(pwd);
+    if (!ok) { if (error) error.textContent = 'Неверный пароль'; if (input) input.value = ''; return; }
     isAdmin = true;
     sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
-    sessionStorage.setItem(ADMIN_PASSWORD_KEY, password);
-    closeAdminModal();
-    updateAdminGate();
-    renderEditor();
-    setDashboardMode(currentView);
+    sessionStorage.setItem(ADMIN_PASSWORD_KEY, pwd);
+    closeAdminModal(); updateAdminGate(); renderEditor(); setDashboardMode(currentView);
   } catch (err) {
-    console.error('Ошибка проверки пароля:', err);
     if (error) error.textContent = 'Сервер недоступен';
   } finally {
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Войти';
-    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Войти'; }
   }
 }
 
@@ -391,226 +250,281 @@ function logoutAdmin() {
   isAdmin = false;
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
   sessionStorage.removeItem(ADMIN_PASSWORD_KEY);
-  closeAdminModal();
-  updateAdminGate();
-  renderEditor();
-  setDashboardMode(currentView);
+  closeAdminModal(); updateAdminGate(); renderEditor(); setDashboardMode(currentView);
 }
 
-/* ============================================================
-   DATA LAYER
-   При подключении FastAPI замените тело каждой функции на
-   вызов соответствующего API-метода из api.js
-   ============================================================ */
-
-/**
- * Возвращает данные за указанную неделю (или все 4 недели).
- * @param {number} weekIdx — 0-3 конкретная неделя, 4 — итого
- * @returns {Promise<Array>} массив [{name, pts}] для каждого факультета
- *
- * API-замена (когда USE_MOCK = false):
- *   return api.getScores(weekIdx);
- *   → GET /api/v1/scores?week=<weekIdx>
- */
+/* ── Data Layer ─────────────────────────────────────────────── */
 async function fetchScores(weekIdx) {
-  if (!USE_MOCK) {
-    // TODO: return await api.getScores(weekIdx);
-  }
   return calcTotals(weekIdx);
 }
 
-/**
- * Возвращает итоговые очки факультета.
- * @param {number} facIdx
- * @param {number} weekIdx
- * @returns {Promise<number>}
- *
- * API-замена:
- *   return api.getFacultyTotal(facIdx, weekIdx);
- *   → GET /api/v1/faculties/<facIdx>/total?week=<weekIdx>
- */
 async function fetchFacultyTotal(facIdx, weekIdx) {
-  if (!USE_MOCK) {
-    // TODO: return await api.getFacultyTotal(facIdx, weekIdx);
-  }
   return getFacultyTotal(facIdx, weekIdx);
 }
 
-/* ============================================================
-   MOCK CALCULATIONS (используются только при USE_MOCK = true)
-   ============================================================ */
 function calcTotals(weekIdx) {
-  const scoreIdx = getScoreMetricIndex();
+  const si = getScoreMetricIndex();
+  const wi = Math.min(weekIdx, WEEKLY_DATA.length - 1);
   return FACULTIES.map((fac, fi) =>
     fac.operators.map((name, oi) => ({
       name,
-      pts: weekIdx < 4
-        ? (Number(WEEKLY_DATA[weekIdx][fi][oi][scoreIdx]) || 0)
-        : [0,1,2,3].reduce((s, w) => s + (Number(WEEKLY_DATA[w][fi][oi][scoreIdx]) || 0), 0),
+      pts: Number(WEEKLY_DATA[wi]?.[fi]?.[oi]?.[si]) || 0,
     }))
   );
 }
 
 function getFacultyTotal(facIdx, weekIdx) {
-  const scoreIdx = getScoreMetricIndex();
-
-  /* Среднее ИТОГО по факультету.
-     Учитываются только операторы с ненулевым баллом — пустые строки
-     (например, оператор не работал в эту неделю) не размывают среднее. */
-  function avgForWeek(w) {
-    const rows = WEEKLY_DATA[w] && WEEKLY_DATA[w][facIdx] ? WEEKLY_DATA[w][facIdx] : [];
-    const scores = rows
-      .map(r => Number(r[scoreIdx]) || 0)
-      .filter(v => v !== 0);
-    if (scores.length === 0) return 0;
-    return scores.reduce((s, v) => s + v, 0) / scores.length;
-  }
-
-  if (weekIdx < 4) return avgForWeek(weekIdx);
-
-  /* Итоги месяца — среднее недельных средних по тем неделям, где есть данные. */
-  const weeklyAverages = [0, 1, 2, 3].map(avgForWeek).filter(v => v !== 0);
-  if (weeklyAverages.length === 0) return 0;
-  return weeklyAverages.reduce((s, v) => s + v, 0) / weeklyAverages.length;
+  const si = getScoreMetricIndex();
+  const wi = Math.min(weekIdx, WEEKLY_DATA.length - 1);
+  const rows = WEEKLY_DATA[wi]?.[facIdx] ?? [];
+  const scores = rows.map(r => Number(r[si]) || 0).filter(v => v !== 0);
+  if (scores.length === 0) return 0;
+  return scores.reduce((s, v) => s + v, 0) / scores.length;
 }
 
-/* ============================================================
-   RENDER HELPERS
-   ============================================================ */
-function fmtPts(v) {
-  return Number.isInteger(v) ? v.toString() : v.toFixed(1);
+/* ── Render Helpers ─────────────────────────────────────────── */
+function buildRankBadge(rank) {
+  const cls = rank <= 3 ? `rank-${rank}` : 'rank-other';
+  return `<span class="rank-badge ${cls}">${rank}</span>`;
 }
 
-function buildRankBadge(globalRank) {
-  const cls = globalRank <= 3 ? `rank-${globalRank}` : 'rank-other';
-  return `<span class="rank-badge ${cls}">${globalRank}</span>`;
-}
+/* ── Stats ──────────────────────────────────────────────────── */
+async function renderStats(weekIdx) {
+  const el = document.getElementById('stats-section');
+  if (!el) return;
 
-function getPeriodLabel(weekIdx) {
-  return weekIdx < 4 ? `Неделя ${weekIdx + 1}` : 'Итоги месяца';
-}
+  const allTotals = await fetchScores(weekIdx);
+  const allPts = allTotals.flat().map(o => o.pts);
+  const totalOps = FACULTIES.reduce((s, f) => s + f.operators.length, 0);
+  const activePts = allPts.filter(p => p > 0);
+  const avgAll = activePts.length ? activePts.reduce((s, v) => s + v, 0) / activePts.length : 0;
+  const bestPts = activePts.length ? Math.max(...activePts) : 0;
 
-function renderCrest(fac, className = 'faculty-crest-img') {
-  // Фракции Дивергента используют emoji-символы вместо изображений
-  return `<span class="faction-icon-display">${fac.icon}</span>`;
+  // Лидирующая фракция
+  const facTotals = await Promise.all(FACULTIES.map((_, fi) => fetchFacultyTotal(fi, weekIdx)));
+  const leaderIdx = facTotals.indexOf(Math.max(...facTotals));
+  const leader = FACULTIES[leaderIdx];
+
+  // Лучший оператор
+  let bestOp = '—';
+  allTotals.forEach((facArr, fi) => {
+    facArr.forEach(op => {
+      if (op.pts === bestPts && bestPts > 0) bestOp = op.name;
+    });
+  });
+
+  // Нарушения: сумма всех penalty-метрик
+  const wi = Math.min(weekIdx, WEEKLY_DATA.length - 1);
+  let violations = 0;
+  METRICS.forEach((m, mi) => {
+    if (m.type === 'penalty') {
+      WEEKLY_DATA[wi]?.forEach(facRows => {
+        facRows.forEach(row => { violations += Number(row[mi]) || 0; });
+      });
+    }
+  });
+
+  const now = new Date();
+  const updated = `${now.getDate().toString().padStart(2,'0')}.${(now.getMonth()+1).toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+
+  el.innerHTML = `
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Всего участников</div>
+        <div class="stat-value">${totalOps}</div>
+        <div class="stat-note">${FACULTIES.map(f => f.name + ' · ' + f.operators.length).join('  ')}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Лидирующая фракция</div>
+        <div class="stat-value highlight">${leader ? leader.icon + ' ' + leader.name : '—'}</div>
+        <div class="stat-note">Средний балл: ${fmtPts(Math.max(...facTotals))}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Лучший оператор</div>
+        <div class="stat-value" style="font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${bestOp}</div>
+        <div class="stat-note">Баллы: ${fmtPts(bestPts)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Средний балл</div>
+        <div class="stat-value">${fmtPts(avgAll)}</div>
+        <div class="stat-note">Среди активных участников</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Нарушений / штрафов</div>
+        <div class="stat-value" style="color:var(--danger)">${fmtPts(violations)}</div>
+        <div class="stat-note">Суммарно по всем фракциям</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Последнее обновление</div>
+        <div class="stat-value" style="font-size:18px">${updated}</div>
+        <div class="stat-note">${PUB_LABELS[Math.min(weekIdx, 1)].badge}</div>
+      </div>
+    </div>
+  `;
 }
 
 /* ── Scoreboard ─────────────────────────────────────────────── */
 async function renderScoreboard(weekIdx) {
+  const sb = document.getElementById('scoreboard');
+  if (!sb) return;
+
   const totals = await Promise.all(
-    FACULTIES.map(async (f, i) => ({ ...f, total: await fetchFacultyTotal(i, weekIdx) }))
+    FACULTIES.map(async (f, i) => ({ ...f, avgTotal: await fetchFacultyTotal(i, weekIdx), count: f.operators.length }))
   );
-  totals.sort((a, b) => b.total - a.total);
+
+  const allTotals = await fetchScores(weekIdx);
+  totals.forEach((fac, fi_orig) => {
+    const fi = FACULTIES.findIndex(f => f.id === fac.id);
+    fac.sumTotal = allTotals[fi]?.reduce((s, o) => s + o.pts, 0) || 0;
+  });
+
+  totals.sort((a, b) => b.avgTotal - a.avgTotal);
+
+  const pub = PUB_LABELS[Math.min(weekIdx, 1)];
   const [first, second] = totals;
-  const leaderDiff = second ? first.total - second.total : 0;
-  const isMonthTotal = weekIdx === 4;
-  const scoreItems = totals.map((fac, idx) => `
-    <div class="score-faculty score-faculty-card ${fac.cls}-card${idx === 0 ? ' leader' : ''}">
-      <div class="score-rank">#${idx + 1}</div>
-      <div class="score-faculty-name">
-        ${renderCrest(fac, 'score-crest-img')}
-        <span>${fac.name}</span>
+  const diff = second ? first.avgTotal - second.avgTotal : 0;
+
+  const cards = totals.map((fac, idx) => `
+    <div class="scard ${fac.cls}${idx === 0 ? ' leader' : ''}">
+      <div class="scard-top">
+        <div class="scard-rank">#${idx + 1}</div>
+        <div class="scard-icon">${fac.icon}</div>
+        <div class="scard-names">
+          <div class="scard-name">${fac.name}</div>
+          <div class="scard-en">${fac.enName || ''}</div>
+        </div>
       </div>
-      <div>
-        <div class="score-points ${fac.scoreCls}">${fmtPts(fac.total)}</div>
-        <div class="score-caption">средний балл</div>
+      <div class="scard-stats">
+        <div class="sstat">
+          <div class="sstat-label">Средний балл</div>
+          <div class="sstat-val big">${fmtPts(fac.avgTotal)}</div>
+        </div>
+        <div class="sstat">
+          <div class="sstat-label">Общий балл</div>
+          <div class="sstat-val">${fmtPts(fac.sumTotal)}</div>
+        </div>
+        <div class="sstat">
+          <div class="sstat-label">Участников</div>
+          <div class="sstat-val">${fac.count}</div>
+        </div>
+        <div class="sstat">
+          <div class="sstat-label">Место</div>
+          <div class="sstat-val">${idx + 1} из ${totals.length}</div>
+        </div>
       </div>
+      <div class="scard-desc">${FACTION_DESC[fac.id] || ''}</div>
     </div>
   `).join('');
 
-  document.getElementById('scoreboard').innerHTML = `
+  sb.innerHTML = `
     <div class="scoreboard-header">
       <div>
         <div class="section-kicker">Рейтинг фракций</div>
         <h2 class="section-title">Общий рейтинг команд</h2>
       </div>
-      <div class="score-summary">
-        <span>${getPeriodLabel(weekIdx)}</span>
-        <strong>Лидер: ${first.name}</strong>
-        <span>${isMonthTotal ? 'Средний отрыв' : 'Отрыв от 2 места'}: +${fmtPts(leaderDiff)}</span>
+      <div class="score-meta">
+        <span>${pub.date} · ${pub.name}</span>
+        <strong>Лидер: ${first?.name || '—'}</strong>
+        <span>Отрыв от 2 места: +${fmtPts(diff)}</span>
       </div>
     </div>
-    <div class="score-list">${scoreItems}</div>
+    <div class="score-list">${cards}</div>
   `;
 }
 
 /* ── Faculty Cards ──────────────────────────────────────────── */
 async function renderFacultyCards(weekIdx) {
   const grid = document.getElementById('faculty-grid');
+  if (!grid) return;
+
   const allTotals = await fetchScores(weekIdx);
   const maxPts = Math.max(1, ...allTotals.flat().map(o => o.pts));
+  const wi = Math.min(weekIdx, WEEKLY_DATA.length - 1);
 
-  const colHeaders = weekIdx < 4
-    ? METRICS.map(metric => `<th class="metric-col metric-${metric.type}">${escapeHtml(metric.label)}</th>`).join('')
-    : '<th>Баллы (итого)</th>';
+  const colHeaders = METRICS.map(m => `<th class="metric-col metric-${m.type}">${escapeHtml(m.label)}</th>`).join('');
 
   let html = '';
 
   for (let fi = 0; fi < FACULTIES.length; fi++) {
     const fac = FACULTIES[fi];
     const facTotal = await fetchFacultyTotal(fi, weekIdx);
-    const visibleOperators = fac.operators;
 
-    const rows = visibleOperators.map((name, oi) => {
-      const opTotal = allTotals[fi][oi]?.pts || 0;
-      const pct = Math.round((opTotal / maxPts) * 100);
-      let metricCells = '';
+    // Сортируем операторов по баллу для ранжирования
+    const scoreIdx = getScoreMetricIndex();
+    const opsWithRank = fac.operators.map((name, oi) => ({
+      name, oi,
+      pts: allTotals[fi][oi]?.pts || 0,
+    }));
+    opsWithRank.sort((a, b) => b.pts - a.pts);
 
-      if (weekIdx < 4) {
-        const row = WEEKLY_DATA[weekIdx][fi][oi] || [];
-        metricCells = METRICS.map((metric, index) => {
-          const value = row[index] ?? 0;
-          if (metric.type === 'score') {
-            return `
-              <td class="metric-score-cell">
-                <div class="score-bar-wrap">
-                  <div class="score-bar">
-                    <div class="score-bar-fill" style="width:${pct}%"></div>
-                  </div>
-                  <span class="pts-value">${fmtPts(opTotal)}</span>
-                </div>
-              </td>`;
-          }
+    // Глобальный ранг среди всех операторов всех фракций
+    const allOpsPts = allTotals.flat().map(o => o.pts).sort((a, b) => b - a);
+    function globalRank(pts) {
+      if (pts <= 0) return null;
+      return allOpsPts.indexOf(pts) + 1;
+    }
 
-          const cls = metric.type === 'penalty' && Number(value) > 0 ? ' class="neg"' : '';
-          return `<td${cls}>${formatMetricValue(value, metric)}</td>`;
-        }).join('');
-      }
+    const rows = opsWithRank.map(({ name, oi, pts }, sortIdx) => {
+      const pct = Math.round((pts / maxPts) * 100);
+      const localRank = sortIdx + 1;
+      const grank = globalRank(pts);
+      const topCls = localRank <= 3 ? ` top${localRank}` : '';
 
-      return `
-        <tr>
-          <td class="operator-name-cell">${escapeHtml(name)}</td>
-          ${weekIdx < 4 ? metricCells : `<td>
+      const row = WEEKLY_DATA[wi]?.[fi]?.[oi] || [];
+      const metricCells = METRICS.map((metric, mi) => {
+        const value = row[mi] ?? 0;
+        if (metric.type === 'score') {
+          return `<td class="metric-score-cell">
             <div class="score-bar-wrap">
-              <div class="score-bar">
-                <div class="score-bar-fill" style="width:${pct}%"></div>
-              </div>
-              <span class="pts-value">${fmtPts(opTotal)}</span>
+              <div class="score-bar"><div class="score-bar-fill" style="width:${pct}%"></div></div>
+              <span class="pts-val">${fmtPts(pts)}</span>
             </div>
-          </td>`}
-        </tr>`;
+          </td>`;
+        }
+        const cls = metric.type === 'penalty' && Number(value) > 0 ? ' class="neg"' : '';
+        return `<td${cls}>${formatMetricValue(value, metric)}</td>`;
+      }).join('');
+
+      const rankBadge = buildRankBadge(localRank);
+
+      return `<tr class="${topCls}">
+        <td>${rankBadge}</td>
+        <td class="op-name">${escapeHtml(name)}</td>
+        ${metricCells}
+      </tr>`;
     }).join('');
 
     html += `
       <div class="faculty-card ${fac.cls}">
         <div class="faculty-header">
-          <div class="faculty-header-left">
-            <div class="faculty-crest">${renderCrest(fac)}</div>
-            <div class="faculty-name">${fac.name}</div>
+          <div class="fh-left">
+            <div class="fh-icon">${fac.icon}</div>
+            <div class="fh-names">
+              <div class="fh-name">${fac.name}</div>
+              <div class="fh-en">${fac.enName || ''}</div>
+            </div>
           </div>
-          <div>
-            <div class="faculty-total">${fmtPts(facTotal)}</div>
-            <div class="faculty-total-label">средний балл</div>
+          <div class="fh-meta">
+            <div class="fh-stat">
+              <div class="fh-stat-val">${fmtPts(facTotal)}</div>
+              <div class="fh-stat-label">ср. балл</div>
+            </div>
+            <div class="fh-stat">
+              <div class="fh-stat-val">${fac.operators.length}</div>
+              <div class="fh-stat-label">участников</div>
+            </div>
           </div>
         </div>
         <div class="faculty-table-wrap">
           <table class="operators">
             <thead>
-              <tr><th>Оператор</th>${colHeaders}</tr>
+              <tr>
+                <th style="width:36px">#</th>
+                <th>Оператор</th>
+                ${colHeaders}
+              </tr>
             </thead>
-            <tbody>
-              ${rows}
-            </tbody>
+            <tbody>${rows}</tbody>
           </table>
         </div>
       </div>`;
@@ -618,9 +532,11 @@ async function renderFacultyCards(weekIdx) {
 
   grid.innerHTML = html;
 }
-/* ── Editor ───────────────────────────────────────────────── */
+
+/* ── Editor ─────────────────────────────────────────────────── */
 async function refreshDashboard() {
   await Promise.all([
+    renderStats(currentWeek),
     renderScoreboard(currentWeek),
     renderFacultyCards(currentWeek),
   ]);
@@ -629,15 +545,11 @@ async function refreshDashboard() {
 function renderEditor() {
   const panel = document.getElementById('editor-panel');
   if (!panel) return;
+  if (!isAdmin) { panel.innerHTML = ''; return; }
 
-  if (!isAdmin) {
-    panel.innerHTML = '';
-    return;
-  }
-
-  const editWeek = currentWeek < 4 ? currentWeek : 0;
-  const weekOptions = [0,1,2,3].map(idx =>
-    `<option value="${idx}" ${idx === editWeek ? 'selected' : ''}>Неделя ${idx + 1}</option>`
+  const editWeek = Math.min(currentWeek, 1);
+  const weekOptions = [0, 1].map(idx =>
+    `<option value="${idx}" ${idx === editWeek ? 'selected' : ''}>${PUB_LABELS[idx].date} — ${PUB_LABELS[idx].name}</option>`
   ).join('');
 
   const metricsRows = METRICS.map((metric, mi) => `
@@ -645,11 +557,11 @@ function renderEditor() {
       <input class="editor-input" value="${escapeHtml(metric.label)}"
         oninput="updateMetricLabel(${mi}, this.value)" aria-label="Название показателя">
       <select class="editor-select" onchange="updateMetricType(${mi}, this.value)" ${metric.type === 'score' ? 'disabled' : ''}>
-        <option value="metric" ${metric.type === 'metric' ? 'selected' : ''}>Показатель</option>
+        <option value="metric"  ${metric.type === 'metric'  ? 'selected' : ''}>Показатель</option>
         <option value="penalty" ${metric.type === 'penalty' ? 'selected' : ''}>Штраф</option>
-        <option value="score" ${metric.type === 'score' ? 'selected' : ''}>Баллы</option>
+        <option value="score"   ${metric.type === 'score'   ? 'selected' : ''}>Баллы</option>
       </select>
-      <button class="editor-icon-btn danger" onclick="removeMetric(${mi})" ${metric.type === 'score' ? 'disabled' : ''} title="Удалить показатель">×</button>
+      <button class="editor-icon-btn danger" onclick="removeMetric(${mi})" ${metric.type === 'score' ? 'disabled' : ''} title="Удалить">×</button>
     </div>
   `).join('');
 
@@ -658,22 +570,21 @@ function renderEditor() {
       const cells = METRICS.map((metric, mi) => `
         <td>
           <input class="metric-value-input" type="number" step="0.1"
-            value="${WEEKLY_DATA[editWeek][fi][oi][mi] ?? 0}"
+            value="${WEEKLY_DATA[editWeek]?.[fi]?.[oi]?.[mi] ?? 0}"
             oninput="updateOperatorMetric(${editWeek}, ${fi}, ${oi}, ${mi}, this.value)"
             aria-label="${escapeHtml(metric.label)}">
         </td>
       `).join('');
-
       return `
         <tr>
           <td>
             <input class="operator-name-input" value="${escapeHtml(name)}"
-              oninput="updateOperatorName(${fi}, ${oi}, this.value)" aria-label="Имя оператора">
+              oninput="updateOperatorName(${fi}, ${oi}, this.value)">
           </td>
           ${cells}
           <td>
-            <button class="editor-icon-btn danger" onclick="clearOperatorMetrics(${fi}, ${oi})" title="Очистить показатели оператора">⊘</button>
-            <button class="editor-icon-btn danger" onclick="removeOperator(${fi}, ${oi})" title="Удалить оператора полностью">🗑</button>
+            <button class="editor-icon-btn danger" onclick="clearOperatorMetrics(${fi}, ${oi})" title="Очистить">⊘</button>
+            <button class="editor-icon-btn danger" onclick="removeOperator(${fi}, ${oi})" title="Удалить">🗑</button>
           </td>
         </tr>`;
     }).join('');
@@ -681,7 +592,7 @@ function renderEditor() {
     return `
       <div class="editor-faculty ${fac.cls}">
         <div class="editor-faculty-header">
-          <div class="editor-faculty-name">${escapeHtml(fac.name)}</div>
+          <div class="editor-faculty-name">${fac.icon} ${escapeHtml(fac.name)}</div>
           <div class="editor-faculty-actions">
             <button class="editor-btn danger-soft" onclick="clearFacultyMetrics(${fi}, ${editWeek})">Очистить группу</button>
             <div class="editor-add-operator">
@@ -695,7 +606,7 @@ function renderEditor() {
             <thead>
               <tr>
                 <th>Оператор</th>
-                ${METRICS.map(metric => `<th class="metric-col metric-${metric.type}">${escapeHtml(metric.label)}</th>`).join('')}
+                ${METRICS.map(m => `<th class="metric-col metric-${m.type}">${escapeHtml(m.label)}</th>`).join('')}
                 <th></th>
               </tr>
             </thead>
@@ -708,16 +619,15 @@ function renderEditor() {
   panel.innerHTML = `
     <div class="editor-toolbar">
       <div>
-        <div class="editor-title">Управление показателями</div>
-        <div class="editor-subtitle">Все изменения сохраняются в этом браузере</div>
+        <div class="editor-title">Управление данными</div>
+        <div class="editor-subtitle">Изменения сохраняются на сервере</div>
       </div>
       <label class="editor-week-label">
-        Неделя
+        Публикация:
         <select class="editor-select" onchange="showWeek(Number(this.value))">${weekOptions}</select>
       </label>
       <button class="editor-btn ghost" onclick="logoutAdmin()">Выйти</button>
     </div>
-
     <div class="editor-metrics">
       <div class="editor-metrics-list">${metricsRows}</div>
       <div class="editor-add-metric">
@@ -729,24 +639,24 @@ function renderEditor() {
         <button class="editor-btn" onclick="addMetric()">Добавить колонку</button>
       </div>
     </div>
-
     <div class="editor-faculties">${facultyEditors}</div>
   `;
 }
 
+/* ── Operator CRUD ──────────────────────────────────────────── */
 function updateOperatorName(facIdx, opIdx, value) {
   if (!requireAdmin()) return;
   FACULTIES[facIdx].operators[opIdx] = value.trim() || `Оператор ${opIdx + 1}`;
-  // Имена показываются в дашборде → перерисовываем его, но без редактора
-  refreshDashboardOnly();
-  debouncedSave();
+  refreshDashboardOnly(); debouncedSave();
 }
 
 function updateOperatorMetric(weekIdx, facIdx, opIdx, metricIdx, value) {
   if (!requireAdmin()) return;
+  if (!WEEKLY_DATA[weekIdx]) WEEKLY_DATA[weekIdx] = [];
+  if (!WEEKLY_DATA[weekIdx][facIdx]) WEEKLY_DATA[weekIdx][facIdx] = [];
+  if (!WEEKLY_DATA[weekIdx][facIdx][opIdx]) WEEKLY_DATA[weekIdx][facIdx][opIdx] = Array(METRICS.length).fill(0);
   WEEKLY_DATA[weekIdx][facIdx][opIdx][metricIdx] = Number(value) || 0;
-  refreshDashboardOnly();
-  debouncedSave();
+  refreshDashboardOnly(); debouncedSave();
 }
 
 async function addOperator(facIdx) {
@@ -754,80 +664,55 @@ async function addOperator(facIdx) {
   const input = document.getElementById(`new-operator-${facIdx}`);
   const name = input.value.trim();
   if (!name) return;
-
   FACULTIES[facIdx].operators.push(name);
   WEEKLY_DATA.forEach(week => {
+    if (!week[facIdx]) week[facIdx] = [];
     week[facIdx].push(Array(METRICS.length).fill(0));
   });
-
-  await saveEditableData();
-  renderEditor();
-  refreshDashboard();
+  await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
 async function clearOperatorMetrics(facIdx, opIdx) {
   if (!requireAdmin()) return;
   const name = FACULTIES[facIdx].operators[opIdx];
-  if (!confirm(`Очистить все показатели оператора "${name}" за 4 недели? Имя оператора останется в списке.`)) return;
-
+  if (!confirm(`Очистить показатели оператора "${name}" за обе публикации?`)) return;
   WEEKLY_DATA.forEach(week => {
-    if (week[facIdx] && week[facIdx][opIdx]) {
-      week[facIdx][opIdx] = Array(METRICS.length).fill(0);
-    }
+    if (week[facIdx]?.[opIdx]) week[facIdx][opIdx] = Array(METRICS.length).fill(0);
   });
-
-  await saveEditableData();
-  renderEditor();
-  refreshDashboard();
+  await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
 async function removeOperator(facIdx, opIdx) {
   if (!requireAdmin()) return;
   const name = FACULTIES[facIdx].operators[opIdx];
-  if (!confirm(`Удалить оператора "${name}" полностью? Все его данные за все недели будут удалены без возможности восстановления.`)) return;
-
-  // Удаляем оператора из всех недель
-  WEEKLY_DATA.forEach(week => {
-    if (week[facIdx]) {
-      week[facIdx].splice(opIdx, 1);
-    }
-  });
-
-  // Удаляем имя из списка операторов факультета
+  if (!confirm(`Удалить оператора "${name}" полностью?`)) return;
+  WEEKLY_DATA.forEach(week => { if (week[facIdx]) week[facIdx].splice(opIdx, 1); });
   FACULTIES[facIdx].operators.splice(opIdx, 1);
-
-  await saveEditableData();
-  renderEditor();
-  refreshDashboard();
+  await saveEditableData(); renderEditor(); refreshDashboard();
 }
-async function clearFacultyMetrics(facIdx, weekIdx = currentWeek < 4 ? currentWeek : 0) {
+
+async function clearFacultyMetrics(facIdx, weekIdx = currentWeek) {
   if (!requireAdmin()) return;
   const fac = FACULTIES[facIdx];
-  const week = WEEKLY_DATA[weekIdx];
-  if (!fac || !week || !week[facIdx]) return;
-  if (!confirm(`Очистить все показатели всех операторов группы "${fac.name}" только за неделю ${weekIdx + 1}? Имена операторов останутся.`)) return;
-
-  fac.operators.forEach((_, opIdx) => {
-    week[facIdx][opIdx] = Array(METRICS.length).fill(0);
+  const wi = Math.min(weekIdx, WEEKLY_DATA.length - 1);
+  if (!confirm(`Очистить показатели группы "${fac.name}" за ${PUB_LABELS[wi].date}?`)) return;
+  fac.operators.forEach((_, oi) => {
+    if (WEEKLY_DATA[wi]?.[facIdx]) WEEKLY_DATA[wi][facIdx][oi] = Array(METRICS.length).fill(0);
   });
-
-  await saveEditableData();
-  renderEditor();
-  refreshDashboard();
+  await saveEditableData(); renderEditor(); refreshDashboard();
 }
+
 function updateMetricLabel(metricIdx, value) {
   if (!requireAdmin()) return;
   METRICS[metricIdx].label = value.trim() || `Показатель ${metricIdx + 1}`;
-  refreshDashboardOnly();
-  debouncedSave();
+  refreshDashboardOnly(); debouncedSave();
 }
 
 async function updateMetricType(metricIdx, value) {
   if (!requireAdmin()) return;
   if (METRICS[metricIdx].type === 'score') return;
   METRICS[metricIdx].type = value === 'penalty' ? 'penalty' : 'metric';
-  await saveEditableData();
-  refreshDashboard();
+  await saveEditableData(); refreshDashboard();
 }
 
 async function addMetric() {
@@ -836,78 +721,65 @@ async function addMetric() {
   const typeInput = document.getElementById('new-metric-type');
   const label = nameInput.value.trim();
   if (!label) return;
-
   const insertAt = getScoreMetricIndex();
-  METRICS.splice(insertAt, 0, {
-    label,
-    type: typeInput.value === 'penalty' ? 'penalty' : 'metric',
-  });
-
+  METRICS.splice(insertAt, 0, { label, type: typeInput.value === 'penalty' ? 'penalty' : 'metric' });
   WEEKLY_DATA.forEach(week => {
-    week.forEach(facRows => {
-      facRows.forEach(row => row.splice(insertAt, 0, 0));
-    });
+    week.forEach(facRows => { facRows.forEach(row => row.splice(insertAt, 0, 0)); });
   });
-
-  await saveEditableData();
-  renderEditor();
-  refreshDashboard();
+  await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
 async function removeMetric(metricIdx) {
   if (!requireAdmin()) return;
   if (METRICS[metricIdx].type === 'score') return;
-  if (!confirm(`Удалить показатель "${METRICS[metricIdx].label}" из всех операторов за 4 недели?`)) return;
-
+  if (!confirm(`Удалить показатель "${METRICS[metricIdx].label}"?`)) return;
   METRICS.splice(metricIdx, 1);
   WEEKLY_DATA.forEach(week => {
-    week.forEach(facRows => {
-      facRows.forEach(row => row.splice(metricIdx, 1));
-    });
+    week.forEach(facRows => { facRows.forEach(row => row.splice(metricIdx, 1)); });
   });
-
-  await saveEditableData();
-  renderEditor();
-  refreshDashboard();
+  await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
-/* ============================================================
-   NAVIGATION
-   ============================================================ */
+/* ── Navigation ─────────────────────────────────────────────── */
 let currentWeek = 0;
 let currentView = 'week';
 
-function setActiveTab(view, weekIdx = null) {
-  document.querySelectorAll('.week-tab').forEach(tab => {
-    const isWeek = view === 'week' && tab.dataset.week === String(weekIdx);
-    tab.classList.toggle('active', isWeek);
+function setActiveTab(weekIdx) {
+  document.querySelectorAll('.pub-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.week === String(weekIdx));
   });
+}
+
+function updateStatusBar(weekIdx) {
+  const bar = document.getElementById('status-bar');
+  const label = document.getElementById('status-label');
+  if (!bar || !label) return;
+  const pub = PUB_LABELS[Math.min(weekIdx, 1)];
+  label.textContent = `${pub.name} · ${pub.date} · ${pub.badge}`;
+  bar.classList.toggle('final', weekIdx === 1);
 }
 
 function setDashboardMode(view) {
   currentView = view;
   const sections = [
     ['editor-panel', isAdmin],
+    ['stats-section', true],
     ['scoreboard', true],
     ['faculty-grid', true],
   ];
-
-  sections.forEach(([id, visible]) => {
+  sections.forEach(([id, vis]) => {
     const el = document.getElementById(id);
-    if (el) el.hidden = !visible;
-  });
-
-  document.querySelectorAll('.details-intro').forEach(el => {
-    el.hidden = false;
+    if (el) el.hidden = !vis;
   });
 }
 
 async function showWeek(idx) {
   currentWeek = idx;
   setDashboardMode('week');
-  setActiveTab('week', idx);
-
+  setActiveTab(idx);
+  updateStatusBar(idx);
   await Promise.all([
+    renderStats(idx),
     renderScoreboard(idx),
     renderFacultyCards(idx),
   ]);
@@ -919,14 +791,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     await loadEditableData();
   } catch (err) {
-    console.error('Не удалось загрузить данные с сервера:', err);
-    // Показываем баннер ошибки — данные не грузятся из локалки
+    console.error('Не удалось загрузить данные:', err);
     const banner = document.createElement('div');
     banner.style.cssText = [
       'position:fixed','top:0','left:0','right:0','z-index:9999',
-      'background:#0a0b10','color:#f4e8c1','font-family:Rajdhani,sans-serif',
+      'background:#1a0a0a','color:#e4e4f0','font-family:Rajdhani,sans-serif',
       'font-size:13px','text-align:center','padding:10px 16px',
-      'letter-spacing:.05em','cursor:pointer',
+      'letter-spacing:.05em','cursor:pointer','border-bottom:1px solid rgba(220,60,60,.4)',
     ].join(';');
     banner.textContent = '⚠ Сервер недоступен. Данные не загружены. Нажмите для повтора.';
     banner.onclick = () => { banner.remove(); location.reload(); };
@@ -938,56 +809,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   showWeek(0);
 });
 
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') closeAdminModal();
-});
-
-document.addEventListener('click', event => {
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAdminModal(); });
+document.addEventListener('click', e => {
   const gate = document.getElementById('admin-gate');
-  const popover = document.getElementById('admin-popover');
-  if (!gate || !popover || popover.hidden) return;
-  if (!gate.contains(event.target)) closeAdminModal();
+  const pop = document.getElementById('admin-popover');
+  if (!gate || !pop || pop.hidden) return;
+  if (!gate.contains(e.target)) closeAdminModal();
 });
 
-/* При закрытии вкладки с несохранёнными правками — попытаемся сохранить
-   и предупредим пользователя, если есть pending-debounce. */
-window.addEventListener('beforeunload', (event) => {
+window.addEventListener('beforeunload', e => {
   if (debouncedSave.hasPending()) {
-    debouncedSave.flush();
-    event.preventDefault();
-    event.returnValue = '';
-    return '';
+    debouncedSave.flush(); e.preventDefault(); e.returnValue = ''; return '';
   }
 });
-
-
-/* ============================================================
-   ШАБЛОН api.js (создайте отдельный файл когда будет готов бэкенд)
-   ============================================================
-
-// api.js — подключить в index.html перед app.js
-// <script src="js/api.js"></script>
-
-const API_BASE = 'http://localhost:8000/api/v1';
-
-const api = {
-  // GET /api/v1/scores?week=<weekIdx>
-  // Ответ: { faculties: [ { id, operators: [{name, pts}] } ] }
-  async getScores(weekIdx) {
-    const res = await fetch(`${API_BASE}/scores?week=${weekIdx}`);
-    if (!res.ok) throw new Error(`API error ${res.status}`);
-    const data = await res.json();
-    return data.faculties.map(f => f.operators);
-  },
-
-  // GET /api/v1/faculties/<facIdx>/total?week=<weekIdx>
-  // Ответ: { total: 12345.5 }
-  async getFacultyTotal(facIdx, weekIdx) {
-    const res = await fetch(`${API_BASE}/faculties/${facIdx}/total?week=${weekIdx}`);
-    if (!res.ok) throw new Error(`API error ${res.status}`);
-    const data = await res.json();
-    return data.total;
-  },
-};
-
-============================================================ */
