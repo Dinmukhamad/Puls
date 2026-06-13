@@ -7,10 +7,32 @@
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=div4">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=div4">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=div4">
-  <link rel="stylesheet" href="css/styles.css?v=div4">
+  <link rel="stylesheet" href="css/styles.css?v=intro-1">
   <script src="js/api.js"></script>
 </head>
 <body>
+
+  <section class="intro-screen" id="intro-screen" aria-label="Вступительный ролик">
+    <div class="intro-field" aria-hidden="true">
+      <span class="intro-ray ray-one"></span>
+      <span class="intro-ray ray-two"></span>
+      <span class="intro-ray ray-three"></span>
+      <span class="intro-ring ring-one"></span>
+      <span class="intro-ring ring-two"></span>
+    </div>
+    <div class="intro-symbols" aria-hidden="true">
+      <span class="intro-symbol intro-dauntless">🔥</span>
+      <span class="intro-symbol intro-erudite">⚡</span>
+      <span class="intro-symbol intro-candor">⚖</span>
+    </div>
+    <div class="intro-content">
+      <div class="intro-kicker">iGROUP · Операторский конкурс</div>
+      <div class="intro-title">Дивергент</div>
+      <div class="intro-subtitle">Три фракции. Один рейтинг.</div>
+      <div class="intro-progress" aria-hidden="true"><span></span></div>
+    </div>
+    <button class="intro-skip" id="intro-skip" type="button">Пропустить</button>
+  </section>
 
   <div class="bg-grid" aria-hidden="true"></div>
 
@@ -189,7 +211,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=div4"></script>
+  <script src="js/app.js?v=intro-1"></script>
   <script src="js/excel-import.js?v=div4"></script>
 </body>
 </html>
