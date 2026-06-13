@@ -4,296 +4,223 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Дивергент: Конкурс Операторов</title>
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-1">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-1">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-1">
-
-  <!-- Styles -->
-  <link rel="stylesheet" href="css/styles.css?v=divergent-1">
-
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=div2">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=div2">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=div2">
+  <link rel="stylesheet" href="css/styles.css?v=div2">
   <script src="js/api.js"></script>
 </head>
 <body>
 
-  <!-- Анимированный фон -->
   <div class="bg-grid" aria-hidden="true"></div>
-  <div class="bg-particles" aria-hidden="true"></div>
 
-  <!-- Декоративные SVG элементы в стиле Дивергента -->
+  <!-- Декор -->
   <div class="bg-decorations" aria-hidden="true">
-
-    <!-- Символ Бесстрашия (огонь) -->
-    <svg class="bg-deco deco-dauntless-fire" viewBox="0 0 120 180" xmlns="http://www.w3.org/2000/svg">
-      <path d="M60,160 Q20,130 30,90 Q40,60 60,40 Q50,70 65,80 Q55,55 75,30 Q85,60 70,90 Q90,70 85,100 Q95,80 90,120 Q85,150 60,160Z" fill="rgba(220,80,20,.15)" />
-      <path d="M60,150 Q30,125 40,95 Q50,72 60,55 Q55,75 68,85 Q82,65 78,100 Q90,82 86,115 Q82,140 60,150Z" fill="rgba(255,120,30,.1)" />
+    <svg class="bg-deco deco-fire" viewBox="0 0 120 200" xmlns="http://www.w3.org/2000/svg">
+      <path d="M60,180 Q15,145 28,98 Q42,58 60,38 Q48,72 66,84 Q54,57 76,28 Q88,64 72,96 Q94,74 88,108 Q98,84 92,130 Q86,162 60,180Z" fill="rgba(220,80,20,.13)"/>
     </svg>
-
-    <!-- Символ Эрудиции (схема/цепь) -->
-    <svg class="bg-deco deco-erudite-circuit" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <line x1="20" y1="100" x2="80" y2="100" stroke="rgba(30,120,220,.18)" stroke-width="1.5"/>
-      <line x1="100" y1="20" x2="100" y2="80" stroke="rgba(30,120,220,.18)" stroke-width="1.5"/>
-      <line x1="120" y1="100" x2="180" y2="100" stroke="rgba(30,120,220,.18)" stroke-width="1.5"/>
-      <line x1="100" y1="120" x2="100" y2="180" stroke="rgba(30,120,220,.18)" stroke-width="1.5"/>
-      <circle cx="100" cy="100" r="20" fill="none" stroke="rgba(30,120,220,.2)" stroke-width="1.5"/>
-      <circle cx="100" cy="100" r="8" fill="rgba(30,120,220,.12)"/>
-      <rect x="16" y="94" width="12" height="12" rx="2" fill="rgba(30,120,220,.15)"/>
-      <rect x="172" y="94" width="12" height="12" rx="2" fill="rgba(30,120,220,.15)"/>
-      <rect x="94" y="16" width="12" height="12" rx="2" fill="rgba(30,120,220,.15)"/>
-      <rect x="94" y="172" width="12" height="12" rx="2" fill="rgba(30,120,220,.15)"/>
+    <svg class="bg-deco deco-circuit" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <line x1="20" y1="100" x2="80" y2="100" stroke="rgba(30,120,220,.15)" stroke-width="1.5"/>
+      <line x1="100" y1="20" x2="100" y2="80" stroke="rgba(30,120,220,.15)" stroke-width="1.5"/>
+      <line x1="120" y1="100" x2="180" y2="100" stroke="rgba(30,120,220,.15)" stroke-width="1.5"/>
+      <line x1="100" y1="120" x2="100" y2="180" stroke="rgba(30,120,220,.15)" stroke-width="1.5"/>
+      <circle cx="100" cy="100" r="20" fill="none" stroke="rgba(30,120,220,.18)" stroke-width="1.5"/>
+      <circle cx="100" cy="100" r="8" fill="rgba(30,120,220,.1)"/>
+      <rect x="16" y="94" width="12" height="12" rx="2" fill="rgba(30,120,220,.12)"/>
+      <rect x="172" y="94" width="12" height="12" rx="2" fill="rgba(30,120,220,.12)"/>
+      <rect x="94" y="16" width="12" height="12" rx="2" fill="rgba(30,120,220,.12)"/>
+      <rect x="94" y="172" width="12" height="12" rx="2" fill="rgba(30,120,220,.12)"/>
     </svg>
-
-    <!-- Символ Искренности (весы) -->
-    <svg class="bg-deco deco-candor-scales" viewBox="0 0 160 180" xmlns="http://www.w3.org/2000/svg">
-      <line x1="80" y1="20" x2="80" y2="160" stroke="rgba(200,200,200,.2)" stroke-width="1.5"/>
-      <line x1="30" y1="60" x2="130" y2="60" stroke="rgba(200,200,200,.2)" stroke-width="1.5"/>
-      <path d="M30,60 Q20,80 30,90 Q40,80 30,60Z" fill="rgba(200,200,200,.1)" stroke="rgba(200,200,200,.2)" stroke-width="1"/>
-      <path d="M130,60 Q120,80 130,90 Q140,80 130,60Z" fill="rgba(200,200,200,.1)" stroke="rgba(200,200,200,.2)" stroke-width="1"/>
-      <line x1="60" y1="160" x2="100" y2="160" stroke="rgba(200,200,200,.2)" stroke-width="2"/>
-      <circle cx="80" cy="20" r="5" fill="rgba(200,200,200,.2)"/>
+    <svg class="bg-deco deco-ring" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="120" cy="120" r="110" fill="none" stroke="rgba(150,150,200,.05)" stroke-width="1"/>
+      <circle cx="120" cy="120" r="80"  fill="none" stroke="rgba(150,150,200,.04)" stroke-width="1"/>
+      <circle cx="120" cy="120" r="50"  fill="none" stroke="rgba(150,150,200,.04)" stroke-width="1"/>
+      <line x1="120" y1="10" x2="120" y2="230" stroke="rgba(150,150,200,.04)" stroke-width="1"/>
+      <line x1="10" y1="120" x2="230" y2="120" stroke="rgba(150,150,200,.04)" stroke-width="1"/>
     </svg>
-
-    <!-- Абстрактная сетка — правый верх -->
-    <svg class="bg-deco deco-grid-right" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <g stroke="rgba(100,100,150,.08)" stroke-width="1" fill="none">
-        <line x1="0" y1="40" x2="200" y2="40"/>
-        <line x1="0" y1="80" x2="200" y2="80"/>
-        <line x1="0" y1="120" x2="200" y2="120"/>
-        <line x1="0" y1="160" x2="200" y2="160"/>
-        <line x1="40" y1="0" x2="40" y2="200"/>
-        <line x1="80" y1="0" x2="80" y2="200"/>
-        <line x1="120" y1="0" x2="120" y2="200"/>
-        <line x1="160" y1="0" x2="160" y2="200"/>
-      </g>
-      <circle cx="40" cy="40" r="3" fill="rgba(100,100,200,.15)"/>
-      <circle cx="120" cy="80" r="3" fill="rgba(100,100,200,.15)"/>
-      <circle cx="80" cy="160" r="3" fill="rgba(100,100,200,.15)"/>
-      <circle cx="160" cy="120" r="3" fill="rgba(100,100,200,.15)"/>
-    </svg>
-
-    <!-- Фракционный символ — круг с сегментами -->
-    <svg class="bg-deco deco-faction-symbol" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="100" cy="100" r="80" fill="none" stroke="rgba(150,150,180,.1)" stroke-width="1"/>
-      <circle cx="100" cy="100" r="55" fill="none" stroke="rgba(150,150,180,.08)" stroke-width="1"/>
-      <circle cx="100" cy="100" r="30" fill="none" stroke="rgba(150,150,180,.07)" stroke-width="1"/>
-      <line x1="100" y1="20" x2="100" y2="180" stroke="rgba(150,150,180,.07)" stroke-width="1"/>
-      <line x1="20" y1="100" x2="180" y2="100" stroke="rgba(150,150,180,.07)" stroke-width="1"/>
-      <line x1="43" y1="43" x2="157" y2="157" stroke="rgba(150,150,180,.06)" stroke-width="1"/>
-      <line x1="157" y1="43" x2="43" y2="157" stroke="rgba(150,150,180,.06)" stroke-width="1"/>
-    </svg>
-
   </div>
 
   <div class="container">
 
-    <!-- Главный экран -->
-    <section class="hero-section" aria-label="Дивергент: Конкурс Операторов">
-      <div class="hero-factions">
-        <!-- Бесстрашие -->
-        <div class="hero-faction-badge faction-dauntless">
-          <div class="faction-badge-icon">🔥</div>
-          <div class="faction-badge-name">Бесстрашие</div>
-          <div class="faction-badge-subtitle">Dauntless</div>
+    <!-- ═══ HERO ═══════════════════════════════════════════════ -->
+    <section class="hero" aria-label="Дивергент: Конкурс Операторов">
+
+      <div class="hero-factions" aria-hidden="true">
+        <div class="hf-badge hf-dauntless">
+          <span class="hf-icon">🔥</span>
+          <span class="hf-name">Бесстрашие</span>
+          <span class="hf-en">Dauntless</span>
         </div>
-        <!-- Эрудиция -->
-        <div class="hero-faction-badge faction-erudite">
-          <div class="faction-badge-icon">⚡</div>
-          <div class="faction-badge-name">Эрудиция</div>
-          <div class="faction-badge-subtitle">Erudite</div>
+        <div class="hf-badge hf-erudite">
+          <span class="hf-icon">⚡</span>
+          <span class="hf-name">Эрудиция</span>
+          <span class="hf-en">Erudite</span>
         </div>
-        <!-- Искренность -->
-        <div class="hero-faction-badge faction-candor">
-          <div class="faction-badge-icon">⚖</div>
-          <div class="faction-badge-name">Искренность</div>
-          <div class="faction-badge-subtitle">Candor</div>
+        <div class="hf-badge hf-candor">
+          <span class="hf-icon">⚖</span>
+          <span class="hf-name">Искренность</span>
+          <span class="hf-en">Candor</span>
         </div>
       </div>
 
-      <div class="hero-center">
+      <div class="hero-body">
         <div class="hero-eyebrow">IGroup · Операторский конкурс</div>
         <h1 class="hero-title">
-          <span class="hero-title-main">ДИВЕРГЕНТ</span>
-          <span class="hero-title-sub">Конкурс операторов</span>
+          <span class="hero-title-big">ДИВЕРГЕНТ</span>
+          <span class="hero-title-small">Конкурс операторов</span>
         </h1>
-        <p class="hero-desc">Выберись из общей массы. Докажи свою фракцию.</p>
+        <p class="hero-desc">
+          Участники разделены на три фракции. Рейтинг формируется на основе качества работы,
+          выработки часов, эффективности и дополнительных баллов.
+          За дисциплинарные нарушения, опоздания и использование посторонних сайтов снимаются баллы.
+        </p>
 
-        <!-- Расписание -->
-        <div class="hero-schedule">
-          <div class="schedule-item">
-            <div class="schedule-label">Первая неделя</div>
-            <div class="schedule-value">15.06 – 21.06</div>
+        <div class="hero-timeline">
+          <div class="ht-item">
+            <div class="ht-label">Период конкурса</div>
+            <div class="ht-val">15.06 – 21.06</div>
           </div>
-          <div class="schedule-divider"></div>
-          <div class="schedule-item">
-            <div class="schedule-label">Промежуточные итоги</div>
-            <div class="schedule-value">18.06</div>
+          <div class="ht-sep"></div>
+          <div class="ht-item">
+            <div class="ht-label">Промежуточные</div>
+            <div class="ht-val accent-mid">18.06</div>
           </div>
-          <div class="schedule-divider"></div>
-          <div class="schedule-item">
-            <div class="schedule-label">Итоги недели</div>
-            <div class="schedule-value">23.06</div>
+          <div class="ht-sep"></div>
+          <div class="ht-item">
+            <div class="ht-label">Итоги недели</div>
+            <div class="ht-val accent-fin">23.06</div>
           </div>
         </div>
 
-        <a class="hero-scroll-btn" href="#dashboard-start">
-          <span>Перейти к результатам</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+        <a class="hero-cta" href="#dashboard">
+          К результатам
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
         </a>
       </div>
     </section>
 
-    <!-- Шапка -->
-    <header class="header" id="dashboard-start">
-      <div class="header-icon">◈</div>
-      <h1 class="header-title">Конкурс Операторов</h1>
-      <p class="header-subtitle">Рейтинг фракций · IGroup</p>
-      <div class="divider" aria-hidden="true"></div>
-    </header>
+    <!-- ═══ DASHBOARD ═══════════════════════════════════════════ -->
+    <div id="dashboard" class="dashboard-anchor"></div>
 
-    <!-- Инфо-блоки -->
-    <div class="info-blocks-row">
-      <!-- Как начисляются баллы -->
-      <div class="info-block">
-        <div class="info-block-icon">📊</div>
-        <div class="info-block-title">Как начисляются баллы</div>
-        <div class="info-block-body">
-          Итоговый результат формируется на основе <strong>качества работы</strong>, <strong>выработки часов</strong>,
-          <strong>эффективности</strong> и <strong>дополнительных баллов</strong>.
-          При наличии дисциплинарных нарушений, опозданий или посещения посторонних сайтов
-          итоговый результат <span class="text-danger">уменьшается</span>.
-        </div>
-      </div>
-      <!-- Расписание результатов -->
-      <div class="info-block">
-        <div class="info-block-icon">📅</div>
-        <div class="info-block-title">Расписание публикации результатов</div>
-        <div class="info-block-body">
-          <div class="schedule-row">
-            <span class="schedule-row-label">Промежуточные результаты (неделя 1)</span>
-            <span class="schedule-row-date">18.06</span>
-          </div>
-          <div class="schedule-row">
-            <span class="schedule-row-label">Итоги первой недели</span>
-            <span class="schedule-row-date">23.06</span>
-          </div>
-          <div class="schedule-note">Результаты публикуются на сайте и отображаются на информационной доске.</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Критерии оценки -->
-    <div class="criteria-blocks-row">
-      <div class="criteria-block criteria-positive">
-        <div class="criteria-block-title">
-          <span class="criteria-icon">✓</span> Основные показатели
-        </div>
-        <ul class="criteria-list">
-          <li>Качество работы</li>
-          <li>Выработка часов</li>
-          <li>Эффективность</li>
-          <li>Дополнительные баллы за переработки</li>
-        </ul>
-      </div>
-      <div class="criteria-block criteria-negative">
-        <div class="criteria-block-title">
-          <span class="criteria-icon">✗</span> Антипоказатели (снятие баллов)
-        </div>
-        <ul class="criteria-list">
-          <li>Дисциплинарные нарушения</li>
-          <li>Опоздания</li>
-          <li>Использование посторонних сайтов в рабочее время</li>
-        </ul>
-      </div>
-    </div>
-
-    <!-- Вкладки недель -->
-    <nav class="week-tabs" aria-label="Выбор недели">
-      <button class="week-tab active" data-week="0" onclick="showWeek(0)">Неделя 1</button>
-      <button class="week-tab" data-week="1" onclick="showWeek(1)">Неделя 2</button>
-      <button class="week-tab" data-week="2" onclick="showWeek(2)">Неделя 3</button>
-      <button class="week-tab" data-week="3" onclick="showWeek(3)">Неделя 4</button>
-      <button class="week-tab" data-week="4" onclick="showWeek(4)">Итоги месяца</button>
+    <!-- Вкладки публикаций -->
+    <nav class="pub-tabs" aria-label="Выбор публикации">
+      <button class="pub-tab active" data-week="0" onclick="showWeek(0)">
+        <span class="pt-date">18.06</span>
+        <span class="pt-label">Промежуточные результаты</span>
+        <span class="pt-badge">Предварительные</span>
+      </button>
+      <button class="pub-tab" data-week="1" onclick="showWeek(1)">
+        <span class="pt-date">23.06</span>
+        <span class="pt-label">Итоговые результаты</span>
+        <span class="pt-badge final">Финальные</span>
+      </button>
     </nav>
 
-    <section class="editor-panel" id="editor-panel" aria-label="Управление данными">
-      <!-- заполняется из app.js → renderEditor() -->
+    <!-- Текущий статус -->
+    <div class="status-bar" id="status-bar">
+      <span class="status-dot"></span>
+      <span id="status-label">Промежуточные результаты · 18.06 · Результаты предварительные</span>
+    </div>
+
+    <!-- Панель редактора (admin) -->
+    <section class="editor-panel" id="editor-panel" aria-label="Управление данными"></section>
+
+    <!-- Статистика -->
+    <section class="stats-section" id="stats-section" aria-label="Статистика конкурса">
+      <!-- заполняется renderStats() -->
     </section>
 
-    <!-- Общий рейтинг команд -->
-    <section class="scoreboard" id="scoreboard" aria-label="Общий рейтинг команд">
-      <!-- заполняется из app.js → renderScoreboard() -->
+    <!-- Рейтинг фракций -->
+    <section class="scoreboard" id="scoreboard" aria-label="Общий рейтинг фракций">
+      <!-- заполняется renderScoreboard() -->
     </section>
 
-    <!-- Карточки фракций -->
-    <section class="details-intro" aria-label="Подробные таблицы команд">
-      <div>
-        <div class="section-kicker">Фракционные таблицы</div>
-        <h2 class="section-title">Баллы операторов по фракциям</h2>
+    <!-- Критерии -->
+    <section class="criteria-section" aria-label="Критерии оценки">
+      <div class="criteria-header">
+        <div class="section-kicker">Система оценки</div>
+        <h2 class="section-title">Критерии оценки</h2>
       </div>
-      <p class="section-help">Внутри каждой таблицы операторы отсортированы по баллам. Топ-3 выделены особо.</p>
-    </section>
-    <section class="faculties-grid" id="faculty-grid" aria-label="Фракции">
-      <!-- заполняется из app.js → renderFacultyCards() -->
+      <div class="criteria-grid">
+        <div class="criteria-card positive">
+          <div class="cc-icon">✓</div>
+          <div class="cc-title">Основные показатели</div>
+          <ul class="cc-list">
+            <li>Качество работы</li>
+            <li>Выработка часов</li>
+            <li>Эффективность</li>
+            <li>Дополнительные баллы за переработки</li>
+          </ul>
+        </div>
+        <div class="criteria-card negative">
+          <div class="cc-icon">✗</div>
+          <div class="cc-title">Антипоказатели</div>
+          <ul class="cc-list">
+            <li>Дисциплинарные нарушения</li>
+            <li>Опоздания</li>
+            <li>Использование посторонних сайтов в рабочее время</li>
+          </ul>
+          <div class="cc-note">За антипоказатели итоговый балл уменьшается</div>
+        </div>
+      </div>
     </section>
 
-  </div>
+    <!-- Таблицы фракций -->
+    <section aria-label="Таблицы фракций">
+      <div class="section-header-row">
+        <div>
+          <div class="section-kicker">Фракционные таблицы</div>
+          <h2 class="section-title">Операторы по фракциям</h2>
+        </div>
+      </div>
+      <div class="faculties-grid" id="faculty-grid" aria-label="Фракции"></div>
+    </section>
 
-  <!-- Административная панель -->
+  </div><!-- /container -->
+
+  <!-- Админ-кнопка -->
   <div class="admin-gate" id="admin-gate">
     <div class="admin-popover" id="admin-popover" hidden>
       <div class="admin-popover-header">
         <div>
           <div class="admin-popover-kicker">Restricted</div>
-          <div class="admin-popover-title">Режим администратора</div>
+          <div class="admin-popover-title">Администратор</div>
         </div>
         <button class="admin-popover-close" onclick="closeAdminModal()" aria-label="Закрыть">×</button>
       </div>
       <div class="admin-popover-login" id="admin-login-area">
         <input class="admin-popover-input" id="admin-password" type="password" placeholder="Пароль"
-          onkeydown="if(event.key === 'Enter') loginAdmin()" aria-label="Пароль администратора">
+          onkeydown="if(event.key==='Enter') loginAdmin()" aria-label="Пароль">
         <button class="admin-popover-submit" onclick="loginAdmin()">Войти</button>
         <div class="admin-error" id="admin-error" aria-live="polite"></div>
       </div>
       <div class="admin-popover-active" id="admin-active-area" hidden>
-        <p>Доступ открыт. Редактирование доступно во вкладках недель.</p>
-
+        <p>Доступ открыт. Редактирование — в панели выше.</p>
         <div class="excel-import-block">
           <div class="excel-import-title">📥 Загрузить баллы из Excel</div>
-
-          <label class="excel-import-label" for="import-week-select">Неделя:</label>
+          <label class="excel-import-label" for="import-week-select">Публикация:</label>
           <select class="admin-popover-select" id="import-week-select">
-            <option value="0">Неделя 1</option>
-            <option value="1">Неделя 2</option>
-            <option value="2">Неделя 3</option>
-            <option value="3">Неделя 4</option>
+            <option value="0">18.06 — Промежуточные</option>
+            <option value="1">23.06 — Итоговые</option>
           </select>
-
           <label class="excel-import-label" for="excel-file-input">Файл (.xlsx / .xls):</label>
           <label class="excel-file-label" id="excel-file-label">
             <input type="file" id="excel-file-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
             <span id="excel-file-name">Выберите файл…</span>
             <span class="excel-file-btn">Обзор</span>
           </label>
-
-          <button class="admin-popover-submit excel-import-go" id="excel-import-btn">
-            ⚡ Применить
-          </button>
-
+          <button class="admin-popover-submit excel-import-go" id="excel-import-btn">⚡ Применить</button>
           <div class="import-status" id="import-status" hidden></div>
         </div>
-
         <button class="admin-popover-submit ghost" onclick="logoutAdmin()">Выйти</button>
       </div>
     </div>
     <button class="admin-gate-btn" id="admin-gate-btn" onclick="openAdminModal()"
-      aria-label="Открыть режим администратора" title="Режим администратора">
-      <span aria-hidden="true">◈</span>
-    </button>
+      aria-label="Открыть режим администратора" title="Администратор">◈</button>
   </div>
 
-  <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=divergent-1"></script>
-  <script src="js/excel-import.js?v=divergent-1"></script>
-
+  <script src="js/app.js?v=div2"></script>
+  <script src="js/excel-import.js?v=div2"></script>
 </body>
 </html>
