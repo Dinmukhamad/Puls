@@ -382,7 +382,6 @@ async function renderFacultyCards() {
 
   const allTotals = calcTotals();
   const maxPts = Math.max(1, ...allTotals.flat().map(o => o.pts));
-  const colHeaders = METRICS.map(m => `<th class="metric-col metric-${m.type}">${escapeHtml(m.label)}</th>`).join('');
 
   let html = '';
 
@@ -403,29 +402,42 @@ async function renderFacultyCards() {
       const rankBadge = `<span class="rank-badge${localRank <= 3 ? ' rank-'+localRank : ''}">${localRank}</span>`;
 
       const row = WEEKLY_DATA[0]?.[fi]?.[oi] || [];
-      const metricCells = METRICS.map((metric, mi) => {
+      const metricItems = METRICS.map((metric, mi) => {
         const value = row[mi] ?? 0;
+        const metricClasses = [
+          'op-metric',
+          `metric-${metric.type}`,
+          metric.type === 'penalty' && Number(value) > 0 ? 'neg' : '',
+        ].filter(Boolean).join(' ');
         if (metric.type === 'score') {
-          return `<td class="metric-score-cell">
-            <div class="score-bar-wrap">
-              <div class="score-bar"><div class="score-bar-fill" style="width:${pct}%"></div></div>
-              <span class="pts-val">${fmtPts(pts)}</span>
+          return `<div class="${metricClasses}">
+            <div class="op-metric-top">
+              <span class="op-metric-label">${escapeHtml(metric.label)}</span>
+              <span class="op-metric-value pts-val">${fmtPts(pts)}</span>
             </div>
-          </td>`;
+            <div class="score-bar"><div class="score-bar-fill" style="width:${pct}%"></div></div>
+          </div>`;
         }
-        const cls = metric.type === 'penalty' && Number(value) > 0 ? ' class="neg"' : '';
-        return `<td${cls}>${formatMetricValue(value, metric)}</td>`;
+        return `<div class="${metricClasses}">
+          <span class="op-metric-label">${escapeHtml(metric.label)}</span>
+          <span class="op-metric-value">${formatMetricValue(value, metric)}</span>
+        </div>`;
       }).join('');
 
-      return `<tr class="${topCls}">
-        <td>${rankBadge}</td>
-        <td class="op-name">${escapeHtml(name)}</td>
-        ${metricCells}
-      </tr>`;
+      return `<article class="operator-row${topCls}">
+        <div class="operator-main">
+          ${rankBadge}
+          <div class="operator-name-wrap">
+            <div class="op-name">${escapeHtml(name)}</div>
+            <div class="operator-sub">#${localRank} • ${fmtPts(pts)} балл</div>
+          </div>
+        </div>
+        <div class="operator-metrics">${metricItems}</div>
+      </article>`;
     }).join('');
 
     html += `
-      <div class="faction-card ${fac.cls}">
+      <div class="faction-card ${fac.cls}" id="faction-${fac.id}">
         <div class="faction-header">
           <div class="fh-left">
             <div class="fh-icon">${fac.icon}</div>
@@ -446,21 +458,19 @@ async function renderFacultyCards() {
           </div>
         </div>
         <div class="faction-table-wrap">
-          <table class="operators">
-            <thead>
-              <tr>
-                <th style="width:36px">#</th>
-                <th>Оператор</th>
-                ${colHeaders}
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
+          <div class="operators-board">${rows}</div>
         </div>
       </div>`;
   }
 
-  grid.innerHTML = html;
+  const nav = FACULTIES.map(fac => `
+    <a class="faction-jump ${fac.cls}" href="#faction-${fac.id}">
+      <span>${fac.icon}</span>
+      <span>${fac.name}</span>
+    </a>
+  `).join('');
+
+  grid.innerHTML = `<nav class="faction-jumps" aria-label="Быстрый переход по фракциям">${nav}</nav>${html}`;
 }
 
 /* ── Editor ─────────────────────────────────────────────────── */
