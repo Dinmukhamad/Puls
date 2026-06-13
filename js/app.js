@@ -1,15 +1,14 @@
 /* ============================================================
-   Дивергент: Конкурс Операторов — app.js v2
-   Одна конкурсная неделя, две публикации: промежуточная и итоговая.
+   Дивергент: Конкурс Операторов — app.js v4
+   Одна страница, один набор данных. Баллы обновляются через админ.
    ============================================================ */
 
 'use strict';
 
-/* ── Config ────────────────────────────────────────────────── */
 const USE_MOCK = false;
 const API_BASE = window.location.origin;
 
-/* ── Фракции Дивергента ───────────────────────────────────── */
+/* ── Фракции ────────────────────────────────────────────────── */
 const FACTION_DESC = {
   dauntless: 'Воплощают храбрость, отвагу и силу. Отвечают за безопасность и охраняют границы.',
   erudite:   'Стремятся к знаниям, мудрости и интеллекту. Занимаются наукой и технологиями.',
@@ -22,10 +21,9 @@ let FACULTIES = [
   { id: 'candor',    cls: 'candor',    icon: '⚖',  crest: null, name: 'Искренность',enName: 'Candor',    tagCls: 'tag-candor',    scoreCls: 'candor-score',    operators: [] },
 ];
 
-/* Два слота: 0 = промежуточные (18.06), 1 = итоговые (23.06) */
-let WEEKLY_DATA = [ [], [] ];
+/* Один слот данных — обновляется при каждой публикации результатов */
+let WEEKLY_DATA = [ [] ];
 
-/* Метрики */
 const DEFAULT_METRICS = [
   { label: 'Качество',     type: 'metric'  },
   { label: 'Выработка',    type: 'metric'  },
@@ -35,11 +33,6 @@ const DEFAULT_METRICS = [
   { label: 'Нарушения',    type: 'penalty' },
   { label: 'Сайты',        type: 'penalty' },
   { label: 'Итого',        type: 'score'   },
-];
-
-const PUB_LABELS = [
-  { date: '18.06', name: 'Промежуточные результаты', badge: 'Результаты предварительные' },
-  { date: '23.06', name: 'Итоговые результаты',       badge: 'Финальные результаты конкурсной недели' },
 ];
 
 const ADMIN_SESSION_KEY = 'divergentContestAdminUnlocked';
@@ -55,7 +48,6 @@ let METRICS = DEFAULT_METRICS.map(m => ({ ...m }));
 /* ── Debounce ───────────────────────────────────────────────── */
 function debounce(fn, delay = 500) {
   let timer = null, lastArgs = null, pendingResolve = null, pendingReject = null;
-
   function fire() {
     if (timer) { clearTimeout(timer); timer = null; }
     if (!pendingResolve) return Promise.resolve();
@@ -63,7 +55,6 @@ function debounce(fn, delay = 500) {
     pendingResolve = null; pendingReject = null;
     return Promise.resolve().then(() => fn.apply(null, args)).then(resolve, reject);
   }
-
   function debounced(...args) {
     lastArgs = args;
     if (timer) clearTimeout(timer);
@@ -93,9 +84,9 @@ function setSaveIndicator(state) {
     document.body.appendChild(el);
   }
   const palette = {
-    pending: ['rgba(30,60,120,.9)',  '#e4e4f0', '⟳ Сохраняю…'],
-    saved:   ['rgba(30,100,55,.9)',  '#e4e4f0', '✓ Сохранено'],
-    error:   ['rgba(160,30,30,.95)', '#e4e4f0', '✗ Ошибка сохранения'],
+    pending: ['rgba(30,60,120,.92)',  '#e0e0f8', '⟳ Сохраняю…'],
+    saved:   ['rgba(30,100,55,.92)',  '#e0e0f8', '✓ Сохранено'],
+    error:   ['rgba(160,30,30,.95)',  '#e0e0f8', '✗ Ошибка сохранения'],
     idle:    ['','',''],
   };
   const [bg, fg, text] = palette[state] || palette.idle;
@@ -109,40 +100,41 @@ function getScoreMetricIndex() {
   return idx === -1 ? METRICS.length - 1 : idx;
 }
 
+/* ── Normalize ──────────────────────────────────────────────── */
 function normalizeEditableData() {
   const metricCount = METRICS.length;
   FACULTIES.forEach(fac => { fac.crest = null; });
 
-  // Убедиться что у нас ровно 2 слота
-  while (WEEKLY_DATA.length < 2) WEEKLY_DATA.push([]);
+  if (!WEEKLY_DATA[0]) WEEKLY_DATA[0] = [];
 
-  WEEKLY_DATA.forEach((week, wi) => {
-    if (!week) WEEKLY_DATA[wi] = [];
-    FACULTIES.forEach((fac, fi) => {
-      if (!WEEKLY_DATA[wi][fi]) WEEKLY_DATA[wi][fi] = [];
-      fac.operators.forEach((_, oi) => {
-        if (!WEEKLY_DATA[wi][fi][oi]) WEEKLY_DATA[wi][fi][oi] = Array(metricCount).fill(0);
-        while (WEEKLY_DATA[wi][fi][oi].length < metricCount) {
-          WEEKLY_DATA[wi][fi][oi].splice(getScoreMetricIndex(), 0, 0);
-        }
-        if (WEEKLY_DATA[wi][fi][oi].length > metricCount) {
-          WEEKLY_DATA[wi][fi][oi].length = metricCount;
-        }
-      });
-      if (WEEKLY_DATA[wi][fi].length > fac.operators.length) {
-        WEEKLY_DATA[wi][fi].length = fac.operators.length;
+  FACULTIES.forEach((fac, fi) => {
+    if (!WEEKLY_DATA[0][fi]) WEEKLY_DATA[0][fi] = [];
+    fac.operators.forEach((_, oi) => {
+      if (!WEEKLY_DATA[0][fi][oi]) WEEKLY_DATA[0][fi][oi] = Array(metricCount).fill(0);
+      while (WEEKLY_DATA[0][fi][oi].length < metricCount) {
+        WEEKLY_DATA[0][fi][oi].splice(getScoreMetricIndex(), 0, 0);
+      }
+      if (WEEKLY_DATA[0][fi][oi].length > metricCount) {
+        WEEKLY_DATA[0][fi][oi].length = metricCount;
       }
     });
+    if (WEEKLY_DATA[0][fi].length > fac.operators.length) {
+      WEEKLY_DATA[0][fi].length = fac.operators.length;
+    }
   });
 }
 
+/* ── Load / Save ────────────────────────────────────────────── */
 async function loadEditableData() {
   const state = await api.loadState();
   if (state && Array.isArray(state.faculties) && Array.isArray(state.weeklyData) && Array.isArray(state.metrics)) {
     FACULTIES   = state.faculties;
-    WEEKLY_DATA = state.weeklyData;
+    /* Совместимость: если сервер вернул старый формат [slot0, slot1],
+       берём первый (промежуточный) слот */
+    WEEKLY_DATA = Array.isArray(state.weeklyData[0]) && !Array.isArray(state.weeklyData[0][0])
+      ? [ state.weeklyData[0] ]
+      : [ state.weeklyData[0] ?? [] ];
     METRICS     = state.metrics;
-    console.log('✅ Данные загружены с сервера');
   }
   if (!METRICS.some(m => m.type === 'score')) METRICS.push({ label: 'Итого', type: 'score' });
   normalizeEditableData();
@@ -150,6 +142,7 @@ async function loadEditableData() {
 
 async function saveEditableData() {
   normalizeEditableData();
+  /* Сохраняем в формате совместимом с сервером — один слот */
   setSaveIndicator('pending');
   try {
     await api.saveState({ faculties: FACULTIES, weeklyData: WEEKLY_DATA, metrics: METRICS }, getAdminPassword());
@@ -173,9 +166,9 @@ const debouncedSave = debounce(() => saveEditableData(), 500);
 
 async function refreshDashboardOnly() {
   await Promise.all([
-    renderStats(currentWeek),
-    renderScoreboard(currentWeek),
-    renderFacultyCards(currentWeek),
+    renderStats(),
+    renderScoreboard(),
+    renderFacultyCards(),
   ]);
 }
 
@@ -196,7 +189,7 @@ function formatMetricValue(value, metric) {
   return fmtPts(n);
 }
 
-/* ── Admin Session ──────────────────────────────────────────── */
+/* ── Admin ──────────────────────────────────────────────────── */
 function loadAdminSession() {
   const flag = sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
   const hasPwd = !!sessionStorage.getItem(ADMIN_PASSWORD_KEY);
@@ -209,7 +202,7 @@ function updateAdminGate() {
   const login = document.getElementById('admin-login-area');
   const active = document.getElementById('admin-active-area');
   const err = document.getElementById('admin-error');
-  if (btn) { btn.classList.toggle('unlocked', isAdmin); }
+  if (btn) btn.classList.toggle('unlocked', isAdmin);
   if (login) login.hidden = isAdmin;
   if (active) active.hidden = !isAdmin;
   if (err) err.textContent = '';
@@ -238,7 +231,8 @@ async function loginAdmin() {
     isAdmin = true;
     sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
     sessionStorage.setItem(ADMIN_PASSWORD_KEY, pwd);
-    closeAdminModal(); updateAdminGate(); renderEditor(); setDashboardMode(currentView);
+    closeAdminModal(); updateAdminGate(); renderEditor();
+    document.getElementById('editor-panel').hidden = false;
   } catch (err) {
     if (error) error.textContent = 'Сервер недоступен';
   } finally {
@@ -250,75 +244,54 @@ function logoutAdmin() {
   isAdmin = false;
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
   sessionStorage.removeItem(ADMIN_PASSWORD_KEY);
-  closeAdminModal(); updateAdminGate(); renderEditor(); setDashboardMode(currentView);
+  closeAdminModal(); updateAdminGate(); renderEditor();
+  document.getElementById('editor-panel').hidden = true;
 }
 
-/* ── Data Layer ─────────────────────────────────────────────── */
-async function fetchScores(weekIdx) {
-  return calcTotals(weekIdx);
-}
-
-async function fetchFacultyTotal(facIdx, weekIdx) {
-  return getFacultyTotal(facIdx, weekIdx);
-}
-
-function calcTotals(weekIdx) {
+/* ── Data calculations ──────────────────────────────────────── */
+function calcTotals() {
   const si = getScoreMetricIndex();
-  const wi = Math.min(weekIdx, WEEKLY_DATA.length - 1);
   return FACULTIES.map((fac, fi) =>
     fac.operators.map((name, oi) => ({
       name,
-      pts: Number(WEEKLY_DATA[wi]?.[fi]?.[oi]?.[si]) || 0,
+      pts: Number(WEEKLY_DATA[0]?.[fi]?.[oi]?.[si]) || 0,
     }))
   );
 }
 
-function getFacultyTotal(facIdx, weekIdx) {
+function getFacultyTotal(facIdx) {
   const si = getScoreMetricIndex();
-  const wi = Math.min(weekIdx, WEEKLY_DATA.length - 1);
-  const rows = WEEKLY_DATA[wi]?.[facIdx] ?? [];
+  const rows = WEEKLY_DATA[0]?.[facIdx] ?? [];
   const scores = rows.map(r => Number(r[si]) || 0).filter(v => v !== 0);
   if (scores.length === 0) return 0;
   return scores.reduce((s, v) => s + v, 0) / scores.length;
 }
 
-/* ── Render Helpers ─────────────────────────────────────────── */
-function buildRankBadge(rank) {
-  const cls = rank <= 3 ? `rank-${rank}` : 'rank-other';
-  return `<span class="rank-badge ${cls}">${rank}</span>`;
-}
-
 /* ── Stats ──────────────────────────────────────────────────── */
-async function renderStats(weekIdx) {
+async function renderStats() {
   const el = document.getElementById('stats-section');
   if (!el) return;
 
-  const allTotals = await fetchScores(weekIdx);
+  const allTotals = calcTotals();
   const allPts = allTotals.flat().map(o => o.pts);
   const totalOps = FACULTIES.reduce((s, f) => s + f.operators.length, 0);
   const activePts = allPts.filter(p => p > 0);
   const avgAll = activePts.length ? activePts.reduce((s, v) => s + v, 0) / activePts.length : 0;
   const bestPts = activePts.length ? Math.max(...activePts) : 0;
 
-  // Лидирующая фракция
-  const facTotals = await Promise.all(FACULTIES.map((_, fi) => fetchFacultyTotal(fi, weekIdx)));
+  const facTotals = FACULTIES.map((_, fi) => getFacultyTotal(fi));
   const leaderIdx = facTotals.indexOf(Math.max(...facTotals));
   const leader = FACULTIES[leaderIdx];
 
-  // Лучший оператор
   let bestOp = '—';
-  allTotals.forEach((facArr, fi) => {
-    facArr.forEach(op => {
-      if (op.pts === bestPts && bestPts > 0) bestOp = op.name;
-    });
+  allTotals.forEach(facArr => {
+    facArr.forEach(op => { if (op.pts === bestPts && bestPts > 0) bestOp = op.name; });
   });
 
-  // Нарушения: сумма всех penalty-метрик
-  const wi = Math.min(weekIdx, WEEKLY_DATA.length - 1);
   let violations = 0;
   METRICS.forEach((m, mi) => {
     if (m.type === 'penalty') {
-      WEEKLY_DATA[wi]?.forEach(facRows => {
+      WEEKLY_DATA[0]?.forEach(facRows => {
         facRows.forEach(row => { violations += Number(row[mi]) || 0; });
       });
     }
@@ -332,7 +305,7 @@ async function renderStats(weekIdx) {
       <div class="stat-card">
         <div class="stat-label">Всего участников</div>
         <div class="stat-value">${totalOps}</div>
-        <div class="stat-note">${FACULTIES.map(f => f.name + ' · ' + f.operators.length).join('  ')}</div>
+        <div class="stat-note">${FACULTIES.map(f => f.name + ': ' + f.operators.length).join(' · ')}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Лидирующая фракция</div>
@@ -341,7 +314,7 @@ async function renderStats(weekIdx) {
       </div>
       <div class="stat-card">
         <div class="stat-label">Лучший оператор</div>
-        <div class="stat-value" style="font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${bestOp}</div>
+        <div class="stat-value" style="font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bestOp}</div>
         <div class="stat-note">Баллы: ${fmtPts(bestPts)}</div>
       </div>
       <div class="stat-card">
@@ -357,30 +330,26 @@ async function renderStats(weekIdx) {
       <div class="stat-card">
         <div class="stat-label">Последнее обновление</div>
         <div class="stat-value" style="font-size:18px">${updated}</div>
-        <div class="stat-note">${PUB_LABELS[Math.min(weekIdx, 1)].badge}</div>
+        <div class="stat-note">Конкурсная неделя 15.06 – 21.06</div>
       </div>
     </div>
   `;
 }
 
 /* ── Scoreboard ─────────────────────────────────────────────── */
-async function renderScoreboard(weekIdx) {
+async function renderScoreboard() {
   const sb = document.getElementById('scoreboard');
   if (!sb) return;
 
-  const totals = await Promise.all(
-    FACULTIES.map(async (f, i) => ({ ...f, avgTotal: await fetchFacultyTotal(i, weekIdx), count: f.operators.length }))
-  );
-
-  const allTotals = await fetchScores(weekIdx);
-  totals.forEach((fac, fi_orig) => {
-    const fi = FACULTIES.findIndex(f => f.id === fac.id);
-    fac.sumTotal = allTotals[fi]?.reduce((s, o) => s + o.pts, 0) || 0;
-  });
-
+  const allTotals = calcTotals();
+  const totals = FACULTIES.map((fac, fi) => ({
+    ...fac,
+    avgTotal: getFacultyTotal(fi),
+    sumTotal: allTotals[fi]?.reduce((s, o) => s + o.pts, 0) || 0,
+    count: fac.operators.length,
+  }));
   totals.sort((a, b) => b.avgTotal - a.avgTotal);
 
-  const pub = PUB_LABELS[Math.min(weekIdx, 1)];
   const [first, second] = totals;
   const diff = second ? first.avgTotal - second.avgTotal : 0;
 
@@ -423,7 +392,6 @@ async function renderScoreboard(weekIdx) {
         <h2 class="section-title">Общий рейтинг команд</h2>
       </div>
       <div class="score-meta">
-        <span>${pub.date} · ${pub.name}</span>
         <strong>Лидер: ${first?.name || '—'}</strong>
         <span>Отрыв от 2 места: +${fmtPts(diff)}</span>
       </div>
@@ -433,44 +401,33 @@ async function renderScoreboard(weekIdx) {
 }
 
 /* ── Faculty Cards ──────────────────────────────────────────── */
-async function renderFacultyCards(weekIdx) {
+async function renderFacultyCards() {
   const grid = document.getElementById('faction-grid');
   if (!grid) return;
 
-  const allTotals = await fetchScores(weekIdx);
+  const allTotals = calcTotals();
   const maxPts = Math.max(1, ...allTotals.flat().map(o => o.pts));
-  const wi = Math.min(weekIdx, WEEKLY_DATA.length - 1);
-
   const colHeaders = METRICS.map(m => `<th class="metric-col metric-${m.type}">${escapeHtml(m.label)}</th>`).join('');
 
   let html = '';
 
   for (let fi = 0; fi < FACULTIES.length; fi++) {
     const fac = FACULTIES[fi];
-    const facTotal = await fetchFacultyTotal(fi, weekIdx);
-
-    // Сортируем операторов по баллу для ранжирования
+    const facTotal = getFacultyTotal(fi);
     const scoreIdx = getScoreMetricIndex();
+
     const opsWithRank = fac.operators.map((name, oi) => ({
-      name, oi,
-      pts: allTotals[fi][oi]?.pts || 0,
+      name, oi, pts: allTotals[fi][oi]?.pts || 0,
     }));
     opsWithRank.sort((a, b) => b.pts - a.pts);
-
-    // Глобальный ранг среди всех операторов всех фракций
-    const allOpsPts = allTotals.flat().map(o => o.pts).sort((a, b) => b - a);
-    function globalRank(pts) {
-      if (pts <= 0) return null;
-      return allOpsPts.indexOf(pts) + 1;
-    }
 
     const rows = opsWithRank.map(({ name, oi, pts }, sortIdx) => {
       const pct = Math.round((pts / maxPts) * 100);
       const localRank = sortIdx + 1;
-      const grank = globalRank(pts);
       const topCls = localRank <= 3 ? ` top${localRank}` : '';
+      const rankBadge = `<span class="rank-badge${localRank <= 3 ? ' rank-'+localRank : ''}">${localRank}</span>`;
 
-      const row = WEEKLY_DATA[wi]?.[fi]?.[oi] || [];
+      const row = WEEKLY_DATA[0]?.[fi]?.[oi] || [];
       const metricCells = METRICS.map((metric, mi) => {
         const value = row[mi] ?? 0;
         if (metric.type === 'score') {
@@ -484,8 +441,6 @@ async function renderFacultyCards(weekIdx) {
         const cls = metric.type === 'penalty' && Number(value) > 0 ? ' class="neg"' : '';
         return `<td${cls}>${formatMetricValue(value, metric)}</td>`;
       }).join('');
-
-      const rankBadge = buildRankBadge(localRank);
 
       return `<tr class="${topCls}">
         <td>${rankBadge}</td>
@@ -535,11 +490,7 @@ async function renderFacultyCards(weekIdx) {
 
 /* ── Editor ─────────────────────────────────────────────────── */
 async function refreshDashboard() {
-  await Promise.all([
-    renderStats(currentWeek),
-    renderScoreboard(currentWeek),
-    renderFacultyCards(currentWeek),
-  ]);
+  await Promise.all([renderStats(), renderScoreboard(), renderFacultyCards()]);
 }
 
 function renderEditor() {
@@ -547,15 +498,10 @@ function renderEditor() {
   if (!panel) return;
   if (!isAdmin) { panel.innerHTML = ''; return; }
 
-  const editWeek = Math.min(currentWeek, 1);
-  const weekOptions = [0, 1].map(idx =>
-    `<option value="${idx}" ${idx === editWeek ? 'selected' : ''}>${PUB_LABELS[idx].date} — ${PUB_LABELS[idx].name}</option>`
-  ).join('');
-
   const metricsRows = METRICS.map((metric, mi) => `
     <div class="metric-editor-row">
       <input class="editor-input" value="${escapeHtml(metric.label)}"
-        oninput="updateMetricLabel(${mi}, this.value)" aria-label="Название показателя">
+        oninput="updateMetricLabel(${mi}, this.value)">
       <select class="editor-select" onchange="updateMetricType(${mi}, this.value)" ${metric.type === 'score' ? 'disabled' : ''}>
         <option value="metric"  ${metric.type === 'metric'  ? 'selected' : ''}>Показатель</option>
         <option value="penalty" ${metric.type === 'penalty' ? 'selected' : ''}>Штраф</option>
@@ -565,22 +511,19 @@ function renderEditor() {
     </div>
   `).join('');
 
-  const facultyEditors = FACULTIES.map((fac, fi) => {
+  const factionEditors = FACULTIES.map((fac, fi) => {
     const rows = fac.operators.map((name, oi) => {
       const cells = METRICS.map((metric, mi) => `
         <td>
           <input class="metric-value-input" type="number" step="0.1"
-            value="${WEEKLY_DATA[editWeek]?.[fi]?.[oi]?.[mi] ?? 0}"
-            oninput="updateOperatorMetric(${editWeek}, ${fi}, ${oi}, ${mi}, this.value)"
-            aria-label="${escapeHtml(metric.label)}">
+            value="${WEEKLY_DATA[0]?.[fi]?.[oi]?.[mi] ?? 0}"
+            oninput="updateOperatorMetric(${fi}, ${oi}, ${mi}, this.value)">
         </td>
       `).join('');
       return `
         <tr>
-          <td>
-            <input class="operator-name-input" value="${escapeHtml(name)}"
-              oninput="updateOperatorName(${fi}, ${oi}, this.value)">
-          </td>
+          <td><input class="operator-name-input" value="${escapeHtml(name)}"
+            oninput="updateOperatorName(${fi}, ${oi}, this.value)"></td>
           ${cells}
           <td>
             <button class="editor-icon-btn danger" onclick="clearOperatorMetrics(${fi}, ${oi})" title="Очистить">⊘</button>
@@ -594,7 +537,7 @@ function renderEditor() {
         <div class="editor-faction-header">
           <div class="editor-faction-name">${fac.icon} ${escapeHtml(fac.name)}</div>
           <div class="editor-faction-actions">
-            <button class="editor-btn danger-soft" onclick="clearFacultyMetrics(${fi}, ${editWeek})">Очистить группу</button>
+            <button class="editor-btn danger-soft" onclick="clearFactionMetrics(${fi})">Очистить группу</button>
             <div class="editor-add-operator">
               <input class="editor-input" id="new-operator-${fi}" placeholder="Новый оператор">
               <button class="editor-btn" onclick="addOperator(${fi})">Добавить</button>
@@ -622,10 +565,6 @@ function renderEditor() {
         <div class="editor-title">Управление данными</div>
         <div class="editor-subtitle">Изменения сохраняются на сервере</div>
       </div>
-      <label class="editor-week-label">
-        Публикация:
-        <select class="editor-select" onchange="showWeek(Number(this.value))">${weekOptions}</select>
-      </label>
       <button class="editor-btn ghost" onclick="logoutAdmin()">Выйти</button>
     </div>
     <div class="editor-metrics">
@@ -639,23 +578,22 @@ function renderEditor() {
         <button class="editor-btn" onclick="addMetric()">Добавить колонку</button>
       </div>
     </div>
-    <div class="editor-faculties">${facultyEditors}</div>
+    <div class="editor-factions">${factionEditors}</div>
   `;
 }
 
-/* ── Operator CRUD ──────────────────────────────────────────── */
+/* ── CRUD ───────────────────────────────────────────────────── */
 function updateOperatorName(facIdx, opIdx, value) {
   if (!requireAdmin()) return;
   FACULTIES[facIdx].operators[opIdx] = value.trim() || `Оператор ${opIdx + 1}`;
   refreshDashboardOnly(); debouncedSave();
 }
 
-function updateOperatorMetric(weekIdx, facIdx, opIdx, metricIdx, value) {
+function updateOperatorMetric(facIdx, opIdx, metricIdx, value) {
   if (!requireAdmin()) return;
-  if (!WEEKLY_DATA[weekIdx]) WEEKLY_DATA[weekIdx] = [];
-  if (!WEEKLY_DATA[weekIdx][facIdx]) WEEKLY_DATA[weekIdx][facIdx] = [];
-  if (!WEEKLY_DATA[weekIdx][facIdx][opIdx]) WEEKLY_DATA[weekIdx][facIdx][opIdx] = Array(METRICS.length).fill(0);
-  WEEKLY_DATA[weekIdx][facIdx][opIdx][metricIdx] = Number(value) || 0;
+  if (!WEEKLY_DATA[0][facIdx]) WEEKLY_DATA[0][facIdx] = [];
+  if (!WEEKLY_DATA[0][facIdx][opIdx]) WEEKLY_DATA[0][facIdx][opIdx] = Array(METRICS.length).fill(0);
+  WEEKLY_DATA[0][facIdx][opIdx][metricIdx] = Number(value) || 0;
   refreshDashboardOnly(); debouncedSave();
 }
 
@@ -665,20 +603,16 @@ async function addOperator(facIdx) {
   const name = input.value.trim();
   if (!name) return;
   FACULTIES[facIdx].operators.push(name);
-  WEEKLY_DATA.forEach(week => {
-    if (!week[facIdx]) week[facIdx] = [];
-    week[facIdx].push(Array(METRICS.length).fill(0));
-  });
+  if (!WEEKLY_DATA[0][facIdx]) WEEKLY_DATA[0][facIdx] = [];
+  WEEKLY_DATA[0][facIdx].push(Array(METRICS.length).fill(0));
   await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
 async function clearOperatorMetrics(facIdx, opIdx) {
   if (!requireAdmin()) return;
   const name = FACULTIES[facIdx].operators[opIdx];
-  if (!confirm(`Очистить показатели оператора "${name}" за обе публикации?`)) return;
-  WEEKLY_DATA.forEach(week => {
-    if (week[facIdx]?.[opIdx]) week[facIdx][opIdx] = Array(METRICS.length).fill(0);
-  });
+  if (!confirm(`Очистить показатели оператора "${name}"?`)) return;
+  if (WEEKLY_DATA[0]?.[facIdx]?.[opIdx]) WEEKLY_DATA[0][facIdx][opIdx] = Array(METRICS.length).fill(0);
   await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
@@ -686,18 +620,17 @@ async function removeOperator(facIdx, opIdx) {
   if (!requireAdmin()) return;
   const name = FACULTIES[facIdx].operators[opIdx];
   if (!confirm(`Удалить оператора "${name}" полностью?`)) return;
-  WEEKLY_DATA.forEach(week => { if (week[facIdx]) week[facIdx].splice(opIdx, 1); });
+  if (WEEKLY_DATA[0]?.[facIdx]) WEEKLY_DATA[0][facIdx].splice(opIdx, 1);
   FACULTIES[facIdx].operators.splice(opIdx, 1);
   await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
-async function clearFacultyMetrics(facIdx, weekIdx = currentWeek) {
+async function clearFactionMetrics(facIdx) {
   if (!requireAdmin()) return;
   const fac = FACULTIES[facIdx];
-  const wi = Math.min(weekIdx, WEEKLY_DATA.length - 1);
-  if (!confirm(`Очистить показатели группы "${fac.name}" за ${PUB_LABELS[wi].date}?`)) return;
+  if (!confirm(`Очистить все показатели группы "${fac.name}"?`)) return;
   fac.operators.forEach((_, oi) => {
-    if (WEEKLY_DATA[wi]?.[facIdx]) WEEKLY_DATA[wi][facIdx][oi] = Array(METRICS.length).fill(0);
+    if (WEEKLY_DATA[0]?.[facIdx]) WEEKLY_DATA[0][facIdx][oi] = Array(METRICS.length).fill(0);
   });
   await saveEditableData(); renderEditor(); refreshDashboard();
 }
@@ -723,9 +656,7 @@ async function addMetric() {
   if (!label) return;
   const insertAt = getScoreMetricIndex();
   METRICS.splice(insertAt, 0, { label, type: typeInput.value === 'penalty' ? 'penalty' : 'metric' });
-  WEEKLY_DATA.forEach(week => {
-    week.forEach(facRows => { facRows.forEach(row => row.splice(insertAt, 0, 0)); });
-  });
+  WEEKLY_DATA[0].forEach(facRows => { facRows.forEach(row => row.splice(insertAt, 0, 0)); });
   await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
@@ -734,56 +665,8 @@ async function removeMetric(metricIdx) {
   if (METRICS[metricIdx].type === 'score') return;
   if (!confirm(`Удалить показатель "${METRICS[metricIdx].label}"?`)) return;
   METRICS.splice(metricIdx, 1);
-  WEEKLY_DATA.forEach(week => {
-    week.forEach(facRows => { facRows.forEach(row => row.splice(metricIdx, 1)); });
-  });
+  WEEKLY_DATA[0].forEach(facRows => { facRows.forEach(row => row.splice(metricIdx, 1)); });
   await saveEditableData(); renderEditor(); refreshDashboard();
-}
-
-/* ── Navigation ─────────────────────────────────────────────── */
-let currentWeek = 0;
-let currentView = 'week';
-
-function setActiveTab(weekIdx) {
-  document.querySelectorAll('.pub-tab').forEach(tab => {
-    tab.classList.toggle('active', tab.dataset.week === String(weekIdx));
-  });
-}
-
-function updateStatusBar(weekIdx) {
-  const bar = document.getElementById('status-bar');
-  const label = document.getElementById('status-label');
-  if (!bar || !label) return;
-  const pub = PUB_LABELS[Math.min(weekIdx, 1)];
-  label.textContent = `${pub.name} · ${pub.date} · ${pub.badge}`;
-  bar.classList.toggle('final', weekIdx === 1);
-}
-
-function setDashboardMode(view) {
-  currentView = view;
-  const sections = [
-    ['editor-panel', isAdmin],
-    ['stats-section', true],
-    ['scoreboard', true],
-    ['faction-grid', true],
-  ];
-  sections.forEach(([id, vis]) => {
-    const el = document.getElementById(id);
-    if (el) el.hidden = !vis;
-  });
-}
-
-async function showWeek(idx) {
-  currentWeek = idx;
-  setDashboardMode('week');
-  setActiveTab(idx);
-  updateStatusBar(idx);
-  await Promise.all([
-    renderStats(idx),
-    renderScoreboard(idx),
-    renderFacultyCards(idx),
-  ]);
-  renderEditor();
 }
 
 /* ── Init ───────────────────────────────────────────────────── */
@@ -795,9 +678,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const banner = document.createElement('div');
     banner.style.cssText = [
       'position:fixed','top:0','left:0','right:0','z-index:9999',
-      'background:#1a0a0a','color:#e4e4f0','font-family:Rajdhani,sans-serif',
+      'background:#fff3f0','color:#8b2800','font-family:Rajdhani,sans-serif',
       'font-size:13px','text-align:center','padding:10px 16px',
-      'letter-spacing:.05em','cursor:pointer','border-bottom:1px solid rgba(220,60,60,.4)',
+      'letter-spacing:.05em','cursor:pointer',
+      'border-bottom:1px solid rgba(200,52,26,.3)',
     ].join(';');
     banner.textContent = '⚠ Сервер недоступен. Данные не загружены. Нажмите для повтора.';
     banner.onclick = () => { banner.remove(); location.reload(); };
@@ -806,13 +690,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadAdminSession();
   updateAdminGate();
   renderEditor();
-  showWeek(0);
+  document.getElementById('editor-panel').hidden = !isAdmin;
+  await Promise.all([renderStats(), renderScoreboard(), renderFacultyCards()]);
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAdminModal(); });
 document.addEventListener('click', e => {
   const gate = document.getElementById('admin-gate');
-  const pop = document.getElementById('admin-popover');
+  const pop  = document.getElementById('admin-popover');
   if (!gate || !pop || pop.hidden) return;
   if (!gate.contains(e.target)) closeAdminModal();
 });

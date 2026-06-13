@@ -305,10 +305,10 @@ function parseExcelAndApply(file, weekIndex) {
 /* ── UI: инициализация кнопки и обработчика ─────────────── */
 function initExcelImport() {
   const fileInput  = document.getElementById('excel-file-input');
-  const weekSelect = document.getElementById('import-week-select');
+  // weekSelect removed (single slot)
   const importBtn  = document.getElementById('excel-import-btn');
 
-  if (!fileInput || !weekSelect || !importBtn) return;
+  if (!fileInput || !importBtn) return;
 
   importBtn.addEventListener('click', () => {
     const file = fileInput.files[0];
@@ -321,7 +321,7 @@ function initExcelImport() {
       setImportStatus('Поддерживаются только .xlsx, .xls и .ods', 'error');
       return;
     }
-    const weekIdx = parseInt(weekSelect.value, 10);
+    const weekIdx = 0; // единственный слот данных
     setImportStatus('');
     parseExcelAndApply(file, weekIdx);
   });

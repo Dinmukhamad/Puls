@@ -4,48 +4,47 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Дивергент: Конкурс Операторов</title>
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=div2">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=div2">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=div2">
-  <link rel="stylesheet" href="css/styles.css?v=div2">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=div4">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=div4">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=div4">
+  <link rel="stylesheet" href="css/styles.css?v=div4">
   <script src="js/api.js"></script>
 </head>
 <body>
 
   <div class="bg-grid" aria-hidden="true"></div>
 
-  <!-- Декор -->
   <div class="bg-decorations" aria-hidden="true">
     <svg class="bg-deco deco-fire" viewBox="0 0 120 200" xmlns="http://www.w3.org/2000/svg">
-      <path d="M60,180 Q15,145 28,98 Q42,58 60,38 Q48,72 66,84 Q54,57 76,28 Q88,64 72,96 Q94,74 88,108 Q98,84 92,130 Q86,162 60,180Z" fill="rgba(220,80,20,.13)"/>
+      <path d="M60,185 Q18,148 30,100 Q44,60 62,40 Q50,72 68,86 Q56,58 78,28 Q90,66 74,98 Q96,76 90,112 Q100,86 94,132 Q88,164 60,185Z" fill="rgba(200,52,26,.07)"/>
     </svg>
-    <svg class="bg-deco deco-circuit" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
-      <line x1="20" y1="100" x2="80" y2="100" stroke="rgba(30,120,220,.15)" stroke-width="1.5"/>
-      <line x1="100" y1="20" x2="100" y2="80" stroke="rgba(30,120,220,.15)" stroke-width="1.5"/>
-      <line x1="120" y1="100" x2="180" y2="100" stroke="rgba(30,120,220,.15)" stroke-width="1.5"/>
-      <line x1="100" y1="120" x2="100" y2="180" stroke="rgba(30,120,220,.15)" stroke-width="1.5"/>
-      <circle cx="100" cy="100" r="20" fill="none" stroke="rgba(30,120,220,.18)" stroke-width="1.5"/>
-      <circle cx="100" cy="100" r="8" fill="rgba(30,120,220,.1)"/>
-      <rect x="16" y="94" width="12" height="12" rx="2" fill="rgba(30,120,220,.12)"/>
-      <rect x="172" y="94" width="12" height="12" rx="2" fill="rgba(30,120,220,.12)"/>
-      <rect x="94" y="16" width="12" height="12" rx="2" fill="rgba(30,120,220,.12)"/>
-      <rect x="94" y="172" width="12" height="12" rx="2" fill="rgba(30,120,220,.12)"/>
+    <svg class="bg-deco deco-circuit" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+      <line x1="20" y1="110" x2="88" y2="110" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
+      <line x1="110" y1="20" x2="110" y2="88" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
+      <line x1="132" y1="110" x2="200" y2="110" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
+      <line x1="110" y1="132" x2="110" y2="200" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
+      <circle cx="110" cy="110" r="22" fill="none" stroke="rgba(21,88,168,.12)" stroke-width="1.5"/>
+      <circle cx="110" cy="110" r="9" fill="rgba(21,88,168,.08)"/>
+      <rect x="14" y="104" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
+      <rect x="192" y="104" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
+      <rect x="104" y="14" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
+      <rect x="104" y="192" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
     </svg>
-    <svg class="bg-deco deco-ring" viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="120" cy="120" r="110" fill="none" stroke="rgba(150,150,200,.05)" stroke-width="1"/>
-      <circle cx="120" cy="120" r="80"  fill="none" stroke="rgba(150,150,200,.04)" stroke-width="1"/>
-      <circle cx="120" cy="120" r="50"  fill="none" stroke="rgba(150,150,200,.04)" stroke-width="1"/>
-      <line x1="120" y1="10" x2="120" y2="230" stroke="rgba(150,150,200,.04)" stroke-width="1"/>
-      <line x1="10" y1="120" x2="230" y2="120" stroke="rgba(150,150,200,.04)" stroke-width="1"/>
+    <svg class="bg-deco deco-ring" viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="130" cy="130" r="120" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="1"/>
+      <circle cx="130" cy="130" r="90"  fill="none" stroke="rgba(255,255,255,.025)" stroke-width="1"/>
+      <circle cx="130" cy="130" r="60"  fill="none" stroke="rgba(255,255,255,.02)" stroke-width="1"/>
+      <line x1="130" y1="10" x2="130" y2="250" stroke="rgba(255,255,255,.02)" stroke-width="1"/>
+      <line x1="10" y1="130" x2="250" y2="130" stroke="rgba(255,255,255,.02)" stroke-width="1"/>
     </svg>
   </div>
 
   <div class="container">
 
-    <!-- ═══ HERO ═══════════════════════════════════════════════ -->
+    <!-- ═══ HERO ════════════════════════════════════════════════ -->
     <section class="hero" aria-label="Дивергент: Конкурс Операторов">
 
-      <div class="hero-factions" aria-hidden="true">
+      <div class="hero-factions">
         <div class="hf-badge hf-dauntless">
           <span class="hf-icon">🔥</span>
           <span class="hf-name">Бесстрашие</span>
@@ -72,7 +71,7 @@
         <p class="hero-desc">
           Участники разделены на три фракции. Рейтинг формируется на основе качества работы,
           выработки часов, эффективности и дополнительных баллов.
-          За дисциплинарные нарушения, опоздания и использование посторонних сайтов снимаются баллы.
+          За нарушения и опоздания баллы снимаются.
         </p>
 
         <div class="hero-timeline">
@@ -99,43 +98,19 @@
       </div>
     </section>
 
-    <!-- ═══ DASHBOARD ═══════════════════════════════════════════ -->
+    <!-- ═══ DASHBOARD ════════════════════════════════════════════ -->
     <div id="dashboard" class="dashboard-anchor"></div>
 
-    <!-- Вкладки публикаций -->
-    <nav class="pub-tabs" aria-label="Выбор публикации">
-      <button class="pub-tab active" data-week="0" onclick="showWeek(0)">
-        <span class="pt-date">18.06</span>
-        <span class="pt-label">Промежуточные результаты</span>
-        <span class="pt-badge">Предварительные</span>
-      </button>
-      <button class="pub-tab" data-week="1" onclick="showWeek(1)">
-        <span class="pt-date">23.06</span>
-        <span class="pt-label">Итоговые результаты</span>
-        <span class="pt-badge final">Финальные</span>
-      </button>
-    </nav>
-
-    <!-- Текущий статус -->
-    <div class="status-bar" id="status-bar">
-      <span class="status-dot"></span>
-      <span id="status-label">Промежуточные результаты · 18.06 · Результаты предварительные</span>
-    </div>
-
-    <!-- Панель редактора (admin) -->
-    <section class="editor-panel" id="editor-panel" aria-label="Управление данными"></section>
+    <!-- Панель редактора (только для admin) -->
+    <section class="editor-panel" id="editor-panel" aria-label="Управление данными" hidden></section>
 
     <!-- Статистика -->
-    <section class="stats-section" id="stats-section" aria-label="Статистика конкурса">
-      <!-- заполняется renderStats() -->
-    </section>
+    <section class="stats-section" id="stats-section" aria-label="Статистика конкурса"></section>
 
     <!-- Рейтинг фракций -->
-    <section class="scoreboard" id="scoreboard" aria-label="Общий рейтинг фракций">
-      <!-- заполняется renderScoreboard() -->
-    </section>
+    <section class="scoreboard" id="scoreboard" aria-label="Общий рейтинг фракций"></section>
 
-    <!-- Критерии -->
+    <!-- Критерии оценки -->
     <section class="criteria-section" aria-label="Критерии оценки">
       <div class="criteria-header">
         <div class="section-kicker">Система оценки</div>
@@ -173,12 +148,12 @@
           <h2 class="section-title">Операторы по фракциям</h2>
         </div>
       </div>
-      <div class="factions-grid" id="faction-grid" aria-label="Фракции"></div>
+      <div class="factions-grid" id="faction-grid"></div>
     </section>
 
-  </div><!-- /container -->
+  </div>
 
-  <!-- Админ-кнопка -->
+  <!-- Админ -->
   <div class="admin-gate" id="admin-gate">
     <div class="admin-popover" id="admin-popover" hidden>
       <div class="admin-popover-header">
@@ -190,7 +165,7 @@
       </div>
       <div class="admin-popover-login" id="admin-login-area">
         <input class="admin-popover-input" id="admin-password" type="password" placeholder="Пароль"
-          onkeydown="if(event.key==='Enter') loginAdmin()" aria-label="Пароль">
+          onkeydown="if(event.key==='Enter') loginAdmin()">
         <button class="admin-popover-submit" onclick="loginAdmin()">Войти</button>
         <div class="admin-error" id="admin-error" aria-live="polite"></div>
       </div>
@@ -198,11 +173,6 @@
         <p>Доступ открыт. Редактирование — в панели выше.</p>
         <div class="excel-import-block">
           <div class="excel-import-title">📥 Загрузить баллы из Excel</div>
-          <label class="excel-import-label" for="import-week-select">Публикация:</label>
-          <select class="admin-popover-select" id="import-week-select">
-            <option value="0">18.06 — Промежуточные</option>
-            <option value="1">23.06 — Итоговые</option>
-          </select>
           <label class="excel-import-label" for="excel-file-input">Файл (.xlsx / .xls):</label>
           <label class="excel-file-label" id="excel-file-label">
             <input type="file" id="excel-file-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
@@ -215,12 +185,11 @@
         <button class="admin-popover-submit ghost" onclick="logoutAdmin()">Выйти</button>
       </div>
     </div>
-    <button class="admin-gate-btn" id="admin-gate-btn" onclick="openAdminModal()"
-      aria-label="Открыть режим администратора" title="Администратор">◈</button>
+    <button class="admin-gate-btn" id="admin-gate-btn" onclick="openAdminModal()" title="Администратор">◈</button>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=div2"></script>
-  <script src="js/excel-import.js?v=div2"></script>
+  <script src="js/app.js?v=div4"></script>
+  <script src="js/excel-import.js?v=div4"></script>
 </body>
 </html>
