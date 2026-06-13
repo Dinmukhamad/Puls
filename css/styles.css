@@ -63,6 +63,192 @@ body {
   font-size: 14px;
   line-height: 1.55;
 }
+body.intro-lock { overflow: hidden; }
+
+/* ── Intro Movie ────────────────────────────────────────────── */
+.intro-screen {
+  position: fixed; inset: 0; z-index: 10000;
+  display: grid; place-items: center;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    linear-gradient(115deg, rgba(9,10,15,.98), rgba(14,15,24,.96)),
+    radial-gradient(circle at 50% 48%, rgba(201,168,76,.14), transparent 42%);
+  color: var(--tx);
+  isolation: isolate;
+  opacity: 1; visibility: visible;
+  transition: opacity .65s ease, visibility .65s ease;
+}
+.intro-screen.is-hidden {
+  opacity: 0; visibility: hidden;
+  pointer-events: none;
+}
+.intro-field {
+  position: absolute; inset: 0; z-index: -1;
+  background:
+    linear-gradient(rgba(255,255,255,.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+  background-size: 54px 54px;
+  opacity: .72;
+  animation: introGridDrift 3.6s ease forwards;
+}
+.intro-ring {
+  position: absolute; left: 50%; top: 50%;
+  border: 1px solid rgba(232,200,112,.24);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(.52);
+  opacity: 0;
+}
+.ring-one {
+  width: min(64vw, 520px); aspect-ratio: 1;
+  animation: introRing 3.1s .15s ease-out forwards;
+}
+.ring-two {
+  width: min(44vw, 360px); aspect-ratio: 1;
+  border-color: rgba(255,255,255,.14);
+  animation: introRing 2.8s .38s ease-out forwards;
+}
+.intro-ray {
+  position: absolute; left: 50%; top: 50%;
+  width: min(70vw, 620px); height: 1px;
+  transform-origin: 0 50%;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(232,200,112,.6), transparent);
+  animation: introRay 2.7s .25s ease-out forwards;
+}
+.ray-one { transform: rotate(0deg) translateX(-50%); }
+.ray-two { transform: rotate(120deg) translateX(-50%); background: linear-gradient(90deg, transparent, rgba(255,120,64,.56), transparent); }
+.ray-three { transform: rotate(240deg) translateX(-50%); background: linear-gradient(90deg, transparent, rgba(74,174,255,.56), transparent); }
+.intro-symbols {
+  position: absolute; inset: 0;
+  pointer-events: none;
+}
+.intro-symbol {
+  position: absolute; left: 50%; top: 50%;
+  display: grid; place-items: center;
+  width: 72px; height: 72px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 50%;
+  background: rgba(255,255,255,.045);
+  font-size: 31px; line-height: 1;
+  transform: translate(-50%, -50%) scale(.4);
+  opacity: 0;
+  filter: drop-shadow(0 0 18px rgba(232,200,112,.24));
+}
+.intro-dauntless { animation: introSigilDauntless 3.2s .1s cubic-bezier(.2,.9,.25,1) forwards; }
+.intro-erudite   { animation: introSigilErudite 3.2s .22s cubic-bezier(.2,.9,.25,1) forwards; }
+.intro-candor    { animation: introSigilCandor 3.2s .34s cubic-bezier(.2,.9,.25,1) forwards; }
+.intro-content {
+  width: min(92vw, 720px);
+  text-align: center;
+  padding: 28px 18px;
+  transform: translateY(16px) scale(.98);
+  opacity: 0;
+  animation: introTitleIn 2.9s .72s ease forwards;
+}
+.intro-kicker {
+  color: var(--gold2);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: clamp(12px, 2vw, 16px);
+  font-weight: 700;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+}
+.intro-title {
+  margin-top: 10px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: clamp(48px, 11vw, 116px);
+  font-weight: 700;
+  letter-spacing: .06em;
+  line-height: .88;
+  text-transform: uppercase;
+  text-shadow: 0 0 28px rgba(232,200,112,.22);
+}
+.intro-subtitle {
+  margin-top: 18px;
+  color: var(--tx2);
+  font-size: clamp(14px, 2.6vw, 20px);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.intro-progress {
+  width: min(340px, 70vw);
+  height: 3px;
+  margin: 30px auto 0;
+  background: rgba(255,255,255,.1);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.intro-progress span {
+  display: block;
+  width: 100%; height: 100%;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, var(--d-pri), var(--gold2), var(--e-light), var(--c-light));
+  animation: introProgress 2.8s .55s ease forwards;
+}
+.intro-skip {
+  position: absolute; right: clamp(14px, 3vw, 34px); bottom: clamp(14px, 4vw, 34px);
+  padding: 9px 14px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 6px;
+  background: rgba(255,255,255,.06);
+  color: var(--tx2);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.intro-skip:hover {
+  background: rgba(255,255,255,.12);
+  border-color: rgba(232,200,112,.38);
+  color: var(--tx);
+}
+
+@keyframes introGridDrift {
+  0% { transform: scale(1.08); opacity: 0; }
+  20%, 82% { opacity: .72; }
+  100% { transform: scale(1); opacity: .22; }
+}
+@keyframes introRing {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.52) rotate(0deg); }
+  22%, 74% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.18) rotate(90deg); }
+}
+@keyframes introRay {
+  0% { opacity: 0; transform: rotate(var(--angle, 0deg)) translateX(-50%) scaleX(.2); }
+  30%, 70% { opacity: .72; }
+  100% { opacity: 0; transform: rotate(var(--angle, 0deg)) translateX(-50%) scaleX(1.1); }
+}
+.ray-one { --angle: 0deg; }
+.ray-two { --angle: 120deg; }
+.ray-three { --angle: 240deg; }
+@keyframes introSigilDauntless {
+  0% { opacity: 0; transform: translate(-50%, -50%) translate(-42vw, 26vh) scale(.45); }
+  28% { opacity: 1; transform: translate(-50%, -50%) translate(-155px, 88px) scale(1); }
+  68% { opacity: 1; transform: translate(-50%, -50%) translate(-118px, 56px) scale(.82); }
+  100% { opacity: 0; transform: translate(-50%, -50%) translate(0, 0) scale(.26); }
+}
+@keyframes introSigilErudite {
+  0% { opacity: 0; transform: translate(-50%, -50%) translate(40vw, 22vh) scale(.45); }
+  28% { opacity: 1; transform: translate(-50%, -50%) translate(155px, 84px) scale(1); }
+  68% { opacity: 1; transform: translate(-50%, -50%) translate(118px, 52px) scale(.82); }
+  100% { opacity: 0; transform: translate(-50%, -50%) translate(0, 0) scale(.26); }
+}
+@keyframes introSigilCandor {
+  0% { opacity: 0; transform: translate(-50%, -50%) translate(0, -38vh) scale(.45); }
+  28% { opacity: 1; transform: translate(-50%, -50%) translate(0, -132px) scale(1); }
+  68% { opacity: 1; transform: translate(-50%, -50%) translate(0, -96px) scale(.82); }
+  100% { opacity: 0; transform: translate(-50%, -50%) translate(0, 0) scale(.26); }
+}
+@keyframes introTitleIn {
+  0% { opacity: 0; transform: translateY(18px) scale(.96); filter: blur(8px); }
+  28%, 74% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  100% { opacity: 0; transform: translateY(-14px) scale(1.02); filter: blur(5px); }
+}
+@keyframes introProgress {
+  to { transform: translateX(0); }
+}
 
 /* ── Grid BG ───────────────────────────────────────────────── */
 .bg-grid {
@@ -821,6 +1007,17 @@ tr.top3 td { background: rgba(205,127,50,.04) !important; }
    RESPONSIVE
 ══════════════════════════════════════════════════════════════ */
 @media (max-width: 640px) {
+  .intro-symbol {
+    width: 56px; height: 56px;
+    font-size: 25px;
+  }
+  .intro-kicker { letter-spacing: .14em; }
+  .intro-subtitle { letter-spacing: .05em; }
+  .intro-skip {
+    right: 14px; bottom: 14px;
+    padding: 8px 11px;
+    font-size: 11px;
+  }
   .hero-factions { gap: 8px; }
   .hf-badge { min-width: 106px; padding: 11px 14px; }
   .hero-timeline { flex-direction: column; }
@@ -830,4 +1027,19 @@ tr.top3 td { background: rgba(205,127,50,.04) !important; }
   .score-list { grid-template-columns: 1fr; }
   .admin-popover { width: calc(100vw - 36px); right: -8px; }
   .scard::after { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-screen,
+  .intro-field,
+  .intro-ring,
+  .intro-ray,
+  .intro-symbol,
+  .intro-content,
+  .intro-progress span {
+    animation: none !important;
+    transition: opacity .12s ease, visibility .12s ease;
+  }
+  .intro-content { opacity: 1; transform: none; filter: none; }
+  .intro-progress span { transform: none; }
 }
