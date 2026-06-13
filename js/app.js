@@ -644,8 +644,30 @@ async function removeMetric(metricIdx) {
   await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
+function initIntro() {
+  const intro = document.getElementById('intro-screen');
+  if (!intro) return;
+
+  const skip = document.getElementById('intro-skip');
+  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  let closed = false;
+
+  function closeIntro() {
+    if (closed) return;
+    closed = true;
+    intro.classList.add('is-hidden');
+    document.body.classList.remove('intro-lock');
+    window.setTimeout(() => intro.remove(), reducedMotion ? 50 : 700);
+  }
+
+  document.body.classList.add('intro-lock');
+  skip?.addEventListener('click', closeIntro);
+  window.setTimeout(closeIntro, reducedMotion ? 450 : 3700);
+}
+
 /* ── Init ───────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
+  initIntro();
   try {
     await loadEditableData();
   } catch (err) {
