@@ -93,9 +93,9 @@ function setSaveIndicator(state) {
     document.body.appendChild(el);
   }
   const palette = {
-    pending: ['rgba(30,60,120,.9)',  '#e4e4f0', '⟳ Сохраняю…'],
-    saved:   ['rgba(30,100,55,.9)',  '#e4e4f0', '✓ Сохранено'],
-    error:   ['rgba(160,30,30,.95)', '#e4e4f0', '✗ Ошибка сохранения'],
+    pending: ['rgba(21,88,168,.9)',  '#e4e4f0', '⟳ Сохраняю…'],
+    saved:   ['rgba(26,128,64,.9)',  '#e4e4f0', '✓ Сохранено'],
+    error:   ['rgba(180,30,30,.95)', '#e4e4f0', '✗ Ошибка сохранения'],
     idle:    ['','',''],
   };
   const [bg, fg, text] = palette[state] || palette.idle;
@@ -565,7 +565,7 @@ function renderEditor() {
     </div>
   `).join('');
 
-  const facultyEditors = FACULTIES.map((fac, fi) => {
+  const factionEditors = FACULTIES.map((fac, fi) => {
     const rows = fac.operators.map((name, oi) => {
       const cells = METRICS.map((metric, mi) => `
         <td>
@@ -639,7 +639,7 @@ function renderEditor() {
         <button class="editor-btn" onclick="addMetric()">Добавить колонку</button>
       </div>
     </div>
-    <div class="editor-faculties">${facultyEditors}</div>
+    <div class="editor-factions">${factionEditors}</div>
   `;
 }
 
@@ -795,7 +795,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const banner = document.createElement('div');
     banner.style.cssText = [
       'position:fixed','top:0','left:0','right:0','z-index:9999',
-      'background:#1a0a0a','color:#e4e4f0','font-family:Rajdhani,sans-serif',
+      'background:#fff3f0','color:#8b2800','font-family:Rajdhani,sans-serif',
       'font-size:13px','text-align:center','padding:10px 16px',
       'letter-spacing:.05em','cursor:pointer','border-bottom:1px solid rgba(220,60,60,.4)',
     ].join(';');
