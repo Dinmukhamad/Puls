@@ -93,6 +93,6 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Harry Potter contest is running on port ${PORT}`);
+  console.log(`Дивергент: Конкурс Операторов запущен on port ${PORT}`);
   console.log(`Data file: ${DATA_FILE}`);
 });

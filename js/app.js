@@ -434,7 +434,7 @@ async function renderScoreboard(weekIdx) {
 
 /* ── Faculty Cards ──────────────────────────────────────────── */
 async function renderFacultyCards(weekIdx) {
-  const grid = document.getElementById('faculty-grid');
+  const grid = document.getElementById('faction-grid');
   if (!grid) return;
 
   const allTotals = await fetchScores(weekIdx);
@@ -495,8 +495,8 @@ async function renderFacultyCards(weekIdx) {
     }).join('');
 
     html += `
-      <div class="faculty-card ${fac.cls}">
-        <div class="faculty-header">
+      <div class="faction-card ${fac.cls}">
+        <div class="faction-header">
           <div class="fh-left">
             <div class="fh-icon">${fac.icon}</div>
             <div class="fh-names">
@@ -515,7 +515,7 @@ async function renderFacultyCards(weekIdx) {
             </div>
           </div>
         </div>
-        <div class="faculty-table-wrap">
+        <div class="faction-table-wrap">
           <table class="operators">
             <thead>
               <tr>
@@ -590,10 +590,10 @@ function renderEditor() {
     }).join('');
 
     return `
-      <div class="editor-faculty ${fac.cls}">
-        <div class="editor-faculty-header">
-          <div class="editor-faculty-name">${fac.icon} ${escapeHtml(fac.name)}</div>
-          <div class="editor-faculty-actions">
+      <div class="editor-faction ${fac.cls}">
+        <div class="editor-faction-header">
+          <div class="editor-faction-name">${fac.icon} ${escapeHtml(fac.name)}</div>
+          <div class="editor-faction-actions">
             <button class="editor-btn danger-soft" onclick="clearFacultyMetrics(${fi}, ${editWeek})">Очистить группу</button>
             <div class="editor-add-operator">
               <input class="editor-input" id="new-operator-${fi}" placeholder="Новый оператор">
@@ -765,7 +765,7 @@ function setDashboardMode(view) {
     ['editor-panel', isAdmin],
     ['stats-section', true],
     ['scoreboard', true],
-    ['faculty-grid', true],
+    ['faction-grid', true],
   ];
   sections.forEach(([id, vis]) => {
     const el = document.getElementById(id);

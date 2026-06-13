@@ -13,15 +13,15 @@
  * «итого».
  *
  * Поддерживаются обе структуры файла:
- *   - старая (без колонки «Факультет»): A=№, B=Оператор, C=Качество…
- *   - новая (с колонкой «Факультет»):   A=№, B=Факультет, C=Оператор, D=Качество…
+ *   - старая (без колонки «Фракция»): A=№, B=Оператор, C=Качество…
+ *   - новая (с колонкой «Фракция»):   A=№, B=Фракция, C=Оператор, D=Качество…
  *
- * Привязка имени к факультету:
- *   - Имя из Excel ищется в operators всех факультетов в data.json
- *   - Если найдено → пишем значения в эту строку выбранной недели
+ * Привязка имени к фракции:
+ *   - Имя из Excel ищется в operators всех фракций в data.json
+ *   - Если найдено → пишем значения в эту строку выбранной публикации
  *   - Если не найдено → строка пропускается с предупреждением
  *     (новый оператор должен сначала быть добавлен через админ-панель
- *     с привязкой к нужному факультету)
+ *     с привязкой к нужной фракции)
  */
 
 'use strict';
@@ -37,7 +37,7 @@ function toNum(v) {
   return isNaN(n) ? 0 : n;
 }
 
-/* Ищет оператора во всех факультетах по нормализованному имени.
+/* Ищет оператора во всех фракциях по нормализованному имени.
    Возвращает { facIdx, opIdx } или null. */
 function findOperator(rawName) {
   const target = norm(rawName);
@@ -273,18 +273,19 @@ function parseExcelAndApply(file, weekIndex) {
 
       /* ── Сохранение ──────────────────────────────────── */
       saveEditableData().then(() => {
+        renderStats(currentWeek);
         renderScoreboard(currentWeek);
         renderFacultyCards(currentWeek);
         renderEditor();
 
-        let msg = `✅ Импорт завершён: ${imported} операторов загружено в «${getPeriodLabel(weekIndex)}»`;
+        let msg = `✅ Импорт завершён: ${imported} операторов загружено в «${PUB_LABELS[Math.min(weekIndex,1)].date + ' — ' + PUB_LABELS[Math.min(weekIndex,1)].name}»`;
         if (skipped) msg += `, ${skipped} пропущено`;
         if (noticeMultiSheet) msg += `\n${noticeMultiSheet}`;
         if (missingOperators.length) {
           const sample = missingOperators.slice(0, 5).join(', ');
           msg += `\n⚠ Не найдены в системе: ${sample}`;
           if (missingOperators.length > 5) msg += ` … и ещё ${missingOperators.length - 5}`;
-          msg += `\n(Добавьте этих операторов через админ-панель в нужный факультет)`;
+          msg += `\n(Добавьте этих операторов через админ-панель в нужную фракцию)`;
         }
         setImportStatus(msg, missingOperators.length ? 'warn' : 'success');
       }).catch(err => {

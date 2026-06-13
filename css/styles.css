@@ -528,28 +528,28 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   FACULTY GRID & CARDS
+   FACTION GRID FACULTY GRID & CARDS CARDS
 ══════════════════════════════════════════════════════════════ */
-.faculties-grid {
+.factions-grid {
   display: flex; flex-direction: column;
   gap: 24px; margin-bottom: 60px;
 }
 
-.faculty-card {
+.faction-card {
   background: var(--bg2); border: 1px solid var(--border);
   border-radius: 10px; overflow: hidden;
   transition: box-shadow .25s;
   animation: cardIn .5s ease both;
 }
-.faculty-card.dauntless { border-top: 3px solid var(--d-pri); }
-.faculty-card.erudite   { border-top: 3px solid var(--e-pri); }
-.faculty-card.candor    { border-top: 3px solid var(--c-dark); }
-.faculty-card.dauntless:hover { box-shadow: 0 8px 32px var(--d-glow); }
-.faculty-card.erudite:hover   { box-shadow: 0 8px 32px var(--e-glow); }
-.faculty-card.candor:hover    { box-shadow: 0 8px 32px var(--c-glow); }
+.faction-card.dauntless { border-top: 3px solid var(--d-pri); }
+.faction-card.erudite   { border-top: 3px solid var(--e-pri); }
+.faction-card.candor    { border-top: 3px solid var(--c-dark); }
+.faction-card.dauntless:hover { box-shadow: 0 8px 32px var(--d-glow); }
+.faction-card.erudite:hover   { box-shadow: 0 8px 32px var(--e-glow); }
+.faction-card.candor:hover    { box-shadow: 0 8px 32px var(--c-glow); }
 
 /* Card header */
-.faculty-header {
+.faction-header {
   display: flex; justify-content: space-between;
   align-items: center; padding: 18px 22px 14px;
   gap: 14px; flex-wrap: wrap;
@@ -588,7 +588,7 @@ body {
 }
 
 /* Table */
-.faculty-table-wrap { overflow-x: auto; }
+.faction-table-wrap { overflow-x: auto; }
 
 table.operators {
   width: 100%; border-collapse: collapse;
@@ -733,25 +733,25 @@ tr.top3 td { background: rgba(205,127,50,.04) !important; }
   background: rgba(220,60,60,.18); border-color: rgba(220,60,60,.4); color: var(--danger);
 }
 
-.editor-faculty {
+.editor-faction {
   background: rgba(255,255,255,.02); border: 1px solid var(--border);
   border-radius: 6px; overflow: hidden; margin-bottom: 14px;
 }
-.editor-faculty.dauntless { border-left: 3px solid var(--d-pri); }
-.editor-faculty.erudite   { border-left: 3px solid var(--e-pri); }
-.editor-faculty.candor    { border-left: 3px solid var(--c-dark); }
+.editor-faction.dauntless { border-left: 3px solid var(--d-pri); }
+.editor-faction.erudite   { border-left: 3px solid var(--e-pri); }
+.editor-faction.candor    { border-left: 3px solid var(--c-dark); }
 
-.editor-faculty-header {
+.editor-faction-header {
   display: flex; justify-content: space-between; align-items: center;
   padding: 11px 14px; background: rgba(255,255,255,.03);
   gap: 10px; flex-wrap: wrap;
 }
-.editor-faculty-name {
+.editor-faction-name {
   font-family: 'Rajdhani', sans-serif;
   font-size: 14px; font-weight: 700;
   letter-spacing: .1em; text-transform: uppercase; color: var(--tx);
 }
-.editor-faculty-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.editor-faction-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .editor-add-operator { display: flex; gap: 6px; align-items: center; }
 .editor-table-wrap { overflow-x: auto; }
 .editor-table { width: 100%; border-collapse: collapse; font-size: 13px; }
