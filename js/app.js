@@ -1,5 +1,5 @@
 /* ============================================================
-   Конкурс Факультетов — app.js
+   Дивергент: Конкурс Операторов — app.js
    ============================================================
    Архитектура рассчитана на подключение FastAPI + PostgreSQL.
 
@@ -23,10 +23,11 @@ const USE_MOCK = false;
    -------------------------------------------------------- */
 const API_BASE = window.location.origin;
 
+/* Дивергент — три фракции */
 const HOUSE_CRESTS = {
-  gryf: 'assets/crest-gryffindor.png',
-  slyth: 'assets/crest-slytherin.png',
-  huff: 'assets/crest-hufflepuff.png',
+  dauntless: null,
+  erudite:   null,
+  candor:    null,
 };
 
 /* ============================================================
@@ -34,12 +35,12 @@ const HOUSE_CRESTS = {
    Замените реальными вызовами через api.js когда будет готов бэкенд.
 
    Структура данных для одного оператора за неделю:
-   [КЗЧ, QA, CSat, Эфф%, Часы%, Нарушения, Опоздания, Баллы]
+   [Качество, Выработка, Эффективность, Доп.баллы, Опозд.(мин), Сайты, Итого]
    ============================================================ */
 let FACULTIES = [
-  { id: 'gryf',  cls: 'gryf',  icon: '🦁', crest: HOUSE_CRESTS.gryf,  name: 'Гриффиндор', tagCls: 'tag-gryf',  scoreCls: 'gryf-score',  operators: [] },
-  { id: 'slyth', cls: 'slyth', icon: '🐍', crest: HOUSE_CRESTS.slyth, name: 'Слизерин',   tagCls: 'tag-slyth', scoreCls: 'slyth-score', operators: [] },
-  { id: 'huff',  cls: 'huff',  icon: '🦡', crest: HOUSE_CRESTS.huff,  name: 'Пуффендуй',  tagCls: 'tag-huff',  scoreCls: 'huff-score',  operators: [] },
+  { id: 'dauntless', cls: 'dauntless', icon: '🔥', crest: null, name: 'Бесстрашие',  tagCls: 'tag-dauntless', scoreCls: 'dauntless-score', operators: [] },
+  { id: 'erudite',   cls: 'erudite',   icon: '⚡', crest: null, name: 'Эрудиция',    tagCls: 'tag-erudite',   scoreCls: 'erudite-score',   operators: [] },
+  { id: 'candor',    cls: 'candor',    icon: '⚖',  crest: null, name: 'Искренность', tagCls: 'tag-candor',    scoreCls: 'candor-score',    operators: [] },
 ];
 
 /* Weekly data: [week][faculty][operator] → [...метрики, Баллы]
@@ -54,17 +55,18 @@ let WEEKLY_DATA = [ [], [], [], [] ];
    - 1 итоговый балл (приходит из Excel, не вычисляется на сайте)
    Порядок в массиве задаёт порядок колонок в таблицах. */
 const DEFAULT_METRICS = [
-  { label: 'Качество',     type: 'metric'  },  // 0: значение качества (например 97.5)
-  { label: 'Оценка',       type: 'metric'  },  // 1: оценка клиента (например 4.82)
-  { label: 'Выработка %',  type: 'metric'  },  // 2: % выработки
-  { label: 'Эфф. %',       type: 'metric'  },  // 3: эффективность %
+  { label: 'Качество',     type: 'metric'  },  // 0: качество работы
+  { label: 'Выработка',    type: 'metric'  },  // 1: выработка часов
+  { label: 'Эфф. %',       type: 'metric'  },  // 2: эффективность %
+  { label: 'Доп. баллы',   type: 'metric'  },  // 3: дополнительные баллы за переработки
   { label: 'Опозд. (мин)', type: 'penalty' },  // 4: минуты опозданий
-  { label: 'Сайты',        type: 'penalty' },  // 5: факты посещения посторонних сайтов
-  { label: 'Итого',        type: 'score'   },  // 6: итоговый балл из Excel
+  { label: 'Нарушения',    type: 'penalty' },  // 5: дисциплинарные нарушения
+  { label: 'Сайты',        type: 'penalty' },  // 6: посещение посторонних сайтов
+  { label: 'Итого',        type: 'score'   },  // 7: итоговый балл
 ];
 
-const ADMIN_SESSION_KEY = 'hpContestAdminUnlocked';
-const ADMIN_PASSWORD_KEY = 'hpContestAdminToken';
+const ADMIN_SESSION_KEY = 'divergentContestAdminUnlocked';
+const ADMIN_PASSWORD_KEY = 'divergentContestAdminToken';
 let isAdmin = false;
 
 /* Возвращает пароль администратора из sessionStorage.
@@ -135,7 +137,7 @@ function setSaveIndicator(state) {
     el.id = 'save-indicator';
     el.style.cssText = [
       'position:fixed','bottom:16px','left:16px','z-index:9998',
-      'padding:8px 14px','border-radius:6px','font-family:Cinzel,serif',
+      'padding:8px 14px','border-radius:6px','font-family:Rajdhani,sans-serif',
       'font-size:12px','letter-spacing:.06em','pointer-events:none',
       'transition:opacity .25s ease','opacity:0',
     ].join(';');
@@ -187,7 +189,7 @@ function normalizeEditableData() {
   const metricCount = METRICS.length;
 
   FACULTIES.forEach(fac => {
-    fac.crest = HOUSE_CRESTS[fac.id] || fac.crest;
+    fac.crest = null; // фракции используют emoji-иконки, не изображения
     // Операторы загружаются только с сервера — авто-дополнение отключено
   });
 
@@ -489,8 +491,8 @@ function getPeriodLabel(weekIdx) {
 }
 
 function renderCrest(fac, className = 'faculty-crest-img') {
-  if (!fac.crest) return fac.icon;
-  return `<img class="${className}" src="${fac.crest}" alt="${escapeHtml(fac.name)}">`;
+  // Фракции Дивергента используют emoji-символы вместо изображений
+  return `<span class="faction-icon-display">${fac.icon}</span>`;
 }
 
 /* ── Scoreboard ─────────────────────────────────────────────── */
@@ -503,21 +505,23 @@ async function renderScoreboard(weekIdx) {
   const leaderDiff = second ? first.total - second.total : 0;
   const isMonthTotal = weekIdx === 4;
   const scoreItems = totals.map((fac, idx) => `
-    <div class="score-faculty score-faculty-card">
+    <div class="score-faculty score-faculty-card ${fac.cls}-card${idx === 0 ? ' leader' : ''}">
       <div class="score-rank">#${idx + 1}</div>
       <div class="score-faculty-name">
         ${renderCrest(fac, 'score-crest-img')}
         <span>${fac.name}</span>
       </div>
-      <div class="score-points ${fac.scoreCls}">${fmtPts(fac.total)}</div>
-      <div class="score-caption">средний балл</div>
+      <div>
+        <div class="score-points ${fac.scoreCls}">${fmtPts(fac.total)}</div>
+        <div class="score-caption">средний балл</div>
+      </div>
     </div>
   `).join('');
 
   document.getElementById('scoreboard').innerHTML = `
     <div class="scoreboard-header">
       <div>
-        <div class="section-kicker">Командный зачёт</div>
+        <div class="section-kicker">Рейтинг фракций</div>
         <h2 class="section-title">Общий рейтинг команд</h2>
       </div>
       <div class="score-summary">
@@ -920,7 +924,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const banner = document.createElement('div');
     banner.style.cssText = [
       'position:fixed','top:0','left:0','right:0','z-index:9999',
-      'background:#740001','color:#f4e8c1','font-family:Cinzel,serif',
+      'background:#0a0b10','color:#f4e8c1','font-family:Rajdhani,sans-serif',
       'font-size:13px','text-align:center','padding:10px 16px',
       'letter-spacing:.05em','cursor:pointer',
     ].join(';');
