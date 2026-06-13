@@ -459,8 +459,43 @@ body {
    FACTION GRID FACULTY GRID & CARDS CARDS
 ══════════════════════════════════════════════════════════════ */
 .factions-grid {
-  display: flex; flex-direction: column;
-  gap: 24px; margin-bottom: 60px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  align-items: start;
+  gap: 16px; margin-bottom: 60px;
+}
+
+.faction-jumps {
+  grid-column: 1 / -1;
+  position: sticky; top: 8px; z-index: 10;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 8px;
+  background: rgba(15,16,26,.88);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 8px;
+  backdrop-filter: blur(12px);
+}
+.faction-jump {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  min-width: 0; padding: 9px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.08);
+  color: var(--tx2); text-decoration: none;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.faction-jump span:last-child {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.faction-jump:hover {
+  background: rgba(255,255,255,.09);
+  border-color: rgba(255,255,255,.16);
+  color: var(--tx);
 }
 
 .faction-card {
@@ -468,6 +503,7 @@ body {
   border-radius: 10px; overflow: hidden;
   transition: box-shadow .25s;
   animation: cardIn .5s ease both;
+  scroll-margin-top: 72px;
 }
 .faction-card.dauntless { border-top: 3px solid var(--d-pri); }
 .faction-card.erudite   { border-top: 3px solid var(--e-pri); }
@@ -515,8 +551,94 @@ body {
   text-transform: uppercase; color: #9898b8;
 }
 
-/* Table */
-.faction-table-wrap { overflow-x: auto; }
+/* Operators */
+.faction-table-wrap {
+  overflow-x: clip;
+  padding: 0 12px 14px;
+}
+
+.operators-board {
+  display: flex; flex-direction: column;
+  gap: 8px;
+}
+
+.operator-row {
+  display: grid;
+  grid-template-columns: minmax(112px, .85fr) minmax(0, 2.15fr);
+  gap: 10px;
+  padding: 10px;
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(255,255,255,.065);
+  border-radius: 7px;
+  transition: background .12s, border-color .12s;
+}
+.operator-row:hover {
+  background: rgba(255,255,255,.06);
+  border-color: rgba(255,255,255,.12);
+}
+
+.operator-main {
+  display: flex; align-items: center;
+  gap: 9px; min-width: 0;
+}
+.operator-name-wrap { min-width: 0; }
+.operator-sub {
+  margin-top: 3px;
+  color: var(--tx3);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.operator-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.op-metric {
+  min-width: 0;
+  display: flex; flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 7px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 6px;
+}
+.op-metric.metric-score {
+  grid-column: 1 / -1;
+  background: rgba(232,200,112,.055);
+  border-color: rgba(232,200,112,.16);
+}
+.op-metric-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; min-width: 0;
+}
+.op-metric-label {
+  color: #9898b8;
+  font-size: 9px;
+  line-height: 1.15;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.op-metric-value {
+  color: var(--tx);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+.op-metric.metric-penalty.neg {
+  background: rgba(220,60,60,.07);
+  border-color: rgba(220,60,60,.18);
+}
+.op-metric.metric-penalty.neg .op-metric-value {
+  color: var(--danger);
+}
 
 table.operators {
   width: 100%; border-collapse: collapse;
@@ -541,7 +663,8 @@ table.operators tbody tr:hover { background: rgba(255,255,255,.04); }
 /* Name cell — no-wrap */
 .op-name {
   color: var(--tx) !important; font-weight: 500;
-  white-space: nowrap; min-width: 160px;
+  white-space: normal; min-width: 0;
+  line-height: 1.2; overflow-wrap: anywhere;
 }
 
 /* Rank badge */
@@ -586,6 +709,9 @@ td.neg { color: var(--danger) !important; }
 tr.top1 td { background: rgba(232,200,112,.05) !important; }
 tr.top2 td { background: rgba(170,170,170,.04) !important; }
 tr.top3 td { background: rgba(205,127,50,.04) !important; }
+.operator-row.top1 { background: rgba(232,200,112,.07); border-color: rgba(232,200,112,.18); }
+.operator-row.top2 { background: rgba(170,170,170,.055); border-color: rgba(170,170,170,.15); }
+.operator-row.top3 { background: rgba(205,127,50,.055); border-color: rgba(205,127,50,.15); }
 
 /* ═══════════════════════════════════════════════════════════
    EDITOR PANEL
@@ -828,6 +954,19 @@ tr.top3 td { background: rgba(205,127,50,.04) !important; }
   .pub-tabs { flex-direction: column; }
   .pub-tab { min-width: 0; }
   .score-list { grid-template-columns: 1fr; }
+  .faction-jumps {
+    position: static;
+    grid-template-columns: 1fr;
+  }
+  .faction-jump { justify-content: flex-start; }
   .admin-popover { width: calc(100vw - 36px); right: -8px; }
   .scard::after { display: none; }
+}
+
+@media (max-width: 760px) {
+  .operator-row { grid-template-columns: 1fr; }
+  .operator-metrics { grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); }
+  .faction-header { align-items: flex-start; }
+  .fh-meta { width: 100%; justify-content: space-between; }
+  .fh-stat { text-align: left; }
 }
