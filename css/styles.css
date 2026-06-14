@@ -56,7 +56,7 @@
 html { scroll-behavior: smooth; }
 body {
   font-family: 'Inter', 'Segoe UI', sans-serif;
-  background: var(--bg);
+  background: #090a0f;
   color: var(--tx);
   min-height: 100vh;
   overflow-x: hidden;
@@ -253,21 +253,91 @@ body.intro-lock { overflow: hidden; }
 /* ── Grid BG ───────────────────────────────────────────────── */
 .bg-grid {
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  overflow: hidden;
   background:
-    linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px),
-    radial-gradient(ellipse 70% 50% at 50% 0%, rgba(25,70,170,.16) 0%, transparent 62%),
-    radial-gradient(ellipse 45% 35% at 5%  55%, rgba(180,50,10,.10) 0%, transparent 52%),
-    var(--bg);
-  background-size: 56px 56px, 56px 56px, auto, auto, auto;
+    linear-gradient(180deg, rgba(9,10,15,.18) 0%, rgba(9,10,15,.70) 62%, rgba(7,8,13,.96) 100%),
+    radial-gradient(ellipse 64% 46% at 50% -8%, rgba(232,200,112,.20) 0%, transparent 58%),
+    radial-gradient(ellipse 38% 36% at 13% 22%, rgba(255,120,64,.18) 0%, transparent 64%),
+    radial-gradient(ellipse 42% 34% at 88% 26%, rgba(74,174,255,.20) 0%, transparent 64%),
+    radial-gradient(ellipse 35% 30% at 74% 78%, rgba(200,200,220,.09) 0%, transparent 66%),
+    repeating-linear-gradient(118deg, transparent 0 34px, rgba(255,255,255,.024) 35px, transparent 36px),
+    linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px),
+    #090a0f;
+  background-size: auto, auto, auto, auto, auto, 92px 92px, 56px 56px, 56px 56px, auto;
+}
+.bg-grid::before,
+.bg-grid::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.bg-grid::before {
+  background:
+    radial-gradient(circle at 12% 18%, rgba(232,200,112,.62) 0 1px, transparent 2px),
+    radial-gradient(circle at 26% 66%, rgba(255,120,64,.42) 0 1px, transparent 2px),
+    radial-gradient(circle at 47% 32%, rgba(255,255,255,.32) 0 1px, transparent 2px),
+    radial-gradient(circle at 68% 20%, rgba(74,174,255,.45) 0 1px, transparent 2px),
+    radial-gradient(circle at 82% 58%, rgba(232,200,112,.36) 0 1px, transparent 2px),
+    radial-gradient(circle at 91% 82%, rgba(255,255,255,.28) 0 1px, transparent 2px);
+  background-size: 420px 360px, 520px 470px, 380px 420px, 560px 400px, 460px 540px, 620px 480px;
+  opacity: .58;
+  animation: starDrift 34s linear infinite;
+}
+.bg-grid::after {
+  left: -30vw;
+  top: -10vh;
+  width: 160vw;
+  height: 120vh;
+  transform: rotate(-13deg);
+  background:
+    linear-gradient(90deg, transparent, rgba(232,200,112,.10), transparent),
+    linear-gradient(90deg, transparent, rgba(74,174,255,.10), transparent),
+    linear-gradient(90deg, transparent, rgba(255,120,64,.08), transparent);
+  background-size: 16% 100%, 13% 100%, 11% 100%;
+  background-position: 16% 0, 58% 0, 82% 0;
+  background-repeat: no-repeat;
+  opacity: .34;
+}
+@keyframes starDrift {
+  to { transform: translate3d(-80px, 54px, 0); }
 }
 
 /* ── Decorations ───────────────────────────────────────────── */
 .bg-decorations { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.bg-decorations::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -8vh;
+  width: min(980px, 112vw);
+  aspect-ratio: 600 / 420;
+  transform: translateX(-50%);
+  background: url('../assets/hogwarts-castle.png') center bottom / contain no-repeat;
+  filter: invert(1) saturate(1.25) hue-rotate(178deg) brightness(.58) contrast(1.18);
+  mix-blend-mode: screen;
+  opacity: .40;
+  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,.96) 0%, rgba(0,0,0,.82) 52%, transparent 100%);
+  mask-image: linear-gradient(to top, rgba(0,0,0,.96) 0%, rgba(0,0,0,.82) 52%, transparent 100%);
+}
+.bg-decorations::after {
+  content: "";
+  position: absolute;
+  left: -8vw;
+  right: -8vw;
+  bottom: -12vh;
+  height: 44vh;
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(232,200,112,.20), transparent 58%),
+    radial-gradient(ellipse at 30% 90%, rgba(255,120,64,.13), transparent 52%),
+    radial-gradient(ellipse at 74% 86%, rgba(74,174,255,.13), transparent 54%);
+  filter: blur(8px);
+  opacity: .76;
+}
 .bg-deco { position: absolute; opacity: 0; }
-.deco-fire    { width: 140px; bottom: 8%;  left: 2.5%; animation: fadeIn 3s .4s ease forwards; }
-.deco-circuit { width: 170px; top: 12%;   right: 4%;  animation: fadeIn 3s .9s ease forwards; }
-.deco-ring    { width: 260px; top: 46%;   left: 48%; transform: translateX(-50%);
+.deco-fire    { width: 170px; bottom: 12%; left: 2.5%; animation: fadeIn 3s .4s ease forwards; }
+.deco-circuit { width: 210px; top: 12%;   right: 4%;  animation: fadeIn 3s .9s ease forwards; }
+.deco-ring    { width: 320px; top: 45%;   left: 49%; transform: translateX(-50%);
                 animation: fadeIn 3s 1.5s ease forwards, spin 80s linear infinite; }
 @keyframes fadeIn { to { opacity: 1; } }
 @keyframes spin { to { transform: translateX(-50%) rotate(360deg); } }
@@ -1042,7 +1112,9 @@ tr.top3 td { background: rgba(205,127,50,.04) !important; }
   .intro-ray,
   .intro-symbol,
   .intro-content,
-  .intro-progress span {
+  .intro-progress span,
+  .bg-grid::before,
+  .deco-ring {
     animation: none !important;
     transition: opacity .12s ease, visibility .12s ease;
   }
