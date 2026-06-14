@@ -39,6 +39,9 @@ function resolveDataFile() {
     process.env.PERSISTENT_DATA_DIR ||
     process.env.RAILWAY_VOLUME_MOUNT_PATH ||
     process.env.RAILWAY_VOLUME_PATH;
+  const preferredFallbackFile = process.platform === 'win32'
+    ? path.join(__dirname, 'runtime-data', 'data.json')
+    : path.join('/data', 'data.json');
 
   if (explicitFile && path.isAbsolute(explicitFile)) {
     return {
@@ -69,16 +72,16 @@ function resolveDataFile() {
 
   if (explicitFile) {
     return {
-      dataFile: path.resolve(process.cwd(), explicitFile),
-      source: 'DATA_FILE relative fallback',
+      dataFile: preferredFallbackFile,
+      source: 'relative DATA_FILE ignored',
       persistent: false,
-      warning: 'DATA_FILE is relative. Mount a Railway Volume and set DATA_FILE to an absolute path such as /data/data.json.',
+      warning: 'DATA_FILE is relative and unsafe for Railway redeploys. Mount a Railway Volume at /data and set DATA_FILE=/data/data.json.',
     };
   }
 
   return {
-    dataFile: path.join(__dirname, 'runtime-data', 'data.json'),
-    source: 'ephemeral fallback',
+    dataFile: preferredFallbackFile,
+    source: 'preferred /data fallback',
     persistent: false,
     warning: 'No persistent storage configured. Mount a Railway Volume at /data or set DATA_FILE=/data/data.json.',
   };
