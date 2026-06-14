@@ -255,14 +255,15 @@ body.intro-lock { overflow: hidden; }
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(150,176,174,.28) 0%, rgba(41,47,51,.30) 28%, rgba(9,10,15,.78) 70%, rgba(7,8,13,.98) 100%),
-    radial-gradient(ellipse 70% 38% at 50% -6%, rgba(201,168,76,.16) 0%, transparent 60%),
-    radial-gradient(ellipse 38% 30% at 12% 20%, rgba(255,120,64,.14) 0%, transparent 65%),
-    radial-gradient(ellipse 42% 32% at 88% 24%, rgba(74,174,255,.16) 0%, transparent 64%),
-    linear-gradient(rgba(255,255,255,.020) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.020) 1px, transparent 1px),
-    #090a0f;
-  background-size: auto, auto, auto, auto, 64px 64px, 64px 64px, auto;
+    linear-gradient(180deg, rgba(18,23,31,.20) 0%, rgba(8,10,16,.72) 58%, rgba(5,6,10,.98) 100%),
+    radial-gradient(ellipse 72% 44% at 50% -10%, rgba(232,200,112,.18) 0%, transparent 60%),
+    radial-gradient(ellipse 34% 34% at 11% 23%, rgba(255,120,64,.17) 0%, transparent 68%),
+    radial-gradient(ellipse 42% 34% at 89% 25%, rgba(74,174,255,.18) 0%, transparent 66%),
+    radial-gradient(ellipse 42% 22% at 50% 86%, rgba(185,198,214,.08) 0%, transparent 70%),
+    linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px),
+    #07080d;
+  background-size: auto, auto, auto, auto, auto, 58px 58px, 58px 58px, auto;
 }
 .bg-grid::before,
 .bg-grid::after {
@@ -272,30 +273,28 @@ body.intro-lock { overflow: hidden; }
 }
 .bg-grid::before {
   background:
-    radial-gradient(circle at 12% 18%, rgba(232,200,112,.62) 0 1px, transparent 2px),
-    radial-gradient(circle at 26% 66%, rgba(255,120,64,.42) 0 1px, transparent 2px),
-    radial-gradient(circle at 47% 32%, rgba(255,255,255,.32) 0 1px, transparent 2px),
-    radial-gradient(circle at 68% 20%, rgba(74,174,255,.45) 0 1px, transparent 2px),
-    radial-gradient(circle at 82% 58%, rgba(232,200,112,.36) 0 1px, transparent 2px),
-    radial-gradient(circle at 91% 82%, rgba(255,255,255,.28) 0 1px, transparent 2px);
-  background-size: 420px 360px, 520px 470px, 380px 420px, 560px 400px, 460px 540px, 620px 480px;
-  opacity: .58;
-  animation: starDrift 34s linear infinite;
+    radial-gradient(circle at 10% 18%, rgba(232,200,112,.62) 0 1px, transparent 2px),
+    radial-gradient(circle at 24% 68%, rgba(255,120,64,.40) 0 1px, transparent 2px),
+    radial-gradient(circle at 47% 32%, rgba(255,255,255,.30) 0 1px, transparent 2px),
+    radial-gradient(circle at 68% 20%, rgba(74,174,255,.44) 0 1px, transparent 2px),
+    radial-gradient(circle at 82% 58%, rgba(232,200,112,.34) 0 1px, transparent 2px),
+    radial-gradient(circle at 92% 82%, rgba(255,255,255,.25) 0 1px, transparent 2px),
+    repeating-linear-gradient(118deg, transparent 0 44px, rgba(255,255,255,.018) 45px, transparent 46px);
+  background-size: 420px 360px, 520px 470px, 380px 420px, 560px 400px, 460px 540px, 620px 480px, 180px 180px;
+  opacity: .54;
+  animation: starDrift 38s linear infinite;
 }
 .bg-grid::after {
-  left: -30vw;
-  top: -10vh;
-  width: 160vw;
-  height: 120vh;
-  transform: rotate(-13deg);
+  inset: -18vh -28vw;
+  transform: rotate(-9deg);
   background:
-    linear-gradient(90deg, transparent, rgba(232,200,112,.10), transparent),
-    linear-gradient(90deg, transparent, rgba(74,174,255,.10), transparent),
-    linear-gradient(90deg, transparent, rgba(255,120,64,.08), transparent);
-  background-size: 16% 100%, 13% 100%, 11% 100%;
-  background-position: 16% 0, 58% 0, 82% 0;
+    linear-gradient(90deg, transparent 0 31%, rgba(232,200,112,.10) 31.5% 32%, transparent 32.5% 100%),
+    linear-gradient(90deg, transparent 0 47%, rgba(74,174,255,.11) 47.4% 48.1%, transparent 48.6% 100%),
+    linear-gradient(90deg, transparent 0 64%, rgba(255,120,64,.09) 64.3% 64.9%, transparent 65.4% 100%),
+    repeating-linear-gradient(90deg, transparent 0 82px, rgba(255,255,255,.022) 83px 84px, transparent 85px 160px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 240px 100%;
   background-repeat: no-repeat;
-  opacity: .34;
+  opacity: .40;
 }
 @keyframes starDrift {
   to { transform: translate3d(-80px, 54px, 0); }
@@ -307,76 +306,82 @@ body.intro-lock { overflow: hidden; }
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -2vh;
-  width: min(1500px, 132vw);
-  height: min(58vh, 520px);
+  bottom: -4vh;
+  width: min(1500px, 136vw);
+  height: min(48vh, 430px);
   transform: translateX(-50%);
   background:
-    repeating-linear-gradient(90deg, transparent 0 46px, rgba(68,54,43,.44) 47px 51px, rgba(226,208,170,.20) 52px 54px, transparent 55px 82px),
-    repeating-linear-gradient(90deg, transparent 0 12px, rgba(205,188,153,.11) 12px 13px, transparent 14px 22px),
-    repeating-linear-gradient(0deg, transparent 0 30px, rgba(202,183,148,.17) 31px 33px, transparent 34px 58px),
-    repeating-linear-gradient(36deg, transparent 0 34px, rgba(194,174,138,.13) 35px 36px, transparent 37px 68px),
-    repeating-linear-gradient(-36deg, transparent 0 38px, rgba(194,174,138,.11) 39px 40px, transparent 41px 72px),
-    linear-gradient(to top, transparent 0 36%, rgba(122,108,86,.68) 37% 49%, rgba(190,176,143,.34) 49% 51%, transparent 52%),
-    repeating-linear-gradient(90deg, transparent 0 16px, rgba(196,176,133,.22) 17px 23px, transparent 24px 36px, rgba(151,140,118,.14) 37px 44px, transparent 45px 64px),
-    linear-gradient(to top, rgba(20,59,22,.70) 0%, rgba(38,84,29,.44) 22%, rgba(96,88,51,.18) 34%, transparent 35%),
-    linear-gradient(180deg, rgba(184,204,198,.24) 0%, rgba(141,140,115,.14) 42%, transparent 72%);
+    linear-gradient(102deg, transparent 0 40%, rgba(232,200,112,.18) 40.4% 40.9%, transparent 41.4% 100%),
+    linear-gradient(102deg, transparent 0 43%, rgba(74,174,255,.16) 43.3% 44%, transparent 44.5% 100%),
+    repeating-linear-gradient(102deg, transparent 0 46px, rgba(255,255,255,.035) 47px 49px, transparent 50px 94px),
+    repeating-linear-gradient(90deg, transparent 0 34px, rgba(111,143,178,.24) 35px 56px, transparent 57px 106px),
+    repeating-linear-gradient(90deg, transparent 0 72px, rgba(183,198,212,.18) 73px 98px, transparent 99px 164px),
+    repeating-linear-gradient(0deg, transparent 0 14px, rgba(215,230,240,.08) 15px 16px, transparent 17px 34px),
+    linear-gradient(to top, rgba(8,10,16,.88) 0%, rgba(18,25,33,.66) 18%, rgba(42,56,68,.24) 56%, transparent 100%),
+    radial-gradient(ellipse at 50% 100%, rgba(74,174,255,.16), transparent 62%),
+    radial-gradient(ellipse at 28% 92%, rgba(255,120,64,.14), transparent 48%),
+    radial-gradient(ellipse at 74% 90%, rgba(232,200,112,.14), transparent 50%);
   background-size:
-    auto,
-    auto,
-    auto,
-    auto,
-    auto,
     100% 100%,
-    100% 34%,
+    100% 100%,
+    100% 100%,
+    100% 54%,
+    100% 36%,
+    100% 52%,
+    100% 100%,
+    100% 100%,
     100% 100%,
     100% 100%;
   background-position:
     center,
     center,
     center,
-    center,
-    center,
-    center,
-    center 38%,
-    center,
-    center;
+    center bottom,
+    center bottom,
+    center bottom,
+    center bottom,
+    center bottom,
+    center bottom,
+    center bottom;
   background-repeat:
+    no-repeat,
+    no-repeat,
     repeat,
-    repeat,
-    repeat,
-    repeat,
+    repeat-x,
+    repeat-x,
     repeat,
     no-repeat,
-    repeat-x,
+    no-repeat,
     no-repeat,
     no-repeat;
-  opacity: .50;
-  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,.98) 0%, rgba(0,0,0,.92) 58%, rgba(0,0,0,.34) 86%, transparent 100%);
-  mask-image: linear-gradient(to top, rgba(0,0,0,.98) 0%, rgba(0,0,0,.92) 58%, rgba(0,0,0,.34) 86%, transparent 100%);
+  opacity: .56;
+  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,.96) 0%, rgba(0,0,0,.82) 54%, rgba(0,0,0,.26) 84%, transparent 100%);
+  mask-image: linear-gradient(to top, rgba(0,0,0,.96) 0%, rgba(0,0,0,.82) 54%, rgba(0,0,0,.26) 84%, transparent 100%);
 }
 .bg-decorations::after {
   content: "";
   position: absolute;
-  left: -8vw;
-  right: -8vw;
-  bottom: -9vh;
-  height: 42vh;
+  left: 50%;
+  top: 47%;
+  width: min(760px, 90vw);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  border-radius: 50%;
   background:
-    repeating-linear-gradient(82deg, transparent 0 12px, rgba(113,144,45,.17) 13px 15px, transparent 16px 28px),
-    repeating-linear-gradient(101deg, transparent 0 14px, rgba(185,154,58,.12) 15px 17px, transparent 18px 31px),
-    radial-gradient(ellipse at 50% 100%, rgba(116,147,54,.24), transparent 58%),
-    radial-gradient(ellipse at 27% 86%, rgba(255,120,64,.11), transparent 48%),
-    radial-gradient(ellipse at 76% 82%, rgba(74,174,255,.10), transparent 52%);
-  filter: blur(3px);
-  opacity: .72;
-  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,.96), rgba(0,0,0,.48) 52%, transparent 100%);
-  mask-image: linear-gradient(to top, rgba(0,0,0,.96), rgba(0,0,0,.48) 52%, transparent 100%);
+    radial-gradient(circle, transparent 0 21%, rgba(232,200,112,.20) 21.4% 21.8%, transparent 22.3% 36%, rgba(74,174,255,.17) 36.4% 36.9%, transparent 37.4% 55%, rgba(255,255,255,.10) 55.4% 55.9%, transparent 56.5%),
+    conic-gradient(from -32deg, transparent 0 9%, rgba(255,120,64,.20) 9.5% 10.2%, transparent 10.8% 31%, rgba(74,174,255,.22) 31.4% 32.2%, transparent 33% 63%, rgba(232,200,112,.18) 63.4% 64.2%, transparent 65% 100%),
+    linear-gradient(90deg, transparent 0 48%, rgba(255,255,255,.10) 48.4% 48.7%, transparent 49.2% 100%),
+    linear-gradient(0deg, transparent 0 48%, rgba(255,255,255,.08) 48.4% 48.7%, transparent 49.2% 100%);
+  filter: drop-shadow(0 0 30px rgba(74,174,255,.12));
+  opacity: .52;
+  mix-blend-mode: screen;
+  -webkit-mask-image: radial-gradient(circle, transparent 0 17%, rgba(0,0,0,.92) 18% 70%, transparent 72%);
+  mask-image: radial-gradient(circle, transparent 0 17%, rgba(0,0,0,.92) 18% 70%, transparent 72%);
 }
 .bg-deco { position: absolute; opacity: 0; }
-.deco-fire    { width: 170px; bottom: 12%; left: 2.5%; animation: fadeIn 3s .4s ease forwards; }
-.deco-circuit { width: 210px; top: 12%;   right: 4%;  animation: fadeIn 3s .9s ease forwards; }
-.deco-ring    { width: 320px; top: 45%;   left: 49%; transform: translateX(-50%);
+.deco-fire    { width: 135px; bottom: 15%; left: 4%; animation: fadeIn 3s .4s ease forwards; }
+.deco-circuit { width: 240px; top: 13%;   right: 4%;  animation: fadeIn 3s .9s ease forwards; }
+.deco-ring    { width: 390px; top: 43%;   left: 50%; transform: translateX(-50%);
                 animation: fadeIn 3s 1.5s ease forwards, spin 80s linear infinite; }
 @keyframes fadeIn { to { opacity: 1; } }
 @keyframes spin { to { transform: translateX(-50%) rotate(360deg); } }
