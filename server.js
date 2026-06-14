@@ -21,18 +21,6 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '5mb' }));
 
-function isTruthy(value) {
-  return /^(1|true|yes)$/i.test(String(value || ''));
-}
-
-function existingDir(dir) {
-  try {
-    return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
 function resolveDataFile() {
   const explicitFile = process.env.DATA_FILE;
   const persistentDir =
@@ -56,15 +44,6 @@ function resolveDataFile() {
     return {
       dataFile: path.join(persistentDir, 'data.json'),
       source: 'persistent directory env',
-      persistent: true,
-      warning: null,
-    };
-  }
-
-  if (existingDir('/data')) {
-    return {
-      dataFile: path.join('/data', 'data.json'),
-      source: '/data volume path',
       persistent: true,
       warning: null,
     };
