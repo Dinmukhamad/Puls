@@ -720,6 +720,12 @@ table.operators td {
   padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.06);
   color: #c0c0d8; vertical-align: middle;
 }
+table.operators th:first-child,
+table.operators td:first-child,
+table.operators th.metric-col,
+table.operators td:not(:first-child):not(.op-name):not(.metric-score-cell) {
+  text-align: center;
+}
 table.operators tr:last-child td { border-bottom: none; }
 table.operators tbody tr { transition: background .12s; }
 table.operators tbody tr:hover { background: rgba(255,255,255,.04); }
@@ -727,7 +733,7 @@ table.operators tbody tr:hover { background: rgba(255,255,255,.04); }
 /* Name cell — no-wrap */
 .op-name {
   color: var(--tx) !important; font-weight: 500;
-  white-space: nowrap; min-width: 160px;
+  text-align: left; white-space: nowrap; min-width: 160px;
 }
 
 /* Rank badge */
