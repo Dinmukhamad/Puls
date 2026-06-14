@@ -255,16 +255,14 @@ body.intro-lock { overflow: hidden; }
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
   overflow: hidden;
   background:
-    linear-gradient(180deg, rgba(9,10,15,.18) 0%, rgba(9,10,15,.70) 62%, rgba(7,8,13,.96) 100%),
-    radial-gradient(ellipse 64% 46% at 50% -8%, rgba(232,200,112,.20) 0%, transparent 58%),
-    radial-gradient(ellipse 38% 36% at 13% 22%, rgba(255,120,64,.18) 0%, transparent 64%),
-    radial-gradient(ellipse 42% 34% at 88% 26%, rgba(74,174,255,.20) 0%, transparent 64%),
-    radial-gradient(ellipse 35% 30% at 74% 78%, rgba(200,200,220,.09) 0%, transparent 66%),
-    repeating-linear-gradient(118deg, transparent 0 34px, rgba(255,255,255,.024) 35px, transparent 36px),
-    linear-gradient(rgba(255,255,255,.022) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.022) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(150,176,174,.28) 0%, rgba(41,47,51,.30) 28%, rgba(9,10,15,.78) 70%, rgba(7,8,13,.98) 100%),
+    radial-gradient(ellipse 70% 38% at 50% -6%, rgba(201,168,76,.16) 0%, transparent 60%),
+    radial-gradient(ellipse 38% 30% at 12% 20%, rgba(255,120,64,.14) 0%, transparent 65%),
+    radial-gradient(ellipse 42% 32% at 88% 24%, rgba(74,174,255,.16) 0%, transparent 64%),
+    linear-gradient(rgba(255,255,255,.020) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.020) 1px, transparent 1px),
     #090a0f;
-  background-size: auto, auto, auto, auto, auto, 92px 92px, 56px 56px, 56px 56px, auto;
+  background-size: auto, auto, auto, auto, 64px 64px, 64px 64px, auto;
 }
 .bg-grid::before,
 .bg-grid::after {
@@ -309,30 +307,71 @@ body.intro-lock { overflow: hidden; }
   content: "";
   position: absolute;
   left: 50%;
-  bottom: -8vh;
-  width: min(980px, 112vw);
-  aspect-ratio: 600 / 420;
+  bottom: -2vh;
+  width: min(1500px, 132vw);
+  height: min(58vh, 520px);
   transform: translateX(-50%);
-  background: url('../assets/hogwarts-castle.png') center bottom / contain no-repeat;
-  filter: invert(1) saturate(1.25) hue-rotate(178deg) brightness(.58) contrast(1.18);
-  mix-blend-mode: screen;
-  opacity: .40;
-  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,.96) 0%, rgba(0,0,0,.82) 52%, transparent 100%);
-  mask-image: linear-gradient(to top, rgba(0,0,0,.96) 0%, rgba(0,0,0,.82) 52%, transparent 100%);
+  background:
+    repeating-linear-gradient(90deg, transparent 0 46px, rgba(68,54,43,.44) 47px 51px, rgba(226,208,170,.20) 52px 54px, transparent 55px 82px),
+    repeating-linear-gradient(90deg, transparent 0 12px, rgba(205,188,153,.11) 12px 13px, transparent 14px 22px),
+    repeating-linear-gradient(0deg, transparent 0 30px, rgba(202,183,148,.17) 31px 33px, transparent 34px 58px),
+    repeating-linear-gradient(36deg, transparent 0 34px, rgba(194,174,138,.13) 35px 36px, transparent 37px 68px),
+    repeating-linear-gradient(-36deg, transparent 0 38px, rgba(194,174,138,.11) 39px 40px, transparent 41px 72px),
+    linear-gradient(to top, transparent 0 36%, rgba(122,108,86,.68) 37% 49%, rgba(190,176,143,.34) 49% 51%, transparent 52%),
+    repeating-linear-gradient(90deg, transparent 0 16px, rgba(196,176,133,.22) 17px 23px, transparent 24px 36px, rgba(151,140,118,.14) 37px 44px, transparent 45px 64px),
+    linear-gradient(to top, rgba(20,59,22,.70) 0%, rgba(38,84,29,.44) 22%, rgba(96,88,51,.18) 34%, transparent 35%),
+    linear-gradient(180deg, rgba(184,204,198,.24) 0%, rgba(141,140,115,.14) 42%, transparent 72%);
+  background-size:
+    auto,
+    auto,
+    auto,
+    auto,
+    auto,
+    100% 100%,
+    100% 34%,
+    100% 100%,
+    100% 100%;
+  background-position:
+    center,
+    center,
+    center,
+    center,
+    center,
+    center,
+    center 38%,
+    center,
+    center;
+  background-repeat:
+    repeat,
+    repeat,
+    repeat,
+    repeat,
+    repeat,
+    no-repeat,
+    repeat-x,
+    no-repeat,
+    no-repeat;
+  opacity: .50;
+  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,.98) 0%, rgba(0,0,0,.92) 58%, rgba(0,0,0,.34) 86%, transparent 100%);
+  mask-image: linear-gradient(to top, rgba(0,0,0,.98) 0%, rgba(0,0,0,.92) 58%, rgba(0,0,0,.34) 86%, transparent 100%);
 }
 .bg-decorations::after {
   content: "";
   position: absolute;
   left: -8vw;
   right: -8vw;
-  bottom: -12vh;
-  height: 44vh;
+  bottom: -9vh;
+  height: 42vh;
   background:
-    radial-gradient(ellipse at 50% 100%, rgba(232,200,112,.20), transparent 58%),
-    radial-gradient(ellipse at 30% 90%, rgba(255,120,64,.13), transparent 52%),
-    radial-gradient(ellipse at 74% 86%, rgba(74,174,255,.13), transparent 54%);
-  filter: blur(8px);
-  opacity: .76;
+    repeating-linear-gradient(82deg, transparent 0 12px, rgba(113,144,45,.17) 13px 15px, transparent 16px 28px),
+    repeating-linear-gradient(101deg, transparent 0 14px, rgba(185,154,58,.12) 15px 17px, transparent 18px 31px),
+    radial-gradient(ellipse at 50% 100%, rgba(116,147,54,.24), transparent 58%),
+    radial-gradient(ellipse at 27% 86%, rgba(255,120,64,.11), transparent 48%),
+    radial-gradient(ellipse at 76% 82%, rgba(74,174,255,.10), transparent 52%);
+  filter: blur(3px);
+  opacity: .72;
+  -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,.96), rgba(0,0,0,.48) 52%, transparent 100%);
+  mask-image: linear-gradient(to top, rgba(0,0,0,.96), rgba(0,0,0,.48) 52%, transparent 100%);
 }
 .bg-deco { position: absolute; opacity: 0; }
 .deco-fire    { width: 170px; bottom: 12%; left: 2.5%; animation: fadeIn 3s .4s ease forwards; }
