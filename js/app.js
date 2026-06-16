@@ -37,7 +37,13 @@ const DEFAULT_METRICS = [
 
 const ADMIN_SESSION_KEY = 'divergentContestAdminUnlocked';
 const ADMIN_PASSWORD_KEY = 'divergentContestAdminToken';
+const DAILY_IMPORT_STORAGE_KEY = 'divergentContestDailyImport';
+const VISUAL_MODE_STORAGE_KEY = 'divergentContestVisualMode';
+const VISUAL_OPERATOR_STORAGE_KEY = 'divergentContestVisualOperator';
 let isAdmin = false;
+let DAILY_IMPORT_DATA = null;
+let visualMode = localStorage.getItem(VISUAL_MODE_STORAGE_KEY) || 'overview';
+let visualOperatorKey = localStorage.getItem(VISUAL_OPERATOR_STORAGE_KEY) || '';
 
 function getAdminPassword() {
   return sessionStorage.getItem(ADMIN_PASSWORD_KEY) || '';
@@ -100,6 +106,52 @@ function getScoreMetricIndex() {
   return idx === -1 ? METRICS.length - 1 : idx;
 }
 
+function normalizeOperatorName(name) {
+  return String(name || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+}
+
+function sanitizeDailyImport(input) {
+  if (!input || typeof input !== 'object' || !input.operators || typeof input.operators !== 'object') return null;
+  const operators = {};
+  Object.entries(input.operators).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object' || !Array.isArray(value.dates)) return;
+    operators[normalizeOperatorName(key)] = {
+      operator: String(value.operator || ''),
+      dates: value.dates.map(day => ({
+        key: String(day.key || ''),
+        label: String(day.label || ''),
+        baseWorked: Number(day.baseWorked) || 0,
+        extraHours: Number(day.extraHours) || 0,
+        actualFact: Number(day.actualFact) || 0,
+        effectiveHours: Number(day.effectiveHours) || 0,
+      })).filter(day => day.key),
+    };
+  });
+
+  return {
+    period: String(input.period || ''),
+    dateKeys: Array.isArray(input.dateKeys) ? input.dateKeys.map(String) : [],
+    generatedAt: String(input.generatedAt || ''),
+    operators,
+  };
+}
+
+function readStoredDailyImport() {
+  try {
+    return sanitizeDailyImport(JSON.parse(localStorage.getItem(DAILY_IMPORT_STORAGE_KEY) || 'null'));
+  } catch {
+    return null;
+  }
+}
+
+function setDailyImportData(data) {
+  DAILY_IMPORT_DATA = sanitizeDailyImport(data);
+  try {
+    if (DAILY_IMPORT_DATA) localStorage.setItem(DAILY_IMPORT_STORAGE_KEY, JSON.stringify(DAILY_IMPORT_DATA));
+    else localStorage.removeItem(DAILY_IMPORT_STORAGE_KEY);
+  } catch {}
+}
+
 /* ── Normalize ──────────────────────────────────────────────── */
 function normalizeEditableData() {
   const metricCount = METRICS.length;
@@ -135,7 +187,9 @@ async function loadEditableData() {
       ? [ state.weeklyData[0] ]
       : [ state.weeklyData[0] ?? [] ];
     METRICS     = state.metrics;
+    DAILY_IMPORT_DATA = sanitizeDailyImport(state.dailyImport) || readStoredDailyImport();
   }
+  if (!DAILY_IMPORT_DATA) DAILY_IMPORT_DATA = readStoredDailyImport();
   if (!METRICS.some(m => m.type === 'score')) METRICS.push({ label: 'Итого', type: 'score' });
   normalizeEditableData();
 }
@@ -145,7 +199,7 @@ async function saveEditableData() {
   /* Сохраняем в формате совместимом с сервером — один слот */
   setSaveIndicator('pending');
   try {
-    await api.saveState({ faculties: FACULTIES, weeklyData: WEEKLY_DATA, metrics: METRICS }, getAdminPassword());
+    await api.saveState({ faculties: FACULTIES, weeklyData: WEEKLY_DATA, metrics: METRICS, dailyImport: DAILY_IMPORT_DATA }, getAdminPassword());
     setSaveIndicator('saved');
   } catch (err) {
     setSaveIndicator('error');
@@ -167,6 +221,7 @@ const debouncedSave = debounce(() => saveEditableData(), 500);
 async function refreshDashboardOnly() {
   await Promise.all([
     renderStats(),
+    renderVisualDashboard(),
     renderScoreboard(),
     renderFacultyCards(),
   ]);
@@ -265,6 +320,442 @@ function getFacultyTotal(facIdx) {
   const scores = rows.map(r => Number(r[si]) || 0).filter(v => v !== 0);
   if (scores.length === 0) return 0;
   return scores.reduce((s, v) => s + v, 0) / scores.length;
+}
+
+/* ── Visual Dashboard ──────────────────────────────────────── */
+function operatorVisualKey(facIdx, opIdx) {
+  return `${facIdx}:${opIdx}`;
+}
+
+function getOperatorRanking() {
+  const scoreIdx = getScoreMetricIndex();
+  const rows = [];
+
+  FACULTIES.forEach((fac, facIdx) => {
+    (fac.operators || []).forEach((name, opIdx) => {
+      const metricRow = WEEKLY_DATA[0]?.[facIdx]?.[opIdx] || [];
+      rows.push({
+        key: operatorVisualKey(facIdx, opIdx),
+        name,
+        nameKey: normalizeOperatorName(name),
+        facIdx,
+        opIdx,
+        faculty: fac,
+        metrics: metricRow,
+        points: Number(metricRow[scoreIdx]) || 0,
+      });
+    });
+  });
+
+  rows.sort((a, b) => (b.points - a.points) || a.name.localeCompare(b.name, 'ru'));
+  rows.forEach((row, idx) => { row.rank = idx + 1; });
+  return rows;
+}
+
+function getSelectedVisualOperator(ranking) {
+  if (!ranking.length) return null;
+  let selected = ranking.find(row => row.key === visualOperatorKey);
+  if (!selected) selected = ranking.find(row => row.points > 0) || ranking[0];
+  visualOperatorKey = selected.key;
+  try { localStorage.setItem(VISUAL_OPERATOR_STORAGE_KEY, selected.key); } catch {}
+  return selected;
+}
+
+function setVisualMode(mode) {
+  visualMode = mode === 'personal' ? 'personal' : 'overview';
+  try { localStorage.setItem(VISUAL_MODE_STORAGE_KEY, visualMode); } catch {}
+  renderVisualDashboard();
+}
+
+function selectVisualOperator(value) {
+  visualOperatorKey = String(value || '');
+  try { localStorage.setItem(VISUAL_OPERATOR_STORAGE_KEY, visualOperatorKey); } catch {}
+  visualMode = 'personal';
+  try { localStorage.setItem(VISUAL_MODE_STORAGE_KEY, visualMode); } catch {}
+  renderVisualDashboard();
+}
+
+function getRankTone(row, total) {
+  if (!row || !total) return 'neutral';
+  if (row.rank <= 3) return 'good';
+  if (row.rank <= Math.ceil(total * 0.65)) return 'mid';
+  return 'risk';
+}
+
+function getContestStatus(row, ranking, gapToNext) {
+  if (!row) return { label: 'Нет данных', tone: 'neutral' };
+  const total = ranking.length || 1;
+  const topThird = Math.ceil(total * 0.34);
+  const midLine = Math.ceil(total * 0.68);
+  const leaderPoints = ranking[0]?.points || 0;
+  const closeGap = Math.max(8, leaderPoints * 0.04);
+
+  if (row.rank === 1) return { label: 'Лидер', tone: 'good' };
+  if (row.rank <= 3) return { label: 'В топ-3', tone: 'good' };
+  if (gapToNext > 0 && gapToNext <= closeGap) return { label: 'Догоняет', tone: 'good' };
+  if (row.rank <= topThird) return { label: 'Рядом с лидерами', tone: 'info' };
+  if (row.rank <= midLine) return { label: 'Средняя зона', tone: 'mid' };
+  if (row.rank <= total - 2) return { label: 'Зона риска', tone: 'risk' };
+  return { label: 'Сильно отстает', tone: 'risk' };
+}
+
+function isAutoMetric(metric) {
+  const label = normalizeOperatorName(metric.label);
+  return label.includes('выработ') || label.includes('эфф');
+}
+
+function getMetricAverages(ranking) {
+  return METRICS.map((metric, metricIdx) => {
+    if (metric.type === 'score') return 0;
+    const values = ranking.map(row => Number(row.metrics[metricIdx]) || 0);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  });
+}
+
+function getOperatorInsight(row, ranking) {
+  if (!row || !ranking.length) return 'Данные появятся после добавления операторов и баллов.';
+  const averages = getMetricAverages(ranking);
+  let weak = null;
+  let strong = null;
+
+  METRICS.forEach((metric, metricIdx) => {
+    if (metric.type === 'score') return;
+    const value = Number(row.metrics[metricIdx]) || 0;
+    const avg = averages[metricIdx] || 0;
+    let delta = 0;
+    if (metric.type === 'penalty') {
+      delta = value - avg;
+      if (delta > (weak?.delta || 0)) weak = { label: metric.label, delta };
+      if (-delta > (strong?.delta || 0)) strong = { label: metric.label, delta: -delta };
+    } else {
+      delta = avg - value;
+      if (delta > (weak?.delta || 0)) weak = { label: metric.label, delta };
+      if (-delta > (strong?.delta || 0)) strong = { label: metric.label, delta: -delta };
+    }
+  });
+
+  if (row.rank <= 5 && weak) return `Вы входите в топ-5, ближайшая зона роста — ${weak.label}.`;
+  if (weak && strong) return `Сильная сторона: ${strong.label}. Основное отставание: ${weak.label}.`;
+  if (weak) return `Основное отставание сейчас по показателю «${weak.label}».`;
+  return 'Показатели ровные: явной просадки относительно группы нет.';
+}
+
+function renderVisualKpis(selected, ranking) {
+  const selectedIdx = ranking.findIndex(row => row.key === selected.key);
+  const leader = ranking[0] || selected;
+  const nextHigher = selectedIdx > 0 ? ranking[selectedIdx - 1] : null;
+  const nextLower = selectedIdx >= 0 ? ranking[selectedIdx + 1] : null;
+  const gapToNext = nextHigher ? Math.max(0, nextHigher.points - selected.points) : 0;
+  const gapToLeader = leader && selected.key !== leader.key ? Math.max(0, leader.points - selected.points) : 0;
+  const leadBelow = nextLower ? Math.max(0, selected.points - nextLower.points) : 0;
+  const status = getContestStatus(selected, ranking, gapToNext);
+  const tone = getRankTone(selected, ranking.length);
+
+  const cards = [
+    { label: 'Место в рейтинге', value: `${selected.rank} из ${ranking.length}`, note: selected.name, tone },
+    { label: 'Общий балл', value: fmtPts(selected.points), note: selected.faculty.name, tone: 'info' },
+    { label: 'До следующего места', value: nextHigher ? fmtPts(gapToNext) : '0', note: nextHigher ? `До ${nextHigher.rank} места: ${nextHigher.name}` : 'Вы занимаете 1 место', tone: gapToNext <= 8 ? 'good' : 'mid' },
+    { label: 'До лидера', value: fmtPts(gapToLeader), note: leader ? `Лидер: ${leader.name}` : 'Лидер не определен', tone: gapToLeader === 0 ? 'good' : 'risk' },
+    { label: 'Отрыв снизу', value: nextLower ? fmtPts(leadBelow) : '—', note: nextLower ? `От ${nextLower.rank} места: ${nextLower.name}` : 'Ниже никого нет', tone: leadBelow >= 8 ? 'good' : 'mid' },
+    { label: 'Статус', value: status.label, note: getOperatorInsight(selected, ranking), tone: status.tone },
+  ];
+
+  return `<div class="visual-kpis">${cards.map(card => `
+    <div class="visual-kpi ${card.tone}">
+      <div class="visual-kpi-label">${escapeHtml(card.label)}</div>
+      <div class="visual-kpi-value">${escapeHtml(card.value)}</div>
+      <div class="visual-kpi-note">${escapeHtml(card.note)}</div>
+    </div>
+  `).join('')}</div>`;
+}
+
+function renderRatingChart(ranking, selected) {
+  const maxPoints = Math.max(1, ...ranking.map(row => row.points));
+  const rows = ranking.map(row => {
+    const width = Math.max(2, Math.round(row.points / maxPoints * 100));
+    const isSelected = row.key === selected.key;
+    const title = `${row.rank} место — ${row.name}: ${fmtPts(row.points)} балла`;
+    return `
+      <div class="rating-bar-row ${isSelected ? 'selected' : ''}" title="${escapeHtml(title)}">
+        <div class="rating-rank">#${row.rank}</div>
+        <div class="rating-name">
+          <span class="rating-faculty-dot ${row.faculty.cls}"></span>
+          <span>${escapeHtml(row.name)}</span>
+        </div>
+        <div class="rating-track">
+          <div class="rating-fill ${row.faculty.cls}" style="width:${width}%"></div>
+        </div>
+        <div class="rating-points">${fmtPts(row.points)}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="visual-panel rating-panel">
+      <div class="visual-panel-head">
+        <div>
+          <div class="visual-panel-kicker">Общий график рейтинга</div>
+          <h3>Все операторы</h3>
+        </div>
+        <span>${ranking.length} участников</span>
+      </div>
+      <div class="rating-bars">${rows}</div>
+    </div>
+  `;
+}
+
+function renderGapPanels(selected, ranking) {
+  const selectedIdx = ranking.findIndex(row => row.key === selected.key);
+  const leader = ranking[0] || selected;
+  const nextHigher = selectedIdx > 0 ? ranking[selectedIdx - 1] : null;
+  const leaderPct = leader.points > 0 ? Math.min(100, Math.round(selected.points / leader.points * 100)) : 0;
+  const nextPct = nextHigher && nextHigher.points > 0 ? Math.min(100, Math.round(selected.points / nextHigher.points * 100)) : 100;
+
+  return `
+    <div class="visual-panel gap-panel">
+      <div class="visual-panel-head">
+        <div>
+          <div class="visual-panel-kicker">Отставание от лидера</div>
+          <h3>${escapeHtml(leader.name)}</h3>
+        </div>
+        <span>${fmtPts(Math.max(0, leader.points - selected.points))} балла</span>
+      </div>
+      <div class="gap-scale">
+        <div class="gap-scale-fill leader-gap" style="width:${leaderPct}%"></div>
+      </div>
+      <div class="gap-values">
+        <span>Лидер: ${fmtPts(leader.points)}</span>
+        <span>Выбрано: ${fmtPts(selected.points)}</span>
+      </div>
+    </div>
+    <div class="visual-panel gap-panel">
+      <div class="visual-panel-head">
+        <div>
+          <div class="visual-panel-kicker">До следующего места</div>
+          <h3>${nextHigher ? `${nextHigher.rank} место` : 'Цель достигнута'}</h3>
+        </div>
+        <span>${nextHigher ? fmtPts(nextHigher.points - selected.points) : '0'} балла</span>
+      </div>
+      <div class="gap-scale">
+        <div class="gap-scale-fill next-gap" style="width:${nextPct}%"></div>
+      </div>
+      <div class="gap-values">
+        <span>${nextHigher ? escapeHtml(nextHigher.name) + ': ' + fmtPts(nextHigher.points) : 'Вы лидер'}</span>
+        <span>Выбрано: ${fmtPts(selected.points)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderMetricComposition(selected) {
+  const components = METRICS.map((metric, metricIdx) => ({
+    metric,
+    value: Number(selected.metrics[metricIdx]) || 0,
+  })).filter(item => item.metric.type !== 'score');
+  const maxAbs = Math.max(1, ...components.map(item => Math.abs(item.value)));
+
+  const rows = components.map(({ metric, value }) => {
+    const isPenalty = metric.type === 'penalty';
+    const width = Math.max(3, Math.round(Math.abs(value) / maxAbs * 100));
+    const tag = isPenalty ? 'Минус' : (isAutoMetric(metric) ? 'Авто' : 'Ручной');
+    const shown = isPenalty && value > 0 ? `-${fmtPts(value)}` : fmtPts(value);
+    return `
+      <div class="composition-row" title="${escapeHtml(metric.label)}: ${shown}">
+        <div class="composition-meta">
+          <span>${escapeHtml(metric.label)}</span>
+          <em class="${isPenalty ? 'negative' : ''}">${tag}</em>
+        </div>
+        <div class="composition-track">
+          <div class="composition-fill ${isPenalty ? 'negative' : 'positive'}" style="width:${width}%"></div>
+        </div>
+        <div class="composition-value ${isPenalty ? 'negative' : ''}">${shown}</div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="visual-panel">
+      <div class="visual-panel-head">
+        <div>
+          <div class="visual-panel-kicker">Состав баллов</div>
+          <h3>${escapeHtml(selected.name)}</h3>
+        </div>
+        <span>Авто / ручные / минусы</span>
+      </div>
+      <div class="composition-list">${rows}</div>
+    </div>
+  `;
+}
+
+function renderLeaderComparison(selected, ranking) {
+  const leader = ranking[0] || selected;
+  const rows = METRICS.map((metric, metricIdx) => ({
+    metric,
+    selectedValue: Number(selected.metrics[metricIdx]) || 0,
+    leaderValue: Number(leader.metrics[metricIdx]) || 0,
+  })).filter(item => item.metric.type !== 'score').map(({ metric, selectedValue, leaderValue }) => {
+    const maxValue = Math.max(1, Math.abs(selectedValue), Math.abs(leaderValue));
+    const selectedWidth = Math.max(3, Math.round(Math.abs(selectedValue) / maxValue * 100));
+    const leaderWidth = Math.max(3, Math.round(Math.abs(leaderValue) / maxValue * 100));
+    const isPenalty = metric.type === 'penalty';
+    return `
+      <div class="compare-row" title="${escapeHtml(metric.label)} — выбранный: ${fmtPts(selectedValue)}, лидер: ${fmtPts(leaderValue)}">
+        <div class="compare-label">${escapeHtml(metric.label)}</div>
+        <div class="compare-bars">
+          <div class="compare-line">
+            <span>Вы</span>
+            <div><i class="${isPenalty ? 'negative' : 'selected'}" style="width:${selectedWidth}%"></i></div>
+            <b>${formatMetricValue(selectedValue, metric)}</b>
+          </div>
+          <div class="compare-line">
+            <span>Лидер</span>
+            <div><i class="leader" style="width:${leaderWidth}%"></i></div>
+            <b>${formatMetricValue(leaderValue, metric)}</b>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="visual-panel">
+      <div class="visual-panel-head">
+        <div>
+          <div class="visual-panel-kicker">Сравнение с лидером</div>
+          <h3>${escapeHtml(leader.name)}</h3>
+        </div>
+        <span>${selected.key === leader.key ? 'Вы лидер' : `Разница ${fmtPts(leader.points - selected.points)}`}</span>
+      </div>
+      <div class="compare-list">${rows}</div>
+    </div>
+  `;
+}
+
+function buildDailyPolyline(days, field, maxValue) {
+  if (!days.length) return '';
+  const width = 360;
+  const height = 112;
+  const xStep = days.length > 1 ? width / (days.length - 1) : 0;
+  return days.map((day, idx) => {
+    const x = days.length > 1 ? idx * xStep : width / 2;
+    const y = height - Math.min(1, (Number(day[field]) || 0) / maxValue) * 92 - 10;
+    return `${roundSvg(x)},${roundSvg(y)}`;
+  }).join(' ');
+}
+
+function roundSvg(value) {
+  return Math.round(value * 10) / 10;
+}
+
+function renderDailyDynamics(selected) {
+  const data = DAILY_IMPORT_DATA || readStoredDailyImport();
+  const operatorDaily = data?.operators?.[selected.nameKey];
+
+  if (!operatorDaily || !operatorDaily.dates?.length) {
+    return `
+      <div class="visual-panel daily-panel empty">
+        <div class="visual-panel-head">
+          <div>
+            <div class="visual-panel-kicker">Динамика по дням</div>
+            <h3>Нет дневной разбивки</h3>
+          </div>
+          <span>Excel</span>
+        </div>
+        <p class="visual-empty-note">Динамика появится после загрузки Excel-файла с выбранным периодом.</p>
+      </div>
+    `;
+  }
+
+  const days = operatorDaily.dates;
+  const maxValue = Math.max(1, ...days.map(day => Math.max(day.actualFact, day.effectiveHours)));
+  const workLine = buildDailyPolyline(days, 'actualFact', maxValue);
+  const effLine = buildDailyPolyline(days, 'effectiveHours', maxValue);
+  const points = days.map(day => `
+    <div class="daily-point" title="${escapeHtml(day.label)}: факт ${fmtPts(day.actualFact)}, эффективность ${fmtPts(day.effectiveHours)}">
+      <span>${escapeHtml(day.label.replace(/\.\d{4}$/, ''))}</span>
+      <b>${fmtPts(day.actualFact)}</b>
+      <em>${fmtPts(day.effectiveHours)}</em>
+    </div>
+  `).join('');
+
+  return `
+    <div class="visual-panel daily-panel">
+      <div class="visual-panel-head">
+        <div>
+          <div class="visual-panel-kicker">Динамика по дням</div>
+          <h3>${escapeHtml(data.period || 'Последний импорт')}</h3>
+        </div>
+        <span>Факт / эффективность</span>
+      </div>
+      <svg class="daily-line-chart" viewBox="0 0 360 120" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="0" y1="112" x2="360" y2="112"></line>
+        <polyline class="work" points="${workLine}"></polyline>
+        <polyline class="eff" points="${effLine}"></polyline>
+      </svg>
+      <div class="daily-legend">
+        <span><i class="work"></i> Факт часов</span>
+        <span><i class="eff"></i> Эффективность</span>
+      </div>
+      <div class="daily-points">${points}</div>
+    </div>
+  `;
+}
+
+async function renderVisualDashboard() {
+  const el = document.getElementById('visual-dashboard');
+  if (!el) return;
+
+  const ranking = getOperatorRanking();
+  if (!ranking.length) {
+    el.innerHTML = `
+      <div class="visual-dashboard-header">
+        <div>
+          <div class="section-kicker">Визуальный дашборд</div>
+          <h2 class="section-title">Положение операторов</h2>
+        </div>
+      </div>
+      <div class="visual-empty-note">Добавьте операторов и баллы, чтобы увидеть рейтинг и сравнения.</div>
+    `;
+    return;
+  }
+
+  if (visualMode !== 'personal') visualMode = 'overview';
+  const selected = getSelectedVisualOperator(ranking);
+  const options = ranking.map(row => `
+    <option value="${row.key}" ${row.key === selected.key ? 'selected' : ''}>
+      ${row.rank}. ${escapeHtml(row.name)} — ${fmtPts(row.points)}
+    </option>
+  `).join('');
+
+  el.innerHTML = `
+    <div class="visual-dashboard-header">
+      <div>
+        <div class="section-kicker">Визуальный дашборд</div>
+        <h2 class="section-title">Положение операторов</h2>
+      </div>
+      <div class="visual-controls">
+        <div class="visual-mode-tabs" aria-label="Режим просмотра">
+          <button class="${visualMode === 'overview' ? 'active' : ''}" onclick="setVisualMode('overview')">Общий</button>
+          <button class="${visualMode === 'personal' ? 'active' : ''}" onclick="setVisualMode('personal')">Персональный</button>
+        </div>
+        <select class="visual-operator-select" onchange="selectVisualOperator(this.value)" aria-label="Выбрать оператора">
+          ${options}
+        </select>
+      </div>
+    </div>
+    ${renderVisualKpis(selected, ranking)}
+    <div class="visual-layout ${visualMode}">
+      ${renderRatingChart(ranking, selected)}
+      <div class="visual-side">
+        ${renderGapPanels(selected, ranking)}
+      </div>
+    </div>
+    <div class="visual-detail-grid">
+      ${renderMetricComposition(selected)}
+      ${renderLeaderComparison(selected, ranking)}
+      ${renderDailyDynamics(selected)}
+    </div>
+  `;
 }
 
 /* ── Stats ──────────────────────────────────────────────────── */
@@ -465,7 +956,7 @@ async function renderFacultyCards() {
 
 /* ── Editor ─────────────────────────────────────────────────── */
 async function refreshDashboard() {
-  await Promise.all([renderStats(), renderScoreboard(), renderFacultyCards()]);
+  await Promise.all([renderStats(), renderVisualDashboard(), renderScoreboard(), renderFacultyCards()]);
 }
 
 function renderEditor() {
@@ -688,7 +1179,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateAdminGate();
   renderEditor();
   document.getElementById('editor-panel').hidden = !isAdmin;
-  await Promise.all([renderStats(), renderScoreboard(), renderFacultyCards()]);
+  await Promise.all([renderStats(), renderVisualDashboard(), renderScoreboard(), renderFacultyCards()]);
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAdminModal(); });
