@@ -370,6 +370,12 @@ async function parseExcelAndApply(file) {
     const zeroNormOperators = [];
     const updatedNames = new Set();
     const preview = [];
+    const dailyImport = {
+      period: `${formatDateRu(startDate)} - ${formatDateRu(endDate)}`,
+      dateKeys: usedDateKeys,
+      generatedAt: new Date().toISOString(),
+      operators: {},
+    };
 
     if (usedDateKeys.length < selectedDateKeys.length) {
       const missed = selectedDateKeys.filter(key => !usedDateKeys.includes(key));
@@ -400,6 +406,22 @@ async function parseExcelAndApply(file) {
         const actualFact = baseWorked + trainings + tech + offline;
         const workScore = targetNorm > 0 ? actualFact / targetNorm * 100 : 0;
         const effScore = baseWorked > 0 ? effectiveHours / baseWorked * 100 : 0;
+        const dailyRows = usedDateKeys.map(dateKey => {
+          const dayBase = sumSheetDates(workSheet, operatorKey, [dateKey]);
+          const dayTrainings = sumSheetDates(trainingsSheet, operatorKey, [dateKey]);
+          const dayTech = sumSheetDates(techSheet, operatorKey, [dateKey]);
+          const dayOffline = sumSheetDates(offlineSheet, operatorKey, [dateKey]);
+          const dayEffective = sumSheetDates(efficiencySheet, operatorKey, [dateKey]);
+          const dayActual = dayBase + dayTrainings + dayTech + dayOffline;
+          return {
+            key: dateKey,
+            label: formatDateRu(dateKey),
+            baseWorked: round2(dayBase),
+            extraHours: round2(dayTrainings + dayTech + dayOffline),
+            actualFact: round2(dayActual),
+            effectiveHours: round2(dayEffective),
+          };
+        });
 
         if (targetNorm <= 0) zeroNormOperators.push(operatorName);
 
@@ -408,6 +430,10 @@ async function parseExcelAndApply(file) {
         metricRow[effMetricIdx] = round2(effScore);
 
         updatedNames.add(operatorKey);
+        dailyImport.operators[operatorKey] = {
+          operator: operatorName,
+          dates: dailyRows,
+        };
         if (preview.length < 8) {
           preview.push({
             operator: operatorName,
@@ -435,6 +461,12 @@ async function parseExcelAndApply(file) {
 
     if (updatedNames.size === 0) {
       throw new Error('Ни один оператор с сайта не найден в Excel. Данные не изменены.');
+    }
+
+    if (typeof setDailyImportData === 'function') {
+      setDailyImportData(dailyImport);
+    } else {
+      try { localStorage.setItem('divergentContestDailyImport', JSON.stringify(dailyImport)); } catch {}
     }
 
     await saveEditableData();
