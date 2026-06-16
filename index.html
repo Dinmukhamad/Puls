@@ -195,7 +195,17 @@
       <div class="admin-popover-active" id="admin-active-area" hidden>
         <p>Доступ открыт. Редактирование — в панели выше.</p>
         <div class="excel-import-block">
-          <div class="excel-import-title">📥 Загрузить баллы из Excel</div>
+          <div class="excel-import-title">📥 Рассчитать из Excel</div>
+          <div class="excel-period-grid">
+            <label class="excel-period-field" for="excel-period-start">
+              <span>Начало периода</span>
+              <input type="date" id="excel-period-start">
+            </label>
+            <label class="excel-period-field" for="excel-period-end">
+              <span>Конец периода</span>
+              <input type="date" id="excel-period-end">
+            </label>
+          </div>
           <label class="excel-import-label" for="excel-file-input">Файл (.xlsx / .xls):</label>
           <label class="excel-file-label" id="excel-file-label">
             <input type="file" id="excel-file-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
@@ -213,6 +223,6 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="js/app.js?v=intro-1"></script>
-  <script src="js/excel-import.js?v=div4"></script>
+  <script src="js/excel-import.js?v=period-import-1"></script>
 </body>
 </html>
