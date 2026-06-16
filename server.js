@@ -96,6 +96,37 @@ function normalizeRow(row, metricCount) {
   return normalized;
 }
 
+function normalizeDailyImport(input) {
+  if (!input || typeof input !== 'object' || !input.operators || typeof input.operators !== 'object') {
+    return null;
+  }
+
+  const operators = {};
+  Object.entries(input.operators).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object' || !Array.isArray(value.dates)) return;
+    const safeKey = String(key || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+    if (!safeKey) return;
+    operators[safeKey] = {
+      operator: String(value.operator || '').trim(),
+      dates: value.dates.map(day => ({
+        key: String(day?.key || '').trim(),
+        label: String(day?.label || '').trim(),
+        baseWorked: Number.isFinite(Number(day?.baseWorked)) ? Number(day.baseWorked) : 0,
+        extraHours: Number.isFinite(Number(day?.extraHours)) ? Number(day.extraHours) : 0,
+        actualFact: Number.isFinite(Number(day?.actualFact)) ? Number(day.actualFact) : 0,
+        effectiveHours: Number.isFinite(Number(day?.effectiveHours)) ? Number(day.effectiveHours) : 0,
+      })).filter(day => day.key),
+    };
+  });
+
+  return {
+    period: String(input.period || '').trim(),
+    dateKeys: Array.isArray(input.dateKeys) ? input.dateKeys.map(value => String(value).trim()).filter(Boolean) : [],
+    generatedAt: String(input.generatedAt || '').trim(),
+    operators,
+  };
+}
+
 function normalizeState(input) {
   if (!input || !Array.isArray(input.faculties) || !Array.isArray(input.weeklyData) || !Array.isArray(input.metrics)) {
     throw new Error('Invalid state shape');
@@ -124,6 +155,7 @@ function normalizeState(input) {
     faculties,
     weeklyData: [weeklyRows],
     metrics,
+    dailyImport: normalizeDailyImport(input.dailyImport),
   };
 }
 
