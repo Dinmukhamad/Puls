@@ -123,6 +123,7 @@ function normalizeDailyImport(input) {
         worked: Number.isFinite(Number(value.importSummary.worked)) ? Number(value.importSummary.worked) : 0,
         cleanHours: Number.isFinite(Number(value.importSummary.cleanHours)) ? Number(value.importSummary.cleanHours) : 0,
         qualityCount: Number.isFinite(Number(value.importSummary.qualityCount)) ? Number(value.importSummary.qualityCount) : 0,
+        qualityPeriod: String(value.importSummary.qualityPeriod || ''),
         calls: Number.isFinite(Number(value.importSummary.calls)) ? Number(value.importSummary.calls) : 0,
         lateAmount: Number.isFinite(Number(value.importSummary.lateAmount)) ? Number(value.importSummary.lateAmount) : 0,
         lateMinutes: Number.isFinite(Number(value.importSummary.lateMinutes)) ? Number(value.importSummary.lateMinutes) : 0,
