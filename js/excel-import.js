@@ -4,6 +4,8 @@
  * Импортирует показатели конкурса из Excel строго за выбранный период.
  * Автоматически обновляет только: выработку, эффективность, качество, КВЗ
  * и штрафные баллы за опоздания. Остальные ручные показатели сохраняются.
+ * Качество звонков считается исключением: по всем оценкам из файла, а не
+ * только по выбранному периоду конкурса.
  */
 
 'use strict';
@@ -356,7 +358,7 @@ function buildPreviewReport(importData) {
         <td>${row.cleanHours}</td>
         <td>${row.hoursScoreStatus || row.hoursScore}</td>
         <td>${row.efficiencyStatus || row.efficiency}</td>
-        <td>${row.qualityStatus || row.quality}</td>
+        <td title="${escapeImportHtml(row.qualityPeriodLabel)}">${row.qualityStatus || row.quality}</td>
         <td>${row.kvzStatus || row.kvz}</td>
         <td>${row.lateAmount} / ${row.lateMinutes} / -${row.latePenaltyPoints}</td>
       </tr>
@@ -380,7 +382,7 @@ function buildPreviewReport(importData) {
           <thead>
             <tr>
               <th>Вкл.</th><th>ФИО Excel</th><th>Участник сайта</th><th>Даты</th>
-              <th>W</th><th>B</th><th>Выр.</th><th>Эфф.</th><th>Кач.</th><th>КВЗ</th><th>Опоздания</th>
+              <th>W</th><th>B</th><th>Выр.</th><th>Эфф.</th><th>Кач. файл</th><th>КВЗ</th><th>Опоздания</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -426,10 +428,8 @@ function prepareImportData(workbook, startDate, endDate) {
   const offlineSheet = readSheet(workbook, 'offline', fallbackYear, false);
 
   const selectedDateKeys = dateKeysInRange(startDate, endDate);
-  const usedDateKeys = collectSheetDateIntersection(
-    [workSheet, efficiencySheet, callsSheet, qualitySheet, lateSheet],
-    selectedDateKeys
-  );
+  const usedDateKeys = collectSheetDateIntersection([workSheet, efficiencySheet, callsSheet, lateSheet], selectedDateKeys);
+  const qualityDateKeys = [...qualitySheet.layout.dateCols.keys()].sort();
 
   if (!usedDateKeys.length) {
     const availableWorkDates = [...workSheet.layout.dateCols.keys()].sort();
@@ -437,6 +437,9 @@ function prepareImportData(workbook, startDate, endDate) {
       `В выбранном периоде нет дат, которые одновременно найдены на обязательных листах. ` +
       `Даты на листе «${workSheet.sheetName}»: ${formatDateRange(availableWorkDates)}.`
     );
+  }
+  if (!qualityDateKeys.length) {
+    throw new Error(`На листе «${qualitySheet.sheetName}» не найдены дневные колонки для качества звонков.`);
   }
 
   const warnings = [];
@@ -448,6 +451,7 @@ function prepareImportData(workbook, startDate, endDate) {
   if (!trainingsSheet) warnings.push('Лист «Тренинги» не найден: тренинги посчитаны как 0.');
   if (!techSheet) warnings.push('Лист «Тех. сбои» не найден: тех. сбои посчитаны как 0.');
   if (!offlineSheet) warnings.push('Лист «Офлайн активность» не найден: офлайн активность посчитана как 0.');
+  warnings.push(`Качество звонков посчитано по всем датам листа «${qualitySheet.sheetName}»: ${formatDateRange(qualityDateKeys)}.`);
 
   const rows = [];
   const siteKeysInExcel = new Set();
@@ -463,7 +467,7 @@ function prepareImportData(workbook, startDate, endDate) {
     const cleanHours = Math.max(worked - trainings - tech - offline, 0);
     const effectiveHours = sumSheetDates(efficiencySheet, operatorKey, usedDateKeys);
     const calls = sumSheetDates(callsSheet, operatorKey, usedDateKeys);
-    const qualityScores = readQualityScores(qualitySheet, operatorKey, usedDateKeys, errors);
+    const qualityScores = readQualityScores(qualitySheet, operatorKey, qualityDateKeys, errors);
     const lateAmount = sumSheetDates(lateSheet, operatorKey, usedDateKeys);
     const lateMinutes = lateAmount / 50;
     const latePenaltyPoints = lateMinutes * 5;
@@ -472,7 +476,7 @@ function prepareImportData(workbook, startDate, endDate) {
     if (match) siteKeysInExcel.add(match.key);
     if (targetNorm <= 0) warnings.push(`${workEntry.name}: нет нормы часов, выработка не будет обновлена.`);
     if (cleanHours <= 0) warnings.push(`${workEntry.name}: чистые часы B = 0, эффективность и КВЗ не будут обновлены.`);
-    if (!qualityScores.length) warnings.push(`${workEntry.name}: нет оценок качества за выбранный период.`);
+    if (!qualityScores.length) warnings.push(`${workEntry.name}: нет оценок качества в файле.`);
 
     rows.push({
       id: String(rowId++),
@@ -494,6 +498,7 @@ function prepareImportData(workbook, startDate, endDate) {
       quality: qualityScores.length ? round2(qualityScores.reduce((sum, score) => sum + score, 0) / qualityScores.length) : null,
       qualityCount: qualityScores.length,
       qualityStatus: qualityScores.length ? '' : 'Нет оценок',
+      qualityPeriodLabel: `Качество: ${formatDateRange(qualityDateKeys)}`,
       calls: round2(calls),
       kvz: cleanHours > 0 ? round2(calls / cleanHours) : null,
       kvzStatus: cleanHours > 0 ? '' : 'Нет данных',
@@ -638,6 +643,7 @@ async function confirmPendingImport() {
           worked: row.worked,
           cleanHours: row.cleanHours,
           qualityCount: row.qualityCount,
+          qualityPeriod: row.qualityPeriodLabel,
           calls: row.calls,
           lateAmount: row.lateAmount,
           lateMinutes: row.lateMinutes,
