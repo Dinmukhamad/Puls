@@ -132,6 +132,7 @@ function sanitizeDailyImport(input) {
         worked: Number(value.importSummary.worked) || 0,
         cleanHours: Number(value.importSummary.cleanHours) || 0,
         qualityCount: Number(value.importSummary.qualityCount) || 0,
+        qualityPeriod: String(value.importSummary.qualityPeriod || ''),
         calls: Number(value.importSummary.calls) || 0,
         lateAmount: Number(value.importSummary.lateAmount) || 0,
         lateMinutes: Number(value.importSummary.lateMinutes) || 0,
