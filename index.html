@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-icon-1">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-icon-1">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
-  <link rel="stylesheet" href="css/styles.css?v=excel-import-tz-2">
+  <link rel="stylesheet" href="css/styles.css?v=section-polish-1">
   <script src="js/api.js"></script>
 </head>
 <body>
@@ -124,50 +124,59 @@
     <!-- ═══ DASHBOARD ════════════════════════════════════════════ -->
     <div id="dashboard" class="dashboard-anchor"></div>
 
-    <!-- Панель редактора (только для admin) -->
-    <section class="editor-panel" id="editor-panel" aria-label="Управление данными" hidden></section>
-
-    <!-- Статистика -->
-    <section class="stats-section" id="stats-section" aria-label="Статистика конкурса"></section>
-
-    <!-- Визуальный дашборд -->
-    <section class="visual-dashboard" id="visual-dashboard" aria-label="Визуальный дашборд конкурса"></section>
-
-    <!-- Рейтинг фракций -->
-    <section class="scoreboard" id="scoreboard" aria-label="Общий рейтинг фракций"></section>
-
-    <!-- Критерии оценки -->
-    <section class="criteria-section" aria-label="Критерии оценки">
-      <div class="criteria-header">
-        <div class="section-kicker">Система оценки</div>
-        <h2 class="section-title">Критерии оценки</h2>
-      </div>
-      <div class="criteria-grid">
-        <div class="criteria-card positive">
-          <div class="cc-icon">✓</div>
-          <div class="cc-title">Основные показатели</div>
-          <ul class="cc-list">
-            <li>Качество работы</li>
-            <li>Выработка часов</li>
-            <li>Эффективность</li>
-            <li>Дополнительные баллы за переработки</li>
-          </ul>
-        </div>
-        <div class="criteria-card negative">
-          <div class="cc-icon">✗</div>
-          <div class="cc-title">Антипоказатели</div>
-          <ul class="cc-list">
-            <li>Дисциплинарные нарушения</li>
-            <li>Опоздания</li>
-            <li>Использование посторонних сайтов в рабочее время</li>
-          </ul>
-          <div class="cc-note">За антипоказатели итоговый балл уменьшается</div>
+    <section class="content-section analytics-section" aria-label="Статистика конкурса">
+      <div class="content-section-header">
+        <div>
+          <div class="section-kicker">Статистика</div>
+          <h2 class="section-title">Показатели конкурса</h2>
         </div>
       </div>
+
+      <!-- Панель редактора (только для admin) -->
+      <section class="editor-panel" id="editor-panel" aria-label="Управление данными" hidden></section>
+
+      <!-- Статистика -->
+      <section class="stats-section" id="stats-section" aria-label="Статистика конкурса"></section>
+
+      <!-- Визуальный дашборд -->
+      <section class="visual-dashboard" id="visual-dashboard" aria-label="Визуальный дашборд конкурса"></section>
+
+      <!-- Рейтинг фракций -->
+      <section class="scoreboard" id="scoreboard" aria-label="Общий рейтинг фракций"></section>
+
+      <!-- Критерии оценки -->
+      <section class="criteria-section" aria-label="Критерии оценки">
+        <div class="criteria-header">
+          <div class="section-kicker">Система оценки</div>
+          <h2 class="section-title">Критерии оценки</h2>
+        </div>
+        <div class="criteria-grid">
+          <div class="criteria-card positive">
+            <div class="cc-icon">✓</div>
+            <div class="cc-title">Основные показатели</div>
+            <ul class="cc-list">
+              <li>Качество работы</li>
+              <li>Выработка часов</li>
+              <li>Эффективность</li>
+              <li>Дополнительные баллы за переработки</li>
+            </ul>
+          </div>
+          <div class="criteria-card negative">
+            <div class="cc-icon">✗</div>
+            <div class="cc-title">Антипоказатели</div>
+            <ul class="cc-list">
+              <li>Дисциплинарные нарушения</li>
+              <li>Опоздания</li>
+              <li>Использование посторонних сайтов в рабочее время</li>
+            </ul>
+            <div class="cc-note">За антипоказатели итоговый балл уменьшается</div>
+          </div>
+        </div>
+      </section>
     </section>
 
     <!-- Таблицы фракций -->
-    <section aria-label="Таблицы фракций">
+    <section class="content-section tables-section" aria-label="Таблицы фракций">
       <div class="section-header-row">
         <div>
           <div class="section-kicker">Фракционные таблицы</div>
@@ -225,7 +234,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=excel-import-tz-2"></script>
-  <script src="js/excel-import.js?v=excel-import-tz-2"></script>
+  <script src="js/app.js?v=visual-dashboard-1"></script>
+  <script src="js/excel-import.js?v=visual-dashboard-1"></script>
 </body>
 </html>
