@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-icon-1">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-icon-1">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
-  <link rel="stylesheet" href="css/styles.css?v=dual-excel-1">
+  <link rel="stylesheet" href="css/styles.css?v=flexible-excel-1">
   <script src="js/api.js"></script>
 </head>
 <body>
@@ -208,6 +208,7 @@
         <p>Доступ открыт. Редактирование — в панели выше.</p>
         <div class="excel-import-block">
           <div class="excel-import-title">📥 Рассчитать из Excel</div>
+          <div class="excel-import-hint">Можно выбрать один файл или оба сразу. Обновятся только найденные показатели.</div>
           <div class="excel-period-grid">
             <label class="excel-period-field" for="excel-period-start">
               <span>Начало периода</span>
@@ -218,13 +219,13 @@
               <input type="date" id="excel-period-end">
             </label>
           </div>
-          <label class="excel-import-label" for="excel-report-input">Основной отчёт (.xlsx / .xls):</label>
+          <label class="excel-import-label" for="excel-report-input">Основной отчёт (.xlsx / .xls, необязательно):</label>
           <label class="excel-file-label" id="excel-report-label">
             <input type="file" id="excel-report-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
             <span id="excel-report-file-name">Выберите report_2026-06.xlsx…</span>
             <span class="excel-file-btn">Обзор</span>
           </label>
-          <label class="excel-import-label" for="excel-dates-input">Оценки по датам (.xlsx / .xls):</label>
+          <label class="excel-import-label" for="excel-dates-input">Оценки по датам (.xlsx / .xls, необязательно):</label>
           <label class="excel-file-label" id="excel-dates-label">
             <input type="file" id="excel-dates-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
             <span id="excel-dates-file-name">Выберите monthly_report_dates_2026-06.xlsx…</span>
@@ -241,6 +242,6 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="js/app.js?v=visual-dashboard-1"></script>
-  <script src="js/excel-import.js?v=dual-excel-1"></script>
+  <script src="js/excel-import.js?v=flexible-excel-1"></script>
 </body>
 </html>
