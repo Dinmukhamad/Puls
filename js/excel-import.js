@@ -366,6 +366,30 @@ function collectQualityScores(source, dateKeys, fallbackYear) {
   };
 }
 
+function collectQualityScoresFromSources(sources, dateKeys, fallbackYear) {
+  const scoresByOperator = new Map();
+  const sheetNames = [];
+  const availableDateKeys = new Set();
+
+  sources.forEach(source => {
+    const quality = collectQualityScores(source, dateKeys, fallbackYear);
+    quality.sheetNames.forEach(sheetName => {
+      sheetNames.push(`${sheetName} (${source.file?.name || source.name || 'Excel'})`);
+    });
+    quality.availableDateKeys.forEach(key => availableDateKeys.add(key));
+    quality.scoresByOperator.forEach((values, operatorKey) => {
+      const existing = scoresByOperator.get(operatorKey) || [];
+      scoresByOperator.set(operatorKey, existing.concat(values));
+    });
+  });
+
+  return {
+    scoresByOperator,
+    sheetNames,
+    availableDateKeys: [...availableDateKeys].sort(),
+  };
+}
+
 function average(values) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
@@ -468,38 +492,31 @@ async function parseExcelAndApply(reportFile, datesFile) {
       throw new Error('Начало периода не может быть позже конца периода.');
     }
 
-    setImportStatus('Читаю два Excel-файла и считаю выбранный период...');
+    const selectedFiles = [reportFile, datesFile].filter(Boolean);
+    if (!selectedFiles.length) {
+      throw new Error('Выберите хотя бы один Excel-файл.');
+    }
 
-    const reportSource = await readWorkbookFile(reportFile);
-    const datesSource = await readWorkbookFile(datesFile);
-    const sources = [reportSource, datesSource];
+    setImportStatus('Читаю Excel и считаю выбранный период...');
+
+    const sources = await Promise.all(selectedFiles.map(file => readWorkbookFile(file)));
     const fallbackYear = startDate.getFullYear();
 
-    const workSheet = readSheetFromSources(sources, 'work', fallbackYear, true);
-    const efficiencySheet = readSheetFromSources(sources, 'efficiency', fallbackYear, true);
+    const workSheet = readSheetFromSources(sources, 'work', fallbackYear, false);
+    const efficiencySheet = readSheetFromSources(sources, 'efficiency', fallbackYear, false);
     const trainingsSheet = readSheetFromSources(sources, 'trainings', fallbackYear, false);
     const techSheet = readSheetFromSources(sources, 'tech', fallbackYear, false);
     const offlineSheet = readSheetFromSources(sources, 'offline', fallbackYear, false);
 
     const selectedDateKeys = dateKeysInRange(startDate, endDate);
-    const usedDateKeys = selectedDateKeys.filter(key =>
-      workSheet.layout.dateCols.has(key) && efficiencySheet.layout.dateCols.has(key)
-    );
-
-    if (!usedDateKeys.length) {
-      const availableWorkDates = [...workSheet.layout.dateCols.keys()].sort();
-      throw new Error(
-        `В выбранном периоде нет дат, которые одновременно найдены на листах «${workSheet.sheetName}» и «${efficiencySheet.sheetName}». ` +
-        `Даты в основном листе: ${formatDateRange(availableWorkDates)}.`
-      );
-    }
+    const canImportReport = !!workSheet && !!efficiencySheet;
+    const usedDateKeys = canImportReport
+      ? selectedDateKeys.filter(key => workSheet.layout.dateCols.has(key) && efficiencySheet.layout.dateCols.has(key))
+      : [];
 
     const workMetricIdx = metricIndexByKeyword('выработ');
     const effMetricIdx = metricIndexByKeyword('эфф');
     const qualityMetricIdx = metricIndexByKeyword('качеств');
-    if (workMetricIdx < 0 || effMetricIdx < 0) {
-      throw new Error('Не найдены колонки сайта «Выработка» и/или «Эфф. %». Проверьте названия метрик в админке.');
-    }
 
     if (typeof normalizeEditableData === 'function') normalizeEditableData();
 
@@ -510,7 +527,7 @@ async function parseExcelAndApply(reportFile, datesFile) {
     const missingQualityOperators = [];
     const updatedNames = new Set();
     const preview = [];
-    const qualityImport = collectQualityScores(datesSource, usedDateKeys, fallbackYear);
+    const qualityImport = collectQualityScoresFromSources(sources, selectedDateKeys, fallbackYear);
     const dailyImport = {
       period: `${formatDateRu(startDate)} - ${formatDateRu(endDate)}`,
       dateKeys: usedDateKeys,
@@ -518,96 +535,131 @@ async function parseExcelAndApply(reportFile, datesFile) {
       operators: {},
     };
 
-    if (usedDateKeys.length < selectedDateKeys.length) {
+    if (canImportReport && !usedDateKeys.length) {
+      const availableWorkDates = [...workSheet.layout.dateCols.keys()].sort();
+      warnings.push(
+        `По основному отчёту нет дат, которые одновременно найдены на листах «${workSheet.sheetName}» и «${efficiencySheet.sheetName}». ` +
+        `Даты в основном листе: ${formatDateRange(availableWorkDates)}.`
+      );
+    }
+    if (canImportReport && usedDateKeys.length < selectedDateKeys.length) {
       const missed = selectedDateKeys.filter(key => !usedDateKeys.includes(key));
       warnings.push(`В Excel найдена только часть периода. Посчитаны даты ${formatDateRange(usedDateKeys)}; пропущены ${formatDateRange(missed)}.`);
     }
-    if (!trainingsSheet) warnings.push('Лист «Тренинги» не найден: тренинги посчитаны как 0.');
-    if (!techSheet) warnings.push('Лист «Тех. сбои» не найден: тех. сбои посчитаны как 0.');
-    if (!offlineSheet) warnings.push('Лист «Офлайн активность» не найден: офлайн активность посчитана как 0.');
+    if (workSheet && !efficiencySheet) warnings.push('Найден лист «Отработанные часы», но нет листа «Эффективность»: выработка и эффективность не обновлены.');
+    if (!workSheet && efficiencySheet) warnings.push('Найден лист «Эффективность», но нет листа «Отработанные часы»: выработка и эффективность не обновлены.');
+    if (!workSheet && !efficiencySheet) warnings.push('Основной отчёт не выбран или в файле нет листов «Отработанные часы» и «Эффективность»: обновится только качество, если оно найдено.');
+    if (canImportReport && workMetricIdx < 0) warnings.push('На сайте не найдена колонка «Выработка»: выработка не обновлена.');
+    if (canImportReport && effMetricIdx < 0) warnings.push('На сайте не найдена колонка «Эфф. %»: эффективность не обновлена.');
+    if (canImportReport && !trainingsSheet) warnings.push('Лист «Тренинги» не найден: тренинги посчитаны как 0.');
+    if (canImportReport && !techSheet) warnings.push('Лист «Тех. сбои» не найден: тех. сбои посчитаны как 0.');
+    if (canImportReport && !offlineSheet) warnings.push('Лист «Офлайн активность» не найден: офлайн активность посчитана как 0.');
     if (qualityMetricIdx < 0) warnings.push('На сайте не найдена колонка «Качество»: оценки по датам прочитаны, но качество не обновлено.');
     if (!qualityImport.sheetNames.length) {
-      warnings.push(`В файле «${datesFile.name}» не найдены листы с колонкой ФИО и датами.`);
+      warnings.push('Файл оценок не выбран или в загруженных файлах не найдены листы с колонкой ФИО и датами.');
     } else {
-      const qualityDateKeys = usedDateKeys.filter(key => qualityImport.availableDateKeys.includes(key));
+      const qualityDateKeys = selectedDateKeys.filter(key => qualityImport.availableDateKeys.includes(key));
       if (!qualityDateKeys.length) {
         warnings.push(`В файле оценок нет дат из выбранного периода. Даты в файле: ${formatDateRange(qualityImport.availableDateKeys)}.`);
       }
     }
 
+    const canUpdateReport = canImportReport && usedDateKeys.length > 0 && workMetricIdx >= 0 && effMetricIdx >= 0;
+
     FACULTIES.forEach((faculty, facIdx) => {
       (faculty.operators || []).forEach((operatorName, opIdx) => {
         const operatorKey = norm(operatorName);
-        const workEntry = workSheet.operators.get(operatorKey);
-        const efficiencyEntry = efficiencySheet.operators.get(operatorKey);
-
-        if (!workEntry || !efficiencyEntry) {
-          missingSiteOperators.push(operatorName);
-          return;
-        }
-
-        const monthlyNorm = toNum(workEntry.row[workSheet.layout.normCol]);
-        const targetNorm = monthlyNorm / 4;
-        const baseWorked = sumSheetDates(workSheet, operatorKey, usedDateKeys);
-        const trainings = sumSheetDates(trainingsSheet, operatorKey, usedDateKeys);
-        const tech = sumSheetDates(techSheet, operatorKey, usedDateKeys);
-        const offline = sumSheetDates(offlineSheet, operatorKey, usedDateKeys);
-        const effectiveHours = sumSheetDates(efficiencySheet, operatorKey, usedDateKeys);
-        const actualFact = baseWorked + trainings + tech + offline;
-        const workScore = targetNorm > 0 ? actualFact / targetNorm * 100 : 0;
-        const effScore = baseWorked > 0 ? effectiveHours / baseWorked * 100 : 0;
         const qualityValues = qualityImport.scoresByOperator.get(operatorKey) || [];
         const qualityScore = qualityValues.length ? round2(average(qualityValues)) : null;
-        const dailyRows = usedDateKeys.map(dateKey => {
-          const dayBase = sumSheetDates(workSheet, operatorKey, [dateKey]);
-          const dayTrainings = sumSheetDates(trainingsSheet, operatorKey, [dateKey]);
-          const dayTech = sumSheetDates(techSheet, operatorKey, [dateKey]);
-          const dayOffline = sumSheetDates(offlineSheet, operatorKey, [dateKey]);
-          const dayEffective = sumSheetDates(efficiencySheet, operatorKey, [dateKey]);
-          const dayActual = dayBase + dayTrainings + dayTech + dayOffline;
-          return {
-            key: dateKey,
-            label: formatDateRu(dateKey),
-            baseWorked: round2(dayBase),
-            extraHours: round2(dayTrainings + dayTech + dayOffline),
-            actualFact: round2(dayActual),
-            effectiveHours: round2(dayEffective),
-          };
-        });
-
-        if (targetNorm <= 0) zeroNormOperators.push(operatorName);
-
         const metricRow = ensureMetricRow(facIdx, opIdx);
+        let wasUpdated = false;
+        let reportValues = null;
+
         if (qualityMetricIdx >= 0 && qualityScore !== null) {
           metricRow[qualityMetricIdx] = qualityScore;
+          wasUpdated = true;
         }
-        metricRow[workMetricIdx] = round2(workScore);
-        metricRow[effMetricIdx] = round2(effScore);
+
+        if (canUpdateReport) {
+          const workEntry = workSheet.operators.get(operatorKey);
+          const efficiencyEntry = efficiencySheet.operators.get(operatorKey);
+
+          if (!workEntry || !efficiencyEntry) {
+            missingSiteOperators.push(operatorName);
+          } else {
+            const monthlyNorm = toNum(workEntry.row[workSheet.layout.normCol]);
+            const targetNorm = monthlyNorm / 4;
+            const baseWorked = sumSheetDates(workSheet, operatorKey, usedDateKeys);
+            const trainings = sumSheetDates(trainingsSheet, operatorKey, usedDateKeys);
+            const tech = sumSheetDates(techSheet, operatorKey, usedDateKeys);
+            const offline = sumSheetDates(offlineSheet, operatorKey, usedDateKeys);
+            const effectiveHours = sumSheetDates(efficiencySheet, operatorKey, usedDateKeys);
+            const actualFact = baseWorked + trainings + tech + offline;
+            const workScore = targetNorm > 0 ? actualFact / targetNorm * 100 : 0;
+            const effScore = baseWorked > 0 ? effectiveHours / baseWorked * 100 : 0;
+            const dailyRows = usedDateKeys.map(dateKey => {
+              const dayBase = sumSheetDates(workSheet, operatorKey, [dateKey]);
+              const dayTrainings = sumSheetDates(trainingsSheet, operatorKey, [dateKey]);
+              const dayTech = sumSheetDates(techSheet, operatorKey, [dateKey]);
+              const dayOffline = sumSheetDates(offlineSheet, operatorKey, [dateKey]);
+              const dayEffective = sumSheetDates(efficiencySheet, operatorKey, [dateKey]);
+              const dayActual = dayBase + dayTrainings + dayTech + dayOffline;
+              return {
+                key: dateKey,
+                label: formatDateRu(dateKey),
+                baseWorked: round2(dayBase),
+                extraHours: round2(dayTrainings + dayTech + dayOffline),
+                actualFact: round2(dayActual),
+                effectiveHours: round2(dayEffective),
+              };
+            });
+
+            if (targetNorm <= 0) zeroNormOperators.push(operatorName);
+
+            metricRow[workMetricIdx] = round2(workScore);
+            metricRow[effMetricIdx] = round2(effScore);
+            dailyImport.operators[operatorKey] = {
+              operator: operatorName,
+              dates: dailyRows,
+            };
+            reportValues = {
+              actualFact: round2(actualFact),
+              targetNorm: round2(targetNorm),
+              workScore: round2(workScore),
+              effectiveHours: round2(effectiveHours),
+              baseWorked: round2(baseWorked),
+              effScore: round2(effScore),
+            };
+            wasUpdated = true;
+          }
+        }
+
+        if (!wasUpdated) return;
 
         updatedNames.add(operatorKey);
-        if (qualityScore === null) missingQualityOperators.push(operatorName);
-        dailyImport.operators[operatorKey] = {
-          operator: operatorName,
-          dates: dailyRows,
-        };
+        if (qualityScore === null && qualityMetricIdx >= 0 && qualityImport.sheetNames.length) {
+          missingQualityOperators.push(operatorName);
+        }
         if (preview.length < 8) {
           preview.push({
             operator: operatorName,
             qualityScore: qualityScore === null ? '—' : qualityScore,
-            actualFact: round2(actualFact),
-            targetNorm: round2(targetNorm),
-            workScore: round2(workScore),
-            effectiveHours: round2(effectiveHours),
-            baseWorked: round2(baseWorked),
-            effScore: round2(effScore),
+            actualFact: reportValues?.actualFact ?? '—',
+            targetNorm: reportValues?.targetNorm ?? '—',
+            workScore: reportValues?.workScore ?? '—',
+            effectiveHours: reportValues?.effectiveHours ?? '—',
+            baseWorked: reportValues?.baseWorked ?? '—',
+            effScore: reportValues?.effScore ?? '—',
           });
         }
       });
     });
 
-    for (const [operatorKey, entry] of workSheet.operators.entries()) {
-      if (!updatedNames.has(operatorKey) && !findOperator(entry.name)) {
-        extraExcelOperators.push(entry.name);
+    if (workSheet) {
+      for (const [operatorKey, entry] of workSheet.operators.entries()) {
+        if (!updatedNames.has(operatorKey) && !findOperator(entry.name)) {
+          extraExcelOperators.push(entry.name);
+        }
       }
     }
 
@@ -624,10 +676,12 @@ async function parseExcelAndApply(reportFile, datesFile) {
       throw new Error('Ни один оператор с сайта не найден в Excel. Данные не изменены.');
     }
 
-    if (typeof setDailyImportData === 'function') {
-      setDailyImportData(dailyImport);
-    } else {
-      try { localStorage.setItem('divergentContestDailyImport', JSON.stringify(dailyImport)); } catch {}
+    if (canUpdateReport && Object.keys(dailyImport.operators).length) {
+      if (typeof setDailyImportData === 'function') {
+        setDailyImportData(dailyImport);
+      } else {
+        try { localStorage.setItem('divergentContestDailyImport', JSON.stringify(dailyImport)); } catch {}
+      }
     }
 
     await saveEditableData();
@@ -635,19 +689,19 @@ async function parseExcelAndApply(reportFile, datesFile) {
     renderEditor();
 
     const sheetNames = [
-      `${workSheet.sheetName} (${workSheet.fileName})`,
-      `${efficiencySheet.sheetName} (${efficiencySheet.fileName})`,
+      workSheet ? `${workSheet.sheetName} (${workSheet.fileName})` : null,
+      efficiencySheet ? `${efficiencySheet.sheetName} (${efficiencySheet.fileName})` : null,
       trainingsSheet ? `${trainingsSheet.sheetName} (${trainingsSheet.fileName})` : null,
       techSheet ? `${techSheet.sheetName} (${techSheet.fileName})` : null,
       offlineSheet ? `${offlineSheet.sheetName} (${offlineSheet.fileName})` : null,
-      ...qualityImport.sheetNames.map(sheetName => `${sheetName} (${datesFile.name})`),
+      ...qualityImport.sheetNames,
     ].filter(Boolean).join(', ');
 
     const report = {
       updatedCount: updatedNames.size,
-      files: `${reportFile.name}; ${datesFile.name}`,
+      files: selectedFiles.map(file => file.name).join('; '),
       selectedPeriod: `${formatDateRu(startDate)} - ${formatDateRu(endDate)}`,
-      usedDates: formatDateRange(usedDateKeys),
+      usedDates: canUpdateReport ? formatDateRange(usedDateKeys) : formatDateRange(selectedDateKeys),
       sheetNames,
       warnings,
       missingSiteOperators,
@@ -678,9 +732,7 @@ function setDefaultImportPeriod() {
 }
 
 function validateImportFile(file, label) {
-  if (!file) {
-    throw new Error(`Выберите файл: ${label}.`);
-  }
+  if (!file) return;
 
   const ext = file.name.split('.').pop().toLowerCase();
   if (!['xlsx', 'xls', 'ods'].includes(ext)) {
@@ -709,9 +761,12 @@ function initExcelImport() {
     try {
       const reportFile = reportInput.files[0];
       const datesFile = datesInput.files[0];
+      if (!reportFile && !datesFile) {
+        throw new Error('Выберите хотя бы один Excel-файл.');
+      }
       validateImportFile(reportFile, 'основной отчёт');
       validateImportFile(datesFile, 'оценки по датам');
-      parseExcelAndApply(reportFile, datesFile);
+      parseExcelAndApply(reportFile || null, datesFile || null);
     } catch (error) {
       setImportStatus(error.message, 'error');
     }
