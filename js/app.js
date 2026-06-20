@@ -106,6 +106,30 @@ function getScoreMetricIndex() {
   return idx === -1 ? METRICS.length - 1 : idx;
 }
 
+function roundScoreValue(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function calculateOperatorScore(row = []) {
+  return roundScoreValue(METRICS.reduce((total, metric, metricIdx) => {
+    if (metric.type === 'score') return total;
+    const value = Number(row[metricIdx]) || 0;
+    return metric.type === 'penalty' ? total - value : total + value;
+  }, 0));
+}
+
+function syncOperatorScore(row = []) {
+  const scoreIdx = getScoreMetricIndex();
+  if (scoreIdx >= 0) row[scoreIdx] = calculateOperatorScore(row);
+  return row;
+}
+
+function syncAllScores() {
+  WEEKLY_DATA[0]?.forEach(facRows => {
+    facRows.forEach(row => syncOperatorScore(row));
+  });
+}
+
 function normalizeOperatorName(name) {
   return String(name || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
 }
@@ -124,20 +148,7 @@ function sanitizeDailyImport(input) {
         extraHours: Number(day.extraHours) || 0,
         actualFact: Number(day.actualFact) || 0,
         effectiveHours: Number(day.effectiveHours) || 0,
-        calls: Number(day.calls) || 0,
-        lateAmount: Number(day.lateAmount) || 0,
-        lateMinutes: Number(day.lateMinutes) || 0,
       })).filter(day => day.key),
-      importSummary: value.importSummary && typeof value.importSummary === 'object' ? {
-        worked: Number(value.importSummary.worked) || 0,
-        cleanHours: Number(value.importSummary.cleanHours) || 0,
-        qualityCount: Number(value.importSummary.qualityCount) || 0,
-        qualityPeriod: String(value.importSummary.qualityPeriod || ''),
-        calls: Number(value.importSummary.calls) || 0,
-        lateAmount: Number(value.importSummary.lateAmount) || 0,
-        lateMinutes: Number(value.importSummary.lateMinutes) || 0,
-        latePenaltyPoints: Number(value.importSummary.latePenaltyPoints) || 0,
-      } : null,
     };
   });
 
@@ -182,6 +193,7 @@ function normalizeEditableData() {
       if (WEEKLY_DATA[0][fi][oi].length > metricCount) {
         WEEKLY_DATA[0][fi][oi].length = metricCount;
       }
+      syncOperatorScore(WEEKLY_DATA[0][fi][oi]);
     });
     if (WEEKLY_DATA[0][fi].length > fac.operators.length) {
       WEEKLY_DATA[0][fi].length = fac.operators.length;
@@ -318,19 +330,20 @@ function logoutAdmin() {
 
 /* ── Data calculations ──────────────────────────────────────── */
 function calcTotals() {
-  const si = getScoreMetricIndex();
   return FACULTIES.map((fac, fi) =>
-    fac.operators.map((name, oi) => ({
-      name,
-      pts: Number(WEEKLY_DATA[0]?.[fi]?.[oi]?.[si]) || 0,
-    }))
+    fac.operators.map((name, oi) => {
+      const row = WEEKLY_DATA[0]?.[fi]?.[oi] || [];
+      return {
+        name,
+        pts: calculateOperatorScore(row),
+      };
+    })
   );
 }
 
 function getFacultyTotal(facIdx) {
-  const si = getScoreMetricIndex();
-  const rows = WEEKLY_DATA[0]?.[facIdx] ?? [];
-  const scores = rows.map(r => Number(r[si]) || 0).filter(v => v !== 0);
+  const rows = FACULTIES[facIdx]?.operators?.map((_, oi) => WEEKLY_DATA[0]?.[facIdx]?.[oi] || []) ?? [];
+  const scores = rows.map(row => calculateOperatorScore(row)).filter(v => v !== 0);
   if (scores.length === 0) return 0;
   return scores.reduce((s, v) => s + v, 0) / scores.length;
 }
@@ -341,7 +354,6 @@ function operatorVisualKey(facIdx, opIdx) {
 }
 
 function getOperatorRanking() {
-  const scoreIdx = getScoreMetricIndex();
   const rows = [];
 
   FACULTIES.forEach((fac, facIdx) => {
@@ -355,7 +367,7 @@ function getOperatorRanking() {
         opIdx,
         faculty: fac,
         metrics: metricRow,
-        points: Number(metricRow[scoreIdx]) || 0,
+        points: calculateOperatorScore(metricRow),
       });
     });
   });
@@ -414,11 +426,7 @@ function getContestStatus(row, ranking, gapToNext) {
 
 function isAutoMetric(metric) {
   const label = normalizeOperatorName(metric.label);
-  return label.includes('выработ')
-    || label.includes('эфф')
-    || label.includes('качество')
-    || label.includes('квз')
-    || label.includes('опозд');
+  return label.includes('выработ') || label.includes('эфф');
 }
 
 function getMetricAverages(ranking) {
@@ -688,14 +696,12 @@ function renderDailyDynamics(selected) {
   const workLine = buildDailyPolyline(days, 'actualFact', maxValue);
   const effLine = buildDailyPolyline(days, 'effectiveHours', maxValue);
   const points = days.map(day => `
-    <div class="daily-point" title="${escapeHtml(day.label)}: факт ${fmtPts(day.actualFact)}, эффективность ${fmtPts(day.effectiveHours)}, звонки ${fmtPts(day.calls || 0)}, опоздания ${fmtPts(day.lateMinutes || 0)} мин">
+    <div class="daily-point" title="${escapeHtml(day.label)}: факт ${fmtPts(day.actualFact)}, эффективность ${fmtPts(day.effectiveHours)}">
       <span>${escapeHtml(day.label.replace(/\.\d{4}$/, ''))}</span>
       <b>${fmtPts(day.actualFact)}</b>
-      <em>${fmtPts(day.effectiveHours)} / ${fmtPts(day.calls || 0)}</em>
+      <em>${fmtPts(day.effectiveHours)}</em>
     </div>
   `).join('');
-  const totalCalls = days.reduce((sum, day) => sum + (Number(day.calls) || 0), 0);
-  const totalLate = days.reduce((sum, day) => sum + (Number(day.lateMinutes) || 0), 0);
 
   return `
     <div class="visual-panel daily-panel">
@@ -704,7 +710,7 @@ function renderDailyDynamics(selected) {
           <div class="visual-panel-kicker">Динамика по дням</div>
           <h3>${escapeHtml(data.period || 'Последний импорт')}</h3>
         </div>
-        <span>Звонки ${fmtPts(totalCalls)} · опозд. ${fmtPts(totalLate)} мин</span>
+        <span>Факт / эффективность</span>
       </div>
       <svg class="daily-line-chart" viewBox="0 0 360 120" preserveAspectRatio="none" aria-hidden="true">
         <line x1="0" y1="112" x2="360" y2="112"></line>
@@ -713,7 +719,7 @@ function renderDailyDynamics(selected) {
       </svg>
       <div class="daily-legend">
         <span><i class="work"></i> Факт часов</span>
-        <span><i class="eff"></i> Эфф. часы / звонки</span>
+        <span><i class="eff"></i> Эффективность</span>
       </div>
       <div class="daily-points">${points}</div>
     </div>
@@ -1000,9 +1006,11 @@ function renderEditor() {
     const rows = fac.operators.map((name, oi) => {
       const cells = METRICS.map((metric, mi) => `
         <td>
-          <input class="metric-value-input" type="number" step="0.1"
+          <input class="metric-value-input${metric.type === 'score' ? ' metric-value-input--readonly' : ''}" type="number" step="0.1"
             value="${WEEKLY_DATA[0]?.[fi]?.[oi]?.[mi] ?? 0}"
-            oninput="updateOperatorMetric(${fi}, ${oi}, ${mi}, this.value)">
+            ${metric.type === 'score'
+              ? 'readonly title="Считается автоматически"'
+              : `oninput="updateOperatorMetric(${fi}, ${oi}, ${mi}, this.value)"`}>
         </td>
       `).join('');
       return `
@@ -1076,9 +1084,11 @@ function updateOperatorName(facIdx, opIdx, value) {
 
 function updateOperatorMetric(facIdx, opIdx, metricIdx, value) {
   if (!requireAdmin()) return;
+  if (METRICS[metricIdx]?.type === 'score') return;
   if (!WEEKLY_DATA[0][facIdx]) WEEKLY_DATA[0][facIdx] = [];
   if (!WEEKLY_DATA[0][facIdx][opIdx]) WEEKLY_DATA[0][facIdx][opIdx] = Array(METRICS.length).fill(0);
   WEEKLY_DATA[0][facIdx][opIdx][metricIdx] = Number(value) || 0;
+  syncOperatorScore(WEEKLY_DATA[0][facIdx][opIdx]);
   refreshDashboardOnly(); debouncedSave();
 }
 
@@ -1142,6 +1152,7 @@ async function addMetric() {
   const insertAt = getScoreMetricIndex();
   METRICS.splice(insertAt, 0, { label, type: typeInput.value === 'penalty' ? 'penalty' : 'metric' });
   WEEKLY_DATA[0].forEach(facRows => { facRows.forEach(row => row.splice(insertAt, 0, 0)); });
+  syncAllScores();
   await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
@@ -1151,6 +1162,7 @@ async function removeMetric(metricIdx) {
   if (!confirm(`Удалить показатель "${METRICS[metricIdx].label}"?`)) return;
   METRICS.splice(metricIdx, 1);
   WEEKLY_DATA[0].forEach(facRows => { facRows.forEach(row => row.splice(metricIdx, 1)); });
+  syncAllScores();
   await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
