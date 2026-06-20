@@ -1459,6 +1459,9 @@ tr.top3 td { background: rgba(205,127,50,.04) !important; }
   font-size: 12px; color: var(--tx2); overflow: hidden;
 }
 .excel-file-label:hover { border-color: var(--gold); }
+.excel-file-label span:first-of-type {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .excel-file-input-hidden { position: absolute; width:0; height:0; opacity:0; pointer-events:none; }
 .excel-file-btn {
   margin-left: auto; padding: 4px 10px;
