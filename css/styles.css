@@ -1342,6 +1342,11 @@ tr.top3 td { background: rgba(205,127,50,.04) !important; }
 }
 .operator-name-input { min-width: 130px; }
 .metric-value-input  { min-width: 65px; }
+.metric-value-input--readonly {
+  color: var(--tx2);
+  background: rgba(255,255,255,.035);
+  cursor: default;
+}
 .operator-name-input:focus, .metric-value-input:focus {
   outline: none; border-color: var(--gold);
 }
