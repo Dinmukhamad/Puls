@@ -2,8 +2,8 @@
  * excel-import.js
  *
  * Импортирует расчёт из отчёта Excel за выбранный период.
- * Автоматически обновляет только «Выработка» и «Эфф. %».
- * Все ручные поля, штрафы и «Итого» остаются без перезаписи.
+ * Автоматически обновляет «Качество», «Выработка» и «Эфф. %».
+ * Ручные поля и штрафы остаются без перезаписи, «Итого» пересчитывается в app.js.
  */
 
 'use strict';
@@ -394,6 +394,13 @@ function average(values) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
 
+function getPeriodTargetNorm(monthlyNorm, sheetInfo, dateKeys) {
+  const monthDateCount = sheetInfo ? sheetInfo.layout.dateCols.size : 0;
+  if (!monthlyNorm || !monthDateCount || !dateKeys.length) return 0;
+  const selectedDateCount = dateKeys.filter(key => sheetInfo.layout.dateCols.has(key)).length;
+  return monthlyNorm * selectedDateCount / monthDateCount;
+}
+
 function sumSheetDates(sheetInfo, operatorKey, dateKeys) {
   if (!sheetInfo) return 0;
   const entry = sheetInfo.operators.get(operatorKey);
@@ -588,7 +595,7 @@ async function parseExcelAndApply(reportFile, datesFile) {
             missingSiteOperators.push(operatorName);
           } else {
             const monthlyNorm = toNum(workEntry.row[workSheet.layout.normCol]);
-            const targetNorm = monthlyNorm / 4;
+            const targetNorm = getPeriodTargetNorm(monthlyNorm, workSheet, usedDateKeys);
             const baseWorked = sumSheetDates(workSheet, operatorKey, usedDateKeys);
             const trainings = sumSheetDates(trainingsSheet, operatorKey, usedDateKeys);
             const tech = sumSheetDates(techSheet, operatorKey, usedDateKeys);
