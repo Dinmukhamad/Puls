@@ -84,6 +84,8 @@ body.intro-lock { overflow: hidden; }
   flex-direction: column;
   align-items: stretch;
   gap: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid rgba(232,200,112,.18);
   border-radius: 12px;
   background:
@@ -91,6 +93,8 @@ body.intro-lock { overflow: hidden; }
     radial-gradient(circle at 50% 0%, rgba(232,200,112,.16), transparent 44%);
   box-shadow: 0 18px 50px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.06);
   backdrop-filter: blur(14px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(201,168,76,.35) transparent;
 }
 
 .side-nav-logo {
@@ -728,6 +732,7 @@ body.intro-lock { overflow: hidden; }
 
 .app-shell .visual-dashboard,
 .app-shell .game-dashboard,
+.app-shell .icore-section,
 .app-shell .scoreboard,
 .app-shell .criteria-section,
 .app-shell .tables-section {
@@ -1506,6 +1511,283 @@ body.intro-lock { overflow: hidden; }
   color: var(--ok);
 }
 
+.icore-section { min-width: 0; }
+
+.icore-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 14px; margin-bottom: 18px; flex-wrap: wrap;
+}
+.icore-meta,
+.icore-select-wrap {
+  display: grid; gap: 4px; justify-items: end;
+  color: var(--tx3); font-size: 11px;
+}
+.icore-select-wrap span,
+.icore-meta span {
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.icore-meta b {
+  color: var(--gold2); font-family: 'Rajdhani', sans-serif; font-size: 16px;
+}
+
+.icore-kpi-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px; margin-bottom: 14px;
+}
+.icore-kpi,
+.icore-panel,
+.icore-shop-card,
+.icore-podium-card {
+  border: 1px solid rgba(232,200,112,.14);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018)), rgba(8,9,15,.76);
+  box-shadow: 0 14px 36px rgba(0,0,0,.24);
+}
+.icore-kpi { padding: 15px 16px; }
+.icore-kpi.primary {
+  border-color: rgba(232,200,112,.32);
+  background: linear-gradient(135deg, rgba(201,168,76,.16), rgba(224,80,32,.08)), rgba(8,9,15,.78);
+}
+.icore-kpi span,
+.icore-panel-head span,
+.icore-shop-card span,
+.icore-nomination span,
+.icore-request-row span,
+.icore-admin-request span {
+  display: block; color: var(--tx3); font-size: 10px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+}
+.icore-kpi b {
+  display: block; color: var(--tx); font-family: 'Rajdhani', sans-serif;
+  font-size: 30px; line-height: 1.05; margin-top: 5px;
+}
+.icore-kpi em {
+  display: block; color: var(--tx3); font-size: 11px; font-style: normal; margin-top: 3px;
+}
+
+.icore-layout,
+.icore-admin-layout {
+  display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, .95fr);
+  gap: 14px; align-items: start;
+}
+.icore-layout .icore-panel:last-child { grid-column: 1 / -1; }
+.icore-panel { min-width: 0; padding: 16px; }
+.icore-panel-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px;
+}
+.icore-panel-head h3,
+.icore-shop-card h3 {
+  margin: 3px 0 0; color: var(--tx); font-size: 16px; line-height: 1.2;
+}
+.icore-panel-head b {
+  color: var(--gold2); font-family: 'Rajdhani', sans-serif; font-size: 18px; white-space: nowrap;
+}
+
+.icore-progress-list,
+.icore-history-list,
+.icore-request-list,
+.icore-admin-request-list,
+.icore-badge-grid {
+  display: grid; gap: 8px;
+}
+.icore-progress-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 10px; padding: 9px 10px; border-radius: 7px; background: rgba(255,255,255,.035);
+}
+.icore-progress-row b,
+.icore-history-row b,
+.icore-request-row b,
+.icore-admin-request b {
+  color: var(--tx); font-size: 12px;
+}
+.icore-progress-row span {
+  display: block; color: var(--tx3); font-size: 11px;
+}
+.icore-progress-row em {
+  color: var(--gold2); font-family: 'Rajdhani', sans-serif; font-size: 16px;
+  font-style: normal; font-weight: 800;
+}
+.icore-progress-row.danger em { color: var(--danger); }
+.icore-progress-row i {
+  grid-column: 1 / -1; height: 6px; border-radius: 999px;
+  overflow: hidden; background: rgba(255,255,255,.08);
+}
+.icore-progress-row i span {
+  display: block; height: 100%; background: linear-gradient(90deg, var(--e-light), var(--gold2));
+}
+.icore-progress-row.danger i span {
+  background: linear-gradient(90deg, var(--danger), rgba(224,80,32,.55));
+}
+
+.icore-history-row,
+.icore-request-row {
+  display: grid; grid-template-columns: 86px 54px minmax(0, 1fr);
+  gap: 8px; align-items: center; padding: 9px 10px;
+  border-radius: 7px; background: rgba(255,255,255,.035);
+}
+.icore-history-row b {
+  color: var(--ok); font-family: 'Rajdhani', sans-serif; font-size: 16px;
+}
+.icore-history-row.minus b { color: var(--danger); }
+.icore-history-row em,
+.icore-request-row em,
+.icore-admin-request em,
+.icore-admin-request small {
+  min-width: 0; color: var(--tx3); font-size: 11px; font-style: normal;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.icore-badge-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.icore-badge {
+  padding: 11px 12px; border-radius: 7px; border: 1px solid var(--border); background: rgba(255,255,255,.035);
+}
+.icore-badge.active {
+  border-color: rgba(232,200,112,.32); background: rgba(201,168,76,.11);
+}
+.icore-badge b,
+.icore-shop-summary b {
+  display: block; color: var(--tx); font-size: 13px;
+}
+.icore-badge span,
+.icore-shop-summary span {
+  display: block; color: var(--tx3); font-size: 11px; margin-top: 3px;
+}
+
+.icore-action-btn,
+.icore-shop-card button,
+.icore-form-grid button,
+.icore-admin-actions button {
+  border: 1px solid rgba(232,200,112,.28); border-radius: 7px;
+  background: rgba(201,168,76,.12); color: var(--gold2);
+  font: 800 11px 'Rajdhani', sans-serif; letter-spacing: .08em;
+  text-transform: uppercase; cursor: pointer;
+}
+.icore-action-btn {
+  width: 100%; margin-top: 12px; padding: 11px 12px;
+}
+.icore-action-btn.compact {
+  width: auto; margin: 0; padding: 10px 14px;
+}
+
+.icore-podium {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px; margin-bottom: 14px;
+}
+.icore-podium-card {
+  min-width: 0; padding: 16px; border-top: 3px solid rgba(232,200,112,.35);
+}
+.icore-podium-card.place-1 { border-color: var(--gold2); }
+.icore-podium-card span {
+  color: var(--gold2); font-family: 'Rajdhani', sans-serif; font-size: 24px; font-weight: 800;
+}
+.icore-podium-card b,
+.icore-podium-card em,
+.icore-podium-card small,
+.icore-podium-card strong {
+  display: block; min-width: 0;
+}
+.icore-podium-card b {
+  color: var(--tx); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.icore-podium-card em,
+.icore-podium-card small {
+  color: var(--tx3); font-size: 11px; font-style: normal;
+}
+.icore-podium-card strong {
+  margin-top: 10px; color: var(--gold2); font-family: 'Rajdhani', sans-serif; font-size: 20px;
+}
+
+.icore-nomination-grid,
+.icore-shop-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px; margin-bottom: 14px;
+}
+.icore-nomination {
+  min-width: 0; padding: 11px 12px; border-radius: 7px;
+  background: rgba(255,255,255,.035); border-left: 3px solid rgba(232,200,112,.38);
+}
+.icore-nomination b {
+  display: block; color: var(--tx); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.icore-nomination em {
+  display: block; color: var(--gold2); font-size: 12px; font-style: normal;
+}
+
+.icore-table-wrap {
+  overflow-x: hidden; border: 1px solid rgba(232,200,112,.12); border-radius: 8px;
+}
+.icore-table {
+  width: 100%; table-layout: fixed; border-collapse: collapse; background: rgba(8,9,15,.72);
+}
+.icore-table th,
+.icore-table td {
+  padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,.07);
+  color: var(--tx2); font-size: 12px; text-align: center;
+}
+.icore-table th {
+  color: var(--tx3); font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+}
+.icore-table td:nth-child(2),
+.icore-table th:nth-child(2) {
+  width: 34%; text-align: left;
+}
+.icore-table small {
+  display: block; color: var(--tx3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.icore-table tr.current { background: rgba(201,168,76,.12); }
+
+.icore-shop-summary {
+  display: flex; justify-content: space-between; gap: 12px; margin-bottom: 12px;
+  padding: 10px 12px; border-radius: 7px; background: rgba(255,255,255,.035);
+}
+.icore-shop-card {
+  display: grid; gap: 12px; padding: 16px;
+}
+.icore-shop-card.available { border-color: rgba(58,191,104,.28); }
+.icore-shop-card p {
+  margin: 7px 0 0; color: var(--tx3); font-size: 12px;
+}
+.icore-shop-card button,
+.icore-form-grid button {
+  width: 100%; min-height: 38px;
+}
+.icore-shop-card button:disabled,
+.icore-admin-actions button:disabled {
+  cursor: not-allowed; opacity: .48; color: var(--tx3);
+  border-color: var(--border); background: rgba(255,255,255,.035);
+}
+.icore-request-row { grid-template-columns: 92px minmax(0, 1fr) auto; }
+
+.icore-admin-request {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px; align-items: center; padding: 11px 12px;
+  border-radius: 7px; background: rgba(255,255,255,.035);
+}
+.icore-admin-actions {
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end;
+}
+.icore-admin-actions button {
+  min-height: 30px; padding: 0 9px;
+}
+.icore-form-grid {
+  display: grid; grid-template-columns: minmax(180px, 1fr) 110px minmax(220px, 1.4fr) 120px;
+  gap: 8px;
+}
+.icore-form-grid input,
+.icore-form-grid select {
+  min-width: 0; height: 38px; padding: 0 10px; border: 1px solid var(--border);
+  border-radius: 7px; background: rgba(255,255,255,.06); color: var(--tx);
+}
+.icore-empty,
+.icore-muted-line {
+  color: var(--tx3);
+}
+.icore-empty {
+  padding: 28px; border: 1px solid var(--border); border-radius: 8px; background: rgba(255,255,255,.035);
+}
+
 .game-team-row,
 .game-mini-row {
   display: grid;
@@ -1623,6 +1905,50 @@ body.intro-lock { overflow: hidden; }
     justify-items: start;
     text-align: left;
     grid-column: auto;
+  }
+}
+
+@media (max-width: 980px) {
+  .icore-layout,
+  .icore-admin-layout,
+  .icore-podium {
+    grid-template-columns: 1fr;
+  }
+  .icore-form-grid {
+    grid-template-columns: 1fr 110px;
+  }
+  .icore-form-grid input[type="text"],
+  .icore-form-grid button {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .icore-head,
+  .icore-shop-summary,
+  .icore-admin-request {
+    display: grid;
+    justify-items: stretch;
+  }
+  .icore-select-wrap,
+  .icore-meta {
+    justify-items: stretch;
+  }
+  .icore-history-row,
+  .icore-request-row {
+    grid-template-columns: 1fr;
+  }
+  .icore-table th,
+  .icore-table td {
+    padding: 8px 4px;
+    font-size: 11px;
+  }
+  .icore-table th:nth-child(2),
+  .icore-table td:nth-child(2) {
+    width: 30%;
+  }
+  .icore-form-grid {
+    grid-template-columns: 1fr;
   }
 }
 
