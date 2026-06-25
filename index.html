@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-icon-1">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-icon-1">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
-  <link rel="stylesheet" href="css/styles.css?v=section-views-1">
+  <link rel="stylesheet" href="css/styles.css?v=icore-gamification-1">
   <script src="js/api.js"></script>
 </head>
 <body>
@@ -70,6 +70,22 @@
       <a class="side-nav-link active" href="#overview-view" data-nav-target="overview" title="Общие результаты">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
         <span>Общие</span>
+      </a>
+      <a class="side-nav-link" href="#icore-cabinet" data-nav-target="cabinet" title="Мой кабинет">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-7 9a7 7 0 0 1 14 0M16 4l2 2 3-3"/></svg>
+        <span>Кабинет</span>
+      </a>
+      <a class="side-nav-link" href="#icore-rating" data-nav-target="coin-rating" title="Рейтинг коинов">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Zm0 2H4a4 4 0 0 0 4 4M17 6h3a4 4 0 0 1-4 4"/></svg>
+        <span>Рейтинг</span>
+      </a>
+      <a class="side-nav-link" href="#icore-shop" data-nav-target="shop" title="Магазин бонусов">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h15l-2 9H8L6 4H3M9 21h.01M18 21h.01M10 12h7"/></svg>
+        <span>Магазин</span>
+      </a>
+      <a class="side-nav-link" href="#icore-admin" data-nav-target="admin" title="Заявки и администрирование">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5V4Zm4 4h6M9 12h6M9 16h4"/></svg>
+        <span>Заявки</span>
       </a>
       <a class="side-nav-link" href="#visual-dashboard" data-nav-target="individual" title="Индивидуальные показатели">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-7 9a7 7 0 0 1 14 0"/></svg>
@@ -176,6 +192,14 @@
       </section>
 
       <!-- Визуальный дашборд -->
+      <section class="app-view icore-section" id="icore-cabinet" data-section-view="cabinet" aria-label="Личный кабинет оператора"></section>
+
+      <section class="app-view icore-section" id="icore-rating" data-section-view="coin-rating" aria-label="Рейтинг коинов"></section>
+
+      <section class="app-view icore-section" id="icore-shop" data-section-view="shop" aria-label="Магазин бонусов"></section>
+
+      <section class="app-view icore-section" id="icore-admin" data-section-view="admin" aria-label="Заявки и администрирование"></section>
+
       <section class="app-view visual-dashboard" id="visual-dashboard" data-section-view="individual" aria-label="Визуальный дашборд конкурса"></section>
 
       <section class="app-view game-dashboard" id="game-dashboard" data-section-view="season" aria-label="Игровой сезон операторов"></section>
@@ -279,7 +303,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=section-views-1"></script>
-  <script src="js/excel-import.js?v=section-views-1"></script>
+  <script src="js/app.js?v=icore-gamification-1"></script>
+  <script src="js/excel-import.js?v=icore-gamification-1"></script>
 </body>
 </html>
