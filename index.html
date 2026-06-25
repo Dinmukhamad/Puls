@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iCore · Конкурсы операторов</title>
+  <title>Contest · Конкурсы операторов</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=divergent-icon-1">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-icon-1">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-icon-1">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
-  <link rel="stylesheet" href="css/styles.css?v=icore-font-2">
+  <link rel="stylesheet" href="css/styles.css?v=contest-nav-1">
   <script src="js/api.js"></script>
 </head>
 <body>
@@ -63,10 +63,13 @@
   </div>
 
   <nav class="side-nav" aria-label="Разделы сайта">
-    <a class="side-nav-logo" href="#overview-view" aria-label="iCore">
-      <span class="side-nav-brand">iCORE</span>
+    <a class="side-nav-logo" href="#overview-view" aria-label="Contest">
+      <span class="side-nav-brand">Contest</span>
       <span class="side-nav-mark">●</span>
     </a>
+    <button class="side-nav-toggle" id="side-nav-toggle" type="button" aria-label="Свернуть меню" aria-expanded="true" title="Свернуть меню">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
     <div class="side-nav-group">
       <a class="side-nav-link active" href="#overview-view" data-nav-target="overview" title="Общие результаты">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
@@ -304,7 +307,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=icore-ui-1"></script>
+  <script src="js/app.js?v=contest-nav-1"></script>
   <script src="js/excel-import.js?v=icore-ui-1"></script>
 </body>
 </html>
