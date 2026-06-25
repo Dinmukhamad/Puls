@@ -1801,13 +1801,13 @@ table.operators tbody tr:hover { background: rgba(255,255,255,.04); }
 
 /* Score bar */
 .score-bar-wrap { display: flex; align-items: center; gap: 10px; }
-.tables-sidebar .score-bar-wrap { gap: 5px; }
+.tables-sidebar .score-bar-wrap { gap: 3px; }
 .score-bar {
   flex: 1; height: 5px; min-width: 50px;
   background: rgba(255,255,255,.07);
   border-radius: 3px; overflow: hidden;
 }
-.tables-sidebar .score-bar { min-width: 22px; }
+.tables-sidebar .score-bar { min-width: 10px; }
 .score-bar-fill {
   height: 100%; border-radius: 3px;
   background: var(--gold); transition: width .5s ease;
@@ -1821,7 +1821,7 @@ table.operators tbody tr:hover { background: rgba(255,255,255,.04); }
   font-size: 14px; font-weight: 600;
   color: var(--tx); white-space: nowrap;
 }
-.tables-sidebar .pts-val { font-size: 12px; }
+.tables-sidebar .pts-val { font-size: 11px; }
 
 td.neg { color: var(--danger) !important; }
 .metric-col.metric-penalty { color: rgba(220,60,60,.65) !important; }
