@@ -1509,7 +1509,7 @@ function renderIcoreCabinet() {
       <div class="icore-panel">
         <div class="icore-panel-head"><div><span>Достижения</span><h3>Бейджи оператора</h3></div><b>${badges.filter(b => b.active).length}/4</b></div>
         <div class="icore-badge-grid">${badgesHtml}</div>
-        <button class="icore-action-btn" onclick="window.showContestSection?.('shop')">Перейти в магазин · ${state.balance} коинов</button>
+        <button class="icore-action-btn" data-icore-view="shop">Перейти в магазин · ${state.balance} коинов</button>
       </div>
     </div>
   `;
@@ -1578,7 +1578,7 @@ function renderIcoreShop() {
     return `
       <div class="icore-shop-card ${canBuy ? 'available' : ''}">
         <div><span>${item.price} коинов</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.desc)}</p></div>
-        <button onclick="buyIcoreReward('${item.id}')" ${canBuy ? '' : 'disabled'}>${canBuy ? 'Купить' : `Нужно ещё ${missing}`}</button>
+        <button data-icore-buy="${item.id}" ${canBuy ? '' : 'disabled'}>${canBuy ? 'Купить' : `Нужно ещё ${missing}`}</button>
       </div>
     `;
   }).join('');
@@ -1614,9 +1614,9 @@ function renderIcoreAdmin() {
     <div class="icore-admin-request ${item.status}">
       <div><span>${ICORE_REQUEST_STATUS[item.status]}</span><b>${escapeHtml(item.operatorName || item.operatorKey)}</b><em>${escapeHtml(item.rewardTitle)} · ${item.price} коинов</em>${item.reason ? `<small>${escapeHtml(item.reason)}</small>` : ''}</div>
       <div class="icore-admin-actions">
-        <button onclick="updateIcoreRequest('${item.id}', 'approved')" ${item.status !== 'new' ? 'disabled' : ''}>Одобрить</button>
-        <button onclick="updateIcoreRequest('${item.id}', 'rejected')" ${item.status !== 'new' ? 'disabled' : ''}>Отклонить</button>
-        <button onclick="updateIcoreRequest('${item.id}', 'done')" ${item.status !== 'approved' ? 'disabled' : ''}>Выполнена</button>
+        <button data-icore-request="${item.id}" data-icore-status="approved" ${item.status !== 'new' ? 'disabled' : ''}>Одобрить</button>
+        <button data-icore-request="${item.id}" data-icore-status="rejected" ${item.status !== 'new' ? 'disabled' : ''}>Отклонить</button>
+        <button data-icore-request="${item.id}" data-icore-status="done" ${item.status !== 'approved' ? 'disabled' : ''}>Выполнена</button>
       </div>
     </div>
   `).join('');
@@ -1624,7 +1624,7 @@ function renderIcoreAdmin() {
   el.innerHTML = `
     <div class="icore-head">
       <div><div class="section-kicker">iCore · Администрирование</div><h2 class="section-title">Заявки, ручные начисления и отчёт</h2></div>
-      <button class="icore-action-btn compact" onclick="exportIcoreCsv()">CSV</button>
+      <button class="icore-action-btn compact" data-icore-export="csv">CSV</button>
     </div>
     <div class="icore-kpi-grid">
       <div class="icore-kpi"><span>Операторов</span><b>${ranking.length}</b><em>в системе</em></div>
@@ -1639,7 +1639,7 @@ function renderIcoreAdmin() {
           <select id="icore-manual-operator">${options}</select>
           <input id="icore-manual-amount" type="number" step="1" placeholder="+10 или -5">
           <input id="icore-manual-comment" type="text" placeholder="Причина начисления или списания">
-          <button onclick="addManualIcoreCoins()">Сохранить</button>
+          <button data-icore-manual="save">Сохранить</button>
         </div>
       </div>
       <div class="icore-panel">
@@ -2348,6 +2348,41 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAdminModal(); });
+document.addEventListener('click', e => {
+  const buyBtn = e.target.closest('[data-icore-buy]');
+  if (buyBtn) {
+    e.preventDefault();
+    buyIcoreReward(buyBtn.dataset.icoreBuy);
+    return;
+  }
+
+  const requestBtn = e.target.closest('[data-icore-request][data-icore-status]');
+  if (requestBtn) {
+    e.preventDefault();
+    updateIcoreRequest(requestBtn.dataset.icoreRequest, requestBtn.dataset.icoreStatus);
+    return;
+  }
+
+  const manualBtn = e.target.closest('[data-icore-manual="save"]');
+  if (manualBtn) {
+    e.preventDefault();
+    addManualIcoreCoins();
+    return;
+  }
+
+  const exportBtn = e.target.closest('[data-icore-export="csv"]');
+  if (exportBtn) {
+    e.preventDefault();
+    exportIcoreCsv();
+    return;
+  }
+
+  const viewBtn = e.target.closest('[data-icore-view]');
+  if (viewBtn) {
+    e.preventDefault();
+    window.showContestSection?.(viewBtn.dataset.icoreView);
+  }
+});
 document.addEventListener('click', e => {
   const gate = document.getElementById('admin-gate');
   const pop  = document.getElementById('admin-popover');
