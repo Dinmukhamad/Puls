@@ -69,6 +69,44 @@ const api = (() => {
     }
   }
 
-  return { loadState, saveState, verifyPassword };
+  async function createRewardRequest(payload) {
+    const res = await fetch(`${base()}/api/gamification/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`Сервер вернул ${res.status}`);
+    return res.json();
+  }
+
+  async function addManualCoins(payload, adminPassword) {
+    const res = await fetch(`${base()}/api/gamification/manual`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Password': adminPassword,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 403) throw new Error('Неверный пароль администратора');
+    if (!res.ok) throw new Error(`Сервер вернул ${res.status}`);
+    return res.json();
+  }
+
+  async function updateRewardRequest(id, payload, adminPassword) {
+    const res = await fetch(`${base()}/api/gamification/request/${encodeURIComponent(id)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Password': adminPassword,
+      },
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 403) throw new Error('Неверный пароль администратора');
+    if (!res.ok) throw new Error(`Сервер вернул ${res.status}`);
+    return res.json();
+  }
+
+  return { loadState, saveState, verifyPassword, createRewardRequest, addManualCoins, updateRewardRequest };
 
 })();
