@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Дивергент: Конкурс Операторов</title>
+  <title>iCore · Конкурсы операторов</title>
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=divergent-icon-1">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-icon-1">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-icon-1">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
-  <link rel="stylesheet" href="css/styles.css?v=icore-gamification-1">
+  <link rel="stylesheet" href="css/styles.css?v=icore-ui-1">
   <script src="js/api.js"></script>
 </head>
 <body>
@@ -28,8 +28,8 @@
     </div>
     <div class="intro-content">
       <div class="intro-kicker">iGROUP · Операторский конкурс</div>
-      <div class="intro-title">Дивергент</div>
-      <div class="intro-subtitle">Три фракции. Один рейтинг.</div>
+      <div class="intro-title">iCore</div>
+      <div class="intro-subtitle">Рабочий рейтинг операторов.</div>
       <div class="intro-progress" aria-hidden="true"><span></span></div>
     </div>
     <button class="intro-skip" id="intro-skip" type="button">Пропустить</button>
@@ -63,8 +63,9 @@
   </div>
 
   <nav class="side-nav" aria-label="Разделы сайта">
-    <a class="side-nav-logo" href="#overview-view" aria-label="К результатам">
-      <span>∆</span>
+    <a class="side-nav-logo" href="#overview-view" aria-label="iCore">
+      <span class="side-nav-brand">iCORE</span>
+      <span class="side-nav-mark">●</span>
     </a>
     <div class="side-nav-group">
       <a class="side-nav-link active" href="#overview-view" data-nav-target="overview" title="Общие результаты">
@@ -87,28 +88,28 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5V4Zm4 4h6M9 12h6M9 16h4"/></svg>
         <span>Заявки</span>
       </a>
-      <a class="side-nav-link" href="#visual-dashboard" data-nav-target="individual" title="Индивидуальные показатели">
+      <a class="side-nav-link" href="#visual-dashboard" data-nav-target="individual" title="Личные показатели">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-7 9a7 7 0 0 1 14 0"/></svg>
-        <span>Индивид.</span>
+        <span>Личные</span>
       </a>
-      <a class="side-nav-link" href="#game-dashboard" data-nav-target="season" title="Игровой сезон">
+      <a class="side-nav-link" href="#game-dashboard" data-nav-target="season" title="Бонусы и уровни">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v6c0 5-3.5 7.5-8 8-4.5-.5-8-3-8-8V7l8-4Zm0 5v8M8 12h8"/></svg>
-        <span>Сезон</span>
+        <span>Бонусы</span>
       </a>
     </div>
     <div class="side-nav-separator"></div>
     <div class="side-nav-group">
-      <a class="side-nav-link" href="#scoreboard" data-nav-target="factions" title="Рейтинг фракций">
+      <a class="side-nav-link" href="#scoreboard" data-nav-target="factions" title="Рейтинг групп">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Zm0 2H4a4 4 0 0 0 4 4M17 6h3a4 4 0 0 1-4 4"/></svg>
-        <span>Фракции</span>
+        <span>Группы</span>
       </a>
       <a class="side-nav-link" href="#tables-section" data-nav-target="tables" title="Таблицы операторов">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm0 5h16M9 5v14M15 5v14"/></svg>
         <span>Таблицы</span>
       </a>
-      <a class="side-nav-link" href="#criteria-section" data-nav-target="criteria" title="Критерии оценки">
+      <a class="side-nav-link" href="#criteria-section" data-nav-target="criteria" title="Правила оценки">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7M5 5h8M5 9h5"/></svg>
-        <span>Критерии</span>
+        <span>Правила</span>
       </a>
     </div>
   </nav>
@@ -116,34 +117,34 @@
   <div class="container">
 
     <!-- ═══ HERO ════════════════════════════════════════════════ -->
-    <section class="hero" aria-label="Дивергент: Конкурс Операторов">
+    <section class="hero" aria-label="iCore: Конкурс операторов">
 
       <div class="hero-factions">
         <div class="hf-badge hf-dauntless">
           <span class="hf-icon">🔥</span>
-          <span class="hf-name">Бесстрашие</span>
-          <span class="hf-en">Dauntless</span>
+          <span class="hf-name">Группа 1</span>
+          <span class="hf-en">Team 1</span>
         </div>
         <div class="hf-badge hf-erudite">
           <span class="hf-icon">⚡</span>
-          <span class="hf-name">Эрудиция</span>
-          <span class="hf-en">Erudite</span>
+          <span class="hf-name">Группа 2</span>
+          <span class="hf-en">Team 2</span>
         </div>
         <div class="hf-badge hf-candor">
           <span class="hf-icon">⚖</span>
-          <span class="hf-name">Искренность</span>
-          <span class="hf-en">Candor</span>
+          <span class="hf-name">Группа 3</span>
+          <span class="hf-en">Team 3</span>
         </div>
       </div>
 
       <div class="hero-body">
         <div class="hero-eyebrow">IGroup · Операторский конкурс</div>
         <h1 class="hero-title">
-          <span class="hero-title-big">ДИВЕРГЕНТ</span>
+          <span class="hero-title-big">iCORE</span>
           <span class="hero-title-small">Конкурс операторов</span>
         </h1>
         <p class="hero-desc">
-          Участники разделены на три фракции. Рейтинг формируется на основе качества работы,
+          Участники разделены на рабочие группы. Рейтинг формируется на основе качества работы,
           выработки часов, эффективности и дополнительных баллов.
           За нарушения и опоздания баллы снимаются.
         </p>
@@ -180,7 +181,7 @@
         <div class="content-section-header">
           <div>
             <div class="section-kicker">Статистика</div>
-            <h2 class="section-title">Показатели конкурса</h2>
+          <h2 class="section-title">Показатели конкурса</h2>
           </div>
         </div>
 
@@ -202,16 +203,16 @@
 
       <section class="app-view visual-dashboard" id="visual-dashboard" data-section-view="individual" aria-label="Визуальный дашборд конкурса"></section>
 
-      <section class="app-view game-dashboard" id="game-dashboard" data-section-view="season" aria-label="Игровой сезон операторов"></section>
+      <section class="app-view game-dashboard" id="game-dashboard" data-section-view="season" aria-label="Бонусы и уровни операторов"></section>
 
-      <!-- Рейтинг фракций -->
-      <section class="app-view scoreboard" id="scoreboard" data-section-view="factions" aria-label="Общий рейтинг фракций"></section>
+      <!-- Рейтинг групп -->
+      <section class="app-view scoreboard" id="scoreboard" data-section-view="factions" aria-label="Общий рейтинг групп"></section>
 
       <!-- Критерии оценки -->
       <section class="app-view criteria-section" id="criteria-section" data-section-view="criteria" aria-label="Критерии оценки">
         <div class="criteria-header">
           <div class="section-kicker">Система оценки</div>
-          <h2 class="section-title">Критерии оценки</h2>
+          <h2 class="section-title">Правила оценки</h2>
         </div>
         <div class="criteria-grid">
           <div class="criteria-card positive">
@@ -237,11 +238,11 @@
         </div>
       </section>
 
-      <section class="app-view tables-section" id="tables-section" data-section-view="tables" aria-label="Таблицы фракций">
+      <section class="app-view tables-section" id="tables-section" data-section-view="tables" aria-label="Таблицы групп">
         <div class="section-header-row">
           <div>
-            <div class="section-kicker">Фракционные таблицы</div>
-            <h2 class="section-title">Операторы по фракциям</h2>
+            <div class="section-kicker">Операционные таблицы</div>
+            <h2 class="section-title">Операторы по группам</h2>
           </div>
         </div>
         <div class="factions-grid" id="faction-grid"></div>
@@ -303,7 +304,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=icore-gamification-1"></script>
-  <script src="js/excel-import.js?v=icore-gamification-1"></script>
+  <script src="js/app.js?v=icore-ui-1"></script>
+  <script src="js/excel-import.js?v=icore-ui-1"></script>
 </body>
 </html>
