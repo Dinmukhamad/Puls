@@ -708,6 +708,39 @@ body.intro-lock { overflow: hidden; }
   margin-top: 30px;
 }
 
+.app-shell {
+  min-height: min(820px, calc(100vh - 120px));
+}
+
+.app-view {
+  display: none;
+  min-width: 0;
+}
+
+.app-view.active {
+  display: block;
+  animation: cardIn .22s ease both;
+}
+
+.app-shell .app-view[hidden] {
+  display: none !important;
+}
+
+.app-shell .visual-dashboard,
+.app-shell .game-dashboard,
+.app-shell .scoreboard,
+.app-shell .criteria-section,
+.app-shell .tables-section {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.app-shell .tables-section {
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top: 0;
+}
+
 .dashboard-layout {
   display: grid;
   grid-template-columns: minmax(520px, .92fr) minmax(0, 1.08fr);
