@@ -2257,6 +2257,28 @@ function initIntro() {
   window.setTimeout(closeIntro, reducedMotion ? 450 : 3700);
 }
 
+function initSideNavCollapse() {
+  const toggle = document.getElementById('side-nav-toggle');
+  const storageKey = 'contestSideNavCollapsed';
+  if (!toggle) return;
+
+  const applyState = collapsed => {
+    document.body.classList.toggle('side-nav-collapsed', collapsed);
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+    toggle.setAttribute('aria-label', collapsed ? 'Раскрыть меню' : 'Свернуть меню');
+    toggle.setAttribute('title', collapsed ? 'Раскрыть меню' : 'Свернуть меню');
+  };
+
+  const saved = localStorage.getItem(storageKey) === '1';
+  applyState(saved);
+
+  toggle.addEventListener('click', () => {
+    const collapsed = !document.body.classList.contains('side-nav-collapsed');
+    applyState(collapsed);
+    localStorage.setItem(storageKey, collapsed ? '1' : '0');
+  });
+}
+
 function initSideNavigation() {
   const links = Array.from(document.querySelectorAll('.side-nav-link[data-nav-target]'));
   const views = Array.from(document.querySelectorAll('[data-section-view]'));
@@ -2331,6 +2353,7 @@ function initSideNavigation() {
 /* ── Init ───────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   initIntro();
+  initSideNavCollapse();
   try {
     await loadEditableData();
   } catch (err) {
