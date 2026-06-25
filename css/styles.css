@@ -899,6 +899,474 @@ body.intro-lock { overflow: hidden; }
 /* ═══════════════════════════════════════════════════════════
    SCOREBOARD
 ══════════════════════════════════════════════════════════════ */
+.game-dashboard {
+  margin: 4px 0 36px;
+}
+
+.game-shell {
+  min-width: 0;
+  padding-top: 24px;
+  border-top: 1px solid rgba(201,168,76,.2);
+}
+
+.game-shell.empty {
+  padding-bottom: 8px;
+}
+
+.game-season-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.game-season-head p {
+  max-width: 680px;
+  margin-top: 5px;
+  color: var(--tx2);
+  font-size: 13px;
+}
+
+.game-season-meta {
+  display: grid;
+  gap: 5px;
+  justify-items: end;
+  color: var(--tx2);
+  font-size: 12px;
+}
+
+.game-season-meta span,
+.game-season-head > span {
+  color: var(--gold2);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.game-season-meta b {
+  color: var(--tx);
+  font: 700 12px 'Inter', sans-serif;
+}
+
+.game-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.game-stat {
+  min-width: 0;
+  padding: 13px 14px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,.1);
+  background:
+    linear-gradient(135deg, rgba(201,168,76,.1), transparent 54%),
+    rgba(255,255,255,.045);
+}
+
+.game-stat span,
+.game-panel-kicker,
+.game-mini-title {
+  display: block;
+  color: var(--gold);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
+.game-stat b {
+  display: block;
+  margin-top: 3px;
+  color: var(--tx);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.game-stat em {
+  display: block;
+  min-width: 0;
+  margin-top: 4px;
+  color: var(--tx2);
+  font-size: 11px;
+  font-style: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.game-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.05fr) minmax(300px, .95fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.game-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,.045);
+  padding: 16px;
+  overflow: hidden;
+}
+
+.game-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.game-panel-head h3,
+.game-operator-main h3 {
+  margin: 0;
+  color: var(--tx);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.game-panel-head > span {
+  flex-shrink: 0;
+  color: var(--tx3);
+  font-size: 11px;
+  text-align: right;
+}
+
+.game-operator-card {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  background:
+    linear-gradient(135deg, rgba(232,200,112,.1), transparent 42%),
+    rgba(255,255,255,.045);
+}
+
+.game-avatar {
+  display: grid;
+  place-items: center;
+  width: 82px;
+  height: 82px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.13);
+  background: rgba(255,255,255,.06);
+  font-size: 34px;
+}
+
+.game-avatar.dauntless { box-shadow: inset 0 -3px 0 var(--d-pri), 0 0 24px rgba(224,80,32,.12); }
+.game-avatar.erudite { box-shadow: inset 0 -3px 0 var(--e-light), 0 0 24px rgba(74,174,255,.12); }
+.game-avatar.candor { box-shadow: inset 0 -3px 0 var(--c-light), 0 0 24px rgba(232,232,244,.1); }
+
+.game-operator-main {
+  min-width: 0;
+}
+
+.game-level-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--tx2);
+  font-size: 12px;
+}
+
+.game-level-row b {
+  color: var(--gold2);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 17px;
+  white-space: nowrap;
+}
+
+.game-progress,
+.game-mission-track {
+  height: 9px;
+  margin-top: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,.08);
+}
+
+.game-progress span,
+.game-mission-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--d-pri), var(--gold2), var(--e-light));
+}
+
+.game-level-note {
+  margin-top: 7px;
+  color: var(--tx3);
+  font-size: 11px;
+}
+
+.game-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.game-badge {
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(232,200,112,.28);
+  background: rgba(201,168,76,.1);
+  color: #f3df9b;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.game-badge.muted {
+  color: var(--tx3);
+  border-color: var(--border);
+  background: rgba(255,255,255,.035);
+  white-space: normal;
+}
+
+.game-mission-list,
+.game-shop-list,
+.game-team-list,
+.game-mini-list {
+  display: grid;
+  gap: 8px;
+}
+
+.game-mission {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 12px;
+  align-items: center;
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.035);
+}
+
+.game-mission.done {
+  background: rgba(58,191,104,.08);
+  outline: 1px solid rgba(58,191,104,.18);
+}
+
+.game-mission b,
+.game-shop-item b {
+  display: block;
+  min-width: 0;
+  color: var(--tx);
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-mission span,
+.game-shop-item span,
+.game-team-row small {
+  display: block;
+  min-width: 0;
+  color: var(--tx3);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-mission-side {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  min-width: 58px;
+}
+
+.game-mission-side em,
+.game-shop-item em,
+.game-team-row em,
+.game-mini-row em {
+  color: var(--gold2);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 15px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.game-mission-side i {
+  color: var(--tx3);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.game-mission-track {
+  grid-column: 1 / -1;
+  height: 6px;
+  margin-top: 0;
+}
+
+.game-mission.done .game-mission-track span {
+  background: linear-gradient(90deg, var(--ok), var(--gold2));
+}
+
+.game-shop-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  align-items: center;
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.035);
+}
+
+.game-shop-item.available {
+  background: rgba(201,168,76,.11);
+  outline: 1px solid rgba(201,168,76,.22);
+}
+
+.game-shop-item small {
+  grid-column: 2;
+  color: var(--tx3);
+  font-size: 10px;
+  text-align: right;
+}
+
+.game-shop-item.available small {
+  color: var(--ok);
+}
+
+.game-team-row,
+.game-mini-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 9px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.035);
+}
+
+.game-team-row {
+  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+}
+
+.game-team-row.dauntless { border-left: 3px solid var(--d-pri); }
+.game-team-row.erudite { border-left: 3px solid var(--e-light); }
+.game-team-row.candor { border-left: 3px solid var(--c-light); }
+
+.game-team-row span,
+.game-mini-row span {
+  color: var(--tx3);
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 800;
+  text-align: right;
+}
+
+.game-team-row b,
+.game-mini-row b {
+  min-width: 0;
+  color: var(--tx);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-ratings-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.game-mini-ranking {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,.04);
+}
+
+.game-mini-title {
+  margin-bottom: 9px;
+}
+
+.game-mini-row {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  padding: 7px 8px;
+}
+
+.game-empty-line {
+  padding: 9px 8px;
+  color: var(--tx3);
+  font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .game-kpi-grid,
+  .game-ratings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .game-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .game-season-head,
+  .game-season-meta {
+    align-items: stretch;
+    justify-items: start;
+  }
+  .game-kpi-grid,
+  .game-ratings-grid {
+    grid-template-columns: 1fr;
+  }
+  .game-operator-card {
+    grid-template-columns: 1fr;
+  }
+  .game-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 28px;
+  }
+  .game-team-row {
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+  }
+  .game-team-row small {
+    grid-column: 2 / -1;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .game-panel {
+    padding: 13px;
+  }
+  .game-mission,
+  .game-shop-item {
+    grid-template-columns: 1fr;
+  }
+  .game-mission-side,
+  .game-shop-item small {
+    justify-items: start;
+    text-align: left;
+    grid-column: auto;
+  }
+}
+
 .scoreboard { margin-bottom: 36px; }
 
 .scoreboard-header {
