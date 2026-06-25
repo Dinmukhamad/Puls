@@ -1661,6 +1661,46 @@ function initIntro() {
   window.setTimeout(closeIntro, reducedMotion ? 450 : 3700);
 }
 
+function initSideNavigation() {
+  const links = Array.from(document.querySelectorAll('.side-nav-link[data-nav-target]'));
+  if (!links.length) return;
+
+  const sections = links.map(link => ({
+    id: link.dataset.navTarget,
+    link,
+    el: document.getElementById(link.dataset.navTarget),
+  })).filter(item => item.el);
+
+  if (!sections.length) return;
+
+  function setActive(id) {
+    links.forEach(link => link.classList.toggle('active', link.dataset.navTarget === id));
+  }
+
+  let ticking = false;
+  function updateActiveSection() {
+    ticking = false;
+    const checkpoint = window.scrollY + window.innerHeight * 0.34;
+    let active = sections[0];
+    sections.forEach(section => {
+      if (section.el.offsetTop <= checkpoint) active = section;
+    });
+    setActive(active.id);
+  }
+
+  links.forEach(link => {
+    link.addEventListener('click', () => setActive(link.dataset.navTarget));
+  });
+
+  window.addEventListener('scroll', () => {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(updateActiveSection);
+  }, { passive: true });
+  window.addEventListener('resize', updateActiveSection);
+  updateActiveSection();
+}
+
 /* ── Init ───────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
   initIntro();
@@ -1685,6 +1725,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderEditor();
   document.getElementById('editor-panel').hidden = !isAdmin;
   await Promise.all([renderStats(), renderVisualDashboard(), renderGameDashboard(), renderScoreboard(), renderFacultyCards()]);
+  initSideNavigation();
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAdminModal(); });
