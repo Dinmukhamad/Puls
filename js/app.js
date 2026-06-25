@@ -1,5 +1,5 @@
 /* ============================================================
-   Дивергент: Конкурс Операторов — app.js v4
+   iCore: Конкурсы операторов - app.js v4
    Одна страница, один набор данных. Баллы обновляются через админ.
    ============================================================ */
 
@@ -8,7 +8,7 @@
 const USE_MOCK = false;
 const API_BASE = window.location.origin;
 
-/* ── Фракции ────────────────────────────────────────────────── */
+/* ── Группы ─────────────────────────────────────────────────── */
 const FACTION_DESC = {
   dauntless: 'Воплощают храбрость, отвагу и силу. Отвечают за безопасность и охраняют границы.',
   erudite:   'Стремятся к знаниям, мудрости и интеллекту. Занимаются наукой и технологиями.',
@@ -16,9 +16,9 @@ const FACTION_DESC = {
 };
 
 let FACULTIES = [
-  { id: 'dauntless', cls: 'dauntless', icon: '🔥', crest: null, name: 'Бесстрашие', enName: 'Dauntless', tagCls: 'tag-dauntless', scoreCls: 'dauntless-score', operators: [] },
-  { id: 'erudite',   cls: 'erudite',   icon: '⚡', crest: null, name: 'Эрудиция',   enName: 'Erudite',   tagCls: 'tag-erudite',   scoreCls: 'erudite-score',   operators: [] },
-  { id: 'candor',    cls: 'candor',    icon: '⚖',  crest: null, name: 'Искренность',enName: 'Candor',    tagCls: 'tag-candor',    scoreCls: 'candor-score',    operators: [] },
+  { id: 'group-a', cls: 'dauntless', icon: '1', crest: null, name: 'Группа 1', enName: 'Team 1', tagCls: 'tag-dauntless', scoreCls: 'dauntless-score', operators: [] },
+  { id: 'group-b', cls: 'erudite',   icon: '2', crest: null, name: 'Группа 2', enName: 'Team 2', tagCls: 'tag-erudite',   scoreCls: 'erudite-score',   operators: [] },
+  { id: 'group-c', cls: 'candor',    icon: '3', crest: null, name: 'Группа 3', enName: 'Team 3', tagCls: 'tag-candor',    scoreCls: 'candor-score',    operators: [] },
 ];
 
 /* Один слот данных — обновляется при каждой публикации результатов */
@@ -36,11 +36,11 @@ const DEFAULT_METRICS = [
 ];
 
 const GAME_SEASON = {
-  title: 'Дивергент: Битва фракций',
-  theme: 'Сезон испытаний',
+  title: 'iCore: геймификация операторов',
+  theme: 'Рабочий период',
   startDate: '2026-06-15',
   endDate: '2026-06-30',
-  currency: 'жетонов',
+  currency: 'коинов',
   maxMissionScore: 100,
   kvzTarget: 20,
   efficiencyTarget: 70,
@@ -226,6 +226,23 @@ function normalizeOperatorName(name) {
   return String(name || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
 }
 
+function neutralizeGroupLabels() {
+  const neutralNames = ['Группа 1', 'Группа 2', 'Группа 3', 'Группа 4', 'Группа 5'];
+  const neutralIcons = ['1', '2', '3', '4', '5'];
+  const themedNames = new Set(['бесстрашие', 'эрудиция', 'искренность', 'dauntless', 'erudite', 'candor']);
+
+  FACULTIES.forEach((fac, idx) => {
+    const normalizedName = normalizeOperatorName(fac.name);
+    const normalizedEn = normalizeOperatorName(fac.enName);
+    fac.crest = null;
+    if (themedNames.has(normalizedName) || themedNames.has(normalizedEn) || /dauntless|erudite|candor/i.test(String(fac.id || ''))) {
+      fac.name = neutralNames[idx] || `Группа ${idx + 1}`;
+      fac.enName = `Team ${idx + 1}`;
+      fac.icon = neutralIcons[idx] || String(idx + 1);
+    }
+  });
+}
+
 function sanitizeDailyImport(input) {
   if (!input || typeof input !== 'object' || !input.operators || typeof input.operators !== 'object') return null;
   const operators = {};
@@ -362,6 +379,7 @@ async function loadEditableData() {
   GAMIFICATION = normalizeGamification(GAMIFICATION);
   persistGamification();
   if (!METRICS.some(m => m.type === 'score')) METRICS.push({ label: 'Итого', type: 'score' });
+  neutralizeGroupLabels();
   normalizeEditableData();
 }
 
@@ -845,8 +863,8 @@ function getMissionDefinitions() {
     },
     {
       id: 'team',
-      title: 'Фракционный рывок',
-      label: 'Средний балл фракции 85+',
+      title: 'Групповой рывок',
+      label: 'Средний балл группы 85+',
       target: 85,
       unit: '',
       value: row => getFacultyTotal(row.facIdx),
@@ -976,12 +994,12 @@ function renderGameDashboard() {
       <div class="game-shell empty">
         <div class="game-season-head">
           <div>
-            <div class="section-kicker">Игровой сезон</div>
+            <div class="section-kicker">Бонусы</div>
             <h2 class="section-title">${escapeHtml(GAME_SEASON.title)}</h2>
           </div>
           <span>${escapeHtml(getSeasonPeriodLabel())}</span>
         </div>
-        <div class="visual-empty-note">Добавьте операторов и KPI, чтобы появились миссии, жетоны, магазин и достижения.</div>
+        <div class="visual-empty-note">Добавьте операторов и KPI, чтобы появились миссии, коины, магазин и достижения.</div>
       </div>
     `;
     return;
@@ -1048,9 +1066,9 @@ function renderGameDashboard() {
     <div class="game-shell">
       <div class="game-season-head">
         <div>
-          <div class="section-kicker">Игровой сезон</div>
+          <div class="section-kicker">Бонусы</div>
           <h2 class="section-title">${escapeHtml(GAME_SEASON.title)}</h2>
-          <p>${escapeHtml(GAME_SEASON.theme)}: миссии, жетоны, бейджи и магазин наград.</p>
+          <p>${escapeHtml(GAME_SEASON.theme)}: миссии, коины, бейджи и магазин наград.</p>
         </div>
         <div class="game-season-meta">
           <span>${escapeHtml(getSeasonPeriodLabel())}</span>
@@ -1060,7 +1078,7 @@ function renderGameDashboard() {
 
       <div class="game-kpi-grid">
         <div class="game-stat"><span>Активные операторы</span><b>${activeOperators}</b><em>в рейтинге сезона</em></div>
-        <div class="game-stat"><span>Средние жетоны</span><b>${fmtPts(averageCoins)}</b><em>на участника</em></div>
+        <div class="game-stat"><span>Средние коины</span><b>${fmtPts(averageCoins)}</b><em>на участника</em></div>
         <div class="game-stat"><span>Миссии выполнены</span><b>${missionCompletion}%</b><em>${completedMissionCount} из ${allMissionResults.length}</em></div>
         <div class="game-stat"><span>Ближайшая награда</span><b>${topReward ? 'доступна' : 'копим'}</b><em>${topReward ? topReward.title : `${GAME_REWARDS[0].price} ${GAME_SEASON.currency}`}</em></div>
       </div>
@@ -1733,7 +1751,7 @@ async function renderStats() {
   el.innerHTML = `
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="stat-label">Лидирующая фракция</div>
+        <div class="stat-label">Лидирующая группа</div>
         <div class="stat-value highlight">${leader ? leader.icon + ' ' + leader.name : '—'}</div>
         <div class="stat-note">Средний балл: ${fmtPts(Math.max(...facTotals))}</div>
       </div>
@@ -1745,7 +1763,7 @@ async function renderStats() {
       <div class="stat-card">
         <div class="stat-label">Нарушений / штрафов</div>
         <div class="stat-value" style="color:var(--danger)">${fmtPts(violations)}</div>
-        <div class="stat-note">Суммарно по всем фракциям</div>
+        <div class="stat-note">Суммарно по всем группам</div>
       </div>
     </div>
   `;
@@ -1803,7 +1821,7 @@ async function renderScoreboard() {
   sb.innerHTML = `
     <div class="scoreboard-header">
       <div>
-        <div class="section-kicker">Рейтинг фракций</div>
+        <div class="section-kicker">Рейтинг групп</div>
         <h2 class="section-title">Общий рейтинг команд</h2>
       </div>
       <div class="score-meta">
