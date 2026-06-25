@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-icon-1">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-icon-1">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
-  <link rel="stylesheet" href="css/styles.css?v=tables-sidebar-2">
+  <link rel="stylesheet" href="css/styles.css?v=section-nav-1">
   <script src="js/api.js"></script>
 </head>
 <body>
@@ -61,6 +61,41 @@
       <line x1="10" y1="130" x2="250" y2="130" stroke="rgba(255,255,255,.02)" stroke-width="1"/>
     </svg>
   </div>
+
+  <nav class="side-nav" aria-label="Разделы сайта">
+    <a class="side-nav-logo" href="#dashboard" aria-label="К результатам">
+      <span>∆</span>
+    </a>
+    <div class="side-nav-group">
+      <a class="side-nav-link active" href="#dashboard" data-nav-target="dashboard" title="Общие результаты">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+        <span>Общие</span>
+      </a>
+      <a class="side-nav-link" href="#visual-dashboard" data-nav-target="visual-dashboard" title="Индивидуальные показатели">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-7 9a7 7 0 0 1 14 0"/></svg>
+        <span>Индивид.</span>
+      </a>
+      <a class="side-nav-link" href="#game-dashboard" data-nav-target="game-dashboard" title="Игровой сезон">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v6c0 5-3.5 7.5-8 8-4.5-.5-8-3-8-8V7l8-4Zm0 5v8M8 12h8"/></svg>
+        <span>Сезон</span>
+      </a>
+    </div>
+    <div class="side-nav-separator"></div>
+    <div class="side-nav-group">
+      <a class="side-nav-link" href="#scoreboard" data-nav-target="scoreboard" title="Рейтинг фракций">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Zm0 2H4a4 4 0 0 0 4 4M17 6h3a4 4 0 0 1-4 4"/></svg>
+        <span>Фракции</span>
+      </a>
+      <a class="side-nav-link" href="#tables-section" data-nav-target="tables-section" title="Таблицы операторов">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm0 5h16M9 5v14M15 5v14"/></svg>
+        <span>Таблицы</span>
+      </a>
+      <a class="side-nav-link" href="#criteria-section" data-nav-target="criteria-section" title="Критерии оценки">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7M5 5h8M5 9h5"/></svg>
+        <span>Критерии</span>
+      </a>
+    </div>
+  </nav>
 
   <div class="container">
 
@@ -124,20 +159,6 @@
     <!-- ═══ DASHBOARD ════════════════════════════════════════════ -->
     <div id="dashboard" class="dashboard-anchor"></div>
 
-    <div class="dashboard-layout">
-      <aside class="content-section tables-section tables-sidebar" aria-label="Таблицы фракций">
-        <div class="tables-sidebar-inner">
-          <div class="section-header-row">
-            <div>
-              <div class="section-kicker">Фракционные таблицы</div>
-              <h2 class="section-title">Операторы по фракциям</h2>
-            </div>
-          </div>
-          <div class="factions-grid" id="faction-grid"></div>
-        </div>
-      </aside>
-
-      <main class="dashboard-main">
     <section class="content-section analytics-section" aria-label="Статистика конкурса">
       <div class="content-section-header">
         <div>
@@ -161,7 +182,7 @@
       <section class="scoreboard" id="scoreboard" aria-label="Общий рейтинг фракций"></section>
 
       <!-- Критерии оценки -->
-      <section class="criteria-section" aria-label="Критерии оценки">
+      <section class="criteria-section" id="criteria-section" aria-label="Критерии оценки">
         <div class="criteria-header">
           <div class="section-kicker">Система оценки</div>
           <h2 class="section-title">Критерии оценки</h2>
@@ -191,8 +212,15 @@
       </section>
     </section>
 
-      </main>
-    </div>
+    <section class="content-section tables-section" id="tables-section" aria-label="Таблицы фракций">
+      <div class="section-header-row">
+        <div>
+          <div class="section-kicker">Фракционные таблицы</div>
+          <h2 class="section-title">Операторы по фракциям</h2>
+        </div>
+      </div>
+      <div class="factions-grid" id="faction-grid"></div>
+    </section>
 
   </div>
 
@@ -249,7 +277,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=tables-sidebar-2"></script>
-  <script src="js/excel-import.js?v=tables-sidebar-2"></script>
+  <script src="js/app.js?v=section-nav-1"></script>
+  <script src="js/excel-import.js?v=section-nav-1"></script>
 </body>
 </html>
