@@ -35,6 +35,26 @@ const DEFAULT_METRICS = [
   { label: 'Итого',        type: 'score'   },
 ];
 
+const GAME_SEASON = {
+  title: 'Дивергент: Битва фракций',
+  theme: 'Сезон испытаний',
+  startDate: '2026-06-15',
+  endDate: '2026-06-30',
+  currency: 'жетонов',
+  maxMissionScore: 100,
+  kvzTarget: 20,
+  efficiencyTarget: 70,
+};
+
+const GAME_REWARDS = [
+  { title: 'Батончик + напиток', price: 80, tag: 'быстрый приз' },
+  { title: 'Мерч / кружка / блокнот', price: 250, tag: 'склад наград' },
+  { title: 'Сертификат Kaspi', price: 300, tag: 'сертификат' },
+  { title: '1 час тренинга вместо линии', price: 400, tag: 'по согласованию' },
+  { title: 'Право выбрать смену', price: 500, tag: 'супервайзер' },
+  { title: 'Обед за счёт компании', price: 700, tag: 'супервайзер' },
+];
+
 const ADMIN_SESSION_KEY = 'divergentContestAdminUnlocked';
 const ADMIN_PASSWORD_KEY = 'divergentContestAdminToken';
 const DAILY_IMPORT_STORAGE_KEY = 'divergentContestDailyImport';
@@ -110,12 +130,63 @@ function roundScoreValue(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
 
+function clampValue(value, min, max) {
+  return Math.min(max, Math.max(min, Number(value) || 0));
+}
+
+function normalizeMetricLabel(value) {
+  return String(value || '').trim().toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ');
+}
+
+function findMetricIndexByAliases(aliases = []) {
+  const normalizedAliases = aliases.map(normalizeMetricLabel).filter(Boolean);
+  return METRICS.findIndex(metric => {
+    if (!metric || metric.type === 'score') return false;
+    const label = normalizeMetricLabel(metric.label);
+    return normalizedAliases.some(alias => label.includes(alias));
+  });
+}
+
+function hasMetric(aliases = []) {
+  return findMetricIndexByAliases(aliases) !== -1;
+}
+
+function getMetricValue(row = [], aliases = []) {
+  const idx = findMetricIndexByAliases(aliases);
+  return idx === -1 ? 0 : Number(row[idx]) || 0;
+}
+
+function getPenaltyTotal(row = []) {
+  return METRICS.reduce((total, metric, metricIdx) => {
+    if (metric.type !== 'penalty') return total;
+    return total + Math.max(0, Number(row[metricIdx]) || 0);
+  }, 0);
+}
+
+function getScoreComponent(row, aliases, target, weight) {
+  if (!hasMetric(aliases) || !target || !weight) return { value: 0, weight: 0 };
+  const raw = getMetricValue(row, aliases);
+  return {
+    value: clampValue(raw / target, 0, 1) * weight,
+    weight,
+  };
+}
+
 function calculateOperatorScore(row = []) {
-  return roundScoreValue(METRICS.reduce((total, metric, metricIdx) => {
-    if (metric.type === 'score') return total;
-    const value = Number(row[metricIdx]) || 0;
-    return metric.type === 'penalty' ? total - value : total + value;
-  }, 0));
+  const components = [
+    getScoreComponent(row, ['качество'], 100, 35),
+    getScoreComponent(row, ['квз', 'звон'], GAME_SEASON.kvzTarget, 20),
+    getScoreComponent(row, ['эфф'], GAME_SEASON.efficiencyTarget, 20),
+    getScoreComponent(row, ['выработ'], 100, 15),
+    getScoreComponent(row, ['мисси', 'доп'], GAME_SEASON.maxMissionScore, 10),
+  ].filter(component => component.weight > 0);
+
+  const activeWeight = components.reduce((total, component) => total + component.weight, 0);
+  const positiveScore = components.reduce((total, component) => total + component.value, 0);
+  const normalizedPositiveScore = activeWeight > 0 ? (positiveScore / activeWeight) * 100 : 0;
+  const finalScore = normalizedPositiveScore - getPenaltyTotal(row);
+
+  return roundScoreValue(clampValue(finalScore, 0, 100));
 }
 
 function syncOperatorScore(row = []) {
@@ -247,6 +318,7 @@ async function refreshDashboardOnly() {
   await Promise.all([
     renderStats(),
     renderVisualDashboard(),
+    renderGameDashboard(),
     renderScoreboard(),
     renderFacultyCards(),
   ]);
@@ -390,6 +462,7 @@ function setVisualMode(mode) {
   visualMode = mode === 'personal' ? 'personal' : 'overview';
   try { localStorage.setItem(VISUAL_MODE_STORAGE_KEY, visualMode); } catch {}
   renderVisualDashboard();
+  renderGameDashboard();
 }
 
 function selectVisualOperator(value) {
@@ -398,6 +471,7 @@ function selectVisualOperator(value) {
   visualMode = 'personal';
   try { localStorage.setItem(VISUAL_MODE_STORAGE_KEY, visualMode); } catch {}
   renderVisualDashboard();
+  renderGameDashboard();
 }
 
 function getRankTone(row, total) {
@@ -463,6 +537,406 @@ function getOperatorInsight(row, ranking) {
   if (weak && strong) return `Сильная сторона: ${strong.label}. Основное отставание: ${weak.label}.`;
   if (weak) return `Основное отставание сейчас по показателю «${weak.label}».`;
   return 'Показатели ровные: явной просадки относительно группы нет.';
+}
+
+/* ── Game season ───────────────────────────────────────────── */
+function getDailyImportData() {
+  return DAILY_IMPORT_DATA || readStoredDailyImport();
+}
+
+function formatSeasonDate(value) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+}
+
+function getSeasonPeriodLabel() {
+  const data = getDailyImportData();
+  if (data?.period) return data.period;
+  return `${formatSeasonDate(GAME_SEASON.startDate)} - ${formatSeasonDate(GAME_SEASON.endDate)}`;
+}
+
+function getSeasonDaysLeft() {
+  const end = new Date(`${GAME_SEASON.endDate}T23:59:59`);
+  if (Number.isNaN(end.getTime())) return 0;
+  return Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000));
+}
+
+function getOperatorDailySummary(row) {
+  const data = getDailyImportData();
+  const dates = data?.operators?.[row?.nameKey]?.dates || [];
+  const activeDates = dates.filter(day => (Number(day.actualFact) || 0) > 0 || (Number(day.effectiveHours) || 0) > 0);
+  const totalFact = activeDates.reduce((sum, day) => sum + (Number(day.actualFact) || 0), 0);
+  const totalEffective = activeDates.reduce((sum, day) => sum + (Number(day.effectiveHours) || 0), 0);
+  const first = activeDates[0];
+  const last = activeDates[activeDates.length - 1];
+  const firstScore = first ? ((Number(first.actualFact) || 0) + (Number(first.effectiveHours) || 0)) / 2 : 0;
+  const lastScore = last ? ((Number(last.actualFact) || 0) + (Number(last.effectiveHours) || 0)) / 2 : 0;
+
+  return {
+    activeDays: activeDates.length,
+    totalFact,
+    totalEffective,
+    averageFact: activeDates.length ? totalFact / activeDates.length : 0,
+    averageEffective: activeDates.length ? totalEffective / activeDates.length : 0,
+    progress: activeDates.length > 1 ? roundScoreValue(lastScore - firstScore) : 0,
+  };
+}
+
+function getOperatorProgressValue(row) {
+  const daily = getOperatorDailySummary(row);
+  if (daily.activeDays > 1) return daily.progress;
+
+  const quality = getMetricValue(row.metrics, ['качество']);
+  const work = getMetricValue(row.metrics, ['выработ']);
+  const efficiency = getMetricValue(row.metrics, ['эфф']);
+  const fallback = Math.max(0, (quality - 85) * 0.06)
+    + Math.max(0, (work - 85) * 0.05)
+    + Math.max(0, (efficiency - GAME_SEASON.efficiencyTarget) * 0.08);
+  return roundScoreValue(fallback);
+}
+
+function getProgressRanking(ranking) {
+  return ranking.map(row => ({
+    ...row,
+    progress: getOperatorProgressValue(row),
+  })).sort((a, b) => (b.progress - a.progress) || (b.points - a.points) || a.name.localeCompare(b.name, 'ru'));
+}
+
+function getMetricRanking(ranking, aliases) {
+  if (!hasMetric(aliases)) return [];
+  return ranking.map(row => ({
+    ...row,
+    metricValue: getMetricValue(row.metrics, aliases),
+  })).sort((a, b) => (b.metricValue - a.metricValue) || (b.points - a.points) || a.name.localeCompare(b.name, 'ru'));
+}
+
+function getMissionDefinitions() {
+  const definitions = [
+    {
+      id: 'quality',
+      title: 'Чистая линия',
+      label: 'Качество 90%+',
+      target: 90,
+      unit: '%',
+      value: row => getMetricValue(row.metrics, ['качество']),
+    },
+    {
+      id: 'work',
+      title: 'Рабочий ритм',
+      label: 'Выработка 100%+',
+      target: 100,
+      unit: '%',
+      value: row => getMetricValue(row.metrics, ['выработ']),
+    },
+    {
+      id: 'efficiency',
+      title: 'Эффективный ритм',
+      label: `Эффективность ${GAME_SEASON.efficiencyTarget}%+`,
+      target: GAME_SEASON.efficiencyTarget,
+      unit: '%',
+      value: row => getMetricValue(row.metrics, ['эфф']),
+    },
+    {
+      id: 'discipline',
+      title: 'Без штрафов',
+      label: '0 опозданий, нарушений и сайтов',
+      target: 0,
+      unit: '',
+      reverse: true,
+      value: row => getPenaltyTotal(row.metrics),
+    },
+    {
+      id: 'team',
+      title: 'Фракционный рывок',
+      label: 'Средний балл фракции 85+',
+      target: 85,
+      unit: '',
+      value: row => getFacultyTotal(row.facIdx),
+    },
+  ];
+
+  if (hasMetric(['квз', 'звон'])) {
+    definitions.splice(3, 0, {
+      id: 'kvz',
+      title: 'Испытание Бесстрашия',
+      label: `КВЗ ${GAME_SEASON.kvzTarget}+`,
+      target: GAME_SEASON.kvzTarget,
+      unit: '',
+      value: row => getMetricValue(row.metrics, ['квз', 'звон']),
+    });
+  }
+
+  if (hasMetric(['мисси', 'доп'])) {
+    definitions.push({
+      id: 'mission-points',
+      title: 'Дополнительная миссия',
+      label: `Доп. баллы ${GAME_SEASON.maxMissionScore}+`,
+      target: GAME_SEASON.maxMissionScore,
+      unit: '',
+      value: row => getMetricValue(row.metrics, ['мисси', 'доп']),
+    });
+  }
+
+  return definitions;
+}
+
+function getOperatorMissionResults(row) {
+  return getMissionDefinitions().map(mission => {
+    const value = Number(mission.value(row)) || 0;
+    const completed = mission.reverse ? value <= mission.target : value >= mission.target;
+    const progress = mission.reverse
+      ? (completed ? 100 : clampValue(100 - (value - mission.target) * 14, 0, 100))
+      : clampValue((value / Math.max(1, mission.target)) * 100, 0, 100);
+    return { ...mission, value, completed, progress };
+  });
+}
+
+function getOperatorGameState(row, ranking = []) {
+  const quality = getMetricValue(row.metrics, ['качество']);
+  const work = getMetricValue(row.metrics, ['выработ']);
+  const efficiency = getMetricValue(row.metrics, ['эфф']);
+  const kvz = getMetricValue(row.metrics, ['квз', 'звон']);
+  const missionValue = getMetricValue(row.metrics, ['мисси', 'доп']);
+  const penalties = getPenaltyTotal(row.metrics);
+  const progress = getOperatorProgressValue(row);
+  const missionResults = getOperatorMissionResults(row);
+  const completedMissions = missionResults.filter(mission => mission.completed).length;
+  const progressLeader = getProgressRanking(ranking)[0];
+
+  let coins = Math.max(0, Math.round(row.points));
+  if (quality >= 90) coins += 20;
+  if (quality >= 98) coins += 20;
+  if (work >= 100) coins += 15;
+  if (efficiency >= GAME_SEASON.efficiencyTarget) coins += 15;
+  if (hasMetric(['квз', 'звон']) && kvz >= GAME_SEASON.kvzTarget) coins += 15;
+  if (penalties === 0 && row.points > 0) coins += 10;
+  coins += completedMissions * 12;
+  coins += Math.min(50, Math.max(0, Math.round(missionValue)));
+  coins += Math.min(30, Math.max(0, Math.round(progress * 3)));
+
+  const level = clampValue(Math.floor(coins / 150) + 1, 1, 5);
+  const levelNames = ['Новичок линии', 'Стабильный оператор', 'Мастер консультаций', 'Лидер смены', 'Легенда линии'];
+  const currentLevelFloor = (level - 1) * 150;
+  const nextLevelFloor = level >= 5 ? 0 : level * 150;
+  const levelProgress = level >= 5 ? 100 : clampValue(((coins - currentLevelFloor) / 150) * 100, 0, 100);
+
+  const achievements = [];
+  if (row.rank === 1) achievements.push('Лидер сезона');
+  if (quality >= 98) achievements.push('Безупречная консультация');
+  else if (quality >= 90) achievements.push('Серия качества');
+  if (penalties === 0 && row.points > 0) achievements.push('Железная дисциплина');
+  if (work >= 100) achievements.push('Стабильный темп');
+  if (efficiency >= GAME_SEASON.efficiencyTarget) achievements.push('Эффективный ритм');
+  if (progressLeader?.key === row.key && progressLeader.progress > 0) achievements.push('Лучший прогресс');
+  if (progress >= 2 && row.rank > Math.ceil((ranking.length || 1) * 0.4)) achievements.push('Камбэк недели');
+  if (completedMissions >= Math.min(4, missionResults.length)) achievements.push('Мастер миссий');
+
+  return {
+    coins,
+    level,
+    levelName: levelNames[level - 1] || levelNames[0],
+    levelProgress,
+    nextLevelFloor,
+    quality,
+    work,
+    efficiency,
+    kvz,
+    missionValue,
+    penalties,
+    progress,
+    missionResults,
+    completedMissions,
+    achievements: achievements.slice(0, 8),
+  };
+}
+
+function renderGameMiniRanking(title, rows, valueFormatter) {
+  const visibleRows = rows.slice(0, 5);
+  return `
+    <div class="game-mini-ranking">
+      <div class="game-mini-title">${escapeHtml(title)}</div>
+      <div class="game-mini-list">
+        ${visibleRows.length ? visibleRows.map((row, idx) => `
+          <div class="game-mini-row">
+            <span>#${idx + 1}</span>
+            <b>${escapeHtml(row.name)}</b>
+            <em>${escapeHtml(valueFormatter(row))}</em>
+          </div>
+        `).join('') : '<div class="game-empty-line">Нет данных</div>'}
+      </div>
+    </div>
+  `;
+}
+
+function renderGameDashboard() {
+  const el = document.getElementById('game-dashboard');
+  if (!el) return;
+
+  const ranking = getOperatorRanking();
+  if (!ranking.length) {
+    el.innerHTML = `
+      <div class="game-shell empty">
+        <div class="game-season-head">
+          <div>
+            <div class="section-kicker">Игровой сезон</div>
+            <h2 class="section-title">${escapeHtml(GAME_SEASON.title)}</h2>
+          </div>
+          <span>${escapeHtml(getSeasonPeriodLabel())}</span>
+        </div>
+        <div class="visual-empty-note">Добавьте операторов и KPI, чтобы появились миссии, жетоны, магазин и достижения.</div>
+      </div>
+    `;
+    return;
+  }
+
+  const selected = getSelectedVisualOperator(ranking);
+  const selectedState = getOperatorGameState(selected, ranking);
+  const states = ranking.map(row => getOperatorGameState(row, ranking));
+  const activeOperators = ranking.filter(row => row.points > 0).length;
+  const averageCoins = states.length ? states.reduce((sum, state) => sum + state.coins, 0) / states.length : 0;
+  const allMissionResults = ranking.flatMap(row => getOperatorMissionResults(row));
+  const completedMissionCount = allMissionResults.filter(mission => mission.completed).length;
+  const missionCompletion = allMissionResults.length ? Math.round(completedMissionCount / allMissionResults.length * 100) : 0;
+  const topReward = GAME_REWARDS.find(reward => selectedState.coins >= reward.price);
+  const badges = selectedState.achievements.length
+    ? selectedState.achievements.map(title => `<span class="game-badge">${escapeHtml(title)}</span>`).join('')
+    : '<span class="game-badge muted">Бейджи появятся после выполнения миссий</span>';
+
+  const missionRows = selectedState.missionResults.map(mission => `
+    <div class="game-mission ${mission.completed ? 'done' : ''}">
+      <div>
+        <b>${escapeHtml(mission.title)}</b>
+        <span>${escapeHtml(mission.label)}</span>
+      </div>
+      <div class="game-mission-side">
+        <em>${fmtPts(mission.value)}${escapeHtml(mission.unit)}</em>
+        <i>${mission.completed ? 'готово' : `${Math.round(mission.progress)}%`}</i>
+      </div>
+      <div class="game-mission-track" aria-hidden="true">
+        <span style="width:${Math.round(mission.progress)}%"></span>
+      </div>
+    </div>
+  `).join('');
+
+  const shopRows = GAME_REWARDS.map(reward => {
+    const available = selectedState.coins >= reward.price;
+    const missing = Math.max(0, reward.price - selectedState.coins);
+    return `
+      <div class="game-shop-item ${available ? 'available' : ''}">
+        <div>
+          <b>${escapeHtml(reward.title)}</b>
+          <span>${escapeHtml(reward.tag)}</span>
+        </div>
+        <em>${reward.price} ${escapeHtml(GAME_SEASON.currency)}</em>
+        <small>${available ? 'доступно' : `еще ${missing}`}</small>
+      </div>
+    `;
+  }).join('');
+
+  const teamRows = FACULTIES.map((fac, facIdx) => ({
+    ...fac,
+    avgTotal: getFacultyTotal(facIdx),
+    active: (fac.operators || []).filter((_, opIdx) => calculateOperatorScore(WEEKLY_DATA[0]?.[facIdx]?.[opIdx] || []) > 0).length,
+  })).sort((a, b) => b.avgTotal - a.avgTotal);
+
+  const progressRows = getProgressRanking(ranking);
+  const qualityRows = getMetricRanking(ranking, ['качество']);
+  const disciplineRows = ranking.map(row => ({
+    ...row,
+    penaltyValue: getPenaltyTotal(row.metrics),
+  })).sort((a, b) => (a.penaltyValue - b.penaltyValue) || (b.points - a.points) || a.name.localeCompare(b.name, 'ru'));
+
+  el.innerHTML = `
+    <div class="game-shell">
+      <div class="game-season-head">
+        <div>
+          <div class="section-kicker">Игровой сезон</div>
+          <h2 class="section-title">${escapeHtml(GAME_SEASON.title)}</h2>
+          <p>${escapeHtml(GAME_SEASON.theme)}: миссии, жетоны, бейджи и магазин наград.</p>
+        </div>
+        <div class="game-season-meta">
+          <span>${escapeHtml(getSeasonPeriodLabel())}</span>
+          <b>${getSeasonDaysLeft()} дн. до финала</b>
+        </div>
+      </div>
+
+      <div class="game-kpi-grid">
+        <div class="game-stat"><span>Активные операторы</span><b>${activeOperators}</b><em>в рейтинге сезона</em></div>
+        <div class="game-stat"><span>Средние жетоны</span><b>${fmtPts(averageCoins)}</b><em>на участника</em></div>
+        <div class="game-stat"><span>Миссии выполнены</span><b>${missionCompletion}%</b><em>${completedMissionCount} из ${allMissionResults.length}</em></div>
+        <div class="game-stat"><span>Ближайшая награда</span><b>${topReward ? 'доступна' : 'копим'}</b><em>${topReward ? topReward.title : `${GAME_REWARDS[0].price} ${GAME_SEASON.currency}`}</em></div>
+      </div>
+
+      <div class="game-layout">
+        <div class="game-panel game-operator-card">
+          <div class="game-avatar ${selected.faculty.cls}">${selected.faculty.icon}</div>
+          <div class="game-operator-main">
+            <div class="game-panel-kicker">${escapeHtml(selected.faculty.name)} · #${selected.rank}</div>
+            <h3>${escapeHtml(selected.name)}</h3>
+            <div class="game-level-row">
+              <span>${escapeHtml(selectedState.levelName)}</span>
+              <b>${selectedState.coins} ${escapeHtml(GAME_SEASON.currency)}</b>
+            </div>
+            <div class="game-progress">
+              <span style="width:${Math.round(selectedState.levelProgress)}%"></span>
+            </div>
+            <div class="game-level-note">Уровень ${selectedState.level} · ${selectedState.nextLevelFloor ? `следующий порог ${selectedState.nextLevelFloor}` : 'максимум сезона'}</div>
+            <div class="game-badges">${badges}</div>
+          </div>
+        </div>
+
+        <div class="game-panel">
+          <div class="game-panel-head">
+            <div>
+              <div class="game-panel-kicker">Ежедневные и недельные задания</div>
+              <h3>Миссии оператора</h3>
+            </div>
+            <span>${selectedState.completedMissions}/${selectedState.missionResults.length}</span>
+          </div>
+          <div class="game-mission-list">${missionRows}</div>
+        </div>
+
+        <div class="game-panel">
+          <div class="game-panel-head">
+            <div>
+              <div class="game-panel-kicker">Валюта сезона</div>
+              <h3>Магазин наград</h3>
+            </div>
+            <span>${selectedState.coins} ${escapeHtml(GAME_SEASON.currency)}</span>
+          </div>
+          <div class="game-shop-list">${shopRows}</div>
+        </div>
+
+        <div class="game-panel">
+          <div class="game-panel-head">
+            <div>
+              <div class="game-panel-kicker">Средний балл активных</div>
+              <h3>Командный рейтинг</h3>
+            </div>
+            <span>не сумма, а среднее</span>
+          </div>
+          <div class="game-team-list">
+            ${teamRows.map((fac, idx) => `
+              <div class="game-team-row ${fac.cls}">
+                <span>#${idx + 1}</span>
+                <b>${fac.icon} ${escapeHtml(fac.name)}</b>
+                <em>${fmtPts(fac.avgTotal)}</em>
+                <small>${fac.active} активных</small>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="game-ratings-grid">
+        ${renderGameMiniRanking('Личный рейтинг', ranking, row => `${fmtPts(row.points)} балла`)}
+        ${renderGameMiniRanking('Качество', qualityRows, row => `${fmtPts(row.metricValue)}%`)}
+        ${renderGameMiniRanking('Лучший прогресс', progressRows, row => `+${fmtPts(Math.max(0, row.progress))}`)}
+        ${renderGameMiniRanking('Дисциплина', disciplineRows, row => `${fmtPts(row.penaltyValue)} штрафов`)}
+      </div>
+    </div>
+  `;
 }
 
 function renderVisualKpis(selected, ranking) {
@@ -981,7 +1455,7 @@ async function renderFacultyCards() {
 
 /* ── Editor ─────────────────────────────────────────────────── */
 async function refreshDashboard() {
-  await Promise.all([renderStats(), renderVisualDashboard(), renderScoreboard(), renderFacultyCards()]);
+  await Promise.all([renderStats(), renderVisualDashboard(), renderGameDashboard(), renderScoreboard(), renderFacultyCards()]);
 }
 
 function renderEditor() {
@@ -1210,7 +1684,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateAdminGate();
   renderEditor();
   document.getElementById('editor-panel').hidden = !isAdmin;
-  await Promise.all([renderStats(), renderVisualDashboard(), renderScoreboard(), renderFacultyCards()]);
+  await Promise.all([renderStats(), renderVisualDashboard(), renderGameDashboard(), renderScoreboard(), renderFacultyCards()]);
 });
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAdminModal(); });
