@@ -1,12 +1,12 @@
 /* ============================================================
-   Дивергент: Конкурс Операторов — Styles v2
+   iCore: Конкурсы операторов - Styles v2
    ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
 
 /* ── Variables ─────────────────────────────────────────────── */
 :root {
-  /* Dauntless */
+  /* Group A */
   --d-pri:    #e05020;
   --d-light:  #ff7840;
   --d-dark:   #8b2800;
@@ -14,7 +14,7 @@
   --d-border: rgba(220,80,30,.32);
   --d-glow:   rgba(220,80,20,.35);
 
-  /* Erudite */
+  /* Group B */
   --e-pri:    #1a78d0;
   --e-light:  #4aaeff;
   --e-dark:   #0a3d7a;
@@ -22,7 +22,7 @@
   --e-border: rgba(30,120,220,.32);
   --e-glow:   rgba(20,100,220,.35);
 
-  /* Candor */
+  /* Group C */
   --c-pri:    #b0b0c0;
   --c-light:  #e8e8f4;
   --c-dark:   #505060;
@@ -2759,4 +2759,882 @@ tr.top3 td { background: rgba(205,127,50,.04) !important; }
   }
   .intro-content { opacity: 1; transform: none; filter: none; }
   .intro-progress span { transform: none; }
+}
+
+/* ==========================================================================
+   iCore neutral admin UI
+   ========================================================================== */
+:root {
+  --bg: #f4f7fb;
+  --bg2: #ffffff;
+  --bg3: #f8fafc;
+  --bg3h: #eef4ff;
+  --tx: #0f172a;
+  --tx2: #334155;
+  --tx3: #718096;
+  --muted: #94a3b8;
+  --border: #dbe3ef;
+  --border-soft: #e8edf5;
+  --gold: #2563eb;
+  --gold2: #1d4ed8;
+  --ok: #16a34a;
+  --danger: #ef4444;
+  --warn: #f59e0b;
+  --d-pri: #2563eb;
+  --d-dark: #1d4ed8;
+  --d-light: #60a5fa;
+  --d-glow: rgba(37, 99, 235, .18);
+  --e-pri: #2563eb;
+  --e-dark: #1d4ed8;
+  --e-light: #60a5fa;
+  --e-glow: rgba(37, 99, 235, .18);
+  --c-pri: #2563eb;
+  --c-dark: #1d4ed8;
+  --c-light: #60a5fa;
+  --c-glow: rgba(37, 99, 235, .18);
+}
+
+* { scrollbar-color: #c7d2e4 #eef2f7; }
+
+html {
+  background: #f4f7fb;
+  scroll-padding-top: 24px;
+}
+
+body {
+  min-height: 100vh;
+  padding-left: 228px;
+  background:
+    radial-gradient(circle at 88% 8%, rgba(37, 99, 235, .06), transparent 28rem),
+    linear-gradient(180deg, #f8fbff 0%, #f4f7fb 42%, #eef3f9 100%);
+  color: var(--tx);
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0;
+  overflow-x: hidden;
+}
+
+body::before,
+body::after,
+.intro-screen,
+.bg-grid,
+.bg-decorations,
+.hero {
+  display: none !important;
+}
+
+body.intro-lock {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.container {
+  width: 100%;
+  max-width: none;
+  min-height: 100vh;
+  margin: 0;
+  padding: 30px 32px 42px;
+}
+
+.dashboard-anchor { display: none; }
+
+.content-section,
+.content-section.app-shell,
+.analytics-section {
+  position: relative;
+  overflow: visible;
+  min-height: calc(100vh - 60px);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.content-section::before,
+.content-section::after {
+  display: none !important;
+}
+
+.content-section-header,
+.section-header-row,
+.icore-head,
+.game-season-head,
+.visual-dashboard-header,
+.editor-toolbar {
+  min-height: 76px;
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, .06);
+}
+
+.section-kicker,
+.content-kicker,
+.game-panel-kicker,
+.visual-panel-kicker,
+.admin-popover-kicker,
+.editor-subtitle,
+.icore-panel-head span,
+.icore-kpi span,
+.icore-shop-card span,
+.game-stat span,
+.stat-label,
+.fh-en,
+.metric-label,
+.cc-note,
+.visual-empty-note,
+.icore-muted-line,
+.icore-empty {
+  color: var(--tx3) !important;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.section-title,
+.content-title,
+.game-season-head h2,
+.game-panel-head h3,
+.game-operator-main h3,
+.visual-panel-head h3,
+.icore-panel-head h3,
+.icore-shop-card h3,
+.editor-title,
+.criteria-card .cc-title,
+.admin-popover-title,
+.fh-name {
+  color: var(--tx) !important;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.section-title,
+.content-title {
+  font-size: clamp(22px, 2.1vw, 30px);
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.app-view {
+  display: none;
+  min-width: 0;
+}
+
+.app-view.active {
+  display: block;
+  animation: none;
+}
+
+.app-shell .visual-dashboard,
+.app-shell .game-dashboard,
+.app-shell .icore-section,
+.app-shell .scoreboard,
+.app-shell .criteria-section,
+.app-shell .tables-section,
+.stats-section,
+.visual-dashboard,
+.game-dashboard {
+  padding-top: 0;
+  margin-bottom: 0;
+}
+
+.side-nav {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 228px;
+  max-height: none;
+  padding: 16px 12px;
+  transform: none;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 0;
+  background: #2447a8;
+  box-shadow: 12px 0 32px rgba(15, 23, 42, .16);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.side-nav-logo {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-start;
+  width: 154px;
+  height: 48px;
+  margin: 0 0 22px 24px;
+  padding: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 11px;
+  background: #fff;
+  color: #2447a8;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .18);
+}
+
+.side-nav-logo:hover {
+  background: #fff;
+  color: #2447a8;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, .18);
+}
+
+.side-nav-brand {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: #2447a8;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-size: 27px;
+  font-weight: 900;
+  letter-spacing: -1px;
+  text-transform: none;
+}
+
+.side-nav-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  min-width: 50px;
+  height: 48px;
+  margin-left: auto;
+  border-radius: 0 11px 11px 0;
+  background: #2447a8;
+  color: transparent;
+  font-size: 0;
+}
+
+.side-nav-mark::before,
+.side-nav-mark::after {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+}
+
+.side-nav-mark::before {
+  width: 24px;
+  height: 24px;
+  border: 7px solid #fff;
+  border-top-color: transparent;
+  transform: rotate(-28deg);
+}
+
+.side-nav-mark::after {
+  width: 6px;
+  height: 6px;
+  right: 14px;
+  top: 13px;
+  background: #fff;
+}
+
+.side-nav-group {
+  gap: 7px;
+  padding: 0;
+}
+
+.side-nav-separator {
+  height: 1px;
+  margin: 12px 0;
+  background: rgba(255, 255, 255, .28);
+}
+
+.side-nav-link {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  min-height: 43px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, .92);
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.side-nav-link svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+}
+
+.side-nav-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-nav-link:hover,
+.side-nav-link.active {
+  background: #2563eb;
+  color: #fff;
+  box-shadow: none;
+  transform: none;
+}
+
+.side-nav-link.active {
+  border: 0;
+}
+
+.stat-card,
+.visual-kpi,
+.visual-panel,
+.game-stat,
+.game-panel,
+.game-operator-card,
+.game-mission,
+.game-shop-item,
+.game-team-row,
+.game-mini-row,
+.icore-kpi,
+.icore-panel,
+.icore-shop-card,
+.icore-podium-card,
+.icore-nomination,
+.icore-history-row,
+.icore-request-row,
+.icore-admin-request,
+.icore-badge,
+.criteria-card,
+.faction-card,
+.editor-panel,
+.editor-faction,
+.admin-popover,
+.excel-import-panel,
+.excel-file-label,
+.import-status {
+  background: #fff !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  color: var(--tx) !important;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, .055) !important;
+}
+
+.stat-card:hover,
+.visual-panel:hover,
+.game-panel:hover,
+.icore-panel:hover,
+.icore-shop-card:hover,
+.faction-card:hover {
+  background: #fff !important;
+  box-shadow: 0 20px 42px rgba(15, 23, 42, .08) !important;
+  transform: none;
+}
+
+.stats-grid,
+.visual-kpis,
+.game-kpi-grid,
+.icore-kpi-grid {
+  gap: 14px;
+}
+
+.stat-card,
+.game-stat,
+.icore-kpi,
+.visual-kpi {
+  min-height: 98px;
+  padding: 16px;
+}
+
+.stat-value,
+.stat-value.highlight,
+.game-stat b,
+.icore-kpi b,
+.visual-kpi-value,
+.fh-stat-val,
+.icore-podium-card strong {
+  color: #2563eb !important;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0;
+  text-shadow: none;
+}
+
+.stat-note,
+.game-stat em,
+.icore-kpi em,
+.visual-kpi-note,
+.fh-stat-label,
+.game-season-head p,
+.icore-meta,
+.icore-select-wrap,
+.game-season-meta {
+  color: var(--tx3) !important;
+}
+
+.visual-mode-tabs,
+.icore-select-wrap,
+.game-season-meta,
+.hero-timeline,
+.excel-import-panel,
+.pub-tabs {
+  background: #fff !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.visual-mode-tabs button,
+.pub-tab,
+.editor-btn,
+.admin-gate-btn,
+.admin-popover-submit,
+.icore-action-btn,
+.icore-shop-card button,
+.icore-form-grid button,
+.icore-admin-actions button,
+.excel-import-go,
+.excel-file-btn,
+.hero-cta {
+  border: 1px solid #2563eb !important;
+  border-radius: 8px !important;
+  background: #2563eb !important;
+  color: #fff !important;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, .16) !important;
+}
+
+.visual-mode-tabs button.active,
+.pub-tab.active,
+.editor-btn:hover,
+.admin-popover-submit:hover,
+.icore-action-btn:hover,
+.icore-shop-card button:hover,
+.icore-form-grid button:hover,
+.icore-admin-actions button:hover,
+.excel-import-go:hover,
+.excel-file-btn:hover {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+  color: #fff !important;
+}
+
+.editor-btn.ghost,
+.admin-popover-submit.ghost,
+.icore-shop-card button:disabled,
+.icore-admin-actions button:disabled {
+  background: #f3f6fb !important;
+  border-color: var(--border) !important;
+  color: var(--tx2) !important;
+  box-shadow: none !important;
+}
+
+.editor-btn.danger-soft,
+.editor-icon-btn.danger,
+.admin-popover-close {
+  color: var(--danger) !important;
+}
+
+.editor-icon-btn,
+.editor-icon-btn.danger {
+  background: #f8fafc !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+}
+
+.visual-operator-select,
+.editor-input,
+.editor-select,
+.operator-name-input,
+.metric-value-input,
+.admin-popover-input,
+.admin-popover-select,
+.icore-form-grid input,
+.icore-form-grid select,
+.excel-period-field input {
+  min-height: 37px;
+  border: 1px solid var(--border) !important;
+  border-radius: 9px !important;
+  background: #fff !important;
+  color: var(--tx) !important;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  color-scheme: light;
+  box-shadow: none !important;
+}
+
+.visual-operator-select:focus,
+.editor-input:focus,
+.editor-select:focus,
+.operator-name-input:focus,
+.metric-value-input:focus,
+.admin-popover-input:focus,
+.admin-popover-select:focus,
+.icore-form-grid input:focus,
+.icore-form-grid select:focus,
+.excel-period-field input:focus {
+  outline: none;
+  border-color: #60a5fa !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .12) !important;
+}
+
+.visual-operator-select option {
+  background: #fff !important;
+  color: var(--tx) !important;
+}
+
+.factions-grid {
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.faction-card,
+.faction-card.dauntless,
+.faction-card.erudite,
+.faction-card.candor,
+.editor-faction,
+.editor-faction.dauntless,
+.editor-faction.erudite,
+.editor-faction.candor {
+  border-top: 0 !important;
+  border-left: 1px solid var(--border) !important;
+}
+
+.faction-header {
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.fh-icon,
+.game-avatar,
+.cc-icon,
+.scard-icon,
+.excel-import-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0 !important;
+  border-radius: 11px;
+  background: #eaf2ff !important;
+  color: #2563eb !important;
+  box-shadow: none !important;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-weight: 900;
+}
+
+.fh-title {
+  gap: 12px;
+}
+
+.fh-stats {
+  gap: 18px;
+}
+
+.faction-table-wrap,
+.editor-table-wrap,
+.icore-table-wrap {
+  width: 100%;
+  border: 0;
+  border-radius: 0 0 14px 14px;
+  background: #fff;
+  overflow: hidden;
+}
+
+table.operators,
+.editor-table,
+.icore-table,
+.import-preview-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  background: #fff !important;
+  color: var(--tx) !important;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-size: 12px;
+}
+
+table.operators thead,
+.editor-table thead,
+.icore-table thead {
+  background: #f5f7fb !important;
+}
+
+table.operators th,
+table.operators td,
+.editor-table th,
+.editor-table td,
+.icore-table th,
+.icore-table td,
+.import-preview-table th,
+.import-preview-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--border-soft) !important;
+  color: var(--tx2) !important;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+table.operators th,
+.editor-table th,
+.icore-table th,
+.import-preview-table th {
+  color: #64748b !important;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+table.operators th:first-child,
+table.operators td:first-child {
+  width: 40px;
+}
+
+table.operators th:nth-child(2),
+table.operators td.op-name,
+.editor-table th:first-child,
+.editor-table td:first-child,
+.icore-table th:nth-child(2),
+.icore-table td:nth-child(2) {
+  text-align: left;
+}
+
+table.operators td.op-name {
+  width: auto;
+  color: var(--tx) !important;
+  font-weight: 800;
+}
+
+table.operators tbody tr:hover,
+.editor-table tbody tr:hover,
+.icore-table tbody tr:hover {
+  background: #f8fbff !important;
+}
+
+.rank {
+  background: #edf2f7 !important;
+  color: #475569 !important;
+}
+
+.rank.top {
+  background: #dbeafe !important;
+  color: #1d4ed8 !important;
+}
+
+.metric-col.metric-penalty,
+.penalty {
+  color: #ef4444 !important;
+}
+
+.metric-col.metric-score {
+  color: #2563eb !important;
+}
+
+.score-bar {
+  background: #edf2f7 !important;
+  border-radius: 99px;
+}
+
+.score-fill,
+.score-fill.dauntless,
+.score-fill.erudite,
+.score-fill.candor,
+.rating-fill,
+.rating-fill.dauntless,
+.rating-fill.erudite,
+.rating-fill.candor,
+.game-progress span,
+.game-mission-track span,
+.icore-progress-row i span {
+  background: linear-gradient(90deg, #60a5fa, #2563eb) !important;
+  box-shadow: none !important;
+}
+
+.metric-score-cell {
+  min-width: 0;
+}
+
+.score-cell {
+  justify-content: center;
+}
+
+.criteria-grid,
+.visual-detail-grid,
+.icore-layout,
+.icore-admin-layout,
+.game-layout,
+.game-ratings-grid {
+  gap: 16px;
+}
+
+.criteria-card.positive,
+.criteria-card.negative,
+.visual-kpi.good,
+.visual-kpi.mid,
+.visual-kpi.risk,
+.visual-kpi.info,
+.icore-kpi.primary,
+.game-mission.done,
+.game-shop-item.available,
+.icore-badge.active,
+.icore-shop-card.available {
+  border-color: var(--border) !important;
+  background: #fff !important;
+}
+
+.icore-badge.active,
+.game-badge,
+.icore-nomination,
+.admin-popover-active,
+.import-report {
+  background: #f8fafc !important;
+  color: var(--tx2) !important;
+  border-color: var(--border) !important;
+}
+
+.icore-table tr.current,
+.rating-bar-row.selected {
+  background: #eff6ff !important;
+}
+
+.rating-track,
+.game-progress,
+.game-mission-track,
+.icore-progress-row i {
+  background: #edf2f7 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+.game-badge.muted {
+  color: var(--tx3) !important;
+}
+
+.admin-gate {
+  right: 24px;
+  bottom: 24px;
+}
+
+.admin-gate-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px !important;
+}
+
+.admin-popover {
+  right: 0;
+  bottom: 58px;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #eef2f7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c7d2e4;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@media (max-width: 1100px) {
+  body { padding-left: 72px; }
+
+  .side-nav {
+    width: 72px;
+    padding: 16px 7px;
+  }
+
+  .side-nav-logo {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 18px;
+    border-radius: 12px;
+  }
+
+  .side-nav-brand { display: none; }
+
+  .side-nav-mark {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .side-nav-link {
+    display: grid;
+    grid-template-columns: 1fr;
+    place-items: center;
+    min-height: 46px;
+    padding: 0;
+  }
+
+  .side-nav-link span { display: none; }
+
+  .container {
+    padding: 24px 18px 34px;
+  }
+}
+
+@media (max-width: 760px) {
+  body {
+    padding-left: 0;
+    padding-bottom: 78px;
+  }
+
+  .container {
+    padding: 16px 12px 24px;
+  }
+
+  .side-nav {
+    inset: auto 0 0 0;
+    width: auto;
+    height: 66px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    box-shadow: 0 -12px 32px rgba(15, 23, 42, .16);
+  }
+
+  .side-nav-logo,
+  .side-nav-separator {
+    display: none;
+  }
+
+  .side-nav-group {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .side-nav-link {
+    width: 46px;
+    min-width: 46px;
+  }
+
+  .content-section-header,
+  .section-header-row,
+  .icore-head,
+  .game-season-head,
+  .visual-dashboard-header,
+  .editor-toolbar {
+    padding: 14px;
+  }
+
+  table.operators th,
+  table.operators td,
+  .editor-table th,
+  .editor-table td,
+  .icore-table th,
+  .icore-table td {
+    padding: 9px 6px;
+    font-size: 11px;
+  }
 }
