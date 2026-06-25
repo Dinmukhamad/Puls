@@ -55,13 +55,34 @@ const GAME_REWARDS = [
   { title: 'Обед за счёт компании', price: 700, tag: 'супервайзер' },
 ];
 
+const ICORE_SHOP_ITEMS = [
+  { id: 'raffle-ticket', title: 'Участие в розыгрыше', price: 50, desc: '1 билет в ежемесячный розыгрыш крупного приза' },
+  { id: 'week-star', title: 'Статус «Звезда недели»', price: 30, desc: 'Бейдж и упоминание в общем чате команды' },
+  { id: 'early-shift', title: 'Ранний доступ к аукциону смен', price: 80, desc: 'Выбор смены на 30 минут раньше других' },
+  { id: 'break-15', title: 'Дополнительный перерыв +15 мин', price: 80, desc: 'Согласовывается с руководителем' },
+  { id: 'coffee', title: 'Сертификат на кофе', price: 120, desc: 'Подарочная карта в кофейню' },
+  { id: 'pizza', title: 'Корпоративная пицца', price: 180, desc: 'Пицца для вас и двух коллег на смене' },
+  { id: 'merch', title: 'Мерч компании', price: 200, desc: 'Кружка, худи, блокнот, термокружка или шоппер' },
+  { id: 'lunch', title: 'Обед за счёт компании', price: 300, desc: 'Оплаченный обед или сертификат на питание' },
+  { id: 'marketplace', title: 'Сертификат маркетплейс', price: 400, desc: 'Подарочная карта Kaspi, Wildberries и др.' },
+];
+
+const ICORE_REQUEST_STATUS = {
+  new: 'Новая',
+  approved: 'Одобрена',
+  rejected: 'Отклонена',
+  done: 'Выполнена',
+};
+
 const ADMIN_SESSION_KEY = 'divergentContestAdminUnlocked';
 const ADMIN_PASSWORD_KEY = 'divergentContestAdminToken';
 const DAILY_IMPORT_STORAGE_KEY = 'divergentContestDailyImport';
+const GAMIFICATION_STORAGE_KEY = 'icoreGamificationState';
 const VISUAL_MODE_STORAGE_KEY = 'divergentContestVisualMode';
 const VISUAL_OPERATOR_STORAGE_KEY = 'divergentContestVisualOperator';
 let isAdmin = false;
 let DAILY_IMPORT_DATA = null;
+let GAMIFICATION = { settings: { coinRate: 5 }, manualLedger: [], requests: [] };
 let visualMode = localStorage.getItem(VISUAL_MODE_STORAGE_KEY) || 'overview';
 let visualOperatorKey = localStorage.getItem(VISUAL_OPERATOR_STORAGE_KEY) || '';
 
@@ -231,6 +252,56 @@ function sanitizeDailyImport(input) {
   };
 }
 
+function normalizeGamification(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const settingsSource = source.settings && typeof source.settings === 'object' ? source.settings : {};
+  const coinRate = Number(settingsSource.coinRate);
+  const normalizeKey = value => normalizeOperatorName(value || '');
+
+  return {
+    settings: {
+      coinRate: Number.isFinite(coinRate) && coinRate > 0 ? coinRate : 5,
+    },
+    manualLedger: Array.isArray(source.manualLedger)
+      ? source.manualLedger.map(item => ({
+          id: String(item?.id || `manual-${Date.now()}-${Math.random().toString(16).slice(2)}`),
+          operatorKey: normalizeKey(item?.operatorKey || item?.operatorName),
+          operatorName: String(item?.operatorName || '').trim(),
+          amount: Number.isFinite(Number(item?.amount)) ? Math.trunc(Number(item.amount)) : 0,
+          comment: String(item?.comment || '').trim(),
+          author: String(item?.author || '').trim() || 'Администратор',
+          createdAt: String(item?.createdAt || '').trim() || new Date().toISOString(),
+        })).filter(item => item.operatorKey && item.amount !== 0 && item.comment)
+      : [],
+    requests: Array.isArray(source.requests)
+      ? source.requests.map(item => ({
+          id: String(item?.id || `request-${Date.now()}-${Math.random().toString(16).slice(2)}`),
+          operatorKey: normalizeKey(item?.operatorKey || item?.operatorName),
+          operatorName: String(item?.operatorName || '').trim(),
+          rewardId: String(item?.rewardId || '').trim(),
+          rewardTitle: String(item?.rewardTitle || '').trim(),
+          price: Number.isFinite(Number(item?.price)) ? Math.max(0, Math.trunc(Number(item.price))) : 0,
+          status: ICORE_REQUEST_STATUS[item?.status] ? item.status : 'new',
+          reason: String(item?.reason || '').trim(),
+          createdAt: String(item?.createdAt || '').trim() || new Date().toISOString(),
+          updatedAt: String(item?.updatedAt || '').trim() || String(item?.createdAt || '').trim() || new Date().toISOString(),
+        })).filter(item => item.operatorKey && item.rewardId && item.rewardTitle && item.price > 0)
+      : [],
+  };
+}
+
+function readStoredGamification() {
+  try {
+    return normalizeGamification(JSON.parse(localStorage.getItem(GAMIFICATION_STORAGE_KEY) || 'null'));
+  } catch {
+    return normalizeGamification(null);
+  }
+}
+
+function persistGamification() {
+  try { localStorage.setItem(GAMIFICATION_STORAGE_KEY, JSON.stringify(GAMIFICATION)); } catch {}
+}
+
 function readStoredDailyImport() {
   try {
     return sanitizeDailyImport(JSON.parse(localStorage.getItem(DAILY_IMPORT_STORAGE_KEY) || 'null'));
@@ -284,8 +355,12 @@ async function loadEditableData() {
       : [ state.weeklyData[0] ?? [] ];
     METRICS     = state.metrics;
     DAILY_IMPORT_DATA = sanitizeDailyImport(state.dailyImport) || readStoredDailyImport();
+    GAMIFICATION = normalizeGamification(state.gamification || readStoredGamification());
   }
   if (!DAILY_IMPORT_DATA) DAILY_IMPORT_DATA = readStoredDailyImport();
+  if (!state?.gamification) GAMIFICATION = readStoredGamification();
+  GAMIFICATION = normalizeGamification(GAMIFICATION);
+  persistGamification();
   if (!METRICS.some(m => m.type === 'score')) METRICS.push({ label: 'Итого', type: 'score' });
   normalizeEditableData();
 }
@@ -295,7 +370,8 @@ async function saveEditableData() {
   /* Сохраняем в формате совместимом с сервером — один слот */
   setSaveIndicator('pending');
   try {
-    await api.saveState({ faculties: FACULTIES, weeklyData: WEEKLY_DATA, metrics: METRICS, dailyImport: DAILY_IMPORT_DATA }, getAdminPassword());
+    await api.saveState({ faculties: FACULTIES, weeklyData: WEEKLY_DATA, metrics: METRICS, dailyImport: DAILY_IMPORT_DATA, gamification: GAMIFICATION }, getAdminPassword());
+    persistGamification();
     setSaveIndicator('saved');
   } catch (err) {
     setSaveIndicator('error');
@@ -319,6 +395,10 @@ async function refreshDashboardOnly() {
     renderStats(),
     renderVisualDashboard(),
     renderGameDashboard(),
+    renderIcoreCabinet(),
+    renderIcoreRating(),
+    renderIcoreShop(),
+    renderIcoreAdmin(),
     renderScoreboard(),
     renderFacultyCards(),
   ]);
@@ -458,11 +538,126 @@ function getSelectedVisualOperator(ranking) {
   return selected;
 }
 
+function getIcoreCoinRate() {
+  return Math.max(1, Number(GAMIFICATION?.settings?.coinRate) || 5);
+}
+
+function getIcoreBaseCoins(row) {
+  return Math.floor(Math.max(0, Number(row?.points) || 0) / getIcoreCoinRate());
+}
+
+function getIcoreLateValue(row) {
+  return getMetricValue(row?.metrics || [], ['опозд']);
+}
+
+function getIcoreSiteValue(row) {
+  return getMetricValue(row?.metrics || [], ['сайт']);
+}
+
+function getIcoreNominations(ranking = []) {
+  const active = ranking.filter(row => row.points > 0);
+  const nominations = [];
+  const used = new Set();
+
+  function addNomination(id, title, row, value) {
+    if (!row || !row.nameKey) return;
+    nominations.push({ id, title, row, value });
+    used.add(`${id}:${row.nameKey}`);
+  }
+
+  function bestMetric(id, title, aliases, suffix = '') {
+    if (!hasMetric(aliases)) return;
+    const rows = active
+      .map(row => ({ row, value: getMetricValue(row.metrics, aliases) }))
+      .filter(item => item.value > 0)
+      .sort((a, b) => (b.value - a.value) || (b.row.points - a.row.points) || a.row.name.localeCompare(b.row.name, 'ru'));
+    if (rows[0]) addNomination(id, title, rows[0].row, `${fmtPts(rows[0].value)}${suffix}`);
+  }
+
+  bestMetric('calls', 'Лучший по звонкам', ['квз', 'звон'], '');
+  bestMetric('quality', 'Лучшее качество', ['качество'], '%');
+  bestMetric('efficiency', 'Топ по эффективности', ['эфф'], '%');
+  bestMetric('thanks', 'Больше всего благодарностей', ['благодар'], '');
+
+  const progressLeader = getProgressRanking(active)[0];
+  if (progressLeader && progressLeader.progress > 0) addNomination('progress', 'Лучший прогресс недели', progressLeader, `+${fmtPts(progressLeader.progress)}`);
+
+  const disciplineLeader = active
+    .filter(row => getIcoreLateValue(row) <= 0)
+    .sort((a, b) => (getIcoreSiteValue(a) - getIcoreSiteValue(b)) || (b.points - a.points) || a.name.localeCompare(b.name, 'ru'))[0];
+  if (disciplineLeader) addNomination('discipline', 'Без опозданий', disciplineLeader, '0 мин');
+
+  return nominations.filter((item, idx, arr) =>
+    arr.findIndex(other => other.id === item.id && other.row.nameKey === item.row.nameKey) === idx
+  ).slice(0, 6);
+}
+
+function getIcoreManualEntries(operatorKey) {
+  return (GAMIFICATION.manualLedger || []).filter(item => item.operatorKey === operatorKey);
+}
+
+function getIcoreRequests(operatorKey) {
+  return (GAMIFICATION.requests || []).filter(item => item.operatorKey === operatorKey);
+}
+
+function getIcoreOperatorState(row, ranking = []) {
+  const nominations = getIcoreNominations(ranking).filter(item => item.row.nameKey === row.nameKey);
+  const baseCoins = getIcoreBaseCoins(row);
+  const topBonus = row.rank === 1 ? 15 : row.rank === 2 ? 10 : row.rank === 3 ? 7 : 0;
+  const lateBonus = row.points > 0 && getIcoreLateValue(row) <= 0 ? 5 : 0;
+  const siteBonus = row.points > 0 && getIcoreSiteValue(row) <= 0 ? 3 : 0;
+  const nominationBonus = nominations.length * 5;
+  const weekCoins = baseCoins + topBonus + lateBonus + siteBonus + nominationBonus;
+  const manualEntries = getIcoreManualEntries(row.nameKey);
+  const manualTotal = manualEntries.reduce((sum, item) => sum + item.amount, 0);
+  const manualEarned = manualEntries.filter(item => item.amount > 0).reduce((sum, item) => sum + item.amount, 0);
+  const requests = getIcoreRequests(row.nameKey);
+  const reserved = requests.filter(item => item.status === 'new').reduce((sum, item) => sum + item.price, 0);
+  const spent = requests.filter(item => item.status === 'approved' || item.status === 'done').reduce((sum, item) => sum + item.price, 0);
+  const totalEarned = weekCoins + manualEarned;
+  const balance = Math.max(0, weekCoins + manualTotal - reserved - spent);
+
+  return {
+    row,
+    baseCoins,
+    topBonus,
+    lateBonus,
+    siteBonus,
+    nominationBonus,
+    nominations,
+    weekCoins,
+    manualEntries,
+    manualTotal,
+    requests,
+    reserved,
+    spent,
+    totalEarned,
+    balance,
+  };
+}
+
+function getIcoreStates(ranking = getOperatorRanking()) {
+  return ranking.map(row => getIcoreOperatorState(row, ranking));
+}
+
+function getSelectedIcoreState(ranking = getOperatorRanking()) {
+  const selected = getSelectedVisualOperator(ranking);
+  return selected ? getIcoreOperatorState(selected, ranking) : null;
+}
+
+function formatIcoreDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+
 function setVisualMode(mode) {
   visualMode = mode === 'personal' ? 'personal' : 'overview';
   try { localStorage.setItem(VISUAL_MODE_STORAGE_KEY, visualMode); } catch {}
   renderVisualDashboard();
   renderGameDashboard();
+  renderIcoreCabinet();
+  renderIcoreShop();
 }
 
 function selectVisualOperator(value) {
@@ -472,6 +667,8 @@ function selectVisualOperator(value) {
   try { localStorage.setItem(VISUAL_MODE_STORAGE_KEY, visualMode); } catch {}
   renderVisualDashboard();
   renderGameDashboard();
+  renderIcoreCabinet();
+  renderIcoreShop();
 }
 
 function getRankTone(row, total) {
@@ -1200,6 +1397,259 @@ function renderDailyDynamics(selected) {
   `;
 }
 
+function renderIcoreOperatorSelect(ranking, label = 'Выбрать оператора') {
+  const selected = getSelectedVisualOperator(ranking);
+  const options = ranking.map(row => `
+    <option value="${row.key}" ${selected && row.key === selected.key ? 'selected' : ''}>
+      ${row.rank}. ${escapeHtml(row.name)} — ${fmtPts(row.points)}
+    </option>
+  `).join('');
+  return `
+    <label class="icore-select-wrap">
+      <span>${escapeHtml(label)}</span>
+      <select class="visual-operator-select" onchange="selectVisualOperator(this.value)">
+        ${options}
+      </select>
+    </label>
+  `;
+}
+
+function renderIcoreCabinet() {
+  const el = document.getElementById('icore-cabinet');
+  if (!el) return;
+  const ranking = getOperatorRanking();
+  if (!ranking.length) {
+    el.innerHTML = `
+      <div class="icore-empty">
+        <div class="section-kicker">iCore · Мой кабинет</div>
+        <h2 class="section-title">Нет операторов для отображения</h2>
+        <p>Добавьте операторов и показатели, чтобы появился баланс коинов, история и достижения.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const state = getSelectedIcoreState(ranking);
+  const row = state.row;
+  const metricRows = METRICS.map((metric, idx) => ({ metric, value: Number(row.metrics[idx]) || 0 }))
+    .filter(item => item.metric.type !== 'score')
+    .map(({ metric, value }) => {
+      const danger = metric.type === 'penalty';
+      const width = danger ? clampValue(value * 4, 0, 100) : clampValue(value, 0, 100);
+      return `
+        <div class="icore-progress-row ${danger ? 'danger' : ''}">
+          <div><b>${escapeHtml(metric.label)}</b><span>${danger ? 'Антипоказатель' : 'Показатель недели'}</span></div>
+          <em>${danger && value > 0 ? '-' : ''}${fmtPts(value)}</em>
+          <i><span style="width:${Math.round(width)}%"></span></i>
+        </div>
+      `;
+    }).join('');
+
+  const autoHistory = [
+    { type: '+', amount: state.baseCoins, reason: `Перевод баллов по курсу ${getIcoreCoinRate()}:1`, date: 'Итоги недели' },
+    state.topBonus ? { type: '+', amount: state.topBonus, reason: `Бонус за место #${row.rank}`, date: 'Итоги недели' } : null,
+    state.lateBonus ? { type: '+', amount: state.lateBonus, reason: 'Неделя без опозданий', date: 'Итоги недели' } : null,
+    state.siteBonus ? { type: '+', amount: state.siteBonus, reason: 'Неделя без посторонних сайтов', date: 'Итоги недели' } : null,
+    state.nominationBonus ? { type: '+', amount: state.nominationBonus, reason: state.nominations.map(n => n.title).join(', '), date: 'Номинации' } : null,
+  ].filter(Boolean);
+  const manualHistory = state.manualEntries.map(item => ({
+    type: item.amount >= 0 ? '+' : '-',
+    amount: Math.abs(item.amount),
+    reason: item.comment,
+    date: formatIcoreDate(item.createdAt),
+  }));
+  const requestHistory = state.requests.map(item => ({
+    type: item.status === 'rejected' ? '↺' : '-',
+    amount: item.price,
+    reason: `${item.rewardTitle} · ${ICORE_REQUEST_STATUS[item.status]}`,
+    date: formatIcoreDate(item.updatedAt || item.createdAt),
+  }));
+  const history = [...autoHistory, ...manualHistory, ...requestHistory].slice(0, 9);
+  const historyHtml = history.length ? history.map(item => `
+    <div class="icore-history-row ${item.type === '-' ? 'minus' : ''}">
+      <span>${escapeHtml(item.date)}</span>
+      <b>${item.type}${item.amount}</b>
+      <em>${escapeHtml(item.reason)}</em>
+    </div>
+  `).join('') : '<div class="icore-muted-line">История появится после начислений или заявок.</div>';
+
+  const badges = [
+    { title: 'Топ-3 недели', active: row.rank <= 3, hint: 'попасть в топ-3 рейтинга' },
+    { title: 'Без опозданий', active: state.lateBonus > 0, hint: 'закрыть неделю без опозданий' },
+    { title: 'Звезда качества', active: getMetricValue(row.metrics, ['качество']) >= 98, hint: 'качество 98%+' },
+    { title: 'Легенда команды', active: state.balance >= 400, hint: `накопить ${Math.max(0, 400 - state.balance)} коинов` },
+  ];
+  const badgesHtml = badges.map(badge => `
+    <div class="icore-badge ${badge.active ? 'active' : 'locked'}">
+      <b>${escapeHtml(badge.title)}</b>
+      <span>${badge.active ? 'получено' : badge.hint}</span>
+    </div>
+  `).join('');
+
+  el.innerHTML = `
+    <div class="icore-head">
+      <div><div class="section-kicker">iCore · Мой кабинет</div><h2 class="section-title">Баланс и прогресс оператора</h2></div>
+      ${renderIcoreOperatorSelect(ranking)}
+    </div>
+    <div class="icore-kpi-grid">
+      <div class="icore-kpi primary"><span>Текущий баланс</span><b>${state.balance}</b><em>коинов доступно</em></div>
+      <div class="icore-kpi"><span>За текущую неделю</span><b>${state.weekCoins}</b><em>${fmtPts(row.points)} баллов</em></div>
+      <div class="icore-kpi"><span>Место в рейтинге</span><b>#${row.rank}</b><em>из ${ranking.length}</em></div>
+      <div class="icore-kpi"><span>Потрачено / резерв</span><b>${state.spent} / ${state.reserved}</b><em>по заявкам магазина</em></div>
+    </div>
+    <div class="icore-layout">
+      <div class="icore-panel">
+        <div class="icore-panel-head"><div><span>Показатели недели</span><h3>${escapeHtml(row.name)}</h3></div><b>${state.weekCoins} коинов</b></div>
+        <div class="icore-progress-list">${metricRows || '<div class="icore-muted-line">Нет показателей.</div>'}</div>
+      </div>
+      <div class="icore-panel">
+        <div class="icore-panel-head"><div><span>История</span><h3>Начисления и списания</h3></div><b>${state.totalEarned} начислено</b></div>
+        <div class="icore-history-list">${historyHtml}</div>
+      </div>
+      <div class="icore-panel">
+        <div class="icore-panel-head"><div><span>Достижения</span><h3>Бейджи оператора</h3></div><b>${badges.filter(b => b.active).length}/4</b></div>
+        <div class="icore-badge-grid">${badgesHtml}</div>
+        <button class="icore-action-btn" onclick="window.showContestSection?.('shop')">Перейти в магазин · ${state.balance} коинов</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderIcoreRating() {
+  const el = document.getElementById('icore-rating');
+  if (!el) return;
+  const ranking = getOperatorRanking();
+  const states = getIcoreStates(ranking)
+    .sort((a, b) => (b.weekCoins - a.weekCoins) || (b.row.points - a.row.points) || a.row.name.localeCompare(b.row.name, 'ru'));
+  if (!states.length) {
+    el.innerHTML = '<div class="icore-empty"><div class="section-kicker">iCore · Рейтинг</div><h2 class="section-title">Нет данных рейтинга</h2></div>';
+    return;
+  }
+
+  const selected = getSelectedVisualOperator(ranking);
+  const podium = states.slice(0, 3).map((state, idx) => `
+    <div class="icore-podium-card place-${idx + 1}">
+      <span>#${idx + 1}</span><b>${escapeHtml(state.row.name)}</b><em>${escapeHtml(state.row.faculty.name)}</em>
+      <strong>${state.weekCoins} коинов</strong><small>баланс ${state.balance}</small>
+    </div>
+  `).join('');
+  const nominations = getIcoreNominations(ranking).map(item => `
+    <div class="icore-nomination"><span>${escapeHtml(item.title)}</span><b>${escapeHtml(item.row.name)}</b><em>${escapeHtml(item.value)}</em></div>
+  `).join('');
+  const rows = states.map((state, idx) => `
+    <tr class="${selected && selected.nameKey === state.row.nameKey ? 'current' : ''}">
+      <td>${idx + 1}</td>
+      <td>${escapeHtml(state.row.name)}<small>${escapeHtml(state.row.faculty.name)}</small></td>
+      <td>${fmtPts(state.row.points)}</td>
+      <td>${state.weekCoins}</td>
+      <td>${state.balance}</td>
+      <td>${state.row.rank <= 3 ? '↑' : state.row.points > 0 ? '→' : '—'}</td>
+    </tr>
+  `).join('');
+
+  el.innerHTML = `
+    <div class="icore-head">
+      <div><div class="section-kicker">iCore · Рейтинг</div><h2 class="section-title">Турнирная таблица коинов</h2></div>
+      <div class="icore-meta"><span>${ranking.length} участников</span><b>${new Date().toLocaleDateString('ru-RU')}</b></div>
+    </div>
+    <div class="icore-podium">${podium}</div>
+    <div class="icore-nomination-grid">${nominations || '<div class="icore-muted-line">Номинации появятся после загрузки показателей.</div>'}</div>
+    <div class="icore-table-wrap">
+      <table class="icore-table">
+        <thead><tr><th>#</th><th>Оператор</th><th>Баллы</th><th>Неделя</th><th>Баланс</th><th>Дин.</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderIcoreShop() {
+  const el = document.getElementById('icore-shop');
+  if (!el) return;
+  const ranking = getOperatorRanking();
+  if (!ranking.length) {
+    el.innerHTML = '<div class="icore-empty"><div class="section-kicker">iCore · Магазин</div><h2 class="section-title">Нет операторов для магазина</h2></div>';
+    return;
+  }
+  const state = getSelectedIcoreState(ranking);
+  const cards = ICORE_SHOP_ITEMS.map(item => {
+    const missing = Math.max(0, item.price - state.balance);
+    const canBuy = missing === 0;
+    return `
+      <div class="icore-shop-card ${canBuy ? 'available' : ''}">
+        <div><span>${item.price} коинов</span><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.desc)}</p></div>
+        <button onclick="buyIcoreReward('${item.id}')" ${canBuy ? '' : 'disabled'}>${canBuy ? 'Купить' : `Нужно ещё ${missing}`}</button>
+      </div>
+    `;
+  }).join('');
+  const requests = state.requests.slice(0, 5).map(item => `
+    <div class="icore-request-row ${item.status}"><span>${ICORE_REQUEST_STATUS[item.status]}</span><b>${escapeHtml(item.rewardTitle)}</b><em>${item.price} коинов</em></div>
+  `).join('');
+
+  el.innerHTML = `
+    <div class="icore-head">
+      <div><div class="section-kicker">iCore · Магазин бонусов</div><h2 class="section-title">Каталог наград</h2></div>
+      ${renderIcoreOperatorSelect(ranking)}
+    </div>
+    <div class="icore-shop-summary"><b>${escapeHtml(state.row.name)}</b><span>Баланс: ${state.balance} коинов · резерв: ${state.reserved}</span></div>
+    <div class="icore-shop-grid">${cards}</div>
+    <div class="icore-panel icore-shop-history">
+      <div class="icore-panel-head"><div><span>Мои заявки</span><h3>Статусы магазина</h3></div><b>${state.requests.length}</b></div>
+      <div class="icore-request-list">${requests || '<div class="icore-muted-line">Заявок пока нет.</div>'}</div>
+    </div>
+  `;
+}
+
+function renderIcoreAdmin() {
+  const el = document.getElementById('icore-admin');
+  if (!el) return;
+  const ranking = getOperatorRanking();
+  const states = getIcoreStates(ranking);
+  const newRequests = (GAMIFICATION.requests || []).filter(item => item.status === 'new');
+  const weekCoins = states.reduce((sum, state) => sum + state.weekCoins, 0);
+  const avgRank = ranking.length ? ranking.reduce((sum, row) => sum + row.rank, 0) / ranking.length : 0;
+  const selected = getSelectedVisualOperator(ranking);
+  const options = ranking.map(row => `<option value="${row.nameKey}" ${selected && row.nameKey === selected.nameKey ? 'selected' : ''}>${escapeHtml(row.name)}</option>`).join('');
+  const requestRows = (GAMIFICATION.requests || []).slice(0, 30).map(item => `
+    <div class="icore-admin-request ${item.status}">
+      <div><span>${ICORE_REQUEST_STATUS[item.status]}</span><b>${escapeHtml(item.operatorName || item.operatorKey)}</b><em>${escapeHtml(item.rewardTitle)} · ${item.price} коинов</em>${item.reason ? `<small>${escapeHtml(item.reason)}</small>` : ''}</div>
+      <div class="icore-admin-actions">
+        <button onclick="updateIcoreRequest('${item.id}', 'approved')" ${item.status !== 'new' ? 'disabled' : ''}>Одобрить</button>
+        <button onclick="updateIcoreRequest('${item.id}', 'rejected')" ${item.status !== 'new' ? 'disabled' : ''}>Отклонить</button>
+        <button onclick="updateIcoreRequest('${item.id}', 'done')" ${item.status !== 'approved' ? 'disabled' : ''}>Выполнена</button>
+      </div>
+    </div>
+  `).join('');
+
+  el.innerHTML = `
+    <div class="icore-head">
+      <div><div class="section-kicker">iCore · Администрирование</div><h2 class="section-title">Заявки, ручные начисления и отчёт</h2></div>
+      <button class="icore-action-btn compact" onclick="exportIcoreCsv()">CSV</button>
+    </div>
+    <div class="icore-kpi-grid">
+      <div class="icore-kpi"><span>Операторов</span><b>${ranking.length}</b><em>в системе</em></div>
+      <div class="icore-kpi"><span>Начислено за неделю</span><b>${weekCoins}</b><em>коинов</em></div>
+      <div class="icore-kpi"><span>Новых заявок</span><b>${newRequests.length}</b><em>ожидают решения</em></div>
+      <div class="icore-kpi"><span>Средняя позиция</span><b>${fmtPts(avgRank)}</b><em>по команде</em></div>
+    </div>
+    <div class="icore-admin-layout">
+      <div class="icore-panel">
+        <div class="icore-panel-head"><div><span>Ручное начисление</span><h3>Добавить или списать коины</h3></div></div>
+        <div class="icore-form-grid">
+          <select id="icore-manual-operator">${options}</select>
+          <input id="icore-manual-amount" type="number" step="1" placeholder="+10 или -5">
+          <input id="icore-manual-comment" type="text" placeholder="Причина начисления или списания">
+          <button onclick="addManualIcoreCoins()">Сохранить</button>
+        </div>
+      </div>
+      <div class="icore-panel">
+        <div class="icore-panel-head"><div><span>Заявки из магазина</span><h3>Очередь согласования</h3></div><b>${GAMIFICATION.requests.length}</b></div>
+        <div class="icore-admin-request-list">${requestRows || '<div class="icore-muted-line">Заявок пока нет.</div>'}</div>
+      </div>
+    </div>
+  `;
+}
+
 async function renderVisualDashboard() {
   const el = document.getElementById('visual-dashboard');
   if (!el) return;
@@ -1455,7 +1905,17 @@ async function renderFacultyCards() {
 
 /* ── Editor ─────────────────────────────────────────────────── */
 async function refreshDashboard() {
-  await Promise.all([renderStats(), renderVisualDashboard(), renderGameDashboard(), renderScoreboard(), renderFacultyCards()]);
+  await Promise.all([
+    renderStats(),
+    renderVisualDashboard(),
+    renderGameDashboard(),
+    renderIcoreCabinet(),
+    renderIcoreRating(),
+    renderIcoreShop(),
+    renderIcoreAdmin(),
+    renderScoreboard(),
+    renderFacultyCards(),
+  ]);
 }
 
 function renderEditor() {
@@ -1640,6 +2100,117 @@ async function removeMetric(metricIdx) {
   await saveEditableData(); renderEditor(); refreshDashboard();
 }
 
+function applyGamificationResponse(result) {
+  if (result?.gamification) {
+    GAMIFICATION = normalizeGamification(result.gamification);
+    persistGamification();
+  }
+}
+
+async function buyIcoreReward(rewardId) {
+  const ranking = getOperatorRanking();
+  const state = getSelectedIcoreState(ranking);
+  const reward = ICORE_SHOP_ITEMS.find(item => item.id === rewardId);
+  if (!state || !reward) return;
+  if (state.balance < reward.price) {
+    alert(`Не хватает ${reward.price - state.balance} коинов`);
+    return;
+  }
+
+  setSaveIndicator('pending');
+  try {
+    const result = await api.createRewardRequest({
+      operatorKey: state.row.nameKey,
+      operatorName: state.row.name,
+      rewardId: reward.id,
+      rewardTitle: reward.title,
+      price: reward.price,
+    });
+    applyGamificationResponse(result);
+    setSaveIndicator('saved');
+    await refreshDashboard();
+    window.showContestSection?.('shop');
+  } catch (error) {
+    setSaveIndicator('error');
+    alert('Не удалось создать заявку: ' + error.message);
+  }
+}
+
+async function addManualIcoreCoins() {
+  if (!requireAdmin()) return;
+  const operatorKey = document.getElementById('icore-manual-operator')?.value || '';
+  const amount = Math.trunc(Number(document.getElementById('icore-manual-amount')?.value || 0));
+  const comment = String(document.getElementById('icore-manual-comment')?.value || '').trim();
+  const row = getOperatorRanking().find(item => item.nameKey === operatorKey);
+  if (!row || !amount || !comment) {
+    alert('Выберите оператора, сумму и укажите причину.');
+    return;
+  }
+
+  setSaveIndicator('pending');
+  try {
+    const result = await api.addManualCoins({
+      operatorKey: row.nameKey,
+      operatorName: row.name,
+      amount,
+      comment,
+      author: 'Администратор',
+    }, getAdminPassword());
+    applyGamificationResponse(result);
+    setSaveIndicator('saved');
+    await refreshDashboard();
+    window.showContestSection?.('admin');
+  } catch (error) {
+    setSaveIndicator('error');
+    alert('Не удалось сохранить начисление: ' + error.message);
+  }
+}
+
+async function updateIcoreRequest(id, status) {
+  if (!requireAdmin()) return;
+  const reason = status === 'rejected' ? String(prompt('Причина отказа') || '').trim() : '';
+  if (status === 'rejected' && !reason) return;
+
+  setSaveIndicator('pending');
+  try {
+    const result = await api.updateRewardRequest(id, { status, reason }, getAdminPassword());
+    applyGamificationResponse(result);
+    setSaveIndicator('saved');
+    await refreshDashboard();
+    window.showContestSection?.('admin');
+  } catch (error) {
+    setSaveIndicator('error');
+    alert('Не удалось обновить заявку: ' + error.message);
+  }
+}
+
+function exportIcoreCsv() {
+  const ranking = getOperatorRanking();
+  const states = getIcoreStates(ranking);
+  const lines = [
+    ['Место', 'Оператор', 'Группа', 'Баллы', 'Коины за неделю', 'Баланс', 'Резерв', 'Потрачено'].join(';'),
+    ...states.map(state => [
+      state.row.rank,
+      state.row.name,
+      state.row.faculty.name,
+      fmtPts(state.row.points),
+      state.weekCoins,
+      state.balance,
+      state.reserved,
+      state.spent,
+    ].map(value => `"${String(value).replaceAll('"', '""')}"`).join(';')),
+  ];
+  const blob = new Blob([`\ufeff${lines.join('\n')}`], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `icore-gamification-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function initIntro() {
   const intro = document.getElementById('intro-screen');
   if (!intro) return;
@@ -1755,7 +2326,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateAdminGate();
   renderEditor();
   document.getElementById('editor-panel').hidden = !isAdmin;
-  await Promise.all([renderStats(), renderVisualDashboard(), renderGameDashboard(), renderScoreboard(), renderFacultyCards()]);
+  await Promise.all([
+    renderStats(),
+    renderVisualDashboard(),
+    renderGameDashboard(),
+    renderIcoreCabinet(),
+    renderIcoreRating(),
+    renderIcoreShop(),
+    renderIcoreAdmin(),
+    renderScoreboard(),
+    renderFacultyCards(),
+  ]);
   initSideNavigation();
 });
 
