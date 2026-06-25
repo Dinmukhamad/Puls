@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-icon-1">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-icon-1">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
-  <link rel="stylesheet" href="css/styles.css?v=gamified-season-1">
+  <link rel="stylesheet" href="css/styles.css?v=tables-sidebar-1">
   <script src="js/api.js"></script>
 </head>
 <body>
@@ -124,6 +124,20 @@
     <!-- ═══ DASHBOARD ════════════════════════════════════════════ -->
     <div id="dashboard" class="dashboard-anchor"></div>
 
+    <div class="dashboard-layout">
+      <aside class="content-section tables-section tables-sidebar" aria-label="Таблицы фракций">
+        <div class="tables-sidebar-inner">
+          <div class="section-header-row">
+            <div>
+              <div class="section-kicker">Фракционные таблицы</div>
+              <h2 class="section-title">Операторы по фракциям</h2>
+            </div>
+          </div>
+          <div class="factions-grid" id="faction-grid"></div>
+        </div>
+      </aside>
+
+      <main class="dashboard-main">
     <section class="content-section analytics-section" aria-label="Статистика конкурса">
       <div class="content-section-header">
         <div>
@@ -177,16 +191,8 @@
       </section>
     </section>
 
-    <!-- Таблицы фракций -->
-    <section class="content-section tables-section" aria-label="Таблицы фракций">
-      <div class="section-header-row">
-        <div>
-          <div class="section-kicker">Фракционные таблицы</div>
-          <h2 class="section-title">Операторы по фракциям</h2>
-        </div>
-      </div>
-      <div class="factions-grid" id="faction-grid"></div>
-    </section>
+      </main>
+    </div>
 
   </div>
 
@@ -243,7 +249,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=gamified-season-1"></script>
-  <script src="js/excel-import.js?v=gamified-season-1"></script>
+  <script src="js/app.js?v=tables-sidebar-1"></script>
+  <script src="js/excel-import.js?v=tables-sidebar-1"></script>
 </body>
 </html>
