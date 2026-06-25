@@ -410,16 +410,12 @@ const debouncedSave = debounce(() => saveEditableData(), 500);
 
 async function refreshDashboardOnly() {
   await Promise.all([
-    renderStats(),
-    renderVisualDashboard(),
-    renderGameDashboard(),
-    renderIcoreCabinet(),
-    renderIcoreRating(),
+    renderModernDashboard(),
     renderIcoreShop(),
     renderIcoreAdmin(),
-    renderScoreboard(),
-    renderFacultyCards(),
   ]);
+  renderEditor();
+  syncModernRoleUi();
 }
 
 function escapeHtml(v) {
@@ -439,6 +435,321 @@ function formatMetricValue(value, metric) {
   return fmtPts(n);
 }
 
+function formatModernDateTime(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toLocaleDateString('ru-RU');
+  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function getModernUpdatedLabel() {
+  const data = getDailyImportData?.();
+  return formatModernDateTime(data?.generatedAt || data?.updatedAt || Date.now());
+}
+
+function getModernRoleLabel() {
+  return isAdmin ? 'администратор' : 'оператор';
+}
+
+function getMetricTarget(metric) {
+  const label = normalizeMetricLabel(metric?.label || '');
+  if (metric?.type === 'penalty') return 0;
+  if (label.includes('квз') || label.includes('звон')) return GAME_SEASON.kvzTarget;
+  if (label.includes('эфф')) return GAME_SEASON.efficiencyTarget;
+  if (label.includes('доп') || label.includes('мисси')) return GAME_SEASON.maxMissionScore;
+  return 100;
+}
+
+function getMetricTone(metric, value, target) {
+  if (metric?.type === 'penalty') return value > 0 ? 'risk' : 'good';
+  if (!target) return 'neutral';
+  if (value >= target) return 'good';
+  if (value >= target * 0.75) return 'mid';
+  return 'risk';
+}
+
+function renderModernOperatorSelect(ranking) {
+  if (!ranking.length) return '';
+  const selected = getSelectedVisualOperator(ranking);
+  const options = ranking.map(row => `
+    <option value="${row.key}" ${selected && selected.key === row.key ? 'selected' : ''}>
+      ${row.rank}. ${escapeHtml(row.name)} - ${fmtPts(row.points)}
+    </option>
+  `).join('');
+  return `
+    <label class="mvp-operator-select">
+      <span>Оператор</span>
+      <select class="visual-operator-select" onchange="selectVisualOperator(this.value)">
+        ${options}
+      </select>
+    </label>
+  `;
+}
+
+function renderModernKpis(selected, state, ranking, states) {
+  const activeCount = ranking.filter(row => row.points > 0).length;
+  const totalWeekCoins = states.reduce((sum, item) => sum + item.weekCoins, 0);
+  const pendingRequests = (GAMIFICATION.requests || []).filter(item => item.status === 'new').length;
+  const progress = selected ? getOperatorProgressValue(selected) : 0;
+  const cards = [
+    { label: 'Баланс', value: state ? state.balance : 0, note: 'доступно коинов', tone: 'primary' },
+    { label: 'Рейтинг', value: selected ? `#${selected.rank}` : '-', note: selected ? `из ${ranking.length} операторов` : 'нет данных', tone: selected?.rank <= 3 ? 'good' : 'neutral' },
+    { label: 'Коины недели', value: totalWeekCoins, note: `${activeCount} активных участников`, tone: 'info' },
+    { label: 'Динамика', value: progress > 0 ? `+${fmtPts(progress)}` : fmtPts(progress), note: `${pendingRequests} заявок в магазине`, tone: progress > 0 ? 'good' : 'neutral' },
+  ];
+
+  return `
+    <div class="mvp-kpi-grid">
+      ${cards.map(card => `
+        <div class="mvp-kpi-card ${card.tone}">
+          <span>${escapeHtml(card.label)}</span>
+          <b>${escapeHtml(card.value)}</b>
+          <em>${escapeHtml(card.note)}</em>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderModernMetricCards(row) {
+  if (!row) return '';
+  const rows = METRICS
+    .map((metric, idx) => ({ metric, value: Number(row.metrics[idx]) || 0 }))
+    .filter(item => item.metric.type !== 'score')
+    .slice(0, 8);
+
+  return `
+    <div class="mvp-card mvp-progress-card">
+      <div class="mvp-card-head">
+        <div>
+          <span>Показатели недели</span>
+          <h3>${escapeHtml(row.name)}</h3>
+        </div>
+        <b>${fmtPts(row.points)} баллов</b>
+      </div>
+      <div class="mvp-progress-list">
+        ${rows.length ? rows.map(({ metric, value }) => {
+          const target = getMetricTarget(metric);
+          const width = metric.type === 'penalty'
+            ? (value > 0 ? clampValue(value * 8, 8, 100) : 3)
+            : clampValue((value / Math.max(1, target || 100)) * 100, 0, 100);
+          const tone = getMetricTone(metric, value, target);
+          const targetText = metric.type === 'penalty' ? 'цель: 0' : `цель: ${fmtPts(target)}`;
+          return `
+            <div class="mvp-progress-row ${tone}">
+              <div>
+                <b>${escapeHtml(metric.label)}</b>
+                <span>${escapeHtml(targetText)}</span>
+              </div>
+              <em>${escapeHtml(formatMetricValue(value, metric))}</em>
+              <i><span style="width:${Math.round(width)}%"></span></i>
+            </div>
+          `;
+        }).join('') : '<div class="mvp-empty-line">Показатели появятся после загрузки данных.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+function renderModernTopBars(ranking) {
+  const rows = ranking.slice(0, 10);
+  const max = Math.max(1, ...rows.map(row => Number(row.points) || 0));
+  return `
+    <div class="mvp-card">
+      <div class="mvp-card-head">
+        <div>
+          <span>Рейтинг</span>
+          <h3>Топ операторов</h3>
+        </div>
+        <b>${rows.length}</b>
+      </div>
+      <div class="mvp-bar-list">
+        ${rows.length ? rows.map(row => `
+          <div class="mvp-bar-row ${row.rank <= 3 ? 'top' : ''}">
+            <span>#${row.rank}</span>
+            <b>${escapeHtml(row.name)}</b>
+            <i><span style="width:${Math.round((row.points / max) * 100)}%"></span></i>
+            <em>${fmtPts(row.points)}</em>
+          </div>
+        `).join('') : '<div class="mvp-empty-line">Нет операторов для рейтинга.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+function renderModernDailyChart(row) {
+  const daily = row ? getOperatorDailySummary(row) : null;
+  const items = [
+    { label: 'Рабочих дней', value: daily?.activeDays || 0, max: 31 },
+    { label: 'Факт часов', value: daily?.totalFact || 0, max: Math.max(1, daily?.totalFact || 0, daily?.totalEffective || 0) },
+    { label: 'Эфф. часов', value: daily?.totalEffective || 0, max: Math.max(1, daily?.totalFact || 0, daily?.totalEffective || 0) },
+    { label: 'Прогресс', value: Math.max(0, daily?.progress || 0), max: 10 },
+  ];
+  return `
+    <div class="mvp-card">
+      <div class="mvp-card-head">
+        <div>
+          <span>Период</span>
+          <h3>Работа по датам</h3>
+        </div>
+        <b>${escapeHtml(getSeasonPeriodLabel())}</b>
+      </div>
+      <div class="mvp-mini-chart">
+        ${items.map(item => `
+          <div class="mvp-mini-bar">
+            <span>${escapeHtml(item.label)}</span>
+            <i><span style="height:${Math.round(clampValue((item.value / Math.max(1, item.max)) * 100, 4, 100))}%"></span></i>
+            <b>${fmtPts(item.value)}</b>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderModernTopThree(states) {
+  const top = states.slice().sort((a, b) => (b.row.points - a.row.points) || (b.weekCoins - a.weekCoins)).slice(0, 3);
+  return `
+    <div class="mvp-card">
+      <div class="mvp-card-head">
+        <div>
+          <span>Лидеры</span>
+          <h3>Топ-3 недели</h3>
+        </div>
+      </div>
+      <div class="mvp-top-three">
+        ${top.length ? top.map((state, idx) => `
+          <div class="mvp-top-card place-${idx + 1}">
+            <span>#${idx + 1}</span>
+            <b>${escapeHtml(state.row.name)}</b>
+            <em>${escapeHtml(state.row.faculty.name)}</em>
+            <strong>${fmtPts(state.row.points)} баллов</strong>
+            <small>${state.weekCoins} коинов</small>
+          </div>
+        `).join('') : '<div class="mvp-empty-line">Нет данных для топа.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+function renderModernRatingTable(states, selected) {
+  const rows = states.slice(0, 18).map(state => `
+    <tr class="${selected && selected.nameKey === state.row.nameKey ? 'current' : ''}">
+      <td>${state.row.rank}</td>
+      <td><b>${escapeHtml(state.row.name)}</b><small>${escapeHtml(state.row.faculty.name)}</small></td>
+      <td>${fmtPts(state.row.points)}</td>
+      <td>${state.weekCoins}</td>
+      <td>${state.balance}</td>
+      <td>${state.row.rank <= 3 ? 'рост' : state.row.points > 0 ? 'активен' : '-'}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <div class="mvp-card mvp-table-card">
+      <div class="mvp-card-head">
+        <div>
+          <span>Индивидуально</span>
+          <h3>Компактный рейтинг</h3>
+        </div>
+        <b>${states.length} операторов</b>
+      </div>
+      <div class="mvp-table-wrap">
+        <table class="mvp-table">
+          <thead>
+            <tr><th>#</th><th>Оператор</th><th>Баллы</th><th>Неделя</th><th>Баланс</th><th>Статус</th></tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="6">Нет данных</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderModernRules() {
+  return `
+    <div class="mvp-card mvp-rules-card">
+      <div class="mvp-card-head">
+        <div>
+          <span>Правила</span>
+          <h3>Как начисляются коины</h3>
+        </div>
+        <b>${getIcoreCoinRate()}:1</b>
+      </div>
+      <div class="mvp-rule-grid">
+        <div><b>Баллы</b><span>${getIcoreCoinRate()} баллов дают 1 коин.</span></div>
+        <div><b>Топ недели</b><span>За первые 3 места добавляется бонус.</span></div>
+        <div><b>Дисциплина</b><span>Неделя без опозданий и сайтов дает дополнительные коины.</span></div>
+        <div><b>Магазин</b><span>Заявка резервирует коины до решения администратора.</span></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderModernDashboard() {
+  const el = document.getElementById('overview-view');
+  if (!el) return;
+  const ranking = getOperatorRanking();
+  const selected = getSelectedVisualOperator(ranking);
+  const states = getIcoreStates(ranking);
+  const selectedState = selected ? getIcoreOperatorState(selected, ranking) : null;
+  const average = ranking.length ? ranking.reduce((sum, row) => sum + row.points, 0) / ranking.length : 0;
+  const activeCount = ranking.filter(row => row.points > 0).length;
+
+  if (!ranking.length) {
+    el.innerHTML = `
+      <div class="mvp-dashboard empty">
+        <div class="mvp-hero-panel">
+          <div>
+            <span>iCore Contest</span>
+            <h1>Дашборд операторов</h1>
+            <p>Загрузите Excel или добавьте операторов, чтобы увидеть рейтинг, коины, магазин и управление.</p>
+          </div>
+        </div>
+      </div>
+    `;
+    syncModernRoleUi();
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="mvp-dashboard">
+      <div class="mvp-hero-panel">
+        <div>
+          <span>iCore Contest</span>
+          <h1>Дашборд операторов</h1>
+          <p>Рейтинг, баланс коинов, недельные показатели, топы и быстрые действия в одном рабочем экране.</p>
+        </div>
+        <div class="mvp-hero-side">
+          ${renderModernOperatorSelect(ranking)}
+          <div class="mvp-hero-meta">
+            <span>Период: ${escapeHtml(getSeasonPeriodLabel())}</span>
+            <span>Обновлено: ${escapeHtml(getModernUpdatedLabel())}</span>
+            <span>Роль: ${escapeHtml(getModernRoleLabel())}</span>
+          </div>
+        </div>
+      </div>
+
+      ${renderModernKpis(selected, selectedState, ranking, states)}
+
+      <div class="mvp-dashboard-grid">
+        ${renderModernMetricCards(selected)}
+        ${renderModernTopBars(ranking)}
+        ${renderModernDailyChart(selected)}
+        ${renderModernTopThree(states)}
+      </div>
+
+      <div class="mvp-quick-actions">
+        <button type="button" data-icore-view="shop">Открыть магазин</button>
+        ${isAdmin ? '<button type="button" data-icore-view="admin">Перейти в управление</button>' : ''}
+        <span>${activeCount} активных из ${ranking.length}, средний балл ${fmtPts(average)}</span>
+      </div>
+
+      ${renderModernRatingTable(states, selected)}
+      ${renderModernRules()}
+    </div>
+  `;
+  syncModernRoleUi();
+}
+
 /* ── Admin ──────────────────────────────────────────────────── */
 function loadAdminSession() {
   const flag = sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
@@ -456,6 +767,7 @@ function updateAdminGate() {
   if (login) login.hidden = isAdmin;
   if (active) active.hidden = !isAdmin;
   if (err) err.textContent = '';
+  if (typeof syncModernRoleUi === 'function') syncModernRoleUi();
 }
 
 function openAdminModal() {
@@ -481,8 +793,11 @@ async function loginAdmin() {
     isAdmin = true;
     sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
     sessionStorage.setItem(ADMIN_PASSWORD_KEY, pwd);
-    closeAdminModal(); updateAdminGate(); renderEditor();
-    document.getElementById('editor-panel').hidden = false;
+    closeAdminModal(); updateAdminGate();
+    await refreshDashboard();
+    renderEditor();
+    const editorPanel = document.getElementById('editor-panel');
+    if (editorPanel) editorPanel.hidden = false;
   } catch (err) {
     if (error) error.textContent = 'Сервер недоступен';
   } finally {
@@ -495,7 +810,10 @@ function logoutAdmin() {
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
   sessionStorage.removeItem(ADMIN_PASSWORD_KEY);
   closeAdminModal(); updateAdminGate(); renderEditor();
-  document.getElementById('editor-panel').hidden = true;
+  const editorPanel = document.getElementById('editor-panel');
+  if (editorPanel) editorPanel.hidden = true;
+  renderModernDashboard();
+  renderIcoreAdmin();
 }
 
 /* ── Data calculations ──────────────────────────────────────── */
@@ -672,10 +990,12 @@ function formatIcoreDate(value) {
 function setVisualMode(mode) {
   visualMode = mode === 'personal' ? 'personal' : 'overview';
   try { localStorage.setItem(VISUAL_MODE_STORAGE_KEY, visualMode); } catch {}
+  renderModernDashboard();
   renderVisualDashboard();
   renderGameDashboard();
   renderIcoreCabinet();
   renderIcoreShop();
+  renderIcoreAdmin();
 }
 
 function selectVisualOperator(value) {
@@ -683,10 +1003,12 @@ function selectVisualOperator(value) {
   try { localStorage.setItem(VISUAL_OPERATOR_STORAGE_KEY, visualOperatorKey); } catch {}
   visualMode = 'personal';
   try { localStorage.setItem(VISUAL_MODE_STORAGE_KEY, visualMode); } catch {}
+  renderModernDashboard();
   renderVisualDashboard();
   renderGameDashboard();
   renderIcoreCabinet();
   renderIcoreShop();
+  renderIcoreAdmin();
 }
 
 function getRankTone(row, total) {
@@ -1668,6 +1990,162 @@ function renderIcoreAdmin() {
   `;
 }
 
+function getOrCreateEditorPanel() {
+  let panel = document.getElementById('editor-panel');
+  if (!panel) {
+    panel = document.createElement('section');
+    panel.id = 'editor-panel';
+    panel.className = 'editor-panel';
+    panel.setAttribute('aria-label', 'Управление данными');
+    panel.hidden = true;
+  }
+  return panel;
+}
+
+function mountModernAdminTools(editorPanel, excelBlock) {
+  const editorSlot = document.getElementById('modern-admin-editor-slot');
+  const excelSlot = document.getElementById('modern-admin-excel-slot');
+  if (editorSlot && editorPanel) {
+    editorSlot.appendChild(editorPanel);
+    editorPanel.hidden = !isAdmin;
+  }
+  if (excelSlot && excelBlock && isAdmin) {
+    excelSlot.appendChild(excelBlock);
+  }
+}
+
+function renderIcoreAdmin() {
+  const el = document.getElementById('icore-admin');
+  if (!el) return;
+
+  const editorPanel = getOrCreateEditorPanel();
+  const excelBlock = document.querySelector('.excel-import-block');
+
+  if (!isAdmin) {
+    el.innerHTML = `
+      <div class="mvp-admin mvp-admin-locked">
+        <div class="mvp-hero-panel">
+          <div>
+            <span>Управление</span>
+            <h1>Раздел доступен администратору</h1>
+            <p>Войдите через кнопку администратора, чтобы открыть загрузку Excel, заявки и ручные начисления.</p>
+          </div>
+          <button type="button" class="mvp-admin-login" onclick="openAdminModal()">Войти</button>
+        </div>
+        <div id="modern-admin-editor-slot" hidden></div>
+      </div>
+    `;
+    mountModernAdminTools(editorPanel, excelBlock);
+    syncModernRoleUi();
+    return;
+  }
+
+  const ranking = getOperatorRanking();
+  const states = getIcoreStates(ranking);
+  const newRequests = (GAMIFICATION.requests || []).filter(item => item.status === 'new');
+  const weekCoins = states.reduce((sum, state) => sum + state.weekCoins, 0);
+  const totalBalance = states.reduce((sum, state) => sum + state.balance, 0);
+  const totalSpent = states.reduce((sum, state) => sum + state.spent, 0);
+  const selected = getSelectedVisualOperator(ranking);
+  const options = ranking.map(row => `<option value="${row.nameKey}" ${selected && row.nameKey === selected.nameKey ? 'selected' : ''}>${escapeHtml(row.name)}</option>`).join('');
+  const requestRows = (GAMIFICATION.requests || []).slice(0, 40).map(item => `
+    <div class="icore-admin-request ${item.status}">
+      <div>
+        <span>${ICORE_REQUEST_STATUS[item.status] || item.status}</span>
+        <b>${escapeHtml(item.operatorName || item.operatorKey)}</b>
+        <em>${escapeHtml(item.rewardTitle)} · ${item.price} коинов</em>
+        ${item.reason ? `<small>${escapeHtml(item.reason)}</small>` : ''}
+      </div>
+      <div class="icore-admin-actions">
+        <button data-icore-request="${item.id}" data-icore-status="approved" ${item.status !== 'new' ? 'disabled' : ''}>Одобрить</button>
+        <button data-icore-request="${item.id}" data-icore-status="rejected" ${item.status !== 'new' ? 'disabled' : ''}>Отклонить</button>
+        <button data-icore-request="${item.id}" data-icore-status="done" ${item.status !== 'approved' ? 'disabled' : ''}>Выполнено</button>
+      </div>
+    </div>
+  `).join('');
+  const operatorRows = states.map(state => `
+    <tr>
+      <td>${state.row.rank}</td>
+      <td><b>${escapeHtml(state.row.name)}</b><small>${escapeHtml(state.row.faculty.name)}</small></td>
+      <td>${fmtPts(state.row.points)}</td>
+      <td>${state.weekCoins}</td>
+      <td>${state.balance}</td>
+      <td>${state.reserved}</td>
+      <td>${state.spent}</td>
+    </tr>
+  `).join('');
+
+  el.innerHTML = `
+    <div class="mvp-admin">
+      <div class="mvp-hero-panel">
+        <div>
+          <span>Управление</span>
+          <h1>Администрирование геймификации</h1>
+          <p>Загрузка Excel, заявки магазина, ручные коины, экспорт и таблица операторов собраны в одном месте.</p>
+        </div>
+        <button class="icore-action-btn compact" type="button" data-icore-export="csv">Экспорт CSV</button>
+      </div>
+
+      <div class="mvp-kpi-grid">
+        <div class="mvp-kpi-card primary"><span>Операторов</span><b>${ranking.length}</b><em>в текущем списке</em></div>
+        <div class="mvp-kpi-card info"><span>Начислено</span><b>${weekCoins}</b><em>коинов за неделю</em></div>
+        <div class="mvp-kpi-card ${newRequests.length ? 'mid' : 'good'}"><span>Новые заявки</span><b>${newRequests.length}</b><em>ожидают решения</em></div>
+        <div class="mvp-kpi-card neutral"><span>Баланс / потрачено</span><b>${totalBalance} / ${totalSpent}</b><em>по всем операторам</em></div>
+      </div>
+
+      <div class="mvp-admin-grid">
+        <div class="icore-panel">
+          <div class="icore-panel-head">
+            <div><span>Ручное начисление</span><h3>Добавить или списать коины</h3></div>
+          </div>
+          <div class="icore-form-grid">
+            <select id="icore-manual-operator">${options}</select>
+            <input id="icore-manual-amount" type="number" step="1" placeholder="+10 или -5">
+            <input id="icore-manual-comment" type="text" placeholder="Причина начисления или списания">
+            <button data-icore-manual="save">Сохранить</button>
+          </div>
+        </div>
+
+        <div class="icore-panel">
+          <div class="icore-panel-head">
+            <div><span>Заявки магазина</span><h3>Очередь согласования</h3></div>
+            <b>${GAMIFICATION.requests.length}</b>
+          </div>
+          <div class="icore-admin-request-list">${requestRows || '<div class="icore-muted-line">Заявок пока нет.</div>'}</div>
+        </div>
+      </div>
+
+      <div class="mvp-card mvp-table-card">
+        <div class="mvp-card-head">
+          <div><span>Операторы</span><h3>Итоги и балансы</h3></div>
+          <b>${states.length}</b>
+        </div>
+        <div class="mvp-table-wrap">
+          <table class="mvp-table">
+            <thead>
+              <tr><th>#</th><th>Оператор</th><th>Баллы</th><th>Неделя</th><th>Баланс</th><th>Резерв</th><th>Потрачено</th></tr>
+            </thead>
+            <tbody>${operatorRows || '<tr><td colspan="7">Нет данных</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="mvp-admin-tools">
+        <div class="mvp-card">
+          <div class="mvp-card-head"><div><span>Excel</span><h3>Загрузка отчетов</h3></div></div>
+          <div id="modern-admin-excel-slot"></div>
+        </div>
+        <div class="mvp-card mvp-editor-card">
+          <div class="mvp-card-head"><div><span>Данные</span><h3>Операторы, группы и метрики</h3></div></div>
+          <div id="modern-admin-editor-slot"></div>
+        </div>
+      </div>
+    </div>
+  `;
+  mountModernAdminTools(editorPanel, excelBlock);
+  syncModernRoleUi();
+}
+
 async function renderVisualDashboard() {
   const el = document.getElementById('visual-dashboard');
   if (!el) return;
@@ -1924,16 +2402,12 @@ async function renderFacultyCards() {
 /* ── Editor ─────────────────────────────────────────────────── */
 async function refreshDashboard() {
   await Promise.all([
-    renderStats(),
-    renderVisualDashboard(),
-    renderGameDashboard(),
-    renderIcoreCabinet(),
-    renderIcoreRating(),
+    renderModernDashboard(),
     renderIcoreShop(),
     renderIcoreAdmin(),
-    renderScoreboard(),
-    renderFacultyCards(),
   ]);
+  renderEditor();
+  syncModernRoleUi();
 }
 
 function renderEditor() {
@@ -2236,6 +2710,86 @@ Object.assign(window, {
   exportIcoreCsv,
 });
 
+const MODERN_NAV_LABELS = {
+  overview: 'Дашборд',
+  shop: 'Магазин',
+  admin: 'Управление',
+};
+
+const MODERN_NAV_TITLES = {
+  overview: 'Дашборд операторов',
+  shop: 'Магазин бонусов',
+  admin: 'Управление',
+};
+
+function isModernNavTargetAllowed(target) {
+  if (target === 'admin') return isAdmin;
+  return target === 'overview' || target === 'shop';
+}
+
+function syncModernNavLabels() {
+  document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
+    const target = link.dataset.navTarget;
+    const label = MODERN_NAV_LABELS[target];
+    const title = MODERN_NAV_TITLES[target] || label;
+    if (label) {
+      const text = link.querySelector('span');
+      if (text) text.textContent = label;
+      link.setAttribute('title', title);
+    }
+    link.hidden = !isModernNavTargetAllowed(target);
+    link.setAttribute('aria-hidden', String(!isModernNavTargetAllowed(target)));
+  });
+}
+
+function syncModernRoleUi() {
+  document.body.classList.toggle('user-role-admin', isAdmin);
+  document.body.dataset.role = isAdmin ? 'admin' : 'operator';
+  syncModernNavLabels();
+
+  const roleLabel = document.getElementById('side-role-label');
+  const rateLabel = document.getElementById('side-rate-label');
+  const updatedLabel = document.getElementById('side-updated-label');
+  if (roleLabel) roleLabel.textContent = `Роль: ${getModernRoleLabel()}`;
+  if (rateLabel) rateLabel.textContent = `${getIcoreCoinRate()} баллов = 1 коин`;
+  if (updatedLabel) updatedLabel.textContent = `Обновлено: ${getModernUpdatedLabel()}`;
+
+  const activeAdmin = document.querySelector('.app-view.active')?.dataset.sectionView === 'admin';
+  if (!isAdmin && activeAdmin) window.showContestSection?.('overview');
+}
+
+function closeMobileSidebar() {
+  const overlay = document.getElementById('sidebar-overlay');
+  const button = document.getElementById('mobile-menu-button');
+  document.body.classList.remove('sidebar-open');
+  if (overlay) overlay.hidden = true;
+  if (button) button.setAttribute('aria-expanded', 'false');
+}
+
+function openMobileSidebar() {
+  const overlay = document.getElementById('sidebar-overlay');
+  const button = document.getElementById('mobile-menu-button');
+  document.body.classList.add('sidebar-open');
+  if (overlay) overlay.hidden = false;
+  if (button) button.setAttribute('aria-expanded', 'true');
+}
+
+function initMobileSidebar() {
+  const button = document.getElementById('mobile-menu-button');
+  const close = document.getElementById('side-nav-close');
+  const overlay = document.getElementById('sidebar-overlay');
+
+  button?.addEventListener('click', () => {
+    if (document.body.classList.contains('sidebar-open')) closeMobileSidebar();
+    else openMobileSidebar();
+  });
+  close?.addEventListener('click', closeMobileSidebar);
+  overlay?.addEventListener('click', closeMobileSidebar);
+  document.querySelectorAll('.side-nav-link').forEach(link => {
+    link.addEventListener('click', closeMobileSidebar);
+  });
+}
+
 function initIntro() {
   const intro = document.getElementById('intro-screen');
   if (!intro) return;
@@ -2283,13 +2837,34 @@ function initSideNavigation() {
   const links = Array.from(document.querySelectorAll('.side-nav-link[data-nav-target]'));
   const views = Array.from(document.querySelectorAll('[data-section-view]'));
   if (!links.length || !views.length) return;
+  syncModernNavLabels();
 
   const defaultView = views.find(view => view.dataset.sectionView === 'overview') || views[0];
+  const legacyTargets = {
+    dashboard: 'overview',
+    cabinet: 'overview',
+    'coin-rating': 'overview',
+    individual: 'overview',
+    season: 'overview',
+    factions: 'overview',
+    tables: 'overview',
+    criteria: 'overview',
+    'icore-cabinet': 'overview',
+    'icore-rating': 'overview',
+    'visual-dashboard': 'overview',
+    'game-dashboard': 'overview',
+    scoreboard: 'overview',
+    'tables-section': 'overview',
+    'criteria-section': 'overview',
+    'icore-shop': 'shop',
+    'icore-admin': 'admin',
+  };
 
   function resolveView(target) {
     const normalized = (target || '').replace(/^#/, '');
-    if (!normalized || normalized === 'dashboard') return defaultView;
-    return views.find(view => view.dataset.sectionView === normalized || view.id === normalized) || defaultView;
+    const mapped = legacyTargets[normalized] || normalized || 'overview';
+    const allowed = isModernNavTargetAllowed(mapped) ? mapped : 'overview';
+    return views.find(view => view.dataset.sectionView === allowed || view.id === allowed) || defaultView;
   }
 
   function activeViewFromHash() {
@@ -2308,7 +2883,7 @@ function initSideNavigation() {
     });
 
     links.forEach(link => {
-      link.classList.toggle('active', link.dataset.navTarget === sectionId);
+      link.classList.toggle('active', link.dataset.navTarget === sectionId && isModernNavTargetAllowed(link.dataset.navTarget));
     });
 
     if (!options.skipHash) {
@@ -2348,6 +2923,7 @@ function initSideNavigation() {
 
   window.showContestSection = target => setActiveView(target);
   setActiveView(activeViewFromHash().dataset.sectionView, { skipHash: true, skipScroll: true });
+  syncModernRoleUi();
 }
 
 /* ── Init ───────────────────────────────────────────────────── */
@@ -2372,19 +2948,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   loadAdminSession();
   updateAdminGate();
-  renderEditor();
-  document.getElementById('editor-panel').hidden = !isAdmin;
   await Promise.all([
-    renderStats(),
-    renderVisualDashboard(),
-    renderGameDashboard(),
-    renderIcoreCabinet(),
-    renderIcoreRating(),
+    renderModernDashboard(),
     renderIcoreShop(),
     renderIcoreAdmin(),
-    renderScoreboard(),
-    renderFacultyCards(),
   ]);
+  renderEditor();
+  const editorPanel = document.getElementById('editor-panel');
+  if (editorPanel) editorPanel.hidden = !isAdmin;
+  syncModernRoleUi();
+  initMobileSidebar();
   initSideNavigation();
 });
 
