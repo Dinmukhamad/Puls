@@ -3638,3 +3638,18 @@ table.operators tbody tr:hover,
     font-size: 11px;
   }
 }
+
+/* Typography reset */
+:root {
+  --font-ui: "Segoe UI", Arial, Helvetica;
+}
+
+body,
+body *:not(svg):not(path),
+button,
+input,
+select,
+textarea,
+table {
+  font-family: var(--font-ui) !important;
+}
