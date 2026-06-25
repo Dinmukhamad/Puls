@@ -115,20 +115,7 @@ function normalizeDailyImport(input) {
         extraHours: Number.isFinite(Number(day?.extraHours)) ? Number(day.extraHours) : 0,
         actualFact: Number.isFinite(Number(day?.actualFact)) ? Number(day.actualFact) : 0,
         effectiveHours: Number.isFinite(Number(day?.effectiveHours)) ? Number(day.effectiveHours) : 0,
-        calls: Number.isFinite(Number(day?.calls)) ? Number(day.calls) : 0,
-        lateAmount: Number.isFinite(Number(day?.lateAmount)) ? Number(day.lateAmount) : 0,
-        lateMinutes: Number.isFinite(Number(day?.lateMinutes)) ? Number(day.lateMinutes) : 0,
       })).filter(day => day.key),
-      importSummary: value.importSummary && typeof value.importSummary === 'object' ? {
-        worked: Number.isFinite(Number(value.importSummary.worked)) ? Number(value.importSummary.worked) : 0,
-        cleanHours: Number.isFinite(Number(value.importSummary.cleanHours)) ? Number(value.importSummary.cleanHours) : 0,
-        qualityCount: Number.isFinite(Number(value.importSummary.qualityCount)) ? Number(value.importSummary.qualityCount) : 0,
-        qualityPeriod: String(value.importSummary.qualityPeriod || ''),
-        calls: Number.isFinite(Number(value.importSummary.calls)) ? Number(value.importSummary.calls) : 0,
-        lateAmount: Number.isFinite(Number(value.importSummary.lateAmount)) ? Number(value.importSummary.lateAmount) : 0,
-        lateMinutes: Number.isFinite(Number(value.importSummary.lateMinutes)) ? Number(value.importSummary.lateMinutes) : 0,
-        latePenaltyPoints: Number.isFinite(Number(value.importSummary.latePenaltyPoints)) ? Number(value.importSummary.latePenaltyPoints) : 0,
-      } : null,
     };
   });
 
@@ -137,6 +124,47 @@ function normalizeDailyImport(input) {
     dateKeys: Array.isArray(input.dateKeys) ? input.dateKeys.map(value => String(value).trim()).filter(Boolean) : [],
     generatedAt: String(input.generatedAt || '').trim(),
     operators,
+  };
+}
+
+function normalizeGamification(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  const settingsSource = source.settings && typeof source.settings === 'object' ? source.settings : {};
+  const coinRate = Number(settingsSource.coinRate);
+
+  const manualLedger = Array.isArray(source.manualLedger)
+    ? source.manualLedger.map(item => ({
+        id: String(item?.id || `manual-${Date.now()}-${Math.random().toString(16).slice(2)}`),
+        operatorKey: String(item?.operatorKey || '').trim().toLowerCase().replace(/ё/g, 'е'),
+        operatorName: String(item?.operatorName || '').trim(),
+        amount: Number.isFinite(Number(item?.amount)) ? Math.trunc(Number(item.amount)) : 0,
+        comment: String(item?.comment || '').trim(),
+        author: String(item?.author || '').trim() || 'Администратор',
+        createdAt: String(item?.createdAt || '').trim() || new Date().toISOString(),
+      })).filter(item => item.operatorKey && item.amount !== 0 && item.comment)
+    : [];
+
+  const requests = Array.isArray(source.requests)
+    ? source.requests.map(item => ({
+        id: String(item?.id || `request-${Date.now()}-${Math.random().toString(16).slice(2)}`),
+        operatorKey: String(item?.operatorKey || '').trim().toLowerCase().replace(/ё/g, 'е'),
+        operatorName: String(item?.operatorName || '').trim(),
+        rewardId: String(item?.rewardId || '').trim(),
+        rewardTitle: String(item?.rewardTitle || '').trim(),
+        price: Number.isFinite(Number(item?.price)) ? Math.max(0, Math.trunc(Number(item.price))) : 0,
+        status: ['new', 'approved', 'rejected', 'done'].includes(item?.status) ? item.status : 'new',
+        reason: String(item?.reason || '').trim(),
+        createdAt: String(item?.createdAt || '').trim() || new Date().toISOString(),
+        updatedAt: String(item?.updatedAt || '').trim() || String(item?.createdAt || '').trim() || new Date().toISOString(),
+      })).filter(item => item.operatorKey && item.rewardId && item.rewardTitle && item.price > 0)
+    : [];
+
+  return {
+    settings: {
+      coinRate: Number.isFinite(coinRate) && coinRate > 0 ? coinRate : 5,
+    },
+    manualLedger,
+    requests,
   };
 }
 
@@ -169,6 +197,7 @@ function normalizeState(input) {
     weeklyData: [weeklyRows],
     metrics,
     dailyImport: normalizeDailyImport(input.dailyImport),
+    gamification: normalizeGamification(input.gamification),
   };
 }
 
@@ -265,6 +294,73 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/admin/verify', requireAdmin, (req, res) => {
   res.json({ ok: true });
+});
+
+app.post('/api/gamification/request', (req, res) => {
+  try {
+    const state = readState();
+    const gamification = normalizeGamification(state.gamification);
+    const body = req.body || {};
+    const request = normalizeGamification({
+      requests: [{
+        ...body,
+        id: `request-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        status: 'new',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }],
+    }).requests[0];
+    if (!request) return res.status(400).json({ error: 'Invalid request' });
+    gamification.requests.unshift(request);
+    writeState({ ...state, gamification });
+    res.json({ ok: true, request, gamification });
+  } catch (error) {
+    console.error('Failed to create gamification request:', error);
+    res.status(400).json({ error: error.message || 'Failed to create request' });
+  }
+});
+
+app.post('/api/gamification/manual', requireAdmin, (req, res) => {
+  try {
+    const state = readState();
+    const gamification = normalizeGamification(state.gamification);
+    const body = req.body || {};
+    const entry = normalizeGamification({
+      manualLedger: [{
+        ...body,
+        id: `manual-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        createdAt: new Date().toISOString(),
+      }],
+    }).manualLedger[0];
+    if (!entry) return res.status(400).json({ error: 'Invalid manual entry' });
+    gamification.manualLedger.unshift(entry);
+    writeState({ ...state, gamification });
+    res.json({ ok: true, entry, gamification });
+  } catch (error) {
+    console.error('Failed to add manual gamification entry:', error);
+    res.status(400).json({ error: error.message || 'Failed to add manual entry' });
+  }
+});
+
+app.post('/api/gamification/request/:id', requireAdmin, (req, res) => {
+  try {
+    const state = readState();
+    const gamification = normalizeGamification(state.gamification);
+    const request = gamification.requests.find(item => item.id === req.params.id);
+    if (!request) return res.status(404).json({ error: 'Request not found' });
+    const status = req.body?.status;
+    if (!['approved', 'rejected', 'done', 'new'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    request.status = status;
+    request.reason = String(req.body?.reason || request.reason || '').trim();
+    request.updatedAt = new Date().toISOString();
+    writeState({ ...state, gamification });
+    res.json({ ok: true, request, gamification });
+  } catch (error) {
+    console.error('Failed to update gamification request:', error);
+    res.status(400).json({ error: error.message || 'Failed to update request' });
+  }
 });
 
 app.get('/api/state', (req, res) => {
