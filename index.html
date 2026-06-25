@@ -8,7 +8,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-icon-1">
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-icon-1">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
-  <link rel="stylesheet" href="css/styles.css?v=section-nav-2">
+  <link rel="stylesheet" href="css/styles.css?v=section-views-1">
   <script src="js/api.js"></script>
 </head>
 <body>
@@ -63,34 +63,34 @@
   </div>
 
   <nav class="side-nav" aria-label="Разделы сайта">
-    <a class="side-nav-logo" href="#dashboard" aria-label="К результатам">
+    <a class="side-nav-logo" href="#overview-view" aria-label="К результатам">
       <span>∆</span>
     </a>
     <div class="side-nav-group">
-      <a class="side-nav-link active" href="#dashboard" data-nav-target="dashboard" title="Общие результаты">
+      <a class="side-nav-link active" href="#overview-view" data-nav-target="overview" title="Общие результаты">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
         <span>Общие</span>
       </a>
-      <a class="side-nav-link" href="#visual-dashboard" data-nav-target="visual-dashboard" title="Индивидуальные показатели">
+      <a class="side-nav-link" href="#visual-dashboard" data-nav-target="individual" title="Индивидуальные показатели">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-7 9a7 7 0 0 1 14 0"/></svg>
         <span>Индивид.</span>
       </a>
-      <a class="side-nav-link" href="#game-dashboard" data-nav-target="game-dashboard" title="Игровой сезон">
+      <a class="side-nav-link" href="#game-dashboard" data-nav-target="season" title="Игровой сезон">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v6c0 5-3.5 7.5-8 8-4.5-.5-8-3-8-8V7l8-4Zm0 5v8M8 12h8"/></svg>
         <span>Сезон</span>
       </a>
     </div>
     <div class="side-nav-separator"></div>
     <div class="side-nav-group">
-      <a class="side-nav-link" href="#scoreboard" data-nav-target="scoreboard" title="Рейтинг фракций">
+      <a class="side-nav-link" href="#scoreboard" data-nav-target="factions" title="Рейтинг фракций">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Zm0 2H4a4 4 0 0 0 4 4M17 6h3a4 4 0 0 1-4 4"/></svg>
         <span>Фракции</span>
       </a>
-      <a class="side-nav-link" href="#tables-section" data-nav-target="tables-section" title="Таблицы операторов">
+      <a class="side-nav-link" href="#tables-section" data-nav-target="tables" title="Таблицы операторов">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm0 5h16M9 5v14M15 5v14"/></svg>
         <span>Таблицы</span>
       </a>
-      <a class="side-nav-link" href="#criteria-section" data-nav-target="criteria-section" title="Критерии оценки">
+      <a class="side-nav-link" href="#criteria-section" data-nav-target="criteria" title="Критерии оценки">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7M5 5h8M5 9h5"/></svg>
         <span>Критерии</span>
       </a>
@@ -149,7 +149,7 @@
           </div>
         </div>
 
-        <a class="hero-cta" href="#dashboard">
+        <a class="hero-cta" href="#overview-view">
           К результатам
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
         </a>
@@ -159,30 +159,32 @@
     <!-- ═══ DASHBOARD ════════════════════════════════════════════ -->
     <div id="dashboard" class="dashboard-anchor"></div>
 
-    <section class="content-section analytics-section" aria-label="Статистика конкурса">
-      <div class="content-section-header">
-        <div>
-          <div class="section-kicker">Статистика</div>
-          <h2 class="section-title">Показатели конкурса</h2>
+    <section class="content-section app-shell analytics-section" aria-label="Разделы конкурса">
+      <section class="app-view active" id="overview-view" data-section-view="overview" aria-label="Общие результаты">
+        <div class="content-section-header">
+          <div>
+            <div class="section-kicker">Статистика</div>
+            <h2 class="section-title">Показатели конкурса</h2>
+          </div>
         </div>
-      </div>
 
-      <!-- Панель редактора (только для admin) -->
-      <section class="editor-panel" id="editor-panel" aria-label="Управление данными" hidden></section>
+        <!-- Панель редактора (только для admin) -->
+        <section class="editor-panel" id="editor-panel" aria-label="Управление данными" hidden></section>
 
-      <!-- Статистика -->
-      <section class="stats-section" id="stats-section" aria-label="Статистика конкурса"></section>
+        <!-- Статистика -->
+        <section class="stats-section" id="stats-section" aria-label="Статистика конкурса"></section>
+      </section>
 
       <!-- Визуальный дашборд -->
-      <section class="visual-dashboard" id="visual-dashboard" aria-label="Визуальный дашборд конкурса"></section>
+      <section class="app-view visual-dashboard" id="visual-dashboard" data-section-view="individual" aria-label="Визуальный дашборд конкурса"></section>
 
-      <section class="game-dashboard" id="game-dashboard" aria-label="Игровой сезон операторов"></section>
+      <section class="app-view game-dashboard" id="game-dashboard" data-section-view="season" aria-label="Игровой сезон операторов"></section>
 
       <!-- Рейтинг фракций -->
-      <section class="scoreboard" id="scoreboard" aria-label="Общий рейтинг фракций"></section>
+      <section class="app-view scoreboard" id="scoreboard" data-section-view="factions" aria-label="Общий рейтинг фракций"></section>
 
       <!-- Критерии оценки -->
-      <section class="criteria-section" id="criteria-section" aria-label="Критерии оценки">
+      <section class="app-view criteria-section" id="criteria-section" data-section-view="criteria" aria-label="Критерии оценки">
         <div class="criteria-header">
           <div class="section-kicker">Система оценки</div>
           <h2 class="section-title">Критерии оценки</h2>
@@ -210,16 +212,16 @@
           </div>
         </div>
       </section>
-    </section>
 
-    <section class="content-section tables-section" id="tables-section" aria-label="Таблицы фракций">
-      <div class="section-header-row">
-        <div>
-          <div class="section-kicker">Фракционные таблицы</div>
-          <h2 class="section-title">Операторы по фракциям</h2>
+      <section class="app-view tables-section" id="tables-section" data-section-view="tables" aria-label="Таблицы фракций">
+        <div class="section-header-row">
+          <div>
+            <div class="section-kicker">Фракционные таблицы</div>
+            <h2 class="section-title">Операторы по фракциям</h2>
+          </div>
         </div>
-      </div>
-      <div class="factions-grid" id="faction-grid"></div>
+        <div class="factions-grid" id="faction-grid"></div>
+      </section>
     </section>
 
   </div>
@@ -277,7 +279,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=section-nav-2"></script>
-  <script src="js/excel-import.js?v=section-nav-2"></script>
+  <script src="js/app.js?v=section-views-1"></script>
+  <script src="js/excel-import.js?v=section-views-1"></script>
 </body>
 </html>
