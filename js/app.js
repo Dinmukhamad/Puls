@@ -2211,6 +2211,13 @@ function exportIcoreCsv() {
   URL.revokeObjectURL(url);
 }
 
+Object.assign(window, {
+  buyIcoreReward,
+  addManualIcoreCoins,
+  updateIcoreRequest,
+  exportIcoreCsv,
+});
+
 function initIntro() {
   const intro = document.getElementById('intro-screen');
   if (!intro) return;
