@@ -1663,42 +1663,73 @@ function initIntro() {
 
 function initSideNavigation() {
   const links = Array.from(document.querySelectorAll('.side-nav-link[data-nav-target]'));
-  if (!links.length) return;
+  const views = Array.from(document.querySelectorAll('[data-section-view]'));
+  if (!links.length || !views.length) return;
 
-  const sections = links.map(link => ({
-    id: link.dataset.navTarget,
-    link,
-    el: document.getElementById(link.dataset.navTarget),
-  })).filter(item => item.el);
+  const defaultView = views.find(view => view.dataset.sectionView === 'overview') || views[0];
 
-  if (!sections.length) return;
-
-  function setActive(id) {
-    links.forEach(link => link.classList.toggle('active', link.dataset.navTarget === id));
+  function resolveView(target) {
+    const normalized = (target || '').replace(/^#/, '');
+    if (!normalized || normalized === 'dashboard') return defaultView;
+    return views.find(view => view.dataset.sectionView === normalized || view.id === normalized) || defaultView;
   }
 
-  let ticking = false;
-  function updateActiveSection() {
-    ticking = false;
-    const checkpoint = window.scrollY + window.innerHeight * 0.34;
-    let active = sections[0];
-    sections.forEach(section => {
-      if (section.el.offsetTop <= checkpoint) active = section;
+  function activeViewFromHash() {
+    if (!window.location.hash) return defaultView;
+    return resolveView(decodeURIComponent(window.location.hash.slice(1)));
+  }
+
+  function setActiveView(target, options = {}) {
+    const selectedView = resolveView(target);
+    const sectionId = selectedView.dataset.sectionView;
+
+    views.forEach(view => {
+      const isActive = view === selectedView;
+      view.classList.toggle('active', isActive);
+      view.hidden = !isActive;
     });
-    setActive(active.id);
+
+    links.forEach(link => {
+      link.classList.toggle('active', link.dataset.navTarget === sectionId);
+    });
+
+    if (!options.skipHash) {
+      const activeLink = links.find(link => link.dataset.navTarget === sectionId);
+      const nextHash = activeLink?.getAttribute('href') || `#${selectedView.id}`;
+      if (window.location.hash !== nextHash) {
+        window.history.replaceState(null, '', nextHash);
+      }
+    }
+
+    if (!options.skipScroll) {
+      const anchor = document.getElementById('dashboard') || selectedView;
+      anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   links.forEach(link => {
-    link.addEventListener('click', () => setActive(link.dataset.navTarget));
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      setActiveView(link.dataset.navTarget);
+    });
   });
 
-  window.addEventListener('scroll', () => {
-    if (ticking) return;
-    ticking = true;
-    window.requestAnimationFrame(updateActiveSection);
-  }, { passive: true });
-  window.addEventListener('resize', updateActiveSection);
-  updateActiveSection();
+  document.querySelectorAll('.side-nav-logo, .hero-cta').forEach(anchor => {
+    anchor.addEventListener('click', event => {
+      const view = resolveView(anchor.getAttribute('href'));
+      if (!view) return;
+      event.preventDefault();
+      setActiveView(view.dataset.sectionView);
+    });
+  });
+
+  window.addEventListener('hashchange', () => {
+    const activeView = activeViewFromHash();
+    setActiveView(activeView.dataset.sectionView, { skipHash: true, skipScroll: false });
+  });
+
+  window.showContestSection = target => setActiveView(target);
+  setActiveView(activeViewFromHash().dataset.sectionView, { skipHash: true, skipScroll: true });
 }
 
 /* ── Init ───────────────────────────────────────────────────── */
