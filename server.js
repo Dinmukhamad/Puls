@@ -87,6 +87,33 @@ function readJsonFile(filePath) {
   }
 }
 
+function normalizeOperatorName(name) {
+  return String(name || '').trim().toLowerCase().replace(/С‘/g, 'Рµ').replace(/\s+/g, ' ');
+}
+
+function getOperatorDirectory(state) {
+  const rows = [];
+  const faculties = Array.isArray(state?.faculties) ? state.faculties : [];
+
+  faculties.forEach((faculty, facIdx) => {
+    const operators = Array.isArray(faculty?.operators) ? faculty.operators : [];
+    operators.forEach((name, opIdx) => {
+      const operatorName = String(name || '').trim();
+      const nameKey = normalizeOperatorName(operatorName);
+      if (!nameKey) return;
+      rows.push({
+        key: `${facIdx}:${opIdx}`,
+        name: operatorName,
+        nameKey,
+        facultyId: String(faculty?.id || ''),
+        facultyName: String(faculty?.name || `Group ${facIdx + 1}`),
+      });
+    });
+  });
+
+  return rows;
+}
+
 function normalizeMetric(metric) {
   return {
     label: String(metric?.label || '').trim() || 'Metric',
@@ -451,6 +478,23 @@ app.get('/api/health', async (req, res) => {
 
 app.post('/api/admin/verify', requireAdmin, (req, res) => {
   res.json({ ok: true });
+});
+
+app.post('/api/operator/login', async (req, res) => {
+  try {
+    const login = String(req.body?.login || req.body?.name || '').trim();
+    const loginKey = normalizeOperatorName(login);
+    if (!loginKey) return res.status(400).json({ error: 'Login is required' });
+
+    const operators = getOperatorDirectory(await readState());
+    const operator = operators.find(item => item.nameKey === loginKey);
+    if (!operator) return res.status(404).json({ error: 'Operator not found' });
+
+    res.json({ ok: true, operator });
+  } catch (error) {
+    console.error('Failed to login operator:', error);
+    res.status(500).json({ error: error.message || 'Failed to login operator' });
+  }
 });
 
 app.post('/api/gamification/request', async (req, res) => {
