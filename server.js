@@ -6,22 +6,56 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'hogwarts2026';
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 const LEGACY_DATA_FILE = path.join(__dirname, 'data.json');
 const BACKUP_LIMIT = Number(process.env.STATE_BACKUP_LIMIT || 25);
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const DB_STATE_KEY = process.env.DB_STATE_KEY || 'main';
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 12 * 60 * 60 * 1000);
+const PASSWORD_ALGORITHM = 'pbkdf2-sha256';
+const PASSWORD_KEYLEN = 32;
+const SYSTEM_RESET_VERSION = 'auth-login-v1';
 
 app.use(cors({
   origin: CORS_ORIGIN,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'X-Admin-Password'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Password'],
 }));
 app.use(express.json({ limit: '5mb' }));
+
+const sessions = new Map();
+
+const SEEDED_USERS = [
+  {
+    id: 'admin',
+    login: 'admin',
+    name: 'admin',
+    role: 'admin',
+    password: {
+      algorithm: PASSWORD_ALGORITHM,
+      iterations: 210000,
+      salt: '0a3416c7a8bc30706dbb05cd146c2a34',
+      hash: 'f50718cd06e9be5e1cf5afec367149cea390f8df6004aff04c6d730b47d519f7',
+    },
+  },
+  {
+    id: 'test',
+    login: 'test',
+    name: 'test test',
+    role: 'operator',
+    operatorName: 'test test',
+    password: {
+      algorithm: PASSWORD_ALGORITHM,
+      iterations: 210000,
+      salt: '19ff9bfb598878f6c45103dc59cf57cc',
+      hash: '4b90ae8702ae2a96911be3e59587f1dfd380cc7b2c282cd5f9019f4db2d23a8d',
+    },
+  },
+];
 
 function resolveDataFile() {
   const explicitFile = process.env.DATA_FILE;
@@ -91,6 +125,81 @@ function normalizeOperatorName(name) {
   return String(name || '').trim().toLowerCase().replace(/С‘/g, 'Рµ').replace(/\s+/g, ' ');
 }
 
+function normalizeLogin(login) {
+  return String(login || '').trim().toLowerCase();
+}
+
+function normalizePasswordRecord(password) {
+  if (!password || typeof password !== 'object') return null;
+  const algorithm = String(password.algorithm || '');
+  const iterations = Number(password.iterations);
+  const salt = String(password.salt || '');
+  const hash = String(password.hash || '');
+  if (algorithm !== PASSWORD_ALGORITHM || !Number.isFinite(iterations) || iterations < 100000 || !salt || !hash) {
+    return null;
+  }
+  return { algorithm, iterations, salt, hash };
+}
+
+function verifyPassword(password, passwordRecord) {
+  const record = normalizePasswordRecord(passwordRecord);
+  if (!record) return false;
+  const candidate = crypto.pbkdf2Sync(String(password || ''), record.salt, record.iterations, PASSWORD_KEYLEN, 'sha256');
+  const stored = Buffer.from(record.hash, 'hex');
+  return stored.length === candidate.length && crypto.timingSafeEqual(stored, candidate);
+}
+
+function normalizeUser(user) {
+  const login = String(user?.login || '').trim();
+  const loginKey = normalizeLogin(login);
+  const role = user?.role === 'admin' ? 'admin' : 'operator';
+  const name = String(user?.name || login || '').trim();
+  const password = normalizePasswordRecord(user?.password);
+  if (!login || !loginKey || !name || !password) return null;
+  const operatorName = String(user?.operatorName || (role === 'operator' ? name : '') || '').trim();
+  return {
+    id: String(user?.id || loginKey),
+    login,
+    loginKey,
+    name,
+    role,
+    operatorName,
+    operatorKey: normalizeOperatorName(user?.operatorKey || operatorName || name),
+    password,
+  };
+}
+
+function getSeedUsers() {
+  return SEEDED_USERS.map(normalizeUser).filter(Boolean);
+}
+
+function normalizeUsers(users) {
+  const source = Array.isArray(users) ? users : [];
+  const normalized = [];
+  const seen = new Set();
+
+  source.forEach(user => {
+    const normalizedUser = normalizeUser(user);
+    if (!normalizedUser || seen.has(normalizedUser.loginKey)) return;
+    seen.add(normalizedUser.loginKey);
+    normalized.push(normalizedUser);
+  });
+
+  return normalized.length ? normalized : getSeedUsers();
+}
+
+function toPublicUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    login: user.login,
+    name: user.name,
+    role: user.role,
+    operatorName: user.operatorName,
+    operatorKey: user.operatorKey,
+  };
+}
+
 function getOperatorDirectory(state) {
   const rows = [];
   const faculties = Array.isArray(state?.faculties) ? state.faculties : [];
@@ -112,6 +221,49 @@ function getOperatorDirectory(state) {
   });
 
   return rows;
+}
+
+function getOperatorForUser(state, user) {
+  if (!user || user.role !== 'operator') return null;
+  const operatorKey = normalizeOperatorName(user.operatorKey || user.operatorName || user.name);
+  return getOperatorDirectory(state).find(item => item.nameKey === operatorKey) || null;
+}
+
+function createSession(user) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const session = {
+    token,
+    user: toPublicUser(user),
+    expiresAt: Date.now() + SESSION_TTL_MS,
+  };
+  sessions.set(token, session);
+  return session;
+}
+
+function getBearerToken(req) {
+  const header = String(req.headers.authorization || '');
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : '';
+}
+
+function getSessionFromRequest(req) {
+  const token = getBearerToken(req);
+  if (!token) return null;
+  const session = sessions.get(token);
+  if (!session) return null;
+  if (session.expiresAt <= Date.now()) {
+    sessions.delete(token);
+    return null;
+  }
+  return session;
+}
+
+function requireAuth(req, res, next) {
+  const session = getSessionFromRequest(req);
+  if (!session) return res.status(401).json({ error: 'Authentication required' });
+  req.session = session;
+  req.user = session.user;
+  next();
 }
 
 function normalizeMetric(metric) {
@@ -203,6 +355,55 @@ function normalizeGamification(input) {
   };
 }
 
+function getDefaultMetrics() {
+  return [
+    { label: '\u041a\u0430\u0447\u0435\u0441\u0442\u0432\u043e', type: 'metric' },
+    { label: '\u0412\u044b\u0440\u0430\u0431\u043e\u0442\u043a\u0430', type: 'metric' },
+    { label: '\u042d\u0444\u0444. %', type: 'metric' },
+    { label: '\u0414\u043e\u043f. \u0431\u0430\u043b\u043b\u044b', type: 'metric' },
+    { label: '\u041e\u043f\u043e\u0437\u0434. (\u043c\u0438\u043d)', type: 'penalty' },
+    { label: '\u041d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u044f', type: 'penalty' },
+    { label: '\u0421\u0430\u0439\u0442\u044b', type: 'penalty' },
+    { label: '\u0418\u0442\u043e\u0433\u043e', type: 'score' },
+  ];
+}
+
+function getResetState() {
+  const metrics = getDefaultMetrics();
+  const testOperator = 'test test';
+  const faculties = [
+    { id: 'group-a', cls: 'dauntless', icon: '1', crest: null, name: '\u0413\u0440\u0443\u043f\u043f\u0430 1', enName: 'Team 1', tagCls: 'tag-dauntless', scoreCls: 'dauntless-score', operators: [testOperator] },
+    { id: 'group-b', cls: 'erudite', icon: '2', crest: null, name: '\u0413\u0440\u0443\u043f\u043f\u0430 2', enName: 'Team 2', tagCls: 'tag-erudite', scoreCls: 'erudite-score', operators: [] },
+    { id: 'group-c', cls: 'candor', icon: '3', crest: null, name: '\u0413\u0440\u0443\u043f\u043f\u0430 3', enName: 'Team 3', tagCls: 'tag-candor', scoreCls: 'candor-score', operators: [] },
+  ];
+  return {
+    faculties,
+    weeklyData: [[[Array(metrics.length).fill(0)], [], []]],
+    metrics,
+    dailyImport: null,
+    gamification: { settings: { coinRate: 5 }, manualLedger: [], requests: [] },
+    users: getSeedUsers(),
+    system: {
+      resetVersion: SYSTEM_RESET_VERSION,
+      resetAt: new Date().toISOString(),
+    },
+  };
+}
+
+function normalizeSystem(input) {
+  const source = input && typeof input === 'object' ? input : {};
+  return {
+    resetVersion: String(source.resetVersion || ''),
+    resetAt: String(source.resetAt || ''),
+  };
+}
+
+function sanitizeStateForClient(state) {
+  const normalized = normalizeState(state);
+  const { users, ...safeState } = normalized;
+  return safeState;
+}
+
 function normalizeState(input) {
   if (!input || !Array.isArray(input.faculties) || !Array.isArray(input.weeklyData) || !Array.isArray(input.metrics)) {
     throw new Error('Invalid state shape');
@@ -233,11 +434,13 @@ function normalizeState(input) {
     metrics,
     dailyImport: normalizeDailyImport(input.dailyImport),
     gamification: normalizeGamification(input.gamification),
+    users: normalizeUsers(input.users),
+    system: normalizeSystem(input.system),
   };
 }
 
 function getEmptyState() {
-  return { faculties: [], weeklyData: [[]], metrics: [] };
+  return getResetState();
 }
 
 function getSeedState() {
@@ -256,7 +459,14 @@ function ensureFileStorageInitialized() {
   if (!fs.existsSync(storage.backupDir)) fs.mkdirSync(storage.backupDir, { recursive: true });
 
   const current = readJsonFile(storage.dataFile);
-  if (current.exists && !current.error) return;
+  if (current.exists && !current.error) {
+    const normalized = normalizeState(current.value);
+    if (normalized.system?.resetVersion !== SYSTEM_RESET_VERSION) {
+      backupCurrentState();
+      writeFileState(getResetState(), { skipBackup: true });
+    }
+    return;
+  }
 
   if (current.error) {
     const corruptPath = `${storage.dataFile}.corrupt-${Date.now()}`;
@@ -266,7 +476,7 @@ function ensureFileStorageInitialized() {
 
   const seed = readJsonFile(LEGACY_DATA_FILE);
   if (seed.exists && !seed.error && seed.value) {
-    writeFileState(seed.value, { skipBackup: true });
+    writeFileState(getResetState(), { skipBackup: true });
     return;
   }
 
@@ -301,7 +511,7 @@ function readFileState() {
   ensureFileStorageInitialized();
   const result = readJsonFile(storage.dataFile);
   if (result.error) throw result.error;
-  return result.value;
+  return normalizeState(result.value);
 }
 
 function writeFileState(state, options = {}) {
@@ -348,14 +558,29 @@ async function ensureDatabaseInitialized() {
     )
   `);
 
-  const existing = await database.pool.query('SELECT 1 FROM app_state WHERE id = $1 LIMIT 1', [DB_STATE_KEY]);
+  const existing = await database.pool.query('SELECT data FROM app_state WHERE id = $1 LIMIT 1', [DB_STATE_KEY]);
   if (existing.rowCount === 0) {
-    const normalized = normalizeState(getSeedState());
+    const normalized = normalizeState(getResetState());
     await database.pool.query(
       'INSERT INTO app_state (id, data, updated_at) VALUES ($1, $2::jsonb, now())',
       [DB_STATE_KEY, JSON.stringify(normalized)]
     );
-    console.log(`Seeded PostgreSQL app_state "${DB_STATE_KEY}" from JSON storage.`);
+    console.log(`Seeded PostgreSQL app_state "${DB_STATE_KEY}" with clean auth state.`);
+  } else {
+    const current = normalizeState(existing.rows[0].data);
+    if (current.system?.resetVersion !== SYSTEM_RESET_VERSION) {
+      const resetState = normalizeState(getResetState());
+      await database.pool.query(`
+        INSERT INTO app_state_backups (state_id, data)
+        SELECT id, data FROM app_state WHERE id = $1
+      `, [DB_STATE_KEY]);
+      await database.pool.query(
+        'UPDATE app_state SET data = $2::jsonb, updated_at = now() WHERE id = $1',
+        [DB_STATE_KEY, JSON.stringify(resetState)]
+      );
+      await cleanupDatabaseBackups();
+      console.log(`Reset PostgreSQL app_state "${DB_STATE_KEY}" for ${SYSTEM_RESET_VERSION}.`);
+    }
   }
 }
 
@@ -377,7 +602,7 @@ async function readDatabaseState() {
   await ensureDatabaseInitialized();
   const result = await database.pool.query('SELECT data FROM app_state WHERE id = $1', [DB_STATE_KEY]);
   if (result.rowCount === 0) return normalizeState(getEmptyState());
-  return result.rows[0].data;
+  return normalizeState(result.rows[0].data);
 }
 
 async function writeDatabaseState(state, options = {}) {
@@ -435,10 +660,11 @@ async function databaseStateExists() {
 }
 
 function requireAdmin(req, res, next) {
-  const password = req.headers['x-admin-password'];
-  if (password !== ADMIN_PASSWORD) {
-    return res.status(403).json({ error: 'Invalid admin password' });
-  }
+  const session = getSessionFromRequest(req);
+  if (!session) return res.status(401).json({ error: 'Authentication required' });
+  if (session.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
+  req.session = session;
+  req.user = session.user;
   next();
 }
 
@@ -476,28 +702,72 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-app.post('/api/admin/verify', requireAdmin, (req, res) => {
-  res.json({ ok: true });
-});
-
-app.post('/api/operator/login', async (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
-    const login = String(req.body?.login || req.body?.name || '').trim();
-    const loginKey = normalizeOperatorName(login);
-    if (!loginKey) return res.status(400).json({ error: 'Login is required' });
+    const login = String(req.body?.login || '').trim();
+    const password = String(req.body?.password || '');
+    const loginKey = normalizeLogin(login);
+    if (!loginKey || !password) return res.status(400).json({ error: 'Login and password are required' });
 
-    const operators = getOperatorDirectory(await readState());
-    const operator = operators.find(item => item.nameKey === loginKey);
-    if (!operator) return res.status(404).json({ error: 'Operator not found' });
+    const state = await readState();
+    const user = normalizeUsers(state.users).find(item => item.loginKey === loginKey);
+    if (!user || !verifyPassword(password, user.password)) {
+      return res.status(401).json({ error: 'Invalid login or password' });
+    }
 
-    res.json({ ok: true, operator });
+    const session = createSession(user);
+    res.json({
+      ok: true,
+      token: session.token,
+      expiresAt: new Date(session.expiresAt).toISOString(),
+      user: session.user,
+      operator: getOperatorForUser(state, user),
+    });
   } catch (error) {
-    console.error('Failed to login operator:', error);
-    res.status(500).json({ error: error.message || 'Failed to login operator' });
+    console.error('Failed to login user:', error);
+    res.status(500).json({ error: error.message || 'Failed to login' });
   }
 });
 
-app.post('/api/gamification/request', async (req, res) => {
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  try {
+    const state = await readState();
+    res.json({
+      ok: true,
+      user: req.user,
+      operator: getOperatorForUser(state, req.user),
+      expiresAt: new Date(req.session.expiresAt).toISOString(),
+    });
+  } catch (error) {
+    console.error('Failed to read session user:', error);
+    res.status(500).json({ error: error.message || 'Failed to read session' });
+  }
+});
+
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  sessions.delete(req.session.token);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/reset-state', requireAdmin, async (req, res) => {
+  try {
+    await writeState(getResetState());
+    res.json({ ok: true, state: sanitizeStateForClient(getResetState()) });
+  } catch (error) {
+    console.error('Failed to reset state:', error);
+    res.status(500).json({ error: error.message || 'Failed to reset state' });
+  }
+});
+
+app.post('/api/admin/verify', requireAdmin, (req, res) => {
+  res.json({ ok: true, user: req.user });
+});
+
+app.post('/api/operator/login', (req, res) => {
+  res.status(410).json({ error: 'Use /api/auth/login' });
+});
+
+app.post('/api/gamification/request', requireAuth, async (req, res) => {
   try {
     const state = await readState();
     const gamification = normalizeGamification(state.gamification);
@@ -512,6 +782,13 @@ app.post('/api/gamification/request', async (req, res) => {
       }],
     }).requests[0];
     if (!request) return res.status(400).json({ error: 'Invalid request' });
+    if (req.user.role !== 'admin') {
+      const allowedKey = normalizeOperatorName(req.user.operatorKey || req.user.operatorName || req.user.name);
+      if (request.operatorKey !== allowedKey) {
+        return res.status(403).json({ error: 'Operator can create requests only for own account' });
+      }
+      request.operatorName = req.user.operatorName || req.user.name;
+    }
     gamification.requests.unshift(request);
     await writeState({ ...state, gamification });
     res.json({ ok: true, request, gamification });
@@ -567,7 +844,7 @@ app.post('/api/gamification/request/:id', requireAdmin, async (req, res) => {
 app.get('/api/state', async (req, res) => {
   try {
     res.set('Cache-Control', 'no-store');
-    res.json({ state: await readState() });
+    res.json({ state: sanitizeStateForClient(await readState()) });
   } catch (error) {
     console.error('Failed to read state:', error);
     res.status(500).json({ error: 'Failed to read state' });
@@ -576,7 +853,8 @@ app.get('/api/state', async (req, res) => {
 
 app.post('/api/state', requireAdmin, async (req, res) => {
   try {
-    await writeState(req.body || {});
+    const currentState = await readState();
+    await writeState({ ...(req.body || {}), users: currentState.users, system: currentState.system });
     res.json({
       ok: true,
       storage: {
