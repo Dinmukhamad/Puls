@@ -77,11 +77,13 @@ const ICORE_REQUEST_STATUS = {
 const ADMIN_SESSION_KEY = 'divergentContestAdminUnlocked';
 const ADMIN_PASSWORD_KEY = 'divergentContestAdminToken';
 const OPERATOR_SESSION_KEY = 'icoreOperatorSession';
+const AUTH_SESSION_KEY = 'icoreAuthSession';
 const DAILY_IMPORT_STORAGE_KEY = 'divergentContestDailyImport';
 const GAMIFICATION_STORAGE_KEY = 'icoreGamificationState';
 const VISUAL_MODE_STORAGE_KEY = 'divergentContestVisualMode';
 const VISUAL_OPERATOR_STORAGE_KEY = 'divergentContestVisualOperator';
 let isAdmin = false;
+let currentUser = null;
 let operatorSession = null;
 let DAILY_IMPORT_DATA = null;
 let GAMIFICATION = { settings: { coinRate: 5 }, manualLedger: [], requests: [] };
@@ -89,7 +91,87 @@ let visualMode = localStorage.getItem(VISUAL_MODE_STORAGE_KEY) || 'overview';
 let visualOperatorKey = localStorage.getItem(VISUAL_OPERATOR_STORAGE_KEY) || '';
 
 function getAdminPassword() {
-  return sessionStorage.getItem(ADMIN_PASSWORD_KEY) || '';
+  return currentUser?.token || '';
+}
+
+function normalizeAuthSession(input) {
+  if (!input || typeof input !== 'object') return null;
+  const token = String(input.token || '').trim();
+  const user = input.user && typeof input.user === 'object' ? input.user : null;
+  if (!token || !user?.login || !user?.role) return null;
+  return {
+    token,
+    expiresAt: String(input.expiresAt || ''),
+    user: {
+      id: String(user.id || user.login),
+      login: String(user.login || ''),
+      name: String(user.name || user.login || ''),
+      role: user.role === 'admin' ? 'admin' : 'operator',
+      operatorName: String(user.operatorName || ''),
+      operatorKey: String(user.operatorKey || ''),
+    },
+    operator: input.operator || null,
+  };
+}
+
+function applyAuthSession(session) {
+  const normalized = normalizeAuthSession(session);
+  api.setAuthToken(normalized?.token || '');
+  currentUser = normalized ? { ...normalized.user, token: normalized.token, expiresAt: normalized.expiresAt } : null;
+  isAdmin = currentUser?.role === 'admin';
+
+  if (isAdmin) {
+    operatorSession = null;
+  } else if (normalized?.operator) {
+    operatorSession = normalizeOperatorSession(normalized.operator);
+  } else if (currentUser) {
+    operatorSession = normalizeOperatorSession({
+      key: '',
+      name: currentUser.operatorName || currentUser.name,
+      nameKey: currentUser.operatorKey || currentUser.operatorName || currentUser.name,
+      facultyName: '',
+    });
+  } else {
+    operatorSession = null;
+  }
+
+  if (normalized) {
+    sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(normalized));
+  } else {
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    sessionStorage.removeItem(ADMIN_PASSWORD_KEY);
+    sessionStorage.removeItem(OPERATOR_SESSION_KEY);
+  }
+}
+
+function loadAuthSession() {
+  try {
+    applyAuthSession(JSON.parse(sessionStorage.getItem(AUTH_SESSION_KEY) || 'null'));
+  } catch {
+    applyAuthSession(null);
+  }
+}
+
+async function refreshAuthSession() {
+  if (!currentUser?.token) return null;
+  try {
+    const result = await api.loadSession();
+    if (!result?.user) {
+      applyAuthSession(null);
+      return null;
+    }
+    applyAuthSession({
+      token: currentUser.token,
+      expiresAt: result.expiresAt || currentUser.expiresAt,
+      user: result.user,
+      operator: result.operator,
+    });
+    return result;
+  } catch {
+    applyAuthSession(null);
+    return null;
+  }
 }
 
 function normalizeOperatorSession(input) {
@@ -107,6 +189,7 @@ function normalizeOperatorSession(input) {
 }
 
 function loadOperatorSession() {
+  if (currentUser) return;
   try {
     operatorSession = normalizeOperatorSession(JSON.parse(sessionStorage.getItem(OPERATOR_SESSION_KEY) || 'null'));
   } catch {
@@ -179,8 +262,29 @@ function ensureOperatorAuthOverlay() {
     </div>
   `;
   document.body.appendChild(overlay);
+  overlay.innerHTML = `
+    <div class="operator-auth-card">
+      <div class="operator-auth-mark" aria-hidden="true">C</div>
+      <div class="operator-auth-kicker">Contest</div>
+      <h2>Вход в систему</h2>
+      <p>Введите логин и пароль. Регистрация не нужна, аккаунты создает администратор.</p>
+      <label class="operator-auth-field">
+        <span>Логин</span>
+        <input id="operator-login-input" type="text" autocomplete="username" placeholder="admin или test">
+      </label>
+      <label class="operator-auth-field">
+        <span>Пароль</span>
+        <input id="operator-password-input" type="password" autocomplete="current-password" placeholder="Пароль">
+      </label>
+      <button class="operator-auth-submit" id="operator-login-submit" type="button" onclick="loginOperator()">Войти</button>
+      <div class="operator-auth-error" id="operator-login-error" aria-live="polite"></div>
+    </div>
+  `;
 
   overlay.querySelector('#operator-login-input')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') loginOperator();
+  });
+  overlay.querySelector('#operator-password-input')?.addEventListener('keydown', event => {
     if (event.key === 'Enter') loginOperator();
   });
   return overlay;
@@ -219,7 +323,7 @@ function updateOperatorAuthOverlay() {
   if (operatorSession && !getOperatorSessionRow(ranking)) clearOperatorSession();
   const overlay = ensureOperatorAuthOverlay();
   updateOperatorLoginOptions();
-  const required = !isAdmin && !operatorSession && ranking.length > 0;
+  const required = !currentUser;
   overlay.hidden = !required;
   document.body.classList.toggle('operator-login-required', required);
 }
@@ -254,6 +358,47 @@ async function loginOperator() {
 
 function logoutOperator() {
   clearOperatorSession();
+  updateOperatorAuthOverlay();
+  refreshDashboard();
+  window.showContestSection?.('overview');
+}
+
+async function loginOperator() {
+  const input = document.getElementById('operator-login-input');
+  const passwordInput = document.getElementById('operator-password-input');
+  const error = document.getElementById('operator-login-error');
+  const button = document.getElementById('operator-login-submit');
+  const login = String(input?.value || '').trim();
+  const password = String(passwordInput?.value || '');
+  if (!login || !password) {
+    if (error) error.textContent = 'Введите логин и пароль';
+    (login ? passwordInput : input)?.focus();
+    return;
+  }
+  if (button) { button.disabled = true; button.textContent = 'Проверка...'; }
+  if (error) error.textContent = '';
+
+  try {
+    const result = await api.login(login, password);
+    applyAuthSession(result);
+    if (!isAdmin && !getOperatorSessionRow()) {
+      throw new Error('Операторский аккаунт не привязан к строке таблицы');
+    }
+    document.getElementById('operator-auth-overlay')?.setAttribute('hidden', '');
+    document.body.classList.remove('operator-login-required');
+    await refreshDashboard();
+    window.showContestSection?.(isAdmin ? 'admin' : 'overview');
+  } catch (err) {
+    applyAuthSession(null);
+    if (error) error.textContent = err.message || 'Не удалось войти';
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Войти'; }
+  }
+}
+
+async function logoutOperator() {
+  try { await api.logout(); } catch {}
+  applyAuthSession(null);
   updateOperatorAuthOverlay();
   refreshDashboard();
   window.showContestSection?.('overview');
@@ -951,10 +1096,7 @@ function renderModernDashboard() {
 
 /* ── Admin ──────────────────────────────────────────────────── */
 function loadAdminSession() {
-  const flag = sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
-  const hasPwd = !!sessionStorage.getItem(ADMIN_PASSWORD_KEY);
-  isAdmin = flag && hasPwd;
-  if (flag && !hasPwd) sessionStorage.removeItem(ADMIN_SESSION_KEY);
+  loadAuthSession();
 }
 
 function updateAdminGate() {
@@ -973,7 +1115,7 @@ function openAdminModal() {
   const p = document.getElementById('admin-popover');
   if (!p) return;
   updateAdminGate(); p.hidden = false;
-  if (!isAdmin) { const i = document.getElementById('admin-password'); if (i) setTimeout(() => i.focus(), 0); }
+  if (!isAdmin) { const i = document.getElementById('admin-login'); if (i) setTimeout(() => i.focus(), 0); }
 }
 function closeAdminModal() { const p = document.getElementById('admin-popover'); if (p) p.hidden = true; }
 function requireAdmin() { if (isAdmin) return true; openAdminModal(); return false; }
@@ -1016,6 +1158,55 @@ function logoutAdmin() {
 }
 
 /* ── Data calculations ──────────────────────────────────────── */
+async function loginAdmin() {
+  const loginInput = document.getElementById('admin-login');
+  const passwordInput = document.getElementById('admin-password');
+  const error = document.getElementById('admin-error');
+  const btn = document.querySelector('.admin-popover-submit');
+  const login = String(loginInput?.value || '').trim();
+  const password = String(passwordInput?.value || '');
+  if (!login || !password) {
+    if (error) error.textContent = 'Введите логин и пароль';
+    (login ? passwordInput : loginInput)?.focus();
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Проверка...'; }
+  if (error) error.textContent = '';
+  try {
+    const result = await api.login(login, password);
+    applyAuthSession(result);
+    if (!isAdmin) {
+      applyAuthSession(null);
+      if (error) error.textContent = 'У этого аккаунта нет прав администратора';
+      return;
+    }
+    closeAdminModal();
+    updateAdminGate();
+    await refreshDashboard();
+    renderEditor();
+    const editorPanel = document.getElementById('editor-panel');
+    if (editorPanel) editorPanel.hidden = false;
+    window.showContestSection?.('admin');
+  } catch (err) {
+    applyAuthSession(null);
+    if (error) error.textContent = err.message || 'Не удалось войти';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Войти'; }
+  }
+}
+
+async function logoutAdmin() {
+  try { await api.logout(); } catch {}
+  applyAuthSession(null);
+  closeAdminModal();
+  updateAdminGate();
+  renderEditor();
+  const editorPanel = document.getElementById('editor-panel');
+  if (editorPanel) editorPanel.hidden = true;
+  renderModernDashboard();
+  renderIcoreAdmin();
+}
+
 function calcTotals() {
   return FACULTIES.map((fac, fi) =>
     fac.operators.map((name, oi) => {
@@ -3201,6 +3392,8 @@ function initSideNavigation() {
 document.addEventListener('DOMContentLoaded', async () => {
   initIntro();
   initSideNavCollapse();
+  loadAuthSession();
+  await refreshAuthSession();
   try {
     await loadEditableData();
   } catch (err) {
