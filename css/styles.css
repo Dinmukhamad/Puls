@@ -4957,3 +4957,191 @@ table.operators {
   min-height: 34px;
   background: rgba(255, 255, 255, .16);
 }
+
+.operator-auth-overlay[hidden] {
+  display: none !important;
+}
+
+body.operator-login-required {
+  padding-left: 0 !important;
+  overflow: hidden;
+  background: #f3f6fb !important;
+}
+
+body.operator-login-required .side-nav,
+body.operator-login-required .container,
+body.operator-login-required .mobile-menu-button,
+body.operator-login-required .sidebar-overlay,
+body.operator-login-required .admin-gate,
+body.operator-login-required .bg-grid,
+body.operator-login-required .bg-decorations,
+body.operator-login-required .intro-screen {
+  display: none !important;
+}
+
+.admin-gate {
+  display: none !important;
+}
+
+.operator-auth-overlay {
+  z-index: 20000;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 0;
+  background:
+    radial-gradient(circle at 18% 16%, rgba(45, 97, 231, .16), transparent 30%),
+    linear-gradient(135deg, #f7f9fd 0%, #eef3fb 48%, #e8eef8 100%);
+  backdrop-filter: none;
+  overflow: auto;
+}
+
+.operator-auth-shell {
+  width: min(1120px, 100%);
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(340px, 440px);
+  align-items: center;
+  gap: clamp(28px, 5vw, 74px);
+  padding: clamp(24px, 5vw, 72px);
+}
+
+.operator-auth-visual {
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 42px;
+  border-radius: 28px;
+  color: #fff;
+  background:
+    linear-gradient(145deg, rgba(29, 78, 216, .95), rgba(30, 64, 175, .92)),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.16) 0 1px, transparent 1px 34px);
+  box-shadow: 0 30px 80px rgba(37, 99, 235, .24);
+}
+
+.operator-auth-logo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 54px;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.operator-auth-logo-row .operator-auth-mark {
+  margin: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.18);
+}
+
+.operator-auth-visual h1 {
+  max-width: 520px;
+  margin: 0 0 18px;
+  font-size: clamp(34px, 4vw, 56px);
+  line-height: 1.02;
+  letter-spacing: 0;
+}
+
+.operator-auth-visual p {
+  max-width: 430px;
+  margin: 0;
+  color: rgba(255,255,255,.78);
+  font-size: 18px;
+  line-height: 1.55;
+}
+
+.operator-auth-lines {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+  margin-top: 52px;
+}
+
+.operator-auth-lines span {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.22);
+}
+
+.operator-auth-lines span:nth-child(2) {
+  width: 72%;
+}
+
+.operator-auth-lines span:nth-child(3) {
+  width: 48%;
+}
+
+.operator-auth-overlay .operator-auth-card {
+  width: 100%;
+  padding: 34px;
+  border: 1px solid rgba(15, 23, 42, .08);
+  border-radius: 20px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .14);
+}
+
+.operator-auth-card .operator-auth-field + .operator-auth-field {
+  margin-top: 12px;
+}
+
+.operator-auth-overlay .operator-auth-submit {
+  height: 48px;
+  margin-top: 16px;
+  background: #2563eb;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, .18);
+}
+
+.operator-session-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, .1);
+}
+
+.operator-session-user span,
+.operator-session-user b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operator-session-user span {
+  color: rgba(255,255,255,.62);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.operator-session-user b {
+  color: #fff;
+  font-size: 13px;
+}
+
+.operator-session-panel button {
+  min-height: 36px;
+  background: #ef4444;
+  color: #fff;
+}
+
+@media (max-width: 840px) {
+  .operator-auth-shell {
+    min-height: 100dvh;
+    grid-template-columns: 1fr;
+    padding: 20px;
+  }
+
+  .operator-auth-visual {
+    display: none;
+  }
+
+  .operator-auth-overlay .operator-auth-card {
+    max-width: 440px;
+    margin: auto;
+    padding: 26px;
+  }
+}
