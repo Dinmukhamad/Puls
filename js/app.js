@@ -76,11 +76,13 @@ const ICORE_REQUEST_STATUS = {
 
 const ADMIN_SESSION_KEY = 'divergentContestAdminUnlocked';
 const ADMIN_PASSWORD_KEY = 'divergentContestAdminToken';
+const OPERATOR_SESSION_KEY = 'icoreOperatorSession';
 const DAILY_IMPORT_STORAGE_KEY = 'divergentContestDailyImport';
 const GAMIFICATION_STORAGE_KEY = 'icoreGamificationState';
 const VISUAL_MODE_STORAGE_KEY = 'divergentContestVisualMode';
 const VISUAL_OPERATOR_STORAGE_KEY = 'divergentContestVisualOperator';
 let isAdmin = false;
+let operatorSession = null;
 let DAILY_IMPORT_DATA = null;
 let GAMIFICATION = { settings: { coinRate: 5 }, manualLedger: [], requests: [] };
 let visualMode = localStorage.getItem(VISUAL_MODE_STORAGE_KEY) || 'overview';
@@ -88,6 +90,172 @@ let visualOperatorKey = localStorage.getItem(VISUAL_OPERATOR_STORAGE_KEY) || '';
 
 function getAdminPassword() {
   return sessionStorage.getItem(ADMIN_PASSWORD_KEY) || '';
+}
+
+function normalizeOperatorSession(input) {
+  if (!input || typeof input !== 'object') return null;
+  const name = String(input.name || '').trim();
+  const nameKey = normalizeOperatorName(input.nameKey || name);
+  if (!name || !nameKey) return null;
+  return {
+    key: String(input.key || ''),
+    name,
+    nameKey,
+    facultyId: String(input.facultyId || ''),
+    facultyName: String(input.facultyName || ''),
+  };
+}
+
+function loadOperatorSession() {
+  try {
+    operatorSession = normalizeOperatorSession(JSON.parse(sessionStorage.getItem(OPERATOR_SESSION_KEY) || 'null'));
+  } catch {
+    operatorSession = null;
+  }
+}
+
+function persistOperatorSession() {
+  if (!operatorSession) {
+    sessionStorage.removeItem(OPERATOR_SESSION_KEY);
+    return;
+  }
+  sessionStorage.setItem(OPERATOR_SESSION_KEY, JSON.stringify(operatorSession));
+}
+
+function getOperatorSessionRow(ranking = getOperatorRanking()) {
+  if (!operatorSession) return null;
+  const row = ranking.find(item => item.nameKey === operatorSession.nameKey) ||
+    ranking.find(item => item.key === operatorSession.key);
+  if (!row) return null;
+  operatorSession = normalizeOperatorSession({
+    key: row.key,
+    name: row.name,
+    nameKey: row.nameKey,
+    facultyId: row.faculty?.id,
+    facultyName: row.faculty?.name,
+  });
+  persistOperatorSession();
+  return row;
+}
+
+function setOperatorSession(operator) {
+  operatorSession = normalizeOperatorSession(operator);
+  const row = getOperatorSessionRow();
+  if (row) {
+    visualOperatorKey = row.key;
+    try { localStorage.setItem(VISUAL_OPERATOR_STORAGE_KEY, row.key); } catch {}
+  }
+  persistOperatorSession();
+}
+
+function clearOperatorSession() {
+  operatorSession = null;
+  sessionStorage.removeItem(OPERATOR_SESSION_KEY);
+}
+
+function ensureOperatorAuthOverlay() {
+  let overlay = document.getElementById('operator-auth-overlay');
+  if (overlay) return overlay;
+
+  overlay = document.createElement('section');
+  overlay.id = 'operator-auth-overlay';
+  overlay.className = 'operator-auth-overlay';
+  overlay.hidden = true;
+  overlay.setAttribute('aria-label', 'Вход оператора');
+  overlay.innerHTML = `
+    <div class="operator-auth-card">
+      <div class="operator-auth-mark" aria-hidden="true">C</div>
+      <div class="operator-auth-kicker">Contest</div>
+      <h2>Вход оператора</h2>
+      <p>Введите свое ФИО так, как оно указано в таблице. Регистрация не нужна.</p>
+      <label class="operator-auth-field">
+        <span>Логин / ФИО</span>
+        <input id="operator-login-input" type="text" list="operator-login-list" autocomplete="name" placeholder="Например: Алибек Аружан">
+        <datalist id="operator-login-list"></datalist>
+      </label>
+      <button class="operator-auth-submit" id="operator-login-submit" type="button" onclick="loginOperator()">Войти</button>
+      <div class="operator-auth-error" id="operator-login-error" aria-live="polite"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#operator-login-input')?.addEventListener('keydown', event => {
+    if (event.key === 'Enter') loginOperator();
+  });
+  return overlay;
+}
+
+function updateOperatorLoginOptions() {
+  const list = document.getElementById('operator-login-list');
+  if (!list) return;
+  const seen = new Set();
+  list.innerHTML = getOperatorRanking()
+    .filter(row => {
+      if (!row.name || seen.has(row.nameKey)) return false;
+      seen.add(row.nameKey);
+      return true;
+    })
+    .map(row => `<option value="${escapeHtml(row.name)}"></option>`)
+    .join('');
+}
+
+function showOperatorLogin() {
+  const overlay = ensureOperatorAuthOverlay();
+  updateOperatorLoginOptions();
+  overlay.hidden = false;
+  document.body.classList.add('operator-login-required');
+  setTimeout(() => document.getElementById('operator-login-input')?.focus(), 0);
+}
+
+function updateOperatorAuthOverlay() {
+  const ranking = getOperatorRanking();
+  if (operatorSession && !getOperatorSessionRow(ranking)) clearOperatorSession();
+  const overlay = ensureOperatorAuthOverlay();
+  updateOperatorLoginOptions();
+  const required = !isAdmin && !operatorSession && ranking.length > 0;
+  overlay.hidden = !required;
+  document.body.classList.toggle('operator-login-required', required);
+}
+
+async function loginOperator() {
+  const input = document.getElementById('operator-login-input');
+  const error = document.getElementById('operator-login-error');
+  const button = document.getElementById('operator-login-submit');
+  const login = String(input?.value || '').trim();
+  if (!login) {
+    if (error) error.textContent = 'Введите ФИО оператора';
+    input?.focus();
+    return;
+  }
+  if (button) { button.disabled = true; button.textContent = 'Проверка...'; }
+  if (error) error.textContent = '';
+
+  try {
+    const result = await api.loginOperator(login);
+    setOperatorSession(result.operator);
+    if (!getOperatorSessionRow()) throw new Error('Оператор не найден в текущих данных');
+    document.getElementById('operator-auth-overlay')?.setAttribute('hidden', '');
+    document.body.classList.remove('operator-login-required');
+    await refreshDashboard();
+    window.showContestSection?.('overview');
+  } catch (err) {
+    if (error) error.textContent = err.message || 'Не удалось войти';
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Войти'; }
+  }
+}
+
+function logoutOperator() {
+  clearOperatorSession();
+  updateOperatorAuthOverlay();
+  refreshDashboard();
+  window.showContestSection?.('overview');
+}
+
+function ensureOperatorAccess() {
+  if (isAdmin || operatorSession) return true;
+  showOperatorLogin();
+  return false;
 }
 
 let METRICS = DEFAULT_METRICS.map(m => ({ ...m }));
@@ -450,6 +618,11 @@ function getModernRoleLabel() {
   return isAdmin ? 'администратор' : 'оператор';
 }
 
+function getModernRoleLabel() {
+  if (isAdmin) return 'администратор';
+  return operatorSession?.name || 'оператор';
+}
+
 function getMetricTarget(metric) {
   const label = normalizeMetricLabel(metric?.label || '');
   if (metric?.type === 'penalty') return 0;
@@ -470,6 +643,25 @@ function getMetricTone(metric, value, target) {
 function renderModernOperatorSelect(ranking) {
   if (!ranking.length) return '';
   const selected = getSelectedVisualOperator(ranking);
+  if (!isAdmin) {
+    if (!selected || !operatorSession) {
+      return `
+        <div class="operator-session-card">
+          <span>Оператор</span>
+          <b>Вход не выполнен</b>
+          <button type="button" onclick="showOperatorLogin()">Войти</button>
+        </div>
+      `;
+    }
+    return `
+      <div class="operator-session-card">
+        <span>Оператор</span>
+        <b>${escapeHtml(selected.name)}</b>
+        <small>${escapeHtml(selected.faculty.name)} · #${selected.rank}</small>
+        <button type="button" onclick="logoutOperator()">Выйти</button>
+      </div>
+    `;
+  }
   const options = ranking.map(row => `
     <option value="${row.key}" ${selected && selected.key === row.key ? 'selected' : ''}>
       ${row.rank}. ${escapeHtml(row.name)} - ${fmtPts(row.points)}
@@ -867,6 +1059,12 @@ function getOperatorRanking() {
 
 function getSelectedVisualOperator(ranking) {
   if (!ranking.length) return null;
+  const sessionRow = !isAdmin ? getOperatorSessionRow(ranking) : null;
+  if (sessionRow) {
+    visualOperatorKey = sessionRow.key;
+    try { localStorage.setItem(VISUAL_OPERATOR_STORAGE_KEY, sessionRow.key); } catch {}
+    return sessionRow;
+  }
   let selected = ranking.find(row => row.key === visualOperatorKey);
   if (!selected) selected = ranking.find(row => row.points > 0) || ranking[0];
   visualOperatorKey = selected.key;
@@ -999,6 +1197,14 @@ function setVisualMode(mode) {
 }
 
 function selectVisualOperator(value) {
+  if (!isAdmin) {
+    const row = getOperatorSessionRow();
+    if (!row) {
+      showOperatorLogin();
+      return;
+    }
+    value = row.key;
+  }
   visualOperatorKey = String(value || '');
   try { localStorage.setItem(VISUAL_OPERATOR_STORAGE_KEY, visualOperatorKey); } catch {}
   visualMode = 'personal';
@@ -1742,6 +1948,42 @@ function renderIcoreOperatorSelect(ranking, label = 'Выбрать операт
   const options = ranking.map(row => `
     <option value="${row.key}" ${selected && row.key === selected.key ? 'selected' : ''}>
       ${row.rank}. ${escapeHtml(row.name)} — ${fmtPts(row.points)}
+    </option>
+  `).join('');
+  return `
+    <label class="icore-select-wrap">
+      <span>${escapeHtml(label)}</span>
+      <select class="visual-operator-select" onchange="selectVisualOperator(this.value)">
+        ${options}
+      </select>
+    </label>
+  `;
+}
+
+function renderIcoreOperatorSelect(ranking, label = 'Выбрать оператора') {
+  const selected = getSelectedVisualOperator(ranking);
+  if (!isAdmin) {
+    if (!selected || !operatorSession) {
+      return `
+        <div class="operator-session-card compact">
+          <span>Оператор</span>
+          <b>Вход не выполнен</b>
+          <button type="button" onclick="showOperatorLogin()">Войти</button>
+        </div>
+      `;
+    }
+    return `
+      <div class="operator-session-card compact">
+        <span>${escapeHtml(label)}</span>
+        <b>${escapeHtml(selected.name)}</b>
+        <small>${escapeHtml(selected.faculty.name)} · #${selected.rank}</small>
+        <button type="button" onclick="logoutOperator()">Выйти</button>
+      </div>
+    `;
+  }
+  const options = ranking.map(row => `
+    <option value="${row.key}" ${selected && row.key === selected.key ? 'selected' : ''}>
+      ${row.rank}. ${escapeHtml(row.name)} - ${fmtPts(row.points)}
     </option>
   `).join('');
   return `
@@ -2600,6 +2842,7 @@ function applyGamificationResponse(result) {
 }
 
 async function buyIcoreReward(rewardId) {
+  if (!ensureOperatorAccess()) return;
   const ranking = getOperatorRanking();
   const state = getSelectedIcoreState(ranking);
   const reward = ICORE_SHOP_ITEMS.find(item => item.id === rewardId);
@@ -2704,6 +2947,9 @@ function exportIcoreCsv() {
 }
 
 Object.assign(window, {
+  loginOperator,
+  logoutOperator,
+  showOperatorLogin,
   buyIcoreReward,
   addManualIcoreCoins,
   updateIcoreRequest,
@@ -2744,6 +2990,7 @@ function syncModernNavLabels() {
 
 function syncModernRoleUi() {
   document.body.classList.toggle('user-role-admin', isAdmin);
+  document.body.classList.toggle('operator-authenticated', !!operatorSession);
   document.body.dataset.role = isAdmin ? 'admin' : 'operator';
   syncModernNavLabels();
 
@@ -2754,8 +3001,24 @@ function syncModernRoleUi() {
   if (rateLabel) rateLabel.textContent = `${getIcoreCoinRate()} баллов = 1 коин`;
   if (updatedLabel) updatedLabel.textContent = `Обновлено: ${getModernUpdatedLabel()}`;
 
+  const meta = document.querySelector('.side-nav-meta');
+  let sessionPanel = document.getElementById('operator-session-panel');
+  if (meta && !sessionPanel) {
+    sessionPanel = document.createElement('div');
+    sessionPanel.id = 'operator-session-panel';
+    sessionPanel.className = 'operator-session-panel';
+    meta.appendChild(sessionPanel);
+  }
+  if (sessionPanel) {
+    sessionPanel.innerHTML = operatorSession && !isAdmin
+      ? `<button type="button" onclick="logoutOperator()">Выйти</button>`
+      : (!isAdmin ? `<button type="button" onclick="showOperatorLogin()">Войти оператору</button>` : '');
+    sessionPanel.hidden = isAdmin;
+  }
+
   const activeAdmin = document.querySelector('.app-view.active')?.dataset.sectionView === 'admin';
   if (!isAdmin && activeAdmin) window.showContestSection?.('overview');
+  updateOperatorAuthOverlay();
 }
 
 function closeMobileSidebar() {
@@ -2947,6 +3210,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.body.prepend(banner);
   }
   loadAdminSession();
+  loadOperatorSession();
   updateAdminGate();
   await Promise.all([
     renderModernDashboard(),
