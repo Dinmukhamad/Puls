@@ -244,42 +244,39 @@ function ensureOperatorAuthOverlay() {
   overlay.id = 'operator-auth-overlay';
   overlay.className = 'operator-auth-overlay';
   overlay.hidden = true;
-  overlay.setAttribute('aria-label', 'Вход оператора');
+  overlay.setAttribute('aria-label', 'Вход в систему');
   overlay.innerHTML = `
-    <div class="operator-auth-card">
-      <div class="operator-auth-mark" aria-hidden="true">C</div>
-      <div class="operator-auth-kicker">Contest</div>
-      <h2>Вход оператора</h2>
-      <p>Введите свое ФИО так, как оно указано в таблице. Регистрация не нужна.</p>
-      <label class="operator-auth-field">
-        <span>Логин / ФИО</span>
-        <input id="operator-login-input" type="text" list="operator-login-list" autocomplete="name" placeholder="Например: Алибек Аружан">
-        <datalist id="operator-login-list"></datalist>
-      </label>
-      <button class="operator-auth-submit" id="operator-login-submit" type="button" onclick="loginOperator()">Войти</button>
-      <div class="operator-auth-error" id="operator-login-error" aria-live="polite"></div>
-      <button class="operator-auth-admin" type="button" onclick="showAdminLoginFromOperator()">Войти как админ</button>
+    <div class="operator-auth-shell">
+      <aside class="operator-auth-visual" aria-hidden="true">
+        <div class="operator-auth-logo-row">
+          <span class="operator-auth-mark">C</span>
+          <span>Contest</span>
+        </div>
+        <h1>Панель результатов операторов</h1>
+        <p>Единый вход для администратора и операторов системы.</p>
+        <div class="operator-auth-lines">
+          <span></span><span></span><span></span>
+        </div>
+      </aside>
+      <div class="operator-auth-card">
+        <div class="operator-auth-mark" aria-hidden="true">C</div>
+        <div class="operator-auth-kicker">Contest</div>
+        <h2>Вход в систему</h2>
+        <p>Введите логин и пароль. Регистрация не нужна, аккаунты создает администратор.</p>
+        <label class="operator-auth-field">
+          <span>Логин</span>
+          <input id="operator-login-input" type="text" autocomplete="username" placeholder="admin или test">
+        </label>
+        <label class="operator-auth-field">
+          <span>Пароль</span>
+          <input id="operator-password-input" type="password" autocomplete="current-password" placeholder="Пароль">
+        </label>
+        <button class="operator-auth-submit" id="operator-login-submit" type="button" onclick="loginOperator()">Войти</button>
+        <div class="operator-auth-error" id="operator-login-error" aria-live="polite"></div>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
-  overlay.innerHTML = `
-    <div class="operator-auth-card">
-      <div class="operator-auth-mark" aria-hidden="true">C</div>
-      <div class="operator-auth-kicker">Contest</div>
-      <h2>Вход в систему</h2>
-      <p>Введите логин и пароль. Регистрация не нужна, аккаунты создает администратор.</p>
-      <label class="operator-auth-field">
-        <span>Логин</span>
-        <input id="operator-login-input" type="text" autocomplete="username" placeholder="admin или test">
-      </label>
-      <label class="operator-auth-field">
-        <span>Пароль</span>
-        <input id="operator-password-input" type="password" autocomplete="current-password" placeholder="Пароль">
-      </label>
-      <button class="operator-auth-submit" id="operator-login-submit" type="button" onclick="loginOperator()">Войти</button>
-      <div class="operator-auth-error" id="operator-login-error" aria-live="polite"></div>
-    </div>
-  `;
 
   overlay.querySelector('#operator-login-input')?.addEventListener('keydown', event => {
     if (event.key === 'Enter') loginOperator();
@@ -326,41 +323,6 @@ function updateOperatorAuthOverlay() {
   const required = !currentUser;
   overlay.hidden = !required;
   document.body.classList.toggle('operator-login-required', required);
-}
-
-async function loginOperator() {
-  const input = document.getElementById('operator-login-input');
-  const error = document.getElementById('operator-login-error');
-  const button = document.getElementById('operator-login-submit');
-  const login = String(input?.value || '').trim();
-  if (!login) {
-    if (error) error.textContent = 'Введите ФИО оператора';
-    input?.focus();
-    return;
-  }
-  if (button) { button.disabled = true; button.textContent = 'Проверка...'; }
-  if (error) error.textContent = '';
-
-  try {
-    const result = await api.loginOperator(login);
-    setOperatorSession(result.operator);
-    if (!getOperatorSessionRow()) throw new Error('Оператор не найден в текущих данных');
-    document.getElementById('operator-auth-overlay')?.setAttribute('hidden', '');
-    document.body.classList.remove('operator-login-required');
-    await refreshDashboard();
-    window.showContestSection?.('overview');
-  } catch (err) {
-    if (error) error.textContent = err.message || 'Не удалось войти';
-  } finally {
-    if (button) { button.disabled = false; button.textContent = 'Войти'; }
-  }
-}
-
-function logoutOperator() {
-  clearOperatorSession();
-  updateOperatorAuthOverlay();
-  refreshDashboard();
-  window.showContestSection?.('overview');
 }
 
 async function loginOperator() {
@@ -3210,9 +3172,15 @@ function syncModernRoleUi() {
   }
   if (sessionPanel) {
     sessionPanel.innerHTML = operatorSession && !isAdmin
-      ? `<button type="button" onclick="logoutOperator()">Выйти</button>`
-      : (!isAdmin ? `<button type="button" onclick="showOperatorLogin()">Войти оператору</button>` : '');
-    sessionPanel.hidden = isAdmin;
+      ? `
+        <div class="operator-session-user">
+          <span>Аккаунт</span>
+          <b>${escapeHtml(currentUser?.name || currentUser?.login || operatorSession.name || 'Оператор')}</b>
+        </div>
+        <button type="button" onclick="logoutOperator()">Выйти</button>
+      `
+      : (!isAdmin ? `<button type="button" onclick="showOperatorLogin()">Войти</button>` : '');
+    sessionPanel.hidden = isAdmin || !currentUser;
   }
 
   const activeAdmin = document.querySelector('.app-view.active')?.dataset.sectionView === 'admin';
