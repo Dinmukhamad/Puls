@@ -18,7 +18,7 @@ const DB_STATE_KEY = process.env.DB_STATE_KEY || 'main';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 12 * 60 * 60 * 1000);
 const PASSWORD_ALGORITHM = 'pbkdf2-sha256';
 const PASSWORD_KEYLEN = 32;
-const SYSTEM_RESET_VERSION = 'auth-login-v1';
+const SYSTEM_RESET_VERSION = 'auth-login-v2';
 
 app.use(cors({
   origin: CORS_ORIGIN,
@@ -462,7 +462,7 @@ function ensureFileStorageInitialized() {
   if (current.exists && !current.error) {
     const normalized = normalizeState(current.value);
     if (normalized.system?.resetVersion !== SYSTEM_RESET_VERSION) {
-      backupCurrentState();
+      clearFileBackups();
       writeFileState(getResetState(), { skipBackup: true });
     }
     return;
@@ -498,6 +498,19 @@ function cleanupBackups() {
       console.error('Failed to remove old backup:', error);
     }
   }
+}
+
+function clearFileBackups() {
+  if (!fs.existsSync(storage.backupDir)) return;
+  fs.readdirSync(storage.backupDir)
+    .filter(name => /^state-\d+\.json$/.test(name))
+    .forEach(name => {
+      try {
+        fs.unlinkSync(path.join(storage.backupDir, name));
+      } catch (error) {
+        console.error('Failed to remove backup during reset:', error);
+      }
+    });
 }
 
 function backupCurrentState() {
@@ -570,15 +583,11 @@ async function ensureDatabaseInitialized() {
     const current = normalizeState(existing.rows[0].data);
     if (current.system?.resetVersion !== SYSTEM_RESET_VERSION) {
       const resetState = normalizeState(getResetState());
-      await database.pool.query(`
-        INSERT INTO app_state_backups (state_id, data)
-        SELECT id, data FROM app_state WHERE id = $1
-      `, [DB_STATE_KEY]);
       await database.pool.query(
         'UPDATE app_state SET data = $2::jsonb, updated_at = now() WHERE id = $1',
         [DB_STATE_KEY, JSON.stringify(resetState)]
       );
-      await cleanupDatabaseBackups();
+      await clearDatabaseBackups();
       console.log(`Reset PostgreSQL app_state "${DB_STATE_KEY}" for ${SYSTEM_RESET_VERSION}.`);
     }
   }
@@ -596,6 +605,10 @@ async function cleanupDatabaseBackups(client = database.pool) {
       OFFSET $2
     )
   `, [DB_STATE_KEY, BACKUP_LIMIT]);
+}
+
+async function clearDatabaseBackups(client = database.pool) {
+  await client.query('DELETE FROM app_state_backups WHERE state_id = $1', [DB_STATE_KEY]);
 }
 
 async function readDatabaseState() {
@@ -751,7 +764,12 @@ app.post('/api/auth/logout', requireAuth, (req, res) => {
 
 app.post('/api/admin/reset-state', requireAdmin, async (req, res) => {
   try {
-    await writeState(getResetState());
+    await writeState(getResetState(), { skipBackup: true });
+    if (database.enabled) {
+      await clearDatabaseBackups();
+    } else {
+      clearFileBackups();
+    }
     res.json({ ok: true, state: sanitizeStateForClient(getResetState()) });
   } catch (error) {
     console.error('Failed to reset state:', error);
