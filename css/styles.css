@@ -4794,3 +4794,152 @@ table.operators {
     padding-right: 8px;
   }
 }
+
+.operator-auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8500;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, .72), rgba(36, 71, 168, .78)),
+    radial-gradient(circle at 50% 0, rgba(45, 97, 231, .34), transparent 42%);
+  backdrop-filter: blur(10px);
+}
+
+.operator-auth-card {
+  width: min(430px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 18px;
+  background: #fff;
+  color: var(--mvp-text);
+  box-shadow: 0 28px 70px rgba(15, 23, 42, .28);
+}
+
+.operator-auth-mark {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  border-radius: 14px;
+  background: #2447a8;
+  color: #fff;
+  font-weight: 900;
+  font-size: 24px;
+}
+
+.operator-auth-kicker,
+.operator-auth-field span,
+.operator-session-card span {
+  display: block;
+  color: var(--mvp-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.operator-auth-card h2 {
+  margin: 0 0 8px;
+  color: var(--mvp-text);
+  font-size: 28px;
+}
+
+.operator-auth-card p {
+  margin: 0 0 20px;
+  color: var(--mvp-muted);
+  line-height: 1.55;
+}
+
+.operator-auth-field {
+  display: grid;
+  gap: 8px;
+}
+
+.operator-auth-field input {
+  width: 100%;
+  height: 46px;
+  padding: 0 13px;
+  border: 1px solid var(--mvp-line);
+  border-radius: 10px;
+  background: #f8fafc;
+  color: var(--mvp-text);
+  font: inherit;
+}
+
+.operator-auth-field input:focus {
+  outline: none;
+  border-color: #2d61e7;
+  box-shadow: 0 0 0 3px rgba(45, 97, 231, .14);
+}
+
+.operator-auth-submit,
+.operator-session-card button,
+.operator-session-panel button {
+  border: 0;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.operator-auth-submit {
+  width: 100%;
+  height: 46px;
+  margin-top: 14px;
+}
+
+.operator-auth-submit:disabled {
+  opacity: .68;
+  cursor: progress;
+}
+
+.operator-auth-error {
+  min-height: 18px;
+  margin-top: 10px;
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.operator-session-card {
+  padding: 14px;
+  border: 1px solid var(--mvp-line);
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.operator-session-card b,
+.operator-session-card small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.operator-session-card b {
+  margin-top: 4px;
+  color: var(--mvp-text);
+  font-size: 15px;
+}
+
+.operator-session-card small {
+  color: var(--mvp-muted);
+}
+
+.operator-session-card button {
+  min-height: 34px;
+  margin-top: 10px;
+  padding: 0 12px;
+}
+
+.operator-session-panel {
+  margin-top: 12px;
+}
+
+.operator-session-panel button {
+  width: 100%;
+  min-height: 34px;
+  background: rgba(255, 255, 255, .16);
+}
