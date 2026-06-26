@@ -69,6 +69,17 @@ const api = (() => {
     }
   }
 
+  async function loginOperator(login) {
+    const res = await fetch(`${base()}/api/operator/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login }),
+    });
+    if (res.status === 404) throw new Error('РћРїРµСЂР°С‚РѕСЂ РЅРµ РЅР°Р№РґРµРЅ');
+    if (!res.ok) throw new Error(`РЎРµСЂРІРµСЂ РІРµСЂРЅСѓР» ${res.status}`);
+    return res.json();
+  }
+
   async function createRewardRequest(payload) {
     const res = await fetch(`${base()}/api/gamification/request`, {
       method: 'POST',
@@ -107,6 +118,6 @@ const api = (() => {
     return res.json();
   }
 
-  return { loadState, saveState, verifyPassword, createRewardRequest, addManualCoins, updateRewardRequest };
+  return { loadState, saveState, verifyPassword, loginOperator, createRewardRequest, addManualCoins, updateRewardRequest };
 
 })();
