@@ -175,6 +175,7 @@ function ensureOperatorAuthOverlay() {
       </label>
       <button class="operator-auth-submit" id="operator-login-submit" type="button" onclick="loginOperator()">Войти</button>
       <div class="operator-auth-error" id="operator-login-error" aria-live="polite"></div>
+      <button class="operator-auth-admin" type="button" onclick="showAdminLoginFromOperator()">Войти как админ</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -205,6 +206,12 @@ function showOperatorLogin() {
   overlay.hidden = false;
   document.body.classList.add('operator-login-required');
   setTimeout(() => document.getElementById('operator-login-input')?.focus(), 0);
+}
+
+function showAdminLoginFromOperator() {
+  document.getElementById('operator-auth-overlay')?.setAttribute('hidden', '');
+  document.body.classList.remove('operator-login-required');
+  openAdminModal();
 }
 
 function updateOperatorAuthOverlay() {
@@ -2950,6 +2957,7 @@ Object.assign(window, {
   loginOperator,
   logoutOperator,
   showOperatorLogin,
+  showAdminLoginFromOperator,
   buyIcoreReward,
   addManualIcoreCoins,
   updateIcoreRequest,
