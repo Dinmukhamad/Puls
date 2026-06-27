@@ -1,224 +1,1297 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iCORE · Конкурс операторов</title>
-  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=divergent-icon-1">
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-icon-1">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-icon-1">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
-  <link rel="stylesheet" href="css/styles.css?v=frontend-refresh-1">
-  <script src="js/api.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iCORE · Конкурс операторов</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ─── CSS Variables ─── */
+  :root {
+    --bg: #0b0f1a;
+    --bg-card: #111827;
+    --bg-card-2: #1a2235;
+    --border: rgba(255,255,255,0.07);
+    --border-hover: rgba(255,255,255,0.14);
+
+    --text: #f0f4ff;
+    --text-2: #8b9ab8;
+    --text-3: #4d5e7a;
+
+    --gold: #f59e0b;
+    --gold-dim: rgba(245,158,11,0.12);
+    --indigo: #6366f1;
+    --indigo-dim: rgba(99,102,241,0.12);
+    --green: #10b981;
+    --green-dim: rgba(16,185,129,0.1);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.1);
+
+    /* Group colours */
+    --g1: #f97316;  /* fire orange */
+    --g1-dim: rgba(249,115,22,0.12);
+    --g2: #6366f1;  /* indigo */
+    --g2-dim: rgba(99,102,241,0.12);
+    --g3: #10b981;  /* emerald */
+    --g3-dim: rgba(16,185,129,0.12);
+
+    --radius: 14px;
+    --radius-sm: 8px;
+    --font: 'Inter', system-ui, sans-serif;
+  }
+
+  /* ─── Reset ─── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+    font-size: 15px;
+  }
+  a { text-decoration: none; color: inherit; }
+  ul { list-style: none; }
+
+  /* ─── Utility ─── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .badge-gold { background: var(--gold-dim); color: var(--gold); }
+  .badge-indigo { background: var(--indigo-dim); color: var(--indigo); }
+  .badge-green { background: var(--green-dim); color: var(--green); }
+  .badge-g1 { background: var(--g1-dim); color: var(--g1); }
+  .badge-g2 { background: var(--g2-dim); color: var(--g2); }
+  .badge-g3 { background: var(--g3-dim); color: var(--g3); }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+  }
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 20px;
+  }
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 24px 0;
+  }
+
+  /* ─── Layout ─── */
+  .layout { display: flex; min-height: 100vh; }
+
+  /* ─── Sidebar ─── */
+  .sidebar {
+    width: 240px;
+    min-width: 240px;
+    background: var(--bg-card);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 24px 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+  .sidebar-logo {
+    padding: 0 20px 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-logo-mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .logo-icon {
+    width: 34px;
+    height: 34px;
+    background: linear-gradient(135deg, var(--indigo), #818cf8);
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 800;
+    color: #fff;
+    letter-spacing: -0.5px;
+  }
+  .logo-text { font-size: 17px; font-weight: 700; color: var(--text); }
+  .logo-sub { font-size: 12px; color: var(--text-2); }
+
+  .sidebar-nav { padding: 20px 12px; flex: 1; }
+  .nav-group { margin-bottom: 24px; }
+  .nav-group-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    padding: 0 8px;
+    margin-bottom: 6px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-2);
+    transition: background 0.15s, color 0.15s;
+    text-decoration: none;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+  .nav-item.active {
+    background: var(--indigo-dim);
+    color: var(--indigo);
+    font-weight: 500;
+  }
+  .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+  .sidebar-footer {
+    padding: 16px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .role-chip {
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .role-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; flex-shrink: 0; }
+  .role-name { font-weight: 500; color: var(--text); }
+  .role-tag { font-size: 11px; color: var(--text-2); }
+
+  /* ─── Main ─── */
+  .main { flex: 1; overflow-x: hidden; }
+
+  /* ─── Top bar ─── */
+  .topbar {
+    background: rgba(11,15,26,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+  .topbar-title { font-size: 15px; font-weight: 600; }
+  .topbar-right { display: flex; align-items: center; gap: 12px; }
+  .period-pill {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 13px;
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .period-pill .dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  .admin-btn {
+    background: var(--indigo);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--font);
+    transition: opacity 0.15s;
+  }
+  .admin-btn:hover { opacity: 0.85; }
+
+  /* ─── Page content ─── */
+  .page { padding: 32px; max-width: 1100px; }
+
+  /* ─── Hero ─── */
+  .hero {
+    margin-bottom: 32px;
+  }
+  .hero h1 {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1.25;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+  .hero-sub { color: var(--text-2); font-size: 14px; max-width: 520px; }
+
+  /* ─── Timeline row ─── */
+  .timeline-row {
+    display: flex;
+    gap: 12px;
+    margin: 20px 0 32px;
+    flex-wrap: wrap;
+  }
+  .timeline-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 18px;
+    min-width: 130px;
+  }
+  .timeline-item.active-period { border-color: rgba(99,102,241,0.4); }
+  .tl-label { font-size: 11px; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .tl-date { font-size: 16px; font-weight: 600; }
+  .tl-date.accent { color: var(--indigo); }
+
+  /* ─── Stats row ─── */
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 14px; margin-bottom: 32px; }
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .stat-label { font-size: 12px; color: var(--text-2); margin-bottom: 8px; font-weight: 500; }
+  .stat-value { font-size: 26px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .stat-value.gold { color: var(--gold); }
+  .stat-value.indigo { color: var(--indigo); }
+  .stat-value.green { color: var(--green); }
+  .stat-sub { font-size: 11px; color: var(--text-3); margin-top: 6px; }
+
+  /* ─── Groups section ─── */
+  .groups-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+
+  @media (max-width: 800px) { .groups-grid { grid-template-columns: 1fr; } }
+
+  .group-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s;
+    cursor: default;
+  }
+  .group-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  .group-card:hover { transform: translateY(-2px); border-color: var(--border-hover); }
+  .group-card.g1::before { background: var(--g1); }
+  .group-card.g2::before { background: var(--g2); }
+  .group-card.g3::before { background: var(--g3); }
+
+  .group-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .group-name-row { display: flex; align-items: center; gap: 10px; }
+  .group-emoji { font-size: 22px; }
+  .group-name { font-size: 16px; font-weight: 700; }
+  .group-rank {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-3);
+  }
+  .group-rank.rank-1 { color: var(--gold); }
+  .group-rank.rank-2 { color: var(--text-2); }
+  .group-rank.rank-3 { color: #b97333; }
+
+  .group-score { font-size: 32px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; margin-bottom: 4px; }
+  .group-score-label { font-size: 12px; color: var(--text-2); margin-bottom: 16px; }
+
+  .group-bar-wrap {
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+  .group-bar { height: 100%; border-radius: 4px; transition: width 0.8s ease; }
+  .g1 .group-bar { background: var(--g1); }
+  .g2 .group-bar { background: var(--g2); }
+  .g3 .group-bar { background: var(--g3); }
+
+  .group-members { display: flex; gap: 6px; flex-wrap: wrap; }
+  .member-pill {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: var(--text-2);
+  }
+  .member-pill.top { color: var(--gold); border-color: rgba(245,158,11,0.2); background: var(--gold-dim); }
+
+  /* ─── Operator table ─── */
+  .table-wrap { overflow-x: auto; margin-bottom: 32px; }
+  .ops-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .ops-table thead th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .ops-table thead th:first-child { width: 40px; }
+  .ops-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.12s;
+  }
+  .ops-table tbody tr:hover { background: rgba(255,255,255,0.025); }
+  .ops-table tbody tr:last-child { border-bottom: none; }
+  .ops-table td { padding: 11px 14px; vertical-align: middle; white-space: nowrap; }
+
+  .rank-num { color: var(--text-3); font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13px; }
+  .rank-num.top { color: var(--gold); }
+  .op-name { font-weight: 500; }
+  .op-group-dot {
+    display: inline-flex;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
+  .num-cell { font-variant-numeric: tabular-nums; color: var(--text-2); }
+  .num-cell.bold { color: var(--text); font-weight: 600; }
+  .score-bar-wrap {
+    width: 80px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 3px;
+    height: 5px;
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  .score-bar { height: 100%; background: var(--indigo); border-radius: 3px; }
+  .delta-up { color: var(--green); font-size: 12px; }
+  .delta-down { color: var(--red); font-size: 12px; }
+
+  /* ─── Coin / Shop section ─── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 32px; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+  .coin-list { display: flex; flex-direction: column; gap: 10px; }
+  .coin-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .coin-item:last-child { border-bottom: none; }
+  .coin-left { display: flex; align-items: center; gap: 10px; }
+  .coin-avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--bg-card-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-2);
+    flex-shrink: 0;
+  }
+  .coin-name { font-size: 14px; font-weight: 500; }
+  .coin-rank-tiny { font-size: 11px; color: var(--text-3); }
+  .coin-amount { font-size: 16px; font-weight: 700; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .coin-icon { font-size: 14px; margin-right: 2px; }
+
+  .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .shop-item {
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    transition: border-color 0.15s;
+  }
+  .shop-item:hover { border-color: var(--gold); }
+  .shop-emoji { font-size: 24px; margin-bottom: 8px; }
+  .shop-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .shop-desc { font-size: 12px; color: var(--text-2); margin-bottom: 10px; }
+  .shop-price {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--gold);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ─── Rules section ─── */
+  .rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 32px; }
+  @media (max-width: 600px) { .rules-grid { grid-template-columns: 1fr; } }
+  .rules-col {}
+  .rule-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .rule-item:last-child { border-bottom: none; }
+  .rule-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .rule-text { color: var(--text-2); }
+  .rule-text b { color: var(--text); font-weight: 500; }
+  .rules-header { font-size: 13px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .rules-header.good { color: var(--green); }
+  .rules-header.bad { color: var(--red); }
+
+  /* ─── Admin modal ─── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    width: 100%;
+    max-width: 460px;
+  }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .modal-title { font-size: 17px; font-weight: 700; }
+  .modal-close {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    color: var(--text-2);
+    transition: background 0.15s;
+  }
+  .modal-close:hover { background: rgba(255,255,255,0.12); }
+
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 12px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 7px; display: block; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .date-input, .file-section { position: relative; }
+  .date-input input[type="date"],
+  .modal input[type="text"],
+  .modal input[type="password"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 9px 12px;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .date-input input:focus, .modal input:focus { border-color: var(--indigo); }
+  .file-zone {
+    background: var(--bg);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    margin-bottom: 10px;
+    position: relative;
+  }
+  .file-zone:hover { border-color: var(--indigo); }
+  .file-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .file-zone-icon { font-size: 22px; flex-shrink: 0; }
+  .file-zone-text { }
+  .file-zone-title { font-size: 13px; font-weight: 500; }
+  .file-zone-sub { font-size: 11px; color: var(--text-3); }
+  .modal-hint { font-size: 12px; color: var(--text-3); margin-bottom: 20px; }
+  .modal-btn {
+    width: 100%;
+    background: var(--indigo);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--font);
+    transition: opacity 0.15s;
+  }
+  .modal-btn:hover { opacity: 0.88; }
+  .modal-divider { display: flex; align-items: center; gap: 12px; margin: 16px 0; }
+  .modal-divider span { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+  .modal-divider::before, .modal-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* ─── Tab content visibility ─── */
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ─── Mobile sidebar toggle ─── */
+  .mob-toggle {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--indigo);
+    border: none;
+    border-radius: 50%;
+    width: 50px; height: 50px;
+    font-size: 22px;
+    color: #fff;
+    cursor: pointer;
+    z-index: 90;
+    box-shadow: 0 4px 20px rgba(99,102,241,0.45);
+  }
+  @media (max-width: 768px) {
+    .sidebar { position: fixed; left: -260px; z-index: 80; transition: left 0.25s; height: 100vh; }
+    .sidebar.open { left: 0; }
+    .mob-toggle { display: flex; align-items: center; justify-content: center; }
+    .page { padding: 20px 16px; }
+    .topbar { padding: 12px 16px; }
+    .two-col { grid-template-columns: 1fr; }
+  }
+
+  /* ─── Scrollbar ─── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+</style>
 </head>
 <body>
-  <div class="bg-grid" aria-hidden="true"></div>
 
-  <div class="bg-decorations" aria-hidden="true">
-    <svg class="bg-deco deco-fire" viewBox="0 0 120 200" xmlns="http://www.w3.org/2000/svg">
-      <path d="M60,185 Q18,148 30,100 Q44,60 62,40 Q50,72 68,86 Q56,58 78,28 Q90,66 74,98 Q96,76 90,112 Q100,86 94,132 Q88,164 60,185Z" fill="rgba(200,52,26,.07)"/>
-    </svg>
-    <svg class="bg-deco deco-circuit" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
-      <line x1="20" y1="110" x2="88" y2="110" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
-      <line x1="110" y1="20" x2="110" y2="88" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
-      <line x1="132" y1="110" x2="200" y2="110" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
-      <line x1="110" y1="132" x2="110" y2="200" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
-      <circle cx="110" cy="110" r="22" fill="none" stroke="rgba(21,88,168,.12)" stroke-width="1.5"/>
-      <circle cx="110" cy="110" r="9" fill="rgba(21,88,168,.08)"/>
-      <rect x="14" y="104" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
-      <rect x="192" y="104" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
-      <rect x="104" y="14" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
-      <rect x="104" y="192" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
-    </svg>
-    <svg class="bg-deco deco-ring" viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="130" cy="130" r="120" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="1"/>
-      <circle cx="130" cy="130" r="90"  fill="none" stroke="rgba(255,255,255,.025)" stroke-width="1"/>
-      <circle cx="130" cy="130" r="60"  fill="none" stroke="rgba(255,255,255,.02)" stroke-width="1"/>
-      <line x1="130" y1="10" x2="130" y2="250" stroke="rgba(255,255,255,.02)" stroke-width="1"/>
-      <line x1="10" y1="130" x2="250" y2="130" stroke="rgba(255,255,255,.02)" stroke-width="1"/>
-    </svg>
-  </div>
+<!-- Mobile sidebar toggle -->
+<button class="mob-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰</button>
 
-  <header class="app-topbar" aria-label="Навигация конкурса">
-    <a class="brand-lockup" href="#dashboard" aria-label="iCORE · Конкурс операторов">
-      <span class="brand-mark">iC</span>
-      <span>
-        <strong>iCORE</strong>
-        <em>Конкурс операторов</em>
-      </span>
-    </a>
-    <nav class="quick-nav" aria-label="Разделы">
-      <a href="#dashboard">Обзор</a>
-      <a href="#visual-dashboard">Дашборд</a>
-      <a href="#scoreboard">Команды</a>
-      <a href="#faction-grid">Операторы</a>
-    </nav>
-    <a class="topbar-action" href="#faction-grid">К таблицам</a>
-  </header>
+<div class="layout">
 
-  <main class="container">
-
-    <!-- ═══ HERO ════════════════════════════════════════════════ -->
-    <section class="hero" aria-label="Дивергент: Конкурс Операторов">
-
-      <div class="hero-factions">
-        <div class="hf-badge hf-dauntless">
-          <span class="hf-icon">🔥</span>
-          <span class="hf-name">Бесстрашие</span>
-          <span class="hf-en">Dauntless</span>
-        </div>
-        <div class="hf-badge hf-erudite">
-          <span class="hf-icon">⚡</span>
-          <span class="hf-name">Эрудиция</span>
-          <span class="hf-en">Erudite</span>
-        </div>
-        <div class="hf-badge hf-candor">
-          <span class="hf-icon">⚖</span>
-          <span class="hf-name">Искренность</span>
-          <span class="hf-en">Candor</span>
-        </div>
+  <!-- ─── Sidebar ─── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-mark">
+        <div class="logo-icon">iC</div>
+        <div class="logo-text">iCORE</div>
       </div>
+      <div class="logo-sub">Конкурс операторов</div>
+    </div>
 
-      <div class="hero-body">
-        <div class="hero-eyebrow">iGROUP · Конкурс операторов</div>
-        <h1 class="hero-title">
-          <span class="hero-title-big">iCORE</span>
-          <span class="hero-title-small">Рейтинг смены</span>
-        </h1>
-        <p class="hero-desc">
-          Рабочая панель конкурса: импортируйте Excel, проверяйте рассчитанные показатели,
-          следите за рейтингом команд и быстро находите зоны роста каждого оператора.
-        </p>
-
-        <div class="hero-timeline">
-          <div class="ht-item">
-            <div class="ht-label">Период конкурса</div>
-            <div class="ht-val">15.06 – 21.06</div>
-          </div>
-          <div class="ht-sep"></div>
-          <div class="ht-item">
-            <div class="ht-label">Промежуточные</div>
-            <div class="ht-val accent-mid">18.06</div>
-          </div>
-          <div class="ht-sep"></div>
-          <div class="ht-item">
-            <div class="ht-label">Итоги недели</div>
-            <div class="ht-val accent-fin">23.06</div>
-          </div>
-        </div>
-
-        <a class="hero-cta" href="#dashboard">
-          К результатам
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+    <nav class="sidebar-nav">
+      <div class="nav-group">
+        <div class="nav-group-label">Обзор</div>
+        <a href="#" class="nav-item active" onclick="switchTab('overview', this)">
+          <span class="nav-icon">📊</span> Общие результаты
+        </a>
+        <a href="#" class="nav-item" onclick="switchTab('scoreboard', this)">
+          <span class="nav-icon">🏆</span> Рейтинг групп
+        </a>
+        <a href="#" class="nav-item" onclick="switchTab('tables', this)">
+          <span class="nav-icon">📋</span> Таблица операторов
+        </a>
+        <a href="#" class="nav-item" onclick="switchTab('rules', this)">
+          <span class="nav-icon">📜</span> Правила оценки
         </a>
       </div>
-    </section>
 
-    <!-- ═══ DASHBOARD ════════════════════════════════════════════ -->
-    <div id="dashboard" class="dashboard-anchor"></div>
-
-    <!-- Панель редактора (только для admin) -->
-    <section class="editor-panel" id="editor-panel" aria-label="Управление данными" hidden></section>
-
-    <!-- Статистика -->
-    <section class="stats-section" id="stats-section" aria-label="Статистика конкурса"></section>
-
-    <!-- Визуальный дашборд -->
-    <section class="visual-dashboard" id="visual-dashboard" aria-label="Визуальный дашборд конкурса"></section>
-
-    <!-- Рейтинг фракций -->
-    <section class="scoreboard" id="scoreboard" aria-label="Общий рейтинг фракций"></section>
-
-    <!-- Критерии оценки -->
-    <section class="criteria-section" aria-label="Критерии оценки">
-      <div class="criteria-header">
-        <div class="section-kicker">Система оценки</div>
-        <h2 class="section-title">Критерии оценки</h2>
+      <div class="nav-group">
+        <div class="nav-group-label">Личный кабинет</div>
+        <a href="#" class="nav-item" onclick="switchTab('cabinet', this)">
+          <span class="nav-icon">👤</span> Мой кабинет
+        </a>
+        <a href="#" class="nav-item" onclick="switchTab('coins', this)">
+          <span class="nav-icon">🪙</span> Рейтинг коинов
+        </a>
+        <a href="#" class="nav-item" onclick="switchTab('shop', this)">
+          <span class="nav-icon">🛍</span> Магазин бонусов
+        </a>
+        <a href="#" class="nav-item" onclick="switchTab('personal', this)">
+          <span class="nav-icon">📈</span> Личные показатели
+        </a>
+        <a href="#" class="nav-item" onclick="switchTab('bonuses', this)">
+          <span class="nav-icon">🎮</span> Бонусы и уровни
+        </a>
       </div>
-      <div class="criteria-grid">
-        <div class="criteria-card positive">
-          <div class="cc-icon">✓</div>
-          <div class="cc-title">Основные показатели</div>
-          <ul class="cc-list">
-            <li>Качество работы</li>
-            <li>Выработка часов</li>
-            <li>Эффективность</li>
-            <li>Дополнительные баллы за переработки</li>
-          </ul>
-        </div>
-        <div class="criteria-card negative">
-          <div class="cc-icon">✗</div>
-          <div class="cc-title">Антипоказатели</div>
-          <ul class="cc-list">
-            <li>Дисциплинарные нарушения</li>
-            <li>Опоздания</li>
-            <li>Использование посторонних сайтов в рабочее время</li>
-          </ul>
-          <div class="cc-note">За антипоказатели итоговый балл уменьшается</div>
-        </div>
-      </div>
-    </section>
 
-    <!-- Таблицы фракций -->
-    <section aria-label="Таблицы фракций">
-      <div class="section-header-row">
+      <div class="nav-group">
+        <div class="nav-group-label">Управление</div>
+        <a href="#" class="nav-item" onclick="openAdmin()">
+          <span class="nav-icon">⚙️</span> Администратор
+        </a>
+        <a href="#" class="nav-item" onclick="switchTab('requests', this)">
+          <span class="nav-icon">📨</span> Заявки
+        </a>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="role-chip">
+        <div class="role-dot"></div>
         <div>
-          <div class="section-kicker">Фракционные таблицы</div>
-          <h2 class="section-title">Операторы по фракциям</h2>
+          <div class="role-name">Оператор</div>
+          <div class="role-tag">5 баллов = 1 коин</div>
         </div>
-      </div>
-      <div class="factions-grid" id="faction-grid"></div>
-    </section>
-
-  </main>
-
-  <!-- Админ -->
-  <div class="admin-gate" id="admin-gate">
-    <div class="admin-popover" id="admin-popover" hidden>
-      <div class="admin-popover-header">
-        <div>
-          <div class="admin-popover-kicker">Restricted</div>
-          <div class="admin-popover-title">Администратор</div>
-        </div>
-        <button class="admin-popover-close" onclick="closeAdminModal()" aria-label="Закрыть">×</button>
-      </div>
-      <div class="admin-popover-login" id="admin-login-area">
-        <input class="admin-popover-input" id="admin-password" type="password" placeholder="Пароль"
-          onkeydown="if(event.key==='Enter') loginAdmin()">
-        <button class="admin-popover-submit" onclick="loginAdmin()">Войти</button>
-        <div class="admin-error" id="admin-error" aria-live="polite"></div>
-      </div>
-      <div class="admin-popover-active" id="admin-active-area" hidden>
-        <p>Доступ открыт. Редактирование — в панели выше.</p>
-        <div class="excel-import-block">
-          <div class="excel-import-title">📥 Рассчитать из Excel</div>
-          <div class="excel-period-grid">
-            <label class="excel-period-field" for="excel-period-start">
-              <span>Начало периода</span>
-              <input type="date" id="excel-period-start">
-            </label>
-            <label class="excel-period-field" for="excel-period-end">
-              <span>Конец периода</span>
-              <input type="date" id="excel-period-end">
-            </label>
-          </div>
-          <label class="excel-import-label" for="excel-file-input">Файл (.xlsx / .xls):</label>
-          <label class="excel-file-label" id="excel-file-label">
-            <input type="file" id="excel-file-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
-            <span id="excel-file-name">Выберите файл…</span>
-            <span class="excel-file-btn">Обзор</span>
-          </label>
-          <button class="admin-popover-submit excel-import-go" id="excel-import-btn">⚡ Применить</button>
-          <div class="import-status" id="import-status" hidden></div>
-        </div>
-        <button class="admin-popover-submit ghost" onclick="logoutAdmin()">Выйти</button>
       </div>
     </div>
-    <button class="admin-gate-btn" id="admin-gate-btn" onclick="openAdminModal()" title="Администратор">◈</button>
-  </div>
+  </aside>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=frontend-refresh-1"></script>
-  <script src="js/excel-import.js?v=frontend-refresh-1"></script>
+  <!-- ─── Main ─── -->
+  <div class="main">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-title">Конкурс операторов</div>
+        <div class="badge badge-indigo">Неделя 3</div>
+      </div>
+      <div class="topbar-right">
+        <div class="period-pill">
+          <span class="dot"></span>
+          15.06 – 21.06
+        </div>
+        <button class="admin-btn" onclick="openAdmin()">⚡ Загрузить данные</button>
+      </div>
+    </div>
+
+    <div class="page">
+
+      <!-- ─── OVERVIEW TAB ─── -->
+      <div id="tab-overview" class="tab-content active">
+        <div class="hero">
+          <h1>iCORE · Рейтинг недели</h1>
+          <p class="hero-sub">Баллы начисляются за качество работы, выработку часов и эффективность. За нарушения — снятие.</p>
+        </div>
+
+        <!-- Timeline -->
+        <div class="timeline-row">
+          <div class="timeline-item active-period">
+            <div class="tl-label">Период</div>
+            <div class="tl-date accent">15.06 – 21.06</div>
+          </div>
+          <div class="timeline-item">
+            <div class="tl-label">Промежуточные</div>
+            <div class="tl-date">18.06</div>
+          </div>
+          <div class="timeline-item">
+            <div class="tl-label">Итоги недели</div>
+            <div class="tl-date">23.06</div>
+          </div>
+          <div class="timeline-item">
+            <div class="tl-label">Обновлено</div>
+            <div class="tl-date" id="last-updated">—</div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-label">Участников</div>
+            <div class="stat-value indigo">—</div>
+            <div class="stat-sub">в 3 группах</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Коинов в обороте</div>
+            <div class="stat-value gold">—</div>
+            <div class="stat-sub">за текущую неделю</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Лучший балл</div>
+            <div class="stat-value green">—</div>
+            <div class="stat-sub">топ оператор</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Средний балл</div>
+            <div class="stat-value">—</div>
+            <div class="stat-sub">по всем группам</div>
+          </div>
+        </div>
+
+        <!-- Groups -->
+        <div class="section-label">Рейтинг групп</div>
+        <div class="groups-grid">
+
+          <div class="group-card g1">
+            <div class="group-header">
+              <div class="group-name-row">
+                <span class="group-emoji">🔥</span>
+                <span class="group-name">Группа 1</span>
+              </div>
+              <span class="group-rank rank-1">1 место</span>
+            </div>
+            <div class="group-score" style="color: var(--g1)">—</div>
+            <div class="group-score-label">суммарных баллов</div>
+            <div class="group-bar-wrap"><div class="group-bar" style="width: 0%"></div></div>
+            <div class="group-members">
+              <span class="member-pill">Данные загружаются</span>
+            </div>
+          </div>
+
+          <div class="group-card g2">
+            <div class="group-header">
+              <div class="group-name-row">
+                <span class="group-emoji">⚡</span>
+                <span class="group-name">Группа 2</span>
+              </div>
+              <span class="group-rank rank-2">2 место</span>
+            </div>
+            <div class="group-score" style="color: var(--g2)">—</div>
+            <div class="group-score-label">суммарных баллов</div>
+            <div class="group-bar-wrap"><div class="group-bar" style="width: 0%"></div></div>
+            <div class="group-members">
+              <span class="member-pill">Данные загружаются</span>
+            </div>
+          </div>
+
+          <div class="group-card g3">
+            <div class="group-header">
+              <div class="group-name-row">
+                <span class="group-emoji">⚖</span>
+                <span class="group-name">Группа 3</span>
+              </div>
+              <span class="group-rank rank-3">3 место</span>
+            </div>
+            <div class="group-score" style="color: var(--g3)">—</div>
+            <div class="group-score-label">суммарных баллов</div>
+            <div class="group-bar-wrap"><div class="group-bar" style="width: 0%"></div></div>
+            <div class="group-members">
+              <span class="member-pill">Данные загружаются</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Quick operator table preview -->
+        <div class="section-label">Топ операторов</div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Оператор</th>
+                  <th>Группа</th>
+                  <th>Качество</th>
+                  <th>Выработка</th>
+                  <th>Эффективность</th>
+                  <th>Итог</th>
+                  <th>Коины</th>
+                </tr>
+              </thead>
+              <tbody id="overview-table-body">
+                <tr>
+                  <td colspan="8" style="text-align:center; padding: 28px; color: var(--text-3); font-size: 14px;">
+                    Загрузите отчёт для отображения данных
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div><!-- /overview -->
+
+      <!-- ─── SCOREBOARD TAB ─── -->
+      <div id="tab-scoreboard" class="tab-content">
+        <div class="hero">
+          <h1>Рейтинг групп</h1>
+          <p class="hero-sub">Сравнение команд по суммарным показателям за период.</p>
+        </div>
+        <div class="card" style="margin-bottom: 24px;">
+          <p style="color: var(--text-3); font-size: 14px; text-align: center; padding: 32px 0;">Загрузите данные для просмотра рейтинга групп</p>
+        </div>
+      </div>
+
+      <!-- ─── TABLES TAB ─── -->
+      <div id="tab-tables" class="tab-content">
+        <div class="hero">
+          <h1>Таблица операторов</h1>
+          <p class="hero-sub">Детальные показатели всех участников конкурса.</p>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="ops-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Оператор</th>
+                  <th>Группа</th>
+                  <th>Качество</th>
+                  <th>Выработка ч</th>
+                  <th>Эффективность</th>
+                  <th>Доп. баллы</th>
+                  <th>Нарушения</th>
+                  <th>Итог</th>
+                  <th>Коины</th>
+                </tr>
+              </thead>
+              <tbody id="full-table-body">
+                <tr>
+                  <td colspan="10" style="text-align:center; padding: 40px; color: var(--text-3); font-size: 14px;">
+                    Загрузите отчёт через кнопку «Загрузить данные»
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── RULES TAB ─── -->
+      <div id="tab-rules" class="tab-content">
+        <div class="hero">
+          <h1>Правила оценки</h1>
+          <p class="hero-sub">Как формируется итоговый балл и что влияет на рейтинг.</p>
+        </div>
+
+        <div class="rules-grid">
+          <div class="card">
+            <div class="rules-header good">✓ Основные показатели</div>
+            <div class="rule-item">
+              <span class="rule-icon">⭐</span>
+              <div class="rule-text"><b>Качество работы</b> — оценка звонков и взаимодействия с клиентами</div>
+            </div>
+            <div class="rule-item">
+              <span class="rule-icon">⏱</span>
+              <div class="rule-text"><b>Выработка часов</b> — отработанное время за период</div>
+            </div>
+            <div class="rule-item">
+              <span class="rule-icon">⚡</span>
+              <div class="rule-text"><b>Эффективность</b> — скорость и результативность работы</div>
+            </div>
+            <div class="rule-item">
+              <span class="rule-icon">➕</span>
+              <div class="rule-text"><b>Дополнительные баллы</b> за переработки и активность</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="rules-header bad">✗ Антипоказатели</div>
+            <div class="rule-item">
+              <span class="rule-icon">🚫</span>
+              <div class="rule-text"><b>Дисциплинарные нарушения</b> — снятие баллов за нарушения регламента</div>
+            </div>
+            <div class="rule-item">
+              <span class="rule-icon">⏰</span>
+              <div class="rule-text"><b>Опоздания</b> — каждое опоздание уменьшает итоговый балл</div>
+            </div>
+            <div class="rule-item">
+              <span class="rule-icon">🌐</span>
+              <div class="rule-text"><b>Посторонние сайты</b> — использование в рабочее время</div>
+            </div>
+            <div class="rule-item" style="background: var(--red-dim); border-radius: var(--radius-sm); padding: 10px 12px; border: none; margin-top: 8px;">
+              <span class="rule-icon">❗</span>
+              <div class="rule-text" style="color: var(--red);">За антипоказатели итоговый балл уменьшается</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom: 24px;">
+          <div class="section-label">Система коинов</div>
+          <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+            <div style="background: var(--gold-dim); border: 1px solid rgba(245,158,11,0.2); border-radius: var(--radius-sm); padding: 16px 24px; text-align: center;">
+              <div style="font-size: 28px; font-weight: 800; color: var(--gold);">5</div>
+              <div style="font-size: 12px; color: var(--text-2);">баллов</div>
+            </div>
+            <div style="font-size: 24px; color: var(--text-3);">=</div>
+            <div style="background: var(--indigo-dim); border: 1px solid rgba(99,102,241,0.2); border-radius: var(--radius-sm); padding: 16px 24px; text-align: center;">
+              <div style="font-size: 28px; font-weight: 800; color: var(--indigo);">1</div>
+              <div style="font-size: 12px; color: var(--text-2);">коин 🪙</div>
+            </div>
+            <div style="color: var(--text-2); font-size: 14px; max-width: 280px;">Коины можно тратить в магазине на бонусы и привилегии</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── CABINET TAB ─── -->
+      <div id="tab-cabinet" class="tab-content">
+        <div class="hero">
+          <h1>Мой кабинет</h1>
+          <p class="hero-sub">Ваши персональные показатели и достижения.</p>
+        </div>
+        <div class="card" style="text-align: center; padding: 48px;">
+          <div style="font-size: 48px; margin-bottom: 16px;">👤</div>
+          <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Личный кабинет</div>
+          <div style="color: var(--text-2); font-size: 14px;">Функция будет доступна после загрузки данных</div>
+        </div>
+      </div>
+
+      <!-- ─── COINS TAB ─── -->
+      <div id="tab-coins" class="tab-content">
+        <div class="hero">
+          <h1>Рейтинг коинов</h1>
+          <p class="hero-sub">Накопленные монеты операторов за период.</p>
+        </div>
+        <div class="two-col">
+          <div class="card">
+            <div class="section-label">Топ по коинам</div>
+            <div class="coin-list" id="coin-list">
+              <div style="color: var(--text-3); font-size: 14px; padding: 24px 0; text-align: center;">Загрузите данные для просмотра</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="section-label">Как заработать</div>
+            <div class="rule-item" style="border-color: var(--border);">
+              <span class="rule-icon">⭐</span>
+              <div class="rule-text">Высокое качество работы → больше баллов</div>
+            </div>
+            <div class="rule-item" style="border-color: var(--border);">
+              <span class="rule-icon">⏱</span>
+              <div class="rule-text">Полная выработка часов</div>
+            </div>
+            <div class="rule-item" style="border-color: var(--border);">
+              <span class="rule-icon">💪</span>
+              <div class="rule-text">Переработки дают дополнительные баллы</div>
+            </div>
+            <div class="divider"></div>
+            <div style="background: var(--gold-dim); border-radius: var(--radius-sm); padding: 12px 14px; font-size: 13px; color: var(--gold);">
+              🪙 Каждые 5 баллов = 1 коин
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── SHOP TAB ─── -->
+      <div id="tab-shop" class="tab-content">
+        <div class="hero">
+          <h1>Магазин бонусов</h1>
+          <p class="hero-sub">Тратьте заработанные коины на привилегии и подарки.</p>
+        </div>
+        <div class="card">
+          <div class="section-label">Доступные бонусы</div>
+          <div class="shop-grid">
+            <div class="shop-item">
+              <div class="shop-emoji">☕</div>
+              <div class="shop-name">Кофе-пауза +15 мин</div>
+              <div class="shop-desc">Дополнительное время для перерыва</div>
+              <div class="shop-price">🪙 10 коинов</div>
+            </div>
+            <div class="shop-item">
+              <div class="shop-emoji">📅</div>
+              <div class="shop-name">Выбор смены</div>
+              <div class="shop-desc">Приоритет при выборе графика</div>
+              <div class="shop-price">🪙 25 коинов</div>
+            </div>
+            <div class="shop-item">
+              <div class="shop-emoji">🎁</div>
+              <div class="shop-name">Подарок от компании</div>
+              <div class="shop-desc">Приятный сюрприз на выбор</div>
+              <div class="shop-price">🪙 50 коинов</div>
+            </div>
+            <div class="shop-item">
+              <div class="shop-emoji">🏅</div>
+              <div class="shop-name">Грамота лидера</div>
+              <div class="shop-desc">Официальное признание достижений</div>
+              <div class="shop-price">🪙 30 коинов</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── PERSONAL TAB ─── -->
+      <div id="tab-personal" class="tab-content">
+        <div class="hero">
+          <h1>Личные показатели</h1>
+          <p class="hero-sub">Ваша динамика и прогресс за период.</p>
+        </div>
+        <div class="card" style="text-align: center; padding: 48px;">
+          <div style="font-size: 48px; margin-bottom: 16px;">📈</div>
+          <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Ваши показатели</div>
+          <div style="color: var(--text-2); font-size: 14px;">Авторизуйтесь как оператор для просмотра личных данных</div>
+        </div>
+      </div>
+
+      <!-- ─── BONUSES TAB ─── -->
+      <div id="tab-bonuses" class="tab-content">
+        <div class="hero">
+          <h1>Бонусы и уровни</h1>
+          <p class="hero-sub">Система прокачки и достижений операторов.</p>
+        </div>
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="section-label">Уровни</div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div style="display:flex; align-items:center; gap:14px; padding:14px; background:var(--gold-dim); border-radius:var(--radius-sm); border:1px solid rgba(245,158,11,0.15);">
+              <div style="font-size:28px;">🥇</div>
+              <div><div style="font-weight:700; color:var(--gold);">Легенда</div><div style="font-size:12px;color:var(--text-2);">200+ коинов</div></div>
+            </div>
+            <div style="display:flex; align-items:center; gap:14px; padding:14px; background:var(--bg-card-2); border-radius:var(--radius-sm); border:1px solid var(--border);">
+              <div style="font-size:28px;">🥈</div>
+              <div><div style="font-weight:700; color:var(--text-2);">Мастер</div><div style="font-size:12px;color:var(--text-3);">100–199 коинов</div></div>
+            </div>
+            <div style="display:flex; align-items:center; gap:14px; padding:14px; background:var(--bg-card-2); border-radius:var(--radius-sm); border:1px solid var(--border);">
+              <div style="font-size:28px;">🥉</div>
+              <div><div style="font-weight:700; color:#b97333;">Профи</div><div style="font-size:12px;color:var(--text-3);">50–99 коинов</div></div>
+            </div>
+            <div style="display:flex; align-items:center; gap:14px; padding:14px; background:var(--bg-card-2); border-radius:var(--radius-sm); border:1px solid var(--border);">
+              <div style="font-size:28px;">🌱</div>
+              <div><div style="font-weight:700; color:var(--text-2);">Новичок</div><div style="font-size:12px;color:var(--text-3);">0–49 коинов</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── REQUESTS TAB ─── -->
+      <div id="tab-requests" class="tab-content">
+        <div class="hero">
+          <h1>Заявки и администрирование</h1>
+          <p class="hero-sub">Управление запросами операторов и ручные корректировки.</p>
+        </div>
+        <div class="card" style="text-align: center; padding: 48px;">
+          <div style="font-size: 48px; margin-bottom: 16px;">📨</div>
+          <div style="font-size: 18px; font-weight: 600; margin-bottom: 8px;">Заявки</div>
+          <div style="color: var(--text-2); font-size: 14px;">Доступно только для администраторов</div>
+        </div>
+      </div>
+
+    </div><!-- /page -->
+  </div><!-- /main -->
+</div><!-- /layout -->
+
+<!-- ─── Admin Modal ─── -->
+<div class="modal-overlay" id="admin-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">⚡ Загрузить данные</div>
+      <button class="modal-close" onclick="closeAdmin()">×</button>
+    </div>
+
+    <div id="modal-login-screen">
+      <div class="form-group">
+        <label class="form-label">Пароль администратора</label>
+        <input type="password" id="admin-pass" placeholder="Введите пароль">
+      </div>
+      <button class="modal-btn" onclick="adminLogin()">Войти</button>
+      <div style="margin-top: 12px; font-size: 12px; color: var(--text-3); text-align: center;" id="login-error"></div>
+    </div>
+
+    <div id="modal-upload-screen" style="display:none;">
+      <div class="modal-hint">Можно выбрать один файл или оба сразу. Обновятся только найденные показатели.</div>
+
+      <div class="form-group">
+        <div class="form-row">
+          <div>
+            <label class="form-label">Начало периода</label>
+            <div class="date-input"><input type="date" id="date-start"></div>
+          </div>
+          <div>
+            <label class="form-label">Конец периода</label>
+            <div class="date-input"><input type="date" id="date-end"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Основной отчёт (.xlsx / .xls)</label>
+        <div class="file-zone">
+          <input type="file" accept=".xlsx,.xls" id="main-report">
+          <div class="file-zone-icon">📊</div>
+          <div class="file-zone-text">
+            <div class="file-zone-title" id="main-file-name">Выберите report_2026-06.xlsx</div>
+            <div class="file-zone-sub">Необязательно</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Оценки по датам (.xlsx / .xls)</label>
+        <div class="file-zone">
+          <input type="file" accept=".xlsx,.xls" id="dates-report">
+          <div class="file-zone-icon">📅</div>
+          <div class="file-zone-text">
+            <div class="file-zone-title" id="dates-file-name">Выберите monthly_report_dates_2026-06.xlsx</div>
+            <div class="file-zone-sub">Необязательно</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="modal-btn" onclick="applyData()">⚡ Применить</button>
+      <div class="modal-divider"><span>или</span></div>
+      <button onclick="adminLogout()" style="width:100%; background:transparent; border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px; color:var(--text-2); font-family:var(--font); font-size:14px; cursor:pointer;">Выйти</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  /* ─── Tab navigation ─── */
+  function switchTab(id, el) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const tab = document.getElementById('tab-' + id);
+    if (tab) tab.classList.add('active');
+    if (el) el.classList.add('active');
+    return false;
+  }
+
+  /* ─── Admin modal ─── */
+  function openAdmin() {
+    document.getElementById('admin-modal').classList.add('open');
+  }
+  function closeAdmin() {
+    document.getElementById('admin-modal').classList.remove('open');
+  }
+  document.getElementById('admin-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeAdmin();
+  });
+
+  /* Simple password — replace server-side in production */
+  const ADMIN_PASS = 'admin123';
+  let adminLoggedIn = false;
+
+  function adminLogin() {
+    const pass = document.getElementById('admin-pass').value;
+    if (pass === ADMIN_PASS) {
+      adminLoggedIn = true;
+      document.getElementById('modal-login-screen').style.display = 'none';
+      document.getElementById('modal-upload-screen').style.display = 'block';
+      document.getElementById('login-error').textContent = '';
+    } else {
+      document.getElementById('login-error').textContent = 'Неверный пароль';
+    }
+  }
+  function adminLogout() {
+    adminLoggedIn = false;
+    document.getElementById('modal-login-screen').style.display = 'block';
+    document.getElementById('modal-upload-screen').style.display = 'none';
+    document.getElementById('admin-pass').value = '';
+    closeAdmin();
+  }
+
+  /* File name display */
+  document.getElementById('main-report').addEventListener('change', function() {
+    document.getElementById('main-file-name').textContent = this.files[0]?.name || 'Файл не выбран';
+  });
+  document.getElementById('dates-report').addEventListener('change', function() {
+    document.getElementById('dates-file-name').textContent = this.files[0]?.name || 'Файл не выбран';
+  });
+
+  function applyData() {
+    /* 
+      ─── ПОДКЛЮЧЕНИЕ К БЭКЕНДУ ───
+      Здесь отправляем файлы на сервер и получаем обработанные данные.
+      Замените этот блок на реальный fetch/axios запрос к вашему API.
+    */
+    const start = document.getElementById('date-start').value;
+    const end = document.getElementById('date-end').value;
+    const mainFile = document.getElementById('main-report').files[0];
+    const datesFile = document.getElementById('dates-report').files[0];
+
+    if (!mainFile && !datesFile) {
+      alert('Выберите хотя бы один файл');
+      return;
+    }
+
+    /* Example: send to /api/upload */
+    const formData = new FormData();
+    if (mainFile) formData.append('report', mainFile);
+    if (datesFile) formData.append('dates_report', datesFile);
+    if (start) formData.append('period_start', start);
+    if (end) formData.append('period_end', end);
+
+    // fetch('/api/upload', { method: 'POST', body: formData })
+    //   .then(r => r.json())
+    //   .then(data => renderData(data))
+    //   .catch(err => console.error(err));
+
+    /* Demo feedback */
+    closeAdmin();
+    document.getElementById('last-updated').textContent = new Date().toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+  }
+
+  /* 
+    ─── RENDER DATA ───
+    Вызывайте эту функцию с данными от бэкенда.
+    data: { operators: [], groups: [], stats: {} }
+  */
+  function renderData(data) {
+    /* Groups */
+    if (data.groups) {
+      // Example: data.groups = [{name: 'Группа 1', score: 432, members: [...], emoji: '🔥', color: 'g1'}, ...]
+      // Update group cards accordingly
+    }
+
+    /* Stats */
+    if (data.stats) {
+      const vals = document.querySelectorAll('.stat-value');
+      // update vals[0].textContent = data.stats.total_operators, etc.
+    }
+
+    /* Operators table */
+    if (data.operators) {
+      renderTable(data.operators);
+    }
+  }
+
+  function renderTable(operators) {
+    const groupColors = {'1': 'var(--g1)', '2': 'var(--g2)', '3': 'var(--g3)'};
+    const maxScore = Math.max(...operators.map(o => o.total || 0)) || 1;
+
+    const rows = operators.map((op, i) => {
+      const pct = Math.round((op.total / maxScore) * 100);
+      const coins = Math.floor((op.total || 0) / 5);
+      const rankClass = i === 0 ? 'top' : '';
+      const gc = groupColors[op.group] || 'var(--text-2)';
+      return `
+        <tr>
+          <td><span class="rank-num ${rankClass}">${i + 1}</span></td>
+          <td><span class="op-name">${op.name || '—'}</span></td>
+          <td>
+            <span class="op-group-dot" style="background:${gc}"></span>
+            <span style="font-size:13px;color:var(--text-2)">Группа ${op.group || '?'}</span>
+          </td>
+          <td class="num-cell">${op.quality ?? '—'}</td>
+          <td class="num-cell">${op.hours ?? '—'}</td>
+          <td class="num-cell">${op.efficiency ?? '—'}</td>
+          <td class="num-cell bold">
+            <div class="score-bar-wrap"><div class="score-bar" style="width:${pct}%"></div></div>
+            ${op.total ?? '—'}
+          </td>
+          <td><span style="color:var(--gold);font-weight:600;font-variant-numeric:tabular-nums">🪙 ${coins}</span></td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('overview-table-body').innerHTML = rows;
+    document.getElementById('full-table-body').innerHTML = rows;
+  }
+
+  /* Set today as default end date */
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('date-end').value = today;
+</script>
 </body>
 </html>
