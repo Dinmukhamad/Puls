@@ -25,47 +25,28 @@ let STATE = {
 document.addEventListener('DOMContentLoaded', async () => {
   initTheme();
   initNav();
-  if (api.getToken()) {
-    await tryRestoreSession();
-  } else {
-    showAuth();
-  }
+  // Cookie-auth: always call /api/auth/me to check session
+  // No localStorage check needed — token lives in HttpOnly cookie
+  await tryRestoreSession();
 });
 
 async function tryRestoreSession() {
-  const token = api.getToken();
-  console.log('[puls] tryRestoreSession, token:', token ? token.slice(0,20)+'...' : 'EMPTY');
-  
-  if (!token) {
-    console.log('[puls] No token → showAuth');
-    showAuth();
-    return;
-  }
-
   try {
-    console.log('[puls] Calling api.me()...');
     const u = await api.me();
-    console.log('[puls] api.me() OK:', u);
     STATE.user = normalizeUser(u);
     await bootApp();
   } catch(err) {
-    console.error('[puls] api.me() FAILED:', err.message);
-    // Только 401/403 → выход. Всё остальное → показать кнопку повтора
     const msg = String(err?.message || '').toLowerCase();
     const isAuthError = msg.includes('401') || msg.includes('403') ||
       msg.includes('unauthorized') || msg.includes('авторизац') ||
       msg.includes('токен') || msg.includes('forbidden');
-    
-    console.log('[puls] isAuthError:', isAuthError);
-    
     if (isAuthError) {
-      api.logout();
       showAuth();
     } else {
       const shell = document.getElementById('app-shell');
       if (shell) shell.innerHTML = `
         <div class="loading-state" style="gap:20px">
-          <p style="color:var(--danger)">Ошибка: ${err.message}</p>
+          <p style="color:var(--danger)">Ошибка подключения: ${err.message}</p>
           <button class="btn-primary" onclick="tryRestoreSession()">Повторить</button>
         </div>`;
     }
@@ -172,7 +153,7 @@ document.addEventListener('click', async e => {
     }
   }
   if (e.target.id === 'auth-logout-btn') {
-    api.logout();
+    api.logout().catch(() => {});
     STATE = { user:null, wallet:null, rating:[], shopItems:[], purchases:[], dashboard:null, adminOperators:[], history:[], currentView:'cabinet' };
     location.reload();
   }
@@ -206,12 +187,12 @@ async function loadData(role) {
   if (isAdmin(role)) {
     tasks.push(api.getDashboard().catch(() => null).then(d => STATE.dashboard = d));
     tasks.push(
-      fetch(api._base() + '/api/dashboard/operators', { headers: { Authorization: `Bearer ${api.getToken()}` } })
+      fetch(api._base() + '/api/dashboard/operators', { headers: { 'Content-Type': 'application/json' }, credentials: 'include' })
         .then(r => r.ok ? r.json() : []).then(o => STATE.adminOperators = o).catch(() => [])
     );
     tasks.push(api.listPurchases().catch(() => []).then(p => STATE.purchases = p));
     tasks.push(
-      fetch(api._base() + '/api/dashboard/history?limit=50', { headers: { Authorization: `Bearer ${api.getToken()}` } })
+      fetch(api._base() + '/api/dashboard/history?limit=50', { headers: { 'Content-Type': 'application/json' }, credentials: 'include' })
         .then(r => r.ok ? r.json() : []).then(h => STATE.history = h).catch(() => [])
     );
   }
@@ -365,7 +346,7 @@ async function submitChangePassword() {
   if (newPwd !== confirm) { err.textContent='Пароли не совпадают'; err.className='status-line status-error'; return; }
   try {
     await fetch(api._base()+'/api/operators/account/change-password', {
-      method:'POST', headers:{Authorization:`Bearer ${api.getToken()}`,'Content-Type':'application/json'},
+      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
       body: JSON.stringify({current_password:current, new_password:newPwd, confirm_password:confirm})
     }).then(async r => { if (!r.ok) throw new Error((await r.json()).detail); });
     closeModal(); showToast('Пароль успешно изменён', 'ok');
@@ -393,7 +374,7 @@ async function submitChangeUsername() {
   if (!newUsername) { err.textContent='Введите новый логин'; err.className='status-line status-error'; return; }
   try {
     const res = await fetch(api._base()+'/api/operators/account/change-username', {
-      method:'POST', headers:{Authorization:`Bearer ${api.getToken()}`,'Content-Type':'application/json'},
+      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
       body: JSON.stringify({new_username: newUsername})
     });
     const data = await res.json();
@@ -762,7 +743,7 @@ function renderManual() {
   if (!STATE.adminOperators.length) {
     el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div></div><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка операторов…</p></div>`;
     fetch(api._base() + '/api/dashboard/operators', {
-      headers: { Authorization: 'Bearer ' + api.getToken() }
+      headers: { 'Content-Type': 'application/json' }, credentials: 'include'
     }).then(r => r.ok ? r.json() : [])
       .then(ops => { STATE.adminOperators = ops; renderManual(); })
       .catch(() => {
@@ -1131,7 +1112,7 @@ function renderRequests() {
         // Используем approve с пометкой completed
         try {
           await fetch(api._base() + `/api/shop/purchases/${btn.dataset.id}/complete`, {
-            method: 'POST', headers: { Authorization: `Bearer ${api.getToken()}` }
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include'
           });
           STATE.purchases = await api.listPurchases();
           el.querySelector('#requests-list').innerHTML = renderList();
