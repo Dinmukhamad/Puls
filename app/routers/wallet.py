@@ -51,11 +51,20 @@ def create_manual_transaction(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> CoinTransaction:
+    # Backend validation (TZ Приоритет 4)
+    try:
+        payload.validate_business_rules()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     operator = db.get(Operator, payload.operator_id)
     if not operator:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
     transaction_type = "manual_add" if payload.amount >= 0 else "manual_subtract"
-    transaction = add_transaction(db, operator, payload.amount, transaction_type, payload.comment, created_by=current_user)
+    # Build full comment: "Reason: comment" or just "Reason"
+    reason = payload.reason.strip()
+    comment = payload.comment.strip()
+    full_comment = f"{reason}: {comment}" if comment else reason
+    transaction = add_transaction(db, operator, payload.amount, transaction_type, full_comment, created_by=current_user)
     db.commit()
     db.refresh(transaction)
     return transaction
