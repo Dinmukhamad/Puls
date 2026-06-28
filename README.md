@@ -1,88 +1,132 @@
-# Divergent Operator Contest
+# Puls — Operator Performance Platform
 
-## FastAPI MVP backend
+## Актуальная архитектура проекта
 
-Добавлен backend-каркас для MVP iCORE gamification:
+- **Backend:** FastAPI (Python)
+- **База данных:** PostgreSQL
+- **Frontend:** Vanilla JS / HTML / CSS (раздаётся FastAPI)
+- Файл `server.js` полностью удалён
+- Node.js backend не используется
+- JSON-файлы не используются как источник данных
 
-- роли `operator`, `supervisor`, `manager`, `admin`;
-- JWT-авторизация;
-- операторы и недельные результаты конкурса;
-- правило начисления: `5 конкурсных баллов = 1 coin`;
-- кошелек, история транзакций, ручные начисления и списания;
-- рейтинг операторов;
-- магазин бонусов с резервированием коинов, одобрением и возвратом;
-- dashboard для руководителя;
-- seed-данные для быстрого старта.
+---
 
-Локальный запуск backend:
+## Переменные окружения
+
+Создайте `.env` на основе `.env.example`:
+
+```env
+DATABASE_URL=postgresql+psycopg2://user:password@host:5432/dbname
+JWT_SECRET_KEY=ваш-случайный-ключ-минимум-32-символа
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=720
+
+SEED_ADMIN_USERNAME=admin
+SEED_ADMIN_PASSWORD=ваш-пароль-администратора
+SEED_ADMIN_FULLNAME=Администратор
+```
+
+---
+
+## Запуск проекта
+
+### Требования
+- Python 3.11+
+- PostgreSQL 14+
+
+### Установка
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-uvicorn app.main:app --reload --port 8000
 ```
 
-По умолчанию для разработки используется SQLite-файл `icore_mvp.db`, таблицы и демо-данные создаются автоматически. Для PostgreSQL укажите в `.env`:
-
-```env
-DATABASE_URL=postgresql+psycopg://icore:icore@localhost:5432/icore_mvp
-```
-
-Миграции:
+### Запуск (разработка)
 
 ```bash
-alembic upgrade head
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Демо-логины после seed:
+### Запуск (production / Railway)
 
-```text
-admin / admin12345
-supervisor / supervisor123
-manager / manager123
-operator1 / operator123
+```bash
+python app/main.py
 ```
 
-## Persistent data on Railway
+---
 
-The app stores live contest data in JSON through `/api/state`.
+## Структура проекта
 
-Do not store production data in the release file `./data.json`: Railway redeploys can replace files from the GitHub repository and reset operators.
-
-Use a Railway Volume instead:
-
-1. Create or attach a Volume to this service.
-2. Mount it at `/data`.
-3. Set the service variable:
-
-```env
-DATA_FILE=/data/data.json
+```
+project/
+  app/
+    main.py           # FastAPI приложение, раздаёт статику
+    core/
+      config.py       # Настройки из env
+      security.py     # JWT, хэширование паролей
+    database/
+      db.py           # SQLAlchemy engine, session
+    models/
+      entities.py     # ORM модели (User, Operator, ...)
+    routers/
+      auth.py         # /api/auth/*
+      operators.py    # /api/operators/*
+      wallet.py       # /api/wallet/*
+      shop.py         # /api/shop/*
+      rating.py       # /api/rating
+      dashboard.py    # /api/dashboard/*
+      weekly_results.py
+    schemas/          # Pydantic схемы
+    services/
+      seed.py         # Начальные данные
+      coins.py        # Логика коинов
+      rating.py       # Логика рейтинга
+  migrations/         # Alembic миграции
+  css/                # Стили фронтенда
+  js/                 # JS фронтенда
+  assets/             # Статика
+  index.html          # SPA точка входа
+  requirements.txt
+  .env.example
+  start.sh            # Скрипт запуска для Railway
 ```
 
-Alternative:
+---
 
-```env
-PERSISTENT_DATA_DIR=/data
+## Основные API эндпоинты
+
+```
+POST /api/auth/login                    Вход
+GET  /api/auth/me                       Текущий пользователь
+
+GET  /api/operators                     Список операторов
+POST /api/operators                     Создать оператора (+ авто-аккаунт)
+GET  /api/operators/{id}                Карточка оператора
+PATCH /api/operators/{id}               Редактировать оператора
+POST /api/operators/{id}/reset-password Сбросить пароль
+POST /api/operators/account/change-password Сменить пароль (сам оператор)
+POST /api/operators/account/change-username Сменить логин (сам оператор)
+
+GET  /api/rating                        Рейтинг операторов
+POST /api/weekly-results                Загрузить результаты недели
+
+GET  /api/wallet/me                     Мой кошелёк
+POST /api/wallet/transactions           Ручное начисление/списание
+
+GET  /api/shop/items                    Товары магазина
+POST /api/shop/purchases                Купить бонус
+POST /api/shop/purchases/{id}/approve   Одобрить заявку
+POST /api/shop/purchases/{id}/reject    Отклонить заявку
+
+GET  /api/dashboard                     Сводка (admin)
+GET  /api/dashboard/operators           Таблица операторов (admin)
+GET  /api/dashboard/history             История транзакций (admin)
 ```
 
-After deploy, open:
+---
 
-```text
-/api/health
-```
+## Деплой на Railway
 
-The response must show:
-
-```json
-{
-  "storage": {
-    "persistent": true
-  }
-}
-```
-
-The server writes automatic backups into `/data/backups`.
-
-If `storage.persistent` is `false`, operator data can still disappear after deploy or restart.
+1. Подключите PostgreSQL в Railway
+2. Задайте переменные окружения (см. выше)
+3. Custom Start Command: `bash start.sh`
+4. FastAPI автоматически создаст таблицы и seed-данные при первом запуске
