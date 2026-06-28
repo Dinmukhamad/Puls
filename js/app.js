@@ -336,6 +336,74 @@ async function reloadCabinet() {
   renderCabinet();
 }
 
+function showChangePasswordModal() {
+  showModal(`
+    <h3 class="modal-title">Сменить пароль</h3>
+    <div class="form-group">
+      <label class="form-label">Текущий пароль</label>
+      <input id="cp-current" class="form-input" type="password" placeholder="Введите текущий пароль">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Новый пароль</label>
+      <input id="cp-new" class="form-input" type="password" placeholder="Минимум 8 символов">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Повтор нового пароля</label>
+      <input id="cp-confirm" class="form-input" type="password" placeholder="Повторите пароль">
+    </div>
+    <div id="cp-err" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitChangePassword()">Сохранить</button>`);
+}
+
+async function submitChangePassword() {
+  const current = document.getElementById('cp-current')?.value;
+  const newPwd  = document.getElementById('cp-new')?.value;
+  const confirm = document.getElementById('cp-confirm')?.value;
+  const err     = document.getElementById('cp-err');
+  if (!current || !newPwd || !confirm) { err.textContent='Заполните все поля'; err.className='status-line status-error'; return; }
+  if (newPwd.length < 8) { err.textContent='Пароль должен содержать минимум 8 символов'; err.className='status-line status-error'; return; }
+  if (newPwd !== confirm) { err.textContent='Пароли не совпадают'; err.className='status-line status-error'; return; }
+  try {
+    await fetch(api._base()+'/api/operators/account/change-password', {
+      method:'POST', headers:{Authorization:`Bearer ${api.getToken()}`,'Content-Type':'application/json'},
+      body: JSON.stringify({current_password:current, new_password:newPwd, confirm_password:confirm})
+    }).then(async r => { if (!r.ok) throw new Error((await r.json()).detail); });
+    closeModal(); showToast('Пароль успешно изменён', 'ok');
+  } catch(e) { err.textContent=e.message; err.className='status-line status-error'; }
+}
+
+function showChangeUsernameModal() {
+  showModal(`
+    <h3 class="modal-title">Сменить логин</h3>
+    <div class="form-group">
+      <label class="form-label">Текущий логин</label>
+      <input class="form-input" value="${esc(STATE.user?.username||'')}" disabled style="opacity:.5">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Новый логин</label>
+      <input id="cu-new" class="form-input" placeholder="Только латиница, цифры и _">
+    </div>
+    <div id="cu-err" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitChangeUsername()">Сохранить</button>`);
+}
+
+async function submitChangeUsername() {
+  const newUsername = document.getElementById('cu-new')?.value?.trim();
+  const err = document.getElementById('cu-err');
+  if (!newUsername) { err.textContent='Введите новый логин'; err.className='status-line status-error'; return; }
+  try {
+    const res = await fetch(api._base()+'/api/operators/account/change-username', {
+      method:'POST', headers:{Authorization:`Bearer ${api.getToken()}`,'Content-Type':'application/json'},
+      body: JSON.stringify({new_username: newUsername})
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail||'Ошибка');
+    closeModal(); showToast('Логин успешно изменён', 'ok');
+    STATE.user.username = newUsername;
+    setText('side-user', STATE.user.full_name);
+  } catch(e) { err.textContent=e.message; err.className='status-line status-error'; }
+}
+
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
 ══════════════════════════════════════ */
@@ -1224,3 +1292,8 @@ window.showEditItemModal = showEditItemModal;
 window.exportCSV = exportCSV;
 window.exportHistoryCSV = exportHistoryCSV;
 window.reloadCabinet = reloadCabinet;
+window.showChangePasswordModal = showChangePasswordModal;
+window.showChangeUsernameModal = showChangeUsernameModal;
+window.submitChangePassword = submitChangePassword;
+window.submitChangeUsername = submitChangeUsername;
+window.copyCredentials = copyCredentials;
