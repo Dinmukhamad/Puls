@@ -32,7 +32,15 @@ app.use(express.json({ limit: '5mb' }));
 const _sessionsFallback = new Map();
 
 async function ensureSessionsTable() {
-  if (!database.enabled || !database.pool) return;
+  if (!database.enabled) return;
+  // Инициализируем pool если ещё не создан
+  if (!database.pool) {
+    const { Pool } = require('pg');
+    database.pool = new Pool({
+      connectionString: DATABASE_URL,
+      ssl: getDatabaseSslConfig(),
+    });
+  }
   await database.pool.query(`
     CREATE TABLE IF NOT EXISTS sessions (
       token text PRIMARY KEY,
@@ -40,7 +48,7 @@ async function ensureSessionsTable() {
       expires_at timestamptz NOT NULL
     )
   `);
-  // Чистим протухшие при старте
+  // Чистим протухшие
   await database.pool.query('DELETE FROM sessions WHERE expires_at <= now()');
 }
 
@@ -1122,8 +1130,20 @@ app.get('*', (req, res) => {
 async function startServer() {
   await ensureStorageInitialized();
 
+  // Инициализируем БД и таблицу сессий ДО старта сервера
+  // Это гарантирует что getSession работает с первого запроса
+  if (database.enabled) {
+    try {
+      await ensureDatabaseInitialized();
+      await ensureSessionsTable();
+      console.log('[db] PostgreSQL ready, sessions table ensured');
+    } catch (err) {
+      console.error('[db] Startup DB init failed, sessions will use in-memory Map:', err.message);
+    }
+  }
+
   app.listen(PORT, () => {
-    console.log(`Divergent contest started on port ${PORT}`);
+    console.log(`Puls contest started on port ${PORT}`);
     if (database.enabled) {
       console.log(`Data storage: PostgreSQL app_state/${DB_STATE_KEY}`);
     } else {
