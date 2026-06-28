@@ -220,7 +220,8 @@ function buildViews(role) {
 function renderSidebar(role) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     const t = link.dataset.navTarget;
-    const adminViews = ['summary','operators','manual','requests','history','groups'];
+    const adminViews = ['summary','operators','manual','requests','history'];
+    const managerViews = new Set(['groups']);
     const operatorViews = ['cabinet','rating','shop'];
     const sharedViews = ['shop','rating','cabinet'];
     let show = false;
@@ -1196,56 +1197,112 @@ function closeModal() {
   if (o) o.style.display = 'none';
 }
 
-function showAddOperatorModal() {
-  showModal(`
-    <h3 class="modal-title">+ Новый оператор</h3>
+async function showAddOperatorModal() {
+  // Load active groups from backend
+  let groups = [];
+  let groupsError = '';
+  try {
+    groups = await api.listGroups(true);
+  } catch(e) {
+    groupsError = 'Не удалось загрузить список групп';
+  }
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">ФИО <span style="color:var(--danger)">*</span></label>
-        <input id="new-op-name" class="form-input" placeholder="Иванов Иван Иванович">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Группа <span style="color:var(--danger)">*</span></label>
-        <input id="new-op-group" class="form-input" placeholder="Группа 1">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Статус <span style="color:var(--danger)">*</span></label>
-        <select id="new-op-status" class="form-select">
-          <option value="active">Активен</option>
-          <option value="inactive">Неактивен</option>
-          <option value="archive">Архив</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Должность</label>
-        <input id="new-op-position" class="form-input" placeholder="Оператор звонков">
-      </div>
-      <div class="form-group">
-        <label class="form-label">ID сотрудника</label>
-        <input id="new-op-empid" class="form-input" placeholder="ТН-001">
-      </div>
-      <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">Email</label>
-        <input id="new-op-email" class="form-input" type="email" placeholder="ivanov@company.com">
-      </div>
-      <div class="form-group" style="grid-column:1/-1">
-        <label class="form-label">Комментарий</label>
-        <input id="new-op-comment" class="form-input" placeholder="Внутренний комментарий">
-      </div>
-    </div>
+  const groupOptions = groups.length
+    ? groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')
+    : '';
 
-    <div id="new-op-err" class="status-line"></div>
-    <button class="btn-primary" style="width:100%;height:44px;margin-top:4px" onclick="submitAddOperator()">
-      Создать оператора
-    </button>
-    <div style="font-size:11px;color:var(--tx3)">
-      После создания система автоматически сформирует логин и временный пароль.
-    </div>`);
+  const groupField = groupsError
+    ? `<div class="status-line status-error" style="padding:8px">${esc(groupsError)}</div>`
+    : groups.length
+      ? `<select id="new-op-group-id" class="form-select">
+          <option value="">Выберите группу…</option>
+          ${groupOptions}
+        </select>`
+      : `<div class="status-line" style="padding:8px;color:var(--tx3)">
+          Группы не найдены. Создайте группу в разделе «Группы».
+         </div>`;
+
+  showModal(
+    '<h3 class="modal-title">Создание оператора</h3>' +
+    '<div style="display:grid;gap:12px">' +
+      '<div class="form-group">' +
+        '<label class="form-label">ФИО <span style="color:var(--danger)">*</span></label>' +
+        '<input id="new-op-name" class="form-input" placeholder="Иванов Иван Иванович">' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Группа <span style="color:var(--danger)">*</span></label>' +
+        groupField +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Статус участия <span style="color:var(--danger)">*</span></label>' +
+        '<select id="new-op-status" class="form-select">' +
+          '<option value="participating" selected>Участвует</option>' +
+          '<option value="not_participating">Не участвует</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Должность <span style="color:var(--danger)">*</span></label>' +
+        '<select id="new-op-position" class="form-select">' +
+          '<option value="operator" selected>Оператор</option>' +
+          '<option value="chat_manager">Чат-менеджер</option>' +
+        '</select>' +
+      '</div>' +
+      '<div class="form-group">' +
+        '<label class="form-label">Email <span style="color:var(--tx3);font-weight:400;font-size:10px">(необязательно)</span></label>' +
+        '<input id="new-op-email" class="form-input" type="email" placeholder="ivanov@company.com">' +
+      '</div>' +
+    '</div>' +
+    '<div id="new-op-err" class="status-line" style="margin-top:8px"></div>' +
+    '<button class="btn-primary" style="width:100%;height:44px;margin-top:4px" onclick="submitAddOperator()">Создать оператора</button>' +
+    '<div style="font-size:11px;color:var(--tx3);margin-top:6px">После создания система автоматически сформирует логин и временный пароль.</div>'
+  );
 }
 
 async function submitAddOperator() {
-  const name       = document.getElementById('new-op-name')?.value?.trim();
+  const name     = document.getElementById('new-op-name')?.value?.trim();
+  const groupId  = document.getElementById('new-op-group-id')?.value;
+  const status   = document.getElementById('new-op-status')?.value || 'participating';
+  const position = document.getElementById('new-op-position')?.value || 'operator';
+  const email    = document.getElementById('new-op-email')?.value?.trim() || null;
+  const err      = document.getElementById('new-op-err');
+
+  const setErr = msg => { err.textContent = msg; err.className = 'status-line status-error'; };
+
+  if (!name || name.length < 2) return setErr('Укажите ФИО оператора');
+  if (!groupId) return setErr('Выберите группу');
+
+  err.textContent = 'Создаём…'; err.className = 'status-line';
+
+  try {
+    const result = await api.createOperator({
+      full_name: name,
+      group_id: +groupId,
+      participation_status: status,
+      position: position,
+      email: email || null,
+    });
+
+    // Show credentials
+    showModal(
+      '<h3 class="modal-title" style="color:var(--ok)">✓ Оператор создан</h3>' +
+      '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:16px;display:grid;gap:8px;font-size:14px">' +
+        '<div><span style="color:var(--tx3)">ФИО:</span> <b>' + esc(result.full_name) + '</b></div>' +
+        '<div><span style="color:var(--tx3)">Группа:</span> <b>' + esc(result.group_name) + '</b></div>' +
+        '<div><span style="color:var(--tx3)">Должность:</span> <b>' + (result.position === 'chat_manager' ? 'Чат-менеджер' : 'Оператор') + '</b></div>' +
+        '<div><span style="color:var(--tx3)">Статус:</span> <b>' + (result.participation_status === 'participating' ? 'Участвует' : 'Не участвует') + '</b></div>' +
+        '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">' +
+          '<span style="color:var(--tx3)">Логин:</span> <b style="font-family:monospace;color:var(--accent)">' + esc(result.username) + '</b>' +
+        '</div>' +
+        '<div><span style="color:var(--tx3)">Временный пароль:</span> <b style="font-family:monospace;color:var(--accent)">' + esc(result.temp_password) + '</b></div>' +
+      '</div>' +
+      '<button class="btn-outline" style="width:100%" onclick="copyCredentials('' + esc(result.full_name) + '','' + esc(result.username) + '','' + esc(result.temp_password) + '')">Скопировать данные для входа</button>' +
+      '<button class="btn-primary" style="width:100%" onclick="closeModal()">Готово</button>'
+    );
+    await reloadData();
+  } catch(e) {
+    setErr(e.message);
+  }
+}
   const groupId    = document.getElementById('new-op-group-id')?.value;
   const status     = document.getElementById('new-op-status')?.value || 'participating';
   const position   = document.getElementById('new-op-position')?.value || 'operator';
