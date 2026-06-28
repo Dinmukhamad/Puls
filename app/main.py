@@ -79,7 +79,14 @@ _index = _root / "index.html"
 
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str):
-    return FileResponse(str(_index))
+    return FileResponse(
+        str(_index),
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        }
+    )
 
 
 # Точка входа — читаем PORT из env сами
