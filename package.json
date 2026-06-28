@@ -1,7 +1,7 @@
 {
-  "name": "puls-frontend",
+  "name": "pulse-frontend",
   "version": "2.0.0",
-  "description": "Puls — frontend assets only. Backend is FastAPI.",
+  "description": "Pulse — frontend assets only. Backend is FastAPI.",
   "private": true,
   "scripts": {
     "note": "This project uses FastAPI backend. Run: uvicorn app.main:app"
