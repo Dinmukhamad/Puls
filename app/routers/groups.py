@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
-from app.models.entities import Group, Operator, User
+from app.models.entities import AuditLog, Group, Operator, User
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -34,6 +34,16 @@ class GroupRead(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+def _audit_group(db: Session, action: str, group: Group, details: str, user: User) -> None:
+    db.add(AuditLog(
+        action=action,
+        entity_type="group",
+        entity_id=group.id,
+        details=details,
+        performed_by_user_id=user.id,
+    ))
 
 
 @router.get("", response_model=List[GroupRead])
@@ -69,7 +79,7 @@ def list_groups(
 def create_group(
     payload: GroupCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("manager", "admin")),
+    current_user: User = Depends(require_roles("manager", "admin")),
 ) -> dict:
     name = payload.name.strip()
     if not name:
@@ -83,6 +93,8 @@ def create_group(
 
     group = Group(name=name, status=payload.status)
     db.add(group)
+    db.flush()
+    _audit_group(db, "group_created", group, f"Создана группа {group.name} со статусом {group.status}", current_user)
     db.commit()
     db.refresh(group)
     return {
@@ -96,12 +108,13 @@ def update_group(
     group_id: int,
     payload: GroupUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("manager", "admin")),
+    current_user: User = Depends(require_roles("manager", "admin")),
 ) -> dict:
     group = db.get(Group, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Группа не найдена")
 
+    changes = []
     if payload.name is not None:
         name = payload.name.strip()
         if not name:
@@ -109,13 +122,24 @@ def update_group(
         existing = db.scalar(select(Group).where(func.lower(Group.name) == name.lower(), Group.id != group_id))
         if existing:
             raise HTTPException(status_code=409, detail=f"Группа '{name}' уже существует")
-        group.name = name
+        if group.name != name:
+            old_name = group.name
+            group.name = name
+            db.query(Operator).filter(Operator.group_id == group.id).update(
+                {"group_name": name},
+                synchronize_session=False,
+            )
+            changes.append(f"name: {old_name} → {name}")
     if payload.status is not None:
         if payload.status not in ("active", "inactive"):
             raise HTTPException(status_code=400, detail="Некорректный статус")
-        group.status = payload.status
+        if group.status != payload.status:
+            changes.append(f"status: {group.status} → {payload.status}")
+            group.status = payload.status
     if payload.name is not None or payload.status is not None:
         group.updated_at = datetime.utcnow()
+    if changes:
+        _audit_group(db, "group_updated", group, "; ".join(changes), current_user)
 
     db.commit()
     db.refresh(group)
@@ -124,3 +148,68 @@ def update_group(
         "id": group.id, "name": group.name, "status": group.status,
         "operator_count": count, "created_at": group.created_at, "updated_at": group.updated_at
     }
+
+
+@router.post("/{group_id}/disable", response_model=GroupRead)
+def disable_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("manager", "admin")),
+) -> dict:
+    group = db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Группа не найдена")
+    group.status = "inactive"
+    group.updated_at = datetime.utcnow()
+    _audit_group(db, "group_disabled", group, f"Группа {group.name} отключена", current_user)
+    db.commit()
+    db.refresh(group)
+    count = db.scalar(select(func.count(Operator.id)).where(Operator.group_id == group_id)) or 0
+    return {
+        "id": group.id, "name": group.name, "status": group.status,
+        "operator_count": count, "created_at": group.created_at, "updated_at": group.updated_at
+    }
+
+
+@router.post("/{group_id}/enable", response_model=GroupRead)
+def enable_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("manager", "admin")),
+) -> dict:
+    group = db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Группа не найдена")
+    group.status = "active"
+    group.updated_at = datetime.utcnow()
+    _audit_group(db, "group_enabled", group, f"Группа {group.name} включена", current_user)
+    db.commit()
+    db.refresh(group)
+    count = db.scalar(select(func.count(Operator.id)).where(Operator.group_id == group_id)) or 0
+    return {
+        "id": group.id, "name": group.name, "status": group.status,
+        "operator_count": count, "created_at": group.created_at, "updated_at": group.updated_at
+    }
+
+
+@router.delete("/{group_id}")
+def delete_group(
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("manager", "admin")),
+) -> dict:
+    group = db.get(Group, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Группа не найдена")
+
+    operator_count = db.scalar(select(func.count(Operator.id)).where(Operator.group_id == group_id)) or 0
+    if operator_count:
+        raise HTTPException(
+            status_code=409,
+            detail="Группу нельзя удалить, так как в ней есть операторы. Сначала переведите операторов в другую группу или отключите группу.",
+        )
+
+    _audit_group(db, "group_deleted", group, f"Удалена группа {group.name}", current_user)
+    db.delete(group)
+    db.commit()
+    return {"ok": True}
