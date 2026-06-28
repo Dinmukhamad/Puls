@@ -1,132 +1,233 @@
-# Puls — Operator Performance Platform
+# Pulse — платформа геймификации операторов
 
-## Актуальная архитектура проекта
+Внутренняя система мотивации и геймификации для операторов колл-центра.
 
-- **Backend:** FastAPI (Python)
-- **База данных:** PostgreSQL
-- **Frontend:** Vanilla JS / HTML / CSS (раздаётся FastAPI)
-- Файл `server.js` полностью удалён
-- Node.js backend не используется
-- JSON-файлы не используются как источник данных
+**Роли:** оператор, супервайзер, руководитель, администратор  
+**Модули:** операторы, рейтинг, коины, магазин бонусов, заявки, история операций  
+**Backend:** FastAPI + PostgreSQL  
+**Frontend:** HTML / CSS / Vanilla JS (раздаётся FastAPI)
+
+---
+
+## Быстрый старт (локально)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Linux / macOS
+# .venv\Scripts\Activate.ps1     # Windows PowerShell
+
+pip install -r requirements.txt
+cp .env.example .env               # заполните переменные
+
+alembic upgrade head               # применить миграции
+uvicorn app.main:app --reload      # запустить сервер
+```
+
+Откройте http://localhost:8000
 
 ---
 
 ## Переменные окружения
 
-Создайте `.env` на основе `.env.example`:
+### Обязательные для production
 
-```env
-DATABASE_URL=postgresql+psycopg2://user:password@host:5432/dbname
-JWT_SECRET_KEY=ваш-случайный-ключ-минимум-32-символа
-JWT_ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=720
+| Переменная | Описание |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET_KEY` | Секрет JWT — минимум 32 байта, уникальный |
+| `CORS_ORIGINS` | Домен фронтенда (не `*` в production) |
+| `SEED_ADMIN_USERNAME` | Логин admin при первом запуске |
+| `SEED_ADMIN_PASSWORD` | Пароль admin (только при первом запуске) |
 
-SEED_ADMIN_USERNAME=admin
-SEED_ADMIN_PASSWORD=ваш-пароль-администратора
-SEED_ADMIN_FULLNAME=Администратор
+### Опциональные
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | 720 | Время жизни токена (12 часов) |
+| `AUTO_SEED` | true | Создавать admin и demo-данные при старте |
+| `AUTO_CREATE_TABLES` | true | Создавать таблицы через create_all (dev only) |
+| `ENABLE_DEMO_DATA` | true | Создавать демо-операторов |
+| `AUTH_COOKIE_SECURE` | false | true в production (HTTPS) |
+| `AUTH_COOKIE_SAMESITE` | lax | lax или strict |
+| `ENVIRONMENT` | development | production включает safety-check |
+
+Генерация JWT_SECRET_KEY:
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
 ---
 
-## Запуск проекта
-
-### Требования
-- Python 3.11+
-- PostgreSQL 14+
-
-### Установка
+## Миграции (Alembic)
 
 ```bash
-pip install -r requirements.txt
+alembic current          # текущая версия
+alembic heads            # последняя версия
+alembic upgrade head     # применить все миграции
+alembic downgrade -1     # откатить одну миграцию
+
+# Создать новую миграцию после изменения модели:
+alembic revision --autogenerate -m "описание изменения"
 ```
 
-### Запуск (разработка)
-
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### Запуск (production / Railway)
-
-```bash
-python app/main.py
-```
+**Правило:** изменения схемы только через Alembic. Не менять применённые миграции.
 
 ---
 
-## Структура проекта
+## Railway deploy
 
-```
-project/
-  app/
-    main.py           # FastAPI приложение, раздаёт статику
-    core/
-      config.py       # Настройки из env
-      security.py     # JWT, хэширование паролей
-    database/
-      db.py           # SQLAlchemy engine, session
-    models/
-      entities.py     # ORM модели (User, Operator, ...)
-    routers/
-      auth.py         # /api/auth/*
-      operators.py    # /api/operators/*
-      wallet.py       # /api/wallet/*
-      shop.py         # /api/shop/*
-      rating.py       # /api/rating
-      dashboard.py    # /api/dashboard/*
-      weekly_results.py
-    schemas/          # Pydantic схемы
-    services/
-      seed.py         # Начальные данные
-      coins.py        # Логика коинов
-      rating.py       # Логика рейтинга
-  migrations/         # Alembic миграции
-  css/                # Стили фронтенда
-  js/                 # JS фронтенда
-  assets/             # Статика
-  index.html          # SPA точка входа
-  requirements.txt
-  .env.example
-  start.sh            # Скрипт запуска для Railway
-```
-
----
-
-## Основные API эндпоинты
-
-```
-POST /api/auth/login                    Вход
-GET  /api/auth/me                       Текущий пользователь
-
-GET  /api/operators                     Список операторов
-POST /api/operators                     Создать оператора (+ авто-аккаунт)
-GET  /api/operators/{id}                Карточка оператора
-PATCH /api/operators/{id}               Редактировать оператора
-POST /api/operators/{id}/reset-password Сбросить пароль
-POST /api/operators/account/change-password Сменить пароль (сам оператор)
-POST /api/operators/account/change-username Сменить логин (сам оператор)
-
-GET  /api/rating                        Рейтинг операторов
-POST /api/weekly-results                Загрузить результаты недели
-
-GET  /api/wallet/me                     Мой кошелёк
-POST /api/wallet/transactions           Ручное начисление/списание
-
-GET  /api/shop/items                    Товары магазина
-POST /api/shop/purchases                Купить бонус
-POST /api/shop/purchases/{id}/approve   Одобрить заявку
-POST /api/shop/purchases/{id}/reject    Отклонить заявку
-
-GET  /api/dashboard                     Сводка (admin)
-GET  /api/dashboard/operators           Таблица операторов (admin)
-GET  /api/dashboard/history             История транзакций (admin)
-```
-
----
-
-## Деплой на Railway
-
-1. Подключите PostgreSQL в Railway
-2. Задайте переменные окружения (см. выше)
+1. Создайте сервис PostgreSQL в Railway
+2. Задайте Variables (см. выше)
 3. Custom Start Command: `bash start.sh`
-4. FastAPI автоматически создаст таблицы и seed-данные при первом запуске
+
+`start.sh` автоматически запускает `alembic upgrade head` перед стартом uvicorn.
+
+Проверка деплоя:
+```bash
+curl https://<railway-domain>/health
+curl https://<railway-domain>/ready
+```
+
+---
+
+## Создание администратора
+
+При первом запуске если задан `SEED_ADMIN_PASSWORD`:
+- создаётся пользователь с ролью `admin`
+- логин = `SEED_ADMIN_USERNAME` (по умолчанию `admin`)
+
+После создания admin — уберите `SEED_ADMIN_PASSWORD` из переменных или смените пароль.
+
+---
+
+## Backup и restore
+
+```bash
+# Backup
+pg_dump "$DATABASE_URL" > backup_$(date +%Y-%m-%d).sql
+
+# Restore
+psql "$DATABASE_URL" < backup_YYYY-MM-DD.sql
+```
+
+Railway также предоставляет Backups в UI сервиса PostgreSQL.
+
+**Делайте backup перед каждой деструктивной миграцией.**
+
+---
+
+## Rollback
+
+```bash
+# Откат кода:
+git revert HEAD
+git push
+
+# Откат миграции:
+alembic downgrade -1
+
+# Если код уже откатили, а миграция применена —
+# нужен отдельный план. Деструктивные миграции (DROP COLUMN)
+# требуют предварительного backup.
+```
+
+В Railway: Deployments → предыдущий деплой → Redeploy.
+
+---
+
+## Troubleshooting
+
+### `/api/auth/me` отдаёт 500
+- Проверьте Railway Deploy Logs на ошибку AttributeError
+- Убедитесь что `alembic upgrade head` прошёл успешно
+- Проверьте `DATABASE_URL` в Variables
+
+### `/health` отдаёт 502
+- Приложение не стартовало — смотрите Deploy Logs
+- Возможно не прошла Alembic миграция
+- Проверьте порт: `PORT` в Variables должен совпадать с командой запуска
+
+### `alembic upgrade head` падает
+- Проверьте `DATABASE_URL`
+- Запустите `alembic current` — посмотрите текущую версию
+- Смотрите текст ошибки — чаще всего конфликт типов или дублирование колонки
+
+### Пользователь не может войти после смены JWT secret
+- Все текущие сессии инвалидируются — пользователи должны перелогиниться
+- Это нормальное поведение
+
+### CORS ошибка
+- Установите `CORS_ORIGINS=https://ваш-домен.railway.app`
+- Не используйте `*` в production при cookie-auth
+
+### База не подключается
+- Проверьте `DATABASE_URL` в Variables
+- Убедитесь что PostgreSQL сервис в Railway запущен
+- Проверьте `pg_isready -d "$DATABASE_URL"`
+
+### Не создаётся admin
+- Убедитесь что задан `SEED_ADMIN_PASSWORD`
+- Проверьте `AUTO_SEED=true`
+- Смотрите логи `[startup] Seed`
+
+---
+
+## Security checklist
+
+- [ ] `.env` не коммитится (есть в `.gitignore`)
+- [ ] `JWT_SECRET_KEY` уникальный, не дефолтный
+- [ ] `CORS_ORIGINS` не `*` в production
+- [ ] `AUTH_COOKIE_SECURE=true` в production
+- [ ] Токены не отправляются в чат или issue
+- [ ] Backup перед деструктивными миграциями
+- [ ] `gitleaks detect` перед релизом
+- [ ] `SEED_ADMIN_PASSWORD` убран после создания admin
+
+---
+
+## Актуальная архитектура
+
+- **Backend:** FastAPI (Python 3.13)
+- **База данных:** PostgreSQL (Railway)
+- **Frontend:** Vanilla JS / HTML / CSS (раздаётся FastAPI)
+- **Auth:** HttpOnly cookie (`pulse_access_token`)
+- **Миграции:** Alembic
+- Файл `server.js` удалён
+- Node.js backend не используется
+- JSON-файлы не используются как источник данных
+
+---
+
+## API эндпоинты
+
+```
+POST /api/auth/login                     Вход
+POST /api/auth/logout                    Выход (очищает cookie)
+GET  /api/auth/me                        Текущий пользователь
+
+GET  /api/operators                      Список операторов
+POST /api/operators                      Создать (+ авто-аккаунт)
+GET  /api/operators/{id}                 Карточка
+PATCH /api/operators/{id}                Редактировать
+POST /api/operators/{id}/reset-password  Сбросить пароль
+POST /api/operators/account/change-password  Сменить пароль
+POST /api/operators/account/change-username  Сменить логин
+
+GET  /api/rating                         Рейтинг
+POST /api/weekly-results                 Загрузить результаты недели
+
+GET  /api/wallet/me                      Мой кошелёк
+POST /api/wallet/transactions            Ручное начисление
+
+GET  /api/shop/items                     Магазин
+POST /api/shop/purchases                 Купить
+POST /api/shop/purchases/{id}/approve    Одобрить
+POST /api/shop/purchases/{id}/reject     Отклонить
+
+GET  /api/dashboard                      Сводка (admin)
+GET  /api/dashboard/operators            Таблица операторов (admin)
+GET  /api/dashboard/history              История транзакций (admin)
+
+GET  /health                             Liveness check
+GET  /ready                              Readiness check (DB + migrations)
+```
