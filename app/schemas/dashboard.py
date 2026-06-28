@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -15,6 +16,8 @@ class RatingRow(BaseModel):
     final_score: float
     coins_earned: int
     current_balance: int
+    lateness_count: int = 0
+    violation_count: int = 0
 
 
 class GroupSummary(BaseModel):
@@ -24,10 +27,50 @@ class GroupSummary(BaseModel):
     average_score: float
 
 
+class OperatorRow(BaseModel):
+    """Строка таблицы операторов для админ-панели"""
+    id: int
+    full_name: str
+    group_name: str
+    current_balance: int
+    reserved_balance: int
+    total_earned: int
+    total_spent: int
+    is_active: bool
+    # Из последнего WeeklyResult
+    rank_position: Optional[int] = None
+    rank_delta: Optional[int] = None
+    final_score: float = 0
+    coins_earned_week: int = 0
+    lateness_count: int = 0
+    violation_count: int = 0
+
+
+class TransactionRow(BaseModel):
+    id: int
+    operator_id: int
+    operator_name: str
+    group_name: str
+    amount: int
+    type: str
+    comment: str
+    created_by_name: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class DashboardRead(BaseModel):
     total_operators: int
+    active_operators: int
     coins_earned_this_week: int
     pending_purchases_count: int
-    top_3_operators: List[RatingRow]
+    approved_purchases_count: int
+    rejected_purchases_count: int
+    total_lateness_week: int
+    total_violations_week: int
+    top_5_operators: List[RatingRow]
     latest_coin_transactions: List[Dict]
     group_summary: List[GroupSummary]
+    last_updated: Optional[str] = None
