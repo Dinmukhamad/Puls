@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 cd /app
+export PYTHONPATH=/app
 echo "[start] PORT=$PORT"
 
-# Apply database migrations before starting the app
 echo "[start] Running alembic upgrade head..."
 alembic upgrade head
 echo "[start] Migrations complete"
