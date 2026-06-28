@@ -45,8 +45,6 @@ def startup() -> None:
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("[startup] Tables OK")
-        from app.services.schema_maintenance import ensure_operator_management_schema
-        ensure_operator_management_schema(engine)
         logger.info("[startup] Schema compatibility OK")
     except Exception as e:
         logger.error(f"[startup] create_all failed: {e}")
