@@ -1,174 +1,110 @@
 /**
- * Backend API client for the operator contest app.
+ * iCore — FastAPI client
+ * Все методы возвращают Promise. При ошибке бросают Error с текстом от сервера.
  */
-
 'use strict';
 
 const api = (() => {
-  let authToken = '';
+  let _token = localStorage.getItem('icore_token') || '';
 
   function base() {
-    return typeof API_BASE !== 'undefined' ? API_BASE : 'http://localhost:3000';
+    return typeof API_BASE !== 'undefined' ? API_BASE : '';
   }
 
-  function setAuthToken(token) {
-    authToken = String(token || '');
+  function setToken(t) {
+    _token = t || '';
+    if (_token) localStorage.setItem('icore_token', _token);
+    else localStorage.removeItem('icore_token');
   }
 
-  function authHeaders(extra = {}) {
-    return authToken ? { ...extra, Authorization: `Bearer ${authToken}` } : extra;
+  function getToken() { return _token; }
+
+  function headers(extra = {}) {
+    const h = { 'Content-Type': 'application/json', ...extra };
+    if (_token) h['Authorization'] = `Bearer ${_token}`;
+    return h;
   }
 
-  async function readJson(res) {
-    try {
-      return await res.json();
-    } catch {
-      return {};
+  async function req(method, path, body) {
+    const opts = { method, headers: headers() };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    const res = await fetch(base() + path, opts);
+    let data = {};
+    try { data = await res.json(); } catch {}
+    if (!res.ok) {
+      const msg = data.detail || data.error || `Ошибка ${res.status}`;
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
-  }
-
-  async function login(loginValue, password) {
-    const res = await fetch(`${base()}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login: loginValue, password }),
-    });
-    const data = await readJson(res);
-    if (res.status === 401) throw new Error('Неверный логин или пароль');
-    if (!res.ok) throw new Error(data.error || `Сервер вернул ${res.status}`);
-    setAuthToken(data.token);
     return data;
   }
 
-  async function registerOperator(payload) {
-    const res = await fetch(`${base()}/api/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload || {}),
-    });
-    const data = await readJson(res);
-    if (res.status === 409) throw new Error(data.error || 'Такой аккаунт уже существует');
-    if (!res.ok) throw new Error(data.error || `Сервер вернул ${res.status}`);
-    setAuthToken(data.token);
+  /* ── Auth ─────────────────────────────────────────────── */
+  async function login(username, password) {
+    const data = await req('POST', '/api/auth/login', { username, password });
+    setToken(data.access_token);
     return data;
   }
 
-  async function loadSession() {
-    if (!authToken) return null;
-    const res = await fetch(`${base()}/api/auth/me`, {
-      headers: authHeaders(),
-    });
-    const data = await readJson(res);
-    if (res.status === 401) {
-      setAuthToken('');
-      return null;
-    }
-    if (!res.ok) throw new Error(data.error || `Сервер вернул ${res.status}`);
-    return data;
+  async function me() {
+    return req('GET', '/api/auth/me');
   }
 
-  async function logout() {
-    if (!authToken) return { ok: true };
-    const res = await fetch(`${base()}/api/auth/logout`, {
-      method: 'POST',
-      headers: authHeaders(),
-    });
-    setAuthToken('');
-    return res.ok ? readJson(res) : { ok: false };
+  function logout() {
+    setToken('');
   }
 
-  async function loadState() {
-    const res = await fetch(`${base()}/api/state`, { cache: 'no-store' });
-    const data = await readJson(res);
-    if (!res.ok) throw new Error(data.error || `Сервер вернул ${res.status}`);
-    return data.state;
+  /* ── Operators ────────────────────────────────────────── */
+  function listOperators() { return req('GET', '/api/operators'); }
+  function getOperator(id) { return req('GET', `/api/operators/${id}`); }
+  function myOperator()    { return req('GET', '/api/operators/me'); }
+  function createOperator(payload) { return req('POST', '/api/operators', payload); }
+  function updateOperator(id, payload) { return req('PATCH', `/api/operators/${id}`, payload); }
+
+  /* ── Weekly results ───────────────────────────────────── */
+  function listWeekly()    { return req('GET', '/api/weekly-results'); }
+  function upsertWeekly(payload) { return req('POST', '/api/weekly-results', payload); }
+
+  /* ── Rating ───────────────────────────────────────────── */
+  function getRating(weekStart, weekEnd) {
+    let url = '/api/rating';
+    if (weekStart && weekEnd) url += `?week_start=${weekStart}&week_end=${weekEnd}`;
+    return req('GET', url);
   }
 
-  async function saveState(state) {
-    const res = await fetch(`${base()}/api/state`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(state),
-    });
-    const data = await readJson(res);
-    if (res.status === 401 || res.status === 403) throw new Error('Требуется вход администратора');
-    if (!res.ok) throw new Error(data.error || `Сервер вернул ${res.status}`);
-    return data;
-  }
+  /* ── Wallet ───────────────────────────────────────────── */
+  function myWallet()           { return req('GET', '/api/wallet/me'); }
+  function operatorWallet(id)   { return req('GET', `/api/wallet/${id}`); }
+  function manualTransaction(payload) { return req('POST', '/api/wallet/transactions', payload); }
 
-  async function verifyPassword() {
-    if (!authToken) return false;
-    try {
-      const res = await fetch(`${base()}/api/admin/verify`, {
-        method: 'POST',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
-      });
-      return res.ok;
-    } catch {
-      return false;
-    }
-  }
+  /* ── Shop ─────────────────────────────────────────────── */
+  function listShopItems()      { return req('GET', '/api/shop/items'); }
+  function createShopItem(payload) { return req('POST', '/api/shop/items', payload); }
+  function updateShopItem(id, payload) { return req('PATCH', `/api/shop/items/${id}`, payload); }
+  function listPurchases()      { return req('GET', '/api/shop/purchases'); }
+  function buyItem(itemId)      { return req('POST', '/api/shop/purchases', { shop_item_id: itemId }); }
+  function approvePurchase(id)  { return req('POST', `/api/shop/purchases/${id}/approve`); }
+  function rejectPurchase(id, reason) { return req('POST', `/api/shop/purchases/${id}/reject`, { reason }); }
 
-  async function createRewardRequest(payload) {
-    const res = await fetch(`${base()}/api/gamification/request`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
-    });
-    const data = await readJson(res);
-    if (res.status === 401 || res.status === 403) throw new Error('Требуется вход в систему');
-    if (!res.ok) throw new Error(data.error || `Сервер вернул ${res.status}`);
-    return data;
-  }
+  /* ── Dashboard ────────────────────────────────────────── */
+  function getDashboard()       { return req('GET', '/api/dashboard'); }
 
-  async function addManualCoins(payload) {
-    const res = await fetch(`${base()}/api/gamification/manual`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
-    });
-    const data = await readJson(res);
-    if (res.status === 401 || res.status === 403) throw new Error('Требуется вход администратора');
-    if (!res.ok) throw new Error(data.error || `Сервер вернул ${res.status}`);
-    return data;
-  }
-
-  async function updateRewardRequest(id, payload) {
-    const res = await fetch(`${base()}/api/gamification/request/${encodeURIComponent(id)}`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(payload),
-    });
-    const data = await readJson(res);
-    if (res.status === 401 || res.status === 403) throw new Error('Требуется вход администратора');
-    if (!res.ok) throw new Error(data.error || `Сервер вернул ${res.status}`);
-    return data;
-  }
-
-  async function resetState() {
-    const res = await fetch(`${base()}/api/admin/reset-state`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-    });
-    const data = await readJson(res);
-    if (res.status === 401 || res.status === 403) throw new Error('Требуется вход администратора');
-    if (!res.ok) throw new Error(data.error || `Сервер вернул ${res.status}`);
-    return data;
-  }
+  /* ── Auth helpers ─────────────────────────────────────── */
+  function createUser(payload)  { return req('POST', '/api/auth/users', payload); }
+  function listUsers()          { return req('GET', '/api/auth/users'); }
 
   return {
-    setAuthToken,
-    login,
+    setToken, getToken, login, me, logout,
+    listOperators, getOperator, myOperator, createOperator, updateOperator,
+    listWeekly, upsertWeekly,
+    getRating,
+    myWallet, operatorWallet, manualTransaction,
+    listShopItems, createShopItem, updateShopItem,
+    listPurchases, buyItem, approvePurchase, rejectPurchase,
+    getDashboard,
+    createUser, listUsers,
+    // legacy compat
     loginOperator: login,
-    registerOperator,
-    loadSession,
-    logout,
-    loadState,
-    saveState,
-    verifyPassword,
-    createRewardRequest,
-    addManualCoins,
-    updateRewardRequest,
-    resetState,
+    registerOperator: async (p) => login(p.login || p.username, p.password),
+    loadSession: me,
   };
 })();
