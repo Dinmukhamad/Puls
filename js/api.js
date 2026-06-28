@@ -92,6 +92,13 @@ const api = (() => {
   function approvePurchase(id)     { return req('POST', `/api/shop/purchases/${id}/approve`); }
   function rejectPurchase(id, r)   { return req('POST', `/api/shop/purchases/${id}/reject`, { reason: r }); }
 
+  /* ── Groups ─────────────────────────────────────────────── */
+  function listGroups(activeOnly = false) {
+    return req('GET', `/api/groups${activeOnly ? '?active_only=true' : ''}`);
+  }
+  function createGroup(p)          { return req('POST', '/api/groups', p); }
+  function updateGroup(id, p)      { return req('PATCH', `/api/groups/${id}`, p); }
+
   /* ── Dashboard ───────────────────────────────────────────── */
   function getDashboard()          { return req('GET', '/api/dashboard'); }
 
@@ -109,6 +116,7 @@ const api = (() => {
     myWallet, operatorWallet, manualTransaction,
     listShopItems, createShopItem, updateShopItem,
     listPurchases, buyItem, approvePurchase, rejectPurchase,
+    listGroups, createGroup, updateGroup,
     getDashboard,
     createUser, listUsers,
     loginOperator: login,
