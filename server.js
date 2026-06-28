@@ -44,38 +44,71 @@ async function ensureSessionsTable() {
   await database.pool.query('DELETE FROM sessions WHERE expires_at <= now()');
 }
 
+function _dbReady() {
+  return database.enabled && database.pool;
+}
+
 async function saveSession(session) {
-  if (database.enabled && database.pool) {
-    await database.pool.query(
-      'INSERT INTO sessions (token, user_data, expires_at) VALUES ($1, $2::jsonb, to_timestamp($3 / 1000.0)) ON CONFLICT (token) DO UPDATE SET user_data = $2::jsonb, expires_at = to_timestamp($3 / 1000.0)',
-      [session.token, JSON.stringify(session.user), session.expiresAt]
-    );
+  if (_dbReady()) {
+    try {
+      // expiresAt — миллисекунды, переводим в секунды для PostgreSQL
+      const expireSecs = Math.floor(Number(session.expiresAt) / 1000);
+      await database.pool.query(
+        `INSERT INTO sessions (token, user_data, expires_at)
+         VALUES ($1, $2::jsonb, to_timestamp($3))
+         ON CONFLICT (token) DO UPDATE
+         SET user_data = $2::jsonb, expires_at = to_timestamp($3)`,
+        [session.token, JSON.stringify(session.user), expireSecs]
+      );
+    } catch (err) {
+      console.error('[session] saveSession DB error, fallback to Map:', err.message);
+      _sessionsFallback.set(session.token, session);
+    }
   } else {
     _sessionsFallback.set(session.token, session);
   }
 }
 
 async function getSession(token) {
-  if (database.enabled && database.pool) {
-    const r = await database.pool.query(
-      'SELECT user_data, extract(epoch from expires_at)*1000 as expires_at FROM sessions WHERE token = $1 AND expires_at > now() LIMIT 1',
-      [token]
-    );
-    if (!r.rowCount) return null;
-    return { token, user: r.rows[0].user_data, expiresAt: Number(r.rows[0].expires_at) };
-  } else {
-    const s = _sessionsFallback.get(token);
-    if (!s || s.expiresAt <= Date.now()) { _sessionsFallback.delete(token); return null; }
-    return s;
+  if (_dbReady()) {
+    try {
+      const r = await database.pool.query(
+        `SELECT user_data,
+                EXTRACT(EPOCH FROM expires_at) * 1000 AS expires_ms
+         FROM sessions
+         WHERE token = $1 AND expires_at > now()
+         LIMIT 1`,
+        [token]
+      );
+      if (!r.rowCount) return null;
+      const row = r.rows[0];
+      return {
+        token,
+        user: row.user_data,
+        expiresAt: Number(row.expires_ms),
+      };
+    } catch (err) {
+      console.error('[session] getSession DB error, fallback to Map:', err.message);
+      // fallthrough to Map
+    }
   }
+  const s = _sessionsFallback.get(token);
+  if (!s || s.expiresAt <= Date.now()) {
+    _sessionsFallback.delete(token);
+    return null;
+  }
+  return s;
 }
 
 async function deleteSession(token) {
-  if (database.enabled && database.pool) {
-    await database.pool.query('DELETE FROM sessions WHERE token = $1', [token]);
-  } else {
-    _sessionsFallback.delete(token);
+  if (_dbReady()) {
+    try {
+      await database.pool.query('DELETE FROM sessions WHERE token = $1', [token]);
+    } catch (err) {
+      console.error('[session] deleteSession DB error:', err.message);
+    }
   }
+  _sessionsFallback.delete(token);
 }
 
 // ── Seed users из переменных окружения ───────────────────────
@@ -853,7 +886,9 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid login or password' });
     }
 
-    const session = createSession(user);
+    // Инициализируем таблицу сессий если БД доступна
+    if (_dbReady()) await ensureSessionsTable().catch(() => {});
+    const session = await createSession(user);
     res.json({
       ok: true,
       token: session.token,
