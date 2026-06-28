@@ -758,6 +758,19 @@ function renderManual() {
   const el = document.getElementById('view-manual');
   if (!el) return;
 
+  // Если операторы не загружены — подгружаем
+  if (!STATE.adminOperators.length) {
+    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div></div><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка операторов…</p></div>`;
+    fetch(api._base() + '/api/dashboard/operators', {
+      headers: { Authorization: 'Bearer ' + api.getToken() }
+    }).then(r => r.ok ? r.json() : [])
+      .then(ops => { STATE.adminOperators = ops; renderManual(); })
+      .catch(() => {
+        el.innerHTML += '<div class="status-line status-error" style="padding:20px">Не удалось загрузить список операторов</div>';
+      });
+    return;
+  }
+
   // Только активные операторы для начисления
   const ops = STATE.adminOperators.filter(o => o.status === 'active' || o.is_active);
 
@@ -790,7 +803,7 @@ function renderManual() {
             </div>
           </div>
           <input type="hidden" id="manual-op-id" value="">
-          <div id="op-selected-display" style="display:none;margin-top:6px;padding:8px 12px;background:var(--accent-soft);border:1px solid rgba(255,77,46,.2);border-radius:var(--r-sm);font-size:13px;display:flex;align-items:center;justify-content:space-between">
+          <div id="op-selected-display" style="display:none;margin-top:6px;padding:8px 12px;background:var(--accent-soft);border:1px solid rgba(255,77,46,.2);border-radius:var(--r-sm);font-size:13px;align-items:center;justify-content:space-between">
             <span id="op-selected-name"></span>
             <button onclick="clearOpSelection()" style="background:none;border:none;color:var(--tx3);cursor:pointer;font-size:16px;padding:0 4px">×</button>
           </div>
