@@ -6,7 +6,9 @@
 'use strict';
 
 const api = (() => {
-  let _token = localStorage.getItem('puls_token') || '';
+  // Читаем из нового ключа, фолбэк на старый icore_token
+  let _token = localStorage.getItem('puls_token') || localStorage.getItem('icore_token') || '';
+  if (_token) localStorage.setItem('puls_token', _token); // мигрируем если нужно
 
   function base() {
     return typeof API_BASE !== 'undefined' ? API_BASE : '';
