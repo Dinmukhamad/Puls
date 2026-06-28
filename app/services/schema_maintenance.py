@@ -19,6 +19,8 @@ def ensure_operator_management_schema(engine: Engine) -> None:
             migrations = [
                 ("group_id",           "INTEGER"),
                 ("participation_status", "VARCHAR(32) NOT NULL DEFAULT 'participating'"),
+                ("employment_status",  "VARCHAR(32) NOT NULL DEFAULT 'active'"),
+                ("dismissed_at",       "TIMESTAMP"),
                 ("status",             "VARCHAR(32) NOT NULL DEFAULT 'active'"),
                 ("position",           "VARCHAR(200)"),
                 ("employee_id",        "VARCHAR(100)"),
@@ -26,6 +28,7 @@ def ensure_operator_management_schema(engine: Engine) -> None:
                 ("start_date",         "DATE"),
                 ("comment",            "TEXT"),
                 ("created_by_user_id", "INTEGER"),
+                ("updated_at",         "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
             ]
             for col_name, col_type in migrations:
                 if col_name not in existing:
