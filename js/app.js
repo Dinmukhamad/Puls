@@ -86,13 +86,13 @@ function normalizeUser(u) {
    THEME
 ══════════════════════════════════════ */
 function initTheme() {
-  const saved = localStorage.getItem('puls-theme') || 'dark';
+  const saved = localStorage.getItem('pulse-theme') || 'dark';
   document.documentElement.setAttribute('data-theme', saved);
   document.getElementById('theme-toggle')?.addEventListener('click', () => {
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     const next = dark ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('puls-theme', next);
+    localStorage.setItem('pulse-theme', next);
   });
 }
 
