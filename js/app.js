@@ -17,6 +17,7 @@ let STATE = {
   adminOperators: [],
   history: [],
   currentView: 'cabinet',
+  pendingManualOperatorId: null,
 };
 
 /* ══════════════════════════════════════
@@ -79,6 +80,7 @@ function normalizeUser(u) {
     full_name: u.full_name,
     role: u.role,
     operator_id: u.operator_id,
+    can_manage_operators: !!u.can_manage_operators,
   };
 }
 
@@ -173,7 +175,7 @@ document.addEventListener('click', async e => {
   }
   if (e.target.id === 'auth-logout-btn') {
     api.logout();
-    STATE = { user:null, wallet:null, rating:[], shopItems:[], purchases:[], dashboard:null, adminOperators:[], history:[], currentView:'cabinet' };
+    STATE = { user:null, wallet:null, rating:[], shopItems:[], purchases:[], dashboard:null, adminOperators:[], history:[], currentView:'cabinet', pendingManualOperatorId:null };
     location.reload();
   }
 });
@@ -327,13 +329,81 @@ function renderCabinet() {
         <div class="shop-banner-sub">У вас ${w.current_balance} ₡ — потратьте на бонус</div>
       </div>
       <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
+    </div>
+
+    <div class="panel" style="margin-top:20px">
+      <div class="panel-head"><h3>Настройки аккаунта</h3></div>
+      <div style="padding:20px;display:grid;gap:14px;max-width:620px">
+        <div class="form-group">
+          <label class="form-label">Логин</label>
+          <input id="account-username" class="form-input" value="${esc(STATE.user?.username || '')}" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Текущий пароль</label>
+          <input id="account-current-password" class="form-input" type="password" autocomplete="current-password">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-group">
+            <label class="form-label">Новый пароль</label>
+            <input id="account-new-password" class="form-input" type="password" autocomplete="new-password">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Повтор пароля</label>
+            <input id="account-repeat-password" class="form-input" type="password" autocomplete="new-password">
+          </div>
+        </div>
+        <div id="account-settings-status" class="status-line" style="min-height:24px"></div>
+        <button class="btn-primary" id="account-settings-save" style="width:220px">Сохранить настройки</button>
+      </div>
     </div>`;
+
+  bindAccountSettings();
 }
 
 async function reloadCabinet() {
   STATE.wallet = await api.myWallet().catch(() => STATE.wallet);
   STATE.rating = await api.getRating().catch(() => STATE.rating);
   renderCabinet();
+}
+
+function bindAccountSettings() {
+  const btn = document.getElementById('account-settings-save');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const statusEl = document.getElementById('account-settings-status');
+    const username = document.getElementById('account-username')?.value?.trim();
+    const currentPassword = document.getElementById('account-current-password')?.value || '';
+    const newPassword = document.getElementById('account-new-password')?.value || '';
+    const repeatPassword = document.getElementById('account-repeat-password')?.value || '';
+    const payload = {};
+
+    if (username !== STATE.user?.username) payload.username = username;
+    if (newPassword || repeatPassword) {
+      payload.current_password = currentPassword;
+      payload.new_password = newPassword;
+      payload.repeat_password = repeatPassword;
+    }
+    if (!payload.username && !payload.new_password) {
+      if (statusEl) { statusEl.textContent = 'Нет изменений для сохранения'; statusEl.className = 'status-line'; }
+      return;
+    }
+
+    btn.disabled = true;
+    try {
+      const user = await api.updateMyCredentials(payload);
+      STATE.user = normalizeUser(user);
+      setText('side-user', STATE.user?.full_name || STATE.user?.username || '');
+      if (statusEl) { statusEl.textContent = 'Настройки сохранены'; statusEl.className = 'status-line status-ok'; }
+      ['account-current-password','account-new-password','account-repeat-password'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.value = '';
+      });
+    } catch (err) {
+      if (statusEl) { statusEl.textContent = err.message; statusEl.className = 'status-line status-error'; }
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }
 
 /* ══════════════════════════════════════
@@ -590,14 +660,17 @@ function renderAdminOperators() {
   const ops = STATE.adminOperators;
   let searchVal = '';
   let filterGroup = '';
+  let filterStatus = '';
 
   const groups = [...new Set(ops.map(o => o.group_name))].sort();
 
   function filteredOps() {
     return ops.filter(o => {
-      const matchSearch = !searchVal || o.full_name.toLowerCase().includes(searchVal.toLowerCase());
+      const haystack = `${o.full_name || ''} ${o.email || ''} ${o.employee_id || ''} ${o.username || ''}`.toLowerCase();
+      const matchSearch = !searchVal || haystack.includes(searchVal.toLowerCase());
       const matchGroup = !filterGroup || o.group_name === filterGroup;
-      return matchSearch && matchGroup;
+      const matchStatus = !filterStatus || o.status === filterStatus;
+      return matchSearch && matchGroup && matchStatus;
     });
   }
 
@@ -607,30 +680,31 @@ function renderAdminOperators() {
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>#</th><th>ФИО</th><th>Группа</th>
-            <th>Баллы</th><th>Коины (нед.)</th><th>Баланс</th>
-            <th style="color:var(--danger)">Опозд.</th>
-            <th style="color:var(--danger)">Наруш.</th>
-            <th>Дин.</th><th></th>
+            <th>#</th><th>ФИО</th><th>Группа</th><th>Статус</th><th>Логин</th>
+            <th>Баллы</th><th>Коины</th><th>Баланс</th><th></th>
           </tr></thead>
           <tbody>
             ${list.length ? list.map(o => {
-              const d = o.rank_delta;
               return `<tr>
                 <td class="rank-cell"><span class="rank-badge ${o.rank_position<=3?'rank-top':''}">${o.rank_position||'—'}</span></td>
-                <td class="name-cell">${esc(o.full_name)}</td>
+                <td class="name-cell">${esc(o.full_name)}
+                  ${o.employee_id ? `<span class="me-badge">${esc(o.employee_id)}</span>` : ''}
+                  ${o.email ? `<div class="tx-date">${esc(o.email)}</div>` : ''}
+                </td>
                 <td>${esc(o.group_name)}</td>
+                <td><span class="status-badge status-${o.status || 'active'}">${operatorStatusLabel(o.status)}</span></td>
+                <td>${esc(o.username || '—')}</td>
                 <td>${o.final_score?.toFixed(1)||'—'}</td>
-                <td><b class="accent-text">${o.coins_earned_week} ₡</b></td>
+                <td><b class="accent-text">${o.coins_earned_week || 0} ₡</b></td>
                 <td><b>${o.current_balance} ₡</b></td>
-                <td style="color:${o.lateness_count>0?'var(--danger)':'var(--tx2)'}">${o.lateness_count}</td>
-                <td style="color:${o.violation_count>0?'var(--danger)':'var(--tx2)'}">${o.violation_count}</td>
-                <td>${d!=null?`<span class="rank-delta ${d>0?'up':d<0?'down':''}">${d>0?'↑'+d:d<0?'↓'+Math.abs(d):'—'}</span>`:'—'}</td>
-                <td>
-                  <button class="btn-link quick-charge-btn" data-id="${o.id}" data-name="${esc(o.full_name)}">+ Коины</button>
+                <td style="white-space:nowrap">
+                  ${o.status === 'active' ? `<button class="btn-link quick-charge-btn" data-id="${o.id}">+ Коины</button>` : ''}
+                  <button class="btn-link operator-card-btn" data-id="${o.id}">Карточка</button>
+                  ${canManageOperators() ? `<button class="btn-link edit-operator-btn" data-id="${o.id}">Изменить</button>
+                  <button class="btn-link reset-password-btn" data-id="${o.id}">Сбросить пароль</button>` : ''}
                 </td>
               </tr>`;
-            }).join('') : '<tr><td colspan="10" class="empty-line">Нет операторов</td></tr>'}
+            }).join('') : '<tr><td colspan="9" class="empty-line">Нет операторов</td></tr>'}
           </tbody>
         </table>
       </div>`;
@@ -642,16 +716,22 @@ function renderAdminOperators() {
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="exportCSV()">Экспорт CSV</button>
         <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
-        <button class="btn-primary btn-sm" onclick="showAddOperatorModal()">+ Оператор</button>
+        ${canManageOperators() ? '<button class="btn-primary btn-sm" onclick="showAddOperatorModal()">Плюс оператор</button>' : ''}
       </div>
     </div>
 
     <!-- Фильтры -->
     <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-      <input id="ops-search" class="form-input" placeholder="Поиск по ФИО…" style="width:220px" value="${esc(searchVal)}">
+      <input id="ops-search" class="form-input" placeholder="ФИО, email, ID или логин…" style="width:260px" value="${esc(searchVal)}">
       <select id="ops-group" class="form-select" style="width:180px">
         <option value="">Все группы</option>
         ${groups.map(g => `<option value="${esc(g)}" ${filterGroup===g?'selected':''}>${esc(g)}</option>`).join('')}
+      </select>
+      <select id="ops-status" class="form-select" style="width:160px">
+        <option value="">Все статусы</option>
+        <option value="active">Активен</option>
+        <option value="inactive">Неактивен</option>
+        <option value="archive">Архив</option>
       </select>
       <span style="margin-left:auto;color:var(--tx3);font-size:12px;align-self:center">
         Показано: <b>${filteredOps().length}</b> из ${ops.length}
@@ -671,13 +751,27 @@ function renderAdminOperators() {
     el.querySelector('#ops-table-wrap').innerHTML = renderTable();
     bindOpsActions();
   });
+  el.querySelector('#ops-status')?.addEventListener('change', e => {
+    filterStatus = e.target.value;
+    el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+    bindOpsActions();
+  });
 
   function bindOpsActions() {
     el.querySelectorAll('.quick-charge-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.getElementById('manual-op-select').value = btn.dataset.id;
+        STATE.pendingManualOperatorId = +btn.dataset.id;
         navigateTo('manual');
       });
+    });
+    el.querySelectorAll('.operator-card-btn').forEach(btn => {
+      btn.addEventListener('click', () => showOperatorCardModal(+btn.dataset.id));
+    });
+    el.querySelectorAll('.edit-operator-btn').forEach(btn => {
+      btn.addEventListener('click', () => showEditOperatorModal(+btn.dataset.id));
+    });
+    el.querySelectorAll('.reset-password-btn').forEach(btn => {
+      btn.addEventListener('click', () => resetOperatorPassword(+btn.dataset.id));
     });
   }
   bindOpsActions();
@@ -689,7 +783,7 @@ function renderAdminOperators() {
 function renderManual() {
   const el = document.getElementById('view-manual');
   if (!el) return;
-  const ops = STATE.adminOperators;
+  const ops = STATE.adminOperators.filter(o => o.status === 'active');
 
   el.innerHTML = `
     <div class="view-header">
@@ -703,7 +797,7 @@ function renderManual() {
           <label class="form-label">Оператор <span style="color:var(--danger)">*</span></label>
           <select id="manual-op-select" class="form-select">
             <option value="">Выберите оператора…</option>
-            ${ops.map(o => `<option value="${o.id}">${esc(o.full_name)} — ${esc(o.group_name)} (${o.current_balance} ₡)</option>`).join('')}
+            ${ops.map(o => `<option value="${o.id}" ${STATE.pendingManualOperatorId===o.id?'selected':''}>${esc(o.full_name)} — ${esc(o.group_name)} (${o.current_balance} ₡)</option>`).join('')}
           </select>
         </div>
         <div class="form-group">
@@ -987,24 +1081,234 @@ function closeModal() {
 }
 
 function showAddOperatorModal() {
+  if (!canManageOperators()) { showToast('Недостаточно прав для управления операторами', 'error'); return; }
   showModal(`
     <h3 class="modal-title">Добавить оператора</h3>
-    <div class="form-group"><label class="form-label">ФИО</label>
+    <div class="form-group"><label class="form-label">ФИО оператора *</label>
       <input id="new-op-name" class="form-input" placeholder="Иванов Иван Иванович"></div>
-    <div class="form-group"><label class="form-label">Группа</label>
+    <div class="form-group"><label class="form-label">Группа *</label>
       <input id="new-op-group" class="form-input" placeholder="Группа 1"></div>
+    <div class="form-group"><label class="form-label">Статус оператора *</label>
+      <select id="new-op-status" class="form-select">
+        <option value="active">Активен</option>
+        <option value="inactive">Неактивен</option>
+        <option value="archive">Архив</option>
+      </select></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label class="form-label">Должность</label>
+        <input id="new-op-position" class="form-input" placeholder="Оператор звонков"></div>
+      <div class="form-group"><label class="form-label">ID сотрудника</label>
+        <input id="new-op-employee" class="form-input" placeholder="Табельный номер"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label class="form-label">Email / почта</label>
+        <input id="new-op-email" class="form-input" type="email" placeholder="operator@example.com"></div>
+      <div class="form-group"><label class="form-label">Дата начала участия</label>
+        <input id="new-op-started" class="form-input" type="date"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Комментарий</label>
+      <input id="new-op-comment" class="form-input" placeholder="Внутренний комментарий"></div>
     <div id="new-op-err" class="status-line"></div>
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitAddOperator()">Добавить</button>`);
 }
-async function submitAddOperator() {
+function collectOperatorForm(prefix) {
+  return {
+    full_name: document.getElementById(`${prefix}-name`)?.value?.trim(),
+    group_name: document.getElementById(`${prefix}-group`)?.value?.trim(),
+    status: document.getElementById(`${prefix}-status`)?.value || 'active',
+    position: document.getElementById(`${prefix}-position`)?.value?.trim() || null,
+    employee_id: document.getElementById(`${prefix}-employee`)?.value?.trim() || null,
+    email: document.getElementById(`${prefix}-email`)?.value?.trim() || null,
+    participation_started_at: document.getElementById(`${prefix}-started`)?.value || null,
+    admin_comment: document.getElementById(`${prefix}-comment`)?.value?.trim() || null,
+  };
+}
+async function submitAddOperator(confirmDuplicate = false) {
   const name  = document.getElementById('new-op-name')?.value?.trim();
   const group = document.getElementById('new-op-group')?.value?.trim();
   const err   = document.getElementById('new-op-err');
-  if (!name || !group) { err.textContent = 'Заполните все поля'; return; }
+  const statusValue = document.getElementById('new-op-status')?.value;
+  if (!name || !group || !statusValue) { err.textContent = 'Заполните ФИО, группу и статус'; err.className = 'status-line status-error'; return; }
   try {
-    await api.createOperator({ full_name: name, group_name: group });
-    closeModal(); showToast('Оператор добавлен', 'ok'); await reloadData();
-  } catch(e) { err.textContent = e.message; }
+    const result = await api.createOperator({ ...collectOperatorForm('new-op'), confirm_duplicate: confirmDuplicate });
+    await reloadData();
+    showOperatorCreatedModal(result);
+  } catch(e) {
+    const detail = e.data?.detail;
+    if (e.status === 409 && detail?.code === 'possible_duplicate') {
+      showDuplicateWarning(detail.duplicates || []);
+      return;
+    }
+    err.textContent = e.message;
+    err.className = 'status-line status-error';
+  }
+}
+
+function showDuplicateWarning(duplicates) {
+  const rows = duplicates.map(item => `
+    <div class="tx-row">
+      <div class="tx-info">
+        <span class="tx-comment"><b>${esc(item.full_name)}</b> — ${esc(item.group_name)}</span>
+        <span class="tx-date">${operatorStatusLabel(item.status)}${item.email ? ` · ${esc(item.email)}` : ''}${item.employee_id ? ` · ${esc(item.employee_id)}` : ''}</span>
+      </div>
+      <button class="btn-link" onclick="showOperatorCardModal(${item.id})">Открыть</button>
+    </div>`).join('');
+  const err = document.getElementById('new-op-err');
+  if (!err) return;
+  err.className = 'status-line status-error';
+  err.innerHTML = `
+    <div>Похожий оператор уже существует. Проверьте данные перед сохранением.</div>
+    <div style="margin-top:8px;display:grid;gap:6px">${rows}</div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn-outline btn-sm" type="button" onclick="closeModal()">Отменить</button>
+      <button class="btn-primary btn-sm" type="button" onclick="submitAddOperator(true)">Продолжить создание</button>
+    </div>`;
+}
+
+function showOperatorCreatedModal(result) {
+  const op = result.operator;
+  const acc = result.account;
+  const copyText = buildCredentialsText(acc);
+  showModal(`
+    <h3 class="modal-title">Оператор успешно добавлен. Аккаунт создан.</h3>
+    <div class="credential-box">
+      <div><b>ФИО:</b> ${esc(acc.full_name)}</div>
+      <div><b>Группа:</b> ${esc(acc.group_name)}</div>
+      <div><b>Статус:</b> ${operatorStatusLabel(acc.status)}</div>
+      <div><b>Логин:</b> <code>${esc(acc.username)}</code></div>
+      <div><b>Временный пароль:</b> <code>${esc(acc.temporary_password)}</code></div>
+    </div>
+    <textarea id="created-credentials-text" class="form-input" style="height:92px;margin-top:12px">${esc(copyText)}</textarea>
+    <button class="btn-primary" style="width:100%;margin-top:10px" onclick="copyCreatedCredentials()">Скопировать данные для входа</button>
+    <button class="btn-outline" style="width:100%;margin-top:8px" onclick="showOperatorCardModal(${op.id})">Открыть карточку оператора</button>`);
+  showToast('Оператор успешно добавлен. Аккаунт создан.', 'ok');
+}
+
+async function showEditOperatorModal(id) {
+  if (!canManageOperators()) { showToast('Недостаточно прав для управления операторами', 'error'); return; }
+  const op = await api.getOperator(id).catch(err => { showToast(err.message, 'error'); return null; });
+  if (!op) return;
+  showModal(`
+    <h3 class="modal-title">Редактировать оператора</h3>
+    <div class="form-group"><label class="form-label">ФИО оператора *</label>
+      <input id="edit-op-name" class="form-input" value="${esc(op.full_name)}"></div>
+    <div class="form-group"><label class="form-label">Группа *</label>
+      <input id="edit-op-group" class="form-input" value="${esc(op.group_name)}"></div>
+    <div class="form-group"><label class="form-label">Статус *</label>
+      <select id="edit-op-status" class="form-select">
+        <option value="active" ${op.status==='active'?'selected':''}>Активен</option>
+        <option value="inactive" ${op.status==='inactive'?'selected':''}>Неактивен</option>
+        <option value="archive" ${op.status==='archive'?'selected':''}>Архив</option>
+      </select></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label class="form-label">Должность</label>
+        <input id="edit-op-position" class="form-input" value="${esc(op.position || '')}"></div>
+      <div class="form-group"><label class="form-label">ID сотрудника</label>
+        <input id="edit-op-employee" class="form-input" value="${esc(op.employee_id || '')}"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label class="form-label">Email / почта</label>
+        <input id="edit-op-email" class="form-input" type="email" value="${esc(op.email || '')}"></div>
+      <div class="form-group"><label class="form-label">Дата начала участия</label>
+        <input id="edit-op-started" class="form-input" type="date" value="${esc(op.participation_started_at || '')}"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Комментарий</label>
+      <input id="edit-op-comment" class="form-input" value="${esc(op.admin_comment || '')}"></div>
+    <div id="edit-op-err" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitEditOperator(${id})">Сохранить</button>`);
+}
+
+async function submitEditOperator(id) {
+  const err = document.getElementById('edit-op-err');
+  const payload = collectOperatorForm('edit-op');
+  if (!payload.full_name || !payload.group_name || !payload.status) {
+    if (err) { err.textContent = 'Заполните ФИО, группу и статус'; err.className = 'status-line status-error'; }
+    return;
+  }
+  try {
+    await api.updateOperator(id, payload);
+    closeModal();
+    showToast('Оператор обновлен', 'ok');
+    await reloadData();
+  } catch (e) {
+    if (err) { err.textContent = e.message; err.className = 'status-line status-error'; }
+  }
+}
+
+async function resetOperatorPassword(id) {
+  if (!canManageOperators()) { showToast('Недостаточно прав для управления операторами', 'error'); return; }
+  const op = STATE.adminOperators.find(item => item.id === id);
+  if (!confirm(`Сбросить пароль оператору ${op?.full_name || '#'+id}?`)) return;
+  try {
+    const result = await api.resetOperatorPassword(id);
+    await reloadData();
+    const acc = result.account;
+    const copyText = buildCredentialsText(acc);
+    showModal(`
+      <h3 class="modal-title">Пароль сброшен</h3>
+      <div class="credential-box">
+        <div><b>Оператор:</b> ${esc(acc.full_name)}</div>
+        <div><b>Логин:</b> <code>${esc(acc.username)}</code></div>
+        <div><b>Новый временный пароль:</b> <code>${esc(acc.temporary_password)}</code></div>
+      </div>
+      <textarea id="created-credentials-text" class="form-input" style="height:92px;margin-top:12px">${esc(copyText)}</textarea>
+      <button class="btn-primary" style="width:100%;margin-top:10px" onclick="copyCreatedCredentials()">Скопировать данные для входа</button>`);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function showOperatorCardModal(id) {
+  const card = await api.getOperatorCard(id).catch(err => { showToast(err.message, 'error'); return null; });
+  if (!card) return;
+  const op = card.operator;
+  const txRows = card.transactions.slice(0, 8).map(t => `
+    <div class="tx-row ${t.amount>=0?'tx-plus':'tx-minus'}">
+      <div class="tx-info"><span class="tx-comment">${esc(t.comment)}</span><span class="tx-date">${fmtDate(t.created_at)} · ${esc(t.type)}</span></div>
+      <div class="tx-amount">${t.amount>=0?'+':''}${t.amount} ₡</div>
+    </div>`).join('') || '<div class="empty-line">Истории начислений пока нет</div>';
+  const auditRows = card.audit_log.slice(0, 8).map(item => `
+    <div class="tx-row">
+      <div class="tx-info"><span class="tx-comment">${esc(operatorAuditLabel(item.action))}</span><span class="tx-date">${esc(item.comment)} · ${fmtDate(item.created_at)}</span></div>
+      <div class="tx-date">${esc(item.actor_name || 'Система')}</div>
+    </div>`).join('') || '<div class="empty-line">Журнал пока пуст</div>';
+  showModal(`
+    <h3 class="modal-title">Карточка оператора</h3>
+    <div class="operator-card-grid">
+      <div><span>ФИО</span><b>${esc(op.full_name)}</b></div>
+      <div><span>Группа</span><b>${esc(op.group_name)}</b></div>
+      <div><span>Статус</span><b>${operatorStatusLabel(op.status)}</b></div>
+      <div><span>Логин</span><b>${esc(op.username || '—')}</b></div>
+      <div><span>Должность</span><b>${esc(op.position || '—')}</b></div>
+      <div><span>ID сотрудника</span><b>${esc(op.employee_id || '—')}</b></div>
+      <div><span>Email</span><b>${esc(op.email || '—')}</b></div>
+      <div><span>Дата создания</span><b>${fmtDate(op.created_at)}</b></div>
+      <div><span>Автор</span><b>${esc(op.created_by_name || '—')}</b></div>
+      <div><span>Баланс</span><b>${op.current_balance} ₡</b></div>
+      <div><span>Коины заработаны</span><b>${op.total_earned} ₡</b></div>
+      <div><span>Коины потрачены</span><b>${op.total_spent} ₡</b></div>
+    </div>
+    ${op.admin_comment ? `<div class="empty-line" style="margin-top:12px">${esc(op.admin_comment)}</div>` : ''}
+    <div class="panel" style="margin-top:14px"><div class="panel-head"><h3>История начислений и списаний</h3></div><div class="tx-list">${txRows}</div></div>
+    <div class="panel" style="margin-top:14px"><div class="panel-head"><h3>Журнал действий</h3></div><div class="tx-list">${auditRows}</div></div>
+    ${canManageOperators() ? `<button class="btn-outline" style="width:100%;margin-top:12px" onclick="showEditOperatorModal(${op.id})">Редактировать</button>` : ''}`);
+}
+
+function buildCredentialsText(account) {
+  return `Оператор: ${account.full_name}\nЛогин: ${account.username}\nВременный пароль: ${account.temporary_password}`;
+}
+
+async function copyCreatedCredentials() {
+  const text = document.getElementById('created-credentials-text')?.value || '';
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = document.getElementById('created-credentials-text');
+    area?.select();
+    document.execCommand('copy');
+  }
+  showToast('Данные для входа скопированы', 'ok');
 }
 
 function showAddItemModal() {
@@ -1068,9 +1372,10 @@ async function submitEditItem(id) {
 ══════════════════════════════════════ */
 function exportCSV() {
   const ops = STATE.adminOperators;
-  const header = ['ФИО','Группа','Место','Баллы','Коины нед.','Баланс','Опозд.','Наруш.'];
+  const header = ['ФИО','Группа','Статус','Логин','Должность','ID сотрудника','Email','Место','Баллы','Коины нед.','Баланс','Опозд.','Наруш.'];
   const rows = ops.map(o => [
-    o.full_name, o.group_name, o.rank_position||'', o.final_score?.toFixed(1)||'',
+    o.full_name, o.group_name, operatorStatusLabel(o.status), o.username || '', o.position || '', o.employee_id || '', o.email || '',
+    o.rank_position||'', o.final_score?.toFixed(1)||'',
     o.coins_earned_week, o.current_balance, o.lateness_count, o.violation_count,
   ]);
   downloadCSV([header, ...rows], 'puls_operators');
@@ -1129,7 +1434,23 @@ function roleLabel(r) {
 function statusLabel(s) {
   return { pending:'Новая', approved:'Одобрена', rejected:'Отклонена', completed:'Выполнена' }[s] || s;
 }
+function operatorStatusLabel(s) {
+  return { active:'Активен', inactive:'Неактивен', archive:'Архив' }[s] || s || 'Активен';
+}
+function operatorAuditLabel(action) {
+  return {
+    operator_created: 'Создание оператора',
+    account_created: 'Автоматическое создание аккаунта',
+    operator_updated: 'Изменение данных оператора',
+    password_reset: 'Сброс пароля',
+    username_changed: 'Изменение логина',
+    password_changed: 'Изменение пароля',
+  }[action] || action;
+}
 function isAdmin(role) { return ['supervisor','manager','admin'].includes(role); }
+function canManageOperators() {
+  return ['manager','admin'].includes(STATE.user?.role) || !!STATE.user?.can_manage_operators;
+}
 
 /* ══════════════════════════════════════
    WINDOW EXPORTS
@@ -1138,9 +1459,14 @@ window.navigateTo = navigateTo;
 window.reloadData = reloadData;
 window.closeModal = closeModal;
 window.submitAddOperator = submitAddOperator;
+window.submitEditOperator = submitEditOperator;
 window.submitAddItem = submitAddItem;
 window.submitEditItem = submitEditItem;
 window.showAddOperatorModal = showAddOperatorModal;
+window.showEditOperatorModal = showEditOperatorModal;
+window.showOperatorCardModal = showOperatorCardModal;
+window.resetOperatorPassword = resetOperatorPassword;
+window.copyCreatedCredentials = copyCreatedCredentials;
 window.showAddItemModal = showAddItemModal;
 window.showEditItemModal = showEditItemModal;
 window.exportCSV = exportCSV;

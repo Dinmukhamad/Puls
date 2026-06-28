@@ -911,55 +911,7 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 app.post('/api/auth/register', async (req, res) => {
-  try {
-    const login = String(req.body?.login || '').trim();
-    const password = String(req.body?.password || '');
-    const loginKey = normalizeLogin(login);
-
-    if (!loginKey || login.length < 3) {
-      return res.status(400).json({ error: 'Логин должен быть не короче 3 символов' });
-    }
-    if (!/^[a-z0-9._-]+$/i.test(login)) {
-      return res.status(400).json({ error: 'Логин может содержать латинские буквы, цифры, точку, дефис и подчёркивание' });
-    }
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Пароль должен быть не короче 6 символов' });
-    }
-
-    const state = await readState();
-    const users = normalizeUsers(state.users);
-    if (users.some(user => user.loginKey === loginKey)) {
-      return res.status(409).json({ error: 'Такой логин уже занят' });
-    }
-
-    const operator = ensureOperatorRow(state, login);
-    const user = normalizeUser({
-      id: loginKey,
-      login,
-      name: login,
-      role: 'operator',
-      operatorName: operator.name,
-      operatorKey: operator.nameKey,
-      password: createPasswordRecord(password),
-    });
-    if (!user) return res.status(400).json({ error: 'Не удалось создать пользователя' });
-
-    state.users = [...users, user];
-    await writeState(state);
-
-    const session = createSession(user);
-    res.status(201).json({
-      ok: true,
-      token: session.token,
-      expiresAt: new Date(session.expiresAt).toISOString(),
-      user: session.user,
-      operator: getOperatorForUser(state, user),
-      state: sanitizeStateForClient(state),
-    });
-  } catch (error) {
-    console.error('Failed to register operator:', error);
-    res.status(500).json({ error: error.message || 'Failed to register operator' });
-  }
+  res.status(410).json({ error: 'Самостоятельная регистрация отключена. Оператора создает руководитель через раздел "Операторы".' });
 });
 
 app.get('/api/auth/me', requireAuth, async (req, res) => {

@@ -30,6 +30,8 @@ def upsert_weekly_result(payload: WeeklyResultCreate, db: Session = Depends(get_
     operator = db.get(Operator, payload.operator_id)
     if not operator:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
+    if operator.status != "active" or not operator.is_active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Оператор не участвует в текущем рейтинге")
     if payload.week_end < payload.week_start:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Дата окончания раньше даты начала")
 
