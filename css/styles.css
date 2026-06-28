@@ -470,6 +470,22 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .btn-xs { padding: 4px 9px; font-size: 11px; border-radius: var(--r-xs); }
+.btn-icon {
+  width: 34px; height: 34px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 800 15px 'Inter', sans-serif;
+  line-height: 1; flex: 0 0 auto;
+}
+.operator-add-btn { font-size: 20px; }
+.row-actions {
+  display: flex; align-items: center; gap: 6px; flex-wrap: nowrap;
+}
+.row-actions .danger:hover,
+.danger-text:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
 
 .btn-link {
   background: none; border: none; padding: 0;
@@ -758,6 +774,22 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .data-table tr:hover td { background: var(--surface-2); }
 .data-table tr.row-me td { background: var(--accent-soft); }
 .data-table tr.row-top td:first-child { border-left: 2px solid var(--accent); }
+.data-table tr.operator-dismissed-row td {
+  color: var(--tx3);
+  background: rgba(148, 163, 184, .04);
+}
+.cell-muted {
+  color: var(--tx3);
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 3px;
+}
+.inline-check {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 38px; color: var(--tx2);
+  font-size: 12px; font-weight: 600;
+}
+.inline-check input { accent-color: var(--accent); }
 
 .name-cell { color: var(--tx); font-weight: 600; white-space: nowrap; }
 .rank-cell { text-align: center; }
@@ -905,6 +937,29 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   padding: 2px 6px; border-radius: 6px;
   background: var(--accent-soft); color: var(--accent);
 }
+.history-block {
+  display: grid; gap: 8px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+.history-block h4 {
+  margin: 0;
+  color: var(--tx);
+  font-size: 13px;
+  font-weight: 800;
+}
+.history-line {
+  display: grid;
+  grid-template-columns: 120px minmax(90px, auto) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 12px;
+}
+.history-line span { color: var(--tx3); }
+.history-line b { color: var(--tx); }
+.history-line small { color: var(--tx2); line-height: 1.4; }
 .operator-card-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px;
 }
