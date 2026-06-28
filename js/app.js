@@ -120,6 +120,7 @@ function renderView(view) {
     case 'manual':   renderManual();   break;
     case 'requests': renderRequests(); break;
     case 'history':  renderHistory();  break;
+    case 'groups':   renderGroups();   break;
   }
 }
 
@@ -211,7 +212,7 @@ function buildViews(role) {
   const shell = document.getElementById('app-shell');
   if (!shell) return;
   const views = isAdmin(role)
-    ? ['summary', 'operators', 'manual', 'requests', 'shop', 'history', 'cabinet', 'rating']
+    ? ['summary', 'operators', 'manual', 'requests', 'shop', 'history', 'groups', 'cabinet', 'rating']
     : ['cabinet', 'rating', 'shop'];
   shell.innerHTML = views.map(v => `<section class="app-view" id="view-${v}"></section>`).join('');
 }
@@ -219,7 +220,7 @@ function buildViews(role) {
 function renderSidebar(role) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     const t = link.dataset.navTarget;
-    const adminViews = ['summary','operators','manual','requests','history'];
+    const adminViews = ['summary','operators','manual','requests','history','groups'];
     const operatorViews = ['cabinet','rating','shop'];
     const sharedViews = ['shop','rating','cabinet'];
     let show = false;
@@ -1244,22 +1245,32 @@ function showAddOperatorModal() {
 }
 
 async function submitAddOperator() {
-  const name     = document.getElementById('new-op-name')?.value?.trim();
-  const group    = document.getElementById('new-op-group')?.value?.trim();
-  const status   = document.getElementById('new-op-status')?.value;
-  const position = document.getElementById('new-op-position')?.value?.trim() || null;
-  const empId    = document.getElementById('new-op-empid')?.value?.trim() || null;
-  const email    = document.getElementById('new-op-email')?.value?.trim() || null;
-  const comment  = document.getElementById('new-op-comment')?.value?.trim() || null;
-  const err      = document.getElementById('new-op-err');
+  const name       = document.getElementById('new-op-name')?.value?.trim();
+  const groupId    = document.getElementById('new-op-group-id')?.value;
+  const status     = document.getElementById('new-op-status')?.value || 'participating';
+  const position   = document.getElementById('new-op-position')?.value || 'operator';
+  const email      = document.getElementById('new-op-email')?.value?.trim() || null;
+  const err        = document.getElementById('new-op-err');
 
-  if (!name)  { err.textContent = 'Введите ФИО'; err.className='status-line status-error'; return; }
-  if (!group) { err.textContent = 'Введите группу'; err.className='status-line status-error'; return; }
+  if (!name || name.length < 2) {
+    err.textContent = 'Укажите ФИО оператора';
+    err.className = 'status-line status-error'; return;
+  }
+  if (!groupId) {
+    err.textContent = 'Выберите группу';
+    err.className = 'status-line status-error'; return;
+  }
 
   err.textContent = 'Создаём…'; err.className = 'status-line';
 
   try {
-    const result = await api.createOperator({ full_name: name, group_name: group, status, position, employee_id: empId, email, comment });
+    const result = await api.createOperator({
+      full_name: name,
+      group_id: +groupId,
+      participation_status: status,
+      position: position,
+      email: email || null,
+    });
     // Показываем credentials
     showModal(`
       <h3 class="modal-title" style="color:var(--ok)">✓ Оператор добавлен</h3>
@@ -1433,6 +1444,11 @@ window.showEditItemModal = showEditItemModal;
 window.exportCSV = exportCSV;
 window.exportHistoryCSV = exportHistoryCSV;
 window.reloadCabinet = reloadCabinet;
+window.showAddGroupModal = showAddGroupModal;
+window.submitAddGroup = submitAddGroup;
+window.showEditGroupModal = showEditGroupModal;
+window.submitEditGroup = submitEditGroup;
+window.toggleGroupStatus = toggleGroupStatus;
 window.showChangePasswordModal = showChangePasswordModal;
 window.showChangeUsernameModal = showChangeUsernameModal;
 window.submitChangePassword = submitChangePassword;
