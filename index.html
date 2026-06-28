@@ -10,65 +10,35 @@
   <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=auth-register-2">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css?v=modern-minimal-1">
   <script src="js/api.js?v=auth-register-2"></script>
+  <script>
+    // Apply saved theme before paint to avoid flash
+    (function() {
+      const saved = localStorage.getItem('icore-theme');
+      if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    })();
+  </script>
 </head>
 <body>
 
-  <section class="intro-screen" id="intro-screen" aria-label="Вступительный ролик">
-    <div class="intro-field" aria-hidden="true">
-      <span class="intro-ray ray-one"></span>
-      <span class="intro-ray ray-two"></span>
-      <span class="intro-ray ray-three"></span>
-      <span class="intro-ring ring-one"></span>
-      <span class="intro-ring ring-two"></span>
-    </div>
-    <div class="intro-symbols" aria-hidden="true">
-      <span class="intro-symbol intro-dauntless">🔥</span>
-      <span class="intro-symbol intro-erudite">⚡</span>
-      <span class="intro-symbol intro-candor">⚖</span>
-    </div>
+  <section class="intro-screen" id="intro-screen" aria-label="Заставка">
     <div class="intro-content">
       <div class="intro-kicker">iGROUP · Операторский конкурс</div>
       <div class="intro-title">iCore</div>
-      <div class="intro-subtitle">Рабочий рейтинг операторов.</div>
+      <div class="intro-subtitle">Рабочий рейтинг операторов</div>
       <div class="intro-progress" aria-hidden="true"><span></span></div>
     </div>
     <button class="intro-skip" id="intro-skip" type="button">Пропустить</button>
   </section>
 
-  <div class="bg-grid" aria-hidden="true"></div>
-
-  <div class="bg-decorations" aria-hidden="true">
-    <svg class="bg-deco deco-fire" viewBox="0 0 120 200" xmlns="http://www.w3.org/2000/svg">
-      <path d="M60,185 Q18,148 30,100 Q44,60 62,40 Q50,72 68,86 Q56,58 78,28 Q90,66 74,98 Q96,76 90,112 Q100,86 94,132 Q88,164 60,185Z" fill="rgba(200,52,26,.07)"/>
-    </svg>
-    <svg class="bg-deco deco-circuit" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
-      <line x1="20" y1="110" x2="88" y2="110" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
-      <line x1="110" y1="20" x2="110" y2="88" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
-      <line x1="132" y1="110" x2="200" y2="110" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
-      <line x1="110" y1="132" x2="110" y2="200" stroke="rgba(21,88,168,.1)" stroke-width="1.5"/>
-      <circle cx="110" cy="110" r="22" fill="none" stroke="rgba(21,88,168,.12)" stroke-width="1.5"/>
-      <circle cx="110" cy="110" r="9" fill="rgba(21,88,168,.08)"/>
-      <rect x="14" y="104" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
-      <rect x="192" y="104" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
-      <rect x="104" y="14" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
-      <rect x="104" y="192" width="14" height="14" rx="3" fill="rgba(21,88,168,.09)"/>
-    </svg>
-    <svg class="bg-deco deco-ring" viewBox="0 0 260 260" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="130" cy="130" r="120" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="1"/>
-      <circle cx="130" cy="130" r="90"  fill="none" stroke="rgba(255,255,255,.025)" stroke-width="1"/>
-      <circle cx="130" cy="130" r="60"  fill="none" stroke="rgba(255,255,255,.02)" stroke-width="1"/>
-      <line x1="130" y1="10" x2="130" y2="250" stroke="rgba(255,255,255,.02)" stroke-width="1"/>
-      <line x1="10" y1="130" x2="250" y2="130" stroke="rgba(255,255,255,.02)" stroke-width="1"/>
-    </svg>
-  </div>
-
-  <button class="mobile-menu-button" id="mobile-menu-button" type="button" aria-label="Открыть меню" aria-expanded="false">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-    <span>Меню</span>
+  <!-- Theme toggle -->
+  <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему">
+    <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>
+    <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
   </button>
+
   <div class="sidebar-overlay" id="sidebar-overlay" hidden></div>
 
   <nav class="side-nav" aria-label="Разделы сайта">
@@ -303,5 +273,23 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="js/app.js?v=auth-register-2"></script>
   <script src="js/excel-import.js?v=icore-ui-1"></script>
+  <script>
+    // Theme toggle
+    (function() {
+      const btn = document.getElementById('theme-toggle');
+      const html = document.documentElement;
+      if (!btn) return;
+      btn.addEventListener('click', function() {
+        const isDark = html.getAttribute('data-theme') === 'dark';
+        if (isDark) {
+          html.removeAttribute('data-theme');
+          localStorage.setItem('icore-theme', 'light');
+        } else {
+          html.setAttribute('data-theme', 'dark');
+          localStorage.setItem('icore-theme', 'dark');
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
