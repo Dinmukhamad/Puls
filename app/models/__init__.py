@@ -1,9 +1,17 @@
-from app.models.entities import CoinTransaction, Operator, OperatorAuditLog, ShopItem, ShopPurchase, User, WeeklyResult
+from app.models.entities import (
+    AuditLog,
+    CoinTransaction,
+    Operator,
+    ShopItem,
+    ShopPurchase,
+    User,
+    WeeklyResult,
+)
 
 __all__ = [
+    "AuditLog",
     "CoinTransaction",
     "Operator",
-    "OperatorAuditLog",
     "ShopItem",
     "ShopPurchase",
     "User",
