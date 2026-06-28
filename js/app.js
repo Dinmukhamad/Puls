@@ -803,9 +803,9 @@ function renderManual() {
             </div>
           </div>
           <input type="hidden" id="manual-op-id" value="">
-          <div id="op-selected-display" style="display:none;margin-top:6px;padding:8px 12px;background:var(--accent-soft);border:1px solid rgba(255,77,46,.2);border-radius:var(--r-sm);font-size:13px;align-items:center;justify-content:space-between">
-            <span id="op-selected-name"></span>
-            <button onclick="clearOpSelection()" style="background:none;border:none;color:var(--tx3);cursor:pointer;font-size:16px;padding:0 4px">×</button>
+          <div id="op-selected-display">
+            <span id="op-selected-name" style="font-size:13px;color:var(--tx);font-weight:600"></span>
+            <button onclick="clearOpSelection()" style="background:none;border:none;color:var(--tx3);cursor:pointer;font-size:18px;padding:0 4px;line-height:1">×</button>
           </div>
         </div>
 
@@ -990,14 +990,14 @@ function initOpSearch(container, ops) {
     input.value = '';
     input.placeholder = 'Начните вводить имя или группу…';
     dispName.textContent = name;
-    display.style.display = 'flex';
+    display.classList.add('visible');
     dropdown.setAttribute('hidden', '');
   }
 
   window.clearOpSelection = function() {
     _opSearchSelected = null;
     hiddenId.value = '';
-    display.style.display = 'none';
+    display.classList.remove('visible');
     input.value = '';
     input.focus();
   };
