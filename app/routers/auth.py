@@ -1,17 +1,22 @@
-from app.core.config import get_settings
 from __future__ import annotations
 
-import re
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import create_access_token, get_current_user, hash_password, require_roles, verify_password
+from app.core.config import get_settings
+from app.core.security import (
+    create_access_token, get_current_user, hash_password,
+    require_roles, verify_password,
+)
 from app.database.db import get_db
-from app.models.entities import Operator, AuditLog, User
-from app.schemas.auth import AccountCredentialsUpdate, LoginRequest, TokenResponse, UserCreate, UserRead
+from app.models.entities import AuditLog, Operator, User
+from app.schemas.auth import (
+    AccountCredentialsUpdate, LoginRequest, TokenResponse,
+    UserCreate, UserRead,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -19,13 +24,26 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 @router.post("/login")
 def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.username == payload.username))
-    if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный логин или пароль")
-    if user.role == "operator" and user.operator_id:
-        operator = db.get(Operator, user.operator_id)
-        if operator and operator.status == "archive":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Аккаунт оператора находится в архиве")
-    return TokenResponse(access_token=create_access_token(str(user.id), user.role))
+    if not user or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Неверный логин или пароль")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Аккаунт деактивирован")
+
+    token = create_access_token({"sub": str(user.id)}, role=user.role)
+
+    settings = get_settings()
+    response.set_cookie(
+        key="pulse_access_token",
+        value=token,
+        httponly=True,
+        secure=getattr(settings, 'auth_cookie_secure', False),
+        samesite=getattr(settings, 'auth_cookie_samesite', 'lax'),
+        max_age=settings.access_token_expire_minutes * 60,
+        path="/",
+    )
+    return {"ok": True, "access_token": token, "token_type": "bearer"}
 
 
 @router.post("/logout")
@@ -39,39 +57,22 @@ def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-@router.patch("/me/credentials", response_model=UserRead)
-def update_my_credentials(
+@router.post("/account", response_model=UserRead)
+def update_account(
     payload: AccountCredentialsUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> User:
-    username = payload.username.strip() if payload.username is not None else ""
-    wants_username = payload.username is not None and username != current_user.username
-    wants_password = payload.new_password is not None or payload.repeat_password is not None
-
-    if not wants_username and not wants_password:
-        return current_user
-
-    if wants_username:
-        if not username:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Логин не должен быть пустым.")
-        if not re.fullmatch(r"[A-Za-z0-9_]+", username):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Логин может содержать только латинские буквы, цифры и символ _",
-            )
-        existing = db.scalar(select(User).where(User.username == username, User.id != current_user.id))
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Такой логин уже используется. Укажите другой логин.",
-            )
+    wants_password = bool(payload.new_password)
+    wants_username = bool(payload.username and payload.username != current_user.username)
 
     if wants_password:
+        if not payload.current_password:
+            raise HTTPException(status_code=400, detail="Введите текущий пароль")
+        if not verify_password(payload.current_password, current_user.password_hash):
+            raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
         if payload.new_password != payload.repeat_password:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Пароли не совпадают.")
-        if not payload.current_password or not verify_password(payload.current_password, current_user.password_hash):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Текущий пароль указан неверно.")
+            raise HTTPException(status_code=400, detail="Пароли не совпадают")
         current_user.password_hash = hash_password(payload.new_password or "")
         if current_user.operator_id:
             db.add(AuditLog(
@@ -83,6 +84,13 @@ def update_my_credentials(
 
     if wants_username:
         old_username = current_user.username
+        username = payload.username
+        existing = db.scalar(select(User).where(
+            User.username == username, User.id != current_user.id
+        ))
+        if existing:
+            raise HTTPException(status_code=409,
+                                detail="Такой логин уже используется")
         current_user.username = username
         if current_user.operator_id:
             db.add(AuditLog(
@@ -97,12 +105,15 @@ def update_my_credentials(
     return current_user
 
 
-@router.post("/users", response_model=UserRead, dependencies=[Depends(require_roles("admin"))])
-def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> User:
-    if payload.role not in {"operator", "supervisor", "manager", "admin"}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недопустимая роль")
-    if db.scalar(select(User).where(User.username == payload.username)):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Логин уже занят")
+@router.post("/users", response_model=UserRead)
+def create_user(
+    payload: UserCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin")),
+) -> User:
+    existing = db.scalar(select(User).where(User.username == payload.username))
+    if existing:
+        raise HTTPException(status_code=409, detail="Пользователь уже существует")
     user = User(
         full_name=payload.full_name,
         username=payload.username,
@@ -118,6 +129,9 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)) -> User:
     return user
 
 
-@router.get("/users", response_model=List[UserRead], dependencies=[Depends(require_roles("admin"))])
-def list_users(db: Session = Depends(get_db)) -> List[User]:
-    return list(db.scalars(select(User).order_by(User.id.asc())))
+@router.get("/users", response_model=List[UserRead])
+def list_users(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin")),
+) -> List[User]:
+    return list(db.scalars(select(User).order_by(User.id)))
