@@ -29,33 +29,55 @@ app.use(express.json({ limit: '5mb' }));
 
 const sessions = new Map();
 
-const SEEDED_USERS = [
-  {
-    id: 'admin',
-    login: 'admin',
-    name: 'admin',
-    role: 'admin',
-    password: {
-      algorithm: PASSWORD_ALGORITHM,
-      iterations: 210000,
-      salt: '0a3416c7a8bc30706dbb05cd146c2a34',
-      hash: 'f50718cd06e9be5e1cf5afec367149cea390f8df6004aff04c6d730b47d519f7',
-    },
-  },
-  {
-    id: 'test',
-    login: 'test',
-    name: 'test test',
-    role: 'operator',
-    operatorName: 'test test',
-    password: {
-      algorithm: PASSWORD_ALGORITHM,
-      iterations: 210000,
-      salt: '19ff9bfb598878f6c45103dc59cf57cc',
-      hash: '4b90ae8702ae2a96911be3e59587f1dfd380cc7b2c282cd5f9019f4db2d23a8d',
-    },
-  },
-];
+// ── Seed users из переменных окружения ───────────────────────
+// Пароли никогда не хранятся в коде — только в .env на сервере.
+// При первом старте хеши генерируются на лету из env-переменных.
+// Формат .env:
+//   SEED_ADMIN_LOGIN=admin
+//   SEED_ADMIN_PASSWORD=ВашПарольАдмина
+//   SEED_ADMIN_NAME=Администратор
+//   SEED_TEST_LOGIN=test
+//   SEED_TEST_PASSWORD=ВашПарольОператора
+//   SEED_TEST_NAME=Тестовый оператор
+function buildSeedUsers() {
+  const users = [];
+
+  const adminLogin    = process.env.SEED_ADMIN_LOGIN    || 'admin';
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || '';
+  const adminName     = process.env.SEED_ADMIN_NAME     || adminLogin;
+
+  if (!adminPassword) {
+    console.warn('[seed] SEED_ADMIN_PASSWORD не задан — вход администратора невозможен!');
+  } else {
+    users.push({
+      id:    adminLogin,
+      login: adminLogin,
+      name:  adminName,
+      role:  'admin',
+      password: createPasswordRecord(adminPassword),
+    });
+  }
+
+  const testLogin    = process.env.SEED_TEST_LOGIN    || '';
+  const testPassword = process.env.SEED_TEST_PASSWORD || '';
+  const testName     = process.env.SEED_TEST_NAME     || testLogin;
+  const testOpName   = process.env.SEED_TEST_OPERATOR_NAME || testName;
+
+  if (testLogin && testPassword) {
+    users.push({
+      id:           testLogin,
+      login:        testLogin,
+      name:         testName,
+      role:         'operator',
+      operatorName: testOpName,
+      password:     createPasswordRecord(testPassword),
+    });
+  }
+
+  return users;
+}
+
+// SEEDED_USERS инициализируется после определения createPasswordRecord (см. ниже)
 
 function resolveDataFile() {
   const explicitFile = process.env.DATA_FILE;
@@ -160,6 +182,9 @@ function createPasswordRecord(password) {
     hash,
   };
 }
+
+// Инициализация seed-пользователей (после определения createPasswordRecord)
+const SEEDED_USERS = buildSeedUsers();
 
 function normalizeUser(user) {
   const login = String(user?.login || '').trim();
