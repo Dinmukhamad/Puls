@@ -56,25 +56,34 @@ def _audit(db: Session, action: str, entity_type: str, entity_id: int,
 
 # ── Schemas ────────────────────────────────────────────────────
 
+VALID_POSITIONS = ("operator", "chat_manager")
+VALID_PARTICIPATION = ("participating", "not_participating")
+
+
 class OperatorCreateFull(BaseModel):
     full_name: str
-    group_name: str
-    status: str = "active"
-    position: Optional[str] = None
-    employee_id: Optional[str] = None
+    group_id: int                          # required — select from groups list
+    participation_status: str = "participating"
+    position: str = "operator"
     email: Optional[str] = None
-    start_date: Optional[str] = None
+    # Legacy fields ignored but accepted for compat
+    group_name: Optional[str] = None
+    status: Optional[str] = None
+    employee_id: Optional[str] = None
     comment: Optional[str] = None
+    start_date: Optional[str] = None
 
 
 class OperatorCreatedResponse(BaseModel):
+    id: int
     operator_id: int
     full_name: str
     group_name: str
-    status: str
+    participation_status: str
+    position: str
     username: str
     temp_password: str
-    message: str = "Оператор успешно добавлен. Аккаунт создан."
+    message: str = "Оператор успешно создан. Аккаунт создан."
 
 
 class ChangePasswordRequest(BaseModel):
@@ -145,44 +154,58 @@ def create_operator(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("supervisor", "manager", "admin"))
 ) -> OperatorCreatedResponse:
-    """Создаёт оператора и автоматически создаёт аккаунт для входа"""
+    """Создаёт оператора с авто-аккаунтом. Группа выбирается из списка."""
+    from app.models.entities import Group
+
+    # Validate required fields
     if not payload.full_name.strip():
-        raise HTTPException(status_code=400, detail="ФИО обязательно")
-    if not payload.group_name.strip():
-        raise HTTPException(status_code=400, detail="Группа обязательна")
-    if payload.status not in ("active", "inactive", "archive"):
-        raise HTTPException(status_code=400, detail="Недопустимый статус")
+        raise HTTPException(status_code=400, detail="Укажите ФИО оператора")
+    if len(payload.full_name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="ФИО слишком короткое")
+    if payload.participation_status not in VALID_PARTICIPATION:
+        raise HTTPException(status_code=400, detail="Некорректный статус участия")
+    if payload.position not in VALID_POSITIONS:
+        raise HTTPException(status_code=400, detail="Некорректная должность")
 
-    # Проверка дублей по ФИО
-    existing = db.scalar(select(Operator).where(Operator.full_name == payload.full_name.strip()))
-    if existing:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Похожий оператор уже существует: {existing.full_name} (ID {existing.id})"
-        )
+    # Validate group
+    group = db.get(Group, payload.group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Группа не найдена")
+    if group.status != "active":
+        raise HTTPException(status_code=400, detail="Нельзя добавить оператора в отключённую группу")
 
-    # Email дубль
+    # Validate email
     if payload.email:
+        import re as _re
+        if not _re.match(r'^[^@]+@[^@]+\.[^@]+$', payload.email.strip()):
+            raise HTTPException(status_code=400, detail="Введите корректный email")
         dup_email = db.scalar(select(Operator).where(Operator.email == payload.email.strip()))
         if dup_email:
             raise HTTPException(status_code=409, detail="Оператор с таким email уже существует")
 
-    # Создаём оператора
+    # Check duplicate name
+    existing = db.scalar(select(Operator).where(Operator.full_name == payload.full_name.strip()))
+    if existing:
+        raise HTTPException(status_code=409,
+            detail=f"Оператор с таким ФИО уже существует: {existing.full_name} (ID {existing.id})")
+
+    # Create operator
+    is_active = payload.participation_status == "participating"
     op = Operator(
         full_name=payload.full_name.strip(),
-        group_name=payload.group_name.strip(),
-        status=payload.status,
-        is_active=payload.status == "active",
+        group_id=group.id,
+        group_name=group.name,
+        participation_status=payload.participation_status,
+        status="active" if is_active else "inactive",
+        is_active=is_active,
         position=payload.position,
-        employee_id=payload.employee_id,
-        email=payload.email,
-        comment=payload.comment,
+        email=payload.email.strip() if payload.email else None,
         created_by_user_id=current_user.id,
     )
     db.add(op)
     db.flush()
 
-    # Автоматически создаём аккаунт
+    # Auto-create account
     username = _gen_username(db, payload.full_name)
     temp_password = _gen_password()
 
@@ -192,26 +215,25 @@ def create_operator(
         password_hash=hash_password(temp_password),
         role="operator",
         operator_id=op.id,
-        is_active=payload.status == "active",
+        is_active=is_active,
     )
     db.add(user)
     db.flush()
     op.user_id = user.id
 
     _audit(db, "operator_created", "operator", op.id,
-           f"Создан оператор {op.full_name}, группа {op.group_name}, логин {username}",
-           current_user)
-    _audit(db, "account_created", "user", user.id,
-           f"Автоматически создан аккаунт {username} для оператора {op.full_name}",
+           f"Создан оператор {op.full_name}, группа {group.name}, должность {payload.position}, логин {username}",
            current_user)
 
     db.commit()
 
     return OperatorCreatedResponse(
+        id=op.id,
         operator_id=op.id,
         full_name=op.full_name,
-        group_name=op.group_name,
-        status=op.status,
+        group_name=group.name,
+        participation_status=op.participation_status,
+        position=op.position or "operator",
         username=username,
         temp_password=temp_password,
     )
