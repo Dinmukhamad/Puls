@@ -1107,3 +1107,19 @@ body.side-nav-collapsed .theme-toggle { display: none; }
   color: var(--tx3);
   font-size: 13px;
 }
+
+/* ── Op selected display ─────────────────────────────────── */
+#op-selected-display {
+  display: none;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(255,77,46,.2);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  align-items: center;
+  justify-content: space-between;
+}
+#op-selected-display.visible {
+  display: flex !important;
+}
