@@ -162,7 +162,7 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
 .side-nav-logo {
   display: flex; align-items: center; gap: 10px;
   text-decoration: none; padding: 0 4px;
-  margin-bottom: 32px; min-width: 0;
+  min-width: 0; flex: 1;
 }
 .side-nav-mark {
   flex-shrink: 0;
@@ -185,25 +185,29 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
 
 /* Toggle */
 .side-nav-toggle {
-  position: absolute;
-  top: 24px; right: -13px;
-  width: 26px; height: 26px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--tx3);
+  /* Внутри нава, не торчит наружу */
+  width: 28px; height: 28px; flex-shrink: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.4);
   cursor: pointer;
-  display: grid; place-items: center;
-  box-shadow: var(--shadow-sm);
+  display: flex; align-items: center; justify-content: center;
+  margin-left: auto;
   transition: background var(--t), color var(--t);
-  z-index: 2;
 }
-.side-nav-toggle:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.side-nav-toggle:hover { background: var(--accent-soft); color: var(--accent); border-color: rgba(255,77,46,.3); }
 .side-nav-toggle svg {
-  width: 13px; height: 13px; fill: none;
-  stroke: currentColor; stroke-width: 2.4;
+  width: 14px; height: 14px; fill: none;
+  stroke: currentColor; stroke-width: 2.2;
   stroke-linecap: round; stroke-linejoin: round;
   transition: transform var(--t);
+}
+
+/* Nav top row: logo + toggle */
+.side-nav-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 32px;
 }
 
 /* Links */
