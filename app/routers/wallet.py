@@ -59,6 +59,15 @@ def create_manual_transaction(
     operator = db.get(Operator, payload.operator_id)
     if not operator:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
+    if (
+        operator.employment_status != "active"
+        or operator.participation_status != "participating"
+        or not operator.is_active
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нельзя начислять коины уволенному или не участвующему оператору",
+        )
     transaction_type = "manual_add" if payload.amount >= 0 else "manual_subtract"
     # Build full comment: "Reason: comment" or just "Reason"
     reason = payload.reason.strip()
