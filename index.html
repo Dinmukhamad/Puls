@@ -3,293 +3,160 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Contest · Конкурсы операторов</title>
-  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg?v=divergent-icon-1">
-  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png?v=divergent-icon-1">
-  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=divergent-icon-1">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon-180.png?v=divergent-icon-1">
+  <title>iCore · Геймификация операторов</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=modern-minimal-1">
-  <script src="js/api.js?v=auth-register-2"></script>
+  <link rel="stylesheet" href="css/styles.css?v=tz-v1">
+  <script src="js/api.js?v=tz-v1"></script>
   <script>
-    // Apply saved theme before paint to avoid flash
     (function() {
-      const saved = localStorage.getItem('icore-theme');
-      if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+      const t = localStorage.getItem('icore-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
 </head>
 <body>
 
-  <section class="intro-screen" id="intro-screen" aria-label="Заставка">
-    <div class="intro-content">
-      <div class="intro-kicker">iGROUP · Операторский конкурс</div>
-      <div class="intro-title">iCore</div>
-      <div class="intro-subtitle">Рабочий рейтинг операторов</div>
-      <div class="intro-progress" aria-hidden="true"><span></span></div>
+  <!-- ══ AUTH OVERLAY ═════════════════════════════════════════ -->
+  <div id="auth-overlay" class="auth-overlay">
+    <div class="auth-shell">
+      <!-- Левая панель -->
+      <div class="auth-visual">
+        <div class="auth-logo-row">
+          <div class="auth-mark">i</div>
+          <span>iCore</span>
+        </div>
+        <h1>Панель результатов операторов</h1>
+        <p>Единый вход для администраторов, супервайзеров и операторов системы.</p>
+        <div class="auth-lines">
+          <span></span><span></span><span></span>
+        </div>
+      </div>
+      <!-- Правая панель (форма) -->
+      <div class="auth-card">
+        <div class="auth-kicker">CONTEST</div>
+        <h2>Вход в систему</h2>
+        <p>Введите логин и пароль для входа.</p>
+        <div class="form-group">
+          <label class="form-label">ЛОГИН</label>
+          <input id="auth-username" class="form-input" type="text" placeholder="Логин" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label">ПАРОЛЬ</label>
+          <input id="auth-password" class="form-input" type="password" placeholder="Пароль" autocomplete="current-password">
+        </div>
+        <div id="auth-error" class="auth-error"></div>
+        <button id="auth-login-btn" class="btn-primary" style="width:100%;height:44px;margin-top:14px;font-size:14px">Войти</button>
+      </div>
     </div>
-    <button class="intro-skip" id="intro-skip" type="button">Пропустить</button>
-  </section>
+  </div>
 
-  <!-- Theme toggle -->
+  <!-- ══ SIDE NAV ══════════════════════════════════════════════ -->
+  <nav class="side-nav" aria-label="Навигация">
+    <a class="side-nav-logo" href="#" onclick="navigateTo('cabinet');return false;">
+      <div class="side-nav-mark">i</div>
+      <span class="side-nav-brand">iCore</span>
+    </a>
+
+    <button class="side-nav-toggle" id="side-nav-toggle" type="button" aria-label="Свернуть меню">
+      <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+    </button>
+
+    <div class="side-nav-group">
+      <a class="side-nav-link active" href="#" data-nav-target="cabinet" title="Кабинет">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span>Кабинет</span>
+      </a>
+      <a class="side-nav-link" href="#" data-nav-target="rating" title="Рейтинг">
+        <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+        <span>Рейтинг</span>
+      </a>
+      <a class="side-nav-link" href="#" data-nav-target="shop" title="Магазин">
+        <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        <span>Магазин</span>
+      </a>
+      <a class="side-nav-link" href="#" data-nav-target="admin" title="Операторы">
+        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Операторы</span>
+      </a>
+      <a class="side-nav-link" href="#" data-nav-target="requests" title="Заявки">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <span>Заявки</span>
+      </a>
+    </div>
+
+    <div class="side-nav-separator"></div>
+
+    <!-- Excel импорт (только для admins) -->
+    <div class="side-nav-group" id="excel-import-nav" style="display:none">
+      <div class="side-nav-section-label">Импорт данных</div>
+      <div class="excel-import-compact">
+        <div class="excel-period-grid">
+          <label class="excel-period-field">
+            <span>Начало</span>
+            <input type="date" id="excel-period-start">
+          </label>
+          <label class="excel-period-field">
+            <span>Конец</span>
+            <input type="date" id="excel-period-end">
+          </label>
+        </div>
+        <label class="excel-file-label" id="excel-report-label">
+          <input type="file" id="excel-report-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
+          <span id="excel-report-file-name">report.xlsx</span>
+          <span class="excel-file-btn">Обзор</span>
+        </label>
+        <label class="excel-file-label" id="excel-dates-label">
+          <input type="file" id="excel-dates-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
+          <span id="excel-dates-file-name">dates.xlsx</span>
+          <span class="excel-file-btn">Обзор</span>
+        </label>
+        <button class="btn-primary" style="width:100%" id="excel-import-btn">Применить</button>
+        <div class="import-status" id="import-status" hidden></div>
+      </div>
+    </div>
+
+    <div class="side-nav-meta">
+      <span id="side-user">—</span>
+      <span id="side-role">Загрузка…</span>
+      <button id="auth-logout-btn" class="btn-link" style="margin-top:6px;font-size:11px">Выйти</button>
+    </div>
+  </nav>
+
+  <!-- ══ MAIN CONTENT ══════════════════════════════════════════ -->
+  <main class="container">
+    <div id="app-shell">
+      <!-- Views рендерятся динамически через JS -->
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <p>Загрузка…</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- ══ THEME TOGGLE ══════════════════════════════════════════ -->
   <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему">
     <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>
     <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
   </button>
 
-  <div class="sidebar-overlay" id="sidebar-overlay" hidden></div>
-
-  <nav class="side-nav" aria-label="Разделы сайта">
-    <a class="side-nav-logo" href="#overview-view" aria-label="Contest">
-      <span class="side-nav-brand">Contest</span>
-      <span class="side-nav-mark">●</span>
-    </a>
-    <button class="side-nav-close" id="side-nav-close" type="button" aria-label="Закрыть меню">x</button>
-    <button class="side-nav-toggle" id="side-nav-toggle" type="button" aria-label="Свернуть меню" aria-expanded="true" title="Свернуть меню">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
-    </button>
-    <div class="side-nav-group">
-      <a class="side-nav-link active" href="#overview-view" data-nav-target="overview" title="Общие результаты">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
-        <span>Общие</span>
-      </a>
-      <a class="side-nav-link" href="#icore-cabinet" data-nav-target="cabinet" title="Мой кабинет">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-7 9a7 7 0 0 1 14 0M16 4l2 2 3-3"/></svg>
-        <span>Кабинет</span>
-      </a>
-      <a class="side-nav-link" href="#icore-rating" data-nav-target="coin-rating" title="Рейтинг коинов">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Zm0 2H4a4 4 0 0 0 4 4M17 6h3a4 4 0 0 1-4 4"/></svg>
-        <span>Рейтинг</span>
-      </a>
-      <a class="side-nav-link" href="#icore-shop" data-nav-target="shop" title="Магазин бонусов">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h15l-2 9H8L6 4H3M9 21h.01M18 21h.01M10 12h7"/></svg>
-        <span>Магазин</span>
-      </a>
-      <a class="side-nav-link" href="#icore-admin" data-nav-target="admin" title="Заявки и администрирование">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5V4Zm4 4h6M9 12h6M9 16h4"/></svg>
-        <span>Заявки</span>
-      </a>
-      <a class="side-nav-link" href="#visual-dashboard" data-nav-target="individual" title="Личные показатели">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-7 9a7 7 0 0 1 14 0"/></svg>
-        <span>Личные</span>
-      </a>
-      <a class="side-nav-link" href="#game-dashboard" data-nav-target="season" title="Бонусы и уровни">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4v6c0 5-3.5 7.5-8 8-4.5-.5-8-3-8-8V7l8-4Zm0 5v8M8 12h8"/></svg>
-        <span>Бонусы</span>
-      </a>
-    </div>
-    <div class="side-nav-separator"></div>
-    <div class="side-nav-group">
-      <a class="side-nav-link" href="#scoreboard" data-nav-target="factions" title="Рейтинг групп">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4Zm0 2H4a4 4 0 0 0 4 4M17 6h3a4 4 0 0 1-4 4"/></svg>
-        <span>Группы</span>
-      </a>
-      <a class="side-nav-link" href="#tables-section" data-nav-target="tables" title="Таблицы операторов">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4V5Zm0 5h16M9 5v14M15 5v14"/></svg>
-        <span>Таблицы</span>
-      </a>
-      <a class="side-nav-link" href="#criteria-section" data-nav-target="criteria" title="Правила оценки">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7M5 5h8M5 9h5"/></svg>
-        <span>Правила</span>
-      </a>
-    </div>
-    <div class="side-nav-meta" aria-label="Служебная информация">
-      <span id="side-role-label">Роль: оператор</span>
-      <span id="side-rate-label">5 баллов = 1 коин</span>
-      <span id="side-updated-label">Обновлено: -</span>
-    </div>
-  </nav>
-
-  <div class="container">
-
-    <!-- ═══ HERO ════════════════════════════════════════════════ -->
-    <section class="hero" aria-label="iCore: Конкурс операторов">
-
-      <div class="hero-factions">
-        <div class="hf-badge hf-dauntless">
-          <span class="hf-icon">🔥</span>
-          <span class="hf-name">Группа 1</span>
-          <span class="hf-en">Team 1</span>
-        </div>
-        <div class="hf-badge hf-erudite">
-          <span class="hf-icon">⚡</span>
-          <span class="hf-name">Группа 2</span>
-          <span class="hf-en">Team 2</span>
-        </div>
-        <div class="hf-badge hf-candor">
-          <span class="hf-icon">⚖</span>
-          <span class="hf-name">Группа 3</span>
-          <span class="hf-en">Team 3</span>
-        </div>
-      </div>
-
-      <div class="hero-body">
-        <div class="hero-eyebrow">IGroup · Операторский конкурс</div>
-        <h1 class="hero-title">
-          <span class="hero-title-big">iCORE</span>
-          <span class="hero-title-small">Конкурс операторов</span>
-        </h1>
-        <p class="hero-desc">
-          Участники разделены на рабочие группы. Рейтинг формируется на основе качества работы,
-          выработки часов, эффективности и дополнительных баллов.
-          За нарушения и опоздания баллы снимаются.
-        </p>
-
-        <div class="hero-timeline">
-          <div class="ht-item">
-            <div class="ht-label">Период конкурса</div>
-            <div class="ht-val">15.06 – 21.06</div>
-          </div>
-          <div class="ht-sep"></div>
-          <div class="ht-item">
-            <div class="ht-label">Промежуточные</div>
-            <div class="ht-val accent-mid">18.06</div>
-          </div>
-          <div class="ht-sep"></div>
-          <div class="ht-item">
-            <div class="ht-label">Итоги недели</div>
-            <div class="ht-val accent-fin">23.06</div>
-          </div>
-        </div>
-
-        <a class="hero-cta" href="#overview-view">
-          К результатам
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-        </a>
-      </div>
-    </section>
-
-    <!-- ═══ DASHBOARD ════════════════════════════════════════════ -->
-    <div id="dashboard" class="dashboard-anchor"></div>
-
-    <section class="content-section app-shell analytics-section" aria-label="Разделы конкурса">
-      <section class="app-view active" id="overview-view" data-section-view="overview" aria-label="Общие результаты">
-        <div class="content-section-header">
-          <div>
-            <div class="section-kicker">Статистика</div>
-          <h2 class="section-title">Показатели конкурса</h2>
-          </div>
-        </div>
-
-        <!-- Панель редактора (только для admin) -->
-        <section class="editor-panel" id="editor-panel" aria-label="Управление данными" hidden></section>
-
-        <!-- Статистика -->
-        <section class="stats-section" id="stats-section" aria-label="Статистика конкурса"></section>
-      </section>
-
-      <!-- Визуальный дашборд -->
-      <section class="app-view icore-section" id="icore-cabinet" data-section-view="cabinet" aria-label="Личный кабинет оператора"></section>
-
-      <section class="app-view icore-section" id="icore-rating" data-section-view="coin-rating" aria-label="Рейтинг коинов"></section>
-
-      <section class="app-view icore-section" id="icore-shop" data-section-view="shop" aria-label="Магазин бонусов"></section>
-
-      <section class="app-view icore-section" id="icore-admin" data-section-view="admin" aria-label="Заявки и администрирование"></section>
-
-      <section class="app-view visual-dashboard" id="visual-dashboard" data-section-view="individual" aria-label="Визуальный дашборд конкурса"></section>
-
-      <section class="app-view game-dashboard" id="game-dashboard" data-section-view="season" aria-label="Бонусы и уровни операторов"></section>
-
-      <!-- Рейтинг групп -->
-      <section class="app-view scoreboard" id="scoreboard" data-section-view="factions" aria-label="Общий рейтинг групп"></section>
-
-      <!-- Критерии оценки -->
-      <section class="app-view criteria-section" id="criteria-section" data-section-view="criteria" aria-label="Критерии оценки">
-        <div class="criteria-header">
-          <div class="section-kicker">Система оценки</div>
-          <h2 class="section-title">Правила оценки</h2>
-        </div>
-        <div class="criteria-grid">
-          <div class="criteria-card positive">
-            <div class="cc-icon">✓</div>
-            <div class="cc-title">Основные показатели</div>
-            <ul class="cc-list">
-              <li>Качество работы</li>
-              <li>Выработка часов</li>
-              <li>Эффективность</li>
-              <li>Дополнительные баллы за переработки</li>
-            </ul>
-          </div>
-          <div class="criteria-card negative">
-            <div class="cc-icon">✗</div>
-            <div class="cc-title">Антипоказатели</div>
-            <ul class="cc-list">
-              <li>Дисциплинарные нарушения</li>
-              <li>Опоздания</li>
-              <li>Использование посторонних сайтов в рабочее время</li>
-            </ul>
-            <div class="cc-note">За антипоказатели итоговый балл уменьшается</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="app-view tables-section" id="tables-section" data-section-view="tables" aria-label="Таблицы групп">
-        <div class="section-header-row">
-          <div>
-            <div class="section-kicker">Операционные таблицы</div>
-            <h2 class="section-title">Операторы по группам</h2>
-          </div>
-        </div>
-        <div class="factions-grid" id="faction-grid"></div>
-      </section>
-    </section>
-
-  </div>
-
-  <div id="excel-import-template" hidden>
-    <div class="excel-import-block">
-      <div class="excel-import-title">Рассчитать из Excel</div>
-      <div class="excel-import-hint">Можно выбрать один файл или оба сразу. Обновятся только найденные показатели.</div>
-      <div class="excel-period-grid">
-        <label class="excel-period-field" for="excel-period-start">
-          <span>Начало периода</span>
-          <input type="date" id="excel-period-start">
-        </label>
-        <label class="excel-period-field" for="excel-period-end">
-          <span>Конец периода</span>
-          <input type="date" id="excel-period-end">
-        </label>
-      </div>
-      <label class="excel-import-label" for="excel-report-input">Основной отчёт (.xlsx / .xls, необязательно):</label>
-      <label class="excel-file-label" id="excel-report-label">
-        <input type="file" id="excel-report-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
-        <span id="excel-report-file-name">Выберите report_2026-06.xlsx…</span>
-        <span class="excel-file-btn">Обзор</span>
-      </label>
-      <label class="excel-import-label" for="excel-dates-input">Оценки по датам (.xlsx / .xls, необязательно):</label>
-      <label class="excel-file-label" id="excel-dates-label">
-        <input type="file" id="excel-dates-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
-        <span id="excel-dates-file-name">Выберите monthly_report_dates_2026-06.xlsx…</span>
-        <span class="excel-file-btn">Обзор</span>
-      </label>
-      <button class="admin-popover-submit excel-import-go" id="excel-import-btn">Применить</button>
-      <div class="import-status" id="import-status" hidden></div>
-    </div>
-  </div>
-
+  <!-- ══ SCRIPTS ═══════════════════════════════════════════════ -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/app.js?v=auth-register-2"></script>
-  <script src="js/excel-import.js?v=icore-ui-1"></script>
+  <script src="js/excel-import.js?v=tz-v1"></script>
+  <script src="js/app.js?v=tz-v1"></script>
+
   <script>
-    // Theme toggle
-    (function() {
+    // После загрузки показываем Excel-импорт для admin/supervisor
+    document.addEventListener('DOMContentLoaded', () => {
       const btn = document.getElementById('theme-toggle');
-      const html = document.documentElement;
-      if (!btn) return;
-      btn.addEventListener('click', function() {
-        const isDark = html.getAttribute('data-theme') === 'dark';
-        if (isDark) {
-          html.removeAttribute('data-theme');
-          localStorage.setItem('icore-theme', 'light');
-        } else {
-          html.setAttribute('data-theme', 'dark');
-          localStorage.setItem('icore-theme', 'dark');
-        }
+      if (btn) btn.addEventListener('click', () => {
+        const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+        document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+        localStorage.setItem('icore-theme', dark ? 'light' : 'dark');
       });
-    })();
+    });
   </script>
 </body>
 </html>
