@@ -24,7 +24,11 @@ def recalculate_period_ranks(db: Session, week_start: date, week_end: date) -> L
             select(WeeklyResult)
             .join(Operator, Operator.id == WeeklyResult.operator_id)
             .where(WeeklyResult.week_start == week_start, WeeklyResult.week_end == week_end)
-            .where(Operator.participation_status == "participating", Operator.is_active.is_(True))
+            .where(
+                Operator.participation_status == "participating",
+                Operator.employment_status == "active",
+                Operator.is_active.is_(True),
+            )
             .order_by(WeeklyResult.contest_points.desc(), WeeklyResult.final_score.desc(), WeeklyResult.id.asc())
         )
     )
@@ -56,7 +60,11 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
             select(WeeklyResult, Operator)
             .join(Operator, Operator.id == WeeklyResult.operator_id)
             .where(WeeklyResult.week_start == week_start, WeeklyResult.week_end == week_end)
-            .where(Operator.participation_status == "participating", Operator.is_active.is_(True))
+            .where(
+                Operator.participation_status == "participating",
+                Operator.employment_status == "active",
+                Operator.is_active.is_(True),
+            )
             .order_by(WeeklyResult.rank_position.asc().nulls_last(), WeeklyResult.contest_points.desc())
         )
     )
