@@ -197,7 +197,7 @@ def admin_operators(db: Session = Depends(get_db)) -> List[OperatorRow]:
             position=op.position,
             employee_id=op.employee_id,
             email=op.email,
-            username=op.username,
+            
             current_balance=op.current_balance,
             reserved_balance=op.reserved_balance,
             total_earned=op.total_earned,
