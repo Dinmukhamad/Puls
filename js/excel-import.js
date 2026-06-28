@@ -654,7 +654,7 @@ async function confirmPendingImport() {
 
     if (typeof setDailyImportData === 'function') setDailyImportData(dailyImport);
     else {
-      try { localStorage.setItem('divergentContestDailyImport', JSON.stringify(dailyImport)); } catch {}
+      try { localStorage.setItem('pulseDailyImport', JSON.stringify(dailyImport)); } catch {}
     }
 
     await saveEditableData();
