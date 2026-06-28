@@ -1,23 +1,10 @@
 {
-  "name": "harrypotter-contest",
-  "version": "1.0.0",
-  "description": "Harry Potter faculty contest frontend and API",
-  "main": "server.js",
+  "name": "puls-frontend",
+  "version": "2.0.0",
+  "description": "Puls — frontend assets only. Backend is FastAPI.",
+  "private": true,
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "note": "This project uses FastAPI backend. Run: uvicorn app.main:app"
   },
-  "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "pg": "^8.13.1",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.0"
-  },
-  "engines": {
-    "node": ">=18"
-  }
+  "devDependencies": {}
 }
