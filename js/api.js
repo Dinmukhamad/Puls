@@ -96,7 +96,7 @@ const api = (() => {
   function listUsers()             { return req('GET', '/api/auth/users'); }
 
   return {
-    setToken, getToken, login, me, logout,
+    setToken, getToken, login, me, logout, _base: base,
     listOperators, getOperator, myOperator, createOperator, updateOperator,
     listWeekly, upsertWeekly,
     getRating,
