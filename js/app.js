@@ -1095,6 +1095,8 @@ function statusLabel(s) {
 }
 
 function isAdmin(role) {
+  // server.js имеет только 'admin' и 'operator'
+  // FastAPI добавляет 'supervisor' и 'manager'
   return ['supervisor', 'manager', 'admin'].includes(role);
 }
 
