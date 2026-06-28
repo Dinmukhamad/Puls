@@ -79,7 +79,7 @@
 }
 
 /* ── Light theme ─────────────────────────────────────────────── */
-[data-theme="light"] {
+html[data-theme="light"], [data-theme="light"] {
   --bg:        #f2f3f7;
   --bg2:       #e8eaf0;
   --bg3:       #dfe2ea;
@@ -122,6 +122,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }
 html { scroll-behavior: smooth; background: var(--bg); }
+html[data-theme="light"] { background: #f2f3f7; }
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
@@ -263,21 +264,26 @@ body.side-nav-collapsed .side-nav-toggle svg { transform: rotate(180deg); }
    THEME TOGGLE
 ══════════════════════════════════════════════════════════════ */
 .theme-toggle {
-  position: fixed; bottom: 20px; right: 20px; z-index: 9500;
-  width: 40px; height: 40px; border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--tx3); cursor: pointer;
+  /* Живёт внутри side-nav-meta, не фиксированный */
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.5); cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  box-shadow: var(--shadow-md);
-  transition: border-color var(--t), color var(--t), transform .1s;
+  transition: border-color var(--t), color var(--t), background var(--t), transform .1s;
+  flex-shrink: 0;
 }
-.theme-toggle:hover { border-color: var(--accent); color: var(--accent); transform: scale(1.1); }
-.theme-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+  transform: scale(1.08);
+}
+.theme-toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
 .theme-toggle .icon-sun  { display: none; }
 .theme-toggle .icon-moon { display: block; }
-[data-theme="light"] .theme-toggle .icon-sun  { display: block; }
-[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+html[data-theme="light"] .theme-toggle .icon-sun  { display: block; }
+html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
 /* ══════════════════════════════════════════════════════════════
    CONTAINER
@@ -1003,4 +1009,25 @@ body.side-nav-collapsed .side-nav-toggle svg { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) {
   .auth-pulse-line { animation: none; stroke-dashoffset: 0; }
   .app-view.active, .loading-spinner { animation: none; }
+}
+
+/* ── Theme toggle in sidebar ─────────────────────────────────── */
+body.side-nav-collapsed .theme-toggle { display: none; }
+
+/* На мобильном нав горизонтальный — мета скрыта, кнопку показываем как fixed */
+@media (max-width: 760px) {
+  .theme-toggle {
+    position: fixed !important;
+    bottom: 70px; right: 12px;
+    width: 36px; height: 36px;
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--tx3) !important;
+    box-shadow: var(--shadow-md);
+    z-index: 9500;
+  }
+  .theme-toggle:hover {
+    color: var(--accent) !important;
+    border-color: var(--accent) !important;
+  }
 }
