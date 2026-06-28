@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import hash_password
-from app.models.entities import Operator, ShopItem, User, WeeklyResult
+from app.models.entities import Group, Operator, ShopItem, User, WeeklyResult
 from app.services.coins import add_transaction, points_to_coins
 from app.services.rating import recalculate_period_ranks
 
@@ -85,13 +85,22 @@ def seed_database(db: Session) -> None:
         return
 
     # ── Демо-операторы ─────────────────────────────────────────
+    group_map = {}
+    for group_name in ("Группа 1", "Группа 2", "Группа 3"):
+        group = db.scalar(select(Group).where(Group.name == group_name))
+        if not group:
+            group = Group(name=group_name, status="active")
+            db.add(group)
+            db.flush()
+        group_map[group_name] = group
+
     demo_operators = [
-        Operator(full_name="Иванов Алексей",   group_name="Группа 1"),
-        Operator(full_name="Петрова Мария",     group_name="Группа 1"),
-        Operator(full_name="Сидоров Дмитрий",  group_name="Группа 2"),
-        Operator(full_name="Козлова Анна",      group_name="Группа 2"),
-        Operator(full_name="Новиков Сергей",    group_name="Группа 3"),
-        Operator(full_name="Морозова Елена",    group_name="Группа 3"),
+        Operator(full_name="Иванов Алексей",   group_id=group_map["Группа 1"].id, group_name="Группа 1", participation_status="participating", position="operator"),
+        Operator(full_name="Петрова Мария",    group_id=group_map["Группа 1"].id, group_name="Группа 1", participation_status="participating", position="operator"),
+        Operator(full_name="Сидоров Дмитрий",  group_id=group_map["Группа 2"].id, group_name="Группа 2", participation_status="participating", position="operator"),
+        Operator(full_name="Козлова Анна",     group_id=group_map["Группа 2"].id, group_name="Группа 2", participation_status="participating", position="chat_manager"),
+        Operator(full_name="Новиков Сергей",   group_id=group_map["Группа 3"].id, group_name="Группа 3", participation_status="participating", position="operator"),
+        Operator(full_name="Морозова Елена",   group_id=group_map["Группа 3"].id, group_name="Группа 3", participation_status="participating", position="chat_manager"),
     ]
     db.add_all(demo_operators)
     db.flush()

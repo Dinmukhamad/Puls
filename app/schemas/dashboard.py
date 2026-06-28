@@ -31,10 +31,11 @@ class OperatorRow(BaseModel):
     """Строка таблицы операторов для админ-панели"""
     id: int
     full_name: str
+    group_id: Optional[int] = None
     group_name: str
+    participation_status: str = "participating"
     status: str
     position: Optional[str] = None
-    employee_id: Optional[str] = None
     email: Optional[str] = None
     current_balance: int
     reserved_balance: int

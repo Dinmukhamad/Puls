@@ -31,6 +31,7 @@ class GroupRead(BaseModel):
     status: str
     operator_count: int = 0
     created_at: datetime
+    updated_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -58,6 +59,7 @@ def list_groups(
             "status": g.status,
             "operator_count": count or 0,
             "created_at": g.created_at,
+            "updated_at": g.updated_at,
         }
         for g, count in rows
     ]
@@ -69,22 +71,23 @@ def create_group(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("manager", "admin")),
 ) -> dict:
-    if not payload.name.strip():
+    name = payload.name.strip()
+    if not name:
         raise HTTPException(status_code=400, detail="Название группы обязательно")
     if payload.status not in ("active", "inactive"):
         raise HTTPException(status_code=400, detail="Статус должен быть active или inactive")
 
-    existing = db.scalar(select(Group).where(Group.name == payload.name.strip()))
+    existing = db.scalar(select(Group).where(func.lower(Group.name) == name.lower()))
     if existing:
-        raise HTTPException(status_code=409, detail=f"Группа '{payload.name}' уже существует")
+        raise HTTPException(status_code=409, detail=f"Группа '{name}' уже существует")
 
-    group = Group(name=payload.name.strip(), status=payload.status)
+    group = Group(name=name, status=payload.status)
     db.add(group)
     db.commit()
     db.refresh(group)
     return {
         "id": group.id, "name": group.name, "status": group.status,
-        "operator_count": 0, "created_at": group.created_at
+        "operator_count": 0, "created_at": group.created_at, "updated_at": group.updated_at
     }
 
 
@@ -100,17 +103,24 @@ def update_group(
         raise HTTPException(status_code=404, detail="Группа не найдена")
 
     if payload.name is not None:
-        group.name = payload.name.strip()
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Название группы обязательно")
+        existing = db.scalar(select(Group).where(func.lower(Group.name) == name.lower(), Group.id != group_id))
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Группа '{name}' уже существует")
+        group.name = name
     if payload.status is not None:
         if payload.status not in ("active", "inactive"):
             raise HTTPException(status_code=400, detail="Некорректный статус")
         group.status = payload.status
-        group.updated_at = __import__("datetime").datetime.utcnow()
+    if payload.name is not None or payload.status is not None:
+        group.updated_at = datetime.utcnow()
 
     db.commit()
     db.refresh(group)
     count = db.scalar(select(func.count(Operator.id)).where(Operator.group_id == group_id)) or 0
     return {
         "id": group.id, "name": group.name, "status": group.status,
-        "operator_count": count, "created_at": group.created_at
+        "operator_count": count, "created_at": group.created_at, "updated_at": group.updated_at
     }

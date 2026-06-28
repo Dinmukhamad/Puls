@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
-from app.models.entities import AuditLog
+from app.models.entities import AuditLog, Group
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,8 @@ def ensure_operator_management_schema(engine: Engine) -> None:
         if "operators" in tables:
             existing = {col["name"] for col in inspector.get_columns("operators")}
             migrations = [
+                ("group_id",           "INTEGER"),
+                ("participation_status", "VARCHAR(32) NOT NULL DEFAULT 'participating'"),
                 ("status",             "VARCHAR(32) NOT NULL DEFAULT 'active'"),
                 ("position",           "VARCHAR(200)"),
                 ("employee_id",        "VARCHAR(100)"),
@@ -42,5 +44,7 @@ def ensure_operator_management_schema(engine: Engine) -> None:
                 logger.info("[schema] Added users.can_manage_operators")
 
         # Ensure audit_logs table exists
+        Group.__table__.create(bind=conn, checkfirst=True)
         AuditLog.__table__.create(bind=conn, checkfirst=True)
+        logger.info("[schema] groups table ensured")
         logger.info("[schema] audit_logs table ensured")

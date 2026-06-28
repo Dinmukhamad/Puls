@@ -16,6 +16,7 @@ let STATE = {
   dashboard: null,
   adminOperators: [],
   history: [],
+  groups: [],
   currentView: 'cabinet',
 };
 
@@ -60,6 +61,7 @@ function normalizeUser(u) {
     full_name: u.full_name,
     role: u.role,
     operator_id: u.operator_id,
+    can_manage_operators: Boolean(u.can_manage_operators),
   };
 }
 
@@ -155,7 +157,7 @@ document.addEventListener('click', async e => {
   }
   if (e.target.id === 'auth-logout-btn') {
     api.logout().catch(() => {});
-    STATE = { user:null, wallet:null, rating:[], shopItems:[], purchases:[], dashboard:null, adminOperators:[], history:[], currentView:'cabinet' };
+    STATE = { user:null, wallet:null, rating:[], shopItems:[], purchases:[], dashboard:null, adminOperators:[], history:[], groups:[], currentView:'cabinet' };
     location.reload();
   }
 });
@@ -212,7 +214,7 @@ function buildViews(role) {
   const shell = document.getElementById('app-shell');
   if (!shell) return;
   const views = isAdmin(role)
-    ? ['summary', 'operators', 'manual', 'requests', 'shop', 'history', 'groups', 'cabinet', 'rating']
+    ? ['summary', 'operators', 'manual', 'requests', 'shop', 'history', ...(canManageGroups(role) ? ['groups'] : []), 'cabinet', 'rating']
     : ['cabinet', 'rating', 'shop'];
   shell.innerHTML = views.map(v => `<section class="app-view" id="view-${v}"></section>`).join('');
 }
@@ -221,12 +223,15 @@ function renderSidebar(role) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     const t = link.dataset.navTarget;
     const adminViews = ['summary','operators','manual','requests','history'];
-    const managerViews = new Set(['groups']);
     const operatorViews = ['cabinet','rating','shop'];
     const sharedViews = ['shop','rating','cabinet'];
     let show = false;
-    if (isAdmin(role)) show = adminViews.includes(t) || sharedViews.includes(t);
-    else show = operatorViews.includes(t);
+    if (isAdmin(role)) {
+      show = adminViews.includes(t) || sharedViews.includes(t);
+      if (canManageGroups(role)) show = show || t === 'groups';
+    } else {
+      show = operatorViews.includes(t);
+    }
     link.style.display = show ? '' : 'none';
   });
   if (isAdmin(role)) {
@@ -693,7 +698,7 @@ function renderAdminOperators() {
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="exportCSV()">Экспорт CSV</button>
         <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
-        <button class="btn-primary btn-sm" onclick="showAddOperatorModal()">+ Оператор</button>
+        ${canManageOperators() ? '<button class="btn-primary btn-sm" onclick="showAddOperatorModal()">Плюс оператор</button>' : ''}
       </div>
     </div>
 
@@ -755,7 +760,9 @@ function renderManual() {
   }
 
   // Только активные операторы для начисления
-  const ops = STATE.adminOperators.filter(o => o.status === 'active' || o.is_active);
+  const ops = STATE.adminOperators.filter(o =>
+    (o.participation_status ? o.participation_status === 'participating' : o.status === 'active') && o.is_active
+  );
 
   const lastManual = STATE.history
     .filter(t => t.type === 'manual_add' || t.type === 'manual_subtract')
@@ -1178,6 +1185,181 @@ function renderHistory() {
 }
 
 /* ══════════════════════════════════════
+   VIEW: ГРУППЫ
+══════════════════════════════════════ */
+async function renderGroups() {
+  const el = document.getElementById('view-groups');
+  if (!el) return;
+
+  if (!canManageGroups()) {
+    el.innerHTML = `
+      <div class="view-header">
+        <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+      </div>
+      <div class="empty-state"><p>Недостаточно прав для управления группами</p></div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+      <div class="header-right">
+        <button class="btn-outline btn-sm" onclick="renderGroups()">Обновить</button>
+        <button class="btn-primary btn-sm" onclick="showAddGroupModal()">Создать группу</button>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="loading-state"><div class="loading-spinner"></div><p>Загрузка групп…</p></div>
+    </div>`;
+
+  try {
+    STATE.groups = await api.listGroups(false);
+  } catch(e) {
+    el.innerHTML = `
+      <div class="view-header">
+        <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+        <button class="btn-outline btn-sm" onclick="renderGroups()">Повторить</button>
+      </div>
+      <div class="status-line status-error" style="padding:20px">Не удалось загрузить список групп</div>`;
+    return;
+  }
+
+  const rows = STATE.groups;
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+      <div class="header-right">
+        <button class="btn-outline btn-sm" onclick="renderGroups()">Обновить</button>
+        <button class="btn-primary btn-sm" onclick="showAddGroupModal()">Создать группу</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Список групп</h3>
+        <span class="panel-badge">${rows.length} групп</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr>
+            <th>Название группы</th>
+            <th>Статус</th>
+            <th>Количество операторов</th>
+            <th>Действия</th>
+          </tr></thead>
+          <tbody>
+            ${rows.length ? rows.map(g => `
+              <tr>
+                <td class="name-cell">${esc(g.name)}</td>
+                <td>${groupStatusBadge(g.status)}</td>
+                <td>${g.operator_count || 0}</td>
+                <td style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn-outline btn-sm" onclick="showEditGroupModal(${g.id})">Изменить</button>
+                  <button class="btn-outline btn-sm" onclick="toggleGroupStatus(${g.id}, '${g.status === 'active' ? 'inactive' : 'active'}')">
+                    ${g.status === 'active' ? 'Отключить' : 'Включить'}
+                  </button>
+                </td>
+              </tr>`).join('') : '<tr><td colspan="4" class="empty-line">Группы не созданы</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function groupStatusBadge(status) {
+  const isActive = status === 'active';
+  return `<span class="status-badge ${isActive ? 'status-active' : 'status-inactive'}">${isActive ? 'Активна' : 'Отключена'}</span>`;
+}
+
+function showAddGroupModal() {
+  showModal(`
+    <h3 class="modal-title">Создание группы</h3>
+    <div class="form-group">
+      <label class="form-label">Название группы</label>
+      <input id="group-name" class="form-input" placeholder="Группа звонков">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Статус</label>
+      <select id="group-status" class="form-select">
+        <option value="active" selected>Активна</option>
+        <option value="inactive">Отключена</option>
+      </select>
+    </div>
+    <div id="group-err" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitAddGroup()">Создать группу</button>`);
+}
+
+async function submitAddGroup() {
+  const name = document.getElementById('group-name')?.value?.trim();
+  const status = document.getElementById('group-status')?.value || 'active';
+  const err = document.getElementById('group-err');
+  if (!name) {
+    err.textContent = 'Название группы обязательно';
+    err.className = 'status-line status-error';
+    return;
+  }
+  try {
+    await api.createGroup({ name, status });
+    closeModal();
+    showToast('Группа создана', 'ok');
+    await renderGroups();
+  } catch(e) {
+    err.textContent = e.message;
+    err.className = 'status-line status-error';
+  }
+}
+
+function showEditGroupModal(id) {
+  const group = STATE.groups.find(g => g.id === id);
+  if (!group) return showToast('Группа не найдена', 'error');
+  showModal(`
+    <h3 class="modal-title">Редактировать группу</h3>
+    <div class="form-group">
+      <label class="form-label">Название группы</label>
+      <input id="edit-group-name" class="form-input" value="${esc(group.name)}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Статус</label>
+      <select id="edit-group-status" class="form-select">
+        <option value="active" ${group.status === 'active' ? 'selected' : ''}>Активна</option>
+        <option value="inactive" ${group.status === 'inactive' ? 'selected' : ''}>Отключена</option>
+      </select>
+    </div>
+    <div id="edit-group-err" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitEditGroup(${id})">Сохранить</button>`);
+}
+
+async function submitEditGroup(id) {
+  const name = document.getElementById('edit-group-name')?.value?.trim();
+  const status = document.getElementById('edit-group-status')?.value || 'active';
+  const err = document.getElementById('edit-group-err');
+  if (!name) {
+    err.textContent = 'Название группы обязательно';
+    err.className = 'status-line status-error';
+    return;
+  }
+  try {
+    await api.updateGroup(id, { name, status });
+    closeModal();
+    showToast('Группа обновлена', 'ok');
+    await renderGroups();
+  } catch(e) {
+    err.textContent = e.message;
+    err.className = 'status-line status-error';
+  }
+}
+
+async function toggleGroupStatus(id, nextStatus) {
+  try {
+    await api.updateGroup(id, { status: nextStatus });
+    showToast(nextStatus === 'active' ? 'Группа включена' : 'Группа отключена', 'ok');
+    await renderGroups();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+/* ══════════════════════════════════════
    MODALS
 ══════════════════════════════════════ */
 function showModal(html) {
@@ -1198,7 +1380,6 @@ function closeModal() {
 }
 
 async function showAddOperatorModal() {
-  // Load active groups from backend
   let groups = [];
   let groupsError = '';
   try {
@@ -1253,9 +1434,23 @@ async function showAddOperatorModal() {
       '</div>' +
     '</div>' +
     '<div id="new-op-err" class="status-line" style="margin-top:8px"></div>' +
-    '<button class="btn-primary" style="width:100%;height:44px;margin-top:4px" onclick="submitAddOperator()">Создать оператора</button>' +
+    '<button id="create-operator-btn" class="btn-primary" style="width:100%;height:44px;margin-top:4px" onclick="submitAddOperator()" disabled>Создать оператора</button>' +
     '<div style="font-size:11px;color:var(--tx3);margin-top:6px">После создания система автоматически сформирует логин и временный пароль.</div>'
   );
+
+  const updateButton = () => {
+    const btn = document.getElementById('create-operator-btn');
+    const name = document.getElementById('new-op-name')?.value?.trim();
+    const groupId = document.getElementById('new-op-group-id')?.value;
+    const status = document.getElementById('new-op-status')?.value;
+    const position = document.getElementById('new-op-position')?.value;
+    if (btn) btn.disabled = !(name && name.length >= 2 && groupId && status && position);
+  };
+  ['new-op-name', 'new-op-group-id', 'new-op-status', 'new-op-position'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', updateButton);
+    document.getElementById(id)?.addEventListener('change', updateButton);
+  });
+  updateButton();
 }
 
 async function submitAddOperator() {
@@ -1265,13 +1460,18 @@ async function submitAddOperator() {
   const position = document.getElementById('new-op-position')?.value || 'operator';
   const email    = document.getElementById('new-op-email')?.value?.trim() || null;
   const err      = document.getElementById('new-op-err');
+  const btn      = document.getElementById('create-operator-btn');
 
   const setErr = msg => { err.textContent = msg; err.className = 'status-line status-error'; };
 
   if (!name || name.length < 2) return setErr('Укажите ФИО оператора');
   if (!groupId) return setErr('Выберите группу');
+  if (!status) return setErr('Выберите статус участия');
+  if (!position) return setErr('Выберите должность');
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return setErr('Введите корректный email');
 
   err.textContent = 'Создаём…'; err.className = 'status-line';
+  if (btn) btn.disabled = true;
 
   try {
     const result = await api.createOperator({
@@ -1282,74 +1482,33 @@ async function submitAddOperator() {
       email: email || null,
     });
 
-    // Show credentials
+    const login = result.login || result.username;
+    const temporaryPassword = result.temporary_password || result.temp_password;
+    const groupName = result.group?.name || result.group_name || '';
+    const credentialText = `Оператор: ${result.full_name}\nЛогин: ${login}\nВременный пароль: ${temporaryPassword}`;
+
     showModal(
-      '<h3 class="modal-title" style="color:var(--ok)">✓ Оператор создан</h3>' +
+      '<h3 class="modal-title" style="color:var(--ok)">Оператор успешно создан</h3>' +
       '<div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:16px;display:grid;gap:8px;font-size:14px">' +
         '<div><span style="color:var(--tx3)">ФИО:</span> <b>' + esc(result.full_name) + '</b></div>' +
-        '<div><span style="color:var(--tx3)">Группа:</span> <b>' + esc(result.group_name) + '</b></div>' +
-        '<div><span style="color:var(--tx3)">Должность:</span> <b>' + (result.position === 'chat_manager' ? 'Чат-менеджер' : 'Оператор') + '</b></div>' +
-        '<div><span style="color:var(--tx3)">Статус:</span> <b>' + (result.participation_status === 'participating' ? 'Участвует' : 'Не участвует') + '</b></div>' +
+        '<div><span style="color:var(--tx3)">Группа:</span> <b>' + esc(groupName) + '</b></div>' +
+        '<div><span style="color:var(--tx3)">Должность:</span> <b>' + positionLabel(result.position) + '</b></div>' +
+        '<div><span style="color:var(--tx3)">Статус:</span> <b>' + participationStatusLabel(result.participation_status) + '</b></div>' +
         '<div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">' +
-          '<span style="color:var(--tx3)">Логин:</span> <b style="font-family:monospace;color:var(--accent)">' + esc(result.username) + '</b>' +
+          '<span style="color:var(--tx3)">Логин:</span> <b style="font-family:monospace;color:var(--accent)">' + esc(login) + '</b>' +
         '</div>' +
-        '<div><span style="color:var(--tx3)">Временный пароль:</span> <b style="font-family:monospace;color:var(--accent)">' + esc(result.temp_password) + '</b></div>' +
+        '<div><span style="color:var(--tx3)">Временный пароль:</span> <b style="font-family:monospace;color:var(--accent)">' + esc(temporaryPassword) + '</b></div>' +
       '</div>' +
-      '<button class="btn-outline" style="width:100%" onclick="copyCredentials('' + esc(result.full_name) + '','' + esc(result.username) + '','' + esc(result.temp_password) + '')">Скопировать данные для входа</button>' +
+      '<button id="copy-created-credentials" class="btn-outline" style="width:100%">Скопировать данные для входа</button>' +
       '<button class="btn-primary" style="width:100%" onclick="closeModal()">Готово</button>'
     );
+    document.getElementById('copy-created-credentials')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(credentialText).then(() => showToast('Скопировано!', 'ok'));
+    });
     await reloadData();
   } catch(e) {
     setErr(e.message);
-  }
-}
-  const groupId    = document.getElementById('new-op-group-id')?.value;
-  const status     = document.getElementById('new-op-status')?.value || 'participating';
-  const position   = document.getElementById('new-op-position')?.value || 'operator';
-  const email      = document.getElementById('new-op-email')?.value?.trim() || null;
-  const err        = document.getElementById('new-op-err');
-
-  if (!name || name.length < 2) {
-    err.textContent = 'Укажите ФИО оператора';
-    err.className = 'status-line status-error'; return;
-  }
-  if (!groupId) {
-    err.textContent = 'Выберите группу';
-    err.className = 'status-line status-error'; return;
-  }
-
-  err.textContent = 'Создаём…'; err.className = 'status-line';
-
-  try {
-    const result = await api.createOperator({
-      full_name: name,
-      group_id: +groupId,
-      participation_status: status,
-      position: position,
-      email: email || null,
-    });
-    // Показываем credentials
-    showModal(`
-      <h3 class="modal-title" style="color:var(--ok)">✓ Оператор добавлен</h3>
-      <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);padding:16px;display:grid;gap:8px;font-size:14px">
-        <div><span style="color:var(--tx3)">ФИО:</span> <b>${esc(result.full_name)}</b></div>
-        <div><span style="color:var(--tx3)">Группа:</span> <b>${esc(result.group_name)}</b></div>
-        <div><span style="color:var(--tx3)">Статус:</span> <b>${statusOpLabel(result.status)}</b></div>
-        <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
-          <span style="color:var(--tx3)">Логин:</span> <b style="font-family:monospace;color:var(--accent)">${esc(result.username)}</b>
-        </div>
-        <div>
-          <span style="color:var(--tx3)">Временный пароль:</span> <b style="font-family:monospace;color:var(--accent)">${esc(result.temp_password)}</b>
-        </div>
-      </div>
-      <button class="btn-outline" style="width:100%" onclick="copyCredentials('${esc(result.full_name)}','${esc(result.username)}','${esc(result.temp_password)}')">
-        Скопировать данные для входа
-      </button>
-      <button class="btn-primary" style="width:100%" onclick="closeModal()">Готово</button>`);
-    await reloadData();
-  } catch(e) {
-    err.textContent = e.message;
-    err.className = 'status-line status-error';
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -1358,8 +1517,12 @@ function copyCredentials(name, login, password) {
   navigator.clipboard.writeText(text).then(() => showToast('Скопировано!', 'ok'));
 }
 
-function statusOpLabel(s) {
-  return { active: 'Активен', inactive: 'Неактивен', archive: 'Архив' }[s] || s;
+function participationStatusLabel(s) {
+  return { participating: 'Участвует', not_participating: 'Не участвует' }[s] || s || '';
+}
+
+function positionLabel(s) {
+  return { operator: 'Оператор', chat_manager: 'Чат-менеджер' }[s] || s || '';
 }
 
 function showAddItemModal() {
@@ -1485,6 +1648,11 @@ function statusLabel(s) {
   return { pending:'Новая', approved:'Одобрена', rejected:'Отклонена', completed:'Выполнена' }[s] || s;
 }
 function isAdmin(role) { return ['supervisor','manager','admin'].includes(role); }
+function canManageGroups(role = STATE.user?.role) { return ['manager','admin'].includes(role); }
+function canManageOperators() {
+  const role = STATE.user?.role;
+  return ['manager','admin'].includes(role) || (role === 'supervisor' && STATE.user?.can_manage_operators);
+}
 
 /* ══════════════════════════════════════
    WINDOW EXPORTS
@@ -1501,6 +1669,7 @@ window.showEditItemModal = showEditItemModal;
 window.exportCSV = exportCSV;
 window.exportHistoryCSV = exportHistoryCSV;
 window.reloadCabinet = reloadCabinet;
+window.renderGroups = renderGroups;
 window.showAddGroupModal = showAddGroupModal;
 window.submitAddGroup = submitAddGroup;
 window.showEditGroupModal = showEditGroupModal;

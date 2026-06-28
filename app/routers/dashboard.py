@@ -35,7 +35,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
             .where(
                 WeeklyResult.week_start == week_start,
                 WeeklyResult.week_end == week_end,
-                Operator.status == "active",
+                Operator.participation_status == "participating",
                 Operator.is_active.is_(True),
             )
         ) or 0
@@ -46,7 +46,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
             .where(
                 WeeklyResult.week_start == week_start,
                 WeeklyResult.week_end == week_end,
-                Operator.status == "active",
+                Operator.participation_status == "participating",
                 Operator.is_active.is_(True),
             )
         ) or 0
@@ -57,7 +57,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
             .where(
                 WeeklyResult.week_start == week_start,
                 WeeklyResult.week_end == week_end,
-                Operator.status == "active",
+                Operator.participation_status == "participating",
                 Operator.is_active.is_(True),
             )
         ) or 0
@@ -66,7 +66,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
             select(WeeklyResult, Operator)
             .join(Operator, Operator.id == WeeklyResult.operator_id)
             .where(WeeklyResult.week_start == week_start, WeeklyResult.week_end == week_end)
-            .where(Operator.status == "active", Operator.is_active.is_(True))
+            .where(Operator.participation_status == "participating", Operator.is_active.is_(True))
             .order_by(WeeklyResult.rank_position.asc().nulls_last())
             .limit(5)
         ))
@@ -104,7 +104,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
                 func.avg(WeeklyResult.final_score),
             )
             .outerjoin(WeeklyResult, WeeklyResult.operator_id == Operator.id)
-            .where(Operator.status == "active", Operator.is_active.is_(True))
+            .where(Operator.participation_status == "participating", Operator.is_active.is_(True))
             .group_by(Operator.group_name)
             .order_by(Operator.group_name.asc())
         )
@@ -136,7 +136,10 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
 
     total_ops = db.scalar(select(func.count(Operator.id))) or 0
     active_ops = db.scalar(
-        select(func.count(Operator.id)).where(Operator.status == "active", Operator.is_active.is_(True))
+        select(func.count(Operator.id)).where(
+            Operator.participation_status == "participating",
+            Operator.is_active.is_(True),
+        )
     ) or 0
 
     return DashboardRead(
@@ -192,10 +195,11 @@ def admin_operators(db: Session = Depends(get_db)) -> List[OperatorRow]:
         rows.append(OperatorRow(
             id=op.id,
             full_name=op.full_name,
+            group_id=op.group_id,
             group_name=op.group_name,
+            participation_status=op.participation_status,
             status=op.status,
             position=op.position,
-            employee_id=op.employee_id,
             email=op.email,
             
             current_balance=op.current_balance,

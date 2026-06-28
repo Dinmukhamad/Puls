@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, hash_password, require_roles, verify_password
 from app.database.db import get_db
-from app.models.entities import AuditLog, Operator, User
+from app.models.entities import AuditLog, Group, Operator, User
 from app.schemas.operators import OperatorCreate, OperatorRead, OperatorUpdate
 
 router = APIRouter(prefix="/operators", tags=["operators"])
@@ -54,6 +54,14 @@ def _audit(db: Session, action: str, entity_type: str, entity_id: int,
     ))
 
 
+def require_operator_creation_access(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role in {"manager", "admin"}:
+        return current_user
+    if current_user.role == "supervisor" and current_user.can_manage_operators:
+        return current_user
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
+
+
 # ── Schemas ────────────────────────────────────────────────────
 
 VALID_POSITIONS = ("operator", "chat_manager")
@@ -66,24 +74,27 @@ class OperatorCreateFull(BaseModel):
     participation_status: str = "participating"
     position: str = "operator"
     email: Optional[str] = None
-    # Legacy fields ignored but accepted for compat
-    group_name: Optional[str] = None
-    status: Optional[str] = None
-    employee_id: Optional[str] = None
-    comment: Optional[str] = None
-    start_date: Optional[str] = None
+
+
+class OperatorCreatedGroup(BaseModel):
+    id: int
+    name: str
 
 
 class OperatorCreatedResponse(BaseModel):
     id: int
     operator_id: int
     full_name: str
+    group: OperatorCreatedGroup
     group_name: str
     participation_status: str
     position: str
+    email: Optional[str] = None
+    login: str
     username: str
+    temporary_password: str
     temp_password: str
-    message: str = "Оператор успешно создан. Аккаунт создан."
+    message: str = "Оператор успешно создан"
 
 
 class ChangePasswordRequest(BaseModel):
@@ -105,13 +116,13 @@ class ResetPasswordResponse(BaseModel):
 class OperatorFullRead(BaseModel):
     id: int
     full_name: str
+    group_id: Optional[int]
     group_name: str
+    participation_status: str
     status: str
     is_active: bool
     position: Optional[str]
-    employee_id: Optional[str]
     email: Optional[str]
-    comment: Optional[str]
     current_balance: int
     reserved_balance: int
     total_earned: int
@@ -152,11 +163,9 @@ def my_operator(
 def create_operator(
     payload: OperatorCreateFull,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("supervisor", "manager", "admin"))
+    current_user: User = Depends(require_operator_creation_access)
 ) -> OperatorCreatedResponse:
     """Создаёт оператора с авто-аккаунтом. Группа выбирается из списка."""
-    from app.models.entities import Group
-
     # Validate required fields
     if not payload.full_name.strip():
         raise HTTPException(status_code=400, detail="Укажите ФИО оператора")
@@ -175,11 +184,11 @@ def create_operator(
         raise HTTPException(status_code=400, detail="Нельзя добавить оператора в отключённую группу")
 
     # Validate email
-    if payload.email:
-        import re as _re
-        if not _re.match(r'^[^@]+@[^@]+\.[^@]+$', payload.email.strip()):
+    email = payload.email.strip() if payload.email else None
+    if email:
+        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
             raise HTTPException(status_code=400, detail="Введите корректный email")
-        dup_email = db.scalar(select(Operator).where(Operator.email == payload.email.strip()))
+        dup_email = db.scalar(select(Operator).where(Operator.email == email))
         if dup_email:
             raise HTTPException(status_code=409, detail="Оператор с таким email уже существует")
 
@@ -199,7 +208,7 @@ def create_operator(
         status="active" if is_active else "inactive",
         is_active=is_active,
         position=payload.position,
-        email=payload.email.strip() if payload.email else None,
+        email=email,
         created_by_user_id=current_user.id,
     )
     db.add(op)
@@ -231,10 +240,14 @@ def create_operator(
         id=op.id,
         operator_id=op.id,
         full_name=op.full_name,
+        group=OperatorCreatedGroup(id=group.id, name=group.name),
         group_name=group.name,
         participation_status=op.participation_status,
         position=op.position or "operator",
+        email=op.email,
+        login=username,
         username=username,
+        temporary_password=temp_password,
         temp_password=temp_password,
     )
 
@@ -283,9 +296,9 @@ def get_operator(
         u = db.get(User, op.user_id)
         username = u.username if u else None
     return {
-        "id": op.id, "full_name": op.full_name, "group_name": op.group_name,
-        "status": op.status, "is_active": op.is_active, "position": op.position,
-        "employee_id": op.employee_id, "email": op.email, "comment": op.comment,
+        "id": op.id, "full_name": op.full_name, "group_id": op.group_id, "group_name": op.group_name,
+        "participation_status": op.participation_status, "status": op.status,
+        "is_active": op.is_active, "position": op.position, "email": op.email,
         "current_balance": op.current_balance, "reserved_balance": op.reserved_balance,
         "total_earned": op.total_earned, "total_spent": op.total_spent,
         "username": username,
@@ -305,12 +318,31 @@ def update_operator(
         raise HTTPException(status_code=404, detail="Оператор не найден")
     changes = []
     for key, value in payload.model_dump(exclude_unset=True).items():
+        if key == "participation_status" and value not in VALID_PARTICIPATION:
+            raise HTTPException(status_code=400, detail="Некорректный статус участия")
+        if key == "position" and value is not None and value not in VALID_POSITIONS:
+            raise HTTPException(status_code=400, detail="Некорректная должность")
+        if key == "group_id" and value is not None:
+            group = db.get(Group, value)
+            if not group:
+                raise HTTPException(status_code=404, detail="Группа не найдена")
+            if group.status != "active":
+                raise HTTPException(status_code=400, detail="Нельзя добавить оператора в отключённую группу")
+            op.group_name = group.name
         old = getattr(op, key, None)
         setattr(op, key, value)
         changes.append(f"{key}: {old} → {value}")
-        # Синхронизируем is_active со статусом
+        if key == "participation_status":
+            op.is_active = (value == "participating")
+            op.status = "active" if op.is_active else "inactive"
+            if op.user_id:
+                u = db.get(User, op.user_id)
+                if u:
+                    u.is_active = op.is_active
+        # Синхронизируем is_active со статусом для старых клиентов
         if key == "status":
             op.is_active = (value == "active")
+            op.participation_status = "participating" if op.is_active else "not_participating"
             if op.user_id:
                 u = db.get(User, op.user_id)
                 if u:
@@ -393,4 +425,3 @@ def change_username(
                f"Логин изменён: {old_username} → {new_username}", current_user)
     db.commit()
     return {"ok": True, "message": "Логин успешно изменён", "new_username": new_username}
-
