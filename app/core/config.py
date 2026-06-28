@@ -42,11 +42,31 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Cookie auth settings (Блок 3 ТЗ)
+    auth_cookie_name: str = "pulse_access_token"
+    auth_cookie_secure: bool = False   # True in production
+    auth_cookie_samesite: str = "lax"
+    auth_cookie_domain: str = ""
+
+    # Demo data
+    enable_demo_data: bool = True
+
     @property
     def cors_origin_list(self) -> List[str]:
         if self.cors_origins.strip() == "*":
             return ["*"]
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    def check_production_safety(self) -> None:
+        """Raise on startup if dangerous defaults are set in production."""
+        import os
+        env = os.getenv("ENVIRONMENT", "development").lower()
+        if env == "production":
+            if self.jwt_secret_key in ("change-me-in-env", "замените-на-случайную-строку-минимум-32-символа"):
+                raise RuntimeError(
+                    "FATAL: JWT_SECRET_KEY is set to default value. "
+                    "Set a strong secret in Railway Variables before deploying."
+                )
 
 
 @lru_cache
