@@ -6,7 +6,7 @@ from typing import Iterable
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
-from app.models.entities import OperatorAuditLog
+from app.models.entities import AuditLog
 
 logger = logging.getLogger(__name__)
 
@@ -92,5 +92,5 @@ def ensure_operator_management_schema(engine: Engine) -> None:
                 optional_statements.append("CREATE UNIQUE INDEX IF NOT EXISTS uq_operators_email ON operators (email)")
             _run_optional(conn, optional_statements)
 
-        OperatorAuditLog.__table__.create(bind=conn, checkfirst=True)
+        AuditLog.__table__.create(bind=conn, checkfirst=True)
         _stamp_operator_management_revision(conn)
