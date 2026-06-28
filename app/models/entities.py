@@ -56,6 +56,9 @@ class Operator(Base):
 
     # Статус участия: participating | not_participating
     participation_status: Mapped[str] = mapped_column(String(32), default="participating", index=True)
+    # Статус работы: active | dismissed
+    employment_status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # Legacy compat fields
     status: Mapped[str] = mapped_column(String(32), default="active", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -75,6 +78,7 @@ class Operator(Base):
     total_earned: Mapped[int] = mapped_column(Integer, default=0)
     total_spent: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
     user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id], post_update=True)
     created_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by_user_id])
