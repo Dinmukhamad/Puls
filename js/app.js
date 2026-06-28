@@ -1,5 +1,5 @@
 /**
- * iCore Gamification — Main App
+ * Puls Gamification — Main App
  * Полный рефактор по ТЗ v1.0
  */
 'use strict';
@@ -52,9 +52,9 @@ function initTheme() {
   btn.addEventListener('click', () => {
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
-    localStorage.setItem('icore-theme', dark ? 'light' : 'dark');
+    localStorage.setItem('puls-theme', dark ? 'light' : 'dark');
   });
-  const saved = localStorage.getItem('icore-theme');
+  const saved = localStorage.getItem('puls-theme');
   if (saved) document.documentElement.setAttribute('data-theme', saved);
 }
 
@@ -1046,7 +1046,7 @@ function exportOperatorsCSV() {
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `icore_operators_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `puls_operators_${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
 }
 
