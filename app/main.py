@@ -41,21 +41,25 @@ app.include_router(dashboard.router,      prefix=settings.api_prefix)
 
 @app.on_event("startup")
 def startup() -> None:
+    # 1. Create missing tables
     logger.info("[startup] Creating tables...")
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("[startup] Tables OK")
-    try:
-        from app.services.schema_maintenance import ensure_operator_management_schema
-        ensure_operator_management_schema(engine)
-        logger.info("[startup] Schema compatibility OK")
-    except Exception as e:
-        logger.error(f"[startup] Schema maintenance failed (non-fatal): {e}")
-        logger.info("[startup] Schema compatibility OK")
     except Exception as e:
         logger.error(f"[startup] create_all failed: {e}")
         raise
 
+    # 2. Add missing columns to existing tables (idempotent)
+    logger.info("[startup] Running schema maintenance...")
+    try:
+        from app.services.schema_maintenance import ensure_operator_management_schema
+        ensure_operator_management_schema(engine)
+        logger.info("[startup] Schema maintenance OK")
+    except Exception as e:
+        logger.error(f"[startup] Schema maintenance failed (non-fatal): {e}")
+
+    # 3. Seed initial data
     logger.info("[startup] Running seed...")
     try:
         from app.services.seed import seed_database
@@ -67,7 +71,6 @@ def startup() -> None:
             db.close()
     except Exception as e:
         logger.error(f"[startup] Seed failed (non-fatal): {e}")
-
 
 @app.get("/health")
 def health() -> Dict[str, str]:
