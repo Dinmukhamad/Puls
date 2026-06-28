@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from app.core.config import get_settings
+from sqlalchemy import text
 from app.database.db import Base, SessionLocal, engine
 from app.models import entities  # noqa: F401
 from app.routers import auth, dashboard, operators, rating, shop, wallet, weekly_results
@@ -41,40 +42,61 @@ app.include_router(dashboard.router,      prefix=settings.api_prefix)
 
 @app.on_event("startup")
 def startup() -> None:
-    # 1. Create missing tables
-    logger.info("[startup] Creating tables...")
+    settings = get_settings()
+
+    # Production safety check
     try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("[startup] Tables OK")
-    except Exception as e:
-        logger.error(f"[startup] create_all failed: {e}")
+        settings.check_production_safety()
+    except RuntimeError as e:
+        logger.critical(str(e))
         raise
 
-    # 2. Add missing columns to existing tables (idempotent)
-    logger.info("[startup] Running schema maintenance...")
-    try:
-        from app.services.schema_maintenance import ensure_operator_management_schema
-        ensure_operator_management_schema(engine)
-        logger.info("[startup] Schema maintenance OK")
-    except Exception as e:
-        logger.error(f"[startup] Schema maintenance failed (non-fatal): {e}")
-
-    # 3. Seed initial data
-    logger.info("[startup] Running seed...")
-    try:
-        from app.services.seed import seed_database
-        db = SessionLocal()
+    # Schema: Alembic runs via start.sh before uvicorn starts.
+    # create_all is kept only as dev fallback (AUTO_CREATE_TABLES=true).
+    if settings.auto_create_tables:
+        logger.info("[startup] AUTO_CREATE_TABLES=true — creating missing tables...")
         try:
-            seed_database(db)
-            logger.info("[startup] Seed OK")
-        finally:
-            db.close()
-    except Exception as e:
-        logger.error(f"[startup] Seed failed (non-fatal): {e}")
+            Base.metadata.create_all(bind=engine)
+            logger.info("[startup] Tables OK")
+        except Exception as e:
+            logger.error(f"[startup] create_all failed: {e}")
+
+        try:
+            from app.services.schema_maintenance import ensure_operator_management_schema
+            ensure_operator_management_schema(engine)
+            logger.info("[startup] Schema compatibility OK")
+        except Exception as e:
+            logger.error(f"[startup] Schema maintenance failed (non-fatal): {e}")
+
+    # Seed initial data
+    if settings.auto_seed:
+        logger.info("[startup] Running seed...")
+        try:
+            from app.services.seed import seed_database
+            db = SessionLocal()
+            try:
+                seed_database(db)
+                logger.info("[startup] Seed OK")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"[startup] Seed failed (non-fatal): {e}")
 
 @app.get("/health")
 def health() -> Dict[str, str]:
     return {"status": "ok", "port": os.environ.get("PORT", "unknown")}
+
+
+@app.get("/ready")
+def ready() -> Dict[str, str]:
+    """Readiness check — verifies DB connection."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "ready"}
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content={"status": "not ready", "detail": str(e)})
 
 
 # Статические файлы
