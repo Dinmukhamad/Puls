@@ -95,12 +95,12 @@ def seed_database(db: Session) -> None:
         group_map[group_name] = group
 
     demo_operators = [
-        Operator(full_name="Иванов Алексей",   group_id=group_map["Группа 1"].id, group_name="Группа 1", participation_status="participating", position="operator"),
-        Operator(full_name="Петрова Мария",    group_id=group_map["Группа 1"].id, group_name="Группа 1", participation_status="participating", position="operator"),
-        Operator(full_name="Сидоров Дмитрий",  group_id=group_map["Группа 2"].id, group_name="Группа 2", participation_status="participating", position="operator"),
-        Operator(full_name="Козлова Анна",     group_id=group_map["Группа 2"].id, group_name="Группа 2", participation_status="participating", position="chat_manager"),
-        Operator(full_name="Новиков Сергей",   group_id=group_map["Группа 3"].id, group_name="Группа 3", participation_status="participating", position="operator"),
-        Operator(full_name="Морозова Елена",   group_id=group_map["Группа 3"].id, group_name="Группа 3", participation_status="participating", position="chat_manager"),
+        Operator(full_name="Иванов Алексей",   group_id=group_map["Группа 1"].id, group_name="Группа 1", participation_status="participating", employment_status="active", position="operator"),
+        Operator(full_name="Петрова Мария",    group_id=group_map["Группа 1"].id, group_name="Группа 1", participation_status="participating", employment_status="active", position="operator"),
+        Operator(full_name="Сидоров Дмитрий",  group_id=group_map["Группа 2"].id, group_name="Группа 2", participation_status="participating", employment_status="active", position="operator"),
+        Operator(full_name="Козлова Анна",     group_id=group_map["Группа 2"].id, group_name="Группа 2", participation_status="participating", employment_status="active", position="chat_manager"),
+        Operator(full_name="Новиков Сергей",   group_id=group_map["Группа 3"].id, group_name="Группа 3", participation_status="participating", employment_status="active", position="operator"),
+        Operator(full_name="Морозова Елена",   group_id=group_map["Группа 3"].id, group_name="Группа 3", participation_status="participating", employment_status="active", position="chat_manager"),
     ]
     db.add_all(demo_operators)
     db.flush()
