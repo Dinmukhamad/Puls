@@ -27,6 +27,19 @@ def _run_optional(conn, statements: Iterable[str]) -> None:
             logger.warning("[schema] Optional schema statement failed: %s; %s", statement, exc)
 
 
+def _stamp_operator_management_revision(conn) -> None:
+    conn.execute(text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(32) NOT NULL)"))
+    current_revision = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1")).scalar()
+    if current_revision is None:
+        conn.execute(text("INSERT INTO alembic_version (version_num) VALUES ('0002_operator_management')"))
+        logger.info("[schema] Stamped Alembic revision 0002_operator_management")
+    elif current_revision == "0001_initial":
+        conn.execute(text(
+            "UPDATE alembic_version SET version_num = '0002_operator_management' WHERE version_num = '0001_initial'"
+        ))
+        logger.info("[schema] Advanced Alembic revision to 0002_operator_management")
+
+
 def ensure_operator_management_schema(engine: Engine) -> None:
     """Bring pre-migration databases up to the operator-management schema.
 
@@ -80,3 +93,4 @@ def ensure_operator_management_schema(engine: Engine) -> None:
             _run_optional(conn, optional_statements)
 
         OperatorAuditLog.__table__.create(bind=conn, checkfirst=True)
+        _stamp_operator_management_revision(conn)
