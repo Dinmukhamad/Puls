@@ -27,7 +27,56 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '5mb' }));
 
-const sessions = new Map();
+// Сессии хранятся в PostgreSQL — переживают редеплои
+// Fallback на Map() если БД не подключена
+const _sessionsFallback = new Map();
+
+async function ensureSessionsTable() {
+  if (!database.enabled || !database.pool) return;
+  await database.pool.query(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      token text PRIMARY KEY,
+      user_data jsonb NOT NULL,
+      expires_at timestamptz NOT NULL
+    )
+  `);
+  // Чистим протухшие при старте
+  await database.pool.query('DELETE FROM sessions WHERE expires_at <= now()');
+}
+
+async function saveSession(session) {
+  if (database.enabled && database.pool) {
+    await database.pool.query(
+      'INSERT INTO sessions (token, user_data, expires_at) VALUES ($1, $2::jsonb, to_timestamp($3 / 1000.0)) ON CONFLICT (token) DO UPDATE SET user_data = $2::jsonb, expires_at = to_timestamp($3 / 1000.0)',
+      [session.token, JSON.stringify(session.user), session.expiresAt]
+    );
+  } else {
+    _sessionsFallback.set(session.token, session);
+  }
+}
+
+async function getSession(token) {
+  if (database.enabled && database.pool) {
+    const r = await database.pool.query(
+      'SELECT user_data, extract(epoch from expires_at)*1000 as expires_at FROM sessions WHERE token = $1 AND expires_at > now() LIMIT 1',
+      [token]
+    );
+    if (!r.rowCount) return null;
+    return { token, user: r.rows[0].user_data, expiresAt: Number(r.rows[0].expires_at) };
+  } else {
+    const s = _sessionsFallback.get(token);
+    if (!s || s.expiresAt <= Date.now()) { _sessionsFallback.delete(token); return null; }
+    return s;
+  }
+}
+
+async function deleteSession(token) {
+  if (database.enabled && database.pool) {
+    await database.pool.query('DELETE FROM sessions WHERE token = $1', [token]);
+  } else {
+    _sessionsFallback.delete(token);
+  }
+}
 
 // ── Seed users из переменных окружения ───────────────────────
 // Пароли никогда не хранятся в коде — только в .env на сервере.
@@ -300,14 +349,14 @@ function ensureOperatorRow(state, operatorName) {
   };
 }
 
-function createSession(user) {
+async function createSession(user) {
   const token = crypto.randomBytes(32).toString('hex');
   const session = {
     token,
     user: toPublicUser(user),
     expiresAt: Date.now() + SESSION_TTL_MS,
   };
-  sessions.set(token, session);
+  await saveSession(session);
   return session;
 }
 
@@ -317,24 +366,22 @@ function getBearerToken(req) {
   return match ? match[1].trim() : '';
 }
 
-function getSessionFromRequest(req) {
+async function getSessionFromRequest(req) {
   const token = getBearerToken(req);
   if (!token) return null;
-  const session = sessions.get(token);
-  if (!session) return null;
-  if (session.expiresAt <= Date.now()) {
-    sessions.delete(token);
-    return null;
-  }
-  return session;
+  return await getSession(token);
 }
 
 function requireAuth(req, res, next) {
-  const session = getSessionFromRequest(req);
-  if (!session) return res.status(401).json({ error: 'Authentication required' });
-  req.session = session;
-  req.user = session.user;
-  next();
+  getSessionFromRequest(req).then(session => {
+    if (!session) return res.status(401).json({ error: 'Authentication required' });
+    req.session = session;
+    req.user = session.user;
+    next();
+  }).catch(err => {
+    console.error('requireAuth error:', err);
+    res.status(500).json({ error: 'Session check failed' });
+  });
 }
 
 function normalizeMetric(metric) {
@@ -642,6 +689,7 @@ async function ensureDatabaseInitialized() {
     )
   `);
 
+  await ensureSessionsTable();
   const existing = await database.pool.query('SELECT data FROM app_state WHERE id = $1 LIMIT 1', [DB_STATE_KEY]);
   if (existing.rowCount === 0) {
     const normalized = normalizeState(getResetState());
@@ -650,6 +698,7 @@ async function ensureDatabaseInitialized() {
       [DB_STATE_KEY, JSON.stringify(normalized)]
     );
     console.log(`Seeded PostgreSQL app_state "${DB_STATE_KEY}" with clean auth state.`);
+  await ensureSessionsTable();
   } else {
     const current = normalizeState(existing.rows[0].data);
     if (current.system?.resetVersion !== SYSTEM_RESET_VERSION) {
@@ -660,6 +709,7 @@ async function ensureDatabaseInitialized() {
       );
       await clearDatabaseBackups();
       console.log(`Reset PostgreSQL app_state "${DB_STATE_KEY}" for ${SYSTEM_RESET_VERSION}.`);
+  await ensureSessionsTable();
     }
   }
 }
@@ -744,12 +794,16 @@ async function databaseStateExists() {
 }
 
 function requireAdmin(req, res, next) {
-  const session = getSessionFromRequest(req);
-  if (!session) return res.status(401).json({ error: 'Authentication required' });
-  if (session.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
-  req.session = session;
-  req.user = session.user;
-  next();
+  getSessionFromRequest(req).then(session => {
+    if (!session) return res.status(401).json({ error: 'Authentication required' });
+    if (session.user.role !== 'admin') return res.status(403).json({ error: 'Admin role required' });
+    req.session = session;
+    req.user = session.user;
+    next();
+  }).catch(err => {
+    console.error('requireAdmin error:', err);
+    res.status(500).json({ error: 'Session check failed' });
+  });
 }
 
 app.get('/api/health', async (req, res) => {
@@ -880,8 +934,8 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/auth/logout', requireAuth, (req, res) => {
-  sessions.delete(req.session.token);
+app.post('/api/auth/logout', requireAuth, async (req, res) => {
+  await deleteSession(req.session.token);
   res.json({ ok: true });
 });
 
