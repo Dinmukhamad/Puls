@@ -1,3 +1,4 @@
+from app.core.config import get_settings
 from __future__ import annotations
 
 import re
@@ -15,8 +16,8 @@ from app.schemas.auth import AccountCredentialsUpdate, LoginRequest, TokenRespon
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+@router.post("/login")
+def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.username == payload.username))
     if not user or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный логин или пароль")
@@ -25,6 +26,12 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
         if operator and operator.status == "archive":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Аккаунт оператора находится в архиве")
     return TokenResponse(access_token=create_access_token(str(user.id), user.role))
+
+
+@router.post("/logout")
+def logout(response: Response, current_user: User = Depends(get_current_user)):
+    response.delete_cookie(key="pulse_access_token", path="/")
+    return {"ok": True}
 
 
 @router.get("/me", response_model=UserRead)
