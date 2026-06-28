@@ -236,7 +236,7 @@ function renderSidebar(role) {
   });
   if (isAdmin(role)) {
     // excel-import-nav hidden — const nav = document.getElementById('excel-import-nav');
-    // if (nav) nav.style.display = '';
+    // /* excel hidden */ // if (nav) nav.style.display = '';
   }
 }
 
@@ -2073,3 +2073,9 @@ window.showChangeUsernameModal = showChangeUsernameModal;
 window.submitChangePassword = submitChangePassword;
 window.submitChangeUsername = submitChangeUsername;
 window.copyCredentials = copyCredentials;
+
+// Force hide excel import nav — UI hidden, code preserved
+document.addEventListener('DOMContentLoaded', () => {
+  const el = document.getElementById('excel-import-nav');
+  if (el) { el.style.setProperty('display', 'none', 'important'); el.hidden = true; }
+});
