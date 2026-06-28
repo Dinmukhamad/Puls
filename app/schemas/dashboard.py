@@ -34,9 +34,11 @@ class OperatorRow(BaseModel):
     group_id: Optional[int] = None
     group_name: str
     participation_status: str = "participating"
+    employment_status: str = "active"
     status: str
     position: Optional[str] = None
     email: Optional[str] = None
+    username: Optional[str] = None
     current_balance: int
     reserved_balance: int
     total_earned: int
@@ -49,6 +51,7 @@ class OperatorRow(BaseModel):
     coins_earned_week: int = 0
     lateness_count: int = 0
     violation_count: int = 0
+    dismissed_at: Optional[datetime] = None
 
 
 class TransactionRow(BaseModel):
