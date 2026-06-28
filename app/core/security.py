@@ -38,7 +38,7 @@ def create_access_token(subject: dict | str, role: str = "") -> str:
 
 def _extract_token(request: Request, credentials: Optional[HTTPAuthorizationCredentials]) -> Optional[str]:
     """Try cookie first, then Authorization header (backward compat)."""
-    cookie_token = request.cookies.get("pulse_access_token")
+    cookie_token = request.cookies.get(get_settings().auth_cookie_name)
     if cookie_token:
         return cookie_token
     if credentials:
