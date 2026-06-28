@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Dict
 
@@ -59,12 +60,11 @@ def startup() -> None:
             db.close()
     except Exception as e:
         logger.error(f"[startup] Seed failed (non-fatal): {e}")
-        # Seed не критичен — сервер запускается даже если seed упал
 
 
 @app.get("/health")
 def health() -> Dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "port": os.environ.get("PORT", "unknown")}
 
 
 # Статические файлы
@@ -76,6 +76,15 @@ for _folder in ("css", "js", "assets"):
 
 _index = _root / "index.html"
 
+
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str):
     return FileResponse(str(_index))
+
+
+# Точка входа — читаем PORT из env сами
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8080))
+    logger.info(f"[main] Starting on port {port}")
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, log_level="info")
