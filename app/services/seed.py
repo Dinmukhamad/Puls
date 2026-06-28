@@ -74,6 +74,11 @@ def seed_database(db: Session) -> None:
             role="manager",
         )
 
+    # ── Демо-данные только в dev режиме ───────────────────────
+    if not settings.enable_demo_data:
+        db.commit()
+        return
+
     # ── Если операторы уже есть — выходим ─────────────────────
     if db.scalar(select(Operator).limit(1)):
         db.commit()
