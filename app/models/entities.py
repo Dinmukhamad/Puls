@@ -29,22 +29,42 @@ class User(Base):
     operator: Mapped[Optional["Operator"]] = relationship("Operator", foreign_keys=[operator_id], post_update=True)
 
 
+class Group(Base):
+    """Группа операторов"""
+    __tablename__ = "groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")  # active | inactive
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    operators: Mapped[List["Operator"]] = relationship(back_populates="group")
+
+
 class Operator(Base):
     __tablename__ = "operators"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     full_name: Mapped[str] = mapped_column(String(255), index=True)
-    group_name: Mapped[str] = mapped_column(String(120), index=True)
+
+    # Группа — FK к таблице groups
+    group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("groups.id"), nullable=True, index=True)
+    group_name: Mapped[str] = mapped_column(String(120), index=True, default="")  # legacy compat
+
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
 
-    # Статус: active | inactive | archive
+    # Статус участия: participating | not_participating
+    participation_status: Mapped[str] = mapped_column(String(32), default="participating", index=True)
+    # Legacy compat fields
     status: Mapped[str] = mapped_column(String(32), default="active", index=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # совместимость
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Дополнительные поля по ТЗ
-    position: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)   # должность
-    employee_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True) # ID сотрудника
+    # Должность: operator | chat_manager
+    position: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    # Legacy fields kept for DB compat (not used in new forms)
+    employee_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -58,6 +78,7 @@ class Operator(Base):
 
     user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id], post_update=True)
     created_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by_user_id])
+    group: Mapped[Optional["Group"]] = relationship("Group", back_populates="operators")
     weekly_results: Mapped[List["WeeklyResult"]] = relationship(back_populates="operator")
     transactions: Mapped[List["CoinTransaction"]] = relationship(back_populates="operator")
     purchases: Mapped[List["ShopPurchase"]] = relationship(back_populates="operator")
