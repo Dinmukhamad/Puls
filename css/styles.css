@@ -845,6 +845,9 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .status-badge.status-pending  { background: var(--warn-soft);   color: var(--warn); }
 .status-badge.status-approved { background: var(--ok-soft);     color: var(--ok); }
 .status-badge.status-rejected { background: var(--danger-soft); color: var(--danger); }
+.status-badge.status-active   { background: var(--ok-soft);     color: var(--ok); }
+.status-badge.status-inactive { background: var(--warn-soft);   color: var(--warn); }
+.status-badge.status-archive  { background: var(--surface-3);   color: var(--tx3); }
 .request-actions {
   grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end;
   padding-top: 12px; border-top: 1px solid var(--border-soft);
@@ -870,7 +873,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: none; align-items: center; justify-content: center; padding: 20px;
 }
 .modal {
-  position: relative; width: min(480px, 100%);
+  position: relative; width: min(720px, 100%); max-height: calc(100vh - 40px); overflow-y: auto;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-xl); padding: 28px;
   box-shadow: var(--shadow-lg); display: grid; gap: 14px;
@@ -893,6 +896,28 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   transition: color var(--t), background var(--t);
 }
 .modal-close:hover { color: var(--tx); background: var(--surface-3); }
+.credential-box {
+  display: grid; gap: 8px; padding: 14px 16px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--r-md); font-size: 13px;
+}
+.credential-box code {
+  padding: 2px 6px; border-radius: 6px;
+  background: var(--accent-soft); color: var(--accent);
+}
+.operator-card-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px;
+}
+.operator-card-grid > div {
+  padding: 10px 12px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+}
+.operator-card-grid span {
+  display: block; color: var(--tx3); font-size: 11px; margin-bottom: 4px;
+}
+.operator-card-grid b {
+  display: block; color: var(--tx); font-size: 13px; overflow-wrap: anywhere;
+}
 
 /* ══════════════════════════════════════════════════════════════
    TOAST
@@ -990,6 +1015,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   .manual-form { flex-direction: column; align-items: stretch; }
   .request-card { grid-template-columns: 1fr; }
   .podium { grid-template-columns: 1fr; }
+  .operator-card-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) {
   .kpi-grid { grid-template-columns: 1fr; }

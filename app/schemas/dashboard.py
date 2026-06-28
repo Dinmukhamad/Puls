@@ -32,6 +32,11 @@ class OperatorRow(BaseModel):
     id: int
     full_name: str
     group_name: str
+    status: str
+    position: Optional[str] = None
+    employee_id: Optional[str] = None
+    email: Optional[str] = None
+    username: Optional[str] = None
     current_balance: int
     reserved_balance: int
     total_earned: int

@@ -36,7 +36,10 @@ const api = (() => {
     try { data = await res.json(); } catch {}
     if (!res.ok) {
       const msg = data.detail || data.error || `Ошибка ${res.status}`;
-      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      const err = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      err.status = res.status;
+      err.data = data;
+      throw err;
     }
     return data;
   }
@@ -61,9 +64,11 @@ const api = (() => {
   /* ── Operators ───────────────────────────────────────────── */
   function listOperators()         { return req('GET', '/api/operators'); }
   function getOperator(id)         { return req('GET', `/api/operators/${id}`); }
+  function getOperatorCard(id)     { return req('GET', `/api/operators/${id}/card`); }
   function myOperator()            { return req('GET', '/api/operators/me'); }
   function createOperator(p)       { return req('POST', '/api/operators', p); }
   function updateOperator(id, p)   { return req('PATCH', `/api/operators/${id}`, p); }
+  function resetOperatorPassword(id) { return req('POST', `/api/operators/${id}/reset-password`); }
 
   /* ── Weekly results ──────────────────────────────────────── */
   function listWeekly()            { return req('GET', '/api/weekly-results'); }
@@ -96,17 +101,18 @@ const api = (() => {
   /* ── Users (admin) ───────────────────────────────────────── */
   function createUser(p)           { return req('POST', '/api/auth/users', p); }
   function listUsers()             { return req('GET', '/api/auth/users'); }
+  function updateMyCredentials(p)  { return req('PATCH', '/api/auth/me/credentials', p); }
 
   return {
     setToken, getToken, login, me, logout, _base: base,
-    listOperators, getOperator, myOperator, createOperator, updateOperator,
+    listOperators, getOperator, getOperatorCard, myOperator, createOperator, updateOperator, resetOperatorPassword,
     listWeekly, upsertWeekly,
     getRating,
     myWallet, operatorWallet, manualTransaction,
     listShopItems, createShopItem, updateShopItem,
     listPurchases, buyItem, approvePurchase, rejectPurchase,
     getDashboard,
-    createUser, listUsers,
+    createUser, listUsers, updateMyCredentials,
     loginOperator: login,
   };
 })();
