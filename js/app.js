@@ -757,109 +757,256 @@ function renderAdminOperators() {
 function renderManual() {
   const el = document.getElementById('view-manual');
   if (!el) return;
-  const ops = STATE.adminOperators;
+
+  // Только активные операторы для начисления
+  const ops = STATE.adminOperators.filter(o => o.status === 'active' || o.is_active);
+
+  const lastManual = STATE.history
+    .filter(t => t.type === 'manual_add' || t.type === 'manual_subtract')
+    .slice(0, 10);
 
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div>
     </div>
 
-    <div class="panel" style="max-width:640px">
-      <div class="panel-head"><h3>Форма начисления</h3></div>
+    <div class="panel" style="max-width:680px">
+      <div class="panel-head"><h3>Форма начисления / списания</h3></div>
       <div style="padding:20px;display:grid;gap:14px">
+
+        <!-- Searchable operator dropdown -->
         <div class="form-group">
           <label class="form-label">Оператор <span style="color:var(--danger)">*</span></label>
-          <select id="manual-op-select" class="form-select">
-            <option value="">Выберите оператора…</option>
-            ${ops.map(o => `<option value="${o.id}">${esc(o.full_name)} — ${esc(o.group_name)} (${o.current_balance} ₡)</option>`).join('')}
-          </select>
+          <div class="op-search-wrap" id="op-search-wrap">
+            <input
+              id="op-search-input"
+              class="form-input"
+              type="text"
+              placeholder="Начните вводить имя или группу…"
+              autocomplete="off"
+            >
+            <div class="op-search-dropdown" id="op-search-dropdown" hidden>
+              <div class="op-search-list" id="op-search-list"></div>
+            </div>
+          </div>
+          <input type="hidden" id="manual-op-id" value="">
+          <div id="op-selected-display" style="display:none;margin-top:6px;padding:8px 12px;background:var(--accent-soft);border:1px solid rgba(255,77,46,.2);border-radius:var(--r-sm);font-size:13px;display:flex;align-items:center;justify-content:space-between">
+            <span id="op-selected-name"></span>
+            <button onclick="clearOpSelection()" style="background:none;border:none;color:var(--tx3);cursor:pointer;font-size:16px;padding:0 4px">×</button>
+          </div>
         </div>
+
         <div class="form-group">
           <label class="form-label">Тип операции <span style="color:var(--danger)">*</span></label>
-          <select id="manual-type" class="form-select">
-            <option value="add">Начисление</option>
-            <option value="subtract">Списание</option>
-          </select>
+          <div style="display:flex;gap:8px">
+            <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--surface);transition:all var(--t)" id="type-add-label">
+              <input type="radio" name="manual-type" value="add" id="type-add" checked style="accent-color:var(--ok)">
+              <span style="font-size:13px;font-weight:600;color:var(--ok)">+ Начисление</span>
+            </label>
+            <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--surface);transition:all var(--t)" id="type-sub-label">
+              <input type="radio" name="manual-type" value="subtract" id="type-sub" style="accent-color:var(--danger)">
+              <span style="font-size:13px;font-weight:600;color:var(--danger)">− Списание</span>
+            </label>
+          </div>
         </div>
+
         <div class="form-group">
           <label class="form-label">Количество коинов <span style="color:var(--danger)">*</span></label>
-          <input id="manual-amount" class="form-input" type="number" min="1" placeholder="Введите количество">
+          <input id="manual-amount" class="form-input" type="number" min="1" step="1" placeholder="Введите количество">
         </div>
+
         <div class="form-group">
           <label class="form-label">Причина операции <span style="color:var(--danger)">*</span></label>
           <select id="manual-reason" class="form-select">
             <option value="">Выберите причину…</option>
+            <option>Благодарность от водителя</option>
+            <option>Помощь новому сотруднику</option>
+            <option>Попадание на доску почёта</option>
+            <option>Активность вне конкурса</option>
             <option>Топ-1 недели</option>
             <option>Топ-2 недели</option>
             <option>Топ-3 недели</option>
             <option>Номинация недели</option>
-            <option>Благодарность от водителя</option>
-            <option>Попадание на доску почёта</option>
-            <option>Помощь новому сотруднику</option>
-            <option>Активность вне конкурса</option>
+            <option>Корректировка баланса</option>
+            <option>Ошибка начисления</option>
             <option>Дисциплинарное нарушение</option>
-            <option>Другое</option>
+            <option value="Другое">Другое</option>
           </select>
         </div>
+
         <div class="form-group">
-          <label class="form-label">Комментарий <span style="color:var(--danger)">*</span></label>
-          <input id="manual-comment" class="form-input" type="text" placeholder="Обязательный комментарий к операции">
+          <label class="form-label" id="comment-label">
+            Комментарий <span style="color:var(--tx3);font-weight:400;font-size:10px">(необязательно)</span>
+          </label>
+          <input id="manual-comment" class="form-input" type="text"
+            placeholder="Дополнительный комментарий к операции">
+          <div id="comment-hint" style="font-size:11px;color:var(--tx3);margin-top:4px;display:none">
+            Комментарий обязателен при выборе причины "Другое"
+          </div>
         </div>
+
         <div id="manual-status" class="status-line" style="min-height:24px"></div>
+
         <button class="btn-primary" id="manual-submit-btn" style="width:100%;height:44px">
           Сохранить операцию
         </button>
         <div style="font-size:11px;color:var(--tx3)">
-          Операция будет записана с указанием автора, даты и причины. Удаление невозможно.
+          Операция записывается с указанием автора, даты и причины. Изменение и удаление невозможны.
         </div>
       </div>
     </div>
 
-    <!-- Последние операции -->
-    <div class="panel" style="margin-top:20px">
+    <!-- Последние ручные операции -->
+    <div class="panel" style="margin-top:20px;max-width:680px">
       <div class="panel-head"><h3>Последние ручные операции</h3></div>
-      <div class="tx-list">
-        ${STATE.history.filter(t => t.type === 'manual_add' || t.type === 'manual_subtract').slice(0,10).map(t => `
-          <div class="tx-row ${t.amount>=0?'tx-plus':'tx-minus'}">
+      <div class="tx-list" id="manual-history-list">
+        ${lastManual.length ? lastManual.map(t => `
+          <div class="tx-row ${t.amount >= 0 ? 'tx-plus' : 'tx-minus'}">
             <div class="tx-info">
               <span class="tx-comment"><b>${esc(t.operator_name)}</b> — ${esc(t.comment)}</span>
-              <span class="tx-date">Автор: ${esc(t.created_by_name||'Система')} · ${fmtDate(t.created_at)}</span>
+              <span class="tx-date">Автор: ${esc(t.created_by_name || 'Система')} · ${fmtDate(t.created_at)}</span>
             </div>
-            <div class="tx-amount">${t.amount>=0?'+':''}${t.amount} ₡</div>
-          </div>`).join('') || '<div class="empty-line">Нет ручных операций</div>'}
+            <div class="tx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</div>
+          </div>`).join('') : '<div class="empty-line">Нет ручных операций</div>'}
       </div>
     </div>`;
 
-  el.querySelector('#manual-submit-btn')?.addEventListener('click', async () => {
-    const opId    = +el.querySelector('#manual-op-select').value;
-    const type    = el.querySelector('#manual-type').value;
+  // Init operator search
+  initOpSearch(el, ops);
+
+  // Reason → comment required logic
+  const reasonSel = el.querySelector('#manual-reason');
+  const commentLabel = el.querySelector('#comment-label');
+  const commentHint  = el.querySelector('#comment-hint');
+  reasonSel.addEventListener('change', () => {
+    const isOther = reasonSel.value === 'Другое';
+    commentLabel.innerHTML = isOther
+      ? 'Комментарий <span style="color:var(--danger)">*</span>'
+      : 'Комментарий <span style="color:var(--tx3);font-weight:400;font-size:10px">(необязательно)</span>';
+    commentHint.style.display = isOther ? 'block' : 'none';
+  });
+
+  // Submit
+  el.querySelector('#manual-submit-btn').addEventListener('click', async () => {
+    const opId    = el.querySelector('#manual-op-id').value;
+    const type    = el.querySelector('input[name="manual-type"]:checked')?.value || 'add';
     const amount  = +el.querySelector('#manual-amount').value;
     const reason  = el.querySelector('#manual-reason').value;
     const comment = el.querySelector('#manual-comment').value.trim();
     const statusEl = el.querySelector('#manual-status');
 
-    if (!opId)    { statusEl.textContent = 'Выберите оператора'; statusEl.className = 'status-line status-error'; return; }
-    if (!amount || amount <= 0) { statusEl.textContent = 'Введите количество коинов'; statusEl.className = 'status-line status-error'; return; }
-    if (!reason)  { statusEl.textContent = 'Выберите причину'; statusEl.className = 'status-line status-error'; return; }
-    if (!comment) { statusEl.textContent = 'Введите комментарий'; statusEl.className = 'status-line status-error'; return; }
+    const setErr = msg => { statusEl.textContent = msg; statusEl.className = 'status-line status-error'; };
 
-    const finalAmount = type === 'subtract' ? -amount : amount;
-    const fullComment = `${reason}: ${comment}`;
+    if (!opId)              return setErr('Выберите оператора');
+    if (!amount || amount <= 0) return setErr('Введите корректное количество коинов');
+    if (!reason)            return setErr('Выберите причину операции');
+    if (reason === 'Другое' && !comment) return setErr('Укажите комментарий для причины "Другое"');
+
+    const finalAmount  = type === 'subtract' ? -Math.abs(amount) : Math.abs(amount);
+    const fullComment  = comment ? `${reason}: ${comment}` : reason;
 
     try {
-      await api.manualTransaction({ operator_id: opId, amount: finalAmount, comment: fullComment });
+      await api.manualTransaction({ operator_id: +opId, amount: finalAmount, comment: fullComment });
       statusEl.textContent = `✓ Операция сохранена: ${finalAmount > 0 ? '+' : ''}${finalAmount} ₡`;
       statusEl.className = 'status-line status-ok';
       el.querySelector('#manual-amount').value = '';
       el.querySelector('#manual-comment').value = '';
       el.querySelector('#manual-reason').value = '';
+      clearOpSelection();
       showToast('Операция успешно сохранена', 'ok');
       await reloadData();
-      renderManual();
+      // Update history block without full re-render
+      const histEl = el.querySelector('#manual-history-list');
+      if (histEl) {
+        const fresh = STATE.history.filter(t => t.type === 'manual_add' || t.type === 'manual_subtract').slice(0, 10);
+        histEl.innerHTML = fresh.length ? fresh.map(t => `
+          <div class="tx-row ${t.amount >= 0 ? 'tx-plus' : 'tx-minus'}">
+            <div class="tx-info">
+              <span class="tx-comment"><b>${esc(t.operator_name)}</b> — ${esc(t.comment)}</span>
+              <span class="tx-date">Автор: ${esc(t.created_by_name || 'Система')} · ${fmtDate(t.created_at)}</span>
+            </div>
+            <div class="tx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</div>
+          </div>`).join('') : '<div class="empty-line">Нет ручных операций</div>';
+      }
     } catch(err) {
       statusEl.textContent = err.message;
       statusEl.className = 'status-line status-error';
     }
+  });
+}
+
+/* Searchable operator dropdown */
+let _opSearchSelected = null;
+
+function initOpSearch(container, ops) {
+  const input    = container.querySelector('#op-search-input');
+  const dropdown = container.querySelector('#op-search-dropdown');
+  const list     = container.querySelector('#op-search-list');
+  const hiddenId = container.querySelector('#manual-op-id');
+  const display  = container.querySelector('#op-selected-display');
+  const dispName = container.querySelector('#op-selected-name');
+
+  if (!ops.length) {
+    input.placeholder = 'Операторы не найдены';
+    input.disabled = true;
+    return;
+  }
+
+  function renderList(filtered) {
+    if (!filtered.length) {
+      list.innerHTML = '<div class="op-search-empty">Оператор не найден</div>';
+      return;
+    }
+    list.innerHTML = filtered.slice(0, 50).map(o => `
+      <div class="op-search-item" data-id="${o.id}" data-name="${esc(o.full_name)}">
+        <div class="op-search-name">${esc(o.full_name)}</div>
+        <div class="op-search-meta">Группа: ${esc(o.group_name)} · ${o.current_balance} ₡</div>
+      </div>`).join('');
+
+    list.querySelectorAll('.op-search-item').forEach(item => {
+      item.addEventListener('mousedown', e => {
+        e.preventDefault();
+        selectOp(+item.dataset.id, item.dataset.name);
+      });
+    });
+  }
+
+  function selectOp(id, name) {
+    _opSearchSelected = id;
+    hiddenId.value = id;
+    input.value = '';
+    input.placeholder = 'Начните вводить имя или группу…';
+    dispName.textContent = name;
+    display.style.display = 'flex';
+    dropdown.setAttribute('hidden', '');
+  }
+
+  window.clearOpSelection = function() {
+    _opSearchSelected = null;
+    hiddenId.value = '';
+    display.style.display = 'none';
+    input.value = '';
+    input.focus();
+  };
+
+  input.addEventListener('focus', () => {
+    renderList(ops);
+    dropdown.removeAttribute('hidden');
+  });
+
+  input.addEventListener('input', () => {
+    const q = input.value.toLowerCase().trim();
+    const filtered = q
+      ? ops.filter(o =>
+          o.full_name.toLowerCase().includes(q) ||
+          o.group_name.toLowerCase().includes(q))
+      : ops;
+    renderList(filtered);
+    dropdown.removeAttribute('hidden');
+  });
+
+  input.addEventListener('blur', () => {
+    setTimeout(() => dropdown.setAttribute('hidden', ''), 150);
   });
 }
 
