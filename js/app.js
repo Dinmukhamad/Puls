@@ -35,9 +35,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function tryRestoreSession() {
   try {
-    STATE.user = await api.me();
+    const user = await api.me();
+    // FastAPI возвращает { id, username, full_name, role, operator_id }
+    STATE.user = {
+      id:          user.id,
+      username:    user.username,
+      full_name:   user.full_name,
+      role:        user.role,
+      operator_id: user.operator_id,
+    };
     await bootApp();
-  } catch {
+  } catch(e) {
     api.logout();
     showAuth();
   }
@@ -133,7 +141,14 @@ document.addEventListener('click', async e => {
     e.target.textContent = 'Вход…';
     try {
       await api.login(username, password);
-      STATE.user = await api.me();
+      const _me = await api.me();
+      STATE.user = {
+        id:          _me.id,
+        username:    _me.username,
+        full_name:   _me.full_name,
+        role:        _me.role,
+        operator_id: _me.operator_id,
+      };
       hideAuth();
       await bootApp();
     } catch (err) {
