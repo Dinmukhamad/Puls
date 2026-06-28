@@ -19,10 +19,12 @@ class OperatorUpdate(BaseModel):
     group_id: Optional[int] = None
     group_name: Optional[str] = None
     participation_status: Optional[str] = None
+    employment_status: Optional[str] = None
     status: Optional[str] = None
     is_active: Optional[bool] = None
     position: Optional[str] = None
     email: Optional[str] = None
+    username: Optional[str] = None
 
 
 class OperatorRead(BaseModel):
@@ -31,14 +33,18 @@ class OperatorRead(BaseModel):
     group_id: Optional[int] = None
     group_name: str
     participation_status: str = "participating"
+    employment_status: str = "active"
     status: str
     is_active: bool
     position: Optional[str] = None
     email: Optional[str] = None
+    username: Optional[str] = None
     current_balance: int
     reserved_balance: int
     total_earned: int
     total_spent: int
     created_at: datetime
+    updated_at: Optional[datetime] = None
+    dismissed_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
