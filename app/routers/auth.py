@@ -35,7 +35,7 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
 
     settings = get_settings()
     response.set_cookie(
-        key="pulse_access_token",
+        key=get_settings().auth_cookie_name,
         value=token,
         httponly=True,
         secure=getattr(settings, 'auth_cookie_secure', False),
@@ -48,7 +48,7 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
 
 @router.post("/logout")
 def logout(response: Response, current_user: User = Depends(get_current_user)):
-    response.delete_cookie(key="pulse_access_token", path="/")
+    response.delete_cookie(key=get_settings().auth_cookie_name, path="/")
     return {"ok": True}
 
 
