@@ -37,9 +37,23 @@ async function tryRestoreSession() {
     const u = await api.me();
     STATE.user = normalizeUser(u);
     await bootApp();
-  } catch {
-    api.logout();
-    showAuth();
+  } catch(err) {
+    // 401 = токен невалиден → выход
+    // Остальные ошибки (сеть, 500) → не выкидываем, показываем retry
+    const msg = err?.message || '';
+    const is401 = msg.includes('401') || msg.includes('авторизаци') || msg.includes('токен') || msg.toLowerCase().includes('unauthorized');
+    if (is401) {
+      api.logout();
+      showAuth();
+    } else {
+      // Сеть недоступна — показываем кнопку повтора
+      const shell = document.getElementById('app-shell');
+      if (shell) shell.innerHTML = `
+        <div class="loading-state" style="gap:20px">
+          <p style="color:var(--danger)">Ошибка соединения с сервером</p>
+          <button class="btn-primary" onclick="tryRestoreSession()">Повторить</button>
+        </div>`;
+    }
   }
 }
 
