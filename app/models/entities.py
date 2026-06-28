@@ -22,7 +22,6 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(32), index=True)
     operator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("operators.id"), nullable=True)
-    can_manage_operators: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
@@ -35,35 +34,32 @@ class Operator(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     full_name: Mapped[str] = mapped_column(String(255), index=True)
     group_name: Mapped[str] = mapped_column(String(120), index=True)
-    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
-    position: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
-    employee_id: Mapped[Optional[str]] = mapped_column(String(120), unique=True, nullable=True)
-    email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
-    participation_started_at: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    admin_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    # Статус: active | inactive | archive
+    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # совместимость
+
+    # Дополнительные поля по ТЗ
+    position: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)   # должность
+    employee_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True) # ID сотрудника
+    email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    # Балансы
     current_balance: Mapped[int] = mapped_column(Integer, default=0)
     reserved_balance: Mapped[int] = mapped_column(Integer, default=0)
     total_earned: Mapped[int] = mapped_column(Integer, default=0)
     total_spent: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id], post_update=True)
     created_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by_user_id])
     weekly_results: Mapped[List["WeeklyResult"]] = relationship(back_populates="operator")
     transactions: Mapped[List["CoinTransaction"]] = relationship(back_populates="operator")
     purchases: Mapped[List["ShopPurchase"]] = relationship(back_populates="operator")
-    audit_logs: Mapped[List["OperatorAuditLog"]] = relationship(back_populates="operator")
-
-    @property
-    def username(self) -> Optional[str]:
-        return self.user.username if self.user else None
-
-    @property
-    def created_by_name(self) -> Optional[str]:
-        return self.created_by.full_name if self.created_by else None
 
 
 class WeeklyResult(Base):
@@ -139,19 +135,16 @@ class ShopPurchase(Base):
     reviewed_by: Mapped[Optional[User]] = relationship("User")
 
 
-class OperatorAuditLog(Base):
-    __tablename__ = "operator_audit_logs"
+class AuditLog(Base):
+    """Журнал действий по ТЗ"""
+    __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
-    action: Mapped[str] = mapped_column(String(80), index=True)
-    comment: Mapped[str] = mapped_column(Text, default="")
-    actor_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    action: Mapped[str] = mapped_column(String(100), index=True)
+    entity_type: Mapped[str] = mapped_column(String(50))   # operator / user
+    entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    performed_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
-    operator: Mapped[Operator] = relationship(back_populates="audit_logs")
-    actor: Mapped[Optional[User]] = relationship("User")
-
-    @property
-    def actor_name(self) -> Optional[str]:
-        return self.actor.full_name if self.actor else None
+    performed_by: Mapped[Optional[User]] = relationship("User")
