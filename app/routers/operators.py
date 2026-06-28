@@ -217,6 +217,33 @@ def create_operator(
     )
 
 
+@router.get("/audit/logs")
+def get_audit_logs(
+    skip: int = 0,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("manager", "admin"))
+) -> list:
+    from sqlalchemy import select as sa_select
+    logs = list(db.execute(
+        sa_select(AuditLog, User)
+        .outerjoin(User, User.id == AuditLog.performed_by_user_id)
+        .order_by(AuditLog.created_at.desc())
+        .offset(skip).limit(limit)
+    ))
+    return [
+        {
+            "id": log.id,
+            "action": log.action,
+            "entity_type": log.entity_type,
+            "entity_id": log.entity_id,
+            "details": log.details,
+            "performed_by": user.full_name if user else "Система",
+            "created_at": log.created_at.isoformat(),
+        }
+        for log, user in logs
+    ]
+
 @router.get("/{operator_id}", response_model=OperatorFullRead)
 def get_operator(
     operator_id: int,
@@ -345,30 +372,3 @@ def change_username(
     db.commit()
     return {"ok": True, "message": "Логин успешно изменён", "new_username": new_username}
 
-
-@router.get("/audit/logs")
-def get_audit_logs(
-    skip: int = 0,
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    _: User = Depends(require_roles("manager", "admin"))
-) -> list:
-    from sqlalchemy import select as sa_select
-    logs = list(db.execute(
-        sa_select(AuditLog, User)
-        .outerjoin(User, User.id == AuditLog.performed_by_user_id)
-        .order_by(AuditLog.created_at.desc())
-        .offset(skip).limit(limit)
-    ))
-    return [
-        {
-            "id": log.id,
-            "action": log.action,
-            "entity_type": log.entity_type,
-            "entity_id": log.entity_id,
-            "details": log.details,
-            "performed_by": user.full_name if user else "Система",
-            "created_at": log.created_at.isoformat(),
-        }
-        for log, user in logs
-    ]
