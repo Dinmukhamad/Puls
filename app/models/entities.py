@@ -23,6 +23,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(32), index=True)
     operator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("operators.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    can_manage_operators: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
     operator: Mapped[Optional["Operator"]] = relationship("Operator", foreign_keys=[operator_id], post_update=True)
@@ -136,15 +137,19 @@ class ShopPurchase(Base):
 
 
 class AuditLog(Base):
-    """Журнал действий по ТЗ"""
+    """Журнал действий — единая таблица audit_logs"""
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     action: Mapped[str] = mapped_column(String(100), index=True)
-    entity_type: Mapped[str] = mapped_column(String(50))   # operator / user
+    # Поддерживаем оба контракта: новый (entity_type/entity_id) и старый (operator_id)
+    entity_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    operator_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # legacy compat
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)         # legacy compat
     performed_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    actor_user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True) # legacy compat
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
-    performed_by: Mapped[Optional[User]] = relationship("User")
+    performed_by: Mapped[Optional[User]] = relationship("User", foreign_keys=[performed_by_user_id])
