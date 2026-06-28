@@ -36,6 +36,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
                 WeeklyResult.week_start == week_start,
                 WeeklyResult.week_end == week_end,
                 Operator.participation_status == "participating",
+                Operator.employment_status == "active",
                 Operator.is_active.is_(True),
             )
         ) or 0
@@ -47,6 +48,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
                 WeeklyResult.week_start == week_start,
                 WeeklyResult.week_end == week_end,
                 Operator.participation_status == "participating",
+                Operator.employment_status == "active",
                 Operator.is_active.is_(True),
             )
         ) or 0
@@ -58,6 +60,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
                 WeeklyResult.week_start == week_start,
                 WeeklyResult.week_end == week_end,
                 Operator.participation_status == "participating",
+                Operator.employment_status == "active",
                 Operator.is_active.is_(True),
             )
         ) or 0
@@ -66,7 +69,11 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
             select(WeeklyResult, Operator)
             .join(Operator, Operator.id == WeeklyResult.operator_id)
             .where(WeeklyResult.week_start == week_start, WeeklyResult.week_end == week_end)
-            .where(Operator.participation_status == "participating", Operator.is_active.is_(True))
+            .where(
+                Operator.participation_status == "participating",
+                Operator.employment_status == "active",
+                Operator.is_active.is_(True),
+            )
             .order_by(WeeklyResult.rank_position.asc().nulls_last())
             .limit(5)
         ))
@@ -104,7 +111,11 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
                 func.avg(WeeklyResult.final_score),
             )
             .outerjoin(WeeklyResult, WeeklyResult.operator_id == Operator.id)
-            .where(Operator.participation_status == "participating", Operator.is_active.is_(True))
+            .where(
+                Operator.participation_status == "participating",
+                Operator.employment_status == "active",
+                Operator.is_active.is_(True),
+            )
             .group_by(Operator.group_name)
             .order_by(Operator.group_name.asc())
         )
@@ -138,6 +149,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
     active_ops = db.scalar(
         select(func.count(Operator.id)).where(
             Operator.participation_status == "participating",
+            Operator.employment_status == "active",
             Operator.is_active.is_(True),
         )
     ) or 0
@@ -188,6 +200,7 @@ def admin_operators(db: Session = Depends(get_db)) -> List[OperatorRow]:
 
     rows = []
     for op in operators:
+        user = op.user or (db.get(User, op.user_id) if op.user_id else None)
         wr = result_map.get(op.id)
         rank_delta = None
         if wr and wr.rank_position is not None and wr.previous_rank_position is not None:
@@ -198,10 +211,11 @@ def admin_operators(db: Session = Depends(get_db)) -> List[OperatorRow]:
             group_id=op.group_id,
             group_name=op.group_name,
             participation_status=op.participation_status,
+            employment_status=op.employment_status,
             status=op.status,
             position=op.position,
             email=op.email,
-            
+            username=user.username if user else None,
             current_balance=op.current_balance,
             reserved_balance=op.reserved_balance,
             total_earned=op.total_earned,
@@ -213,6 +227,7 @@ def admin_operators(db: Session = Depends(get_db)) -> List[OperatorRow]:
             coins_earned_week=wr.coins_earned if wr else 0,
             lateness_count=wr.lateness_count if wr else 0,
             violation_count=wr.violation_count if wr else 0,
+            dismissed_at=op.dismissed_at,
         ))
     return rows
 
