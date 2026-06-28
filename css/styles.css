@@ -1061,3 +1061,49 @@ body.side-nav-collapsed .theme-toggle { display: none; }
     border-color: var(--accent) !important;
   }
 }
+
+
+/* ── Searchable operator dropdown ────────────────────────── */
+.op-search-wrap {
+  position: relative;
+}
+.op-search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  z-index: 500;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.op-search-dropdown[hidden] { display: none; }
+.op-search-list {
+  max-height: 280px;
+  overflow-y: auto;
+}
+.op-search-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-soft);
+  transition: background var(--t);
+}
+.op-search-item:last-child { border-bottom: none; }
+.op-search-item:hover { background: var(--surface-2); }
+.op-search-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx);
+}
+.op-search-meta {
+  font-size: 11px;
+  color: var(--tx3);
+  margin-top: 2px;
+}
+.op-search-empty {
+  padding: 14px;
+  text-align: center;
+  color: var(--tx3);
+  font-size: 13px;
+}
