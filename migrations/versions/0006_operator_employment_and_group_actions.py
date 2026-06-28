@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 
-revision = "0006_operator_employment_and_group_actions"
+revision = "0006_op_employment"
 down_revision = "0005_operator_group_contract"
 branch_labels = None
 depends_on = None
