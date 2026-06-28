@@ -1145,7 +1145,7 @@ async function submitAddOperator() {
 }
 
 function copyCredentials(name, login, password) {
-  const text = \`Оператор: \${name}\nЛогин: \${login}\nВременный пароль: \${password}\`;
+  const text = `Оператор: ${name}\nЛогин: ${login}\nВременный пароль: ${password}`;
   navigator.clipboard.writeText(text).then(() => showToast('Скопировано!', 'ok'));
 }
 
