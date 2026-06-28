@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Puls — Operator Performance Platform"
+    app_name: str = "Pulse — платформа геймификации операторов"
     api_prefix: str = "/api"
 
     # PostgreSQL — обязателен на проде, SQLite для локалки
