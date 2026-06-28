@@ -66,6 +66,11 @@ const api = (() => {
   function myOperator()            { return req('GET', '/api/operators/me'); }
   function createOperator(p)       { return req('POST', '/api/operators', p); }
   function updateOperator(id, p)   { return req('PATCH', `/api/operators/${id}`, p); }
+  function resetOperatorPassword(id) { return req('POST', `/api/operators/${id}/reset-password`); }
+  function dismissOperator(id)     { return req('POST', `/api/operators/${id}/dismiss`); }
+  function restoreOperator(id, p)  { return req('POST', `/api/operators/${id}/restore`, p); }
+  function deleteOperator(id)      { return req('DELETE', `/api/operators/${id}`); }
+  function operatorHistory(id)     { return req('GET', `/api/operators/${id}/history`); }
 
   /* ── Weekly results ──────────────────────────────────────── */
   function listWeekly()            { return req('GET', '/api/weekly-results'); }
@@ -98,6 +103,9 @@ const api = (() => {
   }
   function createGroup(p)          { return req('POST', '/api/groups', p); }
   function updateGroup(id, p)      { return req('PATCH', `/api/groups/${id}`, p); }
+  function enableGroup(id)         { return req('POST', `/api/groups/${id}/enable`); }
+  function disableGroup(id)        { return req('POST', `/api/groups/${id}/disable`); }
+  function deleteGroup(id)         { return req('DELETE', `/api/groups/${id}`); }
 
   /* ── Dashboard ───────────────────────────────────────────── */
   function getDashboard()          { return req('GET', '/api/dashboard'); }
@@ -111,12 +119,13 @@ const api = (() => {
   return {
     getToken, login, me, logout,
     listOperators, getOperator, myOperator, createOperator, updateOperator,
+    resetOperatorPassword, dismissOperator, restoreOperator, deleteOperator, operatorHistory,
     listWeekly, upsertWeekly,
     getRating,
     myWallet, operatorWallet, manualTransaction,
     listShopItems, createShopItem, updateShopItem,
     listPurchases, buyItem, approvePurchase, rejectPurchase,
-    listGroups, createGroup, updateGroup,
+    listGroups, createGroup, updateGroup, enableGroup, disableGroup, deleteGroup,
     getDashboard,
     createUser, listUsers,
     loginOperator: login,
