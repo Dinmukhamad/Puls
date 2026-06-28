@@ -23,10 +23,16 @@ settings = get_settings()
 
 app = FastAPI(title="Pulse — Operator Performance Platform")
 
+settings = get_settings()
+_cors_origins = settings.cors_origin_list
+# If CORS is *, credentials must be False (browser restriction)
+# In production, set explicit domains in CORS_ORIGINS
+_allow_credentials = "*" not in _cors_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -43,7 +49,6 @@ app.include_router(dashboard.router,      prefix=settings.api_prefix)
 @app.on_event("startup")
 def startup() -> None:
     settings = get_settings()
-
     # Production safety check
     try:
         settings.check_production_safety()
