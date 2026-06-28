@@ -241,19 +241,21 @@ function getOperatorForUser(state, user) {
   return getOperatorDirectory(state).find(item => item.nameKey === operatorKey) || null;
 }
 
-function ensureOperatorRow(state, operatorName, facultyId) {
-  const name = String(operatorName || '').trim();
-  const nameKey = normalizeOperatorName(name);
-  if (!name || !nameKey) throw new Error('Operator name is required');
-
-  const existing = getOperatorDirectory(state).find(item => item.nameKey === nameKey);
-  if (existing) return existing;
+function ensureOperatorRow(state, operatorName) {
+  const baseName = String(operatorName || '').trim();
+  if (!baseName || !normalizeOperatorName(baseName)) throw new Error('Operator name is required');
 
   const faculties = Array.isArray(state.faculties) ? state.faculties : [];
   if (!faculties.length) throw new Error('No groups available');
 
-  let facultyIndex = faculties.findIndex(faculty => String(faculty?.id || '') === String(facultyId || ''));
-  if (facultyIndex < 0) facultyIndex = 0;
+  let name = baseName;
+  const existingKeys = new Set(getOperatorDirectory(state).map(item => item.nameKey));
+  for (let suffix = 2; existingKeys.has(normalizeOperatorName(name)); suffix += 1) {
+    name = `${baseName}-${suffix}`;
+  }
+
+  const facultyIndex = 0;
+  const nameKey = normalizeOperatorName(name);
 
   const faculty = faculties[facultyIndex];
   if (!Array.isArray(faculty.operators)) faculty.operators = [];
@@ -789,20 +791,14 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/auth/register', async (req, res) => {
   try {
     const login = String(req.body?.login || '').trim();
-    const name = String(req.body?.name || '').trim();
     const password = String(req.body?.password || '');
-    const facultyId = String(req.body?.facultyId || '').trim();
     const loginKey = normalizeLogin(login);
-    const operatorKey = normalizeOperatorName(name);
 
     if (!loginKey || login.length < 3) {
       return res.status(400).json({ error: 'Логин должен быть не короче 3 символов' });
     }
     if (!/^[a-z0-9._-]+$/i.test(login)) {
       return res.status(400).json({ error: 'Логин может содержать латинские буквы, цифры, точку, дефис и подчёркивание' });
-    }
-    if (!operatorKey || name.length < 2) {
-      return res.status(400).json({ error: 'Введите ФИО оператора' });
     }
     if (password.length < 6) {
       return res.status(400).json({ error: 'Пароль должен быть не короче 6 символов' });
@@ -813,15 +809,12 @@ app.post('/api/auth/register', async (req, res) => {
     if (users.some(user => user.loginKey === loginKey)) {
       return res.status(409).json({ error: 'Такой логин уже занят' });
     }
-    if (users.some(user => user.role === 'operator' && normalizeOperatorName(user.operatorKey || user.operatorName || user.name) === operatorKey)) {
-      return res.status(409).json({ error: 'Для этого оператора аккаунт уже создан' });
-    }
 
-    const operator = ensureOperatorRow(state, name, facultyId);
+    const operator = ensureOperatorRow(state, login);
     const user = normalizeUser({
       id: loginKey,
       login,
-      name,
+      name: login,
       role: 'operator',
       operatorName: operator.name,
       operatorKey: operator.nameKey,
