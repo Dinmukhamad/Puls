@@ -3,160 +3,190 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>iCore · Геймификация операторов</title>
-  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <title>Puls — Рейтинг операторов</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=tz-v1">
-  <script src="js/api.js?v=tz-v1"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css?v=puls-1">
+  <script src="js/api.js?v=puls-1"></script>
   <script>
     (function() {
-      const t = localStorage.getItem('icore-theme') || 'light';
+      const t = localStorage.getItem('icore-theme') || 'dark';
       document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
 </head>
 <body>
 
-  <!-- ══ AUTH OVERLAY ═════════════════════════════════════════ -->
-  <div id="auth-overlay" class="auth-overlay">
-    <div class="auth-shell">
-      <!-- Левая панель -->
-      <div class="auth-visual">
-        <div class="auth-logo-row">
-          <div class="auth-mark">i</div>
-          <span>iCore</span>
-        </div>
-        <h1>Панель результатов операторов</h1>
-        <p>Единый вход для администраторов, супервайзеров и операторов системы.</p>
-        <div class="auth-lines">
-          <span></span><span></span><span></span>
-        </div>
+<!-- ══ AUTH ══════════════════════════════════════════════════ -->
+<div id="auth-overlay" class="auth-overlay">
+  <div class="auth-shell">
+
+    <!-- Бренд-панель с пульс-линией -->
+    <div class="auth-visual">
+      <div class="auth-visual-brand">
+        <svg class="auth-visual-logo" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="44" height="44" rx="12" fill="#FF4D2E" fill-opacity=".15"/>
+          <polyline points="4,22 10,22 14,12 18,32 22,18 26,28 30,22 44,22"
+            stroke="#FF4D2E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+        <span class="auth-visual-name">Puls<em>.</em></span>
       </div>
-      <!-- Правая панель (форма) -->
-      <div class="auth-card">
-        <div class="auth-kicker">CONTEST</div>
-        <h2>Вход в систему</h2>
-        <p>Введите логин и пароль для входа.</p>
+
+      <!-- Анимированная пульс-линия -->
+      <div class="auth-pulse">
+        <svg viewBox="0 0 420 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <polyline class="auth-pulse-line"
+            points="0,24 40,24 60,24 80,4 100,44 120,14 140,34 160,24 200,24 220,24 240,8 260,40 280,18 300,30 320,24 420,24"/>
+        </svg>
+      </div>
+
+      <h1>Рейтинг.<br>Коины.<br><em>Мотивация.</em></h1>
+      <p>Платформа для отслеживания результатов операторов, накопления коинов и получения бонусов.</p>
+      <div class="auth-decorlines">
+        <span></span><span></span><span></span>
+      </div>
+    </div>
+
+    <!-- Форма входа -->
+    <div class="auth-card">
+      <div class="auth-form">
+        <div class="auth-kicker">Добро пожаловать</div>
+        <h2>Вход в Puls</h2>
+        <p>Введите логин и пароль для входа в систему.</p>
         <div class="form-group">
-          <label class="form-label">ЛОГИН</label>
-          <input id="auth-username" class="form-input" type="text" placeholder="Логин" autocomplete="username">
+          <label class="form-label" for="auth-username">Логин</label>
+          <input id="auth-username" class="form-input" type="text"
+            placeholder="Ваш логин" autocomplete="username">
         </div>
         <div class="form-group">
-          <label class="form-label">ПАРОЛЬ</label>
-          <input id="auth-password" class="form-input" type="password" placeholder="Пароль" autocomplete="current-password">
+          <label class="form-label" for="auth-password">Пароль</label>
+          <input id="auth-password" class="form-input" type="password"
+            placeholder="Пароль" autocomplete="current-password">
         </div>
         <div id="auth-error" class="auth-error"></div>
-        <button id="auth-login-btn" class="btn-primary" style="width:100%;height:44px;margin-top:14px;font-size:14px">Войти</button>
+        <button id="auth-login-btn" class="btn-primary"
+          style="width:100%;height:44px;font-size:14px;margin-top:4px">
+          Войти
+        </button>
       </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ SIDE NAV ══════════════════════════════════════════════ -->
+<nav class="side-nav" aria-label="Навигация">
+
+  <a class="side-nav-logo" href="#" onclick="navigateTo('cabinet');return false;">
+    <div class="side-nav-mark">
+      <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polyline points="2,18 8,18 12,8 16,28 20,12 24,24 28,18 34,18"
+          stroke="#FF4D2E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span class="side-nav-brand">Puls<em>.</em></span>
+  </a>
+
+  <button class="side-nav-toggle" id="side-nav-toggle" type="button" aria-label="Свернуть">
+    <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+
+  <div class="side-nav-group">
+    <a class="side-nav-link active" href="#" data-nav-target="cabinet" title="Кабинет">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span>Кабинет</span>
+    </a>
+    <a class="side-nav-link" href="#" data-nav-target="rating" title="Рейтинг">
+      <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
+      <span>Рейтинг</span>
+    </a>
+    <a class="side-nav-link" href="#" data-nav-target="shop" title="Магазин">
+      <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+      <span>Магазин</span>
+    </a>
+    <a class="side-nav-link" href="#" data-nav-target="admin" title="Операторы">
+      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Операторы</span>
+    </a>
+    <a class="side-nav-link" href="#" data-nav-target="requests" title="Заявки">
+      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/></svg>
+      <span>Заявки</span>
+    </a>
+  </div>
+
+  <div class="side-nav-separator"></div>
+
+  <!-- Excel импорт (только admins) -->
+  <div id="excel-import-nav" style="display:none">
+    <div class="side-nav-section-label">Импорт данных</div>
+    <div class="excel-import-compact">
+      <div class="excel-period-grid">
+        <label class="excel-period-field">
+          <span>Начало</span>
+          <input type="date" id="excel-period-start">
+        </label>
+        <label class="excel-period-field">
+          <span>Конец</span>
+          <input type="date" id="excel-period-end">
+        </label>
+      </div>
+      <label class="excel-file-label" id="excel-report-label">
+        <input type="file" id="excel-report-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
+        <span id="excel-report-file-name">report.xlsx</span>
+        <span class="excel-file-btn">Обзор</span>
+      </label>
+      <label class="excel-file-label" id="excel-dates-label">
+        <input type="file" id="excel-dates-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
+        <span id="excel-dates-file-name">dates.xlsx</span>
+        <span class="excel-file-btn">Обзор</span>
+      </label>
+      <button class="btn-primary btn-sm" style="width:100%" id="excel-import-btn">Применить</button>
+      <div class="import-status" id="import-status" hidden></div>
     </div>
   </div>
 
-  <!-- ══ SIDE NAV ══════════════════════════════════════════════ -->
-  <nav class="side-nav" aria-label="Навигация">
-    <a class="side-nav-logo" href="#" onclick="navigateTo('cabinet');return false;">
-      <div class="side-nav-mark">i</div>
-      <span class="side-nav-brand">iCore</span>
-    </a>
+  <div class="side-nav-meta">
+    <span id="side-user" style="color:rgba(255,255,255,.7);font-weight:600">—</span>
+    <span id="side-role">—</span>
+    <button id="auth-logout-btn" class="btn-link" style="margin-top:8px;font-size:11px;color:rgba(255,255,255,.3)">Выйти</button>
+  </div>
+</nav>
 
-    <button class="side-nav-toggle" id="side-nav-toggle" type="button" aria-label="Свернуть меню">
-      <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
-    </button>
-
-    <div class="side-nav-group">
-      <a class="side-nav-link active" href="#" data-nav-target="cabinet" title="Кабинет">
-        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        <span>Кабинет</span>
-      </a>
-      <a class="side-nav-link" href="#" data-nav-target="rating" title="Рейтинг">
-        <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
-        <span>Рейтинг</span>
-      </a>
-      <a class="side-nav-link" href="#" data-nav-target="shop" title="Магазин">
-        <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-        <span>Магазин</span>
-      </a>
-      <a class="side-nav-link" href="#" data-nav-target="admin" title="Операторы">
-        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span>Операторы</span>
-      </a>
-      <a class="side-nav-link" href="#" data-nav-target="requests" title="Заявки">
-        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        <span>Заявки</span>
-      </a>
+<!-- ══ MAIN ═══════════════════════════════════════════════════ -->
+<main class="container">
+  <div id="app-shell">
+    <div class="loading-state">
+      <div class="loading-spinner"></div>
+      <p>Загрузка Puls…</p>
     </div>
+  </div>
+</main>
 
-    <div class="side-nav-separator"></div>
+<!-- ══ THEME TOGGLE ═══════════════════════════════════════════ -->
+<button class="theme-toggle" id="theme-toggle" type="button" aria-label="Сменить тему">
+  <svg class="icon-moon" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>
+  </svg>
+  <svg class="icon-sun" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round">
+    <circle cx="12" cy="12" r="5"/>
+    <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+    <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+  </svg>
+</button>
 
-    <!-- Excel импорт (только для admins) -->
-    <div class="side-nav-group" id="excel-import-nav" style="display:none">
-      <div class="side-nav-section-label">Импорт данных</div>
-      <div class="excel-import-compact">
-        <div class="excel-period-grid">
-          <label class="excel-period-field">
-            <span>Начало</span>
-            <input type="date" id="excel-period-start">
-          </label>
-          <label class="excel-period-field">
-            <span>Конец</span>
-            <input type="date" id="excel-period-end">
-          </label>
-        </div>
-        <label class="excel-file-label" id="excel-report-label">
-          <input type="file" id="excel-report-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
-          <span id="excel-report-file-name">report.xlsx</span>
-          <span class="excel-file-btn">Обзор</span>
-        </label>
-        <label class="excel-file-label" id="excel-dates-label">
-          <input type="file" id="excel-dates-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
-          <span id="excel-dates-file-name">dates.xlsx</span>
-          <span class="excel-file-btn">Обзор</span>
-        </label>
-        <button class="btn-primary" style="width:100%" id="excel-import-btn">Применить</button>
-        <div class="import-status" id="import-status" hidden></div>
-      </div>
-    </div>
-
-    <div class="side-nav-meta">
-      <span id="side-user">—</span>
-      <span id="side-role">Загрузка…</span>
-      <button id="auth-logout-btn" class="btn-link" style="margin-top:6px;font-size:11px">Выйти</button>
-    </div>
-  </nav>
-
-  <!-- ══ MAIN CONTENT ══════════════════════════════════════════ -->
-  <main class="container">
-    <div id="app-shell">
-      <!-- Views рендерятся динамически через JS -->
-      <div class="loading-state">
-        <div class="loading-spinner"></div>
-        <p>Загрузка…</p>
-      </div>
-    </div>
-  </main>
-
-  <!-- ══ THEME TOGGLE ══════════════════════════════════════════ -->
-  <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему">
-    <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/></svg>
-    <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-  </button>
-
-  <!-- ══ SCRIPTS ═══════════════════════════════════════════════ -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="js/excel-import.js?v=tz-v1"></script>
-  <script src="js/app.js?v=tz-v1"></script>
-
-  <script>
-    // После загрузки показываем Excel-импорт для admin/supervisor
-    document.addEventListener('DOMContentLoaded', () => {
-      const btn = document.getElementById('theme-toggle');
-      if (btn) btn.addEventListener('click', () => {
-        const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-        document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
-        localStorage.setItem('icore-theme', dark ? 'light' : 'dark');
-      });
-    });
-  </script>
+<!-- ══ SCRIPTS ════════════════════════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="js/excel-import.js?v=puls-1"></script>
+<script src="js/app.js?v=puls-1"></script>
+<script>
+  document.getElementById('theme-toggle')?.addEventListener('click', () => {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+    localStorage.setItem('icore-theme', dark ? 'light' : 'dark');
+  });
+</script>
 </body>
 </html>
