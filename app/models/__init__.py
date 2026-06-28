@@ -1,4 +1,5 @@
 from app.models.entities import (
+    Group,
     AuditLog,
     CoinTransaction,
     Operator,
@@ -10,6 +11,7 @@ from app.models.entities import (
 
 __all__ = [
     "AuditLog",
+    "Group",
     "CoinTransaction",
     "Operator",
     "ShopItem",
