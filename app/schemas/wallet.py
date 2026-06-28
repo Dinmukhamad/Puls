@@ -9,7 +9,17 @@ from pydantic import BaseModel, Field
 class ManualTransactionCreate(BaseModel):
     operator_id: int
     amount: int
-    comment: str = Field(min_length=3)
+    comment: str = ""
+    reason: str = ""  # required, validated in router
+
+    def validate_business_rules(self) -> None:
+        """Backend validation per TZ."""
+        if not self.reason.strip():
+            raise ValueError("Причина операции обязательна")
+        if self.amount == 0:
+            raise ValueError("Количество коинов должно быть больше 0")
+        if self.reason.strip() == "Другое" and not self.comment.strip():
+            raise ValueError('Комментарий обязателен при выборе причины "Другое"')
 
 
 class CoinTransactionRead(BaseModel):
