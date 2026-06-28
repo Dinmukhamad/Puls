@@ -646,15 +646,49 @@ function renderAdminOperators() {
   const ops = STATE.adminOperators;
   let searchVal = '';
   let filterGroup = '';
+  let showDismissed = false;
 
   const groups = [...new Set(ops.map(o => o.group_name))].sort();
 
   function filteredOps() {
     return ops.filter(o => {
+      const employmentStatus = o.employment_status || (o.status === 'dismissed' ? 'dismissed' : 'active');
       const matchSearch = !searchVal || o.full_name.toLowerCase().includes(searchVal.toLowerCase());
       const matchGroup = !filterGroup || o.group_name === filterGroup;
-      return matchSearch && matchGroup;
+      const matchDismissed = showDismissed || employmentStatus !== 'dismissed';
+      return matchSearch && matchGroup && matchDismissed;
     });
+  }
+
+  function operatorActions(o) {
+    const dismissed = isOperatorDismissed(o);
+    const canManage = canManageOperators();
+    const canCharge = !dismissed && o.participation_status === 'participating' && o.is_active;
+    const chargeBtn = canCharge
+      ? `<button class="btn-icon btn-ghost quick-charge-btn" data-id="${o.id}" title="Начислить коины" aria-label="Начислить коины">₡</button>`
+      : '';
+    const historyBtn = `<button class="btn-icon btn-ghost" onclick="showOperatorHistoryModal(${o.id})" title="История" aria-label="История">≡</button>`;
+
+    if (!canManage) return `<div class="row-actions">${historyBtn}${chargeBtn}</div>`;
+
+    if (dismissed) {
+      return `
+        <div class="row-actions">
+          ${historyBtn}
+          <button class="btn-icon btn-ghost" onclick="showRestoreOperatorModal(${o.id})" title="Восстановить" aria-label="Восстановить">↺</button>
+          <button class="btn-icon btn-ghost danger" onclick="confirmDeleteOperator(${o.id})" title="Удалить" aria-label="Удалить">×</button>
+        </div>`;
+    }
+
+    return `
+      <div class="row-actions">
+        <button class="btn-icon btn-ghost" onclick="showEditOperatorModal(${o.id})" title="Редактировать" aria-label="Редактировать">✎</button>
+        <button class="btn-icon btn-ghost" onclick="resetOperatorPassword(${o.id})" title="Сбросить пароль" aria-label="Сбросить пароль">↻</button>
+        <button class="btn-icon btn-ghost danger" onclick="confirmDismissOperator(${o.id})" title="Уволить" aria-label="Уволить">!</button>
+        <button class="btn-icon btn-ghost danger" onclick="confirmDeleteOperator(${o.id})" title="Удалить" aria-label="Удалить">×</button>
+        ${historyBtn}
+        ${chargeBtn}
+      </div>`;
   }
 
   function renderTable() {
@@ -663,30 +697,30 @@ function renderAdminOperators() {
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>#</th><th>ФИО</th><th>Группа</th>
-            <th>Баллы</th><th>Коины (нед.)</th><th>Баланс</th>
-            <th style="color:var(--danger)">Опозд.</th>
-            <th style="color:var(--danger)">Наруш.</th>
-            <th>Дин.</th><th></th>
+            <th>ФИО</th>
+            <th>Группа</th>
+            <th>Должность</th>
+            <th>Статус</th>
+            <th>Email</th>
+            <th>Баланс</th>
+            <th>Действия</th>
           </tr></thead>
           <tbody>
             ${list.length ? list.map(o => {
-              const d = o.rank_delta;
-              return `<tr>
-                <td class="rank-cell"><span class="rank-badge ${o.rank_position<=3?'rank-top':''}">${o.rank_position||'—'}</span></td>
-                <td class="name-cell">${esc(o.full_name)}</td>
-                <td>${esc(o.group_name)}</td>
-                <td>${o.final_score?.toFixed(1)||'—'}</td>
-                <td><b class="accent-text">${o.coins_earned_week} ₡</b></td>
-                <td><b>${o.current_balance} ₡</b></td>
-                <td style="color:${o.lateness_count>0?'var(--danger)':'var(--tx2)'}">${o.lateness_count}</td>
-                <td style="color:${o.violation_count>0?'var(--danger)':'var(--tx2)'}">${o.violation_count}</td>
-                <td>${d!=null?`<span class="rank-delta ${d>0?'up':d<0?'down':''}">${d>0?'↑'+d:d<0?'↓'+Math.abs(d):'—'}</span>`:'—'}</td>
-                <td>
-                  <button class="btn-link quick-charge-btn" data-id="${o.id}" data-name="${esc(o.full_name)}">+ Коины</button>
+              const dismissed = isOperatorDismissed(o);
+              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}">
+                <td class="name-cell">
+                  ${esc(o.full_name)}
+                  ${o.username ? `<div class="cell-muted">${esc(o.username)}</div>` : ''}
                 </td>
+                <td>${esc(o.group_name)}</td>
+                <td>${positionLabel(o.position || 'operator')}</td>
+                <td>${operatorStatusBadge(o)}</td>
+                <td>${o.email ? esc(o.email) : '<span class="cell-muted">—</span>'}</td>
+                <td><b>${o.current_balance} ₡</b></td>
+                <td>${operatorActions(o)}</td>
               </tr>`;
-            }).join('') : '<tr><td colspan="10" class="empty-line">Нет операторов</td></tr>'}
+            }).join('') : '<tr><td colspan="7" class="empty-line">Нет операторов</td></tr>'}
           </tbody>
         </table>
       </div>`;
@@ -698,7 +732,7 @@ function renderAdminOperators() {
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="exportCSV()">Экспорт CSV</button>
         <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
-        ${canManageOperators() ? '<button class="btn-primary btn-sm" onclick="showAddOperatorModal()">Плюс оператор</button>' : ''}
+        ${canManageOperators() ? '<button class="btn-icon btn-primary operator-add-btn" onclick="showAddOperatorModal()" title="Добавить оператора" aria-label="Добавить оператора">+</button>' : ''}
       </div>
     </div>
 
@@ -709,8 +743,12 @@ function renderAdminOperators() {
         <option value="">Все группы</option>
         ${groups.map(g => `<option value="${esc(g)}" ${filterGroup===g?'selected':''}>${esc(g)}</option>`).join('')}
       </select>
+      <label class="inline-check">
+        <input id="ops-show-dismissed" type="checkbox">
+        <span>Показывать уволенных</span>
+      </label>
       <span style="margin-left:auto;color:var(--tx3);font-size:12px;align-self:center">
-        Показано: <b>${filteredOps().length}</b> из ${ops.length}
+        Показано: <b class="ops-count">${filteredOps().length}</b> из ${ops.length}
       </span>
     </div>
 
@@ -721,18 +759,35 @@ function renderAdminOperators() {
     searchVal = e.target.value;
     el.querySelector('#ops-table-wrap').innerHTML = renderTable();
     bindOpsActions();
+    el.querySelector('.ops-count').textContent = filteredOps().length;
   });
   el.querySelector('#ops-group')?.addEventListener('change', e => {
     filterGroup = e.target.value;
     el.querySelector('#ops-table-wrap').innerHTML = renderTable();
     bindOpsActions();
+    el.querySelector('.ops-count').textContent = filteredOps().length;
+  });
+  el.querySelector('#ops-show-dismissed')?.addEventListener('change', e => {
+    showDismissed = e.target.checked;
+    el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+    bindOpsActions();
+    const counter = el.querySelector('.ops-count');
+    if (counter) counter.textContent = filteredOps().length;
   });
 
   function bindOpsActions() {
     el.querySelectorAll('.quick-charge-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        document.getElementById('manual-op-select').value = btn.dataset.id;
         navigateTo('manual');
+        const op = STATE.adminOperators.find(item => String(item.id) === String(btn.dataset.id));
+        const hidden = document.getElementById('manual-op-id');
+        const display = document.getElementById('op-selected-display');
+        const name = document.getElementById('op-selected-name');
+        if (op && hidden && display && name) {
+          hidden.value = op.id;
+          name.textContent = op.full_name;
+          display.classList.add('visible');
+        }
       });
     });
   }
@@ -761,7 +816,9 @@ function renderManual() {
 
   // Только активные операторы для начисления
   const ops = STATE.adminOperators.filter(o =>
-    (o.participation_status ? o.participation_status === 'participating' : o.status === 'active') && o.is_active
+    (o.participation_status ? o.participation_status === 'participating' : o.status === 'active') &&
+    (o.employment_status || 'active') === 'active' &&
+    o.is_active
   );
 
   const lastManual = STATE.history
@@ -1258,6 +1315,7 @@ async function renderGroups() {
                   <button class="btn-outline btn-sm" onclick="toggleGroupStatus(${g.id}, '${g.status === 'active' ? 'inactive' : 'active'}')">
                     ${g.status === 'active' ? 'Отключить' : 'Включить'}
                   </button>
+                  <button class="btn-outline btn-sm danger-text" onclick="confirmDeleteGroup(${g.id})">Удалить</button>
                 </td>
               </tr>`).join('') : '<tr><td colspan="4" class="empty-line">Группы не созданы</td></tr>'}
           </tbody>
@@ -1350,12 +1408,314 @@ async function submitEditGroup(id) {
 }
 
 async function toggleGroupStatus(id, nextStatus) {
+  if (nextStatus === 'inactive') {
+    showModal(`
+      <h3 class="modal-title">Отключить группу?</h3>
+      <p style="color:var(--tx2);line-height:1.6">
+        Новые операторы не смогут быть добавлены в эту группу, но текущие данные сохранятся.
+      </p>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn-outline" onclick="closeModal()">Отмена</button>
+        <button class="btn-danger" onclick="applyGroupStatus(${id}, 'inactive')">Отключить</button>
+      </div>`);
+    return;
+  }
+  await applyGroupStatus(id, nextStatus);
+}
+
+async function applyGroupStatus(id, nextStatus) {
   try {
-    await api.updateGroup(id, { status: nextStatus });
+    if (nextStatus === 'active') {
+      await api.enableGroup(id);
+    } else {
+      await api.disableGroup(id);
+    }
+    closeModal();
     showToast(nextStatus === 'active' ? 'Группа включена' : 'Группа отключена', 'ok');
     await renderGroups();
   } catch(e) {
     showToast(e.message, 'error');
+  }
+}
+
+function confirmDeleteGroup(id) {
+  const group = STATE.groups.find(g => g.id === id);
+  if (!group) return showToast('Группа не найдена', 'error');
+  showModal(`
+    <h3 class="modal-title">Удалить группу?</h3>
+    <p style="color:var(--tx2);line-height:1.6">
+      Группу можно удалить только если в ней нет операторов и исторических данных.
+      Это действие нельзя отменить.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn-outline" onclick="closeModal()">Отмена</button>
+      <button class="btn-danger" onclick="deleteGroup(${id})">Удалить</button>
+    </div>`);
+}
+
+async function deleteGroup(id) {
+  try {
+    await api.deleteGroup(id);
+    closeModal();
+    showToast('Группа удалена', 'ok');
+    await renderGroups();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+async function ensureGroupsLoaded() {
+  if (!STATE.groups.length) {
+    STATE.groups = await api.listGroups(false);
+  }
+  return STATE.groups;
+}
+
+function groupOptionsForOperator(groups, selectedId) {
+  return groups
+    .filter(g => g.status === 'active' || g.id === selectedId)
+    .map(g => `
+      <option value="${g.id}" ${g.id === selectedId ? 'selected' : ''}>
+        ${esc(g.name)}${g.status !== 'active' ? ' (отключена)' : ''}
+      </option>`)
+    .join('');
+}
+
+async function showEditOperatorModal(id) {
+  if (!canManageOperators()) return showToast('Недостаточно прав', 'error');
+  showModal('<div class="loading-state" style="min-height:180px"><div class="loading-spinner"></div><p>Загрузка оператора…</p></div>');
+  try {
+    const [op, groups] = await Promise.all([api.getOperator(id), ensureGroupsLoaded()]);
+    const groupOptions = groupOptionsForOperator(groups, op.group_id);
+    showModal(`
+      <h3 class="modal-title">Редактировать оператора</h3>
+      <div style="display:grid;gap:12px">
+        <div class="form-group">
+          <label class="form-label">ФИО <span style="color:var(--danger)">*</span></label>
+          <input id="edit-op-name" class="form-input" value="${esc(op.full_name)}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Группа <span style="color:var(--danger)">*</span></label>
+          <select id="edit-op-group-id" class="form-select">${groupOptions}</select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Статус участия <span style="color:var(--danger)">*</span></label>
+          <select id="edit-op-participation" class="form-select" ${isOperatorDismissed(op) ? 'disabled' : ''}>
+            <option value="participating" ${op.participation_status === 'participating' ? 'selected' : ''}>Участвует</option>
+            <option value="not_participating" ${op.participation_status !== 'participating' ? 'selected' : ''}>Не участвует</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Должность <span style="color:var(--danger)">*</span></label>
+          <select id="edit-op-position" class="form-select">
+            <option value="operator" ${(op.position || 'operator') === 'operator' ? 'selected' : ''}>Оператор</option>
+            <option value="chat_manager" ${op.position === 'chat_manager' ? 'selected' : ''}>Чат-менеджер</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input id="edit-op-email" class="form-input" type="email" value="${esc(op.email || '')}" placeholder="operator@company.com">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Логин <span style="color:var(--danger)">*</span></label>
+          <input id="edit-op-username" class="form-input" value="${esc(op.username || '')}">
+        </div>
+      </div>
+      <div id="edit-op-err" class="status-line"></div>
+      <button class="btn-primary" style="width:100%" onclick="submitEditOperator(${id})">Сохранить</button>
+    `);
+  } catch(e) {
+    showModal(`
+      <h3 class="modal-title">Не удалось открыть оператора</h3>
+      <div class="status-line status-error">${esc(e.message)}</div>
+      <button class="btn-outline" onclick="closeModal()">Закрыть</button>`);
+  }
+}
+
+async function submitEditOperator(id) {
+  const err = document.getElementById('edit-op-err');
+  const setErr = msg => { err.textContent = msg; err.className = 'status-line status-error'; };
+  const fullName = document.getElementById('edit-op-name')?.value?.trim();
+  const groupId = document.getElementById('edit-op-group-id')?.value;
+  const participationStatus = document.getElementById('edit-op-participation')?.value || 'not_participating';
+  const position = document.getElementById('edit-op-position')?.value || 'operator';
+  const email = document.getElementById('edit-op-email')?.value?.trim() || null;
+  const username = document.getElementById('edit-op-username')?.value?.trim();
+
+  if (!fullName || fullName.length < 2) return setErr('ФИО обязательно');
+  if (!groupId) return setErr('Выберите группу');
+  if (!username) return setErr('Логин обязателен');
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return setErr('Введите корректный email');
+
+  try {
+    await api.updateOperator(id, {
+      full_name: fullName,
+      group_id: +groupId,
+      participation_status: participationStatus,
+      position,
+      email,
+      username,
+    });
+    closeModal();
+    showToast('Оператор обновлён', 'ok');
+    await reloadData();
+  } catch(e) {
+    setErr(e.message);
+  }
+}
+
+function resetOperatorPassword(id) {
+  const op = STATE.adminOperators.find(o => o.id === id);
+  showModal(`
+    <h3 class="modal-title">Сбросить пароль?</h3>
+    <p style="color:var(--tx2);line-height:1.6">
+      Будет создан новый временный пароль для ${esc(op?.full_name || 'оператора')}.
+      Пароль будет показан только один раз.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn-outline" onclick="closeModal()">Отмена</button>
+      <button class="btn-primary" onclick="performResetOperatorPassword(${id})">Сбросить пароль</button>
+    </div>`);
+}
+
+async function performResetOperatorPassword(id) {
+  try {
+    const result = await api.resetOperatorPassword(id);
+    const text = `Оператор: ${result.full_name}\nВременный пароль: ${result.new_password}`;
+    showModal(`
+      <h3 class="modal-title" style="color:var(--ok)">Пароль сброшен</h3>
+      <div class="credential-box">
+        <div>Оператор: <b>${esc(result.full_name)}</b></div>
+        <div>Временный пароль: <code>${esc(result.new_password)}</code></div>
+      </div>
+      <button id="copy-reset-password" class="btn-outline" style="width:100%">Скопировать пароль</button>
+      <button class="btn-primary" style="width:100%" onclick="closeModal()">Готово</button>`);
+    document.getElementById('copy-reset-password')?.addEventListener('click', () => {
+      navigator.clipboard.writeText(text).then(() => showToast('Скопировано!', 'ok'));
+    });
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function confirmDismissOperator(id) {
+  const op = STATE.adminOperators.find(o => o.id === id);
+  showModal(`
+    <h3 class="modal-title">Уволить оператора?</h3>
+    <p style="color:var(--tx2);line-height:1.6">
+      После увольнения оператор не сможет входить на сайт и участвовать в рейтинге.
+      История начислений, заявок и операций сохранится.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn-outline" onclick="closeModal()">Отмена</button>
+      <button class="btn-danger" onclick="dismissOperator(${id})">Уволить</button>
+    </div>`);
+}
+
+async function dismissOperator(id) {
+  try {
+    await api.dismissOperator(id);
+    closeModal();
+    showToast('Оператор уволен', 'ok');
+    await reloadData();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function showRestoreOperatorModal(id) {
+  const op = STATE.adminOperators.find(o => o.id === id);
+  showModal(`
+    <h3 class="modal-title">Восстановить оператора</h3>
+    <p style="color:var(--tx2);line-height:1.6">
+      ${esc(op?.full_name || 'Оператор')} снова сможет входить на сайт.
+    </p>
+    <div class="form-group">
+      <label class="form-label">Статус участия</label>
+      <select id="restore-op-participation" class="form-select">
+        <option value="participating">Участвует</option>
+        <option value="not_participating">Не участвует</option>
+      </select>
+    </div>
+    <div id="restore-op-err" class="status-line"></div>
+    <button class="btn-primary" style="width:100%" onclick="submitRestoreOperator(${id})">Восстановить</button>`);
+}
+
+async function submitRestoreOperator(id) {
+  const participationStatus = document.getElementById('restore-op-participation')?.value || 'participating';
+  try {
+    await api.restoreOperator(id, { participation_status: participationStatus });
+    closeModal();
+    showToast('Оператор восстановлен', 'ok');
+    await reloadData();
+  } catch(e) {
+    const err = document.getElementById('restore-op-err');
+    if (err) { err.textContent = e.message; err.className = 'status-line status-error'; }
+  }
+}
+
+function confirmDeleteOperator(id) {
+  const op = STATE.adminOperators.find(o => o.id === id);
+  showModal(`
+    <h3 class="modal-title">Удалить оператора?</h3>
+    <p style="color:var(--tx2);line-height:1.6">
+      Это действие нельзя отменить. Удаление разрешено только для ошибочно созданных операторов без истории.
+      Если история уже есть, система предложит использовать увольнение.
+    </p>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn-outline" onclick="closeModal()">Отмена</button>
+      <button class="btn-danger" onclick="deleteOperator(${id})">Удалить</button>
+    </div>`);
+}
+
+async function deleteOperator(id) {
+  try {
+    await api.deleteOperator(id);
+    closeModal();
+    showToast('Оператор удалён', 'ok');
+    await reloadData();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+async function showOperatorHistoryModal(id) {
+  showModal('<div class="loading-state" style="min-height:180px"><div class="loading-spinner"></div><p>Загрузка истории…</p></div>');
+  try {
+    const data = await api.operatorHistory(id);
+    const op = data.operator || {};
+    const audit = data.audit_logs || [];
+    const transactions = data.transactions || [];
+    const purchases = data.purchases || [];
+    const weekly = data.weekly_results || [];
+    showModal(`
+      <h3 class="modal-title">История оператора</h3>
+      <div class="credential-box">
+        <div><b>${esc(op.full_name || '')}</b></div>
+        <div>${esc(op.group_name || '')} · ${operatorStatusBadge(op)}</div>
+      </div>
+      <div class="history-block">
+        <h4>Журнал действий</h4>
+        ${audit.length ? audit.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${esc(row.action)}</b><small>${esc(row.details || '')}</small></div>`).join('') : '<div class="empty-line">Нет записей</div>'}
+      </div>
+      <div class="history-block">
+        <h4>Коины</h4>
+        ${transactions.length ? transactions.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${row.amount > 0 ? '+' : ''}${row.amount} ₡</b><small>${esc(row.comment || row.type)}</small></div>`).join('') : '<div class="empty-line">Нет операций</div>'}
+      </div>
+      <div class="history-block">
+        <h4>Заявки</h4>
+        ${purchases.length ? purchases.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${statusLabel(row.status)}</b><small>${row.price} ₡</small></div>`).join('') : '<div class="empty-line">Нет заявок</div>'}
+      </div>
+      <div class="history-block">
+        <h4>Рейтинг</h4>
+        ${weekly.length ? weekly.map(row => `<div class="history-line"><span>${fmtDate(row.week_start)}–${fmtDate(row.week_end)}</span><b>${row.final_score || 0}</b><small>место: ${row.rank_position || '—'}, коины: ${row.coins_earned || 0}</small></div>`).join('') : '<div class="empty-line">Нет результатов</div>'}
+      </div>
+      <button class="btn-outline" onclick="closeModal()">Закрыть</button>`);
+  } catch(e) {
+    showModal(`
+      <h3 class="modal-title">Не удалось загрузить историю</h3>
+      <div class="status-line status-error">${esc(e.message)}</div>
+      <button class="btn-outline" onclick="closeModal()">Закрыть</button>`);
   }
 }
 
@@ -1521,6 +1881,18 @@ function participationStatusLabel(s) {
   return { participating: 'Участвует', not_participating: 'Не участвует' }[s] || s || '';
 }
 
+function isOperatorDismissed(o) {
+  return (o?.employment_status || (o?.status === 'dismissed' ? 'dismissed' : 'active')) === 'dismissed';
+}
+
+function operatorStatusBadge(o) {
+  if (isOperatorDismissed(o)) {
+    return '<span class="status-badge status-archive">Уволен</span>';
+  }
+  const participates = (o?.participation_status || 'participating') === 'participating';
+  return `<span class="status-badge ${participates ? 'status-active' : 'status-inactive'}">${participationStatusLabel(o?.participation_status || 'participating')}</span>`;
+}
+
 function positionLabel(s) {
   return { operator: 'Оператор', chat_manager: 'Чат-менеджер' }[s] || s || '';
 }
@@ -1586,10 +1958,17 @@ async function submitEditItem(id) {
 ══════════════════════════════════════ */
 function exportCSV() {
   const ops = STATE.adminOperators;
-  const header = ['ФИО','Группа','Место','Баллы','Коины нед.','Баланс','Опозд.','Наруш.'];
+  const header = ['ФИО','Группа','Должность','Статус участия','Статус работы','Email','Логин','Баланс','Коины нед.'];
   const rows = ops.map(o => [
-    o.full_name, o.group_name, o.rank_position||'', o.final_score?.toFixed(1)||'',
-    o.coins_earned_week, o.current_balance, o.lateness_count, o.violation_count,
+    o.full_name,
+    o.group_name,
+    positionLabel(o.position || 'operator'),
+    participationStatusLabel(o.participation_status || 'participating'),
+    isOperatorDismissed(o) ? 'Уволен' : 'Активен',
+    o.email || '',
+    o.username || '',
+    o.current_balance,
+    o.coins_earned_week,
   ]);
   downloadCSV([header, ...rows], 'puls_operators');
 }
@@ -1675,6 +2054,20 @@ window.submitAddGroup = submitAddGroup;
 window.showEditGroupModal = showEditGroupModal;
 window.submitEditGroup = submitEditGroup;
 window.toggleGroupStatus = toggleGroupStatus;
+window.applyGroupStatus = applyGroupStatus;
+window.confirmDeleteGroup = confirmDeleteGroup;
+window.deleteGroup = deleteGroup;
+window.showEditOperatorModal = showEditOperatorModal;
+window.submitEditOperator = submitEditOperator;
+window.resetOperatorPassword = resetOperatorPassword;
+window.performResetOperatorPassword = performResetOperatorPassword;
+window.confirmDismissOperator = confirmDismissOperator;
+window.dismissOperator = dismissOperator;
+window.showRestoreOperatorModal = showRestoreOperatorModal;
+window.submitRestoreOperator = submitRestoreOperator;
+window.confirmDeleteOperator = confirmDeleteOperator;
+window.deleteOperator = deleteOperator;
+window.showOperatorHistoryModal = showOperatorHistoryModal;
 window.showChangePasswordModal = showChangePasswordModal;
 window.showChangeUsernameModal = showChangeUsernameModal;
 window.submitChangePassword = submitChangePassword;
