@@ -235,8 +235,8 @@ function renderSidebar(role) {
     link.style.display = show ? '' : 'none';
   });
   if (isAdmin(role)) {
-    const nav = document.getElementById('excel-import-nav');
-    if (nav) nav.style.display = '';
+    // excel-import-nav hidden — const nav = document.getElementById('excel-import-nav');
+    // if (nav) nav.style.display = '';
   }
 }
 
