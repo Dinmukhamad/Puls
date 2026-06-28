@@ -161,8 +161,14 @@ async function bootApp() {
   // Загружаем данные параллельно
   await loadAllData(role);
 
+  // Excel импорт — только для admin/supervisor/manager
+  if (isAdmin(role)) {
+    const excelNav = document.getElementById('excel-import-nav');
+    if (excelNav) excelNav.style.display = '';
+  }
+
   // Стартовый экран
-  const startView = role === 'operator' ? 'cabinet' : 'admin';
+  const startView = role === 'operator' ? 'cabinet' : 'cabinet';
   navigateTo(startView);
 
   // Мета в сайдбаре
@@ -330,8 +336,9 @@ function renderCabinet() {
    ADMIN DASHBOARD (для супервайзера/руководителя в «кабинете»)
 ══════════════════════════════════════════════════════════ */
 function renderAdminDashboard() {
-  const d = STATE.dashboard;
-  if (!d) return `<div class="empty-state"><p>Загрузка данных…</p></div>`;
+  // Если FastAPI dashboard недоступен — строим из данных server.js
+  const d = STATE.dashboard || buildDashboardFromState();
+  if (!d) return `<div class="empty-state"><p>Нет данных. Попробуйте обновить страницу.</p></div>`;
 
   const pending = d.pending_purchases_count || 0;
 
@@ -418,6 +425,51 @@ function renderAdminDashboard() {
 }
 
 function bindDashboardEvents(el) {} // placeholder
+/* Строим дашборд из данных server.js когда FastAPI /api/dashboard недоступен */
+function buildDashboardFromState() {
+  const ops = STATE.operators || [];
+  const rating = STATE.rating || [];
+  const purchases = STATE.purchases || [];
+  if (!ops.length && !rating.length) return null;
+
+  const pending = purchases.filter(p => p.status === 'pending').length;
+  const coinsThisWeek = rating.reduce((s, r) => s + (r.coins_earned || 0), 0);
+
+  // Топ-3 из рейтинга
+  const top3 = rating.slice(0, 3).map(r => {
+    const op = ops.find(o => o.id === r.operator_id) || {};
+    return {
+      full_name: r.operator_name || op.full_name || '—',
+      group_name: r.group_name || op.group_name || '—',
+      coins_earned: r.coins_earned || 0,
+      current_balance: op.current_balance || 0,
+    };
+  });
+
+  // Группы
+  const groupMap = {};
+  ops.forEach(o => {
+    if (!groupMap[o.group_name]) groupMap[o.group_name] = { group_name: o.group_name, operators_count: 0, total_balance: 0, average_score: 0, scores: [] };
+    groupMap[o.group_name].operators_count++;
+    groupMap[o.group_name].total_balance += o.current_balance || 0;
+  });
+  rating.forEach(r => {
+    if (groupMap[r.group_name]) groupMap[r.group_name].scores.push(r.contest_points || 0);
+  });
+  const group_summary = Object.values(groupMap).map(g => ({
+    ...g,
+    average_score: g.scores.length ? g.scores.reduce((a,b)=>a+b,0)/g.scores.length : 0,
+  }));
+
+  return {
+    total_operators: ops.length,
+    coins_earned_this_week: coinsThisWeek,
+    pending_purchases_count: pending,
+    top_3_operators: top3,
+    latest_coin_transactions: [],
+    group_summary,
+  };
+}
 
 /* ══════════════════════════════════════════════════════════
    VIEW: РЕЙТИНГ
