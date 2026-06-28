@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import create_access_token, get_current_user, hash_password, require_roles, verify_password
 from app.database.db import get_db
-from app.models.entities import Operator, OperatorAuditLog, User
+from app.models.entities import Operator, AuditLog, User
 from app.schemas.auth import AccountCredentialsUpdate, LoginRequest, TokenResponse, UserCreate, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -67,7 +67,7 @@ def update_my_credentials(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Текущий пароль указан неверно.")
         current_user.password_hash = hash_password(payload.new_password or "")
         if current_user.operator_id:
-            db.add(OperatorAuditLog(
+            db.add(AuditLog(
                 operator_id=current_user.operator_id,
                 action="password_changed",
                 comment="Оператор изменил пароль",
@@ -78,7 +78,7 @@ def update_my_credentials(
         old_username = current_user.username
         current_user.username = username
         if current_user.operator_id:
-            db.add(OperatorAuditLog(
+            db.add(AuditLog(
                 operator_id=current_user.operator_id,
                 action="username_changed",
                 comment=f"Логин изменен: {old_username} -> {username}",
