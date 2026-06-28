@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_name: str = "Pulse — платформа геймификации операторов"
+    app_env: str = "development"  # set to 'production' in Railway
     api_prefix: str = "/api"
 
     # PostgreSQL — обязателен на проде, SQLite для локалки
