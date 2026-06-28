@@ -280,24 +280,12 @@ function ensureOperatorAuthOverlay() {
         </div>
         <div class="operator-auth-form" id="operator-register-form" hidden>
           <label class="operator-auth-field">
-            <span>ФИО оператора</span>
-            <input id="operator-register-name" type="text" autocomplete="name" placeholder="Например: Алибек Аружан">
-          </label>
-          <label class="operator-auth-field">
-            <span>Группа</span>
-            <select id="operator-register-faculty"></select>
-          </label>
-          <label class="operator-auth-field">
             <span>Логин</span>
             <input id="operator-register-login" type="text" autocomplete="username" placeholder="Например: alibek">
           </label>
           <label class="operator-auth-field">
             <span>Пароль</span>
             <input id="operator-register-password" type="password" autocomplete="new-password" placeholder="Минимум 6 символов">
-          </label>
-          <label class="operator-auth-field">
-            <span>Повторите пароль</span>
-            <input id="operator-register-password-confirm" type="password" autocomplete="new-password" placeholder="Ещё раз пароль">
           </label>
           <button class="operator-auth-submit" id="operator-register-submit" type="button" onclick="registerOperator()">Создать аккаунт</button>
         </div>
@@ -318,16 +306,7 @@ function ensureOperatorAuthOverlay() {
       if (event.key === 'Enter') registerOperator();
     });
   });
-  updateOperatorRegistrationOptions();
   return overlay;
-}
-
-function updateOperatorRegistrationOptions() {
-  const select = document.getElementById('operator-register-faculty');
-  if (!select) return;
-  select.innerHTML = FACULTIES.map((faculty, index) => `
-    <option value="${escapeHtml(faculty.id || `group-${index + 1}`)}">${escapeHtml(faculty.name || `Группа ${index + 1}`)}</option>
-  `).join('');
 }
 
 function setOperatorAuthMode(mode) {
@@ -342,7 +321,7 @@ function setOperatorAuthMode(mode) {
 
   if (title) title.textContent = registerMode ? 'Регистрация оператора' : 'Вход в систему';
   if (copy) copy.textContent = registerMode
-    ? 'Создайте операторский аккаунт. После регистрации вы сразу попадёте в личный кабинет.'
+    ? 'Введите только логин и пароль. Система сама создаст новый пустой аккаунт оператора.'
     : 'Введите логин и пароль. Если аккаунта ещё нет, зарегистрируйтесь как оператор.';
   if (loginForm) loginForm.hidden = registerMode;
   if (registerForm) registerForm.hidden = !registerMode;
@@ -351,9 +330,8 @@ function setOperatorAuthMode(mode) {
   loginTab?.setAttribute('aria-selected', String(!registerMode));
   registerTab?.setAttribute('aria-selected', String(registerMode));
   if (error) error.textContent = '';
-  updateOperatorRegistrationOptions();
   setTimeout(() => {
-    document.getElementById(registerMode ? 'operator-register-name' : 'operator-login-input')?.focus();
+    document.getElementById(registerMode ? 'operator-register-login' : 'operator-login-input')?.focus();
   }, 0);
 }
 
@@ -374,12 +352,11 @@ function updateOperatorLoginOptions() {
 function showOperatorLogin() {
   const overlay = ensureOperatorAuthOverlay();
   updateOperatorLoginOptions();
-  updateOperatorRegistrationOptions();
   overlay.hidden = false;
   document.body.classList.add('operator-login-required');
   setTimeout(() => {
     const activeRegister = !document.getElementById('operator-register-form')?.hidden;
-    document.getElementById(activeRegister ? 'operator-register-name' : 'operator-login-input')?.focus();
+    document.getElementById(activeRegister ? 'operator-register-login' : 'operator-login-input')?.focus();
   }, 0);
 }
 
@@ -394,7 +371,6 @@ function updateOperatorAuthOverlay() {
   if (operatorSession && !getOperatorSessionRow(ranking)) clearOperatorSession();
   const overlay = ensureOperatorAuthOverlay();
   updateOperatorLoginOptions();
-  updateOperatorRegistrationOptions();
   const required = !currentUser;
   overlay.hidden = !required;
   document.body.classList.toggle('operator-login-required', required);
@@ -434,22 +410,16 @@ async function loginOperator() {
 }
 
 async function registerOperator() {
-  const nameInput = document.getElementById('operator-register-name');
-  const facultyInput = document.getElementById('operator-register-faculty');
   const loginInput = document.getElementById('operator-register-login');
   const passwordInput = document.getElementById('operator-register-password');
-  const confirmInput = document.getElementById('operator-register-password-confirm');
   const error = document.getElementById('operator-login-error');
   const button = document.getElementById('operator-register-submit');
-  const name = String(nameInput?.value || '').trim();
-  const facultyId = String(facultyInput?.value || '').trim();
   const login = String(loginInput?.value || '').trim();
   const password = String(passwordInput?.value || '');
-  const passwordConfirm = String(confirmInput?.value || '');
 
-  if (!name || !login || !password || !passwordConfirm) {
-    if (error) error.textContent = 'Заполните ФИО, логин и пароль';
-    (!name ? nameInput : !login ? loginInput : !password ? passwordInput : confirmInput)?.focus();
+  if (!login || !password) {
+    if (error) error.textContent = 'Введите логин и пароль';
+    (!login ? loginInput : passwordInput)?.focus();
     return;
   }
   if (password.length < 6) {
@@ -457,17 +427,12 @@ async function registerOperator() {
     passwordInput?.focus();
     return;
   }
-  if (password !== passwordConfirm) {
-    if (error) error.textContent = 'Пароли не совпадают';
-    confirmInput?.focus();
-    return;
-  }
 
   if (button) { button.disabled = true; button.textContent = 'Создание...'; }
   if (error) error.textContent = '';
 
   try {
-    const result = await api.registerOperator({ name, login, password, facultyId });
+    const result = await api.registerOperator({ login, password });
     if (result.state) applyEditableState(result.state);
     applyAuthSession(result);
     if (!getOperatorSessionRow()) {
