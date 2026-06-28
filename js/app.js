@@ -33,24 +33,39 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function tryRestoreSession() {
+  const token = api.getToken();
+  console.log('[puls] tryRestoreSession, token:', token ? token.slice(0,20)+'...' : 'EMPTY');
+  
+  if (!token) {
+    console.log('[puls] No token → showAuth');
+    showAuth();
+    return;
+  }
+
   try {
+    console.log('[puls] Calling api.me()...');
     const u = await api.me();
+    console.log('[puls] api.me() OK:', u);
     STATE.user = normalizeUser(u);
     await bootApp();
   } catch(err) {
-    // 401 = токен невалиден → выход
-    // Остальные ошибки (сеть, 500) → не выкидываем, показываем retry
-    const msg = err?.message || '';
-    const is401 = msg.includes('401') || msg.includes('авторизаци') || msg.includes('токен') || msg.toLowerCase().includes('unauthorized');
-    if (is401) {
+    console.error('[puls] api.me() FAILED:', err.message);
+    // Только 401/403 → выход. Всё остальное → показать кнопку повтора
+    const msg = String(err?.message || '').toLowerCase();
+    const isAuthError = msg.includes('401') || msg.includes('403') ||
+      msg.includes('unauthorized') || msg.includes('авторизац') ||
+      msg.includes('токен') || msg.includes('forbidden');
+    
+    console.log('[puls] isAuthError:', isAuthError);
+    
+    if (isAuthError) {
       api.logout();
       showAuth();
     } else {
-      // Сеть недоступна — показываем кнопку повтора
       const shell = document.getElementById('app-shell');
       if (shell) shell.innerHTML = `
         <div class="loading-state" style="gap:20px">
-          <p style="color:var(--danger)">Ошибка соединения с сервером</p>
+          <p style="color:var(--danger)">Ошибка: ${err.message}</p>
           <button class="btn-primary" onclick="tryRestoreSession()">Повторить</button>
         </div>`;
     }
