@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-app = FastAPI(title="Puls — Operator Performance Platform")
+app = FastAPI(title="Pulse — Operator Performance Platform")
 
 app.add_middleware(
     CORSMiddleware,
