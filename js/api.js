@@ -1,45 +1,43 @@
 /**
- * Puls — FastAPI client
- * FastAPI: POST /api/auth/login { username, password } → { access_token }
- *          GET  /api/auth/me → { id, username, full_name, role, operator_id }
+ * Pulse — API client v3
+ * Auth via HttpOnly cookie (pulse_access_token).
+ * Falls back to Bearer token during transition period.
+ * JWT is NOT stored in localStorage.
  */
 'use strict';
 
 const api = (() => {
-  // Читаем из нового ключа, фолбэк на старый icore_token
-  let _token = localStorage.getItem('puls_token') || localStorage.getItem('icore_token') || '';
-  if (_token) localStorage.setItem('puls_token', _token); // мигрируем если нужно
+  // Clean up legacy localStorage tokens
+  localStorage.removeItem('puls_token');
+  localStorage.removeItem('icore_token');
 
   function base() {
     return typeof API_BASE !== 'undefined' ? API_BASE : '';
   }
 
-  function setToken(t) {
-    _token = t || '';
-    if (_token) localStorage.setItem('puls_token', _token);
-    else localStorage.removeItem('puls_token');
+  function getToken() {
+    // No-op: token lives in HttpOnly cookie, not accessible via JS
+    return null;
   }
 
-  function getToken() { return _token; }
-
-  function authHeaders() {
-    const h = { 'Content-Type': 'application/json' };
-    if (_token) h['Authorization'] = `Bearer ${_token}`;
-    return h;
+  function headers() {
+    // credentials: 'include' handles cookie automatically
+    return { 'Content-Type': 'application/json' };
   }
 
   async function req(method, path, body) {
-    const opts = { method, headers: authHeaders() };
+    const opts = {
+      method,
+      headers: headers(),
+      credentials: 'include',  // Send HttpOnly cookie
+    };
     if (body !== undefined) opts.body = JSON.stringify(body);
     const res = await fetch(base() + path, opts);
     let data = {};
     try { data = await res.json(); } catch {}
     if (!res.ok) {
       const msg = data.detail || data.error || `Ошибка ${res.status}`;
-      const err = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
-      err.status = res.status;
-      err.data = data;
-      throw err;
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
     return data;
   }
@@ -47,28 +45,27 @@ const api = (() => {
   /* ── Auth ────────────────────────────────────────────────── */
   async function login(username, password) {
     if (!username || !password) throw new Error('Введите логин и пароль');
-    // FastAPI ожидает { username, password }
-    const data = await req('POST', '/api/auth/login', { username, password });
-    // FastAPI возвращает { access_token, token_type }
-    setToken(data.access_token);
-    return data;
+    // Backend sets HttpOnly cookie on success
+    return req('POST', '/api/auth/login', { username, password });
   }
 
   async function me() {
-    // FastAPI возвращает { id, username, full_name, role, operator_id, is_active }
     return req('GET', '/api/auth/me');
   }
 
-  function logout() { setToken(''); }
+  async function logout() {
+    try {
+      await req('POST', '/api/auth/logout');
+    } catch {}
+    // No localStorage to clear — cookie is cleared by backend
+  }
 
   /* ── Operators ───────────────────────────────────────────── */
   function listOperators()         { return req('GET', '/api/operators'); }
   function getOperator(id)         { return req('GET', `/api/operators/${id}`); }
-  function getOperatorCard(id)     { return req('GET', `/api/operators/${id}/card`); }
   function myOperator()            { return req('GET', '/api/operators/me'); }
   function createOperator(p)       { return req('POST', '/api/operators', p); }
   function updateOperator(id, p)   { return req('PATCH', `/api/operators/${id}`, p); }
-  function resetOperatorPassword(id) { return req('POST', `/api/operators/${id}/reset-password`); }
 
   /* ── Weekly results ──────────────────────────────────────── */
   function listWeekly()            { return req('GET', '/api/weekly-results'); }
@@ -101,18 +98,20 @@ const api = (() => {
   /* ── Users (admin) ───────────────────────────────────────── */
   function createUser(p)           { return req('POST', '/api/auth/users', p); }
   function listUsers()             { return req('GET', '/api/auth/users'); }
-  function updateMyCredentials(p)  { return req('PATCH', '/api/auth/me/credentials', p); }
+
+  function _base() { return base(); }
 
   return {
-    setToken, getToken, login, me, logout, _base: base,
-    listOperators, getOperator, getOperatorCard, myOperator, createOperator, updateOperator, resetOperatorPassword,
+    getToken, login, me, logout,
+    listOperators, getOperator, myOperator, createOperator, updateOperator,
     listWeekly, upsertWeekly,
     getRating,
     myWallet, operatorWallet, manualTransaction,
     listShopItems, createShopItem, updateShopItem,
     listPurchases, buyItem, approvePurchase, rejectPurchase,
     getDashboard,
-    createUser, listUsers, updateMyCredentials,
+    createUser, listUsers,
     loginOperator: login,
+    _base,
   };
 })();
