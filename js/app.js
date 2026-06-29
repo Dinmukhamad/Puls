@@ -848,196 +848,246 @@ function renderManual() {
   const el = document.getElementById('view-manual');
   if (!el) return;
 
-  // Если операторы не загружены — подгружаем
+  // Load operators if empty
   if (!STATE.adminOperators.length) {
-    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div></div><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка операторов…</p></div>`;
-    fetch(api._base() + '/api/dashboard/operators', {
-      headers: { 'Content-Type': 'application/json' }, credentials: 'include'
-    }).then(r => r.ok ? r.json() : [])
+    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div></div><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>`;
+    fetch(api._base() + '/api/dashboard/operators', { headers: {'Content-Type':'application/json'}, credentials:'include' })
+      .then(r => r.ok ? r.json() : [])
       .then(ops => { STATE.adminOperators = ops; renderManual(); })
-      .catch(() => {
-        el.innerHTML += '<div class="status-line status-error" style="padding:20px">Не удалось загрузить список операторов</div>';
-      });
+      .catch(() => { el.innerHTML += '<p style="color:var(--danger);padding:20px">Не удалось загрузить операторов</p>'; });
     return;
   }
 
-  // Только активные операторы для начисления
   const ops = STATE.adminOperators.filter(o =>
     (o.participation_status ? o.participation_status === 'participating' : o.status === 'active') &&
-    (o.employment_status || 'active') === 'active' &&
-    o.is_active
+    (o.employment_status || 'active') === 'active' && o.is_active
   );
 
-  const lastManual = STATE.history
-    .filter(t => t.type === 'manual_add' || t.type === 'manual_subtract')
-    .slice(0, 10);
+  function todayStats() {
+    const today = new Date().toDateString();
+    const todayTx = STATE.history.filter(t => new Date(t.created_at).toDateString() === today);
+    const add = todayTx.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+    const sub = todayTx.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+    return { count: todayTx.length, add, sub };
+  }
+
+  function renderHistory() {
+    const items = STATE.history
+      .filter(t => t.type === 'manual_add' || t.type === 'manual_subtract')
+      .slice(0, 5);
+    if (!items.length) return '<div class="manual-empty">Операций пока нет</div>';
+    return items.map(t => `
+      <div class="manual-tx-row">
+        <div class="manual-tx-sign ${t.amount >= 0 ? 'plus' : 'minus'}">${t.amount >= 0 ? '+' : ''}${t.amount}</div>
+        <div class="manual-tx-body">
+          <div class="manual-tx-name">${esc(t.operator_name)}</div>
+          <div class="manual-tx-meta">${esc(t.comment)} · ${esc(t.created_by_name || 'Система')} · ${fmtDate(t.created_at)}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  const st = todayStats();
 
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div>
     </div>
 
-    <div class="panel" style="max-width:680px">
-      <div class="panel-head"><h3>Форма начисления / списания</h3></div>
-      <div style="padding:20px;display:grid;gap:14px">
+    <div class="manual-layout">
 
-        <!-- Searchable operator dropdown -->
-        <div class="form-group">
-          <label class="form-label">Оператор <span style="color:var(--danger)">*</span></label>
-          <div class="op-search-wrap" id="op-search-wrap">
-            <input
-              id="op-search-input"
-              class="form-input"
-              type="text"
-              placeholder="Начните вводить имя или группу…"
-              autocomplete="off"
-            >
-            <div class="op-search-dropdown" id="op-search-dropdown" hidden>
-              <div class="op-search-list" id="op-search-list"></div>
+      <!-- ─── Левая колонка: форма ─── -->
+      <div class="manual-col-form">
+        <div class="manual-card">
+          <div class="manual-card-head">Форма начисления / списания</div>
+
+          <div class="form-group">
+            <label class="form-label">Оператор <span class="req">*</span></label>
+            <div class="op-search-wrap" id="op-search-wrap">
+              <input id="op-search-input" class="form-input" type="text"
+                placeholder="Начните вводить имя или группу…" autocomplete="off">
+              <div class="op-search-dropdown" id="op-search-dropdown" hidden>
+                <div class="op-search-list" id="op-search-list"></div>
+              </div>
+            </div>
+            <input type="hidden" id="manual-op-id" value="">
+            <div id="op-selected-display">
+              <span id="op-selected-name"></span>
+              <button onclick="clearOpSelection()">×</button>
             </div>
           </div>
-          <input type="hidden" id="manual-op-id" value="">
-          <div id="op-selected-display">
-            <span id="op-selected-name" style="font-size:13px;color:var(--tx);font-weight:600"></span>
-            <button onclick="clearOpSelection()" style="background:none;border:none;color:var(--tx3);cursor:pointer;font-size:18px;padding:0 4px;line-height:1">×</button>
-          </div>
-        </div>
 
-        <div class="form-group">
-          <label class="form-label">Тип операции <span style="color:var(--danger)">*</span></label>
-          <div style="display:flex;gap:8px">
-            <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--surface);transition:all var(--t)" id="type-add-label">
-              <input type="radio" name="manual-type" value="add" id="type-add" checked style="accent-color:var(--ok)">
-              <span style="font-size:13px;font-weight:600;color:var(--ok)">+ Начисление</span>
+          <div class="form-group">
+            <label class="form-label">Тип операции <span class="req">*</span></label>
+            <div class="manual-type-btns">
+              <button class="manual-type-btn active-add" id="btn-type-add" onclick="setManualType('add')">
+                + Начисление
+              </button>
+              <button class="manual-type-btn" id="btn-type-sub" onclick="setManualType('subtract')">
+                − Списание
+              </button>
+            </div>
+            <input type="hidden" id="manual-type-val" value="add">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Количество коинов <span class="req">*</span></label>
+            <input id="manual-amount" class="form-input" type="number" min="1" step="1" placeholder="Например: 50">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Причина операции <span class="req">*</span></label>
+            <select id="manual-reason" class="form-select">
+              <option value="">Выберите причину…</option>
+              <option>Благодарность от водителя</option>
+              <option>Помощь новому сотруднику</option>
+              <option>Попадание на доску почёта</option>
+              <option>Активность вне конкурса</option>
+              <option>Топ-1 недели</option>
+              <option>Топ-2 недели</option>
+              <option>Топ-3 недели</option>
+              <option>Номинация недели</option>
+              <option>Корректировка баланса</option>
+              <option>Ошибка начисления</option>
+              <option>Дисциплинарное нарушение</option>
+              <option value="Другое">Другое</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" id="comment-label">
+              Комментарий <span class="optional">(необязательно)</span>
             </label>
-            <label style="flex:1;display:flex;align-items:center;gap:8px;padding:10px 14px;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:var(--surface);transition:all var(--t)" id="type-sub-label">
-              <input type="radio" name="manual-type" value="subtract" id="type-sub" style="accent-color:var(--danger)">
-              <span style="font-size:13px;font-weight:600;color:var(--danger)">− Списание</span>
-            </label>
+            <input id="manual-comment" class="form-input" type="text"
+              placeholder="Дополнительный комментарий">
+            <div id="comment-hint" class="field-hint" style="display:none">
+              Обязательно при причине «Другое»
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label class="form-label">Количество коинов <span style="color:var(--danger)">*</span></label>
-          <input id="manual-amount" class="form-input" type="number" min="1" step="1" placeholder="Введите количество">
-        </div>
+          <div id="manual-status" class="status-line" style="min-height:20px"></div>
 
-        <div class="form-group">
-          <label class="form-label">Причина операции <span style="color:var(--danger)">*</span></label>
-          <select id="manual-reason" class="form-select">
-            <option value="">Выберите причину…</option>
-            <option>Благодарность от водителя</option>
-            <option>Помощь новому сотруднику</option>
-            <option>Попадание на доску почёта</option>
-            <option>Активность вне конкурса</option>
-            <option>Топ-1 недели</option>
-            <option>Топ-2 недели</option>
-            <option>Топ-3 недели</option>
-            <option>Номинация недели</option>
-            <option>Корректировка баланса</option>
-            <option>Ошибка начисления</option>
-            <option>Дисциплинарное нарушение</option>
-            <option value="Другое">Другое</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" id="comment-label">
-            Комментарий <span style="color:var(--tx3);font-weight:400;font-size:10px">(необязательно)</span>
-          </label>
-          <input id="manual-comment" class="form-input" type="text"
-            placeholder="Дополнительный комментарий к операции">
-          <div id="comment-hint" style="font-size:11px;color:var(--tx3);margin-top:4px;display:none">
-            Комментарий обязателен при выборе причины "Другое"
-          </div>
-        </div>
-
-        <div id="manual-status" class="status-line" style="min-height:24px"></div>
-
-        <button class="btn-primary" id="manual-submit-btn" style="width:100%;height:44px">
-          Сохранить операцию
-        </button>
-        <div style="font-size:11px;color:var(--tx3)">
-          Операция записывается с указанием автора, даты и причины. Изменение и удаление невозможны.
+          <button class="manual-submit-btn" id="manual-submit-btn">
+            Сохранить операцию
+          </button>
+          <p class="manual-note">Операция записывается с автором, датой и причиной. Удаление невозможно.</p>
         </div>
       </div>
-    </div>
 
-    <!-- Последние ручные операции -->
-    <div class="panel" style="margin-top:20px;max-width:680px">
-      <div class="panel-head"><h3>Последние ручные операции</h3></div>
-      <div class="tx-list" id="manual-history-list">
-        ${lastManual.length ? lastManual.map(t => `
-          <div class="tx-row ${t.amount >= 0 ? 'tx-plus' : 'tx-minus'}">
-            <div class="tx-info">
-              <span class="tx-comment"><b>${esc(t.operator_name)}</b> — ${esc(t.comment)}</span>
-              <span class="tx-date">Автор: ${esc(t.created_by_name || 'Система')} · ${fmtDate(t.created_at)}</span>
+      <!-- ─── Правая колонка: карточки ─── -->
+      <div class="manual-col-right">
+
+        <!-- Статистика за сегодня -->
+        <div class="manual-card">
+          <div class="manual-card-head">Статистика за сегодня</div>
+          <div class="manual-stats-grid" id="manual-stats">
+            <div class="manual-stat">
+              <div class="manual-stat-val">${st.count}</div>
+              <div class="manual-stat-label">Операций</div>
             </div>
-            <div class="tx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</div>
-          </div>`).join('') : '<div class="empty-line">Нет ручных операций</div>'}
+            <div class="manual-stat green">
+              <div class="manual-stat-val">+${st.add}</div>
+              <div class="manual-stat-label">Начислено ₡</div>
+            </div>
+            <div class="manual-stat red">
+              <div class="manual-stat-val">−${st.sub}</div>
+              <div class="manual-stat-label">Списано ₡</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Последние операции -->
+        <div class="manual-card">
+          <div class="manual-card-head">Последние операции</div>
+          <div id="manual-history-list">${renderHistory()}</div>
+        </div>
+
+        <!-- Правила начисления -->
+        <div class="manual-card">
+          <div class="manual-card-head">Правила начисления</div>
+          <div class="manual-rules">
+            <div class="manual-rule"><span class="rule-coin">+50</span><span>Топ-1 недели</span></div>
+            <div class="manual-rule"><span class="rule-coin">+30</span><span>Топ-2 недели</span></div>
+            <div class="manual-rule"><span class="rule-coin">+20</span><span>Топ-3 недели</span></div>
+            <div class="manual-rule"><span class="rule-coin">+15</span><span>Номинация недели</span></div>
+            <div class="manual-rule"><span class="rule-coin">+10</span><span>Благодарность от водителя</span></div>
+            <div class="manual-rule"><span class="rule-coin">+10</span><span>Попадание на доску почёта</span></div>
+          </div>
+        </div>
+
       </div>
     </div>`;
 
-  // Init operator search
+  // Operator search
   initOpSearch(el, ops);
 
-  // Reason → comment required logic
-  const reasonSel = el.querySelector('#manual-reason');
-  const commentLabel = el.querySelector('#comment-label');
-  const commentHint  = el.querySelector('#comment-hint');
-  reasonSel.addEventListener('change', () => {
-    const isOther = reasonSel.value === 'Другое';
-    commentLabel.innerHTML = isOther
-      ? 'Комментарий <span style="color:var(--danger)">*</span>'
-      : 'Комментарий <span style="color:var(--tx3);font-weight:400;font-size:10px">(необязательно)</span>';
-    commentHint.style.display = isOther ? 'block' : 'none';
+  // Type toggle
+  window.setManualType = function(type) {
+    document.getElementById('manual-type-val').value = type;
+    const btnAdd = el.querySelector('#btn-type-add');
+    const btnSub = el.querySelector('#btn-type-sub');
+    btnAdd.className = 'manual-type-btn' + (type === 'add' ? ' active-add' : '');
+    btnSub.className = 'manual-type-btn' + (type === 'subtract' ? ' active-sub' : '');
+  };
+
+  // Reason → comment required
+  el.querySelector('#manual-reason').addEventListener('change', function() {
+    const isOther = this.value === 'Другое';
+    el.querySelector('#comment-label').innerHTML = isOther
+      ? 'Комментарий <span class="req">*</span>'
+      : 'Комментарий <span class="optional">(необязательно)</span>';
+    el.querySelector('#comment-hint').style.display = isOther ? 'block' : 'none';
   });
 
   // Submit
   el.querySelector('#manual-submit-btn').addEventListener('click', async () => {
     const opId    = el.querySelector('#manual-op-id').value;
-    const type    = el.querySelector('input[name="manual-type"]:checked')?.value || 'add';
+    const type    = el.querySelector('#manual-type-val').value || 'add';
     const amount  = +el.querySelector('#manual-amount').value;
     const reason  = el.querySelector('#manual-reason').value;
     const comment = el.querySelector('#manual-comment').value.trim();
     const statusEl = el.querySelector('#manual-status');
+    const btn = el.querySelector('#manual-submit-btn');
 
     const setErr = msg => { statusEl.textContent = msg; statusEl.className = 'status-line status-error'; };
 
-    if (!opId)              return setErr('Выберите оператора');
+    if (!opId)                  return setErr('Выберите оператора');
     if (!amount || amount <= 0) return setErr('Введите корректное количество коинов');
-    if (!reason)            return setErr('Выберите причину операции');
-    if (reason === 'Другое' && !comment) return setErr('Укажите комментарий для причины "Другое"');
+    if (!reason)                return setErr('Выберите причину операции');
+    if (reason === 'Другое' && !comment) return setErr('Укажите комментарий для причины «Другое»');
 
-    const finalAmount  = type === 'subtract' ? -Math.abs(amount) : Math.abs(amount);
-    const fullComment  = comment ? `${reason}: ${comment}` : reason;
+    btn.disabled = true;
+    btn.textContent = 'Сохраняем…';
+
+    const finalAmount = type === 'subtract' ? -Math.abs(amount) : Math.abs(amount);
+    const fullComment = comment ? `${reason}: ${comment}` : reason;
 
     try {
       await api.manualTransaction({ operator_id: +opId, amount: finalAmount, comment: fullComment });
-      statusEl.textContent = `✓ Операция сохранена: ${finalAmount > 0 ? '+' : ''}${finalAmount} ₡`;
+      statusEl.textContent = `✓ Сохранено: ${finalAmount > 0 ? '+' : ''}${finalAmount} ₡`;
       statusEl.className = 'status-line status-ok';
       el.querySelector('#manual-amount').value = '';
       el.querySelector('#manual-comment').value = '';
       el.querySelector('#manual-reason').value = '';
       clearOpSelection();
-      showToast('Операция успешно сохранена', 'ok');
+      showToast('Операция сохранена', 'ok');
       await reloadData();
-      // Update history block without full re-render
-      const histEl = el.querySelector('#manual-history-list');
-      if (histEl) {
-        const fresh = STATE.history.filter(t => t.type === 'manual_add' || t.type === 'manual_subtract').slice(0, 10);
-        histEl.innerHTML = fresh.length ? fresh.map(t => `
-          <div class="tx-row ${t.amount >= 0 ? 'tx-plus' : 'tx-minus'}">
-            <div class="tx-info">
-              <span class="tx-comment"><b>${esc(t.operator_name)}</b> — ${esc(t.comment)}</span>
-              <span class="tx-date">Автор: ${esc(t.created_by_name || 'Система')} · ${fmtDate(t.created_at)}</span>
-            </div>
-            <div class="tx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</div>
-          </div>`).join('') : '<div class="empty-line">Нет ручных операций</div>';
+      // Update right column without re-render
+      const hist = el.querySelector('#manual-history-list');
+      if (hist) hist.innerHTML = renderHistory();
+      const stats = el.querySelector('#manual-stats');
+      if (stats) {
+        const s = todayStats();
+        stats.innerHTML = `
+          <div class="manual-stat"><div class="manual-stat-val">${s.count}</div><div class="manual-stat-label">Операций</div></div>
+          <div class="manual-stat green"><div class="manual-stat-val">+${s.add}</div><div class="manual-stat-label">Начислено ₡</div></div>
+          <div class="manual-stat red"><div class="manual-stat-val">−${s.sub}</div><div class="manual-stat-label">Списано ₡</div></div>`;
       }
     } catch(err) {
       statusEl.textContent = err.message;
       statusEl.className = 'status-line status-error';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Сохранить операцию';
     }
   });
 }
