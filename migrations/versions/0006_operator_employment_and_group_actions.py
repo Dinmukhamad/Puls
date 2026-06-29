@@ -1,6 +1,6 @@
 """Operator employment status and group actions.
 
-Revision ID: 0006_operator_employment_and_group_actions
+Revision ID: 0006_op_employment
 Revises: 0005_operator_group_contract
 Create Date: 2026-06-29
 """
@@ -10,7 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 
-revision = "0006_operator_employment_and_group_actions"
+# Keep this short revision id: the live Railway DB is already stamped with it.
+revision = "0006_op_employment"
 down_revision = "0005_operator_group_contract"
 branch_labels = None
 depends_on = None
