@@ -2148,6 +2148,183 @@ function canManageOperators() {
 /* ══════════════════════════════════════
    WINDOW EXPORTS
 ══════════════════════════════════════ */
+
+/* ══════════════════════════════════════
+   ACCOUNT SETTINGS MODAL
+══════════════════════════════════════ */
+function showAccountSettingsModal() {
+  const u = STATE.user;
+  if (!u) return;
+  const roleLabel = { operator:'Оператор', supervisor:'Супервайзер', manager:'Руководитель', admin:'Администратор' }[u.role] || u.role;
+
+  showModal(`
+    <div class="acc-modal">
+      <h3 class="acc-title">Настройки аккаунта</h3>
+
+      <div class="acc-info">
+        <div class="acc-avatar">${esc((u.full_name||'?')[0].toUpperCase())}</div>
+        <div>
+          <div class="acc-name">${esc(u.full_name || '—')}</div>
+          <div class="acc-role">${esc(roleLabel)}</div>
+          <div class="acc-login">Логин: <b>${esc(u.username || '—')}</b></div>
+        </div>
+      </div>
+
+      <div class="acc-divider"></div>
+
+      <!-- Изменение логина -->
+      <div class="acc-section">
+        <div class="acc-section-title">Изменить логин</div>
+        <div class="form-group">
+          <label class="form-label">Новый логин</label>
+          <input id="acc-new-login" class="form-input" type="text"
+            placeholder="Только буквы, цифры, точка, _"
+            value="${esc(u.username || '')}">
+          <div id="acc-login-hint" class="acc-field-hint"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Текущий пароль</label>
+          <input id="acc-login-pwd" class="form-input" type="password" placeholder="Подтвердите текущий пароль">
+          <div id="acc-login-err" class="acc-field-err"></div>
+        </div>
+        <button class="acc-btn" id="acc-save-login-btn" onclick="submitChangeLogin()">Сохранить логин</button>
+      </div>
+
+      <div class="acc-divider"></div>
+
+      <!-- Изменение пароля -->
+      <div class="acc-section">
+        <div class="acc-section-title">Изменить пароль</div>
+        <div class="form-group">
+          <label class="form-label">Текущий пароль</label>
+          <input id="acc-cur-pwd" class="form-input" type="password" placeholder="Текущий пароль">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Новый пароль</label>
+          <input id="acc-new-pwd" class="form-input" type="password" placeholder="Минимум 8 символов, буквы и цифры">
+          <div id="acc-pwd-hint" class="acc-field-hint"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Повторите новый пароль</label>
+          <input id="acc-confirm-pwd" class="form-input" type="password" placeholder="Повторите пароль">
+          <div id="acc-pwd-err" class="acc-field-err"></div>
+        </div>
+        <button class="acc-btn" id="acc-save-pwd-btn" onclick="submitChangePassword()">Сохранить пароль</button>
+      </div>
+    </div>
+  `);
+
+  // Live validation for login
+  document.getElementById('acc-new-login')?.addEventListener('input', function() {
+    const v = this.value;
+    const hint = document.getElementById('acc-login-hint');
+    if (!v) { hint.textContent = ''; return; }
+    if (!/^[a-zA-Z0-9._]+$/.test(v)) {
+      hint.textContent = 'Только буквы, цифры, точка и _';
+      hint.className = 'acc-field-err';
+    } else if (v.length < 3) {
+      hint.textContent = 'Минимум 3 символа';
+      hint.className = 'acc-field-err';
+    } else {
+      hint.textContent = 'Выглядит хорошо';
+      hint.className = 'acc-field-hint ok';
+    }
+  });
+
+  // Live validation for password
+  document.getElementById('acc-new-pwd')?.addEventListener('input', function() {
+    const v = this.value;
+    const hint = document.getElementById('acc-pwd-hint');
+    if (!v) { hint.textContent = ''; return; }
+    const hasLetters = /[a-zA-Z]/.test(v);
+    const hasDigits  = /[0-9]/.test(v);
+    if (v.length < 8 || !hasLetters || !hasDigits) {
+      hint.textContent = 'Минимум 8 символов, буквы и цифры';
+      hint.className = 'acc-field-err';
+    } else {
+      hint.textContent = 'Надёжный пароль';
+      hint.className = 'acc-field-hint ok';
+    }
+  });
+}
+
+async function submitChangeLogin() {
+  const newLogin = document.getElementById('acc-new-login')?.value?.trim();
+  const curPwd   = document.getElementById('acc-login-pwd')?.value;
+  const errEl    = document.getElementById('acc-login-err');
+  const btn      = document.getElementById('acc-save-login-btn');
+
+  errEl.textContent = '';
+  if (!newLogin)  return errEl.textContent = 'Введите новый логин';
+  if (newLogin.length < 3) return errEl.textContent = 'Логин слишком короткий';
+  if (!/^[a-zA-Z0-9._]+$/.test(newLogin)) return errEl.textContent = 'Недопустимые символы в логине';
+  if (!curPwd)   return errEl.textContent = 'Введите текущий пароль';
+
+  btn.disabled = true; btn.textContent = 'Сохраняем…';
+  try {
+    const res = await fetch(api._base() + '/api/auth/me/login', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ new_login: newLogin, current_password: curPwd }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Ошибка');
+    STATE.user.username = newLogin;
+    errEl.textContent = '✓ Логин изменён';
+    errEl.className = 'acc-field-hint ok';
+    document.getElementById('acc-login-pwd').value = '';
+    showToast('Логин успешно изменён', 'ok');
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.className = 'acc-field-err';
+  } finally {
+    btn.disabled = false; btn.textContent = 'Сохранить логин';
+  }
+}
+
+async function submitChangePassword() {
+  const curPwd  = document.getElementById('acc-cur-pwd')?.value;
+  const newPwd  = document.getElementById('acc-new-pwd')?.value;
+  const confPwd = document.getElementById('acc-confirm-pwd')?.value;
+  const errEl   = document.getElementById('acc-pwd-err');
+  const btn     = document.getElementById('acc-save-pwd-btn');
+
+  errEl.textContent = '';
+  if (!curPwd)  return errEl.textContent = 'Введите текущий пароль';
+  if (!newPwd || newPwd.length < 8) return errEl.textContent = 'Пароль минимум 8 символов';
+  if (!/[a-zA-Z]/.test(newPwd) || !/[0-9]/.test(newPwd))
+    return errEl.textContent = 'Пароль должен содержать буквы и цифры';
+  if (newPwd !== confPwd) return errEl.textContent = 'Пароли не совпадают';
+
+  btn.disabled = true; btn.textContent = 'Сохраняем…';
+  try {
+    const res = await fetch(api._base() + '/api/auth/me/password', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ current_password: curPwd, new_password: newPwd, confirm_password: confPwd }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Ошибка');
+    showToast('Пароль изменён. Выполняется выход…', 'ok');
+    closeModal();
+    setTimeout(async () => {
+      await api.logout().catch(() => {});
+      STATE.user = null;
+      location.reload();
+    }, 1500);
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.className = 'acc-field-err';
+    btn.disabled = false; btn.textContent = 'Сохранить пароль';
+  }
+}
+
+window.showAccountSettingsModal = showAccountSettingsModal;
+window.submitChangeLogin        = submitChangeLogin;
+window.submitChangePassword     = submitChangePassword;
+
 window.navigateTo = navigateTo;
 window.reloadData = reloadData;
 window.closeModal = closeModal;
