@@ -2289,17 +2289,25 @@ body.side-nav-collapsed .side-nav {
   align-items: center;
 }
 
-/* Header row: hide toggle, center mark icon */
+/* Header row: center everything */
 body.side-nav-collapsed .side-nav-header {
   width: 100%;
   justify-content: center;
+  flex-direction: column;
+  gap: 8px;
   padding: 0;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
-/* Hide toggle button when collapsed */
+/* Toggle stays visible in collapsed — user needs it to expand back */
 body.side-nav-collapsed .side-nav-toggle {
-  display: none;
+  display: flex;
+  width: 32px;
+  height: 32px;
+  margin: 0 auto;
+}
+body.side-nav-collapsed .side-nav-toggle svg {
+  transform: rotate(180deg);
 }
 
 /* Logo: show only the SVG mark, centered */
