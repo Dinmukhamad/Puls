@@ -954,8 +954,6 @@ function renderManual() {
       </div>
     </div>
 
-    </div><!-- end form panel -->
-
     <!-- Последние ручные операции — правая колонка -->
     <div class="panel" style="position:sticky;top:20px">
       <div class="panel-head"><h3>Последние ручные операции</h3></div>
@@ -970,6 +968,7 @@ function renderManual() {
           </div>`).join('') : '<div class="empty-line">Нет ручных операций</div>'}
       </div>
     </div>
+
     </div>`;
 
   // Init operator search
