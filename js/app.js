@@ -860,14 +860,15 @@ function renderManual() {
 
   const lastManual = STATE.history
     .filter(t => t.type === 'manual_add' || t.type === 'manual_subtract')
-    .slice(0, 10);
+    .slice(0, 15);
 
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div>
     </div>
 
-    <div class="panel" style="max-width:680px">
+    <div style="display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,0.9fr);gap:20px;align-items:start">
+    <div class="panel">
       <div class="panel-head"><h3>Форма начисления / списания</h3></div>
       <div style="padding:20px;display:grid;gap:14px">
 
@@ -953,8 +954,10 @@ function renderManual() {
       </div>
     </div>
 
-    <!-- Последние ручные операции -->
-    <div class="panel" style="margin-top:20px;max-width:680px">
+    </div><!-- end form panel -->
+
+    <!-- Последние ручные операции — правая колонка -->
+    <div class="panel" style="position:sticky;top:20px">
       <div class="panel-head"><h3>Последние ручные операции</h3></div>
       <div class="tx-list" id="manual-history-list">
         ${lastManual.length ? lastManual.map(t => `
