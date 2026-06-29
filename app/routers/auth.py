@@ -112,6 +112,87 @@ def update_account(
     return current_user
 
 
+@router.patch("/me/login")
+def change_my_login(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    response: Response = None,
+) -> dict:
+    """Change current user login. Requires current password verification."""
+    from pydantic import BaseModel
+    import re as _re
+
+    new_login   = (payload.get("new_login") or "").strip()
+    current_pwd = payload.get("current_password") or ""
+
+    if not new_login:
+        raise HTTPException(status_code=400, detail="Логин не может быть пустым")
+    if not _re.match(r'^[a-zA-Z0-9._]+$', new_login):
+        raise HTTPException(status_code=400, detail="Логин может содержать только буквы, цифры, точку и нижнее подчёркивание")
+    if len(new_login) < 3:
+        raise HTTPException(status_code=400, detail="Логин должен быть не менее 3 символов")
+    if not verify_password(current_pwd, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
+
+    existing = db.scalar(select(User).where(User.username == new_login, User.id != current_user.id))
+    if existing:
+        raise HTTPException(status_code=409, detail="Этот логин уже занят. Выберите другой.")
+
+    old_login = current_user.username
+    current_user.username = new_login
+    db.add(AuditLog(
+        action="login_changed",
+        entity_type="user",
+        entity_id=current_user.id,
+        details=f"Логин изменён: {old_login} → {new_login}",
+        performed_by_user_id=current_user.id,
+    ))
+    db.commit()
+    return {"ok": True, "message": "Логин успешно изменён", "new_login": new_login}
+
+
+@router.patch("/me/password")
+def change_my_password(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    response: Response = None,
+) -> dict:
+    """Change current user password. Logs out after change."""
+    import re as _re
+
+    current_pwd = payload.get("current_password") or ""
+    new_pwd     = payload.get("new_password") or ""
+    confirm_pwd = payload.get("confirm_password") or ""
+
+    if not verify_password(current_pwd, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
+    if len(new_pwd) < 8:
+        raise HTTPException(status_code=400, detail="Новый пароль должен содержать минимум 8 символов")
+    if not _re.search(r'[a-zA-Z]', new_pwd) or not _re.search(r'[0-9]', new_pwd):
+        raise HTTPException(status_code=400, detail="Пароль должен содержать буквы и цифры")
+    if new_pwd != confirm_pwd:
+        raise HTTPException(status_code=400, detail="Пароли не совпадают")
+    if verify_password(new_pwd, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Новый пароль не должен совпадать со старым")
+
+    current_user.password_hash = hash_password(new_pwd)
+    db.add(AuditLog(
+        action="password_changed",
+        entity_type="user",
+        entity_id=current_user.id,
+        details=f"Пароль изменён пользователем {current_user.username}",
+        performed_by_user_id=current_user.id,
+    ))
+    db.commit()
+    # Clear auth cookie → force re-login
+    settings = get_settings()
+    if response:
+        response.delete_cookie(key=settings.auth_cookie_name, path="/")
+    return {"ok": True, "message": "Пароль изменён. Войдите снова.", "logout": True}
+
+
 @router.post("/users", response_model=UserRead)
 def create_user(
     payload: UserCreate,
