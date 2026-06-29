@@ -969,6 +969,7 @@ function renderManual() {
             <div class="tx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</div>
           </div>`).join('') : '<div class="empty-line">Нет ручных операций</div>'}
       </div>
+    </div>
     </div>`;
 
   // Init operator search
