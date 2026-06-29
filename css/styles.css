@@ -34,11 +34,11 @@
   --border-soft: rgba(0,0,0,.05);
 
   /* Акцент — брендовый красный */
-  --accent:      #FF4D2E;
-  --accent-2:    #FF6B50;
-  --accent-dark: #CC3318;
-  --accent-soft: rgba(255,77,46,.08);
-  --accent-glow: rgba(255,77,46,.15);
+  --accent:      #18181B;
+  --accent-2:    #3F3F46;
+  --accent-dark: #09090B;
+  --accent-soft: rgba(24,24,27,.07);
+  --accent-glow: rgba(24,24,27,.12);
 
   /* Семантические */
   --ok:          #16A34A;
@@ -49,7 +49,7 @@
   --warn-soft:   rgba(217,119,6,.08);
 
   /* Группы */
-  --g1: #FF4D2E; --g1-soft: rgba(255,77,46,.09);
+  --g1: #2563EB; --g1-soft: rgba(37,99,235,.09);
   --g2: #2563EB; --g2-soft: rgba(37,99,235,.09);
   --g3: #7C3AED; --g3-soft: rgba(124,58,237,.09);
 
@@ -74,7 +74,7 @@
   --nav-w:    220px;
   --nav-bg:   #18181B;
   --nav-tx:   rgba(255,255,255,.55);
-  --nav-act:  rgba(255,77,46,.18);
+  --nav-act:  rgba(255,255,255,.10);
   --nav-sep:  rgba(255,255,255,.07);
 
   --t: .14s ease;
@@ -94,7 +94,7 @@ html[data-theme="dark"], [data-theme="dark"] {
   --tx4:  #3a4260;
   --border:      rgba(255,255,255,.07);
   --border-soft: rgba(255,255,255,.04);
-  --accent-soft: rgba(255,77,46,.12);
+  --accent-soft: rgba(255,255,255,.08);
   --ok:          #22c55e;
   --ok-soft:     rgba(34,197,94,.12);
   --danger:      #ef4444;
@@ -106,7 +106,7 @@ html[data-theme="dark"], [data-theme="dark"] {
   --shadow-lg: 0 8px 28px rgba(0,0,0,.55), 0 20px 48px rgba(0,0,0,.4);
   --nav-bg:   #0a0c12;
   --nav-tx:   rgba(255,255,255,.6);
-  --nav-act:  rgba(255,77,46,.15);
+  --nav-act:  rgba(255,255,255,.10);
   --nav-sep:  rgba(255,255,255,.06);
 }
 
