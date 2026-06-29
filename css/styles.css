@@ -167,8 +167,6 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
   text-transform: uppercase; color: var(--text-muted);
   padding: 0 12px 6px;
 }
-.excel-import-compact { padding: 0 2px 8px; }
-
 /* ══════════════════════════════════════════════════════════════
    THEME TOGGLE
 ══════════════════════════════════════════════════════════════ */
@@ -917,38 +915,6 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 ::-webkit-scrollbar-thumb:hover { background: var(--tx4); }
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
-/* ══════════════════════════════════════════════════════════════
-   ADMIN DASHBOARD EXTRAS
-══════════════════════════════════════════════════════════════ */
-.excel-import-compact .excel-period-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
-.excel-period-field { display: grid; gap: 3px; }
-.excel-period-field span { font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.3); }
-.excel-period-field input {
-  height: 32px; padding: 0 8px; border-radius: var(--r-xs);
-  border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.06);
-  color: rgba(255,255,255,.8); font: 500 12px 'Inter', sans-serif; color-scheme: dark;
-}
-.excel-file-label {
-  display: flex; align-items: center; gap: 6px;
-  padding: 7px 10px; border: 1px solid rgba(255,255,255,.08);
-  border-radius: var(--r-xs); cursor: pointer; margin-bottom: 7px;
-  font-size: 11px; color: rgba(255,255,255,.4); overflow: hidden;
-}
-.excel-file-label:hover { border-color: rgba(2,132,199,.3); }
-.excel-file-label span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.excel-file-input-hidden { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
-.excel-file-btn {
-  margin-left: auto; padding: 3px 8px; flex-shrink: 0;
-  background: rgba(2,132,199,.2); border-radius: 4px;
-  color: var(--accent); font-size: 10px; font-weight: 700;
-}
-.import-status {
-  font-size: 11px; padding: 7px 10px; border-radius: var(--r-xs);
-  background: rgba(255,255,255,.04); color: rgba(255,255,255,.5); overflow-wrap: anywhere;
-}
-.import-status--success { background: var(--ok-soft); color: var(--ok); }
-.import-status--error   { background: var(--danger-soft); color: var(--danger); }
-.import-status--warn    { background: var(--warn-soft); color: var(--warn); }
 
 /* ══════════════════════════════════════════════════════════════
    RESPONSIVE
@@ -974,7 +940,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
     border-right: none; border-top: 1px solid var(--border);
   }
   .side-nav-logo, .side-nav-separator, .side-nav-meta,
-  .side-nav-toggle, .side-nav-section-label, .excel-import-compact { display: none; }
+  .side-nav-toggle, .side-nav-section-label { display: none; }
   .side-nav-group { flex-direction: row; gap: 4px; }
   .side-nav-link { width: 46px; min-width: 46px; flex-shrink: 0; padding: 0; justify-content: center; border-radius: var(--r-sm); }
   .side-nav-link span { display: none; }
@@ -1997,10 +1963,6 @@ button, a, input, select, textarea {
 }
 
 
-/* Force hide excel import nav */
-#excel-import-nav { display: none !important; }
-
-
 /* ═══════════════════════════════════════════════════
    SLATE+SKY POLISH — visual refinements
 ═══════════════════════════════════════════════════ */
@@ -2277,6 +2239,7 @@ body { padding-left: var(--nav-w, 220px); }
    COLLAPSED SIDEBAR — clean, no overflow
 ══════════════════════════════════════════════ */
 
+@media (min-width: 761px) {
 body.side-nav-collapsed {
   padding-left: 64px;
 }
@@ -2308,6 +2271,7 @@ body.side-nav-collapsed .side-nav-toggle {
 }
 body.side-nav-collapsed .side-nav-toggle svg {
   transform: rotate(180deg);
+}
 }
 
 /* Logo: show only the SVG mark, centered */

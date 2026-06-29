@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/tokens.css">
-  <link rel="stylesheet" href="css/styles.css?v=slate-sky-1">
+  <link rel="stylesheet" href="css/tokens.css?v=slate-sky-2">
+  <link rel="stylesheet" href="css/styles.css?v=slate-sky-2">
   <script src="js/api.js?v=puls-2"></script>
   <script>
     (function() {
@@ -124,37 +124,6 @@
     </a>
   </div>
 
-  <div class="side-nav-separator"></div>
-
-  <!-- Excel импорт -->
-  <div id="excel-import-nav" style="display:none">
-    <div class="side-nav-section-label">Импорт данных</div>
-    <div class="excel-import-compact">
-      <div class="excel-period-grid">
-        <label class="excel-period-field">
-          <span>Начало</span>
-          <input type="date" id="excel-period-start">
-        </label>
-        <label class="excel-period-field">
-          <span>Конец</span>
-          <input type="date" id="excel-period-end">
-        </label>
-      </div>
-      <label class="excel-file-label">
-        <input type="file" id="excel-report-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
-        <span id="excel-report-file-name">report.xlsx</span>
-        <span class="excel-file-btn">Обзор</span>
-      </label>
-      <label class="excel-file-label">
-        <input type="file" id="excel-dates-input" accept=".xlsx,.xls,.ods" class="excel-file-input-hidden">
-        <span id="excel-dates-file-name">dates.xlsx</span>
-        <span class="excel-file-btn">Обзор</span>
-      </label>
-      <button class="btn-primary btn-sm" style="width:100%" id="excel-import-btn">Применить</button>
-      <div class="import-status" id="import-status" hidden></div>
-    </div>
-  </div>
-
   <div class="side-nav-meta">
     <div class="side-user-row">
       <div style="display:flex;align-items:center;gap:8px;min-width:0">
@@ -197,8 +166,6 @@
 </main>
 
 <!-- SCRIPTS -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="js/excel-import.js?v=puls-2"></script>
-<script src="js/app.js?v=rating-dashboard-1"></script>
+<script src="js/app.js?v=pulse-cleanup-1"></script>
 </body>
 </html>

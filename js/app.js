@@ -250,10 +250,6 @@ function renderSidebar(role) {
     }
     link.style.display = show ? '' : 'none';
   });
-  if (isAdmin(role)) {
-    const nav = document.getElementById('excel-import-nav');
-    if (nav) nav.style.display = '';
-  }
 }
 
 /* ══════════════════════════════════════
@@ -358,10 +354,10 @@ function showChangePasswordModal() {
       <input id="cp-confirm" class="form-input" type="password" placeholder="Повторите пароль">
     </div>
     <div id="cp-err" class="status-line"></div>
-    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitChangePassword()">Сохранить</button>`);
+    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitLegacyChangePassword()">Сохранить</button>`);
 }
 
-async function submitChangePassword() {
+async function submitLegacyChangePassword() {
   const current = document.getElementById('cp-current')?.value;
   const newPwd  = document.getElementById('cp-new')?.value;
   const confirm = document.getElementById('cp-confirm')?.value;
@@ -2853,6 +2849,7 @@ window.deleteOperator = deleteOperator;
 window.showOperatorHistoryModal = showOperatorHistoryModal;
 window.showChangePasswordModal = showChangePasswordModal;
 window.showChangeUsernameModal = showChangeUsernameModal;
+window.submitLegacyChangePassword = submitLegacyChangePassword;
 window.submitChangePassword = submitChangePassword;
 window.submitChangeUsername = submitChangeUsername;
 window.copyCredentials = copyCredentials;

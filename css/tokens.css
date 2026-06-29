@@ -78,7 +78,7 @@ html[data-theme="light"] {
   --surface-2: var(--bg-muted);  --surface-3: var(--bg-subtle);
   --tx: var(--text-primary);  --tx2: var(--text-secondary);
   --tx3: var(--text-muted);   --tx4: var(--border-strong);
-  --border: var(--border-default);  --border-soft: var(--border-soft);
+  --border: var(--border-default);
   --accent: var(--accent-primary);  --accent-soft: var(--accent-secondary-soft);
   --ok: var(--success);  --ok-soft: var(--success-soft);
   --warn: var(--warning); --warn-soft: var(--warning-soft);
@@ -137,7 +137,7 @@ html[data-theme="dark"] {
   --surface-2: var(--bg-muted);  --surface-3: var(--bg-subtle);
   --tx: var(--text-primary);  --tx2: var(--text-secondary);
   --tx3: var(--text-muted);   --tx4: var(--border-strong);
-  --border: var(--border-default);  --border-soft: var(--border-soft);
+  --border: var(--border-default);
   --accent: var(--accent-primary);  --accent-soft: var(--accent-secondary-soft);
   --ok: var(--success);  --ok-soft: var(--success-soft);
   --warn: var(--warning); --warn-soft: var(--warning-soft);
