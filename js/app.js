@@ -1072,7 +1072,20 @@ function renderManual() {
       await reloadData();
       // Update right column without re-render
       const hist = el.querySelector('#manual-history-list');
-      if (hist) hist.innerHTML = renderHistory();
+      if (hist) {
+        const freshItems = STATE.history
+          .filter(t => t.type === 'manual_add' || t.type === 'manual_subtract')
+          .slice(0, 5);
+        hist.innerHTML = freshItems.length ? freshItems.map(t =>
+          '<div class="manual-tx-row">' +
+            '<div class="manual-tx-sign ' + (t.amount >= 0 ? 'plus' : 'minus') + '">' + (t.amount >= 0 ? '+' : '') + t.amount + '</div>' +
+            '<div class="manual-tx-body">' +
+              '<div class="manual-tx-name">' + esc(t.operator_name) + '</div>' +
+              '<div class="manual-tx-meta">' + esc(t.comment) + ' · ' + esc(t.created_by_name || 'Система') + ' · ' + fmtDate(t.created_at) + '</div>' +
+            '</div>' +
+          '</div>'
+        ).join('') : '<div class="manual-empty">Операций пока нет</div>';
+      }
       const stats = el.querySelector('#manual-stats');
       if (stats) {
         const s = todayStats();
