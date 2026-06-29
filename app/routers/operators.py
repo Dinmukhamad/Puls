@@ -580,22 +580,41 @@ def delete_operator(
         )
 
     try:
-        # Detach user before deleting operator
+        op_name = op.full_name
+        op_id   = op.id
+
+        # 1. Detach linked user
         user = _operator_user(db, op)
         if user:
-            user.is_active = False
+            user.is_active   = False
             user.operator_id = None
-            user.username = f"deleted_{op.id}_{user.username}"[:120]
+            user.username    = f"deleted_{op_id}_{user.username}"[:120]
             db.flush()
 
-        # Clear FK on operator
-        op.user_id = None
+        # 2. Clear self-referencing FKs on operator
+        op.user_id   = None
+        op.group_id  = None
         db.flush()
 
-        _audit(db, "operator_deleted", "operator", op.id,
-               f"Удалена ошибочно созданная карточка оператора {op.full_name}.",
-               current_user)
+        # 3. Nullify AuditLog references to this operator (entity_id)
+        from sqlalchemy import text
+        db.execute(
+            text("UPDATE audit_logs SET entity_id = NULL WHERE entity_type = 'operator' AND entity_id = :oid"),
+            {"oid": op_id}
+        )
         db.flush()
+
+        # 4. Record deletion before deleting the row
+        db.add(AuditLog(
+            action="operator_deleted",
+            entity_type="operator",
+            entity_id=None,
+            details=f"Удалена ошибочно созданная карточка: {op_name} (ID {op_id})",
+            performed_by_user_id=current_user.id,
+        ))
+        db.flush()
+
+        # 5. Delete
         db.delete(op)
         db.commit()
         return {"ok": True}
