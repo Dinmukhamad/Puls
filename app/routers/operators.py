@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import random
 import re
+import secrets
 import string
 from datetime import datetime
 from typing import List, Optional
@@ -31,17 +31,21 @@ def _gen_username(db: Session, full_name: str) -> str:
         return candidate
     # Добавляем случайный суффикс
     for _ in range(20):
-        suffix = ''.join(random.choices(string.digits, k=4))
+        suffix = ''.join(secrets.choice(string.digits) for _ in range(4))
         candidate = f"user_{base}{suffix}"
         if not db.scalar(select(User).where(User.username == candidate)):
             return candidate
     raise HTTPException(status_code=500, detail="Не удалось сгенерировать уникальный логин")
 
 
-def _gen_password() -> str:
+def _gen_password(username: Optional[str] = None) -> str:
     """Генерирует временный пароль минимум 8 символов"""
     chars = string.ascii_letters + string.digits
-    return ''.join(random.choices(chars, k=10))
+    for _ in range(20):
+        password = ''.join(secrets.choice(chars) for _ in range(10))
+        if password != (username or ""):
+            return password
+    raise HTTPException(status_code=500, detail="Не удалось сгенерировать временный пароль")
 
 
 def _audit(db: Session, action: str, entity_type: str, entity_id: int,
@@ -299,7 +303,7 @@ def create_operator(
 
     # Auto-create account
     username = _gen_username(db, payload.full_name)
-    temp_password = _gen_password()
+    temp_password = _gen_password(username)
 
     user = User(
         full_name=payload.full_name.strip(),
@@ -493,7 +497,7 @@ def reset_password(
     if not user:
         raise HTTPException(status_code=400, detail="У оператора нет аккаунта")
 
-    new_pwd = _gen_password()
+    new_pwd = _gen_password(user.username)
     user.password_hash = hash_password(new_pwd)
     _audit(db, "password_reset", "user", user.id,
            f"Пароль сброшен для {op.full_name} администратором {current_user.full_name}",

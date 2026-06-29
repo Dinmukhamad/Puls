@@ -49,7 +49,7 @@ uvicorn app.main:app --reload      # запустить сервер
 | `ENABLE_DEMO_DATA` | true | Создавать демо-операторов |
 | `AUTH_COOKIE_SECURE` | false | true в production (HTTPS) |
 | `AUTH_COOKIE_SAMESITE` | lax | lax или strict |
-| `ENVIRONMENT` | development | production включает safety-check |
+| `APP_ENV` / `ENVIRONMENT` | development | production включает safety-check |
 
 Генерация JWT_SECRET_KEY:
 ```bash

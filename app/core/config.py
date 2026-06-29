@@ -61,13 +61,35 @@ class Settings(BaseSettings):
     def check_production_safety(self) -> None:
         """Raise on startup if dangerous defaults are set in production."""
         import os
-        env = os.getenv("ENVIRONMENT", "development").lower()
-        if env == "production":
-            if self.jwt_secret_key in ("change-me-in-env", "замените-на-случайную-строку-минимум-32-символа"):
-                raise RuntimeError(
-                    "FATAL: JWT_SECRET_KEY is set to default value. "
-                    "Set a strong secret in Railway Variables before deploying."
-                )
+
+        env_values = {
+            (self.app_env or "").lower(),
+            os.getenv("APP_ENV", "").lower(),
+            os.getenv("ENVIRONMENT", "").lower(),
+        }
+        if "production" not in env_values:
+            return
+
+        problems = []
+        if (
+            self.jwt_secret_key
+            in ("change-me-in-env", "замените-на-случайную-строку-минимум-32-символа")
+            or len(self.jwt_secret_key) < 32
+        ):
+            problems.append("JWT_SECRET_KEY must be a non-default secret with at least 32 characters")
+        if self.database_url.startswith("sqlite"):
+            problems.append("DATABASE_URL must point to PostgreSQL in production")
+        if self.cors_origins.strip() == "*":
+            problems.append("CORS_ORIGINS must be explicit in production")
+        if not self.auth_cookie_secure:
+            problems.append("AUTH_COOKIE_SECURE must be true in production")
+        if self.auto_create_tables:
+            problems.append("AUTO_CREATE_TABLES must be false in production; use Alembic migrations")
+        if self.enable_demo_data:
+            problems.append("ENABLE_DEMO_DATA must be false in production")
+
+        if problems:
+            raise RuntimeError("FATAL: unsafe production configuration: " + "; ".join(problems))
 
 
 @lru_cache

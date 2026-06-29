@@ -14,7 +14,7 @@ from app.core.security import (
 from app.database.db import get_db
 from app.models.entities import AuditLog, Operator, User
 from app.schemas.auth import (
-    AccountCredentialsUpdate, LoginRequest, TokenResponse,
+    AccountCredentialsUpdate, LoginRequest,
     UserCreate, UserRead,
 )
 
@@ -34,21 +34,28 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     token = create_access_token({"sub": str(user.id)}, role=user.role)
 
     settings = get_settings()
-    response.set_cookie(
-        key=get_settings().auth_cookie_name,
-        value=token,
-        httponly=True,
-        secure=getattr(settings, 'auth_cookie_secure', False),
-        samesite=getattr(settings, 'auth_cookie_samesite', 'lax'),
-        max_age=settings.access_token_expire_minutes * 60,
-        path="/",
-    )
-    return {"ok": True, "access_token": token, "token_type": "bearer"}
+    cookie_options = {
+        "key": settings.auth_cookie_name,
+        "value": token,
+        "httponly": True,
+        "secure": settings.auth_cookie_secure,
+        "samesite": settings.auth_cookie_samesite,
+        "max_age": settings.access_token_expire_minutes * 60,
+        "path": "/",
+    }
+    if settings.auth_cookie_domain:
+        cookie_options["domain"] = settings.auth_cookie_domain
+    response.set_cookie(**cookie_options)
+    return {"ok": True}
 
 
 @router.post("/logout")
 def logout(response: Response, current_user: User = Depends(get_current_user)):
-    response.delete_cookie(key=get_settings().auth_cookie_name, path="/")
+    settings = get_settings()
+    cookie_options = {"key": settings.auth_cookie_name, "path": "/"}
+    if settings.auth_cookie_domain:
+        cookie_options["domain"] = settings.auth_cookie_domain
+    response.delete_cookie(**cookie_options)
     return {"ok": True}
 
 
