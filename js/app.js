@@ -730,57 +730,6 @@ async function renderRating() {
     </div>`;
   }
 }
-  if (!el) return;
-  const rows = STATE.rating;
-  const myId = STATE.wallet?.operator_id;
-
-  el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
-      <button class="btn-outline btn-sm" onclick="api.getRating().then(r=>{STATE.rating=r;renderRating()})">Обновить</button>
-    </div>
-
-    ${rows.length >= 3 ? `
-    <div class="podium" style="margin-bottom:24px">
-      ${[rows[1],rows[0],rows[2]].filter(Boolean).map((op,vi) => {
-        const ri = [1,0,2][vi];
-        return `<div class="podium-card place-${ri+1} ${op.operator_id===myId?'podium-me':''}">
-          <div class="podium-rank">${['🥇','🥈','🥉'][ri]}</div>
-          <div class="podium-name">${esc(op.operator_name)}</div>
-          <div class="podium-group">${esc(op.group_name)}</div>
-          <div class="podium-coins">${op.coins_earned} ₡</div>
-          <div class="podium-score">${(op.contest_points||0).toFixed(1)} баллов</div>
-        </div>`;
-      }).join('')}
-    </div>` : ''}
-
-    <div class="panel">
-      <div class="panel-head"><h3>Все участники</h3><span class="panel-badge">${rows.length} операторов</span></div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr>
-            <th style="width:48px">#</th>
-            <th>Оператор</th><th>Группа</th><th>Баллы</th>
-            <th>Коины (нед.)</th><th style="width:60px">Дин.</th>
-          </tr></thead>
-          <tbody>
-            ${rows.length ? rows.map(r => {
-              const isMe = r.operator_id === myId;
-              const d = r.rank_delta;
-              return `<tr class="${isMe?'row-me':''} ${r.rank_position<=3?'row-top':''}">
-                <td class="rank-cell"><span class="rank-badge ${r.rank_position<=3?'rank-top':''}">${r.rank_position}</span></td>
-                <td class="name-cell">${esc(r.operator_name)}${isMe?'<span class="me-badge">Вы</span>':''}</td>
-                <td>${esc(r.group_name)}</td>
-                <td><b>${(r.contest_points||0).toFixed(1)}</b></td>
-                <td><b class="accent-text">${r.coins_earned} ₡</b></td>
-                <td class="delta-cell">${d!=null?`<span class="rank-delta ${d>0?'up':d<0?'down':''}">${d>0?'↑'+d:d<0?'↓'+Math.abs(d):'—'}</span>`:'—'}</td>
-              </tr>`;
-            }).join('') : '<tr><td colspan="6" class="empty-line">Нет данных</td></tr>'}
-          </tbody>
-        </table>
-      </div>
-    </div>`;
-}
 
 function miniRating(limit, highlightId) {
   const rows = STATE.rating.slice(0, limit);
