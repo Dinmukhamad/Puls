@@ -4,8 +4,8 @@ from datetime import date
 from statistics import mean
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
@@ -14,6 +14,7 @@ from app.models.entities import CoinTransaction, Operator, User, WeeklyResult
 from app.services.rating import latest_period, rating_rows
 
 router = APIRouter(prefix="/rating", tags=["rating"])
+PRIVILEGED_RATING_ROLES = {"supervisor", "manager", "admin"}
 
 
 def _get_operator_for_user(db: Session, user: User) -> Optional[Operator]:
@@ -22,8 +23,31 @@ def _get_operator_for_user(db: Session, user: User) -> Optional[Operator]:
     return None
 
 
+def _get_requested_operator(db: Session, user: User, operator_id: Optional[int]) -> Optional[Operator]:
+    if operator_id is None:
+        return _get_operator_for_user(db, user)
+
+    if user.role not in PRIVILEGED_RATING_ROLES and user.operator_id != operator_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
+
+    op = db.get(Operator, operator_id)
+    if not op:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
+    return op
+
+
 def _week_label(ws: date, we: date) -> str:
     return f"{ws.strftime('%d.%m')}–{we.strftime('%d.%m.%Y')}"
+
+
+def _metric_value(row: Dict, metric: str) -> float:
+    if metric == "coins":
+        return float(row.get("coins_earned") or 0)
+    if metric == "quality":
+        return float(row.get("quality_score") or 0)
+    if metric == "efficiency":
+        return float(row.get("efficiency_score") or 0)
+    return float(row.get("contest_points") or row.get("final_score") or 0)
 
 
 @router.get("")
@@ -36,6 +60,7 @@ def get_rating(
     rows = rating_rows(db, week_start, week_end)
     period = latest_period(db)
     period_label = _week_label(*period) if period else "—"
+    last_updated = db.scalar(select(func.max(WeeklyResult.created_at)))
 
     # Mark current user row
     op = _get_operator_for_user(db, current_user)
@@ -47,16 +72,18 @@ def get_rating(
         "week_start": str(period[0]) if period else None,
         "week_end":   str(period[1]) if period else None,
         "total":      len(rows),
+        "updated_at": last_updated.isoformat() if last_updated else None,
         "items":      rows,
     }
 
 
 @router.get("/me")
 def get_my_rating(
+    operator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    op = _get_operator_for_user(db, current_user)
+    op = _get_requested_operator(db, current_user, operator_id)
     if not op:
         return {"no_operator": True}
 
@@ -74,6 +101,8 @@ def get_my_rating(
             "weekly_points": 0,
             "weekly_coins": 0,
             "total_balance": op.current_balance or 0,
+            "quality_score": 0,
+            "efficiency_score": 0,
             "place_change": None,
         }
 
@@ -86,6 +115,8 @@ def get_my_rating(
         "weekly_points": my_row.get("contest_points") or my_row.get("final_score") or 0,
         "weekly_coins": my_row.get("coins_earned") or 0,
         "total_balance": op.current_balance or 0,
+        "quality_score": my_row.get("quality_score") or 0,
+        "efficiency_score": my_row.get("efficiency_score") or 0,
         "place_change": my_row.get("rank_delta"),
     }
 
@@ -93,31 +124,32 @@ def get_my_rating(
 @router.get("/me/comparison")
 def get_my_comparison(
     metric: str = "points",
+    operator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    op = _get_operator_for_user(db, current_user)
+    op = _get_requested_operator(db, current_user, operator_id)
     rows = rating_rows(db)
-    if not rows:
+    if not rows or not op:
         return {"metric": metric, "items": []}
 
-    def val(row):
-        if metric == "coins":
-            return row.get("coins_earned") or 0
-        return row.get("contest_points") or row.get("final_score") or 0
+    def val(row: Dict) -> float:
+        return _metric_value(row, metric)
 
-    my_val    = val(next((r for r in rows if op and r["operator_id"] == op.id), {})) if op else 0
+    selected_row = next((r for r in rows if r["operator_id"] == op.id), {})
+    selected_val = val(selected_row)
     top1_val  = val(rows[0]) if rows else 0
     top3_vals = [val(r) for r in rows[:3]]
     top3_avg  = round(mean(top3_vals), 1) if top3_vals else 0
     all_avg   = round(mean([val(r) for r in rows]), 1) if rows else 0
+    selected_label = "Вы" if current_user.operator_id == op.id else "Выбранный оператор"
 
     return {
         "metric": metric,
         "items": [
             {"label": "Топ-1",           "value": top1_val,  "is_highlight": False},
             {"label": "Среднее топ-3",   "value": top3_avg,  "is_highlight": False},
-            {"label": "Вы",              "value": my_val,    "is_highlight": True},
+            {"label": selected_label,    "value": selected_val, "is_highlight": True},
             {"label": "Среднее по всем", "value": all_avg,   "is_highlight": False},
         ]
     }
@@ -127,10 +159,11 @@ def get_my_comparison(
 def get_my_dynamics(
     type: str = "place",
     weeks: int = 8,
+    operator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    op = _get_operator_for_user(db, current_user)
+    op = _get_requested_operator(db, current_user, operator_id)
     if not op:
         return {"type": type, "items": []}
 
@@ -162,10 +195,11 @@ def get_my_dynamics(
 @router.get("/me/transactions")
 def get_my_transactions(
     limit: int = 5,
+    operator_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> List[dict]:
-    op = _get_operator_for_user(db, current_user)
+    op = _get_requested_operator(db, current_user, operator_id)
     if not op:
         return []
 

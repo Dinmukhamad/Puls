@@ -189,7 +189,7 @@ async function bootApp() {
 
 async function loadData(role) {
   const tasks = [
-    api.getRating().catch(() => []).then(r => STATE.rating = r),
+    api.getRating().catch(() => ({ items: [] })).then(r => STATE.rating = Array.isArray(r) ? r : (r.items || [])),
     api.listShopItems().catch(() => []).then(s => STATE.shopItems = s),
   ];
   if (role === 'operator') {
@@ -264,7 +264,8 @@ function renderCabinet() {
   }
 
   const myRow = STATE.rating.find(r => r.operator_id === w.operator_id);
-  const rank = myRow?.rank_position || '—';
+  const hasRank = myRow?.rank_position != null && Number(myRow.rank_position) > 0;
+  const rank = hasRank ? Number(myRow.rank_position) : null;
   const total = STATE.rating.length || '—';
   const delta = myRow?.rank_delta;
 
@@ -289,8 +290,8 @@ function renderCabinet() {
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Место в рейтинге</div>
-        <div class="kpi-value">${rank} <span class="kpi-unit">из ${total}</span>
-          ${delta != null ? `<span class="rank-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${delta > 0 ? '↑'+delta : delta < 0 ? '↓'+Math.abs(delta) : '—'}</span>` : ''}
+        <div class="kpi-value">${rank ? `${rank} <span class="kpi-unit">из ${total}</span>` : '<span class="kpi-unit">Пока не рассчитано</span>'}
+          ${delta != null ? `<span class="rank-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${delta > 0 ? '↑'+delta : delta < 0 ? '↓'+Math.abs(delta) : 'без изм.'}</span>` : ''}
         </div>
       </div>
     </div>
@@ -329,7 +330,8 @@ function renderCabinet() {
 
 async function reloadCabinet() {
   STATE.wallet = await api.myWallet().catch(() => STATE.wallet);
-  STATE.rating = await api.getRating().catch(() => STATE.rating);
+  const ratingResp = await api.getRating().catch(() => ({ items: STATE.rating }));
+  STATE.rating = Array.isArray(ratingResp) ? ratingResp : (ratingResp.items || []);
   renderCabinet();
 }
 
@@ -410,6 +412,14 @@ async function renderRating() {
 
   const role  = STATE.user?.role || 'operator';
   const isOp  = role === 'operator';
+  const canSelectOperator = isAdmin(role);
+  let selectedOpId = canSelectOperator ? null : (STATE.user?.operator_id || null);
+  let searchVal = '';
+  let filterGroup = '';
+  let operatorSearchVal = '';
+  let cmpMetric = 'points';
+  let dynType = 'place';
+  let personal = { myData: null, myTx: [], myDyn: null, myCmp: null };
 
   // Skeleton
   el.innerHTML = `
@@ -418,111 +428,239 @@ async function renderRating() {
       <div class="header-right"><button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button></div>
     </div>
     <div class="rating-page">
-      <div class="skel-block" style="height:72px;border-radius:16px;margin-bottom:20px"></div>
-      <div class="rating-top-grid" style="margin-bottom:20px">
-        <div class="skel-block" style="height:180px;border-radius:16px"></div>
-        <div class="skel-block" style="height:180px;border-radius:16px"></div>
+      <div class="skel-block rating-skel-header"></div>
+      <div class="rating-top-grid">
+        <div class="skel-block rating-skel-card"></div>
+        <div class="skel-block rating-skel-card"></div>
       </div>
-      <div class="rating-mid-grid" style="margin-bottom:20px">
-        <div class="skel-block" style="height:160px;border-radius:16px"></div>
-        <div class="skel-block" style="height:160px;border-radius:16px"></div>
+      <div class="rating-mid-grid">
+        <div class="skel-block rating-skel-card compact"></div>
+        <div class="skel-block rating-skel-card compact"></div>
       </div>
-      <div class="skel-block" style="height:120px;border-radius:16px;margin-bottom:20px"></div>
-      <div class="skel-block" style="height:240px;border-radius:16px"></div>
+      <div class="skel-block rating-skel-wide"></div>
+      <div class="skel-block rating-skel-wide tall"></div>
     </div>`;
 
   try {
-    // State for admin/supervisor selected operator
-    let selectedOpId = isOp ? (STATE.user?.operator_id || null) : null;
+    async function fetchRequired(path) {
+      const res = await fetch(api._base() + path, { credentials: 'include' });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (!res.ok) {
+        const msg = data.detail || data.error || `Ошибка ${res.status}`;
+        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      }
+      return data;
+    }
 
-    // Fetch base data
+    async function fetchOptional(path, fallback) {
+      try {
+        const res = await fetch(api._base() + path, { credentials: 'include' });
+        if (!res.ok) return fallback;
+        return await res.json();
+      } catch {
+        return fallback;
+      }
+    }
+
     const [ratingResp, nominationsResp] = await Promise.all([
-      fetch(api._base() + '/api/rating', { credentials: 'include' }).then(r => r.json()),
-      fetch(api._base() + '/api/rating/nominations', { credentials: 'include' }).then(r => r.json()),
+      fetchRequired('/api/rating'),
+      fetchOptional('/api/rating/nominations', { items: [] }),
     ]);
 
-    const rows     = ratingResp.items || [];
-    const total    = ratingResp.total || rows.length;
-    const period   = ratingResp.period || '—';
-    const groups   = [...new Set(rows.map(r => r.group_name).filter(Boolean))].sort();
-    const noms     = nominationsResp.items || [];
+    const rows = Array.isArray(ratingResp.items) ? ratingResp.items : [];
+    const total = ratingResp.total !== null && ratingResp.total !== undefined && ratingResp.total !== ''
+      && Number.isFinite(Number(ratingResp.total)) ? Number(ratingResp.total) : rows.length;
+    const period = ratingResp.period && ratingResp.period !== '—' ? ratingResp.period : 'Период пока не рассчитан';
+    const updatedAt = ratingResp.updated_at || '';
+    const groups = [...new Set(rows.map(r => r.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+    const noms = Array.isArray(nominationsResp.items) ? nominationsResp.items : [];
+    const operatorChoices = buildOperatorChoices();
 
-    // Get personal data for a given operator_id
+    function hasPersonalTarget(opId) {
+      return canSelectOperator ? Boolean(opId) : true;
+    }
+
+    function pathWithParams(path, params = {}, opId = selectedOpId) {
+      const qp = new URLSearchParams(params);
+      if (opId) qp.set('operator_id', opId);
+      const qs = qp.toString();
+      return qs ? `${path}?${qs}` : path;
+    }
+
+    async function fetchComparisonData(opId, metric) {
+      if (!hasPersonalTarget(opId)) return { metric, items: [] };
+      return fetchOptional(pathWithParams('/api/rating/me/comparison', { metric }, opId), { metric, items: [] });
+    }
+
+    async function fetchDynamicsData(opId, type) {
+      if (!hasPersonalTarget(opId)) return { type, items: [] };
+      return fetchOptional(pathWithParams('/api/rating/me/dynamics', { type, weeks: 8 }, opId), { type, items: [] });
+    }
+
+    async function fetchTransactionsData(opId) {
+      if (!hasPersonalTarget(opId)) return [];
+      const data = await fetchOptional(pathWithParams('/api/rating/me/transactions', { limit: 5 }, opId), []);
+      return Array.isArray(data) ? data : [];
+    }
+
     async function fetchPersonalData(opId) {
-      if (!opId) return { myData: null, myTx: [], myDyn: null, myCmp: null };
+      if (!hasPersonalTarget(opId)) return { myData: null, myTx: [], myDyn: null, myCmp: null };
       const [myData, myTx, myDyn, myCmp] = await Promise.all([
-        fetch(api._base() + '/api/rating/me', { credentials: 'include' }).then(r => r.json()),
-        fetch(api._base() + '/api/rating/me/transactions?limit=5', { credentials: 'include' }).then(r => r.json()),
-        fetch(api._base() + '/api/rating/me/dynamics?type=place&weeks=8', { credentials: 'include' }).then(r => r.json()),
-        fetch(api._base() + '/api/rating/me/comparison?metric=points', { credentials: 'include' }).then(r => r.json()),
+        fetchOptional(pathWithParams('/api/rating/me', {}, opId), { no_operator: true }),
+        fetchTransactionsData(opId),
+        fetchDynamicsData(opId, dynType),
+        fetchComparisonData(opId, cmpMetric),
       ]);
       return { myData, myTx, myDyn, myCmp };
     }
 
-    let { myData, myTx, myDyn, myCmp } = await fetchPersonalData(isOp ? 1 : null);
+    personal = await fetchPersonalData(selectedOpId);
 
-    // ── Render helpers ──────────────────────────────────────
+    function buildOperatorChoices() {
+      const map = new Map();
+      rows.forEach(r => {
+        if (!r.operator_id) return;
+        map.set(String(r.operator_id), {
+          id: Number(r.operator_id),
+          full_name: r.operator_name || 'Без имени',
+          group_name: r.group_name || '',
+        });
+      });
+      (STATE.adminOperators || []).forEach(o => {
+        if (!o.id) return;
+        map.set(String(o.id), {
+          id: Number(o.id),
+          full_name: o.full_name || 'Без имени',
+          group_name: o.group_name || '',
+        });
+      });
+      return [...map.values()].sort((a, b) => String(a.full_name).localeCompare(String(b.full_name), 'ru'));
+    }
 
-    function safeNum(v, decimals = 0) {
+    function isNum(v) {
+      return v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
+    }
+
+    function cleanNumber(v, decimals = 0, fallback = 'Нет данных') {
+      if (!isNum(v)) return fallback;
       const n = Number(v);
-      if (isNaN(n)) return '—';
-      return decimals > 0 ? n.toFixed(decimals) : String(n);
+      if (decimals > 0) return n.toFixed(decimals).replace(/\.0$/, '');
+      return String(Math.round(n));
+    }
+
+    function cleanCoins(v, fallback = 'Нет данных') {
+      return isNum(v) ? `${Math.round(Number(v))} ₡` : fallback;
+    }
+
+    function cleanDate(dt, fallback = 'Нет данных') {
+      if (!dt) return fallback;
+      const date = new Date(dt);
+      if (Number.isNaN(date.getTime())) return fallback;
+      return date.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+    }
+
+    function cleanDateTime(dt, fallback = 'Нет данных') {
+      if (!dt) return fallback;
+      const date = new Date(dt);
+      if (Number.isNaN(date.getTime())) return fallback;
+      return date.toLocaleString('ru-RU', {
+        day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
+      });
+    }
+
+    function metricDecimals(metric) {
+      return metric === 'coins' ? 0 : 1;
     }
 
     function renderHeader() {
-      const bal = myData?.total_balance != null ? `<div class="rh-balance">${myData.total_balance} ₡</div>` : '';
+      const myData = personal.myData;
+      const bal = myData && !myData.no_operator && isNum(myData.total_balance)
+        ? `<div class="rh-balance"><span>Баланс</span><b>${cleanCoins(myData.total_balance)}</b></div>`
+        : '';
       return `<div class="rh-card">
         <div>
           <div class="rh-title">Рейтинг операторов</div>
-          <div class="rh-meta">Период: ${esc(period)} &nbsp;·&nbsp; Участников: ${total}</div>
+          <div class="rh-meta">Период: ${esc(period)} · Участников: ${total} · Обновлено: ${cleanDateTime(updatedAt)}</div>
         </div>
         ${bal}
       </div>`;
     }
 
+    function operatorOptionsHtml() {
+      const q = operatorSearchVal.trim().toLowerCase();
+      let visible = operatorChoices.filter(op =>
+        !q ||
+        String(op.full_name).toLowerCase().includes(q) ||
+        String(op.group_name || '').toLowerCase().includes(q)
+      );
+      if (selectedOpId && !visible.some(op => op.id === selectedOpId)) {
+        const selected = operatorChoices.find(op => op.id === selectedOpId);
+        if (selected) visible = [selected, ...visible];
+      }
+      return `<option value="">Не выбран</option>${visible.map(op => `
+        <option value="${op.id}" ${op.id === selectedOpId ? 'selected' : ''}>
+          ${esc(op.full_name)}${op.group_name ? ` · ${esc(op.group_name)}` : ''}
+        </option>`).join('')}`;
+    }
+
     function renderOpSelector() {
-      if (isOp) return '';
-      return `<div class="rating-card rating-card-body" style="margin-bottom:20px">
-        <div class="rs-label">Просмотр оператора</div>
+      if (!canSelectOperator) return '';
+      return `<div class="rating-card rating-card-body rating-selector-card">
+        <div>
+          <div class="rs-label">Карточка оператора</div>
+          <div class="rs-hint">${selectedOpId ? 'Личные блоки показывают данные выбранного оператора' : 'Выберите оператора, чтобы посмотреть индивидуальный результат.'}</div>
+        </div>
         <div class="rs-row">
-          <select id="rating-op-select" class="form-select" style="max-width:320px">
-            <option value="">— Выберите оператора —</option>
-            ${rows.map(r => `<option value="${r.operator_id}" ${r.operator_id==selectedOpId?'selected':''}>${esc(r.operator_name)} (${esc(r.group_name||'—')})</option>`).join('')}
-          </select>
-          <span class="rs-hint">${selectedOpId ? '' : 'Выберите оператора, чтобы увидеть личный результат'}</span>
+          <input id="rating-op-search" class="form-input" placeholder="Поиск по ФИО" value="${esc(operatorSearchVal)}">
+          <select id="rating-op-select" class="form-select">${operatorOptionsHtml()}</select>
         </div>
       </div>`;
     }
 
     function renderMyResult() {
-      if (!myData || myData.no_operator) {
-        if (isOp) return `<div class="rating-card rating-card-body r-my-card">
-          <div class="rcard-title">Мой результат</div>
-          <div class="r-empty-state"><div class="r-empty-icon">📊</div><div>Место пока не рассчитано</div><div class="r-empty-sub">Участвуйте в конкурсе, чтобы попасть в рейтинг</div></div>
+      const myData = personal.myData;
+      if (canSelectOperator && !selectedOpId) {
+        return `<div class="rating-card rating-card-body r-my-card">
+          <div class="rcard-title">Карточка оператора</div>
+          <div class="r-empty-state">
+            <div class="r-empty-title">Выберите оператора</div>
+            <div class="r-empty-sub">После выбора здесь появятся место, баллы, коины и баланс.</div>
+          </div>
         </div>`;
-        if (!selectedOpId) return `<div class="rating-card rating-card-body r-my-card">
-          <div class="rcard-title">Результат оператора</div>
-          <div class="r-empty-state"><div class="r-empty-icon">👤</div><div>Выберите оператора</div></div>
-        </div>`;
-        return '';
       }
-      const delta = myData.place_change;
-      const deltaEl = delta == null ? '<span class="rd-neutral">без изменений</span>'
+      if (!myData || myData.no_operator) {
+        return `<div class="rating-card rating-card-body r-my-card">
+          <div class="rcard-title">Мой результат</div>
+          <div class="r-empty-state">
+            <div class="r-empty-title">Место пока не рассчитано</div>
+            <div class="r-empty-sub">Участвуйте в конкурсе, чтобы попасть в рейтинг</div>
+          </div>
+        </div>`;
+      }
+      const delta = isNum(myData.place_change) ? Number(myData.place_change) : null;
+      const deltaEl = delta === null ? '<span class="rd-neutral">без изменений</span>'
         : delta > 0 ? `<span class="rd-up">↑ +${delta} позиции</span>`
         : delta < 0 ? `<span class="rd-down">↓ ${Math.abs(delta)} позиции</span>`
         : '<span class="rd-neutral">без изменений</span>';
 
-      const placeEl = myData.place
-        ? `<div class="rmp-place">#${myData.place} <span class="rmp-total">из ${total}</span></div>`
-        : `<div class="rmp-noplace">Место не определено</div>`;
+      const place = isNum(myData.place) && Number(myData.place) > 0 ? Number(myData.place) : null;
+      const placeTotal = isNum(myData.total_participants) ? Number(myData.total_participants) : total;
+      const placeEl = place
+        ? `<div class="rmp-place">#${place} <span class="rmp-total">из ${placeTotal || total}</span></div>`
+        : `<div class="rmp-noplace"><b>Место пока не рассчитано</b><span>Оператор не участвует в текущем периоде или расчёт ещё не выполнен.</span></div>`;
 
       return `<div class="rating-card rating-card-body r-my-card">
-        <div class="rcard-title">${isOp ? 'Мой результат' : 'Результат: ' + esc(myData.full_name)}</div>
+        <div class="rcard-title">${isOp ? 'Мой результат' : 'Карточка оператора'}</div>
+        <div class="rmp-person">
+          <b>${esc(myData.full_name || STATE.user?.full_name || 'Оператор')}</b>
+          <span>${esc(myData.group_name || 'Группа не указана')}</span>
+        </div>
         ${placeEl}
         <div class="rms-list">
-          <div class="rms-row"><span class="rms-label">Баллы недели</span><span class="rms-val">${safeNum(myData.weekly_points, 1)}</span></div>
-          <div class="rms-row"><span class="rms-label">Коины недели</span><span class="rms-val accent">${safeNum(myData.weekly_coins)} ₡</span></div>
-          <div class="rms-row"><span class="rms-label">Общий баланс</span><span class="rms-val">${safeNum(myData.total_balance)} ₡</span></div>
+          <div class="rms-row"><span class="rms-label">Баллы недели</span><span class="rms-val">${cleanNumber(myData.weekly_points, 1)}</span></div>
+          <div class="rms-row"><span class="rms-label">Коины недели</span><span class="rms-val accent">${cleanCoins(myData.weekly_coins)}</span></div>
+          <div class="rms-row"><span class="rms-label">Общий баланс</span><span class="rms-val">${cleanCoins(myData.total_balance)}</span></div>
           <div class="rms-row"><span class="rms-label">Динамика</span><span class="rms-val">${deltaEl}</span></div>
         </div>
       </div>`;
@@ -530,102 +668,120 @@ async function renderRating() {
 
     function renderPodium() {
       const top3 = rows.slice(0, 3);
-      if (!top3.length) return `<div class="r-empty-state"><div>Данных пока нет</div></div>`;
-      const order = [top3[1], top3[0], top3[2]];
-      const medals = ['🥈','🥇','🥉'];
-      const cls    = ['pod-2','pod-1','pod-3'];
+      if (!top3.length) return `<div class="r-empty-state"><div class="r-empty-title">Пока нет данных</div></div>`;
+      const medals = ['1', '2', '3'];
       return `<div class="podium-grid">
-        ${order.map((op, i) => op ? `
-          <div class="pod-card ${cls[i]} ${op.is_current_user?'pod-me':''}">
+        ${[0, 1, 2].map(i => {
+          const op = top3[i];
+          if (!op) return `<div class="pod-card pod-empty">Пока нет данных</div>`;
+          const isHighlighted = op.is_current_user || (selectedOpId && Number(op.operator_id) === selectedOpId);
+          return `<div class="pod-card pod-${i + 1} ${isHighlighted ? 'pod-me' : ''}">
             <div class="pod-medal">${medals[i]}</div>
-            <div class="pod-name">${esc(op.operator_name)}</div>
-            <div class="pod-group">${esc(op.group_name||'—')}</div>
-            <div class="pod-pts">${safeNum(op.contest_points,1)} б</div>
-            <div class="pod-coins">${safeNum(op.coins_earned)} ₡</div>
-          </div>` : `<div class="pod-card pod-empty">—</div>`).join('')}
+            <div class="pod-name">${esc(op.operator_name || 'Оператор')}</div>
+            <div class="pod-group">${esc(op.group_name || 'Группа не указана')}</div>
+            <div class="pod-pts">${cleanNumber(op.contest_points, 1)} баллов</div>
+            <div class="pod-coins">${cleanCoins(op.coins_earned)}</div>
+          </div>`;
+        }).join('')}
       </div>`;
     }
 
     function renderComparison(data, metric) {
-      if (!data?.items?.length) return `<div class="r-empty-state"><div class="r-empty-icon">📉</div><div>Данные появятся после первого расчёта недели</div></div>`;
-      const maxVal = Math.max(...data.items.map(i => Number(i.value)||0), 1);
+      if (!data?.items?.length) return `<div class="r-empty-state">
+        <div class="r-empty-title">${canSelectOperator && !selectedOpId ? 'Выберите оператора' : 'Сравнение пока недоступно'}</div>
+        <div class="r-empty-sub">Данные появятся после расчёта конкурса.</div>
+      </div>`;
+      const maxVal = Math.max(...data.items.map(i => Number(i.value) || 0), 1);
       return data.items.map(item => {
-        const pct = Math.round(((Number(item.value)||0) / maxVal) * 100);
+        const value = Number(item.value) || 0;
+        const pct = Math.max(0, Math.min(100, Math.round((value / maxVal) * 100)));
         return `<div class="cmp-row ${item.is_highlight?'cmp-me':''}">
-          <div class="cmp-label">${esc(item.label)}</div>
+          <div class="cmp-label">${esc(item.label || 'Показатель')}</div>
           <div class="cmp-bar-wrap"><div class="cmp-bar" style="width:${pct}%"></div></div>
-          <div class="cmp-value">${Number(item.value)||0}</div>
+          <div class="cmp-value">${cleanNumber(value, metricDecimals(metric))}</div>
         </div>`;
       }).join('');
     }
 
     function renderDynamics(data) {
-      if (!data?.items?.length) return `<div class="r-empty-state">
-        <div class="r-empty-icon">📈</div>
-        <div>Динамика пока недоступна</div>
+      if (!data?.items?.length || data.items.length < 2) return `<div class="r-empty-state">
+        <div class="r-empty-title">${canSelectOperator && !selectedOpId ? 'Выберите оператора' : 'Динамика пока недоступна'}</div>
         <div class="r-empty-sub">Появится после нескольких недель участия</div>
       </div>`;
       const items = data.items;
       const isPlace = data.type === 'place';
-      const vals = items.map(i => Number(i.value)||0);
+      const vals = items.map(i => Number(i.value) || 0);
       const minV = Math.min(...vals), maxV = Math.max(...vals);
       const range = maxV - minV || 1;
-      const H = 80, W = 100 * (items.length - 1) || 100;
+      const H = 82, W = 240;
       const pts = items.map((item, i) => {
-        const norm = isPlace ? 1 - (Number(item.value) - minV) / range : (Number(item.value) - minV) / range;
-        return `${i * (W/(items.length-1||1))},${H - norm * H}`;
+        const value = Number(item.value) || 0;
+        const norm = isPlace ? 1 - ((value - minV) / range) : ((value - minV) / range);
+        const x = 8 + i * ((W - 16) / (items.length - 1));
+        const y = 10 + ((1 - norm) * (H - 20));
+        return { x, y, value, week: item.week || 'Неделя' };
       });
       return `<div class="dyn-chart-wrap">
-        <svg viewBox="0 0 ${W+20} ${H+24}" preserveAspectRatio="none" style="width:100%;height:90px">
-          <polyline points="${pts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-          ${pts.map((p, i) => {
-            const [x,y] = p.split(',');
-            return `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--accent)"/>
-              <text x="${x}" y="${Number(y)-8}" text-anchor="middle" font-size="9" fill="var(--tx3)" font-family="Inter,sans-serif">${items[i].value}</text>`;
-          }).join('')}
-          ${items.map((item, i) => `<text x="${i*(W/(items.length-1||1))}" y="${H+18}" text-anchor="middle" font-size="8" fill="var(--tx3)" font-family="Inter,sans-serif">${esc(item.week.split('–')[0])}</text>`).join('')}
+        <svg class="dyn-chart" viewBox="0 0 ${W} 118" preserveAspectRatio="none" aria-hidden="true">
+          <polyline points="${pts.map(p => `${p.x},${p.y}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+          ${pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="var(--accent)"/>
+            <text x="${p.x}" y="${Math.max(8, p.y - 8)}" text-anchor="middle" font-size="9" fill="var(--tx3)" font-family="Inter,sans-serif">${cleanNumber(p.value, dynType === 'place' ? 0 : 1)}</text>`).join('')}
+          ${pts.map(p => `<text x="${p.x}" y="108" text-anchor="middle" font-size="8" fill="var(--tx3)" font-family="Inter,sans-serif">${esc(String(p.week).split('–')[0])}</text>`).join('')}
         </svg>
       </div>`;
     }
 
     function renderNominations() {
-      if (!noms.length) return `<div class="r-empty-state"><div>Номинации недели пока не определены</div></div>`;
+      if (!noms.length) return `<div class="r-empty-state"><div class="r-empty-title">Номинации недели пока не определены.</div></div>`;
       return `<div class="nom-grid-v2">
         ${noms.map(n => `<div class="nom-card-v2 ${n.is_current_user?'nom-me-v2':''}">
-          ${n.is_current_user ? '<div class="nom-you">Это вы!</div>' : ''}
-          <div class="nom-t">${esc(n.title)}</div>
-          <div class="nom-n">${esc(n.winner_name)}</div>
-          <div class="nom-v">${esc(n.value)}</div>
-          <div class="nom-c">+${n.coins_bonus} ₡</div>
+          ${n.is_current_user ? '<div class="nom-you">Это вы</div>' : ''}
+          <div class="nom-t">${esc(n.title || 'Номинация')}</div>
+          <div class="nom-n">${esc(n.winner_name || 'Пока нет победителя')}</div>
+          <div class="nom-v">${esc(n.value || 'Нет данных')}</div>
+          <div class="nom-c">+${cleanCoins(n.coins_bonus, '0 ₡')}</div>
         </div>`).join('')}
       </div>`;
     }
 
     function renderTx() {
-      if (!myTx?.length) return `<div class="r-empty-state"><div>Начислений пока нет</div></div>`;
-      return myTx.map(t => `
-        <div class="rtx2-row ${Number(t.amount)>=0?'rtx2-plus':'rtx2-minus'}">
-          <div class="rtx2-amount">${Number(t.amount)>=0?'+':''}${t.amount} ₡</div>
-          <div class="rtx2-comment" title="${esc(t.comment)}">${esc(t.comment)}</div>
-          <div class="rtx2-date">${fmtDate(t.created_at)}</div>
-        </div>`).join('');
+      const txs = Array.isArray(personal.myTx) ? personal.myTx.slice(0, 5) : [];
+      if (canSelectOperator && !selectedOpId) return `<div class="r-empty-state">
+        <div class="r-empty-title">Выберите оператора</div>
+        <div class="r-empty-sub">Здесь будут последние начисления выбранного оператора.</div>
+      </div>`;
+      if (!txs.length) return `<div class="r-empty-state"><div class="r-empty-title">Начислений пока нет.</div></div>`;
+      return txs.map(t => {
+        const amount = Number(t.amount) || 0;
+        const comment = t.comment || t.type || 'Операция';
+        return `
+        <div class="rtx2-row ${amount >= 0 ? 'rtx2-plus' : 'rtx2-minus'}">
+          <div class="rtx2-amount">${amount >= 0 ? '+' : ''}${cleanCoins(amount)}</div>
+          <div class="rtx2-comment" title="${esc(comment)}">${esc(comment)}</div>
+          <div class="rtx2-date">${cleanDate(t.created_at, '')}</div>
+        </div>`;
+      }).join('');
     }
 
-    let searchVal = '', filterGroup = '';
     function filteredRows() {
+      const q = searchVal.trim().toLowerCase();
       return rows.filter(r =>
-        (!searchVal || r.operator_name.toLowerCase().includes(searchVal.toLowerCase())) &&
+        (!q || String(r.operator_name || '').toLowerCase().includes(q)) &&
         (!filterGroup || r.group_name === filterGroup)
       );
     }
 
     function renderTable() {
       const fr = filteredRows();
-      if (!fr.length) return `<div class="r-empty-state"><div>Рейтинг пока не сформирован. Данные появятся после расчёта конкурса.</div></div>`;
-      const myOpId = myData?.operator_id || null;
-      return `<div class="table-wrap"><table class="data-table">
+      if (!fr.length) return `<div class="r-empty-state">
+        <div class="r-empty-title">Рейтинг пока не сформирован.</div>
+        <div class="r-empty-sub">Данные появятся после расчёта конкурса.</div>
+      </div>`;
+      const myData = personal.myData || {};
+      const myOpId = myData.operator_id || null;
+      return `<div class="table-wrap rating-table-wrap"><table class="data-table rating-table">
         <thead><tr>
-          <th style="width:48px;text-align:center">#</th>
+          <th style="width:72px;text-align:center">Место</th>
           <th>Оператор</th><th>Группа</th>
           <th style="text-align:right">Баллы</th>
           <th style="text-align:right">Коины</th>
@@ -635,27 +791,27 @@ async function renderRating() {
         <tbody>
           ${fr.map(r => {
             const isMe = r.is_current_user || (myOpId && r.operator_id == myOpId) || (selectedOpId && r.operator_id == selectedOpId);
-            const d = r.rank_delta;
-            const dEl = d == null ? '<span class="rd-neutral">—</span>'
+            const place = isNum(r.rank_position) && Number(r.rank_position) > 0 ? Number(r.rank_position) : null;
+            const d = isNum(r.rank_delta) ? Number(r.rank_delta) : null;
+            const dEl = d === null ? '<span class="rd-neutral">без изм.</span>'
               : d > 0 ? `<span class="rd-up">↑${d}</span>`
               : d < 0 ? `<span class="rd-down">↓${Math.abs(d)}</span>`
-              : '<span class="rd-neutral">—</span>';
+              : '<span class="rd-neutral">без изм.</span>';
+            const badgeText = r.is_current_user ? 'Вы' : (selectedOpId && r.operator_id == selectedOpId ? 'Выбран' : '');
             return `<tr class="${isMe?'rating-my-row':''}">
-              <td style="text-align:center"><span class="rank-badge ${r.rank_position<=3?'rank-top':''}">${r.rank_position}</span></td>
-              <td class="name-cell">${esc(r.operator_name)}${isMe?'<span class="me-badge">Вы</span>':''}</td>
-              <td>${esc(r.group_name||'—')}</td>
-              <td style="text-align:right"><b>${safeNum(r.contest_points,1)}</b></td>
-              <td style="text-align:right"><b class="accent-text">${safeNum(r.coins_earned)} ₡</b></td>
-              <td style="text-align:right">${r.total_balance!=null?safeNum(r.total_balance)+' ₡':'—'}</td>
+              <td style="text-align:center">${place ? `<span class="rank-badge ${place <= 3 ? 'rank-top' : ''}">${place}</span>` : '<span class="rank-missing">Нет места</span>'}</td>
+              <td class="name-cell">${esc(r.operator_name || 'Оператор')}${badgeText ? `<span class="me-badge">${badgeText}</span>` : ''}</td>
+              <td>${esc(r.group_name || 'Группа не указана')}</td>
+              <td style="text-align:right"><b>${cleanNumber(r.contest_points,1)}</b></td>
+              <td style="text-align:right"><b class="accent-text">${cleanCoins(r.coins_earned)}</b></td>
+              <td style="text-align:right">${cleanCoins(r.total_balance)}</td>
               <td style="text-align:center">${dEl}</td>
             </tr>`;
           }).join('')}
         </tbody>
       </table></div>
-      ${myData?.place > 10 ? `<div class="rating-my-sticky">Ваше место: <b>#${myData.place}</b> — ${esc(myData.full_name||'')} — ${safeNum(myData.weekly_points,1)} баллов — ${safeNum(myData.weekly_coins)} ₡</div>` : ''}`;
+      ${isNum(myData.place) && Number(myData.place) > 10 ? `<div class="rating-my-sticky">Ваше место: <b>#${Number(myData.place)}</b> · ${esc(myData.full_name||'')} · ${cleanNumber(myData.weekly_points,1)} баллов · ${cleanCoins(myData.weekly_coins)}</div>` : ''}`;
     }
-
-    let cmpMetric = 'points', dynType = 'place';
 
     function buildPage() {
       el.innerHTML = `
@@ -681,22 +837,24 @@ async function renderRating() {
               <div class="rcard-title-row">
                 <span class="rcard-title">Сравнение</span>
                 <div class="metric-tabs" id="cmp-tabs">
-                  <button class="metric-tab active" data-metric="points">Баллы</button>
-                  <button class="metric-tab" data-metric="coins">Коины</button>
+                  <button class="metric-tab ${cmpMetric === 'points' ? 'active' : ''}" data-metric="points">Баллы</button>
+                  <button class="metric-tab ${cmpMetric === 'coins' ? 'active' : ''}" data-metric="coins">Коины</button>
+                  <button class="metric-tab ${cmpMetric === 'quality' ? 'active' : ''}" data-metric="quality">Качество</button>
+                  <button class="metric-tab ${cmpMetric === 'efficiency' ? 'active' : ''}" data-metric="efficiency">Эффективность</button>
                 </div>
               </div>
-              <div id="cmp-body">${renderComparison(myCmp, cmpMetric)}</div>
+              <div id="cmp-body">${renderComparison(personal.myCmp, cmpMetric)}</div>
             </div>
             <div class="rating-card rating-card-body">
               <div class="rcard-title-row">
                 <span class="rcard-title">Динамика</span>
                 <div class="metric-tabs" id="dyn-tabs">
-                  <button class="metric-tab active" data-type="place">Место</button>
-                  <button class="metric-tab" data-type="points">Баллы</button>
-                  <button class="metric-tab" data-type="coins">Коины</button>
+                  <button class="metric-tab ${dynType === 'place' ? 'active' : ''}" data-type="place">Место</button>
+                  <button class="metric-tab ${dynType === 'points' ? 'active' : ''}" data-type="points">Баллы</button>
+                  <button class="metric-tab ${dynType === 'coins' ? 'active' : ''}" data-type="coins">Коины</button>
                 </div>
               </div>
-              <div id="dyn-body">${renderDynamics(myDyn)}</div>
+              <div id="dyn-body">${renderDynamics(personal.myDyn)}</div>
             </div>
           </div>
 
@@ -705,11 +863,10 @@ async function renderRating() {
             ${renderNominations()}
           </div>
 
-          ${myTx?.length || isOp ? `
           <div class="rating-card rating-card-body">
             <div class="rcard-title">${isOp ? 'Мои последние начисления' : 'Последние начисления оператора'}</div>
             ${renderTx()}
-          </div>` : ''}
+          </div>
 
           <div class="rating-card rating-card-body">
             <div class="rcard-title-row">
@@ -737,14 +894,21 @@ async function renderRating() {
         filterGroup = e.target.value;
         el.querySelector('#rating-table-body').innerHTML = renderTable();
       });
+      el.querySelector('#rating-op-search')?.addEventListener('input', e => {
+        operatorSearchVal = e.target.value;
+        const select = el.querySelector('#rating-op-select');
+        if (select) select.innerHTML = operatorOptionsHtml();
+      });
 
       el.querySelectorAll('#cmp-tabs .metric-tab').forEach(btn => {
         btn.addEventListener('click', async () => {
           el.querySelectorAll('#cmp-tabs .metric-tab').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           cmpMetric = btn.dataset.metric;
-          const d = await fetch(api._base() + `/api/rating/me/comparison?metric=${cmpMetric}`, { credentials: 'include' }).then(r => r.json()).catch(() => null);
-          el.querySelector('#cmp-body').innerHTML = renderComparison(d, cmpMetric);
+          const body = el.querySelector('#cmp-body');
+          if (body) body.innerHTML = '<div class="rating-inline-skeleton"></div>';
+          personal.myCmp = await fetchComparisonData(selectedOpId, cmpMetric);
+          if (body) body.innerHTML = renderComparison(personal.myCmp, cmpMetric);
         });
       });
 
@@ -753,37 +917,16 @@ async function renderRating() {
           el.querySelectorAll('#dyn-tabs .metric-tab').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           dynType = btn.dataset.type;
-          const d = await fetch(api._base() + `/api/rating/me/dynamics?type=${dynType}&weeks=8`, { credentials: 'include' }).then(r => r.json()).catch(() => null);
-          el.querySelector('#dyn-body').innerHTML = renderDynamics(d);
+          const body = el.querySelector('#dyn-body');
+          if (body) body.innerHTML = '<div class="rating-inline-skeleton"></div>';
+          personal.myDyn = await fetchDynamicsData(selectedOpId, dynType);
+          if (body) body.innerHTML = renderDynamics(personal.myDyn);
         });
       });
 
       el.querySelector('#rating-op-select')?.addEventListener('change', async e => {
         selectedOpId = e.target.value ? +e.target.value : null;
-        // Reload personal data for selected operator (admin sees own data via /me)
-        if (selectedOpId) {
-          const selected = rows.find(r => r.operator_id == selectedOpId);
-          if (selected) {
-            myData = {
-              operator_id: selected.operator_id,
-              full_name: selected.operator_name,
-              group_name: selected.group_name,
-              place: selected.rank_position,
-              total_participants: total,
-              weekly_points: selected.contest_points || 0,
-              weekly_coins: selected.coins_earned || 0,
-              total_balance: selected.total_balance || 0,
-              place_change: selected.rank_delta,
-            };
-          }
-        } else {
-          myData = null;
-        }
-        // Re-render personal blocks
-        el.querySelector('.r-my-card')?.outerHTML && (() => {
-          const wrap = el.querySelector('.rating-top-grid');
-          if (wrap) wrap.children[0].outerHTML = renderMyResult();
-        })();
+        personal = await fetchPersonalData(selectedOpId);
         buildPage();
       });
     }
@@ -798,13 +941,13 @@ async function renderRating() {
 }
 
 function miniRating(limit, highlightId) {
-  const rows = STATE.rating.slice(0, limit);
+  const rows = Array.isArray(STATE.rating) ? STATE.rating.slice(0, limit) : [];
   if (!rows.length) return '<div class="empty-line">Нет данных</div>';
   return `<div class="mini-rating">${rows.map(r => `
     <div class="mini-rating-row ${r.operator_id===highlightId?'mini-me':''}">
-      <span class="mini-rank">${r.rank_position}</span>
-      <span class="mini-name">${esc(r.operator_name)}</span>
-      <span class="mini-coins">${r.coins_earned} ₡</span>
+      <span class="mini-rank">${r.rank_position || 'Нет'}</span>
+      <span class="mini-name">${esc(r.operator_name || 'Оператор')}</span>
+      <span class="mini-coins">${r.coins_earned || 0} ₡</span>
     </div>`).join('')}</div>`;
 }
 

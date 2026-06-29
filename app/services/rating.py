@@ -79,8 +79,12 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
                 "operator_name": operator.full_name,
                 "group_name": operator.group_name,
                 "contest_points": result.contest_points,
+                "final_score": result.final_score,
+                "quality_score": result.quality_score,
+                "efficiency_score": result.efficiency_score,
                 "coins_earned": result.coins_earned,
-                "rank_position": result.rank_position or 0,
+                "total_balance": operator.current_balance or 0,
+                "rank_position": result.rank_position,
                 "rank_delta": rank_delta,
             }
         )
