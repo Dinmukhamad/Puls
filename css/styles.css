@@ -2075,3 +2075,77 @@ button, a, input, select, textarea {
 
 /* Force hide excel import nav */
 #excel-import-nav { display: none !important; }
+
+
+/* ═══════════════════════════════════════════════════
+   SLATE+SKY POLISH — visual refinements
+═══════════════════════════════════════════════════ */
+
+/* Sidebar brand logo always white on slate */
+.side-nav-brand { color: #F8FAFC !important; }
+.side-nav-brand em { color: #38BDF8 !important; font-style: normal; }
+
+/* Sidebar links always slate theme */
+.side-nav-link { color: var(--sidebar-text) !important; }
+.side-nav-link svg { stroke: var(--sidebar-text) !important; }
+.side-nav-link:hover { background: var(--sidebar-hover-bg) !important; color: #CBD5E1 !important; }
+.side-nav-link:hover svg { stroke: #CBD5E1 !important; }
+.side-nav-link.active { background: var(--accent-primary) !important; color: #fff !important; }
+.side-nav-link.active svg { stroke: #fff !important; }
+
+/* Side nav meta */
+.side-nav-meta { color: var(--sidebar-text) !important; }
+.side-user-info #side-user { color: #CBD5E1 !important; }
+.side-user-info #side-role { color: var(--sidebar-text) !important; }
+#auth-logout-btn { color: var(--sidebar-text) !important; }
+#auth-logout-btn:hover { color: #CBD5E1 !important; }
+
+/* Gear button in sidebar */
+.side-gear-btn { border-color: var(--sidebar-border) !important; color: var(--sidebar-text) !important; }
+.side-gear-btn:hover { background: var(--sidebar-hover-bg) !important; color: #CBD5E1 !important; }
+
+/* Theme toggle */
+.theme-toggle { border-color: var(--sidebar-border) !important; color: var(--sidebar-text) !important; }
+.theme-toggle:hover { background: var(--sidebar-hover-bg) !important; color: #CBD5E1 !important; }
+
+/* Section separator */
+.side-nav-separator { background: var(--sidebar-border) !important; }
+.side-nav-section-label { color: #475569 !important; }
+
+/* KPI card accent border */
+.kpi-card.kpi-accent { border-top: 3px solid var(--accent-primary); }
+
+/* Btn primary sky blue */
+.btn-primary {
+  background: var(--accent-primary) !important;
+  color: #fff !important;
+}
+.btn-primary:hover { background: var(--accent-primary-hover) !important; }
+
+/* Panel head h3 */
+.panel-head h3 { color: var(--text-primary); font-weight: 600; }
+
+/* View header separator */
+.view-header { border-bottom: 1px solid var(--border-default); }
+
+/* Table improvements */
+.data-table th { color: var(--text-secondary); border-bottom: 1px solid var(--border-default); }
+.data-table td { border-bottom: 1px solid var(--border-soft); }
+.data-table tr:hover td { background: var(--bg-surface-hover); }
+
+/* Card panels */
+.panel, .rating-card, .manual-card {
+  border-color: var(--border-default) !important;
+}
+
+/* Focus ring sky blue */
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 0 0 3px rgba(2,132,199,0.15) !important;
+}
+
+/* Scrollbar slate */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
