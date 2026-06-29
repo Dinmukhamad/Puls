@@ -579,19 +579,29 @@ def delete_operator(
             detail="Оператора нельзя удалить, так как по нему уже есть история. Используйте функцию увольнения.",
         )
 
-    user = _operator_user(db, op)
-    if user:
-        user.is_active = False
-        user.operator_id = None
-        user.username = f"deleted_{op.id}_{user.username}"[:120]
-    op.user_id = None
-    _audit(db, "operator_deleted", "operator", op.id,
-           f"Удалена ошибочно созданная карточка оператора {op.full_name}.",
-           current_user)
-    db.flush()
-    db.delete(op)
-    db.commit()
-    return {"ok": True}
+    try:
+        # Detach user before deleting operator
+        user = _operator_user(db, op)
+        if user:
+            user.is_active = False
+            user.operator_id = None
+            user.username = f"deleted_{op.id}_{user.username}"[:120]
+            db.flush()
+
+        # Clear FK on operator
+        op.user_id = None
+        db.flush()
+
+        _audit(db, "operator_deleted", "operator", op.id,
+               f"Удалена ошибочно созданная карточка оператора {op.full_name}.",
+               current_user)
+        db.flush()
+        db.delete(op)
+        db.commit()
+        return {"ok": True}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка при удалении: {str(e)}")
 
 
 @router.get("/{operator_id}/history")
