@@ -1364,6 +1364,15 @@ body.side-nav-collapsed .theme-toggle { display: none; }
   justify-content: space-between;
   gap: 8px;
 }
+.side-user-avatar {
+  width: 32px; height: 32px; border-radius: 999px;
+  background: var(--sidebar-hover-bg);
+  border: 1px solid var(--sidebar-border);
+  color: #CBD5E1;
+  display: flex; align-items: center; justify-content: center;
+  font: 700 11px 'Inter', sans-serif;
+  flex-shrink: 0; text-transform: uppercase;
+}
 .side-user-info {
   min-width: 0;
   flex: 1;
@@ -2079,14 +2088,22 @@ button, .btn, .btn-primary, .btn-outline, .btn-sm,
    Layout constraints, typography, contrast
 ═══════════════════════════════════════════════ */
 
-/* Max-width content constraint — no more empty right space */
+/* Layout: content fills available space, max 1360px centered */
 .view-content {
-  padding: 28px 32px 48px;
+  padding: 0;
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-page);
+  min-width: 0;
 }
 .app-view.active {
-  max-width: 1280px;
-  margin: 0 auto;
+  display: block;
   width: 100%;
+  min-height: 100vh;
+  padding: 28px 32px 48px;
+  max-width: 1360px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 
 /* All tables wrapped in panels get rounded corners */
@@ -2191,9 +2208,51 @@ button, .btn, .btn-primary, .btn-outline, .btn-sm,
 
 /* Responsive constraint */
 @media (max-width: 1100px) {
-  .view-content { padding: 20px 20px 40px; }
+  /* removed — now handled by .app-view.active */
   .app-view.active { max-width: 100%; }
 }
 @media (max-width: 768px) {
-  .view-content { padding: 16px 16px 32px; }
+  /* removed — now handled by .app-view.active */
 }
+
+
+/* ═══════════════════════════════════════════════
+   LAYOUT + DETAIL FIXES — ТЗ compliance
+═══════════════════════════════════════════════ */
+
+/* Center content, fill width, no empty space */
+body { padding-left: var(--nav-w, 220px); }
+.view-content {
+  min-height: 100vh;
+  display: block;
+  background: var(--bg-page);
+}
+
+/* Numeric columns right-aligned */
+.data-table td.num,
+.data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* KPI cards equal height in row */
+.kpi-row .kpi-card { height: 100%; }
+
+/* Summary layout */
+@media (min-width: 1200px) {
+  .kpi-row { grid-template-columns: repeat(5, minmax(0,1fr)); }
+}
+@media (max-width: 1100px) {
+  .kpi-row { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .summary-main-grid { grid-template-columns: 1fr; }
+  .app-view.active { padding: 20px 20px 40px; }
+}
+@media (max-width: 640px) {
+  .kpi-row { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .app-view.active { padding: 16px 16px 32px; }
+}
+
+/* Table rows readable */
+.data-table td { color: var(--text-primary); }
+.data-table th { color: var(--text-secondary); }
+
+/* Sidebar logo SVG color */
+.side-nav-mark svg { color: #38BDF8; }
+.side-nav-mark { color: #38BDF8; }
