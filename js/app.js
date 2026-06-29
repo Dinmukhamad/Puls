@@ -664,31 +664,68 @@ function renderAdminOperators() {
     const dismissed = isOperatorDismissed(o);
     const canManage = canManageOperators();
     const canCharge = !dismissed && o.participation_status === 'participating' && o.is_active;
-    const chargeBtn = canCharge
-      ? `<button class="btn-icon btn-ghost quick-charge-btn" data-id="${o.id}" title="Начислить коины" aria-label="Начислить коины">₡</button>`
-      : '';
-    const historyBtn = `<button class="btn-icon btn-ghost" onclick="showOperatorHistoryModal(${o.id})" title="История" aria-label="История">≡</button>`;
 
-    if (!canManage) return `<div class="row-actions">${historyBtn}${chargeBtn}</div>`;
-
-    if (dismissed) {
-      return `
-        <div class="row-actions">
-          ${historyBtn}
-          <button class="btn-icon btn-ghost" onclick="showRestoreOperatorModal(${o.id})" title="Восстановить" aria-label="Восстановить">↺</button>
-          <button class="btn-icon btn-ghost danger" onclick="confirmDeleteOperator(${o.id})" title="Удалить" aria-label="Удалить">×</button>
-        </div>`;
+    if (!canManage) {
+      return `<div class="row-actions">
+        <button class="btn-action btn-action-secondary" onclick="showOperatorHistoryModal(${o.id})" title="История операций">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          История
+        </button>
+        ${canCharge ? `<button class="btn-action btn-action-primary quick-charge-btn" data-id="${o.id}" title="Начислить коины">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Начислить
+        </button>` : ''}
+      </div>`;
     }
 
-    return `
-      <div class="row-actions">
-        <button class="btn-icon btn-ghost" onclick="showEditOperatorModal(${o.id})" title="Редактировать" aria-label="Редактировать">✎</button>
-        <button class="btn-icon btn-ghost" onclick="resetOperatorPassword(${o.id})" title="Сбросить пароль" aria-label="Сбросить пароль">↻</button>
-        <button class="btn-icon btn-ghost danger" onclick="confirmDismissOperator(${o.id})" title="Уволить" aria-label="Уволить">!</button>
-        <button class="btn-icon btn-ghost danger" onclick="confirmDeleteOperator(${o.id})" title="Удалить" aria-label="Удалить">×</button>
-        ${historyBtn}
-        ${chargeBtn}
+    if (dismissed) {
+      return `<div class="row-actions">
+        <button class="btn-action btn-action-secondary" onclick="showOperatorHistoryModal(${o.id})" title="История операций">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          История
+        </button>
+        <button class="btn-action btn-action-secondary" onclick="showRestoreOperatorModal(${o.id})" title="Восстановить оператора">
+          <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.95"/></svg>
+          Восстановить
+        </button>
+        <button class="btn-action btn-action-danger" onclick="confirmDeleteOperator(${o.id})" title="Удалить">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+          Удалить
+        </button>
       </div>`;
+    }
+
+    return `<div class="row-actions">
+      <div class="row-actions-group">
+        <button class="btn-action btn-action-secondary" onclick="showEditOperatorModal(${o.id})" title="Редактировать данные">
+          <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Изменить
+        </button>
+        <button class="btn-action btn-action-secondary" onclick="resetOperatorPassword(${o.id})" title="Сбросить пароль">
+          <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Пароль
+        </button>
+        <button class="btn-action btn-action-secondary" onclick="showOperatorHistoryModal(${o.id})" title="История операций">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          История
+        </button>
+      </div>
+      <div class="row-actions-sep"></div>
+      <div class="row-actions-group">
+        ${canCharge ? `<button class="btn-action btn-action-primary quick-charge-btn" data-id="${o.id}" title="Начислить коины">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+          Начислить
+        </button>` : ''}
+        <button class="btn-action btn-action-warn" onclick="confirmDismissOperator(${o.id})" title="Уволить оператора">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+          Уволить
+        </button>
+        <button class="btn-action btn-action-danger" onclick="confirmDeleteOperator(${o.id})" title="Удалить оператора">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+          Удалить
+        </button>
+      </div>
+    </div>`;
   }
 
   function renderTable() {
