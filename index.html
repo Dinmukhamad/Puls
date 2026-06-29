@@ -11,7 +11,7 @@
   <script src="js/api.js?v=puls-2"></script>
   <script>
     (function() {
-      const t = localStorage.getItem('puls-theme') || 'light';
+      const t = localStorage.getItem('pulse-theme') || localStorage.getItem('puls-theme') || 'light';
       document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
