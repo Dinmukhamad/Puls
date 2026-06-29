@@ -140,7 +140,7 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
   inset: 0 auto 0 0;
   z-index: 900;
   width: var(--nav-w);
-  background: var(--nav-bg);
+  background: var(--sidebar-bg);
   display: flex;
   flex-direction: column;
   padding: 20px 14px 24px;
@@ -206,7 +206,7 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
 
 /* Links */
 .side-nav-group { display: flex; flex-direction: column; gap: 2px; }
-.side-nav-separator { height: 1px; margin: 14px 4px; background: var(--nav-sep); }
+.side-nav-separator { height: 1px; margin: 14px 4px; background: var(--sidebar-border); }
 
 .side-nav-link {
   display: flex; align-items: center; gap: 10px;
@@ -234,7 +234,7 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
 /* Meta */
 .side-nav-meta {
   margin-top: auto; padding-top: 16px;
-  border-top: 1px solid var(--nav-sep);
+  border-top: 1px solid var(--sidebar-border);
   font-size: 11px; color: rgba(255,255,255,.3);
   line-height: 1.6;
 }
@@ -311,7 +311,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .auth-visual {
   display: flex; flex-direction: column;
   justify-content: center; padding: clamp(40px,8vw,100px);
-  background: var(--nav-bg);
+  background: var(--sidebar-bg);
   position: relative; overflow: hidden;
 }
 .auth-visual::before {
@@ -558,7 +558,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   gap: 12px; margin-bottom: 20px;
 }
 .kpi-card {
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--card-bg); border: 1px solid var(--border);
   border-radius: var(--r-lg); padding: 20px;
   transition: border-color var(--t), box-shadow var(--t), transform var(--t);
   position: relative; overflow: hidden;
@@ -698,7 +698,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   gap: 14px; margin-bottom: 24px;
 }
 .shop-card {
-  background: var(--surface); border: 1px solid var(--border);
+  background: var(--card-bg); border: 1px solid var(--border);
   border-radius: var(--r-lg); padding: 20px;
   display: flex; flex-direction: column; gap: 10px;
   transition: border-color var(--t), box-shadow var(--t), transform var(--t);
@@ -765,7 +765,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   border-bottom: 1px solid var(--border-soft);
   color: var(--tx2); vertical-align: middle;
 }
-.data-table tr:hover td { background: var(--surface-2); }
+.data-table tr:hover td { background: var(--bg-surface-hover); }
 .data-table tr.row-me td { background: var(--accent-soft); }
 .data-table tr.row-top td:first-child { border-left: 2px solid var(--accent); }
 .data-table tr.operator-dismissed-row td {
@@ -1454,7 +1454,7 @@ body.side-nav-collapsed .theme-toggle { display: none; }
 }
 .side-user-info #side-user {
   display: block;
-  color: rgba(255,255,255,.85);
+  color: var(--sidebar-text-active);
   font-weight: 600;
   font-size: 13px;
   white-space: nowrap;
@@ -1472,17 +1472,16 @@ body.side-nav-collapsed .theme-toggle { display: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255,255,255,.12);
+  border: 1px solid var(--sidebar-border);
   border-radius: 8px;
-  background: rgba(255,255,255,.05);
-  color: rgba(255,255,255,.45);
+  background: transparent;
+  color: var(--sidebar-text);
   cursor: pointer;
-  transition: background var(--t), color var(--t), border-color var(--t);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 .side-gear-btn:hover {
-  background: rgba(255,255,255,.12);
-  color: rgba(255,255,255,.85);
-  border-color: rgba(255,255,255,.25);
+  background: var(--sidebar-hover-bg);
+  color: var(--text-primary);
 }
 
 /* ── Account settings modal ─────────────────────────────────── */
@@ -1986,4 +1985,88 @@ body.side-nav-collapsed .theme-toggle { display: none; }
   .rtx2-date { display: none; }
   .nom-grid-v2 { grid-template-columns: 1fr; }
   .rating-table-wrap { max-height: 420px; }
+}
+
+
+/* ══════════════════════════════════════════════════════
+   BADGE SYSTEM — unified status badges
+══════════════════════════════════════════════════════ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font: 600 11px var(--font-main);
+  white-space: nowrap;
+}
+.badge-success { background: var(--success-soft); color: var(--success); }
+.badge-danger  { background: var(--danger-soft);  color: var(--danger);  }
+.badge-warning { background: var(--warning-soft); color: var(--warning); }
+.badge-info    { background: var(--info-soft);    color: var(--info);    }
+.badge-neutral { background: var(--bg-muted);     color: var(--text-secondary); }
+
+/* ══════════════════════════════════════════════════════
+   SIDEBAR — theme-aware (light sidebar in light theme)
+══════════════════════════════════════════════════════ */
+.side-nav-brand,
+.side-nav-logo,
+html[data-theme="light"] .side-nav-brand {
+  color: var(--text-primary);
+}
+html[data-theme="dark"] .side-nav-brand {
+  color: var(--text-primary);
+}
+
+/* Auth logout button adapts to theme */
+html[data-theme="light"] #auth-logout-btn {
+  color: var(--text-muted) !important;
+}
+html[data-theme="dark"] #auth-logout-btn {
+  color: rgba(255,255,255,.3) !important;
+}
+
+html[data-theme="light"] .side-nav-meta span {
+  color: var(--text-secondary);
+}
+
+/* Theme toggle button */
+.theme-toggle {
+  border: 1px solid var(--sidebar-border) !important;
+  background: transparent !important;
+  color: var(--sidebar-text) !important;
+}
+.theme-toggle:hover {
+  background: var(--sidebar-hover-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+/* ══════════════════════════════════════════════════════
+   FORM LABEL — unified
+══════════════════════════════════════════════════════ */
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+  display: block;
+}
+
+/* ══════════════════════════════════════════════════════
+   PAGE TRANSITIONS — smooth theme switch
+══════════════════════════════════════════════════════ */
+*, *::before, *::after {
+  transition: background-color var(--transition-default),
+              border-color var(--transition-default),
+              color var(--transition-default);
+}
+/* But don't animate transforms and other non-color transitions */
+button, a, input, select, textarea {
+  transition: background-color var(--transition-fast),
+              border-color var(--transition-fast),
+              color var(--transition-fast),
+              opacity var(--transition-fast),
+              box-shadow var(--transition-fast);
 }
