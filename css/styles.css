@@ -1233,3 +1233,93 @@ html[data-theme="light"] .theme-toggle {
 html[data-theme="light"] .side-nav-section-label {
   color: rgba(0,0,0,.35);
 }
+
+
+/* ── Operator row action buttons ────────────────────────────── */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.row-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.row-actions-sep {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.btn-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  font: 500 11px 'Inter', sans-serif;
+  cursor: pointer;
+  transition: background var(--t), color var(--t), opacity var(--t);
+  white-space: nowrap;
+}
+
+.btn-action svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+
+.btn-action-secondary {
+  background: transparent;
+  color: var(--tx3);
+}
+.btn-action-secondary:hover {
+  background: var(--surface-3);
+  color: var(--tx);
+}
+
+.btn-action-primary {
+  background: rgba(255,77,46,.1);
+  color: var(--accent);
+}
+.btn-action-primary:hover {
+  background: rgba(255,77,46,.2);
+}
+
+.btn-action-warn {
+  background: rgba(245,158,11,.08);
+  color: var(--warn);
+}
+.btn-action-warn:hover {
+  background: rgba(245,158,11,.18);
+}
+
+.btn-action-danger {
+  background: rgba(239,68,68,.08);
+  color: var(--danger);
+}
+.btn-action-danger:hover {
+  background: rgba(239,68,68,.18);
+}
+
+/* Wider actions column */
+.data-table th:last-child,
+.data-table td:last-child {
+  min-width: 280px;
+}
