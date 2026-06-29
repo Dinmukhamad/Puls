@@ -813,22 +813,6 @@ function renderAdminOperators() {
     bindOpsActions();
   }
   rebindOps();
-    el.querySelector('.ops-count').textContent = filteredOps().length;
-  });
-  el.querySelector('#ops-group')?.addEventListener('change', e => {
-    filterGroup = e.target.value;
-    el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-    bindOpsActions();
-    el.querySelector('.ops-count').textContent = filteredOps().length;
-  });
-  el.querySelector('#ops-show-dismissed')?.addEventListener('change', e => {
-    showDismissed = e.target.checked;
-    el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-    bindOpsActions();
-    const counter = el.querySelector('.ops-count');
-    if (counter) counter.textContent = filteredOps().length;
-  });
-
   function bindOpsActions() {
     el.querySelectorAll('.quick-charge-btn').forEach(btn => {
       btn.addEventListener('click', () => {
