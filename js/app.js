@@ -103,6 +103,9 @@ function initNav() {
 
 function navigateTo(view) {
   STATE.currentView = view;
+  // Save to URL hash so F5 restores the same section
+  history.replaceState(null, '', '#' + view);
+  localStorage.setItem('pulse-last-view', view);
   document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(l => {
     l.classList.toggle('active', l.dataset.navTarget === view);
@@ -174,7 +177,13 @@ async function bootApp() {
 
   await loadData(role);
 
-  const start = isAdmin(role) ? 'summary' : 'cabinet';
+  // Restore last viewed section after F5 reload
+  const savedView = location.hash.replace('#', '') || localStorage.getItem('pulse-last-view');
+  const adminViews = ['summary','operators','manual','requests','history','groups','shop','rating','cabinet'];
+  const operatorViews = ['cabinet','rating','shop'];
+  const allowedViews = isAdmin(role) ? adminViews : operatorViews;
+  const defaultView = isAdmin(role) ? 'summary' : 'cabinet';
+  const start = (savedView && allowedViews.includes(savedView)) ? savedView : defaultView;
   navigateTo(start);
 }
 
