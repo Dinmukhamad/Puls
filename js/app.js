@@ -174,6 +174,13 @@ async function bootApp() {
   renderSidebar(role);
   setText('side-user', STATE.user?.full_name || STATE.user?.username || '');
   setText('side-role', roleLabel(role));
+  // Update initials avatar
+  (function() {
+    var av = document.getElementById('side-user-avatar');
+    if (!av) return;
+    var name = (STATE.user?.full_name || STATE.user?.username || '?').trim();
+    av.textContent = name.split(' ').filter(Boolean).slice(0,2).map(function(w){return w[0];}).join('').toUpperCase() || '?';
+  })();
 
   await loadData(role);
 
