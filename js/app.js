@@ -69,7 +69,7 @@ function normalizeUser(u) {
    THEME
 ══════════════════════════════════════ */
 function initTheme() {
-  const saved = localStorage.getItem('pulse-theme') || 'dark';
+  const saved = localStorage.getItem('pulse-theme') || 'light';
   document.documentElement.setAttribute('data-theme', saved);
   document.getElementById('theme-toggle')?.addEventListener('click', () => {
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -234,8 +234,10 @@ function renderSidebar(role) {
     }
     link.style.display = show ? '' : 'none';
   });
-  const legacyExcelNav = document.getElementById('excel-import-nav');
-  if (legacyExcelNav) legacyExcelNav.style.display = 'none';
+  if (isAdmin(role)) {
+    const nav = document.getElementById('excel-import-nav');
+    if (nav) nav.style.display = '';
+  }
 }
 
 /* ══════════════════════════════════════
@@ -961,9 +963,10 @@ function renderManual() {
     if (reason === 'Другое' && !comment) return setErr('Укажите комментарий для причины "Другое"');
 
     const finalAmount  = type === 'subtract' ? -Math.abs(amount) : Math.abs(amount);
+    const fullComment  = comment ? `${reason}: ${comment}` : reason;
 
     try {
-      await api.manualTransaction({ operator_id: +opId, amount: finalAmount, reason, comment });
+      await api.manualTransaction({ operator_id: +opId, amount: finalAmount, comment: fullComment });
       statusEl.textContent = `✓ Операция сохранена: ${finalAmount > 0 ? '+' : ''}${finalAmount} ₡`;
       statusEl.className = 'status-line status-ok';
       el.querySelector('#manual-amount').value = '';
