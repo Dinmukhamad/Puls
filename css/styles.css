@@ -2256,3 +2256,15 @@ body { padding-left: var(--nav-w, 220px); }
 /* Sidebar logo SVG color */
 .side-nav-mark svg { color: #38BDF8; }
 .side-nav-mark { color: #38BDF8; }
+
+.mini-pts { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+.side-user-avatar {
+  width: 30px; height: 30px; border-radius: 999px;
+  background: rgba(56,189,248,0.2);
+  border: 1px solid rgba(56,189,248,0.3);
+  color: #38BDF8;
+  display: flex; align-items: center; justify-content: center;
+  font: 700 11px 'Inter', sans-serif;
+  flex-shrink: 0; text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
