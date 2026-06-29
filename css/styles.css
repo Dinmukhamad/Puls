@@ -110,10 +110,10 @@ html[data-theme="light"], [data-theme="light"] {
   --shadow-md: 0 4px 16px rgba(0,0,0,.08), 0 12px 32px rgba(0,0,0,.06);
   --shadow-lg: 0 8px 28px rgba(0,0,0,.10), 0 20px 48px rgba(0,0,0,.08);
 
-  --nav-bg:  #0f1117;
-  --nav-tx:  rgba(255,255,255,.6);
-  --nav-act: rgba(255,77,46,.15);
-  --nav-sep: rgba(255,255,255,.06);
+  --nav-bg:  #ffffff;
+  --nav-tx:  rgba(0,0,0,.65);
+  --nav-act: rgba(255,77,46,.1);
+  --nav-sep: rgba(0,0,0,.08);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1177,4 +1177,59 @@ body.side-nav-collapsed .theme-toggle { display: none; }
 }
 #op-selected-display.visible {
   display: flex !important;
+}
+
+/* ── Light theme sidebar overrides ─────────────────────────── */
+html[data-theme="light"] .side-nav {
+  background: #ffffff;
+  border-right-color: rgba(0,0,0,.08);
+  box-shadow: 2px 0 12px rgba(0,0,0,.06);
+}
+html[data-theme="light"] .side-nav-brand {
+  color: #0f1117;
+}
+html[data-theme="light"] .side-nav-brand em {
+  color: var(--accent);
+}
+html[data-theme="light"] .side-nav-link {
+  color: rgba(0,0,0,.6);
+}
+html[data-theme="light"] .side-nav-link:hover {
+  background: rgba(0,0,0,.05);
+  color: #0f1117;
+}
+html[data-theme="light"] .side-nav-link.active {
+  background: rgba(255,77,46,.08);
+  color: var(--accent);
+  border-color: rgba(255,77,46,.2);
+}
+html[data-theme="light"] .side-nav-separator {
+  background: rgba(0,0,0,.08);
+}
+html[data-theme="light"] .side-nav-meta {
+  border-top-color: rgba(0,0,0,.08);
+}
+html[data-theme="light"] .side-nav-meta span {
+  color: rgba(0,0,0,.45);
+}
+html[data-theme="light"] #auth-logout-btn {
+  color: rgba(0,0,0,.35) !important;
+}
+html[data-theme="light"] .side-nav-toggle {
+  border-color: rgba(0,0,0,.12);
+  background: rgba(0,0,0,.04);
+  color: rgba(0,0,0,.45);
+}
+html[data-theme="light"] .side-nav-toggle:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: rgba(255,77,46,.3);
+}
+html[data-theme="light"] .theme-toggle {
+  border-color: rgba(0,0,0,.12) !important;
+  background: rgba(0,0,0,.04) !important;
+  color: rgba(0,0,0,.5) !important;
+}
+html[data-theme="light"] .side-nav-section-label {
+  color: rgba(0,0,0,.35);
 }
