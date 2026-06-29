@@ -209,7 +209,9 @@ def delete_group(
             detail="Группу нельзя удалить, так как в ней есть операторы. Сначала переведите операторов в другую группу или отключите группу.",
         )
 
+    from sqlalchemy import text
     _audit_group(db, "group_deleted", group, f"Удалена группа {group.name}", current_user)
-    db.delete(group)
+    db.flush()
+    db.execute(text("DELETE FROM groups WHERE id = :gid"), {"gid": group_id})
     db.commit()
     return {"ok": True}
