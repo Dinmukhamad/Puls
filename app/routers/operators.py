@@ -568,6 +568,8 @@ def delete_operator(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_operator_management_access),
 ) -> dict:
+    from sqlalchemy import text
+
     op = db.get(Operator, operator_id)
     if not op:
         raise HTTPException(status_code=404, detail="Оператор не найден")
@@ -579,10 +581,10 @@ def delete_operator(
             detail="Оператора нельзя удалить, так как по нему уже есть история. Используйте функцию увольнения.",
         )
 
-    try:
-        op_name = op.full_name
-        op_id   = op.id
+    op_name = op.full_name
+    op_id   = op.id
 
+    try:
         # 1. Detach linked user
         user = _operator_user(db, op)
         if user:
@@ -591,42 +593,50 @@ def delete_operator(
             user.username    = f"deleted_{op_id}_{user.username}"[:120]
             db.flush()
 
-        # 2. Clear self-referencing FKs on operator
-        op.user_id   = None
-        op.group_id  = None
+        # 2. Clear FK fields on operator row itself
+        op.user_id  = None
+        op.group_id = None
         db.flush()
 
-        # 3. Nullify all audit log references to this operator
-        from sqlalchemy import text
+        # 3. Nullify references in audit_logs
         db.execute(
             text("UPDATE audit_logs SET entity_id = NULL WHERE entity_type = 'operator' AND entity_id = :oid"),
             {"oid": op_id}
         )
-        # Also nullify operator_audit_logs (legacy table)
+        db.flush()
+
+        # 4. Nullify operator_audit_logs using a savepoint so failure doesn't abort tx
+        sp = db.begin_nested()
         try:
             db.execute(
                 text("UPDATE operator_audit_logs SET operator_id = NULL WHERE operator_id = :oid"),
                 {"oid": op_id}
             )
+            sp.commit()
         except Exception:
-            pass  # table may not exist
-        # Also nullify coin_transactions, shop_purchases operator references if no history
-        db.flush()
+            sp.rollback()
 
-        # 4. Record deletion before deleting the row
-        db.add(AuditLog(
-            action="operator_deleted",
-            entity_type="operator",
-            entity_id=None,
-            details=f"Удалена ошибочно созданная карточка: {op_name} (ID {op_id})",
-            performed_by_user_id=current_user.id,
-        ))
-        db.flush()
-
-        # 5. Delete
+        # 5. Delete the operator row
         db.delete(op)
+        db.flush()
+
+        # 6. Write audit record after delete so no FK issue
+        db.execute(
+            text(
+                "INSERT INTO audit_logs (action, entity_type, entity_id, details, performed_by_user_id, created_at) "
+                "VALUES (:action, :etype, NULL, :details, :uid, NOW())"
+            ),
+            {
+                "action": "operator_deleted",
+                "etype": "operator",
+                "details": f"Удалена карточка оператора: {op_name} (ID {op_id})",
+                "uid": current_user.id,
+            }
+        )
+
         db.commit()
         return {"ok": True}
+
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Ошибка при удалении: {str(e)}")
