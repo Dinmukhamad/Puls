@@ -408,210 +408,210 @@ async function renderRating() {
   const el = document.getElementById('view-rating');
   if (!el) return;
 
-  const isOp = STATE.user?.role === 'operator';
+  const role  = STATE.user?.role || 'operator';
+  const isOp  = role === 'operator';
 
+  // Skeleton
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
-      <div class="header-right">
-        <button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button>
-      </div>
+      <div class="header-right"><button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button></div>
     </div>
-    <div class="rating-skeleton">
-      <div class="skel-block" style="height:80px;border-radius:16px;margin-bottom:16px"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="skel-block" style="height:140px;border-radius:16px"></div>
-        <div class="skel-block" style="height:140px;border-radius:16px"></div>
+    <div class="rating-page">
+      <div class="skel-block" style="height:72px;border-radius:16px;margin-bottom:20px"></div>
+      <div class="rating-top-grid" style="margin-bottom:20px">
+        <div class="skel-block" style="height:180px;border-radius:16px"></div>
+        <div class="skel-block" style="height:180px;border-radius:16px"></div>
       </div>
-      <div class="skel-block" style="height:200px;border-radius:16px"></div>
+      <div class="rating-mid-grid" style="margin-bottom:20px">
+        <div class="skel-block" style="height:160px;border-radius:16px"></div>
+        <div class="skel-block" style="height:160px;border-radius:16px"></div>
+      </div>
+      <div class="skel-block" style="height:120px;border-radius:16px;margin-bottom:20px"></div>
+      <div class="skel-block" style="height:240px;border-radius:16px"></div>
     </div>`;
 
   try {
-    // Parallel fetches
-    const [ratingData, myData, nominationsData, myTx, myDynamics, myComparison] = await Promise.all([
+    // State for admin/supervisor selected operator
+    let selectedOpId = isOp ? (STATE.user?.operator_id || null) : null;
+
+    // Fetch base data
+    const [ratingResp, nominationsResp] = await Promise.all([
       fetch(api._base() + '/api/rating', { credentials: 'include' }).then(r => r.json()),
-      isOp ? fetch(api._base() + '/api/rating/me', { credentials: 'include' }).then(r => r.json()) : Promise.resolve(null),
       fetch(api._base() + '/api/rating/nominations', { credentials: 'include' }).then(r => r.json()),
-      isOp ? fetch(api._base() + '/api/rating/me/transactions?limit=5', { credentials: 'include' }).then(r => r.json()) : Promise.resolve([]),
-      isOp ? fetch(api._base() + '/api/rating/me/dynamics?type=place&weeks=8', { credentials: 'include' }).then(r => r.json()) : Promise.resolve(null),
-      isOp ? fetch(api._base() + '/api/rating/me/comparison?metric=points', { credentials: 'include' }).then(r => r.json()) : Promise.resolve(null),
     ]);
 
-    const rows  = ratingData.items || [];
-    const total = ratingData.total || rows.length;
-    const period = ratingData.period || '—';
+    const rows     = ratingResp.items || [];
+    const total    = ratingResp.total || rows.length;
+    const period   = ratingResp.period || '—';
+    const groups   = [...new Set(rows.map(r => r.group_name).filter(Boolean))].sort();
+    const noms     = nominationsResp.items || [];
 
-    // ── Header ──────────────────────────────────────────
+    // Get personal data for a given operator_id
+    async function fetchPersonalData(opId) {
+      if (!opId) return { myData: null, myTx: [], myDyn: null, myCmp: null };
+      const [myData, myTx, myDyn, myCmp] = await Promise.all([
+        fetch(api._base() + '/api/rating/me', { credentials: 'include' }).then(r => r.json()),
+        fetch(api._base() + '/api/rating/me/transactions?limit=5', { credentials: 'include' }).then(r => r.json()),
+        fetch(api._base() + '/api/rating/me/dynamics?type=place&weeks=8', { credentials: 'include' }).then(r => r.json()),
+        fetch(api._base() + '/api/rating/me/comparison?metric=points', { credentials: 'include' }).then(r => r.json()),
+      ]);
+      return { myData, myTx, myDyn, myCmp };
+    }
+
+    let { myData, myTx, myDyn, myCmp } = await fetchPersonalData(isOp ? 1 : null);
+
+    // ── Render helpers ──────────────────────────────────────
+
+    function safeNum(v, decimals = 0) {
+      const n = Number(v);
+      if (isNaN(n)) return '—';
+      return decimals > 0 ? n.toFixed(decimals) : String(n);
+    }
+
     function renderHeader() {
-      const balance = myData?.total_balance != null ? `<span class="rating-balance">${myData.total_balance} ₡</span>` : '';
-      return `<div class="rating-header-card">
+      const bal = myData?.total_balance != null ? `<div class="rh-balance">${myData.total_balance} ₡</div>` : '';
+      return `<div class="rh-card">
         <div>
-          <div class="rating-header-title">Рейтинг операторов</div>
-          <div class="rating-header-meta">Период: ${esc(period)} · Участников: ${total}</div>
+          <div class="rh-title">Рейтинг операторов</div>
+          <div class="rh-meta">Период: ${esc(period)} &nbsp;·&nbsp; Участников: ${total}</div>
         </div>
-        ${balance}
+        ${bal}
       </div>`;
     }
 
-    // ── My result ────────────────────────────────────────
+    function renderOpSelector() {
+      if (isOp) return '';
+      return `<div class="rating-card rating-card-body" style="margin-bottom:20px">
+        <div class="rs-label">Просмотр оператора</div>
+        <div class="rs-row">
+          <select id="rating-op-select" class="form-select" style="max-width:320px">
+            <option value="">— Выберите оператора —</option>
+            ${rows.map(r => `<option value="${r.operator_id}" ${r.operator_id==selectedOpId?'selected':''}>${esc(r.operator_name)} (${esc(r.group_name||'—')})</option>`).join('')}
+          </select>
+          <span class="rs-hint">${selectedOpId ? '' : 'Выберите оператора, чтобы увидеть личный результат'}</span>
+        </div>
+      </div>`;
+    }
+
     function renderMyResult() {
-      if (!myData || myData.no_operator) return '';
+      if (!myData || myData.no_operator) {
+        if (isOp) return `<div class="rating-card rating-card-body r-my-card">
+          <div class="rcard-title">Мой результат</div>
+          <div class="r-empty-state"><div class="r-empty-icon">📊</div><div>Место пока не рассчитано</div><div class="r-empty-sub">Участвуйте в конкурсе, чтобы попасть в рейтинг</div></div>
+        </div>`;
+        if (!selectedOpId) return `<div class="rating-card rating-card-body r-my-card">
+          <div class="rcard-title">Результат оператора</div>
+          <div class="r-empty-state"><div class="r-empty-icon">👤</div><div>Выберите оператора</div></div>
+        </div>`;
+        return '';
+      }
       const delta = myData.place_change;
-      const deltaHtml = delta == null ? '<span class="rd-neutral">— без изменений</span>'
+      const deltaEl = delta == null ? '<span class="rd-neutral">без изменений</span>'
         : delta > 0 ? `<span class="rd-up">↑ +${delta} позиции</span>`
-        : delta < 0 ? `<span class="rd-down">↓ ${delta} позиции</span>`
-        : '<span class="rd-neutral">— без изменений</span>';
+        : delta < 0 ? `<span class="rd-down">↓ ${Math.abs(delta)} позиции</span>`
+        : '<span class="rd-neutral">без изменений</span>';
 
-      return `<div class="rating-my-card">
-        <div class="rating-my-place">
-          <div class="rmp-number">#${myData.place || '—'}</div>
-          <div class="rmp-sub">из ${total}</div>
+      const placeEl = myData.place
+        ? `<div class="rmp-place">#${myData.place} <span class="rmp-total">из ${total}</span></div>`
+        : `<div class="rmp-noplace">Место не определено</div>`;
+
+      return `<div class="rating-card rating-card-body r-my-card">
+        <div class="rcard-title">${isOp ? 'Мой результат' : 'Результат: ' + esc(myData.full_name)}</div>
+        ${placeEl}
+        <div class="rms-list">
+          <div class="rms-row"><span class="rms-label">Баллы недели</span><span class="rms-val">${safeNum(myData.weekly_points, 1)}</span></div>
+          <div class="rms-row"><span class="rms-label">Коины недели</span><span class="rms-val accent">${safeNum(myData.weekly_coins)} ₡</span></div>
+          <div class="rms-row"><span class="rms-label">Общий баланс</span><span class="rms-val">${safeNum(myData.total_balance)} ₡</span></div>
+          <div class="rms-row"><span class="rms-label">Динамика</span><span class="rms-val">${deltaEl}</span></div>
         </div>
-        <div class="rating-my-stats">
-          <div class="rms-row"><span class="rms-label">Баллы недели</span><span class="rms-val">${myData.weekly_points}</span></div>
-          <div class="rms-row"><span class="rms-label">Коины недели</span><span class="rms-val accent">${myData.weekly_coins} ₡</span></div>
-          <div class="rms-row"><span class="rms-label">Общий баланс</span><span class="rms-val">${myData.total_balance} ₡</span></div>
-        </div>
-        <div class="rating-my-delta">${deltaHtml}</div>
       </div>`;
     }
 
-    // ── Podium top-3 ─────────────────────────────────────
     function renderPodium() {
       const top3 = rows.slice(0, 3);
-      if (!top3.length) return '<div class="empty-line">Нет данных</div>';
-      const order = [top3[1], top3[0], top3[2]].filter(Boolean);
-      const heights = [top3[1] ? '80px' : '0', '100px', top3[2] ? '60px' : '0'];
-      const medals  = ['🥈','🥇','🥉'];
-      const podiumH = ['h-podium-2','h-podium-1','h-podium-3'];
-      return `<div class="podium-wrap">
-        ${order.map((op, idx) => {
-          const isCurrent = op.is_current_user;
-          return `<div class="podium-col ${isCurrent ? 'podium-me' : ''} ${podiumH[idx]}">
-            <div class="podium-medal">${medals[idx]}</div>
-            <div class="podium-name">${esc(op.operator_name)}</div>
-            <div class="podium-group">${esc(op.group_name || '')}</div>
-            <div class="podium-pts">${op.contest_points?.toFixed(0) || 0} б</div>
-            <div class="podium-coins">${op.coins_earned || 0} ₡</div>
-          </div>`;
-        }).join('')}
+      if (!top3.length) return `<div class="r-empty-state"><div>Данных пока нет</div></div>`;
+      const order = [top3[1], top3[0], top3[2]];
+      const medals = ['🥈','🥇','🥉'];
+      const cls    = ['pod-2','pod-1','pod-3'];
+      return `<div class="podium-grid">
+        ${order.map((op, i) => op ? `
+          <div class="pod-card ${cls[i]} ${op.is_current_user?'pod-me':''}">
+            <div class="pod-medal">${medals[i]}</div>
+            <div class="pod-name">${esc(op.operator_name)}</div>
+            <div class="pod-group">${esc(op.group_name||'—')}</div>
+            <div class="pod-pts">${safeNum(op.contest_points,1)} б</div>
+            <div class="pod-coins">${safeNum(op.coins_earned)} ₡</div>
+          </div>` : `<div class="pod-card pod-empty">—</div>`).join('')}
       </div>`;
     }
 
-    // ── Comparison bar chart ─────────────────────────────
-    function renderComparison(data) {
-      if (!data?.items?.length) return '<div class="empty-line">Данные появятся после первого расчёта</div>';
-      const maxVal = Math.max(...data.items.map(i => i.value), 1);
+    function renderComparison(data, metric) {
+      if (!data?.items?.length) return `<div class="r-empty-state"><div class="r-empty-icon">📉</div><div>Данные появятся после первого расчёта недели</div></div>`;
+      const maxVal = Math.max(...data.items.map(i => Number(i.value)||0), 1);
       return data.items.map(item => {
-        const pct = Math.round((item.value / maxVal) * 100);
-        return `<div class="cmp-row ${item.is_highlight ? 'cmp-me' : ''}">
+        const pct = Math.round(((Number(item.value)||0) / maxVal) * 100);
+        return `<div class="cmp-row ${item.is_highlight?'cmp-me':''}">
           <div class="cmp-label">${esc(item.label)}</div>
-          <div class="cmp-bar-wrap">
-            <div class="cmp-bar" style="width:${pct}%"></div>
-          </div>
-          <div class="cmp-value">${item.value}</div>
+          <div class="cmp-bar-wrap"><div class="cmp-bar" style="width:${pct}%"></div></div>
+          <div class="cmp-value">${Number(item.value)||0}</div>
         </div>`;
       }).join('');
     }
 
-    // ── Dynamics line ─────────────────────────────────────
     function renderDynamics(data) {
-      if (!data?.items?.length) return '<div class="empty-line">Динамика появится после нескольких недель участия</div>';
+      if (!data?.items?.length) return `<div class="r-empty-state">
+        <div class="r-empty-icon">📈</div>
+        <div>Динамика пока недоступна</div>
+        <div class="r-empty-sub">Появится после нескольких недель участия</div>
+      </div>`;
       const items = data.items;
       const isPlace = data.type === 'place';
-      const vals = items.map(i => i.value);
-      const minV = Math.min(...vals);
-      const maxV = Math.max(...vals);
+      const vals = items.map(i => Number(i.value)||0);
+      const minV = Math.min(...vals), maxV = Math.max(...vals);
       const range = maxV - minV || 1;
-      const H = 80;
-      const W = 280;
-      const step = W / Math.max(items.length - 1, 1);
-
+      const H = 80, W = 100 * (items.length - 1) || 100;
       const pts = items.map((item, i) => {
-        const norm = isPlace
-          ? 1 - (item.value - minV) / range  // inverted: lower place = higher on chart
-          : (item.value - minV) / range;
-        const x = i * step;
-        const y = H - norm * H;
-        return `${x},${y}`;
+        const norm = isPlace ? 1 - (Number(item.value) - minV) / range : (Number(item.value) - minV) / range;
+        return `${i * (W/(items.length-1||1))},${H - norm * H}`;
       });
-
-      return `<svg viewBox="0 0 ${W} ${H + 20}" style="width:100%;height:auto;overflow:visible">
-        <polyline points="${pts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
-        ${pts.map((p, i) => {
-          const [x, y] = p.split(',');
-          return `<circle cx="${x}" cy="${y}" r="3" fill="var(--accent)"/>
-          <text x="${x}" y="${+y - 6}" text-anchor="middle" font-size="9" fill="var(--tx3)">${items[i].value}</text>`;
-        }).join('')}
-        ${items.map((item, i) => `<text x="${i * step}" y="${H + 16}" text-anchor="middle" font-size="8" fill="var(--tx3)">${esc(item.week.split('–')[0])}</text>`).join('')}
-      </svg>`;
-    }
-
-    // ── Nominations ───────────────────────────────────────
-    function renderNominations() {
-      const items = nominationsData?.items || [];
-      if (!items.length) return '<div class="empty-line">Номинации будут после расчёта</div>';
-      return `<div class="nom-grid">
-        ${items.map(n => `
-          <div class="nom-card ${n.is_current_user ? 'nom-me' : ''}">
-            ${n.is_current_user ? '<div class="nom-you-badge">Это вы!</div>' : ''}
-            <div class="nom-title">${esc(n.title)}</div>
-            <div class="nom-name">${esc(n.winner_name)}</div>
-            <div class="nom-val">${esc(n.value)}</div>
-            <div class="nom-coins">+${n.coins_bonus} ₡</div>
-          </div>`).join('')}
+      return `<div class="dyn-chart-wrap">
+        <svg viewBox="0 0 ${W+20} ${H+24}" preserveAspectRatio="none" style="width:100%;height:90px">
+          <polyline points="${pts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+          ${pts.map((p, i) => {
+            const [x,y] = p.split(',');
+            return `<circle cx="${x}" cy="${y}" r="3.5" fill="var(--accent)"/>
+              <text x="${x}" y="${Number(y)-8}" text-anchor="middle" font-size="9" fill="var(--tx3)" font-family="Inter,sans-serif">${items[i].value}</text>`;
+          }).join('')}
+          ${items.map((item, i) => `<text x="${i*(W/(items.length-1||1))}" y="${H+18}" text-anchor="middle" font-size="8" fill="var(--tx3)" font-family="Inter,sans-serif">${esc(item.week.split('–')[0])}</text>`).join('')}
+        </svg>
       </div>`;
     }
 
-    // ── My recent transactions ─────────────────────────────
-    function renderMyTx() {
-      if (!myTx?.length) return '<div class="empty-line">Нет операций</div>';
+    function renderNominations() {
+      if (!noms.length) return `<div class="r-empty-state"><div>Номинации недели пока не определены</div></div>`;
+      return `<div class="nom-grid-v2">
+        ${noms.map(n => `<div class="nom-card-v2 ${n.is_current_user?'nom-me-v2':''}">
+          ${n.is_current_user ? '<div class="nom-you">Это вы!</div>' : ''}
+          <div class="nom-t">${esc(n.title)}</div>
+          <div class="nom-n">${esc(n.winner_name)}</div>
+          <div class="nom-v">${esc(n.value)}</div>
+          <div class="nom-c">+${n.coins_bonus} ₡</div>
+        </div>`).join('')}
+      </div>`;
+    }
+
+    function renderTx() {
+      if (!myTx?.length) return `<div class="r-empty-state"><div>Начислений пока нет</div></div>`;
       return myTx.map(t => `
-        <div class="rtx-row ${t.amount >= 0 ? 'rtx-plus' : 'rtx-minus'}">
-          <span class="rtx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</span>
-          <span class="rtx-comment">${esc(t.comment)}</span>
-          <span class="rtx-date">${fmtDate(t.created_at)}</span>
+        <div class="rtx2-row ${Number(t.amount)>=0?'rtx2-plus':'rtx2-minus'}">
+          <div class="rtx2-amount">${Number(t.amount)>=0?'+':''}${t.amount} ₡</div>
+          <div class="rtx2-comment" title="${esc(t.comment)}">${esc(t.comment)}</div>
+          <div class="rtx2-date">${fmtDate(t.created_at)}</div>
         </div>`).join('');
     }
 
-    // ── Full rating table ─────────────────────────────────
-    function renderTable(filterRows) {
-      if (!filterRows.length) return '<div class="empty-line">Нет данных</div>';
-      const myId = myData?.operator_id;
-      return `<div class="table-wrap">
-        <table class="data-table">
-          <thead><tr>
-            <th>#</th><th>Оператор</th><th>Группа</th>
-            <th>Баллы</th><th>Коины</th><th>Баланс</th><th>Динамика</th>
-          </tr></thead>
-          <tbody>
-            ${filterRows.map(op => {
-              const delta = op.rank_delta;
-              const deltaHtml = delta == null ? '<span class="rd-neutral">—</span>'
-                : delta > 0 ? `<span class="rd-up">↑ +${delta}</span>`
-                : delta < 0 ? `<span class="rd-down">↓ ${delta}</span>`
-                : '<span class="rd-neutral">—</span>';
-              const isMe = op.is_current_user || (myId && op.operator_id === myId);
-              return `<tr class="${isMe ? 'rating-my-row' : ''}">
-                <td><span class="rank-badge ${op.rank_position <= 3 ? 'rank-top' : ''}">${op.rank_position}</span></td>
-                <td class="name-cell">${esc(op.operator_name)}${isMe ? ' <span class="me-badge">Вы</span>' : ''}</td>
-                <td>${esc(op.group_name || '—')}</td>
-                <td><b>${(op.contest_points || 0).toFixed(1)}</b></td>
-                <td><b class="accent-text">${op.coins_earned || 0} ₡</b></td>
-                <td>${op.total_balance != null ? op.total_balance + ' ₡' : '—'}</td>
-                <td>${deltaHtml}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>`;
-    }
-
-    // ── Assemble page ─────────────────────────────────────
-    const groups = [...new Set(rows.map(r => r.group_name).filter(Boolean))].sort();
     let searchVal = '', filterGroup = '';
-    let dynType = 'place', cmpMetric = 'points';
-
     function filteredRows() {
       return rows.filter(r =>
         (!searchVal || r.operator_name.toLowerCase().includes(searchVal.toLowerCase())) &&
@@ -619,115 +619,181 @@ async function renderRating() {
       );
     }
 
-    el.innerHTML = `
-      ${renderHeader()}
+    function renderTable() {
+      const fr = filteredRows();
+      if (!fr.length) return `<div class="r-empty-state"><div>Рейтинг пока не сформирован. Данные появятся после расчёта конкурса.</div></div>`;
+      const myOpId = myData?.operator_id || null;
+      return `<div class="table-wrap"><table class="data-table">
+        <thead><tr>
+          <th style="width:48px;text-align:center">#</th>
+          <th>Оператор</th><th>Группа</th>
+          <th style="text-align:right">Баллы</th>
+          <th style="text-align:right">Коины</th>
+          <th style="text-align:right">Баланс</th>
+          <th style="text-align:center">Дин.</th>
+        </tr></thead>
+        <tbody>
+          ${fr.map(r => {
+            const isMe = r.is_current_user || (myOpId && r.operator_id == myOpId) || (selectedOpId && r.operator_id == selectedOpId);
+            const d = r.rank_delta;
+            const dEl = d == null ? '<span class="rd-neutral">—</span>'
+              : d > 0 ? `<span class="rd-up">↑${d}</span>`
+              : d < 0 ? `<span class="rd-down">↓${Math.abs(d)}</span>`
+              : '<span class="rd-neutral">—</span>';
+            return `<tr class="${isMe?'rating-my-row':''}">
+              <td style="text-align:center"><span class="rank-badge ${r.rank_position<=3?'rank-top':''}">${r.rank_position}</span></td>
+              <td class="name-cell">${esc(r.operator_name)}${isMe?'<span class="me-badge">Вы</span>':''}</td>
+              <td>${esc(r.group_name||'—')}</td>
+              <td style="text-align:right"><b>${safeNum(r.contest_points,1)}</b></td>
+              <td style="text-align:right"><b class="accent-text">${safeNum(r.coins_earned)} ₡</b></td>
+              <td style="text-align:right">${r.total_balance!=null?safeNum(r.total_balance)+' ₡':'—'}</td>
+              <td style="text-align:center">${dEl}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>
+      ${myData?.place > 10 ? `<div class="rating-my-sticky">Ваше место: <b>#${myData.place}</b> — ${esc(myData.full_name||'')} — ${safeNum(myData.weekly_points,1)} баллов — ${safeNum(myData.weekly_coins)} ₡</div>` : ''}`;
+    }
 
-      ${isOp ? `
-      <div class="rating-top-grid">
-        ${renderMyResult()}
-        <div class="panel rating-panel">
-          <div class="panel-head"><h3>Топ-3 недели</h3></div>
-          ${renderPodium()}
+    let cmpMetric = 'points', dynType = 'place';
+
+    function buildPage() {
+      el.innerHTML = `
+        <div class="view-header">
+          <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
+          <div class="header-right"><button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button></div>
         </div>
-      </div>` : `
-      <div class="panel rating-panel" style="margin-bottom:16px">
-        <div class="panel-head"><h3>Топ-3 недели</h3></div>
-        ${renderPodium()}
-      </div>`}
+        <div class="rating-page">
 
-      ${isOp ? `
-      <div class="rating-mid-grid">
-        <div class="panel rating-panel">
-          <div class="panel-head">
-            <h3>Сравнение</h3>
-            <div class="metric-tabs" id="cmp-tabs">
-              <button class="metric-tab active" data-metric="points">Баллы</button>
-              <button class="metric-tab" data-metric="coins">Коины</button>
+          ${renderHeader()}
+          ${renderOpSelector()}
+
+          <div class="rating-top-grid">
+            ${renderMyResult()}
+            <div class="rating-card rating-card-body">
+              <div class="rcard-title">Топ-3 недели</div>
+              ${renderPodium()}
             </div>
           </div>
-          <div id="cmp-body">${renderComparison(myComparison)}</div>
-        </div>
-        <div class="panel rating-panel">
-          <div class="panel-head">
-            <h3>Динамика</h3>
-            <div class="metric-tabs" id="dyn-tabs">
-              <button class="metric-tab active" data-type="place">Место</button>
-              <button class="metric-tab" data-type="points">Баллы</button>
-              <button class="metric-tab" data-type="coins">Коины</button>
+
+          <div class="rating-mid-grid">
+            <div class="rating-card rating-card-body">
+              <div class="rcard-title-row">
+                <span class="rcard-title">Сравнение</span>
+                <div class="metric-tabs" id="cmp-tabs">
+                  <button class="metric-tab active" data-metric="points">Баллы</button>
+                  <button class="metric-tab" data-metric="coins">Коины</button>
+                </div>
+              </div>
+              <div id="cmp-body">${renderComparison(myCmp, cmpMetric)}</div>
+            </div>
+            <div class="rating-card rating-card-body">
+              <div class="rcard-title-row">
+                <span class="rcard-title">Динамика</span>
+                <div class="metric-tabs" id="dyn-tabs">
+                  <button class="metric-tab active" data-type="place">Место</button>
+                  <button class="metric-tab" data-type="points">Баллы</button>
+                  <button class="metric-tab" data-type="coins">Коины</button>
+                </div>
+              </div>
+              <div id="dyn-body">${renderDynamics(myDyn)}</div>
             </div>
           </div>
-          <div id="dyn-body">${renderDynamics(myDynamics)}</div>
-        </div>
-      </div>` : ''}
 
-      <div class="panel rating-panel">
-        <div class="panel-head"><h3>Номинации недели</h3></div>
-        ${renderNominations()}
-      </div>
+          <div class="rating-card rating-card-body">
+            <div class="rcard-title">Номинации недели</div>
+            ${renderNominations()}
+          </div>
 
-      ${isOp && myTx?.length ? `
-      <div class="panel rating-panel">
-        <div class="panel-head"><h3>Мои последние начисления</h3></div>
-        ${renderMyTx()}
-      </div>` : ''}
+          ${myTx?.length || isOp ? `
+          <div class="rating-card rating-card-body">
+            <div class="rcard-title">${isOp ? 'Мои последние начисления' : 'Последние начисления оператора'}</div>
+            ${renderTx()}
+          </div>` : ''}
 
-      <div class="panel rating-panel">
-        <div class="panel-head">
-          <h3>Общий рейтинг</h3>
-          <span class="panel-badge">${total} участников</span>
-        </div>
-        <div class="rating-filters">
-          <input id="rating-search" class="form-input" placeholder="Поиск по ФИО…" style="width:220px">
-          <select id="rating-group" class="form-select" style="width:160px">
-            <option value="">Все группы</option>
-            ${groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('')}
-          </select>
-        </div>
-        <div id="rating-table">${renderTable(filteredRows())}</div>
-        ${isOp && myData?.place > 10 ? `
-        <div class="rating-my-sticky">
-          Ваше место: <b>#${myData.place}</b> — ${esc(myData.full_name)} —
-          ${myData.weekly_points} баллов — ${myData.weekly_coins} ₡
-        </div>` : ''}
-      </div>`;
+          <div class="rating-card rating-card-body">
+            <div class="rcard-title-row">
+              <span class="rcard-title">Общий рейтинг</span>
+              <span class="panel-badge">${total} участников</span>
+            </div>
+            <div class="rating-filters">
+              <input id="rating-search" class="form-input" placeholder="Поиск по ФИО…" style="max-width:240px">
+              <select id="rating-group-filter" class="form-select" style="max-width:180px">
+                <option value="">Все группы</option>
+                ${groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('')}
+              </select>
+            </div>
+            <div id="rating-table-body">${renderTable()}</div>
+          </div>
 
-    // Bind search + filter
-    el.querySelector('#rating-search')?.addEventListener('input', e => {
-      searchVal = e.target.value;
-      el.querySelector('#rating-table').innerHTML = renderTable(filteredRows());
-    });
-    el.querySelector('#rating-group')?.addEventListener('change', e => {
-      filterGroup = e.target.value;
-      el.querySelector('#rating-table').innerHTML = renderTable(filteredRows());
-    });
+        </div>`;
 
-    // Comparison metric tabs
-    el.querySelectorAll('#cmp-tabs .metric-tab').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        el.querySelectorAll('#cmp-tabs .metric-tab').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        cmpMetric = btn.dataset.metric;
-        const d = await fetch(api._base() + `/api/rating/me/comparison?metric=${cmpMetric}`, { credentials: 'include' }).then(r => r.json());
-        el.querySelector('#cmp-body').innerHTML = renderComparison(d);
+      // Events
+      el.querySelector('#rating-search')?.addEventListener('input', e => {
+        searchVal = e.target.value;
+        el.querySelector('#rating-table-body').innerHTML = renderTable();
       });
-    });
-
-    // Dynamics type tabs
-    el.querySelectorAll('#dyn-tabs .metric-tab').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        el.querySelectorAll('#dyn-tabs .metric-tab').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        dynType = btn.dataset.type;
-        const d = await fetch(api._base() + `/api/rating/me/dynamics?type=${dynType}&weeks=8`, { credentials: 'include' }).then(r => r.json());
-        el.querySelector('#dyn-body').innerHTML = renderDynamics(d);
+      el.querySelector('#rating-group-filter')?.addEventListener('change', e => {
+        filterGroup = e.target.value;
+        el.querySelector('#rating-table-body').innerHTML = renderTable();
       });
-    });
+
+      el.querySelectorAll('#cmp-tabs .metric-tab').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          el.querySelectorAll('#cmp-tabs .metric-tab').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          cmpMetric = btn.dataset.metric;
+          const d = await fetch(api._base() + `/api/rating/me/comparison?metric=${cmpMetric}`, { credentials: 'include' }).then(r => r.json()).catch(() => null);
+          el.querySelector('#cmp-body').innerHTML = renderComparison(d, cmpMetric);
+        });
+      });
+
+      el.querySelectorAll('#dyn-tabs .metric-tab').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          el.querySelectorAll('#dyn-tabs .metric-tab').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          dynType = btn.dataset.type;
+          const d = await fetch(api._base() + `/api/rating/me/dynamics?type=${dynType}&weeks=8`, { credentials: 'include' }).then(r => r.json()).catch(() => null);
+          el.querySelector('#dyn-body').innerHTML = renderDynamics(d);
+        });
+      });
+
+      el.querySelector('#rating-op-select')?.addEventListener('change', async e => {
+        selectedOpId = e.target.value ? +e.target.value : null;
+        // Reload personal data for selected operator (admin sees own data via /me)
+        if (selectedOpId) {
+          const selected = rows.find(r => r.operator_id == selectedOpId);
+          if (selected) {
+            myData = {
+              operator_id: selected.operator_id,
+              full_name: selected.operator_name,
+              group_name: selected.group_name,
+              place: selected.rank_position,
+              total_participants: total,
+              weekly_points: selected.contest_points || 0,
+              weekly_coins: selected.coins_earned || 0,
+              total_balance: selected.total_balance || 0,
+              place_change: selected.rank_delta,
+            };
+          }
+        } else {
+          myData = null;
+        }
+        // Re-render personal blocks
+        el.querySelector('.r-my-card')?.outerHTML && (() => {
+          const wrap = el.querySelector('.rating-top-grid');
+          if (wrap) wrap.children[0].outerHTML = renderMyResult();
+        })();
+        buildPage();
+      });
+    }
+
+    buildPage();
 
   } catch(err) {
-    el.innerHTML += `<div class="status-line status-error" style="margin-top:20px">
-      Не удалось загрузить рейтинг. Попробуйте обновить страницу.<br>
-      <small>${esc(err.message)}</small>
-    </div>`;
+    const content = el.querySelector('.rating-page');
+    if (content) content.innerHTML += `<div class="status-line status-error">Не удалось загрузить рейтинг: ${esc(err.message)}</div>`;
+    else el.innerHTML += `<div class="status-line status-error">Не удалось загрузить рейтинг: ${esc(err.message)}</div>`;
   }
 }
 
