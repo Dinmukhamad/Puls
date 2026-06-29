@@ -8,7 +8,7 @@
 /* ═══════════════════════════════════════════════════
    ВАРИАНТ Б — Светлый бежево-белый
    Тёплый фон #F5F4F0, белые карточки, чёрный текст
-   Акцент — красно-оранжевый #FF4D2E (сохраняем бренд)
+   Акцент — красно-оранжевый #18181B (сохраняем бренд)
 ═══════════════════════════════════════════════════ */
 
 /* Переопределяем ВСЕ токены для light-first подхода */
@@ -190,7 +190,7 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
   margin-left: auto;
   transition: background var(--t), color var(--t);
 }
-.side-nav-toggle:hover { background: var(--accent-soft); color: var(--accent); border-color: rgba(255,77,46,.3); }
+.side-nav-toggle:hover { background: var(--accent-soft); color: var(--accent); border-color: rgba(24,24,27,.3); }
 .side-nav-toggle svg {
   width: 14px; height: 14px; fill: none;
   stroke: currentColor; stroke-width: 2.2;
@@ -227,7 +227,7 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
 .side-nav-link.active {
   background: var(--nav-act);
   color: var(--accent);
-  border-color: rgba(255,77,46,.2);
+  border-color: rgba(24,24,27,.2);
   font-weight: 600;
 }
 
@@ -318,7 +318,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   content: '';
   position: absolute; inset: 0;
   background:
-    radial-gradient(ellipse 60% 50% at 20% 50%, rgba(255,77,46,.08), transparent),
+    radial-gradient(ellipse 60% 50% at 20% 50%, rgba(24,24,27,.08), transparent),
     repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 1px, transparent 1px 48px);
 }
 
@@ -373,7 +373,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   width: min(320px, 100%); position: relative;
 }
 .auth-decorlines span { height: 3px; border-radius: 2px; background: rgba(255,255,255,.08); }
-.auth-decorlines span:nth-child(1) { width: 100%; background: rgba(255,77,46,.35); }
+.auth-decorlines span:nth-child(1) { width: 100%; background: rgba(24,24,27,.35); }
 .auth-decorlines span:nth-child(2) { width: 64%; }
 .auth-decorlines span:nth-child(3) { width: 40%; }
 
@@ -572,7 +572,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .kpi-card.kpi-accent::before { background: var(--accent); }
 .kpi-card.kpi-ok::before    { background: var(--ok); }
 .kpi-card.kpi-warn::before  { background: var(--warn); }
-.kpi-card.kpi-accent { border-color: rgba(255,77,46,.2); background: linear-gradient(135deg, var(--accent-soft), transparent); }
+.kpi-card.kpi-accent { border-color: rgba(24,24,27,.2); background: linear-gradient(135deg, var(--accent-soft), transparent); }
 .kpi-card.kpi-warn   { border-color: rgba(245,158,11,.2); }
 
 .kpi-label {
@@ -706,8 +706,8 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 }
 .shop-card:hover { box-shadow: var(--shadow-md); transform: translateY(-3px); }
 .shop-card-available {
-  border-color: rgba(255,77,46,.25);
-  background: linear-gradient(135deg, rgba(255,77,46,.06), transparent);
+  border-color: rgba(24,24,27,.25);
+  background: linear-gradient(135deg, rgba(24,24,27,.06), transparent);
 }
 .shop-card-available::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
@@ -728,7 +728,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; padding: 20px 24px; margin-top: 8px;
   background: linear-gradient(135deg, var(--accent-soft), transparent);
-  border: 1px solid rgba(255,77,46,.2); border-radius: var(--r-lg);
+  border: 1px solid rgba(24,24,27,.2); border-radius: var(--r-lg);
 }
 .shop-banner-title {
   font-family: 'Inter', sans-serif;
@@ -739,7 +739,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 /* Balance chip */
 .balance-chip {
   padding: 6px 14px;
-  background: var(--accent-soft); border: 1px solid rgba(255,77,46,.2);
+  background: var(--accent-soft); border: 1px solid rgba(24,24,27,.2);
   border-radius: 999px; font-size: 13px; color: var(--tx);
 }
 .balance-chip b { color: var(--accent); font-family: 'Inter', sans-serif; font-weight: 600; }
@@ -1013,12 +1013,12 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   border-radius: var(--r-xs); cursor: pointer; margin-bottom: 7px;
   font-size: 11px; color: rgba(255,255,255,.4); overflow: hidden;
 }
-.excel-file-label:hover { border-color: rgba(255,77,46,.3); }
+.excel-file-label:hover { border-color: rgba(24,24,27,.3); }
 .excel-file-label span:first-of-type { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .excel-file-input-hidden { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
 .excel-file-btn {
   margin-left: auto; padding: 3px 8px; flex-shrink: 0;
-  background: rgba(255,77,46,.2); border-radius: 4px;
+  background: rgba(24,24,27,.2); border-radius: 4px;
   color: var(--accent); font-size: 10px; font-weight: 700;
 }
 .import-status {
@@ -1163,7 +1163,7 @@ body.side-nav-collapsed .theme-toggle { display: none; }
   margin-top: 6px;
   padding: 8px 12px;
   background: var(--accent-soft);
-  border: 1px solid rgba(255,77,46,.2);
+  border: 1px solid rgba(24,24,27,.2);
   border-radius: var(--r-sm);
   font-size: 13px;
   align-items: center;
