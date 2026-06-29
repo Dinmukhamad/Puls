@@ -1,7 +1,6 @@
 /**
  * Pulse — API client v3
  * Auth via HttpOnly cookie (pulse_access_token).
- * Falls back to Bearer token during transition period.
  * JWT is NOT stored in localStorage.
  */
 'use strict';
@@ -9,7 +8,6 @@
 const api = (() => {
   // Clean up legacy localStorage tokens
   localStorage.removeItem('puls_token');
-  localStorage.removeItem('icore_token');
 
   function base() {
     return typeof API_BASE !== 'undefined' ? API_BASE : '';

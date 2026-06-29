@@ -65,6 +65,19 @@ def get_current_user(
     user = db.get(User, user_id)
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь не найден")
+    if getattr(user, "must_change_password", False):
+        settings = get_settings()
+        path = request.url.path.rstrip("/")
+        allowed_paths = {
+            f"{settings.api_prefix}/auth/me",
+            f"{settings.api_prefix}/auth/logout",
+            f"{settings.api_prefix}/auth/me/password",
+            f"{settings.api_prefix}/auth/account",
+            f"{settings.api_prefix}/operators/account/change-password",
+        }
+        if request.method != "OPTIONS" and path not in allowed_paths:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Необходимо сменить временный пароль")
     return user
 
 

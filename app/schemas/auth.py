@@ -17,6 +17,7 @@ class UserCreate(BaseModel):
     role: str
     operator_id: Optional[int] = None
     can_manage_operators: bool = False
+    must_change_password: bool = False
     is_active: bool = True
 
 
@@ -27,6 +28,7 @@ class UserRead(BaseModel):
     role: str
     operator_id: Optional[int]
     can_manage_operators: bool = False
+    must_change_password: bool = False
     is_active: bool
 
     model_config = {"from_attributes": True}

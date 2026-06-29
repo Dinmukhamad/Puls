@@ -81,6 +81,7 @@ def update_account(
         if payload.new_password != payload.repeat_password:
             raise HTTPException(status_code=400, detail="Пароли не совпадают")
         current_user.password_hash = hash_password(payload.new_password or "")
+        current_user.must_change_password = False
         if current_user.operator_id:
             db.add(AuditLog(
                 operator_id=current_user.operator_id,
@@ -160,8 +161,6 @@ def change_my_password(
     response: Response = None,
 ) -> dict:
     """Change current user password. Logs out after change."""
-    import re as _re
-
     current_pwd = payload.get("current_password") or ""
     new_pwd     = payload.get("new_password") or ""
     confirm_pwd = payload.get("confirm_password") or ""
@@ -170,14 +169,13 @@ def change_my_password(
         raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
     if len(new_pwd) < 8:
         raise HTTPException(status_code=400, detail="Новый пароль должен содержать минимум 8 символов")
-    if not _re.search(r'[a-zA-Z]', new_pwd) or not _re.search(r'[0-9]', new_pwd):
-        raise HTTPException(status_code=400, detail="Пароль должен содержать буквы и цифры")
     if new_pwd != confirm_pwd:
         raise HTTPException(status_code=400, detail="Пароли не совпадают")
     if verify_password(new_pwd, current_user.password_hash):
         raise HTTPException(status_code=400, detail="Новый пароль не должен совпадать со старым")
 
     current_user.password_hash = hash_password(new_pwd)
+    current_user.must_change_password = False
     db.add(AuditLog(
         action="password_changed",
         entity_type="user",
@@ -209,6 +207,7 @@ def create_user(
         role=payload.role,
         operator_id=payload.operator_id,
         can_manage_operators=payload.can_manage_operators,
+        must_change_password=payload.must_change_password,
         is_active=payload.is_active,
     )
     db.add(user)

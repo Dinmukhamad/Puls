@@ -24,6 +24,7 @@ class User(Base):
     operator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("operators.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     can_manage_operators: Mapped[bool] = mapped_column(Boolean, default=False)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
     operator: Mapped[Optional["Operator"]] = relationship("Operator", foreign_keys=[operator_id], post_update=True)

@@ -1,5 +1,5 @@
 /**
- * Puls — Main App v2
+ * Pulse — Main App v2
  * FastAPI backend, full admin panel per TZ
  */
 'use strict';
@@ -62,6 +62,7 @@ function normalizeUser(u) {
     role: u.role,
     operator_id: u.operator_id,
     can_manage_operators: Boolean(u.can_manage_operators),
+    must_change_password: Boolean(u.must_change_password),
   };
 }
 
@@ -181,6 +182,13 @@ async function bootApp() {
     var name = (STATE.user?.full_name || STATE.user?.username || '?').trim();
     av.textContent = name.split(' ').filter(Boolean).slice(0,2).map(function(w){return w[0];}).join('').toUpperCase() || '?';
   })();
+
+  if (STATE.user?.must_change_password) {
+    document.body.classList.add('must-change-password');
+    showForcedPasswordChangeModal();
+    return;
+  }
+  document.body.classList.remove('must-change-password');
 
   await loadData(role);
 
@@ -2324,7 +2332,7 @@ async function showOperatorHistoryModal(id) {
 /* ══════════════════════════════════════
    MODALS
 ══════════════════════════════════════ */
-function showModal(html) {
+function showModal(html, options = {}) {
   let overlay = document.getElementById('modal-overlay');
   if (!overlay) {
     overlay = document.createElement('div');
@@ -2332,12 +2340,15 @@ function showModal(html) {
     overlay.className = 'modal-overlay';
     document.body.appendChild(overlay);
   }
-  overlay.innerHTML = `<div class="modal">${html}<button class="modal-close" onclick="closeModal()">✕</button></div>`;
+  const forced = Boolean(options.force);
+  overlay.dataset.force = forced ? 'true' : 'false';
+  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
   overlay.style.display = 'flex';
-  overlay.onclick = e => { if (e.target === overlay) closeModal(); };
+  overlay.onclick = e => { if (e.target === overlay && !forced) closeModal(); };
 }
-function closeModal() {
+function closeModal(force = false) {
   const o = document.getElementById('modal-overlay');
+  if (o?.dataset.force === 'true' && !force) return;
   if (o) o.style.display = 'none';
 }
 
@@ -2572,7 +2583,7 @@ function exportCSV() {
     o.current_balance,
     o.coins_earned_week,
   ]);
-  downloadCSV([header, ...rows], 'puls_operators');
+  downloadCSV([header, ...rows], 'pulse_operators');
 }
 
 function exportHistoryCSV() {
@@ -2581,7 +2592,7 @@ function exportHistoryCSV() {
     fmtDate(t.created_at), t.operator_name, t.group_name, t.type,
     t.amount, t.comment, t.created_by_name||'Система',
   ]);
-  downloadCSV([header, ...rows], 'puls_history');
+  downloadCSV([header, ...rows], 'pulse_history');
 }
 
 function downloadCSV(rows, name) {
@@ -2642,6 +2653,72 @@ function canManageOperators() {
 /* ══════════════════════════════════════
    ACCOUNT SETTINGS MODAL
 ══════════════════════════════════════ */
+function showForcedPasswordChangeModal() {
+  showModal(`
+    <div class="acc-modal">
+      <h3 class="acc-title">Смените временный пароль</h3>
+      <div class="status-line" style="padding:0;color:var(--tx2)">
+        Для продолжения работы в Pulse нужно заменить временный пароль.
+      </div>
+      <div class="acc-divider"></div>
+      <div class="acc-section">
+        <div class="form-group">
+          <label class="form-label">Текущий временный пароль</label>
+          <input id="forced-cur-pwd" class="form-input" type="password" autocomplete="current-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Новый пароль</label>
+          <input id="forced-new-pwd" class="form-input" type="password" placeholder="Минимум 8 символов" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Повторите новый пароль</label>
+          <input id="forced-confirm-pwd" class="form-input" type="password" autocomplete="new-password">
+          <div id="forced-pwd-err" class="acc-field-err"></div>
+        </div>
+        <button class="acc-btn" id="forced-save-pwd-btn" onclick="submitForcedPasswordChange()">Сохранить пароль</button>
+        <button class="btn-outline" style="width:100%;margin-top:10px" onclick="logoutAndReload()">Выйти</button>
+      </div>
+    </div>
+  `, { force: true });
+}
+
+async function submitForcedPasswordChange() {
+  const curPwd  = document.getElementById('forced-cur-pwd')?.value;
+  const newPwd  = document.getElementById('forced-new-pwd')?.value;
+  const confPwd = document.getElementById('forced-confirm-pwd')?.value;
+  const errEl   = document.getElementById('forced-pwd-err');
+  const btn     = document.getElementById('forced-save-pwd-btn');
+
+  errEl.textContent = '';
+  if (!curPwd) return errEl.textContent = 'Введите текущий пароль';
+  if (!newPwd || newPwd.length < 8) return errEl.textContent = 'Пароль минимум 8 символов';
+  if (newPwd !== confPwd) return errEl.textContent = 'Пароли не совпадают';
+
+  btn.disabled = true; btn.textContent = 'Сохраняем…';
+  try {
+    const res = await fetch(api._base() + '/api/auth/me/password', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ current_password: curPwd, new_password: newPwd, confirm_password: confPwd }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Ошибка');
+    showToast('Пароль изменён. Войдите снова.', 'ok');
+    closeModal(true);
+    setTimeout(logoutAndReload, 900);
+  } catch(e) {
+    errEl.textContent = e.message;
+    btn.disabled = false; btn.textContent = 'Сохранить пароль';
+  }
+}
+
+async function logoutAndReload() {
+  await api.logout().catch(() => {});
+  STATE.user = null;
+  location.reload();
+}
+
 function showAccountSettingsModal() {
   const u = STATE.user;
   if (!u) return;
@@ -2691,7 +2768,7 @@ function showAccountSettingsModal() {
         </div>
         <div class="form-group">
           <label class="form-label">Новый пароль</label>
-          <input id="acc-new-pwd" class="form-input" type="password" placeholder="Минимум 8 символов, буквы и цифры">
+          <input id="acc-new-pwd" class="form-input" type="password" placeholder="Минимум 8 символов">
           <div id="acc-pwd-hint" class="acc-field-hint"></div>
         </div>
         <div class="form-group">
@@ -2726,13 +2803,11 @@ function showAccountSettingsModal() {
     const v = this.value;
     const hint = document.getElementById('acc-pwd-hint');
     if (!v) { hint.textContent = ''; return; }
-    const hasLetters = /[a-zA-Z]/.test(v);
-    const hasDigits  = /[0-9]/.test(v);
-    if (v.length < 8 || !hasLetters || !hasDigits) {
-      hint.textContent = 'Минимум 8 символов, буквы и цифры';
+    if (v.length < 8) {
+      hint.textContent = 'Минимум 8 символов';
       hint.className = 'acc-field-err';
     } else {
-      hint.textContent = 'Надёжный пароль';
+      hint.textContent = 'Подходит';
       hint.className = 'acc-field-hint ok';
     }
   });
@@ -2783,8 +2858,6 @@ async function submitChangePassword() {
   errEl.textContent = '';
   if (!curPwd)  return errEl.textContent = 'Введите текущий пароль';
   if (!newPwd || newPwd.length < 8) return errEl.textContent = 'Пароль минимум 8 символов';
-  if (!/[a-zA-Z]/.test(newPwd) || !/[0-9]/.test(newPwd))
-    return errEl.textContent = 'Пароль должен содержать буквы и цифры';
   if (newPwd !== confPwd) return errEl.textContent = 'Пароли не совпадают';
 
   btn.disabled = true; btn.textContent = 'Сохраняем…';
@@ -2814,6 +2887,9 @@ async function submitChangePassword() {
 window.showAccountSettingsModal = showAccountSettingsModal;
 window.submitChangeLogin        = submitChangeLogin;
 window.submitChangePassword     = submitChangePassword;
+window.showForcedPasswordChangeModal = showForcedPasswordChangeModal;
+window.submitForcedPasswordChange = submitForcedPasswordChange;
+window.logoutAndReload = logoutAndReload;
 
 window.navigateTo = navigateTo;
 window.reloadData = reloadData;

@@ -841,6 +841,11 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   transition: color var(--t), background var(--t);
 }
 .modal-close:hover { color: var(--tx); background: var(--surface-3); }
+.modal-forced { max-width: 520px; }
+body.must-change-password .side-nav-link[data-nav-target] {
+  pointer-events: none;
+  opacity: .45;
+}
 .credential-box {
   display: grid; gap: 8px; padding: 14px 16px;
   background: var(--surface-2); border: 1px solid var(--border);

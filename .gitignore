@@ -22,6 +22,9 @@ icore_mvp.db
 # Образец структуры — data.example.json
 data.json
 runtime-data/
+secure_outputs/
+operator_credentials_*.csv
+operator_import_report_*.json
 
 # ── Логи ─────────────────────────────────────────────────────────
 *.log

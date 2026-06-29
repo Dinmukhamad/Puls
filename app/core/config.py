@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
 
     # PostgreSQL — обязателен на проде, SQLite для локалки
-    database_url: str = "sqlite:///./puls.db"
+    database_url: str = "sqlite:///./pulse.db"
 
     # JWT
     jwt_secret_key: str = "change-me-in-env"

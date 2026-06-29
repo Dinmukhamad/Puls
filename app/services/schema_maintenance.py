@@ -45,6 +45,12 @@ def ensure_operator_management_schema(engine: Engine) -> None:
                     "BOOLEAN NOT NULL DEFAULT false"
                 ))
                 logger.info("[schema] Added users.can_manage_operators")
+            if "must_change_password" not in existing:
+                conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN must_change_password "
+                    "BOOLEAN NOT NULL DEFAULT false"
+                ))
+                logger.info("[schema] Added users.must_change_password")
 
         # Ensure audit_logs table exists
         Group.__table__.create(bind=conn, checkfirst=True)

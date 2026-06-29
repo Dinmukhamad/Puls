@@ -74,6 +74,26 @@ alembic revision --autogenerate -m "описание изменения"
 
 ---
 
+## Разовый импорт операторов из Excel
+
+Для массового создания операторов группы `Группа 51` используйте скрипт:
+
+```bash
+python scripts/import_group51_operators.py --file /path/to/операторы.xlsx
+```
+
+По умолчанию это dry-run: скрипт проверяет файл, дубли и будущие изменения, но не пишет в БД.
+
+Для реальной записи:
+
+```bash
+python scripts/import_group51_operators.py --file /path/to/операторы.xlsx --apply
+```
+
+Скрипт требует `DATABASE_URL`, создаёт группу при отсутствии, создаёт/обновляет операторов, ставит `must_change_password=true` для временных паролей и сохраняет одноразовый CSV с доступами в `secure_outputs/`. Этот каталог не коммитится.
+
+---
+
 ## Railway deploy
 
 1. Создайте сервис PostgreSQL в Railway

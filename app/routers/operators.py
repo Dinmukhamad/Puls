@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import random
 import secrets
 import string
 from datetime import datetime
@@ -39,10 +40,20 @@ def _gen_username(db: Session, full_name: str) -> str:
 
 
 def _gen_password(username: Optional[str] = None) -> str:
-    """Генерирует временный пароль минимум 8 символов"""
-    chars = string.ascii_letters + string.digits
-    for _ in range(20):
-        password = ''.join(secrets.choice(chars) for _ in range(10))
+    """Генерирует сложный временный пароль минимум 10 символов."""
+    special_chars = "!@#$%&*?"
+    chars = string.ascii_letters + string.digits + special_chars
+    rng = random.SystemRandom()
+    for _ in range(50):
+        password_chars = [
+            secrets.choice(string.ascii_uppercase),
+            secrets.choice(string.ascii_lowercase),
+            secrets.choice(string.digits),
+            secrets.choice(special_chars),
+        ]
+        password_chars.extend(secrets.choice(chars) for _ in range(6))
+        rng.shuffle(password_chars)
+        password = ''.join(password_chars)
         if password != (username or ""):
             return password
     raise HTTPException(status_code=500, detail="Не удалось сгенерировать временный пароль")
@@ -312,6 +323,7 @@ def create_operator(
         role="operator",
         operator_id=op.id,
         is_active=True,
+        must_change_password=True,
     )
     db.add(user)
     db.flush()
@@ -499,6 +511,7 @@ def reset_password(
 
     new_pwd = _gen_password(user.username)
     user.password_hash = hash_password(new_pwd)
+    user.must_change_password = True
     _audit(db, "password_reset", "user", user.id,
            f"Пароль сброшен для {op.full_name} администратором {current_user.full_name}",
            current_user)
@@ -742,6 +755,7 @@ def change_password(
     if len(payload.new_password) < 8:
         raise HTTPException(status_code=400, detail="Пароль должен содержать минимум 8 символов")
     current_user.password_hash = hash_password(payload.new_password)
+    current_user.must_change_password = False
     if current_user.operator_id:
         _audit(db, "password_changed", "user", current_user.id,
                f"Оператор {current_user.full_name} изменил пароль", current_user)
