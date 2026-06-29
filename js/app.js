@@ -646,17 +646,36 @@ function renderAdminOperators() {
   const ops = STATE.adminOperators;
   let searchVal = '';
   let filterGroup = '';
-  let showDismissed = false;
+  let activeTab = 'all'; // all | participating | not_participating | dismissed
 
-  const groups = [...new Set(ops.map(o => o.group_name))].sort();
+  const groups = [...new Set(ops.map(o => o.group_name).filter(Boolean))].sort();
+
+  function isDismissed(o) {
+    return o.employment_status === 'dismissed' || o.status === 'dismissed';
+  }
+
+  // Counts for tabs
+  function counts() {
+    return {
+      all:              ops.filter(o => !isDismissed(o)).length,
+      participating:    ops.filter(o => !isDismissed(o) && o.participation_status === 'participating').length,
+      not_participating:ops.filter(o => !isDismissed(o) && o.participation_status === 'not_participating').length,
+      dismissed:        ops.filter(o => isDismissed(o)).length,
+    };
+  }
 
   function filteredOps() {
     return ops.filter(o => {
-      const employmentStatus = o.employment_status || (o.status === 'dismissed' ? 'dismissed' : 'active');
-      const matchSearch = !searchVal || o.full_name.toLowerCase().includes(searchVal.toLowerCase());
+      const dismissed = isDismissed(o);
+      const matchSearch = !searchVal || o.full_name.toLowerCase().includes(searchVal.toLowerCase())
+        || (o.group_name || '').toLowerCase().includes(searchVal.toLowerCase());
       const matchGroup = !filterGroup || o.group_name === filterGroup;
-      const matchDismissed = showDismissed || employmentStatus !== 'dismissed';
-      return matchSearch && matchGroup && matchDismissed;
+      let matchTab = false;
+      if (activeTab === 'all')               matchTab = !dismissed;
+      else if (activeTab === 'participating') matchTab = !dismissed && o.participation_status === 'participating';
+      else if (activeTab === 'not_participating') matchTab = !dismissed && o.participation_status === 'not_participating';
+      else if (activeTab === 'dismissed')    matchTab = dismissed;
+      return matchSearch && matchGroup && matchTab;
     });
   }
 
