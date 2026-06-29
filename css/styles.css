@@ -339,7 +339,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 ══════════════════════════════════════════════════════════════ */
 .btn-primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 10px 20px; border: none; border-radius: var(--r-sm);
+  padding: 10px 20px; border: none; border-radius: 10px;
   background: var(--accent); color: #fff;
   font: 600 13px 'Inter', sans-serif;
   cursor: pointer; transition: background var(--t), box-shadow var(--t), transform .1s;
@@ -351,7 +351,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
 .btn-outline {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 9px 16px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 9px 16px; border: 1px solid var(--border); border-radius: 10px;
   background: transparent; color: var(--tx2);
   font: 500 13px 'Inter', sans-serif;
   cursor: pointer; transition: border-color var(--t), color var(--t), background var(--t);
@@ -361,7 +361,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
 .btn-ghost {
   display: inline-flex; align-items: center; justify-content: center;
-  padding: 8px 14px; border: none; border-radius: var(--r-xs);
+  padding: 8px 14px; border: none; border-radius: 10px;
   background: var(--surface-2); color: var(--tx2);
   font: 500 12px 'Inter', sans-serif; cursor: pointer;
   transition: background var(--t), color var(--t);
@@ -369,7 +369,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .btn-ghost:hover { background: var(--surface-3); color: var(--tx); }
 
 .btn-sm { padding: 6px 12px; font-size: 12px; }
-.btn-xs { padding: 4px 9px; font-size: 11px; border-radius: var(--r-xs); }
+.btn-xs { padding: 4px 9px; font-size: 11px; border-radius: 10px; }
 .btn-icon {
   width: 34px; height: 34px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
@@ -395,7 +395,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .btn-link:hover { text-decoration: underline; }
 
 .btn-ok {
-  padding: 7px 14px; border: none; border-radius: var(--r-xs);
+  padding: 7px 14px; border: none; border-radius: 10px;
   background: var(--ok); color: #fff;
   font: 600 12px 'Inter', sans-serif; cursor: pointer;
   transition: opacity var(--t);
@@ -403,7 +403,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .btn-ok:hover { opacity: .88; }
 
 .btn-danger {
-  padding: 7px 14px; border: none; border-radius: var(--r-xs);
+  padding: 7px 14px; border: none; border-radius: 10px;
   background: var(--danger); color: #fff;
   font: 600 12px 'Inter', sans-serif; cursor: pointer;
   transition: opacity var(--t);
@@ -1100,7 +1100,7 @@ body.side-nav-collapsed .theme-toggle { display: none; }
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1.5px;
-  border-radius: var(--r-xs) var(--r-xs) 0 0;
+  border-radius: 8px 8px 0 0;
   transition: color var(--t), border-color var(--t), background var(--t);
   white-space: nowrap;
 }
@@ -1230,7 +1230,7 @@ body.side-nav-collapsed .theme-toggle { display: none; }
   height: 46px;
   margin-top: 8px;
   border: none;
-  border-radius: var(--r-sm);
+  border-radius: 10px;
   background: var(--accent-primary);
   color: #fff;
   font: 600 14px 'Inter', sans-serif;
@@ -1455,7 +1455,7 @@ body.side-nav-collapsed .theme-toggle { display: none; }
   width: 100%;
   height: 40px;
   border: none;
-  border-radius: var(--r-sm);
+  border-radius: 10px;
   background: var(--accent);
   color: #fff;
   font: 600 13px 'Inter', sans-serif;
@@ -1657,7 +1657,7 @@ body.side-nav-collapsed .theme-toggle { display: none; }
 .metric-tab {
   padding: 4px 10px;
   border: 0.5px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   font: 500 11px 'Inter', sans-serif;
   color: var(--tx3);
@@ -1770,7 +1770,7 @@ body.side-nav-collapsed .theme-toggle { display: none; }
 .nom-card-v2 {
   background: var(--surface-2);
   border: 0.5px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 16px;
   position: relative;
   min-height: 112px;
@@ -2051,3 +2051,14 @@ input:focus, select:focus, textarea:focus {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ── Global button border-radius enforcement ── */
+button, .btn, .btn-primary, .btn-outline, .btn-sm,
+.btn-action, .acc-btn, .manual-submit-btn,
+.choose, .ops-tab, .metric-tab, .side-nav-link {
+  border-radius: 10px;
+}
+.side-nav-link { border-radius: 10px; }
+.status-badge  { border-radius: 8px; }
+.badge, .ops-tab-badge, .me-badge, .nom-you { border-radius: 20px; }
+.modal-box, .manual-card, .rating-card, .panel { border-radius: 16px; }
