@@ -891,6 +891,9 @@ function renderManual() {
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div>
+      <div class="header-right">
+        <button class="btn-outline btn-sm" onclick="reloadData().then(()=>renderManual())">Обновить</button>
+      </div>
     </div>
 
     <div class="manual-layout">
