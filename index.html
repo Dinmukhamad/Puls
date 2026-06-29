@@ -11,7 +11,7 @@
   <script src="js/api.js?v=puls-2"></script>
   <script>
     (function() {
-      const t = localStorage.getItem('puls-theme') || 'dark';
+      const t = localStorage.getItem('puls-theme') || 'light';
       document.documentElement.setAttribute('data-theme', t);
     })();
   </script>
@@ -186,6 +186,8 @@
 </main>
 
 <!-- SCRIPTS -->
-<script src="js/app.js?v=puls-3"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="js/excel-import.js?v=puls-2"></script>
+<script src="js/app.js?v=puls-2"></script>
 </body>
 </html>
