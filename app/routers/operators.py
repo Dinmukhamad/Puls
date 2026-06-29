@@ -596,12 +596,21 @@ def delete_operator(
         op.group_id  = None
         db.flush()
 
-        # 3. Nullify AuditLog references to this operator (entity_id)
+        # 3. Nullify all audit log references to this operator
         from sqlalchemy import text
         db.execute(
             text("UPDATE audit_logs SET entity_id = NULL WHERE entity_type = 'operator' AND entity_id = :oid"),
             {"oid": op_id}
         )
+        # Also nullify operator_audit_logs (legacy table)
+        try:
+            db.execute(
+                text("UPDATE operator_audit_logs SET operator_id = NULL WHERE operator_id = :oid"),
+                {"oid": op_id}
+            )
+        except Exception:
+            pass  # table may not exist
+        # Also nullify coin_transactions, shop_purchases operator references if no history
         db.flush()
 
         # 4. Record deletion before deleting the row
