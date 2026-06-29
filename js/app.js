@@ -1059,10 +1059,9 @@ function renderManual() {
     btn.textContent = 'Сохраняем…';
 
     const finalAmount = type === 'subtract' ? -Math.abs(amount) : Math.abs(amount);
-    const fullComment = comment ? `${reason}: ${comment}` : reason;
 
     try {
-      await api.manualTransaction({ operator_id: +opId, amount: finalAmount, comment: fullComment });
+      await api.manualTransaction({ operator_id: +opId, amount: finalAmount, reason: reason, comment: comment });
       statusEl.textContent = `✓ Сохранено: ${finalAmount > 0 ? '+' : ''}${finalAmount} ₡`;
       statusEl.className = 'status-line status-ok';
       el.querySelector('#manual-amount').value = '';
