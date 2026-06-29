@@ -943,12 +943,17 @@ async function renderRating() {
 function miniRating(limit, highlightId) {
   const rows = Array.isArray(STATE.rating) ? STATE.rating.slice(0, limit) : [];
   if (!rows.length) return '<div class="empty-line">Нет данных</div>';
-  return `<div class="mini-rating">${rows.map(r => `
-    <div class="mini-rating-row ${r.operator_id===highlightId?'mini-me':''}">
-      <span class="mini-rank">${r.rank_position || 'Нет'}</span>
+  return '<div class="mini-rating">' + rows.map((r, idx) => {
+    const rank = r.rank_position || (idx + 1);
+    const isMe = r.operator_id === highlightId;
+    const topCls = rank <= 3 ? 'rank-top' : '';
+    return `<div class="mini-rating-row ${isMe ? 'mini-me' : ''}">
+      <span class="rank-badge ${topCls}">${rank}</span>
       <span class="mini-name">${esc(r.operator_name || 'Оператор')}</span>
       <span class="mini-coins">${r.coins_earned || 0} ₡</span>
-    </div>`).join('')}</div>`;
+      <span class="mini-pts">${(r.contest_points || 0).toFixed(1)}</span>
+    </div>`;
+  }).join('') + '</div>';
 }
 
 /* ══════════════════════════════════════
