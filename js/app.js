@@ -404,8 +404,332 @@ async function submitChangeUsername() {
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
 ══════════════════════════════════════ */
-function renderRating() {
+async function renderRating() {
   const el = document.getElementById('view-rating');
+  if (!el) return;
+
+  const isOp = STATE.user?.role === 'operator';
+
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
+      <div class="header-right">
+        <button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button>
+      </div>
+    </div>
+    <div class="rating-skeleton">
+      <div class="skel-block" style="height:80px;border-radius:16px;margin-bottom:16px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="skel-block" style="height:140px;border-radius:16px"></div>
+        <div class="skel-block" style="height:140px;border-radius:16px"></div>
+      </div>
+      <div class="skel-block" style="height:200px;border-radius:16px"></div>
+    </div>`;
+
+  try {
+    // Parallel fetches
+    const [ratingData, myData, nominationsData, myTx, myDynamics, myComparison] = await Promise.all([
+      fetch(api._base() + '/api/rating', { credentials: 'include' }).then(r => r.json()),
+      isOp ? fetch(api._base() + '/api/rating/me', { credentials: 'include' }).then(r => r.json()) : Promise.resolve(null),
+      fetch(api._base() + '/api/rating/nominations', { credentials: 'include' }).then(r => r.json()),
+      isOp ? fetch(api._base() + '/api/rating/me/transactions?limit=5', { credentials: 'include' }).then(r => r.json()) : Promise.resolve([]),
+      isOp ? fetch(api._base() + '/api/rating/me/dynamics?type=place&weeks=8', { credentials: 'include' }).then(r => r.json()) : Promise.resolve(null),
+      isOp ? fetch(api._base() + '/api/rating/me/comparison?metric=points', { credentials: 'include' }).then(r => r.json()) : Promise.resolve(null),
+    ]);
+
+    const rows  = ratingData.items || [];
+    const total = ratingData.total || rows.length;
+    const period = ratingData.period || '—';
+
+    // ── Header ──────────────────────────────────────────
+    function renderHeader() {
+      const balance = myData?.total_balance != null ? `<span class="rating-balance">${myData.total_balance} ₡</span>` : '';
+      return `<div class="rating-header-card">
+        <div>
+          <div class="rating-header-title">Рейтинг операторов</div>
+          <div class="rating-header-meta">Период: ${esc(period)} · Участников: ${total}</div>
+        </div>
+        ${balance}
+      </div>`;
+    }
+
+    // ── My result ────────────────────────────────────────
+    function renderMyResult() {
+      if (!myData || myData.no_operator) return '';
+      const delta = myData.place_change;
+      const deltaHtml = delta == null ? '<span class="rd-neutral">— без изменений</span>'
+        : delta > 0 ? `<span class="rd-up">↑ +${delta} позиции</span>`
+        : delta < 0 ? `<span class="rd-down">↓ ${delta} позиции</span>`
+        : '<span class="rd-neutral">— без изменений</span>';
+
+      return `<div class="rating-my-card">
+        <div class="rating-my-place">
+          <div class="rmp-number">#${myData.place || '—'}</div>
+          <div class="rmp-sub">из ${total}</div>
+        </div>
+        <div class="rating-my-stats">
+          <div class="rms-row"><span class="rms-label">Баллы недели</span><span class="rms-val">${myData.weekly_points}</span></div>
+          <div class="rms-row"><span class="rms-label">Коины недели</span><span class="rms-val accent">${myData.weekly_coins} ₡</span></div>
+          <div class="rms-row"><span class="rms-label">Общий баланс</span><span class="rms-val">${myData.total_balance} ₡</span></div>
+        </div>
+        <div class="rating-my-delta">${deltaHtml}</div>
+      </div>`;
+    }
+
+    // ── Podium top-3 ─────────────────────────────────────
+    function renderPodium() {
+      const top3 = rows.slice(0, 3);
+      if (!top3.length) return '<div class="empty-line">Нет данных</div>';
+      const order = [top3[1], top3[0], top3[2]].filter(Boolean);
+      const heights = [top3[1] ? '80px' : '0', '100px', top3[2] ? '60px' : '0'];
+      const medals  = ['🥈','🥇','🥉'];
+      const podiumH = ['h-podium-2','h-podium-1','h-podium-3'];
+      return `<div class="podium-wrap">
+        ${order.map((op, idx) => {
+          const isCurrent = op.is_current_user;
+          return `<div class="podium-col ${isCurrent ? 'podium-me' : ''} ${podiumH[idx]}">
+            <div class="podium-medal">${medals[idx]}</div>
+            <div class="podium-name">${esc(op.operator_name)}</div>
+            <div class="podium-group">${esc(op.group_name || '')}</div>
+            <div class="podium-pts">${op.contest_points?.toFixed(0) || 0} б</div>
+            <div class="podium-coins">${op.coins_earned || 0} ₡</div>
+          </div>`;
+        }).join('')}
+      </div>`;
+    }
+
+    // ── Comparison bar chart ─────────────────────────────
+    function renderComparison(data) {
+      if (!data?.items?.length) return '<div class="empty-line">Данные появятся после первого расчёта</div>';
+      const maxVal = Math.max(...data.items.map(i => i.value), 1);
+      return data.items.map(item => {
+        const pct = Math.round((item.value / maxVal) * 100);
+        return `<div class="cmp-row ${item.is_highlight ? 'cmp-me' : ''}">
+          <div class="cmp-label">${esc(item.label)}</div>
+          <div class="cmp-bar-wrap">
+            <div class="cmp-bar" style="width:${pct}%"></div>
+          </div>
+          <div class="cmp-value">${item.value}</div>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Dynamics line ─────────────────────────────────────
+    function renderDynamics(data) {
+      if (!data?.items?.length) return '<div class="empty-line">Динамика появится после нескольких недель участия</div>';
+      const items = data.items;
+      const isPlace = data.type === 'place';
+      const vals = items.map(i => i.value);
+      const minV = Math.min(...vals);
+      const maxV = Math.max(...vals);
+      const range = maxV - minV || 1;
+      const H = 80;
+      const W = 280;
+      const step = W / Math.max(items.length - 1, 1);
+
+      const pts = items.map((item, i) => {
+        const norm = isPlace
+          ? 1 - (item.value - minV) / range  // inverted: lower place = higher on chart
+          : (item.value - minV) / range;
+        const x = i * step;
+        const y = H - norm * H;
+        return `${x},${y}`;
+      });
+
+      return `<svg viewBox="0 0 ${W} ${H + 20}" style="width:100%;height:auto;overflow:visible">
+        <polyline points="${pts.join(' ')}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+        ${pts.map((p, i) => {
+          const [x, y] = p.split(',');
+          return `<circle cx="${x}" cy="${y}" r="3" fill="var(--accent)"/>
+          <text x="${x}" y="${+y - 6}" text-anchor="middle" font-size="9" fill="var(--tx3)">${items[i].value}</text>`;
+        }).join('')}
+        ${items.map((item, i) => `<text x="${i * step}" y="${H + 16}" text-anchor="middle" font-size="8" fill="var(--tx3)">${esc(item.week.split('–')[0])}</text>`).join('')}
+      </svg>`;
+    }
+
+    // ── Nominations ───────────────────────────────────────
+    function renderNominations() {
+      const items = nominationsData?.items || [];
+      if (!items.length) return '<div class="empty-line">Номинации будут после расчёта</div>';
+      return `<div class="nom-grid">
+        ${items.map(n => `
+          <div class="nom-card ${n.is_current_user ? 'nom-me' : ''}">
+            ${n.is_current_user ? '<div class="nom-you-badge">Это вы!</div>' : ''}
+            <div class="nom-title">${esc(n.title)}</div>
+            <div class="nom-name">${esc(n.winner_name)}</div>
+            <div class="nom-val">${esc(n.value)}</div>
+            <div class="nom-coins">+${n.coins_bonus} ₡</div>
+          </div>`).join('')}
+      </div>`;
+    }
+
+    // ── My recent transactions ─────────────────────────────
+    function renderMyTx() {
+      if (!myTx?.length) return '<div class="empty-line">Нет операций</div>';
+      return myTx.map(t => `
+        <div class="rtx-row ${t.amount >= 0 ? 'rtx-plus' : 'rtx-minus'}">
+          <span class="rtx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</span>
+          <span class="rtx-comment">${esc(t.comment)}</span>
+          <span class="rtx-date">${fmtDate(t.created_at)}</span>
+        </div>`).join('');
+    }
+
+    // ── Full rating table ─────────────────────────────────
+    function renderTable(filterRows) {
+      if (!filterRows.length) return '<div class="empty-line">Нет данных</div>';
+      const myId = myData?.operator_id;
+      return `<div class="table-wrap">
+        <table class="data-table">
+          <thead><tr>
+            <th>#</th><th>Оператор</th><th>Группа</th>
+            <th>Баллы</th><th>Коины</th><th>Баланс</th><th>Динамика</th>
+          </tr></thead>
+          <tbody>
+            ${filterRows.map(op => {
+              const delta = op.rank_delta;
+              const deltaHtml = delta == null ? '<span class="rd-neutral">—</span>'
+                : delta > 0 ? `<span class="rd-up">↑ +${delta}</span>`
+                : delta < 0 ? `<span class="rd-down">↓ ${delta}</span>`
+                : '<span class="rd-neutral">—</span>';
+              const isMe = op.is_current_user || (myId && op.operator_id === myId);
+              return `<tr class="${isMe ? 'rating-my-row' : ''}">
+                <td><span class="rank-badge ${op.rank_position <= 3 ? 'rank-top' : ''}">${op.rank_position}</span></td>
+                <td class="name-cell">${esc(op.operator_name)}${isMe ? ' <span class="me-badge">Вы</span>' : ''}</td>
+                <td>${esc(op.group_name || '—')}</td>
+                <td><b>${(op.contest_points || 0).toFixed(1)}</b></td>
+                <td><b class="accent-text">${op.coins_earned || 0} ₡</b></td>
+                <td>${op.total_balance != null ? op.total_balance + ' ₡' : '—'}</td>
+                <td>${deltaHtml}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    }
+
+    // ── Assemble page ─────────────────────────────────────
+    const groups = [...new Set(rows.map(r => r.group_name).filter(Boolean))].sort();
+    let searchVal = '', filterGroup = '';
+    let dynType = 'place', cmpMetric = 'points';
+
+    function filteredRows() {
+      return rows.filter(r =>
+        (!searchVal || r.operator_name.toLowerCase().includes(searchVal.toLowerCase())) &&
+        (!filterGroup || r.group_name === filterGroup)
+      );
+    }
+
+    el.innerHTML = `
+      ${renderHeader()}
+
+      ${isOp ? `
+      <div class="rating-top-grid">
+        ${renderMyResult()}
+        <div class="panel rating-panel">
+          <div class="panel-head"><h3>Топ-3 недели</h3></div>
+          ${renderPodium()}
+        </div>
+      </div>` : `
+      <div class="panel rating-panel" style="margin-bottom:16px">
+        <div class="panel-head"><h3>Топ-3 недели</h3></div>
+        ${renderPodium()}
+      </div>`}
+
+      ${isOp ? `
+      <div class="rating-mid-grid">
+        <div class="panel rating-panel">
+          <div class="panel-head">
+            <h3>Сравнение</h3>
+            <div class="metric-tabs" id="cmp-tabs">
+              <button class="metric-tab active" data-metric="points">Баллы</button>
+              <button class="metric-tab" data-metric="coins">Коины</button>
+            </div>
+          </div>
+          <div id="cmp-body">${renderComparison(myComparison)}</div>
+        </div>
+        <div class="panel rating-panel">
+          <div class="panel-head">
+            <h3>Динамика</h3>
+            <div class="metric-tabs" id="dyn-tabs">
+              <button class="metric-tab active" data-type="place">Место</button>
+              <button class="metric-tab" data-type="points">Баллы</button>
+              <button class="metric-tab" data-type="coins">Коины</button>
+            </div>
+          </div>
+          <div id="dyn-body">${renderDynamics(myDynamics)}</div>
+        </div>
+      </div>` : ''}
+
+      <div class="panel rating-panel">
+        <div class="panel-head"><h3>Номинации недели</h3></div>
+        ${renderNominations()}
+      </div>
+
+      ${isOp && myTx?.length ? `
+      <div class="panel rating-panel">
+        <div class="panel-head"><h3>Мои последние начисления</h3></div>
+        ${renderMyTx()}
+      </div>` : ''}
+
+      <div class="panel rating-panel">
+        <div class="panel-head">
+          <h3>Общий рейтинг</h3>
+          <span class="panel-badge">${total} участников</span>
+        </div>
+        <div class="rating-filters">
+          <input id="rating-search" class="form-input" placeholder="Поиск по ФИО…" style="width:220px">
+          <select id="rating-group" class="form-select" style="width:160px">
+            <option value="">Все группы</option>
+            ${groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('')}
+          </select>
+        </div>
+        <div id="rating-table">${renderTable(filteredRows())}</div>
+        ${isOp && myData?.place > 10 ? `
+        <div class="rating-my-sticky">
+          Ваше место: <b>#${myData.place}</b> — ${esc(myData.full_name)} —
+          ${myData.weekly_points} баллов — ${myData.weekly_coins} ₡
+        </div>` : ''}
+      </div>`;
+
+    // Bind search + filter
+    el.querySelector('#rating-search')?.addEventListener('input', e => {
+      searchVal = e.target.value;
+      el.querySelector('#rating-table').innerHTML = renderTable(filteredRows());
+    });
+    el.querySelector('#rating-group')?.addEventListener('change', e => {
+      filterGroup = e.target.value;
+      el.querySelector('#rating-table').innerHTML = renderTable(filteredRows());
+    });
+
+    // Comparison metric tabs
+    el.querySelectorAll('#cmp-tabs .metric-tab').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        el.querySelectorAll('#cmp-tabs .metric-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        cmpMetric = btn.dataset.metric;
+        const d = await fetch(api._base() + `/api/rating/me/comparison?metric=${cmpMetric}`, { credentials: 'include' }).then(r => r.json());
+        el.querySelector('#cmp-body').innerHTML = renderComparison(d);
+      });
+    });
+
+    // Dynamics type tabs
+    el.querySelectorAll('#dyn-tabs .metric-tab').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        el.querySelectorAll('#dyn-tabs .metric-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        dynType = btn.dataset.type;
+        const d = await fetch(api._base() + `/api/rating/me/dynamics?type=${dynType}&weeks=8`, { credentials: 'include' }).then(r => r.json());
+        el.querySelector('#dyn-body').innerHTML = renderDynamics(d);
+      });
+    });
+
+  } catch(err) {
+    el.innerHTML += `<div class="status-line status-error" style="margin-top:20px">
+      Не удалось загрузить рейтинг. Попробуйте обновить страницу.<br>
+      <small>${esc(err.message)}</small>
+    </div>`;
+  }
+}
   if (!el) return;
   const rows = STATE.rating;
   const myId = STATE.wallet?.operator_id;
