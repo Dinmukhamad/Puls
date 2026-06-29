@@ -578,64 +578,60 @@ def delete_operator(
     if any(counts.values()):
         raise HTTPException(
             status_code=409,
-            detail="Оператора нельзя удалить, так как по нему уже есть история. Используйте функцию увольнения.",
+            detail="Нельзя удалить оператора с историей операций. Используйте функцию увольнения.",
         )
 
     op_name = op.full_name
     op_id   = op.id
 
     try:
-        # 1. Detach linked user
-        user = _operator_user(db, op)
-        if user:
-            user.is_active   = False
-            user.operator_id = None
-            user.username    = f"deleted_{op_id}_{user.username}"[:120]
-            db.flush()
+        conn = db.connection()
 
-        # 2. Clear FK fields on operator row itself
-        op.user_id  = None
-        op.group_id = None
-        db.flush()
+        # 1. DELETE из operator_audit_logs (operator_id NOT NULL — нельзя обнулить)
+        conn.execute(
+            text("DELETE FROM operator_audit_logs WHERE operator_id = :oid"),
+            {"oid": op_id}
+        )
 
-        # 3. Nullify references in audit_logs
-        db.execute(
+        # 2. Обнулить ссылки в audit_logs (entity_id nullable)
+        conn.execute(
             text("UPDATE audit_logs SET entity_id = NULL WHERE entity_type = 'operator' AND entity_id = :oid"),
             {"oid": op_id}
         )
-        db.flush()
 
-        # 4. Nullify operator_audit_logs using a savepoint so failure doesn't abort tx
-        sp = db.begin_nested()
-        try:
-            db.execute(
-                text("UPDATE operator_audit_logs SET operator_id = NULL WHERE operator_id = :oid"),
-                {"oid": op_id}
+        # 3. Отвязать пользователя
+        if op.user_id:
+            conn.execute(
+                text("UPDATE users SET is_active = false, operator_id = NULL, username = CONCAT('deleted_', :oid, '_', username) WHERE id = :uid"),
+                {"oid": op_id, "uid": op.user_id}
             )
-            sp.commit()
-        except Exception:
-            sp.rollback()
 
-        # 5. Delete the operator row
-        db.delete(op)
-        db.flush()
+        # 4. Обнулить FK на операторе
+        conn.execute(
+            text("UPDATE operators SET user_id = NULL, group_id = NULL WHERE id = :oid"),
+            {"oid": op_id}
+        )
 
-        # 6. Write audit record after delete so no FK issue
-        db.execute(
+        # 5. Удалить оператора
+        conn.execute(
+            text("DELETE FROM operators WHERE id = :oid"),
+            {"oid": op_id}
+        )
+
+        # 6. Записать в audit лог (entity_id = NULL, т.к. оператор удалён)
+        conn.execute(
             text(
                 "INSERT INTO audit_logs (action, entity_type, entity_id, details, performed_by_user_id, created_at) "
-                "VALUES (:action, :etype, NULL, :details, :uid, NOW())"
+                "VALUES ('operator_deleted', 'operator', NULL, :details, :uid, NOW())"
             ),
             {
-                "action": "operator_deleted",
-                "etype": "operator",
-                "details": f"Удалена карточка оператора: {op_name} (ID {op_id})",
+                "details": f"Удалён оператор: {op_name} (ID {op_id})",
                 "uid": current_user.id,
             }
         )
 
         db.commit()
-        return {"ok": True}
+        return {"ok": True, "message": f"Оператор {op_name} удалён"}
 
     except Exception as e:
         db.rollback()
