@@ -745,6 +745,25 @@ function renderAdminOperators() {
       </div>`;
   }
 
+  function renderTabsAndFilters() {
+    const c = {
+      all:               ops.filter(o => !isDismissed(o)).length,
+      participating:     ops.filter(o => !isDismissed(o) && o.participation_status === 'participating').length,
+      not_participating: ops.filter(o => !isDismissed(o) && o.participation_status === 'not_participating').length,
+      dismissed:         ops.filter(o => isDismissed(o)).length,
+    };
+    const tabs = [
+      { key: 'all',               label: 'Активные' },
+      { key: 'participating',     label: 'Участвует' },
+      { key: 'not_participating', label: 'Не участвует' },
+      { key: 'dismissed',         label: 'Уволенные' },
+    ];
+    return tabs.map(t => `
+      <button class="ops-tab ${activeTab===t.key?'ops-tab-active':''}" data-tab="${t.key}">
+        ${t.label}<span class="ops-tab-badge ${activeTab===t.key?'ops-tab-badge-active':''}">${c[t.key]}</span>
+      </button>`).join('');
+  }
+
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Операторы</div><h2 class="section-title">Список операторов</h2></div>
@@ -755,29 +774,45 @@ function renderAdminOperators() {
       </div>
     </div>
 
-    <!-- Фильтры -->
-    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-      <input id="ops-search" class="form-input" placeholder="Поиск по ФИО…" style="width:220px" value="${esc(searchVal)}">
+    <div class="ops-tab-bar" id="ops-tab-bar">${renderTabsAndFilters()}</div>
+
+    <div class="ops-filters-row">
+      <input id="ops-search" class="form-input" placeholder="Поиск по ФИО или группе…" style="width:260px" value="${esc(searchVal)}">
       <select id="ops-group" class="form-select" style="width:180px">
         <option value="">Все группы</option>
         ${groups.map(g => `<option value="${esc(g)}" ${filterGroup===g?'selected':''}>${esc(g)}</option>`).join('')}
       </select>
-      <label class="inline-check">
-        <input id="ops-show-dismissed" type="checkbox">
-        <span>Показывать уволенных</span>
-      </label>
-      <span style="margin-left:auto;color:var(--tx3);font-size:12px;align-self:center">
-        Показано: <b class="ops-count">${filteredOps().length}</b> из ${ops.length}
-      </span>
+      <span class="ops-count-info">Показано: <b>${filteredOps().length}</b> из ${ops.length}</span>
     </div>
 
     <div id="ops-table-wrap">${renderTable()}</div>`;
 
-  // Поиск и фильтр
-  el.querySelector('#ops-search')?.addEventListener('input', e => {
-    searchVal = e.target.value;
-    el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+  function rebindOps() {
+    el.querySelectorAll('.ops-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTab = btn.dataset.tab;
+        el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
+        el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+        el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+        rebindOps();
+      });
+    });
+    el.querySelector('#ops-search')?.addEventListener('input', e => {
+      searchVal = e.target.value;
+      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+      bindOpsActions();
+    });
+    el.querySelector('#ops-group')?.addEventListener('change', e => {
+      filterGroup = e.target.value;
+      el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
+      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+      rebindOps();
+    });
     bindOpsActions();
+  }
+  rebindOps();
     el.querySelector('.ops-count').textContent = filteredOps().length;
   });
   el.querySelector('#ops-group')?.addEventListener('change', e => {
