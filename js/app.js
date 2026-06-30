@@ -3346,182 +3346,7 @@ function renderPeriodReport() {
 window.renderPeriodReport = renderPeriodReport;
 
 
-/* ══════════════════════════════════════
-   VIEW: АНАЛИТИКА
-══════════════════════════════════════ */
-let _analyticsState = {
-  startDate: null,
-  endDate: null,
-  groupId: '',
-  operatorQuery: '',
-  participationStatus: 'all',
-  onlyWithData: false,
-  groups: [],
-};
 
-function analyticsApiUrl(path, params) {
-  const qs = new URLSearchParams(params).toString();
-  return api._base() + '/api/analytics/' + path + (qs ? '?' + qs : '');
-}
-
-async function analyticsFetch(path, params) {
-  const res = await fetch(analyticsApiUrl(path, params), { credentials: 'include' });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки данных');
-  return data;
-}
-
-function fmtA(v, decimals = 2, suffix = '') {
-  if (v === null || v === undefined || (typeof v === 'number' && isNaN(v))) return '—';
-  return Number(v).toFixed(decimals) + suffix;
-}
-
-function qualityColor(band) {
-  return { green: 'var(--success)', yellow: '#D97706', orange: '#EA580C', red: 'var(--danger)' }[band] || 'var(--text-muted)';
-}
-
-function riskBadge(status) {
-  const map = {
-    stable: { label: 'Стабильно', color: 'var(--success)', bg: 'var(--success-soft)' },
-    watch: { label: 'Контроль', color: 'var(--warning)', bg: 'var(--warning-soft)' },
-    critical: { label: 'Критично', color: 'var(--danger)', bg: 'var(--danger-soft)' },
-    no_data: { label: 'Нет данных', color: 'var(--text-muted)', bg: 'var(--bg-muted)' },
-  };
-  const r = map[status] || map.no_data;
-  return `<span class="risk-badge" style="color:${r.color};background:${r.bg}">${r.label}</span>`;
-}
-
-async function renderAnalytics() {
-  const el = document.getElementById('view-analytics');
-  if (!el) return;
-
-  // Default period: last 7 days
-  if (!_analyticsState.startDate) {
-    const today = new Date();
-    const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 6);
-    _analyticsState.startDate = weekAgo.toISOString().slice(0, 10);
-    _analyticsState.endDate = today.toISOString().slice(0, 10);
-  }
-
-  el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">Аналитика</div><h2 class="section-title">Управленческая аналитика</h2></div>
-    </div>
-    <div class="an-filters-card">
-      <div class="an-filters-row">
-        <div class="form-group">
-          <label class="form-label">Период с</label>
-          <input id="an-start" type="date" class="form-input" value="${_analyticsState.startDate}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">по</label>
-          <input id="an-end" type="date" class="form-input" value="${_analyticsState.endDate}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Группа</label>
-          <select id="an-group" class="form-select"><option value="">Все группы</option></select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Оператор</label>
-          <input id="an-operator" type="text" class="form-input" placeholder="Поиск по ФИО" value="${esc(_analyticsState.operatorQuery)}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Статус участия</label>
-          <select id="an-participation" class="form-select">
-            <option value="all">Все</option>
-            <option value="participating">Участвует</option>
-            <option value="not_participating">Не участвует</option>
-          </select>
-        </div>
-        <label class="an-checkbox-label">
-          <input type="checkbox" id="an-only-data" ${_analyticsState.onlyWithData ? 'checked' : ''}>
-          Только с данными
-        </label>
-        <button class="btn-primary" id="an-apply-btn">Применить</button>
-      </div>
-    </div>
-    <div id="an-content"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка аналитики…</p></div></div>
-  `;
-
-  // Load groups for filter
-  try {
-    const gdata = await analyticsFetch('groups-list', {});
-    _analyticsState.groups = gdata.items || [];
-    const sel = el.querySelector('#an-group');
-    sel.innerHTML = '<option value="">Все группы</option>' +
-      _analyticsState.groups.map(g => `<option value="${g.id}" ${String(g.id)===_analyticsState.groupId?'selected':''}>${esc(g.name)}</option>`).join('');
-  } catch(e) { /* groups list optional */ }
-
-  el.querySelector('#an-participation').value = _analyticsState.participationStatus;
-
-  el.querySelector('#an-apply-btn').addEventListener('click', () => {
-    _analyticsState.startDate = el.querySelector('#an-start').value;
-    _analyticsState.endDate = el.querySelector('#an-end').value;
-    _analyticsState.groupId = el.querySelector('#an-group').value;
-    _analyticsState.operatorQuery = el.querySelector('#an-operator').value;
-    _analyticsState.participationStatus = el.querySelector('#an-participation').value;
-    _analyticsState.onlyWithData = el.querySelector('#an-only-data').checked;
-    loadAnalyticsContent();
-  });
-
-  await loadAnalyticsContent();
-}
-
-async function loadAnalyticsContent() {
-  const el = document.getElementById('view-analytics');
-  const content = el?.querySelector('#an-content');
-  if (!content) return;
-
-  const s = _analyticsState;
-  const baseParams = { start_date: s.startDate, end_date: s.endDate };
-  const groupParam = s.groupId ? { group_id: s.groupId } : {};
-  const opParams = { ...baseParams, ...groupParam };
-  if (s.operatorQuery) opParams.operator_query = s.operatorQuery;
-  if (s.participationStatus !== 'all') opParams.participation_status = s.participationStatus;
-  if (s.onlyWithData) opParams.only_with_data = 'true';
-
-  content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем показатели…</p></div>';
-
-  try {
-    const [summary, dynamics, opsTable, groupsCmp, topAttn, penalties, breakdown, riskPyramid, coverage, loadEff, qVsP] = await Promise.all([
-      analyticsFetch('summary', opParams),
-      analyticsFetch('daily-dynamics', { ...baseParams, ...groupParam, metric: 'calls' }),
-      analyticsFetch('operators', opParams),
-      analyticsFetch('groups-comparison', baseParams),
-      analyticsFetch('top-and-attention', { ...baseParams, ...groupParam }),
-      analyticsFetch('penalties', { ...baseParams, ...groupParam }),
-      analyticsFetch('points-breakdown', opParams),
-      analyticsFetch('risk-pyramid', { ...baseParams, ...groupParam }),
-      analyticsFetch('quality-coverage', { ...baseParams, ...groupParam }),
-      analyticsFetch('load-vs-efficiency', { ...baseParams, ...groupParam }),
-      analyticsFetch('quality-vs-penalties', { ...baseParams, ...groupParam }),
-    ]);
-
-    content.innerHTML =
-      renderKpiBlock(summary) +
-      renderDailyDynamicsBlock(dynamics) +
-      renderOperatorsTableBlock(opsTable) +
-      renderGroupsComparisonBlock(groupsCmp) +
-      renderQualityKvzMatrixBlock() +
-      renderTopAttentionBlock(topAttn) +
-      renderPenaltiesBlock(penalties) +
-      renderPointsBreakdownBlock(breakdown) +
-      renderHeatmapBlock() +
-      renderQualityVsPenaltiesBlock(qVsP) +
-      renderRiskPyramidBlock(riskPyramid) +
-      renderQualityCoverageBlock(coverage) +
-      renderLoadEfficiencyBlock(loadEff) +
-      renderFutureKpiBlock() +
-      renderAnalyticsWarningsBlock(summary.warnings);
-
-    bindAnalyticsInteractions(opParams, baseParams, groupParam);
-
-  } catch(e) {
-    content.innerHTML = `<div class="an-card"><div class="status-line status-error">Не удалось загрузить аналитику: ${esc(e.message)}</div></div>`;
-  }
-}
-
-/* ── Block: KPI cards ───────────────────────────────────────── */
 function renderKpiBlock(summary) {
   const k = summary.kpi || {};
   const cards = [
@@ -4096,129 +3921,734 @@ function renderAnalyticsWarningsBlock(warnings) {
 }
 
 /* ── Wiring: interactions for tabs, scatter plots, exports ──────────*/
-function bindAnalyticsInteractions(opParams, baseParams, groupParam) {
+/* ══════════════════════════════════════
+   VIEW: АНАЛИТИКА — с горизонтальными табами
+══════════════════════════════════════ */
+const ANALYTICS_TABS = [
+  { key: 'overview',   label: 'Обзор' },
+  { key: 'operators',  label: 'Операторы' },
+  { key: 'groups',     label: 'Группы' },
+  { key: 'matrix',     label: 'Матрицы' },
+  { key: 'quality',    label: 'Качество' },
+  { key: 'dynamics',   label: 'Динамика' },
+  { key: 'penalties',  label: 'Штрафы' },
+  { key: 'risks',      label: 'Риски' },
+  { key: 'points',     label: 'Баллы' },
+  { key: 'export',     label: 'Экспорт' },
+];
+
+function getAnalyticsParams() {
+  const qs = new URLSearchParams(location.hash.replace(/^#analytics\??/, ''));
+  return {
+    tab: qs.get('tab') || 'overview',
+    start: qs.get('start') || null,
+    end: qs.get('end') || null,
+    group: qs.get('group') || '',
+    operator: qs.get('operator') || '',
+    participation: qs.get('participation') || 'all',
+    onlyData: qs.get('onlyData') === '1',
+  };
+}
+
+function setAnalyticsUrl(params) {
+  const qs = new URLSearchParams();
+  qs.set('tab', params.tab);
+  if (params.start) qs.set('start', params.start);
+  if (params.end) qs.set('end', params.end);
+  if (params.group) qs.set('group', params.group);
+  if (params.operator) qs.set('operator', params.operator);
+  if (params.participation && params.participation !== 'all') qs.set('participation', params.participation);
+  if (params.onlyData) qs.set('onlyData', '1');
+  history.replaceState(null, '', '#analytics?' + qs.toString());
+}
+
+let _analyticsState = {
+  tab: 'overview',
+  startDate: null,
+  endDate: null,
+  groupId: '',
+  operatorQuery: '',
+  participationStatus: 'all',
+  onlyWithData: false,
+  groups: [],
+};
+
+function analyticsApiUrl(path, params) {
+  const qs = new URLSearchParams(params).toString();
+  return api._base() + '/api/analytics/' + path + (qs ? '?' + qs : '');
+}
+
+async function analyticsFetch(path, params) {
+  const res = await fetch(analyticsApiUrl(path, params), { credentials: 'include' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки данных');
+  return data;
+}
+
+function fmtA(v, decimals = 2, suffix = '') {
+  if (v === null || v === undefined || (typeof v === 'number' && isNaN(v))) return '—';
+  return Number(v).toFixed(decimals) + suffix;
+}
+
+function qualityColor(band) {
+  return { green: 'var(--success)', yellow: '#D97706', orange: '#EA580C', red: 'var(--danger)' }[band] || 'var(--text-muted)';
+}
+
+function riskBadge(status) {
+  const map = {
+    stable: { label: 'Стабильно', color: 'var(--success)', bg: 'var(--success-soft)' },
+    watch: { label: 'Контроль', color: 'var(--warning)', bg: 'var(--warning-soft)' },
+    critical: { label: 'Критично', color: 'var(--danger)', bg: 'var(--danger-soft)' },
+    no_data: { label: 'Нет данных', color: 'var(--text-muted)', bg: 'var(--bg-muted)' },
+  };
+  const r = map[status] || map.no_data;
+  return `<span class="risk-badge" style="color:${r.color};background:${r.bg}">${r.label}</span>`;
+}
+
+async function renderAnalytics() {
   const el = document.getElementById('view-analytics');
   if (!el) return;
 
-  // Daily dynamics metric tabs
-  el.querySelectorAll('#an-dyn-tabs .metric-tab').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      el.querySelectorAll('#an-dyn-tabs .metric-tab').forEach(b => b.classList.remove('active'));
+  const urlParams = getAnalyticsParams();
+
+  if (!_analyticsState.startDate) {
+    const today = new Date();
+    const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 6);
+    _analyticsState.startDate = urlParams.start || weekAgo.toISOString().slice(0, 10);
+    _analyticsState.endDate = urlParams.end || today.toISOString().slice(0, 10);
+    _analyticsState.tab = urlParams.tab;
+    _analyticsState.groupId = urlParams.group;
+    _analyticsState.operatorQuery = urlParams.operator;
+    _analyticsState.participationStatus = urlParams.participation;
+    _analyticsState.onlyWithData = urlParams.onlyData;
+  }
+
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Аналитика</div><h2 class="section-title">Управленческая аналитика</h2></div>
+    </div>
+    <div class="an-filters-card">
+      <div class="an-filters-row">
+        <div class="form-group">
+          <label class="form-label">Период с</label>
+          <input id="an-start" type="date" class="form-input" value="${_analyticsState.startDate}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">по</label>
+          <input id="an-end" type="date" class="form-input" value="${_analyticsState.endDate}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Группа</label>
+          <select id="an-group" class="form-select"><option value="">Все группы</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Оператор</label>
+          <input id="an-operator" type="text" class="form-input" placeholder="Поиск по ФИО" value="${esc(_analyticsState.operatorQuery)}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Статус участия</label>
+          <select id="an-participation" class="form-select">
+            <option value="all">Все</option>
+            <option value="participating">Участвует</option>
+            <option value="not_participating">Не участвует</option>
+          </select>
+        </div>
+        <label class="an-checkbox-label">
+          <input type="checkbox" id="an-only-data" ${_analyticsState.onlyWithData ? 'checked' : ''}>
+          Только с данными
+        </label>
+        <button class="btn-primary" id="an-apply-btn">Применить</button>
+      </div>
+    </div>
+
+    <div class="analytics-tabs" id="an-tabs">
+      ${ANALYTICS_TABS.map(t => `<button class="analytics-tab ${t.key===_analyticsState.tab?'active':''}" data-tab="${t.key}">${esc(t.label)}</button>`).join('')}
+    </div>
+
+    <div id="an-tab-content" class="analytics-tab-content">
+      <div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>
+    </div>
+  `;
+
+  try {
+    const gdata = await analyticsFetch('groups-list', {});
+    _analyticsState.groups = gdata.items || [];
+    const sel = el.querySelector('#an-group');
+    sel.innerHTML = '<option value="">Все группы</option>' +
+      _analyticsState.groups.map(g => `<option value="${g.id}" ${String(g.id)===_analyticsState.groupId?'selected':''}>${esc(g.name)}</option>`).join('');
+  } catch(e) { /* groups list optional */ }
+
+  el.querySelector('#an-participation').value = _analyticsState.participationStatus;
+
+  function syncStateFromFilters() {
+    _analyticsState.startDate = el.querySelector('#an-start').value;
+    _analyticsState.endDate = el.querySelector('#an-end').value;
+    _analyticsState.groupId = el.querySelector('#an-group').value;
+    _analyticsState.operatorQuery = el.querySelector('#an-operator').value;
+    _analyticsState.participationStatus = el.querySelector('#an-participation').value;
+    _analyticsState.onlyWithData = el.querySelector('#an-only-data').checked;
+  }
+
+  function updateUrl() {
+    setAnalyticsUrl({
+      tab: _analyticsState.tab,
+      start: _analyticsState.startDate,
+      end: _analyticsState.endDate,
+      group: _analyticsState.groupId,
+      operator: _analyticsState.operatorQuery,
+      participation: _analyticsState.participationStatus,
+      onlyData: _analyticsState.onlyWithData,
+    });
+  }
+
+  el.querySelector('#an-apply-btn').addEventListener('click', () => {
+    syncStateFromFilters();
+    updateUrl();
+    loadAnalyticsTab(_analyticsState.tab);
+  });
+
+  // Tab click handling
+  el.querySelectorAll('.analytics-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.querySelectorAll('.analytics-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      const metric = btn.dataset.metric;
-      try {
-        const d = await analyticsFetch('daily-dynamics', { ...baseParams, ...groupParam, metric });
-        el.querySelector('#an-dyn-chart').innerHTML = renderDynChart(d.items || [], metric);
-      } catch(e) {}
+      _analyticsState.tab = btn.dataset.tab;
+      updateUrl();
+      loadAnalyticsTab(_analyticsState.tab);
     });
   });
 
-  // Operators table sorting
-  let curSortKey = 'final_points', curSortDir = 'desc';
-  let curOpsItems = [];
-  (async () => {
-    try {
-      const d = await analyticsFetch('operators', opParams);
-      curOpsItems = d.items || [];
-    } catch(e) {}
-  })();
+  updateUrl();
+  await loadAnalyticsTab(_analyticsState.tab);
+}
 
-  function bindOpsSort() {
-    el.querySelectorAll('#an-ops-table-wrap .sortable').forEach(th => {
+function analyticsBaseParams() {
+  const s = _analyticsState;
+  const p = { start_date: s.startDate, end_date: s.endDate };
+  if (s.groupId) p.group_id = s.groupId;
+  return p;
+}
+function analyticsOpParams() {
+  const s = _analyticsState;
+  const p = analyticsBaseParams();
+  if (s.operatorQuery) p.operator_query = s.operatorQuery;
+  if (s.participationStatus !== 'all') p.participation_status = s.participationStatus;
+  if (s.onlyWithData) p.only_with_data = 'true';
+  return p;
+}
+
+/* ── Ленивая загрузка по активной вкладке ─────────────────── */
+async function loadAnalyticsTab(tab) {
+  const content = document.getElementById('an-tab-content');
+  if (!content) return;
+  content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем показатели…</p></div>';
+
+  try {
+    switch (tab) {
+      case 'overview':  await loadOverviewTab(content); break;
+      case 'operators': await loadOperatorsTab(content); break;
+      case 'groups':    await loadGroupsTab(content); break;
+      case 'matrix':    await loadMatrixTab(content); break;
+      case 'quality':   await loadQualityTab(content); break;
+      case 'dynamics':  await loadDynamicsTab(content); break;
+      case 'penalties': await loadPenaltiesTab(content); break;
+      case 'risks':     await loadRisksTab(content); break;
+      case 'points':    await loadPointsTab(content); break;
+      case 'export':    await loadExportTab(content); break;
+      default: content.innerHTML = '<div class="empty-line">Вкладка не найдена</div>';
+    }
+  } catch(e) {
+    content.innerHTML = `<div class="an-card"><div class="status-line status-error">Не удалось загрузить: ${esc(e.message)}</div></div>`;
+  }
+}
+
+/* ── Вкладка: Обзор ──────────────────────────────────────────*/
+async function loadOverviewTab(content) {
+  const [summary, dynamics, groupsCmp, riskPyramid] = await Promise.all([
+    analyticsFetch('summary', analyticsOpParams()),
+    analyticsFetch('daily-dynamics', { ...analyticsBaseParams(), metric: 'calls' }),
+    analyticsFetch('groups-comparison', analyticsBaseParams()),
+    analyticsFetch('risk-pyramid', analyticsBaseParams()),
+  ]);
+
+  content.innerHTML =
+    renderKpiBlock(summary) +
+    '<div class="an-grid-2">' +
+      '<div class="an-card"><div class="an-card-head">Динамика звонков</div><div id="an-ov-dyn">' + renderDynChart(dynamics.items||[], 'calls') + '</div></div>' +
+      '<div class="an-card"><div class="an-card-head">Сравнение групп по баллам</div>' + renderMiniGroupsChart(groupsCmp.items||[]) + '</div>' +
+    '</div>' +
+    renderMiniRiskPyramid(riskPyramid) +
+    renderAnalyticsWarningsBlock(summary.warnings);
+
+  if (!summary.kpi || summary.kpi.operators_count === 0) {
+    content.innerHTML = renderAnalyticsEmptyState() + content.innerHTML;
+  }
+}
+
+function renderMiniGroupsChart(items) {
+  if (!items.length) return '<div class="empty-line">Нет данных</div>';
+  const maxPts = Math.max(...items.map(g => g.final_points_sum || 0), 1);
+  return `<div class="an-bar-chart">
+    ${items.slice(0,6).map(g => `<div class="an-bar-row">
+      <div class="an-bar-date" style="width:110px">${esc(g.group_name)}</div>
+      <div class="an-bar-track"><div class="an-bar-fill" style="width:${Math.round((g.final_points_sum/maxPts)*100)}%"></div></div>
+      <div class="an-bar-val">${fmtA(g.final_points_sum,0)}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderMiniRiskPyramid(riskPyramid) {
+  const statuses = [
+    { key: 'stable', label: 'Стабильные', icon: '🟢' },
+    { key: 'watch', label: 'Нужен контроль', icon: '🟡' },
+    { key: 'critical', label: 'Критично', icon: '🔴' },
+    { key: 'no_data', label: 'Нет данных', icon: '⚪' },
+  ];
+  return `<div class="an-card">
+    <div class="an-card-head">Состояние команды</div>
+    <div class="an-risk-grid">
+      ${statuses.map(s => {
+        const bucket = riskPyramid[s.key] || { count: 0 };
+        return `<div class="an-risk-cell" style="cursor:default">
+          <div class="an-risk-icon">${s.icon}</div>
+          <div class="an-risk-count">${bucket.count}</div>
+          <div class="an-risk-label">${s.label}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function renderAnalyticsEmptyState() {
+  return `<div class="an-card"><div class="an-empty-state">
+    <div class="an-empty-icon">📊</div>
+    <div class="an-empty-title">Нет данных для аналитики</div>
+    <div class="an-empty-sub">Загрузите файлы Report и Monthly Report в разделе «Расчёт периода»</div>
+    <button class="btn-primary btn-sm" onclick="navigateTo('period-report')" style="margin-top:12px">Перейти к загрузке файлов</button>
+  </div></div>`;
+}
+
+/* ── Вкладка: Операторы (таблица эффективности + зона внимания) ─*/
+async function loadOperatorsTab(content) {
+  const [opsTable, topAttn] = await Promise.all([
+    analyticsFetch('operators', analyticsOpParams()),
+    analyticsFetch('top-and-attention', analyticsBaseParams()),
+  ]);
+
+  content.innerHTML =
+    renderOperatorsTableBlock(opsTable) +
+    renderAttentionZoneTableBlock(topAttn.attention_zone || []);
+
+  bindOpsTableSort(opsTable.items || []);
+
+  content.querySelector('#an-export-ops-btn')?.addEventListener('click', () => exportOperatorsCsv(opsTable.items || []));
+}
+
+function renderAttentionZoneTableBlock(items) {
+  function recommendation(reason) {
+    if (reason.includes('качество')) return 'Провести разбор звонков';
+    if (reason.includes('КВЗ')) return 'Поставить контрольную точку';
+    if (reason.includes('эффективность')) return 'Проверить загрузку оператора';
+    if (reason.includes('штраф')) return 'Проверить дисциплину';
+    if (reason.includes('нет оценок')) return 'Проверить отсутствие оценок';
+    if (reason.includes('нет базы')) return 'Проверить корректность табеля';
+    return '—';
+  }
+  return `<div class="an-card">
+    <div class="an-card-head" style="color:var(--warning)">Зона внимания (${items.length})</div>
+    ${items.length ? `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Оператор</th><th>Группа</th><th>Проблемный показатель</th><th>Причина</th><th>Рекомендация</th></tr></thead>
+      <tbody>${items.map(a => `<tr>
+        <td class="name-cell">${esc(a.full_name)}</td>
+        <td>${esc(a.group_name||'—')}</td>
+        <td style="font-size:12px;color:var(--text-secondary)">${esc(a.reason.split(',')[0])}</td>
+        <td style="color:var(--warning);font-size:12px">${esc(a.reason)}</td>
+        <td style="font-size:12px;color:var(--text-secondary)">${esc(recommendation(a.reason))}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty-line">Операторов в зоне внимания нет</div>'}
+  </div>`;
+}
+
+function bindOpsTableSort(items) {
+  let curSortKey = 'final_points', curSortDir = 'desc';
+  const wrap = document.getElementById('an-ops-table-wrap');
+  function bind() {
+    document.querySelectorAll('#an-ops-table-wrap .sortable').forEach(th => {
       th.addEventListener('click', () => {
         const key = th.dataset.sort;
         if (curSortKey === key) curSortDir = curSortDir === 'desc' ? 'asc' : 'desc';
         else { curSortKey = key; curSortDir = 'desc'; }
-        el.querySelector('#an-ops-table-wrap').innerHTML = renderOpsTable(curOpsItems, curSortKey, curSortDir);
-        bindOpsSort();
+        wrap.innerHTML = renderOpsTable(items, curSortKey, curSortDir);
+        bind();
       });
     });
   }
-  bindOpsSort();
+  bind();
+}
 
-  // Export operators CSV
-  el.querySelector('#an-export-ops-btn')?.addEventListener('click', async () => {
-    try {
-      const d = curOpsItems.length ? curOpsItems : (await analyticsFetch('operators', opParams)).items;
-      const headers = ['ФИО','Группа','Звонки','Итог ч','База ч','КВЗ','Качество','Оцен.звонков','Эфф.%','Штраф мин','Итог','Риск'];
-      const rows = [headers.join(';')];
-      d.forEach(o => rows.push([o.full_name,o.group_name||'',o.calls_total,o.total_hours,o.base_hours,o.kvz,
-        o.quality_avg??'',o.quality_calls_count,o.efficiency_percent,o.penalty_minutes,o.final_points,o.risk_status].join(';')));
-      const blob = new Blob(['\ufeff'+rows.join('\n')], {type:'text/csv;charset=utf-8'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href=url; a.download='аналитика_операторы.csv'; a.click();
-      URL.revokeObjectURL(url);
-    } catch(e) { showToast('Ошибка экспорта: ' + e.message, 'error'); }
-  });
+function exportOperatorsCsv(items) {
+  const headers = ['ФИО','Группа','Звонки','Итог ч','База ч','КВЗ','Качество','Оцен.звонков','Эфф.%','Штраф мин','Итог','Риск'];
+  const rows = [headers.join(';')];
+  items.forEach(o => rows.push([o.full_name,o.group_name||'',o.calls_total,o.total_hours,o.base_hours,o.kvz,
+    o.quality_avg??'',o.quality_calls_count,o.efficiency_percent,o.penalty_minutes,o.final_points,o.risk_status].join(';')));
+  downloadCsv(rows, 'аналитика_операторы.csv');
+}
 
-  // Quality x KVZ matrix
-  (async () => {
-    try {
-      const d = await analyticsFetch('quality-kvz-matrix', { ...baseParams, ...groupParam });
-      drawScatter('an-qk-matrix', d.items || [], 'kvz', 'quality_avg', 'КВЗ', 'Качество',
-        d.thresholds?.kvz, d.thresholds?.quality);
-    } catch(e) {
-      const c = document.getElementById('an-qk-matrix');
-      if (c) c.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
-    }
-  })();
+function downloadCsv(rows, filename) {
+  const blob = new Blob(['\ufeff'+rows.join('\n')], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
+  URL.revokeObjectURL(url);
+}
 
-  // Load vs efficiency matrix
-  (async () => {
-    try {
-      const d = await analyticsFetch('load-vs-efficiency', { ...baseParams, ...groupParam });
-      drawScatter('an-load-eff-matrix', d.items || [], 'calls_total', 'efficiency_percent', 'Звонки', 'Эффективность %');
-    } catch(e) {
-      const c = document.getElementById('an-load-eff-matrix');
-      if (c) c.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
-    }
-  })();
+/* ── Вкладка: Группы ──────────────────────────────────────────*/
+async function loadGroupsTab(content) {
+  const groupsCmp = await analyticsFetch('groups-comparison', analyticsBaseParams());
+  const items = groupsCmp.items || [];
 
-  // Heatmap metric tabs
-  async function loadHeatmap(metric) {
-    const body = el.querySelector('#an-heatmap-body');
-    body.innerHTML = '<div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div>';
-    try {
-      const d = await analyticsFetch('heatmap', { ...baseParams, ...groupParam, metric });
-      body.innerHTML = renderHeatmapTable(d, metric);
-    } catch(e) {
-      body.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
-    }
+  const bestQuality = items.length ? [...items].sort((a,b)=>(b.avg_quality??-1)-(a.avg_quality??-1))[0] : null;
+  const bestKvz = items.length ? [...items].sort((a,b)=>(b.avg_kvz??-1)-(a.avg_kvz??-1))[0] : null;
+  const worstPenalty = items.length ? [...items].sort((a,b)=>b.penalty_minutes-a.penalty_minutes)[0] : null;
+  const worstRisk = items.length ? [...items].sort((a,b)=>b.operators_in_risk-a.operators_in_risk)[0] : null;
+
+  content.innerHTML =
+    renderGroupsBestWorstBlock(bestQuality, bestKvz, worstPenalty, worstRisk) +
+    renderGroupsMetricChartBlock(items) +
+    renderGroupsComparisonBlock(groupsCmp);
+
+  bindGroupsMetricTabs(items);
+}
+
+function renderGroupsBestWorstBlock(bestQ, bestK, worstP, worstR) {
+  function card(label, group, valueFmt) {
+    if (!group) return `<div class="an-kpi-cell"><div class="an-kpi-val">—</div><div class="an-kpi-label">${esc(label)}</div></div>`;
+    return `<div class="an-kpi-cell"><div class="an-kpi-val" style="font-size:15px">${esc(group.group_name)}</div><div class="an-kpi-label">${esc(label)}: ${valueFmt}</div></div>`;
   }
-  el.querySelectorAll('#an-heatmap-tabs .metric-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      el.querySelectorAll('#an-heatmap-tabs .metric-tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      loadHeatmap(btn.dataset.metric);
-    });
-  });
-  loadHeatmap('quality');
+  return `<div class="an-card">
+    <div class="an-card-head">Лучшие и слабые группы</div>
+    <div class="an-kpi-grid">
+      ${card('Лучшая по качеству', bestQ, fmtA(bestQ?.avg_quality))}
+      ${card('Лучшая по КВЗ', bestK, fmtA(bestK?.avg_kvz))}
+      ${card('Больше всего штрафов', worstP, fmtA(worstP?.penalty_minutes,1)+' мин')}
+      ${card('Больше всего в риске', worstR, (worstR?.operators_in_risk??0)+' опер.')}
+    </div>
+  </div>`;
+}
 
-  // Risk pyramid — click to expand
-  el.querySelectorAll('.an-risk-cell').forEach(cell => {
-    cell.addEventListener('click', async () => {
-      const status = cell.dataset.riskStatus;
-      const detail = el.querySelector('#an-risk-detail');
-      try {
-        const d = await analyticsFetch('risk-pyramid', { ...baseParams, ...groupParam });
-        const bucket = d[status];
-        if (!bucket || !bucket.operators.length) {
-          detail.innerHTML = '<div class="empty-line">Операторов в этой категории нет</div>';
-          return;
-        }
-        detail.innerHTML = `<div class="table-wrap"><table class="data-table">
-          <thead><tr><th>Оператор</th><th>Группа</th><th class="num">Качество</th><th class="num">КВЗ</th><th class="num">Эфф.%</th><th class="num">Штраф мин</th></tr></thead>
-          <tbody>${bucket.operators.map(o => `<tr>
-            <td class="name-cell">${esc(o.full_name)}</td><td>${esc(o.group_name||'—')}</td>
-            <td class="num">${o.quality_avg!=null?fmtA(o.quality_avg):'—'}</td>
-            <td class="num">${o.kvz!=null?fmtA(o.kvz):'—'}</td>
-            <td class="num">${o.efficiency_percent!=null?fmtA(o.efficiency_percent):'—'}</td>
-            <td class="num">${fmtA(o.penalty_minutes,1)}</td>
-          </tr>`).join('')}</tbody>
-        </table></div>`;
-      } catch(e) { detail.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`; }
+function renderGroupsMetricChartBlock(items) {
+  return `<div class="an-card">
+    <div class="an-card-head-row">
+      <span>Сравнение групп по показателю</span>
+      <div class="metric-tabs" id="an-groups-metric-tabs">
+        <button class="metric-tab active" data-metric="final_points_sum">Баллы</button>
+        <button class="metric-tab" data-metric="avg_quality">Качество</button>
+        <button class="metric-tab" data-metric="avg_kvz">КВЗ</button>
+        <button class="metric-tab" data-metric="avg_efficiency">Эфф.</button>
+        <button class="metric-tab" data-metric="penalty_minutes">Штрафы</button>
+        <button class="metric-tab" data-metric="total_calls">Звонки</button>
+      </div>
+    </div>
+    <div id="an-groups-metric-chart">${renderGroupsMetricChart(items, 'final_points_sum')}</div>
+  </div>`;
+}
+
+function renderGroupsMetricChart(items, metric) {
+  if (!items.length) return '<div class="empty-line">Нет данных</div>';
+  const vals = items.map(g => g[metric] ?? 0);
+  const maxV = Math.max(...vals, 1);
+  return `<div class="an-bar-chart">
+    ${items.map((g,i) => `<div class="an-bar-row">
+      <div class="an-bar-date" style="width:120px">${esc(g.group_name)}</div>
+      <div class="an-bar-track"><div class="an-bar-fill" style="width:${Math.round((vals[i]/maxV)*100)}%"></div></div>
+      <div class="an-bar-val">${fmtA(vals[i], metric==='total_calls'?0:2)}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function bindGroupsMetricTabs(items) {
+  document.querySelectorAll('#an-groups-metric-tabs .metric-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#an-groups-metric-tabs .metric-tab').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('an-groups-metric-chart').innerHTML = renderGroupsMetricChart(items, btn.dataset.metric);
     });
   });
+}
+
+/* ── Вкладка: Матрицы ──────────────────────────────────────────*/
+async function loadMatrixTab(content) {
+  content.innerHTML =
+    renderQualityKvzMatrixBlock() +
+    `<div class="an-card"><div class="an-card-head">Нагрузка и эффективность</div>
+      <div id="an-load-eff-matrix"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+    </div>` +
+    `<div class="an-card"><div class="an-card-head">Качество против штрафов</div>
+      <div id="an-qp-matrix"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+    </div>`;
+
+  const base = analyticsBaseParams();
+
+  analyticsFetch('quality-kvz-matrix', base).then(d => {
+    drawScatter('an-qk-matrix', d.items || [], 'kvz', 'quality_avg', 'КВЗ', 'Качество', d.thresholds?.kvz, d.thresholds?.quality);
+  }).catch(e => { const c=document.getElementById('an-qk-matrix'); if(c) c.innerHTML=`<div class="empty-line">${esc(e.message)}</div>`; });
+
+  analyticsFetch('load-vs-efficiency', base).then(d => {
+    drawScatter('an-load-eff-matrix', d.items || [], 'calls_total', 'efficiency_percent', 'Звонки', 'Эффективность %');
+  }).catch(e => { const c=document.getElementById('an-load-eff-matrix'); if(c) c.innerHTML=`<div class="empty-line">${esc(e.message)}</div>`; });
+
+  analyticsFetch('quality-vs-penalties', base).then(d => {
+    const items = (d.items||[]).filter(o => o.quality_avg != null).map(o => ({...o, group_name: o.group_name}));
+    drawScatter('an-qp-matrix', items, 'penalty_minutes', 'quality_avg', 'Штрафы, мин', 'Качество');
+  }).catch(e => { const c=document.getElementById('an-qp-matrix'); if(c) c.innerHTML=`<div class="empty-line">${esc(e.message)}</div>`; });
+}
+
+/* ── Вкладка: Качество ──────────────────────────────────────────*/
+async function loadQualityTab(content) {
+  const [coverage] = await Promise.all([
+    analyticsFetch('quality-coverage', analyticsBaseParams()),
+  ]);
+
+  content.innerHTML =
+    renderQualityCoverageBlock(coverage) +
+    `<div class="an-card">
+      <div class="an-card-head">Heatmap качества по дням</div>
+      <div id="an-quality-heatmap"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+    </div>`;
+
+  try {
+    const hm = await analyticsFetch('heatmap', { ...analyticsBaseParams(), metric: 'quality' });
+    document.getElementById('an-quality-heatmap').innerHTML = renderHeatmapTable(hm, 'quality');
+  } catch(e) {
+    const c = document.getElementById('an-quality-heatmap');
+    if (c) c.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+  }
+}
+
+/* ── Вкладка: Динамика ────────────────────────────────────────*/
+async function loadDynamicsTab(content) {
+  content.innerHTML = `
+    <div class="an-card">
+      <div class="an-card-head-row">
+        <span>Динамика по дням</span>
+        <div class="metric-tabs" id="an-dyn-tabs2">
+          <button class="metric-tab active" data-metric="calls">Звонки</button>
+          <button class="metric-tab" data-metric="kvz">КВЗ</button>
+          <button class="metric-tab" data-metric="operators">Операторы</button>
+        </div>
+      </div>
+      <div id="an-dyn-chart2"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+    </div>
+    <div class="an-card">
+      <div class="an-card-head-row">
+        <span>Тепловая карта по дням</span>
+        <div class="metric-tabs" id="an-heatmap-tabs2">
+          <button class="metric-tab active" data-metric="quality">Качество</button>
+          <button class="metric-tab" data-metric="calls">Звонки</button>
+          <button class="metric-tab" data-metric="kvz">КВЗ</button>
+          <button class="metric-tab" data-metric="efficiency">Эфф.</button>
+          <button class="metric-tab" data-metric="penalty">Штрафы</button>
+        </div>
+      </div>
+      <div id="an-heatmap-body2"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+    </div>`;
+
+  const base = analyticsBaseParams();
+
+  async function loadDyn(metric) {
+    const box = document.getElementById('an-dyn-chart2');
+    try {
+      const d = await analyticsFetch('daily-dynamics', { ...base, metric });
+      box.innerHTML = renderDynChart(d.items || [], metric);
+    } catch(e) { box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`; }
+  }
+  document.querySelectorAll('#an-dyn-tabs2 .metric-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#an-dyn-tabs2 .metric-tab').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      loadDyn(btn.dataset.metric);
+    });
+  });
+  loadDyn('calls');
+
+  async function loadHm(metric) {
+    const box = document.getElementById('an-heatmap-body2');
+    try {
+      const d = await analyticsFetch('heatmap', { ...base, metric });
+      box.innerHTML = renderHeatmapTable(d, metric);
+    } catch(e) { box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`; }
+  }
+  document.querySelectorAll('#an-heatmap-tabs2 .metric-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#an-heatmap-tabs2 .metric-tab').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      loadHm(btn.dataset.metric);
+    });
+  });
+  loadHm('quality');
+}
+
+/* ── Вкладка: Штрафы ──────────────────────────────────────────*/
+async function loadPenaltiesTab(content) {
+  const penalties = await analyticsFetch('penalties', analyticsBaseParams());
+  content.innerHTML = renderPenaltiesBlock(penalties);
+}
+
+/* ── Вкладка: Риски ───────────────────────────────────────────*/
+async function loadRisksTab(content) {
+  const [riskPyramid, opsTable] = await Promise.all([
+    analyticsFetch('risk-pyramid', analyticsBaseParams()),
+    analyticsFetch('operators', analyticsOpParams()),
+  ]);
+
+  content.innerHTML =
+    renderRiskPyramidBlock(riskPyramid) +
+    renderRiskOperatorsTableBlock(opsTable.items || []) +
+    renderRiskByGroupsBlock(riskPyramid, opsTable.items || []);
+
+  document.querySelectorAll('.an-risk-cell').forEach(cell => {
+    cell.addEventListener('click', () => {
+      const status = cell.dataset.riskStatus;
+      const detail = document.getElementById('an-risk-detail');
+      const bucket = riskPyramid[status];
+      if (!detail) return;
+      if (!bucket || !bucket.operators.length) { detail.innerHTML = '<div class="empty-line">Операторов в этой категории нет</div>'; return; }
+      detail.innerHTML = `<div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Оператор</th><th>Группа</th><th class="num">Качество</th><th class="num">КВЗ</th><th class="num">Эфф.%</th><th class="num">Штраф мин</th></tr></thead>
+        <tbody>${bucket.operators.map(o => `<tr>
+          <td class="name-cell">${esc(o.full_name)}</td><td>${esc(o.group_name||'—')}</td>
+          <td class="num">${o.quality_avg!=null?fmtA(o.quality_avg):'—'}</td>
+          <td class="num">${o.kvz!=null?fmtA(o.kvz):'—'}</td>
+          <td class="num">${o.efficiency_percent!=null?fmtA(o.efficiency_percent):'—'}</td>
+          <td class="num">${fmtA(o.penalty_minutes,1)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    });
+  });
+}
+
+function renderRiskOperatorsTableBlock(items) {
+  function reasons(o) {
+    const r = [];
+    if (o.risk_status === 'no_data') return 'Нет данных';
+    if (o.quality_avg != null && o.quality_avg < 80) r.push(`качество ${o.quality_avg}`);
+    if (o.kvz != null && o.kvz < 8) r.push(`КВЗ ${o.kvz}`);
+    if (o.efficiency_percent != null && o.efficiency_percent < 45) r.push(`эфф. ${o.efficiency_percent}%`);
+    if (o.penalty_minutes > 10) r.push(`штрафы ${o.penalty_minutes} мин`);
+    return r.length ? r.join(', ') : '—';
+  }
+  function recommend(status) {
+    return { critical: 'Срочно провести разбор и контрольную точку', watch: 'Поставить на контроль',
+      stable: 'Без действий', no_data: 'Проверить наличие данных' }[status] || '—';
+  }
+  const risky = items.filter(o => o.risk_status !== 'stable');
+  return `<div class="an-card">
+    <div class="an-card-head">Операторы по рискам</div>
+    ${risky.length ? `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Оператор</th><th>Группа</th><th>Статус</th><th>Причины</th><th>Рекомендация</th></tr></thead>
+      <tbody>${risky.map(o => `<tr>
+        <td class="name-cell">${esc(o.full_name)}</td><td>${esc(o.group_name||'—')}</td>
+        <td>${riskBadge(o.risk_status)}</td>
+        <td style="font-size:12px;color:var(--text-secondary)">${esc(reasons(o))}</td>
+        <td style="font-size:12px;color:var(--text-secondary)">${esc(recommend(o.risk_status))}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty-line">Все операторы стабильны</div>'}
+  </div>`;
+}
+
+function renderRiskByGroupsBlock(riskPyramid, items) {
+  const byGroup = {};
+  items.forEach(o => {
+    const g = o.group_name || 'Без группы';
+    if (!byGroup[g]) byGroup[g] = { stable: 0, watch: 0, critical: 0, no_data: 0 };
+    byGroup[g][o.risk_status] = (byGroup[g][o.risk_status] || 0) + 1;
+  });
+  const rows = Object.entries(byGroup);
+  return `<div class="an-card">
+    <div class="an-card-head">Риски по группам</div>
+    ${rows.length ? `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Группа</th><th class="num">Стабильные</th><th class="num">Нужен контроль</th><th class="num">Критично</th><th class="num">Нет данных</th></tr></thead>
+      <tbody>${rows.map(([g,c]) => `<tr>
+        <td class="name-cell">${esc(g)}</td>
+        <td class="num" style="color:var(--success)">${c.stable||0}</td>
+        <td class="num" style="color:var(--warning)">${c.watch||0}</td>
+        <td class="num" style="color:var(--danger)">${c.critical||0}</td>
+        <td class="num" style="color:var(--text-muted)">${c.no_data||0}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty-line">Нет данных</div>'}
+  </div>`;
+}
+
+/* ── Вкладка: Баллы ───────────────────────────────────────────*/
+async function loadPointsTab(content) {
+  const breakdown = await analyticsFetch('points-breakdown', analyticsOpParams());
+  content.innerHTML = `
+    <div class="an-card">
+      <div class="an-card-head">Формула расчёта</div>
+      <div class="an-formula-box">Итоговые баллы = Качество + КВЗ + Итог часов + Эффективность − Штрафные баллы</div>
+    </div>` +
+    renderPointsBreakdownBlock(breakdown);
+}
+
+/* ── Вкладка: Экспорт ─────────────────────────────────────────*/
+async function loadExportTab(content) {
+  content.innerHTML = `<div class="an-card">
+    <div class="an-card-head">Экспорт отчётов</div>
+    <div class="an-export-grid">
+      <button class="btn-outline an-export-btn" data-export="operators">Таблица операторов</button>
+      <button class="btn-outline an-export-btn" data-export="groups">Сравнение групп</button>
+      <button class="btn-outline an-export-btn" data-export="penalties">Штрафы</button>
+      <button class="btn-outline an-export-btn" data-export="attention">Зона внимания</button>
+      <button class="btn-outline an-export-btn" data-export="risks">Риски</button>
+      <button class="btn-outline an-export-btn" data-export="quality_coverage">Качество прослушки</button>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);margin-top:14px">Экспорт учитывает выбранные фильтры периода, группы и оператора.</p>
+  </div>`;
+
+  content.querySelectorAll('.an-export-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const kind = btn.dataset.export;
+      btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Готовим…';
+      try {
+        await exportAnalyticsCsv(kind);
+      } catch(e) { showToast('Ошибка экспорта: ' + e.message, 'error'); }
+      finally { btn.disabled = false; btn.textContent = orig; }
+    });
+  });
+}
+
+async function exportAnalyticsCsv(kind) {
+  const base = analyticsBaseParams();
+  const opParams = analyticsOpParams();
+
+  if (kind === 'operators') {
+    const d = await analyticsFetch('operators', opParams);
+    exportOperatorsCsv(d.items || []);
+  } else if (kind === 'groups') {
+    const d = await analyticsFetch('groups-comparison', base);
+    const rows = ['Группа;Операторов;Звонки;Качество;КВЗ;Эфф.%;Штраф мин;Итог баллов'];
+    (d.items||[]).forEach(g => rows.push([g.group_name,g.operators_count,g.total_calls,g.avg_quality??'',g.avg_kvz??'',g.avg_efficiency??'',g.penalty_minutes,g.final_points_sum].join(';')));
+    downloadCsv(rows, 'аналитика_группы.csv');
+  } else if (kind === 'penalties') {
+    const d = await analyticsFetch('penalties', base);
+    const rows = ['Оператор;Группа;Сумма;Минуты;Потеря баллов'];
+    (d.operators||[]).forEach(o => rows.push([o.full_name,o.group_name||'',o.penalty_sum,o.penalty_minutes,o.penalty_points].join(';')));
+    downloadCsv(rows, 'аналитика_штрафы.csv');
+  } else if (kind === 'attention') {
+    const d = await analyticsFetch('top-and-attention', base);
+    const rows = ['Оператор;Группа;Причина'];
+    (d.attention_zone||[]).forEach(a => rows.push([a.full_name,a.group_name||'',a.reason].join(';')));
+    downloadCsv(rows, 'аналитика_зона_внимания.csv');
+  } else if (kind === 'risks') {
+    const d = await analyticsFetch('operators', opParams);
+    const rows = ['Оператор;Группа;Статус риска;Качество;КВЗ;Эфф.%;Штраф мин'];
+    (d.items||[]).forEach(o => rows.push([o.full_name,o.group_name||'',o.risk_status,o.quality_avg??'',o.kvz??'',o.efficiency_percent??'',o.penalty_minutes].join(';')));
+    downloadCsv(rows, 'аналитика_риски.csv');
+  } else if (kind === 'quality_coverage') {
+    const d = await analyticsFetch('quality-coverage', base);
+    const rows = ['Группа;Операторов;Оцен.звонков;Среднее/опер;Без оценок;Ср.качество'];
+    (d.by_group||[]).forEach(g => rows.push([g.group_name,g.operators_count,g.evaluated_calls,g.avg_evaluations_per_operator,g.operators_without_quality,g.avg_quality??''].join(';')));
+    downloadCsv(rows, 'аналитика_качество_прослушки.csv');
+  }
 }
 
 window.renderAnalytics = renderAnalytics;
