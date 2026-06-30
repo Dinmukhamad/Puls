@@ -5208,7 +5208,7 @@ function renderRaceChart(items) {
           const colWidth = stretch ? `calc((100% - ${(n-1)*24}px) / ${n})` : `${barW}px`;
           return `<div class="race-col ${it.is_current_user?'race-col-me':''}" style="width:${colWidth};flex:${stretch?'1 1 0':'0 0 auto'}" data-race-operator="${it.operator_id}"
               title="${esc(it.full_name)}${it.group?' · '+esc(it.group):''} · место #${it.rank} · ${Math.round(it.points)} баллов">
-            <div class="race-car-icon ${rankClass}" style="bottom:${padBottom + barH}px">${RACE_CAR_SVG}</div>
+            <img class="race-car-icon ${rankClass}" style="bottom:${padBottom + barH}px" src="${raceCarImageSrc(it.rank, it.is_current_user)}" alt="" loading="lazy">
             <div class="race-points-label" style="bottom:${padBottom + barH + 26}px">${Math.round(it.points)}</div>
             <div class="race-bar ${it.is_current_user?'race-bar-me':''} ${rankClass}" style="height:${barH}px;bottom:${padBottom}px"></div>
             <div class="race-x-label ${it.is_current_user?'race-x-label-me':''}">
