@@ -5466,6 +5466,13 @@ function renderRaceChart(items) {
 }
 
 function renderRaceMyCard(cu, note, visibleItems) {
+  const hasOwnOperatorRecord = Boolean(STATE.user?.operator_id);
+  if (!hasOwnOperatorRecord) {
+    // У управленческого аккаунта (admin/manager/supervisor) нет личного
+    // места в рейтинге операторов — карточка "Ваш результат" здесь
+    // бессмысленна, поэтому просто не показываем её вовсе.
+    return '';
+  }
   if (!cu) {
     return `<div class="rating-card race-side-card"><div class="rcard-title">Ваш результат</div>
       <div class="r-empty-state"><div>Ваши баллы за выбранный период пока не рассчитаны.</div></div>
