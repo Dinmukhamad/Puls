@@ -383,9 +383,11 @@ def get_summary(
         return cached
     rows = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
     kpi = compute_kpi_summary(rows)
+    availability_warning = get_data_availability_warning(db, start_date, end_date)
     result = {
         "period": {"start": str(start_date), "end": str(end_date)},
         "kpi": kpi,
+        "data_availability_warning": availability_warning,
     }
     cache_set(key, result)
     return result
