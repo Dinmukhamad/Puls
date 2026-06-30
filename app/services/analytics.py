@@ -604,3 +604,143 @@ def compute_quality_vs_penalties(rows: List[OperatorAnalyticsRow]) -> List[dict]
                 "Нет оценок качества": 2, "Качество нормальное, штрафов нет": 3, "—": 4}
     out.sort(key=lambda x: priority.get(x["comment"], 5))
     return out
+
+
+# ── Points analysis (вкладка «Баллы») ──────────────────────────────────
+
+def _result_status(m: OperatorPeriodMetrics) -> str:
+    if m.quality_calls_count == 0 and m.base_hours <= 0:
+        return "no_data"
+    if m.final_points >= 180:
+        return "excellent"
+    if m.final_points >= 150:
+        return "good"
+    if m.final_points >= 100:
+        return "average"
+    return "low"
+
+
+def _main_change_reason(deltas: dict) -> str:
+    """Определяет показатель с наибольшим абсолютным влиянием на изменение."""
+    labeled = {
+        "quality": ("качества", deltas.get("delta_quality", 0)),
+        "kvz": ("КВЗ", deltas.get("delta_kvz", 0)),
+        "hours": ("часов", deltas.get("delta_total_hours", 0)),
+        "efficiency": ("эффективности", deltas.get("delta_efficiency", 0)),
+        "penalty": ("штрафов", -deltas.get("delta_penalty_points", 0)),
+    }
+    significant = {k: v for k, v in labeled.items() if abs(v[1]) >= 0.5}
+    if not significant:
+        return "Нет значимых изменений"
+    key, (label, val) = max(significant.items(), key=lambda kv: abs(kv[1][1]))
+    direction = "Рост за счёт" if val > 0 else "Просадка из-за"
+    sign = "+" if val > 0 else ""
+    return f"{direction} {label}: {sign}{round(val, 1)}"
+
+
+def _recommendation_for(m: OperatorPeriodMetrics, delta_final: Optional[float]) -> str:
+    if m.quality_calls_count == 0 and m.base_hours <= 0:
+        return "Недостаточно данных для рекомендации — проверьте наличие оценок и табеля."
+    parts = []
+    if m.quality_calls_count > 0 and m.quality_avg < 80:
+        parts.append("Провести разбор звонков и дать обратную связь по качеству.")
+    if m.base_hours > 0 and m.kvz < 8:
+        parts.append("Проверить скорость обработки и причины низкого количества звонков в час.")
+    if m.base_hours > 0 and m.efficiency_percent < 45:
+        parts.append("Проверить, сколько времени оператор реально находится в звонке.")
+    if m.penalty_minutes > 0:
+        parts.append("Проверить дисциплину и причины штрафов.")
+    if delta_final is not None and delta_final > 15:
+        parts.append("Отметить положительную динамику оператора.")
+    if not parts:
+        return "Показатели в норме, отклонений не выявлено."
+    return " ".join(parts)
+
+
+def compute_points_analysis(
+    rows: List[OperatorAnalyticsRow],
+    prev_rows: Optional[List[OperatorAnalyticsRow]],
+) -> dict:
+    """
+    Полный анализ итоговых баллов с разбором вклада и сравнением с прошлым
+    периодом (если prev_rows передан — тот же период длительности, смещённый назад).
+    """
+    included = [r for r in rows if r.metrics and r.metrics.has_any_period_data]
+
+    prev_by_key: Dict[str, OperatorPeriodMetrics] = {}
+    if prev_rows:
+        for r in prev_rows:
+            if r.metrics and r.metrics.has_any_period_data:
+                prev_by_key[r.name_key] = r.metrics
+
+    operators_out = []
+    for r in included:
+        m = r.metrics
+        prev_m = prev_by_key.get(r.name_key)
+
+        delta_final = round(m.final_points - prev_m.final_points, 2) if prev_m else None
+        delta_quality = round(m.quality_avg - prev_m.quality_avg, 2) if (prev_m and m.quality_calls_count and prev_m.quality_calls_count) else None
+        delta_kvz = round(m.kvz - prev_m.kvz, 2) if (prev_m and m.base_hours > 0 and prev_m.base_hours > 0) else None
+        delta_hours = round(m.total_hours - prev_m.total_hours, 2) if prev_m else None
+        delta_efficiency = round(m.efficiency_percent - prev_m.efficiency_percent, 2) if (prev_m and m.base_hours > 0 and prev_m.base_hours > 0) else None
+        delta_penalty = round(m.penalty_points - prev_m.penalty_points, 2) if prev_m else None
+
+        deltas_for_reason = {
+            "delta_quality": delta_quality or 0,
+            "delta_kvz": delta_kvz or 0,
+            "delta_total_hours": delta_hours or 0,
+            "delta_efficiency": delta_efficiency or 0,
+            "delta_penalty_points": delta_penalty or 0,
+        }
+        main_reason = _main_change_reason(deltas_for_reason) if prev_m else "Нет данных за прошлый период"
+
+        operators_out.append({
+            "operator_id": r.operator_id,
+            "full_name": r.full_name,
+            "group_name": r.group_name,
+            "quality": m.quality_avg if m.quality_calls_count else None,
+            "kvz": m.kvz if m.base_hours > 0 else None,
+            "total_hours": m.total_hours,
+            "efficiency": m.efficiency_percent if m.base_hours > 0 else None,
+            "penalty_points": m.penalty_points,
+            "penalty_minutes": m.penalty_minutes,
+            "final_points": m.final_points,
+            "previous_final_points": prev_m.final_points if prev_m else None,
+            "delta_final_points": delta_final,
+            "delta_quality": delta_quality,
+            "delta_kvz": delta_kvz,
+            "delta_total_hours": delta_hours,
+            "delta_efficiency": delta_efficiency,
+            "delta_penalty_points": delta_penalty,
+            "main_change_reason": main_reason,
+            "status": _result_status(m),
+            "recommendation": _recommendation_for(m, delta_final),
+        })
+
+    operators_out.sort(key=lambda o: o["final_points"], reverse=True)
+
+    finals = [o["final_points"] for o in operators_out]
+    deltas = [o["delta_final_points"] for o in operators_out if o["delta_final_points"] is not None]
+
+    growth = [o for o in operators_out if o["delta_final_points"] is not None and o["delta_final_points"] > 0]
+    decline = [o for o in operators_out if o["delta_final_points"] is not None and o["delta_final_points"] < 0]
+
+    top_growth = sorted(growth, key=lambda o: o["delta_final_points"], reverse=True)[:5]
+    top_decline = sorted(decline, key=lambda o: o["delta_final_points"])[:5]
+
+    summary = {
+        "avg_final_points": round(sum(finals) / len(finals), 2) if finals else None,
+        "max_final_points": round(max(finals), 2) if finals else None,
+        "min_final_points": round(min(finals), 2) if finals else None,
+        "avg_delta": round(sum(deltas) / len(deltas), 2) if deltas else None,
+        "operators_with_growth": len(growth),
+        "operators_with_decline": len(decline),
+        "has_previous_period": bool(prev_rows),
+    }
+
+    return {
+        "summary": summary,
+        "operators": operators_out,
+        "top_growth": top_growth,
+        "top_decline": top_decline,
+    }
