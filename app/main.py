@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from sqlalchemy import text
 from app.database.db import Base, SessionLocal, engine
 from app.models import entities  # noqa: F401
-from app.routers import auth, dashboard, groups, operators, rating, shop, wallet, weekly_results
+from app.routers import auth, dashboard, groups, operators, period_reports, rating, shop, wallet, weekly_results
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -39,6 +39,7 @@ app.add_middleware(
 
 app.include_router(auth.router,           prefix=settings.api_prefix)
 app.include_router(groups.router,          prefix=settings.api_prefix)
+app.include_router(period_reports.router,   prefix=settings.api_prefix)
 app.include_router(operators.router,      prefix=settings.api_prefix)
 app.include_router(weekly_results.router, prefix=settings.api_prefix)
 app.include_router(wallet.router,         prefix=settings.api_prefix)
