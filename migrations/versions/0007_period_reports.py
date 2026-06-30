@@ -8,8 +8,8 @@ from __future__ import annotations
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0007_period_reports"
-down_revision = "0006_op_employment"
+revision = "0008_period_reports"
+down_revision = "0007_user_must_change_password"
 branch_labels = None
 depends_on = None
 
