@@ -29,6 +29,19 @@ admin_router = APIRouter(prefix="/admin/tests", tags=["tests-admin"])
 STAFF_ROLES = ("supervisor", "manager", "admin")
 
 
+def _utc_iso(dt: Optional[datetime]) -> Optional[str]:
+    """
+    Сериализует naive datetime (хранится как UTC, см. now_utc()) в ISO-строку
+    с явным суффиксом Z. Без этого JavaScript (new Date(str)) интерпретирует
+    строку без таймзоны как ЛОКАЛЬНОЕ время браузера, а не UTC — что приводило
+    к смещению на величину часового пояса пользователя (опубликованные тесты
+    оставались в статусе "Запланирован" дольше, чем реально нужно).
+    """
+    if dt is None:
+        return None
+    return dt.isoformat() + "Z"
+
+
 def _require_staff(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role not in STAFF_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Доступ запрещён")
@@ -65,8 +78,8 @@ def my_tests(db: Session = Depends(get_db), current_user: User = Depends(get_cur
             "title": t.title,
             "description": t.description,
             "status": op_status,
-            "opens_at": t.opens_at.isoformat() if t.opens_at else None,
-            "closes_at": t.closes_at.isoformat() if t.closes_at else None,
+            "opens_at": _utc_iso(t.opens_at),
+            "closes_at": _utc_iso(t.closes_at),
             "time_limit_minutes": t.time_limit_minutes,
             "questions_count": len(t.questions),
             "max_points": sum(q.points for q in t.questions),
@@ -109,8 +122,8 @@ def start_test(test_id: int, db: Session = Depends(get_db), current_user: User =
         "test_title": test.title,
         "instruction": test.instruction,
         "time_limit_minutes": test.time_limit_minutes,
-        "started_at": attempt.started_at.isoformat(),
-        "expires_at": attempt.expires_at.isoformat(),
+        "started_at": _utc_iso(attempt.started_at),
+        "expires_at": _utc_iso(attempt.expires_at),
         "questions": questions,
         "attempt_number": attempt.attempt_number,
     }
@@ -259,8 +272,8 @@ def _test_summary(db: Session, t: Test) -> dict:
         "title": t.title,
         "status": t.status,
         "created_by_name": t.created_by.full_name if t.created_by else None,
-        "opens_at": t.opens_at.isoformat() if t.opens_at else None,
-        "closes_at": t.closes_at.isoformat() if t.closes_at else None,
+        "opens_at": _utc_iso(t.opens_at),
+        "closes_at": _utc_iso(t.closes_at),
         "time_limit_minutes": t.time_limit_minutes,
         "questions_count": len(t.questions),
         "assignments": [{"target_type": a.target_type, "target_id": a.target_id} for a in assignments],
@@ -452,7 +465,7 @@ def get_results(
             "operator_name": operator.full_name,
             "group_name": operator.group_name,
             "status": attempt.status,
-            "started_at": attempt.started_at.isoformat(),
+            "started_at": _utc_iso(attempt.started_at),
             "finished_at": attempt.finished_at.isoformat() if attempt.finished_at else None,
             "duration_seconds": (
                 (attempt.finished_at - attempt.started_at).total_seconds()
