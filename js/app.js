@@ -4016,6 +4016,7 @@ function riskBadge(status) {
 async function renderAnalytics() {
   const el = document.getElementById('view-analytics');
   if (!el) return;
+  const myNavGen = STATE.navGen;
 
   const urlParams = getAnalyticsParams();
 
@@ -4080,11 +4081,13 @@ async function renderAnalytics() {
 
   try {
     const gdata = await analyticsFetch('groups-list', {});
+    if (isNavStale(myNavGen)) return; // ушли с "Аналитики" пока ждали список групп
     _analyticsState.groups = gdata.items || [];
     const sel = el.querySelector('#an-group');
     sel.innerHTML = '<option value="">Все группы</option>' +
       _analyticsState.groups.map(g => `<option value="${g.id}" ${String(g.id)===_analyticsState.groupId?'selected':''}>${esc(g.name)}</option>`).join('');
   } catch(e) { /* groups list optional */ }
+  if (isNavStale(myNavGen)) return;
 
   el.querySelector('#an-participation').value = _analyticsState.participationStatus;
 
@@ -4127,6 +4130,7 @@ async function renderAnalytics() {
   });
 
   updateUrl();
+  if (isNavStale(myNavGen)) return;
   await loadAnalyticsTab(_analyticsState.tab);
 }
 
