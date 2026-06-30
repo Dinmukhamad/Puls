@@ -156,10 +156,17 @@ def finish_test(attempt_id: int, db: Session = Depends(get_db), current_user: Us
     if not attempt or attempt.operator_id != operator.id:
         raise HTTPException(status_code=404, detail="Попытка не найдена")
 
-    finish_attempt(db, attempt, reviewer=None)
-    db.commit()
-    db.refresh(attempt)
-    return _attempt_result_payload(attempt, attempt.test)
+    try:
+        finish_attempt(db, attempt, reviewer=None)
+        db.commit()
+        db.refresh(attempt)
+        return _attempt_result_payload(attempt, attempt.test)
+    except Exception as e:
+        db.rollback()
+        # Временная диагностика: возвращаем точный текст ошибки вместо
+        # голого 500, чтобы понять причину сбоя завершения теста.
+        import traceback
+        raise HTTPException(status_code=500, detail=f"Ошибка завершения теста: {type(e).__name__}: {e}\n{traceback.format_exc()[-800:]}")
 
 
 @router.get("/attempts/{attempt_id}/result")
