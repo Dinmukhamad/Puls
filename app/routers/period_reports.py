@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import re
-from datetime import date, datetime
+from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -12,16 +11,12 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
 from app.models.entities import CoinTransaction, Operator, PeriodReport, User
-from app.services.period_reports import calculate_period_report
+from app.services.period_reports import calculate_period_report, normalize_name
 
 router = APIRouter(prefix="/reports", tags=["period-reports"])
 
-# In-memory cache of last uploaded files per session (simple, single-admin use case)
+# In-memory cache of last uploaded files per process (simple, single-admin use case)
 _LAST_UPLOAD: dict = {"monthly": None, "report": None}
-
-
-def _normalize_name(name: str) -> str:
-    return re.sub(r"\s+", " ", str(name).strip().lower())
 
 
 class OperatorMetricsOut(BaseModel):
@@ -46,10 +41,19 @@ class OperatorMetricsOut(BaseModel):
     warnings: List[str] = []
 
 
+class PeriodWarningsOut(BaseModel):
+    site_only: List[str] = []       # есть на сайте, нет в файле
+    file_only: List[str] = []       # есть в файле, нет на сайте
+    no_quality: List[str] = []      # нет оценок качества
+    no_base_hours: List[str] = []   # нет базы часов
+    ignored_service_rows: List[str] = []
+
+
 class PeriodSummaryOut(BaseModel):
     period: dict
     operators: List[OperatorMetricsOut]
-    warnings: List[dict]
+    warnings: PeriodWarningsOut
+    summary: dict
 
 
 @router.post("/period-report/upload")
@@ -77,6 +81,10 @@ async def upload_period_files(
     return {"ok": True, "message": "Файлы загружены. Выберите период и нажмите «Рассчитать»."}
 
 
+def _site_operator_names(db: Session) -> List[str]:
+    return [o.full_name for o in db.scalars(select(Operator)) if o.full_name]
+
+
 @router.get("/operators-period-summary", response_model=PeriodSummaryOut)
 def get_period_summary(
     start_date: date,
@@ -93,22 +101,25 @@ def get_period_summary(
             detail="Сначала загрузите файлы Monthly Report и Report",
         )
 
+    site_names = _site_operator_names(db)
+
     try:
         result = calculate_period_report(
-            _LAST_UPLOAD["monthly"], _LAST_UPLOAD["report"], start_date, end_date
+            _LAST_UPLOAD["monthly"], _LAST_UPLOAD["report"],
+            start_date, end_date, site_operator_names=site_names,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Map to existing operators in DB for operator_id / group
+    # Map matched operators to DB rows for operator_id / group (guaranteed match by construction)
     db_ops = list(db.scalars(select(Operator)))
-    name_to_op = {_normalize_name(o.full_name): o for o in db_ops}
+    name_to_op = {normalize_name(o.full_name): o for o in db_ops}
 
     operators_out: List[OperatorMetricsOut] = []
     for m in result.operators:
-        db_op = name_to_op.get(_normalize_name(m.full_name))
+        db_op = name_to_op.get(m.name_key)
         operators_out.append(OperatorMetricsOut(
-            full_name=m.full_name,
+            full_name=db_op.full_name if db_op else m.full_name,
             operator_id=db_op.id if db_op else None,
             group_name=db_op.group_name if db_op else None,
             quality_avg=m.quality_avg,
@@ -132,7 +143,14 @@ def get_period_summary(
     return PeriodSummaryOut(
         period={"start": str(start_date), "end": str(end_date)},
         operators=operators_out,
-        warnings=result.cross_warnings,
+        warnings=PeriodWarningsOut(
+            site_only=result.warnings_site_only,
+            file_only=result.warnings_file_only,
+            no_quality=result.warnings_no_quality,
+            no_base_hours=result.warnings_no_base_hours,
+            ignored_service_rows=[],  # стоп-слова статичны, не показываем весь список по умолчанию
+        ),
+        summary=result.summary,
     )
 
 
@@ -149,29 +167,31 @@ def save_period_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("supervisor", "manager", "admin")),
 ) -> dict:
-    """Пересчитывает период и сохраняет результаты в БД. Опционально начисляет коины."""
+    """Пересчитывает период (только matched-операторы) и сохраняет результаты в БД."""
     if not _LAST_UPLOAD["monthly"] or not _LAST_UPLOAD["report"]:
         raise HTTPException(status_code=400, detail="Сначала загрузите файлы")
+
+    site_names = _site_operator_names(db)
 
     try:
         result = calculate_period_report(
             _LAST_UPLOAD["monthly"], _LAST_UPLOAD["report"],
-            payload.start_date, payload.end_date,
+            payload.start_date, payload.end_date, site_operator_names=site_names,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     db_ops = list(db.scalars(select(Operator)))
-    name_to_op = {_normalize_name(o.full_name): o for o in db_ops}
+    name_to_op = {normalize_name(o.full_name): o for o in db_ops}
 
     saved = 0
     coins_total = 0
-    skipped_no_match = []
 
     for m in result.operators:
-        db_op = name_to_op.get(_normalize_name(m.full_name))
+        db_op = name_to_op.get(m.name_key)
         if not db_op:
-            skipped_no_match.append(m.full_name)
+            # Не должно происходить — matched гарантирует наличие на сайте,
+            # но проверяем на случай гонки данных
             continue
 
         pr = PeriodReport(
@@ -220,6 +240,5 @@ def save_period_report(
         "ok": True,
         "saved": saved,
         "coins_awarded_total": coins_total,
-        "skipped_no_match": skipped_no_match,
         "message": f"Сохранено {saved} расчётов" + (f", начислено {coins_total} ₡" if payload.award_coins else ""),
     }
