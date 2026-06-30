@@ -85,23 +85,42 @@ def _supervisor_group_ids(current_user: User) -> Optional[set]:
 
 @router.get("/my")
 def my_tests(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
-    try:
-        operator = operator_for_user_or_403(db, current_user)
-        tests = visible_tests_for_operator(db, operator)
-        db.commit()  # фиксируем возможный scheduled->open переход из activate_scheduled_tests
-    except Exception as e:
-        db.rollback()
-        import traceback
-        raise HTTPException(status_code=500, detail=f"Ошибка в my_tests (загрузка списка): {type(e).__name__}: {e}\n{traceback.format_exc()[-800:]}")
+    operator = operator_for_user_or_403(db, current_user)
+    tests = visible_tests_for_operator(db, operator)
+    db.commit()  # фиксируем возможный scheduled->open переход из activate_scheduled_tests
+
+    if not tests:
+        return {"items": []}
+
+    test_ids = [t.id for t in tests]
+
+    # Bulk-загрузка вместо N+1: раньше get_active_or_recent_attempt вызывалась
+    # в цикле (1 SELECT на каждый тест), а t.questions лениво триггерила ещё
+    # один SELECT на каждый тест — итого 1 + 2N запросов вместо 1 + 2.
+    all_attempts = list(
+        db.scalars(
+            select(TestAttempt)
+            .where(TestAttempt.test_id.in_(test_ids), TestAttempt.operator_id == operator.id)
+            .order_by(TestAttempt.test_id, TestAttempt.attempt_number.desc())
+        )
+    )
+    latest_attempt_by_test: Dict[int, TestAttempt] = {}
+    for a in all_attempts:
+        if a.test_id not in latest_attempt_by_test:  # первая встреченная — самая свежая попытка (см. order_by выше)
+            latest_attempt_by_test[a.test_id] = a
+
+    all_questions = list(
+        db.scalars(select(TestQuestion).where(TestQuestion.test_id.in_(test_ids)))
+    )
+    questions_by_test: Dict[int, list] = {}
+    for q in all_questions:
+        questions_by_test.setdefault(q.test_id, []).append(q)
 
     items = []
     for t in tests:
-        try:
-            attempt = get_active_or_recent_attempt(db, t, operator)
-            op_status = operator_test_status(t, attempt)
-        except Exception as e:
-            import traceback
-            raise HTTPException(status_code=500, detail=f"Ошибка my_tests на тесте id={t.id} '{t.title}': {type(e).__name__}: {e}\n{traceback.format_exc()[-800:]}")
+        attempt = latest_attempt_by_test.get(t.id)
+        op_status = operator_test_status(t, attempt)
+        questions = questions_by_test.get(t.id, [])
         items.append({
             "id": t.id,
             "title": t.title,
@@ -110,8 +129,8 @@ def my_tests(db: Session = Depends(get_db), current_user: User = Depends(get_cur
             "opens_at": _utc_iso(t.opens_at),
             "closes_at": _utc_iso(t.closes_at),
             "time_limit_minutes": t.time_limit_minutes,
-            "questions_count": len(t.questions),
-            "max_points": sum(q.points for q in t.questions),
+            "questions_count": len(questions),
+            "max_points": sum(q.points for q in questions),
             "reward_type": t.reward_type,
             "reward_points": t.reward_points,
             "reward_coins": t.reward_coins,
