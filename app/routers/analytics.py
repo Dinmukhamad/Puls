@@ -236,33 +236,62 @@ def _save_period_report_from_metrics(
     end_date: date,
     m: OperatorPeriodMetrics,
 ) -> None:
-    """Сохраняет агрегат как PeriodReport — следующий запрос того же диапазона
-    обслуживается мгновенно (read-cache), без повторной агрегации."""
-    existing = db.scalar(
-        select(PeriodReport).where(
-            PeriodReport.operator_id == operator_id,
-            PeriodReport.period_start == start_date,
-            PeriodReport.period_end == end_date,
-        )
+    """
+    Сохраняет агрегат как PeriodReport (read-cache для следующего запроса того
+    же диапазона) через атомарный upsert на уровне БД (INSERT ... ON CONFLICT
+    DO UPDATE). Это устойчиво к гонке нескольких параллельных HTTP-запросов
+    (вкладка «Обзор» дёргает /summary, /daily-dynamics, /groups-comparison,
+    /risk-pyramid одновременно через Promise.all — без атомарного upsert два
+    параллельных запроса одновременно пытаются INSERT одну и ту же строку
+    и ловят нарушение UniqueConstraint -> 500).
+    """
+    values = dict(
+        operator_id=operator_id,
+        period_start=start_date,
+        period_end=end_date,
+        quality_avg=m.quality_avg,
+        quality_calls_count=m.quality_calls_count,
+        total_hours=m.total_hours,
+        base_hours=m.base_hours,
+        tech_issue_hours=m.tech_issue_hours,
+        training_hours=m.training_hours,
+        offline_activity_hours=m.offline_activity_hours,
+        calls_total=m.calls_total,
+        kvz=m.kvz,
+        call_time_hours=m.call_time_hours,
+        efficiency_percent=m.efficiency_percent,
+        penalty_sum=m.penalty_sum,
+        penalty_minutes=m.penalty_minutes,
+        penalty_points=m.penalty_points,
+        final_points=m.final_points,
     )
-    pr = existing or PeriodReport(operator_id=operator_id, period_start=start_date, period_end=end_date)
-    pr.quality_avg = m.quality_avg
-    pr.quality_calls_count = m.quality_calls_count
-    pr.total_hours = m.total_hours
-    pr.base_hours = m.base_hours
-    pr.tech_issue_hours = m.tech_issue_hours
-    pr.training_hours = m.training_hours
-    pr.offline_activity_hours = m.offline_activity_hours
-    pr.calls_total = m.calls_total
-    pr.kvz = m.kvz
-    pr.call_time_hours = m.call_time_hours
-    pr.efficiency_percent = m.efficiency_percent
-    pr.penalty_sum = m.penalty_sum
-    pr.penalty_minutes = m.penalty_minutes
-    pr.penalty_points = m.penalty_points
-    pr.final_points = m.final_points
-    if not existing:
-        db.add(pr)
+
+    bind = db.get_bind()
+    if bind.dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        stmt = pg_insert(PeriodReport).values(**values)
+        update_cols = {k: v for k, v in values.items() if k not in ("operator_id", "period_start", "period_end")}
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["operator_id", "period_start", "period_end"],
+            set_=update_cols,
+        )
+        db.execute(stmt)
+    else:
+        # SQLite (тесты/локальная разработка) — нет нативного ON CONFLICT с
+        # тем же синтаксисом, используем select-then-write (без гонки —
+        # SQLite в этом проекте однопоточный для разработки).
+        existing = db.scalar(
+            select(PeriodReport).where(
+                PeriodReport.operator_id == operator_id,
+                PeriodReport.period_start == start_date,
+                PeriodReport.period_end == end_date,
+            )
+        )
+        pr = existing or PeriodReport(operator_id=operator_id, period_start=start_date, period_end=end_date)
+        for k, v in values.items():
+            setattr(pr, k, v)
+        if not existing:
+            db.add(pr)
 
 
 def _get_rows(
