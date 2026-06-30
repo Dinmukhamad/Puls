@@ -5153,6 +5153,25 @@ function renderRaceContent(content, data) {
   `;
 }
 
+/* Цвет машинки по месту: топ-1/2/3 — особые цвета, текущий оператор — синий,
+   остальные — циклически по палитре (используем реальные PNG-иконки болидов). */
+const RACE_CAR_IMAGES = {
+  current: 'img/cars/blue.webp',
+  rank1:   'img/cars/yellow.webp',  // золото/лидер
+  rank2:   'img/cars/green.webp',   // серебро (зелёный — нейтральный, не путать с топ-1)
+  rank3:   'img/cars/orange.webp',  // бронза
+  default: ['img/cars/purple.webp', 'img/cars/red.webp'],
+};
+
+function raceCarImageSrc(rank, isCurrentUser) {
+  if (isCurrentUser) return RACE_CAR_IMAGES.current;
+  if (rank === 1) return RACE_CAR_IMAGES.rank1;
+  if (rank === 2) return RACE_CAR_IMAGES.rank2;
+  if (rank === 3) return RACE_CAR_IMAGES.rank3;
+  const palette = RACE_CAR_IMAGES.default;
+  return palette[rank % palette.length];
+}
+
 function raceCarRankClass(rank, isCurrentUser) {
   if (isCurrentUser) return 'is-current-user';
   if (rank === 1) return 'rank-1';
@@ -5160,25 +5179,6 @@ function raceCarRankClass(rank, isCurrentUser) {
   if (rank === 3) return 'rank-3';
   return 'default';
 }
-
-/* SVG-болид вид сверху (формула-1 стиль), currentColor для заливки */
-const RACE_CAR_SVG = `<svg viewBox="0 0 128 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <g stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
-    <rect x="8" y="24" width="14" height="16" rx="2" fill="currentColor" opacity="0.9"/>
-    <path d="M22 22 L40 18 L50 18 L56 24 L56 40 L50 46 L40 46 L22 42 Z" fill="currentColor" opacity="0.92"/>
-    <path d="M54 20 L72 20 L78 26 L78 38 L72 44 L54 44 L50 38 L50 26 Z" fill="currentColor"/>
-    <path d="M78 26 L102 22 L114 28 L114 36 L102 42 L78 38 Z" fill="currentColor" opacity="0.95"/>
-    <rect x="114" y="26" width="10" height="12" rx="2" fill="currentColor" opacity="0.9"/>
-    <rect x="28" y="10" width="12" height="14" rx="3" fill="#111827"/>
-    <rect x="28" y="40" width="12" height="14" rx="3" fill="#111827"/>
-    <rect x="84" y="10" width="12" height="14" rx="3" fill="#111827"/>
-    <rect x="84" y="40" width="12" height="14" rx="3" fill="#111827"/>
-    <circle cx="34" cy="17" r="3" fill="#E5E7EB"/>
-    <circle cx="34" cy="47" r="3" fill="#E5E7EB"/>
-    <circle cx="90" cy="17" r="3" fill="#E5E7EB"/>
-    <circle cx="90" cy="47" r="3" fill="#E5E7EB"/>
-  </g>
-</svg>`;
 
 function renderRaceChart(items) {
   const maxPoints = Math.max(...items.map(i => i.points), 1);
