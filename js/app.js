@@ -5850,6 +5850,18 @@ async function renderTestsOperatorView(el) {
   if (isNavStale(myNavGen)) return;
 
   const items = data.items || [];
+
+  // Если у оператора есть незавершённая попытка (in_progress) — это значит
+  // он либо только начал тест, либо обновил страницу (F5) во время
+  // прохождения. В любом случае нужно сразу показать экран теста с
+  // таймером, а не список карточек — иначе F5 "выкидывает из теста"
+  // (хотя на сервере попытка всё ещё активна и таймер продолжает идти).
+  const inProgressTest = items.find(t => t.attempt_status === 'in_progress');
+  if (inProgressTest) {
+    await resumeTestRunner(inProgressTest.id);
+    return;
+  }
+
   const available = items.filter(t => ['available', 'in_progress'].includes(t.status));
   const finished = items.filter(t => ['finished', 'expired'].includes(t.status));
   const upcoming = items.filter(t => t.status === 'upcoming');
