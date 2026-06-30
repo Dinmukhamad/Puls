@@ -281,3 +281,165 @@ class OperatorDailyMetric(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# РАЗДЕЛ «ТЕСТЫ» — внутреннее тестирование операторов по принципу ЕНТ
+# ═══════════════════════════════════════════════════════════════════
+
+class Test(Base):
+    """Тест: конструктор + настройки времени/награды/проходного процента."""
+    __tablename__ = "tests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, default="")
+    instruction: Mapped[str] = mapped_column(Text, default="")
+
+    # draft | scheduled | open | finished | archived
+    status: Mapped[str] = mapped_column(String(32), default="draft", index=True)
+
+    time_limit_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    opens_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    closes_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    passing_percent: Mapped[float] = mapped_column(Float, default=70.0)
+    show_result_after_finish: Mapped[bool] = mapped_column(Boolean, default=True)
+    show_correct_answers: Mapped[bool] = mapped_column(Boolean, default=False)
+    allow_retake: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=1)
+
+    # none | points | coins | points_and_coins
+    reward_type: Mapped[str] = mapped_column(String(32), default="none")
+    reward_points: Mapped[float] = mapped_column(Float, default=0)
+    reward_coins: Mapped[int] = mapped_column(Integer, default=0)
+    reward_min_percent: Mapped[float] = mapped_column(Float, default=70.0)
+    # fixed | proportional — режим начисления награды (см. ТЗ п.10.3)
+    reward_mode: Mapped[str] = mapped_column(String(32), default="fixed")
+
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    questions: Mapped[List["TestQuestion"]] = relationship(back_populates="test", cascade="all, delete-orphan", order_by="TestQuestion.sort_order")
+    assignments: Mapped[List["TestAssignment"]] = relationship(back_populates="test", cascade="all, delete-orphan")
+    attempts: Mapped[List["TestAttempt"]] = relationship(back_populates="test", cascade="all, delete-orphan")
+    created_by: Mapped[Optional["User"]] = relationship("User")
+
+
+class TestQuestion(Base):
+    """Вопрос теста: текст, тип (один/несколько ответов), вес в баллах."""
+    __tablename__ = "test_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    test_id: Mapped[int] = mapped_column(ForeignKey("tests.id"), index=True)
+    question_text: Mapped[str] = mapped_column(Text)
+    # single_choice | multiple_choice
+    question_type: Mapped[str] = mapped_column(String(32), default="single_choice")
+    points: Mapped[float] = mapped_column(Float, default=1.0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    test: Mapped["Test"] = relationship(back_populates="questions")
+    answers: Mapped[List["TestAnswerOption"]] = relationship(back_populates="question", cascade="all, delete-orphan", order_by="TestAnswerOption.sort_order")
+
+
+class TestAnswerOption(Base):
+    """Вариант ответа на вопрос. is_correct НИКОГДА не отдаётся оператору до завершения теста."""
+    __tablename__ = "test_answers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    question_id: Mapped[int] = mapped_column(ForeignKey("test_questions.id"), index=True)
+    answer_text: Mapped[str] = mapped_column(Text)
+    is_correct: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    question: Mapped["TestQuestion"] = relationship(back_populates="answers")
+
+
+class TestAssignment(Base):
+    """
+    Назначение теста: кому он виден/доступен.
+    target_type=all  -> target_id игнорируется (виден всем операторам)
+    target_type=group -> target_id = groups.id
+    target_type=operator -> target_id = operators.id
+    """
+    __tablename__ = "test_assignments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    test_id: Mapped[int] = mapped_column(ForeignKey("tests.id"), index=True)
+    target_type: Mapped[str] = mapped_column(String(16))  # all | group | operator
+    target_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+
+    test: Mapped["Test"] = relationship(back_populates="assignments")
+
+
+class TestAttempt(Base):
+    """
+    Попытка прохождения теста одним оператором. started_at/expires_at
+    фиксируются на сервере при старте — это и есть защита от "перезапуска
+    таймера через F5" (см. ТЗ п.7.3): фронтенд всегда вычисляет остаток
+    времени как expires_at - now(), а не хранит таймер локально.
+    """
+    __tablename__ = "test_attempts"
+    __table_args__ = (
+        UniqueConstraint("test_id", "operator_id", "attempt_number", name="uq_test_attempt_number"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    test_id: Mapped[int] = mapped_column(ForeignKey("tests.id"), index=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+
+    # not_started | in_progress | finished | expired | cancelled
+    status: Mapped[str] = mapped_column(String(32), default="in_progress", index=True)
+
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    score_points: Mapped[float] = mapped_column(Float, default=0)
+    max_points: Mapped[float] = mapped_column(Float, default=0)
+    score_percent: Mapped[float] = mapped_column(Float, default=0)
+    correct_count: Mapped[int] = mapped_column(Integer, default=0)
+    questions_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    reward_points: Mapped[float] = mapped_column(Float, default=0)
+    reward_coins: Mapped[int] = mapped_column(Integer, default=0)
+    reward_transaction_id: Mapped[Optional[int]] = mapped_column(ForeignKey("coin_transactions.id"), nullable=True)
+
+    attempt_number: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    test: Mapped["Test"] = relationship(back_populates="attempts")
+    operator: Mapped["Operator"] = relationship("Operator")
+    answers: Mapped[List["TestAttemptAnswer"]] = relationship(back_populates="attempt", cascade="all, delete-orphan")
+
+
+class TestAttemptAnswer(Base):
+    """
+    Черновик/финальный ответ оператора на конкретный вопрос внутри попытки.
+    selected_answer_ids хранится как JSON-список ID вариантов — позволяет
+    как single_choice (1 элемент), так и multiple_choice (несколько).
+    Сохраняется по каждому "Далее" — это и есть draft_answers из ТЗ п.7.3.
+    """
+    __tablename__ = "test_attempt_answers"
+    __table_args__ = (
+        UniqueConstraint("attempt_id", "question_id", name="uq_attempt_question"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    attempt_id: Mapped[int] = mapped_column(ForeignKey("test_attempts.id"), index=True)
+    question_id: Mapped[int] = mapped_column(ForeignKey("test_questions.id"), index=True)
+    selected_answer_ids_json: Mapped[str] = mapped_column(Text, default="[]")
+    is_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)  # None до проверки
+    points_awarded: Mapped[float] = mapped_column(Float, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    attempt: Mapped["TestAttempt"] = relationship(back_populates="answers")
+    question: Mapped["TestQuestion"] = relationship("TestQuestion")
