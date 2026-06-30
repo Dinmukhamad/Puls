@@ -4227,11 +4227,33 @@ function analyticsOpParams() {
 }
 
 /* ── Ленивая загрузка по активной вкладке ─────────────────── */
+/**
+ * Запрашивает /summary только для получения data_availability_warning
+ * (см. backend ТЗ п.8) и показывает понятное предупреждение прямо под
+ * фильтрами — независимо от того, какая вкладка аналитики сейчас открыта.
+ */
+async function refreshAvailabilityWarning() {
+  const box = document.getElementById('an-availability-warning');
+  if (!box) return;
+  try {
+    const summary = await analyticsFetch('summary', analyticsOpParams());
+    const msg = summary.data_availability_warning;
+    box.innerHTML = msg
+      ? `<div class="an-availability-note">${esc(msg)}</div>`
+      : '';
+  } catch(e) {
+    // Если /summary вернул 404 (совсем нет данных) — analyticsFetch бросит
+    // ошибку с тем же текстом, что и data_availability_warning на backend.
+    box.innerHTML = `<div class="an-availability-note an-availability-note-error">${esc(e.message)}</div>`;
+  }
+}
+
 async function loadAnalyticsTab(tab) {
   const content = document.getElementById('an-tab-content');
   if (!content) return;
   const myNavGen = STATE.navGen;
   const myTabGen = bumpAnalyticsTabGen();
+  refreshAvailabilityWarning();
   // Спиннер показываем с небольшой задержкой (150мс) — если данные придут
   // из кеша почти мгновенно (swrFetch отдаёт их синхронно из sessionStorage),
   // спиннер просто не успеет появиться, и переключение вкладок будет
