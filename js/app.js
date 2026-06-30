@@ -6113,6 +6113,7 @@ async function finishTestRun() {
   try {
     const result = await api.finishTest(attemptId);
     _activeTestRun = null;
+    swrInvalidate('tests:my'); // статус теста изменился (finished) — следующий заход в список не должен показать устаревшее "in_progress"
     renderTestResultScreen(result);
   } catch(e) {
     showToast(e.message || 'Не удалось завершить тест', 'error');
