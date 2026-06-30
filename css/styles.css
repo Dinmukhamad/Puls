@@ -3086,7 +3086,7 @@ body.side-nav-collapsed .side-nav-toggle svg {
   overflow-x: auto;
   width: 100%;
   box-sizing: border-box;
-  padding: 14px 12px 4px;
+  padding: 10px 12px 2px;
   border: 1px solid var(--border-soft);
   border-radius: 16px;
   background: linear-gradient(180deg, var(--bg-subtle), var(--card-bg));
@@ -3146,9 +3146,9 @@ body.side-nav-collapsed .side-nav-toggle svg {
   content: "";
   position: absolute;
   left: 50%;
-  bottom: 62px;
+  bottom: 48px;
   width: min(100%, 68px);
-  height: calc(100% - 124px);
+  height: calc(100% - 100px);
   transform: translateX(-50%);
   border-radius: 16px;
   background: transparent;
@@ -3201,7 +3201,7 @@ body.side-nav-collapsed .side-nav-toggle svg {
   color: var(--text-primary);
   white-space: nowrap;
   transition: bottom .45s cubic-bezier(.2,.8,.2,1);
-  z-index: 4;
+  z-index: 3;
 }
 
 /* ── Car icon (uploaded F1 top-view PNG/WebP images) ─────────*/
@@ -3211,11 +3211,11 @@ body.side-nav-collapsed .side-nav-toggle svg {
   width: 38px;
   height: 38px;
   object-fit: contain;
-  transform: translate(-50%, -100%);
+  transform: translateX(-50%);
   display: block;
   transition: bottom .45s cubic-bezier(.2,.8,.2,1);
   filter: drop-shadow(0 5px 9px rgba(15,23,42,.24));
-  z-index: 3;
+  z-index: 4;
 }
 .race-car-icon.is-current-user {
   width: 46px;
@@ -3326,6 +3326,6 @@ body.side-nav-collapsed .side-nav-toggle svg {
   .race-col { min-width: 40px; }
   .race-summary-strip,
   .race-detail-grid { grid-template-columns: 1fr; }
-  .race-chart-scroll { padding: 12px 8px 4px; }
+  .race-chart-scroll { padding: 10px 8px 2px; }
   .race-segmented { width: 100%; overflow-x: auto; }
 }

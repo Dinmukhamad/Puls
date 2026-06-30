@@ -5234,9 +5234,9 @@ function renderRaceChart(items) {
   const labelGap = 8;    // зазор между цифрой и машинкой
   const carH = 44;       // максимальная высота машинки
   const carGap = 12;     // зазор между машинкой и верхом столбца
-  const padTop = labelH + labelGap + carH + carGap + 12;
-  const padBottom = 74;
-  const plotH = items.length <= 12 ? 300 : 280;
+  const padTop = labelH + labelGap + carH + carGap + 10;
+  const padBottom = 58;
+  const plotH = items.length <= 12 ? 252 : 236;
   const chartH = plotH + padTop + padBottom;
   const usableH = plotH;
 
@@ -5257,9 +5257,9 @@ function renderRaceChart(items) {
           const rankClass = raceCarRankClass(it.rank, it.is_current_user);
           const colWidth = stretch ? `calc((100% - ${(n-1)*gap}px) / ${n})` : `${barW}px`;
           // carBottom — нижняя точка машинки (она сама растёт вверх на свою высоту через CSS transform)
-          const carBottom = padBottom + barH + carGap;
+          const labelBottom = padBottom + barH + carGap;
           // labelBottom — нижний край текста, должен быть выше верха машинки (carBottom + carH) + зазор
-          const labelBottom = carBottom + carH + labelGap;
+          const carBottom = labelBottom + labelH + labelGap;
           return `<div class="race-col ${rankClass} ${it.is_current_user?'race-col-me':''}" style="width:${colWidth};flex:${stretch?'1 1 0':'0 0 auto'}" data-race-operator="${it.operator_id}"
               title="${esc(it.full_name)}${it.group?' · '+esc(it.group):''} · место #${it.rank} · ${Math.round(it.points)} баллов">
             <div class="race-points-label" style="bottom:${labelBottom}px">${Math.round(it.points)}</div>
