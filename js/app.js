@@ -4187,6 +4187,7 @@ async function renderAnalytics() {
           Только с данными
         </label>
         <button class="btn-primary" id="an-apply-btn">Применить</button>
+        <button class="btn-outline" id="an-goto-calc-btn" type="button">Рассчитать новый период</button>
       </div>
     </div>
 
@@ -4266,6 +4267,10 @@ async function renderAnalytics() {
     syncStateFromFilters();
     updateUrl();
     loadAnalyticsTab(_analyticsState.tab);
+  });
+
+  el.querySelector('#an-goto-calc-btn')?.addEventListener('click', () => {
+    navigateTo('period-report');
   });
 
   // Tab click handling
