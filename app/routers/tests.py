@@ -294,6 +294,11 @@ class TestCreatePayload(BaseModel):
     reward_min_percent: float = 70.0
     reward_mode: str = Field(default="fixed", pattern="^(fixed|proportional)$")
 
+    @field_validator("opens_at", "closes_at")
+    @classmethod
+    def _strip_tz(cls, v):
+        return _strip_tzinfo(v)
+
 
 class TestUpdatePayload(BaseModel):
     title: Optional[str] = None
@@ -312,6 +317,11 @@ class TestUpdatePayload(BaseModel):
     reward_coins: Optional[int] = None
     reward_min_percent: Optional[float] = None
     reward_mode: Optional[str] = None
+
+    @field_validator("opens_at", "closes_at")
+    @classmethod
+    def _strip_tz(cls, v):
+        return _strip_tzinfo(v)
 
 
 class AssignPayload(BaseModel):
