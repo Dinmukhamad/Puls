@@ -30,7 +30,30 @@ const api = (() => {
       credentials: 'include',  // Send HttpOnly cookie
     };
     if (body !== undefined) opts.body = JSON.stringify(body);
-    const res = await fetch(base() + path, opts);
+
+    // Защита от бесконечного "висения": без этого, если сервер реально не
+    // отвечает (зависшее соединение к БД, deadlock и т.п.), fetch() ждёт
+    // ответа навечно, и UI остаётся в состоянии "Загрузка..." без какой-либо
+    // ошибки и без возможности выйти из этого состояния. 20 секунд — щедрый
+    // запас для любого штатного запроса; если сервер не ответил за это время,
+    // что-то реально не так, и пользователю нужно явное сообщение об ошибке,
+    // а не вечный спиннер.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
+    opts.signal = controller.signal;
+
+    let res;
+    try {
+      res = await fetch(base() + path, opts);
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error('Сервер не отвечает (превышено время ожидания). Попробуйте обновить страницу.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
     let data = {};
     try { data = await res.json(); } catch {}
     if (!res.ok) {
