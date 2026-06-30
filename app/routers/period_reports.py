@@ -116,7 +116,13 @@ async def upload_period_files(
 def _rebuild_daily_metrics(db: Session, monthly_bytes: bytes, report_bytes: bytes, actor_user_id: int) -> dict:
     """
     Парсит оба файла ПОСУТОЧНО (build_daily_metric_rows) и записывает
-    результат в operator_daily_metrics с upsert по (operator_id, metric_date).
+    результат в operator_daily_metrics ОДНИМ bulk upsert-запросом (PostgreSQL
+    INSERT ... ON CONFLICT DO UPDATE), а не построчным select+insert/update в
+    цикле — на ~800 строк построчный вариант means ~800 отдельных round-trip
+    к БД по сети (Railway), что и вызывало многосекундное/похожее на
+    зависание ожидание ответа на frontend. Bulk-запрос делает то же самое
+    за одно обращение к БД.
+
     Сопоставление со страницами сайта — по нормализованному ФИО, как и
     везде в проекте. Операторы, не найденные на сайте, пропускаются —
     они и так не должны попадать в аналитику (см. matched-only правило).
@@ -136,9 +142,12 @@ def _rebuild_daily_metrics(db: Session, monthly_bytes: bytes, report_bytes: byte
 
     monthly_file_row = db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == "monthly"))
     report_file_row = db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == "report"))
+    monthly_file_id = monthly_file_row.id if monthly_file_row else None
+    report_file_id = report_file_row.id if report_file_row else None
 
     matched = 0
     unmatched_names = set()
+    values_to_upsert: list[dict] = []
 
     for row in rows:
         operator = name_to_op.get(row.name_key)
@@ -146,44 +155,75 @@ def _rebuild_daily_metrics(db: Session, monthly_bytes: bytes, report_bytes: byte
             unmatched_names.add(row.display_name)
             continue
 
-        existing = db.scalar(
-            select(OperatorDailyMetric).where(
-                OperatorDailyMetric.operator_id == operator.id,
-                OperatorDailyMetric.metric_date == row.metric_date,
-            )
-        )
         quality_sum = sum(row.quality_scores)
         quality_count = len(row.quality_scores)
         base_hours = max(0.0, row.worked_hours - row.tech_issue_hours - row.training_hours - row.offline_activity_hours)
         kvz = round(row.calls_count / base_hours, 2) if base_hours > 0 else 0.0
-        efficiency = round(row.call_time_hours / base_hours * 100, 2) if base_hours > 0 else 0.0
         penalty_minutes = round(row.penalty_sum / 50.0, 2) if row.penalty_sum else 0.0
         penalty_points = round(penalty_minutes * 5.0, 2)
 
-        target = existing or OperatorDailyMetric(operator_id=operator.id, metric_date=row.metric_date)
-        target.operator_name = operator.full_name
-        target.group_id = operator.group_id
-        target.calls_count = row.calls_count
-        target.quality_scores_json = _json.dumps(row.quality_scores)
-        target.quality_sum = quality_sum
-        target.quality_count = quality_count
-        target.quality_avg = round(quality_sum / quality_count, 2) if quality_count else 0.0
-        target.kvz = kvz
-        target.efficiency = row.call_time_hours  # сырые часы в звонке за день — % пересчитывается при агрегации диапазона
-        target.worked_hours = row.worked_hours
-        target.tech_issue_hours = row.tech_issue_hours
-        target.training_hours = row.training_hours
-        target.offline_activity_hours = row.offline_activity_hours
-        target.base_hours = base_hours
-        target.penalty_sum = row.penalty_sum
-        target.penalty_minutes = penalty_minutes
-        target.penalty_points = penalty_points
-        target.source_monthly_report_id = monthly_file_row.id if monthly_file_row else None
-        target.source_report_id = report_file_row.id if report_file_row else None
-
-        if not existing:
-            db.add(target)
+        values_to_upsert.append(dict(
+            operator_id=operator.id,
+            operator_name=operator.full_name,
+            group_id=operator.group_id,
+            metric_date=row.metric_date,
+            calls_count=row.calls_count,
+            quality_scores_json=_json.dumps(row.quality_scores),
+            quality_sum=quality_sum,
+            quality_count=quality_count,
+            quality_avg=round(quality_sum / quality_count, 2) if quality_count else 0.0,
+            kvz=kvz,
+            efficiency=row.call_time_hours,  # сырые часы в звонке за день — % пересчитывается при агрегации диапазона
+            worked_hours=row.worked_hours,
+            tech_issue_hours=row.tech_issue_hours,
+            training_hours=row.training_hours,
+            offline_activity_hours=row.offline_activity_hours,
+            base_hours=base_hours,
+            penalty_sum=row.penalty_sum,
+            penalty_minutes=penalty_minutes,
+            penalty_points=penalty_points,
+            source_monthly_report_id=monthly_file_id,
+            source_report_id=report_file_id,
+        ))
         matched += 1
+
+    if values_to_upsert:
+        bind = db.get_bind()
+        if bind.dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            # PostgreSQL ограничивает число параметров в одном запросе —
+            # с запасом бьём на пачки по 500 строк (у нас 20 колонок на
+            # строку, 500*20=10000 параметров, безопасно ниже лимита 65535).
+            CHUNK = 500
+            for i in range(0, len(values_to_upsert), CHUNK):
+                chunk = values_to_upsert[i:i + CHUNK]
+                stmt = pg_insert(OperatorDailyMetric).values(chunk)
+                update_cols = {
+                    col: getattr(stmt.excluded, col)
+                    for col in chunk[0].keys()
+                    if col not in ("operator_id", "metric_date")
+                }
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["operator_id", "metric_date"],
+                    set_=update_cols,
+                )
+                db.execute(stmt)
+        else:
+            # SQLite (локальная разработка) — построчный upsert, без bulk-синтаксиса
+            for values in values_to_upsert:
+                existing = db.scalar(
+                    select(OperatorDailyMetric).where(
+                        OperatorDailyMetric.operator_id == values["operator_id"],
+                        OperatorDailyMetric.metric_date == values["metric_date"],
+                    )
+                )
+                target = existing or OperatorDailyMetric(
+                    operator_id=values["operator_id"], metric_date=values["metric_date"],
+                )
+                for k, v in values.items():
+                    setattr(target, k, v)
+                if not existing:
+                    db.add(target)
 
     # Старые сохранённые расчёты периодов больше не гарантированно актуальны —
     # инвалидируем (п.9 ТЗ). Пользователь при необходимости пересчитает заново.
