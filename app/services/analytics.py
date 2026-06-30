@@ -146,9 +146,10 @@ def compute_kpi_summary(rows: List[OperatorAnalyticsRow]) -> dict:
     included = [r for r in rows if r.metrics and r.metrics.has_any_period_data]
     metrics = [r.metrics for r in included]
 
-    all_scores: List[float] = []
-    for m in metrics:
-        all_scores.extend(m.quality_scores)
+    # Средневзвешенное по количеству оценок — математически тождественно
+    # "сумма всех индивидуальных оценок / их количество", не требует хранить
+    # сырые оценки (PeriodReport хранит только агрегированные quality_avg/count).
+    quality_weighted_sum = sum(m.quality_avg * m.quality_calls_count for m in metrics if m.quality_calls_count > 0)
 
     total_calls = sum(m.calls_total for m in metrics)
     total_hours = sum(m.total_hours for m in metrics)
@@ -162,7 +163,7 @@ def compute_kpi_summary(rows: List[OperatorAnalyticsRow]) -> dict:
     return {
         "operators_count": len(included),
         "total_calls": round(total_calls, 2),
-        "avg_quality": round(sum(all_scores) / len(all_scores), 2) if all_scores else None,
+        "avg_quality": round(quality_weighted_sum / quality_calls_count, 2) if quality_calls_count else None,
         "avg_kvz": round(total_calls / total_base_hours, 2) if total_base_hours > 0 else None,
         "avg_efficiency": round(total_call_time / total_base_hours * 100, 2) if total_base_hours > 0 else None,
         "penalty_minutes_total": round(total_penalty_sum / 50, 2) if total_penalty_sum else 0.0,
@@ -242,9 +243,8 @@ def compute_groups_comparison(rows: List[OperatorAnalyticsRow]) -> List[dict]:
     out = []
     for (gid, gname), group_rows in by_group.items():
         metrics = [r.metrics for r in group_rows]
-        all_scores: List[float] = []
-        for m in metrics:
-            all_scores.extend(m.quality_scores)
+        quality_weighted_sum = sum(m.quality_avg * m.quality_calls_count for m in metrics if m.quality_calls_count > 0)
+        quality_calls_count_g = sum(m.quality_calls_count for m in metrics)
 
         total_calls = sum(m.calls_total for m in metrics)
         base_hours_list = [m.base_hours for m in metrics if m.base_hours > 0]
@@ -261,7 +261,7 @@ def compute_groups_comparison(rows: List[OperatorAnalyticsRow]) -> List[dict]:
             "total_calls": round(total_calls, 2),
             "total_hours": round(sum(m.total_hours for m in metrics), 2),
             "base_hours_total": round(total_base_hours, 2),
-            "avg_quality": round(sum(all_scores) / len(all_scores), 2) if all_scores else None,
+            "avg_quality": round(quality_weighted_sum / quality_calls_count_g, 2) if quality_calls_count_g else None,
             "avg_kvz": round(total_calls / total_base_hours, 2) if total_base_hours > 0 else None,
             "avg_efficiency": round(total_call_time / total_base_hours * 100, 2) if total_base_hours > 0 else None,
             "penalty_minutes": round(total_penalty / 50, 2) if total_penalty else 0.0,
