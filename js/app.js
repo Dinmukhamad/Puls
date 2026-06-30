@@ -4,6 +4,78 @@
  */
 'use strict';
 
+
+/* ══════════════════════════════════════
+   SWR CACHE (stale-while-revalidate)
+   Переживает F5 через sessionStorage. Любой fetch-обёрнутый вызов
+   через swrFetch(key, fetcher) сразу отдаёт закешированные данные
+   (если есть), а затем тихо обновляет их в фоне и уведомляет подписчика.
+══════════════════════════════════════ */
+const SWR_PREFIX = 'puls-swr:';
+const SWR_DEFAULT_TTL_MS = 30_000; // считается "свежим" 30с — после этого фон обновит при следующем заходе
+
+function swrReadRaw(key) {
+  try {
+    const raw = sessionStorage.getItem(SWR_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+function swrWriteRaw(key, entry) {
+  try { sessionStorage.setItem(SWR_PREFIX + key, JSON.stringify(entry)); }
+  catch(e) { /* sessionStorage может быть полон/недоступен — тихо игнорируем, кеш просто не сохранится */ }
+}
+
+/**
+ * Возвращает { data, fromCache, isStale }, сразу синхронно если есть кеш.
+ * Не делает сетевой запрос сама — для этого используйте swrFetch.
+ */
+function swrPeek(key) {
+  const entry = swrReadRaw(key);
+  if (!entry) return null;
+  const age = Date.now() - entry.ts;
+  return { data: entry.data, fromCache: true, isStale: age > SWR_DEFAULT_TTL_MS, ageMs: age };
+}
+
+/**
+ * Stale-while-revalidate fetch.
+ *
+ * @param key       уникальный ключ кеша (например 'analytics:summary:2026-06-15:2026-06-20:all')
+ * @param fetcher   async () => data — реальный запрос к API
+ * @param onUpdate  (data) => void — вызывается с финальными свежими данными после фонового обновления
+ *                  (НЕ вызывается, если возвращённые данные совпадают с тем, что уже было в кеше — избегаем лишних перерисовок)
+ * @returns         Promise<data> — резолвится с кешированными данными немедленно, если они есть,
+ *                   либо ждёт первый реальный fetch если кеша вообще нет
+ */
+async function swrFetch(key, fetcher, onUpdate) {
+  const cached = swrReadRaw(key);
+
+  if (cached) {
+    // Есть кеш — отдаём его сразу, а свежие данные подгружаем в фоне
+    const age = Date.now() - cached.ts;
+    if (age > SWR_DEFAULT_TTL_MS) {
+      fetcher().then(fresh => {
+        const changed = JSON.stringify(fresh) !== JSON.stringify(cached.data);
+        swrWriteRaw(key, { data: fresh, ts: Date.now() });
+        if (changed && onUpdate) onUpdate(fresh);
+      }).catch(() => { /* фоновое обновление не удалось — старые данные остаются видимыми, это нормально */ });
+    }
+    return cached.data;
+  }
+
+  // Кеша нет вообще — обычный fetch, без фонового режима
+  const fresh = await fetcher();
+  swrWriteRaw(key, { data: fresh, ts: Date.now() });
+  return fresh;
+}
+
+/** Принудительно стирает один ключ или все ключи кеша (например после сохранения расчёта периода) */
+function swrInvalidate(keyOrPrefix) {
+  try {
+    const keys = Object.keys(sessionStorage).filter(k => k.startsWith(SWR_PREFIX + keyOrPrefix));
+    keys.forEach(k => sessionStorage.removeItem(k));
+  } catch(e) { /* ignore */ }
+}
+
 /* ══════════════════════════════════════
    STATE
 ══════════════════════════════════════ */
