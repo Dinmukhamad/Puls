@@ -140,12 +140,26 @@ def ready() -> Dict[str, str]:
         return JSONResponse(status_code=503, content={"status": "not ready", "detail": str(e)})
 
 
+class CachedStaticFiles(StaticFiles):
+    """
+    Статика (css/js/img/assets) подключается через query-параметр версии
+    (например styles.css?v=race-compact-3) — при деплое версия меняется,
+    значит можно безопасно отдавать длинный immutable-кеш: один и тот же
+    URL с одним и тем же ?v= всегда отдаёт один и тот же файл.
+    """
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
 # Статические файлы
 _root = Path(__file__).parent.parent
 for _folder in ("css", "js", "assets", "img"):
     _path = _root / _folder
     if _path.exists():
-        app.mount(f"/{_folder}", StaticFiles(directory=str(_path)), name=_folder)
+        app.mount(f"/{_folder}", CachedStaticFiles(directory=str(_path)), name=_folder)
 
 _index = _root / "index.html"
 
