@@ -5155,7 +5155,7 @@ function renderRaceChart(items) {
   const gap = 24;
   const chartH = 320;
   const padTop = 50; // место под машинку
-  const padBottom = 50; // место под подписи
+  const padBottom = 70; // место под подписи (увеличено, чтобы подписи не вылезали за rating-card с overflow:hidden)
 
   const usableH = chartH - padTop - padBottom;
 
