@@ -90,6 +90,8 @@ let STATE = {
   history: [],
   groups: [],
   currentView: 'cabinet',
+  coinsOverview: null,
+  coinsTab: 'overview',
   navGen: 0,         // увеличивается при каждой смене раздела/вкладки —
   ratingTabGen: 0,   // используется для отмены "осиротевших" async-рендеров
   analyticsTabGen: 0,
@@ -112,6 +114,41 @@ function bumpRatingTabGen() { return ++STATE.ratingTabGen; }
 function isRatingTabStale(token) { return token !== STATE.ratingTabGen; }
 function bumpAnalyticsTabGen() { return ++STATE.analyticsTabGen; }
 function isAnalyticsTabStale(token) { return token !== STATE.analyticsTabGen; }
+
+const COIN_TABS = ['overview', 'accrual', 'requests', 'history', 'rules'];
+const LEGACY_COIN_VIEW_TAB = { accrual: 'accrual', manual: 'accrual', requests: 'requests', history: 'history' };
+
+function normalizeCoinTab(tab) {
+  if (tab === 'manual') return 'accrual';
+  return COIN_TABS.includes(tab) ? tab : 'overview';
+}
+
+function parseStoredView(value) {
+  if (!value) return { view: '', tab: '' };
+  const clean = String(value).replace(/^#/, '');
+  const [view, query = ''] = clean.split('?');
+  const params = new URLSearchParams(query);
+  return { view, tab: params.get('tab') || '' };
+}
+
+function initialRouteForRole(role) {
+  const path = location.pathname.replace(/^\/+|\/+$/g, '');
+  const params = new URLSearchParams(location.search);
+  if (path === 'coins') return { view: 'coins', tab: normalizeCoinTab(params.get('tab')) };
+  if (path === 'accrual') return { view: 'coins', tab: 'accrual' };
+  if (path === 'requests') return { view: 'coins', tab: 'requests' };
+  if (path === 'history') return { view: 'coins', tab: 'history' };
+
+  const hashRoute = parseStoredView(location.hash);
+  if (hashRoute.view === 'coins') return { view: 'coins', tab: normalizeCoinTab(hashRoute.tab) };
+  if (LEGACY_COIN_VIEW_TAB[hashRoute.view]) return { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[hashRoute.view] };
+
+  const savedRoute = parseStoredView(localStorage.getItem('pulse-last-view'));
+  if (savedRoute.view === 'coins') return { view: 'coins', tab: normalizeCoinTab(savedRoute.tab) };
+  if (LEGACY_COIN_VIEW_TAB[savedRoute.view]) return { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[savedRoute.view] };
+
+  return { view: isAdmin(role) ? 'summary' : 'cabinet', tab: '' };
+}
 
 /* ══════════════════════════════════════
    BOOT
@@ -195,15 +232,22 @@ function initNav() {
   }
 }
 
-function navigateTo(view) {
+function navigateTo(view, options = {}) {
+  if (LEGACY_COIN_VIEW_TAB[view]) {
+    options = { ...options, tab: LEGACY_COIN_VIEW_TAB[view] };
+    view = 'coins';
+  }
   STATE.currentView = view;
+  if (view === 'coins') STATE.coinsTab = normalizeCoinTab(options.tab || STATE.coinsTab);
   bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов
   // Save to URL hash so F5 restores the same section
-  history.replaceState(null, '', '#' + view);
-  localStorage.setItem('pulse-last-view', view);
+  const route = view === 'coins' ? `coins?tab=${STATE.coinsTab}` : view;
+  history.replaceState(null, '', view === 'coins' ? `/${route}` : '/#' + route);
+  localStorage.setItem('pulse-last-view', route);
   document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(l => {
-    l.classList.toggle('active', l.dataset.navTarget === view);
+    const target = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
+    l.classList.toggle('active', target === view);
   });
   const el = document.getElementById(`view-${view}`);
   if (el) el.classList.add('active');
@@ -217,6 +261,7 @@ function renderView(view) {
     case 'shop':     renderShop();     break;
     case 'summary':  renderSummary();  break;
     case 'operators': renderAdminOperators(); break;
+    case 'coins':    renderCoins();    break;
     case 'manual':   renderManual();   break;
     case 'requests': renderRequests(); break;
     case 'history':  renderHistory();  break;
@@ -294,13 +339,13 @@ async function bootApp() {
   await loadData(role);
 
   // Restore last viewed section after F5 reload
-  const savedView = location.hash.replace('#', '') || localStorage.getItem('pulse-last-view');
-  const adminViews = ['summary','operators','manual','requests','history','groups','shop','rating','cabinet','period-report','analytics'];
+  const restoredRoute = initialRouteForRole(role);
+  const adminViews = ['summary','operators','coins','groups','shop','rating','cabinet','period-report','analytics'];
   const operatorViews = ['cabinet','rating','shop'];
   const allowedViews = isAdmin(role) ? adminViews : operatorViews;
   const defaultView = isAdmin(role) ? 'summary' : 'cabinet';
-  const start = (savedView && allowedViews.includes(savedView)) ? savedView : defaultView;
-  navigateTo(start);
+  const start = allowedViews.includes(restoredRoute.view) ? restoredRoute.view : defaultView;
+  navigateTo(start, { tab: restoredRoute.tab });
 }
 
 /**
@@ -326,7 +371,7 @@ async function loadData(role) {
   };
   const onHistoryUpdate = (fresh) => {
     STATE.history = fresh;
-    if (STATE.currentView === 'history') renderHistory();
+    if (STATE.currentView === 'coins') renderCoins();
   };
 
   const tasks = [
@@ -373,7 +418,7 @@ function buildViews(role) {
   const shell = document.getElementById('app-shell');
   if (!shell) return;
   const views = isAdmin(role)
-    ? ['summary', 'operators', 'manual', 'requests', 'shop', 'history', ...(canManageGroups(role) ? ['groups'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
+    ? ['summary', 'operators', 'coins', 'shop', ...(canManageGroups(role) ? ['groups'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
     : ['cabinet', 'rating', 'shop'];
   shell.innerHTML = views.map(v => `<section class="app-view" id="view-${v}"></section>`).join('');
 }
@@ -381,7 +426,7 @@ function buildViews(role) {
 function renderSidebar(role) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     const t = link.dataset.navTarget;
-    const adminViews = ['summary','operators','manual','requests','history','period-report','analytics'];
+    const adminViews = ['summary','operators','coins','period-report','analytics'];
     const operatorViews = ['cabinet','rating','shop'];
     const sharedViews = ['shop','rating','cabinet'];
     let show = false;
@@ -1184,7 +1229,7 @@ function renderSummary() {
       <div class="kpi-card ${d.pending_purchases_count > 0 ? 'kpi-warn' : ''}">
         <div class="kpi-label">Новых заявок</div>
         <div class="kpi-value">${d.pending_purchases_count}</div>
-        ${d.pending_purchases_count > 0 ? `<div class="kpi-action"><button class="btn-link" onclick="navigateTo('requests')">Рассмотреть →</button></div>` : ''}
+        ${d.pending_purchases_count > 0 ? `<div class="kpi-action"><button class="btn-link" onclick="navigateTo('coins',{tab:'requests'})">Рассмотреть →</button></div>` : ''}
       </div>
       <div class="kpi-card ${d.total_lateness_week > 0 ? 'kpi-warn' : ''}">
         <div class="kpi-label">Опозданий за неделю</div>
@@ -1234,7 +1279,7 @@ function renderSummary() {
       </div>
 
       <div class="panel">
-        <div class="panel-head"><h3>Последние действия</h3><button class="btn-link" onclick="navigateTo('history')">Все →</button></div>
+        <div class="panel-head"><h3>Последние действия</h3><button class="btn-link" onclick="navigateTo('coins',{tab:'history'})">Все →</button></div>
         <div class="tx-list">
           ${d.latest_coin_transactions?.length ? d.latest_coin_transactions.slice(0,10).map(t => `
             <div class="tx-row ${t.amount>=0?'tx-plus':'tx-minus'}">
@@ -1466,6 +1511,163 @@ function renderAdminOperators() {
 /* ══════════════════════════════════════
    VIEW: РУЧНОЕ НАЧИСЛЕНИЕ
 ══════════════════════════════════════ */
+function renderCoins() {
+  const el = document.getElementById('view-coins');
+  if (!el) return;
+
+  if (!isAdmin(STATE.user?.role)) {
+    el.innerHTML = '<div class="empty-state"><p>Недостаточно прав</p></div>';
+    return;
+  }
+
+  const tab = normalizeCoinTab(STATE.coinsTab);
+  STATE.coinsTab = tab;
+  const tabs = [
+    ['overview', 'Обзор'],
+    ['accrual', 'Начисление'],
+    ['requests', 'Заявки'],
+    ['history', 'История'],
+    ['rules', 'Правила'],
+  ];
+
+  el.innerHTML = `
+    <div class="view-header coins-header">
+      <div>
+        <div class="section-kicker">Коины</div>
+        <h2 class="section-title">Операции с коинами</h2>
+        <p class="section-subtitle">Управление начислениями, заявками и историей операций</p>
+      </div>
+      <div class="header-right">
+        ${tab === 'history' ? '<button class="btn-outline btn-sm" onclick="exportHistoryCSV()">Экспорт CSV</button>' : ''}
+        <button class="btn-outline btn-sm" onclick="refreshCoinsModule()">Обновить</button>
+      </div>
+    </div>
+    <div class="filter-tabs coins-tabs">
+      ${tabs.map(([id, label]) => `<button class="filter-tab ${tab === id ? 'active' : ''}" data-coins-tab="${id}">${label}</button>`).join('')}
+    </div>
+    <div id="coins-tab-body" class="coins-tab-body"></div>`;
+
+  el.querySelectorAll('[data-coins-tab]').forEach(btn => {
+    btn.addEventListener('click', () => navigateTo('coins', { tab: btn.dataset.coinsTab }));
+  });
+
+  const body = el.querySelector('#coins-tab-body');
+  if (tab === 'overview') renderCoinsOverview(body);
+  if (tab === 'accrual') {
+    body.innerHTML = '<section class="coins-embedded-view" id="view-manual"></section>';
+    renderManual();
+  }
+  if (tab === 'requests') {
+    body.innerHTML = '<section class="coins-embedded-view" id="view-requests"></section>';
+    renderRequests();
+  }
+  if (tab === 'history') {
+    body.innerHTML = '<section class="coins-embedded-view" id="view-history"></section>';
+    renderHistory();
+  }
+  if (tab === 'rules') renderCoinRules(body);
+}
+
+async function refreshCoinsModule() {
+  STATE.coinsOverview = null;
+  await reloadData();
+  if (STATE.currentView === 'coins') renderCoins();
+}
+
+function renderCoinsOverview(body) {
+  const overview = STATE.coinsOverview;
+  if (!overview) {
+    body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка данных…</p></div>';
+    const myNavGen = STATE.navGen;
+    api.getCoinsOverview().then(data => {
+      STATE.coinsOverview = data;
+      if (!isNavStale(myNavGen) && STATE.currentView === 'coins' && STATE.coinsTab === 'overview') renderCoins();
+    }).catch(err => {
+      if (!isNavStale(myNavGen)) {
+        body.innerHTML = `<div class="status-line status-error">Не удалось загрузить обзор: ${esc(err.message)}</div>`;
+      }
+    });
+    return;
+  }
+
+  const tx = overview.latest_transactions || [];
+  const req = overview.latest_requests || [];
+  body.innerHTML = `
+    <div class="kpi-grid coins-kpi-grid">
+      <div class="kpi-card kpi-accent"><div class="kpi-label">Операций сегодня</div><div class="kpi-value">${overview.today_operations || 0}</div></div>
+      <div class="kpi-card kpi-ok"><div class="kpi-label">Начислено сегодня</div><div class="kpi-value">+${overview.today_credited || 0}<span class="kpi-unit"> ₡</span></div></div>
+      <div class="kpi-card"><div class="kpi-label">Списано сегодня</div><div class="kpi-value">-${overview.today_debited || 0}<span class="kpi-unit"> ₡</span></div></div>
+      <div class="kpi-card ${overview.new_requests ? 'kpi-warn' : ''}"><div class="kpi-label">Новых заявок</div><div class="kpi-value">${overview.new_requests || 0}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Зарезервировано</div><div class="kpi-value">${overview.reserved_coins || 0}<span class="kpi-unit"> ₡</span></div></div>
+      <div class="kpi-card"><div class="kpi-label">Всего операций</div><div class="kpi-value">${overview.total_operations || 0}</div></div>
+    </div>
+    <div class="coins-overview-grid">
+      <div class="panel">
+        <div class="panel-head"><h3>Последние операции</h3><button class="btn-link" onclick="navigateTo('coins',{tab:'history'})">Открыть историю</button></div>
+        <div class="coins-list">
+          ${tx.length ? tx.map(t => `
+            <div class="manual-tx-row">
+              <div class="manual-tx-sign ${t.amount >= 0 ? 'plus' : 'minus'}">${t.amount >= 0 ? '+' : ''}${t.amount}</div>
+              <div class="manual-tx-body">
+                <div class="manual-tx-name">${esc(t.operator_name)}</div>
+                <div class="manual-tx-meta">${esc(transactionTypeLabel(t.type))} · ${esc(t.comment)} · ${fmtDate(t.created_at)}</div>
+              </div>
+            </div>`).join('') : '<div class="empty-line">Операций пока нет</div>'}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Последние заявки</h3><button class="btn-link" onclick="navigateTo('coins',{tab:'requests'})">Открыть заявки</button></div>
+        <div class="coins-list">
+          ${req.length ? req.map(p => `
+            <div class="manual-tx-row">
+              <div class="manual-tx-sign">${p.price}</div>
+              <div class="manual-tx-body">
+                <div class="manual-tx-name">${esc(p.operator_name)} — ${esc(p.bonus_name)}</div>
+                <div class="manual-tx-meta">${esc(p.group_name || '—')} · ${statusLabel(p.status)} · ${fmtDate(p.created_at)}</div>
+              </div>
+            </div>`).join('') : '<div class="empty-line">Заявок нет</div>'}
+        </div>
+      </div>
+    </div>
+    <div class="panel coins-actions">
+      <div class="panel-head"><h3>Быстрые действия</h3></div>
+      <div class="coins-action-row">
+        <button class="btn-primary" onclick="navigateTo('coins',{tab:'accrual'})">Начислить коины</button>
+        <button class="btn-outline" onclick="navigateTo('coins',{tab:'requests'})">Открыть заявки</button>
+        <button class="btn-outline" onclick="navigateTo('coins',{tab:'history'})">Открыть историю</button>
+      </div>
+    </div>`;
+}
+
+function renderCoinRules(body) {
+  body.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h3>Правила операций с коинами</h3></div>
+      <div class="manual-rules coins-rules">
+        <div class="manual-rule"><span class="rule-coin">1</span><span>Любое изменение баланса создается через транзакцию и попадает в историю.</span></div>
+        <div class="manual-rule"><span class="rule-coin">2</span><span>Покупка в магазине сначала резервирует коины, затем заявка одобряется или отклоняется.</span></div>
+        <div class="manual-rule"><span class="rule-coin">3</span><span>Отклонение заявки возвращает резерв на баланс оператора.</span></div>
+        <div class="manual-rule"><span class="rule-coin">4</span><span>Ручные операции не редактируются: для корректировки создается обратная операция.</span></div>
+      </div>
+    </div>`;
+}
+
+function transactionTypeLabel(type) {
+  return {
+    weekly_accrual: 'Авт. начисление',
+    manual_add: 'Ручное начисление',
+    manual_subtract: 'Ручное списание',
+    manual_accrual: 'Ручное начисление',
+    manual_deduction: 'Ручное списание',
+    reserve: 'Резервирование',
+    reservation: 'Резервирование',
+    purchase: 'Покупка бонуса',
+    refund: 'Возврат коинов',
+    request_completed: 'Заявка выполнена',
+    period_report: 'Расчет периода',
+  }[type] || type;
+}
+
 function renderManual() {
   const el = document.getElementById('view-manual');
   if (!el) return;
@@ -1494,7 +1696,7 @@ function renderManual() {
 
   function renderHistory() {
     const items = STATE.history
-      .filter(t => t.type === 'manual_add' || t.type === 'manual_subtract')
+      .filter(t => ['manual_add','manual_subtract','manual_accrual','manual_deduction'].includes(t.type))
       .slice(0, 5);
     if (!items.length) return '<div class="manual-empty">Операций пока нет</div>';
     return items.map(t => `
@@ -1698,7 +1900,7 @@ function renderManual() {
       const hist = el.querySelector('#manual-history-list');
       if (hist) {
         const freshItems = STATE.history
-          .filter(t => t.type === 'manual_add' || t.type === 'manual_subtract')
+          .filter(t => ['manual_add','manual_subtract','manual_accrual','manual_deduction'].includes(t.type))
           .slice(0, 5);
         hist.innerHTML = freshItems.length ? freshItems.map(t =>
           '<div class="manual-tx-row">' +
@@ -1810,10 +2012,11 @@ function renderRequests() {
   const el = document.getElementById('view-requests');
   if (!el) return;
   const all = STATE.purchases;
-  let activeFilter = 'pending';
+  let activeFilter = 'new';
 
   function filtered() {
     if (activeFilter === 'all') return all;
+    if (activeFilter === 'new') return all.filter(p => p.status === 'new' || p.status === 'pending');
     return all.filter(p => p.status === activeFilter);
   }
 
@@ -1838,7 +2041,7 @@ function renderRequests() {
           <div class="request-status">
             <span class="status-badge status-${p.status}">${statusLabel(p.status)}</span>
           </div>
-          ${p.status === 'pending' ? `
+          ${(p.status === 'pending' || p.status === 'new') ? `
             <div class="request-actions">
               <button class="btn-ok approve-btn" data-id="${p.id}">✓ Одобрить</button>
               <button class="btn-danger reject-btn" data-id="${p.id}">✗ Отклонить</button>
@@ -1858,7 +2061,7 @@ function renderRequests() {
     </div>
     <div class="filter-tabs" id="req-tabs">
       ${[
-        ['pending',  `Новые <span class="badge">${all.filter(p=>p.status==='pending').length}</span>`],
+        ['new',  `Новые <span class="badge">${all.filter(p=>p.status==='new'||p.status==='pending').length}</span>`],
         ['approved', 'Одобрены'],
         ['rejected', 'Отклонены'],
         ['all',      `Все <span class="badge">${all.length}</span>`],
@@ -1930,9 +2133,17 @@ function renderHistory() {
   const history = STATE.history;
 
   const typeLabels = {
-    weekly_accrual: 'Авт. начисление', manual_add: 'Ручное начисление',
-    manual_subtract: 'Ручное списание', reserve: 'Резервирование',
-    purchase: 'Покупка бонуса', refund: 'Возврат коинов',
+    weekly_accrual: 'Авт. начисление',
+    manual_add: 'Ручное начисление',
+    manual_subtract: 'Ручное списание',
+    manual_accrual: 'Ручное начисление',
+    manual_deduction: 'Ручное списание',
+    reserve: 'Резервирование',
+    reservation: 'Резервирование',
+    purchase: 'Покупка бонуса',
+    refund: 'Возврат коинов',
+    request_completed: 'Заявка выполнена',
+    period_report: 'Расчет периода',
   };
 
   el.innerHTML = `
@@ -2761,7 +2972,7 @@ function roleLabel(r) {
   return { operator:'Оператор', supervisor:'Супервайзер', manager:'Руководитель', admin:'Администратор' }[r] || r || '';
 }
 function statusLabel(s) {
-  return { pending:'Новая', approved:'Одобрена', rejected:'Отклонена', completed:'Выполнена' }[s] || s;
+  return { pending:'Новая', new:'Новая', approved:'Одобрена', rejected:'Отклонена', completed:'Выполнена', cancelled:'Отменена' }[s] || s;
 }
 function isAdmin(role) { return ['supervisor','manager','admin'].includes(role); }
 function canManageGroups(role = STATE.user?.role) { return ['manager','admin'].includes(role); }
