@@ -68,6 +68,7 @@ def _supervisor_group_ids(current_user: User) -> Optional[set]:
 def my_tests(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
     operator = operator_for_user_or_403(db, current_user)
     tests = visible_tests_for_operator(db, operator)
+    db.commit()  # фиксируем возможный scheduled->open переход из activate_scheduled_tests
 
     items = []
     for t in tests:
