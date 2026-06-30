@@ -84,7 +84,16 @@ const api = (() => {
   /* ── Wallet ──────────────────────────────────────────────── */
   function myWallet()              { return req('GET', '/api/wallet/me'); }
   function operatorWallet(id)      { return req('GET', `/api/wallet/${id}`); }
-  function manualTransaction(p)    { return req('POST', '/api/wallet/transactions', p); }
+  function manualTransaction(p) {
+    const amount = Number(p.amount || 0);
+    return req('POST', '/api/coins/manual-operation', {
+      operator_id: p.operator_id,
+      operation: amount < 0 ? 'debit' : 'credit',
+      amount: Math.abs(amount),
+      reason: p.reason,
+      comment: p.comment || '',
+    });
+  }
 
   /* ── Shop ────────────────────────────────────────────────── */
   function listShopItems()         { return req('GET', '/api/shop/items'); }
@@ -141,6 +150,27 @@ const api = (() => {
     return req('POST', `/api/shop/purchases/${purchaseId}/complete`);
   }
 
+  async function getCoinsOverview() {
+    return req('GET', '/api/coins/overview');
+  }
+  async function listCoinRequests(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/coins/requests' + (qs ? '?' + qs : ''));
+  }
+  async function listCoinTransactions(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/coins/transactions' + (qs ? '?' + qs : ''));
+  }
+  async function approveCoinRequest(id) {
+    return req('POST', `/api/coins/requests/${id}/approve`);
+  }
+  async function rejectCoinRequest(id, reason) {
+    return req('POST', `/api/coins/requests/${id}/reject`, { reason });
+  }
+  async function completeCoinRequest(id) {
+    return req('POST', `/api/coins/requests/${id}/complete`);
+  }
+
   /* ── Period reports ──────────────────────────────────────── */
   async function getPeriodReportStatus() {
     return req('GET', '/api/reports/period-report/status');
@@ -193,6 +223,8 @@ const api = (() => {
     getDashboard, getDashboardOperators, getDashboardHistory,
     createUser, listUsers,
     changeMyPassword, changeMyLogin, changeOperatorPassword, changeOperatorUsername,
+    getCoinsOverview, listCoinRequests, listCoinTransactions,
+    approveCoinRequest, rejectCoinRequest, completeCoinRequest,
     getPeriodReportStatus, uploadPeriodReportFiles, savePeriodReport,
     getAvailablePeriods, analyticsGet,
     getRatingRace, getMyRatingDynamics,
