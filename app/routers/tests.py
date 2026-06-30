@@ -108,8 +108,29 @@ def start_test(test_id: int, db: Session = Depends(get_db), current_user: User =
     existing = get_active_or_recent_attempt(db, test, operator)
     if existing and existing.status == "in_progress":
         if now_utc() > existing.expires_at:
-            auto_expire_attempt(db, existing)
-            db.commit()
+            try:
+                auto_expire_attempt(db, existing)
+                db.commit()
+            except Exception as e:
+                # Если авто-завершение по таймеру упало (например ошибка в
+                # подсчёте баллов) — раньше исключение улетало наружу БЕЗ
+                # rollback и без изменения статуса попытки. Из-за этого
+                # попытка навечно оставалась "in_progress", и при каждом
+                # повторном заходе оператора в раздел система снова и снова
+                # пыталась её авто-завершить, получая ту же ошибку — визуально
+                # это выглядело как бесконечная загрузка страницы. Теперь
+                # откатываем транзакцию и принудительно помечаем попытку
+                # как "expired" отдельным простым UPDATE (без сложной логики
+                # подсчёта баллов, которая и могла быть причиной сбоя),
+                # чтобы оператор не застревал навсегда.
+                db.rollback()
+                existing.status = "expired"
+                existing.finished_at = now_utc()
+                db.commit()
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Время теста истекло (ошибка при подсчёте результата: {type(e).__name__}: {e})",
+                )
             raise HTTPException(status_code=400, detail="Время теста истекло")
         attempt = existing
     else:
