@@ -3350,17 +3350,17 @@ body.side-nav-collapsed .side-nav-toggle svg {
    ROLE-AWARE SIDEBAR — prevent admin-link flash on load/F5
 ═══════════════════════════════════════════════════ */
 
-/* Пока роль не подтверждена JS-ом — скрываем все admin-only ссылки.
-   Список admin-only target-ов совпадает с adminViews в renderSidebar(). */
-body.role-pending .side-nav-link[data-nav-target="summary"],
-body.role-pending .side-nav-link[data-nav-target="operators"],
-body.role-pending .side-nav-link[data-nav-target="manual"],
-body.role-pending .side-nav-link[data-nav-target="requests"],
-body.role-pending .side-nav-link[data-nav-target="history"],
-body.role-pending .side-nav-link[data-nav-target="groups"],
-body.role-pending .side-nav-link[data-nav-target="analytics"],
-body.role-pending .side-nav-link[data-nav-target="period-report"] {
-  display: none;
+/* Пока роль не подтверждена JS-ом — скрываем ВСЮ навигацию целиком
+   (а не только admin-only пункты), чтобы ни админ, ни оператор не видели
+   на долю секунды "чужой" набор разделов — ни operator-only, ни admin-only. */
+body.role-pending .side-nav-group,
+body.role-pending .side-nav-separator,
+body.role-pending .side-nav-meta {
+  visibility: hidden;
+}
+/* Логотип и шапку оставляем видимыми — это нейтральный элемент, общий для всех ролей */
+body.role-pending .side-nav-header {
+  visibility: visible;
 }
 
 /* Для оператора сайдбар уже физически содержит только 3 пункта —
