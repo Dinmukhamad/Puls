@@ -173,6 +173,11 @@ document.addEventListener('click', async e => {
 ══════════════════════════════════════ */
 async function bootApp() {
   const role = STATE.user?.role;
+  // Снимаем "role-pending" (скрывал admin-ссылки по умолчанию, чтобы не мигали
+  // на F5 до подтверждения роли) и ставим точный класс роли для CSS (ширина сайдбара и т.п.)
+  document.body.classList.remove('role-pending');
+  document.body.classList.toggle('role-admin', isAdmin(role));
+  document.body.classList.toggle('role-operator', !isAdmin(role));
   buildViews(role);
   renderSidebar(role);
   setText('side-user', STATE.user?.full_name || STATE.user?.username || '');
