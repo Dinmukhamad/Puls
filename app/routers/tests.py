@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,25 @@ router = APIRouter(prefix="/tests", tags=["tests"])
 admin_router = APIRouter(prefix="/admin/tests", tags=["tests-admin"])
 
 STAFF_ROLES = ("supervisor", "manager", "admin")
+
+
+def _strip_tzinfo(value: Optional[datetime]) -> Optional[datetime]:
+    """
+    Frontend отправляет opens_at/closes_at как ISO-строку с суффиксом Z
+    (UTC), которую Pydantic парсит в timezone-AWARE datetime. Колонки
+    tests.opens_at/closes_at в БД — naive DateTime (без timezone, как и
+    now_utc() = datetime.utcnow() везде в проекте). Сравнение aware vs naive
+    datetime в Python бросает TypeError — именно это происходило при
+    проверке test.closes_at (now_utc() > test.closes_at), из-за чего тест
+    физически не закрывался по достижении времени: исключение прерывало
+    проверку статуса до того, как она доходила до сравнения с closes_at.
+    Здесь явно убираем tzinfo сразу при разборе входных данных, оставляя
+    числовое значение времени как есть (оно уже сконвертировано в UTC на
+    фронтенде через .toISOString() перед отправкой).
+    """
+    if value is None:
+        return None
+    return value.replace(tzinfo=None) if value.tzinfo else value
 
 
 def _utc_iso(dt: Optional[datetime]) -> Optional[str]:
