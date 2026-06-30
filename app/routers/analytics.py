@@ -410,6 +410,13 @@ def get_points_analysis(
     с предыдущим периодом (если для него тоже есть сохранённый расчёт),
     топ роста/просадки, статусы, рекомендации.
     """
+    key = cache_key("points", start_date=start_date, end_date=end_date, group_id=group_id,
+                     operator_query=operator_query, participation_status=participation_status,
+                     only_with_data=only_with_data)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+
     rows = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data)
 
     period_length = (end_date - start_date).days
@@ -425,6 +432,7 @@ def get_points_analysis(
     analysis = compute_points_analysis(rows, prev_rows)
     analysis["period"] = {"start": str(start_date), "end": str(end_date)}
     analysis["previous_period"] = {"start": str(prev_start), "end": str(prev_end)} if prev_rows else None
+    cache_set(key, analysis)
     return analysis
 
 
