@@ -4241,16 +4241,16 @@ async function loadAnalyticsTab(tab) {
   if (!content) return;
   const myNavGen = STATE.navGen;
   const myTabGen = bumpAnalyticsTabGen();
-  // Если для текущего периода/фильтров этой вкладки уже есть кеш в sessionStorage
-  // (даже устаревший) — не показываем спиннер, переходим к рендеру сразу;
-  // swrFetch внутри load*Tab-функций отдаст закешированные данные синхронно.
-  const base = JSON.stringify(analyticsBaseParams());
-  const hasCacheForThisTab = Object.keys(sessionStorage).some(k =>
-    k.startsWith('puls-swr:analytics:') && k.includes(base.slice(1, -1).split(',')[0])
-  );
-  if (!hasCacheForThisTab) {
+  // Спиннер показываем с небольшой задержкой (150мс) — если данные придут
+  // из кеша почти мгновенно (swrFetch отдаёт их синхронно из sessionStorage),
+  // спиннер просто не успеет появиться, и переключение вкладок будет
+  // выглядеть мгновенным вместо "мигающего лоадера на каждый клик".
+  let spinnerShown = false;
+  const spinnerTimer = setTimeout(() => {
+    if (isNavStale(myNavGen) || isAnalyticsTabStale(myTabGen)) return;
+    spinnerShown = true;
     content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем показатели…</p></div>';
-  }
+  }, 150);
 
   try {
     switch (tab) {
