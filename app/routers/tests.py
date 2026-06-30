@@ -293,6 +293,9 @@ def _test_summary(db: Session, t: Test) -> dict:
 
 @admin_router.get("")
 def list_tests(db: Session = Depends(get_db), _: User = Depends(_require_staff)) -> dict:
+    from app.services.tests import activate_scheduled_tests
+    activate_scheduled_tests(db)
+    db.commit()
     tests = list(db.scalars(select(Test).order_by(Test.created_at.desc())))
     return {"items": [_test_summary(db, t) for t in tests]}
 
