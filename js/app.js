@@ -3674,17 +3674,39 @@ function drawScatter(containerId, points, xKey, yKey, xLabel, yLabel, xThreshold
   if (!el) return;
   if (!points.length) { el.innerHTML = '<div class="empty-line">Нет данных для построения графика</div>'; return; }
 
-  const W = 600, H = 360, PAD = 40;
+  const W = 640, H = 400, PAD_L = 50, PAD_B = 36, PAD_T = 16, PAD_R = 16;
   const xVals = points.map(p => p[xKey]);
   const yVals = points.map(p => p[yKey]);
-  const xMax = Math.max(...xVals, xThreshold||0) * 1.1 || 1;
-  const yMax = Math.max(...yVals, yThreshold||0) * 1.1 || 1;
+  const xMaxRaw = Math.max(...xVals, xThreshold||0);
+  const yMaxRaw = Math.max(...yVals, yThreshold||0);
+  const xMax = (xMaxRaw * 1.15) || 1;
+  const yMax = (yMaxRaw * 1.15) || 1;
   const xMin = 0, yMin = 0;
 
   const sizeMax = Math.max(...points.map(p => p.calls_total || p.base_hours || 1), 1);
 
-  const sx = x => PAD + (x - xMin) / (xMax - xMin) * (W - 2*PAD);
-  const sy = y => H - PAD - (y - yMin) / (yMax - yMin) * (H - 2*PAD);
+  const plotW = W - PAD_L - PAD_R;
+  const plotH = H - PAD_T - PAD_B;
+
+  const sx = x => PAD_L + (x - xMin) / (xMax - xMin) * plotW;
+  const sy = y => H - PAD_B - (y - yMin) / (yMax - yMin) * plotH;
+
+  // Сетка и числовые деления (5 шагов на каждой оси)
+  function niceTicks(max, steps = 5) {
+    const raw = max / steps;
+    const mag = Math.pow(10, Math.floor(Math.log10(raw || 1)));
+    const norm = raw / mag;
+    let step;
+    if (norm < 1.5) step = 1 * mag;
+    else if (norm < 3) step = 2 * mag;
+    else if (norm < 7) step = 5 * mag;
+    else step = 10 * mag;
+    const ticks = [];
+    for (let v = 0; v <= max + step * 0.5; v += step) ticks.push(Math.round(v * 100) / 100);
+    return ticks;
+  }
+  const xTicks = niceTicks(xMax);
+  const yTicks = niceTicks(yMax);
 
   const groupColors = {};
   const palette = ['#0284C7','#16A34A','#D97706','#9333EA','#DC2626','#0891B2'];
@@ -3698,19 +3720,41 @@ function drawScatter(containerId, points, xKey, yKey, xLabel, yLabel, xThreshold
   const thresholdY = yThreshold != null ? sy(yThreshold) : null;
 
   el.innerHTML = `
-    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:420px" id="${containerId}-svg">
-      <line x1="${PAD}" y1="${H-PAD}" x2="${W-PAD}" y2="${H-PAD}" stroke="var(--border-default)" stroke-width="1"/>
-      <line x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${H-PAD}" stroke="var(--border-default)" stroke-width="1"/>
-      ${thresholdX != null ? `<line x1="${thresholdX}" y1="${PAD}" x2="${thresholdX}" y2="${H-PAD}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="4,4"/>` : ''}
-      ${thresholdY != null ? `<line x1="${PAD}" y1="${thresholdY}" x2="${W-PAD}" y2="${thresholdY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="4,4"/>` : ''}
-      <text x="${W/2}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--text-secondary)" font-family="Inter">${esc(xLabel)}</text>
-      <text x="12" y="${H/2}" text-anchor="middle" font-size="11" fill="var(--text-secondary)" font-family="Inter" transform="rotate(-90,12,${H/2})">${esc(yLabel)}</text>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:460px" id="${containerId}-svg" font-family="Inter,sans-serif">
+      <!-- Сетка по X -->
+      ${xTicks.map(t => {
+        const x = sx(t);
+        return `<line x1="${x}" y1="${PAD_T}" x2="${x}" y2="${H-PAD_B}" stroke="var(--border-soft)" stroke-width="1"/>
+          <text x="${x}" y="${H-PAD_B+16}" text-anchor="middle" font-size="10" fill="var(--text-muted)">${t}</text>`;
+      }).join('')}
+      <!-- Сетка по Y -->
+      ${yTicks.map(t => {
+        const y = sy(t);
+        return `<line x1="${PAD_L}" y1="${y}" x2="${W-PAD_R}" y2="${y}" stroke="var(--border-soft)" stroke-width="1"/>
+          <text x="${PAD_L-8}" y="${y+3}" text-anchor="end" font-size="10" fill="var(--text-muted)">${t}</text>`;
+      }).join('')}
+      <!-- Оси -->
+      <line x1="${PAD_L}" y1="${H-PAD_B}" x2="${W-PAD_R}" y2="${H-PAD_B}" stroke="var(--border-strong)" stroke-width="1.5"/>
+      <line x1="${PAD_L}" y1="${PAD_T}" x2="${PAD_L}" y2="${H-PAD_B}" stroke="var(--border-strong)" stroke-width="1.5"/>
+      <!-- Пороговые линии -->
+      ${thresholdX != null ? `<line x1="${thresholdX}" y1="${PAD_T}" x2="${thresholdX}" y2="${H-PAD_B}" stroke="var(--warning)" stroke-width="1.2" stroke-dasharray="5,4"/>
+        <text x="${thresholdX}" y="${PAD_T-2}" text-anchor="middle" font-size="9" fill="var(--warning)">${xThreshold}</text>` : ''}
+      ${thresholdY != null ? `<line x1="${PAD_L}" y1="${thresholdY}" x2="${W-PAD_R}" y2="${thresholdY}" stroke="var(--warning)" stroke-width="1.2" stroke-dasharray="5,4"/>
+        <text x="${W-PAD_R+2}" y="${thresholdY+3}" text-anchor="start" font-size="9" fill="var(--warning)">${yThreshold}</text>` : ''}
+      <!-- Подписи осей -->
+      <text x="${PAD_L + plotW/2}" y="${H-4}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text-primary)">${esc(xLabel)}</text>
+      <text x="14" y="${PAD_T + plotH/2}" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text-primary)" transform="rotate(-90,14,${PAD_T + plotH/2})">${esc(yLabel)}</text>
+      <!-- Точки -->
       ${points.map(p => {
-        const r = 4 + 8 * Math.sqrt((p.calls_total || p.base_hours || 1) / sizeMax);
+        const r = 4 + 7 * Math.sqrt((p.calls_total || p.base_hours || 1) / sizeMax);
         const color = groupColors[p.group_name || '—'];
-        return `<circle cx="${sx(p[xKey])}" cy="${sy(p[yKey])}" r="${r.toFixed(1)}" fill="${color}" opacity="0.65" stroke="${color}" stroke-width="1.5">
-          <title>${esc(p.full_name)} (${esc(p.group_name||'—')})\n${xLabel}: ${p[xKey]}\n${yLabel}: ${p[yKey]}</title>
-        </circle>`;
+        const cx = sx(p[xKey]), cy = sy(p[yKey]);
+        const xv = typeof p[xKey] === 'number' ? (p[xKey] % 1 === 0 ? p[xKey] : p[xKey].toFixed(1)) : p[xKey];
+        const yv = typeof p[yKey] === 'number' ? (p[yKey] % 1 === 0 ? p[yKey] : p[yKey].toFixed(1)) : p[yKey];
+        return `<circle cx="${cx}" cy="${cy}" r="${r.toFixed(1)}" fill="${color}" opacity="0.7" stroke="${color}" stroke-width="1.5">
+            <title>${esc(p.full_name)} (${esc(p.group_name||'—')})\n${xLabel}: ${p[xKey]}\n${yLabel}: ${p[yKey]}</title>
+          </circle>
+          <text x="${cx}" y="${cy - r - 4}" text-anchor="middle" font-size="9" fill="var(--text-secondary)" font-weight="600">${yv}</text>`;
       }).join('')}
     </svg>
     <div class="an-legend">
