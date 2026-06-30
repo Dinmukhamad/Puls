@@ -93,7 +93,7 @@ def _get_rows(
 
     try:
         result = calculate_period_report(
-            _LAST_UPLOAD["monthly"], _LAST_UPLOAD["report"],
+            monthly_bytes, report_bytes,
             start_date, end_date, site_operator_names=site_names,
         )
     except ValueError as e:
