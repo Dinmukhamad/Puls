@@ -3328,3 +3328,807 @@ function renderPeriodReport() {
 }
 
 window.renderPeriodReport = renderPeriodReport;
+
+
+/* ══════════════════════════════════════
+   VIEW: АНАЛИТИКА
+══════════════════════════════════════ */
+let _analyticsState = {
+  startDate: null,
+  endDate: null,
+  groupId: '',
+  operatorQuery: '',
+  participationStatus: 'all',
+  onlyWithData: false,
+  groups: [],
+};
+
+function analyticsApiUrl(path, params) {
+  const qs = new URLSearchParams(params).toString();
+  return api._base() + '/api/analytics/' + path + (qs ? '?' + qs : '');
+}
+
+async function analyticsFetch(path, params) {
+  const res = await fetch(analyticsApiUrl(path, params), { credentials: 'include' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки данных');
+  return data;
+}
+
+function fmtA(v, decimals = 2, suffix = '') {
+  if (v === null || v === undefined || (typeof v === 'number' && isNaN(v))) return '—';
+  return Number(v).toFixed(decimals) + suffix;
+}
+
+function qualityColor(band) {
+  return { green: 'var(--success)', yellow: '#D97706', orange: '#EA580C', red: 'var(--danger)' }[band] || 'var(--text-muted)';
+}
+
+function riskBadge(status) {
+  const map = {
+    stable: { label: 'Стабильно', color: 'var(--success)', bg: 'var(--success-soft)' },
+    watch: { label: 'Контроль', color: 'var(--warning)', bg: 'var(--warning-soft)' },
+    critical: { label: 'Критично', color: 'var(--danger)', bg: 'var(--danger-soft)' },
+    no_data: { label: 'Нет данных', color: 'var(--text-muted)', bg: 'var(--bg-muted)' },
+  };
+  const r = map[status] || map.no_data;
+  return `<span class="risk-badge" style="color:${r.color};background:${r.bg}">${r.label}</span>`;
+}
+
+async function renderAnalytics() {
+  const el = document.getElementById('view-analytics');
+  if (!el) return;
+
+  // Default period: last 7 days
+  if (!_analyticsState.startDate) {
+    const today = new Date();
+    const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 6);
+    _analyticsState.startDate = weekAgo.toISOString().slice(0, 10);
+    _analyticsState.endDate = today.toISOString().slice(0, 10);
+  }
+
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Аналитика</div><h2 class="section-title">Управленческая аналитика</h2></div>
+    </div>
+    <div class="an-filters-card">
+      <div class="an-filters-row">
+        <div class="form-group">
+          <label class="form-label">Период с</label>
+          <input id="an-start" type="date" class="form-input" value="${_analyticsState.startDate}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">по</label>
+          <input id="an-end" type="date" class="form-input" value="${_analyticsState.endDate}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Группа</label>
+          <select id="an-group" class="form-select"><option value="">Все группы</option></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Оператор</label>
+          <input id="an-operator" type="text" class="form-input" placeholder="Поиск по ФИО" value="${esc(_analyticsState.operatorQuery)}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Статус участия</label>
+          <select id="an-participation" class="form-select">
+            <option value="all">Все</option>
+            <option value="participating">Участвует</option>
+            <option value="not_participating">Не участвует</option>
+          </select>
+        </div>
+        <label class="an-checkbox-label">
+          <input type="checkbox" id="an-only-data" ${_analyticsState.onlyWithData ? 'checked' : ''}>
+          Только с данными
+        </label>
+        <button class="btn-primary" id="an-apply-btn">Применить</button>
+      </div>
+    </div>
+    <div id="an-content"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка аналитики…</p></div></div>
+  `;
+
+  // Load groups for filter
+  try {
+    const gdata = await analyticsFetch('groups-list', {});
+    _analyticsState.groups = gdata.items || [];
+    const sel = el.querySelector('#an-group');
+    sel.innerHTML = '<option value="">Все группы</option>' +
+      _analyticsState.groups.map(g => `<option value="${g.id}" ${String(g.id)===_analyticsState.groupId?'selected':''}>${esc(g.name)}</option>`).join('');
+  } catch(e) { /* groups list optional */ }
+
+  el.querySelector('#an-participation').value = _analyticsState.participationStatus;
+
+  el.querySelector('#an-apply-btn').addEventListener('click', () => {
+    _analyticsState.startDate = el.querySelector('#an-start').value;
+    _analyticsState.endDate = el.querySelector('#an-end').value;
+    _analyticsState.groupId = el.querySelector('#an-group').value;
+    _analyticsState.operatorQuery = el.querySelector('#an-operator').value;
+    _analyticsState.participationStatus = el.querySelector('#an-participation').value;
+    _analyticsState.onlyWithData = el.querySelector('#an-only-data').checked;
+    loadAnalyticsContent();
+  });
+
+  await loadAnalyticsContent();
+}
+
+async function loadAnalyticsContent() {
+  const el = document.getElementById('view-analytics');
+  const content = el?.querySelector('#an-content');
+  if (!content) return;
+
+  const s = _analyticsState;
+  const baseParams = { start_date: s.startDate, end_date: s.endDate };
+  const groupParam = s.groupId ? { group_id: s.groupId } : {};
+  const opParams = { ...baseParams, ...groupParam };
+  if (s.operatorQuery) opParams.operator_query = s.operatorQuery;
+  if (s.participationStatus !== 'all') opParams.participation_status = s.participationStatus;
+  if (s.onlyWithData) opParams.only_with_data = 'true';
+
+  content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем показатели…</p></div>';
+
+  try {
+    const [summary, dynamics, opsTable, groupsCmp, topAttn, penalties, breakdown, riskPyramid, coverage, loadEff, qVsP] = await Promise.all([
+      analyticsFetch('summary', opParams),
+      analyticsFetch('daily-dynamics', { ...baseParams, ...groupParam, metric: 'calls' }),
+      analyticsFetch('operators', opParams),
+      analyticsFetch('groups-comparison', baseParams),
+      analyticsFetch('top-and-attention', { ...baseParams, ...groupParam }),
+      analyticsFetch('penalties', { ...baseParams, ...groupParam }),
+      analyticsFetch('points-breakdown', opParams),
+      analyticsFetch('risk-pyramid', { ...baseParams, ...groupParam }),
+      analyticsFetch('quality-coverage', { ...baseParams, ...groupParam }),
+      analyticsFetch('load-vs-efficiency', { ...baseParams, ...groupParam }),
+      analyticsFetch('quality-vs-penalties', { ...baseParams, ...groupParam }),
+    ]);
+
+    content.innerHTML =
+      renderKpiBlock(summary) +
+      renderDailyDynamicsBlock(dynamics) +
+      renderOperatorsTableBlock(opsTable) +
+      renderGroupsComparisonBlock(groupsCmp) +
+      renderQualityKvzMatrixBlock() +
+      renderTopAttentionBlock(topAttn) +
+      renderPenaltiesBlock(penalties) +
+      renderPointsBreakdownBlock(breakdown) +
+      renderHeatmapBlock() +
+      renderQualityVsPenaltiesBlock(qVsP) +
+      renderRiskPyramidBlock(riskPyramid) +
+      renderQualityCoverageBlock(coverage) +
+      renderLoadEfficiencyBlock(loadEff) +
+      renderFutureKpiBlock() +
+      renderAnalyticsWarningsBlock(summary.warnings);
+
+    bindAnalyticsInteractions(opParams, baseParams, groupParam);
+
+  } catch(e) {
+    content.innerHTML = `<div class="an-card"><div class="status-line status-error">Не удалось загрузить аналитику: ${esc(e.message)}</div></div>`;
+  }
+}
+
+/* ── Block: KPI cards ───────────────────────────────────────── */
+function renderKpiBlock(summary) {
+  const k = summary.kpi || {};
+  const cards = [
+    { label: 'Операторов в расчёте', val: k.operators_count, dec: 0 },
+    { label: 'Всего звонков', val: k.total_calls, dec: 0 },
+    { label: 'Среднее качество', val: k.avg_quality, dec: 2 },
+    { label: 'Средний КВЗ', val: k.avg_kvz, dec: 2 },
+    { label: 'Средняя эффективность', val: k.avg_efficiency, dec: 2, suf: '%' },
+    { label: 'Штрафы, мин', val: k.penalty_minutes_total, dec: 1 },
+    { label: 'Итог часов', val: k.total_hours, dec: 1 },
+    { label: 'База часов', val: k.base_hours_total, dec: 1 },
+    { label: 'Оценённых звонков', val: k.quality_calls_count, dec: 0 },
+    { label: 'Операторов без оценок', val: k.operators_no_quality, dec: 0 },
+  ];
+  return `<div class="an-card">
+    <div class="an-card-head">Главные показатели</div>
+    <div class="an-kpi-grid">
+      ${cards.map(c => `
+        <div class="an-kpi-cell">
+          <div class="an-kpi-val">${fmtA(c.val, c.dec, c.suf||'')}</div>
+          <div class="an-kpi-label">${esc(c.label)}</div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+/* ── Block: Daily dynamics chart ───────────────────────────────*/
+function renderDailyDynamicsBlock(dynamics) {
+  const items = dynamics.items || [];
+  return `<div class="an-card">
+    <div class="an-card-head-row">
+      <span>Динамика по дням</span>
+      <div class="metric-tabs" id="an-dyn-tabs">
+        <button class="metric-tab active" data-metric="calls">Звонки</button>
+        <button class="metric-tab" data-metric="kvz">КВЗ</button>
+        <button class="metric-tab" data-metric="operators">Операторы</button>
+      </div>
+    </div>
+    <div id="an-dyn-chart">${renderDynChart(items, 'calls')}</div>
+  </div>`;
+}
+
+function renderDynChart(items, metric) {
+  if (!items.length) return '<div class="empty-line">Нет данных за период</div>';
+  const field = metric === 'operators' ? 'operators_on_line' : metric;
+  const vals = items.map(i => Number(i[field]) || 0);
+  const maxV = Math.max(...vals, 1);
+  return `<div class="an-bar-chart">
+    ${items.map((it, i) => {
+      const v = vals[i];
+      const pct = Math.round((v / maxV) * 100);
+      const label = it[field] == null ? '—' : (metric === 'kvz' ? v.toFixed(2) : Math.round(v));
+      return `<div class="an-bar-row">
+        <div class="an-bar-date">${esc(it.date.slice(5))}</div>
+        <div class="an-bar-track"><div class="an-bar-fill" style="width:${pct}%"></div></div>
+        <div class="an-bar-val">${label}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+/* ── Block: Operators table ────────────────────────────────────*/
+function renderOperatorsTableBlock(opsTable) {
+  const items = opsTable.items || [];
+  return `<div class="an-card">
+    <div class="an-card-head-row">
+      <span>Таблица эффективности операторов</span>
+      <button class="btn-outline btn-sm" id="an-export-ops-btn">Экспорт CSV</button>
+    </div>
+    <div id="an-ops-table-wrap">${renderOpsTable(items, 'final_points', 'desc')}</div>
+  </div>`;
+}
+
+function renderOpsTable(items, sortKey, sortDir) {
+  if (!items.length) return '<div class="empty-line">Нет операторов, удовлетворяющих фильтрам</div>';
+  const sorted = [...items].sort((a, b) => {
+    const av = a[sortKey] ?? -Infinity, bv = b[sortKey] ?? -Infinity;
+    return sortDir === 'desc' ? bv - av : av - bv;
+  });
+  const arrow = dir => dir === 'desc' ? ' ↓' : ' ↑';
+  const sortAttr = k => k === sortKey ? arrow(sortDir) : '';
+
+  return `<div class="table-wrap"><table class="data-table">
+    <thead><tr>
+      <th>#</th><th>Оператор</th><th>Группа</th>
+      <th class="num sortable" data-sort="calls_total">Звонки${sortAttr('calls_total')}</th>
+      <th class="num">Итог ч.</th><th class="num">База ч.</th>
+      <th class="num sortable" data-sort="kvz">КВЗ${sortAttr('kvz')}</th>
+      <th class="num sortable" data-sort="quality_avg">Качество${sortAttr('quality_avg')}</th>
+      <th class="num">Оцен. зв.</th>
+      <th class="num sortable" data-sort="efficiency_percent">Эфф.%${sortAttr('efficiency_percent')}</th>
+      <th class="num sortable" data-sort="penalty_minutes">Штраф мин${sortAttr('penalty_minutes')}</th>
+      <th class="num sortable" data-sort="final_points">Итог${sortAttr('final_points')}</th>
+      <th>Риск</th>
+    </tr></thead>
+    <tbody>
+      ${sorted.map((o, i) => `
+        <tr class="${i<3?'an-row-top3':''}">
+          <td>${i+1}</td>
+          <td class="name-cell">${esc(o.full_name)}</td>
+          <td>${esc(o.group_name||'—')}</td>
+          <td class="num">${fmtA(o.calls_total,0)}</td>
+          <td class="num">${fmtA(o.total_hours,1)}</td>
+          <td class="num">${fmtA(o.base_hours,1)}</td>
+          <td class="num">${fmtA(o.kvz)}</td>
+          <td class="num" style="${o.quality_avg!=null?'color:'+qualityColor(o.quality_band)+';font-weight:600':''}">${o.quality_avg!=null?fmtA(o.quality_avg):'нет оценок'}</td>
+          <td class="num">${o.quality_calls_count}</td>
+          <td class="num">${fmtA(o.efficiency_percent,2,'%')}</td>
+          <td class="num" style="${o.penalty_minutes>0?'color:var(--danger)':''}">${fmtA(o.penalty_minutes,1)}</td>
+          <td class="num"><b>${fmtA(o.final_points)}</b></td>
+          <td>${riskBadge(o.risk_status)}</td>
+        </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+/* ── Block: Groups comparison ───────────────────────────────────*/
+function renderGroupsComparisonBlock(groupsCmp) {
+  const items = groupsCmp.items || [];
+  if (!items.length) return `<div class="an-card"><div class="an-card-head">Сравнение групп</div><div class="empty-line">Нет данных</div></div>`;
+  const maxPts = Math.max(...items.map(g => g.final_points_sum || 0), 1);
+  return `<div class="an-card">
+    <div class="an-card-head">Сравнение групп</div>
+    <div class="an-bar-chart" style="margin-bottom:16px">
+      ${items.map(g => `
+        <div class="an-bar-row">
+          <div class="an-bar-date" style="width:120px">${esc(g.group_name)}</div>
+          <div class="an-bar-track"><div class="an-bar-fill" style="width:${Math.round((g.final_points_sum/maxPts)*100)}%"></div></div>
+          <div class="an-bar-val">${fmtA(g.final_points_sum,0)}</div>
+        </div>`).join('')}
+    </div>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr>
+        <th>Группа</th><th class="num">Операторов</th><th class="num">Звонки</th>
+        <th class="num">Качество</th><th class="num">КВЗ</th><th class="num">Эфф.%</th>
+        <th class="num">Штраф мин</th><th class="num">Без оценок</th><th class="num">В риске</th>
+      </tr></thead>
+      <tbody>
+        ${items.map(g => `<tr>
+          <td class="name-cell">${esc(g.group_name)}</td>
+          <td class="num">${g.operators_count}</td>
+          <td class="num">${fmtA(g.total_calls,0)}</td>
+          <td class="num">${fmtA(g.avg_quality)}</td>
+          <td class="num">${fmtA(g.avg_kvz)}</td>
+          <td class="num">${fmtA(g.avg_efficiency,2,'%')}</td>
+          <td class="num">${fmtA(g.penalty_minutes,1)}</td>
+          <td class="num">${g.operators_no_quality}</td>
+          <td class="num" style="${g.operators_in_risk>0?'color:var(--warning)':''}">${g.operators_in_risk}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+/* ── Block: Quality x KVZ scatter matrix ────────────────────────*/
+let _qkMatrixData = null;
+function renderQualityKvzMatrixBlock() {
+  return `<div class="an-card">
+    <div class="an-card-head">Матрица «Качество × КВЗ»</div>
+    <div id="an-qk-matrix"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+  </div>`;
+}
+
+function drawScatter(containerId, points, xKey, yKey, xLabel, yLabel, xThreshold, yThreshold) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!points.length) { el.innerHTML = '<div class="empty-line">Нет данных для построения графика</div>'; return; }
+
+  const W = 600, H = 360, PAD = 40;
+  const xVals = points.map(p => p[xKey]);
+  const yVals = points.map(p => p[yKey]);
+  const xMax = Math.max(...xVals, xThreshold||0) * 1.1 || 1;
+  const yMax = Math.max(...yVals, yThreshold||0) * 1.1 || 1;
+  const xMin = 0, yMin = 0;
+
+  const sizeMax = Math.max(...points.map(p => p.calls_total || p.base_hours || 1), 1);
+
+  const sx = x => PAD + (x - xMin) / (xMax - xMin) * (W - 2*PAD);
+  const sy = y => H - PAD - (y - yMin) / (yMax - yMin) * (H - 2*PAD);
+
+  const groupColors = {};
+  const palette = ['#0284C7','#16A34A','#D97706','#9333EA','#DC2626','#0891B2'];
+  let colorIdx = 0;
+  points.forEach(p => {
+    const g = p.group_name || '—';
+    if (!(g in groupColors)) groupColors[g] = palette[colorIdx++ % palette.length];
+  });
+
+  const thresholdX = xThreshold != null ? sx(xThreshold) : null;
+  const thresholdY = yThreshold != null ? sy(yThreshold) : null;
+
+  el.innerHTML = `
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;max-height:420px" id="${containerId}-svg">
+      <line x1="${PAD}" y1="${H-PAD}" x2="${W-PAD}" y2="${H-PAD}" stroke="var(--border-default)" stroke-width="1"/>
+      <line x1="${PAD}" y1="${PAD}" x2="${PAD}" y2="${H-PAD}" stroke="var(--border-default)" stroke-width="1"/>
+      ${thresholdX != null ? `<line x1="${thresholdX}" y1="${PAD}" x2="${thresholdX}" y2="${H-PAD}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="4,4"/>` : ''}
+      ${thresholdY != null ? `<line x1="${PAD}" y1="${thresholdY}" x2="${W-PAD}" y2="${thresholdY}" stroke="var(--border-strong)" stroke-width="1" stroke-dasharray="4,4"/>` : ''}
+      <text x="${W/2}" y="${H-8}" text-anchor="middle" font-size="11" fill="var(--text-secondary)" font-family="Inter">${esc(xLabel)}</text>
+      <text x="12" y="${H/2}" text-anchor="middle" font-size="11" fill="var(--text-secondary)" font-family="Inter" transform="rotate(-90,12,${H/2})">${esc(yLabel)}</text>
+      ${points.map(p => {
+        const r = 4 + 8 * Math.sqrt((p.calls_total || p.base_hours || 1) / sizeMax);
+        const color = groupColors[p.group_name || '—'];
+        return `<circle cx="${sx(p[xKey])}" cy="${sy(p[yKey])}" r="${r.toFixed(1)}" fill="${color}" opacity="0.65" stroke="${color}" stroke-width="1.5">
+          <title>${esc(p.full_name)} (${esc(p.group_name||'—')})\n${xLabel}: ${p[xKey]}\n${yLabel}: ${p[yKey]}</title>
+        </circle>`;
+      }).join('')}
+    </svg>
+    <div class="an-legend">
+      ${Object.entries(groupColors).map(([g,c]) => `<span class="an-legend-item"><span class="an-legend-dot" style="background:${c}"></span>${esc(g)}</span>`).join('')}
+    </div>`;
+}
+
+/* ── Block: Top / Attention ─────────────────────────────────────*/
+function renderTopAttentionBlock(topAttn) {
+  function topList(title, items, suffix='') {
+    if (!items || !items.length) return `<div class="an-top-col"><div class="an-top-title">${esc(title)}</div><div class="empty-line">Нет данных</div></div>`;
+    return `<div class="an-top-col">
+      <div class="an-top-title">${esc(title)}</div>
+      ${items.map((it,i) => `<div class="an-top-row">
+        <span class="an-top-rank">${i+1}</span>
+        <span class="an-top-name">${esc(it.full_name)}</span>
+        <span class="an-top-val">${fmtA(it.value)}${suffix}</span>
+      </div>`).join('')}
+    </div>`;
+  }
+
+  const attn = topAttn.attention_zone || [];
+
+  return `<div class="an-card">
+    <div class="an-card-head">Топ операторов</div>
+    <div class="an-top-grid">
+      ${topList('По итоговым баллам', topAttn.top_final_points)}
+      ${topList('По качеству', topAttn.top_quality)}
+      ${topList('По КВЗ', topAttn.top_kvz)}
+      ${topList('По эффективности', topAttn.top_efficiency, '%')}
+    </div>
+  </div>
+  <div class="an-card">
+    <div class="an-card-head" style="color:var(--warning)">Зона внимания (${attn.length})</div>
+    ${attn.length ? `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Оператор</th><th>Группа</th><th>Причина</th></tr></thead>
+      <tbody>
+        ${attn.map(a => `<tr>
+          <td class="name-cell">${esc(a.full_name)}</td>
+          <td>${esc(a.group_name||'—')}</td>
+          <td style="color:var(--warning)">${esc(a.reason)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>` : '<div class="empty-line">Операторов в зоне внимания нет</div>'}
+  </div>`;
+}
+
+/* ── Block: Penalties analytics ─────────────────────────────────*/
+function renderPenaltiesBlock(penalties) {
+  const ops = penalties.operators || [];
+  const byReason = penalties.by_reason || [];
+  const maxMin = Math.max(...byReason.map(r=>r.minutes), 1);
+  return `<div class="an-card">
+    <div class="an-card-head">Аналитика штрафов</div>
+    <div class="an-kpi-grid" style="margin-bottom:16px">
+      <div class="an-kpi-cell"><div class="an-kpi-val">${fmtA(penalties.total_penalty_minutes,1)}</div><div class="an-kpi-label">Всего штрафов, мин</div></div>
+      <div class="an-kpi-cell"><div class="an-kpi-val">${penalties.operators_with_penalty_count}</div><div class="an-kpi-label">Операторов со штрафами</div></div>
+      <div class="an-kpi-cell"><div class="an-kpi-val">${fmtA(penalties.avg_penalty_per_operator,1)}</div><div class="an-kpi-label">Средний штраф/оператор</div></div>
+      <div class="an-kpi-cell"><div class="an-kpi-val" style="color:var(--danger)">${fmtA(penalties.total_points_lost,1)}</div><div class="an-kpi-label">Потеря баллов</div></div>
+    </div>
+    ${byReason.length ? `<div class="an-bar-chart" style="margin-bottom:16px">
+      ${byReason.map(r => `<div class="an-bar-row">
+        <div class="an-bar-date" style="width:200px">${esc(r.reason)}</div>
+        <div class="an-bar-track"><div class="an-bar-fill" style="width:${Math.round((r.minutes/maxMin)*100)}%;background:var(--danger)"></div></div>
+        <div class="an-bar-val">${fmtA(r.minutes,1)} мин</div>
+      </div>`).join('')}
+    </div>` : ''}
+    ${ops.length ? `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Оператор</th><th>Группа</th><th class="num">Сумма</th><th class="num">Минуты</th><th class="num">Потеря баллов</th></tr></thead>
+      <tbody>${ops.map(o => `<tr>
+        <td class="name-cell">${esc(o.full_name)}</td><td>${esc(o.group_name||'—')}</td>
+        <td class="num">${fmtA(o.penalty_sum,0)}</td>
+        <td class="num" style="color:var(--danger)">${fmtA(o.penalty_minutes,1)}</td>
+        <td class="num" style="color:var(--danger)">-${fmtA(o.penalty_points,1)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty-line">Штрафов за период нет</div>'}
+  </div>`;
+}
+
+/* ── Block: Points breakdown (waterfall-style) ───────────────────*/
+function renderPointsBreakdownBlock(breakdown) {
+  const items = (breakdown.items || []).slice(0, 10);
+  return `<div class="an-card">
+    <div class="an-card-head">Вклад показателей в итоговый балл (топ-10)</div>
+    ${items.length ? items.map(o => renderBreakdownRow(o)).join('') : '<div class="empty-line">Нет данных</div>'}
+  </div>`;
+}
+
+function renderBreakdownRow(o) {
+  const parts = [
+    { label: 'Качество', val: o.quality_contribution, color: '#0284C7' },
+    { label: 'КВЗ', val: o.kvz_contribution, color: '#16A34A' },
+    { label: 'Часы', val: o.hours_contribution, color: '#9333EA' },
+    { label: 'Эфф.', val: o.efficiency_contribution, color: '#D97706' },
+    { label: 'Штрафы', val: o.penalty_contribution, color: '#DC2626' },
+  ];
+  const maxAbs = Math.max(...parts.map(p => Math.abs(p.val)), 1);
+  return `<div class="an-breakdown-row">
+    <div class="an-breakdown-name">${esc(o.full_name)} <span style="color:var(--text-muted);font-weight:400">(${esc(o.group_name||'—')})</span></div>
+    <div class="an-breakdown-bars">
+      ${parts.map(p => `<div class="an-bd-seg" title="${p.label}: ${fmtA(p.val)}">
+        <span class="an-bd-label">${p.label}</span>
+        <div class="an-bd-track"><div class="an-bd-fill" style="width:${Math.min(100,Math.abs(p.val)/maxAbs*100)}%;background:${p.color}"></div></div>
+        <span class="an-bd-val" style="${p.val<0?'color:var(--danger)':''}">${p.val>=0?'+':''}${fmtA(p.val,1)}</span>
+      </div>`).join('')}
+    </div>
+    <div class="an-breakdown-total">Итог: <b>${fmtA(o.final_points)}</b></div>
+  </div>`;
+}
+
+/* ── Block: Heatmap by day ───────────────────────────────────────*/
+function renderHeatmapBlock() {
+  return `<div class="an-card">
+    <div class="an-card-head-row">
+      <span>Тепловая карта по дням</span>
+      <div class="metric-tabs" id="an-heatmap-tabs">
+        <button class="metric-tab active" data-metric="quality">Качество</button>
+        <button class="metric-tab" data-metric="calls">Звонки</button>
+        <button class="metric-tab" data-metric="kvz">КВЗ</button>
+        <button class="metric-tab" data-metric="efficiency">Эфф.</button>
+        <button class="metric-tab" data-metric="penalty">Штрафы</button>
+      </div>
+    </div>
+    <div id="an-heatmap-body"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+  </div>`;
+}
+
+function heatColor(metric, v) {
+  if (v === null || v === undefined) return 'var(--bg-muted)';
+  if (metric === 'penalty') {
+    if (v === 0) return '#16A34A';
+    if (v <= 5) return '#FACC15';
+    if (v <= 20) return '#EA580C';
+    return '#DC2626';
+  }
+  // quality / efficiency / kvz / calls — higher is better, use 0-100 scale heuristically
+  const scale = metric === 'calls' ? Math.min(100, v / 3) : v;
+  if (scale >= 90) return '#16A34A';
+  if (scale >= 80) return '#84CC16';
+  if (scale >= 70) return '#FACC15';
+  if (scale >= 50) return '#EA580C';
+  return '#DC2626';
+}
+
+function renderHeatmapTable(data, metric) {
+  const dates = data.dates || [];
+  const operators = data.operators || [];
+  if (!operators.length || !dates.length) return '<div class="empty-line">Нет данных для тепловой карты</div>';
+  return `<div class="an-heatmap-wrap"><table class="an-heatmap-table">
+    <thead><tr><th class="an-heatmap-name-col">Оператор</th>
+      ${dates.map(d => `<th>${esc(d.slice(5))}</th>`).join('')}
+    </tr></thead>
+    <tbody>
+      ${operators.map(op => `<tr>
+        <td class="an-heatmap-name-col name-cell">${esc(op.full_name)}</td>
+        ${dates.map(d => {
+          const v = op.values[d];
+          const bg = heatColor(metric, v);
+          const label = v == null ? '—' : (metric==='kvz'||metric==='penalty' ? v.toFixed(1) : Math.round(v));
+          return `<td class="an-heatmap-cell" style="background:${bg}" title="${esc(op.full_name)} ${d}: ${v==null?'нет данных':label}">${label}</td>`;
+        }).join('')}
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+/* ── Block: Quality vs Penalties control ──────────────────────────*/
+function renderQualityVsPenaltiesBlock(qVsP) {
+  const items = qVsP.items || [];
+  return `<div class="an-card">
+    <div class="an-card-head">Контроль «Качество против штрафов»</div>
+    ${items.length ? `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Оператор</th><th>Группа</th><th class="num">Качество</th><th class="num">Штрафы мин</th><th class="num">Потеря баллов</th><th>Комментарий</th></tr></thead>
+      <tbody>${items.map(o => `<tr>
+        <td class="name-cell">${esc(o.full_name)}</td>
+        <td>${esc(o.group_name||'—')}</td>
+        <td class="num">${o.quality_avg!=null?fmtA(o.quality_avg):'—'}</td>
+        <td class="num" style="${o.penalty_minutes>0?'color:var(--danger)':''}">${fmtA(o.penalty_minutes,1)}</td>
+        <td class="num" style="${o.points_lost<0?'color:var(--danger)':''}">${fmtA(o.points_lost,1)}</td>
+        <td style="font-size:12px;color:var(--text-secondary)">${esc(o.comment)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : '<div class="empty-line">Нет данных</div>'}
+  </div>`;
+}
+
+/* ── Block: Risk pyramid ─────────────────────────────────────────*/
+function renderRiskPyramidBlock(riskPyramid) {
+  const statuses = [
+    { key: 'stable', label: 'Стабильные', icon: '🟢' },
+    { key: 'watch', label: 'Нужен контроль', icon: '🟡' },
+    { key: 'critical', label: 'Критично', icon: '🔴' },
+    { key: 'no_data', label: 'Нет данных', icon: '⚪' },
+  ];
+  return `<div class="an-card">
+    <div class="an-card-head">Пирамида риска операторов</div>
+    <div class="an-risk-grid">
+      ${statuses.map(s => {
+        const bucket = riskPyramid[s.key] || { count: 0, operators: [] };
+        return `<div class="an-risk-cell" data-risk-status="${s.key}">
+          <div class="an-risk-icon">${s.icon}</div>
+          <div class="an-risk-count">${bucket.count}</div>
+          <div class="an-risk-label">${s.label}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div id="an-risk-detail"></div>
+  </div>`;
+}
+
+/* ── Block: Quality coverage dashboard ─────────────────────────────*/
+function renderQualityCoverageBlock(coverage) {
+  const byGroup = coverage.by_group || [];
+  const withoutQ = coverage.without_quality || [];
+  return `<div class="an-card">
+    <div class="an-card-head">Дашборд качества прослушки</div>
+    <div class="an-kpi-grid" style="margin-bottom:16px">
+      <div class="an-kpi-cell"><div class="an-kpi-val">${coverage.total_evaluated_calls}</div><div class="an-kpi-label">Оценённых звонков</div></div>
+      <div class="an-kpi-cell"><div class="an-kpi-val">${fmtA(coverage.avg_evaluations_per_operator,1)}</div><div class="an-kpi-label">Среднее оценок/оператора</div></div>
+      <div class="an-kpi-cell"><div class="an-kpi-val" style="color:var(--warning)">${coverage.operators_without_quality_count}</div><div class="an-kpi-label">Без оценок</div></div>
+      <div class="an-kpi-cell"><div class="an-kpi-val" style="font-size:14px">${esc(coverage.best_coverage_group||'—')}</div><div class="an-kpi-label">Лучшее покрытие</div></div>
+      <div class="an-kpi-cell"><div class="an-kpi-val" style="font-size:14px">${esc(coverage.worst_coverage_group||'—')}</div><div class="an-kpi-label">Худшее покрытие</div></div>
+    </div>
+    ${byGroup.length ? `<div class="table-wrap"><table class="data-table">
+      <thead><tr><th>Группа</th><th class="num">Операторов</th><th class="num">Оцен. звонков</th><th class="num">Среднее/опер.</th><th class="num">Без оценок</th><th class="num">Ср. качество</th></tr></thead>
+      <tbody>${byGroup.map(g => `<tr>
+        <td class="name-cell">${esc(g.group_name)}</td>
+        <td class="num">${g.operators_count}</td>
+        <td class="num">${g.evaluated_calls}</td>
+        <td class="num">${fmtA(g.avg_evaluations_per_operator,1)}</td>
+        <td class="num">${g.operators_without_quality}</td>
+        <td class="num">${fmtA(g.avg_quality)}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : ''}
+    ${withoutQ.length ? `<div style="margin-top:16px">
+      <div class="an-sub-title">Операторы без оценки качества (${withoutQ.length})</div>
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Оператор</th><th>Группа</th><th class="num">База ч.</th><th class="num">Звонки</th></tr></thead>
+        <tbody>${withoutQ.map(o => `<tr>
+          <td class="name-cell">${esc(o.full_name)}</td><td>${esc(o.group_name||'—')}</td>
+          <td class="num">${fmtA(o.base_hours,1)}</td><td class="num">${fmtA(o.calls_total,0)}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </div>` : ''}
+  </div>`;
+}
+
+/* ── Block: Load vs Efficiency scatter ─────────────────────────────*/
+function renderLoadEfficiencyBlock(loadEff) {
+  return `<div class="an-card">
+    <div class="an-card-head">Нагрузка и эффективность</div>
+    <div id="an-load-eff-matrix"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+  </div>`;
+}
+
+/* ── Block: Future KPI (placeholder) ───────────────────────────────*/
+function renderFutureKpiBlock() {
+  const future = ['AHT — среднее время обработки', 'ASA — среднее время ожидания ответа', 'Service Level',
+    'Abandonment Rate', 'FCR', 'CSAT / NPS', 'Occupancy'];
+  return `<div class="an-card">
+    <div class="an-card-head">Будущие метрики</div>
+    <div class="an-future-grid">
+      ${future.map(f => `<div class="an-future-item">
+        <div class="an-future-name">${esc(f)}</div>
+        <div class="an-future-status">Недоступно: нет данных из телефонии / CRM</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+/* ── Block: Warnings ────────────────────────────────────────────────*/
+function renderAnalyticsWarningsBlock(warnings) {
+  if (!warnings) return '';
+  const w = warnings;
+  const total = (w.site_only?.length||0)+(w.file_only?.length||0)+(w.no_quality?.length||0)+(w.no_base_hours?.length||0);
+  if (!total) return '';
+
+  function chipGroup(title, items) {
+    if (!items || !items.length) return '';
+    return `<div class="pr-warn-group">
+      <div class="pr-warn-group-title">${esc(title)} (${items.length})</div>
+      <div class="pr-warn-chips">${items.slice(0,30).map(n=>`<span class="pr-warn-chip">${esc(n)}</span>`).join('')}
+      ${items.length>30?`<span class="pr-warn-chip pr-warn-chip-more">+${items.length-30}</span>`:''}</div>
+    </div>`;
+  }
+
+  return `<div class="an-card">
+    <div class="an-card-head">Предупреждения по данным (${total})</div>
+    ${chipGroup('Есть на сайте, но отсутствуют в файле', w.site_only)}
+    ${chipGroup('Есть в файле, но отсутствуют на сайте', w.file_only)}
+    ${chipGroup('Нет оценок качества', w.no_quality)}
+    ${chipGroup('Нет базы часов', w.no_base_hours)}
+  </div>`;
+}
+
+/* ── Wiring: interactions for tabs, scatter plots, exports ──────────*/
+function bindAnalyticsInteractions(opParams, baseParams, groupParam) {
+  const el = document.getElementById('view-analytics');
+  if (!el) return;
+
+  // Daily dynamics metric tabs
+  el.querySelectorAll('#an-dyn-tabs .metric-tab').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      el.querySelectorAll('#an-dyn-tabs .metric-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const metric = btn.dataset.metric;
+      try {
+        const d = await analyticsFetch('daily-dynamics', { ...baseParams, ...groupParam, metric });
+        el.querySelector('#an-dyn-chart').innerHTML = renderDynChart(d.items || [], metric);
+      } catch(e) {}
+    });
+  });
+
+  // Operators table sorting
+  let curSortKey = 'final_points', curSortDir = 'desc';
+  let curOpsItems = [];
+  (async () => {
+    try {
+      const d = await analyticsFetch('operators', opParams);
+      curOpsItems = d.items || [];
+    } catch(e) {}
+  })();
+
+  function bindOpsSort() {
+    el.querySelectorAll('#an-ops-table-wrap .sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (curSortKey === key) curSortDir = curSortDir === 'desc' ? 'asc' : 'desc';
+        else { curSortKey = key; curSortDir = 'desc'; }
+        el.querySelector('#an-ops-table-wrap').innerHTML = renderOpsTable(curOpsItems, curSortKey, curSortDir);
+        bindOpsSort();
+      });
+    });
+  }
+  bindOpsSort();
+
+  // Export operators CSV
+  el.querySelector('#an-export-ops-btn')?.addEventListener('click', async () => {
+    try {
+      const d = curOpsItems.length ? curOpsItems : (await analyticsFetch('operators', opParams)).items;
+      const headers = ['ФИО','Группа','Звонки','Итог ч','База ч','КВЗ','Качество','Оцен.звонков','Эфф.%','Штраф мин','Итог','Риск'];
+      const rows = [headers.join(';')];
+      d.forEach(o => rows.push([o.full_name,o.group_name||'',o.calls_total,o.total_hours,o.base_hours,o.kvz,
+        o.quality_avg??'',o.quality_calls_count,o.efficiency_percent,o.penalty_minutes,o.final_points,o.risk_status].join(';')));
+      const blob = new Blob(['\ufeff'+rows.join('\n')], {type:'text/csv;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download='аналитика_операторы.csv'; a.click();
+      URL.revokeObjectURL(url);
+    } catch(e) { showToast('Ошибка экспорта: ' + e.message, 'error'); }
+  });
+
+  // Quality x KVZ matrix
+  (async () => {
+    try {
+      const d = await analyticsFetch('quality-kvz-matrix', { ...baseParams, ...groupParam });
+      drawScatter('an-qk-matrix', d.items || [], 'kvz', 'quality_avg', 'КВЗ', 'Качество',
+        d.thresholds?.kvz, d.thresholds?.quality);
+    } catch(e) {
+      const c = document.getElementById('an-qk-matrix');
+      if (c) c.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+    }
+  })();
+
+  // Load vs efficiency matrix
+  (async () => {
+    try {
+      const d = await analyticsFetch('load-vs-efficiency', { ...baseParams, ...groupParam });
+      drawScatter('an-load-eff-matrix', d.items || [], 'calls_total', 'efficiency_percent', 'Звонки', 'Эффективность %');
+    } catch(e) {
+      const c = document.getElementById('an-load-eff-matrix');
+      if (c) c.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+    }
+  })();
+
+  // Heatmap metric tabs
+  async function loadHeatmap(metric) {
+    const body = el.querySelector('#an-heatmap-body');
+    body.innerHTML = '<div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div>';
+    try {
+      const d = await analyticsFetch('heatmap', { ...baseParams, ...groupParam, metric });
+      body.innerHTML = renderHeatmapTable(d, metric);
+    } catch(e) {
+      body.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+    }
+  }
+  el.querySelectorAll('#an-heatmap-tabs .metric-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.querySelectorAll('#an-heatmap-tabs .metric-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadHeatmap(btn.dataset.metric);
+    });
+  });
+  loadHeatmap('quality');
+
+  // Risk pyramid — click to expand
+  el.querySelectorAll('.an-risk-cell').forEach(cell => {
+    cell.addEventListener('click', async () => {
+      const status = cell.dataset.riskStatus;
+      const detail = el.querySelector('#an-risk-detail');
+      try {
+        const d = await analyticsFetch('risk-pyramid', { ...baseParams, ...groupParam });
+        const bucket = d[status];
+        if (!bucket || !bucket.operators.length) {
+          detail.innerHTML = '<div class="empty-line">Операторов в этой категории нет</div>';
+          return;
+        }
+        detail.innerHTML = `<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Оператор</th><th>Группа</th><th class="num">Качество</th><th class="num">КВЗ</th><th class="num">Эфф.%</th><th class="num">Штраф мин</th></tr></thead>
+          <tbody>${bucket.operators.map(o => `<tr>
+            <td class="name-cell">${esc(o.full_name)}</td><td>${esc(o.group_name||'—')}</td>
+            <td class="num">${o.quality_avg!=null?fmtA(o.quality_avg):'—'}</td>
+            <td class="num">${o.kvz!=null?fmtA(o.kvz):'—'}</td>
+            <td class="num">${o.efficiency_percent!=null?fmtA(o.efficiency_percent):'—'}</td>
+            <td class="num">${fmtA(o.penalty_minutes,1)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>`;
+      } catch(e) { detail.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`; }
+    });
+  });
+}
+
+window.renderAnalytics = renderAnalytics;
