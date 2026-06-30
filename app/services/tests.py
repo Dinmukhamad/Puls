@@ -118,9 +118,9 @@ def can_start_attempt(db: Session, test: Test, operator: Operator) -> tuple[bool
     now = now_utc()
     if test.status != "open":
         return False, "Тест недоступен"
-    if test.opens_at and now < test.opens_at:
+    if test.opens_at and now < _naive(test.opens_at):
         return False, f"Тест откроется {test.opens_at.strftime('%d.%m.%Y в %H:%M')}"
-    if test.closes_at and now > test.closes_at:
+    if test.closes_at and now > _naive(test.closes_at):
         return False, "Срок прохождения истёк"
 
     existing_attempts = list(
