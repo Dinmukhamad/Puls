@@ -4602,6 +4602,7 @@ async function loadPointsTab(content) {
     renderPointsModeSwitcher() +
     `<div id="an-points-mode-content"></div>`;
 
+  bindPointsFormulaToggle(content);
   bindPointsModeSwitcher();
   renderPointsModeContent(_pointsViewMode);
 }
@@ -4707,16 +4708,25 @@ function renderPointsModeContent(mode) {
   if (mode === 'top10') box.innerHTML = renderPointsTop10(d.operators);
   else if (mode === 'all') box.innerHTML = renderPointsAllCards(d.operators);
   else if (mode === 'growth') box.innerHTML = renderPointsGrowthDecline(d.top_growth, d.top_decline);
-  else if (mode === 'table') box.innerHTML = renderPointsDetailTable(d.operators);
+  else if (mode === 'table') {
+    box.innerHTML = renderPointsDetailTable(d.operators);
+    bindPointsTableSort(d.operators);
+    box.querySelector('#an-points-export-btn')?.addEventListener('click', () => exportPointsCsv(d.operators));
+  }
 
-  // Re-bind row clicks for detail drawer
-  box.querySelectorAll('[data-points-operator]').forEach(elx => {
-    elx.addEventListener('click', () => {
-      const key = elx.dataset.pointsOperator;
-      const op = d.operators.find(o => String(o.operator_id) === key || o.full_name === key);
-      if (op) openOperatorPointsDrawer(op);
-    });
-  });
+  bindPointsRowClicks(d.operators);
+}
+
+function exportPointsCsv(operators) {
+  const headers = ['ФИО','Группа','Итог','Δ итог','Качество','Δ кач','КВЗ','Δ КВЗ','Часы','Δ часы','Эфф%','Δ эфф','Штраф баллы','Δ штраф','Статус'];
+  const rows = [headers.join(';')];
+  operators.forEach(o => rows.push([
+    o.full_name, o.group_name||'', o.final_points, o.delta_final_points??'',
+    o.quality??'', o.delta_quality??'', o.kvz??'', o.delta_kvz??'',
+    o.total_hours, o.delta_total_hours??'', o.efficiency??'', o.delta_efficiency??'',
+    o.penalty_points, o.delta_penalty_points??'', o.status
+  ].join(';')));
+  downloadCsv(rows, 'аналитика_баллы.csv');
 }
 
 /* Топ-10 bar chart */
