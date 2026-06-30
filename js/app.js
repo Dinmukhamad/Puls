@@ -4381,9 +4381,6 @@ async function loadMatrixTab(content) {
     renderQualityKvzMatrixBlock() +
     `<div class="an-card"><div class="an-card-head">Нагрузка и эффективность</div>
       <div id="an-load-eff-matrix"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
-    </div>` +
-    `<div class="an-card"><div class="an-card-head">Качество против штрафов</div>
-      <div id="an-qp-matrix"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
     </div>`;
 
   const base = analyticsBaseParams();
@@ -4395,11 +4392,6 @@ async function loadMatrixTab(content) {
   analyticsFetch('load-vs-efficiency', base).then(d => {
     drawScatter('an-load-eff-matrix', d.items || [], 'calls_total', 'efficiency_percent', 'Звонки', 'Эффективность %');
   }).catch(e => { const c=document.getElementById('an-load-eff-matrix'); if(c) c.innerHTML=`<div class="empty-line">${esc(e.message)}</div>`; });
-
-  analyticsFetch('quality-vs-penalties', base).then(d => {
-    const items = (d.items||[]).filter(o => o.quality_avg != null).map(o => ({...o, group_name: o.group_name}));
-    drawScatter('an-qp-matrix', items, 'penalty_minutes', 'quality_avg', 'Штрафы, мин', 'Качество');
-  }).catch(e => { const c=document.getElementById('an-qp-matrix'); if(c) c.innerHTML=`<div class="empty-line">${esc(e.message)}</div>`; });
 }
 
 /* ── Вкладка: Качество ──────────────────────────────────────────*/
