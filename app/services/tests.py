@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
