@@ -3401,6 +3401,11 @@ body.role-operator {
   margin-top: 0;
 }
 
+.coins-tab-body > .coins-embedded-view > .view-header .header-right,
+.coins-tab-body > .coins-embedded-view > .view-header > .btn-outline.btn-sm {
+  display: none;
+}
+
 .coins-kpi-grid {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   margin-bottom: 20px;
