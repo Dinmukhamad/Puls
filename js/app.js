@@ -3307,8 +3307,8 @@ function renderPeriodReport() {
       a.click(); URL.revokeObjectURL(url);
     });
 
-    // Save handler
-    el.querySelector('#pr-save-btn')?.addEventListener('click', () => {
+    // Save handler — открывает подтверждение сохранения (обе кнопки используют один обработчик)
+    function openSaveModal() {
       showModal(`
         <h3 class="modal-title">Сохранить расчёт</h3>
         <p style="font-size:13px;color:var(--text-secondary);margin-bottom:14px">
@@ -3347,7 +3347,9 @@ function renderPeriodReport() {
           errEl.className = 'status-line status-error';
         }
       });
-    });
+    }
+    el.querySelector('#pr-save-btn')?.addEventListener('click', openSaveModal);
+    el.querySelector('#pr-save-btn-top')?.addEventListener('click', openSaveModal);
   }
 }
 
