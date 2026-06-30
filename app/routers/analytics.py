@@ -190,6 +190,45 @@ def _aggregate_from_daily_metrics(
     return metrics_by_operator, warnings
 
 
+def get_data_availability_warning(db: Session, start_date: date, end_date: date) -> Optional[str]:
+    """
+    Лёгкая проверка покрытия дат (без полной агрегации метрик) — используется
+    эндпоинтом /summary, чтобы вернуть frontend понятное сообщение вида
+    "Данные доступны частично: с ... по ... . Нет данных за ..." (п.8 ТЗ).
+    """
+    covered_dates = set(
+        db.scalars(
+            select(OperatorDailyMetric.metric_date)
+            .where(OperatorDailyMetric.metric_date >= start_date, OperatorDailyMetric.metric_date <= end_date)
+            .distinct()
+        )
+    )
+    total_days = (end_date - start_date).days + 1
+
+    if not covered_dates:
+        available = _available_data_date_range(db)
+        if available:
+            return (
+                f"Нет данных за выбранный период. Данные доступны с {available[0].strftime('%d.%m.%Y')} "
+                f"по {available[1].strftime('%d.%m.%Y')}."
+            )
+        return "Нет загруженных данных. Загрузите Monthly Report и Report в разделе «Расчёт периода»."
+
+    if len(covered_dates) < total_days:
+        missing_count = total_days - len(covered_dates)
+        all_dates = {start_date + timedelta(days=i) for i in range(total_days)}
+        missing_dates = sorted(all_dates - covered_dates)
+        first_gap, last_gap = missing_dates[0], missing_dates[-1]
+        return (
+            f"Данные доступны частично: с {start_date.strftime('%d.%m.%Y')} по {end_date.strftime('%d.%m.%Y')}. "
+            f"Нет данных за {missing_count} из {total_days} дн. "
+            f"(например {first_gap.strftime('%d.%m.%Y')}"
+            + (f" — {last_gap.strftime('%d.%m.%Y')}" if last_gap != first_gap else "")
+            + ")."
+        )
+    return None
+
+
 def _save_period_report_from_metrics(
     db: Session,
     operator_id: int,
