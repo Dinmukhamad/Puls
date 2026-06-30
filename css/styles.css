@@ -3443,3 +3443,181 @@ body.role-operator {
   .coins-kpi-grid { grid-template-columns: 1fr; }
   .coins-action-row { flex-direction: column; align-items: stretch; }
 }
+
+/* ═══════════════════════════════════════════════════
+   ТЕСТЫ — оператор: карточки тестов
+═══════════════════════════════════════════════════ */
+.test-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+.test-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.test-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+.test-card-title { font: 700 14px 'Inter', sans-serif; color: var(--text-primary); }
+.test-card-desc { font-size: 12.5px; color: var(--text-secondary); line-height: 1.4; }
+.test-card-meta { display: flex; flex-direction: column; gap: 4px; }
+.test-card-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.test-card-row span:last-child { color: var(--text-secondary); font-weight: 500; }
+.test-card-actions { margin-top: auto; padding-top: 8px; }
+.test-card-disabled-note { font-size: 12px; color: var(--text-muted); padding: 8px 0; }
+.test-card-result { font-size: 13px; color: var(--text-primary); margin-bottom: 6px; }
+
+/* ── Прохождение теста ─────────────────────────────────────────── */
+.test-runner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.test-runner-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 18px;
+}
+.test-runner-title { font: 700 18px 'Inter', sans-serif; color: var(--text-primary); }
+.test-runner-timer {
+  font: 700 20px 'Inter', sans-serif;
+  color: var(--accent-primary);
+  background: var(--accent-secondary-soft);
+  padding: 6px 16px;
+  border-radius: 10px;
+}
+.test-timer-warning { color: var(--danger); background: var(--danger-soft); }
+.test-runner-progress { margin-bottom: 20px; }
+.test-runner-progress-bar {
+  height: 6px;
+  background: var(--bg-muted);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.test-runner-progress-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  transition: width .3s ease;
+}
+.test-runner-progress-label { font-size: 12px; color: var(--text-muted); }
+.test-runner-question {
+  background: var(--card-bg);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.test-runner-question-text { font: 600 15px 'Inter', sans-serif; color: var(--text-primary); margin-bottom: 16px; line-height: 1.5; }
+.test-runner-answers { display: flex; flex-direction: column; gap: 10px; }
+.test-runner-answer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border-default);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+  font-size: 13.5px;
+}
+.test-runner-answer-row:hover { border-color: var(--accent-primary); }
+.test-runner-answer-row.selected { border-color: var(--accent-primary); background: var(--accent-secondary-soft); }
+.test-runner-answer-row input { flex-shrink: 0; }
+.test-runner-nav { display: flex; align-items: center; gap: 10px; }
+
+/* ── Результат теста ──────────────────────────────────────────── */
+.test-result-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 720px;
+}
+.test-result-title { font: 700 18px 'Inter', sans-serif; color: var(--text-primary); margin-bottom: 16px; }
+.test-result-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.test-result-stat {
+  background: var(--bg-muted);
+  border-radius: 10px;
+  padding: 12px;
+  text-align: center;
+}
+.test-result-stat-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+.test-result-stat-value { font: 700 16px 'Inter', sans-serif; color: var(--text-primary); }
+.test-result-reward {
+  background: var(--success-soft);
+  color: var(--success);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.test-result-question {
+  border-top: 1px solid var(--border-soft);
+  padding: 12px 0;
+}
+.test-result-question-text { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
+.test-result-answer-row { font-size: 12.5px; padding: 4px 0; color: var(--text-secondary); }
+.test-result-answer-row.correct { color: var(--success); font-weight: 600; }
+.test-result-answer-row.incorrect { color: var(--danger); }
+
+@media (max-width: 700px) {
+  .test-result-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ═══════════════════════════════════════════════════
+   ТЕСТЫ — конструктор (staff)
+═══════════════════════════════════════════════════ */
+.test-builder-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+.rcard-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 700px) { .form-grid-2 { grid-template-columns: 1fr; } }
+
+.test-question-editor {
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.test-question-editor-head { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
+.test-question-editor-head input:first-child { flex: 1; }
+.test-answer-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.test-answer-option-row { display: flex; align-items: center; gap: 8px; }
+.test-answer-option-row input[type="text"], .test-answer-option-row .form-input { flex: 1; }
+.test-target-checklist {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 8px;
+}
+
