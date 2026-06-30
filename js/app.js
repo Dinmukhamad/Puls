@@ -303,25 +303,61 @@ async function bootApp() {
   navigateTo(start);
 }
 
+/**
+ * Загружает основные данные приложения (рейтинг, магазин, дашборд, операторы,
+ * история) через SWR-кеш. После F5 эти данные сначала читаются из
+ * sessionStorage (мгновенно — без ожидания сети), а свежая версия
+ * подгружается в фоне и тихо обновляет STATE + перерисовывает активный
+ * раздел, если данные реально изменились.
+ */
 async function loadData(role) {
+  const onDashboardUpdate = (fresh) => {
+    STATE.dashboard = fresh;
+    if (STATE.currentView === 'summary') renderSummary();
+  };
+  const onRatingUpdate = (fresh) => {
+    STATE.rating = Array.isArray(fresh) ? fresh : (fresh.items || []);
+    if (STATE.currentView === 'rating') renderRating();
+    if (STATE.currentView === 'cabinet') renderCabinet();
+  };
+  const onOperatorsUpdate = (fresh) => {
+    STATE.adminOperators = fresh;
+    if (STATE.currentView === 'operators') renderAdminOperators();
+  };
+  const onHistoryUpdate = (fresh) => {
+    STATE.history = fresh;
+    if (STATE.currentView === 'history') renderHistory();
+  };
+
   const tasks = [
-    api.getRating().catch(() => ({ items: [] })).then(r => STATE.rating = Array.isArray(r) ? r : (r.items || [])),
-    api.listShopItems().catch(() => []).then(s => STATE.shopItems = s),
+    swrFetch('rating:list', () => api.getRating().catch(() => ({ items: [] })), onRatingUpdate)
+      .then(r => STATE.rating = Array.isArray(r) ? r : (r.items || [])),
+    swrFetch('shop:items', () => api.listShopItems().catch(() => []))
+      .then(s => STATE.shopItems = s),
   ];
   if (role === 'operator') {
-    tasks.push(api.myWallet().catch(() => null).then(w => STATE.wallet = w));
+    tasks.push(api.myWallet().catch(() => null).then(w => STATE.wallet = w)); // личный баланс — всегда свежий, без кеша
     tasks.push(api.listPurchases().catch(() => []).then(p => STATE.purchases = p));
   }
   if (isAdmin(role)) {
-    tasks.push(api.getDashboard().catch(() => null).then(d => STATE.dashboard = d));
     tasks.push(
-      fetch(api._base() + '/api/dashboard/operators', { headers: { 'Content-Type': 'application/json' }, credentials: 'include' })
-        .then(r => r.ok ? r.json() : []).then(o => STATE.adminOperators = o).catch(() => [])
+      swrFetch('dashboard:main', () => api.getDashboard().catch(() => null), onDashboardUpdate)
+        .then(d => STATE.dashboard = d)
+    );
+    tasks.push(
+      swrFetch('dashboard:operators', () =>
+        fetch(api._base() + '/api/dashboard/operators', { headers: { 'Content-Type': 'application/json' }, credentials: 'include' })
+          .then(r => r.ok ? r.json() : []).catch(() => []),
+        onOperatorsUpdate
+      ).then(o => STATE.adminOperators = o)
     );
     tasks.push(api.listPurchases().catch(() => []).then(p => STATE.purchases = p));
     tasks.push(
-      fetch(api._base() + '/api/dashboard/history?limit=50', { headers: { 'Content-Type': 'application/json' }, credentials: 'include' })
-        .then(r => r.ok ? r.json() : []).then(h => STATE.history = h).catch(() => [])
+      swrFetch('dashboard:history', () =>
+        fetch(api._base() + '/api/dashboard/history?limit=50', { headers: { 'Content-Type': 'application/json' }, credentials: 'include' })
+          .then(r => r.ok ? r.json() : []).catch(() => []),
+        onHistoryUpdate
+      ).then(h => STATE.history = h)
     );
   }
   await Promise.all(tasks);
