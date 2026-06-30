@@ -349,8 +349,8 @@ async function bootApp() {
 
   // Restore last viewed section after F5 reload
   const restoredRoute = initialRouteForRole(role);
-  const adminViews = ['summary','operators','coins','groups','shop','rating','cabinet','period-report','analytics'];
-  const operatorViews = ['cabinet','rating','shop'];
+  const adminViews = ['summary','operators','coins','groups','shop','rating','cabinet','period-report','analytics','tests'];
+  const operatorViews = ['cabinet','rating','shop','tests'];
   const allowedViews = isAdmin(role) ? adminViews : operatorViews;
   const defaultView = isAdmin(role) ? 'summary' : 'cabinet';
   const start = allowedViews.includes(restoredRoute.view) ? restoredRoute.view : defaultView;
