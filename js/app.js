@@ -5216,7 +5216,7 @@ function raceCarRankClass(rank, isCurrentUser) {
 
 function renderRaceChart(items) {
   const maxPoints = Math.max(...items.map(i => i.points), 1);
-  const rawMax = maxPoints * 1.15;
+  const rawMax = maxPoints * 1.3;
   const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax || 1)));
   const niceMax = Math.ceil(rawMax / (magnitude / 2)) * (magnitude / 2) || 100;
   const ticks = [];
@@ -5236,7 +5236,7 @@ function renderRaceChart(items) {
   const carGap = 12;     // зазор между машинкой и верхом столбца
   const padTop = labelH + labelGap + carH + carGap + 10;
   const padBottom = 58;
-  const plotH = items.length <= 12 ? 252 : 236;
+  const plotH = items.length <= 12 ? 228 : 216;
   const chartH = plotH + padTop + padBottom;
   const usableH = plotH;
 
