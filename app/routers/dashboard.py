@@ -109,7 +109,7 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
         active_operators=active_ops,
         coins_earned_this_week=coins_this_week,
         pending_purchases_count=db.scalar(
-            select(func.count(ShopPurchase.id)).where(ShopPurchase.status == "pending")
+            select(func.count(ShopPurchase.id)).where(ShopPurchase.status.in_(["pending", "new"]))
         ) or 0,
         approved_purchases_count=db.scalar(
             select(func.count(ShopPurchase.id)).where(ShopPurchase.status == "approved")
