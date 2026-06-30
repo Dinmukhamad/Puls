@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -9,9 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
-from app.models.entities import Group, Operator, User
+from app.models.entities import Group, Operator, PeriodReport, User
 from app.services.analytics import (
-    build_analytics_rows,
+    OperatorAnalyticsRow,
+    classify_risk,
     compute_daily_dynamics,
     compute_groups_comparison,
     compute_heatmap,
@@ -27,22 +28,9 @@ from app.services.analytics import (
     compute_top_and_attention,
     filter_rows,
 )
-from app.services.period_reports import (
-    calculate_period_report,
-    normalize_name,
-    parse_monthly_report,
-    parse_report_file,
-)
+from app.services.period_reports import OperatorPeriodMetrics, normalize_name
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
-
-from app.models.entities import UploadedReportFile
-
-
-def _get_uploaded_bytes(db: Session, file_kind: str):
-    """Читает загруженный xlsx-файл из БД (та же таблица, что period_reports)."""
-    row = db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == file_kind))
-    return row.content if row else None
 
 
 def _require_analytics_access(current_user: User = Depends(get_current_user)) -> User:
@@ -74,6 +62,57 @@ def _build_site_map(operators: List[Operator]) -> dict:
     return out
 
 
+PERIOD_NOT_CALCULATED_MESSAGE = (
+    "Период ещё не рассчитан. Сначала выполните расчёт периода в разделе «Расчёт периода»."
+)
+
+
+def _metrics_from_period_report(pr: PeriodReport, full_name: str, name_key: str) -> OperatorPeriodMetrics:
+    """
+    Строит OperatorPeriodMetrics напрямую из уже сохранённой записи PeriodReport —
+    БЕЗ единого обращения к Excel. Это и есть основная оптимизация: вся
+    аналитика (кроме daily-dynamics/heatmap, которым нужна посуточная
+    разбивка, которой в агрегированном PeriodReport нет) больше не парсит
+    файлы и не вызывает calculate_period_report при каждом запросе.
+    """
+    m = OperatorPeriodMetrics(full_name=full_name, name_key=name_key)
+    m.quality_avg = pr.quality_avg
+    m.quality_calls_count = pr.quality_calls_count
+    m.total_hours = pr.total_hours
+    m.base_hours = pr.base_hours
+    m.tech_issue_hours = pr.tech_issue_hours
+    m.training_hours = pr.training_hours
+    m.offline_activity_hours = pr.offline_activity_hours
+    m.calls_total = pr.calls_total
+    m.kvz = pr.kvz
+    m.call_time_hours = pr.call_time_hours
+    m.efficiency_percent = pr.efficiency_percent
+    m.penalty_sum = pr.penalty_sum
+    m.penalty_minutes = pr.penalty_minutes
+    m.penalty_points = pr.penalty_points
+    m.final_points = pr.final_points
+    m.has_any_period_data = any([
+        m.quality_calls_count > 0,
+        m.total_hours > 0,
+        m.calls_total > 0,
+        m.base_hours > 0,
+        m.penalty_sum > 0,
+    ])
+    if m.quality_calls_count == 0:
+        m.warnings.append("Нет оценок качества за выбранный период")
+    if m.base_hours <= 0:
+        m.warnings.append("Нет базы часов за выбранный период")
+    return m
+
+
+def _period_is_calculated(db: Session, start_date: date, end_date: date) -> bool:
+    return db.scalar(
+        select(PeriodReport.id)
+        .where(PeriodReport.period_start == start_date, PeriodReport.period_end == end_date)
+        .limit(1)
+    ) is not None
+
+
 def _get_rows(
     db: Session,
     start_date: date,
@@ -82,27 +121,72 @@ def _get_rows(
     operator_query: Optional[str] = None,
     participation_status: Optional[str] = None,
     only_with_data: bool = False,
-):
-    monthly_bytes = _get_uploaded_bytes(db, "monthly")
-    report_bytes = _get_uploaded_bytes(db, "report")
-    if not monthly_bytes or not report_bytes:
-        raise HTTPException(status_code=400, detail="Сначала загрузите файлы Monthly Report и Report в разделе «Расчёт периода»")
-
-    site_ops = _site_operators(db)
-    site_names = [o.full_name for o in site_ops if o.full_name]
-    site_map = _build_site_map(site_ops)
-
-    try:
-        result = calculate_period_report(
-            monthly_bytes, report_bytes,
-            start_date, end_date, site_operator_names=site_names,
+) -> List[OperatorAnalyticsRow]:
+    """
+    Строит строки аналитики ИСКЛЮЧИТЕЛЬНО из сохранённых PeriodReport с
+    точным совпадением (period_start, period_end). Никакого автоматического
+    fallback на Excel-парсинг — если период не рассчитан, явная ошибка
+    с понятным сообщением (см. ТЗ: "Период ещё не рассчитан...").
+    """
+    reports = list(
+        db.scalars(
+            select(PeriodReport).where(
+                PeriodReport.period_start == start_date,
+                PeriodReport.period_end == end_date,
+            )
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    )
+    if not reports:
+        raise HTTPException(status_code=404, detail=PERIOD_NOT_CALCULATED_MESSAGE)
 
-    rows = build_analytics_rows(result.operators, site_map)
+    operator_ids = [r.operator_id for r in reports]
+    operators = {
+        o.id: o for o in db.scalars(select(Operator).where(Operator.id.in_(operator_ids)))
+    }
+
+    rows: List[OperatorAnalyticsRow] = []
+    for pr in reports:
+        operator = operators.get(pr.operator_id)
+        if not operator:
+            continue  # оператор был удалён после сохранения расчёта — пропускаем сиротские записи
+        name_key = normalize_name(operator.full_name)
+        metrics = _metrics_from_period_report(pr, operator.full_name, name_key)
+        rows.append(OperatorAnalyticsRow(
+            full_name=operator.full_name,
+            name_key=name_key,
+            operator_id=operator.id,
+            group_id=operator.group_id,
+            group_name=operator.group_name,
+            participation_status=operator.participation_status,
+            metrics=metrics,
+            risk_status=classify_risk(metrics),
+        ))
+
     rows = filter_rows(rows, group_id, operator_query, participation_status, only_with_data)
-    return rows, result, site_map
+    return rows
+
+
+@router.get("/available-periods")
+def get_available_periods(
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_analytics_access),
+) -> dict:
+    """
+    Список периодов, для которых уже выполнен и сохранён расчёт (есть хотя
+    бы одна запись PeriodReport). Frontend должен предлагать пользователю
+    выбирать период именно из этого списка, а не вводить произвольные даты.
+    """
+    rows = db.execute(
+        select(PeriodReport.period_start, PeriodReport.period_end)
+        .distinct()
+        .order_by(PeriodReport.period_end.desc())
+    ).all()
+    return {
+        "items": [
+            {"start_date": str(s), "end_date": str(e), "label": f"{s.strftime('%d.%m.%Y')} – {e.strftime('%d.%m.%Y')}"}
+            for s, e in rows
+        ]
+    }
 
 
 @router.get("/summary")
@@ -115,17 +199,11 @@ def get_summary(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, result, _site_map = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
+    rows = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
     kpi = compute_kpi_summary(rows)
     return {
         "period": {"start": str(start_date), "end": str(end_date)},
         "kpi": kpi,
-        "warnings": {
-            "site_only": result.warnings_site_only,
-            "file_only": result.warnings_file_only,
-            "no_quality": result.warnings_no_quality,
-            "no_base_hours": result.warnings_no_base_hours,
-        },
     }
 
 
@@ -138,8 +216,16 @@ def get_daily_dynamics(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    report_bytes = _get_uploaded_bytes(db, "report")
-    if not report_bytes:
+    """
+    Посуточная динамика требует посуточного разреза, которого нет в
+    агрегированном PeriodReport — для этого эндпоинта Excel-парсинг
+    оправдан и остаётся (он лежит вне сферы основной оптимизации,
+    т.к. структурно не может строиться из агрегатов).
+    """
+    from app.models.entities import UploadedReportFile
+
+    report_row = db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == "report"))
+    if not report_row:
         raise HTTPException(status_code=400, detail="Сначала загрузите файл Report")
 
     site_ops = _site_operators(db)
@@ -151,7 +237,7 @@ def get_daily_dynamics(
     if days > 31:
         raise HTTPException(status_code=400, detail="Период для динамики по дням ограничен 31 днём")
 
-    dynamics = compute_daily_dynamics(report_bytes, start_date, end_date, site_keys, metric)
+    dynamics = compute_daily_dynamics(report_row.content, start_date, end_date, site_keys, metric)
     return {"metric": metric, "items": dynamics}
 
 
@@ -166,7 +252,7 @@ def get_operators_table(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, _result, _site_map = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data)
+    rows = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data)
 
     def quality_band(q):
         if q is None:
@@ -209,7 +295,7 @@ def get_groups_comparison(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, _result, _site_map = _get_rows(db, start_date, end_date)
+    rows = _get_rows(db, start_date, end_date)
     return {"items": compute_groups_comparison(rows)}
 
 
@@ -221,7 +307,7 @@ def get_quality_kvz_matrix(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, _result, _site_map = _get_rows(db, start_date, end_date, group_id)
+    rows = _get_rows(db, start_date, end_date, group_id)
     return {"items": compute_quality_kvz_matrix(rows), "thresholds": {"quality": 85, "kvz": 10}}
 
 
@@ -233,7 +319,7 @@ def get_top_and_attention(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, _result, _site_map = _get_rows(db, start_date, end_date, group_id)
+    rows = _get_rows(db, start_date, end_date, group_id)
     return compute_top_and_attention(rows)
 
 
@@ -245,7 +331,7 @@ def get_penalties(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, _result, _site_map = _get_rows(db, start_date, end_date, group_id)
+    rows = _get_rows(db, start_date, end_date, group_id)
     return compute_penalties_analytics(rows)
 
 
@@ -258,7 +344,7 @@ def get_points_breakdown(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, _result, _site_map = _get_rows(db, start_date, end_date, group_id, operator_query)
+    rows = _get_rows(db, start_date, end_date, group_id, operator_query)
     return {"items": compute_points_breakdown(rows)}
 
 
@@ -275,25 +361,20 @@ def get_points_analysis(
 ) -> dict:
     """
     Полный анализ итоговых баллов: разбор вклада показателей, сравнение
-    с предыдущим периодом (та же длительность, смещённая назад), топ
-    роста/просадки, статусы, рекомендации.
+    с предыдущим периодом (если для него тоже есть сохранённый расчёт),
+    топ роста/просадки, статусы, рекомендации.
     """
-    rows, _result, _site_map = _get_rows(
-        db, start_date, end_date, group_id, operator_query, participation_status, only_with_data
-    )
+    rows = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data)
 
-    # Предыдущий период — та же длительность, сразу перед текущим
     period_length = (end_date - start_date).days
     prev_end = start_date - timedelta(days=1)
     prev_start = prev_end - timedelta(days=period_length)
 
     prev_rows = None
     try:
-        prev_rows, _prev_result, _ = _get_rows(
-            db, prev_start, prev_end, group_id, operator_query, participation_status, only_with_data
-        )
+        prev_rows = _get_rows(db, prev_start, prev_end, group_id, operator_query, participation_status, only_with_data)
     except HTTPException:
-        prev_rows = None  # нет данных за прошлый период — сравнение недоступно
+        prev_rows = None  # нет сохранённого расчёта за прошлый период — сравнение недоступно, это нормально
 
     analysis = compute_points_analysis(rows, prev_rows)
     analysis["period"] = {"start": str(start_date), "end": str(end_date)}
@@ -310,9 +391,12 @@ def get_heatmap(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    monthly_bytes = _get_uploaded_bytes(db, "monthly")
-    report_bytes = _get_uploaded_bytes(db, "report")
-    if not report_bytes:
+    """Посуточный heatmap — структурно требует Excel (см. комментарий в daily-dynamics)."""
+    from app.models.entities import UploadedReportFile
+
+    monthly_row = db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == "monthly"))
+    report_row = db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == "report"))
+    if not report_row:
         raise HTTPException(status_code=400, detail="Сначала загрузите файлы")
 
     days = (end_date - start_date).days
@@ -325,7 +409,7 @@ def get_heatmap(
     site_keys = {normalize_name(o.full_name): o.full_name for o in site_ops if o.full_name}
 
     result = compute_heatmap(
-        monthly_bytes, report_bytes,
+        monthly_row.content if monthly_row else None, report_row.content,
         start_date, end_date, site_keys, metric,
     )
     return result
@@ -339,7 +423,7 @@ def get_risk_pyramid(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, _result, _site_map = _get_rows(db, start_date, end_date, group_id)
+    rows = _get_rows(db, start_date, end_date, group_id)
     return compute_risk_pyramid(rows)
 
 
@@ -351,7 +435,7 @@ def get_quality_coverage(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, _result, _site_map = _get_rows(db, start_date, end_date, group_id)
+    rows = _get_rows(db, start_date, end_date, group_id)
     return compute_quality_coverage(rows)
 
 
@@ -363,7 +447,7 @@ def get_load_vs_efficiency(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, _result, _site_map = _get_rows(db, start_date, end_date, group_id)
+    rows = _get_rows(db, start_date, end_date, group_id)
     return {"items": compute_load_vs_efficiency(rows)}
 
 
@@ -375,25 +459,8 @@ def get_quality_vs_penalties(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    rows, _result, _site_map = _get_rows(db, start_date, end_date, group_id)
+    rows = _get_rows(db, start_date, end_date, group_id)
     return {"items": compute_quality_vs_penalties(rows)}
-
-
-@router.get("/warnings")
-def get_warnings(
-    start_date: date,
-    end_date: date,
-    db: Session = Depends(get_db),
-    _: User = Depends(_require_analytics_access),
-) -> dict:
-    _rows, result, _site_map = _get_rows(db, start_date, end_date)
-    return {
-        "site_only": result.warnings_site_only,
-        "file_only": result.warnings_file_only,
-        "no_quality": result.warnings_no_quality,
-        "no_base_hours": result.warnings_no_base_hours,
-        "ignored_service_rows": result.ignored_service_rows,
-    }
 
 
 @router.get("/groups-list")
