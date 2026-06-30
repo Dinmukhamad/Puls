@@ -661,18 +661,28 @@ def get_analytics(test_id: int, db: Session = Depends(get_db), _: User = Depends
 
     passed = sum(1 for a in finished if a.score_percent >= test.passing_percent)
 
-    # Аналитика по вопросам — какие чаще вызывают ошибки (ТЗ п.17)
-    question_stats = []
-    for q in test.questions:
-        all_answers = list(
-            db.scalars(
-                select(TestAttemptAnswer).where(
-                    TestAttemptAnswer.question_id == q.id, TestAttemptAnswer.is_correct.is_not(None)
-                )
+    # Аналитика по вопросам — какие чаще вызывают ошибки (ТЗ п.17).
+    # Раньше TestAttemptAnswer запрашивались отдельным SELECT на каждый
+    # вопрос (N+1) — здесь загружаем все ответы по всем вопросам теста
+    # одним запросом и группируем в памяти.
+    questions = list(test.questions)
+    question_ids = [q.id for q in questions]
+    all_answers_flat = list(
+        db.scalars(
+            select(TestAttemptAnswer).where(
+                TestAttemptAnswer.question_id.in_(question_ids), TestAttemptAnswer.is_correct.is_not(None)
             )
         )
-        correct = sum(1 for a in all_answers if a.is_correct)
-        total = len(all_answers)
+    ) if question_ids else []
+    answers_by_question: Dict[int, list] = {}
+    for a in all_answers_flat:
+        answers_by_question.setdefault(a.question_id, []).append(a)
+
+    question_stats = []
+    for q in questions:
+        q_answers = answers_by_question.get(q.id, [])
+        correct = sum(1 for a in q_answers if a.is_correct)
+        total = len(q_answers)
         question_stats.append({
             "question_id": q.id,
             "question_text": q.question_text,
