@@ -159,6 +159,19 @@ def main() -> int:
                 {"uids": user_ids_to_delete},
             )
 
+        # Дополнительные таблицы, ссылающиеся на users.id, которые мы не
+        # удаляем целиком (только обезличиваем ссылку — сама запись лога/файла
+        # остаётся, важна для истории действий администраторов):
+        if user_ids_to_delete:
+            db.execute(
+                text("UPDATE audit_logs SET performed_by_user_id = NULL WHERE performed_by_user_id = ANY(:uids)"),
+                {"uids": user_ids_to_delete},
+            )
+            db.execute(
+                text("UPDATE uploaded_report_files SET uploaded_by_user_id = NULL WHERE uploaded_by_user_id = ANY(:uids)"),
+                {"uids": user_ids_to_delete},
+            )
+
         # Учётные записи операторов — удаляются целиком (тестовые логины не нужны)
         db.query(User).filter(User.operator_id.in_(operator_ids)).delete(synchronize_session=False)
 
