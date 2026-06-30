@@ -5800,3 +5800,774 @@ async function renderRatingProgressTab(content) {
 }
 
 window.renderRating = renderRating;
+
+
+/* ══════════════════════════════════════
+   VIEW: ТЕСТЫ — общий диспетчер по роли
+══════════════════════════════════════ */
+let _testsTab = 'available'; // available | history (operator) | overview | list (staff)
+let _testTimerInterval = null;
+
+function renderTests() {
+  const el = document.getElementById('view-tests');
+  if (!el) return;
+  if (isAdmin(STATE.user?.role)) {
+    renderTestsStaffView(el);
+  } else {
+    renderTestsOperatorView(el);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   ОПЕРАТОРСКАЯ ЧАСТЬ
+──────────────────────────────────────────────────────────────── */
+
+async function renderTestsOperatorView(el) {
+  const myNavGen = STATE.navGen;
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Тесты</div><h2 class="section-title">Мои тесты</h2></div>
+      <button class="btn-outline btn-sm" onclick="renderTests()">Обновить</button>
+    </div>
+    <div id="tests-op-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
+
+  let data;
+  try {
+    data = await api.myTests();
+  } catch(e) {
+    if (isNavStale(myNavGen)) return;
+    el.querySelector('#tests-op-body').innerHTML = `<div class="status-line status-error">Не удалось загрузить тесты: ${esc(e.message)}</div>`;
+    return;
+  }
+  if (isNavStale(myNavGen)) return;
+
+  const items = data.items || [];
+  const available = items.filter(t => ['available', 'in_progress'].includes(t.status));
+  const finished = items.filter(t => ['finished', 'expired'].includes(t.status));
+  const upcoming = items.filter(t => t.status === 'upcoming');
+
+  const body = el.querySelector('#tests-op-body');
+  if (!items.length) {
+    body.innerHTML = `<div class="empty-state"><p>Доступных тестов пока нет.</p></div>`;
+    return;
+  }
+
+  body.innerHTML = `
+    ${upcoming.length ? `<div class="rcard-title" style="margin-top:6px">Скоро откроются</div><div class="test-card-grid">${upcoming.map(testCardHtml).join('')}</div>` : ''}
+    <div class="rcard-title" style="margin-top:18px">Доступные</div>
+    ${available.length ? `<div class="test-card-grid">${available.map(testCardHtml).join('')}</div>` : `<div class="empty-line">Доступных тестов пока нет.</div>`}
+    <div class="rcard-title" style="margin-top:18px">Завершённые / история</div>
+    ${finished.length ? `<div class="test-card-grid">${finished.map(testCardHtml).join('')}</div>` : `<div class="empty-line">Вы пока не проходили тесты.</div>`}
+  `;
+
+  body.querySelectorAll('[data-test-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const testId = Number(btn.dataset.testId);
+      const action = btn.dataset.testAction;
+      if (action === 'start' || action === 'continue') openTestRunner(testId);
+      if (action === 'result') openTestResultModal(btn.dataset.attemptId);
+    });
+  });
+}
+
+function testStatusBadge(status) {
+  const map = {
+    upcoming: ['Скоро откроется', 'badge-neutral'],
+    available: ['Доступен', 'badge-info'],
+    in_progress: ['В процессе', 'badge-warning'],
+    finished: ['Завершён', 'badge-success'],
+    expired: ['Просрочен', 'badge-danger'],
+    unavailable: ['Недоступен', 'badge-neutral'],
+  };
+  const [label, cls] = map[status] || [status, 'badge-neutral'];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function testCardHtml(t) {
+  const rewardLine = t.reward_type === 'none' ? '' :
+    `<div class="test-card-row"><span>Награда</span><span>${t.reward_type.includes('coins') ? `до ${t.reward_coins} коинов` : ''}${t.reward_type.includes('points') ? ` ${t.reward_points} баллов` : ''}</span></div>`;
+
+  let actionHtml = '';
+  if (t.status === 'available') {
+    actionHtml = `<button class="btn-primary btn-sm" data-test-action="start" data-test-id="${t.id}">Начать тест</button>`;
+  } else if (t.status === 'in_progress') {
+    actionHtml = `<button class="btn-primary btn-sm" data-test-action="continue" data-test-id="${t.id}">Продолжить</button>`;
+  } else if (t.status === 'upcoming') {
+    actionHtml = `<div class="test-card-disabled-note">Тест откроется ${fmtDateTime(t.opens_at)}</div>`;
+  } else if (t.status === 'finished') {
+    actionHtml = `<div class="test-card-result"><b>Результат:</b> ${t.correct_count} / ${t.questions_count} · <b>${cleanNumber(t.score_percent,0)}%</b></div>
+      ${t.reward_coins_earned ? `<div class="test-card-result">+${t.reward_coins_earned} коинов</div>` : ''}
+      <button class="btn-outline btn-sm" data-test-action="result" data-attempt-id="${t.attempt_id}">Подробнее</button>`;
+  } else if (t.status === 'expired') {
+    actionHtml = `<div class="test-card-disabled-note">Срок прохождения истёк</div>`;
+  } else {
+    actionHtml = `<div class="test-card-disabled-note">Недоступен</div>`;
+  }
+
+  return `<div class="test-card">
+    <div class="test-card-head">
+      <div class="test-card-title">${esc(t.title)}</div>
+      ${testStatusBadge(t.status)}
+    </div>
+    ${t.description ? `<div class="test-card-desc">${esc(t.description)}</div>` : ''}
+    <div class="test-card-meta">
+      ${t.opens_at ? `<div class="test-card-row"><span>Открыт</span><span>${fmtDateTime(t.opens_at)}</span></div>` : ''}
+      ${t.closes_at ? `<div class="test-card-row"><span>Закрывается</span><span>${fmtDateTime(t.closes_at)}</span></div>` : ''}
+      <div class="test-card-row"><span>Время на прохождение</span><span>${t.time_limit_minutes} мин</span></div>
+      <div class="test-card-row"><span>Вопросов</span><span>${t.questions_count}</span></div>
+      ${rewardLine}
+    </div>
+    <div class="test-card-actions">${actionHtml}</div>
+  </div>`;
+}
+
+
+/* ── Прохождение теста ────────────────────────────────────────── */
+let _activeTestRun = null; // { attemptId, questions, currentIndex, answers: {qid: [ids]}, expiresAt }
+
+async function openTestRunner(testId) {
+  showModal(`
+    <h3 class="modal-title">Перед началом теста</h3>
+    <p style="font-size:13px;color:var(--text-secondary);line-height:1.6;margin-bottom:16px">
+      После начала теста запустится таймер.<br>
+      Не закрывайте страницу до завершения.<br>
+      Правильные ответы будут скрыты до окончания тестирования.
+    </p>
+    <div style="display:flex;gap:10px">
+      <button class="btn-outline" style="flex:1" id="test-cancel-btn">Отмена</button>
+      <button class="btn-primary" style="flex:1" id="test-confirm-start-btn">Начать тест</button>
+    </div>
+  `);
+  document.getElementById('test-cancel-btn').addEventListener('click', closeModal);
+  document.getElementById('test-confirm-start-btn').addEventListener('click', async () => {
+    try {
+      const data = await api.startTest(testId);
+      closeModal();
+      _activeTestRun = {
+        attemptId: data.attempt_id,
+        testTitle: data.test_title,
+        questions: data.questions,
+        currentIndex: 0,
+        answers: {},
+        expiresAt: new Date(data.expires_at).getTime(),
+      };
+      renderTestRunnerScreen();
+    } catch(e) {
+      closeModal();
+      showToast(e.message || 'Не удалось начать тест', 'error');
+    }
+  });
+}
+
+function renderTestRunnerScreen() {
+  const el = document.getElementById('view-tests');
+  if (!el || !_activeTestRun) return;
+  const run = _activeTestRun;
+  const q = run.questions[run.currentIndex];
+  const selected = run.answers[q.id] || [];
+
+  el.innerHTML = `
+    <div class="test-runner">
+      <div class="test-runner-head">
+        <div class="test-runner-title">${esc(run.testTitle)}</div>
+        <div class="test-runner-timer" id="test-timer">--:--</div>
+      </div>
+      <div class="test-runner-progress">
+        <div class="test-runner-progress-bar"><div class="test-runner-progress-fill" style="width:${Math.round((run.currentIndex+1)/run.questions.length*100)}%"></div></div>
+        <div class="test-runner-progress-label">Вопрос ${run.currentIndex+1} из ${run.questions.length}</div>
+      </div>
+      <div class="test-runner-question">
+        <div class="test-runner-question-text">${esc(q.question_text)}</div>
+        <div class="test-runner-answers">
+          ${q.answers.map(a => `
+            <label class="test-runner-answer-row ${selected.includes(a.id) ? 'selected' : ''}">
+              <input type="${q.question_type === 'multiple_choice' ? 'checkbox' : 'radio'}" name="test-answer" value="${a.id}" ${selected.includes(a.id) ? 'checked' : ''}>
+              <span>${esc(a.answer_text)}</span>
+            </label>
+          `).join('')}
+        </div>
+      </div>
+      <div class="test-runner-nav">
+        <button class="btn-outline" id="test-nav-back" ${run.currentIndex === 0 ? 'disabled' : ''}>Назад</button>
+        <div style="flex:1"></div>
+        ${run.currentIndex < run.questions.length - 1
+          ? '<button class="btn-primary" id="test-nav-next">Далее</button>'
+          : '<button class="btn-primary" id="test-nav-finish">Завершить тест</button>'}
+      </div>
+    </div>`;
+
+  el.querySelectorAll('input[name="test-answer"]').forEach(input => {
+    input.addEventListener('change', () => {
+      const answerId = Number(input.value);
+      if (q.question_type === 'multiple_choice') {
+        const set = new Set(run.answers[q.id] || []);
+        if (input.checked) set.add(answerId); else set.delete(answerId);
+        run.answers[q.id] = [...set];
+      } else {
+        run.answers[q.id] = [answerId];
+      }
+      el.querySelectorAll('.test-runner-answer-row').forEach(row => row.classList.remove('selected'));
+      input.closest('.test-runner-answer-row').classList.add('selected');
+      api.saveTestAnswer(run.attemptId, q.id, run.answers[q.id]).catch(() => {});
+    });
+  });
+
+  el.querySelector('#test-nav-back')?.addEventListener('click', () => {
+    run.currentIndex = Math.max(0, run.currentIndex - 1);
+    renderTestRunnerScreen();
+  });
+  el.querySelector('#test-nav-next')?.addEventListener('click', () => {
+    run.currentIndex = Math.min(run.questions.length - 1, run.currentIndex + 1);
+    renderTestRunnerScreen();
+  });
+  el.querySelector('#test-nav-finish')?.addEventListener('click', () => finishTestRun());
+
+  startTestTimer();
+}
+
+function startTestTimer() {
+  if (_testTimerInterval) clearInterval(_testTimerInterval);
+  const tick = () => {
+    if (!_activeTestRun) { clearInterval(_testTimerInterval); return; }
+    const remainMs = _activeTestRun.expiresAt - Date.now();
+    const timerEl = document.getElementById('test-timer');
+    if (!timerEl) { clearInterval(_testTimerInterval); return; }
+    if (remainMs <= 0) {
+      clearInterval(_testTimerInterval);
+      timerEl.textContent = '00:00';
+      showToast('Время теста истекло. Ответы были отправлены автоматически.', 'error');
+      finishTestRun();
+      return;
+    }
+    const totalSec = Math.floor(remainMs / 1000);
+    const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
+    const s = String(totalSec % 60).padStart(2, '0');
+    timerEl.textContent = `${m}:${s}`;
+    timerEl.classList.toggle('test-timer-warning', totalSec < 60);
+  };
+  tick();
+  _testTimerInterval = setInterval(tick, 1000);
+}
+
+async function finishTestRun() {
+  if (!_activeTestRun) return;
+  clearInterval(_testTimerInterval);
+  const attemptId = _activeTestRun.attemptId;
+  try {
+    const result = await api.finishTest(attemptId);
+    _activeTestRun = null;
+    renderTestResultScreen(result);
+  } catch(e) {
+    showToast(e.message || 'Не удалось завершить тест', 'error');
+  }
+}
+
+function renderTestResultScreen(result) {
+  const el = document.getElementById('view-tests');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Тесты</div><h2 class="section-title">Результат теста</h2></div>
+      <button class="btn-primary btn-sm" onclick="renderTests()">К списку тестов</button>
+    </div>
+    ${testResultCardHtml(result)}
+  `;
+}
+
+function testResultCardHtml(result) {
+  const passed = result.passed;
+  return `<div class="test-result-card">
+    <div class="test-result-title">${esc(result.test_title)}</div>
+    <div class="test-result-grid">
+      <div class="test-result-stat"><div class="test-result-stat-label">Правильных ответов</div><div class="test-result-stat-value">${result.correct_count} из ${result.questions_count}</div></div>
+      <div class="test-result-stat"><div class="test-result-stat-label">Процент</div><div class="test-result-stat-value">${cleanNumber(result.score_percent,0)}%</div></div>
+      <div class="test-result-stat"><div class="test-result-stat-label">Баллы</div><div class="test-result-stat-value">${cleanNumber(result.score_points,1)}</div></div>
+      <div class="test-result-stat"><div class="test-result-stat-label">Статус</div><div class="test-result-stat-value">${passed === null ? '—' : (passed ? '<span class="badge badge-success">Пройден</span>' : '<span class="badge badge-danger">Не пройден</span>')}</div></div>
+    </div>
+    ${(result.reward_coins > 0 || result.reward_points > 0) ? `
+      <div class="test-result-reward">
+        ${result.reward_coins > 0 ? `Награда: +${result.reward_coins} коинов` : ''}
+        ${result.reward_points > 0 ? ` +${cleanNumber(result.reward_points,1)} баллов` : ''}
+      </div>` : ''}
+    ${result.questions ? renderTestCorrectAnswersBlock(result) : ''}
+  </div>`;
+}
+
+function renderTestCorrectAnswersBlock(result) {
+  return `<div class="test-result-answers">
+    <div class="rcard-title" style="margin-top:18px">Разбор ответов</div>
+    ${result.questions.map(q => {
+      const yourIds = (result.your_answers && result.your_answers[q.id]) || [];
+      return `<div class="test-result-question">
+        <div class="test-result-question-text">${esc(q.question_text)}</div>
+        ${q.answers.map(a => {
+          const wasSelected = yourIds.includes(a.id);
+          const cls = a.is_correct ? 'correct' : (wasSelected ? 'incorrect' : '');
+          return `<div class="test-result-answer-row ${cls}">${wasSelected ? '☑' : '☐'} ${esc(a.answer_text)}</div>`;
+        }).join('')}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+async function openTestResultModal(attemptId) {
+  try {
+    const result = await api.getTestResult(attemptId);
+    showModal(`<div style="max-height:70vh;overflow-y:auto">${testResultCardHtml(result)}</div>`);
+  } catch(e) {
+    showToast(e.message || 'Не удалось загрузить результат', 'error');
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   АДМИНСКАЯ ЧАСТЬ (supervisor / manager / admin)
+──────────────────────────────────────────────────────────────── */
+
+async function renderTestsStaffView(el) {
+  const myNavGen = STATE.navGen;
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Тесты</div><h2 class="section-title">Управление тестами</h2></div>
+      <div class="header-right">
+        <button class="btn-primary btn-sm" id="tests-new-btn">+ Новый тест</button>
+        <button class="btn-outline btn-sm" onclick="renderTests()">Обновить</button>
+      </div>
+    </div>
+    <div id="tests-staff-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
+
+  el.querySelector('#tests-new-btn').addEventListener('click', () => openTestBuilder(null));
+
+  let data;
+  try {
+    data = await api.listAdminTests();
+  } catch(e) {
+    if (isNavStale(myNavGen)) return;
+    el.querySelector('#tests-staff-body').innerHTML = `<div class="status-line status-error">${esc(e.message)}</div>`;
+    return;
+  }
+  if (isNavStale(myNavGen)) return;
+
+  const items = data.items || [];
+  const body = el.querySelector('#tests-staff-body');
+  if (!items.length) {
+    body.innerHTML = `<div class="empty-state"><p>Тестов пока нет. Создайте первый тест.</p></div>`;
+    return;
+  }
+
+  const statusLabel = { draft: 'Черновик', scheduled: 'Запланирован', open: 'Открыт', finished: 'Завершён', archived: 'Архив' };
+  const statusBadgeClass = { draft: 'badge-neutral', scheduled: 'badge-info', open: 'badge-success', finished: 'badge-warning', archived: 'badge-neutral' };
+
+  body.innerHTML = `<div class="table-wrap"><table class="data-table">
+    <thead><tr>
+      <th>Название</th><th>Статус</th><th>Автор</th><th>Открытие</th><th>Закрытие</th>
+      <th class="num">Вопросов</th><th class="num">Прошли</th><th class="num">Средний %</th><th>Действия</th>
+    </tr></thead>
+    <tbody>
+      ${items.map(t => `<tr>
+        <td class="name-cell">${esc(t.title)}</td>
+        <td><span class="badge ${statusBadgeClass[t.status]||'badge-neutral'}">${statusLabel[t.status]||t.status}</span></td>
+        <td>${esc(t.created_by_name||'—')}</td>
+        <td>${t.opens_at?fmtDateTime(t.opens_at):'—'}</td>
+        <td>${t.closes_at?fmtDateTime(t.closes_at):'—'}</td>
+        <td class="num">${t.questions_count}</td>
+        <td class="num">${t.attempts_finished}</td>
+        <td class="num">${t.average_percent!=null?t.average_percent+'%':'—'}</td>
+        <td>
+          <div style="display:flex;gap:6px">
+            <button class="btn-outline btn-sm" data-test-edit="${t.id}">Изменить</button>
+            <button class="btn-outline btn-sm" data-test-results="${t.id}">Результаты</button>
+            ${t.status==='draft'||t.status==='scheduled' ? `<button class="btn-primary btn-sm" data-test-publish="${t.id}">Опубликовать</button>` : ''}
+            ${t.status==='open' ? `<button class="btn-outline btn-sm" data-test-close="${t.id}">Закрыть</button>` : ''}
+          </div>
+        </td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+
+  body.querySelectorAll('[data-test-edit]').forEach(btn => btn.addEventListener('click', () => openTestBuilder(Number(btn.dataset.testEdit))));
+  body.querySelectorAll('[data-test-results]').forEach(btn => btn.addEventListener('click', () => openTestResultsView(Number(btn.dataset.testResults))));
+  body.querySelectorAll('[data-test-publish]').forEach(btn => btn.addEventListener('click', async () => {
+    try { await api.publishTest(Number(btn.dataset.testPublish)); showToast('Тест опубликован', 'ok'); renderTests(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }));
+  body.querySelectorAll('[data-test-close]').forEach(btn => btn.addEventListener('click', async () => {
+    try { await api.closeTest(Number(btn.dataset.testClose)); showToast('Тест закрыт', 'ok'); renderTests(); }
+    catch(e) { showToast(e.message, 'error'); }
+  }));
+}
+
+/* ── Конструктор теста ────────────────────────────────────────── */
+let _testBuilderState = null; // { testId, test, questions: [...], assignTargetType, assignTargetIds }
+
+async function openTestBuilder(testId) {
+  const el = document.getElementById('view-tests');
+  if (!el) return;
+
+  let test = null;
+  let questions = [];
+  if (testId) {
+    try {
+      const list = await api.listAdminTests();
+      test = (list.items || []).find(t => t.id === testId);
+    } catch(e) { /* fallthrough — test stays null, builder treats as new */ }
+  }
+
+  _testBuilderState = {
+    testId: testId,
+    title: test?.title || '',
+    description: '',
+    instruction: '',
+    time_limit_minutes: test?.time_limit_minutes || 30,
+    opens_at: test?.opens_at ? test.opens_at.slice(0,16) : '',
+    closes_at: test?.closes_at ? test.closes_at.slice(0,16) : '',
+    passing_percent: 70,
+    show_result_after_finish: true,
+    show_correct_answers: false,
+    allow_retake: false,
+    max_attempts: 1,
+    reward_type: 'none',
+    reward_points: 0,
+    reward_coins: 0,
+    reward_min_percent: 70,
+    reward_mode: 'fixed',
+    questions: [],
+    assignTargetType: test?.assignments?.[0]?.target_type || 'all',
+    assignTargetIds: (test?.assignments || []).filter(a => a.target_id != null).map(a => a.target_id),
+    status: test?.status || 'draft',
+  };
+
+  renderTestBuilderScreen();
+}
+
+function renderTestBuilderScreen() {
+  const el = document.getElementById('view-tests');
+  if (!el || !_testBuilderState) return;
+  const s = _testBuilderState;
+  const isOpen = s.status === 'open';
+
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Тесты</div><h2 class="section-title">${s.testId ? 'Редактирование теста' : 'Новый тест'}</h2></div>
+      <button class="btn-outline btn-sm" onclick="renderTests()">К списку</button>
+    </div>
+    ${isOpen ? '<div class="status-line status-error" style="margin-bottom:14px">Тест уже открыт — можно изменить только дату закрытия и назначение.</div>' : ''}
+    <div class="test-builder-card">
+      <div class="rcard-title">1. Основная информация</div>
+      <div class="form-grid-2">
+        <div class="form-group"><label class="form-label">Название теста</label><input id="tb-title" class="form-input" value="${esc(s.title)}" ${isOpen?'disabled':''}></div>
+        <div class="form-group"><label class="form-label">Время на прохождение (мин)</label><input id="tb-time-limit" type="number" min="1" class="form-input" value="${s.time_limit_minutes}" ${isOpen?'disabled':''}></div>
+      </div>
+      <div class="form-group"><label class="form-label">Описание</label><textarea id="tb-description" class="form-input" rows="2" ${isOpen?'disabled':''}>${esc(s.description)}</textarea></div>
+      <div class="form-group"><label class="form-label">Инструкция для операторов</label><textarea id="tb-instruction" class="form-input" rows="2" ${isOpen?'disabled':''}>${esc(s.instruction)}</textarea></div>
+      <div class="form-grid-2">
+        <div class="form-group"><label class="form-label">Дата и время открытия</label><input id="tb-opens-at" type="datetime-local" class="form-input" value="${s.opens_at}" ${isOpen?'disabled':''}></div>
+        <div class="form-group"><label class="form-label">Дата и время закрытия</label><input id="tb-closes-at" type="datetime-local" class="form-input" value="${s.closes_at}"></div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group"><label class="form-label">Проходной процент</label><input id="tb-passing-percent" type="number" min="0" max="100" class="form-input" value="${s.passing_percent}" ${isOpen?'disabled':''}></div>
+        <div class="form-group"><label class="form-label">Максимум попыток</label><input id="tb-max-attempts" type="number" min="1" class="form-input" value="${s.max_attempts}" ${isOpen?'disabled':''}></div>
+      </div>
+      <label class="an-checkbox-label"><input type="checkbox" id="tb-show-result" ${s.show_result_after_finish?'checked':''} ${isOpen?'disabled':''}> Показывать результат сразу после завершения</label>
+      <label class="an-checkbox-label"><input type="checkbox" id="tb-show-correct" ${s.show_correct_answers?'checked':''} ${isOpen?'disabled':''}> Показывать правильные ответы после завершения</label>
+      <label class="an-checkbox-label"><input type="checkbox" id="tb-allow-retake" ${s.allow_retake?'checked':''} ${isOpen?'disabled':''}> Разрешить повторное прохождение</label>
+    </div>
+
+    <div class="test-builder-card">
+      <div class="rcard-title">Награда</div>
+      <div class="form-group"><label class="form-label">Тип награды</label>
+        <select id="tb-reward-type" class="form-select" ${isOpen?'disabled':''}>
+          <option value="none" ${s.reward_type==='none'?'selected':''}>Без награды</option>
+          <option value="points" ${s.reward_type==='points'?'selected':''}>Баллы</option>
+          <option value="coins" ${s.reward_type==='coins'?'selected':''}>Коины</option>
+          <option value="points_and_coins" ${s.reward_type==='points_and_coins'?'selected':''}>Баллы + коины</option>
+        </select>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group"><label class="form-label">Максимум баллов</label><input id="tb-reward-points" type="number" min="0" class="form-input" value="${s.reward_points}" ${isOpen?'disabled':''}></div>
+        <div class="form-group"><label class="form-label">Максимум коинов</label><input id="tb-reward-coins" type="number" min="0" class="form-input" value="${s.reward_coins}" ${isOpen?'disabled':''}></div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-group"><label class="form-label">Минимальный % для награды</label><input id="tb-reward-min-percent" type="number" min="0" max="100" class="form-input" value="${s.reward_min_percent}" ${isOpen?'disabled':''}></div>
+        <div class="form-group"><label class="form-label">Режим начисления</label>
+          <select id="tb-reward-mode" class="form-select" ${isOpen?'disabled':''}>
+            <option value="fixed" ${s.reward_mode==='fixed'?'selected':''}>Фиксированная</option>
+            <option value="proportional" ${s.reward_mode==='proportional'?'selected':''}>Пропорциональная</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="test-builder-card">
+      <div class="rcard-title-row"><div class="rcard-title">2. Вопросы</div>${!isOpen?'<button class="btn-outline btn-sm" id="tb-add-question">+ Добавить вопрос</button>':''}</div>
+      <div id="tb-questions-list">${s.questions.map((q,i) => questionEditorHtml(q,i,isOpen)).join('') || '<div class="empty-line">Вопросов пока нет</div>'}</div>
+    </div>
+
+    <div class="test-builder-card">
+      <div class="rcard-title">3. Назначение — кому назначить тест</div>
+      <div class="form-group">
+        <select id="tb-assign-type" class="form-select">
+          <option value="all" ${s.assignTargetType==='all'?'selected':''}>Все операторы</option>
+          <option value="group" ${s.assignTargetType==='group'?'selected':''}>По группам</option>
+          <option value="operator" ${s.assignTargetType==='operator'?'selected':''}>Отдельные операторы</option>
+        </select>
+      </div>
+      <div id="tb-assign-targets"></div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn-outline" id="tb-save-draft">Сохранить ${s.testId?'':'как черновик'}</button>
+      <button class="btn-primary" id="tb-save-and-publish">${s.status==='open'?'Сохранить изменения':'Сохранить и опубликовать'}</button>
+    </div>
+  `;
+
+  el.querySelector('#tb-add-question')?.addEventListener('click', () => {
+    s.questions.push({ question_text: '', question_type: 'single_choice', points: 1, answers: [{answer_text:'',is_correct:false},{answer_text:'',is_correct:false}] });
+    renderTestBuilderScreen();
+  });
+
+  bindQuestionEditorEvents(el, isOpen);
+  renderAssignTargetsBlock(el);
+  el.querySelector('#tb-assign-type').addEventListener('change', (e) => { s.assignTargetType = e.target.value; renderAssignTargetsBlock(el); });
+
+  el.querySelector('#tb-save-draft').addEventListener('click', () => saveTestBuilder(false));
+  el.querySelector('#tb-save-and-publish').addEventListener('click', () => saveTestBuilder(true));
+}
+
+function questionEditorHtml(q, index, isOpen) {
+  return `<div class="test-question-editor" data-q-index="${index}">
+    <div class="test-question-editor-head">
+      <input class="form-input" placeholder="Текст вопроса" value="${esc(q.question_text)}" data-q-field="question_text" ${isOpen?'disabled':''}>
+      <select class="form-select" data-q-field="question_type" style="max-width:200px" ${isOpen?'disabled':''}>
+        <option value="single_choice" ${q.question_type==='single_choice'?'selected':''}>Один ответ</option>
+        <option value="multiple_choice" ${q.question_type==='multiple_choice'?'selected':''}>Несколько ответов</option>
+      </select>
+      <input class="form-input" type="number" min="0" style="max-width:90px" placeholder="Баллы" value="${q.points}" data-q-field="points" ${isOpen?'disabled':''}>
+      ${!isOpen?`<button class="btn-outline btn-sm" data-q-delete>×</button>`:''}
+    </div>
+    <div class="test-answer-options">
+      ${q.answers.map((a,ai) => `<div class="test-answer-option-row" data-a-index="${ai}">
+        <input type="${q.question_type==='multiple_choice'?'checkbox':'radio'}" data-a-field="is_correct" ${a.is_correct?'checked':''} ${isOpen?'disabled':''}>
+        <input class="form-input" placeholder="Вариант ответа" value="${esc(a.answer_text)}" data-a-field="answer_text" ${isOpen?'disabled':''}>
+        ${!isOpen&&q.answers.length>2?`<button class="btn-outline btn-sm" data-a-delete>×</button>`:''}
+      </div>`).join('')}
+    </div>
+    ${!isOpen && q.answers.length < 10 ? `<button class="btn-outline btn-sm" data-q-add-answer>+ Добавить вариант ответа</button>` : ''}
+  </div>`;
+}
+
+function bindQuestionEditorEvents(el, isOpen) {
+  const s = _testBuilderState;
+  el.querySelectorAll('[data-q-index]').forEach(qDiv => {
+    const qi = Number(qDiv.dataset.qIndex);
+    qDiv.querySelectorAll('[data-q-field]').forEach(input => {
+      input.addEventListener('input', () => { s.questions[qi][input.dataset.qField] = input.type === 'number' ? Number(input.value) : input.value; });
+      input.addEventListener('change', () => {
+        if (input.dataset.qField === 'question_type') renderTestBuilderScreen();
+      });
+    });
+    qDiv.querySelector('[data-q-delete]')?.addEventListener('click', () => { s.questions.splice(qi,1); renderTestBuilderScreen(); });
+    qDiv.querySelector('[data-q-add-answer]')?.addEventListener('click', () => { s.questions[qi].answers.push({answer_text:'',is_correct:false}); renderTestBuilderScreen(); });
+
+    qDiv.querySelectorAll('[data-a-index]').forEach(aDiv => {
+      const ai = Number(aDiv.dataset.aIndex);
+      aDiv.querySelectorAll('[data-a-field]').forEach(input => {
+        input.addEventListener('input', () => {
+          if (input.dataset.aField === 'is_correct') {
+            if (s.questions[qi].question_type === 'single_choice') {
+              s.questions[qi].answers.forEach(a => a.is_correct = false);
+            }
+            s.questions[qi].answers[ai].is_correct = input.checked;
+          } else {
+            s.questions[qi].answers[ai][input.dataset.aField] = input.value;
+          }
+        });
+      });
+      aDiv.querySelector('[data-a-delete]')?.addEventListener('click', () => { s.questions[qi].answers.splice(ai,1); renderTestBuilderScreen(); });
+    });
+  });
+}
+
+function renderAssignTargetsBlock(el) {
+  const s = _testBuilderState;
+  const box = el.querySelector('#tb-assign-targets');
+  if (s.assignTargetType === 'all') { box.innerHTML = ''; return; }
+  if (s.assignTargetType === 'group') {
+    box.innerHTML = `<div class="form-group"><label class="form-label">Группы</label>
+      <div class="test-target-checklist">${(STATE.groups||[]).map(g => `<label class="an-checkbox-label"><input type="checkbox" value="${g.id}" ${s.assignTargetIds.includes(g.id)?'checked':''}> ${esc(g.name)}</label>`).join('')}</div></div>`;
+  } else {
+    box.innerHTML = `<div class="form-group"><label class="form-label">Операторы</label>
+      <input class="form-input" id="tb-operator-search" placeholder="Поиск по ФИО" style="margin-bottom:8px">
+      <div class="test-target-checklist" id="tb-operator-checklist">${(STATE.adminOperators||[]).map(o => `<label class="an-checkbox-label" data-op-name="${esc(o.full_name).toLowerCase()}"><input type="checkbox" value="${o.id}" ${s.assignTargetIds.includes(o.id)?'checked':''}> ${esc(o.full_name)}</label>`).join('')}</div></div>`;
+    box.querySelector('#tb-operator-search')?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      box.querySelectorAll('[data-op-name]').forEach(label => { label.style.display = label.dataset.opName.includes(q) ? '' : 'none'; });
+    });
+  }
+  box.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const id = Number(cb.value);
+      if (cb.checked) { if (!s.assignTargetIds.includes(id)) s.assignTargetIds.push(id); }
+      else { s.assignTargetIds = s.assignTargetIds.filter(x => x !== id); }
+    });
+  });
+}
+
+async function saveTestBuilder(publish) {
+  const s = _testBuilderState;
+  const el = document.getElementById('view-tests');
+
+  const payload = {
+    title: el.querySelector('#tb-title').value,
+    description: el.querySelector('#tb-description').value,
+    instruction: el.querySelector('#tb-instruction').value,
+    time_limit_minutes: Number(el.querySelector('#tb-time-limit').value),
+    opens_at: el.querySelector('#tb-opens-at').value || null,
+    closes_at: el.querySelector('#tb-closes-at').value || null,
+    passing_percent: Number(el.querySelector('#tb-passing-percent').value),
+    show_result_after_finish: el.querySelector('#tb-show-result').checked,
+    show_correct_answers: el.querySelector('#tb-show-correct').checked,
+    allow_retake: el.querySelector('#tb-allow-retake').checked,
+    max_attempts: Number(el.querySelector('#tb-max-attempts').value),
+    reward_type: el.querySelector('#tb-reward-type').value,
+    reward_points: Number(el.querySelector('#tb-reward-points').value),
+    reward_coins: Number(el.querySelector('#tb-reward-coins').value),
+    reward_min_percent: Number(el.querySelector('#tb-reward-min-percent').value),
+    reward_mode: el.querySelector('#tb-reward-mode').value,
+  };
+
+  if (!payload.title.trim()) { showToast('Укажите название теста', 'error'); return; }
+
+  try {
+    let testId = s.testId;
+    if (testId) {
+      await api.updateTest(testId, payload);
+    } else {
+      const created = await api.createTest(payload);
+      testId = created.id;
+      s.testId = testId;
+    }
+
+    for (const q of s.questions) {
+      if (q.answers.filter(a => a.is_correct).length === 0) {
+        showToast(`У вопроса "${q.question_text || '(без текста)'}" не указан правильный ответ`, 'error');
+        return;
+      }
+      const qPayload = { question_text: q.question_text, question_type: q.question_type, points: q.points, sort_order: 0, answers: q.answers };
+      if (q.id) await api.updateTestQuestion(q.id, qPayload);
+      else { const created = await api.addTestQuestion(testId, qPayload); q.id = created.id; }
+    }
+
+    await api.assignTest(testId, { target_type: s.assignTargetType, target_ids: s.assignTargetIds });
+
+    if (publish) {
+      await api.publishTest(testId);
+      showToast('Тест сохранён и опубликован', 'ok');
+    } else {
+      showToast('Тест сохранён', 'ok');
+    }
+    renderTests();
+  } catch(e) {
+    showToast(e.message || 'Не удалось сохранить тест', 'error');
+  }
+}
+
+/* ── Результаты и аналитика для руководства ─────────────────────── */
+async function openTestResultsView(testId) {
+  const el = document.getElementById('view-tests');
+  if (!el) return;
+
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Тесты</div><h2 class="section-title">Результаты</h2></div>
+      <button class="btn-outline btn-sm" onclick="renderTests()">К списку</button>
+    </div>
+    <div class="filter-tabs" id="tr-tabs">
+      <button class="filter-tab active" data-tr-tab="results">Результаты</button>
+      <button class="filter-tab" data-tr-tab="analytics">Аналитика</button>
+    </div>
+    <div id="tr-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
+
+  el.querySelectorAll('[data-tr-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.querySelectorAll('[data-tr-tab]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (btn.dataset.trTab === 'results') loadTestResultsTable(testId);
+      else loadTestAnalyticsBlock(testId);
+    });
+  });
+
+  await loadTestResultsTable(testId);
+}
+
+async function loadTestResultsTable(testId) {
+  const body = document.getElementById('tr-body');
+  if (!body) return;
+  body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div></div>';
+  try {
+    const data = await api.getTestResults(testId);
+    const items = data.items || [];
+    if (!items.length) {
+      body.innerHTML = `<div class="empty-state"><p>По выбранным фильтрам операций не найдено.</p></div>`;
+      return;
+    }
+    body.innerHTML = `<div class="table-wrap"><table class="data-table">
+      <thead><tr>
+        <th>Оператор</th><th>Группа</th><th>Статус</th><th>Начал</th><th>Завершил</th>
+        <th class="num">Время</th><th class="num">Правильных</th><th class="num">%</th>
+        <th class="num">Баллы</th><th class="num">Коины</th><th class="num">Попытка</th>
+      </tr></thead>
+      <tbody>
+        ${items.map(r => `<tr>
+          <td class="name-cell">${esc(r.operator_name)}</td>
+          <td>${esc(r.group_name||'—')}</td>
+          <td>${testStatusBadge(r.status==='finished'?(r.passed?'finished':'expired'):r.status)}</td>
+          <td>${fmtDateTime(r.started_at)}</td>
+          <td>${r.finished_at?fmtDateTime(r.finished_at):'—'}</td>
+          <td class="num">${r.duration_seconds!=null?Math.round(r.duration_seconds/60)+' мин':'—'}</td>
+          <td class="num">${r.correct_count}/${r.questions_count}</td>
+          <td class="num"><b>${cleanNumber(r.score_percent,0)}%</b></td>
+          <td class="num">${cleanNumber(r.score_points,1)}</td>
+          <td class="num">${r.reward_coins||0}</td>
+          <td class="num">${r.attempt_number}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+  } catch(e) {
+    body.innerHTML = `<div class="status-line status-error">${esc(e.message)}</div>`;
+  }
+}
+
+async function loadTestAnalyticsBlock(testId) {
+  const body = document.getElementById('tr-body');
+  if (!body) return;
+  body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div></div>';
+  try {
+    const a = await api.getTestAnalytics(testId);
+    body.innerHTML = `
+      <div class="an-kpi-grid">
+        <div class="an-kpi-cell"><div class="an-kpi-label">Всего назначено</div><div class="an-kpi-value">${a.total_assigned}</div></div>
+        <div class="an-kpi-cell"><div class="an-kpi-label">Начали</div><div class="an-kpi-value">${a.started}</div></div>
+        <div class="an-kpi-cell"><div class="an-kpi-label">Завершили</div><div class="an-kpi-value">${a.finished}</div></div>
+        <div class="an-kpi-cell"><div class="an-kpi-label">Не начали</div><div class="an-kpi-value">${a.not_started}</div></div>
+        <div class="an-kpi-cell"><div class="an-kpi-label">Средний %</div><div class="an-kpi-value">${a.average_percent!=null?a.average_percent+'%':'—'}</div></div>
+        <div class="an-kpi-cell"><div class="an-kpi-label">Среднее время</div><div class="an-kpi-value">${a.average_duration_seconds!=null?Math.round(a.average_duration_seconds/60)+' мин':'—'}</div></div>
+        <div class="an-kpi-cell"><div class="an-kpi-label">Прошли</div><div class="an-kpi-value">${a.passed}</div></div>
+        <div class="an-kpi-cell"><div class="an-kpi-label">Не прошли</div><div class="an-kpi-value">${a.failed}</div></div>
+      </div>
+      <div class="rcard-title" style="margin-top:18px">Вопросы, вызывающие больше всего ошибок</div>
+      <div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Вопрос</th><th class="num">Правильных</th><th class="num">Неправильных</th><th class="num">% ошибок</th></tr></thead>
+        <tbody>
+          ${(a.questions||[]).sort((x,y)=>(y.error_percent||0)-(x.error_percent||0)).map(q => `<tr>
+            <td>${esc(q.question_text)}</td>
+            <td class="num">${q.correct_count}</td>
+            <td class="num">${q.incorrect_count}</td>
+            <td class="num"><b>${q.error_percent!=null?q.error_percent+'%':'—'}</b></td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+    `;
+  } catch(e) {
+    body.innerHTML = `<div class="status-line status-error">${esc(e.message)}</div>`;
+  }
+}
