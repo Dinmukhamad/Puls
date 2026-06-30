@@ -466,7 +466,7 @@ def get_results(
             "group_name": operator.group_name,
             "status": attempt.status,
             "started_at": _utc_iso(attempt.started_at),
-            "finished_at": attempt.finished_at.isoformat() if attempt.finished_at else None,
+            "finished_at": _utc_iso(attempt.finished_at),
             "duration_seconds": (
                 (attempt.finished_at - attempt.started_at).total_seconds()
                 if attempt.finished_at else None
