@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
 from app.database.db import get_db
-from app.models.entities import CoinTransaction, Operator, User, WeeklyResult
+from app.models.entities import CoinTransaction, Operator, PeriodReport, User
 from app.services.rating import latest_period, rating_rows
 
 router = APIRouter(prefix="/rating", tags=["rating"])
@@ -60,7 +60,7 @@ def get_rating(
     rows = rating_rows(db, week_start, week_end)
     period = latest_period(db)
     period_label = _week_label(*period) if period else "—"
-    last_updated = db.scalar(select(func.max(WeeklyResult.created_at)))
+    last_updated = db.scalar(select(func.max(PeriodReport.created_at)))
 
     # Mark current user row
     op = _get_operator_for_user(db, current_user)
@@ -168,10 +168,9 @@ def get_my_dynamics(
         return {"type": type, "items": []}
 
     results = list(db.scalars(
-        select(WeeklyResult)
-        .where(WeeklyResult.operator_id == op.id)
-        .where(WeeklyResult.rank_position.is_not(None))
-        .order_by(WeeklyResult.week_end.desc())
+        select(PeriodReport)
+        .where(PeriodReport.operator_id == op.id)
+        .order_by(PeriodReport.period_end.desc())
         .limit(weeks)
     ))
     results.reverse()
@@ -179,13 +178,17 @@ def get_my_dynamics(
     items = []
     for r in results:
         if type == "coins":
-            value = r.coins_earned or 0
+            value = r.coins_awarded or 0
         elif type == "points":
-            value = r.contest_points or r.final_score or 0
+            value = r.final_points or 0
         else:
-            value = r.rank_position or 0
+            # "place" — динамика места не хранится напрямую, используем
+            # final_points как прокси (выше балл = выше место); для точного
+            # места по историческому периоду нужен пересчёт всей выборки,
+            # что дорого для графика динамики — упрощаем до баллов.
+            value = r.final_points or 0
         items.append({
-            "week": _week_label(r.week_start, r.week_end),
+            "week": _week_label(r.period_start, r.period_end),
             "value": value,
         })
 
