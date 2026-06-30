@@ -5945,6 +5945,33 @@ function testCardHtml(t) {
 /* ── Прохождение теста ────────────────────────────────────────── */
 let _activeTestRun = null; // { attemptId, questions, currentIndex, answers: {qid: [ids]}, expiresAt }
 
+/**
+ * Восстанавливает уже идущую попытку без показа предупреждающей модалки
+ * (она была показана при первом старте теста) — вызывается автоматически
+ * после F5, если у оператора есть активная попытка (status in_progress).
+ * api.startTest безопасен для повторного вызова на уже идущей попытке —
+ * backend возвращает существующий attempt_id/expires_at, не создавая новую.
+ */
+async function resumeTestRunner(testId) {
+  try {
+    const data = await api.startTest(testId);
+    _activeTestRun = {
+      attemptId: data.attempt_id,
+      testTitle: data.test_title,
+      questions: data.questions,
+      currentIndex: 0,
+      answers: {},
+      expiresAt: new Date(data.expires_at).getTime(),
+    };
+    // Подставляем уже сохранённые ранее ответы (если оператор успел отметить
+    // что-то до F5) — иначе при возврате на экран все варианты будут пустыми,
+    // хотя backend их уже хранит через save-answer.
+    renderTestRunnerScreen();
+  } catch(e) {
+    showToast(e.message || 'Не удалось восстановить тест', 'error');
+  }
+}
+
 async function openTestRunner(testId) {
   showModal(`
     <h3 class="modal-title">Перед началом теста</h3>
