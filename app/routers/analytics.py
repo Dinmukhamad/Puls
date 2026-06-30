@@ -35,9 +35,13 @@ from app.services.period_reports import (
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
-# Переиспользуем то же in-memory хранилище, что и period_reports —
-# файлы загружаются один раз через /api/reports/period-report/upload
-from app.routers.period_reports import _LAST_UPLOAD  # noqa: E402
+from app.models.entities import UploadedReportFile
+
+
+def _get_uploaded_bytes(db: Session, file_kind: str):
+    """Читает загруженный xlsx-файл из БД (та же таблица, что period_reports)."""
+    row = db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == file_kind))
+    return row.content if row else None
 
 
 def _require_analytics_access(current_user: User = Depends(get_current_user)) -> User:
@@ -78,7 +82,9 @@ def _get_rows(
     participation_status: Optional[str] = None,
     only_with_data: bool = False,
 ):
-    if not _LAST_UPLOAD.get("monthly") or not _LAST_UPLOAD.get("report"):
+    monthly_bytes = _get_uploaded_bytes(db, "monthly")
+    report_bytes = _get_uploaded_bytes(db, "report")
+    if not monthly_bytes or not report_bytes:
         raise HTTPException(status_code=400, detail="Сначала загрузите файлы Monthly Report и Report в разделе «Расчёт периода»")
 
     site_ops = _site_operators(db)
@@ -131,7 +137,8 @@ def get_daily_dynamics(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    if not _LAST_UPLOAD.get("report"):
+    report_bytes = _get_uploaded_bytes(db, "report")
+    if not report_bytes:
         raise HTTPException(status_code=400, detail="Сначала загрузите файл Report")
 
     site_ops = _site_operators(db)
@@ -143,7 +150,7 @@ def get_daily_dynamics(
     if days > 31:
         raise HTTPException(status_code=400, detail="Период для динамики по дням ограничен 31 днём")
 
-    dynamics = compute_daily_dynamics(_LAST_UPLOAD["report"], start_date, end_date, site_keys, metric)
+    dynamics = compute_daily_dynamics(report_bytes, start_date, end_date, site_keys, metric)
     return {"metric": metric, "items": dynamics}
 
 
@@ -263,7 +270,9 @@ def get_heatmap(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
-    if not _LAST_UPLOAD.get("report"):
+    monthly_bytes = _get_uploaded_bytes(db, "monthly")
+    report_bytes = _get_uploaded_bytes(db, "report")
+    if not report_bytes:
         raise HTTPException(status_code=400, detail="Сначала загрузите файлы")
 
     days = (end_date - start_date).days
@@ -276,7 +285,7 @@ def get_heatmap(
     site_keys = {normalize_name(o.full_name): o.full_name for o in site_ops if o.full_name}
 
     result = compute_heatmap(
-        _LAST_UPLOAD.get("monthly"), _LAST_UPLOAD["report"],
+        monthly_bytes, report_bytes,
         start_date, end_date, site_keys, metric,
     )
     return result
