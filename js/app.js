@@ -127,6 +127,7 @@ function renderView(view) {
     case 'requests': renderRequests(); break;
     case 'history':  renderHistory();  break;
     case 'groups':   renderGroups();   break;
+    case 'period-report': renderPeriodReport(); break;
   }
 }
 
@@ -238,7 +239,7 @@ function buildViews(role) {
   const shell = document.getElementById('app-shell');
   if (!shell) return;
   const views = isAdmin(role)
-    ? ['summary', 'operators', 'manual', 'requests', 'shop', 'history', ...(canManageGroups(role) ? ['groups'] : []), 'cabinet', 'rating']
+    ? ['summary', 'operators', 'manual', 'requests', 'shop', 'history', ...(canManageGroups(role) ? ['groups'] : []), 'period-report', 'cabinet', 'rating']
     : ['cabinet', 'rating', 'shop'];
   shell.innerHTML = views.map(v => `<section class="app-view" id="view-${v}"></section>`).join('');
 }
@@ -246,7 +247,7 @@ function buildViews(role) {
 function renderSidebar(role) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     const t = link.dataset.navTarget;
-    const adminViews = ['summary','operators','manual','requests','history'];
+    const adminViews = ['summary','operators','manual','requests','history','period-report'];
     const operatorViews = ['cabinet','rating','shop'];
     const sharedViews = ['shop','rating','cabinet'];
     let show = false;
