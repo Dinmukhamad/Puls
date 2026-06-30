@@ -5165,7 +5165,13 @@ async function loadRatingTab(tab) {
   if (!content) return;
   const myNavGen = STATE.navGen;
   const myTabGen = bumpRatingTabGen(); // отменяет любой ещё не завершённый рендер предыдущей вкладки
-  content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>';
+  // Спиннер с задержкой 150мс — если данные уже в кеше (sessionStorage),
+  // swrFetch отдаст их синхронно внутри render*Tab-функций раньше, чем
+  // успеет сработать таймер, и переключение вкладок будет мгновенным.
+  const spinnerTimer = setTimeout(() => {
+    if (isNavStale(myNavGen) || isRatingTabStale(myTabGen)) return;
+    content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>';
+  }, 150);
 
   try {
     if (tab === 'overview') await renderRatingOverviewTab(content);
@@ -5173,10 +5179,12 @@ async function loadRatingTab(tab) {
     else if (tab === 'groups') await renderRatingGroupsTab(content);
     else if (tab === 'progress') await renderRatingProgressTab(content);
   } catch(e) {
+    clearTimeout(spinnerTimer);
     if (isNavStale(myNavGen) || isRatingTabStale(myTabGen)) return; // ушли в другой раздел/вкладку — не показываем чужую ошибку
     content.innerHTML = `<div class="rating-card"><div class="status-line status-error">Не удалось загрузить: ${esc(e.message)}</div></div>`;
     return;
   }
+  clearTimeout(spinnerTimer);
   // Успешный рендер прошёл, но пока ждали ответ сервера пользователь мог уже
   // переключиться на другой раздел или другую вкладку — в этом случае контент,
   // который только что записали внутренние render*Tab-функции, всё равно устарел.
