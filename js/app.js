@@ -18,7 +18,25 @@ let STATE = {
   history: [],
   groups: [],
   currentView: 'cabinet',
+  navGen: 0,       // увеличивается при каждой смене раздела/вкладки —
+  ratingTabGen: 0, // используется для отмены "осиротевших" async-рендеров
 };
+
+/**
+ * Защита от устаревших async-рендеров при быстром переключении разделов/вкладок.
+ * Использование: захватить токен ДО await-ов, и проверить isStale() сразу
+ * после каждого await — если true, дальше рендерить (писать в DOM) не нужно,
+ * пользователь уже ушёл в другой раздел/вкладку.
+ *
+ *   const myGen = bumpNavGen();
+ *   const data = await fetch(...);
+ *   if (isNavStale(myGen)) return;   // раздел сменился — выходим тихо
+ *   el.innerHTML = ...;
+ */
+function bumpNavGen() { return ++STATE.navGen; }
+function isNavStale(token) { return token !== STATE.navGen; }
+function bumpRatingTabGen() { return ++STATE.ratingTabGen; }
+function isRatingTabStale(token) { return token !== STATE.ratingTabGen; }
 
 /* ══════════════════════════════════════
    BOOT
