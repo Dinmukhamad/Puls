@@ -3129,27 +3129,29 @@ body.side-nav-collapsed .side-nav-toggle svg {
   z-index: 2;
 }
 
-/* ── Car icon (F1 top-view, currentColor-driven) ─────────────*/
+/* ── Car icon (uploaded F1 top-view PNG/WebP images) ─────────*/
 .race-car-icon {
   position: absolute;
   left: 50%;
   width: 30px;
-  height: 15px;
+  height: 30px;
+  object-fit: contain;
   transform: translate(-50%, -100%);
   display: block;
   transition: bottom .45s cubic-bezier(.2,.8,.2,1);
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.18));
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,.2));
   z-index: 3;
 }
-.race-car-icon svg { width: 100%; height: 100%; display: block; }
-.race-car-icon.default { color: #64748b; }
-.race-car-icon.rank-1 { color: #f59e0b; }
-.race-car-icon.rank-2 { color: #94a3b8; }
-.race-car-icon.rank-3 { color: #f97316; }
 .race-car-icon.is-current-user {
-  color: #0ea5e9;
-  width: 34px;
-  height: 17px;
+  width: 36px;
+  height: 36px;
+  filter: drop-shadow(0 3px 6px rgba(14,165,233,.35));
+}
+.race-car-icon.rank-1,
+.race-car-icon.rank-2,
+.race-car-icon.rank-3 {
+  width: 32px;
+  height: 32px;
 }
 
 /* ── X-axis labels ────────────────────────────────────────── */
