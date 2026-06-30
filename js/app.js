@@ -4168,7 +4168,12 @@ async function loadAnalyticsTab(tab) {
       default: content.innerHTML = '<div class="empty-line">Вкладка не найдена</div>';
     }
   } catch(e) {
+    if (isNavStale(myNavGen) || isAnalyticsTabStale(myTabGen)) return;
     content.innerHTML = `<div class="an-card"><div class="status-line status-error">Не удалось загрузить: ${esc(e.message)}</div></div>`;
+    return;
+  }
+  if (isNavStale(myNavGen) || isAnalyticsTabStale(myTabGen)) {
+    content.innerHTML = '';
   }
 }
 
