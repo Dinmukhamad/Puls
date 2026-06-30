@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.db import Base
@@ -215,3 +215,19 @@ class PeriodReport(Base):
     created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     operator: Mapped["Operator"] = relationship("Operator")
+
+
+class UploadedReportFile(Base):
+    """
+    Хранилище загруженных xlsx-файлов (Monthly Report / Report) для раздела
+    «Расчёт периода» и «Аналитика». Храним в БД (не in-memory), чтобы файлы
+    переживали редеплой и перезапуск контейнера.
+    """
+    __tablename__ = "uploaded_report_files"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_kind: Mapped[str] = mapped_column(String(32), unique=True, index=True)  # "monthly" | "report"
+    filename: Mapped[str] = mapped_column(String(255))
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+    uploaded_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
