@@ -253,6 +253,9 @@ const api = (() => {
     getPeriodReportStatus, uploadPeriodReportFiles, savePeriodReport,
     getAvailablePeriods, analyticsGet,
     getRatingRace, getMyRatingDynamics,
+    myTests, startTest, saveTestAnswer, finishTest, getTestResult,
+    listAdminTests, createTest, updateTest, addTestQuestion, updateTestQuestion, deleteTestQuestion,
+    assignTest, publishTest, closeTest, getTestResults, getTestAnalytics,
     loginOperator: login,
     _base,
   };
