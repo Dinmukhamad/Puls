@@ -3882,27 +3882,57 @@ function renderHeatmapBlock() {
   </div>`;
 }
 
-function heatColor(metric, v) {
+// Преобразует число 0..1 в мягкий цвет по градиенту красный→жёлтый→зелёный (HSL, низкая насыщенность)
+function softGradientColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  // HSL hue: 0 (красный) -> 50 (жёлтый) -> 142 (зелёный)
+  const hue = t < 0.5 ? (t / 0.5) * 50 : 50 + ((t - 0.5) / 0.5) * 92;
+  return `hsl(${hue.toFixed(0)}, 62%, 78%)`;
+}
+
+function heatColor(metric, v, ctx) {
   if (v === null || v === undefined) return 'var(--bg-muted)';
+
   if (metric === 'penalty') {
-    if (v === 0) return '#16A34A';
-    if (v <= 5) return '#FACC15';
-    if (v <= 20) return '#EA580C';
-    return '#DC2626';
+    // Штрафы: 0 — нейтрально-зелёный мягкий, дальше темнее к красному, без скачков
+    if (v === 0) return 'hsl(142, 45%, 82%)';
+    const maxRef = Math.max(ctx?.maxVal || 30, 20);
+    const t = Math.min(1, v / maxRef);
+    // инвертируем: больше штраф — краснее
+    return softGradientColor(1 - t);
   }
-  // quality / efficiency / kvz / calls — higher is better, use 0-100 scale heuristically
-  const scale = metric === 'calls' ? Math.min(100, v / 3) : v;
-  if (scale >= 90) return '#16A34A';
-  if (scale >= 80) return '#84CC16';
-  if (scale >= 70) return '#FACC15';
-  if (scale >= 50) return '#EA580C';
-  return '#DC2626';
+
+  if (metric === 'quality' || metric === 'efficiency') {
+    // Шкала 0-100, фиксированная и предсказуемая
+    const t = Math.max(0, Math.min(1, v / 100));
+    return softGradientColor(t);
+  }
+
+  // calls / kvz — нет фиксированного максимума, используем относительный масштаб
+  // по диапазону значений в текущей таблице (min..max), без ложного "всё красное"
+  const minV = ctx?.minVal ?? 0;
+  const maxV = ctx?.maxVal ?? (v || 1);
+  if (maxV <= minV) return softGradientColor(0.6);
+  const t = (v - minV) / (maxV - minV);
+  return softGradientColor(t);
 }
 
 function renderHeatmapTable(data, metric) {
   const dates = data.dates || [];
   const operators = data.operators || [];
   if (!operators.length || !dates.length) return '<div class="empty-line">Нет данных для тепловой карты</div>';
+
+  // Считаем диапазон значений по всей таблице для относительного масштаба (calls/kvz)
+  let allVals = [];
+  operators.forEach(op => dates.forEach(d => {
+    const v = op.values[d];
+    if (v !== null && v !== undefined) allVals.push(v);
+  }));
+  const ctx = {
+    minVal: allVals.length ? Math.min(...allVals) : 0,
+    maxVal: allVals.length ? Math.max(...allVals) : 1,
+  };
+
   return `<div class="an-heatmap-wrap"><table class="an-heatmap-table">
     <thead><tr><th class="an-heatmap-name-col">Оператор</th>
       ${dates.map(d => `<th>${esc(d.slice(5))}</th>`).join('')}
@@ -3912,7 +3942,7 @@ function renderHeatmapTable(data, metric) {
         <td class="an-heatmap-name-col name-cell">${esc(op.full_name)}</td>
         ${dates.map(d => {
           const v = op.values[d];
-          const bg = heatColor(metric, v);
+          const bg = heatColor(metric, v, ctx);
           const label = v == null ? '—' : (metric==='kvz'||metric==='penalty' ? v.toFixed(1) : Math.round(v));
           return `<td class="an-heatmap-cell" style="background:${bg}" title="${esc(op.full_name)} ${d}: ${v==null?'нет данных':label}">${label}</td>`;
         }).join('')}
