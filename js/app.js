@@ -5182,22 +5182,30 @@ function raceCarRankClass(rank, isCurrentUser) {
 
 function renderRaceChart(items) {
   const maxPoints = Math.max(...items.map(i => i.points), 1);
-  const niceMax = Math.ceil(maxPoints / 100) * 100 || 100;
+  // Шкала строится от максимального балла среди отображаемых операторов,
+  // с запасом ~15%, затем округляется до приятного числа делений по 5 шагам.
+  const rawMax = maxPoints * 1.15;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax || 1)));
+  const niceMax = Math.ceil(rawMax / (magnitude / 2)) * (magnitude / 2) || 100;
   const ticks = [];
   for (let v = 0; v <= niceMax; v += niceMax / 5) ticks.push(Math.round(v));
 
-  const chartH = 300;
-  const padBottom = 64;
-  const usableH = chartH - padBottom;
+  // Резервируем место сверху под машинку + подпись баллов у самого высокого столбца,
+  // и снизу под подпись ФИО/инициалов — чтобы ничего не обрезалось контейнером.
+  const padTop = 70;     // машинка (~36px) + текст баллов (~20px) + зазор
+  const padBottom = 56;  // подпись инициалов + тег "Вы"
+  const plotH = 280;     // высота самой полосы графика (без отступов)
+  const chartH = plotH + padTop + padBottom;
+  const usableH = plotH;
+
   const n = items.length;
-  // Ширина столбца уже, чем раньше; при малом количестве элементов — растягиваем под контейнер
   const barW = n <= 6 ? 56 : n <= 12 ? 48 : 36;
   const gap = n <= 6 ? 32 : n <= 12 ? 24 : 14;
-  const stretch = n <= 12; // в "Моя зона"/Топ-10 растягиваем на всю ширину
+  const stretch = n <= 12;
 
   return `<div class="race-chart-scroll">
     <div class="race-chart ${stretch ? 'race-chart-stretch' : ''}" style="height:${chartH}px">
-      <div class="race-axis-labels" style="height:${chartH - padBottom}px">
+      <div class="race-axis-labels" style="height:${usableH}px;margin-top:${padTop}px">
         ${ticks.slice().reverse().map(t => `<div class="race-axis-tick">${t}</div>`).join('')}
       </div>
       <div class="race-bars-area" style="height:${chartH}px;${stretch ? '' : `min-width:${n * (barW+gap) + 40}px`}">
@@ -5206,10 +5214,12 @@ function renderRaceChart(items) {
           const barH = Math.max(4, (it.points / niceMax) * usableH);
           const rankClass = raceCarRankClass(it.rank, it.is_current_user);
           const colWidth = stretch ? `calc((100% - ${(n-1)*24}px) / ${n})` : `${barW}px`;
+          const carBottom = padBottom + barH + 22;   // машинка стоит на 22px над верхом столбца
+          const labelBottom = carBottom + 30;          // подпись баллов — ещё выше, над машинкой
           return `<div class="race-col ${it.is_current_user?'race-col-me':''}" style="width:${colWidth};flex:${stretch?'1 1 0':'0 0 auto'}" data-race-operator="${it.operator_id}"
               title="${esc(it.full_name)}${it.group?' · '+esc(it.group):''} · место #${it.rank} · ${Math.round(it.points)} баллов">
-            <img class="race-car-icon ${rankClass}" style="bottom:${padBottom + barH}px" src="${raceCarImageSrc(it.rank, it.is_current_user)}" alt="" loading="lazy">
-            <div class="race-points-label" style="bottom:${padBottom + barH + 26}px">${Math.round(it.points)}</div>
+            <div class="race-points-label" style="bottom:${labelBottom}px">${Math.round(it.points)}</div>
+            <img class="race-car-icon ${rankClass}" style="bottom:${carBottom}px" src="${raceCarImageSrc(it.rank, it.is_current_user)}" alt="" loading="lazy">
             <div class="race-bar ${it.is_current_user?'race-bar-me':''} ${rankClass}" style="height:${barH}px;bottom:${padBottom}px"></div>
             <div class="race-x-label ${it.is_current_user?'race-x-label-me':''}">
               ${esc(it.initials)}
