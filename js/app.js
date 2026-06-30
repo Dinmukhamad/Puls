@@ -2930,3 +2930,330 @@ window.submitLegacyChangePassword = submitLegacyChangePassword;
 window.submitChangePassword = submitChangePassword;
 window.submitChangeUsername = submitChangeUsername;
 window.copyCredentials = copyCredentials;
+
+
+/* ══════════════════════════════════════
+   VIEW: РАСЧЁТ ЗА ПЕРИОД
+══════════════════════════════════════ */
+function renderPeriodReport() {
+  const el = document.getElementById('view-period-report');
+  if (!el) return;
+
+  let lastResult = null;
+  let searchVal = '', filterGroup = '', sortKey = 'final_points', sortDir = 'desc';
+
+  function fmtNum(v, decimals = 2) {
+    if (v === null || v === undefined || isNaN(v)) return '—';
+    return Number(v).toFixed(decimals);
+  }
+
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Расчёт</div><h2 class="section-title">Расчёт показателей за период</h2></div>
+    </div>
+
+    <div class="pr-card">
+      <div class="pr-card-head">Загрузка файлов</div>
+      <div class="pr-upload-grid">
+        <div class="form-group">
+          <label class="form-label">Monthly Report — оценки качества звонков</label>
+          <input id="pr-file-monthly" type="file" accept=".xlsx" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Report — часы, звонки, штрафы</label>
+          <input id="pr-file-report" type="file" accept=".xlsx" class="form-input">
+        </div>
+      </div>
+      <div id="pr-upload-status" class="status-line"></div>
+      <button class="btn-primary" id="pr-upload-btn" style="margin-top:8px">Загрузить файлы</button>
+    </div>
+
+    <div class="pr-card">
+      <div class="pr-card-head">Период расчёта</div>
+      <div class="pr-period-row">
+        <div class="form-group">
+          <label class="form-label">Дата начала</label>
+          <input id="pr-start-date" type="date" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Дата окончания</label>
+          <input id="pr-end-date" type="date" class="form-input">
+        </div>
+        <button class="btn-primary" id="pr-calc-btn" style="align-self:flex-end">Рассчитать</button>
+      </div>
+      <div id="pr-calc-status" class="status-line"></div>
+    </div>
+
+    <div id="pr-results"></div>
+  `;
+
+  // Upload handler
+  el.querySelector('#pr-upload-btn').addEventListener('click', async () => {
+    const monthlyFile = el.querySelector('#pr-file-monthly').files[0];
+    const reportFile = el.querySelector('#pr-file-report').files[0];
+    const statusEl = el.querySelector('#pr-upload-status');
+
+    if (!monthlyFile || !reportFile) {
+      statusEl.textContent = 'Выберите оба файла';
+      statusEl.className = 'status-line status-error';
+      return;
+    }
+    if (!monthlyFile.name.toLowerCase().endsWith('.xlsx') || !reportFile.name.toLowerCase().endsWith('.xlsx')) {
+      statusEl.textContent = 'Файлы должны быть в формате .xlsx';
+      statusEl.className = 'status-line status-error';
+      return;
+    }
+
+    statusEl.textContent = 'Загружаем…';
+    statusEl.className = 'status-line';
+
+    const formData = new FormData();
+    formData.append('monthly_report_file', monthlyFile);
+    formData.append('report_file', reportFile);
+
+    try {
+      const res = await fetch(api._base() + '/api/reports/period-report/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки');
+      statusEl.textContent = '✓ ' + data.message;
+      statusEl.className = 'status-line status-ok';
+    } catch (e) {
+      statusEl.textContent = e.message;
+      statusEl.className = 'status-line status-error';
+    }
+  });
+
+  // Calculate handler
+  el.querySelector('#pr-calc-btn').addEventListener('click', async () => {
+    const startDate = el.querySelector('#pr-start-date').value;
+    const endDate = el.querySelector('#pr-end-date').value;
+    const statusEl = el.querySelector('#pr-calc-status');
+
+    if (!startDate || !endDate) {
+      statusEl.textContent = 'Укажите дату начала и окончания';
+      statusEl.className = 'status-line status-error';
+      return;
+    }
+    if (startDate > endDate) {
+      statusEl.textContent = 'Дата начала не может быть позже даты окончания';
+      statusEl.className = 'status-line status-error';
+      return;
+    }
+
+    statusEl.textContent = 'Считаем…';
+    statusEl.className = 'status-line';
+
+    try {
+      const res = await fetch(
+        api._base() + `/api/reports/operators-period-summary?start_date=${startDate}&end_date=${endDate}`,
+        { credentials: 'include' }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Ошибка расчёта');
+      statusEl.textContent = '';
+      lastResult = data;
+      renderResults(data);
+    } catch (e) {
+      statusEl.textContent = e.message;
+      statusEl.className = 'status-line status-error';
+      el.querySelector('#pr-results').innerHTML = '';
+    }
+  });
+
+  function renderResults(data) {
+    const ops = data.operators || [];
+    const warnings = data.warnings || [];
+    const groups = [...new Set(ops.map(o => o.group_name).filter(Boolean))].sort();
+
+    const avgQuality = ops.length ? ops.reduce((s, o) => s + (o.quality_avg || 0), 0) / ops.length : 0;
+    const totalCalls = ops.reduce((s, o) => s + (o.calls_total || 0), 0);
+    const avgKvz = ops.length ? ops.reduce((s, o) => s + (o.kvz || 0), 0) / ops.length : 0;
+    const avgEff = ops.length ? ops.reduce((s, o) => s + (o.efficiency_percent || 0), 0) / ops.length : 0;
+    const totalPenaltyMin = ops.reduce((s, o) => s + (o.penalty_minutes || 0), 0);
+
+    function filteredSorted() {
+      let r = ops.filter(o =>
+        (!searchVal || o.full_name.toLowerCase().includes(searchVal.toLowerCase())) &&
+        (!filterGroup || o.group_name === filterGroup)
+      );
+      r.sort((a, b) => {
+        const av = a[sortKey] || 0, bv = b[sortKey] || 0;
+        return sortDir === 'desc' ? bv - av : av - bv;
+      });
+      return r;
+    }
+
+    function sortIndicator(key) {
+      if (sortKey !== key) return '';
+      return sortDir === 'desc' ? ' ↓' : ' ↑';
+    }
+
+    function renderTable() {
+      const rows = filteredSorted();
+      if (!rows.length) return '<div class="empty-line">Нет данных для отображения</div>';
+      return `<div class="table-wrap"><table class="data-table">
+        <thead><tr>
+          <th>Оператор</th><th>Группа</th>
+          <th class="num sortable" data-sort="final_points">Баллы${sortIndicator('final_points')}</th>
+          <th class="num sortable" data-sort="quality_avg">Качество${sortIndicator('quality_avg')}</th>
+          <th class="num">Звонков оцен.</th>
+          <th class="num">Итог часов</th>
+          <th class="num">База часов</th>
+          <th class="num sortable" data-sort="kvz">КВЗ${sortIndicator('kvz')}</th>
+          <th class="num sortable" data-sort="efficiency_percent">Эфф. %${sortIndicator('efficiency_percent')}</th>
+          <th class="num sortable" data-sort="penalty_minutes">Штраф мин${sortIndicator('penalty_minutes')}</th>
+        </tr></thead>
+        <tbody>
+          ${rows.map(o => `
+            <tr>
+              <td class="name-cell">${esc(o.full_name)}</td>
+              <td>${esc(o.group_name || '—')}</td>
+              <td class="num"><b>${fmtNum(o.final_points)}</b></td>
+              <td class="num">${o.quality_calls_count > 0 ? fmtNum(o.quality_avg) : '<span style="color:var(--text-muted)">нет оценок</span>'}</td>
+              <td class="num">${o.quality_calls_count}</td>
+              <td class="num">${fmtNum(o.total_hours)}</td>
+              <td class="num">${fmtNum(o.base_hours)}</td>
+              <td class="num">${fmtNum(o.kvz)}</td>
+              <td class="num">${fmtNum(o.efficiency_percent)}%</td>
+              <td class="num" style="${o.penalty_minutes > 0 ? 'color:var(--danger)' : ''}">${fmtNum(o.penalty_minutes, 1)}</td>
+            </tr>
+            ${o.warnings && o.warnings.length ? `<tr><td colspan="10" style="padding:4px 16px;background:var(--warning-soft)">
+              <span style="font-size:11px;color:var(--warning)">⚠ ${o.warnings.map(esc).join(' · ')}</span>
+            </td></tr>` : ''}
+          `).join('')}
+        </tbody>
+      </table></div>`;
+    }
+
+    el.querySelector('#pr-results').innerHTML = `
+      <div class="pr-stats-row">
+        <div class="pr-stat"><div class="pr-stat-val">${ops.length}</div><div class="pr-stat-label">Операторов</div></div>
+        <div class="pr-stat"><div class="pr-stat-val">${fmtNum(avgQuality)}</div><div class="pr-stat-label">Сред. качество</div></div>
+        <div class="pr-stat"><div class="pr-stat-val">${fmtNum(totalCalls, 0)}</div><div class="pr-stat-label">Всего звонков</div></div>
+        <div class="pr-stat"><div class="pr-stat-val">${fmtNum(avgKvz)}</div><div class="pr-stat-label">Средний КВЗ</div></div>
+        <div class="pr-stat"><div class="pr-stat-val">${fmtNum(avgEff)}%</div><div class="pr-stat-label">Сред. эффективность</div></div>
+        <div class="pr-stat"><div class="pr-stat-val">${fmtNum(totalPenaltyMin, 1)}</div><div class="pr-stat-label">Штрафов, мин</div></div>
+      </div>
+
+      ${warnings.length ? `
+      <div class="pr-card">
+        <div class="pr-card-head">Предупреждения сопоставления (${warnings.length})</div>
+        <div class="pr-warnings-list">
+          ${warnings.slice(0, 20).map(w => `<div class="pr-warning-row">⚠ <b>${esc(w.operator)}</b> — ${esc(w.message)}</div>`).join('')}
+          ${warnings.length > 20 ? `<div class="pr-warning-row" style="color:var(--text-muted)">… и ещё ${warnings.length - 20}</div>` : ''}
+        </div>
+      </div>` : ''}
+
+      <div class="pr-card">
+        <div class="pr-card-head-row">
+          <span>Результаты по операторам</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn-outline btn-sm" id="pr-export-btn">Экспорт CSV</button>
+            <button class="btn-primary btn-sm" id="pr-save-btn">Сохранить расчёт</button>
+          </div>
+        </div>
+        <div class="pr-filters-row">
+          <input id="pr-search" class="form-input" placeholder="Поиск по ФИО…" style="max-width:240px">
+          <select id="pr-group-filter" class="form-select" style="max-width:180px">
+            <option value="">Все группы</option>
+            ${groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('')}
+          </select>
+        </div>
+        <div id="pr-table-wrap">${renderTable()}</div>
+      </div>
+    `;
+
+    // Bind search/filter/sort
+    el.querySelector('#pr-search')?.addEventListener('input', e => {
+      searchVal = e.target.value;
+      el.querySelector('#pr-table-wrap').innerHTML = renderTable();
+      bindTableSort();
+    });
+    el.querySelector('#pr-group-filter')?.addEventListener('change', e => {
+      filterGroup = e.target.value;
+      el.querySelector('#pr-table-wrap').innerHTML = renderTable();
+      bindTableSort();
+    });
+
+    function bindTableSort() {
+      el.querySelectorAll('.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+          const key = th.dataset.sort;
+          if (sortKey === key) sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+          else { sortKey = key; sortDir = 'desc'; }
+          el.querySelector('#pr-table-wrap').innerHTML = renderTable();
+          bindTableSort();
+        });
+      });
+    }
+    bindTableSort();
+
+    // Export CSV
+    el.querySelector('#pr-export-btn')?.addEventListener('click', () => {
+      const rows = filteredSorted();
+      const headers = ['ФИО','Группа','Итоговые баллы','Кач-во','Звонков оцен.','Итог часов','База часов',
+        'Техсбои','Тренинги','Офлайн','Звонки','КВЗ','Часы в звонке','Эфф. %','Штраф сумма','Штраф мин','Штраф баллы'];
+      const csvRows = [headers.join(';')];
+      rows.forEach(o => {
+        csvRows.push([
+          o.full_name, o.group_name || '', o.final_points, o.quality_avg, o.quality_calls_count,
+          o.total_hours, o.base_hours, o.tech_issue_hours, o.training_hours, o.offline_activity_hours,
+          o.calls_total, o.kvz, o.call_time_hours, o.efficiency_percent, o.penalty_sum, o.penalty_minutes, o.penalty_points
+        ].join(';'));
+      });
+      const blob = new Blob(['\ufeff' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `период_${data.period.start}_${data.period.end}.csv`;
+      a.click(); URL.revokeObjectURL(url);
+    });
+
+    // Save handler
+    el.querySelector('#pr-save-btn')?.addEventListener('click', () => {
+      showModal(`
+        <h3 class="modal-title">Сохранить расчёт</h3>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:14px">
+          Период: ${esc(data.period.start)} — ${esc(data.period.end)}. Будет сохранено ${ops.length} расчётов.
+        </p>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-bottom:14px">
+          <input type="checkbox" id="pr-award-coins-check">
+          Начислить коины по формуле: баллы / 5 (округление вниз)
+        </label>
+        <div id="pr-save-err" class="status-line"></div>
+        <button class="btn-primary" style="width:100%" id="pr-save-confirm-btn">Сохранить</button>
+      `);
+      document.getElementById('pr-save-confirm-btn').addEventListener('click', async () => {
+        const awardCoins = document.getElementById('pr-award-coins-check').checked;
+        const errEl = document.getElementById('pr-save-err');
+        try {
+          const res = await fetch(api._base() + '/api/reports/period-report/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              start_date: data.period.start,
+              end_date: data.period.end,
+              award_coins: awardCoins,
+            }),
+          });
+          const result = await res.json();
+          if (!res.ok) throw new Error(result.detail || 'Ошибка сохранения');
+          closeModal();
+          showToast(result.message, 'ok');
+          if (result.skipped_no_match?.length) {
+            console.warn('Не сопоставлены с операторами в БД:', result.skipped_no_match);
+          }
+        } catch (e) {
+          errEl.textContent = e.message;
+          errEl.className = 'status-line status-error';
+        }
+      });
+    });
+  }
+}
+
+window.renderPeriodReport = renderPeriodReport;
