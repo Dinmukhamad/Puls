@@ -4063,8 +4063,20 @@ async function analyticsFetch(path, params, onUpdate) {
   const key = 'analytics:' + path + ':' + JSON.stringify(params || {});
   return swrFetch(key, async () => {
     const res = await fetch(analyticsApiUrl(path, params), { credentials: 'include' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки данных');
+    // Сначала читаем как текст — backend при 500 может вернуть обычный
+    // текст ("Internal Server Error"), а не JSON; res.json() в этом случае
+    // падает с "Unexpected token 'I'..." вместо понятной ошибки пользователю.
+    const text = await res.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error(text?.slice(0, 200) || `Ошибка ${res.status}`);
+    }
+    if (!res.ok) {
+      const msg = data.detail || data.error || `Ошибка ${res.status}`;
+      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    }
     return data;
   }, onUpdate, ANALYTICS_SWR_TTL_MS);
 }
