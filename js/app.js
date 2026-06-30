@@ -4983,3 +4983,309 @@ async function exportAnalyticsCsv(kind) {
 }
 
 window.renderAnalytics = renderAnalytics;
+
+/* ══════════════════════════════════════
+   VIEW: РЕЙТИНГ — обёртка с горизонтальными вкладками
+══════════════════════════════════════ */
+const RATING_TABS = [
+  { key: 'overview', label: 'Общий рейтинг' },
+  { key: 'race',     label: 'Гонка баллов' },
+  { key: 'groups',   label: 'Сравнение групп' },
+  { key: 'progress', label: 'Мой прогресс' },
+];
+
+let _ratingActiveTab = 'overview';
+
+async function renderRating() {
+  const el = document.getElementById('view-rating');
+  if (!el) return;
+
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
+      <div class="header-right"><button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button></div>
+    </div>
+    <div class="analytics-tabs" id="rating-tabs">
+      ${RATING_TABS.map(t => `<button class="analytics-tab ${t.key===_ratingActiveTab?'active':''}" data-tab="${t.key}">${esc(t.label)}</button>`).join('')}
+    </div>
+    <div id="rating-tab-content"></div>
+  `;
+
+  el.querySelectorAll('.analytics-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      el.querySelectorAll('.analytics-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _ratingActiveTab = btn.dataset.tab;
+      loadRatingTab(_ratingActiveTab);
+    });
+  });
+
+  await loadRatingTab(_ratingActiveTab);
+}
+
+async function loadRatingTab(tab) {
+  const content = document.getElementById('rating-tab-content');
+  if (!content) return;
+  content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>';
+
+  try {
+    if (tab === 'overview') await renderRatingOverviewTab(content);
+    else if (tab === 'race') await renderRatingRaceTab(content);
+    else if (tab === 'groups') await renderRatingGroupsTab(content);
+    else if (tab === 'progress') await renderRatingProgressTab(content);
+  } catch(e) {
+    content.innerHTML = `<div class="rating-card"><div class="status-line status-error">Не удалось загрузить: ${esc(e.message)}</div></div>`;
+  }
+}
+
+/* ── Вкладка: Гонка баллов ─────────────────────────────────────*/
+let _raceState = { groupId: '', mode: 'top10' };
+
+async function fetchRace(params) {
+  const qs = new URLSearchParams(params).toString();
+  const res = await fetch(api._base() + '/api/rating/race' + (qs ? '?' + qs : ''), { credentials: 'include' });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки гонки баллов');
+  return data;
+}
+
+async function renderRatingRaceTab(content) {
+  // Load groups for filter (reuse rating data for group names)
+  let groupOptions = '<option value="">Все группы</option>';
+  try {
+    const baseData = await fetchRace({ mode: 'all' });
+    const groupNames = [...new Set((baseData.items || []).map(i => i.group).filter(Boolean))].sort();
+    groupOptions += groupNames.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+  } catch(e) { /* ignore — filter will just show "Все группы" */ }
+
+  content.innerHTML = `
+    <div class="rating-card">
+      <div class="race-header-row">
+        <div>
+          <div class="race-title">Гонка баллов</div>
+          <div class="race-subtitle">Сравните свои баллы с другими операторами и группами</div>
+        </div>
+        <div id="race-my-place-badge"></div>
+      </div>
+      <div class="race-filters-row">
+        <select id="race-group-filter" class="form-select" style="max-width:200px">${groupOptions}</select>
+        <div class="an-mode-switcher" id="race-mode-switcher" style="margin:0">
+          <button class="an-mode-btn ${_raceState.mode==='top10'?'active':''}" data-mode="top10">Топ-10</button>
+          <button class="an-mode-btn ${_raceState.mode==='top20'?'active':''}" data-mode="top20">Топ-20</button>
+          <button class="an-mode-btn ${_raceState.mode==='my_zone'?'active':''}" data-mode="my_zone">Моя зона</button>
+          <button class="an-mode-btn ${_raceState.mode==='all'?'active':''}" data-mode="all">Все</button>
+        </div>
+      </div>
+      <div id="race-chart-wrap"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+    </div>
+    <div id="race-bottom-grid"></div>
+  `;
+
+  content.querySelector('#race-group-filter').value = _raceState.groupId;
+
+  async function reload() {
+    const params = { mode: _raceState.mode };
+    if (_raceState.groupId) params.group_id = _raceState.groupId;
+    const data = await fetchRace(params);
+    renderRaceContent(content, data);
+  }
+
+  content.querySelector('#race-group-filter').addEventListener('change', (e) => {
+    _raceState.groupId = e.target.value;
+    reload();
+  });
+  content.querySelectorAll('#race-mode-switcher .an-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      content.querySelectorAll('#race-mode-switcher .an-mode-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      _raceState.mode = btn.dataset.mode;
+      reload();
+    });
+  });
+
+  await reload();
+}
+
+function renderRaceContent(content, data) {
+  const items = data.items || [];
+  const cu = data.current_user;
+
+  // "Ваше место" badge
+  const badgeEl = content.querySelector('#race-my-place-badge');
+  if (badgeEl) {
+    badgeEl.innerHTML = cu
+      ? `<div class="race-place-badge">Ваше место: <b>#${cu.rank}</b> из ${cu.total_participants}</div>`
+      : '';
+  }
+
+  if (!items.length) {
+    content.querySelector('#race-chart-wrap').innerHTML = `<div class="empty-line">${esc(data.message || 'Нет данных для отображения')}</div>`;
+    content.querySelector('#race-bottom-grid').innerHTML = '';
+    return;
+  }
+
+  content.querySelector('#race-chart-wrap').innerHTML = renderRaceChart(items);
+
+  content.querySelector('#race-bottom-grid').innerHTML = `
+    <div class="an-grid-2">
+      ${renderRaceMyCard(cu, data.not_in_group_note)}
+      ${renderRaceTopTable(items, cu)}
+    </div>
+  `;
+}
+
+const RACE_CAR_COLORS = ['#D97706', '#94A3B8', '#B45309']; // золото/серебро/бронза для топ-3
+function raceCarColor(rank, isCurrentUser) {
+  if (isCurrentUser) return '#0284C7';
+  if (rank === 1) return '#D97706';
+  if (rank === 2) return '#94A3B8';
+  if (rank === 3) return '#B45309';
+  const palette = ['#16A34A', '#9333EA', '#0891B2', '#DC2626', '#65A30D', '#C026D3'];
+  return palette[rank % palette.length];
+}
+
+function renderRaceChart(items) {
+  const maxPoints = Math.max(...items.map(i => i.points), 1);
+  // Округляем шкалу до приятного числа (100/200/300...)
+  const niceMax = Math.ceil(maxPoints / 100) * 100 || 100;
+  const ticks = [];
+  for (let v = 0; v <= niceMax; v += niceMax / 5) ticks.push(Math.round(v));
+
+  const barW = 64;
+  const gap = 24;
+  const chartH = 320;
+  const padTop = 50; // место под машинку
+  const padBottom = 50; // место под подписи
+
+  const usableH = chartH - padTop - padBottom;
+
+  return `<div class="race-chart-scroll">
+    <div class="race-chart" style="height:${chartH}px;min-width:${items.length * (barW+gap) + 60}px">
+      <div class="race-axis-labels" style="height:${chartH}px">
+        ${ticks.slice().reverse().map(t => `<div class="race-axis-tick" style="height:${usableH/5}px">${t}</div>`).join('')}
+      </div>
+      <div class="race-bars-area" style="height:${chartH}px">
+        ${ticks.map((t,i) => i>0 ? `<div class="race-grid-line" style="bottom:${padBottom + (t/niceMax)*usableH}px"></div>` : '').join('')}
+        ${items.map(it => {
+          const barH = Math.max(4, (it.points / niceMax) * usableH);
+          const color = raceCarColor(it.rank, it.is_current_user);
+          return `<div class="race-col" style="width:${barW}px" data-race-operator="${it.operator_id}">
+            <div class="race-car" style="bottom:${padBottom + barH}px;color:${color}" title="${esc(it.full_name)}">
+              <svg viewBox="0 0 32 20" width="30" height="19"><path fill="currentColor" d="M4 14 L6 8 Q7 5 11 5 L21 5 Q25 5 26 8 L28 14 Q28 16 26 16 L24 16 Q23 18 21 18 Q19 18 18 16 L14 16 Q13 18 11 18 Q9 18 8 16 L6 16 Q4 16 4 14 Z"/><circle cx="9" cy="16" r="2.4" fill="#1f2937"/><circle cx="23" cy="16" r="2.4" fill="#1f2937"/></svg>
+            </div>
+            <div class="race-bar ${it.is_current_user?'race-bar-me':''}" style="height:${barH}px;bottom:${padBottom}px;background:${it.is_current_user?'var(--accent-secondary-soft)':'var(--bg-muted)'};border-color:${color}"></div>
+            <div class="race-points-label" style="bottom:${padBottom + barH + 22}px">${Math.round(it.points)}</div>
+            <div class="race-x-label ${it.is_current_user?'race-x-label-me':''}" title="${esc(it.full_name)}">
+              ${esc(it.initials)}
+              ${it.is_current_user ? '<div class="race-you-tag">Вы</div>' : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderRaceMyCard(cu, note) {
+  if (!cu) {
+    return `<div class="rating-card"><div class="rcard-title">Ваш результат</div>
+      <div class="r-empty-state"><div>Ваши баллы за выбранный период пока не рассчитаны.</div></div>
+    </div>`;
+  }
+  let hint;
+  if (cu.rank === 1) {
+    hint = `Вы на 1 месте. Удерживайте позицию.`;
+  } else if (cu.points_to_next_rank != null && cu.points_to_next_rank > 0) {
+    hint = `До следующего места: <b>${Math.round(cu.points_to_next_rank)} баллов</b>`;
+  } else {
+    hint = `—`;
+  }
+  return `<div class="rating-card">
+    <div class="rcard-title">Ваш результат</div>
+    ${cu.outside_selected_group ? `<div class="race-note">${esc(note || 'Вы не входите в выбранную группу.')}</div>` : ''}
+    <div class="rms-list">
+      <div class="rms-row"><span class="rms-label">Место</span><span class="rms-val">#${cu.rank} из ${cu.total_participants}</span></div>
+      <div class="rms-row"><span class="rms-label">Баллы</span><span class="rms-val accent">${Math.round(cu.points)}</span></div>
+      <div class="rms-row"><span class="rms-label">Группа</span><span class="rms-val">${esc(cu.group||'—')}</span></div>
+      ${cu.points_to_top_3 != null && cu.points_to_top_3 > 0 ? `<div class="rms-row"><span class="rms-label">До топ-3</span><span class="rms-val">${Math.round(cu.points_to_top_3)} баллов</span></div>` : ''}
+      <div class="rms-row"><span class="rms-label">Изменение</span><span class="rms-val">${cu.rank_change!=null ? (cu.rank_change>0?`<span class="rd-up">↑ +${cu.rank_change}</span>`:cu.rank_change<0?`<span class="rd-down">↓ ${Math.abs(cu.rank_change)}</span>`:'<span class="rd-neutral">без изменений</span>') : '—'}</span></div>
+    </div>
+    <div class="race-hint">${hint}</div>
+  </div>`;
+}
+
+function renderRaceTopTable(items, cu) {
+  const myPoints = cu ? cu.points : null;
+  return `<div class="rating-card">
+    <div class="rcard-title">Топ операторов</div>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>#</th><th>Оператор</th><th>Группа</th><th class="num">Баллы</th><th class="num">Разница с вами</th></tr></thead>
+      <tbody>
+        ${items.slice(0, 10).map(it => {
+          const diff = myPoints != null ? Math.round(it.points - myPoints) : null;
+          const diffHtml = it.is_current_user ? '—' : (diff == null ? '—' : (diff > 0 ? `<span style="color:var(--danger)">+${diff}</span>` : diff < 0 ? `<span style="color:var(--success)">${diff}</span>` : '0'));
+          return `<tr class="${it.is_current_user?'rating-my-row':''}">
+            <td>${it.rank}</td>
+            <td class="name-cell">${it.is_current_user?'Вы':esc(it.full_name)}</td>
+            <td>${esc(it.group||'—')}</td>
+            <td class="num"><b>${Math.round(it.points)}</b></td>
+            <td class="num">${diffHtml}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+/* ── Вкладка: Сравнение групп ────────────────────────────────────*/
+async function renderRatingGroupsTab(content) {
+  const data = await fetchRace({ mode: 'all' });
+  const groups = data.groups || [];
+  const cu = data.current_user;
+
+  if (!groups.length) {
+    content.innerHTML = `<div class="rating-card"><div class="empty-line">Нет данных для сравнения групп</div></div>`;
+    return;
+  }
+
+  const rows = groups.map(g => ({ label: g.group, value: g.avg_points, isMe: false }));
+  if (cu) rows.push({ label: 'Вы', value: cu.points, isMe: true });
+  rows.sort((a,b) => b.value - a.value);
+  const maxV = Math.max(...rows.map(r => r.value), 1);
+
+  content.innerHTML = `
+    <div class="rating-card">
+      <div class="rcard-title">Сравнение групп</div>
+      <div class="an-bar-chart">
+        ${rows.map(r => `<div class="an-bar-row">
+          <div class="an-bar-date" style="width:120px;${r.isMe?'font-weight:700;color:var(--accent-primary)':''}">${esc(r.label)}</div>
+          <div class="an-bar-track"><div class="an-bar-fill" style="width:${Math.round((r.value/maxV)*100)}%;${r.isMe?'background:var(--accent-primary)':''}"></div></div>
+          <div class="an-bar-val">${Math.round(r.value)}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/* ── Вкладка: Мой прогресс ───────────────────────────────────────*/
+async function renderRatingProgressTab(content) {
+  const role = STATE.user?.role || 'operator';
+  const isOp = role === 'operator';
+
+  if (!isOp) {
+    content.innerHTML = `<div class="rating-card"><div class="empty-line">Выберите оператора во вкладке «Общий рейтинг», чтобы увидеть прогресс</div></div>`;
+    return;
+  }
+
+  try {
+    const dyn = await fetch(api._base() + '/api/rating/me/dynamics?type=place&weeks=8', { credentials: 'include' }).then(r => r.json());
+    content.innerHTML = `<div class="rating-card">
+      <div class="rcard-title">Динамика места за последние недели</div>
+      ${renderDynamics ? renderDynamics(dyn) : '<div class="empty-line">Нет данных</div>'}
+    </div>`;
+  } catch(e) {
+    content.innerHTML = `<div class="rating-card"><div class="empty-line">Нет данных о прогрессе</div></div>`;
+  }
+}
+
+window.renderRating = renderRating;
