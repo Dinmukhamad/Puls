@@ -4105,6 +4105,8 @@ function analyticsApiUrl(path, params) {
   return api._base() + '/api/analytics/' + path + (qs ? '?' + qs : '');
 }
 
+const ANALYTICS_SWR_TTL_MS = 5 * 60_000; // 5 минут — данные построены из PeriodReport, меняются редко
+
 async function analyticsFetch(path, params, onUpdate) {
   const key = 'analytics:' + path + ':' + JSON.stringify(params || {});
   return swrFetch(key, async () => {
@@ -4112,7 +4114,7 @@ async function analyticsFetch(path, params, onUpdate) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки данных');
     return data;
-  }, onUpdate);
+  }, onUpdate, ANALYTICS_SWR_TTL_MS);
 }
 
 function fmtA(v, decimals = 2, suffix = '') {
