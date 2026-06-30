@@ -55,6 +55,35 @@ def _origin_from_referer(value: str | None) -> str | None:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
+def _request_origin(request: Request) -> str:
+    """
+    Реальный публичный origin запроса с учётом Railway proxy. Railway
+    терминирует TLS на прокси и проксирует внутрь как http — без учёта
+    x-forwarded-proto/x-forwarded-host request.url.scheme будет "http",
+    а настоящий клиентский origin — "https://<домен>", из-за чего сравнение
+    всегда проваливалось и легитимные запросы отбивались как "недопустимый
+    источник".
+    """
+    forwarded_proto = request.headers.get("x-forwarded-proto")
+    forwarded_host = request.headers.get("x-forwarded-host")
+
+    proto = (forwarded_proto or request.url.scheme or "https").split(",")[0].strip()
+    host = (
+        forwarded_host
+        or request.headers.get("host")
+        or request.url.netloc
+    ).split(",")[0].strip()
+
+    return f"{proto}://{host}".rstrip("/")
+
+
+def _origin_host(origin: str | None) -> str | None:
+    if not origin:
+        return None
+    parsed = urlparse(origin)
+    return parsed.netloc.lower() if parsed.netloc else None
+
+
 @app.middleware("http")
 async def csrf_origin_guard(request: Request, call_next):
     if (
@@ -62,11 +91,24 @@ async def csrf_origin_guard(request: Request, call_next):
         and request.cookies.get(settings.auth_cookie_name)
     ):
         origin = request.headers.get("origin") or _origin_from_referer(request.headers.get("referer"))
+
         if origin:
-            current_origin = f"{request.url.scheme}://{request.headers.get('host', '')}".rstrip("/")
+            origin = origin.rstrip("/")
+            current_origin = _request_origin(request)
+
+            current_host = _origin_host(current_origin)
+            origin_host = _origin_host(origin)
+
             allowed_origins = {current_origin}
             allowed_origins.update(o.rstrip("/") for o in _cors_origins if o != "*")
-            if origin.rstrip("/") not in allowed_origins:
+
+            # За Railway-прокси схема (http/https) во внутреннем запросе может
+            # не совпадать с публичной схемой клиента — поэтому помимо точного
+            # совпадения origin допускаем совпадение по host (без схемы),
+            # если он совпадает с текущим доменом приложения.
+            same_host = bool(current_host and origin_host and current_host == origin_host)
+
+            if origin not in allowed_origins and not same_host:
                 return JSONResponse(status_code=403, content={"detail": "Недопустимый источник запроса"})
     return await call_next(request)
 
