@@ -137,9 +137,18 @@ def admin_operators(db: Session = Depends(get_db)) -> List[OperatorRow]:
 
     rating_map = {row["operator_id"]: row for row in rating_rows(db)}
 
+    # Подгружаем всех связанных пользователей ОДНИМ запросом вместо
+    # db.get(User, op.user_id) на каждого оператора в цикле (N+1) —
+    # на 50+ операторов это давало 50+ дополнительных запросов к БД
+    # при каждом заходе в раздел «Операторы».
+    user_ids = [op.user_id for op in operators if op.user_id]
+    users_by_id = {
+        u.id: u for u in db.scalars(select(User).where(User.id.in_(user_ids)))
+    } if user_ids else {}
+
     rows = []
     for op in operators:
-        user = op.user or (db.get(User, op.user_id) if op.user_id else None)
+        user = users_by_id.get(op.user_id) if op.user_id else None
         rating_row = rating_map.get(op.id)
         rows.append(OperatorRow(
             id=op.id,
