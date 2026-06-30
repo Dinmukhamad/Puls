@@ -3224,6 +3224,14 @@ function renderPeriodReport() {
         Только в файле: <b style="color:var(--warning)">${summary.file_only_count}</b>
       </div>` : ''}
 
+      <div class="pr-save-banner">
+        <div class="pr-save-banner-text">
+          <div class="pr-save-banner-title">Это предварительный просмотр расчёта</div>
+          <div class="pr-save-banner-sub">Данные ниже не сохранены. Чтобы они появились в рейтинге и истории начислений, нажмите «Сохранить расчёт».</div>
+        </div>
+        <button class="btn-primary pr-save-banner-btn" id="pr-save-btn-top">Сохранить расчёт</button>
+      </div>
+
       ${totalWarnings ? `
       <div class="pr-card">
         <div class="pr-card-head">Предупреждения по данным (${totalWarnings})</div>
