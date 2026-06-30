@@ -3093,14 +3093,14 @@ function renderPeriodReport() {
 
   function renderResults(data) {
     const ops = data.operators || [];
-    const warnings = data.warnings || [];
+    const w = data.warnings || {};
+    const summary = data.summary || {};
     const groups = [...new Set(ops.map(o => o.group_name).filter(Boolean))].sort();
 
-    const avgQuality = ops.length ? ops.reduce((s, o) => s + (o.quality_avg || 0), 0) / ops.length : 0;
-    const totalCalls = ops.reduce((s, o) => s + (o.calls_total || 0), 0);
-    const avgKvz = ops.length ? ops.reduce((s, o) => s + (o.kvz || 0), 0) / ops.length : 0;
-    const avgEff = ops.length ? ops.reduce((s, o) => s + (o.efficiency_percent || 0), 0) / ops.length : 0;
-    const totalPenaltyMin = ops.reduce((s, o) => s + (o.penalty_minutes || 0), 0);
+    // Сводные показатели приходят с backend — считаются только по matched-операторам
+    // с реальными данными за период (см. ТЗ: matched-only summary).
+    const fmtOrDash = (v, decimals = 2, suffix = '') =>
+      (v === null || v === undefined) ? '—' : fmtNum(v, decimals) + suffix;
 
     function filteredSorted() {
       let r = ops.filter(o =>
@@ -3156,23 +3156,66 @@ function renderPeriodReport() {
       </table></div>`;
     }
 
+    const totalWarnings = (w.site_only?.length||0) + (w.file_only?.length||0) +
+      (w.no_quality?.length||0) + (w.no_base_hours?.length||0);
+
+    function warnGroup(title, items, hint) {
+      if (!items || !items.length) return '';
+      return `<div class="pr-warn-group">
+        <div class="pr-warn-group-title">${esc(title)} (${items.length})</div>
+        ${hint ? `<div class="pr-warn-group-hint">${esc(hint)}</div>` : ''}
+        <div class="pr-warn-chips">
+          ${items.slice(0, 30).map(n => `<span class="pr-warn-chip">${esc(n)}</span>`).join('')}
+          ${items.length > 30 ? `<span class="pr-warn-chip pr-warn-chip-more">+${items.length - 30}</span>` : ''}
+        </div>
+      </div>`;
+    }
+
     el.querySelector('#pr-results').innerHTML = `
       <div class="pr-stats-row">
-        <div class="pr-stat"><div class="pr-stat-val">${ops.length}</div><div class="pr-stat-label">Операторов</div></div>
-        <div class="pr-stat"><div class="pr-stat-val">${fmtNum(avgQuality)}</div><div class="pr-stat-label">Сред. качество</div></div>
-        <div class="pr-stat"><div class="pr-stat-val">${fmtNum(totalCalls, 0)}</div><div class="pr-stat-label">Всего звонков</div></div>
-        <div class="pr-stat"><div class="pr-stat-val">${fmtNum(avgKvz)}</div><div class="pr-stat-label">Средний КВЗ</div></div>
-        <div class="pr-stat"><div class="pr-stat-val">${fmtNum(avgEff)}%</div><div class="pr-stat-label">Сред. эффективность</div></div>
-        <div class="pr-stat"><div class="pr-stat-val">${fmtNum(totalPenaltyMin, 1)}</div><div class="pr-stat-label">Штрафов, мин</div></div>
+        <div class="pr-stat">
+          <div class="pr-stat-val">${summary.operators_count ?? 0}</div>
+          <div class="pr-stat-label">Операторов в расчёте</div>
+        </div>
+        <div class="pr-stat">
+          <div class="pr-stat-val">${fmtOrDash(summary.avg_quality)}</div>
+          <div class="pr-stat-label">${summary.avg_quality == null ? 'Нет оценок за период' : 'Сред. качество (по оценкам)'}</div>
+        </div>
+        <div class="pr-stat">
+          <div class="pr-stat-val">${fmtOrDash(summary.total_calls, 0)}</div>
+          <div class="pr-stat-label">Всего звонков</div>
+        </div>
+        <div class="pr-stat">
+          <div class="pr-stat-val">${fmtOrDash(summary.avg_kvz)}</div>
+          <div class="pr-stat-label">${summary.avg_kvz == null ? 'Нет базы часов' : 'Средний КВЗ'}</div>
+        </div>
+        <div class="pr-stat">
+          <div class="pr-stat-val">${fmtOrDash(summary.avg_efficiency, 2, '%')}</div>
+          <div class="pr-stat-label">${summary.avg_efficiency == null ? 'Нет базы часов' : 'Сред. эффективность'}</div>
+        </div>
+        <div class="pr-stat">
+          <div class="pr-stat-val">${fmtOrDash(summary.penalty_minutes_total, 1)}</div>
+          <div class="pr-stat-label">Штрафов, мин</div>
+        </div>
       </div>
 
-      ${warnings.length ? `
+      ${summary.site_total_count != null ? `
+      <div class="pr-match-info">
+        Всего на сайте: <b>${summary.site_total_count}</b> ·
+        Совпало с файлом: <b>${summary.matched_count}</b> ·
+        Только на сайте: <b style="color:var(--warning)">${summary.site_only_count}</b> ·
+        Только в файле: <b style="color:var(--warning)">${summary.file_only_count}</b>
+      </div>` : ''}
+
+      ${totalWarnings ? `
       <div class="pr-card">
-        <div class="pr-card-head">Предупреждения сопоставления (${warnings.length})</div>
-        <div class="pr-warnings-list">
-          ${warnings.slice(0, 20).map(w => `<div class="pr-warning-row">⚠ <b>${esc(w.operator)}</b> — ${esc(w.message)}</div>`).join('')}
-          ${warnings.length > 20 ? `<div class="pr-warning-row" style="color:var(--text-muted)">… и ещё ${warnings.length - 20}</div>` : ''}
-        </div>
+        <div class="pr-card-head">Предупреждения по данным (${totalWarnings})</div>
+        ${warnGroup('Есть на сайте, но отсутствуют в файле', w.site_only,
+          'Эти операторы не участвуют в расчёте за выбранный период.')}
+        ${warnGroup('Есть в файле, но отсутствуют на сайте', w.file_only,
+          'Игнорируются — не влияют на статистику и не появляются как операторы.')}
+        ${warnGroup('Нет оценок качества за период', w.no_quality)}
+        ${warnGroup('Нет базы часов за период', w.no_base_hours)}
       </div>` : ''}
 
       <div class="pr-card">
