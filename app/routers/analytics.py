@@ -28,6 +28,7 @@ from app.services.analytics import (
     compute_top_and_attention,
     filter_rows,
 )
+from app.services.analytics_cache import cache_get, cache_key, cache_set
 from app.services.period_reports import OperatorPeriodMetrics, normalize_name
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -199,12 +200,19 @@ def get_summary(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("summary", start_date=start_date, end_date=end_date, group_id=group_id,
+                     operator_query=operator_query, participation_status=participation_status)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
     kpi = compute_kpi_summary(rows)
-    return {
+    result = {
         "period": {"start": str(start_date), "end": str(end_date)},
         "kpi": kpi,
     }
+    cache_set(key, result)
+    return result
 
 
 @router.get("/daily-dynamics")
@@ -252,6 +260,13 @@ def get_operators_table(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("operators", start_date=start_date, end_date=end_date, group_id=group_id,
+                     operator_query=operator_query, participation_status=participation_status,
+                     only_with_data=only_with_data)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+
     rows = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data)
 
     def quality_band(q):
@@ -295,8 +310,14 @@ def get_groups_comparison(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("groups-comparison", start_date=start_date, end_date=end_date)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = _get_rows(db, start_date, end_date)
-    return {"items": compute_groups_comparison(rows)}
+    result = {"items": compute_groups_comparison(rows)}
+    cache_set(key, result)
+    return result
 
 
 @router.get("/quality-kvz-matrix")
@@ -307,8 +328,14 @@ def get_quality_kvz_matrix(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("quality-kvz-matrix", start_date=start_date, end_date=end_date, group_id=group_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = _get_rows(db, start_date, end_date, group_id)
-    return {"items": compute_quality_kvz_matrix(rows), "thresholds": {"quality": 85, "kvz": 10}}
+    result = {"items": compute_quality_kvz_matrix(rows), "thresholds": {"quality": 85, "kvz": 10}}
+    cache_set(key, result)
+    return result
 
 
 @router.get("/top-and-attention")
@@ -319,8 +346,14 @@ def get_top_and_attention(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("top-and-attention", start_date=start_date, end_date=end_date, group_id=group_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = _get_rows(db, start_date, end_date, group_id)
-    return compute_top_and_attention(rows)
+    result = compute_top_and_attention(rows)
+    cache_set(key, result)
+    return result
 
 
 @router.get("/penalties")
@@ -331,8 +364,14 @@ def get_penalties(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("penalties", start_date=start_date, end_date=end_date, group_id=group_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = _get_rows(db, start_date, end_date, group_id)
-    return compute_penalties_analytics(rows)
+    result = compute_penalties_analytics(rows)
+    cache_set(key, result)
+    return result
 
 
 @router.get("/points-breakdown")
@@ -344,8 +383,15 @@ def get_points_breakdown(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("points-breakdown", start_date=start_date, end_date=end_date, group_id=group_id,
+                     operator_query=operator_query)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = _get_rows(db, start_date, end_date, group_id, operator_query)
-    return {"items": compute_points_breakdown(rows)}
+    result = {"items": compute_points_breakdown(rows)}
+    cache_set(key, result)
+    return result
 
 
 @router.get("/points")
@@ -423,8 +469,14 @@ def get_risk_pyramid(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("risk-pyramid", start_date=start_date, end_date=end_date, group_id=group_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = _get_rows(db, start_date, end_date, group_id)
-    return compute_risk_pyramid(rows)
+    result = compute_risk_pyramid(rows)
+    cache_set(key, result)
+    return result
 
 
 @router.get("/quality-coverage")
@@ -435,8 +487,14 @@ def get_quality_coverage(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("quality-coverage", start_date=start_date, end_date=end_date, group_id=group_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = _get_rows(db, start_date, end_date, group_id)
-    return compute_quality_coverage(rows)
+    result = compute_quality_coverage(rows)
+    cache_set(key, result)
+    return result
 
 
 @router.get("/load-vs-efficiency")
@@ -447,8 +505,14 @@ def get_load_vs_efficiency(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("load-vs-efficiency", start_date=start_date, end_date=end_date, group_id=group_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = _get_rows(db, start_date, end_date, group_id)
-    return {"items": compute_load_vs_efficiency(rows)}
+    result = {"items": compute_load_vs_efficiency(rows)}
+    cache_set(key, result)
+    return result
 
 
 @router.get("/quality-vs-penalties")
@@ -459,8 +523,14 @@ def get_quality_vs_penalties(
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
+    key = cache_key("quality-vs-penalties", start_date=start_date, end_date=end_date, group_id=group_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
     rows = _get_rows(db, start_date, end_date, group_id)
-    return {"items": compute_quality_vs_penalties(rows)}
+    result = {"items": compute_quality_vs_penalties(rows)}
+    cache_set(key, result)
+    return result
 
 
 @router.get("/groups-list")
