@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-app = FastAPI(title="Pulse — Operator Performance Platform")
+app = FastAPI(title="Puls — Operator Performance Platform")
 
 settings = get_settings()
 _cors_origins = settings.cors_origin_list
