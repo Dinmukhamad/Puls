@@ -3062,7 +3062,7 @@ body.side-nav-collapsed .side-nav-toggle svg {
 }
 .race-x-label {
   position: absolute;
-  bottom: -34px;
+  bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
   font: 600 12px 'Inter', sans-serif;
