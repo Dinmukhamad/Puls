@@ -503,18 +503,18 @@ def compute_quality_coverage(rows: List[OperatorAnalyticsRow]) -> dict:
     total_evaluated_calls = sum(r.metrics.quality_calls_count for r in with_quality)
     avg_per_operator = round(total_evaluated_calls / len(with_quality), 2) if with_quality else 0.0
 
-    by_group: Dict[str, dict] = defaultdict(lambda: {"operators": 0, "evaluated_calls": 0, "with_quality": 0, "scores": []})
+    by_group: Dict[str, dict] = defaultdict(lambda: {"operators": 0, "evaluated_calls": 0, "with_quality": 0, "quality_weighted_sum": 0.0})
     for r in included:
         g = r.group_name or "Без группы"
         by_group[g]["operators"] += 1
         if r.metrics.quality_calls_count > 0:
             by_group[g]["with_quality"] += 1
             by_group[g]["evaluated_calls"] += r.metrics.quality_calls_count
-            by_group[g]["scores"].extend(r.metrics.quality_scores)
+            by_group[g]["quality_weighted_sum"] += r.metrics.quality_avg * r.metrics.quality_calls_count
 
     group_table = []
     for g, data in by_group.items():
-        avg_q = round(sum(data["scores"]) / len(data["scores"]), 2) if data["scores"] else None
+        avg_q = round(data["quality_weighted_sum"] / data["evaluated_calls"], 2) if data["evaluated_calls"] else None
         group_table.append({
             "group_name": g,
             "operators_count": data["operators"],
