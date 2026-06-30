@@ -3792,24 +3792,6 @@ function renderHeatmapTable(data, metric) {
   </table></div>`;
 }
 
-/* ── Block: Quality vs Penalties control ──────────────────────────*/
-function renderQualityVsPenaltiesBlock(qVsP) {
-  const items = qVsP.items || [];
-  return `<div class="an-card">
-    <div class="an-card-head">Контроль «Качество против штрафов»</div>
-    ${items.length ? `<div class="table-wrap"><table class="data-table">
-      <thead><tr><th>Оператор</th><th>Группа</th><th class="num">Качество</th><th class="num">Штрафы мин</th><th class="num">Потеря баллов</th><th>Комментарий</th></tr></thead>
-      <tbody>${items.map(o => `<tr>
-        <td class="name-cell">${esc(o.full_name)}</td>
-        <td>${esc(o.group_name||'—')}</td>
-        <td class="num">${o.quality_avg!=null?fmtA(o.quality_avg):'—'}</td>
-        <td class="num" style="${o.penalty_minutes>0?'color:var(--danger)':''}">${fmtA(o.penalty_minutes,1)}</td>
-        <td class="num" style="${o.points_lost<0?'color:var(--danger)':''}">${fmtA(o.points_lost,1)}</td>
-        <td style="font-size:12px;color:var(--text-secondary)">${esc(o.comment)}</td>
-      </tr>`).join('')}</tbody>
-    </table></div>` : '<div class="empty-line">Нет данных</div>'}
-  </div>`;
-}
 
 /* ── Block: Risk pyramid ─────────────────────────────────────────*/
 function renderRiskPyramidBlock(riskPyramid) {
