@@ -3016,21 +3016,23 @@ body.side-nav-collapsed .side-nav-toggle svg {
   position: relative;
   flex: 1;
   display: flex;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 24px;
   padding: 0 12px;
   border-left: 1px solid var(--border-default);
+  box-sizing: border-box;
 }
 .race-grid-line {
   position: absolute;
   left: 0; right: 0;
   height: 1px;
   background: var(--border-soft);
+  z-index: 0;
 }
 .race-col {
   position: relative;
   flex-shrink: 0;
-  height: 100%;
+  align-self: stretch;
 }
 .race-bar {
   position: absolute;
