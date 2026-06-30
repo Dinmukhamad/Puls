@@ -17,7 +17,7 @@ from app.models.entities import (
 )
 from app.services.coins import operator_for_user_or_403
 from app.services.tests import (
-    auto_expire_attempt, can_start_attempt, finish_attempt,
+    activate_scheduled_tests, auto_expire_attempt, can_start_attempt, finish_attempt,
     full_question_payload, get_active_or_recent_attempt, is_test_assigned_to_operator,
     operator_test_status, safe_question_payload, save_draft_answer, start_attempt,
     visible_tests_for_operator,
@@ -293,7 +293,6 @@ def _test_summary(db: Session, t: Test) -> dict:
 
 @admin_router.get("")
 def list_tests(db: Session = Depends(get_db), _: User = Depends(_require_staff)) -> dict:
-    from app.services.tests import activate_scheduled_tests
     activate_scheduled_tests(db)
     db.commit()
     tests = list(db.scalars(select(Test).order_by(Test.created_at.desc())))
