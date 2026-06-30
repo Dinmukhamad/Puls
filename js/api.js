@@ -1,5 +1,5 @@
 /**
- * Pulse — API client v3
+ * Puls — API client v3
  * Auth via HttpOnly cookie (pulse_access_token).
  * JWT is NOT stored in localStorage.
  */
