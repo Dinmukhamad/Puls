@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import CoinTransaction, Operator, ShopItem, ShopPurchase, User
+from app.models.entities import CoinTransaction, Operator, ShopItem, ShopPurchase, User, now_utc
 
 
 def points_to_coins(points: float) -> int:
@@ -29,7 +29,7 @@ def add_transaction(
     operator.current_balance += amount
     if amount > 0:
         operator.total_earned += amount
-    elif transaction_type in {"manual_subtract", "purchase"}:
+    elif transaction_type in {"manual_subtract", "manual_deduction", "purchase"}:
         operator.total_spent += abs(amount)
 
     if operator.current_balance < 0:
@@ -54,7 +54,7 @@ def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurcha
     if operator.current_balance < item.price:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недостаточно коинов")
 
-    purchase = ShopPurchase(operator_id=operator.id, shop_item_id=item.id, price=item.price, status="pending")
+    purchase = ShopPurchase(operator_id=operator.id, shop_item_id=item.id, price=item.price, status="new")
     db.add(purchase)
     db.flush()
 
@@ -65,7 +65,7 @@ def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurcha
         CoinTransaction(
             operator_id=operator.id,
             amount=-item.price,
-            type="reserve",
+            type="reservation",
             comment=f"Резерв заявки: {item.title}",
             related_purchase_id=purchase.id,
         )
@@ -74,14 +74,13 @@ def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurcha
 
 
 def approve_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> ShopPurchase:
-    if purchase.status != "pending":
+    if purchase.status not in {"pending", "new"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Заявка уже обработана")
     operator = db.get(Operator, purchase.operator_id)
     operator.reserved_balance = max(0, operator.reserved_balance - purchase.price)
     operator.total_spent += purchase.price
     purchase.status = "approved"
     purchase.reviewed_by_user_id = reviewer.id
-    from app.models.entities import now_utc
 
     purchase.reviewed_at = now_utc()
     db.add(
@@ -98,7 +97,7 @@ def approve_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sho
 
 
 def reject_purchase(db: Session, purchase: ShopPurchase, reviewer: User, reason: str) -> ShopPurchase:
-    if purchase.status != "pending":
+    if purchase.status not in {"pending", "new"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Заявка уже обработана")
     operator = db.get(Operator, purchase.operator_id)
     operator.reserved_balance = max(0, operator.reserved_balance - purchase.price)
@@ -106,7 +105,6 @@ def reject_purchase(db: Session, purchase: ShopPurchase, reviewer: User, reason:
     purchase.status = "rejected"
     purchase.reject_reason = reason
     purchase.reviewed_by_user_id = reviewer.id
-    from app.models.entities import now_utc
 
     purchase.reviewed_at = now_utc()
     db.add(
@@ -115,6 +113,28 @@ def reject_purchase(db: Session, purchase: ShopPurchase, reviewer: User, reason:
             amount=purchase.price,
             type="refund",
             comment=f"Возврат по отклоненной заявке: {reason}",
+            created_by_user_id=reviewer.id,
+            related_purchase_id=purchase.id,
+        )
+    )
+    return purchase
+
+
+def complete_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> ShopPurchase:
+    if purchase.status != "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Выполнить можно только одобренную заявку",
+        )
+    purchase.status = "completed"
+    purchase.reviewed_by_user_id = purchase.reviewed_by_user_id or reviewer.id
+    purchase.completed_at = now_utc()
+    db.add(
+        CoinTransaction(
+            operator_id=purchase.operator_id,
+            amount=0,
+            type="request_completed",
+            comment="Заявка отмечена выполненной",
             created_by_user_id=reviewer.id,
             related_purchase_id=purchase.id,
         )
