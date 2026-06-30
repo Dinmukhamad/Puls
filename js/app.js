@@ -5275,7 +5275,7 @@ async function fetchRace(params, onUpdate) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки гонки баллов');
     return data;
-  }, onUpdate);
+  }, onUpdate, ANALYTICS_SWR_TTL_MS);
 }
 
 async function renderRatingRaceTab(content) {
