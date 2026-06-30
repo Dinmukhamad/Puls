@@ -4069,11 +4069,14 @@ function analyticsApiUrl(path, params) {
   return api._base() + '/api/analytics/' + path + (qs ? '?' + qs : '');
 }
 
-async function analyticsFetch(path, params) {
-  const res = await fetch(analyticsApiUrl(path, params), { credentials: 'include' });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки данных');
-  return data;
+async function analyticsFetch(path, params, onUpdate) {
+  const key = 'analytics:' + path + ':' + JSON.stringify(params || {});
+  return swrFetch(key, async () => {
+    const res = await fetch(analyticsApiUrl(path, params), { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки данных');
+    return data;
+  }, onUpdate);
 }
 
 function fmtA(v, decimals = 2, suffix = '') {
@@ -5174,12 +5177,15 @@ async function loadRatingTab(tab) {
 /* ── Вкладка: Гонка баллов ─────────────────────────────────────*/
 let _raceState = { groupId: '', mode: 'my_zone' };
 
-async function fetchRace(params) {
-  const qs = new URLSearchParams(params).toString();
-  const res = await fetch(api._base() + '/api/rating/race' + (qs ? '?' + qs : ''), { credentials: 'include' });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки гонки баллов');
-  return data;
+async function fetchRace(params, onUpdate) {
+  const key = 'race:' + JSON.stringify(params || {});
+  return swrFetch(key, async () => {
+    const qs = new URLSearchParams(params).toString();
+    const res = await fetch(api._base() + '/api/rating/race' + (qs ? '?' + qs : ''), { credentials: 'include' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки гонки баллов');
+    return data;
+  }, onUpdate);
 }
 
 async function renderRatingRaceTab(content) {
