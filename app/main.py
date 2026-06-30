@@ -7,8 +7,9 @@ from typing import Dict
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from urllib.parse import urlparse
 
 from app.core.config import get_settings
@@ -37,6 +38,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Сжимает текстовые ответы (JSON API + статика отдаваемая через FileResponse) —
+# JS/CSS бандлы весят сотни КБ несжатыми, gzip даёт ~70-80% экономии трафика.
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
