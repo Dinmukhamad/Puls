@@ -346,16 +346,14 @@ async function loadData(role) {
     );
     tasks.push(
       swrFetch('dashboard:operators', () =>
-        fetch(api._base() + '/api/dashboard/operators', { headers: { 'Content-Type': 'application/json' }, credentials: 'include' })
-          .then(r => r.ok ? r.json() : []).catch(() => []),
+        api.getDashboardOperators().catch(() => []),
         onOperatorsUpdate
       ).then(o => STATE.adminOperators = o)
     );
     tasks.push(api.listPurchases().catch(() => []).then(p => STATE.purchases = p));
     tasks.push(
       swrFetch('dashboard:history', () =>
-        fetch(api._base() + '/api/dashboard/history?limit=50', { headers: { 'Content-Type': 'application/json' }, credentials: 'include' })
-          .then(r => r.ok ? r.json() : []).catch(() => []),
+        api.getDashboardHistory(50).catch(() => []),
         onHistoryUpdate
       ).then(h => STATE.history = h)
     );
@@ -515,10 +513,7 @@ async function submitLegacyChangePassword() {
   if (newPwd.length < 8) { err.textContent='Пароль должен содержать минимум 8 символов'; err.className='status-line status-error'; return; }
   if (newPwd !== confirm) { err.textContent='Пароли не совпадают'; err.className='status-line status-error'; return; }
   try {
-    await fetch(api._base()+'/api/operators/account/change-password', {
-      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
-      body: JSON.stringify({current_password:current, new_password:newPwd, confirm_password:confirm})
-    }).then(async r => { if (!r.ok) throw new Error((await r.json()).detail); });
+    await api.changeOperatorPassword({current_password:current, new_password:newPwd, confirm_password:confirm});
     closeModal(); showToast('Пароль успешно изменён', 'ok');
   } catch(e) { err.textContent=e.message; err.className='status-line status-error'; }
 }
@@ -543,12 +538,7 @@ async function submitChangeUsername() {
   const err = document.getElementById('cu-err');
   if (!newUsername) { err.textContent='Введите новый логин'; err.className='status-line status-error'; return; }
   try {
-    const res = await fetch(api._base()+'/api/operators/account/change-username', {
-      method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include',
-      body: JSON.stringify({new_username: newUsername})
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail||'Ошибка');
+    const data = await api.changeOperatorUsername({new_username: newUsername});
     closeModal(); showToast('Логин успешно изменён', 'ok');
     STATE.user.username = newUsername;
     setText('side-user', STATE.user.full_name);
@@ -1483,8 +1473,7 @@ function renderManual() {
   // Load operators if empty
   if (!STATE.adminOperators.length) {
     el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div></div><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>`;
-    fetch(api._base() + '/api/dashboard/operators', { headers: {'Content-Type':'application/json'}, credentials:'include' })
-      .then(r => r.ok ? r.json() : [])
+    api.getDashboardOperators()
       .then(ops => { STATE.adminOperators = ops; renderManual(); })
       .catch(() => { el.innerHTML += '<p style="color:var(--danger);padding:20px">Не удалось загрузить операторов</p>'; });
     return;
@@ -1921,9 +1910,7 @@ function renderRequests() {
         btn.disabled = true;
         // Используем approve с пометкой completed
         try {
-          await fetch(api._base() + `/api/shop/purchases/${btn.dataset.id}/complete`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include'
-          });
+          await api.completePurchase(btn.dataset.id);
           STATE.purchases = await api.listPurchases();
           el.querySelector('#requests-list').innerHTML = renderList();
           bindRequestActions();
@@ -2833,14 +2820,7 @@ async function submitForcedPasswordChange() {
 
   btn.disabled = true; btn.textContent = 'Сохраняем…';
   try {
-    const res = await fetch(api._base() + '/api/auth/me/password', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ current_password: curPwd, new_password: newPwd, confirm_password: confPwd }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Ошибка');
+    const data = await api.changeMyPassword({ current_password: curPwd, new_password: newPwd, confirm_password: confPwd });
     showToast('Пароль изменён. Войдите снова.', 'ok');
     closeModal(true);
     setTimeout(logoutAndReload, 900);
@@ -2964,14 +2944,7 @@ async function submitChangeLogin() {
 
   btn.disabled = true; btn.textContent = 'Сохраняем…';
   try {
-    const res = await fetch(api._base() + '/api/auth/me/login', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ new_login: newLogin, current_password: curPwd }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Ошибка');
+    const data = await api.changeMyLogin({ new_login: newLogin, current_password: curPwd });
     STATE.user.username = newLogin;
     errEl.textContent = '✓ Логин изменён';
     errEl.className = 'acc-field-hint ok';
@@ -2999,14 +2972,7 @@ async function submitChangePassword() {
 
   btn.disabled = true; btn.textContent = 'Сохраняем…';
   try {
-    const res = await fetch(api._base() + '/api/auth/me/password', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ current_password: curPwd, new_password: newPwd, confirm_password: confPwd }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Ошибка');
+    const data = await api.changeMyPassword({ current_password: curPwd, new_password: newPwd, confirm_password: confPwd });
     showToast('Пароль изменён. Выполняется выход…', 'ok');
     closeModal();
     setTimeout(async () => {
