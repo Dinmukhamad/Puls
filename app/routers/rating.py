@@ -273,3 +273,160 @@ def get_nominations(
         })
 
     return {"items": nominations}
+
+
+def _initials(full_name: str) -> str:
+    parts = [p for p in full_name.strip().split() if p]
+    if not parts:
+        return "??"
+    if len(parts) == 1:
+        return parts[0][:2].upper()
+    return (parts[0][0] + parts[1][0]).upper()
+
+
+@router.get("/race")
+def get_rating_race(
+    group_id: Optional[int] = None,
+    mode: str = "top10",  # top10 | top20 | my_zone | all
+    operator_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Визуальный рейтинг «Гонка баллов». Использует уже посчитанные итоговые
+    баллы (PeriodReport.final_points через rating_rows) — не пересчитывает
+    ничего на лету. Поддерживает фильтр по группе и режимы отображения.
+    """
+    me = _get_requested_operator(db, current_user, operator_id)
+
+    all_rows = rating_rows(db)
+    total_all = len(all_rows)
+
+    if not all_rows:
+        return {
+            "current_user": None,
+            "items": [],
+            "groups": [],
+            "total_participants": 0,
+            "message": "Рейтинг за выбранный период пока не сформирован.",
+        }
+
+    # Группа, к которой относится сам оператор (для подсказки, если он не входит в выбранную группу)
+    my_row_global = next((r for r in all_rows if me and r["operator_id"] == me.id), None)
+    my_group_name = my_row_global["group_name"] if my_row_global else (me.group_name if me else None)
+
+    # Фильтрация по группе
+    if group_id is not None:
+        target_group = db.get(Operator, group_id) and None  # group_id здесь — это Group.id, не Operator.id
+        from app.models.entities import Group
+        grp = db.get(Group, group_id)
+        group_name_filter = grp.name if grp else None
+        rows = [r for r in all_rows if r["group_name"] == group_name_filter] if group_name_filter else all_rows
+    else:
+        rows = all_rows
+
+    if not rows:
+        return {
+            "current_user": None,
+            "items": [],
+            "groups": [],
+            "total_participants": 0,
+            "message": "В выбранной группе пока нет данных для рейтинга.",
+        }
+
+    # Баллы и место пересчитываются в рамках отфильтрованной выборки (группы),
+    # т.к. "место в группе" логически отличается от глобального места
+    rows_sorted = sorted(rows, key=lambda r: r["contest_points"] or r["final_score"] or 0, reverse=True)
+    for i, r in enumerate(rows_sorted, start=1):
+        r["_local_rank"] = i
+
+    total_in_view = len(rows_sorted)
+
+    my_row = next((r for r in rows_sorted if me and r["operator_id"] == me.id), None)
+
+    # current_user payload
+    current_user_payload = None
+    not_in_group_note = None
+    if me:
+        if my_row:
+            points = my_row["contest_points"] or my_row["final_score"] or 0
+            rank = my_row["_local_rank"]
+            next_above = rows_sorted[rank - 2] if rank > 1 else None
+            top3_ref = rows_sorted[2] if len(rows_sorted) > 2 else (rows_sorted[-1] if rows_sorted else None)
+            points_to_next = round((next_above["contest_points"] or next_above["final_score"] or 0) - points, 1) if next_above else 0
+            points_to_top3 = round(max(0, (top3_ref["contest_points"] or top3_ref["final_score"] or 0) - points), 1) if rank > 3 and top3_ref else 0
+
+            current_user_payload = {
+                "operator_id": me.id,
+                "full_name": me.full_name,
+                "group": my_row["group_name"],
+                "rank": rank,
+                "points": points,
+                "total_participants": total_in_view,
+                "points_to_next_rank": points_to_next,
+                "points_to_top_3": points_to_top3,
+                "rank_change": my_row.get("rank_delta"),
+            }
+        else:
+            # Оператор не входит в выбранную группу — отдельная заметка, но не блокируем выдачу
+            if group_id is not None and my_group_name and my_group_name != (rows_sorted[0]["group_name"] if rows_sorted else None):
+                not_in_group_note = "Вы не входите в выбранную группу, но можете сравнить свои баллы с этой группой."
+            if my_row_global:
+                points = my_row_global["contest_points"] or my_row_global["final_score"] or 0
+                current_user_payload = {
+                    "operator_id": me.id,
+                    "full_name": me.full_name,
+                    "group": my_row_global["group_name"],
+                    "rank": my_row_global["rank_position"],
+                    "points": points,
+                    "total_participants": total_all,
+                    "points_to_next_rank": None,
+                    "points_to_top_3": None,
+                    "rank_change": my_row_global.get("rank_delta"),
+                    "outside_selected_group": True,
+                }
+
+    # Режимы отображения
+    my_local_rank = my_row["_local_rank"] if my_row else None
+    if mode == "top10":
+        display_rows = rows_sorted[:10]
+    elif mode == "top20":
+        display_rows = rows_sorted[:20]
+    elif mode == "my_zone" and my_local_rank:
+        lo = max(0, my_local_rank - 6)
+        hi = min(len(rows_sorted), my_local_rank + 5)
+        display_rows = rows_sorted[lo:hi]
+    else:  # all, или my_zone без своих данных
+        display_rows = rows_sorted
+
+    items = []
+    for r in display_rows:
+        points = r["contest_points"] or r["final_score"] or 0
+        items.append({
+            "operator_id": r["operator_id"],
+            "full_name": r["operator_name"],
+            "initials": _initials(r["operator_name"]),
+            "group": r["group_name"],
+            "rank": r["_local_rank"],
+            "points": points,
+            "is_current_user": bool(me and r["operator_id"] == me.id),
+        })
+
+    # Сравнение по группам (средний балл каждой группы + личный балл оператора)
+    by_group: Dict[str, List[float]] = {}
+    for r in all_rows:
+        g = r["group_name"] or "Без группы"
+        by_group.setdefault(g, []).append(r["contest_points"] or r["final_score"] or 0)
+    groups_out = [
+        {"group": g, "avg_points": round(mean(vals), 1) if vals else 0}
+        for g, vals in sorted(by_group.items())
+    ]
+
+    return {
+        "current_user": current_user_payload,
+        "not_in_group_note": not_in_group_note,
+        "items": items,
+        "groups": groups_out,
+        "total_participants": total_in_view,
+        "mode": mode,
+    }
