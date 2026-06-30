@@ -419,10 +419,7 @@ async function submitChangeUsername() {
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
 ══════════════════════════════════════ */
-async function renderRating() {
-  const el = document.getElementById('view-rating');
-  if (!el) return;
-
+async function renderRatingOverviewTab(el) {
   const role  = STATE.user?.role || 'operator';
   const isOp  = role === 'operator';
   const canSelectOperator = isAdmin(role);
@@ -436,10 +433,6 @@ async function renderRating() {
 
   // Skeleton
   el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
-      <div class="header-right"><button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button></div>
-    </div>
     <div class="rating-page">
       <div class="skel-block rating-skel-header"></div>
       <div class="rating-top-grid">
