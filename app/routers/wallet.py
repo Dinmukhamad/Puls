@@ -66,7 +66,7 @@ def create_manual_transaction(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Нельзя начислять коины уволенному оператору",
         )
-    transaction_type = "manual_add" if payload.amount >= 0 else "manual_subtract"
+    transaction_type = "manual_accrual" if payload.amount >= 0 else "manual_deduction"
     # Build full comment: "Reason: comment" or just "Reason"
     reason = payload.reason.strip()
     comment = payload.comment.strip()
