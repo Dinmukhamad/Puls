@@ -18,8 +18,9 @@ let STATE = {
   history: [],
   groups: [],
   currentView: 'cabinet',
-  navGen: 0,       // увеличивается при каждой смене раздела/вкладки —
-  ratingTabGen: 0, // используется для отмены "осиротевших" async-рендеров
+  navGen: 0,         // увеличивается при каждой смене раздела/вкладки —
+  ratingTabGen: 0,   // используется для отмены "осиротевших" async-рендеров
+  analyticsTabGen: 0,
 };
 
 /**
@@ -37,6 +38,8 @@ function bumpNavGen() { return ++STATE.navGen; }
 function isNavStale(token) { return token !== STATE.navGen; }
 function bumpRatingTabGen() { return ++STATE.ratingTabGen; }
 function isRatingTabStale(token) { return token !== STATE.ratingTabGen; }
+function bumpAnalyticsTabGen() { return ++STATE.analyticsTabGen; }
+function isAnalyticsTabStale(token) { return token !== STATE.analyticsTabGen; }
 
 /* ══════════════════════════════════════
    BOOT
@@ -4146,6 +4149,8 @@ function analyticsOpParams() {
 async function loadAnalyticsTab(tab) {
   const content = document.getElementById('an-tab-content');
   if (!content) return;
+  const myNavGen = STATE.navGen;
+  const myTabGen = bumpAnalyticsTabGen();
   content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем показатели…</p></div>';
 
   try {
