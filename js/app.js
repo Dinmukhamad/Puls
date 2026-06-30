@@ -46,13 +46,13 @@ function swrPeek(key) {
  * @returns         Promise<data> — резолвится с кешированными данными немедленно, если они есть,
  *                   либо ждёт первый реальный fetch если кеша вообще нет
  */
-async function swrFetch(key, fetcher, onUpdate) {
+async function swrFetch(key, fetcher, onUpdate, ttlMs = SWR_DEFAULT_TTL_MS) {
   const cached = swrReadRaw(key);
 
   if (cached) {
     // Есть кеш — отдаём его сразу, а свежие данные подгружаем в фоне
     const age = Date.now() - cached.ts;
-    if (age > SWR_DEFAULT_TTL_MS) {
+    if (age > ttlMs) {
       fetcher().then(fresh => {
         const changed = JSON.stringify(fresh) !== JSON.stringify(cached.data);
         swrWriteRaw(key, { data: fresh, ts: Date.now() });
