@@ -3369,3 +3369,19 @@ body.role-pending,
 body.role-operator {
   --nav-w: 200px;
 }
+
+
+/* ── Analytics — partial/no data availability note ──────────── */
+.an-availability-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-radius: 10px;
+  padding: 10px 14px;
+  line-height: 1.5;
+}
+.an-availability-note-error {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
