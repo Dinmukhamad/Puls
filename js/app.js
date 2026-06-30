@@ -5831,6 +5831,8 @@ function renderTests() {
    ОПЕРАТОРСКАЯ ЧАСТЬ
 ──────────────────────────────────────────────────────────────── */
 
+const TESTS_SWR_TTL_MS = 15_000; // короткий TTL — статус теста (открыт/просрочен) должен быстро актуализироваться
+
 async function renderTestsOperatorView(el) {
   const myNavGen = STATE.navGen;
   el.innerHTML = `
@@ -5842,7 +5844,7 @@ async function renderTestsOperatorView(el) {
 
   let data;
   try {
-    data = await api.myTests();
+    data = await swrFetch('tests:my', () => api.myTests(), null, TESTS_SWR_TTL_MS);
   } catch(e) {
     if (isNavStale(myNavGen)) return;
     el.querySelector('#tests-op-body').innerHTML = `<div class="status-line status-error">Не удалось загрузить тесты: ${esc(e.message)}</div>`;
