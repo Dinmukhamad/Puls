@@ -268,6 +268,7 @@ function renderView(view) {
     case 'groups':   renderGroups();   break;
     case 'period-report': renderPeriodReport(); break;
     case 'analytics': renderAnalytics(); break;
+    case 'tests':    renderTests();    break;
   }
 }
 
