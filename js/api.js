@@ -114,6 +114,72 @@ const api = (() => {
 
   function _base() { return base(); }
 
+  /* ── Dashboard extras ───────────────────────────────────── */
+  async function getDashboardOperators() {
+    return req('GET', '/api/dashboard/operators');
+  }
+  async function getDashboardHistory(limit = 50) {
+    return req('GET', `/api/dashboard/history?limit=${limit}`);
+  }
+
+  /* ── Account self-service ────────────────────────────────── */
+  async function changeMyPassword(payload) {
+    return req('PATCH', '/api/auth/me/password', payload);
+  }
+  async function changeMyLogin(payload) {
+    return req('PATCH', '/api/auth/me/login', payload);
+  }
+  async function changeOperatorPassword(payload) {
+    return req('POST', '/api/operators/account/change-password', payload);
+  }
+  async function changeOperatorUsername(payload) {
+    return req('POST', '/api/operators/account/change-username', payload);
+  }
+
+  /* ── Shop ────────────────────────────────────────────────── */
+  async function completePurchase(purchaseId) {
+    return req('POST', `/api/shop/purchases/${purchaseId}/complete`);
+  }
+
+  /* ── Period reports ──────────────────────────────────────── */
+  async function getPeriodReportStatus() {
+    return req('GET', '/api/reports/period-report/status');
+  }
+  async function uploadPeriodReportFiles(formData) {
+    const res = await fetch(base() + '/api/reports/period-report/upload', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData, // FormData — нельзя ставить Content-Type вручную, браузер сам выставит boundary
+    });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    if (!res.ok) throw new Error(data.detail || `Ошибка ${res.status}`);
+    return data;
+  }
+  async function savePeriodReport(payload) {
+    return req('POST', '/api/reports/period-report/save', payload);
+  }
+
+  /* ── Analytics ───────────────────────────────────────────── */
+  async function getAvailablePeriods() {
+    return req('GET', '/api/analytics/available-periods');
+  }
+
+  /* ── Rating ──────────────────────────────────────────────── */
+  async function getRatingRace(params) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/rating/race' + (qs ? '?' + qs : ''));
+  }
+  async function getMyRatingDynamics(type = 'place', weeks = 8) {
+    return req('GET', `/api/rating/me/dynamics?type=${type}&weeks=${weeks}`);
+  }
+
+  /* ── Generic path helper for analytics tabs (many distinct query shapes) ── */
+  async function analyticsGet(path, params) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', `/api/analytics/${path}` + (qs ? '?' + qs : ''));
+  }
+
   return {
     getToken, login, me, logout,
     listOperators, getOperator, myOperator, createOperator, updateOperator,
@@ -122,10 +188,14 @@ const api = (() => {
     getRating,
     myWallet, operatorWallet, manualTransaction,
     listShopItems, createShopItem, updateShopItem,
-    listPurchases, buyItem, approvePurchase, rejectPurchase,
+    listPurchases, buyItem, approvePurchase, rejectPurchase, completePurchase,
     listGroups, createGroup, updateGroup, enableGroup, disableGroup, deleteGroup,
-    getDashboard,
+    getDashboard, getDashboardOperators, getDashboardHistory,
     createUser, listUsers,
+    changeMyPassword, changeMyLogin, changeOperatorPassword, changeOperatorUsername,
+    getPeriodReportStatus, uploadPeriodReportFiles, savePeriodReport,
+    getAvailablePeriods, analyticsGet,
+    getRatingRace, getMyRatingDynamics,
     loginOperator: login,
     _base,
   };
