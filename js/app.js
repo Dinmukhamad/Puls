@@ -299,7 +299,11 @@ function renderCabinet() {
   if (!w) {
     el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div></div>
       <div class="empty-state"><p>Данные загружаются…</p></div>`;
-    api.myWallet().then(data => { STATE.wallet = data; renderCabinet(); }).catch(() => {});
+    const _cabinetGen = STATE.navGen;
+    api.myWallet().then(data => {
+      STATE.wallet = data;
+      if (!isNavStale(_cabinetGen)) renderCabinet();
+    }).catch(() => {});
     return;
   }
 
@@ -1052,7 +1056,11 @@ function renderSummary() {
   if (!d) {
     el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Сводка</div><h2 class="section-title">Панель управления</h2></div></div>
       <div class="empty-state"><p>Загрузка данных…</p></div>`;
-    api.getDashboard().then(data => { STATE.dashboard = data; renderSummary(); }).catch(() => {});
+    const _summaryGen = STATE.navGen;
+    api.getDashboard().then(data => {
+      STATE.dashboard = data;
+      if (!isNavStale(_summaryGen)) renderSummary();
+    }).catch(() => {});
     return;
   }
 
