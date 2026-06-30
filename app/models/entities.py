@@ -234,3 +234,50 @@ class UploadedReportFile(Base):
     content: Mapped[bytes] = mapped_column(LargeBinary)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
     uploaded_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+
+class OperatorDailyMetric(Base):
+    """
+    Посуточные показатели оператора — заполняется ОДИН раз при загрузке
+    Monthly Report / Report (parse_to_daily_metrics), независимо от того,
+    какой период выберет пользователь в «Аналитике» позже.
+
+    Произвольный диапазон дат строится через SUM() по этой таблице —
+    Excel больше не парсится повторно при каждом новом выборе периода.
+    """
+    __tablename__ = "operator_daily_metrics"
+    __table_args__ = (
+        UniqueConstraint("operator_id", "metric_date", name="uq_daily_metrics_operator_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    operator_name: Mapped[str] = mapped_column(String(255))  # снимок ФИО на момент парсинга — для диагностики
+    group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("groups.id"), nullable=True)
+    metric_date: Mapped[date] = mapped_column(Date, index=True)
+
+    calls_count: Mapped[float] = mapped_column(Float, default=0)
+
+    quality_scores_json: Mapped[str] = mapped_column(Text, default="[]")  # JSON-список оценок за день
+    quality_sum: Mapped[float] = mapped_column(Float, default=0)
+    quality_count: Mapped[int] = mapped_column(Integer, default=0)
+    quality_avg: Mapped[float] = mapped_column(Float, default=0)
+
+    kvz: Mapped[float] = mapped_column(Float, default=0)
+    efficiency: Mapped[float] = mapped_column(Float, default=0)  # часы в звонке за день (лист "Эффективность")
+
+    worked_hours: Mapped[float] = mapped_column(Float, default=0)       # лист "Отработанные часы"
+    tech_issue_hours: Mapped[float] = mapped_column(Float, default=0)
+    training_hours: Mapped[float] = mapped_column(Float, default=0)
+    offline_activity_hours: Mapped[float] = mapped_column(Float, default=0)
+    base_hours: Mapped[float] = mapped_column(Float, default=0)         # worked - tech - training - offline
+
+    penalty_sum: Mapped[float] = mapped_column(Float, default=0)
+    penalty_minutes: Mapped[float] = mapped_column(Float, default=0)
+    penalty_points: Mapped[float] = mapped_column(Float, default=0)
+
+    source_monthly_report_id: Mapped[Optional[int]] = mapped_column(ForeignKey("uploaded_report_files.id"), nullable=True)
+    source_report_id: Mapped[Optional[int]] = mapped_column(ForeignKey("uploaded_report_files.id"), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
