@@ -69,13 +69,40 @@ def activate_scheduled_tests(db: Session) -> int:
 
 
 def visible_tests_for_operator(db: Session, operator: Operator) -> List[Test]:
+    """
+    Оптимизированная версия: вместо отдельного SELECT на test_assignments
+    для КАЖДОГО теста (N+1 — при 20 тестах это 20 лишних запросов на
+    каждый заход оператора в раздел), загружаем ВСЕ назначения для всех
+    видимых тестов ОДНИМ запросом и фильтруем в памяти.
+    """
     activate_scheduled_tests(db)
     all_tests = list(
         db.scalars(
             select(Test).where(Test.status.in_(["open", "finished"])).order_by(Test.opens_at.desc().nullslast())
         )
     )
-    return [t for t in all_tests if is_test_assigned_to_operator(db, t, operator)]
+    if not all_tests:
+        return []
+
+    test_ids = [t.id for t in all_tests]
+    all_assignments = list(
+        db.scalars(select(TestAssignment).where(TestAssignment.test_id.in_(test_ids)))
+    )
+    assignments_by_test: Dict[int, List[TestAssignment]] = {}
+    for a in all_assignments:
+        assignments_by_test.setdefault(a.test_id, []).append(a)
+
+    def is_assigned(test: Test) -> bool:
+        for a in assignments_by_test.get(test.id, []):
+            if a.target_type == "all":
+                return True
+            if a.target_type == "group" and operator.group_id == a.target_id:
+                return True
+            if a.target_type == "operator" and operator.id == a.target_id:
+                return True
+        return False
+
+    return [t for t in all_tests if is_assigned(t)]
 
 
 # ── Статусы для оператора ────────────────────────────────────────────
