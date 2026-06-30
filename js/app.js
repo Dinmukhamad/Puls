@@ -1,5 +1,5 @@
 /**
- * Puls — Main App v2
+ * Pulse — Main App v2
  * FastAPI backend, full admin panel per TZ
  */
 'use strict';
@@ -47,7 +47,7 @@ async function tryRestoreSession() {
       const shell = document.getElementById('app-shell');
       if (shell) shell.innerHTML = `
         <div class="loading-state" style="gap:20px">
-          <p style="color:var(--danger)">Ошибка подключения: ${err.message}</p>
+          <p style="color:var(--danger)">Ошибка подключения: ${esc(err.message)}</p>
           <button class="btn-primary" onclick="tryRestoreSession()">Повторить</button>
         </div>`;
     }
@@ -2649,7 +2649,7 @@ function showForcedPasswordChangeModal() {
     <div class="acc-modal">
       <h3 class="acc-title">Смените временный пароль</h3>
       <div class="status-line" style="padding:0;color:var(--tx2)">
-        Для продолжения работы в Puls нужно заменить временный пароль.
+        Для продолжения работы в Pulse нужно заменить временный пароль.
       </div>
       <div class="acc-divider"></div>
       <div class="acc-section">
@@ -5052,9 +5052,8 @@ async function fetchRace(params) {
 async function renderRatingRaceTab(content) {
   let groupOptions = '<option value="">Все группы</option>';
   try {
-    const baseData = await fetchRace({ mode: 'all' });
-    const groupNames = [...new Set((baseData.items || []).map(i => i.group).filter(Boolean))].sort();
-    groupOptions += groupNames.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
+    const groups = await api.listGroups(true);
+    groupOptions += (groups || []).map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
   } catch(e) { /* ignore */ }
 
   content.innerHTML = `
@@ -5080,7 +5079,9 @@ async function renderRatingRaceTab(content) {
     <div id="race-bottom-grid"></div>
   `;
 
-  content.querySelector('#race-group-filter').value = _raceState.groupId;
+  const groupFilter = content.querySelector('#race-group-filter');
+  groupFilter.value = _raceState.groupId;
+  if (groupFilter.value !== _raceState.groupId) _raceState.groupId = groupFilter.value;
 
   async function reload() {
     const params = { mode: _raceState.mode };
@@ -5089,7 +5090,7 @@ async function renderRatingRaceTab(content) {
     renderRaceContent(content, data);
   }
 
-  content.querySelector('#race-group-filter').addEventListener('change', (e) => {
+  groupFilter.addEventListener('change', (e) => {
     _raceState.groupId = e.target.value;
     reload();
   });
@@ -5138,19 +5139,52 @@ function renderRaceContent(content, data) {
   }
 
   if (!items.length) {
-    content.querySelector('#race-chart-wrap').innerHTML = `<div class="empty-line">${esc(data.message || 'Нет данных для отображения')}</div>`;
+    content.querySelector('#race-chart-wrap').innerHTML = `<div class="race-empty-line">${esc(data.message || 'Нет данных для отображения')}</div>`;
     content.querySelector('#race-bottom-grid').innerHTML = '';
     return;
   }
 
-  content.querySelector('#race-chart-wrap').innerHTML = renderRaceChart(items);
+  content.querySelector('#race-chart-wrap').innerHTML = renderRaceSummary(itemsRaw, cu, data) + renderRaceChart(items);
 
   content.querySelector('#race-bottom-grid').innerHTML = `
-    <div class="an-grid-2">
+    <div class="race-detail-grid">
       ${renderRaceMyCard(cu, data.not_in_group_note, items)}
       ${renderRaceTopTable(itemsRaw, cu)}
     </div>
   `;
+}
+
+function renderRaceSummary(items, cu, data) {
+  const visible = items || [];
+  const leader = visible[0];
+  const avg = visible.length
+    ? Math.round(visible.reduce((sum, item) => sum + (Number(item.points) || 0), 0) / visible.length)
+    : 0;
+  const currentPoints = cu ? Math.round(cu.points || 0) : null;
+  const nextGap = cu?.points_to_next_rank != null ? Math.round(cu.points_to_next_rank) : null;
+
+  return `<div class="race-summary-strip">
+    <div class="race-summary-item">
+      <span class="race-summary-label">Лидер</span>
+      <b>${leader ? esc(leader.full_name) : '—'}</b>
+      <em>${leader ? Math.round(leader.points) + ' баллов' : 'нет данных'}</em>
+    </div>
+    <div class="race-summary-item">
+      <span class="race-summary-label">Участников</span>
+      <b>${data.total_participants || visible.length}</b>
+      <em>${_raceState.mode === 'my_zone' ? 'в вашей зоне' : 'в выборке'}</em>
+    </div>
+    <div class="race-summary-item">
+      <span class="race-summary-label">Средний балл</span>
+      <b>${avg}</b>
+      <em>по показанным</em>
+    </div>
+    <div class="race-summary-item race-summary-item-accent">
+      <span class="race-summary-label">Ваш результат</span>
+      <b>${currentPoints ?? '—'}</b>
+      <em>${nextGap && nextGap > 0 ? `до следующего ${nextGap}` : 'позиция актуальна'}</em>
+    </div>
+  </div>`;
 }
 
 /* Цвет машинки по месту: топ-1/2/3 — особые цвета, текущий оператор — синий,
@@ -5196,19 +5230,19 @@ function renderRaceChart(items) {
   // [ столбец ]        высота = barH, пропорциональна баллам
   // [ подпись инициалов ]  внизу, в зоне padBottom
 
-  const labelH = 18;     // высота строки с цифрой баллов
-  const labelGap = 6;    // зазор между цифрой и машинкой
-  const carH = 36;       // максимальная высота машинки (is-current-user)
-  const carGap = 14;     // зазор между машинкой и верхом столбца
-  const padTop = labelH + labelGap + carH + carGap + 10; // +10px доп. запас
-  const padBottom = 56;
-  const plotH = 280;
+  const labelH = 24;     // высота строки с цифрой баллов
+  const labelGap = 8;    // зазор между цифрой и машинкой
+  const carH = 44;       // максимальная высота машинки
+  const carGap = 12;     // зазор между машинкой и верхом столбца
+  const padTop = labelH + labelGap + carH + carGap + 12;
+  const padBottom = 74;
+  const plotH = items.length <= 12 ? 300 : 280;
   const chartH = plotH + padTop + padBottom;
   const usableH = plotH;
 
   const n = items.length;
-  const barW = n <= 6 ? 56 : n <= 12 ? 48 : 36;
-  const gap = n <= 6 ? 32 : n <= 12 ? 24 : 14;
+  const barW = n <= 6 ? 64 : n <= 12 ? 54 : 42;
+  const gap = n <= 6 ? 28 : n <= 12 ? 20 : 14;
   const stretch = n <= 12;
 
   return `<div class="race-chart-scroll">
@@ -5216,23 +5250,24 @@ function renderRaceChart(items) {
       <div class="race-axis-labels" style="height:${usableH}px;margin-top:${padTop}px">
         ${ticks.slice().reverse().map(t => `<div class="race-axis-tick">${t}</div>`).join('')}
       </div>
-      <div class="race-bars-area" style="height:${chartH}px;${stretch ? '' : `min-width:${n * (barW+gap) + 40}px`}">
+      <div class="race-bars-area" style="height:${chartH}px;gap:${gap}px;${stretch ? '' : `min-width:${n * (barW+gap) + 40}px`}">
         ${ticks.map((t,i) => i>0 ? `<div class="race-grid-line" style="bottom:${padBottom + (t/niceMax)*usableH}px"></div>` : '').join('')}
         ${items.map(it => {
           const barH = Math.max(4, (it.points / niceMax) * usableH);
           const rankClass = raceCarRankClass(it.rank, it.is_current_user);
-          const colWidth = stretch ? `calc((100% - ${(n-1)*24}px) / ${n})` : `${barW}px`;
+          const colWidth = stretch ? `calc((100% - ${(n-1)*gap}px) / ${n})` : `${barW}px`;
           // carBottom — нижняя точка машинки (она сама растёт вверх на свою высоту через CSS transform)
           const carBottom = padBottom + barH + carGap;
           // labelBottom — нижний край текста, должен быть выше верха машинки (carBottom + carH) + зазор
           const labelBottom = carBottom + carH + labelGap;
-          return `<div class="race-col ${it.is_current_user?'race-col-me':''}" style="width:${colWidth};flex:${stretch?'1 1 0':'0 0 auto'}" data-race-operator="${it.operator_id}"
+          return `<div class="race-col ${rankClass} ${it.is_current_user?'race-col-me':''}" style="width:${colWidth};flex:${stretch?'1 1 0':'0 0 auto'}" data-race-operator="${it.operator_id}"
               title="${esc(it.full_name)}${it.group?' · '+esc(it.group):''} · место #${it.rank} · ${Math.round(it.points)} баллов">
             <div class="race-points-label" style="bottom:${labelBottom}px">${Math.round(it.points)}</div>
             <img class="race-car-icon ${rankClass}" style="bottom:${carBottom}px" src="${raceCarImageSrc(it.rank, it.is_current_user)}" alt="" loading="lazy">
             <div class="race-bar ${it.is_current_user?'race-bar-me':''} ${rankClass}" style="height:${barH}px;bottom:${padBottom}px"></div>
             <div class="race-x-label ${it.is_current_user?'race-x-label-me':''}">
-              ${esc(it.initials)}
+              <span>${esc(it.initials)}</span>
+              <small>#${it.rank}</small>
               ${it.is_current_user ? '<div class="race-you-tag">Вы</div>' : ''}
             </div>
           </div>`;
@@ -5244,7 +5279,7 @@ function renderRaceChart(items) {
 
 function renderRaceMyCard(cu, note, visibleItems) {
   if (!cu) {
-    return `<div class="rating-card"><div class="rcard-title">Ваш результат</div>
+    return `<div class="rating-card race-side-card"><div class="rcard-title">Ваш результат</div>
       <div class="r-empty-state"><div>Ваши баллы за выбранный период пока не рассчитаны.</div></div>
     </div>`;
   }
@@ -5268,7 +5303,7 @@ function renderRaceMyCard(cu, note, visibleItems) {
   const below = visibleItems?.filter(i => !i.is_current_user && i.points < cu.points).length ?? null;
   const nearestAbove = visibleItems?.filter(i => !i.is_current_user && i.points > cu.points).sort((a,b)=>a.points-b.points)[0];
 
-  return `<div class="rating-card">
+  return `<div class="rating-card race-side-card">
     <div class="rcard-title">Ваш результат</div>
     ${cu.outside_selected_group ? `<div class="race-note">${esc(note || 'Вы не входите в выбранную группу.')}</div>` : ''}
     <div class="rms-list">
@@ -5285,7 +5320,7 @@ function renderRaceMyCard(cu, note, visibleItems) {
 
 function renderRaceTopTable(items, cu) {
   const myPoints = cu ? cu.points : null;
-  return `<div class="rating-card">
+  return `<div class="rating-card race-side-card">
     <div class="rcard-title">Топ операторов</div>
     <div class="table-wrap"><table class="data-table">
       <thead><tr><th>#</th><th>Оператор</th><th>Группа</th><th class="num">Баллы</th><th class="num">Разница с вами</th></tr></thead>

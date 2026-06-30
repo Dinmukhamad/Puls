@@ -10,10 +10,11 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
-from app.models.entities import CoinTransaction, Operator, PeriodReport, UploadedReportFile, User
+from app.models.entities import AuditLog, CoinTransaction, Operator, PeriodReport, UploadedReportFile, User
 from app.services.period_reports import calculate_period_report, normalize_name
 
 router = APIRouter(prefix="/reports", tags=["period-reports"])
+MAX_REPORT_FILE_BYTES = 15 * 1024 * 1024
 
 
 def _get_uploaded_bytes(db: Session, file_kind: str) -> Optional[bytes]:
@@ -91,6 +92,8 @@ async def upload_period_files(
         raise HTTPException(status_code=400, detail="Monthly Report пустой или повреждён")
     if not report_bytes:
         raise HTTPException(status_code=400, detail="Report пустой или повреждён")
+    if len(monthly_bytes) > MAX_REPORT_FILE_BYTES or len(report_bytes) > MAX_REPORT_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="Размер каждого Excel-файла не должен превышать 15 МБ")
 
     _save_uploaded_bytes(db, "monthly", monthly_report_file.filename, monthly_bytes, current_user.id)
     _save_uploaded_bytes(db, "report", report_file.filename, report_bytes, current_user.id)
@@ -193,6 +196,25 @@ class SavePeriodReportRequest(BaseModel):
     coins_per_points: float = 5.0
 
 
+def _apply_metrics(pr: PeriodReport, m, user_id: int) -> None:
+    pr.quality_avg = m.quality_avg
+    pr.quality_calls_count = m.quality_calls_count
+    pr.total_hours = m.total_hours
+    pr.base_hours = m.base_hours
+    pr.tech_issue_hours = m.tech_issue_hours
+    pr.training_hours = m.training_hours
+    pr.offline_activity_hours = m.offline_activity_hours
+    pr.calls_total = m.calls_total
+    pr.kvz = m.kvz
+    pr.call_time_hours = m.call_time_hours
+    pr.efficiency_percent = m.efficiency_percent
+    pr.penalty_sum = m.penalty_sum
+    pr.penalty_minutes = m.penalty_minutes
+    pr.penalty_points = m.penalty_points
+    pr.final_points = m.final_points
+    pr.created_by_user_id = user_id
+
+
 @router.post("/period-report/save")
 def save_period_report(
     payload: SavePeriodReportRequest,
@@ -200,6 +222,11 @@ def save_period_report(
     current_user: User = Depends(require_roles("supervisor", "manager", "admin")),
 ) -> dict:
     """Пересчитывает период (только matched-операторы) и сохраняет результаты в БД."""
+    if payload.start_date > payload.end_date:
+        raise HTTPException(status_code=400, detail="Дата начала не может быть позже даты окончания")
+    if payload.award_coins and payload.coins_per_points <= 0:
+        raise HTTPException(status_code=400, detail="Коэффициент начисления коинов должен быть больше нуля")
+
     monthly_bytes = _get_uploaded_bytes(db, "monthly")
     report_bytes = _get_uploaded_bytes(db, "report")
     if not monthly_bytes or not report_bytes:
@@ -219,58 +246,96 @@ def save_period_report(
     name_to_op = {normalize_name(o.full_name): o for o in db_ops}
 
     saved = 0
-    coins_total = 0
+    created = 0
+    updated = 0
+    coins_delta_total = 0
 
     for m in result.operators:
         db_op = name_to_op.get(m.name_key)
         if not db_op:
             continue
 
-        pr = PeriodReport(
+        existing_reports = list(db.scalars(
+            select(PeriodReport)
+            .where(
+                PeriodReport.operator_id == db_op.id,
+                PeriodReport.period_start == payload.start_date,
+                PeriodReport.period_end == payload.end_date,
+            )
+            .order_by(PeriodReport.created_at.desc(), PeriodReport.id.desc())
+        ))
+        pr = existing_reports[0] if existing_reports else PeriodReport(
             operator_id=db_op.id,
             period_start=payload.start_date,
             period_end=payload.end_date,
-            quality_avg=m.quality_avg,
-            quality_calls_count=m.quality_calls_count,
-            total_hours=m.total_hours,
-            base_hours=m.base_hours,
-            tech_issue_hours=m.tech_issue_hours,
-            training_hours=m.training_hours,
-            offline_activity_hours=m.offline_activity_hours,
-            calls_total=m.calls_total,
-            kvz=m.kvz,
-            call_time_hours=m.call_time_hours,
-            efficiency_percent=m.efficiency_percent,
-            penalty_sum=m.penalty_sum,
-            penalty_minutes=m.penalty_minutes,
-            penalty_points=m.penalty_points,
-            final_points=m.final_points,
-            created_by_user_id=current_user.id,
         )
+        for stale_report in existing_reports[1:]:
+            db.delete(stale_report)
 
-        if payload.award_coins and m.final_points > 0:
-            coins = int(m.final_points / payload.coins_per_points)
-            pr.coins_awarded = coins
-            coins_total += coins
+        old_coins = pr.coins_awarded or 0
+        _apply_metrics(pr, m, current_user.id)
 
-            db_op.current_balance = (db_op.current_balance or 0) + coins
-            db_op.total_earned = (db_op.total_earned or 0) + coins
-            db.add(CoinTransaction(
-                operator_id=db_op.id,
-                amount=coins,
-                type="period_report",
-                comment=f"Расчёт за период {payload.start_date}–{payload.end_date}: {m.final_points} баллов",
-                created_by_user_id=current_user.id,
-            ))
+        if payload.award_coins:
+            desired_coins = int(m.final_points / payload.coins_per_points) if m.final_points > 0 else 0
+            coin_delta = desired_coins - old_coins
+            if coin_delta < 0 and (db_op.current_balance or 0) + coin_delta < 0:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Нельзя уменьшить ранее начисленные коины для {db_op.full_name}: "
+                        "текущего баланса недостаточно для автоматической корректировки"
+                    ),
+                )
+            pr.coins_awarded = desired_coins
+
+            if coin_delta:
+                coins_delta_total += coin_delta
+                db_op.current_balance = (db_op.current_balance or 0) + coin_delta
+                if coin_delta > 0:
+                    db_op.total_earned = (db_op.total_earned or 0) + coin_delta
+                else:
+                    db_op.total_earned = max(0, (db_op.total_earned or 0) + coin_delta)
+
+                db.add(CoinTransaction(
+                    operator_id=db_op.id,
+                    amount=coin_delta,
+                    type="period_report" if not existing_reports else "period_report_adjustment",
+                    comment=(
+                        f"Расчёт за период {payload.start_date}–{payload.end_date}: "
+                        f"{m.final_points} баллов, коины {old_coins} → {desired_coins}"
+                    ),
+                    created_by_user_id=current_user.id,
+                ))
+        else:
+            pr.coins_awarded = old_coins
 
         db.add(pr)
         saved += 1
+        if existing_reports:
+            updated += 1
+        else:
+            created += 1
+
+    db.add(AuditLog(
+        action="period_report_saved",
+        entity_type="period_report",
+        details=(
+            f"Сохранён расчёт за период {payload.start_date}–{payload.end_date}: "
+            f"created={created}, updated={updated}, coins_delta={coins_delta_total}"
+        ),
+        performed_by_user_id=current_user.id,
+    ))
 
     db.commit()
 
     return {
         "ok": True,
         "saved": saved,
-        "coins_awarded_total": coins_total,
-        "message": f"Сохранено {saved} расчётов" + (f", начислено {coins_total} ₡" if payload.award_coins else ""),
+        "created": created,
+        "updated": updated,
+        "coins_delta_total": coins_delta_total,
+        "coins_awarded_total": coins_delta_total,
+        "message": f"Сохранено {saved} расчётов" + (
+            f", изменение баланса {coins_delta_total:+d} ₡" if payload.award_coins else ""
+        ),
     }

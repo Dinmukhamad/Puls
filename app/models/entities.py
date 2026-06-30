@@ -184,6 +184,9 @@ class AuditLog(Base):
 class PeriodReport(Base):
     """Сохранённый расчёт показателей оператора за выбранный период"""
     __tablename__ = "period_reports"
+    __table_args__ = (
+        UniqueConstraint("operator_id", "period_start", "period_end", name="uq_period_reports_operator_period"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)

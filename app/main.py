@@ -5,10 +5,11 @@ import os
 from pathlib import Path
 from typing import Dict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
+from urllib.parse import urlparse
 
 from app.core.config import get_settings
 from sqlalchemy import text
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-app = FastAPI(title="Puls — Operator Performance Platform")
+app = FastAPI(title="Pulse — Operator Performance Platform")
 
 settings = get_settings()
 _cors_origins = settings.cors_origin_list
@@ -36,6 +37,34 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _origin_from_referer(value: str | None) -> str | None:
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+@app.middleware("http")
+async def csrf_origin_guard(request: Request, call_next):
+    if (
+        request.method.upper() in UNSAFE_METHODS
+        and request.cookies.get(settings.auth_cookie_name)
+    ):
+        origin = request.headers.get("origin") or _origin_from_referer(request.headers.get("referer"))
+        if origin:
+            current_origin = f"{request.url.scheme}://{request.headers.get('host', '')}".rstrip("/")
+            allowed_origins = {current_origin}
+            allowed_origins.update(o.rstrip("/") for o in _cors_origins if o != "*")
+            if origin.rstrip("/") not in allowed_origins:
+                return JSONResponse(status_code=403, content={"detail": "Недопустимый источник запроса"})
+    return await call_next(request)
 
 app.include_router(auth.router,           prefix=settings.api_prefix)
 app.include_router(groups.router,          prefix=settings.api_prefix)

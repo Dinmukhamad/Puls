@@ -9,11 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
-from app.models.entities import CoinTransaction, Operator, ShopPurchase, User, WeeklyResult
-from app.schemas.dashboard import (
-    DashboardRead, GroupSummary, OperatorRow, RatingRow, TransactionRow
-)
-from app.services.rating import latest_period
+from app.models.entities import CoinTransaction, Operator, ShopPurchase, User
+from app.schemas.dashboard import DashboardRead, GroupSummary, OperatorRow, RatingRow
+from app.services.rating import rating_rows
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -21,104 +19,56 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 @router.get("", response_model=DashboardRead,
             dependencies=[Depends(require_roles("supervisor", "manager", "admin"))])
 def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
-    period = latest_period(db)
-    top_rows = []
-    coins_this_week = 0
+    rating = rating_rows(db)
+    rating_by_operator = {row["operator_id"]: row for row in rating}
+
+    top_rows = [
+        RatingRow(
+            operator_id=row["operator_id"],
+            full_name=row["operator_name"],
+            group_name=row["group_name"],
+            rank_position=row["rank_position"],
+            previous_rank_position=None,
+            rank_delta=row.get("rank_delta"),
+            final_score=row.get("final_score") or row.get("contest_points") or 0,
+            coins_earned=row.get("coins_earned") or 0,
+            current_balance=row.get("total_balance") or 0,
+            lateness_count=0,
+            violation_count=0,
+        )
+        for row in rating[:5]
+    ]
+    coins_this_week = sum(row.get("coins_earned") or 0 for row in rating)
     lateness_week = 0
     violations_week = 0
 
-    if period:
-        week_start, week_end = period
-        coins_this_week = db.scalar(
-            select(func.coalesce(func.sum(WeeklyResult.coins_earned), 0))
-            .join(Operator, Operator.id == WeeklyResult.operator_id)
-            .where(
-                WeeklyResult.week_start == week_start,
-                WeeklyResult.week_end == week_end,
-                Operator.participation_status == "participating",
-                Operator.employment_status == "active",
-                Operator.is_active.is_(True),
-            )
-        ) or 0
-
-        lateness_week = db.scalar(
-            select(func.coalesce(func.sum(WeeklyResult.lateness_count), 0))
-            .join(Operator, Operator.id == WeeklyResult.operator_id)
-            .where(
-                WeeklyResult.week_start == week_start,
-                WeeklyResult.week_end == week_end,
-                Operator.participation_status == "participating",
-                Operator.employment_status == "active",
-                Operator.is_active.is_(True),
-            )
-        ) or 0
-
-        violations_week = db.scalar(
-            select(func.coalesce(func.sum(WeeklyResult.violation_count), 0))
-            .join(Operator, Operator.id == WeeklyResult.operator_id)
-            .where(
-                WeeklyResult.week_start == week_start,
-                WeeklyResult.week_end == week_end,
-                Operator.participation_status == "participating",
-                Operator.employment_status == "active",
-                Operator.is_active.is_(True),
-            )
-        ) or 0
-
-        rows = list(db.execute(
-            select(WeeklyResult, Operator)
-            .join(Operator, Operator.id == WeeklyResult.operator_id)
-            .where(WeeklyResult.week_start == week_start, WeeklyResult.week_end == week_end)
-            .where(
-                Operator.participation_status == "participating",
-                Operator.employment_status == "active",
-                Operator.is_active.is_(True),
-            )
-            .order_by(WeeklyResult.rank_position.asc().nulls_last())
-            .limit(5)
-        ))
-
-        for result, operator in rows:
-            rank_delta = None
-            if result.rank_position is not None and result.previous_rank_position is not None:
-                rank_delta = result.previous_rank_position - result.rank_position
-            top_rows.append(RatingRow(
-                operator_id=operator.id,
-                full_name=operator.full_name,
-                group_name=operator.group_name,
-                rank_position=result.rank_position,
-                previous_rank_position=result.previous_rank_position,
-                rank_delta=rank_delta,
-                final_score=result.final_score,
-                coins_earned=result.coins_earned,
-                current_balance=operator.current_balance,
-                lateness_count=result.lateness_count,
-                violation_count=result.violation_count,
-            ))
+    active_operators = list(db.scalars(
+        select(Operator)
+        .where(
+            Operator.participation_status == "participating",
+            Operator.employment_status == "active",
+            Operator.is_active.is_(True),
+        )
+        .order_by(Operator.group_name.asc(), Operator.full_name.asc())
+    ))
+    group_stats: dict[str, dict] = {}
+    for operator in active_operators:
+        group_name = operator.group_name or "Без группы"
+        stat = group_stats.setdefault(group_name, {"count": 0, "balance": 0, "scores": []})
+        stat["count"] += 1
+        stat["balance"] += operator.current_balance or 0
+        rating_row = rating_by_operator.get(operator.id)
+        if rating_row:
+            stat["scores"].append(rating_row.get("final_score") or rating_row.get("contest_points") or 0)
 
     group_summary = [
         GroupSummary(
             group_name=name,
-            operators_count=count,
-            total_balance=balance,
-            average_score=score or 0,
+            operators_count=stat["count"],
+            total_balance=stat["balance"],
+            average_score=round(sum(stat["scores"]) / len(stat["scores"]), 2) if stat["scores"] else 0,
         )
-        for name, count, balance, score in db.execute(
-            select(
-                Operator.group_name,
-                func.count(Operator.id),
-                func.coalesce(func.sum(Operator.current_balance), 0),
-                func.avg(WeeklyResult.final_score),
-            )
-            .outerjoin(WeeklyResult, WeeklyResult.operator_id == Operator.id)
-            .where(
-                Operator.participation_status == "participating",
-                Operator.employment_status == "active",
-                Operator.is_active.is_(True),
-            )
-            .group_by(Operator.group_name)
-            .order_by(Operator.group_name.asc())
-        )
+        for name, stat in sorted(group_stats.items())
     ]
 
     # Последние транзакции с именами
@@ -180,31 +130,17 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
             dependencies=[Depends(require_roles("supervisor", "manager", "admin"))])
 def admin_operators(db: Session = Depends(get_db)) -> List[OperatorRow]:
     """Расширенная таблица операторов для админ-панели"""
-    period = latest_period(db)
-
     operators = list(db.scalars(
         select(Operator)
         .order_by(Operator.group_name.asc(), Operator.full_name.asc())
     ))
 
-    result_map = {}
-    if period:
-        week_start, week_end = period
-        for wr in db.scalars(
-            select(WeeklyResult).where(
-                WeeklyResult.week_start == week_start,
-                WeeklyResult.week_end == week_end,
-            )
-        ):
-            result_map[wr.operator_id] = wr
+    rating_map = {row["operator_id"]: row for row in rating_rows(db)}
 
     rows = []
     for op in operators:
         user = op.user or (db.get(User, op.user_id) if op.user_id else None)
-        wr = result_map.get(op.id)
-        rank_delta = None
-        if wr and wr.rank_position is not None and wr.previous_rank_position is not None:
-            rank_delta = wr.previous_rank_position - wr.rank_position
+        rating_row = rating_map.get(op.id)
         rows.append(OperatorRow(
             id=op.id,
             full_name=op.full_name,
@@ -221,12 +157,12 @@ def admin_operators(db: Session = Depends(get_db)) -> List[OperatorRow]:
             total_earned=op.total_earned,
             total_spent=op.total_spent,
             is_active=op.is_active,
-            rank_position=wr.rank_position if wr else None,
-            rank_delta=rank_delta,
-            final_score=wr.final_score if wr else 0,
-            coins_earned_week=wr.coins_earned if wr else 0,
-            lateness_count=wr.lateness_count if wr else 0,
-            violation_count=wr.violation_count if wr else 0,
+            rank_position=rating_row["rank_position"] if rating_row else None,
+            rank_delta=rating_row.get("rank_delta") if rating_row else None,
+            final_score=(rating_row.get("final_score") or rating_row.get("contest_points") or 0) if rating_row else 0,
+            coins_earned_week=(rating_row.get("coins_earned") or 0) if rating_row else 0,
+            lateness_count=0,
+            violation_count=0,
             dismissed_at=op.dismissed_at,
         ))
     return rows

@@ -581,7 +581,7 @@ def delete_operator(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_operator_management_access),
 ) -> dict:
-    from sqlalchemy import text
+    from sqlalchemy import inspect, text
 
     op = db.get(Operator, operator_id)
     if not op:
@@ -600,11 +600,12 @@ def delete_operator(
     try:
         conn = db.connection()
 
-        # 1. DELETE из operator_audit_logs (operator_id NOT NULL — нельзя обнулить)
-        conn.execute(
-            text("DELETE FROM operator_audit_logs WHERE operator_id = :oid"),
-            {"oid": op_id}
-        )
+        # 1. Legacy table existed before audit_logs unification. It may be absent on current schemas.
+        if inspect(conn).has_table("operator_audit_logs"):
+            conn.execute(
+                text("DELETE FROM operator_audit_logs WHERE operator_id = :oid"),
+                {"oid": op_id}
+            )
 
         # 2. Обнулить ссылки в audit_logs (entity_id nullable)
         conn.execute(

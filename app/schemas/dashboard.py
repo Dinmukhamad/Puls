@@ -44,7 +44,7 @@ class OperatorRow(BaseModel):
     total_earned: int
     total_spent: int
     is_active: bool
-    # Из последнего WeeklyResult
+    # Из текущего рейтинга на основе PeriodReport
     rank_position: Optional[int] = None
     rank_delta: Optional[int] = None
     final_score: float = 0

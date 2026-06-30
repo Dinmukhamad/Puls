@@ -92,6 +92,8 @@ python scripts/import_group51_operators.py --file /path/to/операторы.xl
 
 Скрипт требует `DATABASE_URL`, создаёт группу при отсутствии, создаёт/обновляет операторов, ставит `must_change_password=true` для временных паролей и сохраняет одноразовый CSV с доступами в `secure_outputs/`. Этот каталог не коммитится.
 
+Нельзя коммитить одноразовые скрипты или таблицы с реальными ФИО, email, логинами и временными паролями. Если такие данные попали в Git, временные пароли нужно считать скомпрометированными и сразу сбросить.
+
 ---
 
 ## Railway deploy
@@ -202,6 +204,7 @@ alembic downgrade -1
 - [ ] Backup перед деструктивными миграциями
 - [ ] `gitleaks detect` перед релизом
 - [ ] `SEED_ADMIN_PASSWORD` убран после создания admin
+- [ ] В репозитории нет одноразовых файлов импорта с реальными ФИО/email/паролями
 
 ---
 
@@ -212,6 +215,7 @@ alembic downgrade -1
 - **Frontend:** Vanilla JS / HTML / CSS (раздаётся FastAPI)
 - **Auth:** HttpOnly cookie (`pulse_access_token`)
 - **Миграции:** Alembic
+- **Рейтинг:** строится по сохранённым `PeriodReport`
 - Файл `server.js` удалён
 - Node.js backend не используется
 - JSON-файлы не используются как источник данных
@@ -234,7 +238,17 @@ POST /api/operators/account/change-password  Сменить пароль
 POST /api/operators/account/change-username  Сменить логин
 
 GET  /api/rating                         Рейтинг
-POST /api/weekly-results                 Загрузить результаты недели
+POST /api/weekly-results                 Legacy: ручная загрузка результатов недели
+
+POST /api/reports/period-report/upload   Загрузить Monthly Report и Report
+GET  /api/reports/period-report/status   Статус загруженных файлов
+GET  /api/reports/operators-period-summary Предпросмотр расчёта периода
+POST /api/reports/period-report/save     Сохранить расчёт периода
+
+GET  /api/analytics/summary              KPI аналитики
+GET  /api/analytics/operators            Таблица операторов аналитики
+GET  /api/analytics/groups-comparison    Сравнение групп
+GET  /api/analytics/points               Анализ итоговых баллов
 
 GET  /api/wallet/me                      Мой кошелёк
 POST /api/wallet/transactions            Ручное начисление
