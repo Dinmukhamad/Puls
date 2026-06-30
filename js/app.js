@@ -4241,13 +4241,14 @@ async function loadAnalyticsTab(tab) {
   if (!content) return;
   const myNavGen = STATE.navGen;
   const myTabGen = bumpAnalyticsTabGen();
-  // Если для этой вкладки уже есть кеш в sessionStorage (даже устаревший) —
-  // не показываем спиннер, сразу переходим к рендеру; swrFetch внутри
-  // load*Tab-функций отдаст закешированные данные синхронно, а сами
-  // загрузочные функции допишут фоновое обновление, если кеш устарел.
-  const probeKey = 'analytics:' + tab;
-  const hasAnyCacheForTab = Object.keys(sessionStorage).some(k => k.startsWith('puls-swr:analytics:') );
-  if (!hasAnyCacheForTab) {
+  // Если для текущего периода/фильтров этой вкладки уже есть кеш в sessionStorage
+  // (даже устаревший) — не показываем спиннер, переходим к рендеру сразу;
+  // swrFetch внутри load*Tab-функций отдаст закешированные данные синхронно.
+  const base = JSON.stringify(analyticsBaseParams());
+  const hasCacheForThisTab = Object.keys(sessionStorage).some(k =>
+    k.startsWith('puls-swr:analytics:') && k.includes(base.slice(1, -1).split(',')[0])
+  );
+  if (!hasCacheForThisTab) {
     content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем показатели…</p></div>';
   }
 
