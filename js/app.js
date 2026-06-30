@@ -5815,6 +5815,7 @@ window.renderRating = renderRating;
 ══════════════════════════════════════ */
 let _testsTab = 'available'; // available | history (operator) | overview | list (staff)
 let _testTimerInterval = null;
+let _testResumeFailedFor = null; // attempt_id, на котором resumeTestRunner уже падал — не повторяем автоматически
 
 function renderTests() {
   const el = document.getElementById('view-tests');
@@ -5970,19 +5971,12 @@ async function resumeTestRunner(testId) {
       answers: {},
       expiresAt: new Date(data.expires_at).getTime(),
     };
-    // Подставляем уже сохранённые ранее ответы (если оператор успел отметить
-    // что-то до F5) — иначе при возврате на экран все варианты будут пустыми,
-    // хотя backend их уже хранит через save-answer.
     renderTestRunnerScreen();
+    return true;
   } catch(e) {
-    // Попытка не восстановилась (например время истекло, и backend сам её
-    // завершил — см. auto_expire_attempt) — раньше здесь просто показывался
-    // toast, а экран навечно оставался со спиннером загрузки, потому что
-    // ни список тестов, ни сообщение об ошибке не отображались. Теперь
-    // явно перерисовываем список заново — он либо покажет тест в статусе
-    // "Завершён"/"Просрочен", либо (если и список не грузится) ошибку.
     showToast(e.message || 'Не удалось восстановить тест', 'error');
     renderTests();
+    return false;
   }
 }
 
