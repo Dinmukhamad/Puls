@@ -1875,6 +1875,7 @@ function renderHistory() {
 async function renderGroups() {
   const el = document.getElementById('view-groups');
   if (!el) return;
+  const myNavGen = STATE.navGen;
 
   if (!canManageGroups()) {
     el.innerHTML = `
@@ -1900,6 +1901,7 @@ async function renderGroups() {
   try {
     STATE.groups = await api.listGroups(false);
   } catch(e) {
+    if (isNavStale(myNavGen)) return;
     el.innerHTML = `
       <div class="view-header">
         <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
@@ -1908,6 +1910,7 @@ async function renderGroups() {
       <div class="status-line status-error" style="padding:20px">Не удалось загрузить список групп</div>`;
     return;
   }
+  if (isNavStale(myNavGen)) return; // ушли с "Групп" пока ждали ответ сервера
 
   const rows = STATE.groups;
   el.innerHTML = `
