@@ -216,6 +216,13 @@ def _parse_simple_sheet(
                 v = row[col_idx]
                 if isinstance(v, (int, float)):
                     total += float(v)
+                elif isinstance(v, str) and v.strip():
+                    # Некоторые листы (например "Штрафы") хранят числа как текст
+                    cleaned = v.strip().replace(",", ".").replace(" ", "")
+                    try:
+                        total += float(cleaned)
+                    except ValueError:
+                        pass
         prev = out.get(name_key, (raw_name, 0.0))
         out[name_key] = (raw_name, prev[1] + total)
     return out
