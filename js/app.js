@@ -2957,11 +2957,19 @@ function renderPeriodReport() {
       <div class="pr-upload-grid">
         <div class="form-group">
           <label class="form-label">Monthly Report — оценки качества звонков</label>
-          <input id="pr-file-monthly" type="file" accept=".xlsx" class="form-input">
+          <label class="pr-file-drop" for="pr-file-monthly" id="pr-file-monthly-drop">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span class="pr-file-drop-text">Нажмите, чтобы выбрать файл .xlsx</span>
+          </label>
+          <input id="pr-file-monthly" type="file" accept=".xlsx" hidden>
         </div>
         <div class="form-group">
           <label class="form-label">Report — часы, звонки, штрафы</label>
-          <input id="pr-file-report" type="file" accept=".xlsx" class="form-input">
+          <label class="pr-file-drop" for="pr-file-report" id="pr-file-report-drop">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span class="pr-file-drop-text">Нажмите, чтобы выбрать файл .xlsx</span>
+          </label>
+          <input id="pr-file-report" type="file" accept=".xlsx" hidden>
         </div>
       </div>
       <div id="pr-upload-status" class="status-line"></div>
@@ -2986,6 +2994,25 @@ function renderPeriodReport() {
 
     <div id="pr-results"></div>
   `;
+
+  // File selection display
+  function bindFileDrop(inputId, dropId) {
+    const input = el.querySelector('#' + inputId);
+    const drop = el.querySelector('#' + dropId);
+    input?.addEventListener('change', () => {
+      const file = input.files[0];
+      const textEl = drop.querySelector('.pr-file-drop-text');
+      if (file) {
+        drop.classList.add('pr-file-drop-filled');
+        textEl.textContent = file.name;
+      } else {
+        drop.classList.remove('pr-file-drop-filled');
+        textEl.textContent = 'Нажмите, чтобы выбрать файл .xlsx';
+      }
+    });
+  }
+  bindFileDrop('pr-file-monthly', 'pr-file-monthly-drop');
+  bindFileDrop('pr-file-report', 'pr-file-report-drop');
 
   // Upload handler
   el.querySelector('#pr-upload-btn').addEventListener('click', async () => {
