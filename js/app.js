@@ -4166,40 +4166,11 @@ async function renderAnalytics() {
   } catch(e) { /* groups list optional */ }
   if (isNavStale(myNavGen)) return;
 
-  // Период теперь выбирается из списка уже рассчитанных — свободный ввод дат
-  // убран, чтобы не показывать пользователю несуществующие периоды (см. ТЗ:
-  // "Аналитика должна строиться только на основе сохранённых PeriodReport").
-  try {
-    const periodsData = await api.getAvailablePeriods();
-    if (isNavStale(myNavGen)) return;
-    const periods = periodsData.items || [];
-    const periodSel = el.querySelector('#an-period');
-    if (!periods.length) {
-      periodSel.innerHTML = '<option value="">Нет рассчитанных периодов</option>';
-    } else {
-      periodSel.innerHTML = periods.map(p =>
-        `<option value="${p.start_date}|${p.end_date}" ${p.start_date===_analyticsState.startDate && p.end_date===_analyticsState.endDate?'selected':''}>${esc(p.label)}</option>`
-      ).join('');
-      // Если в URL/состоянии нет валидного периода — берём самый последний (первый в списке, т.к. сортировка desc)
-      const hasMatch = periods.some(p => p.start_date === _analyticsState.startDate && p.end_date === _analyticsState.endDate);
-      if (!hasMatch) {
-        _analyticsState.startDate = periods[0].start_date;
-        _analyticsState.endDate = periods[0].end_date;
-        periodSel.value = `${periods[0].start_date}|${periods[0].end_date}`;
-      }
-    }
-  } catch(e) { /* available-periods недоступен — продолжаем с тем, что было в URL */ }
-  if (isNavStale(myNavGen)) return;
-
   el.querySelector('#an-participation').value = _analyticsState.participationStatus;
 
   function syncStateFromFilters() {
-    const periodVal = el.querySelector('#an-period').value;
-    if (periodVal) {
-      const [s, e] = periodVal.split('|');
-      _analyticsState.startDate = s;
-      _analyticsState.endDate = e;
-    }
+    _analyticsState.startDate = el.querySelector('#an-start').value;
+    _analyticsState.endDate = el.querySelector('#an-end').value;
     _analyticsState.groupId = el.querySelector('#an-group').value;
     _analyticsState.operatorQuery = el.querySelector('#an-operator').value;
     _analyticsState.participationStatus = el.querySelector('#an-participation').value;
