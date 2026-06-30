@@ -5039,7 +5039,7 @@ async function loadRatingTab(tab) {
 }
 
 /* ── Вкладка: Гонка баллов ─────────────────────────────────────*/
-let _raceState = { groupId: '', mode: 'top10' };
+let _raceState = { groupId: '', mode: 'my_zone' };
 
 async function fetchRace(params) {
   const qs = new URLSearchParams(params).toString();
@@ -5050,16 +5050,15 @@ async function fetchRace(params) {
 }
 
 async function renderRatingRaceTab(content) {
-  // Load groups for filter (reuse rating data for group names)
   let groupOptions = '<option value="">Все группы</option>';
   try {
     const baseData = await fetchRace({ mode: 'all' });
     const groupNames = [...new Set((baseData.items || []).map(i => i.group).filter(Boolean))].sort();
     groupOptions += groupNames.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('');
-  } catch(e) { /* ignore — filter will just show "Все группы" */ }
+  } catch(e) { /* ignore */ }
 
   content.innerHTML = `
-    <div class="rating-card">
+    <div class="race-card">
       <div class="race-header-row">
         <div>
           <div class="race-title">Гонка баллов</div>
@@ -5068,12 +5067,12 @@ async function renderRatingRaceTab(content) {
         <div id="race-my-place-badge"></div>
       </div>
       <div class="race-filters-row">
-        <select id="race-group-filter" class="form-select" style="max-width:200px">${groupOptions}</select>
-        <div class="an-mode-switcher" id="race-mode-switcher" style="margin:0">
-          <button class="an-mode-btn ${_raceState.mode==='top10'?'active':''}" data-mode="top10">Топ-10</button>
-          <button class="an-mode-btn ${_raceState.mode==='top20'?'active':''}" data-mode="top20">Топ-20</button>
-          <button class="an-mode-btn ${_raceState.mode==='my_zone'?'active':''}" data-mode="my_zone">Моя зона</button>
-          <button class="an-mode-btn ${_raceState.mode==='all'?'active':''}" data-mode="all">Все</button>
+        <select id="race-group-filter" class="race-select">${groupOptions}</select>
+        <div class="race-segmented" id="race-mode-switcher">
+          <button class="race-seg-btn ${_raceState.mode==='my_zone'?'active':''}" data-mode="my_zone">Моя зона</button>
+          <button class="race-seg-btn ${_raceState.mode==='top10'?'active':''}" data-mode="top10">Топ-10</button>
+          <button class="race-seg-btn ${_raceState.mode==='top20'?'active':''}" data-mode="top20">Топ-20</button>
+          <button class="race-seg-btn ${_raceState.mode==='all'?'active':''}" data-mode="all">Все</button>
         </div>
       </div>
       <div id="race-chart-wrap"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
@@ -5094,9 +5093,9 @@ async function renderRatingRaceTab(content) {
     _raceState.groupId = e.target.value;
     reload();
   });
-  content.querySelectorAll('#race-mode-switcher .an-mode-btn').forEach(btn => {
+  content.querySelectorAll('#race-mode-switcher .race-seg-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      content.querySelectorAll('#race-mode-switcher .an-mode-btn').forEach(b => b.classList.remove('active'));
+      content.querySelectorAll('#race-mode-switcher .race-seg-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       _raceState.mode = btn.dataset.mode;
       reload();
@@ -5106,11 +5105,31 @@ async function renderRatingRaceTab(content) {
   await reload();
 }
 
-function renderRaceContent(content, data) {
-  const items = data.items || [];
-  const cu = data.current_user;
+/**
+ * Перестраивает порядок элементов под режим "Моя зона": текущий оператор
+ * в центре, слева — те, у кого баллов больше (выше по рейтингу),
+ * справа — те, у кого меньше. Бэкенд возвращает срез ±5 от оператора,
+ * уже отсортированный по убыванию баллов (rank 1..N) — здесь просто
+ * физически переставляем массив так, чтобы "Я" оказался посередине.
+ */
+function reorderForMyZone(items) {
+  const meIdx = items.findIndex(i => i.is_current_user);
+  if (meIdx === -1) return items; // нет своих данных — оставляем как есть (Топ-N логика)
 
-  // "Ваше место" badge
+  const above = items.slice(0, meIdx);       // у кого баллов больше (rank меньше)
+  const me = items[meIdx];
+  const below = items.slice(meIdx + 1);      // у кого баллов меньше
+
+  // above уже идёт от дальнего к ближнему (по убыванию rank, т.е. ближе к концу — ближе к "Я")
+  // Хотим: [дальние слева ... близкие слева][Я][близкие справа ... дальние справа]
+  return [...above, me, ...below];
+}
+
+function renderRaceContent(content, data) {
+  const itemsRaw = data.items || [];
+  const cu = data.current_user;
+  const items = _raceState.mode === 'my_zone' ? reorderForMyZone(itemsRaw) : itemsRaw;
+
   const badgeEl = content.querySelector('#race-my-place-badge');
   if (badgeEl) {
     badgeEl.innerHTML = cu
@@ -5128,54 +5147,71 @@ function renderRaceContent(content, data) {
 
   content.querySelector('#race-bottom-grid').innerHTML = `
     <div class="an-grid-2">
-      ${renderRaceMyCard(cu, data.not_in_group_note)}
-      ${renderRaceTopTable(items, cu)}
+      ${renderRaceMyCard(cu, data.not_in_group_note, items)}
+      ${renderRaceTopTable(itemsRaw, cu)}
     </div>
   `;
 }
 
-const RACE_CAR_COLORS = ['#D97706', '#94A3B8', '#B45309']; // золото/серебро/бронза для топ-3
-function raceCarColor(rank, isCurrentUser) {
-  if (isCurrentUser) return '#0284C7';
-  if (rank === 1) return '#D97706';
-  if (rank === 2) return '#94A3B8';
-  if (rank === 3) return '#B45309';
-  const palette = ['#16A34A', '#9333EA', '#0891B2', '#DC2626', '#65A30D', '#C026D3'];
-  return palette[rank % palette.length];
+function raceCarRankClass(rank, isCurrentUser) {
+  if (isCurrentUser) return 'is-current-user';
+  if (rank === 1) return 'rank-1';
+  if (rank === 2) return 'rank-2';
+  if (rank === 3) return 'rank-3';
+  return 'default';
 }
+
+/* SVG-болид вид сверху (формула-1 стиль), currentColor для заливки */
+const RACE_CAR_SVG = `<svg viewBox="0 0 128 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+    <rect x="8" y="24" width="14" height="16" rx="2" fill="currentColor" opacity="0.9"/>
+    <path d="M22 22 L40 18 L50 18 L56 24 L56 40 L50 46 L40 46 L22 42 Z" fill="currentColor" opacity="0.92"/>
+    <path d="M54 20 L72 20 L78 26 L78 38 L72 44 L54 44 L50 38 L50 26 Z" fill="currentColor"/>
+    <path d="M78 26 L102 22 L114 28 L114 36 L102 42 L78 38 Z" fill="currentColor" opacity="0.95"/>
+    <rect x="114" y="26" width="10" height="12" rx="2" fill="currentColor" opacity="0.9"/>
+    <rect x="28" y="10" width="12" height="14" rx="3" fill="#111827"/>
+    <rect x="28" y="40" width="12" height="14" rx="3" fill="#111827"/>
+    <rect x="84" y="10" width="12" height="14" rx="3" fill="#111827"/>
+    <rect x="84" y="40" width="12" height="14" rx="3" fill="#111827"/>
+    <circle cx="34" cy="17" r="3" fill="#E5E7EB"/>
+    <circle cx="34" cy="47" r="3" fill="#E5E7EB"/>
+    <circle cx="90" cy="17" r="3" fill="#E5E7EB"/>
+    <circle cx="90" cy="47" r="3" fill="#E5E7EB"/>
+  </g>
+</svg>`;
 
 function renderRaceChart(items) {
   const maxPoints = Math.max(...items.map(i => i.points), 1);
-  // Округляем шкалу до приятного числа (100/200/300...)
   const niceMax = Math.ceil(maxPoints / 100) * 100 || 100;
   const ticks = [];
   for (let v = 0; v <= niceMax; v += niceMax / 5) ticks.push(Math.round(v));
 
-  const barW = 64;
-  const gap = 24;
-  const chartH = 320;
-  const padTop = 50; // место под машинку
-  const padBottom = 70; // место под подписи (увеличено, чтобы подписи не вылезали за rating-card с overflow:hidden)
-
-  const usableH = chartH - padTop - padBottom;
+  const chartH = 300;
+  const padBottom = 64;
+  const usableH = chartH - padBottom;
+  const n = items.length;
+  // Ширина столбца уже, чем раньше; при малом количестве элементов — растягиваем под контейнер
+  const barW = n <= 6 ? 56 : n <= 12 ? 48 : 36;
+  const gap = n <= 6 ? 32 : n <= 12 ? 24 : 14;
+  const stretch = n <= 12; // в "Моя зона"/Топ-10 растягиваем на всю ширину
 
   return `<div class="race-chart-scroll">
-    <div class="race-chart" style="height:${chartH}px;min-width:${items.length * (barW+gap) + 60}px">
-      <div class="race-axis-labels" style="height:${chartH}px">
-        ${ticks.slice().reverse().map(t => `<div class="race-axis-tick" style="height:${usableH/5}px">${t}</div>`).join('')}
+    <div class="race-chart ${stretch ? 'race-chart-stretch' : ''}" style="height:${chartH}px">
+      <div class="race-axis-labels" style="height:${chartH - padBottom}px">
+        ${ticks.slice().reverse().map(t => `<div class="race-axis-tick">${t}</div>`).join('')}
       </div>
-      <div class="race-bars-area" style="height:${chartH}px">
+      <div class="race-bars-area" style="height:${chartH}px;${stretch ? '' : `min-width:${n * (barW+gap) + 40}px`}">
         ${ticks.map((t,i) => i>0 ? `<div class="race-grid-line" style="bottom:${padBottom + (t/niceMax)*usableH}px"></div>` : '').join('')}
         ${items.map(it => {
           const barH = Math.max(4, (it.points / niceMax) * usableH);
-          const color = raceCarColor(it.rank, it.is_current_user);
-          return `<div class="race-col" style="width:${barW}px" data-race-operator="${it.operator_id}">
-            <div class="race-car" style="bottom:${padBottom + barH}px;color:${color}" title="${esc(it.full_name)}">
-              <svg viewBox="0 0 32 20" width="30" height="19"><path fill="currentColor" d="M4 14 L6 8 Q7 5 11 5 L21 5 Q25 5 26 8 L28 14 Q28 16 26 16 L24 16 Q23 18 21 18 Q19 18 18 16 L14 16 Q13 18 11 18 Q9 18 8 16 L6 16 Q4 16 4 14 Z"/><circle cx="9" cy="16" r="2.4" fill="#1f2937"/><circle cx="23" cy="16" r="2.4" fill="#1f2937"/></svg>
-            </div>
-            <div class="race-bar ${it.is_current_user?'race-bar-me':''}" style="height:${barH}px;bottom:${padBottom}px;background:${it.is_current_user?'var(--accent-secondary-soft)':'var(--bg-muted)'};border-color:${color}"></div>
-            <div class="race-points-label" style="bottom:${padBottom + barH + 22}px">${Math.round(it.points)}</div>
-            <div class="race-x-label ${it.is_current_user?'race-x-label-me':''}" title="${esc(it.full_name)}">
+          const rankClass = raceCarRankClass(it.rank, it.is_current_user);
+          const colWidth = stretch ? `calc((100% - ${(n-1)*24}px) / ${n})` : `${barW}px`;
+          return `<div class="race-col ${it.is_current_user?'race-col-me':''}" style="width:${colWidth};flex:${stretch?'1 1 0':'0 0 auto'}" data-race-operator="${it.operator_id}"
+              title="${esc(it.full_name)}${it.group?' · '+esc(it.group):''} · место #${it.rank} · ${Math.round(it.points)} баллов">
+            <div class="race-car-icon ${rankClass}" style="bottom:${padBottom + barH}px">${RACE_CAR_SVG}</div>
+            <div class="race-points-label" style="bottom:${padBottom + barH + 26}px">${Math.round(it.points)}</div>
+            <div class="race-bar ${it.is_current_user?'race-bar-me':''} ${rankClass}" style="height:${barH}px;bottom:${padBottom}px"></div>
+            <div class="race-x-label ${it.is_current_user?'race-x-label-me':''}">
               ${esc(it.initials)}
               ${it.is_current_user ? '<div class="race-you-tag">Вы</div>' : ''}
             </div>
@@ -5186,20 +5222,32 @@ function renderRaceChart(items) {
   </div>`;
 }
 
-function renderRaceMyCard(cu, note) {
+function renderRaceMyCard(cu, note, visibleItems) {
   if (!cu) {
     return `<div class="rating-card"><div class="rcard-title">Ваш результат</div>
       <div class="r-empty-state"><div>Ваши баллы за выбранный период пока не рассчитаны.</div></div>
     </div>`;
   }
+
   let hint;
   if (cu.rank === 1) {
-    hint = `Вы на 1 месте. Удерживайте позицию.`;
+    const nextBest = visibleItems?.find(i => !i.is_current_user);
+    const gap = nextBest ? Math.round(cu.points - nextBest.points) : null;
+    hint = gap != null
+      ? `Вы лидер рейтинга. Ближайший оператор отстаёт на ${gap} баллов.`
+      : `Вы лидер рейтинга. Удерживайте позицию.`;
   } else if (cu.points_to_next_rank != null && cu.points_to_next_rank > 0) {
-    hint = `До следующего места: <b>${Math.round(cu.points_to_next_rank)} баллов</b>`;
+    const above = visibleItems?.find(i => i.rank === cu.rank - 1);
+    hint = above
+      ? `Чтобы обогнать ${esc(above.full_name)}, нужно набрать ещё ${Math.round(cu.points_to_next_rank)} баллов.`
+      : `До следующего места: <b>${Math.round(cu.points_to_next_rank)} баллов</b>`;
   } else {
-    hint = `—`;
+    hint = '—';
   }
+
+  const below = visibleItems?.filter(i => !i.is_current_user && i.points < cu.points).length ?? null;
+  const nearestAbove = visibleItems?.filter(i => !i.is_current_user && i.points > cu.points).sort((a,b)=>a.points-b.points)[0];
+
   return `<div class="rating-card">
     <div class="rcard-title">Ваш результат</div>
     ${cu.outside_selected_group ? `<div class="race-note">${esc(note || 'Вы не входите в выбранную группу.')}</div>` : ''}
@@ -5210,6 +5258,7 @@ function renderRaceMyCard(cu, note) {
       ${cu.points_to_top_3 != null && cu.points_to_top_3 > 0 ? `<div class="rms-row"><span class="rms-label">До топ-3</span><span class="rms-val">${Math.round(cu.points_to_top_3)} баллов</span></div>` : ''}
       <div class="rms-row"><span class="rms-label">Изменение</span><span class="rms-val">${cu.rank_change!=null ? (cu.rank_change>0?`<span class="rd-up">↑ +${cu.rank_change}</span>`:cu.rank_change<0?`<span class="rd-down">↓ ${Math.abs(cu.rank_change)}</span>`:'<span class="rd-neutral">без изменений</span>') : '—'}</span></div>
     </div>
+    ${below != null ? `<div class="race-extra-line">Вы опережаете ${below} операторов${nearestAbove ? ` · отстаёте от ближайшего на ${Math.round(nearestAbove.points - cu.points)} баллов` : ''}</div>` : ''}
     <div class="race-hint">${hint}</div>
   </div>`;
 }
