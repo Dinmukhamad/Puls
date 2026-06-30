@@ -1,5 +1,5 @@
 /**
- * Pulse — Main App v2
+ * Puls — Main App v2
  * FastAPI backend, full admin panel per TZ
  */
 'use strict';
@@ -2658,7 +2658,7 @@ function showForcedPasswordChangeModal() {
     <div class="acc-modal">
       <h3 class="acc-title">Смените временный пароль</h3>
       <div class="status-line" style="padding:0;color:var(--tx2)">
-        Для продолжения работы в Pulse нужно заменить временный пароль.
+        Для продолжения работы в Puls нужно заменить временный пароль.
       </div>
       <div class="acc-divider"></div>
       <div class="acc-section">
