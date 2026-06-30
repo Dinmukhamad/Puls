@@ -109,7 +109,7 @@ def ready() -> Dict[str, str]:
 
 # Статические файлы
 _root = Path(__file__).parent.parent
-for _folder in ("css", "js", "assets"):
+for _folder in ("css", "js", "assets", "img"):
     _path = _root / _folder
     if _path.exists():
         app.mount(f"/{_folder}", StaticFiles(directory=str(_path)), name=_folder)
