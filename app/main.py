@@ -16,7 +16,7 @@ from app.core.config import get_settings
 from sqlalchemy import text
 from app.database.db import Base, SessionLocal, engine
 from app.models import entities  # noqa: F401
-from app.routers import analytics, auth, coins, dashboard, groups, operators, period_reports, rating, shop, wallet, weekly_results
+from app.routers import analytics, auth, coins, dashboard, groups, operators, period_reports, rating, shop, tests, wallet, weekly_results
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -123,6 +123,8 @@ app.include_router(coins.router,          prefix=settings.api_prefix)
 app.include_router(rating.router,         prefix=settings.api_prefix)
 app.include_router(shop.router,           prefix=settings.api_prefix)
 app.include_router(dashboard.router,      prefix=settings.api_prefix)
+app.include_router(tests.router,          prefix=settings.api_prefix)
+app.include_router(tests.admin_router,    prefix=settings.api_prefix)
 
 
 @app.on_event("startup")
