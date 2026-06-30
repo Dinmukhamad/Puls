@@ -122,6 +122,7 @@ function initNav() {
 
 function navigateTo(view) {
   STATE.currentView = view;
+  bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов
   // Save to URL hash so F5 restores the same section
   history.replaceState(null, '', '#' + view);
   localStorage.setItem('pulse-last-view', view);
