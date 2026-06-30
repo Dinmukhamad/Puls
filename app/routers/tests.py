@@ -66,14 +66,23 @@ def _supervisor_group_ids(current_user: User) -> Optional[set]:
 
 @router.get("/my")
 def my_tests(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> dict:
-    operator = operator_for_user_or_403(db, current_user)
-    tests = visible_tests_for_operator(db, operator)
-    db.commit()  # фиксируем возможный scheduled->open переход из activate_scheduled_tests
+    try:
+        operator = operator_for_user_or_403(db, current_user)
+        tests = visible_tests_for_operator(db, operator)
+        db.commit()  # фиксируем возможный scheduled->open переход из activate_scheduled_tests
+    except Exception as e:
+        db.rollback()
+        import traceback
+        raise HTTPException(status_code=500, detail=f"Ошибка в my_tests (загрузка списка): {type(e).__name__}: {e}\n{traceback.format_exc()[-800:]}")
 
     items = []
     for t in tests:
-        attempt = get_active_or_recent_attempt(db, t, operator)
-        op_status = operator_test_status(t, attempt)
+        try:
+            attempt = get_active_or_recent_attempt(db, t, operator)
+            op_status = operator_test_status(t, attempt)
+        except Exception as e:
+            import traceback
+            raise HTTPException(status_code=500, detail=f"Ошибка my_tests на тесте id={t.id} '{t.title}': {type(e).__name__}: {e}\n{traceback.format_exc()[-800:]}")
         items.append({
             "id": t.id,
             "title": t.title,
