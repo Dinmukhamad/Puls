@@ -366,7 +366,15 @@ def _get_rows(
             risk_status=classify_risk(m),
         ))
 
-    db.commit()  # фиксируем новые/обновлённые PeriodReport-кеши
+    try:
+        db.commit()  # фиксируем новые/обновлённые PeriodReport-кеши
+    except Exception:
+        # Параллельный запрос (например соседняя вкладка через Promise.all)
+        # уже закоммитил тот же upsert и удерживал блокировку строки —
+        # откатываем нашу транзакцию и читаем то, что записал он; сами
+        # вычисленные rows (в памяти, не зависят от commit) всё равно валидны
+        # и возвращаются пользователю без потери ответа.
+        db.rollback()
 
     rows = filter_rows(rows, group_id, operator_query, participation_status, only_with_data)
     return rows
