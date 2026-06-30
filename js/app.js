@@ -821,10 +821,6 @@ async function renderRatingOverviewTab(el) {
 
     function buildPage() {
       el.innerHTML = `
-        <div class="view-header">
-          <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
-          <div class="header-right"><button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button></div>
-        </div>
         <div class="rating-page">
 
           ${renderHeader()}
