@@ -10,7 +10,7 @@ from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
 from app.models.entities import ShopItem, ShopPurchase, User
 from app.schemas.shop import PurchaseCreate, RejectPurchaseRequest, ShopItemCreate, ShopItemRead, ShopItemUpdate, ShopPurchaseRead
-from app.services.coins import approve_purchase, create_purchase, operator_for_user_or_403, reject_purchase
+from app.services.coins import approve_purchase, complete_purchase, create_purchase, operator_for_user_or_403, reject_purchase
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
@@ -84,6 +84,17 @@ def reject(
     if not purchase:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
     reject_purchase(db, purchase, current_user, payload.reason)
+    db.commit()
+    db.refresh(purchase)
+    return purchase
+
+
+@router.post("/purchases/{purchase_id}/complete", response_model=ShopPurchaseRead, dependencies=[Depends(require_roles("supervisor", "manager", "admin"))])
+def complete(purchase_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> ShopPurchase:
+    purchase = db.get(ShopPurchase, purchase_id)
+    if not purchase:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
+    complete_purchase(db, purchase, current_user)
     db.commit()
     db.refresh(purchase)
     return purchase
