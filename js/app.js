@@ -418,8 +418,8 @@ function buildViews(role) {
   const shell = document.getElementById('app-shell');
   if (!shell) return;
   const views = isAdmin(role)
-    ? ['summary', 'operators', 'coins', 'shop', ...(canManageGroups(role) ? ['groups'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
-    : ['cabinet', 'rating', 'shop'];
+    ? ['summary', 'operators', 'coins', 'shop', 'tests', ...(canManageGroups(role) ? ['groups'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
+    : ['cabinet', 'rating', 'shop', 'tests'];
   shell.innerHTML = views.map(v => `<section class="app-view" id="view-${v}"></section>`).join('');
 }
 
@@ -427,8 +427,8 @@ function renderSidebar(role) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     const t = link.dataset.navTarget;
     const adminViews = ['summary','operators','coins','period-report','analytics'];
-    const operatorViews = ['cabinet','rating','shop'];
-    const sharedViews = ['shop','rating','cabinet'];
+    const operatorViews = ['cabinet','rating','shop','tests'];
+    const sharedViews = ['shop','rating','cabinet','tests']; // «Тесты» доступен всем ролям (ТЗ п.1), разный функционал внутри
     let show = false;
     if (isAdmin(role)) {
       show = adminViews.includes(t) || sharedViews.includes(t);
