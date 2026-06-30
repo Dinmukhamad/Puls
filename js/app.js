@@ -4195,10 +4195,6 @@ async function renderAnalytics() {
     loadAnalyticsTab(_analyticsState.tab);
   });
 
-  el.querySelector('#an-goto-calc-btn')?.addEventListener('click', () => {
-    navigateTo('period-report');
-  });
-
   // Tab click handling
   el.querySelectorAll('.analytics-tab').forEach(btn => {
     btn.addEventListener('click', () => {
