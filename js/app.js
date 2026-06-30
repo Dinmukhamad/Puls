@@ -5857,8 +5857,15 @@ async function renderTestsOperatorView(el) {
   // таймером, а не список карточек — иначе F5 "выкидывает из теста"
   // (хотя на сервере попытка всё ещё активна и таймер продолжает идти).
   const inProgressTest = items.find(t => t.attempt_status === 'in_progress');
-  if (inProgressTest) {
-    await resumeTestRunner(inProgressTest.id);
+  // Защита от бесконечного цикла: если resumeTestRunner уже падал с ошибкой
+  // на этой же попытке (например backend систематически роняет finish/start
+  // на ней), не пытаемся восстановить её повторно при каждом рендере —
+  // иначе получаем бесконечный цикл "ошибка -> renderTests() -> снова
+  // находим in_progress -> снова resumeTestRunner -> снова ошибка",
+  // который визуально выглядит как вечная загрузка.
+  if (inProgressTest && _testResumeFailedFor !== inProgressTest.attempt_id) {
+    const ok = await resumeTestRunner(inProgressTest.id);
+    if (!ok) _testResumeFailedFor = inProgressTest.attempt_id;
     return;
   }
 
