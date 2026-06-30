@@ -5235,6 +5235,15 @@ async function renderRatingRaceTab(content) {
     groupOptions += (groups || []).map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
   } catch(e) { /* ignore */ }
 
+  // У admin/manager/supervisor нет своего operator_id — для них "Моя зона"
+  // и "Ваш результат" не имеют смысла (нет личного места в рейтинге
+  // операторов). Принудительно переключаем на "Топ-10" и не показываем
+  // кнопку "Моя зона" вовсе, чтобы не путать управленческий аккаунт.
+  const hasOwnOperatorRecord = Boolean(STATE.user?.operator_id);
+  if (!hasOwnOperatorRecord && _raceState.mode === 'my_zone') {
+    _raceState.mode = 'top10';
+  }
+
   content.innerHTML = `
     <div class="race-card">
       <div class="race-header-row">
@@ -5247,7 +5256,7 @@ async function renderRatingRaceTab(content) {
       <div class="race-filters-row">
         <select id="race-group-filter" class="race-select">${groupOptions}</select>
         <div class="race-segmented" id="race-mode-switcher">
-          <button class="race-seg-btn ${_raceState.mode==='my_zone'?'active':''}" data-mode="my_zone">Моя зона</button>
+          ${hasOwnOperatorRecord ? `<button class="race-seg-btn ${_raceState.mode==='my_zone'?'active':''}" data-mode="my_zone">Моя зона</button>` : ''}
           <button class="race-seg-btn ${_raceState.mode==='top10'?'active':''}" data-mode="top10">Топ-10</button>
           <button class="race-seg-btn ${_raceState.mode==='top20'?'active':''}" data-mode="top20">Топ-20</button>
           <button class="race-seg-btn ${_raceState.mode==='all'?'active':''}" data-mode="all">Все</button>
