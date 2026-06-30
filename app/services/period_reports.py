@@ -7,6 +7,11 @@
   - Report: отдельные листы — "Отработанные часы", "Звонки", "Эффективность",
     "Штрафы", "Тренинги", "Тех. сбои", "Офлайн активность". Колонки = даты,
     последняя колонка(и) = агрегаты ("Итого", "Всего (ч)" и т.п.) — игнорируются.
+
+Ключевое правило: в расчёт сводных показателей (summary) попадают ТОЛЬКО
+операторы, которые одновременно есть на сайте (siteOperators) и в файле.
+Служебные строки (итого, причина, опоздание...) отфильтровываются ещё на
+этапе парсинга и никогда не считаются операторами.
 """
 from __future__ import annotations
 
@@ -30,13 +35,32 @@ _AGGREGATE_HEADERS = {
 
 _DATE_RE = re.compile(r"^(\d{1,2})[.\-/](\d{1,2})(?:[.\-/](\d{2,4}))?$")
 
+# Служебные строки — никогда не считаются операторами
+_SERVICE_ROWS = {
+    "итого", "другое", "корп такси", "легенда причин", "не выход",
+    "опоздание", "причина", "прокси карта", "штраф", "штрафы",
+    "комментарий", "итого часов", "всего", "план", "примечание",
+    "без причины", "технический сбой", "выходной", "отпуск",
+    "больничный", "корпоративное такси",
+}
 
-def _normalize_name(name: str) -> str:
-    """ФИО -> нормализованный ключ для сопоставления между файлами."""
+
+def normalize_name(name: Optional[str]) -> str:
+    """ФИО -> нормализованный ключ для сопоставления между файлами и сайтом."""
     if not name:
         return ""
-    s = re.sub(r"\s+", " ", str(name).strip().lower())
-    return s
+    s = str(name).strip()
+    s = re.sub(r"\s+", " ", s)
+    s = s.replace("ё", "е").replace("Ё", "Е")
+    return s.lower()
+
+
+def is_service_row(name: Optional[str]) -> bool:
+    """True если строка — служебная (итого/причина/опоздание...), не оператор."""
+    norm = normalize_name(name)
+    if not norm:
+        return True
+    return norm in _SERVICE_ROWS
 
 
 def _parse_header_date(value, year: int) -> Optional[date]:
@@ -83,6 +107,7 @@ def parse_scores(cell_value) -> List[float]:
 @dataclass
 class QualityResult:
     scores: List[float] = field(default_factory=list)
+    display_name: str = ""
 
     @property
     def avg(self) -> float:
@@ -101,15 +126,13 @@ def parse_monthly_report(
 ) -> Dict[str, QualityResult]:
     """
     Парсит Monthly Report — несколько листов, на каждом несколько таблиц
-    (блоки "ФИО + даты"), под каждой шапкой строки операторов.
+    (блоки "ФИО + даты"). Служебные строки отфильтровываются сразу.
 
-    Возвращает {normalized_name: QualityResult} — оценки суммируются по
-    оператору со всех листов/проверяющих, попадающие в период.
+    Возвращает {normalized_name: QualityResult}.
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
     year = default_year or period_start.year
     results: Dict[str, QualityResult] = {}
-    display_names: Dict[str, str] = {}
 
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
@@ -121,7 +144,6 @@ def parse_monthly_report(
                 i += 1
                 continue
             first_cell = str(row[0]).strip().lower()
-            # Заголовок блока — строка с "ФИО" в первой колонке
             if first_cell == "фио":
                 header = row
                 date_cols: List[Tuple[int, date]] = []
@@ -130,7 +152,6 @@ def parse_monthly_report(
                     if d:
                         date_cols.append((col_idx, d))
                 i += 1
-                # Читаем строки операторов до следующего заголовка/конца листа
                 while i < len(rows):
                     data_row = rows[i]
                     if not data_row or not data_row[0]:
@@ -138,11 +159,13 @@ def parse_monthly_report(
                         continue
                     cell0 = str(data_row[0]).strip()
                     if cell0.lower() == "фио" or "оценки" in cell0.lower():
-                        break  # начался новый блок
-                    name_key = _normalize_name(cell0)
+                        break
+                    if is_service_row(cell0):
+                        i += 1
+                        continue
+                    name_key = normalize_name(cell0)
                     if name_key not in results:
-                        results[name_key] = QualityResult()
-                        display_names[name_key] = cell0
+                        results[name_key] = QualityResult(display_name=cell0)
                     qr = results[name_key]
                     for col_idx, d in date_cols:
                         if period_start <= d <= period_end and col_idx < len(data_row):
@@ -152,16 +175,7 @@ def parse_monthly_report(
             i += 1
 
     wb.close()
-    # Прикрепим оригинальное отображаемое имя через атрибут
-    for key, qr in results.items():
-        qr.display_name = display_names.get(key, key)  # type: ignore[attr-defined]
     return results
-
-
-@dataclass
-class ReportSheetResult:
-    """Сумма значений по датам периода для одного оператора на одном листе."""
-    value: float = 0.0
 
 
 def _parse_simple_sheet(
@@ -170,11 +184,11 @@ def _parse_simple_sheet(
     period_end: date,
     year: int,
     name_col: int = 0,
-) -> Dict[str, float]:
+) -> Dict[str, Tuple[str, float]]:
     """
     Общий парсер для листов вида: первая колонка — ФИО, остальные — даты,
-    последние колонки — агрегаты (Итого/Всего/КВЗ/...). Суммирует значения
-    по датам, входящим в период.
+    последние колонки — агрегаты. Возвращает {norm_name: (display_name, sum)}.
+    Служебные строки отфильтровываются.
     """
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
@@ -188,18 +202,22 @@ def _parse_simple_sheet(
         if d:
             date_cols.append((col_idx, d))
 
-    out: Dict[str, float] = {}
+    out: Dict[str, Tuple[str, float]] = {}
     for row in rows[1:]:
         if not row or not row[name_col]:
             continue
-        name_key = _normalize_name(row[name_col])
+        raw_name = str(row[name_col]).strip()
+        if is_service_row(raw_name):
+            continue
+        name_key = normalize_name(raw_name)
         total = 0.0
         for col_idx, d in date_cols:
             if period_start <= d <= period_end and col_idx < len(row):
                 v = row[col_idx]
                 if isinstance(v, (int, float)):
                     total += float(v)
-        out[name_key] = out.get(name_key, 0.0) + total
+        prev = out.get(name_key, (raw_name, 0.0))
+        out[name_key] = (raw_name, prev[1] + total)
     return out
 
 
@@ -214,10 +232,9 @@ def parse_report_file(
     period_start: date,
     period_end: date,
     default_year: Optional[int] = None,
-) -> Dict[str, Dict[str, float]]:
+) -> Dict[str, Dict[str, Tuple[str, float]]]:
     """
-    Парсит Report — возвращает:
-      { sheet_name: { normalized_name: sum_for_period } }
+    Парсит Report — возвращает { sheet_name: { norm_name: (display_name, sum) } }.
     Бросает ValueError если обязательный лист отсутствует.
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
@@ -228,18 +245,10 @@ def parse_report_file(
         wb.close()
         raise ValueError(f"В файле Report отсутствуют листы: {', '.join(missing)}")
 
-    out: Dict[str, Dict[str, float]] = {}
+    out: Dict[str, Dict[str, Tuple[str, float]]] = {}
     for sheet in REQUIRED_REPORT_SHEETS:
         ws = wb[sheet]
         out[sheet] = _parse_simple_sheet(ws, period_start, period_end, year)
-
-    # Сохраняем отображаемые имена с первого листа для последующего вывода
-    display_names: Dict[str, str] = {}
-    ws0 = wb[REQUIRED_REPORT_SHEETS[0]]
-    for row in ws0.iter_rows(values_only=True):
-        if row and row[0] and str(row[0]).strip().lower() != "оператор":
-            display_names[_normalize_name(row[0])] = str(row[0]).strip()
-    out["_display_names"] = display_names  # type: ignore[assignment]
 
     wb.close()
     return out
@@ -248,8 +257,10 @@ def parse_report_file(
 @dataclass
 class OperatorPeriodMetrics:
     full_name: str
+    name_key: str = ""
     quality_avg: float = 0.0
     quality_calls_count: int = 0
+    quality_scores: List[float] = field(default_factory=list)
     total_hours: float = 0.0
     base_hours: float = 0.0
     tech_issue_hours: float = 0.0
@@ -263,6 +274,7 @@ class OperatorPeriodMetrics:
     penalty_minutes: float = 0.0
     penalty_points: float = 0.0
     final_points: float = 0.0
+    has_any_period_data: bool = False
     warnings: List[str] = field(default_factory=list)
 
 
@@ -274,22 +286,26 @@ def compute_operator_metrics(
     name_key: str,
     display_name: str,
     quality: Optional[QualityResult],
-    report_data: Dict[str, Dict[str, float]],
+    report_data: Dict[str, Dict[str, Tuple[str, float]]],
 ) -> OperatorPeriodMetrics:
-    m = OperatorPeriodMetrics(full_name=display_name)
+    m = OperatorPeriodMetrics(full_name=display_name, name_key=name_key)
 
     # Качество
     if quality and quality.scores:
         m.quality_avg = quality.avg
         m.quality_calls_count = quality.count
+        m.quality_scores = list(quality.scores)
     else:
-        m.warnings.append("Нет оценок качества за период")
+        m.warnings.append("Нет оценок качества за выбранный период")
 
-    # Часы
-    m.total_hours = round(report_data.get("Отработанные часы", {}).get(name_key, 0.0), 2)
-    m.tech_issue_hours = round(report_data.get("Тех. сбои", {}).get(name_key, 0.0), 2)
-    m.training_hours = round(report_data.get("Тренинги", {}).get(name_key, 0.0), 2)
-    m.offline_activity_hours = round(report_data.get("Офлайн активность", {}).get(name_key, 0.0), 2)
+    def sheet_val(sheet: str) -> float:
+        entry = report_data.get(sheet, {}).get(name_key)
+        return entry[1] if entry else 0.0
+
+    m.total_hours = round(sheet_val("Отработанные часы"), 2)
+    m.tech_issue_hours = round(sheet_val("Тех. сбои"), 2)
+    m.training_hours = round(sheet_val("Тренинги"), 2)
+    m.offline_activity_hours = round(sheet_val("Офлайн активность"), 2)
 
     base = m.total_hours - m.tech_issue_hours - m.training_hours - m.offline_activity_hours
     if base < 0:
@@ -297,41 +313,50 @@ def compute_operator_metrics(
         base = 0.0
     m.base_hours = round(base, 2)
 
-    # Звонки / КВЗ
-    m.calls_total = round(report_data.get("Звонки", {}).get(name_key, 0.0), 2)
+    m.calls_total = round(sheet_val("Звонки"), 2)
     if m.base_hours > 0:
         m.kvz = round(m.calls_total / m.base_hours, 2)
     else:
         m.kvz = 0.0
-        m.warnings.append("Нет базы часов за выбранный период.")
+        m.warnings.append("Нет базы часов за выбранный период")
 
-    # Эффективность (лист "Эффективность" хранит часы в звонке)
-    m.call_time_hours = round(report_data.get("Эффективность", {}).get(name_key, 0.0), 2)
+    m.call_time_hours = round(sheet_val("Эффективность"), 2)
     if m.base_hours > 0:
         m.efficiency_percent = round(m.call_time_hours / m.base_hours * 100, 2)
     else:
         m.efficiency_percent = 0.0
-        if "Нет базы часов за выбранный период." not in m.warnings:
-            m.warnings.append("Нет базы часов для расчёта эффективности.")
+        if "Нет базы часов за выбранный период" not in m.warnings:
+            m.warnings.append("Нет базы часов для расчёта эффективности")
 
-    # Штрафы
-    m.penalty_sum = round(report_data.get("Штрафы", {}).get(name_key, 0.0), 2)
+    m.penalty_sum = round(sheet_val("Штрафы"), 2)
     m.penalty_minutes = round(m.penalty_sum / PENALTY_RUB_PER_MINUTE, 2) if m.penalty_sum else 0.0
     m.penalty_points = round(m.penalty_minutes * PENALTY_POINTS_PER_MINUTE, 2)
 
-    # Итоговые баллы
     m.final_points = round(
         m.quality_avg + m.kvz + m.total_hours + m.efficiency_percent - m.penalty_points,
         2,
     )
+
+    m.has_any_period_data = any([
+        m.quality_calls_count > 0,
+        m.total_hours > 0,
+        m.calls_total > 0,
+        m.base_hours > 0,
+        m.penalty_sum > 0,
+    ])
 
     return m
 
 
 @dataclass
 class PeriodCalculationResult:
-    operators: List[OperatorPeriodMetrics]
-    cross_warnings: List[Dict[str, str]]
+    operators: List[OperatorPeriodMetrics]              # только matched, с данными
+    warnings_site_only: List[str]                        # есть на сайте, нет в файле
+    warnings_file_only: List[str]                        # есть в файле, нет на сайте
+    warnings_no_quality: List[str]                       # нет оценок качества
+    warnings_no_base_hours: List[str]                    # нет базы часов
+    ignored_service_rows: List[str]                      # игнорированные служебные строки
+    summary: Dict[str, Optional[float]]                  # сводные показатели
 
 
 def calculate_period_report(
@@ -339,42 +364,94 @@ def calculate_period_report(
     report_bytes: bytes,
     period_start: date,
     period_end: date,
+    site_operator_names: List[str],
 ) -> PeriodCalculationResult:
+    """
+    site_operator_names — список full_name операторов из БД сайта.
+    Используется для построения matched-выборки: в расчёт идут только те,
+    кто есть и на сайте, и в файле.
+    """
     if period_start > period_end:
         raise ValueError("Дата начала не может быть позже даты окончания")
 
     quality_map = parse_monthly_report(monthly_report_bytes, period_start, period_end)
     report_data = parse_report_file(report_bytes, period_start, period_end)
-    display_names_report = report_data.pop("_display_names", {})  # type: ignore[arg-type]
 
-    all_keys = set(quality_map.keys()) | set(display_names_report.keys())
+    # Множество имён операторов сайта (нормализованных)
+    site_keys = {normalize_name(n): n for n in site_operator_names if n and not is_service_row(n)}
+
+    # Все ключи из файлов (только реальные, не служебные — уже отфильтровано на парсинге)
+    file_keys: Dict[str, str] = {}
+    for key, qr in quality_map.items():
+        file_keys.setdefault(key, qr.display_name)
     for sheet_data in report_data.values():
-        all_keys |= set(sheet_data.keys())
-    all_keys.discard("")
+        for key, (disp, _val) in sheet_data.items():
+            file_keys.setdefault(key, disp)
 
-    cross_warnings: List[Dict[str, str]] = []
-    in_quality = set(quality_map.keys())
-    in_report = set(display_names_report.keys())
-
-    for key in in_quality - in_report:
-        cross_warnings.append({
-            "type": "missing_operator",
-            "operator": getattr(quality_map[key], "display_name", key),
-            "message": "Оператор найден в Monthly Report, но отсутствует в Report",
-        })
-    for key in in_report - in_quality:
-        cross_warnings.append({
-            "type": "missing_operator",
-            "operator": display_names_report.get(key, key),
-            "message": "Оператор найден в Report, но отсутствует в Monthly Report",
-        })
+    matched_keys = set(site_keys.keys()) & set(file_keys.keys())
+    site_only_keys = set(site_keys.keys()) - set(file_keys.keys())
+    file_only_keys = set(file_keys.keys()) - set(site_keys.keys())
 
     operators: List[OperatorPeriodMetrics] = []
-    for key in sorted(all_keys):
-        display = display_names_report.get(key) or getattr(quality_map.get(key), "display_name", None) or key
+    warnings_no_quality: List[str] = []
+    warnings_no_base_hours: List[str] = []
+
+    for key in sorted(matched_keys):
+        display = site_keys.get(key) or file_keys.get(key) or key
         q = quality_map.get(key)
         metrics = compute_operator_metrics(key, display, q, report_data)
+
+        if not metrics.has_any_period_data:
+            # Matched, но реально нет никаких данных за период — не включаем в расчёт
+            continue
+
         operators.append(metrics)
+        if "Нет оценок качества за выбранный период" in metrics.warnings:
+            warnings_no_quality.append(display)
+        if "Нет базы часов за выбранный период" in metrics.warnings:
+            warnings_no_base_hours.append(display)
 
     operators.sort(key=lambda m: m.final_points, reverse=True)
-    return PeriodCalculationResult(operators=operators, cross_warnings=cross_warnings)
+
+    warnings_site_only = sorted(site_keys[k] for k in site_only_keys)
+    warnings_file_only = sorted(file_keys[k] for k in file_only_keys)
+
+    # Сводные показатели — считаем ТОЛЬКО по matched + has_any_period_data
+    included = operators  # уже отфильтрованы выше
+
+    all_quality_scores: List[float] = []
+    for op in included:
+        all_quality_scores.extend(op.quality_scores)
+    avg_quality = round(sum(all_quality_scores) / len(all_quality_scores), 2) if all_quality_scores else None
+
+    total_calls = sum(op.calls_total for op in included)
+    total_base_hours = sum(op.base_hours for op in included if op.base_hours > 0)
+    total_call_time = sum(op.call_time_hours for op in included if op.base_hours > 0)
+    total_penalty_sum = sum(op.penalty_sum for op in included)
+
+    avg_kvz = round(total_calls / total_base_hours, 2) if total_base_hours > 0 else None
+    avg_efficiency = round(total_call_time / total_base_hours * 100, 2) if total_base_hours > 0 else None
+    penalty_minutes_total = round(total_penalty_sum / PENALTY_RUB_PER_MINUTE, 2) if total_penalty_sum else 0.0
+
+    summary = {
+        "operators_count": len(included),
+        "site_total_count": len(site_keys),
+        "matched_count": len(matched_keys),
+        "site_only_count": len(site_only_keys),
+        "file_only_count": len(file_only_keys),
+        "avg_quality": avg_quality,
+        "total_calls": round(total_calls, 2),
+        "avg_kvz": avg_kvz,
+        "avg_efficiency": avg_efficiency,
+        "penalty_minutes_total": penalty_minutes_total,
+    }
+
+    return PeriodCalculationResult(
+        operators=operators,
+        warnings_site_only=warnings_site_only,
+        warnings_file_only=warnings_file_only,
+        warnings_no_quality=warnings_no_quality,
+        warnings_no_base_hours=warnings_no_base_hours,
+        ignored_service_rows=sorted(_SERVICE_ROWS),
+        summary=summary,
+    )
