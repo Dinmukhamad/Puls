@@ -210,6 +210,31 @@ const api = (() => {
     return req('GET', `/api/analytics/${path}` + (qs ? '?' + qs : ''));
   }
 
+  /* ── Tests (Тесты) — operator side ──────────────────────────── */
+  async function myTests() { return req('GET', '/api/tests/my'); }
+  async function startTest(testId) { return req('POST', `/api/tests/${testId}/start`); }
+  async function saveTestAnswer(attemptId, questionId, selectedAnswerIds) {
+    return req('POST', `/api/tests/attempts/${attemptId}/save-answer`, { question_id: questionId, selected_answer_ids: selectedAnswerIds });
+  }
+  async function finishTest(attemptId) { return req('POST', `/api/tests/attempts/${attemptId}/finish`); }
+  async function getTestResult(attemptId) { return req('GET', `/api/tests/attempts/${attemptId}/result`); }
+
+  /* ── Tests (Тесты) — admin/supervisor/manager side ──────────── */
+  async function listAdminTests() { return req('GET', '/api/admin/tests'); }
+  async function createTest(payload) { return req('POST', '/api/admin/tests', payload); }
+  async function updateTest(testId, payload) { return req('PATCH', `/api/admin/tests/${testId}`, payload); }
+  async function addTestQuestion(testId, payload) { return req('POST', `/api/admin/tests/${testId}/questions`, payload); }
+  async function updateTestQuestion(questionId, payload) { return req('PATCH', `/api/admin/tests/questions/${questionId}`, payload); }
+  async function deleteTestQuestion(questionId) { return req('DELETE', `/api/admin/tests/questions/${questionId}`); }
+  async function assignTest(testId, payload) { return req('POST', `/api/admin/tests/${testId}/assign`, payload); }
+  async function publishTest(testId) { return req('POST', `/api/admin/tests/${testId}/publish`); }
+  async function closeTest(testId) { return req('POST', `/api/admin/tests/${testId}/close`); }
+  async function getTestResults(testId, params) {
+    const qs = new URLSearchParams(params || {}).toString();
+    return req('GET', `/api/admin/tests/${testId}/results` + (qs ? '?' + qs : ''));
+  }
+  async function getTestAnalytics(testId) { return req('GET', `/api/admin/tests/${testId}/analytics`); }
+
   return {
     getToken, login, me, logout,
     listOperators, getOperator, myOperator, createOperator, updateOperator,
