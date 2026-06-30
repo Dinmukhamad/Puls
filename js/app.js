@@ -5182,19 +5182,27 @@ function raceCarRankClass(rank, isCurrentUser) {
 
 function renderRaceChart(items) {
   const maxPoints = Math.max(...items.map(i => i.points), 1);
-  // Шкала строится от максимального балла среди отображаемых операторов,
-  // с запасом ~15%, затем округляется до приятного числа делений по 5 шагам.
   const rawMax = maxPoints * 1.15;
   const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax || 1)));
   const niceMax = Math.ceil(rawMax / (magnitude / 2)) * (magnitude / 2) || 100;
   const ticks = [];
   for (let v = 0; v <= niceMax; v += niceMax / 5) ticks.push(Math.round(v));
 
-  // Резервируем место сверху под машинку + подпись баллов у самого высокого столбца,
-  // и снизу под подпись ФИО/инициалов — чтобы ничего не обрезалось контейнером.
-  const padTop = 70;     // машинка (~36px) + текст баллов (~20px) + зазор
-  const padBottom = 56;  // подпись инициалов + тег "Вы"
-  const plotH = 280;     // высота самой полосы графика (без отступов)
+  // ── Геометрия столбца сверху вниз (от верха контейнера к низу) ──
+  // [ цифра баллов ]  18px текста + 6px зазор до машинки
+  // [ зазор 6px ]
+  // [ машинка ]        36px макс. высота (растёт вверх от carBottom)
+  // [ зазор 14px ]     визуальный воздух между машинкой и верхом столбца
+  // [ столбец ]        высота = barH, пропорциональна баллам
+  // [ подпись инициалов ]  внизу, в зоне padBottom
+
+  const labelH = 18;     // высота строки с цифрой баллов
+  const labelGap = 6;    // зазор между цифрой и машинкой
+  const carH = 36;       // максимальная высота машинки (is-current-user)
+  const carGap = 14;     // зазор между машинкой и верхом столбца
+  const padTop = labelH + labelGap + carH + carGap + 10; // +10px доп. запас
+  const padBottom = 56;
+  const plotH = 280;
   const chartH = plotH + padTop + padBottom;
   const usableH = plotH;
 
@@ -5214,8 +5222,10 @@ function renderRaceChart(items) {
           const barH = Math.max(4, (it.points / niceMax) * usableH);
           const rankClass = raceCarRankClass(it.rank, it.is_current_user);
           const colWidth = stretch ? `calc((100% - ${(n-1)*24}px) / ${n})` : `${barW}px`;
-          const carBottom = padBottom + barH + 22;   // машинка стоит на 22px над верхом столбца
-          const labelBottom = carBottom + 30;          // подпись баллов — ещё выше, над машинкой
+          // carBottom — нижняя точка машинки (она сама растёт вверх на свою высоту через CSS transform)
+          const carBottom = padBottom + barH + carGap;
+          // labelBottom — нижний край текста, должен быть выше верха машинки (carBottom + carH) + зазор
+          const labelBottom = carBottom + carH + labelGap;
           return `<div class="race-col ${it.is_current_user?'race-col-me':''}" style="width:${colWidth};flex:${stretch?'1 1 0':'0 0 auto'}" data-race-operator="${it.operator_id}"
               title="${esc(it.full_name)}${it.group?' · '+esc(it.group):''} · место #${it.rank} · ${Math.round(it.points)} баллов">
             <div class="race-points-label" style="bottom:${labelBottom}px">${Math.round(it.points)}</div>
