@@ -80,22 +80,36 @@ def visible_tests_for_operator(db: Session, operator: Operator) -> List[Test]:
 
 # ── Статусы для оператора ────────────────────────────────────────────
 
+def _naive(dt: Optional[datetime]) -> Optional[datetime]:
+    """
+    Защитный второй уровень: некоторые записи в БД могли сохраниться с
+    timezone-aware datetime ДО того как добавился _strip_tzinfo на уровне
+    Pydantic-схем (см. tests.py router) — без этой нормализации сравнение
+    now_utc() > test.closes_at бросает TypeError, которое тихо обрывало
+    проверку статуса теста, из-за чего тест никогда не переходил в
+    "expired" и продолжал быть доступным для прохождения после closes_at.
+    """
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=None) if dt.tzinfo else dt
+
+
 def operator_test_status(test: Test, attempt: Optional[TestAttempt], now: Optional[datetime] = None) -> str:
     """upcoming | available | in_progress | finished | expired | unavailable"""
-    now = now or now_utc()
+    now = _naive(now) or now_utc()
 
     if attempt and attempt.status == "finished":
         return "finished"
     if attempt and attempt.status == "in_progress":
-        if attempt.expires_at and now > attempt.expires_at:
+        if attempt.expires_at and now > _naive(attempt.expires_at):
             return "expired"  # таймер истёк, но finish ещё не вызван — клиент должен сам вызвать finish
         return "in_progress"
 
     if test.status != "open":
         return "unavailable"
-    if test.opens_at and now < test.opens_at:
+    if test.opens_at and now < _naive(test.opens_at):
         return "upcoming"
-    if test.closes_at and now > test.closes_at:
+    if test.closes_at and now > _naive(test.closes_at):
         return "expired"
     return "available"
 
