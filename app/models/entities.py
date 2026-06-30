@@ -21,7 +21,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(32), index=True)
-    operator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("operators.id"), nullable=True)
+    operator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("operators.id"), nullable=True, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     can_manage_operators: Mapped[bool] = mapped_column(Boolean, default=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -148,7 +148,7 @@ class ShopPurchase(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
-    shop_item_id: Mapped[int] = mapped_column(ForeignKey("shop_items.id"))
+    shop_item_id: Mapped[int] = mapped_column(ForeignKey("shop_items.id"), index=True)
     price: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     reject_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -171,7 +171,7 @@ class AuditLog(Base):
     # Поддерживаем оба контракта: новый (entity_type/entity_id) и старый (operator_id)
     entity_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    operator_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # legacy compat
+    operator_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)  # legacy compat
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)         # legacy compat
     performed_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
