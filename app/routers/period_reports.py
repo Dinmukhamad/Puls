@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
 from app.models.entities import AuditLog, CoinTransaction, Operator, PeriodReport, UploadedReportFile, User
+from app.services.analytics_cache import cache_clear_all
 from app.services.period_reports import calculate_period_report, normalize_name
 
 router = APIRouter(prefix="/reports", tags=["period-reports"])
@@ -97,6 +98,7 @@ async def upload_period_files(
 
     _save_uploaded_bytes(db, "monthly", monthly_report_file.filename, monthly_bytes, current_user.id)
     _save_uploaded_bytes(db, "report", report_file.filename, report_bytes, current_user.id)
+    cache_clear_all()  # новые файлы — старые закешированные расчёты аналитики больше не актуальны
 
     return {"ok": True, "message": "Файлы загружены и сохранены. Выберите период и нажмите «Рассчитать»."}
 
@@ -327,6 +329,7 @@ def save_period_report(
     ))
 
     db.commit()
+    cache_clear_all()  # новый/обновлённый расчёт периода — сбрасываем кеш аналитики
 
     return {
         "ok": True,
