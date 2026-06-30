@@ -3015,6 +3015,22 @@ function renderPeriodReport() {
   bindFileDrop('pr-file-monthly', 'pr-file-monthly-drop');
   bindFileDrop('pr-file-report', 'pr-file-report-drop');
 
+  // Проверяем, сохранены ли файлы в БД (переживают редеплой)
+  (async () => {
+    try {
+      const res = await fetch(api._base() + '/api/reports/period-report/status', { credentials: 'include' });
+      const status = await res.json();
+      const statusEl = el.querySelector('#pr-upload-status');
+      if (status.monthly && status.report) {
+        statusEl.innerHTML = `✓ Файлы уже загружены и сохранены: <b>${esc(status.monthly.filename)}</b>, <b>${esc(status.report.filename)}</b>. Можно сразу выбрать период.`;
+        statusEl.className = 'status-line status-ok';
+      } else if (status.monthly || status.report) {
+        statusEl.textContent = 'Загружен только один из файлов — дозагрузите второй.';
+        statusEl.className = 'status-line status-error';
+      }
+    } catch(e) { /* тихо игнорируем — не критично для работы страницы */ }
+  })();
+
   // Upload handler
   el.querySelector('#pr-upload-btn').addEventListener('click', async () => {
     const monthlyFile = el.querySelector('#pr-file-monthly').files[0];
