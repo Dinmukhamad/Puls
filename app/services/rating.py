@@ -6,13 +6,20 @@
 Для каждого оператора берётся последний сохранённый период (по period_end),
 ранжирование — по final_points. Динамика места считается относительно
 предыдущего по дате сохранённого периода того же оператора.
+
+Производительность: вся история PeriodReport нужных операторов загружается
+ОДНИМ SQL-запросом и дальше обрабатывается в памяти (группировка, сортировка,
+восстановление исторического ранга) — раньше на каждого оператора уходило
+до N дополнительных запросов (1 на "предыдущий период" + N на "место на тот
+момент"), что давало O(N²) запросов к БД при построении рейтинга.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import date
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.entities import Operator, PeriodReport
@@ -28,10 +35,11 @@ def latest_period(db: Session) -> Optional[Tuple[date, date]]:
     return tuple(result) if result else None
 
 
-def _latest_report_per_operator(db: Session) -> Dict[int, PeriodReport]:
+def _all_reports_grouped(db: Session) -> Dict[int, List[PeriodReport]]:
     """
-    Для каждого operator_id берём самый последний сохранённый PeriodReport
-    (по period_end, затем created_at — на случай пересчёта того же периода).
+    Загружает ВСЮ историю PeriodReport одним запросом и группирует по
+    operator_id, каждый список отсортирован по period_end (затем created_at)
+    по убыванию — самый свежий отчёт оператора первый в списке.
     """
     all_reports = list(
         db.scalars(
@@ -42,24 +50,10 @@ def _latest_report_per_operator(db: Session) -> Dict[int, PeriodReport]:
             )
         )
     )
-    latest: Dict[int, PeriodReport] = {}
+    grouped: Dict[int, List[PeriodReport]] = defaultdict(list)
     for r in all_reports:
-        if r.operator_id not in latest:
-            latest[r.operator_id] = r
-    return latest
-
-
-def _previous_report_for(db: Session, operator_id: int, before_period_end: date) -> Optional[PeriodReport]:
-    """Предыдущий по дате сохранённый расчёт того же оператора (для динамики места)."""
-    return db.scalar(
-        select(PeriodReport)
-        .where(
-            PeriodReport.operator_id == operator_id,
-            PeriodReport.period_end < before_period_end,
-        )
-        .order_by(PeriodReport.period_end.desc(), PeriodReport.created_at.desc())
-        .limit(1)
-    )
+        grouped[r.operator_id].append(r)
+    return grouped
 
 
 def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Optional[date] = None) -> List[Dict]:
@@ -69,11 +63,11 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
     сохранённому расчёту каждого оператора (т.к. разные операторы могут быть
     рассчитаны за разные периоды через «Расчёт периода»).
     """
-    latest_by_op = _latest_report_per_operator(db)
-    if not latest_by_op:
+    grouped = _all_reports_grouped(db)
+    if not grouped:
         return []
 
-    operator_ids = list(latest_by_op.keys())
+    operator_ids = list(grouped.keys())
     operators = {
         o.id: o for o in db.scalars(
             select(Operator).where(
@@ -86,24 +80,50 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
     }
 
     entries = []
-    for op_id, report in latest_by_op.items():
+    for op_id, reports in grouped.items():
         operator = operators.get(op_id)
         if not operator:
             continue  # не участвует / уволен / неактивен — не попадает в рейтинг
-        entries.append((operator, report))
+        entries.append((operator, reports[0], reports))  # reports[0] = самый свежий
 
-    # Ранжирование по итоговым баллам
-    entries.sort(key=lambda pair: pair[1].final_points, reverse=True)
+    # Ранжирование по итоговым баллам текущего (самого свежего) расчёта
+    entries.sort(key=lambda e: e[1].final_points, reverse=True)
+
+    # ── Восстановление исторического ранга для расчёта rank_delta ──────
+    # Для каждого "as_of" момента (period_end предыдущего отчёта оператора)
+    # нужно знать место среди ВСЕХ операторов на тот момент. Вместо запроса
+    # в БД на каждого оператора — строим это полностью в памяти: для каждого
+    # уникального as_of-момента один раз вычисляем полный отсортированный
+    # снимок (kандидат = последний отчёт оператора с period_end <= as_of).
+    def snapshot_at(as_of: date) -> List[Tuple[int, float]]:
+        """Возвращает [(operator_id, final_points)] для всех операторов на момент as_of."""
+        snap = []
+        for op_id, reports in grouped.items():
+            if operators.get(op_id) is None:
+                continue
+            candidate = next((r for r in reports if r.period_end <= as_of), None)
+            if candidate:
+                snap.append((op_id, candidate.final_points))
+        snap.sort(key=lambda x: x[1], reverse=True)
+        return snap
+
+    # Кешируем снимки по as_of-дате — разные операторы часто делят один и тот
+    # же "предыдущий период", поэтому снимок пересчитывается не на каждого
+    # оператора отдельно, а максимум один раз на каждую уникальную дату.
+    snapshot_cache: Dict[date, Dict[int, int]] = {}
+
+    def rank_position_at(operator_id: int, as_of: date) -> Optional[int]:
+        if as_of not in snapshot_cache:
+            snap = snapshot_at(as_of)
+            snapshot_cache[as_of] = {op_id: pos for pos, (op_id, _pts) in enumerate(snap, start=1)}
+        return snapshot_cache[as_of].get(operator_id)
 
     output = []
-    for position, (operator, report) in enumerate(entries, start=1):
-        prev_report = _previous_report_for(db, operator.id, report.period_end)
+    for position, (operator, report, reports) in enumerate(entries, start=1):
+        prev_report = reports[1] if len(reports) > 1 else None
         rank_delta = None
         if prev_report is not None:
-            # Найдём, каким было место оператора в предыдущем периоде —
-            # пересчитываем ранг той эпохи по той же выборке отчётов,
-            # действовавших на тот момент.
-            prev_position = _rank_position_at(db, operator.id, prev_report.period_end, operators.keys())
+            prev_position = rank_position_at(operator.id, prev_report.period_end)
             if prev_position is not None:
                 rank_delta = prev_position - position
 
@@ -123,33 +143,6 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
             "period_end": str(report.period_end),
         })
     return output
-
-
-def _rank_position_at(db: Session, operator_id: int, as_of_period_end: date, candidate_op_ids) -> Optional[int]:
-    """
-    Восстанавливает место оператора среди расчётов, актуальных на дату
-    as_of_period_end (т.е. последний расчёт каждого оператора с
-    period_end <= as_of_period_end на тот момент).
-    """
-    candidates = []
-    for op_id in candidate_op_ids:
-        r = db.scalar(
-            select(PeriodReport)
-            .where(PeriodReport.operator_id == op_id, PeriodReport.period_end <= as_of_period_end)
-            .order_by(PeriodReport.period_end.desc(), PeriodReport.created_at.desc())
-            .limit(1)
-        )
-        if r:
-            candidates.append((op_id, r.final_points))
-
-    if not candidates:
-        return None
-
-    candidates.sort(key=lambda x: x[1], reverse=True)
-    for pos, (op_id, _pts) in enumerate(candidates, start=1):
-        if op_id == operator_id:
-            return pos
-    return None
 
 
 def recalculate_period_ranks(db: Session, week_start: date, week_end: date):
