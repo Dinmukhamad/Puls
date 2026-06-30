@@ -5023,6 +5023,7 @@ let _ratingActiveTab = 'overview';
 async function renderRating() {
   const el = document.getElementById('view-rating');
   if (!el) return;
+  const myNavGen = STATE.navGen; // раздел "Рейтинг" уже активен — фиксируем текущее поколение
 
   el.innerHTML = `
     <div class="view-header">
@@ -5044,12 +5045,15 @@ async function renderRating() {
     });
   });
 
+  if (isNavStale(myNavGen)) return; // пользователь уже ушёл с "Рейтинга" — дальше не рисуем
   await loadRatingTab(_ratingActiveTab);
 }
 
 async function loadRatingTab(tab) {
   const content = document.getElementById('rating-tab-content');
   if (!content) return;
+  const myNavGen = STATE.navGen;
+  const myTabGen = bumpRatingTabGen(); // отменяет любой ещё не завершённый рендер предыдущей вкладки
   content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>';
 
   try {
@@ -5058,7 +5062,15 @@ async function loadRatingTab(tab) {
     else if (tab === 'groups') await renderRatingGroupsTab(content);
     else if (tab === 'progress') await renderRatingProgressTab(content);
   } catch(e) {
+    if (isNavStale(myNavGen) || isRatingTabStale(myTabGen)) return; // ушли в другой раздел/вкладку — не показываем чужую ошибку
     content.innerHTML = `<div class="rating-card"><div class="status-line status-error">Не удалось загрузить: ${esc(e.message)}</div></div>`;
+    return;
+  }
+  // Успешный рендер прошёл, но пока ждали ответ сервера пользователь мог уже
+  // переключиться на другой раздел или другую вкладку — в этом случае контент,
+  // который только что записали внутренние render*Tab-функции, всё равно устарел.
+  if (isNavStale(myNavGen) || isRatingTabStale(myTabGen)) {
+    content.innerHTML = '';
   }
 }
 
