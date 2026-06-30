@@ -462,3 +462,295 @@ def calculate_period_report(
         ignored_service_rows=sorted(_SERVICE_ROWS),
         summary=summary,
     )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ПОСУТОЧНЫЙ ПАРСИНГ — для сохранения в OperatorDailyMetric
+# ═══════════════════════════════════════════════════════════════════
+#
+# В отличие от parse_monthly_report/parse_report_file (которые сразу
+# суммируют значения внутри заданного диапазона), эти функции проходят
+# ПО ВСЕМ датам, найденным в файле, и возвращают значения раздельно по
+# каждому дню — без диапазона и без агрегации. Используются один раз
+# при загрузке файлов (POST /period-report/upload), результат пишется
+# в БД построчно на (operator, date).
+#
+# ВАЖНО: КВЗ и эффективность — производные показатели (звонки/база_часов,
+# часы_в_звонке/база_часов × 100), их нельзя честно посчитать на уровне
+# одного дня и затем складывать — иначе среднее по дням исказит результат
+# относительно правильного "сумма звонков за период / сумма базы часов
+# за период". Поэтому в OperatorDailyMetric.kvz/efficiency хранятся
+# дневные значения только для информации (heatmap и т.п.), а при агрегации
+# произвольного диапазона эти поля ВСЕГДА пересчитываются заново из сумм
+# (см. aggregate_daily_metrics).
+
+from collections import defaultdict
+
+
+def parse_monthly_report_daily(
+    file_bytes: bytes,
+    default_year: Optional[int] = None,
+) -> Dict[Tuple[str, date], Dict[str, object]]:
+    """
+    Возвращает { (name_key, date): {"display_name": str, "scores": [float, ...]} }
+    по ВСЕМ датам, найденным в файле (без ограничения диапазоном).
+    """
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+    out: Dict[Tuple[str, date], Dict[str, object]] = {}
+
+    # Определяем "опорный" год по первой найденной дате в файле (если возможно),
+    # иначе используем текущий год — это резервный случай для совсем пустых файлов
+    year_guess = default_year
+
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+        rows = list(ws.iter_rows(values_only=True))
+        i = 0
+        while i < len(rows):
+            row = rows[i]
+            if not row or not row[0]:
+                i += 1
+                continue
+            first_cell = str(row[0]).strip().lower()
+            if first_cell == "фио":
+                header = row
+                if year_guess is None:
+                    year_guess = date.today().year
+                date_cols: List[Tuple[int, date]] = []
+                for col_idx, h in enumerate(header):
+                    d = _parse_header_date(h, year_guess)
+                    if d:
+                        date_cols.append((col_idx, d))
+                i += 1
+                while i < len(rows):
+                    data_row = rows[i]
+                    if not data_row or not data_row[0]:
+                        i += 1
+                        continue
+                    cell0 = str(data_row[0]).strip()
+                    if cell0.lower() == "фио" or "оценки" in cell0.lower():
+                        break
+                    if is_service_row(cell0):
+                        i += 1
+                        continue
+                    name_key = normalize_name(cell0)
+                    for col_idx, d in date_cols:
+                        if col_idx >= len(data_row):
+                            continue
+                        scores = parse_scores(data_row[col_idx])
+                        if not scores:
+                            continue
+                        key = (name_key, d)
+                        if key not in out:
+                            out[key] = {"display_name": cell0, "scores": []}
+                        out[key]["scores"].extend(scores)
+                    i += 1
+                continue
+            i += 1
+
+    wb.close()
+    return out
+
+
+def _parse_simple_sheet_daily(ws, year: int, name_col: int = 0) -> Dict[Tuple[str, date], Tuple[str, float]]:
+    """Версия _parse_simple_sheet без диапазона — все даты, по отдельности."""
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return {}
+    header = rows[0]
+    date_cols: List[Tuple[int, date]] = []
+    for col_idx, h in enumerate(header):
+        if col_idx == name_col:
+            continue
+        d = _parse_header_date(h, year)
+        if d:
+            date_cols.append((col_idx, d))
+
+    out: Dict[Tuple[str, date], Tuple[str, float]] = {}
+    for row in rows[1:]:
+        if not row or not row[name_col]:
+            continue
+        raw_name = str(row[name_col]).strip()
+        if is_service_row(raw_name):
+            continue
+        name_key = normalize_name(raw_name)
+        for col_idx, d in date_cols:
+            if col_idx >= len(row):
+                continue
+            v = row[col_idx]
+            value = 0.0
+            if isinstance(v, (int, float)):
+                value = float(v)
+            elif isinstance(v, str) and v.strip():
+                cleaned = v.strip().replace(",", ".").replace(" ", "")
+                try:
+                    value = float(cleaned)
+                except ValueError:
+                    continue
+            else:
+                continue
+            out[(name_key, d)] = (raw_name, value)
+    return out
+
+
+def parse_report_file_daily(
+    file_bytes: bytes,
+    default_year: Optional[int] = None,
+) -> Dict[str, Dict[Tuple[str, date], Tuple[str, float]]]:
+    """
+    Возвращает { sheet_name: { (name_key, date): (display_name, value) } }
+    по ВСЕМ датам в файле. Бросает ValueError если обязательный лист отсутствует.
+    """
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+    year = default_year or date.today().year
+
+    missing = [s for s in REQUIRED_REPORT_SHEETS if s not in wb.sheetnames]
+    if missing:
+        wb.close()
+        raise ValueError(f"В файле Report отсутствуют листы: {', '.join(missing)}")
+
+    out: Dict[str, Dict[Tuple[str, date], Tuple[str, float]]] = {}
+    for sheet in REQUIRED_REPORT_SHEETS:
+        ws = wb[sheet]
+        out[sheet] = _parse_simple_sheet_daily(ws, year)
+
+    wb.close()
+    return out
+
+
+@dataclass
+class DailyMetricRow:
+    name_key: str
+    display_name: str
+    metric_date: date
+    calls_count: float = 0.0
+    quality_scores: List[float] = field(default_factory=list)
+    worked_hours: float = 0.0
+    tech_issue_hours: float = 0.0
+    training_hours: float = 0.0
+    offline_activity_hours: float = 0.0
+    call_time_hours: float = 0.0  # лист "Эффективность" — часы в звонке за день
+    penalty_sum: float = 0.0
+
+
+def build_daily_metric_rows(
+    monthly_bytes: bytes,
+    report_bytes: bytes,
+    default_year: Optional[int] = None,
+) -> List[DailyMetricRow]:
+    """
+    Главная точка входа для посуточного парсинга. Объединяет Monthly Report
+    (оценки качества) и Report (часы/звонки/штрафы) в единый список строк
+    "оператор × дата", готовых для сохранения в OperatorDailyMetric.
+
+    Вызывается ОДИН раз при загрузке файлов — не при построении аналитики.
+    """
+    quality_by_day = parse_monthly_report_daily(monthly_bytes, default_year)
+    report_by_sheet = parse_report_file_daily(report_bytes, default_year)
+
+    keys = set(quality_by_day.keys())
+    for sheet_data in report_by_sheet.values():
+        keys |= set(sheet_data.keys())
+
+    display_names: Dict[str, str] = {}
+    for (name_key, _d), data in quality_by_day.items():
+        display_names.setdefault(name_key, data["display_name"])
+    for sheet_data in report_by_sheet.values():
+        for (name_key, _d), (disp, _val) in sheet_data.items():
+            display_names.setdefault(name_key, disp)
+
+    rows: List[DailyMetricRow] = []
+    for name_key, metric_date in sorted(keys):
+        q = quality_by_day.get((name_key, metric_date))
+        row = DailyMetricRow(
+            name_key=name_key,
+            display_name=display_names.get(name_key, name_key),
+            metric_date=metric_date,
+            quality_scores=list(q["scores"]) if q else [],
+            calls_count=report_by_sheet.get("Звонки", {}).get((name_key, metric_date), (None, 0.0))[1],
+            worked_hours=report_by_sheet.get("Отработанные часы", {}).get((name_key, metric_date), (None, 0.0))[1],
+            tech_issue_hours=report_by_sheet.get("Тех. сбои", {}).get((name_key, metric_date), (None, 0.0))[1],
+            training_hours=report_by_sheet.get("Тренинги", {}).get((name_key, metric_date), (None, 0.0))[1],
+            offline_activity_hours=report_by_sheet.get("Офлайн активность", {}).get((name_key, metric_date), (None, 0.0))[1],
+            call_time_hours=report_by_sheet.get("Эффективность", {}).get((name_key, metric_date), (None, 0.0))[1],
+            penalty_sum=report_by_sheet.get("Штрафы", {}).get((name_key, metric_date), (None, 0.0))[1],
+        )
+        rows.append(row)
+
+    return rows
+
+
+def aggregate_daily_rows(daily_rows: List[dict]) -> OperatorPeriodMetrics:
+    """
+    Агрегирует список словарей-строк OperatorDailyMetric (за произвольный
+    диапазон дат, для ОДНОГО оператора) в OperatorPeriodMetrics — те же
+    формулы, что в compute_operator_metrics, но источник — БД, не Excel.
+
+    daily_rows: список dict с полями calls_count, quality_sum, quality_count,
+    worked_hours, tech_issue_hours, training_hours, offline_activity_hours,
+    efficiency (= call_time_hours за день), penalty_sum.
+    """
+    if not daily_rows:
+        return OperatorPeriodMetrics(full_name="", warnings=["Нет данных за выбранный период"])
+
+    quality_sum = sum(r["quality_sum"] for r in daily_rows)
+    quality_count = sum(r["quality_count"] for r in daily_rows)
+
+    total_hours = round(sum(r["worked_hours"] for r in daily_rows), 2)
+    tech_issue_hours = round(sum(r["tech_issue_hours"] for r in daily_rows), 2)
+    training_hours = round(sum(r["training_hours"] for r in daily_rows), 2)
+    offline_activity_hours = round(sum(r["offline_activity_hours"] for r in daily_rows), 2)
+    calls_total = round(sum(r["calls_count"] for r in daily_rows), 2)
+    call_time_hours = round(sum(r["efficiency"] for r in daily_rows), 2)  # "efficiency" в дневной таблице = часы в звонке за день
+    penalty_sum = round(sum(r["penalty_sum"] for r in daily_rows), 2)
+
+    m = OperatorPeriodMetrics(full_name="")
+    m.quality_calls_count = quality_count
+    m.quality_avg = round(quality_sum / quality_count, 2) if quality_count else 0.0
+    if quality_count == 0:
+        m.warnings.append("Нет оценок качества за выбранный период")
+
+    m.total_hours = total_hours
+    m.tech_issue_hours = tech_issue_hours
+    m.training_hours = training_hours
+    m.offline_activity_hours = offline_activity_hours
+
+    base = total_hours - tech_issue_hours - training_hours - offline_activity_hours
+    if base < 0:
+        m.warnings.append("База часов получилась отрицательной. Проверьте тренинги, техсбои и офлайн-активность.")
+        base = 0.0
+    m.base_hours = round(base, 2)
+
+    m.calls_total = calls_total
+    if m.base_hours > 0:
+        m.kvz = round(calls_total / m.base_hours, 2)
+    else:
+        m.kvz = 0.0
+        m.warnings.append("Нет базы часов за выбранный период")
+
+    m.call_time_hours = call_time_hours
+    if m.base_hours > 0:
+        m.efficiency_percent = round(call_time_hours / m.base_hours * 100, 2)
+    else:
+        m.efficiency_percent = 0.0
+        if "Нет базы часов за выбранный период" not in m.warnings:
+            m.warnings.append("Нет базы часов для расчёта эффективности")
+
+    m.penalty_sum = penalty_sum
+    m.penalty_minutes = round(penalty_sum / PENALTY_RUB_PER_MINUTE, 2) if penalty_sum else 0.0
+    m.penalty_points = round(m.penalty_minutes * PENALTY_POINTS_PER_MINUTE, 2)
+
+    m.final_points = round(
+        m.quality_avg + m.kvz + m.total_hours + m.efficiency_percent - m.penalty_points,
+        2,
+    )
+
+    m.has_any_period_data = any([
+        m.quality_calls_count > 0,
+        m.total_hours > 0,
+        m.calls_total > 0,
+        m.base_hours > 0,
+        m.penalty_sum > 0,
+    ])
+
+    return m
