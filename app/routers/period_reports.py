@@ -10,9 +10,10 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
-from app.models.entities import AuditLog, CoinTransaction, Operator, PeriodReport, UploadedReportFile, User
+from app.models.entities import AuditLog, CoinTransaction, Operator, OperatorDailyMetric, PeriodReport, UploadedReportFile, User
+import json as _json
 from app.services.analytics_cache import cache_clear_all
-from app.services.period_reports import calculate_period_report, normalize_name
+from app.services.period_reports import build_daily_metric_rows, calculate_period_report, normalize_name
 
 router = APIRouter(prefix="/reports", tags=["period-reports"])
 MAX_REPORT_FILE_BYTES = 15 * 1024 * 1024
@@ -98,9 +99,104 @@ async def upload_period_files(
 
     _save_uploaded_bytes(db, "monthly", monthly_report_file.filename, monthly_bytes, current_user.id)
     _save_uploaded_bytes(db, "report", report_file.filename, report_bytes, current_user.id)
-    cache_clear_all()  # новые файлы — старые закешированные расчёты аналитики больше не актуальны
 
-    return {"ok": True, "message": "Файлы загружены и сохранены. Выберите период и нажмите «Рассчитать»."}
+    # Посуточный разбор — ОДИН раз при загрузке, дальше аналитика строится
+    # из operator_daily_metrics без повторного парсинга Excel (см. ТЗ).
+    daily_stats = _rebuild_daily_metrics(db, monthly_bytes, report_bytes, current_user.id)
+
+    cache_clear_all()  # новые файлы — старые закешированные расчёты аналитики и сохранённые PeriodReport больше не актуальны
+
+    return {
+        "ok": True,
+        "message": "Файлы загружены и сохранены. Выберите период и нажмите «Рассчитать».",
+        "daily_metrics": daily_stats,
+    }
+
+
+def _rebuild_daily_metrics(db: Session, monthly_bytes: bytes, report_bytes: bytes, actor_user_id: int) -> dict:
+    """
+    Парсит оба файла ПОСУТОЧНО (build_daily_metric_rows) и записывает
+    результат в operator_daily_metrics с upsert по (operator_id, metric_date).
+    Сопоставление со страницами сайта — по нормализованному ФИО, как и
+    везде в проекте. Операторы, не найденные на сайте, пропускаются —
+    они и так не должны попадать в аналитику (см. matched-only правило).
+
+    Также удаляет все ранее сохранённые PeriodReport — после перезагрузки
+    файлов старые агрегаты по точным периодам больше не гарантированно
+    соответствуют новым исходным данным (п.9 ТЗ: "обновлять и инвалидировать
+    связанные PeriodReport").
+    """
+    try:
+        rows = build_daily_metric_rows(monthly_bytes, report_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    site_ops = list(db.scalars(select(Operator)))
+    name_to_op = {normalize_name(o.full_name): o for o in site_ops if o.full_name}
+
+    monthly_file_row = db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == "monthly"))
+    report_file_row = db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == "report"))
+
+    matched = 0
+    unmatched_names = set()
+
+    for row in rows:
+        operator = name_to_op.get(row.name_key)
+        if not operator:
+            unmatched_names.add(row.display_name)
+            continue
+
+        existing = db.scalar(
+            select(OperatorDailyMetric).where(
+                OperatorDailyMetric.operator_id == operator.id,
+                OperatorDailyMetric.metric_date == row.metric_date,
+            )
+        )
+        quality_sum = sum(row.quality_scores)
+        quality_count = len(row.quality_scores)
+        base_hours = max(0.0, row.worked_hours - row.tech_issue_hours - row.training_hours - row.offline_activity_hours)
+        kvz = round(row.calls_count / base_hours, 2) if base_hours > 0 else 0.0
+        efficiency = round(row.call_time_hours / base_hours * 100, 2) if base_hours > 0 else 0.0
+        penalty_minutes = round(row.penalty_sum / 50.0, 2) if row.penalty_sum else 0.0
+        penalty_points = round(penalty_minutes * 5.0, 2)
+
+        target = existing or OperatorDailyMetric(operator_id=operator.id, metric_date=row.metric_date)
+        target.operator_name = operator.full_name
+        target.group_id = operator.group_id
+        target.calls_count = row.calls_count
+        target.quality_scores_json = _json.dumps(row.quality_scores)
+        target.quality_sum = quality_sum
+        target.quality_count = quality_count
+        target.quality_avg = round(quality_sum / quality_count, 2) if quality_count else 0.0
+        target.kvz = kvz
+        target.efficiency = row.call_time_hours  # сырые часы в звонке за день — % пересчитывается при агрегации диапазона
+        target.worked_hours = row.worked_hours
+        target.tech_issue_hours = row.tech_issue_hours
+        target.training_hours = row.training_hours
+        target.offline_activity_hours = row.offline_activity_hours
+        target.base_hours = base_hours
+        target.penalty_sum = row.penalty_sum
+        target.penalty_minutes = penalty_minutes
+        target.penalty_points = penalty_points
+        target.source_monthly_report_id = monthly_file_row.id if monthly_file_row else None
+        target.source_report_id = report_file_row.id if report_file_row else None
+
+        if not existing:
+            db.add(target)
+        matched += 1
+
+    # Старые сохранённые расчёты периодов больше не гарантированно актуальны —
+    # инвалидируем (п.9 ТЗ). Пользователь при необходимости пересчитает заново.
+    deleted_reports = db.query(PeriodReport).delete()
+
+    db.commit()
+
+    return {
+        "matched_daily_rows": matched,
+        "unmatched_operators_count": len(unmatched_names),
+        "unmatched_operators_sample": sorted(unmatched_names)[:20],
+        "invalidated_period_reports": deleted_reports,
+    }
 
 
 @router.get("/period-report/status")
