@@ -5923,7 +5923,7 @@ function testCardHtml(t) {
   } else if (t.status === 'upcoming') {
     actionHtml = `<div class="test-card-disabled-note">Тест откроется ${fmtDateTime(t.opens_at)}</div>`;
   } else if (t.status === 'finished') {
-    actionHtml = `<div class="test-card-result"><b>Результат:</b> ${t.correct_count} / ${t.questions_count} · <b>${cleanNumber(t.score_percent,0)}%</b></div>
+    actionHtml = `<div class="test-card-result"><b>Результат:</b> ${t.correct_count} / ${t.questions_count} · <b>${fmtA(t.score_percent,0)}%</b></div>
       ${t.reward_coins_earned ? `<div class="test-card-result">+${t.reward_coins_earned} коинов</div>` : ''}
       <button class="btn-outline btn-sm" data-test-action="result" data-attempt-id="${t.attempt_id}">Подробнее</button>`;
   } else if (t.status === 'expired') {
@@ -6135,14 +6135,14 @@ function testResultCardHtml(result) {
     <div class="test-result-title">${esc(result.test_title)}</div>
     <div class="test-result-grid">
       <div class="test-result-stat"><div class="test-result-stat-label">Правильных ответов</div><div class="test-result-stat-value">${result.correct_count} из ${result.questions_count}</div></div>
-      <div class="test-result-stat"><div class="test-result-stat-label">Процент</div><div class="test-result-stat-value">${cleanNumber(result.score_percent,0)}%</div></div>
-      <div class="test-result-stat"><div class="test-result-stat-label">Баллы</div><div class="test-result-stat-value">${cleanNumber(result.score_points,1)}</div></div>
+      <div class="test-result-stat"><div class="test-result-stat-label">Процент</div><div class="test-result-stat-value">${fmtA(result.score_percent,0)}%</div></div>
+      <div class="test-result-stat"><div class="test-result-stat-label">Баллы</div><div class="test-result-stat-value">${fmtA(result.score_points,1)}</div></div>
       <div class="test-result-stat"><div class="test-result-stat-label">Статус</div><div class="test-result-stat-value">${passed === null ? '—' : (passed ? '<span class="badge badge-success">Пройден</span>' : '<span class="badge badge-danger">Не пройден</span>')}</div></div>
     </div>
     ${(result.reward_coins > 0 || result.reward_points > 0) ? `
       <div class="test-result-reward">
         ${result.reward_coins > 0 ? `Награда: +${result.reward_coins} коинов` : ''}
-        ${result.reward_points > 0 ? ` +${cleanNumber(result.reward_points,1)} баллов` : ''}
+        ${result.reward_points > 0 ? ` +${fmtA(result.reward_points,1)} баллов` : ''}
       </div>` : ''}
     ${result.questions ? renderTestCorrectAnswersBlock(result) : ''}
   </div>`;
@@ -6608,8 +6608,8 @@ async function loadTestResultsTable(testId) {
           <td>${r.finished_at?fmtDateTime(r.finished_at):'—'}</td>
           <td class="num">${r.duration_seconds!=null?Math.round(r.duration_seconds/60)+' мин':'—'}</td>
           <td class="num">${r.correct_count}/${r.questions_count}</td>
-          <td class="num"><b>${cleanNumber(r.score_percent,0)}%</b></td>
-          <td class="num">${cleanNumber(r.score_points,1)}</td>
+          <td class="num"><b>${fmtA(r.score_percent,0)}%</b></td>
+          <td class="num">${fmtA(r.score_points,1)}</td>
           <td class="num">${r.reward_coins||0}</td>
           <td class="num">${r.attempt_number}</td>
         </tr>`).join('')}
