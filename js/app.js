@@ -196,7 +196,7 @@ async function bootApp() {
 
   // Restore last viewed section after F5 reload
   const savedView = location.hash.replace('#', '') || localStorage.getItem('pulse-last-view');
-  const adminViews = ['summary','operators','manual','requests','history','groups','shop','rating','cabinet'];
+  const adminViews = ['summary','operators','manual','requests','history','groups','shop','rating','cabinet','period-report','analytics'];
   const operatorViews = ['cabinet','rating','shop'];
   const allowedViews = isAdmin(role) ? adminViews : operatorViews;
   const defaultView = isAdmin(role) ? 'summary' : 'cabinet';
