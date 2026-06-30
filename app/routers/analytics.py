@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+import json as _json
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
-from app.models.entities import Group, Operator, PeriodReport, User
+from app.models.entities import Group, Operator, OperatorDailyMetric, PeriodReport, User
 from app.services.analytics import (
     OperatorAnalyticsRow,
     classify_risk,
@@ -29,7 +30,7 @@ from app.services.analytics import (
     filter_rows,
 )
 from app.services.analytics_cache import cache_get, cache_key, cache_set
-from app.services.period_reports import OperatorPeriodMetrics, normalize_name
+from app.services.period_reports import OperatorPeriodMetrics, aggregate_daily_rows, normalize_name
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -114,6 +115,117 @@ def _period_is_calculated(db: Session, start_date: date, end_date: date) -> bool
     ) is not None
 
 
+def _available_data_date_range(db: Session) -> Optional[tuple]:
+    """Минимальная и максимальная дата, для которых есть посуточные данные."""
+    row = db.execute(
+        select(func.min(OperatorDailyMetric.metric_date), func.max(OperatorDailyMetric.metric_date))
+    ).first()
+    if not row or row[0] is None:
+        return None
+    return row[0], row[1]
+
+
+def _aggregate_from_daily_metrics(
+    db: Session,
+    start_date: date,
+    end_date: date,
+) -> tuple[Dict[int, OperatorPeriodMetrics], List[str]]:
+    """
+    Агрегирует operator_daily_metrics за произвольный диапазон дат — БЕЗ
+    обращения к Excel. Возвращает {operator_id: OperatorPeriodMetrics} и
+    список предупреждений о частично/полностью отсутствующих датах.
+    """
+    daily_rows = list(
+        db.scalars(
+            select(OperatorDailyMetric).where(
+                OperatorDailyMetric.metric_date >= start_date,
+                OperatorDailyMetric.metric_date <= end_date,
+            )
+        )
+    )
+
+    by_operator: Dict[int, List[dict]] = {}
+    covered_dates: set = set()
+    for r in daily_rows:
+        covered_dates.add(r.metric_date)
+        by_operator.setdefault(r.operator_id, []).append({
+            "calls_count": r.calls_count,
+            "quality_sum": r.quality_sum,
+            "quality_count": r.quality_count,
+            "worked_hours": r.worked_hours,
+            "tech_issue_hours": r.tech_issue_hours,
+            "training_hours": r.training_hours,
+            "offline_activity_hours": r.offline_activity_hours,
+            "efficiency": r.efficiency,
+            "penalty_sum": r.penalty_sum,
+        })
+
+    warnings: List[str] = []
+    total_days = (end_date - start_date).days + 1
+    if not daily_rows:
+        available = _available_data_date_range(db)
+        if available:
+            warnings.append(
+                f"Нет данных за выбранный период. Данные доступны с {available[0].strftime('%d.%m.%Y')} "
+                f"по {available[1].strftime('%d.%m.%Y')}."
+            )
+        else:
+            warnings.append("Нет загруженных данных. Загрузите Monthly Report и Report в разделе «Расчёт периода».")
+    elif len(covered_dates) < total_days:
+        missing_count = total_days - len(covered_dates)
+        all_dates = {start_date + timedelta(days=i) for i in range(total_days)}
+        missing_dates = sorted(all_dates - covered_dates)
+        first_gap, last_gap = missing_dates[0], missing_dates[-1]
+        warnings.append(
+            f"Данные доступны частично: с {start_date.strftime('%d.%m.%Y')} по {end_date.strftime('%d.%m.%Y')}. "
+            f"Нет данных за {missing_count} из {total_days} дн. "
+            f"(например {first_gap.strftime('%d.%m.%Y')}"
+            + (f" — {last_gap.strftime('%d.%m.%Y')}" if last_gap != first_gap else "")
+            + ")."
+        )
+
+    metrics_by_operator: Dict[int, OperatorPeriodMetrics] = {
+        op_id: aggregate_daily_rows(rows) for op_id, rows in by_operator.items()
+    }
+    return metrics_by_operator, warnings
+
+
+def _save_period_report_from_metrics(
+    db: Session,
+    operator_id: int,
+    start_date: date,
+    end_date: date,
+    m: OperatorPeriodMetrics,
+) -> None:
+    """Сохраняет агрегат как PeriodReport — следующий запрос того же диапазона
+    обслуживается мгновенно (read-cache), без повторной агрегации."""
+    existing = db.scalar(
+        select(PeriodReport).where(
+            PeriodReport.operator_id == operator_id,
+            PeriodReport.period_start == start_date,
+            PeriodReport.period_end == end_date,
+        )
+    )
+    pr = existing or PeriodReport(operator_id=operator_id, period_start=start_date, period_end=end_date)
+    pr.quality_avg = m.quality_avg
+    pr.quality_calls_count = m.quality_calls_count
+    pr.total_hours = m.total_hours
+    pr.base_hours = m.base_hours
+    pr.tech_issue_hours = m.tech_issue_hours
+    pr.training_hours = m.training_hours
+    pr.offline_activity_hours = m.offline_activity_hours
+    pr.calls_total = m.calls_total
+    pr.kvz = m.kvz
+    pr.call_time_hours = m.call_time_hours
+    pr.efficiency_percent = m.efficiency_percent
+    pr.penalty_sum = m.penalty_sum
+    pr.penalty_minutes = m.penalty_minutes
+    pr.penalty_points = m.penalty_points
+    pr.final_points = m.final_points
+    if not existing:
+        db.add(pr)
+
+
 def _get_rows(
     db: Session,
     start_date: date,
@@ -124,44 +236,69 @@ def _get_rows(
     only_with_data: bool = False,
 ) -> List[OperatorAnalyticsRow]:
     """
-    Строит строки аналитики ИСКЛЮЧИТЕЛЬНО из сохранённых PeriodReport с
-    точным совпадением (period_start, period_end). Никакого автоматического
-    fallback на Excel-парсинг — если период не рассчитан, явная ошибка
-    с понятным сообщением (см. ТЗ: "Период ещё не рассчитан...").
+    Строит строки аналитики для ПРОИЗВОЛЬНОГО диапазона дат:
+
+      1. Если для каждого оператора уже есть точный PeriodReport на этот
+         диапазон — используем как кеш (мгновенно, без агрегации).
+      2. Иначе агрегируем operator_daily_metrics за диапазон (SUM по дням,
+         БЕЗ обращения к Excel) и сохраняем результат как новый PeriodReport
+         для следующего раза.
+      3. Если данных за диапазон вообще нет — кидаем 404 с понятным
+         сообщением о том, какие даты доступны.
     """
-    reports = list(
-        db.scalars(
+    existing_reports = {
+        r.operator_id: r
+        for r in db.scalars(
             select(PeriodReport).where(
                 PeriodReport.period_start == start_date,
                 PeriodReport.period_end == end_date,
             )
         )
-    )
-    if not reports:
-        raise HTTPException(status_code=404, detail=PERIOD_NOT_CALCULATED_MESSAGE)
+    }
 
-    operator_ids = [r.operator_id for r in reports]
+    daily_metrics, warnings = _aggregate_from_daily_metrics(db, start_date, end_date)
+
+    if not daily_metrics and not existing_reports:
+        raise HTTPException(status_code=404, detail=" ".join(warnings) or PERIOD_NOT_CALCULATED_MESSAGE)
+
+    all_operator_ids = set(existing_reports.keys()) | set(daily_metrics.keys())
     operators = {
-        o.id: o for o in db.scalars(select(Operator).where(Operator.id.in_(operator_ids)))
+        o.id: o for o in db.scalars(select(Operator).where(Operator.id.in_(all_operator_ids)))
     }
 
     rows: List[OperatorAnalyticsRow] = []
-    for pr in reports:
-        operator = operators.get(pr.operator_id)
+    for operator_id in all_operator_ids:
+        operator = operators.get(operator_id)
         if not operator:
-            continue  # оператор был удалён после сохранения расчёта — пропускаем сиротские записи
-        name_key = normalize_name(operator.full_name)
-        metrics = _metrics_from_period_report(pr, operator.full_name, name_key)
+            continue
+
+        # PeriodReport как кеш приоритетнее свежей агрегации, КРОМЕ случая,
+        # когда posted daily-metrics реально есть (значит файлы могли быть
+        # перезагружены после сохранения старого PeriodReport — на upload
+        # старые PeriodReport уже инвалидируются, так что это редкий путь,
+        # но на всякий случай предпочитаем daily-агрегат как источник правды).
+        if operator_id in daily_metrics:
+            m = daily_metrics[operator_id]
+            m.full_name = operator.full_name
+            m.name_key = normalize_name(operator.full_name)
+            _save_period_report_from_metrics(db, operator_id, start_date, end_date, m)
+        else:
+            pr = existing_reports[operator_id]
+            name_key = normalize_name(operator.full_name)
+            m = _metrics_from_period_report(pr, operator.full_name, name_key)
+
         rows.append(OperatorAnalyticsRow(
             full_name=operator.full_name,
-            name_key=name_key,
+            name_key=normalize_name(operator.full_name),
             operator_id=operator.id,
             group_id=operator.group_id,
             group_name=operator.group_name,
             participation_status=operator.participation_status,
-            metrics=metrics,
-            risk_status=classify_risk(metrics),
+            metrics=m,
+            risk_status=classify_risk(m),
         ))
+
+    db.commit()  # фиксируем новые/обновлённые PeriodReport-кеши
 
     rows = filter_rows(rows, group_id, operator_query, participation_status, only_with_data)
     return rows
