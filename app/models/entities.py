@@ -179,3 +179,39 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
     performed_by: Mapped[Optional[User]] = relationship("User", foreign_keys=[performed_by_user_id])
+
+
+class PeriodReport(Base):
+    """Сохранённый расчёт показателей оператора за выбранный период"""
+    __tablename__ = "period_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    period_start: Mapped[date] = mapped_column(Date, index=True)
+    period_end: Mapped[date] = mapped_column(Date, index=True)
+
+    quality_avg: Mapped[float] = mapped_column(Float, default=0)
+    quality_calls_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    total_hours: Mapped[float] = mapped_column(Float, default=0)
+    base_hours: Mapped[float] = mapped_column(Float, default=0)
+    tech_issue_hours: Mapped[float] = mapped_column(Float, default=0)
+    training_hours: Mapped[float] = mapped_column(Float, default=0)
+    offline_activity_hours: Mapped[float] = mapped_column(Float, default=0)
+
+    calls_total: Mapped[float] = mapped_column(Float, default=0)
+    kvz: Mapped[float] = mapped_column(Float, default=0)
+    call_time_hours: Mapped[float] = mapped_column(Float, default=0)
+    efficiency_percent: Mapped[float] = mapped_column(Float, default=0)
+
+    penalty_sum: Mapped[float] = mapped_column(Float, default=0)
+    penalty_minutes: Mapped[float] = mapped_column(Float, default=0)
+    penalty_points: Mapped[float] = mapped_column(Float, default=0)
+
+    final_points: Mapped[float] = mapped_column(Float, default=0)
+    coins_awarded: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    operator: Mapped["Operator"] = relationship("Operator")
