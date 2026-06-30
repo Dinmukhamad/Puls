@@ -6245,11 +6245,21 @@ async function renderTestsStaffView(el) {
   body.querySelectorAll('[data-test-edit]').forEach(btn => btn.addEventListener('click', () => openTestBuilder(Number(btn.dataset.testEdit))));
   body.querySelectorAll('[data-test-results]').forEach(btn => btn.addEventListener('click', () => openTestResultsView(Number(btn.dataset.testResults))));
   body.querySelectorAll('[data-test-publish]').forEach(btn => btn.addEventListener('click', async () => {
-    try { await api.publishTest(Number(btn.dataset.testPublish)); showToast('Тест опубликован', 'ok'); renderTests(); }
+    try {
+      await api.publishTest(Number(btn.dataset.testPublish));
+      swrInvalidate('tests:'); // публикация меняет статус — сбрасываем и admin-list, и операторский my-list
+      showToast('Тест опубликован', 'ok');
+      renderTests();
+    }
     catch(e) { showToast(e.message, 'error'); }
   }));
   body.querySelectorAll('[data-test-close]').forEach(btn => btn.addEventListener('click', async () => {
-    try { await api.closeTest(Number(btn.dataset.testClose)); showToast('Тест закрыт', 'ok'); renderTests(); }
+    try {
+      await api.closeTest(Number(btn.dataset.testClose));
+      swrInvalidate('tests:');
+      showToast('Тест закрыт', 'ok');
+      renderTests();
+    }
     catch(e) { showToast(e.message, 'error'); }
   }));
 }
