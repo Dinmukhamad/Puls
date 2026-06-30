@@ -4160,13 +4160,11 @@ async function renderAnalytics() {
     </div>
     <div class="an-filters-card">
       <div class="an-filters-row">
-        <div class="form-group">
-          <label class="form-label">Период с</label>
-          <input id="an-start" type="date" class="form-input" value="${_analyticsState.startDate}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">по</label>
-          <input id="an-end" type="date" class="form-input" value="${_analyticsState.endDate}">
+        <div class="form-group" style="min-width:260px">
+          <label class="form-label">Рассчитанный период</label>
+          <select id="an-period" class="form-select">
+            <option value="">Загрузка периодов…</option>
+          </select>
         </div>
         <div class="form-group">
           <label class="form-label">Группа</label>
