@@ -3119,8 +3119,7 @@ function renderPeriodReport() {
   // Проверяем, сохранены ли файлы в БД (переживают редеплой)
   (async () => {
     try {
-      const res = await fetch(api._base() + '/api/reports/period-report/status', { credentials: 'include' });
-      const status = await res.json();
+      const status = await api.getPeriodReportStatus();
       const statusEl = el.querySelector('#pr-upload-status');
       if (status.monthly && status.report) {
         statusEl.innerHTML = `✓ Файлы уже загружены и сохранены: <b>${esc(status.monthly.filename)}</b>, <b>${esc(status.report.filename)}</b>. Можно сразу выбрать период.`;
@@ -3157,13 +3156,7 @@ function renderPeriodReport() {
     formData.append('report_file', reportFile);
 
     try {
-      const res = await fetch(api._base() + '/api/reports/period-report/upload', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки');
+      const data = await api.uploadPeriodReportFiles(formData);
       statusEl.textContent = '✓ ' + data.message;
       statusEl.className = 'status-line status-ok';
     } catch (e) {
@@ -3426,18 +3419,11 @@ function renderPeriodReport() {
         const awardCoins = document.getElementById('pr-award-coins-check').checked;
         const errEl = document.getElementById('pr-save-err');
         try {
-          const res = await fetch(api._base() + '/api/reports/period-report/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              start_date: data.period.start,
-              end_date: data.period.end,
-              award_coins: awardCoins,
-            }),
+          const result = await api.savePeriodReport({
+            start_date: data.period.start,
+            end_date: data.period.end,
+            award_coins: awardCoins,
           });
-          const result = await res.json();
-          if (!res.ok) throw new Error(result.detail || 'Ошибка сохранения');
           closeModal();
           showToast(result.message, 'ok');
           if (result.skipped_no_match?.length) {
@@ -4182,8 +4168,7 @@ async function renderAnalytics() {
   // убран, чтобы не показывать пользователю несуществующие периоды (см. ТЗ:
   // "Аналитика должна строиться только на основе сохранённых PeriodReport").
   try {
-    const periodsRes = await fetch(api._base() + '/api/analytics/available-periods', { credentials: 'include' });
-    const periodsData = await periodsRes.json();
+    const periodsData = await api.getAvailablePeriods();
     if (isNavStale(myNavGen)) return;
     const periods = periodsData.items || [];
     const periodSel = el.querySelector('#an-period');
@@ -5236,11 +5221,7 @@ let _raceState = { groupId: '', mode: 'my_zone' };
 async function fetchRace(params, onUpdate) {
   const key = 'race:' + JSON.stringify(params || {});
   return swrFetch(key, async () => {
-    const qs = new URLSearchParams(params).toString();
-    const res = await fetch(api._base() + '/api/rating/race' + (qs ? '?' + qs : ''), { credentials: 'include' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'Ошибка загрузки гонки баллов');
-    return data;
+    return api.getRatingRace(params);
   }, onUpdate, ANALYTICS_SWR_TTL_MS);
 }
 
@@ -5577,7 +5558,7 @@ async function renderRatingProgressTab(content) {
   }
 
   try {
-    const dyn = await fetch(api._base() + '/api/rating/me/dynamics?type=place&weeks=8', { credentials: 'include' }).then(r => r.json());
+    const dyn = await api.getMyRatingDynamics('place', 8);
     content.innerHTML = `<div class="rating-card">
       <div class="rcard-title">Динамика места за последние недели</div>
       ${renderDynamics ? renderDynamics(dyn) : '<div class="empty-line">Нет данных</div>'}
