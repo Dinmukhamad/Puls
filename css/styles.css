@@ -2623,7 +2623,19 @@ body.side-nav-collapsed .side-nav-toggle svg {
 }
 .an-heatmap-name-col { position: sticky; left: 0; background: var(--card-bg); z-index: 2; text-align: left !important; min-width: 160px; }
 .an-heatmap-table th.an-heatmap-name-col { z-index: 3; }
-.an-heatmap-cell { text-align: center; padding: 6px 8px; color: #1a1a1a; font-weight: 600; border: 1px solid rgba(255,255,255,.4); min-width: 36px; }
+.an-heatmap-cell {
+  text-align: center;
+  padding: 8px 10px;
+  color: rgba(15,23,42,0.72);
+  font-weight: 600;
+  font-size: 11px;
+  border: 1px solid var(--card-bg);
+  min-width: 38px;
+  transition: opacity var(--transition-fast);
+}
+.an-heatmap-cell:hover { opacity: 0.75; outline: 1.5px solid var(--text-primary); outline-offset: -1px; }
+.an-heatmap-table tr:nth-child(even) .an-heatmap-name-col { background: var(--bg-subtle); }
+.an-heatmap-table tr:hover .an-heatmap-name-col { background: var(--bg-muted); }
 
 /* Risk pyramid */
 .an-risk-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 16px; }
