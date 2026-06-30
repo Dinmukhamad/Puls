@@ -374,7 +374,63 @@ def list_tests(db: Session = Depends(get_db), _: User = Depends(_require_staff))
     activate_scheduled_tests(db)
     db.commit()
     tests = list(db.scalars(select(Test).order_by(Test.created_at.desc())))
-    return {"items": [_test_summary(db, t) for t in tests]}
+    return {"items": _test_summaries_bulk(db, tests)}
+
+
+def _test_summaries_bulk(db: Session, tests: list) -> list:
+    """
+    Batch-версия _test_summary для списков — раньше list_tests вызывала
+    _test_summary(db, t) в цикле, и КАЖДЫЙ вызов делал 2 явных запроса
+    (attempts, assignments) + 2 lazy-load (created_by, questions) — итого
+    4N запросов на N тестов. Здесь все 4 типа данных загружаются ОДИН раз
+    для всех тестов сразу, дальше группируются в памяти по test_id.
+    """
+    if not tests:
+        return []
+    test_ids = [t.id for t in tests]
+
+    all_attempts = list(db.scalars(select(TestAttempt).where(TestAttempt.test_id.in_(test_ids))))
+    attempts_by_test: Dict[int, list] = {}
+    for a in all_attempts:
+        attempts_by_test.setdefault(a.test_id, []).append(a)
+
+    all_assignments = list(db.scalars(select(TestAssignment).where(TestAssignment.test_id.in_(test_ids))))
+    assignments_by_test: Dict[int, list] = {}
+    for a in all_assignments:
+        assignments_by_test.setdefault(a.test_id, []).append(a)
+
+    all_questions = list(db.scalars(select(TestQuestion).where(TestQuestion.test_id.in_(test_ids))))
+    questions_count_by_test: Dict[int, int] = {}
+    for q in all_questions:
+        questions_count_by_test[q.test_id] = questions_count_by_test.get(q.test_id, 0) + 1
+
+    creator_ids = [t.created_by_user_id for t in tests if t.created_by_user_id]
+    creators_by_id: Dict[int, User] = {}
+    if creator_ids:
+        creators_by_id = {u.id: u for u in db.scalars(select(User).where(User.id.in_(creator_ids)))}
+
+    result = []
+    for t in tests:
+        attempts = attempts_by_test.get(t.id, [])
+        finished = [a for a in attempts if a.status == "finished"]
+        avg_percent = round(sum(a.score_percent for a in finished) / len(finished), 1) if finished else None
+        assignments = assignments_by_test.get(t.id, [])
+        creator = creators_by_id.get(t.created_by_user_id) if t.created_by_user_id else None
+        result.append({
+            "id": t.id,
+            "title": t.title,
+            "status": t.status,
+            "created_by_name": creator.full_name if creator else None,
+            "opens_at": _utc_iso(t.opens_at),
+            "closes_at": _utc_iso(t.closes_at),
+            "time_limit_minutes": t.time_limit_minutes,
+            "questions_count": questions_count_by_test.get(t.id, 0),
+            "assignments": [{"target_type": a.target_type, "target_id": a.target_id} for a in assignments],
+            "attempts_started": len(attempts),
+            "attempts_finished": len(finished),
+            "average_percent": avg_percent,
+        })
+    return result
 
 
 @admin_router.post("")
