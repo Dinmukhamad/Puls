@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,6 +18,7 @@ from app.services.analytics import (
     compute_kpi_summary,
     compute_load_vs_efficiency,
     compute_penalties_analytics,
+    compute_points_analysis,
     compute_points_breakdown,
     compute_quality_coverage,
     compute_quality_kvz_matrix,
@@ -259,6 +260,45 @@ def get_points_breakdown(
 ) -> dict:
     rows, _result, _site_map = _get_rows(db, start_date, end_date, group_id, operator_query)
     return {"items": compute_points_breakdown(rows)}
+
+
+@router.get("/points")
+def get_points_analysis(
+    start_date: date,
+    end_date: date,
+    group_id: Optional[int] = Query(None),
+    operator_query: Optional[str] = Query(None),
+    participation_status: Optional[str] = Query(None),
+    only_with_data: bool = Query(False),
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_analytics_access),
+) -> dict:
+    """
+    Полный анализ итоговых баллов: разбор вклада показателей, сравнение
+    с предыдущим периодом (та же длительность, смещённая назад), топ
+    роста/просадки, статусы, рекомендации.
+    """
+    rows, _result, _site_map = _get_rows(
+        db, start_date, end_date, group_id, operator_query, participation_status, only_with_data
+    )
+
+    # Предыдущий период — та же длительность, сразу перед текущим
+    period_length = (end_date - start_date).days
+    prev_end = start_date - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=period_length)
+
+    prev_rows = None
+    try:
+        prev_rows, _prev_result, _ = _get_rows(
+            db, prev_start, prev_end, group_id, operator_query, participation_status, only_with_data
+        )
+    except HTTPException:
+        prev_rows = None  # нет данных за прошлый период — сравнение недоступно
+
+    analysis = compute_points_analysis(rows, prev_rows)
+    analysis["period"] = {"start": str(start_date), "end": str(end_date)}
+    analysis["previous_period"] = {"start": str(prev_start), "end": str(prev_end)} if prev_rows else None
+    return analysis
 
 
 @router.get("/heatmap")
