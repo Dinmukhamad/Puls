@@ -46,7 +46,30 @@ def is_test_assigned_to_operator(db: Session, test: Test, operator: Operator) ->
     return False
 
 
+def activate_scheduled_tests(db: Session) -> int:
+    """
+    Лениво переводит тесты из status='scheduled' в 'open', если наступило
+    время opens_at. Без этого тест навсегда оставался "Запланирован" после
+    нажатия "Опубликовать" — статус менялся только в момент самого клика
+    (см. publish_test), и если opens_at был в будущем, ничто потом не
+    пересматривало его снова: ни оператор не видел тест по факту наступления
+    времени, ни админ не получал автоматического перехода без повторного
+    ручного нажатия "Опубликовать". Вызывается перед каждым чтением списка
+    тестов — дешёвая проверка (один UPDATE по условию), не требует cron/воркера.
+    """
+    now = now_utc()
+    updated = db.execute(
+        select(Test).where(Test.status == "scheduled", Test.opens_at.is_not(None), Test.opens_at <= now)
+    ).scalars().all()
+    for t in updated:
+        t.status = "open"
+    if updated:
+        db.flush()
+    return len(updated)
+
+
 def visible_tests_for_operator(db: Session, operator: Operator) -> List[Test]:
+    activate_scheduled_tests(db)
     all_tests = list(
         db.scalars(
             select(Test).where(Test.status.in_(["open", "finished"])).order_by(Test.opens_at.desc().nullslast())
