@@ -3344,3 +3344,28 @@ body.side-nav-collapsed .side-nav-toggle svg {
   .race-chart-scroll { padding: 10px 8px 2px; }
   .race-segmented { width: 100%; overflow-x: auto; }
 }
+
+
+/* ═══════════════════════════════════════════════════
+   ROLE-AWARE SIDEBAR — prevent admin-link flash on load/F5
+═══════════════════════════════════════════════════ */
+
+/* Пока роль не подтверждена JS-ом — скрываем все admin-only ссылки.
+   Список admin-only target-ов совпадает с adminViews в renderSidebar(). */
+body.role-pending .side-nav-link[data-nav-target="summary"],
+body.role-pending .side-nav-link[data-nav-target="operators"],
+body.role-pending .side-nav-link[data-nav-target="manual"],
+body.role-pending .side-nav-link[data-nav-target="requests"],
+body.role-pending .side-nav-link[data-nav-target="history"],
+body.role-pending .side-nav-link[data-nav-target="groups"],
+body.role-pending .side-nav-link[data-nav-target="analytics"],
+body.role-pending .side-nav-link[data-nav-target="period-report"] {
+  display: none;
+}
+
+/* Для оператора сайдбар уже физически содержит только 3 пункта —
+   сужаем колонку, чтобы не было лишнего пустого пространства. */
+body.role-pending,
+body.role-operator {
+  --nav-w: 200px;
+}
