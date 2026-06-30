@@ -109,11 +109,14 @@ def main() -> int:
 
         print("\nВыполняется удаление...")
 
-        # Порядок важен — от зависимых таблиц к корневой operators
+        # Порядок важен — от зависимых таблиц к корневой operators.
+        # coin_transactions.related_purchase_id ссылается на shop_purchases.id,
+        # поэтому coin_transactions нужно удалить РАНЬШЕ shop_purchases —
+        # иначе PostgreSQL не даёт удалить строку, на которую ещё ссылаются.
         db.query(OperatorDailyMetric).filter(OperatorDailyMetric.operator_id.in_(operator_ids)).delete(synchronize_session=False)
         db.query(PeriodReport).filter(PeriodReport.operator_id.in_(operator_ids)).delete(synchronize_session=False)
-        db.query(ShopPurchase).filter(ShopPurchase.operator_id.in_(operator_ids)).delete(synchronize_session=False)
         db.query(CoinTransaction).filter(CoinTransaction.operator_id.in_(operator_ids)).delete(synchronize_session=False)
+        db.query(ShopPurchase).filter(ShopPurchase.operator_id.in_(operator_ids)).delete(synchronize_session=False)
         db.query(WeeklyResult).filter(WeeklyResult.operator_id.in_(operator_ids)).delete(synchronize_session=False)
 
         # audit_logs — обнуляем ссылки (entity_id для нового контракта, operator_id для legacy),
