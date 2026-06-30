@@ -6561,6 +6561,7 @@ async function saveTestBuilder(publish) {
     } else {
       showToast('Тест сохранён', 'ok');
     }
+    swrInvalidate('tests:'); // создание/редактирование/назначение — список тестов и видимость операторам могли измениться
     renderTests();
   } catch(e) {
     showToast(e.message || 'Не удалось сохранить тест', 'error');
