@@ -138,14 +138,26 @@ def main() -> int:
                 {"ids": operator_ids},
             )
 
-        # operators.user_id ссылается на users.id (отдельно от users.operator_id
-        # -> operators.id — связь двусторонняя). Перед удалением users нужно
-        # сначала обнулить operators.user_id, иначе PostgreSQL не даст удалить
-        # строку users, на которую ещё ссылается operators.user_id.
+        # operators.user_id и operators.created_by_user_id оба ссылаются на
+        # users.id (отдельно от users.operator_id -> operators.id — связь
+        # двусторонняя). Перед удалением users нужно обнулить оба поля,
+        # иначе PostgreSQL не даст удалить строку users, на которую ещё
+        # ссылается какое-либо из этих полей operators (включая операторов,
+        # которые НЕ входят в список удаления, но были созданы тестовым
+        # пользователем — поэтому обновляем без фильтра по id операторов,
+        # только по совпадению user_id с удаляемыми пользователями).
         db.execute(
             text("UPDATE operators SET user_id = NULL WHERE id = ANY(:ids)"),
             {"ids": operator_ids},
         )
+        user_ids_to_delete = [row[0] for row in db.execute(
+            text("SELECT id FROM users WHERE operator_id = ANY(:ids)"), {"ids": operator_ids}
+        ).all()]
+        if user_ids_to_delete:
+            db.execute(
+                text("UPDATE operators SET created_by_user_id = NULL WHERE created_by_user_id = ANY(:uids)"),
+                {"uids": user_ids_to_delete},
+            )
 
         # Учётные записи операторов — удаляются целиком (тестовые логины не нужны)
         db.query(User).filter(User.operator_id.in_(operator_ids)).delete(synchronize_session=False)
