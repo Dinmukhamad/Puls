@@ -74,12 +74,18 @@ alembic revision --autogenerate -m "описание изменения"
 
 ---
 
-## Разовый импорт операторов из Excel
+## Ручной импорт операторов из Excel
 
-Для массового создания операторов группы `Группа 51` используйте скрипт:
+> **Административная утилита.** Не вызывается приложением в рантайме, не запускается
+> при деплое (отсутствует в `start.sh`, `Procfile`, `railpack.json`). Запускается
+> вручную администратором при необходимости массово добавить/обновить операторов
+> произвольной группы.
+
+Для массового создания операторов нужной группы используйте скрипт `scripts/import_operators.py`,
+указав название группы через `--group` (группа может быть любой, не привязана к конкретному номеру):
 
 ```bash
-python scripts/import_group51_operators.py --file /path/to/операторы.xlsx
+python scripts/import_operators.py --file /path/to/операторы.xlsx --group "Группа 7"
 ```
 
 По умолчанию это dry-run: скрипт проверяет файл, дубли и будущие изменения, но не пишет в БД.
@@ -87,7 +93,7 @@ python scripts/import_group51_operators.py --file /path/to/операторы.xl
 Для реальной записи:
 
 ```bash
-python scripts/import_group51_operators.py --file /path/to/операторы.xlsx --apply
+python scripts/import_operators.py --file /path/to/операторы.xlsx --group "Группа 7" --apply
 ```
 
 Скрипт требует `DATABASE_URL`, создаёт группу при отсутствии, создаёт/обновляет операторов, ставит `must_change_password=true` для временных паролей и сохраняет одноразовый CSV с доступами в `secure_outputs/`. Этот каталог не коммитится.
