@@ -2954,3 +2954,146 @@ body.side-nav-collapsed .side-nav-toggle svg {
   .pr-save-banner { flex-direction: column; align-items: stretch; }
   .pr-save-banner-btn { width: 100%; }
 }
+
+/* ═══════════════════════════════════════════════════
+   RATING — Race tab (Гонка баллов)
+═══════════════════════════════════════════════════ */
+
+.race-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.race-title { font: 700 16px 'Inter', sans-serif; color: var(--text-primary); }
+.race-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+.race-place-badge {
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--bg-muted);
+  border-radius: 10px;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+.race-place-badge b { color: var(--accent-primary); }
+
+.race-filters-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+/* Chart scroll container */
+.race-chart-scroll {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.race-chart {
+  display: flex;
+  position: relative;
+}
+.race-axis-labels {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-right: 10px;
+  flex-shrink: 0;
+  width: 40px;
+}
+.race-axis-tick {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding-bottom: 0;
+}
+.race-bars-area {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  padding: 0 12px;
+  border-left: 1px solid var(--border-default);
+}
+.race-grid-line {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: var(--border-soft);
+}
+.race-col {
+  position: relative;
+  flex-shrink: 0;
+  height: 100%;
+}
+.race-bar {
+  position: absolute;
+  left: 0; right: 0;
+  border-radius: 8px 8px 0 0;
+  border: 1.5px solid;
+  transition: height .5s ease;
+}
+.race-bar-me {
+  border-width: 2px;
+}
+.race-car {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  transition: bottom .5s ease;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.15));
+}
+.race-points-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font: 700 11px 'Inter', sans-serif;
+  color: var(--text-primary);
+  white-space: nowrap;
+  transition: bottom .5s ease;
+}
+.race-x-label {
+  position: absolute;
+  bottom: -34px;
+  left: 50%;
+  transform: translateX(-50%);
+  font: 600 12px 'Inter', sans-serif;
+  color: var(--text-secondary);
+  text-align: center;
+  white-space: nowrap;
+}
+.race-x-label-me { color: var(--accent-primary); }
+.race-you-tag {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  margin-top: 2px;
+}
+
+.race-note {
+  font-size: 12px;
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+.race-hint {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.race-hint b { color: var(--accent-primary); }
+
+@media (max-width: 700px) {
+  .race-bars-area { gap: 16px; }
+  .race-col { width: 48px !important; }
+}
