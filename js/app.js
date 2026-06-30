@@ -142,10 +142,18 @@ function initialRouteForRole(role) {
   const hashRoute = parseStoredView(location.hash);
   if (hashRoute.view === 'coins') return { view: 'coins', tab: normalizeCoinTab(hashRoute.tab) };
   if (LEGACY_COIN_VIEW_TAB[hashRoute.view]) return { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[hashRoute.view] };
+  // ВАЖНО: до сих пор здесь обрабатывался только частный случай 'coins' —
+  // любой другой раздел (rating, shop, tests, ...) из hash игнорировался,
+  // и F5 всегда откатывал на дефолтный раздел. Теперь любой непустой view
+  // из hash восстанавливается как есть.
+  if (hashRoute.view) return { view: hashRoute.view, tab: hashRoute.tab };
 
   const savedRoute = parseStoredView(localStorage.getItem('pulse-last-view'));
   if (savedRoute.view === 'coins') return { view: 'coins', tab: normalizeCoinTab(savedRoute.tab) };
   if (LEGACY_COIN_VIEW_TAB[savedRoute.view]) return { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[savedRoute.view] };
+  // То же самое для localStorage-фоллбэка (срабатывает, когда hash пуст,
+  // например при заходе по чистому "/" без сохранённого hash в адресной строке).
+  if (savedRoute.view) return { view: savedRoute.view, tab: savedRoute.tab };
 
   return { view: isAdmin(role) ? 'summary' : 'cabinet', tab: '' };
 }
