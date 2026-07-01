@@ -98,6 +98,19 @@ def _operator_for_user(db: Session, user: User) -> Optional[Operator]:
     return None
 
 
+from datetime import date as _date
+
+def _tenure_days(operator) -> int | None:
+    """Стаж оператора в днях от start_date (или created_at) до сегодня."""
+    if not operator:
+        return None
+    today = _date.today()
+    start = operator.start_date or (operator.created_at.date() if operator.created_at else None)
+    if not start:
+        return None
+    return max(0, (today - start).days)
+
+
 def _safe_level_badge(db: Session, operator) -> dict | None:
     """Безопасный вызов — не роняет весь список если уровень не удаётся получить."""
     try:
@@ -133,6 +146,8 @@ def _user_out(db: Session, user: User, level_cache: dict | None = None) -> dict:
         "must_change_password": user.must_change_password,
         "can_manage_operators": user.can_manage_operators,
         "created_at": user.created_at,
+        "tenure_days": _tenure_days(operator),
+        "start_date": operator.start_date.isoformat() if operator and operator.start_date else None,
     }
 
 

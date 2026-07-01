@@ -58,6 +58,8 @@ class UserReadOut(BaseModel):
     can_manage_operators: bool
     created_at: datetime
     rate: Optional[float] = None
+    tenure_days: Optional[int] = None
+    start_date: Optional[str] = None
 
 
 class UserListOut(BaseModel):
