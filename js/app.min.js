@@ -1833,16 +1833,12 @@ function renderUsersPage() {
     const list = filteredOps();
     return `
       <div class="table-wrap">
-        <table class="data-table">
+        <table class="data-table users-table-compact">
           <thead><tr>
-            <th>ФИО</th>
-            <th>Email</th>
-            <th>Роль</th>
-            <th>Группа</th>
-            <th>Ставка</th>
-            <th>Уровень</th>
+            <th>Сотрудник</th>
+            <th>Роль / Группа</th>
+            <th>Ставка / Уровень</th>
             <th>Статус</th>
-            <th>Дата</th>
             <th>Действия</th>
           </tr></thead>
           <tbody>
@@ -1850,18 +1846,21 @@ function renderUsersPage() {
               const dismissed = isDismissed(o);
               return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}">
                 <td class="name-cell">
-                  ${esc(o.full_name)}
+                  <div class="user-cell-name">${esc(o.full_name)}</div>
+                  ${o.email ? `<div class="user-cell-sub">${esc(o.email)}</div>` : ''}
                 </td>
-                <td>${o.email ? esc(o.email) : '<span class="cell-muted">—</span>'}</td>
-                <td>${roleBadge(o.role)}</td>
-                <td>${o.group_name ? esc(o.group_name) : '<span class="cell-muted">—</span>'}</td>
-                <td>${o.role === 'operator' ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">—</span>'}</td>
-                <td>${levelBadgeHtml(o.level)}</td>
+                <td>
+                  <div>${roleBadge(o.role)}</div>
+                  ${o.group_name ? `<div class="user-cell-sub" style="margin-top:3px">${esc(o.group_name)}</div>` : ''}
+                </td>
+                <td>
+                  <div>${o.role === 'operator' ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">—</span>'}</div>
+                  ${o.role === 'operator' && o.level ? `<div style="margin-top:3px">${levelBadgeHtml(o.level)}</div>` : ''}
+                </td>
                 <td>${userStatusBadge(o.status)}</td>
-                <td>${fmtDate(o.created_at)}</td>
                 <td>${operatorActions(o)}</td>
               </tr>`;
-            }).join('') : '<tr><td colspan="8" class="empty-line">Нет пользователей</td></tr>'}
+            }).join('') : '<tr><td colspan="5" class="empty-line">Нет пользователей</td></tr>'}
           </tbody>
         </table>
       </div>`;

@@ -3640,6 +3640,28 @@ body.role-operator {
 .level-badge-lg { min-height: 26px; padding: 4px 10px; font-size: 12px; margin-left: 0; }
 .level-badge-mini { min-height: 18px; padding: 2px 6px; font-size: 10px; margin-left: 4px; }
 .level-card { margin: 18px 0; }
+/* ── Compact users table ─────────────────────────────────────── */
+.user-cell-name {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+.user-cell-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.users-table-compact th:nth-child(1) { width: 28%; }
+.users-table-compact th:nth-child(2) { width: 20%; }
+.users-table-compact th:nth-child(3) { width: 18%; }
+.users-table-compact th:nth-child(4) { width: 10%; }
+.users-table-compact th:nth-child(5) { width: 12%; }
+
 .rate-badge {
   display: inline-flex;
   align-items: center;
