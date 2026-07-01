@@ -1852,13 +1852,15 @@ function renderUsersPage() {
           <thead><tr>
             <th>Сотрудник</th>
             <th>Роль / Группа</th>
-            <th>Ставка / Уровень</th>
-            <th>Статус</th>
-            <th>Действия</th>
+            <th class="tc">Ставка</th>
+            <th>Уровень</th>
+            <th class="tc">Статус</th>
+            <th class="tc">Действия</th>
           </tr></thead>
           <tbody>
             ${list.length ? list.map(o => {
               const dismissed = isDismissed(o);
+              const isOp = o.role === 'operator';
               return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}">
                 <td class="name-cell">
                   <div class="user-cell-name">${esc(o.full_name)}</div>
@@ -1866,16 +1868,18 @@ function renderUsersPage() {
                 </td>
                 <td>
                   <div>${roleBadge(o.role)}</div>
-                  ${o.group_name ? `<div class="user-cell-sub" style="margin-top:3px">${esc(o.group_name)}</div>` : ''}
+                  ${o.group_name ? `<div class="user-cell-sub" style="margin-top:4px">${esc(o.group_name)}</div>` : ''}
+                </td>
+                <td class="tc">
+                  ${isOp ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">—</span>'}
                 </td>
                 <td>
-                  <div>${o.role === 'operator' ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">—</span>'}</div>
-                  ${o.role === 'operator' && o.level ? `<div style="margin-top:3px">${levelBadgeHtml(o.level)}</div>` : ''}
+                  ${isOp ? levelBadgeHtml(o.level) : '<span class="cell-muted">—</span>'}
                 </td>
-                <td>${userStatusBadge(o.status)}</td>
-                <td>${operatorActions(o)}</td>
+                <td class="tc">${userStatusBadge(o.status)}</td>
+                <td class="tc">${operatorActions(o)}</td>
               </tr>`;
-            }).join('') : '<tr><td colspan="5" class="empty-line">Нет пользователей</td></tr>'}
+            }).join('') : '<tr><td colspan="6" class="empty-line">Нет пользователей</td></tr>'}
           </tbody>
         </table>
       </div>`;
