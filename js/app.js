@@ -1341,7 +1341,8 @@ async function renderRatingOverviewTab(el) {
     };
 
     async function loadDynCard() {
-      const opId = selectedOpId || null;
+      // Для оператора используем его operator_id; для admin/manager — selectedOpId
+      const opId = canSelectOperator ? (selectedOpId || null) : (STATE.user?.operator_id || null);
       try {
         const url = `/api/rating/operator-dynamics?mode=${dynMode}&limit=4${opId ? '&operator_id='+opId : ''}`;
         dynData = await api._req('GET', url);
@@ -1358,7 +1359,10 @@ async function renderRatingOverviewTab(el) {
       }
       const items = data.items;
       if (!items.length) {
-        return renderDynEmpty('Нет данных для построения динамики.<br><small>Динамика появится после загрузки рабочих показателей.</small>');
+        const reason = (canSelectOperator && !dynData?.operator_id)
+          ? 'Выберите оператора для просмотра динамики.'
+          : 'Нет данных для построения динамики.<br><small>Динамика появится после загрузки рабочих показателей (Excel-отчёта).</small>';
+        return renderDynEmpty(reason);
       }
 
       // Определяем значения по режиму
