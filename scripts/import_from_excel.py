@@ -105,13 +105,14 @@ def _gen_username(full_name: str, existing_usernames: set[str]) -> str:
 
 
 def _gen_password() -> str:
+    # bcrypt ограничивает пароль 72 байтами — держим 12 символов латиницы
     alphabet = string.ascii_letters + string.digits
     while True:
         pwd = "".join(secrets.choice(alphabet) for _ in range(12))
         if (any(c.isupper() for c in pwd) and
                 any(c.islower() for c in pwd) and
                 any(c.isdigit() for c in pwd)):
-            return pwd
+            return pwd[:72]
 
 
 def read_excel(path: str) -> list[ExcelRow]:
