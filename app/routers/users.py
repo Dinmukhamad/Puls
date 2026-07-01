@@ -152,7 +152,7 @@ def _user_out(db: Session, user: User, level_cache: dict | None = None) -> dict:
 
 
 def _visible_user_stmt(db: Session, actor: User):
-    stmt = select(User)
+    stmt = select(User).where(User.status != "deleted")  # скрываем удалённых операторов
     if actor.role == "manager":
         stmt = stmt.where(User.role.in_(("operator", "supervisor")))
     elif actor.role == "supervisor":
