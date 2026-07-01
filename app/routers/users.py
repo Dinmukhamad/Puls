@@ -127,6 +127,7 @@ def _user_out(db: Session, user: User, level_cache: dict | None = None) -> dict:
         "group_name": _group_name(db, user, operator),
         "operator_id": user.operator_id,
         "level": level,
+        "rate": float(operator.rate) if operator and operator.rate is not None else None,
         "status": _user_status(user),
         "is_active": user.is_active,
         "must_change_password": user.must_change_password,

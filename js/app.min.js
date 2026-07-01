@@ -3191,15 +3191,16 @@ function rateBadgeHtml(rate, operatorId) {
     const btn = operatorId ? ` <button class="btn-link" style="font-size:11px;color:var(--warning)" onclick="showSetRateModal(${operatorId})">Задать</button>` : '';
     return `<span class="rate-badge rate-none">—${btn}</span>`;
   }
-  const cls = rate === 0.5 ? 'rate-half' : rate === 0.75 ? 'rate-three-q' : 'rate-full';
+  const r = parseFloat(rate); // защита от строк и Decimal
+  const cls = r === 0.5 ? 'rate-half' : r === 0.75 ? 'rate-three-q' : 'rate-full';
   const btn = operatorId ? ` <button class="btn-link" style="font-size:11px" onclick="showSetRateModal(${operatorId})">✎</button>` : '';
-  return `<span class="rate-badge ${cls}">${rate}${btn}</span>`;
+  return `<span class="rate-badge ${cls}">${r}${btn}</span>`;
 }
 
 async function showSetRateModal(operatorId) {
   const op = STATE.users.find(u => u.operator_id === operatorId) || STATE.adminOperators.find(o => o.id === operatorId);
   const name = op?.full_name || `Оператор #${operatorId}`;
-  const current = op?.rate ?? null;
+  const current = op?.rate != null ? parseFloat(op.rate) : null;
 
   showModal(`
     <div class="acc-modal">

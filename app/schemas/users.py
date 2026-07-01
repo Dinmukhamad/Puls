@@ -57,6 +57,7 @@ class UserReadOut(BaseModel):
     must_change_password: bool
     can_manage_operators: bool
     created_at: datetime
+    rate: Optional[float] = None
 
 
 class UserListOut(BaseModel):
