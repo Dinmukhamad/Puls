@@ -106,8 +106,15 @@ def _safe_level_badge(db: Session, operator) -> dict | None:
         return None
 
 
-def _user_out(db: Session, user: User) -> dict:
+def _user_out(db: Session, user: User, level_cache: dict | None = None) -> dict:
     operator = _operator_for_user(db, user)
+    # level берём из кеша (preloaded) или пропускаем — не делаем N+1 запросов
+    if level_cache is not None and operator and user.role == "operator":
+        level = level_cache.get(operator.id)
+    elif operator and user.role == "operator":
+        level = _safe_level_badge(db, operator)
+    else:
+        level = None
     return {
         "id": user.id,
         "full_name": user.full_name,
@@ -119,7 +126,7 @@ def _user_out(db: Session, user: User) -> dict:
         "group_id": user.group_id or (operator.group_id if operator else None),
         "group_name": _group_name(db, user, operator),
         "operator_id": user.operator_id,
-        "level": _safe_level_badge(db, operator) if operator and user.role == "operator" else None,
+        "level": level,
         "status": _user_status(user),
         "is_active": user.is_active,
         "must_change_password": user.must_change_password,
@@ -171,10 +178,35 @@ def list_users(
         stmt = stmt.where(or_(User.full_name.ilike(q), User.username.ilike(q), User.email.ilike(q)))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     users = list(db.scalars(stmt.order_by(User.created_at.desc()).offset((page - 1) * limit).limit(limit)))
+
+    # Preload operator level assignments одним запросом — избегаем N+1
+    # Собираем operator_id всех операторов в текущей странице
+    operator_ids = [u.operator_id for u in users if u.operator_id and u.role == "operator"]
+    level_cache: dict = {}
+    if operator_ids:
+        try:
+            from app.models.entities import OperatorLevelAssignment, OperatorLevel
+            rows = list(db.execute(
+                select(OperatorLevelAssignment, OperatorLevel)
+                .join(OperatorLevel, OperatorLevelAssignment.level_id == OperatorLevel.id)
+                .where(OperatorLevelAssignment.operator_id.in_(operator_ids))
+            ))
+            for assignment, level in rows:
+                level_cache[assignment.operator_id] = {
+                    "id": level.id,
+                    "code": level.code,
+                    "name": level.name,
+                    "color": level.color,
+                    "icon": level.icon,
+                    "sort_order": level.sort_order,
+                }
+        except Exception as e:
+            logger.error(f"[list_users] ошибка загрузки уровней: {e}")
+
     items = []
     for u in users:
         try:
-            items.append(_user_out(db, u))
+            items.append(_user_out(db, u, level_cache=level_cache))
         except Exception as e:
             logger.error(f"[list_users] ошибка при сборке user_id={u.id}: {e}", exc_info=True)
     return {"items": items, "total": total, "page": page, "limit": limit}
