@@ -323,6 +323,20 @@ function initNav() {
   }
 }
 
+// Кеш отрендеренных разделов — не перерисовываем если уже есть актуальный HTML
+const VIEW_CACHE = {};
+const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report']); // эти разделы всегда рендерим заново
+
+function invalidateViewCache(view) {
+  if (view) delete VIEW_CACHE[view];
+  else Object.keys(VIEW_CACHE).forEach(k => delete VIEW_CACHE[k]);
+}
+
+// Вызывается после обновления данных — сбрасываем кеш затронутых разделов
+function onDataUpdated(views) {
+  (views || ['rating','cabinet','summary','operators','coins']).forEach(v => invalidateViewCache(v));
+}
+
 function navigateTo(view, options = {}) {
   if (LEGACY_COIN_VIEW_TAB[view]) {
     options = { ...options, tab: LEGACY_COIN_VIEW_TAB[view] };
@@ -346,6 +360,16 @@ function navigateTo(view, options = {}) {
 }
 
 function renderView(view) {
+  const el = document.getElementById(`view-${view}`);
+
+  // Используем кешированный HTML если доступен (кроме тех разделов что всегда свежие)
+  if (el && VIEW_CACHE[view] && !VIEW_CACHE_SKIP.has(view)) {
+    el.innerHTML = VIEW_CACHE[view];
+    // Перезапускаем интерактивность после восстановления из кеша
+    _reattachViewListeners(view, el);
+    return;
+  }
+
   switch (view) {
     case 'cabinet':  renderCabinet();  break;
     case 'rating':   renderRating();   break;
@@ -361,6 +385,25 @@ function renderView(view) {
     case 'period-report': renderPeriodReport(); break;
     case 'analytics': renderAnalytics(); break;
     case 'tests':    renderTests();    break;
+  }
+}
+
+// После рендера сохраняем HTML в кеш
+function _cacheViewHtml(view) {
+  if (VIEW_CACHE_SKIP.has(view)) return;
+  const el = document.getElementById(`view-${view}`);
+  if (el) VIEW_CACHE[view] = el.innerHTML;
+}
+
+// Восстановление слушателей после кеша — для разделов с динамикой
+function _reattachViewListeners(view, el) {
+  // Рейтинг: запускаем динамику если есть dyn-body
+  if (view === 'rating') {
+    const dynBox = el.querySelector('#dyn-body');
+    if (dynBox && window._setDynModeInternal) {
+      // Блок динамики уже отрендерен — просто убедимся что данные свежие
+      if (typeof loadDynCard !== 'undefined') setTimeout(() => loadDynCard(), 50);
+    }
   }
 }
 
@@ -534,6 +577,7 @@ async function loadData(role) {
 }
 
 async function reloadData() {
+  invalidateViewCache(); // данные изменились — все разделы нужно перерисовать
   await loadData(STATE.user?.role);
   renderView(STATE.currentView);
 }
@@ -1337,6 +1381,11 @@ async function renderRatingOverviewTab(el) {
     // expose to global setDynMode
     window._setDynModeInternal = async function(mode) {
       dynMode = mode;
+      // Обновляем визуально активную вкладку немедленно
+      document.querySelectorAll('.dyn-tab').forEach(btn => {
+        const m = btn.getAttribute('onclick')?.match(/setDynMode\('(\w+)'\)/)?.[1];
+        if (m) btn.className = 'dyn-tab' + (m === mode ? ' dyn-tab-active' : '');
+      });
       await loadDynCard();
     };
 
@@ -1692,14 +1741,6 @@ async function renderRatingOverviewTab(el) {
               <div id="cmp-body">${renderComparison(personal.myCmp, cmpMetric)}</div>
             </div>
             <div class="rating-card rating-card-body">
-              <div class="rcard-title-row">
-                <span class="rcard-title">Динамика</span>
-                <div class="metric-tabs" id="dyn-tabs">
-                  <button class="metric-tab ${dynType === 'place' ? 'active' : ''}" data-type="place">Место</button>
-                  <button class="metric-tab ${dynType === 'points' ? 'active' : ''}" data-type="points">Баллы</button>
-                  <button class="metric-tab ${dynType === 'coins' ? 'active' : ''}" data-type="coins">Коины</button>
-                </div>
-              </div>
               <div id="dyn-body"><div class="loading-state" style="min-height:120px"><div class="loading-spinner"></div></div></div>
             </div>
           </div>
@@ -1766,17 +1807,7 @@ async function renderRatingOverviewTab(el) {
         });
       });
 
-      el.querySelectorAll('#dyn-tabs .metric-tab').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          el.querySelectorAll('#dyn-tabs .metric-tab').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          dynType = btn.dataset.type;
-          const body = el.querySelector('#dyn-body');
-          if (body) body.innerHTML = '<div class="rating-inline-skeleton"></div>';
-          personal.myDyn = await fetchDynamicsData(selectedOpId, dynType);
-          loadDynCard();
-        });
-      });
+      // dyn tabs are inside renderDynamics — handled by setDynMode
 
       el.querySelector('#rating-op-select')?.addEventListener('change', async e => {
         selectedOpId = e.target.value ? +e.target.value : null;
@@ -1787,7 +1818,10 @@ async function renderRatingOverviewTab(el) {
 
     buildPage();
     // Загружаем блок динамики после первичного рендера
-    setTimeout(() => loadDynCard(), 150);
+    setTimeout(() => {
+      loadDynCard();
+      _cacheViewHtml('rating'); // кешируем HTML после рендера
+    }, 200);
 
   } catch(err) {
     const content = el.querySelector('.rating-page');
