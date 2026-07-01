@@ -33,8 +33,13 @@ engine = create_engine(
     _db_url,
     pool_pre_ping=True,
     connect_args=_connect_args,
-    # Для PostgreSQL — пул соединений
-    **({"pool_size": 5, "max_overflow": 10} if not _is_sqlite else {}),
+    # Для PostgreSQL — оптимизированный пул соединений
+    **({
+        "pool_size": 10,          # базовый размер пула (было 5)
+        "max_overflow": 20,       # до 30 одновременных соединений (было 10)
+        "pool_recycle": 1800,     # пересоздавать соединения каждые 30 мин
+        "pool_timeout": 10,       # не ждать соединение дольше 10с
+    } if not _is_sqlite else {}),
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)

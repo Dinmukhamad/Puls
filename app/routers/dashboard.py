@@ -95,28 +95,24 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
         for tx, op, user in tx_rows
     ]
 
+    # Два счётчика операторов одним запросом
     total_ops = db.scalar(select(func.count(Operator.id))) or 0
-    active_ops = db.scalar(
-        select(func.count(Operator.id)).where(
-            Operator.participation_status == "participating",
-            Operator.employment_status == "active",
-            Operator.is_active.is_(True),
-        )
-    ) or 0
+    active_ops = len(active_operators)  # уже загружены выше
+
+    # Все счётчики покупок одним запросом вместо трёх отдельных COUNT
+    purchase_counts = dict(db.execute(
+        select(ShopPurchase.status, func.count(ShopPurchase.id))
+        .group_by(ShopPurchase.status)
+    ))
+    pending_cnt = (purchase_counts.get("pending") or 0) + (purchase_counts.get("new") or 0)
 
     return DashboardRead(
         total_operators=total_ops,
         active_operators=active_ops,
         coins_earned_this_week=coins_this_week,
-        pending_purchases_count=db.scalar(
-            select(func.count(ShopPurchase.id)).where(ShopPurchase.status.in_(["pending", "new"]))
-        ) or 0,
-        approved_purchases_count=db.scalar(
-            select(func.count(ShopPurchase.id)).where(ShopPurchase.status == "approved")
-        ) or 0,
-        rejected_purchases_count=db.scalar(
-            select(func.count(ShopPurchase.id)).where(ShopPurchase.status == "rejected")
-        ) or 0,
+        pending_purchases_count=pending_cnt,
+        approved_purchases_count=purchase_counts.get("approved") or 0,
+        rejected_purchases_count=purchase_counts.get("rejected") or 0,
         total_lateness_week=lateness_week,
         total_violations_week=violations_week,
         top_5_operators=top_rows,

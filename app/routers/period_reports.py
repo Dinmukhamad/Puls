@@ -15,6 +15,7 @@ import json as _json
 from app.services.analytics_cache import cache_clear_all
 from app.services.period_reports import build_daily_metric_rows, calculate_period_report, normalize_name
 from app.services.work_norms import calculate_norm_for_period, MAX_HOURS_POINTS
+from app.services.rating import rating_cache_invalidate
 
 router = APIRouter(prefix="/reports", tags=["period-reports"])
 MAX_REPORT_FILE_BYTES = 15 * 1024 * 1024
@@ -512,6 +513,7 @@ def save_period_report(
 
     db.commit()
     cache_clear_all()  # новый/обновлённый расчёт периода — сбрасываем кеш аналитики
+    rating_cache_invalidate()  # рейтинг тоже изменился
 
     return {
         "ok": True,

@@ -15,6 +15,7 @@
 """
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from datetime import date
 from typing import Dict, List, Optional, Tuple
@@ -22,8 +23,28 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.entities import Operator, PeriodReport
-from app.services.operator_levels import operator_level_badge
+from app.models.entities import Operator, OperatorLevel, OperatorLevelAssignment, PeriodReport
+
+# Простой in-memory кеш рейтинга — пересчёт тяжёлый (все PeriodReport + снапшоты),
+# а данные меняются редко (только после сохранения расчёта). Кеш живёт 60 секунд.
+_RATING_CACHE: Dict = {}
+_RATING_CACHE_TTL = 60  # секунд
+
+
+def _rating_cache_get() -> Optional[List[Dict]]:
+    entry = _RATING_CACHE.get("rows")
+    if entry and (time.time() - entry["ts"]) < _RATING_CACHE_TTL:
+        return entry["data"]
+    return None
+
+
+def _rating_cache_set(rows: List[Dict]) -> None:
+    _RATING_CACHE["rows"] = {"data": rows, "ts": time.time()}
+
+
+def rating_cache_invalidate() -> None:
+    """Вызывать после сохранения нового PeriodReport."""
+    _RATING_CACHE.clear()
 
 
 def latest_period(db: Session) -> Optional[Tuple[date, date]]:
@@ -64,6 +85,11 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
     сохранённому расчёту каждого оператора (т.к. разные операторы могут быть
     рассчитаны за разные периоды через «Расчёт периода»).
     """
+    # Проверяем in-memory кеш — рейтинг тяжёлый, данные меняются редко
+    cached = _rating_cache_get()
+    if cached is not None:
+        return cached
+
     grouped = _all_reports_grouped(db)
     if not grouped:
         return []
@@ -119,6 +145,22 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
             snapshot_cache[as_of] = {op_id: pos for pos, (op_id, _pts) in enumerate(snap, start=1)}
         return snapshot_cache[as_of].get(operator_id)
 
+    # Bulk-загрузка уровней ОДНИМ запросом вместо N вызовов operator_level_badge
+    op_ids = [op.id for op, _, _ in entries]
+    level_rows = list(db.execute(
+        select(OperatorLevelAssignment, OperatorLevel)
+        .join(OperatorLevel, OperatorLevelAssignment.level_id == OperatorLevel.id)
+        .where(OperatorLevelAssignment.operator_id.in_(op_ids))
+    )) if op_ids else []
+    level_map = {
+        assignment.operator_id: {
+            "id": level.id, "code": level.code, "name": level.name,
+            "color": level.color, "icon": level.icon, "sort_order": level.sort_order,
+        }
+        for assignment, level in level_rows
+    }
+    default_level = {"id": None, "code": "trainee", "name": "Стажёр", "color": "#64748B", "icon": "seedling", "sort_order": 10}
+
     output = []
     for position, (operator, report, reports) in enumerate(entries, start=1):
         prev_report = reports[1] if len(reports) > 1 else None
@@ -142,8 +184,9 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
             "rank_delta": rank_delta,
             "period_start": str(report.period_start),
             "period_end": str(report.period_end),
-            "level": operator_level_badge(db, operator),
+            "level": level_map.get(operator.id, default_level),
         })
+    _rating_cache_set(output)
     return output
 
 

@@ -12,7 +12,9 @@
    (если есть), а затем тихо обновляет их в фоне и уведомляет подписчика.
 ══════════════════════════════════════ */
 const SWR_PREFIX = 'puls-swr:';
-const SWR_DEFAULT_TTL_MS = 30_000; // считается "свежим" 30с — после этого фон обновит при следующем заходе
+const SWR_DEFAULT_TTL_MS = 120_000;  // 2 минуты — динамичные данные (рейтинг, дашборд)
+const SWR_STATIC_TTL_MS  = 600_000; // 10 минут — статичные (уровни, магазин, группы)
+const SWR_USER_TTL_MS    = 300_000; // 5 минут — пользователи
 const SWR_VERSION = 'tenure-display-1'; // при смене версии весь кеш сбрасывается
 (function() {
   const stored = sessionStorage.getItem('puls-swr-version');
@@ -427,6 +429,12 @@ async function bootApp() {
   document.body.classList.remove('must-change-password');
 
   await loadData(role);
+  // Lazy preload данных которые не нужны сразу, но могут понадобиться скоро
+  if (isAdmin(role)) {
+    setTimeout(() => {
+      if (!STATE.groups?.length) api.listGroups().catch(() => []).then(g => STATE.groups = g);
+    }, 2000); // через 2 секунды после загрузки
+  }
 
   // Restore last viewed section after F5 reload
   const restoredRoute = initialRouteForRole(role);
@@ -469,11 +477,12 @@ async function loadData(role) {
   };
 
   const tasks = [
-    swrFetch('rating:list', () => api.getRating().catch(() => ({ items: [] })), onRatingUpdate)
+    swrFetch('rating:list', () => api.getRating().catch(() => ({ items: [] })), onRatingUpdate, SWR_DEFAULT_TTL_MS)
       .then(r => STATE.rating = Array.isArray(r) ? r : (r.items || [])),
-    swrFetch('shop:items', () => api.listShopItems().catch(() => []))
+    swrFetch('shop:items', () => api.listShopItems().catch(() => []), null, SWR_STATIC_TTL_MS)
       .then(s => STATE.shopItems = s),
-    api.listOperatorLevels().catch(() => []).then(levels => STATE.operatorLevels = levels),
+    swrFetch('levels:list', () => api.listOperatorLevels().catch(() => []), null, SWR_STATIC_TTL_MS)
+      .then(levels => STATE.operatorLevels = levels),
   ];
   // myLevel и myOperator — только для операторов (у admin нет operator_id → всегда 403)
   if (role === 'operator' || role === 'supervisor') {
@@ -489,13 +498,13 @@ async function loadData(role) {
   }
   if (isAdmin(role)) {
     tasks.push(
-      swrFetch('dashboard:main', () => api.getDashboard().catch(() => null), onDashboardUpdate)
+      swrFetch('dashboard:main', () => api.getDashboard().catch(() => null), onDashboardUpdate, SWR_DEFAULT_TTL_MS)
         .then(d => STATE.dashboard = d)
     );
     tasks.push(
       swrFetch('dashboard:operators', () =>
         api.getDashboardOperators().catch(() => []),
-        onOperatorsUpdate
+        onOperatorsUpdate, SWR_USER_TTL_MS
       ).then(o => STATE.adminOperators = o)
     );
     tasks.push(
@@ -504,16 +513,14 @@ async function loadData(role) {
           console.error('[users:list] ошибка загрузки:', err?.message || err);
           return { items: [] };
         }),
-        onUsersUpdate
+        onUsersUpdate, SWR_USER_TTL_MS
       ).then(u => STATE.users = Array.isArray(u) ? u : (u.items || []))
     );
-    tasks.push(api.listPurchases().catch(() => []).then(p => STATE.purchases = p));
-    tasks.push(
-      swrFetch('dashboard:history', () =>
-        api.getDashboardHistory(50).catch(() => []),
-        onHistoryUpdate
-      ).then(h => STATE.history = h)
-    );
+    // История транзакций — грузим лениво, не блокируем загрузку
+    swrFetch('dashboard:history', () =>
+      api.getDashboardHistory(50).catch(() => []),
+      onHistoryUpdate
+    ).then(h => { STATE.history = h; });
   }
   await Promise.all(tasks);
 }

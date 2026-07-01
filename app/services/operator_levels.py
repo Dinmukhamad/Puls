@@ -216,13 +216,22 @@ def level_matches(level: OperatorLevel, metrics: dict) -> bool:
     return all(_rule_ok(rule, metrics.get(rule.metric_code, 0)) for rule in required_rules)
 
 
+# Простой кеш active_levels на уровне сессии БД — identity map SQLAlchemy
+# уже кеширует объекты, но повторные вызовы всё равно делают SELECT.
+# Используем атрибут сессии как хранилище в рамках одного запроса.
 def active_levels(db: Session) -> list[OperatorLevel]:
-    return list(db.scalars(
+    cache_key = "_puls_active_levels_cache"
+    cached = getattr(db, cache_key, None)
+    if cached is not None:
+        return cached
+    result = list(db.scalars(
         select(OperatorLevel)
         .options(selectinload(OperatorLevel.rules))
         .where(OperatorLevel.is_active.is_(True))
         .order_by(OperatorLevel.sort_order.asc(), OperatorLevel.id.asc())
     ))
+    setattr(db, cache_key, result)
+    return result
 
 
 def calculate_auto_level(
