@@ -1836,7 +1836,6 @@ function renderUsersPage() {
         <table class="data-table">
           <thead><tr>
             <th>ФИО</th>
-            <th>Логин</th>
             <th>Email</th>
             <th>Роль</th>
             <th>Группа</th>
@@ -1853,7 +1852,6 @@ function renderUsersPage() {
                 <td class="name-cell">
                   ${esc(o.full_name)}
                 </td>
-                <td>${esc(o.login || o.username || '—')}</td>
                 <td>${o.email ? esc(o.email) : '<span class="cell-muted">—</span>'}</td>
                 <td>${roleBadge(o.role)}</td>
                 <td>${o.group_name ? esc(o.group_name) : '<span class="cell-muted">—</span>'}</td>
@@ -1863,7 +1861,7 @@ function renderUsersPage() {
                 <td>${fmtDate(o.created_at)}</td>
                 <td>${operatorActions(o)}</td>
               </tr>`;
-            }).join('') : '<tr><td colspan="9" class="empty-line">Нет пользователей</td></tr>'}
+            }).join('') : '<tr><td colspan="8" class="empty-line">Нет пользователей</td></tr>'}
           </tbody>
         </table>
       </div>`;
@@ -3449,13 +3447,25 @@ async function showAddOperatorModal() {
         <input id="new-user-password-confirm" class="form-input" type="password" placeholder="TempPassword123">
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Статус</label>
-      <select id="new-user-status" class="form-select">
-        <option value="active" selected>Активен</option>
-        <option value="inactive">Неактивен</option>
-        <option value="blocked">Заблокирован</option>
-      </select>
+    <div class="form-grid-2">
+      <div class="form-group" id="new-user-rate-field" style="display:none">
+        <label class="form-label">Ставка <span style="color:var(--danger)">*</span></label>
+        <select id="new-user-rate" class="form-select">
+          <option value="">— не указана —</option>
+          <option value="0.5">0.5 ставки</option>
+          <option value="0.75">0.75 ставки</option>
+          <option value="1.0">1.0 ставка</option>
+        </select>
+        <div class="form-hint">Используется для расчёта выполнения нормы часов</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Статус</label>
+        <select id="new-user-status" class="form-select">
+          <option value="active" selected>Активен</option>
+          <option value="inactive">Неактивен</option>
+          <option value="blocked">Заблокирован</option>
+        </select>
+      </div>
     </div>
     <div id="new-op-err" class="status-line" style="margin-top:8px"></div>
     <button id="create-operator-btn" class="btn-primary" style="width:100%;height:44px;margin-top:4px" onclick="submitAddOperator()" disabled>Создать пользователя</button>
@@ -3471,10 +3481,13 @@ async function showAddOperatorModal() {
     const pwd = document.getElementById('new-user-password')?.value || '';
     const confirm = document.getElementById('new-user-password-confirm')?.value || '';
     const needsGroup = role === 'operator' || role === 'supervisor';
+    const isOperator = role === 'operator';
     const field = document.getElementById('new-user-group-field');
     const required = document.getElementById('new-group-required');
+    const rateField = document.getElementById('new-user-rate-field');
     if (field) field.style.display = needsGroup ? '' : 'none';
     if (required) required.style.display = needsGroup ? '' : 'none';
+    if (rateField) rateField.style.display = isOperator ? '' : 'none';
     setText('new-role-hint', roleHint[role] || '');
     if (btn) btn.disabled = !(name && name.length >= 2 && login && pwd.length >= 8 && pwd === confirm && (!needsGroup || groupId));
   };
@@ -3495,6 +3508,8 @@ async function submitAddOperator() {
   const phone    = document.getElementById('new-user-phone')?.value?.trim() || null;
   const password = document.getElementById('new-user-password')?.value || '';
   const confirm  = document.getElementById('new-user-password-confirm')?.value || '';
+  const rateVal  = document.getElementById('new-user-rate')?.value || '';
+  const rate     = rateVal ? parseFloat(rateVal) : null;
   const err      = document.getElementById('new-op-err');
   const btn      = document.getElementById('create-operator-btn');
 
@@ -3523,6 +3538,15 @@ async function submitAddOperator() {
       confirm_password: confirm,
       status,
     });
+
+    // Сохраняем ставку если указана и это оператор
+    if (role === 'operator' && rate && result.operator_id) {
+      try {
+        await api._req('PATCH', `/api/work-norms/operators/${result.operator_id}/rate`, { rate });
+      } catch(e) {
+        console.warn('Не удалось сохранить ставку:', e.message);
+      }
+    }
 
     const credentialText = `Пользователь: ${result.full_name}\nРоль: ${roleLabel(result.role)}\nЛогин: ${result.login || result.username}\nВременный пароль: ${password}`;
 
