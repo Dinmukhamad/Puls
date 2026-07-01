@@ -355,7 +355,6 @@ def compute_operator_metrics(
         2,
     )
     # Пометим что hours_points ещё не заполнен — роутер подставит позже
-    m._hours_raw = m.total_hours  # сырые часы для fallback
 
     m.has_any_period_data = any([
         m.quality_calls_count > 0,
@@ -761,7 +760,6 @@ def aggregate_daily_rows(daily_rows: List[dict]) -> OperatorPeriodMetrics:
         2,
     )
     # Пометим что hours_points ещё не заполнен — роутер подставит позже
-    m._hours_raw = m.total_hours  # сырые часы для fallback
 
     m.has_any_period_data = any([
         m.quality_calls_count > 0,
