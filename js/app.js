@@ -475,11 +475,14 @@ async function loadData(role) {
       .then(s => STATE.shopItems = s),
     api.listOperatorLevels().catch(() => []).then(levels => STATE.operatorLevels = levels),
   ];
-  tasks.push(api.myLevel().catch(() => null).then(level => {
-    STATE.myLevel = level;
-    setText('side-level', level?.level?.name || '—');
-  }));
-  tasks.push(api.myOperator().catch(() => null).then(op => { STATE.myOperator = op; }));
+  // myLevel и myOperator — только для операторов (у admin нет operator_id → всегда 403)
+  if (role === 'operator' || role === 'supervisor') {
+    tasks.push(api.myLevel().catch(() => null).then(level => {
+      STATE.myLevel = level;
+      setText('side-level', level?.level?.name || '—');
+    }));
+    tasks.push(api.myOperator().catch(() => null).then(op => { STATE.myOperator = op; }));
+  }
   if (role === 'operator') {
     tasks.push(api.myWallet().catch(() => null).then(w => STATE.wallet = w)); // личный баланс — всегда свежий, без кеша
     tasks.push(api.listPurchases().catch(() => []).then(p => STATE.purchases = p));
@@ -497,7 +500,10 @@ async function loadData(role) {
     );
     tasks.push(
       swrFetch('users:list', () =>
-        api.listUsers({ limit: 200 }).catch(() => ({ items: [] })),
+        api.listUsers({ limit: 200 }).catch(err => {
+          console.error('[users:list] ошибка загрузки:', err?.message || err);
+          return { items: [] };
+        }),
         onUsersUpdate
       ).then(u => STATE.users = Array.isArray(u) ? u : (u.items || []))
     );

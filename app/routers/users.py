@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, or_, select
@@ -168,7 +171,13 @@ def list_users(
         stmt = stmt.where(or_(User.full_name.ilike(q), User.username.ilike(q), User.email.ilike(q)))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     users = list(db.scalars(stmt.order_by(User.created_at.desc()).offset((page - 1) * limit).limit(limit)))
-    return {"items": [_user_out(db, u) for u in users], "total": total, "page": page, "limit": limit}
+    items = []
+    for u in users:
+        try:
+            items.append(_user_out(db, u))
+        except Exception as e:
+            logger.error(f"[list_users] ошибка при сборке user_id={u.id}: {e}", exc_info=True)
+    return {"items": items, "total": total, "page": page, "limit": limit}
 
 
 @router.post("", response_model=UserReadOut)

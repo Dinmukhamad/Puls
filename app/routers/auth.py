@@ -65,6 +65,36 @@ def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+@router.get("/debug-me")
+def debug_me(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Диагностика текущей сессии — возвращает состояние пользователя без блокировок."""
+    settings = get_settings()
+    cookie_token = request.cookies.get(settings.auth_cookie_name)
+    if not cookie_token:
+        return {"status": "no_cookie"}
+    try:
+        from jose import jwt as _jwt
+        payload = _jwt.decode(cookie_token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        user_id = int(payload.get("sub"))
+    except Exception as e:
+        return {"status": "invalid_token", "error": str(e)}
+    user = db.get(User, user_id)
+    if not user:
+        return {"status": "user_not_found", "user_id": user_id}
+    return {
+        "status": "ok",
+        "user_id": user.id,
+        "username": user.username,
+        "role": user.role,
+        "is_active": user.is_active,
+        "must_change_password": user.must_change_password,
+        "can_manage_operators": user.can_manage_operators,
+    }
+
+
 @router.post("/fix-session")
 def fix_session(
     response: Response,
