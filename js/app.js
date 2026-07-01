@@ -4558,6 +4558,16 @@ function renderOperatorsTableBlock(opsTable) {
   </div>`;
 }
 
+function normCompletionHtml(o) {
+  if (o.norm_completion_percent == null) {
+    if (o.rate == null) return '<span class="cell-muted" title="Ставка не указана">—</span>';
+    return '<span class="cell-muted">нет нормы</span>';
+  }
+  const pct = o.norm_completion_percent;
+  const color = pct >= 100 ? 'var(--success)' : pct >= 80 ? 'var(--warning)' : 'var(--danger)';
+  return `<span style="color:${color};font-weight:600">${pct.toFixed(1)}%</span>`;
+}
+
 function renderOpsTable(items, sortKey, sortDir) {
   if (!items.length) return '<div class="empty-line">Нет операторов, удовлетворяющих фильтрам</div>';
   const sorted = [...items].sort((a, b) => {
@@ -4566,17 +4576,24 @@ function renderOpsTable(items, sortKey, sortDir) {
   });
   const arrow = dir => dir === 'desc' ? ' ↓' : ' ↑';
   const sortAttr = k => k === sortKey ? arrow(sortDir) : '';
+  const hasNorm = items.some(o => o.individual_norm_hours != null);
 
   return `<div class="table-wrap"><table class="data-table">
     <thead><tr>
       <th>#</th><th>Оператор</th><th>Группа</th>
       <th class="num sortable" data-sort="calls_total">Звонки${sortAttr('calls_total')}</th>
-      <th class="num">Итог ч.</th><th class="num">База ч.</th>
+      <th class="num">Факт ч.</th>
+      ${hasNorm ? `
+      <th class="num">Ставка</th>
+      <th class="num sortable" data-sort="individual_norm_hours">Норма${sortAttr('individual_norm_hours')}</th>
+      <th class="num sortable" data-sort="norm_completion_percent">Выполн.${sortAttr('norm_completion_percent')}</th>
+      <th class="num sortable" data-sort="hours_points">Б.за ч.${sortAttr('hours_points')}</th>
+      <th class="num">Перераб.</th>
+      ` : ''}
       <th class="num sortable" data-sort="kvz">КВЗ${sortAttr('kvz')}</th>
       <th class="num sortable" data-sort="quality_avg">Качество${sortAttr('quality_avg')}</th>
-      <th class="num">Оцен. зв.</th>
       <th class="num sortable" data-sort="efficiency_percent">Эфф.%${sortAttr('efficiency_percent')}</th>
-      <th class="num sortable" data-sort="penalty_minutes">Штраф мин${sortAttr('penalty_minutes')}</th>
+      <th class="num sortable" data-sort="penalty_minutes">Штраф м.${sortAttr('penalty_minutes')}</th>
       <th class="num sortable" data-sort="final_points">Итог${sortAttr('final_points')}</th>
       <th>Риск</th>
     </tr></thead>
@@ -4588,10 +4605,15 @@ function renderOpsTable(items, sortKey, sortDir) {
           <td>${esc(o.group_name||'—')}</td>
           <td class="num">${fmtA(o.calls_total,0)}</td>
           <td class="num">${fmtA(o.total_hours,1)}</td>
-          <td class="num">${fmtA(o.base_hours,1)}</td>
+          ${hasNorm ? `
+          <td class="num">${o.rate != null ? `<span class="rate-badge ${o.rate===0.5?'rate-half':o.rate===0.75?'rate-three-q':'rate-full'}">${o.rate}</span>` : '<span class="cell-muted">—</span>'}</td>
+          <td class="num">${o.individual_norm_hours != null ? fmtA(o.individual_norm_hours,1)+' ч' : '<span class="cell-muted">—</span>'}</td>
+          <td class="num">${normCompletionHtml(o)}</td>
+          <td class="num">${o.hours_points != null ? `<b>${fmtA(o.hours_points,1)}</b><span style="color:var(--tx3)">/25</span>` : '<span class="cell-muted">—</span>'}</td>
+          <td class="num">${o.overtime_hours > 0 ? `<span style="color:var(--success)">+${fmtA(o.overtime_hours,1)}ч</span>` : '—'}</td>
+          ` : ''}
           <td class="num">${fmtA(o.kvz)}</td>
           <td class="num" style="${o.quality_avg!=null?'color:'+qualityColor(o.quality_band)+';font-weight:600':''}">${o.quality_avg!=null?fmtA(o.quality_avg):'нет оценок'}</td>
-          <td class="num">${o.quality_calls_count}</td>
           <td class="num">${fmtA(o.efficiency_percent,2,'%')}</td>
           <td class="num" style="${o.penalty_minutes>0?'color:var(--danger)':''}">${fmtA(o.penalty_minutes,1)}</td>
           <td class="num"><b>${fmtA(o.final_points)}</b></td>
@@ -5559,10 +5581,21 @@ function bindOpsTableSort(items) {
 }
 
 function exportOperatorsCsv(items) {
-  const headers = ['ФИО','Группа','Звонки','Итог ч','База ч','КВЗ','Качество','Оцен.звонков','Эфф.%','Штраф мин','Итог','Риск'];
+  const hasNorm = items.some(o => o.individual_norm_hours != null);
+  const headers = ['ФИО','Группа','Звонки','Факт ч'];
+  if (hasNorm) headers.push('Ставка','Норма ч','Выполн.%','Баллы за ч','Перераб.ч','Перераб.%');
+  headers.push('База ч','КВЗ','Качество','Оцен.звонков','Эфф.%','Штраф мин','Итог','Риск');
   const rows = [headers.join(';')];
-  items.forEach(o => rows.push([o.full_name,o.group_name||'',o.calls_total,o.total_hours,o.base_hours,o.kvz,
-    o.quality_avg??'',o.quality_calls_count,o.efficiency_percent,o.penalty_minutes,o.final_points,o.risk_status].join(';')));
+  items.forEach(o => {
+    const row = [o.full_name, o.group_name||'', o.calls_total??'', o.total_hours??''];
+    if (hasNorm) row.push(
+      o.rate??'', o.individual_norm_hours??'', o.norm_completion_percent??'',
+      o.hours_points??'', o.overtime_hours??'', o.overtime_percent??''
+    );
+    row.push(o.base_hours??'', o.kvz??'', o.quality_avg??'', o.quality_calls_count??'',
+      o.efficiency_percent??'', o.penalty_minutes??'', o.final_points??'', o.risk_status??'');
+    rows.push(row.join(';'));
+  });
   downloadCsv(rows, 'аналитика_операторы.csv');
 }
 

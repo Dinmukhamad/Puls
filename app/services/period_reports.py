@@ -347,13 +347,15 @@ def compute_operator_metrics(
     m.penalty_minutes = round(m.penalty_sum / PENALTY_RUB_PER_MINUTE, 2) if m.penalty_sum else 0.0
     m.penalty_points = round(m.penalty_minutes * PENALTY_POINTS_PER_MINUTE, 2)
 
-    # Итоговые баллы: если ставка/норма заданы — используем hours_points,
-    # иначе (для обратной совместимости) используем total_hours напрямую.
-    # hours_points заполняется после вызова enrich_with_norm() из роутера.
+    # Базовые итоговые баллы БЕЗ часов — norm-aware финальный расчёт
+    # делается в роутере после enrich_with_norm(). Сохраняем 0 за часы
+    # чтобы роутер мог корректно подставить hours_points.
     m.final_points = round(
         m.quality_avg + m.kvz + m.total_hours + m.efficiency_percent - m.penalty_points,
         2,
     )
+    # Пометим что hours_points ещё не заполнен — роутер подставит позже
+    m._hours_raw = m.total_hours  # сырые часы для fallback
 
     m.has_any_period_data = any([
         m.quality_calls_count > 0,
@@ -751,13 +753,15 @@ def aggregate_daily_rows(daily_rows: List[dict]) -> OperatorPeriodMetrics:
     m.penalty_minutes = round(penalty_sum / PENALTY_RUB_PER_MINUTE, 2) if penalty_sum else 0.0
     m.penalty_points = round(m.penalty_minutes * PENALTY_POINTS_PER_MINUTE, 2)
 
-    # Итоговые баллы: если ставка/норма заданы — используем hours_points,
-    # иначе (для обратной совместимости) используем total_hours напрямую.
-    # hours_points заполняется после вызова enrich_with_norm() из роутера.
+    # Базовые итоговые баллы БЕЗ часов — norm-aware финальный расчёт
+    # делается в роутере после enrich_with_norm(). Сохраняем 0 за часы
+    # чтобы роутер мог корректно подставить hours_points.
     m.final_points = round(
         m.quality_avg + m.kvz + m.total_hours + m.efficiency_percent - m.penalty_points,
         2,
     )
+    # Пометим что hours_points ещё не заполнен — роутер подставит позже
+    m._hours_raw = m.total_hours  # сырые часы для fallback
 
     m.has_any_period_data = any([
         m.quality_calls_count > 0,

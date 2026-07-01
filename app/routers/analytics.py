@@ -30,6 +30,7 @@ from app.services.analytics import (
     filter_rows,
 )
 from app.services.analytics_cache import cache_get, cache_key, cache_set
+from app.services.work_norms import calculate_norm_for_period
 from app.services.period_reports import OperatorPeriodMetrics, aggregate_daily_rows, normalize_name
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -67,6 +68,36 @@ def _build_site_map(operators: List[Operator]) -> dict:
 PERIOD_NOT_CALCULATED_MESSAGE = (
     "Период ещё не рассчитан. Сначала выполните расчёт периода в разделе «Расчёт периода»."
 )
+
+
+def _enrich_metrics_with_norm(
+    db: Session,
+    m: OperatorPeriodMetrics,
+    operator,
+    start_date: date,
+    end_date: date,
+) -> None:
+    """Заполняет поля нормы часов в метриках оператора (in-place)."""
+    raw_rate = getattr(operator, "rate", None)
+    rate = float(raw_rate) if raw_rate is not None else None
+    norm_result = calculate_norm_for_period(db, rate, start_date, end_date, m.total_hours)
+    m.rate = norm_result.rate
+    m.individual_norm_hours = norm_result.individual_norm_hours
+    m.norm_completion_percent = norm_result.norm_completion_percent
+    m.hours_points = norm_result.hours_points
+    m.overtime_hours = norm_result.overtime_hours
+    m.overtime_percent = norm_result.overtime_percent
+    if norm_result.warnings:
+        for w in norm_result.warnings:
+            if w not in m.warnings:
+                m.warnings.append(w)
+    # Пересчитываем итоговые баллы с правильными hours_points
+    if norm_result.individual_norm_hours > 0:
+        m.final_points = round(
+            m.quality_avg + m.kvz + norm_result.hours_points
+            + m.efficiency_percent - m.penalty_points,
+            2,
+        )
 
 
 def _metrics_from_period_report(pr: PeriodReport, full_name: str, name_key: str) -> OperatorPeriodMetrics:
@@ -349,11 +380,13 @@ def _get_rows(
             m = daily_metrics[operator_id]
             m.full_name = operator.full_name
             m.name_key = normalize_name(operator.full_name)
+            _enrich_metrics_with_norm(db, m, operator, start_date, end_date)
             _save_period_report_from_metrics(db, operator_id, start_date, end_date, m)
         else:
             pr = existing_reports[operator_id]
             name_key = normalize_name(operator.full_name)
             m = _metrics_from_period_report(pr, operator.full_name, name_key)
+            _enrich_metrics_with_norm(db, m, operator, start_date, end_date)
 
         rows.append(OperatorAnalyticsRow(
             full_name=operator.full_name,
@@ -514,6 +547,12 @@ def get_operators_table(
             "penalty_points": m.penalty_points,
             "final_points": m.final_points,
             "risk_status": r.risk_status,
+            "rate": m.rate,
+            "individual_norm_hours": m.individual_norm_hours if m.individual_norm_hours > 0 else None,
+            "norm_completion_percent": round(m.norm_completion_percent, 1) if m.individual_norm_hours > 0 else None,
+            "hours_points": m.hours_points if m.individual_norm_hours > 0 else None,
+            "overtime_hours": m.overtime_hours if m.overtime_hours > 0 else None,
+            "overtime_percent": round(m.overtime_percent, 1) if m.overtime_percent > 0 else None,
         })
     return {"items": out}
 
@@ -848,6 +887,12 @@ def get_operators_combined(
             "penalty_points": m.penalty_points,
             "final_points": m.final_points,
             "risk_status": r.risk_status,
+            "rate": m.rate,
+            "individual_norm_hours": m.individual_norm_hours if m.individual_norm_hours > 0 else None,
+            "norm_completion_percent": round(m.norm_completion_percent, 1) if m.individual_norm_hours > 0 else None,
+            "hours_points": m.hours_points if m.individual_norm_hours > 0 else None,
+            "overtime_hours": m.overtime_hours if m.overtime_hours > 0 else None,
+            "overtime_percent": round(m.overtime_percent, 1) if m.overtime_percent > 0 else None,
         })
 
     top_attn = compute_top_and_attention(rows)
