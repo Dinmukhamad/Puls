@@ -756,6 +756,154 @@ def get_quality_vs_penalties(
     return result
 
 
+
+@router.get("/overview")
+def get_overview(
+    start_date: date,
+    end_date: date,
+    group_id: Optional[int] = Query(None),
+    operator_query: Optional[str] = Query(None),
+    participation_status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_analytics_access),
+) -> dict:
+    """
+    Комбинированный endpoint для вкладки Обзор — возвращает summary +
+    groups-comparison + risk-pyramid одним запросом к БД вместо 3-4 отдельных.
+    daily-dynamics исключена (требует Excel-парсинга, грузится отдельно).
+    """
+    key = cache_key("overview", start_date=start_date, end_date=end_date,
+                    group_id=group_id, operator_query=operator_query,
+                    participation_status=participation_status)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+
+    rows = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
+    kpi = compute_kpi_summary(rows)
+    groups_cmp = compute_groups_comparison(rows)
+    risk_pyramid = compute_risk_pyramid(rows)
+    availability_warning = get_data_availability_warning(db, start_date, end_date)
+
+    result = {
+        "period": {"start": str(start_date), "end": str(end_date)},
+        "kpi": kpi,
+        "data_availability_warning": availability_warning,
+        "groups_comparison": groups_cmp,
+        "risk_pyramid": risk_pyramid,
+        "warnings": [],
+    }
+    cache_set(key, result, ttl_seconds=600)  # 10 минут — дольше стандартного
+    return result
+
+
+@router.get("/operators-combined")
+def get_operators_combined(
+    start_date: date,
+    end_date: date,
+    group_id: Optional[int] = Query(None),
+    operator_query: Optional[str] = Query(None),
+    participation_status: Optional[str] = Query(None),
+    only_with_data: bool = Query(False),
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_analytics_access),
+) -> dict:
+    """
+    Комбинированный endpoint для вкладки Операторы — таблица + зона внимания
+    одним запросом к БД вместо двух.
+    """
+    key = cache_key("operators-combined", start_date=start_date, end_date=end_date,
+                    group_id=group_id, operator_query=operator_query,
+                    participation_status=participation_status, only_with_data=only_with_data)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+
+    rows = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data)
+
+    def quality_band(q):
+        if q is None: return None
+        if q >= 90: return "green"
+        if q >= 80: return "yellow"
+        if q >= 70: return "orange"
+        return "red"
+
+    ops_out = []
+    for r in rows:
+        m = r.metrics
+        ops_out.append({
+            "full_name": r.full_name,
+            "group_name": r.group_name,
+            "operator_id": r.operator_id,
+            "calls_total": m.calls_total,
+            "total_hours": m.total_hours,
+            "base_hours": m.base_hours,
+            "kvz": m.kvz if m.base_hours > 0 else None,
+            "quality_avg": m.quality_avg if m.quality_calls_count > 0 else None,
+            "quality_band": quality_band(m.quality_avg if m.quality_calls_count > 0 else None),
+            "quality_calls_count": m.quality_calls_count,
+            "call_time_hours": m.call_time_hours,
+            "efficiency_percent": m.efficiency_percent if m.base_hours > 0 else None,
+            "penalty_minutes": m.penalty_minutes,
+            "penalty_points": m.penalty_points,
+            "final_points": m.final_points,
+            "risk_status": r.risk_status,
+        })
+
+    top_attn = compute_top_and_attention(rows)
+
+    result = {"items": ops_out, "top_and_attention": top_attn}
+    cache_set(key, result, ttl_seconds=300)
+    return result
+
+
+@router.get("/matrix-combined")
+def get_matrix_combined(
+    start_date: date,
+    end_date: date,
+    group_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_analytics_access),
+) -> dict:
+    """quality-kvz-matrix + quality-vs-penalties + load-vs-efficiency одним запросом."""
+    key = cache_key("matrix-combined", start_date=start_date, end_date=end_date, group_id=group_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+
+    rows = _get_rows(db, start_date, end_date, group_id)
+    result = {
+        "quality_kvz": compute_quality_kvz_matrix(rows),
+        "quality_penalties": compute_quality_vs_penalties(rows),
+        "load_efficiency": compute_load_vs_efficiency(rows),
+        "thresholds": {"quality": 85, "kvz": 10},
+    }
+    cache_set(key, result, ttl_seconds=300)
+    return result
+
+
+@router.get("/quality-combined")
+def get_quality_combined(
+    start_date: date,
+    end_date: date,
+    group_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_analytics_access),
+) -> dict:
+    """quality-coverage + penalties одним запросом."""
+    key = cache_key("quality-combined", start_date=start_date, end_date=end_date, group_id=group_id)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+
+    rows = _get_rows(db, start_date, end_date, group_id)
+    result = {
+        "coverage": compute_quality_coverage(rows),
+        "penalties": compute_penalties_analytics(rows),
+    }
+    cache_set(key, result, ttl_seconds=300)
+    return result
+
 @router.get("/groups-list")
 def get_groups_list(
     db: Session = Depends(get_db),

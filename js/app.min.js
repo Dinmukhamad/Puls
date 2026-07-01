@@ -5090,7 +5090,7 @@ function analyticsApiUrl(path, params) {
   return api._base() + '/api/analytics/' + path + (qs ? '?' + qs : '');
 }
 
-const ANALYTICS_SWR_TTL_MS = 5 * 60_000; // 5 минут — данные построены из PeriodReport, меняются редко
+const ANALYTICS_SWR_TTL_MS = 10 * 60_000; // 10 минут — данные построены из PeriodReport, меняются очень редко
 
 async function analyticsFetch(path, params, onUpdate) {
   const key = 'analytics:' + path + ':' + JSON.stringify(params || {});
@@ -5240,8 +5240,25 @@ async function renderAnalytics() {
     loadAnalyticsTab(_analyticsState.tab);
   });
 
-  // Tab click handling
+  // Tab click handling + prefetch on hover
   el.querySelectorAll('.analytics-tab').forEach(btn => {
+    // Prefetch при наведении — данные загружаются в кеш до клика
+    btn.addEventListener('mouseenter', () => {
+      const tab = btn.dataset.tab;
+      if (tab === _analyticsState.tab) return;
+      const base = analyticsBaseParams();
+      const full = analyticsOpParams();
+      switch(tab) {
+        case 'overview':   analyticsFetch('overview', full); break;
+        case 'operators':  analyticsFetch('operators-combined', full); break;
+        case 'groups':     analyticsFetch('groups-comparison', base); break;
+        case 'matrix':     analyticsFetch('matrix-combined', base); break;
+        case 'quality':    analyticsFetch('quality-combined', base); break;
+        case 'penalties':  analyticsFetch('penalties', base); break;
+        case 'risks':      analyticsFetch('risk-pyramid', base); break;
+        case 'points':     analyticsFetch('points', full); break;
+      }
+    }, { passive: true });
     btn.addEventListener('click', () => {
       el.querySelectorAll('.analytics-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
@@ -5298,7 +5315,7 @@ async function loadAnalyticsTab(tab) {
   if (!content) return;
   const myNavGen = STATE.navGen;
   const myTabGen = bumpAnalyticsTabGen();
-  refreshAvailabilityWarning();
+  // warning обновляется вместе с данными вкладки (в loadOverviewTab) без отдельного запроса
   // Спиннер показываем с небольшой задержкой (150мс) — если данные придут
   // из кеша почти мгновенно (swrFetch отдаёт их синхронно из sessionStorage),
   // спиннер просто не успеет появиться, и переключение вкладок будет
@@ -5338,23 +5355,31 @@ async function loadAnalyticsTab(tab) {
 
 /* ── Вкладка: Обзор ──────────────────────────────────────────*/
 async function loadOverviewTab(content) {
-  const [summary, dynamics, groupsCmp, riskPyramid] = await Promise.all([
-    analyticsFetch('summary', analyticsOpParams()),
-    analyticsFetch('daily-dynamics', { ...analyticsBaseParams(), metric: 'calls' }),
-    analyticsFetch('groups-comparison', analyticsBaseParams()),
-    analyticsFetch('risk-pyramid', analyticsBaseParams()),
+  // Один комбинированный запрос вместо 4 отдельных (summary + groups + risks)
+  // daily-dynamics грузится параллельно и независимо — не блокирует рендер
+  const [overview, dynamics] = await Promise.all([
+    analyticsFetch('overview', analyticsOpParams()),
+    analyticsFetch('daily-dynamics', { ...analyticsBaseParams(), metric: 'calls' }).catch(() => ({ items: [] })),
   ]);
 
+  // Обновляем warning под фильтрами без лишнего запроса
+  const warnBox = document.getElementById('an-availability-warning');
+  if (warnBox && overview.data_availability_warning) {
+    warnBox.innerHTML = `<div class="an-availability-note">${esc(overview.data_availability_warning)}</div>`;
+  } else if (warnBox) {
+    warnBox.innerHTML = '';
+  }
+
   content.innerHTML =
-    renderKpiBlock(summary) +
+    renderKpiBlock(overview) +
     '<div class="an-grid-2">' +
       '<div class="an-card"><div class="an-card-head">Динамика звонков</div><div id="an-ov-dyn">' + renderDynChart(dynamics.items||[], 'calls') + '</div></div>' +
-      '<div class="an-card"><div class="an-card-head">Сравнение групп по баллам</div>' + renderMiniGroupsChart(groupsCmp.items||[]) + '</div>' +
+      '<div class="an-card"><div class="an-card-head">Сравнение групп по баллам</div>' + renderMiniGroupsChart(overview.groups_comparison||[]) + '</div>' +
     '</div>' +
-    renderMiniRiskPyramid(riskPyramid) +
-    renderAnalyticsWarningsBlock(summary.warnings);
+    renderMiniRiskPyramid(overview.risk_pyramid||{}) +
+    renderAnalyticsWarningsBlock(overview.warnings||[]);
 
-  if (!summary.kpi || summary.kpi.operators_count === 0) {
+  if (!overview.kpi || overview.kpi.operators_count === 0) {
     content.innerHTML = renderAnalyticsEmptyState() + content.innerHTML;
   }
 }
@@ -5404,10 +5429,10 @@ function renderAnalyticsEmptyState() {
 
 /* ── Вкладка: Операторы (таблица эффективности + зона внимания) ─*/
 async function loadOperatorsTab(content) {
-  const [opsTable, topAttn] = await Promise.all([
-    analyticsFetch('operators', analyticsOpParams()),
-    analyticsFetch('top-and-attention', analyticsBaseParams()),
-  ]);
+  // Один комбинированный запрос вместо 2
+  const combined = await analyticsFetch('operators-combined', analyticsOpParams());
+  const opsTable = { items: combined.items || [] };
+  const topAttn = combined.top_and_attention || {};
 
   content.innerHTML =
     renderOperatorsTableBlock(opsTable) +
@@ -5557,37 +5582,34 @@ async function loadMatrixTab(content) {
       <div id="an-load-eff-matrix"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
     </div>`;
 
-  const base = analyticsBaseParams();
-
-  analyticsFetch('quality-kvz-matrix', base).then(d => {
-    drawScatter('an-qk-matrix', d.items || [], 'kvz', 'quality_avg', 'КВЗ', 'Качество', d.thresholds?.kvz, d.thresholds?.quality);
-  }).catch(e => { const c=document.getElementById('an-qk-matrix'); if(c) c.innerHTML=`<div class="empty-line">${esc(e.message)}</div>`; });
-
-  analyticsFetch('load-vs-efficiency', base).then(d => {
-    drawScatter('an-load-eff-matrix', d.items || [], 'calls_total', 'efficiency_percent', 'Звонки', 'Эффективность %');
-  }).catch(e => { const c=document.getElementById('an-load-eff-matrix'); if(c) c.innerHTML=`<div class="empty-line">${esc(e.message)}</div>`; });
+  // Один запрос вместо 2 — получаем все матрицы сразу
+  try {
+    const d = await analyticsFetch('matrix-combined', analyticsBaseParams());
+    drawScatter('an-qk-matrix', d.quality_kvz || [], 'kvz', 'quality_avg', 'КВЗ', 'Качество', d.thresholds?.kvz, d.thresholds?.quality);
+    drawScatter('an-load-eff-matrix', d.load_efficiency || [], 'calls_total', 'efficiency_percent', 'Звонки', 'Эффективность %');
+  } catch(e) {
+    const c = document.getElementById('an-qk-matrix');
+    if (c) c.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+    const c2 = document.getElementById('an-load-eff-matrix');
+    if (c2) c2.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+  }
 }
 
 /* ── Вкладка: Качество ──────────────────────────────────────────*/
 async function loadQualityTab(content) {
-  const [coverage] = await Promise.all([
-    analyticsFetch('quality-coverage', analyticsBaseParams()),
+  // Получаем coverage и penalties одним запросом, heatmap — параллельно
+  const [combined, hm] = await Promise.all([
+    analyticsFetch('quality-combined', analyticsBaseParams()),
+    analyticsFetch('heatmap', { ...analyticsBaseParams(), metric: 'quality' }).catch(() => null),
   ]);
 
+  const coverage = combined.coverage || {};
   content.innerHTML =
     renderQualityCoverageBlock(coverage) +
     `<div class="an-card">
       <div class="an-card-head">Heatmap качества по дням</div>
-      <div id="an-quality-heatmap"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+      <div id="an-quality-heatmap">${hm ? renderHeatmapTable(hm, 'quality') : '<div class="empty-line">Нет данных для heatmap</div>'}</div>
     </div>`;
-
-  try {
-    const hm = await analyticsFetch('heatmap', { ...analyticsBaseParams(), metric: 'quality' });
-    document.getElementById('an-quality-heatmap').innerHTML = renderHeatmapTable(hm, 'quality');
-  } catch(e) {
-    const c = document.getElementById('an-quality-heatmap');
-    if (c) c.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
-  }
 }
 
 /* ── Вкладка: Динамика ────────────────────────────────────────*/
