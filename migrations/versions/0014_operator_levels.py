@@ -148,7 +148,10 @@ def upgrade() -> None:
         sa.column("created_at", sa.DateTime),
         sa.column("updated_at", sa.DateTime),
     )
-    ids = dict(bind.execute(sa.text("SELECT code, id FROM operator_levels")))
+    ids = {
+        row.code: row.id
+        for row in bind.execute(sa.text("SELECT code, id FROM operator_levels"))
+    }
     if bind.execute(sa.text("SELECT COUNT(*) FROM operator_level_rules")).scalar() == 0:
         seed_rules = [
             ("trainee", "tenure_days", "between", 0, 7),
