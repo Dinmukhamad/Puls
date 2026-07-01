@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import List, Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.db import Base
@@ -389,8 +389,8 @@ class WorkNorm(Base):
     year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     month: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     month_days: Mapped[int] = mapped_column(Integer, nullable=False)
-    rate: Mapped[float] = mapped_column(Float, nullable=False, index=True)
-    monthly_norm_hours: Mapped[float] = mapped_column(Float, nullable=False)
+    rate: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, index=True)
+    monthly_norm_hours: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)

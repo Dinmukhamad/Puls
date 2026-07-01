@@ -23,6 +23,11 @@ MAX_HOURS_POINTS: float = 25.0
 VALID_RATES = {0.5, 0.75, 1.0}
 
 
+def _normalize_rate(rate) -> float:
+    """Конвертирует Decimal из БД в float для сравнения."""
+    return float(rate) if rate is not None else None
+
+
 # ── CRUD ─────────────────────────────────────────────────────────────────────
 
 def list_norms(db: Session, active_only: bool = False) -> list[WorkNorm]:
@@ -37,11 +42,14 @@ def get_norm(db: Session, norm_id: int) -> Optional[WorkNorm]:
 
 
 def get_norm_for_month(db: Session, year: int, month: int, rate: float) -> Optional[WorkNorm]:
+    from decimal import Decimal
+    from sqlalchemy import func, cast, Numeric as SANumeric
+    rate_dec = Decimal(str(rate))
     return db.scalar(
         select(WorkNorm).where(
             WorkNorm.year == year,
             WorkNorm.month == month,
-            WorkNorm.rate == rate,
+            WorkNorm.rate == rate_dec,
             WorkNorm.is_active.is_(True),
         )
     )
@@ -134,6 +142,7 @@ def calculate_norm_for_period(
             warnings=warnings,
         )
 
+    rate = float(rate) if rate is not None else None
     if rate not in VALID_RATES:
         warnings.append(f"Некорректная ставка: {rate}. Допустимые значения: 0.5, 0.75, 1.0.")
         rate = None

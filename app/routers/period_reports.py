@@ -303,7 +303,9 @@ def get_period_summary(
 
     for m in result.operators:
         db_op = name_to_op.get(m.name_key)
-        rate = db_op.rate if db_op else None
+        # Конвертируем Decimal → float (Numeric из БД возвращается как Decimal)
+        raw_rate = db_op.rate if db_op else None
+        rate = float(raw_rate) if raw_rate is not None else None
 
         # Рассчитываем норму часов для этого оператора
         norm_result = calculate_norm_for_period(
