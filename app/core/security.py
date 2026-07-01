@@ -74,6 +74,8 @@ def get_current_user(
             f"{settings.api_prefix}/auth/me/password",
             f"{settings.api_prefix}/auth/account",
             f"{settings.api_prefix}/operators/account/change-password",
+            f"{settings.api_prefix}/me/level",
+            f"{settings.api_prefix}/operators/me",
         }
         if request.method != "OPTIONS" and path not in allowed_paths:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,

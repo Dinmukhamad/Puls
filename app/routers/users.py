@@ -19,7 +19,7 @@ from app.schemas.users import (
     UserResetPasswordRequest,
     UserUpdateRequest,
 )
-from app.services.operator_levels import operator_level_badge
+from app.services.operator_levels import ensure_default_levels, operator_level_badge
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -95,6 +95,14 @@ def _operator_for_user(db: Session, user: User) -> Optional[Operator]:
     return None
 
 
+def _safe_level_badge(db: Session, operator) -> dict | None:
+    """Безопасный вызов — не роняет весь список если уровень не удаётся получить."""
+    try:
+        return operator_level_badge(db, operator)
+    except Exception:
+        return None
+
+
 def _user_out(db: Session, user: User) -> dict:
     operator = _operator_for_user(db, user)
     return {
@@ -108,7 +116,7 @@ def _user_out(db: Session, user: User) -> dict:
         "group_id": user.group_id or (operator.group_id if operator else None),
         "group_name": _group_name(db, user, operator),
         "operator_id": user.operator_id,
-        "level": operator_level_badge(db, operator) if operator and user.role == "operator" else None,
+        "level": _safe_level_badge(db, operator) if operator and user.role == "operator" else None,
         "status": _user_status(user),
         "is_active": user.is_active,
         "must_change_password": user.must_change_password,
@@ -147,6 +155,7 @@ def list_users(
 ) -> dict:
     page = max(1, page)
     limit = min(max(1, limit), 200)
+    ensure_default_levels(db)
     stmt = _visible_user_stmt(db, current_user)
     if role:
         stmt = stmt.where(User.role == role)
@@ -216,7 +225,9 @@ def create_user(
         status=payload.status,
         is_active=payload.status == "active",
         can_manage_operators=False,
-        must_change_password=True,
+        # Оператор получает временный пароль → должен сменить
+        # Руководители/Администраторы создают свои пароли → менять необязательно
+        must_change_password=payload.role == "operator",
     )
     db.add(user)
     db.flush()

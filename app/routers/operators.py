@@ -94,6 +94,14 @@ def _sync_operator_state(db: Session, op: Operator) -> None:
         user.is_active = op.employment_status == "active"
 
 
+def _safe_level_badge(db: Session, operator) -> dict | None:
+    """Безопасный вызов — не роняет весь список если уровень не удаётся получить."""
+    try:
+        return operator_level_badge(db, operator)
+    except Exception:
+        return None
+
+
 def _operator_response(db: Session, op: Operator) -> dict:
     user = _operator_user(db, op)
     # Стаж: если задана start_date — считаем от неё, иначе от created_at
@@ -118,7 +126,7 @@ def _operator_response(db: Session, op: Operator) -> dict:
         "created_at": op.created_at,
         "updated_at": getattr(op, "updated_at", None),
         "dismissed_at": op.dismissed_at,
-        "level": operator_level_badge(db, op),
+        "level": _safe_level_badge(db, op),
         "start_date": op.start_date.isoformat() if op.start_date else None,
         "tenure_days": tenure_days,
     }
