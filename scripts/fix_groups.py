@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 """
-Объединяет 'Группа Динмухамада' → 'Пахриддинов Динмухамад'
-Обновляет все FK ссылки перед удалением.
+Объединяет 'Группа Динмухамада' → 'Пахриддинов Динмухамад'.
+Каждый UPDATE — отдельное соединение, чтобы ошибка в одной таблице
+не роняла всю транзакцию.
 """
 import os, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from sqlalchemy import create_engine, select, text
-from sqlalchemy.orm import sessionmaker
-from app.models.entities import Group, Operator, User
 
 db_url = os.environ["DATABASE_URL"]
 if db_url.startswith("postgres://"):
@@ -17,37 +14,65 @@ if db_url.startswith("postgres://"):
 elif db_url.startswith("postgresql://") and "+psycopg" not in db_url:
     db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-engine = create_engine(db_url, pool_pre_ping=True)
-db = sessionmaker(bind=engine)()
+import psycopg2
+from urllib.parse import urlparse
 
-all_groups = list(db.scalars(select(Group)))
+u = urlparse(db_url.replace("postgresql+psycopg2://", "postgresql://"))
+conn_params = dict(
+    host=u.hostname, port=u.port or 5432,
+    dbname=u.path.lstrip("/"),
+    user=u.username, password=u.password,
+    sslmode="require",
+)
+
+def run(sql, params=None):
+    """Выполняет один SQL в отдельной автокоммит-транзакции."""
+    conn = psycopg2.connect(**conn_params)
+    conn.autocommit = True
+    cur = conn.cursor()
+    try:
+        cur.execute(sql, params)
+        rowcount = cur.rowcount
+    except psycopg2.errors.UndefinedColumn:
+        rowcount = -1   # нет такой колонки — нормально
+    except Exception as e:
+        print(f"  WARN: {e}")
+        rowcount = -1
+    finally:
+        cur.close()
+        conn.close()
+    return rowcount
+
+# Читаем группы
+conn = psycopg2.connect(**conn_params)
+conn.autocommit = True
+cur = conn.cursor()
+cur.execute("SELECT id, name FROM groups ORDER BY id")
+groups = cur.fetchall()
+cur.close()
+conn.close()
+
 print("Группы в БД:")
-for g in all_groups:
-    print(f"  #{g.id}: '{g.name}'")
+for gid, gname in groups:
+    print(f"  #{gid}: '{gname}'")
 
-old_g = next((g for g in all_groups if g.name == "Группа Динмухамада"), None)
-new_g = next((g for g in all_groups if g.name == "Пахриддинов Динмухамад"), None)
+old_id = next((gid for gid, gname in groups if gname == "Группа Динмухамада"), None)
+new_id = next((gid for gid, gname in groups if gname == "Пахриддинов Динмухамад"), None)
 
-if not old_g:
+if not old_id:
     print("\nДубль 'Группа Динмухамада' не найден — всё чисто")
-    db.close()
     sys.exit(0)
 
-if not new_g:
-    # Только старая — просто переименовываем
-    print(f"\nТолько старая группа — переименовываем #{old_g.id}...")
-    db.execute(text("UPDATE operators SET group_name='Пахриддинов Динмухамад' WHERE group_id=:gid"), {"gid": old_g.id})
-    old_g.name = "Пахриддинов Динмухамад"
-    db.commit()
+if not new_id:
+    print(f"\nТолько старая — переименовываем #{old_id}...")
+    run("UPDATE operators SET group_name='Пахриддинов Динмухамад' WHERE group_id=%s", (old_id,))
+    run("UPDATE groups SET name='Пахриддинов Динмухамад' WHERE id=%s", (old_id,))
     print("✓ Готово")
-    db.close()
     sys.exit(0)
 
-old_id = old_g.id
-new_id = new_g.id
-print(f"\nОбъединяем #{old_id} → #{new_id}")
+print(f"\nОбъединяем #{old_id} ('Группа Динмухамада') → #{new_id} ('Пахриддинов Динмухамад')\n")
 
-# Обновляем ВСЕ таблицы которые ссылаются на group_id
+# Таблицы с group_id — каждая в своей транзакции
 tables = [
     "operators",
     "users",
@@ -61,28 +86,22 @@ tables = [
 ]
 
 for table in tables:
-    try:
-        result = db.execute(
-            text(f"UPDATE {table} SET group_id=:new WHERE group_id=:old"),
-            {"new": new_id, "old": old_id}
-        )
-        if result.rowcount > 0:
-            print(f"  {table}: перенесено {result.rowcount} строк")
-    except Exception as e:
-        if "column" in str(e).lower() and "group_id" in str(e).lower():
-            pass  # таблица не имеет group_id — нормально
-        else:
-            print(f"  WARN {table}: {e}")
+    n = run(f"UPDATE {table} SET group_id=%s WHERE group_id=%s", (new_id, old_id))
+    if n > 0:
+        print(f"  ✓ {table}: {n} строк перенесено")
+    elif n == 0:
+        print(f"  — {table}: нет записей")
+    # n == -1: нет колонки — молча пропускаем
 
-# Обновляем group_name у операторов
-db.execute(
-    text("UPDATE operators SET group_name='Пахриддинов Динмухамад' WHERE group_id=:gid"),
-    {"gid": new_id}
-)
+# Обновляем текстовое поле group_name у операторов
+n = run("UPDATE operators SET group_name='Пахриддинов Динмухамад' WHERE group_id=%s", (new_id,))
+print(f"\n  ✓ operators.group_name обновлён ({n} строк)")
 
 # Удаляем старую группу
-db.execute(text("DELETE FROM groups WHERE id=:gid"), {"gid": old_id})
-db.commit()
+n = run("DELETE FROM groups WHERE id=%s", (old_id,))
+if n == 1:
+    print(f"  ✓ Группа #{old_id} удалена")
+else:
+    print(f"  WARN: DELETE вернул {n}")
 
-print(f"\n✓ Группа #{old_id} удалена, всё перенесено в #{new_id}")
-db.close()
+print("\n✓ Готово — обновите страницу (Ctrl+Shift+R)")
