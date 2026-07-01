@@ -4,7 +4,7 @@ import re
 import random
 import secrets
 import string
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -96,6 +96,9 @@ def _sync_operator_state(db: Session, op: Operator) -> None:
 
 def _operator_response(db: Session, op: Operator) -> dict:
     user = _operator_user(db, op)
+    # Стаж: если задана start_date — считаем от неё, иначе от created_at
+    start = op.start_date or op.created_at.date()
+    tenure_days = max(0, (date.today() - start).days)
     return {
         "id": op.id,
         "full_name": op.full_name,
@@ -116,6 +119,8 @@ def _operator_response(db: Session, op: Operator) -> dict:
         "updated_at": getattr(op, "updated_at", None),
         "dismissed_at": op.dismissed_at,
         "level": operator_level_badge(db, op),
+        "start_date": op.start_date.isoformat() if op.start_date else None,
+        "tenure_days": tenure_days,
     }
 
 

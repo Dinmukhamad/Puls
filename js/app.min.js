@@ -89,6 +89,7 @@ let STATE = {
   adminOperators: [],
   users: [],
   myLevel: null,
+  myOperator: null,
   operatorLevels: [],
   history: [],
   groups: [],
@@ -112,17 +113,46 @@ function levelNum(v, decimals = 1) {
   return n.toLocaleString('ru-RU', { maximumFractionDigits: decimals });
 }
 
+// Форматирование стажа: дни → читаемая строка
+function formatTenureDays(days) {
+  if (days == null || isNaN(days)) return '—';
+  days = Math.max(0, Math.round(days));
+  if (days === 0) return 'Сегодня первый день';
+  if (days < 30) return `${days} ${pluralize(days, 'день', 'дня', 'дней')}`;
+  const months = Math.floor(days / 30);
+  const rem = days % 30;
+  const mStr = `${months} ${pluralize(months, 'месяц', 'месяца', 'месяцев')}`;
+  return rem > 0 ? `${mStr} ${rem} ${pluralize(rem, 'день', 'дня', 'дней')}` : mStr;
+}
+
+function pluralize(n, one, few, many) {
+  const mod10 = n % 10, mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
+  return many;
+}
+
 function metricValueHtml(gap) {
   const suffix = gap.metric_code === 'efficiency' || gap.metric_code === 'quality' || gap.metric_code === 'test_percent' ? '%' : '';
   if (gap.metric_code === 'penalty_minutes') return `${levelNum(gap.current, 1)} мин`;
+  if (gap.metric_code === 'tenure_days') return formatTenureDays(gap.current);
   return `${levelNum(gap.current, 1)}${suffix}`;
 }
 
 function levelRequirementHtml(gap) {
   const suffix = gap.metric_code === 'efficiency' || gap.metric_code === 'quality' || gap.metric_code === 'test_percent' ? '%' : '';
-  if (gap.operator === 'gte') return `нужно ${levelNum(gap.required_min, 1)}${suffix}`;
-  if (gap.operator === 'lte') return `максимум ${levelNum(gap.required_max, 1)}${gap.metric_code === 'penalty_minutes' ? ' мин' : suffix}`;
-  if (gap.operator === 'between') return `${levelNum(gap.required_min, 1)}-${levelNum(gap.required_max, 1)}${gap.metric_code === 'penalty_minutes' ? ' мин' : suffix}`;
+  if (gap.operator === 'gte') {
+    if (gap.metric_code === 'tenure_days') return `нужно ${formatTenureDays(gap.required_min)}`;
+    return `нужно ${levelNum(gap.required_min, 1)}${suffix}`;
+  }
+  if (gap.operator === 'lte') {
+    if (gap.metric_code === 'tenure_days') return `максимум ${formatTenureDays(gap.required_max)}`;
+    return `максимум ${levelNum(gap.required_max, 1)}${gap.metric_code === 'penalty_minutes' ? ' мин' : suffix}`;
+  }
+  if (gap.operator === 'between') {
+    if (gap.metric_code === 'tenure_days') return `${formatTenureDays(gap.required_min)} — ${formatTenureDays(gap.required_max)}`;
+    return `${levelNum(gap.required_min, 1)}-${levelNum(gap.required_max, 1)}${gap.metric_code === 'penalty_minutes' ? ' мин' : suffix}`;
+  }
   return `нужно ${levelNum(gap.required_min, 1)}${suffix}`;
 }
 
@@ -341,7 +371,7 @@ document.addEventListener('click', async e => {
   }
   if (e.target.id === 'auth-logout-btn') {
     api.logout().catch(() => {});
-    STATE = { user:null, wallet:null, rating:[], shopItems:[], purchases:[], dashboard:null, adminOperators:[], users:[], myLevel:null, operatorLevels:[], history:[], groups:[], currentView:'cabinet' };
+    STATE = { user:null, wallet:null, rating:[], shopItems:[], purchases:[], dashboard:null, adminOperators:[], users:[], myLevel:null, myOperator:null, operatorLevels:[], history:[], groups:[], currentView:'cabinet' };
     location.reload();
   }
 });
@@ -429,6 +459,7 @@ async function loadData(role) {
     STATE.myLevel = level;
     setText('side-level', level?.level?.name || '—');
   }));
+  tasks.push(api.myOperator().catch(() => null).then(op => { STATE.myOperator = op; }));
   if (role === 'operator') {
     tasks.push(api.myWallet().catch(() => null).then(w => STATE.wallet = w)); // личный баланс — всегда свежий, без кеша
     tasks.push(api.listPurchases().catch(() => []).then(p => STATE.purchases = p));
@@ -799,11 +830,18 @@ function renderCabinet() {
   const total = STATE.rating.length || '—';
   const delta = myRow?.rank_delta;
   const levelInfo = STATE.myLevel;
+  // Стаж: берём из metrics (API /me/level) или из STATE.myOperator
+  const tenureDays = levelInfo?.metrics?.tenure_days ?? STATE.myOperator?.tenure_days ?? null;
+  const tenureStr = tenureDays != null ? formatTenureDays(tenureDays) : '—';
   const levelCard = levelInfo ? `
     <div class="panel level-card">
       <div class="panel-head">
         <h3>Мой уровень</h3>
         ${levelBadgeHtml(levelInfo.level, 'level-badge-lg')}
+      </div>
+      <div class="level-tenure-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Стаж: <b>${esc(tenureStr)}</b></span>
       </div>
       ${levelInfo.next_level ? `
         <div class="level-next">До следующего уровня: ${levelBadgeHtml(levelInfo.next_level)}</div>
@@ -844,6 +882,10 @@ function renderCabinet() {
           ${delta != null ? `<span class="rank-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${delta > 0 ? '↑'+delta : delta < 0 ? '↓'+Math.abs(delta) : 'без изм.'}</span>` : ''}
         </div>
       </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Стаж в компании</div>
+        <div class="kpi-value" style="font-size:clamp(14px,2vw,18px)">${esc(tenureStr)}</div>
+      </div>
     </div>
 
     ${levelCard}
@@ -883,6 +925,7 @@ function renderCabinet() {
 async function reloadCabinet() {
   STATE.wallet = await api.myWallet().catch(() => STATE.wallet);
   STATE.myLevel = await api.myLevel().catch(() => STATE.myLevel);
+  STATE.myOperator = await api.myOperator().catch(() => STATE.myOperator);
   setText('side-level', STATE.myLevel?.level?.name || '—');
   const ratingResp = await api.getRating().catch(() => ({ items: STATE.rating }));
   STATE.rating = Array.isArray(ratingResp) ? ratingResp : (ratingResp.items || []);

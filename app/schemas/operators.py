@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 from pydantic import BaseModel
@@ -49,5 +49,7 @@ class OperatorRead(BaseModel):
     updated_at: Optional[datetime] = None
     dismissed_at: Optional[datetime] = None
     level: Optional[OperatorLevelBadge] = None
+    start_date: Optional[date] = None
+    tenure_days: Optional[int] = None
 
     model_config = {"from_attributes": True}
