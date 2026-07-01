@@ -169,7 +169,7 @@ def get_operator_dynamics(
     Динамика оператора за последние N рабочих дней с данными.
     Качество звонков НЕ учитывается (только часы, КВЗ, эффективность, штрафы).
     """
-    from app.models.entities import OperatorDailyMetrics, WorkNorm
+    from app.models.entities import OperatorDailyMetric, WorkNorm
     from sqlalchemy import func as sqlfunc
     import calendar
 
@@ -181,20 +181,20 @@ def get_operator_dynamics(
 
     # ── Шаг 1-3: последние N дат с рабочими данными ──────────────
     rows = list(db.scalars(
-        select(OperatorDailyMetrics)
+        select(OperatorDailyMetric)
         .where(
-            OperatorDailyMetrics.operator_id == op.id,
+            OperatorDailyMetric.operator_id == op.id,
             # Хотя бы один рабочий показатель > 0
             (
-                (OperatorDailyMetrics.worked_hours > 0) |
-                (OperatorDailyMetrics.base_hours > 0) |
-                (OperatorDailyMetrics.calls_count > 0) |
-                (OperatorDailyMetrics.efficiency > 0) |
-                (OperatorDailyMetrics.penalty_points > 0) |
-                (OperatorDailyMetrics.penalty_minutes > 0)
+                (OperatorDailyMetric.worked_hours > 0) |
+                (OperatorDailyMetric.base_hours > 0) |
+                (OperatorDailyMetric.calls_count > 0) |
+                (OperatorDailyMetric.efficiency > 0) |
+                (OperatorDailyMetric.penalty_points > 0) |
+                (OperatorDailyMetric.penalty_minutes > 0)
             )
         )
-        .order_by(OperatorDailyMetrics.metric_date.desc())
+        .order_by(OperatorDailyMetric.metric_date.desc())
         .limit(limit)
     ))
     rows.reverse()  # хронологический порядок для графика
@@ -301,19 +301,19 @@ def get_operator_dynamics(
         # Все метрики всех операторов за нужные даты
         all_rows = list(db.execute(
             select(
-                OperatorDailyMetrics.metric_date,
-                OperatorDailyMetrics.operator_id,
-                OperatorDailyMetrics.worked_hours,
-                OperatorDailyMetrics.base_hours,
-                OperatorDailyMetrics.calls_count,
-                OperatorDailyMetrics.efficiency,
-                OperatorDailyMetrics.penalty_points,
+                OperatorDailyMetric.metric_date,
+                OperatorDailyMetric.operator_id,
+                OperatorDailyMetric.worked_hours,
+                OperatorDailyMetric.base_hours,
+                OperatorDailyMetric.calls_count,
+                OperatorDailyMetric.efficiency,
+                OperatorDailyMetric.penalty_points,
             ).where(
-                OperatorDailyMetrics.metric_date.in_([date.fromisoformat(x) for x in dates_needed]),
+                OperatorDailyMetric.metric_date.in_([date.fromisoformat(x) for x in dates_needed]),
                 (
-                    (OperatorDailyMetrics.worked_hours > 0) |
-                    (OperatorDailyMetrics.base_hours > 0) |
-                    (OperatorDailyMetrics.calls_count > 0)
+                    (OperatorDailyMetric.worked_hours > 0) |
+                    (OperatorDailyMetric.base_hours > 0) |
+                    (OperatorDailyMetric.calls_count > 0)
                 )
             )
         ))
