@@ -641,50 +641,41 @@ def delete_operator(
     try:
         conn = db.connection()
 
+        def safe_delete(table: str, col: str = "operator_id") -> None:
+            """DELETE игнорируя несуществующие таблицы — схема может отличаться."""
+            try:
+                conn.execute(text(f"DELETE FROM {table} WHERE {col} = :oid"), {"oid": op_id})
+            except Exception:
+                db.rollback()  # сбрасываем aborted-транзакцию PostgreSQL
+
+        def safe_update(sql: str, params: dict) -> None:
+            try:
+                conn.execute(text(sql), params)
+            except Exception:
+                db.rollback()
+
         # Порядок важен: сначала зависимые таблицы, потом оператор
+        safe_delete("period_reports")
+        safe_delete("operator_daily_metrics")
+        safe_delete("operator_level_assignments")
+        safe_delete("operator_level_history")
+        safe_delete("coin_transactions")
+        safe_delete("shop_purchases")
+        safe_delete("lateness_records")       # может не существовать — ок
+        safe_delete("violations")              # может не существовать — ок
+        safe_delete("test_results")
+        safe_delete("weekly_results")
+        safe_delete("rating_snapshots")        # может не существовать — ок
+        safe_delete("operator_audit_logs")     # legacy — может не существовать
+        safe_delete("penalty_records")         # может не существовать — ок
 
-        # 1. period_reports (история расчётов)
-        conn.execute(text("DELETE FROM period_reports WHERE operator_id = :oid"), {"oid": op_id})
-
-        # 2. operator_daily_metrics (ежедневные данные)
-        conn.execute(text("DELETE FROM operator_daily_metrics WHERE operator_id = :oid"), {"oid": op_id})
-
-        # 3. Уровни оператора
-        conn.execute(text("DELETE FROM operator_level_assignments WHERE operator_id = :oid"), {"oid": op_id})
-        conn.execute(text("DELETE FROM operator_level_history WHERE operator_id = :oid"), {"oid": op_id})
-
-        # 4. Коины и транзакции
-        conn.execute(text("DELETE FROM coin_transactions WHERE operator_id = :oid"), {"oid": op_id})
-
-        # 5. Покупки в магазине
-        conn.execute(text("DELETE FROM shop_purchases WHERE operator_id = :oid"), {"oid": op_id})
-
-        # 6. Штрафы / опоздания
-        conn.execute(text("DELETE FROM lateness_records WHERE operator_id = :oid"), {"oid": op_id})
-        conn.execute(text("DELETE FROM violations WHERE operator_id = :oid"), {"oid": op_id})
-
-        # 7. Тесты
-        conn.execute(text("DELETE FROM test_results WHERE operator_id = :oid"), {"oid": op_id})
-
-        # 8. Недельные результаты
-        conn.execute(text("DELETE FROM weekly_results WHERE operator_id = :oid"), {"oid": op_id})
-
-        # 9. Снапшоты рейтинга
-        conn.execute(text("DELETE FROM rating_snapshots WHERE operator_id = :oid"), {"oid": op_id})
-
-        # 10. Audit logs (entity_id обнуляем — не удаляем)
-        conn.execute(
-            text("UPDATE audit_logs SET entity_id = NULL WHERE entity_type = 'operator' AND entity_id = :oid"),
+        # Audit logs — обнуляем entity_id (не удаляем)
+        safe_update(
+            "UPDATE audit_logs SET entity_id = NULL WHERE entity_type = 'operator' AND entity_id = :oid",
             {"oid": op_id},
         )
 
-        # 11. Legacy operator_audit_logs (если есть)
-        try:
-            conn.execute(text("DELETE FROM operator_audit_logs WHERE operator_id = :oid"), {"oid": op_id})
-        except Exception:
-            pass
-
-        # 12. Отвязать и деактивировать учётную запись пользователя
+        # Отвязать и деактивировать учётную запись
         if user_id:
             conn.execute(
                 text("""UPDATE users
@@ -696,16 +687,16 @@ def delete_operator(
                 {"oid": op_id, "uid": user_id},
             )
 
-        # 13. Обнулить self-FK оператора перед удалением
+        # Обнулить self-FK оператора перед удалением
         conn.execute(
             text("UPDATE operators SET user_id = NULL, group_id = NULL WHERE id = :oid"),
             {"oid": op_id},
         )
 
-        # 14. Удалить оператора
+        # Удалить оператора
         conn.execute(text("DELETE FROM operators WHERE id = :oid"), {"oid": op_id})
 
-        # 15. Записать в audit лог
+        # Записать в audit лог
         conn.execute(
             text(
                 "INSERT INTO audit_logs "
