@@ -50,7 +50,8 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
 
 
 @router.post("/logout")
-def logout(response: Response, current_user: User = Depends(get_current_user)):
+def logout(response: Response, db: Session = Depends(get_db)):
+    """Logout всегда работает — даже если JWT протух или невалиден."""
     settings = get_settings()
     cookie_options = {"key": settings.auth_cookie_name, "path": "/"}
     if settings.auth_cookie_domain:

@@ -378,9 +378,7 @@ document.addEventListener('click', async e => {
     }
   }
   if (e.target.id === 'auth-logout-btn') {
-    api.logout().catch(() => {});
-    STATE = { user:null, wallet:null, rating:[], shopItems:[], purchases:[], dashboard:null, adminOperators:[], users:[], myLevel:null, myOperator:null, operatorLevels:[], history:[], groups:[], currentView:'cabinet' };
-    location.reload();
+    logoutAndReload();
   }
 });
 
@@ -3589,7 +3587,14 @@ async function submitForcedPasswordChange() {
 }
 
 async function logoutAndReload() {
-  await api.logout().catch(() => {});
+  try { await api.logout(); } catch(e) { /* игнорируем ошибку — удаляем куку на клиенте */ }
+  // Запасное удаление куки на клиенте (на случай если сервер вернул 403)
+  document.cookie.split(';').forEach(c => {
+    const name = c.trim().split('=')[0];
+    document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+  });
+  // Очищаем sessionStorage (SWR-кеш)
+  sessionStorage.clear();
   STATE.user = null;
   location.reload();
 }
