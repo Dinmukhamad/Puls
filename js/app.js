@@ -1330,31 +1330,249 @@ async function renderRatingOverviewTab(el) {
       }).join('');
     }
 
+    /* ── Новый блок динамики оператора (ТЗ §14-19) ──────────────── */
+    let dynMode = 'points'; // points | coins | rank
+    let dynData = null;
+
+    // expose to global setDynMode
+    window._setDynModeInternal = async function(mode) {
+      dynMode = mode;
+      await loadDynCard();
+    };
+
+    async function loadDynCard() {
+      const opId = selectedOpId || null;
+      try {
+        const url = `/api/rating/operator-dynamics?mode=${dynMode}&limit=4${opId ? '&operator_id='+opId : ''}`;
+        dynData = await api._req('GET', url);
+      } catch(e) {
+        dynData = null;
+      }
+      const box = document.getElementById('dyn-body');
+      if (box) box.innerHTML = renderDynamics(dynData);
+    }
+
     function renderDynamics(data) {
-      if (!data?.items?.length || data.items.length < 2) return `<div class="r-empty-state">
-        <div class="r-empty-title">${canSelectOperator && !selectedOpId ? 'Выберите оператора' : 'Динамика пока недоступна'}</div>
-        <div class="r-empty-sub">Появится после нескольких недель участия</div>
-      </div>`;
+      if (!data || !data.items) {
+        return renderDynEmpty(canSelectOperator && !selectedOpId ? 'Выберите оператора' : 'Нет данных');
+      }
       const items = data.items;
-      const isPlace = data.type === 'place';
-      const vals = items.map(i => Number(i.value) || 0);
+      if (!items.length) {
+        return renderDynEmpty('Нет данных для построения динамики.<br><small>Динамика появится после загрузки рабочих показателей.</small>');
+      }
+
+      // Определяем значения по режиму
+      const isRank = dynMode === 'rank';
+      const isCoins = dynMode === 'coins';
+      const vals = items.map(i =>
+        isRank ? (i.rank || 0) : isCoins ? (i.daily_coins || 0) : (i.daily_points || 0)
+      );
+
+      const summary = data.summary || {};
+      const comps   = data.components_summary || {};
+
+      return `
+      <div class="dyn-card">
+        <!-- Вкладки режима -->
+        <div class="dyn-header">
+          <div>
+            <div class="dyn-title">Динамика оператора</div>
+            <div class="dyn-subtitle">Последние ${items.length} рабочих дня с данными</div>
+          </div>
+          <div class="dyn-tabs">
+            ${['points','coins','rank'].map(m => `
+              <button class="dyn-tab${dynMode===m?' dyn-tab-active':''}" onclick="setDynMode('${m}')">
+                ${m==='points'?'Баллы':m==='coins'?'Коины':'Место'}
+              </button>`).join('')}
+          </div>
+        </div>
+
+        <!-- График + Summary -->
+        <div class="dyn-body-grid">
+          <div class="dyn-chart-col">
+            ${renderDynChart(items, vals, isRank)}
+          </div>
+          <div class="dyn-summary-col">
+            ${renderDynSummary(summary, dynMode)}
+          </div>
+        </div>
+
+        <!-- Расшифровка компонентов -->
+        ${!isRank ? renderDynBreakdown(comps) : ''}
+      </div>`;
+    }
+
+    function renderDynEmpty(msg) {
+      return `<div class="r-empty-state"><div class="r-empty-title">${msg}</div></div>`;
+    }
+
+    function renderDynChart(items, vals, isRank) {
+      if (items.length === 1) {
+        // Одна точка — показываем без линии
+        const v = vals[0];
+        const it = items[0];
+        return `<div class="dyn-single">
+          <div class="dyn-single-val">${isRank ? '#'+v : cleanNumber(v,1)}</div>
+          <div class="dyn-single-date">${esc(it.label)} ${esc(it.weekday)}</div>
+          <div class="dyn-single-note">Недостаточно данных для сравнения</div>
+        </div>`;
+      }
+
+      const W = 320, H = 110, PAD = 28, BOTTOM = 36;
+      const n = items.length;
       const minV = Math.min(...vals), maxV = Math.max(...vals);
-      const range = maxV - minV || 1;
-      const H = 82, W = 240;
-      const pts = items.map((item, i) => {
-        const value = Number(item.value) || 0;
-        const norm = isPlace ? 1 - ((value - minV) / range) : ((value - minV) / range);
-        const x = 8 + i * ((W - 16) / (items.length - 1));
-        const y = 10 + ((1 - norm) * (H - 20));
-        return { x, y, value, week: item.week || 'Неделя' };
-      });
-      return `<div class="dyn-chart-wrap">
-        <svg class="dyn-chart" viewBox="0 0 ${W} 118" preserveAspectRatio="none" aria-hidden="true">
-          <polyline points="${pts.map(p => `${p.x},${p.y}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-          ${pts.map(p => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="var(--accent)"/>
-            <text x="${p.x}" y="${Math.max(8, p.y - 8)}" text-anchor="middle" font-size="9" fill="var(--tx3)" font-family="Inter,sans-serif">${cleanNumber(p.value, dynType === 'place' ? 0 : 1)}</text>`).join('')}
-          ${pts.map(p => `<text x="${p.x}" y="108" text-anchor="middle" font-size="8" fill="var(--tx3)" font-family="Inter,sans-serif">${esc(String(p.week).split('–')[0])}</text>`).join('')}
-        </svg>
+      // Добавляем padding к диапазону чтобы линия не была плоской
+      const range = maxV === minV ? Math.max(maxV * 0.2, 5) : (maxV - minV);
+      const yPad = range * 0.25;
+      const lo = minV - yPad, hi = maxV + yPad;
+
+      const toX = i => PAD + i * (W - PAD*2) / (n - 1);
+      const toY = v => isRank
+        ? PAD + ((v - minV + yPad) / (range + yPad*2)) * (H - PAD)       // rank: выше = ниже на графике
+        : H - PAD - ((v - minV + yPad) / (range + yPad*2)) * (H - PAD);  // points/coins: выше = выше
+
+      const pts = items.map((it, i) => ({ x: toX(i), y: toY(vals[i]), v: vals[i], it }));
+
+      // Smooth bezier path
+      function makePath(pts) {
+        if (pts.length < 2) return '';
+        let d = `M ${pts[0].x} ${pts[0].y}`;
+        for (let i = 1; i < pts.length; i++) {
+          const prev = pts[i-1], cur = pts[i];
+          const cx = (prev.x + cur.x) / 2;
+          d += ` C ${cx} ${prev.y} ${cx} ${cur.y} ${cur.x} ${cur.y}`;
+        }
+        return d;
+      }
+
+      const linePath  = makePath(pts);
+      const fillPath  = linePath + ` L ${pts[pts.length-1].x} ${H+4} L ${pts[0].x} ${H+4} Z`;
+
+      // Y grid lines
+      const gridCount = 3;
+      const gridLines = Array.from({length: gridCount}, (_, i) => {
+        const y = PAD + i * (H - PAD) / (gridCount - 1);
+        return `<line x1="${PAD-4}" y1="${y}" x2="${W-PAD+4}" y2="${y}" stroke="var(--border)" stroke-width="1" stroke-dasharray="4 3"/>`;
+      }).join('');
+
+      return `<svg class="dyn-svg" viewBox="0 0 ${W} ${H + BOTTOM}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="dyn-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.18"/>
+            <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+
+        ${gridLines}
+
+        <!-- Заливка под линией -->
+        <path d="${fillPath}" fill="url(#dyn-grad)"/>
+
+        <!-- Линия -->
+        <path d="${linePath}" fill="none" stroke="var(--accent)" stroke-width="2.5"
+              stroke-linejoin="round" stroke-linecap="round"/>
+
+        <!-- Точки + значения -->
+        ${pts.map((p, i) => {
+          const isLast = i === pts.length - 1;
+          const labelY = Math.max(14, p.y - 10);
+          const label  = isRank ? '#' + (p.v||0) : cleanNumber(p.v, isRank ? 0 : 1);
+          return `
+            <circle cx="${p.x}" cy="${p.y}" r="${isLast?5:4}"
+              fill="${isLast?'var(--accent)':'var(--surface)'}"
+              stroke="var(--accent)" stroke-width="2"/>
+            <text x="${p.x}" y="${labelY}" text-anchor="middle"
+              font-size="10" font-weight="${isLast?'700':'500'}"
+              fill="${isLast?'var(--accent)':'var(--tx2)'}"
+              font-family="Inter,system-ui,sans-serif">${label}</text>
+            <text x="${p.x}" y="${H + 14}" text-anchor="middle"
+              font-size="10" fill="var(--tx2)"
+              font-family="Inter,system-ui,sans-serif">${esc(p.it.label)}</text>
+            <text x="${p.x}" y="${H + 26}" text-anchor="middle"
+              font-size="9" fill="var(--tx3)"
+              font-family="Inter,system-ui,sans-serif">${esc(p.it.weekday)}</text>`;
+        }).join('')}
+      </svg>`;
+    }
+
+    function renderDynSummary(s, mode) {
+      const isRank = mode === 'rank';
+      const isCoins = mode === 'coins';
+      const unit = isRank ? '' : isCoins ? ' ₡' : ' б';
+      const todayFmt = s.today_value != null
+        ? (isRank ? '#' + s.today_value : cleanNumber(s.today_value, 1) + unit)
+        : '—';
+      const avgFmt = s.average_4_days != null
+        ? (isRank ? '#' + Math.round(s.average_4_days) : cleanNumber(s.average_4_days, 1) + unit)
+        : '—';
+
+      let deltaEl = '—';
+      if (s.delta != null) {
+        const sign = isRank
+          ? (s.delta < 0 ? '▲' : s.delta > 0 ? '▼' : '=')   // rank: меньше = лучше
+          : (s.delta > 0 ? '▲' : s.delta < 0 ? '▼' : '=');
+        const cls  = isRank
+          ? (s.delta < 0 ? 'dyn-delta-up' : s.delta > 0 ? 'dyn-delta-dn' : 'dyn-delta-eq')
+          : (s.delta > 0 ? 'dyn-delta-up' : s.delta < 0 ? 'dyn-delta-dn' : 'dyn-delta-eq');
+        const absDelta = Math.abs(s.delta);
+        const pctPart  = s.delta_percent != null ? ` (${s.delta_percent > 0 ? '+' : ''}${cleanNumber(s.delta_percent,1)}%)` : '';
+        deltaEl = `<span class="${cls}">${sign} ${isRank ? absDelta + ' поз.' : (s.delta > 0 ? '+' : '') + cleanNumber(s.delta, 1) + unit + pctPart}</span>`;
+      }
+
+      return `<div class="dyn-summary">
+        <div class="dyn-sum-row">
+          <span class="dyn-sum-lbl">${isRank ? 'Позиция сегодня' : isCoins ? 'Коины сегодня' : 'Баллы сегодня'}</span>
+          <span class="dyn-sum-val dyn-sum-main">${todayFmt}</span>
+        </div>
+        <div class="dyn-sum-row">
+          <span class="dyn-sum-lbl">Изменение</span>
+          <span class="dyn-sum-val">${deltaEl}</span>
+        </div>
+        <div class="dyn-sum-row">
+          <span class="dyn-sum-lbl">Среднее за ${dynData?.items?.length||4} дня</span>
+          <span class="dyn-sum-val">${avgFmt}</span>
+        </div>
+      </div>`;
+    }
+
+    function renderDynBreakdown(c) {
+      const total = (c.hours_points||0) + (c.kvz||0) + (c.efficiency||0);
+      const pct = v => total > 0 ? Math.round(v/total*100) : 0;
+      const bar = (v, max, color) => {
+        const w = max > 0 ? Math.round(clamp01(v/max)*100) : 0;
+        return `<div class="dyn-bar-bg"><div class="dyn-bar-fill" style="width:${w}%;background:${color}"></div></div>`;
+      };
+      const clamp01 = x => Math.min(1, Math.max(0, x));
+      const maxComp = Math.max(c.hours_points||0, c.kvz||0, c.efficiency||0, 0.1);
+
+      return `<div class="dyn-breakdown">
+        <div class="dyn-bk-title">Баллы за день формируются без учёта качества, только из:</div>
+        <div class="dyn-bk-rows">
+          <div class="dyn-bk-row">
+            <span class="dyn-bk-icon">⏱</span>
+            <span class="dyn-bk-lbl">Часы</span>
+            ${bar(c.hours_points||0, maxComp, '#3b82f6')}
+            <span class="dyn-bk-val">${cleanNumber(c.hours_points,1)}</span>
+          </div>
+          <div class="dyn-bk-row">
+            <span class="dyn-bk-icon">📞</span>
+            <span class="dyn-bk-lbl">КВЗ</span>
+            ${bar(c.kvz||0, maxComp, '#10b981')}
+            <span class="dyn-bk-val">${cleanNumber(c.kvz,2)}</span>
+          </div>
+          <div class="dyn-bk-row">
+            <span class="dyn-bk-icon">⚡</span>
+            <span class="dyn-bk-lbl">Эффективность</span>
+            ${bar(c.efficiency||0, maxComp, '#8b5cf6')}
+            <span class="dyn-bk-val">${cleanNumber(c.efficiency,1)}%</span>
+          </div>
+          ${(c.penalty_points||0) > 0 ? `<div class="dyn-bk-row">
+            <span class="dyn-bk-icon">⚠</span>
+            <span class="dyn-bk-lbl">Штрафы</span>
+            ${bar(c.penalty_points||0, maxComp, '#ef4444')}
+            <span class="dyn-bk-val dyn-bk-penalty">−${cleanNumber(c.penalty_points,1)}</span>
+          </div>` : ''}
+        </div>
       </div>`;
     }
 
@@ -1478,7 +1696,7 @@ async function renderRatingOverviewTab(el) {
                   <button class="metric-tab ${dynType === 'coins' ? 'active' : ''}" data-type="coins">Коины</button>
                 </div>
               </div>
-              <div id="dyn-body">${renderDynamics(personal.myDyn)}</div>
+              <div id="dyn-body"><div class="loading-state" style="min-height:120px"><div class="loading-spinner"></div></div></div>
             </div>
           </div>
 
@@ -1552,7 +1770,7 @@ async function renderRatingOverviewTab(el) {
           const body = el.querySelector('#dyn-body');
           if (body) body.innerHTML = '<div class="rating-inline-skeleton"></div>';
           personal.myDyn = await fetchDynamicsData(selectedOpId, dynType);
-          if (body) body.innerHTML = renderDynamics(personal.myDyn);
+          loadDynCard();
         });
       });
 
@@ -1564,6 +1782,8 @@ async function renderRatingOverviewTab(el) {
     }
 
     buildPage();
+    // Загружаем блок динамики после первичного рендера
+    setTimeout(() => loadDynCard(), 150);
 
   } catch(err) {
     const content = el.querySelector('.rating-page');
@@ -4074,6 +4294,12 @@ window.reloadData = reloadData;
 window.closeModal = closeModal;
 window.submitAddOperator = submitAddOperator;
 window.deactivateUserUi = deactivateUserUi;
+
+window.setDynMode = function(mode) {
+  // dynMode живёт внутри замыкания renderRating,
+  // поэтому обновляем через глобальный колбэк
+  if (window._setDynModeInternal) window._setDynModeInternal(mode);
+};
 window.showUserResetPasswordModal = showUserResetPasswordModal;
 window.submitUserResetPassword = submitUserResetPassword;
 window.submitAddItem = submitAddItem;

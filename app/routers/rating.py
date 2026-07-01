@@ -155,6 +155,240 @@ def get_my_comparison(
     }
 
 
+
+
+@router.get("/operator-dynamics")
+def get_operator_dynamics(
+    mode: str = "points",        # points | coins | rank
+    limit: int = 4,
+    operator_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """
+    Динамика оператора за последние N рабочих дней с данными.
+    Качество звонков НЕ учитывается (только часы, КВЗ, эффективность, штрафы).
+    """
+    from app.models.entities import OperatorDailyMetrics, WorkNorm
+    from sqlalchemy import func as sqlfunc
+    import calendar
+
+    op = _get_requested_operator(db, current_user, operator_id)
+    if not op:
+        return {"operator_id": None, "items": [], "summary": {}, "components_summary": {}}
+
+    limit = max(1, min(limit, 10))
+
+    # ── Шаг 1-3: последние N дат с рабочими данными ──────────────
+    rows = list(db.scalars(
+        select(OperatorDailyMetrics)
+        .where(
+            OperatorDailyMetrics.operator_id == op.id,
+            # Хотя бы один рабочий показатель > 0
+            (
+                (OperatorDailyMetrics.worked_hours > 0) |
+                (OperatorDailyMetrics.base_hours > 0) |
+                (OperatorDailyMetrics.calls_count > 0) |
+                (OperatorDailyMetrics.efficiency > 0) |
+                (OperatorDailyMetrics.penalty_points > 0) |
+                (OperatorDailyMetrics.penalty_minutes > 0)
+            )
+        )
+        .order_by(OperatorDailyMetrics.metric_date.desc())
+        .limit(limit)
+    ))
+    rows.reverse()  # хронологический порядок для графика
+
+    if not rows:
+        return {
+            "operator_id": op.id,
+            "full_name": op.full_name,
+            "mode": mode,
+            "limit": limit,
+            "quality_included": False,
+            "items": [],
+            "summary": {},
+            "components_summary": {},
+        }
+
+    # ── Норма часов оператора ─────────────────────────────────────
+    op_rate = float(op.rate) if op.rate else None
+    MAX_HOURS_PTS = 25.0
+
+    def daily_norm(d: date) -> float:
+        """Дневная норма часов для оператора с учётом его ставки."""
+        if not op_rate:
+            return 0.0
+        days_in_month = calendar.monthrange(d.year, d.month)[1]
+        wn = db.scalar(
+            select(WorkNorm).where(
+                WorkNorm.year == d.year,
+                WorkNorm.month == d.month,
+                WorkNorm.rate == op_rate,
+                WorkNorm.is_active.is_(True),
+            )
+        )
+        if wn:
+            return float(wn.monthly_norm_hours) / days_in_month
+        # Fallback: стандартные нормы
+        std = {0.5: (84, 88), 0.75: (126, 132), 1.0: (168, 176)}
+        norms = std.get(op_rate, (168, 176))
+        monthly = norms[0] if days_in_month == 30 else norms[1]
+        return monthly / days_in_month
+
+    def safe_div(a, b, default=0.0):
+        try:
+            if b and b != 0:
+                return a / b
+            return default
+        except Exception:
+            return default
+
+    def clamp(v, lo=0.0, hi=None):
+        v = max(lo, v or 0.0)
+        return min(v, hi) if hi is not None else v
+
+    # ── Шаг 4-5: рассчитываем показатели для каждого дня ─────────
+    WEEKDAYS_RU = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
+
+    items = []
+    for row in rows:
+        d = row.metric_date
+        norm = daily_norm(d)
+
+        total_hours = clamp(row.worked_hours)
+        base_h      = clamp(row.base_hours)
+        calls       = clamp(row.calls_count)
+        call_time   = clamp(row.efficiency)   # efficiency поле = call_time_hours
+        pen_pts     = clamp(row.penalty_points)
+
+        # Баллы за часы
+        if norm > 0:
+            hours_pts = clamp(safe_div(total_hours, norm), hi=1.0) * MAX_HOURS_PTS
+        else:
+            hours_pts = 0.0
+
+        # КВЗ
+        kvz = clamp(safe_div(calls, base_h))
+
+        # Эффективность (%)
+        eff = clamp(safe_div(call_time, base_h) * 100)
+
+        daily_pts   = round(hours_pts + kvz + eff - pen_pts, 2)
+        daily_coins = int(max(0, daily_pts) // 5)
+
+        items.append({
+            "date":           d.isoformat(),
+            "label":          d.strftime("%-d.%m"),
+            "weekday":        WEEKDAYS_RU[d.weekday()],
+            "total_hours":    round(total_hours, 2),
+            "base_hours":     round(base_h, 2),
+            "calls_count":    int(calls),
+            "call_time_hours": round(call_time, 2),
+            "hours_points":   round(hours_pts, 2),
+            "kvz":            round(kvz, 2),
+            "efficiency":     round(eff, 2),
+            "penalty_points": round(pen_pts, 2),
+            "daily_points":   daily_pts,
+            "daily_coins":    daily_coins,
+            "rank":           None,   # заполним ниже
+        })
+
+    # ── Место за каждый день ──────────────────────────────────────
+    dates_needed = [i["date"] for i in items]
+    if dates_needed:
+        from app.models.entities import Operator as OpModel
+        # Все метрики всех операторов за нужные даты
+        all_rows = list(db.execute(
+            select(
+                OperatorDailyMetrics.metric_date,
+                OperatorDailyMetrics.operator_id,
+                OperatorDailyMetrics.worked_hours,
+                OperatorDailyMetrics.base_hours,
+                OperatorDailyMetrics.calls_count,
+                OperatorDailyMetrics.efficiency,
+                OperatorDailyMetrics.penalty_points,
+            ).where(
+                OperatorDailyMetrics.metric_date.in_([date.fromisoformat(x) for x in dates_needed]),
+                (
+                    (OperatorDailyMetrics.worked_hours > 0) |
+                    (OperatorDailyMetrics.base_hours > 0) |
+                    (OperatorDailyMetrics.calls_count > 0)
+                )
+            )
+        ))
+
+        # Группируем по дате
+        from collections import defaultdict
+        by_date = defaultdict(list)
+        for r in all_rows:
+            d_str = r.metric_date.isoformat()
+            bh = clamp(r.base_hours)
+            th = clamp(r.worked_hours)
+            calls_ = clamp(r.calls_count)
+            eff_   = clamp(r.efficiency)
+            pen_   = clamp(r.penalty_points)
+            # Норма для этого оператора — приближение (без JOIN)
+            dp = round(clamp(th / max(daily_norm(r.metric_date), 0.001), hi=1.0) * MAX_HOURS_PTS
+                       + safe_div(calls_, bh)
+                       + safe_div(eff_, bh) * 100
+                       - pen_, 2)
+            by_date[d_str].append((r.operator_id, dp))
+
+        # Считаем ранги
+        rank_map = {}
+        for d_str, op_pts in by_date.items():
+            sorted_ops = sorted(op_pts, key=lambda x: (-x[1], x[0]))
+            for rank_pos, (oid, _) in enumerate(sorted_ops, 1):
+                if oid == op.id:
+                    rank_map[d_str] = rank_pos
+                    break
+
+        for item in items:
+            item["rank"] = rank_map.get(item["date"])
+
+    # ── Summary ───────────────────────────────────────────────────
+    if mode == "rank":
+        vals = [i["rank"] or 0 for i in items]
+    elif mode == "coins":
+        vals = [i["daily_coins"] for i in items]
+    else:
+        vals = [i["daily_points"] for i in items]
+
+    today_val = vals[-1] if vals else 0
+    prev_val  = vals[-2] if len(vals) >= 2 else None
+    delta     = round(today_val - prev_val, 2) if prev_val is not None else None
+    delta_pct = round(delta / prev_val * 100, 2) if (prev_val and prev_val != 0 and delta is not None) else None
+    avg4      = round(sum(vals) / len(vals), 2) if vals else 0
+
+    summary = {
+        "today_value":    today_val,
+        "previous_value": prev_val,
+        "delta":          delta,
+        "delta_percent":  delta_pct,
+        "average_4_days": avg4,
+    }
+
+    # Components summary (последний день)
+    last = items[-1] if items else {}
+    components = {
+        "hours_points":   last.get("hours_points", 0),
+        "kvz":            last.get("kvz", 0),
+        "efficiency":     last.get("efficiency", 0),
+        "penalty_points": last.get("penalty_points", 0),
+    }
+
+    return {
+        "operator_id":       op.id,
+        "full_name":         op.full_name,
+        "mode":              mode,
+        "limit":             limit,
+        "quality_included":  False,
+        "items":             items,
+        "summary":           summary,
+        "components_summary": components,
+    }
+
 @router.get("/me/dynamics")
 def get_my_dynamics(
     type: str = "place",
