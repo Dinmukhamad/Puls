@@ -1836,7 +1836,7 @@ function renderUsersPage() {
   }
 
   function operatorActions(o) {
-    const isAdmin = STATE.currentUser?.role === 'admin';
+    const isAdmin = STATE.user?.role === 'admin';
     return `
       <div class="row-actions">
         <button class="btn-icon btn-ghost" onclick="showUserResetPasswordModal(${o.id})" title="Сбросить пароль" aria-label="Сбросить пароль">↻</button>
