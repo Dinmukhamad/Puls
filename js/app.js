@@ -3216,7 +3216,7 @@ async function submitSetRate(operatorId) {
   const rate = val === '' ? null : parseFloat(val);
   const errEl = document.getElementById('rate-err');
   try {
-    await api._req('PATCH', \`/api/work-norms/operators/\${operatorId}/rate\`, { rate });
+    await api._req('PATCH', `/api/work-norms/operators/${operatorId}/rate`, { rate });
     showToast('Ставка сохранена', 'ok');
     closeModal();
     swrInvalidate('users:list');
@@ -3343,7 +3343,7 @@ async function showEditNormModal(normId, currentHours) {
   const hours = parseFloat(val);
   if (!hours || hours <= 0) { showToast('Некорректное значение', 'error'); return; }
   try {
-    await api._req('PATCH', \`/api/work-norms/\${normId}\`, { monthly_norm_hours: hours });
+    await api._req('PATCH', `/api/work-norms/${normId}`, { monthly_norm_hours: hours });
     showToast('Норма обновлена', 'ok');
     const norms = await api._req('GET', '/api/work-norms');
     renderWorkNormsModal(norms);
@@ -3353,7 +3353,7 @@ async function showEditNormModal(normId, currentHours) {
 async function deleteNorm(normId) {
   if (!confirm('Отключить норму?')) return;
   try {
-    await api._req('DELETE', \`/api/work-norms/\${normId}\`);
+    await api._req('DELETE', `/api/work-norms/${normId}`);
     showToast('Норма отключена', 'ok');
     const norms = await api._req('GET', '/api/work-norms');
     renderWorkNormsModal(norms);
