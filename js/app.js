@@ -496,14 +496,17 @@ async function renderOperatorLevelsSettings() {
     el.innerHTML = '<div class="empty-state"><p>Недостаточно прав</p></div>';
     return;
   }
-  el.innerHTML = `<div class="view-header">
-    <div><div class="section-kicker">Операторы</div><h2 class="section-title">Уровни операторов</h2></div>
-    <div class="header-right">
+  el.innerHTML = `<div class="view-header level-view-header">
+    <div>
+      <div class="section-kicker">Операторы</div>
+      <h2 class="section-title">Уровни операторов</h2>
+    </div>
+    <div class="header-right level-header-actions">
       <button class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi()">Пересчитать</button>
       <button class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">Добавить уровень</button>
     </div>
   </div>
-  <div class="empty-state"><p>Загрузка уровней…</p></div>`;
+  <div class="panel level-settings-shell"><div class="empty-state"><p>Загрузка уровней…</p></div></div>`;
 
   const levels = await api.listAdminOperatorLevels().catch(err => {
     el.innerHTML = `<div class="status-line status-error">${esc(err.message)}</div>`;
@@ -511,8 +514,8 @@ async function renderOperatorLevelsSettings() {
   });
   STATE.operatorLevels = levels;
 
-  function ruleText(rule) {
-    const label = {
+  function metricLabel(code) {
+    return {
       tenure_days: 'Стаж',
       quality: 'Качество',
       kvz: 'КВЗ',
@@ -520,39 +523,63 @@ async function renderOperatorLevelsSettings() {
       penalty_minutes: 'Штрафы',
       final_points: 'Итоговые баллы',
       test_percent: 'Тесты',
-    }[rule.metric_code] || rule.metric_code;
+    }[code] || code;
+  }
+
+  function ruleText(rule) {
+    const label = metricLabel(rule.metric_code);
     if (rule.operator === 'between') return `${label}: ${levelNum(rule.value_min)}-${levelNum(rule.value_max)}`;
     if (rule.operator === 'gte') return `${label} >= ${levelNum(rule.value_min)}`;
     if (rule.operator === 'lte') return `${label} <= ${levelNum(rule.value_max)}`;
     return `${label} = ${levelNum(rule.value_min)}`;
   }
 
-  el.innerHTML = `<div class="view-header">
-    <div><div class="section-kicker">Операторы</div><h2 class="section-title">Уровни операторов</h2></div>
-    <div class="header-right">
+  el.innerHTML = `<div class="view-header level-view-header">
+    <div>
+      <div class="section-kicker">Операторы</div>
+      <h2 class="section-title">Уровни операторов</h2>
+    </div>
+    <div class="header-right level-header-actions">
       <button class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi()">Пересчитать</button>
       <button class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">Добавить уровень</button>
     </div>
   </div>
-  <div class="level-settings-grid">
-    ${levels.map(level => `<div class="panel level-settings-card">
-      <div class="panel-head">
-        <h3>${levelBadgeHtml(level, 'level-badge-lg')} ${esc(level.name)}</h3>
-        <span class="panel-badge">${level.is_active ? 'Активен' : 'Отключён'}</span>
+  <div class="panel level-settings-shell">
+    <div class="level-settings-head">
+      <div>
+        <h3>Правила уровней</h3>
+        <p>Уровень считается отдельно от роли доступа. Чем выше порядок, тем выше игровой статус оператора.</p>
       </div>
-      <p class="cell-muted">${esc(level.description || '')}</p>
-      <div class="level-rule-list">
-        ${(level.rules || []).map(rule => `<div class="level-rule-row">
-          <span>${esc(ruleText(rule))}</span>
-          <button class="btn-link" onclick="deleteOperatorLevelRuleUi(${rule.id})">Удалить</button>
-        </div>`).join('') || '<div class="empty-line">Правил пока нет</div>'}
-      </div>
-      <div class="row-actions" style="justify-content:flex-start;margin-top:12px">
-        <button class="btn-outline btn-sm" onclick="editOperatorLevelUi(${level.id})">Редактировать</button>
-        <button class="btn-outline btn-sm" onclick="addOperatorLevelRuleUi(${level.id})">Добавить показатель</button>
-        <button class="btn-outline btn-sm danger" onclick="disableOperatorLevelUi(${level.id})">Отключить</button>
-      </div>
-    </div>`).join('')}
+      <span class="panel-badge">${levels.filter(l => l.is_active).length} активных</span>
+    </div>
+    <div class="level-settings-list">
+      ${levels.map(level => `<article class="level-settings-row ${level.is_active ? '' : 'is-disabled'}">
+        <div class="level-main-cell">
+          <div class="level-title-line">
+            <span class="level-color-dot" style="background:${esc(level.color || '#64748B')}"></span>
+            <strong>${esc(level.name)}</strong>
+            ${levelBadgeHtml(level)}
+            <span class="level-order">#${level.sort_order ?? 0}</span>
+          </div>
+          <div class="level-desc">${esc(level.description || 'Описание не задано')}</div>
+        </div>
+        <div class="level-rules-cell">
+          ${(level.rules || []).length ? (level.rules || []).map(rule => `
+            <span class="level-rule-chip" title="${esc(ruleText(rule))}">
+              ${esc(ruleText(rule))}
+              <button type="button" onclick="deleteOperatorLevelRuleUi(${rule.id})" aria-label="Удалить показатель">×</button>
+            </span>`).join('') : '<span class="cell-muted">Показатели не настроены</span>'}
+        </div>
+        <div class="level-status-cell">
+          <span class="status-pill ${level.is_active ? 'ok' : 'muted'}">${level.is_active ? 'Активен' : 'Отключён'}</span>
+        </div>
+        <div class="level-actions-cell">
+          <button class="btn-outline btn-sm" onclick="editOperatorLevelUi(${level.id})">Изменить</button>
+          <button class="btn-outline btn-sm" onclick="addOperatorLevelRuleUi(${level.id})">Показатель</button>
+          <button class="btn-outline btn-sm danger" onclick="disableOperatorLevelUi(${level.id})">Отключить</button>
+        </div>
+      </article>`).join('')}
+    </div>
   </div>`;
 }
 
@@ -566,36 +593,115 @@ async function recalculateOperatorLevelsUi() {
 }
 
 async function showCreateOperatorLevelPrompt() {
-  const name = prompt('Название уровня');
-  if (!name) return;
-  const code = prompt('Код уровня латиницей', name.toLowerCase().replace(/\s+/g, '_'));
-  if (!code) return;
-  const color = prompt('Цвет бейджа', '#64748B') || '#64748B';
-  try {
-    await api.createOperatorLevel({ code, name, color, description: '', icon: '', sort_order: (STATE.operatorLevels.length + 1) * 10, is_active: true });
-    await renderOperatorLevelsSettings();
-  } catch(e) { showToast(e.message, 'error'); }
+  showOperatorLevelForm();
 }
 
 async function editOperatorLevelUi(levelId) {
   const level = STATE.operatorLevels.find(l => l.id === levelId);
   if (!level) return;
-  const name = prompt('Название уровня', level.name);
-  if (!name) return;
-  const color = prompt('Цвет бейджа', level.color || '#64748B') || level.color;
+  showOperatorLevelForm(level);
+}
+
+function showOperatorLevelForm(level = null) {
+  const isEdit = Boolean(level);
+  showModal(`
+    <h3 class="modal-title">${isEdit ? 'Изменить уровень' : 'Добавить уровень'}</h3>
+    <div class="form-grid-2">
+      <div class="form-group">
+        <label class="form-label">Название</label>
+        <input id="lvl-name" class="form-input" value="${esc(level?.name || '')}" placeholder="Например: Профи">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Код</label>
+        <input id="lvl-code" class="form-input" value="${esc(level?.code || '')}" ${isEdit ? 'disabled' : ''} placeholder="pro">
+      </div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group">
+        <label class="form-label">Цвет бейджа</label>
+        <input id="lvl-color" class="form-input" value="${esc(level?.color || '#64748B')}" placeholder="#64748B">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Порядок</label>
+        <input id="lvl-order" class="form-input" type="number" value="${esc(level?.sort_order ?? ((STATE.operatorLevels.length + 1) * 10))}">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Описание</label>
+      <textarea id="lvl-description" class="form-input" rows="3" placeholder="Короткое описание уровня">${esc(level?.description || '')}</textarea>
+    </div>
+    <div id="lvl-form-error" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:8px" onclick="submitOperatorLevelForm(${isEdit ? level.id : 'null'})">${isEdit ? 'Сохранить' : 'Создать'}</button>
+  `);
+}
+
+async function submitOperatorLevelForm(levelId) {
+  const err = document.getElementById('lvl-form-error');
+  const name = document.getElementById('lvl-name')?.value.trim();
+  const code = document.getElementById('lvl-code')?.value.trim();
+  const color = document.getElementById('lvl-color')?.value.trim() || '#64748B';
+  const description = document.getElementById('lvl-description')?.value.trim() || '';
+  const sort_order = Number(document.getElementById('lvl-order')?.value || 0);
+  if (!name || (!levelId && !code)) {
+    if (err) { err.textContent = 'Заполните название и код'; err.className = 'status-line status-error'; }
+    return;
+  }
   try {
-    await api.updateOperatorLevel(levelId, { name, color });
+    if (levelId) await api.updateOperatorLevel(levelId, { name, color, description, sort_order });
+    else await api.createOperatorLevel({ code, name, color, description, icon: '', sort_order, is_active: true });
+    closeModal();
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
 }
 
 async function addOperatorLevelRuleUi(levelId) {
-  const metric_code = prompt('Показатель: tenure_days, quality, kvz, efficiency, penalty_minutes, final_points, test_percent', 'quality');
-  if (!metric_code) return;
-  const operator = prompt('Условие: gte, lte, eq, between', metric_code === 'penalty_minutes' ? 'lte' : 'gte');
-  if (!operator) return;
-  const value_min_raw = prompt('Минимум / значение (для lte можно оставить пустым)', operator === 'lte' ? '' : '0');
-  const value_max_raw = operator === 'between' || operator === 'lte' ? prompt('Максимум', '0') : '';
+  const level = STATE.operatorLevels.find(l => l.id === levelId);
+  showModal(`
+    <h3 class="modal-title">Добавить показатель</h3>
+    <div class="status-line" style="padding:0;color:var(--text-secondary)">Уровень: <b>${esc(level?.name || '')}</b></div>
+    <div class="form-grid-2">
+      <div class="form-group">
+        <label class="form-label">Показатель</label>
+        <select id="rule-metric" class="form-select">
+          <option value="tenure_days">Стаж</option>
+          <option value="quality">Качество</option>
+          <option value="kvz">КВЗ</option>
+          <option value="efficiency">Эффективность</option>
+          <option value="penalty_minutes">Штрафы</option>
+          <option value="final_points">Итоговые баллы</option>
+          <option value="test_percent">Тесты</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Условие</label>
+        <select id="rule-operator" class="form-select">
+          <option value="gte">Больше или равно</option>
+          <option value="lte">Меньше или равно</option>
+          <option value="eq">Равно</option>
+          <option value="between">Между</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group">
+        <label class="form-label">Минимум / значение</label>
+        <input id="rule-min" class="form-input" type="number" step="0.01" value="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Максимум</label>
+        <input id="rule-max" class="form-input" type="number" step="0.01" placeholder="Для lte / between">
+      </div>
+    </div>
+    <div id="rule-form-error" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:8px" onclick="submitOperatorLevelRuleForm(${levelId})">Добавить</button>
+  `);
+}
+
+async function submitOperatorLevelRuleForm(levelId) {
+  const metric_code = document.getElementById('rule-metric')?.value;
+  const operator = document.getElementById('rule-operator')?.value;
+  const value_min_raw = document.getElementById('rule-min')?.value;
+  const value_max_raw = document.getElementById('rule-max')?.value;
   const payload = {
     metric_code,
     operator,
@@ -603,8 +709,20 @@ async function addOperatorLevelRuleUi(levelId) {
     value_max: value_max_raw === '' || value_max_raw == null ? null : Number(value_max_raw),
     is_required: true,
   };
+  if (operator === 'lte') payload.value_min = null;
+  if ((operator === 'gte' || operator === 'eq') && payload.value_min === null) {
+    const err = document.getElementById('rule-form-error');
+    if (err) { err.textContent = 'Укажите значение'; err.className = 'status-line status-error'; }
+    return;
+  }
+  if ((operator === 'lte' || operator === 'between') && payload.value_max === null) {
+    const err = document.getElementById('rule-form-error');
+    if (err) { err.textContent = 'Укажите максимум'; err.className = 'status-line status-error'; }
+    return;
+  }
   try {
     await api.addOperatorLevelRule(levelId, payload);
+    closeModal();
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
 }
@@ -3507,8 +3625,10 @@ window.copyCredentials = copyCredentials;
 window.renderOperatorLevelsSettings = renderOperatorLevelsSettings;
 window.recalculateOperatorLevelsUi = recalculateOperatorLevelsUi;
 window.showCreateOperatorLevelPrompt = showCreateOperatorLevelPrompt;
+window.submitOperatorLevelForm = submitOperatorLevelForm;
 window.editOperatorLevelUi = editOperatorLevelUi;
 window.addOperatorLevelRuleUi = addOperatorLevelRuleUi;
+window.submitOperatorLevelRuleForm = submitOperatorLevelRuleForm;
 window.deleteOperatorLevelRuleUi = deleteOperatorLevelRuleUi;
 window.disableOperatorLevelUi = disableOperatorLevelUi;
 window.manualOperatorLevelUi = manualOperatorLevelUi;
