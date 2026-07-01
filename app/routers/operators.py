@@ -641,41 +641,39 @@ def delete_operator(
     try:
         conn = db.connection()
 
-        def safe_delete(table: str, col: str = "operator_id") -> None:
-            """DELETE игнорируя несуществующие таблицы — схема может отличаться."""
-            try:
-                conn.execute(text(f"DELETE FROM {table} WHERE {col} = :oid"), {"oid": op_id})
-            except Exception:
-                db.rollback()  # сбрасываем aborted-транзакцию PostgreSQL
-
-        def safe_update(sql: str, params: dict) -> None:
+        def safe_exec(sql: str, params: dict) -> None:
+            """
+            Выполняет SQL через SAVEPOINT — если таблица не существует,
+            откатывается к savepoint и продолжает. Соединение остаётся живым.
+            """
+            sp = f"sp_{abs(hash(sql)) % 100000}"
+            conn.execute(text(f"SAVEPOINT {sp}"))
             try:
                 conn.execute(text(sql), params)
+                conn.execute(text(f"RELEASE SAVEPOINT {sp}"))
             except Exception:
-                db.rollback()
+                conn.execute(text(f"ROLLBACK TO SAVEPOINT {sp}"))
 
-        # Порядок важен: сначала зависимые таблицы, потом оператор
-        safe_delete("period_reports")
-        safe_delete("operator_daily_metrics")
-        safe_delete("operator_level_assignments")
-        safe_delete("operator_level_history")
-        safe_delete("coin_transactions")
-        safe_delete("shop_purchases")
-        safe_delete("lateness_records")       # может не существовать — ок
-        safe_delete("violations")              # может не существовать — ок
-        safe_delete("test_results")
-        safe_delete("weekly_results")
-        safe_delete("rating_snapshots")        # может не существовать — ок
-        safe_delete("operator_audit_logs")     # legacy — может не существовать
-        safe_delete("penalty_records")         # может не существовать — ок
+        oid = op_id
 
-        # Audit logs — обнуляем entity_id (не удаляем)
-        safe_update(
+        # 1. Зависимые таблицы — через savepoint (таблица может не существовать)
+        for tbl in [
+            "period_reports", "operator_daily_metrics",
+            "operator_level_assignments", "operator_level_history",
+            "coin_transactions", "shop_purchases",
+            "lateness_records", "violations", "penalty_records",
+            "test_results", "weekly_results", "rating_snapshots",
+            "operator_audit_logs",
+        ]:
+            safe_exec(f"DELETE FROM {tbl} WHERE operator_id = :oid", {"oid": oid})
+
+        # 2. Audit logs — обнуляем entity_id
+        safe_exec(
             "UPDATE audit_logs SET entity_id = NULL WHERE entity_type = 'operator' AND entity_id = :oid",
-            {"oid": op_id},
+            {"oid": oid},
         )
 
-        # Отвязать и деактивировать учётную запись
+        # 3. Отвязать и деактивировать учётную запись
         if user_id:
             conn.execute(
                 text("""UPDATE users
@@ -684,19 +682,19 @@ def delete_operator(
                             status = 'deleted',
                             username = CONCAT('deleted_', :oid, '_', username)
                         WHERE id = :uid"""),
-                {"oid": op_id, "uid": user_id},
+                {"oid": oid, "uid": user_id},
             )
 
-        # Обнулить self-FK оператора перед удалением
+        # 4. Обнулить self-FK оператора
         conn.execute(
             text("UPDATE operators SET user_id = NULL, group_id = NULL WHERE id = :oid"),
-            {"oid": op_id},
+            {"oid": oid},
         )
 
-        # Удалить оператора
-        conn.execute(text("DELETE FROM operators WHERE id = :oid"), {"oid": op_id})
+        # 5. Удалить оператора
+        conn.execute(text("DELETE FROM operators WHERE id = :oid"), {"oid": oid})
 
-        # Записать в audit лог
+        # 6. Audit лог удаления
         conn.execute(
             text(
                 "INSERT INTO audit_logs "
@@ -704,7 +702,7 @@ def delete_operator(
                 "VALUES ('operator_deleted', 'operator', NULL, :details, :uid, NOW())"
             ),
             {
-                "details": f"Администратор удалил оператора: {op_name} (ID {op_id}) со всей историей",
+                "details": f"Администратор удалил оператора: {op_name} (ID {oid}) со всей историей",
                 "uid": current_user.id,
             },
         )
