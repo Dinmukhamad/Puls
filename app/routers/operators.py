@@ -615,73 +615,111 @@ def restore_operator(
 def delete_operator(
     operator_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_operator_management_access),
+    current_user: User = Depends(get_current_user),
 ) -> dict:
+    """
+    Полное удаление оператора из БД — только для admin.
+    Каскадно удаляет всю историю (PeriodReport, DailyMetrics, уровни и т.д.).
+    """
     from sqlalchemy import inspect, text
+
+    # Только admin
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Удаление оператора доступно только администратору",
+        )
 
     op = db.get(Operator, operator_id)
     if not op:
         raise HTTPException(status_code=404, detail="Оператор не найден")
 
-    counts = _operator_history_counts(db, operator_id)
-    if any(counts.values()):
-        raise HTTPException(
-            status_code=409,
-            detail="Нельзя удалить оператора с историей операций. Используйте функцию увольнения.",
-        )
-
     op_name = op.full_name
     op_id   = op.id
+    user_id = op.user_id
 
     try:
         conn = db.connection()
 
-        # 1. Legacy table existed before audit_logs unification. It may be absent on current schemas.
-        if inspect(conn).has_table("operator_audit_logs"):
-            conn.execute(
-                text("DELETE FROM operator_audit_logs WHERE operator_id = :oid"),
-                {"oid": op_id}
-            )
+        # Порядок важен: сначала зависимые таблицы, потом оператор
 
-        # 2. Обнулить ссылки в audit_logs (entity_id nullable)
+        # 1. period_reports (история расчётов)
+        conn.execute(text("DELETE FROM period_reports WHERE operator_id = :oid"), {"oid": op_id})
+
+        # 2. operator_daily_metrics (ежедневные данные)
+        conn.execute(text("DELETE FROM operator_daily_metrics WHERE operator_id = :oid"), {"oid": op_id})
+
+        # 3. Уровни оператора
+        conn.execute(text("DELETE FROM operator_level_assignments WHERE operator_id = :oid"), {"oid": op_id})
+        conn.execute(text("DELETE FROM operator_level_history WHERE operator_id = :oid"), {"oid": op_id})
+
+        # 4. Коины и транзакции
+        conn.execute(text("DELETE FROM coin_transactions WHERE operator_id = :oid"), {"oid": op_id})
+
+        # 5. Покупки в магазине
+        conn.execute(text("DELETE FROM shop_purchases WHERE operator_id = :oid"), {"oid": op_id})
+
+        # 6. Штрафы / опоздания
+        conn.execute(text("DELETE FROM lateness_records WHERE operator_id = :oid"), {"oid": op_id})
+        conn.execute(text("DELETE FROM violations WHERE operator_id = :oid"), {"oid": op_id})
+
+        # 7. Тесты
+        conn.execute(text("DELETE FROM test_results WHERE operator_id = :oid"), {"oid": op_id})
+
+        # 8. Недельные результаты
+        conn.execute(text("DELETE FROM weekly_results WHERE operator_id = :oid"), {"oid": op_id})
+
+        # 9. Снапшоты рейтинга
+        conn.execute(text("DELETE FROM rating_snapshots WHERE operator_id = :oid"), {"oid": op_id})
+
+        # 10. Audit logs (entity_id обнуляем — не удаляем)
         conn.execute(
             text("UPDATE audit_logs SET entity_id = NULL WHERE entity_type = 'operator' AND entity_id = :oid"),
-            {"oid": op_id}
+            {"oid": op_id},
         )
 
-        # 3. Отвязать пользователя
-        if op.user_id:
+        # 11. Legacy operator_audit_logs (если есть)
+        try:
+            conn.execute(text("DELETE FROM operator_audit_logs WHERE operator_id = :oid"), {"oid": op_id})
+        except Exception:
+            pass
+
+        # 12. Отвязать и деактивировать учётную запись пользователя
+        if user_id:
             conn.execute(
-                text("UPDATE users SET is_active = false, operator_id = NULL, username = CONCAT('deleted_', :oid, '_', username) WHERE id = :uid"),
-                {"oid": op_id, "uid": op.user_id}
+                text("""UPDATE users
+                        SET is_active = false,
+                            operator_id = NULL,
+                            status = 'deleted',
+                            username = CONCAT('deleted_', :oid, '_', username)
+                        WHERE id = :uid"""),
+                {"oid": op_id, "uid": user_id},
             )
 
-        # 4. Обнулить FK на операторе
+        # 13. Обнулить self-FK оператора перед удалением
         conn.execute(
             text("UPDATE operators SET user_id = NULL, group_id = NULL WHERE id = :oid"),
-            {"oid": op_id}
+            {"oid": op_id},
         )
 
-        # 5. Удалить оператора
-        conn.execute(
-            text("DELETE FROM operators WHERE id = :oid"),
-            {"oid": op_id}
-        )
+        # 14. Удалить оператора
+        conn.execute(text("DELETE FROM operators WHERE id = :oid"), {"oid": op_id})
 
-        # 6. Записать в audit лог (entity_id = NULL, т.к. оператор удалён)
+        # 15. Записать в audit лог
         conn.execute(
             text(
-                "INSERT INTO audit_logs (action, entity_type, entity_id, details, performed_by_user_id, created_at) "
+                "INSERT INTO audit_logs "
+                "(action, entity_type, entity_id, details, performed_by_user_id, created_at) "
                 "VALUES ('operator_deleted', 'operator', NULL, :details, :uid, NOW())"
             ),
             {
-                "details": f"Удалён оператор: {op_name} (ID {op_id})",
+                "details": f"Администратор удалил оператора: {op_name} (ID {op_id}) со всей историей",
                 "uid": current_user.id,
-            }
+            },
         )
 
         db.commit()
-        return {"ok": True, "message": f"Оператор {op_name} удалён"}
+        return {"ok": True, "message": f"Оператор «{op_name}» удалён вместе с историей"}
 
     except Exception as e:
         db.rollback()

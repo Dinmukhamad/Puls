@@ -1836,11 +1836,13 @@ function renderUsersPage() {
   }
 
   function operatorActions(o) {
+    const isAdmin = STATE.currentUser?.role === 'admin';
     return `
       <div class="row-actions">
         <button class="btn-icon btn-ghost" onclick="showUserResetPasswordModal(${o.id})" title="Сбросить пароль" aria-label="Сбросить пароль">↻</button>
         ${o.status === 'active' ? `<button class="btn-icon btn-ghost danger" onclick="deactivateUserUi(${o.id})" title="Деактивировать" aria-label="Деактивировать">!</button>` : ''}
         ${o.role === 'operator' && o.operator_id ? `<button class="btn-icon btn-ghost" onclick="manualOperatorLevelUi(${o.operator_id})" title="Сменить уровень" aria-label="Сменить уровень">★</button>` : ''}
+        ${isAdmin && o.role === 'operator' && o.operator_id ? `<button class="btn-icon btn-ghost danger" onclick="confirmDeleteOperator(${o.operator_id})" title="Удалить оператора" aria-label="Удалить оператора" style="color:var(--danger)">🗑</button>` : ''}
       </div>`;
   }
 
@@ -3101,28 +3103,52 @@ async function submitRestoreOperator(id) {
   }
 }
 
-function confirmDeleteOperator(id) {
-  const op = STATE.adminOperators.find(o => o.id === id);
+function confirmDeleteOperator(operatorId) {
+  // operatorId — это operators.id
+  const op = STATE.users.find(u => u.operator_id === operatorId);
+  const name = op ? op.full_name : `Оператор #${operatorId}`;
   showModal(`
-    <h3 class="modal-title">Удалить оператора?</h3>
-    <p style="color:var(--tx2);line-height:1.6">
-      Это действие нельзя отменить. Удаление разрешено только для ошибочно созданных операторов без истории.
-      Если история уже есть, система предложит использовать увольнение.
-    </p>
-    <div style="display:flex;gap:10px;justify-content:flex-end">
-      <button class="btn-outline" onclick="closeModal()">Отмена</button>
-      <button class="btn-danger" onclick="deleteOperator(${id})">Удалить</button>
+    <div class="acc-modal">
+      <h3 class="acc-title" style="color:var(--danger)">⚠ Удалить оператора?</h3>
+      <p style="color:var(--tx2);line-height:1.6;margin:12px 0">
+        Вы удаляете <b>${esc(name)}</b>.
+      </p>
+      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:8px;padding:12px 14px;margin-bottom:16px">
+        <div style="font-weight:600;color:var(--danger);margin-bottom:6px">Будет удалено навсегда:</div>
+        <ul style="margin:0;padding-left:18px;color:var(--tx2);line-height:1.8;font-size:13px">
+          <li>Профиль оператора</li>
+          <li>Вся история расчётов и баллов</li>
+          <li>Ежедневные метрики</li>
+          <li>Транзакции коинов</li>
+          <li>Уровни и история уровней</li>
+          <li>Покупки в магазине</li>
+          <li>Учётная запись (логин/пароль)</li>
+        </ul>
+      </div>
+      <p style="color:var(--tx3);font-size:12px;margin-bottom:16px">
+        Это действие невозможно отменить. Доступно только администратору.
+      </p>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn-outline" onclick="closeModal()">Отмена</button>
+        <button class="btn-danger" onclick="deleteOperator(${operatorId})">Удалить навсегда</button>
+      </div>
     </div>`);
 }
 
-async function deleteOperator(id) {
+async function deleteOperator(operatorId) {
   try {
-    await api.deleteOperator(id);
+    const btn = document.querySelector('.btn-danger[onclick*="deleteOperator"]');
+    if (btn) { btn.disabled = true; btn.textContent = 'Удаление…'; }
+    await api.deleteOperator(operatorId);
     closeModal();
     showToast('Оператор удалён', 'ok');
+    swrInvalidate('users:list');
+    swrInvalidate('dashboard:operators');
     await reloadData();
   } catch(e) {
-    showToast(e.message, 'error');
+    showToast(e.message || 'Ошибка удаления', 'error');
+    const btn = document.querySelector('.btn-danger[onclick*="deleteOperator"]');
+    if (btn) { btn.disabled = false; btn.textContent = 'Удалить навсегда'; }
   }
 }
 
