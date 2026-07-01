@@ -121,6 +121,9 @@ def get_my_rating(
     }
 
 
+# Кеш сравнений — 60 секунд (rating_rows уже кеширован 60с, нет смысла больше)
+_CMP_CACHE: dict = {}
+
 @router.get("/me/comparison")
 def get_my_comparison(
     metric: str = "points",
@@ -129,7 +132,7 @@ def get_my_comparison(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     op = _get_requested_operator(db, current_user, operator_id)
-    rows = rating_rows(db)
+    rows = rating_rows(db)  # уже кеширован 60с в rating.py
     if not rows or not op:
         return {"metric": metric, "items": []}
 
@@ -458,11 +461,29 @@ def get_my_transactions(
     ]
 
 
+# Кеш номинаций — меняются только после пересчёта рейтинга, держим 5 минут
+_NOMINATIONS_CACHE: dict = {}
+_NOMINATIONS_TTL = 300
+
+def _nominations_cache_get():
+    e = _NOMINATIONS_CACHE.get("v")
+    if e and (time.time() - e["ts"]) < _NOMINATIONS_TTL:
+        return e["data"]
+    return None
+
+def _nominations_cache_set(data):
+    _NOMINATIONS_CACHE["v"] = {"data": data, "ts": time.time()}
+
+
 @router.get("/nominations")
 def get_nominations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    cached = _nominations_cache_get()
+    if cached is not None:
+        return cached
+
     op = _get_operator_for_user(db, current_user)
     rows = rating_rows(db)
     if not rows:

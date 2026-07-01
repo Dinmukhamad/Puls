@@ -93,6 +93,7 @@ let STATE = {
   user: null,
   wallet: null,
   rating: [],
+  nominations: { items: [] },
   shopItems: [],
   purchases: [],
   dashboard: null,
@@ -530,6 +531,8 @@ async function loadData(role) {
   const tasks = [
     swrFetch('rating:list', () => api.getRating().catch(() => ({ items: [] })), onRatingUpdate, SWR_DEFAULT_TTL_MS)
       .then(r => STATE.rating = Array.isArray(r) ? r : (r.items || [])),
+    swrFetch('rating:nominations', () => api._req('GET', '/api/rating/nominations').catch(() => ({ items: [] })), null, SWR_STATIC_TTL_MS)
+      .then(n => STATE.nominations = n),
     swrFetch('shop:items', () => api.listShopItems().catch(() => []), null, SWR_STATIC_TTL_MS)
       .then(s => STATE.shopItems = s),
     swrFetch('levels:list', () => api.listOperatorLevels().catch(() => []), null, SWR_STATIC_TTL_MS)
@@ -1131,14 +1134,22 @@ async function renderRatingOverviewTab(el) {
       }
     }
 
-    const [ratingResp, nominationsResp] = await Promise.all([
-      fetchRequired('/api/rating'),
-      fetchOptional('/api/rating/nominations', { items: [] }),
-    ]);
+    // Используем кешированные данные из STATE — без лишних запросов
+    let ratingResp = { items: STATE.rating, total: STATE.rating.length, period: '—', updated_at: '' };
+    let nominationsResp = STATE.nominations || { items: [] };
 
-    const rows = Array.isArray(ratingResp.items) ? ratingResp.items : [];
-    const total = ratingResp.total !== null && ratingResp.total !== undefined && ratingResp.total !== ''
-      && Number.isFinite(Number(ratingResp.total)) ? Number(ratingResp.total) : rows.length;
+    // Если рейтинг пуст — грузим свежие данные (первый вход или инвалидация)
+    if (!STATE.rating.length) {
+      [ratingResp, nominationsResp] = await Promise.all([
+        fetchRequired('/api/rating'),
+        fetchOptional('/api/rating/nominations', { items: [] }),
+      ]);
+      STATE.rating = Array.isArray(ratingResp.items) ? ratingResp.items : [];
+      STATE.nominations = nominationsResp;
+    }
+
+    const rows = Array.isArray(ratingResp.items) ? ratingResp.items : STATE.rating;
+    const total = rows.length;
     const period = ratingResp.period && ratingResp.period !== '—' ? ratingResp.period : 'Период пока не рассчитан';
     const updatedAt = ratingResp.updated_at || '';
     const groups = [...new Set(rows.map(r => r.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
@@ -1175,18 +1186,42 @@ async function renderRatingOverviewTab(el) {
       return Array.isArray(data) ? data : [];
     }
 
+    // Кеш личных данных — TTL 2 минуты, инвалидируется при смене оператора
+    const _personalCacheKey = `rating:personal:${selectedOpId || 'me'}`;
+
     async function fetchPersonalData(opId) {
       if (!hasPersonalTarget(opId)) return { myData: null, myTx: [], myDyn: null, myCmp: null };
-      const [myData, myTx, myDyn, myCmp] = await Promise.all([
+
+      // Используем SWR кеш — me + transactions загружаем вместе, dynamics отдельно
+      const cached = swrReadRaw(_personalCacheKey);
+      if (cached) return cached.data;
+
+      const [myData, myTx] = await Promise.all([
         fetchOptional(pathWithParams('/api/rating/me', {}, opId), { no_operator: true }),
         fetchTransactionsData(opId),
-        fetchDynamicsData(opId, dynType),
-        fetchComparisonData(opId, cmpMetric),
       ]);
-      return { myData, myTx, myDyn, myCmp };
+      const result = { myData, myTx, myDyn: null, myCmp: null };
+      swrWriteRaw(_personalCacheKey, { data: result, ts: Date.now() });
+      return result;
     }
 
     personal = await fetchPersonalData(selectedOpId);
+
+    // dynamics и comparison — загружаем в фоне после рендера (не блокируем)
+    async function loadPersonalExtras() {
+      if (!hasPersonalTarget(selectedOpId)) return;
+      const opId = selectedOpId;
+      const [myDyn, myCmp] = await Promise.all([
+        fetchDynamicsData(opId, dynType),
+        fetchComparisonData(opId, cmpMetric),
+      ]).catch(() => [null, null]);
+      personal.myDyn = myDyn;
+      personal.myCmp = myCmp;
+      // Обновляем только блоки сравнения и динамики без полного ре-рендера
+      const cmpBody = el.querySelector('#cmp-body');
+      if (cmpBody) cmpBody.innerHTML = renderComparison(personal.myCmp, cmpMetric);
+      loadDynCard();
+    }
 
     function buildOperatorChoices() {
       const map = new Map();
@@ -1802,6 +1837,7 @@ async function renderRatingOverviewTab(el) {
           cmpMetric = btn.dataset.metric;
           const body = el.querySelector('#cmp-body');
           if (body) body.innerHTML = '<div class="rating-inline-skeleton"></div>';
+          // comparison не кешируем — данные специфичны для метрики
           personal.myCmp = await fetchComparisonData(selectedOpId, cmpMetric);
           if (body) body.innerHTML = renderComparison(personal.myCmp, cmpMetric);
         });
@@ -1811,17 +1847,20 @@ async function renderRatingOverviewTab(el) {
 
       el.querySelector('#rating-op-select')?.addEventListener('change', async e => {
         selectedOpId = e.target.value ? +e.target.value : null;
+        // Инвалидируем кеш предыдущего оператора
+        swrInvalidate(`rating:personal:${selectedOpId || 'me'}`);
         personal = await fetchPersonalData(selectedOpId);
         buildPage();
+        setTimeout(() => loadPersonalExtras(), 50);
       });
     }
 
     buildPage();
-    // Загружаем блок динамики после первичного рендера
-    setTimeout(() => {
-      loadDynCard();
-      _cacheViewHtml('rating'); // кешируем HTML после рендера
-    }, 200);
+    // Загружаем extras (динамика, сравнение) в фоне — не блокируем рендер
+    setTimeout(async () => {
+      await loadPersonalExtras();
+      _cacheViewHtml('rating'); // кешируем HTML после полной загрузки
+    }, 100);
 
   } catch(err) {
     const content = el.querySelector('.rating-page');
