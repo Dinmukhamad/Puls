@@ -89,6 +89,90 @@ class Operator(Base):
     purchases: Mapped[List["ShopPurchase"]] = relationship(back_populates="operator")
 
 
+class OperatorLevel(Base):
+    """Настраиваемый игровой уровень оператора. Не связан с ролью доступа."""
+    __tablename__ = "operator_levels"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(Text, default="")
+    color: Mapped[str] = mapped_column(String(32), default="#64748B")
+    icon: Mapped[str] = mapped_column(String(64), default="")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    rules: Mapped[List["OperatorLevelRule"]] = relationship(
+        back_populates="level", cascade="all, delete-orphan", order_by="OperatorLevelRule.id"
+    )
+
+
+class OperatorLevelRule(Base):
+    """Условие уровня: качество >= 90, штрафы <= 5, стаж между 8 и 30 и т.п."""
+    __tablename__ = "operator_level_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    level_id: Mapped[int] = mapped_column(ForeignKey("operator_levels.id"), index=True)
+    metric_code: Mapped[str] = mapped_column(String(64), index=True)
+    operator: Mapped[str] = mapped_column(String(16))
+    value_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    value_max: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    is_required: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    level: Mapped["OperatorLevel"] = relationship(back_populates="rules")
+
+
+class OperatorLevelAssignment(Base):
+    """Текущий уровень оператора: автоматический или ручной."""
+    __tablename__ = "operator_level_assignments"
+    __table_args__ = (
+        UniqueConstraint("operator_id", name="uq_operator_level_assignments_operator"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    level_id: Mapped[int] = mapped_column(ForeignKey("operator_levels.id"), index=True)
+    assignment_type: Mapped[str] = mapped_column(String(16), default="auto", index=True)
+    calculated_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    calculated_to: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    is_manual: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    manual_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    manual_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    assigned_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    operator: Mapped["Operator"] = relationship("Operator")
+    level: Mapped["OperatorLevel"] = relationship("OperatorLevel")
+    assigned_by_user: Mapped[Optional["User"]] = relationship("User")
+
+
+class OperatorLevelHistory(Base):
+    """История изменений уровня для аудита и объяснений."""
+    __tablename__ = "operator_level_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    old_level_id: Mapped[Optional[int]] = mapped_column(ForeignKey("operator_levels.id"), nullable=True)
+    new_level_id: Mapped[Optional[int]] = mapped_column(ForeignKey("operator_levels.id"), nullable=True)
+    change_type: Mapped[str] = mapped_column(String(16), index=True)
+    reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    changed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
+    metadata_json: Mapped[Optional[str]] = mapped_column("metadata", Text, nullable=True)
+
+    operator: Mapped["Operator"] = relationship("Operator")
+    old_level: Mapped[Optional["OperatorLevel"]] = relationship("OperatorLevel", foreign_keys=[old_level_id])
+    new_level: Mapped[Optional["OperatorLevel"]] = relationship("OperatorLevel", foreign_keys=[new_level_id])
+    changed_by_user: Mapped[Optional["User"]] = relationship("User")
+
+
 class WeeklyResult(Base):
     __tablename__ = "weekly_results"
     __table_args__ = (UniqueConstraint("operator_id", "week_start", "week_end", name="uq_weekly_operator_period"),)

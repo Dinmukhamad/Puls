@@ -3621,3 +3621,61 @@ body.role-operator {
   padding: 8px;
 }
 
+/* ═══════════════════════════════════════════════════
+   УРОВНИ ОПЕРАТОРОВ
+═══════════════════════════════════════════════════ */
+.level-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 22px;
+  padding: 2px 8px;
+  margin-left: 8px;
+  border: 1px solid var(--level-color, var(--border-default));
+  border-radius: 999px;
+  font: 700 11px/1 'Inter', sans-serif;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.level-badge-lg { min-height: 26px; padding: 4px 10px; font-size: 12px; margin-left: 0; }
+.level-badge-mini { min-height: 18px; padding: 2px 6px; font-size: 10px; margin-left: 4px; }
+.level-card { margin: 18px 0; }
+.level-next { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+.level-gap-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.level-gap-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  align-items: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--bg-muted);
+}
+.level-gap-row span { font-size: 12px; color: var(--text-secondary); }
+.level-gap-row b { font-size: 13px; color: var(--text-primary); }
+.level-gap-row em {
+  grid-column: 1 / -1;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.level-gap-row.ok em { color: var(--success); }
+.level-gap-row.miss em { color: var(--danger); }
+.level-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.level-settings-card .panel-head h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
+.level-rule-list { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+.level-rule-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+@media (max-width: 800px) {
+  .level-gap-list,
+  .level-settings-grid { grid-template-columns: 1fr; }
+}

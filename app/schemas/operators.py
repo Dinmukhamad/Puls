@@ -5,6 +5,8 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+from app.schemas.operator_levels import OperatorLevelBadge
+
 
 class OperatorCreate(BaseModel):
     full_name: str
@@ -46,5 +48,6 @@ class OperatorRead(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     dismissed_at: Optional[datetime] = None
+    level: Optional[OperatorLevelBadge] = None
 
     model_config = {"from_attributes": True}

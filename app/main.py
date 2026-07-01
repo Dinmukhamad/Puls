@@ -16,7 +16,7 @@ from app.core.config import get_settings
 from sqlalchemy import text
 from app.database.db import Base, SessionLocal, engine
 from app.models import entities  # noqa: F401
-from app.routers import analytics, auth, coins, dashboard, groups, operators, period_reports, rating, shop, tests, wallet, weekly_results
+from app.routers import analytics, auth, coins, dashboard, groups, operator_levels, operators, period_reports, rating, shop, tests, wallet, weekly_results
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -113,6 +113,11 @@ async def csrf_origin_guard(request: Request, call_next):
     return await call_next(request)
 
 app.include_router(auth.router,           prefix=settings.api_prefix)
+app.include_router(operator_levels.router, prefix=settings.api_prefix)
+app.include_router(operator_levels.me_router, prefix=settings.api_prefix)
+app.include_router(operator_levels.admin_router, prefix=settings.api_prefix)
+app.include_router(operator_levels.admin_rules_router, prefix=settings.api_prefix)
+app.include_router(operator_levels.admin_operator_router, prefix=settings.api_prefix)
 app.include_router(groups.router,          prefix=settings.api_prefix)
 app.include_router(period_reports.router,   prefix=settings.api_prefix)
 app.include_router(analytics.router,        prefix=settings.api_prefix)
@@ -159,9 +164,12 @@ def startup() -> None:
         logger.info("[startup] Running seed...")
         try:
             from app.services.seed import seed_database
+            from app.services.operator_levels import ensure_default_levels
             db = SessionLocal()
             try:
+                ensure_default_levels(db)
                 seed_database(db)
+                db.commit()
                 logger.info("[startup] Seed OK")
             finally:
                 db.close()

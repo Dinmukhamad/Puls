@@ -258,6 +258,20 @@ const api = (() => {
   }
   async function getTestAnalytics(testId) { return req('GET', `/api/admin/tests/${testId}/analytics`); }
 
+  /* ── Operator levels ─────────────────────────────────────── */
+  async function listOperatorLevels() { return req('GET', '/api/operator-levels'); }
+  async function listAdminOperatorLevels() { return req('GET', '/api/admin/operator-levels'); }
+  async function createOperatorLevel(payload) { return req('POST', '/api/admin/operator-levels', payload); }
+  async function updateOperatorLevel(levelId, payload) { return req('PATCH', `/api/admin/operator-levels/${levelId}`, payload); }
+  async function deleteOperatorLevel(levelId) { return req('DELETE', `/api/admin/operator-levels/${levelId}`); }
+  async function addOperatorLevelRule(levelId, payload) { return req('POST', `/api/admin/operator-levels/${levelId}/rules`, payload); }
+  async function updateOperatorLevelRule(ruleId, payload) { return req('PATCH', `/api/admin/operator-level-rules/${ruleId}`, payload); }
+  async function deleteOperatorLevelRule(ruleId) { return req('DELETE', `/api/admin/operator-level-rules/${ruleId}`); }
+  async function myLevel() { return req('GET', '/api/me/level'); }
+  async function operatorLevel(operatorId) { return req('GET', `/api/operators/${operatorId}/level`); }
+  async function recalculateOperatorLevels(payload) { return req('POST', '/api/admin/operator-levels/recalculate', payload || {}); }
+  async function manualOperatorLevel(operatorId, payload) { return req('POST', `/api/admin/operators/${operatorId}/level/manual`, payload); }
+
   return {
     getToken, login, me, logout,
     listOperators, getOperator, myOperator, createOperator, updateOperator,
@@ -279,6 +293,10 @@ const api = (() => {
     myTests, startTest, saveTestAnswer, finishTest, getTestResult,
     listAdminTests, createTest, updateTest, addTestQuestion, updateTestQuestion, deleteTestQuestion,
     assignTest, publishTest, closeTest, getTestResults, getTestAnalytics,
+    listOperatorLevels, listAdminOperatorLevels, myLevel, operatorLevel,
+    createOperatorLevel, updateOperatorLevel, deleteOperatorLevel,
+    addOperatorLevelRule, updateOperatorLevelRule, deleteOperatorLevelRule,
+    recalculateOperatorLevels, manualOperatorLevel,
     loginOperator: login,
     _base,
   };

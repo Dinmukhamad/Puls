@@ -87,6 +87,8 @@ let STATE = {
   purchases: [],
   dashboard: null,
   adminOperators: [],
+  myLevel: null,
+  operatorLevels: [],
   history: [],
   groups: [],
   currentView: 'cabinet',
@@ -96,6 +98,32 @@ let STATE = {
   ratingTabGen: 0,   // используется для отмены "осиротевших" async-рендеров
   analyticsTabGen: 0,
 };
+
+function levelBadgeHtml(level, extraClass = '') {
+  if (!level) return '<span class="cell-muted">—</span>';
+  const color = level.color || '#64748B';
+  return `<span class="level-badge ${extraClass}" style="--level-color:${esc(color)};border-color:${esc(color)};color:${esc(color)};background:${esc(color)}16">${esc(level.name || 'Стажёр')}</span>`;
+}
+
+function levelNum(v, decimals = 1) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return '0';
+  return n.toLocaleString('ru-RU', { maximumFractionDigits: decimals });
+}
+
+function metricValueHtml(gap) {
+  const suffix = gap.metric_code === 'efficiency' || gap.metric_code === 'quality' || gap.metric_code === 'test_percent' ? '%' : '';
+  if (gap.metric_code === 'penalty_minutes') return `${levelNum(gap.current, 1)} мин`;
+  return `${levelNum(gap.current, 1)}${suffix}`;
+}
+
+function levelRequirementHtml(gap) {
+  const suffix = gap.metric_code === 'efficiency' || gap.metric_code === 'quality' || gap.metric_code === 'test_percent' ? '%' : '';
+  if (gap.operator === 'gte') return `нужно ${levelNum(gap.required_min, 1)}${suffix}`;
+  if (gap.operator === 'lte') return `максимум ${levelNum(gap.required_max, 1)}${gap.metric_code === 'penalty_minutes' ? ' мин' : suffix}`;
+  if (gap.operator === 'between') return `${levelNum(gap.required_min, 1)}-${levelNum(gap.required_max, 1)}${gap.metric_code === 'penalty_minutes' ? ' мин' : suffix}`;
+  return `нужно ${levelNum(gap.required_min, 1)}${suffix}`;
+}
 
 /**
  * Защита от устаревших async-рендеров при быстром переключении разделов/вкладок.
@@ -269,6 +297,7 @@ function renderView(view) {
     case 'shop':     renderShop();     break;
     case 'summary':  renderSummary();  break;
     case 'operators': renderAdminOperators(); break;
+    case 'operator-levels': renderOperatorLevelsSettings(); break;
     case 'coins':    renderCoins();    break;
     case 'manual':   renderManual();   break;
     case 'requests': renderRequests(); break;
@@ -311,7 +340,7 @@ document.addEventListener('click', async e => {
   }
   if (e.target.id === 'auth-logout-btn') {
     api.logout().catch(() => {});
-    STATE = { user:null, wallet:null, rating:[], shopItems:[], purchases:[], dashboard:null, adminOperators:[], history:[], groups:[], currentView:'cabinet' };
+    STATE = { user:null, wallet:null, rating:[], shopItems:[], purchases:[], dashboard:null, adminOperators:[], myLevel:null, operatorLevels:[], history:[], groups:[], currentView:'cabinet' };
     location.reload();
   }
 });
@@ -330,6 +359,7 @@ async function bootApp() {
   renderSidebar(role);
   setText('side-user', STATE.user?.full_name || STATE.user?.username || '');
   setText('side-role', roleLabel(role));
+  setText('side-level', '—');
   // Update initials avatar
   (function() {
     var av = document.getElementById('side-user-avatar');
@@ -349,7 +379,7 @@ async function bootApp() {
 
   // Restore last viewed section after F5 reload
   const restoredRoute = initialRouteForRole(role);
-  const adminViews = ['summary','operators','coins','groups','shop','rating','cabinet','period-report','analytics','tests'];
+  const adminViews = ['summary','operators','operator-levels','coins','groups','shop','rating','cabinet','period-report','analytics','tests'];
   const operatorViews = ['cabinet','rating','shop','tests'];
   const allowedViews = isAdmin(role) ? adminViews : operatorViews;
   const defaultView = isAdmin(role) ? 'summary' : 'cabinet';
@@ -388,7 +418,12 @@ async function loadData(role) {
       .then(r => STATE.rating = Array.isArray(r) ? r : (r.items || [])),
     swrFetch('shop:items', () => api.listShopItems().catch(() => []))
       .then(s => STATE.shopItems = s),
+    api.listOperatorLevels().catch(() => []).then(levels => STATE.operatorLevels = levels),
   ];
+  tasks.push(api.myLevel().catch(() => null).then(level => {
+    STATE.myLevel = level;
+    setText('side-level', level?.level?.name || '—');
+  }));
   if (role === 'operator') {
     tasks.push(api.myWallet().catch(() => null).then(w => STATE.wallet = w)); // личный баланс — всегда свежий, без кеша
     tasks.push(api.listPurchases().catch(() => []).then(p => STATE.purchases = p));
@@ -427,7 +462,7 @@ function buildViews(role) {
   const shell = document.getElementById('app-shell');
   if (!shell) return;
   const views = isAdmin(role)
-    ? ['summary', 'operators', 'coins', 'shop', 'tests', ...(canManageGroups(role) ? ['groups'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
+    ? ['summary', 'operators', ...(role === 'manager' || role === 'admin' ? ['operator-levels'] : []), 'coins', 'shop', 'tests', ...(canManageGroups(role) ? ['groups'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
     : ['cabinet', 'rating', 'shop', 'tests'];
   shell.innerHTML = views.map(v => `<section class="app-view" id="view-${v}"></section>`).join('');
 }
@@ -436,17 +471,179 @@ function renderSidebar(role) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     const t = link.dataset.navTarget;
     const adminViews = ['summary','operators','coins','period-report','analytics'];
+    const managerViews = ['operator-levels'];
     const operatorViews = ['cabinet','rating','shop','tests'];
     const sharedViews = ['shop','rating','cabinet','tests']; // «Тесты» доступен всем ролям (ТЗ п.1), разный функционал внутри
     let show = false;
     if (isAdmin(role)) {
       show = adminViews.includes(t) || sharedViews.includes(t);
+      if (role === 'manager' || role === 'admin') show = show || managerViews.includes(t);
       if (canManageGroups(role)) show = show || t === 'groups';
     } else {
       show = operatorViews.includes(t);
     }
     link.style.display = show ? '' : 'none';
   });
+}
+
+/* ══════════════════════════════════════
+   VIEW: УРОВНИ ОПЕРАТОРОВ
+══════════════════════════════════════ */
+async function renderOperatorLevelsSettings() {
+  const el = document.getElementById('view-operator-levels');
+  if (!el) return;
+  if (!(STATE.user?.role === 'manager' || STATE.user?.role === 'admin')) {
+    el.innerHTML = '<div class="empty-state"><p>Недостаточно прав</p></div>';
+    return;
+  }
+  el.innerHTML = `<div class="view-header">
+    <div><div class="section-kicker">Операторы</div><h2 class="section-title">Уровни операторов</h2></div>
+    <div class="header-right">
+      <button class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi()">Пересчитать</button>
+      <button class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">Добавить уровень</button>
+    </div>
+  </div>
+  <div class="empty-state"><p>Загрузка уровней…</p></div>`;
+
+  const levels = await api.listAdminOperatorLevels().catch(err => {
+    el.innerHTML = `<div class="status-line status-error">${esc(err.message)}</div>`;
+    return [];
+  });
+  STATE.operatorLevels = levels;
+
+  function ruleText(rule) {
+    const label = {
+      tenure_days: 'Стаж',
+      quality: 'Качество',
+      kvz: 'КВЗ',
+      efficiency: 'Эффективность',
+      penalty_minutes: 'Штрафы',
+      final_points: 'Итоговые баллы',
+      test_percent: 'Тесты',
+    }[rule.metric_code] || rule.metric_code;
+    if (rule.operator === 'between') return `${label}: ${levelNum(rule.value_min)}-${levelNum(rule.value_max)}`;
+    if (rule.operator === 'gte') return `${label} >= ${levelNum(rule.value_min)}`;
+    if (rule.operator === 'lte') return `${label} <= ${levelNum(rule.value_max)}`;
+    return `${label} = ${levelNum(rule.value_min)}`;
+  }
+
+  el.innerHTML = `<div class="view-header">
+    <div><div class="section-kicker">Операторы</div><h2 class="section-title">Уровни операторов</h2></div>
+    <div class="header-right">
+      <button class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi()">Пересчитать</button>
+      <button class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">Добавить уровень</button>
+    </div>
+  </div>
+  <div class="level-settings-grid">
+    ${levels.map(level => `<div class="panel level-settings-card">
+      <div class="panel-head">
+        <h3>${levelBadgeHtml(level, 'level-badge-lg')} ${esc(level.name)}</h3>
+        <span class="panel-badge">${level.is_active ? 'Активен' : 'Отключён'}</span>
+      </div>
+      <p class="cell-muted">${esc(level.description || '')}</p>
+      <div class="level-rule-list">
+        ${(level.rules || []).map(rule => `<div class="level-rule-row">
+          <span>${esc(ruleText(rule))}</span>
+          <button class="btn-link" onclick="deleteOperatorLevelRuleUi(${rule.id})">Удалить</button>
+        </div>`).join('') || '<div class="empty-line">Правил пока нет</div>'}
+      </div>
+      <div class="row-actions" style="justify-content:flex-start;margin-top:12px">
+        <button class="btn-outline btn-sm" onclick="editOperatorLevelUi(${level.id})">Редактировать</button>
+        <button class="btn-outline btn-sm" onclick="addOperatorLevelRuleUi(${level.id})">Добавить показатель</button>
+        <button class="btn-outline btn-sm danger" onclick="disableOperatorLevelUi(${level.id})">Отключить</button>
+      </div>
+    </div>`).join('')}
+  </div>`;
+}
+
+async function recalculateOperatorLevelsUi() {
+  try {
+    const res = await api.recalculateOperatorLevels({ mode: 'all' });
+    showToast(`Пересчитано: ${res.processed}, изменено: ${res.updated}`, 'ok');
+    swrInvalidate('rating:list');
+    await reloadData();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function showCreateOperatorLevelPrompt() {
+  const name = prompt('Название уровня');
+  if (!name) return;
+  const code = prompt('Код уровня латиницей', name.toLowerCase().replace(/\s+/g, '_'));
+  if (!code) return;
+  const color = prompt('Цвет бейджа', '#64748B') || '#64748B';
+  try {
+    await api.createOperatorLevel({ code, name, color, description: '', icon: '', sort_order: (STATE.operatorLevels.length + 1) * 10, is_active: true });
+    await renderOperatorLevelsSettings();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function editOperatorLevelUi(levelId) {
+  const level = STATE.operatorLevels.find(l => l.id === levelId);
+  if (!level) return;
+  const name = prompt('Название уровня', level.name);
+  if (!name) return;
+  const color = prompt('Цвет бейджа', level.color || '#64748B') || level.color;
+  try {
+    await api.updateOperatorLevel(levelId, { name, color });
+    await renderOperatorLevelsSettings();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function addOperatorLevelRuleUi(levelId) {
+  const metric_code = prompt('Показатель: tenure_days, quality, kvz, efficiency, penalty_minutes, final_points, test_percent', 'quality');
+  if (!metric_code) return;
+  const operator = prompt('Условие: gte, lte, eq, between', metric_code === 'penalty_minutes' ? 'lte' : 'gte');
+  if (!operator) return;
+  const value_min_raw = prompt('Минимум / значение (для lte можно оставить пустым)', operator === 'lte' ? '' : '0');
+  const value_max_raw = operator === 'between' || operator === 'lte' ? prompt('Максимум', '0') : '';
+  const payload = {
+    metric_code,
+    operator,
+    value_min: value_min_raw === '' || value_min_raw == null ? null : Number(value_min_raw),
+    value_max: value_max_raw === '' || value_max_raw == null ? null : Number(value_max_raw),
+    is_required: true,
+  };
+  try {
+    await api.addOperatorLevelRule(levelId, payload);
+    await renderOperatorLevelsSettings();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function deleteOperatorLevelRuleUi(ruleId) {
+  if (!confirm('Удалить показатель уровня?')) return;
+  try {
+    await api.deleteOperatorLevelRule(ruleId);
+    await renderOperatorLevelsSettings();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function disableOperatorLevelUi(levelId) {
+  if (!confirm('Отключить уровень?')) return;
+  try {
+    await api.deleteOperatorLevel(levelId);
+    await renderOperatorLevelsSettings();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function manualOperatorLevelUi(operatorId) {
+  const op = STATE.adminOperators.find(o => o.id === operatorId);
+  const levels = STATE.operatorLevels.length ? STATE.operatorLevels : await api.listOperatorLevels().catch(() => []);
+  const activeLevels = levels.filter(l => l.is_active);
+  if (!activeLevels.length) { showToast('Нет активных уровней', 'error'); return; }
+  const options = activeLevels.map(l => `${l.id}: ${l.name}`).join('\n');
+  const raw = prompt(`Выберите уровень для ${op?.full_name || 'оператора'}:\n${options}`);
+  if (!raw) return;
+  const levelId = Number(String(raw).split(':')[0].trim());
+  if (!levelId) { showToast('Некорректный уровень', 'error'); return; }
+  const reason = prompt('Причина ручной смены уровня');
+  if (!reason || !reason.trim()) { showToast('Причина обязательна', 'error'); return; }
+  const comment = prompt('Комментарий', '') || '';
+  try {
+    await api.manualOperatorLevel(operatorId, { level_id: levelId, reason, comment });
+    showToast('Уровень изменён', 'ok');
+    swrInvalidate('rating:list');
+    await reloadData();
+  } catch(e) { showToast(e.message, 'error'); }
 }
 
 /* ══════════════════════════════════════
@@ -472,6 +669,26 @@ function renderCabinet() {
   const rank = hasRank ? Number(myRow.rank_position) : null;
   const total = STATE.rating.length || '—';
   const delta = myRow?.rank_delta;
+  const levelInfo = STATE.myLevel;
+  const levelCard = levelInfo ? `
+    <div class="panel level-card">
+      <div class="panel-head">
+        <h3>Мой уровень</h3>
+        ${levelBadgeHtml(levelInfo.level, 'level-badge-lg')}
+      </div>
+      ${levelInfo.next_level ? `
+        <div class="level-next">До следующего уровня: ${levelBadgeHtml(levelInfo.next_level)}</div>
+        <div class="level-gap-list">
+          ${(levelInfo.gaps || []).map(g => `
+            <div class="level-gap-row ${g.ok ? 'ok' : 'miss'}">
+              <span>${esc(g.label)}</span>
+              <b>${metricValueHtml(g)}</b>
+              <em>${g.ok ? 'готово' : levelRequirementHtml(g)}</em>
+            </div>`).join('')}
+        </div>` : `
+        <div class="empty-line">Вы достигли максимального уровня.</div>`}
+      ${levelInfo.is_manual ? `<div class="status-line">Ручной уровень: ${esc(levelInfo.manual_reason || '')}</div>` : ''}
+    </div>` : '';
 
   el.innerHTML = `
     <div class="view-header">
@@ -499,6 +716,8 @@ function renderCabinet() {
         </div>
       </div>
     </div>
+
+    ${levelCard}
 
     <div class="two-col-grid">
       <div class="panel">
@@ -534,6 +753,8 @@ function renderCabinet() {
 
 async function reloadCabinet() {
   STATE.wallet = await api.myWallet().catch(() => STATE.wallet);
+  STATE.myLevel = await api.myLevel().catch(() => STATE.myLevel);
+  setText('side-level', STATE.myLevel?.level?.name || '—');
   const ratingResp = await api.getRating().catch(() => ({ items: STATE.rating }));
   STATE.rating = Array.isArray(ratingResp) ? ratingResp : (ratingResp.items || []);
   renderCabinet();
@@ -609,6 +830,7 @@ async function renderRatingOverviewTab(el) {
   let selectedOpId = canSelectOperator ? null : (STATE.user?.operator_id || null);
   let searchVal = '';
   let filterGroup = '';
+  let filterLevel = '';
   let operatorSearchVal = '';
   let cmpMetric = 'points';
   let dynType = 'place';
@@ -663,6 +885,9 @@ async function renderRatingOverviewTab(el) {
     const period = ratingResp.period && ratingResp.period !== '—' ? ratingResp.period : 'Период пока не рассчитан';
     const updatedAt = ratingResp.updated_at || '';
     const groups = [...new Set(rows.map(r => r.group_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+    const levels = STATE.operatorLevels.length
+      ? STATE.operatorLevels
+      : [...new Map(rows.map(r => r.level).filter(Boolean).map(l => [l.code, l])).values()];
     const noms = Array.isArray(nominationsResp.items) ? nominationsResp.items : [];
     const operatorChoices = buildOperatorChoices();
 
@@ -956,7 +1181,8 @@ async function renderRatingOverviewTab(el) {
       const q = searchVal.trim().toLowerCase();
       return rows.filter(r =>
         (!q || String(r.operator_name || '').toLowerCase().includes(q)) &&
-        (!filterGroup || r.group_name === filterGroup)
+        (!filterGroup || r.group_name === filterGroup) &&
+        (!filterLevel || r.level?.code === filterLevel)
       );
     }
 
@@ -989,7 +1215,7 @@ async function renderRatingOverviewTab(el) {
             const badgeText = r.is_current_user ? 'Вы' : (selectedOpId && r.operator_id == selectedOpId ? 'Выбран' : '');
             return `<tr class="${isMe?'rating-my-row':''}">
               <td style="text-align:center">${place ? `<span class="rank-badge ${place <= 3 ? 'rank-top' : ''}">${place}</span>` : '<span class="rank-missing">Нет места</span>'}</td>
-              <td class="name-cell">${esc(r.operator_name || 'Оператор')}${badgeText ? `<span class="me-badge">${badgeText}</span>` : ''}</td>
+              <td class="name-cell">${esc(r.operator_name || 'Оператор')}${levelBadgeHtml(r.level)}${badgeText ? `<span class="me-badge">${badgeText}</span>` : ''}</td>
               <td>${esc(r.group_name || 'Группа не указана')}</td>
               <td style="text-align:right"><b>${cleanNumber(r.contest_points,1)}</b></td>
               <td style="text-align:right"><b class="accent-text">${cleanCoins(r.coins_earned)}</b></td>
@@ -1064,6 +1290,10 @@ async function renderRatingOverviewTab(el) {
                 <option value="">Все группы</option>
                 ${groups.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join('')}
               </select>
+              <select id="rating-level-filter" class="form-select" style="max-width:170px">
+                <option value="">Все уровни</option>
+                ${levels.map(l => `<option value="${esc(l.code)}">${esc(l.name)}</option>`).join('')}
+              </select>
             </div>
             <div id="rating-table-body">${renderTable()}</div>
           </div>
@@ -1077,6 +1307,10 @@ async function renderRatingOverviewTab(el) {
       });
       el.querySelector('#rating-group-filter')?.addEventListener('change', e => {
         filterGroup = e.target.value;
+        el.querySelector('#rating-table-body').innerHTML = renderTable();
+      });
+      el.querySelector('#rating-level-filter')?.addEventListener('change', e => {
+        filterLevel = e.target.value;
         el.querySelector('#rating-table-body').innerHTML = renderTable();
       });
       el.querySelector('#rating-op-search')?.addEventListener('input', e => {
@@ -1134,7 +1368,7 @@ function miniRating(limit, highlightId) {
     const topCls = rank <= 3 ? 'rank-top' : '';
     return `<div class="mini-rating-row ${isMe ? 'mini-me' : ''}">
       <span class="rank-badge ${topCls}">${rank}</span>
-      <span class="mini-name">${esc(r.operator_name || 'Оператор')}</span>
+      <span class="mini-name">${esc(r.operator_name || 'Оператор')} ${levelBadgeHtml(r.level, 'level-badge-mini')}</span>
       <span class="mini-coins">${r.coins_earned || 0} ₡</span>
       <span class="mini-pts">${(r.contest_points || 0).toFixed(1)}</span>
     </div>`;
@@ -1331,9 +1565,13 @@ function renderAdminOperators() {
   const ops = STATE.adminOperators;
   let searchVal = '';
   let filterGroup = '';
+  let filterLevel = '';
   let activeTab = 'all'; // all | participating | not_participating | dismissed
 
   const groups = [...new Set(ops.map(o => o.group_name).filter(Boolean))].sort();
+  const levels = STATE.operatorLevels.length
+    ? STATE.operatorLevels
+    : [...new Map(ops.map(o => o.level).filter(Boolean).map(l => [l.code, l])).values()];
 
   function isDismissed(o) {
     return o.employment_status === 'dismissed' || o.status === 'dismissed';
@@ -1355,12 +1593,13 @@ function renderAdminOperators() {
       const matchSearch = !searchVal || o.full_name.toLowerCase().includes(searchVal.toLowerCase())
         || (o.group_name || '').toLowerCase().includes(searchVal.toLowerCase());
       const matchGroup = !filterGroup || o.group_name === filterGroup;
+      const matchLevel = !filterLevel || o.level?.code === filterLevel;
       let matchTab = false;
       if (activeTab === 'all')               matchTab = !dismissed;
       else if (activeTab === 'participating') matchTab = !dismissed && o.participation_status === 'participating';
       else if (activeTab === 'not_participating') matchTab = !dismissed && o.participation_status === 'not_participating';
       else if (activeTab === 'dismissed')    matchTab = dismissed;
-      return matchSearch && matchGroup && matchTab;
+      return matchSearch && matchGroup && matchLevel && matchTab;
     });
   }
 
@@ -1387,6 +1626,7 @@ function renderAdminOperators() {
     return `
       <div class="row-actions">
         <button class="btn-icon btn-ghost" onclick="showEditOperatorModal(${o.id})" title="Редактировать" aria-label="Редактировать">✎</button>
+        ${['manager','admin'].includes(STATE.user?.role) ? `<button class="btn-icon btn-ghost" onclick="manualOperatorLevelUi(${o.id})" title="Сменить уровень" aria-label="Сменить уровень">★</button>` : ''}
         <button class="btn-icon btn-ghost" onclick="resetOperatorPassword(${o.id})" title="Сбросить пароль" aria-label="Сбросить пароль">↻</button>
         <button class="btn-icon btn-ghost danger" onclick="confirmDismissOperator(${o.id})" title="Уволить" aria-label="Уволить">!</button>
         <button class="btn-icon btn-ghost danger" onclick="confirmDeleteOperator(${o.id})" title="Удалить" aria-label="Удалить">×</button>
@@ -1404,6 +1644,7 @@ function renderAdminOperators() {
             <th>ФИО</th>
             <th>Группа</th>
             <th>Должность</th>
+            <th>Уровень</th>
             <th>Статус</th>
             <th>Email</th>
             <th>Баланс</th>
@@ -1419,12 +1660,13 @@ function renderAdminOperators() {
                 </td>
                 <td>${esc(o.group_name)}</td>
                 <td>${positionLabel(o.position || 'operator')}</td>
+                <td>${levelBadgeHtml(o.level)}</td>
                 <td>${operatorStatusBadge(o)}</td>
                 <td>${o.email ? esc(o.email) : '<span class="cell-muted">—</span>'}</td>
                 <td><b>${o.current_balance} ₡</b></td>
                 <td>${operatorActions(o)}</td>
               </tr>`;
-            }).join('') : '<tr><td colspan="7" class="empty-line">Нет операторов</td></tr>'}
+            }).join('') : '<tr><td colspan="8" class="empty-line">Нет операторов</td></tr>'}
           </tbody>
         </table>
       </div>`;
@@ -1467,6 +1709,10 @@ function renderAdminOperators() {
         <option value="">Все группы</option>
         ${groups.map(g => `<option value="${esc(g)}" ${filterGroup===g?'selected':''}>${esc(g)}</option>`).join('')}
       </select>
+      <select id="ops-level" class="form-select" style="width:170px">
+        <option value="">Все уровни</option>
+        ${levels.map(l => `<option value="${esc(l.code)}" ${filterLevel===l.code?'selected':''}>${esc(l.name)}</option>`).join('')}
+      </select>
       <span class="ops-count-info">Показано: <b>${filteredOps().length}</b> из ${ops.length}</span>
     </div>
 
@@ -1494,6 +1740,12 @@ function renderAdminOperators() {
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       rebindOps();
+    });
+    el.querySelector('#ops-level')?.addEventListener('change', e => {
+      filterLevel = e.target.value;
+      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+      bindOpsActions();
     });
     bindOpsActions();
   }
@@ -3252,6 +3504,14 @@ window.submitLegacyChangePassword = submitLegacyChangePassword;
 window.submitChangePassword = submitChangePassword;
 window.submitChangeUsername = submitChangeUsername;
 window.copyCredentials = copyCredentials;
+window.renderOperatorLevelsSettings = renderOperatorLevelsSettings;
+window.recalculateOperatorLevelsUi = recalculateOperatorLevelsUi;
+window.showCreateOperatorLevelPrompt = showCreateOperatorLevelPrompt;
+window.editOperatorLevelUi = editOperatorLevelUi;
+window.addOperatorLevelRuleUi = addOperatorLevelRuleUi;
+window.deleteOperatorLevelRuleUi = deleteOperatorLevelRuleUi;
+window.disableOperatorLevelUi = disableOperatorLevelUi;
+window.manualOperatorLevelUi = manualOperatorLevelUi;
 
 
 /* ══════════════════════════════════════

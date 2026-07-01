@@ -16,6 +16,8 @@ from app.core.security import get_current_user, hash_password, require_roles, ve
 from app.database.db import get_db
 from app.models.entities import AuditLog, CoinTransaction, Group, Operator, ShopPurchase, User, WeeklyResult
 from app.schemas.operators import OperatorCreate, OperatorRead, OperatorUpdate
+from app.schemas.operator_levels import OperatorLevelSummary
+from app.services.operator_levels import operator_level_badge, operator_level_summary
 
 router = APIRouter(prefix="/operators", tags=["operators"])
 
@@ -113,6 +115,7 @@ def _operator_response(db: Session, op: Operator) -> dict:
         "created_at": op.created_at,
         "updated_at": getattr(op, "updated_at", None),
         "dismissed_at": op.dismissed_at,
+        "level": operator_level_badge(db, op),
     }
 
 
@@ -225,6 +228,7 @@ class OperatorFullRead(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
     dismissed_at: Optional[datetime] = None
+    level: Optional[dict] = None
 
     model_config = {"from_attributes": True}
 
@@ -390,6 +394,24 @@ def get_operator(
     if not op:
         raise HTTPException(status_code=404, detail="Оператор не найден")
     return _operator_response(db, op)
+
+
+@router.get("/{operator_id}/level", response_model=OperatorLevelSummary)
+def get_operator_level(
+    operator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    op = db.get(Operator, operator_id)
+    if not op:
+        raise HTTPException(status_code=404, detail="Оператор не найден")
+    if current_user.role == "operator" and current_user.operator_id != operator_id:
+        raise HTTPException(status_code=403, detail="Нет доступа")
+    if current_user.role == "supervisor" and current_user.operator_id:
+        supervisor_op = db.get(Operator, current_user.operator_id)
+        if supervisor_op and supervisor_op.group_id != op.group_id:
+            raise HTTPException(status_code=403, detail="Нет доступа к оператору другой группы")
+    return operator_level_summary(db, op)
 
 
 @router.patch("/{operator_id}", response_model=OperatorRead)

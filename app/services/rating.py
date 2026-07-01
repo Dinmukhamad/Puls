@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.entities import Operator, PeriodReport
+from app.services.operator_levels import operator_level_badge
 
 
 def latest_period(db: Session) -> Optional[Tuple[date, date]]:
@@ -141,6 +142,7 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
             "rank_delta": rank_delta,
             "period_start": str(report.period_start),
             "period_end": str(report.period_end),
+            "level": operator_level_badge(db, operator),
         })
     return output
 
