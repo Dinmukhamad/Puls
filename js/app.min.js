@@ -13,6 +13,14 @@
 ══════════════════════════════════════ */
 const SWR_PREFIX = 'puls-swr:';
 const SWR_DEFAULT_TTL_MS = 30_000; // считается "свежим" 30с — после этого фон обновит при следующем заходе
+const SWR_VERSION = 'tenure-display-1'; // при смене версии весь кеш сбрасывается
+(function() {
+  const stored = sessionStorage.getItem('puls-swr-version');
+  if (stored !== SWR_VERSION) {
+    Object.keys(sessionStorage).filter(k => k.startsWith(SWR_PREFIX)).forEach(k => sessionStorage.removeItem(k));
+    sessionStorage.setItem('puls-swr-version', SWR_VERSION);
+  }
+})();
 
 function swrReadRaw(key) {
   try {

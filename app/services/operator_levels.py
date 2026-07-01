@@ -135,7 +135,8 @@ def level_badge(level: Optional[OperatorLevel]) -> dict:
 
 def _operator_tenure_days(operator: Operator, as_of: Optional[date]) -> int:
     end = as_of or date.today()
-    start = operator.start_date or operator.created_at.date()
+    created = operator.created_at.date() if operator.created_at else date.today()
+    start = operator.start_date or created
     return max(0, (end - start).days)
 
 
