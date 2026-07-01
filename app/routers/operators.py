@@ -129,6 +129,7 @@ def _operator_response(db: Session, op: Operator) -> dict:
         "level": _safe_level_badge(db, op),
         "start_date": op.start_date.isoformat() if op.start_date else None,
         "tenure_days": tenure_days,
+        "rate": op.rate,
     }
 
 

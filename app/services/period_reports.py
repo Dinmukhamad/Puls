@@ -283,6 +283,14 @@ class OperatorPeriodMetrics:
     final_points: float = 0.0
     has_any_period_data: bool = False
     warnings: List[str] = field(default_factory=list)
+    # Поля нормы часов (заполняются отдельно через work_norms сервис)
+    rate: Optional[float] = None
+    individual_norm_hours: float = 0.0
+    norm_completion_percent: float = 0.0
+    hours_points: float = 0.0
+    overtime_hours: float = 0.0
+    overtime_percent: float = 0.0
+    norm_warnings: List[str] = field(default_factory=list)
 
 
 PENALTY_RUB_PER_MINUTE = 50.0
@@ -339,6 +347,9 @@ def compute_operator_metrics(
     m.penalty_minutes = round(m.penalty_sum / PENALTY_RUB_PER_MINUTE, 2) if m.penalty_sum else 0.0
     m.penalty_points = round(m.penalty_minutes * PENALTY_POINTS_PER_MINUTE, 2)
 
+    # Итоговые баллы: если ставка/норма заданы — используем hours_points,
+    # иначе (для обратной совместимости) используем total_hours напрямую.
+    # hours_points заполняется после вызова enrich_with_norm() из роутера.
     m.final_points = round(
         m.quality_avg + m.kvz + m.total_hours + m.efficiency_percent - m.penalty_points,
         2,
@@ -740,6 +751,9 @@ def aggregate_daily_rows(daily_rows: List[dict]) -> OperatorPeriodMetrics:
     m.penalty_minutes = round(penalty_sum / PENALTY_RUB_PER_MINUTE, 2) if penalty_sum else 0.0
     m.penalty_points = round(m.penalty_minutes * PENALTY_POINTS_PER_MINUTE, 2)
 
+    # Итоговые баллы: если ставка/норма заданы — используем hours_points,
+    # иначе (для обратной совместимости) используем total_hours напрямую.
+    # hours_points заполняется после вызова enrich_with_norm() из роутера.
     m.final_points = round(
         m.quality_avg + m.kvz + m.total_hours + m.efficiency_percent - m.penalty_points,
         2,

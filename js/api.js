@@ -306,5 +306,6 @@ const api = (() => {
     recalculateOperatorLevels, manualOperatorLevel,
     loginOperator: login,
     _base,
+    _req: req,
   };
 })();

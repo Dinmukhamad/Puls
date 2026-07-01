@@ -77,6 +77,9 @@ class Operator(Base):
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
 
+    # Ставка: 0.5 | 0.75 | 1.0 — используется для расчёта нормы часов
+    rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Балансы
     current_balance: Mapped[int] = mapped_column(Integer, default=0)
     reserved_balance: Mapped[int] = mapped_column(Integer, default=0)
@@ -367,6 +370,29 @@ class OperatorDailyMetric(Base):
     source_monthly_report_id: Mapped[Optional[int]] = mapped_column(ForeignKey("uploaded_report_files.id"), nullable=True)
     source_report_id: Mapped[Optional[int]] = mapped_column(ForeignKey("uploaded_report_files.id"), nullable=True)
 
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# РАЗДЕЛ «НОРМЫ ЧАСОВ»
+# ═══════════════════════════════════════════════════════════════════
+
+class WorkNorm(Base):
+    """Норма часов по ставке за конкретный год/месяц."""
+    __tablename__ = "work_norms"
+    __table_args__ = (
+        UniqueConstraint("year", "month", "rate", name="uq_work_norms_year_month_rate"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    month: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    month_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    rate: Mapped[float] = mapped_column(Float, nullable=False, index=True)
+    monthly_norm_hours: Mapped[float] = mapped_column(Float, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 

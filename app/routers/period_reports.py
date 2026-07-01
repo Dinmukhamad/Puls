@@ -14,6 +14,7 @@ from app.models.entities import AuditLog, CoinTransaction, Operator, OperatorDai
 import json as _json
 from app.services.analytics_cache import cache_clear_all
 from app.services.period_reports import build_daily_metric_rows, calculate_period_report, normalize_name
+from app.services.work_norms import calculate_norm_for_period, MAX_HOURS_POINTS
 
 router = APIRouter(prefix="/reports", tags=["period-reports"])
 MAX_REPORT_FILE_BYTES = 15 * 1024 * 1024
@@ -58,11 +59,20 @@ class OperatorMetricsOut(BaseModel):
     penalty_points: float
     final_points: float
     warnings: List[str] = []
+    # Норма часов
+    rate: Optional[float] = None
+    individual_norm_hours: float = 0.0
+    norm_completion_percent: float = 0.0
+    hours_points: float = 0.0
+    overtime_hours: float = 0.0
+    overtime_percent: float = 0.0
+    norm_warnings: List[str] = []
 
 
 class PeriodWarningsOut(BaseModel):
     site_only: List[str] = []
     file_only: List[str] = []
+    norm_warnings: List[str] = []
     no_quality: List[str] = []
     no_base_hours: List[str] = []
     ignored_service_rows: List[str] = []
@@ -289,8 +299,34 @@ def get_period_summary(
     name_to_op = {normalize_name(o.full_name): o for o in db_ops}
 
     operators_out: List[OperatorMetricsOut] = []
+    norm_warnings_global: List[str] = []
+
     for m in result.operators:
         db_op = name_to_op.get(m.name_key)
+        rate = db_op.rate if db_op else None
+
+        # Рассчитываем норму часов для этого оператора
+        norm_result = calculate_norm_for_period(
+            db, rate, start_date, end_date, m.total_hours
+        )
+
+        # Итоговые баллы: если норма рассчитана — используем hours_points,
+        # иначе — total_hours (обратная совместимость)
+        if norm_result.individual_norm_hours > 0:
+            final_points = round(
+                m.quality_avg + m.kvz + norm_result.hours_points
+                + m.efficiency_percent - m.penalty_points,
+                2,
+            )
+        else:
+            final_points = m.final_points
+
+        if norm_result.warnings:
+            for w in norm_result.warnings:
+                entry = f"{db_op.full_name if db_op else m.full_name}: {w}"
+                if entry not in norm_warnings_global:
+                    norm_warnings_global.append(entry)
+
         operators_out.append(OperatorMetricsOut(
             full_name=db_op.full_name if db_op else m.full_name,
             operator_id=db_op.id if db_op else None,
@@ -309,8 +345,15 @@ def get_period_summary(
             penalty_sum=m.penalty_sum,
             penalty_minutes=m.penalty_minutes,
             penalty_points=m.penalty_points,
-            final_points=m.final_points,
+            final_points=final_points,
             warnings=m.warnings,
+            rate=norm_result.rate,
+            individual_norm_hours=norm_result.individual_norm_hours,
+            norm_completion_percent=norm_result.norm_completion_percent,
+            hours_points=norm_result.hours_points,
+            overtime_hours=norm_result.overtime_hours,
+            overtime_percent=norm_result.overtime_percent,
+            norm_warnings=norm_result.warnings,
         ))
 
     return PeriodSummaryOut(
@@ -322,6 +365,7 @@ def get_period_summary(
             no_quality=result.warnings_no_quality,
             no_base_hours=result.warnings_no_base_hours,
             ignored_service_rows=[],
+            norm_warnings=norm_warnings_global,
         ),
         summary=result.summary,
     )

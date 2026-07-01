@@ -51,5 +51,6 @@ class OperatorRead(BaseModel):
     level: Optional[OperatorLevelBadge] = None
     start_date: Optional[date] = None
     tenure_days: Optional[int] = None
+    rate: Optional[float] = None
 
     model_config = {"from_attributes": True}
