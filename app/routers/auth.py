@@ -65,6 +65,41 @@ def me(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
+@router.post("/fix-session")
+def fix_session(
+    response: Response,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Аварийный endpoint: сбрасывает must_change_password для текущего
+    admin/manager/supervisor пользователя. Вызывается автоматически
+    фронтендом если обнаружен 403 при наличии валидного токена.
+    """
+    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+    from typing import Optional as Opt
+    settings = get_settings()
+    cookie_token = request.cookies.get(settings.auth_cookie_name)
+    if not cookie_token:
+        return {"ok": False, "reason": "no_token"}
+    try:
+        from jose import jwt as _jwt
+        payload = _jwt.decode(cookie_token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        user_id = int(payload.get("sub"))
+    except Exception:
+        return {"ok": False, "reason": "invalid_token"}
+    user = db.get(User, user_id)
+    if not user or not user.is_active:
+        return {"ok": False, "reason": "user_not_found"}
+    if user.role not in ("admin", "manager", "supervisor"):
+        return {"ok": False, "reason": "not_allowed_for_role"}
+    if user.must_change_password:
+        user.must_change_password = False
+        db.commit()
+        return {"ok": True, "fixed": True}
+    return {"ok": True, "fixed": False}
+
+
 @router.post("/account", response_model=UserRead)
 def update_account(
     payload: AccountCredentialsUpdate,
