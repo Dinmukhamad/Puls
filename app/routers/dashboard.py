@@ -100,10 +100,12 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
     active_ops = len(active_operators)  # уже загружены выше
 
     # Все счётчики покупок одним запросом вместо трёх отдельных COUNT
-    purchase_counts = dict(db.execute(
+    purchase_counts: dict = {}
+    for row in db.execute(
         select(ShopPurchase.status, func.count(ShopPurchase.id))
         .group_by(ShopPurchase.status)
-    ))
+    ):
+        purchase_counts[row[0]] = row[1]
     pending_cnt = (purchase_counts.get("pending") or 0) + (purchase_counts.get("new") or 0)
 
     return DashboardRead(
