@@ -16,7 +16,7 @@ from app.core.config import get_settings
 from sqlalchemy import text
 from app.database.db import Base, SessionLocal, engine
 from app.models import entities  # noqa: F401
-from app.routers import analytics, auth, coins, dashboard, groups, operator_levels, operators, period_reports, rating, shop, tests, wallet, weekly_results
+from app.routers import analytics, auth, coins, dashboard, groups, operator_levels, operators, period_reports, rating, shop, tests, users, wallet, weekly_results
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -113,6 +113,7 @@ async def csrf_origin_guard(request: Request, call_next):
     return await call_next(request)
 
 app.include_router(auth.router,           prefix=settings.api_prefix)
+app.include_router(users.router,          prefix=settings.api_prefix)
 app.include_router(operator_levels.router, prefix=settings.api_prefix)
 app.include_router(operator_levels.me_router, prefix=settings.api_prefix)
 app.include_router(operator_levels.admin_router, prefix=settings.api_prefix)

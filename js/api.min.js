@@ -141,8 +141,15 @@ const api = (() => {
   function getDashboard()          { return req('GET', '/api/dashboard'); }
 
   /* ── Users (admin) ───────────────────────────────────────── */
-  function createUser(p)           { return req('POST', '/api/auth/users', p); }
-  function listUsers()             { return req('GET', '/api/auth/users'); }
+  function createUser(p)           { return req('POST', '/api/users', p); }
+  function listUsers(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/users' + (qs ? '?' + qs : ''));
+  }
+  function updateUser(id, p)       { return req('PATCH', `/api/users/${id}`, p); }
+  function deactivateUser(id)      { return req('POST', `/api/users/${id}/deactivate`); }
+  function changeUserRole(id, p)   { return req('POST', `/api/users/${id}/change-role`, p); }
+  function resetUserPassword(id, p){ return req('POST', `/api/users/${id}/reset-password`, p); }
 
   function _base() { return base(); }
 
@@ -283,7 +290,7 @@ const api = (() => {
     listPurchases, buyItem, approvePurchase, rejectPurchase, completePurchase,
     listGroups, createGroup, updateGroup, enableGroup, disableGroup, deleteGroup,
     getDashboard, getDashboardOperators, getDashboardHistory,
-    createUser, listUsers,
+    createUser, listUsers, updateUser, deactivateUser, changeUserRole, resetUserPassword,
     changeMyPassword, changeMyLogin, changeOperatorPassword, changeOperatorUsername,
     getCoinsOverview, listCoinRequests, listCoinTransactions,
     approveCoinRequest, rejectCoinRequest, completeCoinRequest,
