@@ -1854,6 +1854,7 @@ function renderUsersPage() {
             <th>Роль / Группа</th>
             <th class="tc">Ставка</th>
             <th>Уровень</th>
+            <th class="tc">Стаж</th>
             <th class="tc">Статус</th>
             <th class="tc">Действия</th>
           </tr></thead>
@@ -1876,10 +1877,13 @@ function renderUsersPage() {
                 <td>
                   ${isOp ? levelBadgeHtml(o.level) : '<span class="cell-muted">—</span>'}
                 </td>
+                <td class="tc">
+                  ${isOp && o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">—</span>'}
+                </td>
                 <td class="tc">${userStatusBadge(o.status)}</td>
                 <td class="tc">${operatorActions(o)}</td>
               </tr>`;
-            }).join('') : '<tr><td colspan="6" class="empty-line">Нет пользователей</td></tr>'}
+            }).join('') : '<tr><td colspan="7" class="empty-line">Нет пользователей</td></tr>'}
           </tbody>
         </table>
       </div>`;
@@ -3189,6 +3193,18 @@ function closeModal(force = false) {
 /* ══════════════════════════════════════
    СТАВКИ И НОРМЫ ЧАСОВ
 ══════════════════════════════════════ */
+
+function tenureBadgeHtml(days) {
+  if (days == null || isNaN(days)) return '<span class="cell-muted">—</span>';
+  const months = Math.floor(Math.max(0, days) / 30);
+  const d = days % 30;
+  let label, cls;
+  if (months >= 61)      { label = months + 'м'; cls = 'tenure-pro'; }
+  else if (months >= 41) { label = months + 'м'; cls = 'tenure-op'; }
+  else if (months >= 16) { label = months + 'м'; cls = 'tenure-mid'; }
+  else                   { label = months > 0 ? months + 'м' : d + 'д'; cls = 'tenure-new'; }
+  return `<span class="tenure-badge ${cls}">${label}</span>`;
+}
 
 function rateBadgeHtml(rate, operatorId) {
   if (rate == null) {
