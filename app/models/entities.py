@@ -281,7 +281,6 @@ class OperatorDailyMetric(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
-from __future__ import annotations
 
 from datetime import date, datetime
 from typing import List, Optional
