@@ -66,25 +66,18 @@ def get_current_user(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Пользователь не найден")
     if getattr(user, "must_change_password", False):
-        # Admin / manager / supervisor никогда не блокируются флагом must_change_password.
-        # Этот флаг предназначен только для операторов с временными паролями.
-        if user.role not in ("admin", "manager", "supervisor"):
-            settings = get_settings()
-            path = request.url.path.rstrip("/")
-            # Убираем query string если есть
-            path = path.split("?")[0].rstrip("/")
-            allowed_paths = {
-                f"{settings.api_prefix}/auth/me",
-                f"{settings.api_prefix}/auth/logout",
-                f"{settings.api_prefix}/auth/me/password",
-                f"{settings.api_prefix}/auth/account",
-                f"{settings.api_prefix}/operators/account/change-password",
-                f"{settings.api_prefix}/me/level",
-                f"{settings.api_prefix}/operators/me",
-            }
-            if request.method != "OPTIONS" and path not in allowed_paths:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
-                                    detail="Необходимо сменить временный пароль")
+        settings = get_settings()
+        path = request.url.path.rstrip("/")
+        allowed_paths = {
+            f"{settings.api_prefix}/auth/me",
+            f"{settings.api_prefix}/auth/logout",
+            f"{settings.api_prefix}/auth/me/password",
+            f"{settings.api_prefix}/auth/account",
+            f"{settings.api_prefix}/operators/account/change-password",
+        }
+        if request.method != "OPTIONS" and path not in allowed_paths:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Необходимо сменить временный пароль")
     return user
 
 
