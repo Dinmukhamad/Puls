@@ -11,3 +11,16 @@ numReplicas        = 1
 # Restart policy — при падении перезапускать автоматически
 restartPolicyType  = "ON_FAILURE"
 restartPolicyMaxRetries = 3
+[deploy]
+# Healthcheck — Railway ждёт пока /ready вернёт 200,
+# только потом переключает трафик на новый контейнер.
+# Старый контейнер продолжает работать всё это время.
+healthcheckPath    = "/ready"
+healthcheckTimeout = 60        # секунд ждать ответа (миграции могут занять время)
+
+# Сколько раз повторить healthcheck если вернул не 200
+numReplicas        = 1
+
+# Restart policy — при падении перезапускать автоматически
+restartPolicyType  = "ON_FAILURE"
+restartPolicyMaxRetries = 3
