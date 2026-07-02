@@ -51,6 +51,16 @@ def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurcha
     item = db.get(ShopItem, item_id)
     if not item or not item.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бонус не найден")
+
+    # Блокируем строку оператора на время транзакции (SELECT ... FOR UPDATE).
+    # Без этого два одновременных запроса на покупку читают один и тот же
+    # баланс, оба проходят проверку и оба списывают — двойное списание и уход
+    # баланса в минус. На PostgreSQL (prod) блокировка сериализует запросы,
+    # на SQLite (dev) FOR UPDATE просто игнорируется.
+    operator = db.get(Operator, operator.id, with_for_update=True)
+    if operator is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
+
     if operator.current_balance < item.price:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недостаточно коинов")
 
@@ -61,6 +71,11 @@ def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurcha
     # Резервирование: коины уходят с доступного баланса, но еще не считаются потраченными.
     operator.current_balance -= item.price
     operator.reserved_balance += item.price
+
+    # Страховка: баланс не должен уйти в минус ни при каких рассогласованиях.
+    if operator.current_balance < 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недостаточно коинов")
+
     db.add(
         CoinTransaction(
             operator_id=operator.id,
@@ -74,9 +89,15 @@ def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurcha
 
 
 def approve_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> ShopPurchase:
+    # Блокируем оператора и перечитываем актуальный статус заявки — защита от
+    # двойной обработки, когда два ревьюера жмут «Одобрить»/«Отклонить»
+    # одновременно (оба видят статус "new" до блокировки).
+    operator = db.get(Operator, purchase.operator_id, with_for_update=True)
+    db.refresh(purchase)
     if purchase.status not in {"pending", "new"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Заявка уже обработана")
-    operator = db.get(Operator, purchase.operator_id)
+    if operator is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
     operator.reserved_balance = max(0, operator.reserved_balance - purchase.price)
     operator.total_spent += purchase.price
     purchase.status = "approved"
@@ -97,9 +118,13 @@ def approve_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sho
 
 
 def reject_purchase(db: Session, purchase: ShopPurchase, reviewer: User, reason: str) -> ShopPurchase:
+    # Блокируем оператора и перечитываем статус заявки (см. approve_purchase).
+    operator = db.get(Operator, purchase.operator_id, with_for_update=True)
+    db.refresh(purchase)
     if purchase.status not in {"pending", "new"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Заявка уже обработана")
-    operator = db.get(Operator, purchase.operator_id)
+    if operator is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
     operator.reserved_balance = max(0, operator.reserved_balance - purchase.price)
     operator.current_balance += purchase.price
     purchase.status = "rejected"

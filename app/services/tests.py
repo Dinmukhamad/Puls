@@ -21,6 +21,7 @@ from typing import Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.entities import (
@@ -182,9 +183,6 @@ def start_attempt(db: Session, test: Test, operator: Operator) -> TestAttempt:
     if not questions:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="В тесте нет вопросов")
 
-    prev_count = db.scalar(
-        select(TestAttempt).where(TestAttempt.test_id == test.id, TestAttempt.operator_id == operator.id)
-    )
     attempt_number = (
         db.execute(
             select(TestAttempt.attempt_number)
@@ -206,7 +204,14 @@ def start_attempt(db: Session, test: Test, operator: Operator) -> TestAttempt:
         attempt_number=attempt_number,
     )
     db.add(attempt)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.flush()
+    except IntegrityError:
+        # Гонка: два одновременных старта вычислили одинаковый attempt_number и
+        # упёрлись в uq_test_attempt_number. Откатываем только вставку попытки
+        # (SAVEPOINT), отдаём понятную ошибку вместо 500.
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Тест уже начат — обновите страницу")
     return attempt
 
 
@@ -224,7 +229,7 @@ def get_active_or_recent_attempt(db: Session, test: Test, operator: Operator) ->
 def save_draft_answer(db: Session, attempt: TestAttempt, question_id: int, selected_answer_ids: List[int]) -> TestAttemptAnswer:
     if attempt.status != "in_progress":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Попытка уже завершена")
-    if now_utc() > attempt.expires_at:
+    if now_utc() > _naive(attempt.expires_at):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Время теста истекло")
 
     question = db.get(TestQuestion, question_id)
@@ -324,13 +329,24 @@ def auto_expire_attempt(db: Session, attempt: TestAttempt) -> TestAttempt:
 
 def _maybe_award_reward(db: Session, attempt: TestAttempt, test: Test, reviewer: Optional[User]) -> None:
     """
-    Начисляет награду максимум один раз за попытку (защёлка
-    reward_transaction_id). Режимы:
+    Начисляет награду максимум один раз за попытку. Режимы:
       fixed         — проходной % достигнут -> начисляется reward_points/reward_coins целиком
       proportional  — награда масштабируется пропорционально набранному % от 100%
+
+    ВНИМАНИЕ по баллам (reward_points): у оператора в схеме нет накопительного
+    «кошелька баллов» — рейтинг строится из PeriodReport (Excel). Поэтому
+    reward_points сейчас только фиксируется в попытке и показывается в UI, но
+    НИКУДА не начисляется. Чтобы баллы теста реально влияли на оператора,
+    нужно продуктовое решение (отдельное поле баланса баллов + миграция + место
+    в рейтинге/аналитике). Начислять коины «за баллы» здесь намеренно нельзя —
+    это разные валюты. См. задачу в трекере.
     """
-    if attempt.reward_transaction_id is not None:
-        return  # уже начислено — повторное начисление запрещено (ТЗ п.15.4)
+    # Идемпотентность: если по этой попытке уже что-то начислено (коины ИЛИ
+    # зафиксированы баллы), повторно не начисляем. Раньше защёлка была только на
+    # reward_transaction_id, которая для награды без коинов (points-only) не
+    # ставилась вообще.
+    if attempt.reward_transaction_id is not None or attempt.reward_coins or attempt.reward_points:
+        return  # уже обработано — повторное начисление запрещено (ТЗ п.15.4)
     if test.reward_type == "none":
         return
     if attempt.score_percent < test.reward_min_percent:
