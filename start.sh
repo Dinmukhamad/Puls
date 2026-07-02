@@ -8,17 +8,6 @@ echo "[start] Running alembic upgrade head..."
 alembic upgrade head
 echo "[start] Migrations complete"
 
-exec uvicorn app.main:app --host 0.0.0.0 --port "${PORT:-8080}"
-#!/bin/bash
-set -e
-cd /app
-export PYTHONPATH=/app
-echo "[start] PORT=$PORT"
-
-echo "[start] Running alembic upgrade head..."
-alembic upgrade head
-echo "[start] Migrations complete"
-
 # ВАЖНО: --workers 1.
 # Кеши рейтинга (rating._RATING_CACHE) и аналитики (analytics_cache) — process-local
 # (в памяти процесса, без Redis). При >1 воркере сброс кеша после загрузки Excel или
