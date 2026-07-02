@@ -35,7 +35,7 @@ class User(Base):
 
 
 class Group(Base):
-    """Р“СЂСѓРїРїР° РѕРїРµСЂР°С‚РѕСЂРѕРІ"""
+    """Группа операторов"""
     __tablename__ = "groups"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -53,22 +53,22 @@ class Operator(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     full_name: Mapped[str] = mapped_column(String(255), index=True)
 
-    # Р“СЂСѓРїРїР° вЂ” FK Рє С‚Р°Р±Р»РёС†Рµ groups
+    # Группа — FK к таблице groups
     group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("groups.id"), nullable=True, index=True)
     group_name: Mapped[str] = mapped_column(String(120), index=True, default="")  # legacy compat
 
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
 
-    # РЎС‚Р°С‚СѓСЃ СѓС‡Р°СЃС‚РёСЏ: participating | not_participating
+    # Статус участия: participating | not_participating
     participation_status: Mapped[str] = mapped_column(String(32), default="participating", index=True)
-    # РЎС‚Р°С‚СѓСЃ СЂР°Р±РѕС‚С‹: active | dismissed
+    # Статус работы: active | dismissed
     employment_status: Mapped[str] = mapped_column(String(32), default="active", index=True)
     dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     # Legacy compat fields
     status: Mapped[str] = mapped_column(String(32), default="active", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Р”РѕР»Р¶РЅРѕСЃС‚СЊ: operator | chat_manager
+    # Должность: operator | chat_manager
     position: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     # Legacy fields kept for DB compat (not used in new forms)
@@ -77,10 +77,10 @@ class Operator(Base):
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
 
-    # РЎС‚Р°РІРєР°: 0.5 | 0.75 | 1.0 вЂ” РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ РґР»СЏ СЂР°СЃС‡С‘С‚Р° РЅРѕСЂРјС‹ С‡Р°СЃРѕРІ
+    # Ставка: 0.5 | 0.75 | 1.0 — используется для расчёта нормы часов
     rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
-    # Р‘Р°Р»Р°РЅСЃС‹
+    # Балансы
     current_balance: Mapped[int] = mapped_column(Integer, default=0)
     reserved_balance: Mapped[int] = mapped_column(Integer, default=0)
     total_earned: Mapped[int] = mapped_column(Integer, default=0)
@@ -97,7 +97,7 @@ class Operator(Base):
 
 
 class OperatorLevel(Base):
-    """РќР°СЃС‚СЂР°РёРІР°РµРјС‹Р№ РёРіСЂРѕРІРѕР№ СѓСЂРѕРІРµРЅСЊ РѕРїРµСЂР°С‚РѕСЂР°. РќРµ СЃРІСЏР·Р°РЅ СЃ СЂРѕР»СЊСЋ РґРѕСЃС‚СѓРїР°."""
+    """Настраиваемый игровой уровень оператора. Не связан с ролью доступа."""
     __tablename__ = "operator_levels"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -117,7 +117,7 @@ class OperatorLevel(Base):
 
 
 class OperatorLevelRule(Base):
-    """РЈСЃР»РѕРІРёРµ СѓСЂРѕРІРЅСЏ: РєР°С‡РµСЃС‚РІРѕ >= 90, С€С‚СЂР°С„С‹ <= 5, СЃС‚Р°Р¶ РјРµР¶РґСѓ 8 Рё 30 Рё С‚.Рї."""
+    """Условие уровня: качество >= 90, штрафы <= 5, стаж между 8 и 30 и т.п."""
     __tablename__ = "operator_level_rules"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -134,7 +134,7 @@ class OperatorLevelRule(Base):
 
 
 class OperatorLevelAssignment(Base):
-    """РўРµРєСѓС‰РёР№ СѓСЂРѕРІРµРЅСЊ РѕРїРµСЂР°С‚РѕСЂР°: Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРёР№ РёР»Рё СЂСѓС‡РЅРѕР№."""
+    """Текущий уровень оператора: автоматический или ручной."""
     __tablename__ = "operator_level_assignments"
     __table_args__ = (
         UniqueConstraint("operator_id", name="uq_operator_level_assignments_operator"),
@@ -160,7 +160,7 @@ class OperatorLevelAssignment(Base):
 
 
 class OperatorLevelHistory(Base):
-    """РСЃС‚РѕСЂРёСЏ РёР·РјРµРЅРµРЅРёР№ СѓСЂРѕРІРЅСЏ РґР»СЏ Р°СѓРґРёС‚Р° Рё РѕР±СЉСЏСЃРЅРµРЅРёР№."""
+    """История изменений уровня для аудита и объяснений."""
     __tablename__ = "operator_level_history"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -254,12 +254,12 @@ class ShopPurchase(Base):
 
 
 class AuditLog(Base):
-    """Р–СѓСЂРЅР°Р» РґРµР№СЃС‚РІРёР№ вЂ” РµРґРёРЅР°СЏ С‚Р°Р±Р»РёС†Р° audit_logs"""
+    """Журнал действий — единая таблица audit_logs"""
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     action: Mapped[str] = mapped_column(String(100), index=True)
-    # РџРѕРґРґРµСЂР¶РёРІР°РµРј РѕР±Р° РєРѕРЅС‚СЂР°РєС‚Р°: РЅРѕРІС‹Р№ (entity_type/entity_id) Рё СЃС‚Р°СЂС‹Р№ (operator_id)
+    # Поддерживаем оба контракта: новый (entity_type/entity_id) и старый (operator_id)
     entity_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     operator_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)  # legacy compat
@@ -273,7 +273,7 @@ class AuditLog(Base):
 
 
 class PeriodReport(Base):
-    """РЎРѕС…СЂР°РЅС‘РЅРЅС‹Р№ СЂР°СЃС‡С‘С‚ РїРѕРєР°Р·Р°С‚РµР»РµР№ РѕРїРµСЂР°С‚РѕСЂР° Р·Р° РІС‹Р±СЂР°РЅРЅС‹Р№ РїРµСЂРёРѕРґ"""
+    """Сохранённый расчёт показателей оператора за выбранный период"""
     __tablename__ = "period_reports"
     __table_args__ = (
         UniqueConstraint("operator_id", "period_start", "period_end", name="uq_period_reports_operator_period"),
@@ -313,9 +313,9 @@ class PeriodReport(Base):
 
 class UploadedReportFile(Base):
     """
-    РҐСЂР°РЅРёР»РёС‰Рµ Р·Р°РіСЂСѓР¶РµРЅРЅС‹С… xlsx-С„Р°Р№Р»РѕРІ (Monthly Report / Report) РґР»СЏ СЂР°Р·РґРµР»Р°
-    В«Р Р°СЃС‡С‘С‚ РїРµСЂРёРѕРґР°В» Рё В«РђРЅР°Р»РёС‚РёРєР°В». РҐСЂР°РЅРёРј РІ Р‘Р” (РЅРµ in-memory), С‡С‚РѕР±С‹ С„Р°Р№Р»С‹
-    РїРµСЂРµР¶РёРІР°Р»Рё СЂРµРґРµРїР»РѕР№ Рё РїРµСЂРµР·Р°РїСѓСЃРє РєРѕРЅС‚РµР№РЅРµСЂР°.
+    Хранилище загруженных xlsx-файлов (Monthly Report / Report) для раздела
+    «Расчёт периода» и «Аналитика». Храним в БД (не in-memory), чтобы файлы
+    переживали редеплой и перезапуск контейнера.
     """
     __tablename__ = "uploaded_report_files"
 
@@ -329,12 +329,12 @@ class UploadedReportFile(Base):
 
 class OperatorDailyMetric(Base):
     """
-    РџРѕСЃСѓС‚РѕС‡РЅС‹Рµ РїРѕРєР°Р·Р°С‚РµР»Рё РѕРїРµСЂР°С‚РѕСЂР° вЂ” Р·Р°РїРѕР»РЅСЏРµС‚СЃСЏ РћР”РРќ СЂР°Р· РїСЂРё Р·Р°РіСЂСѓР·РєРµ
-    Monthly Report / Report (parse_to_daily_metrics), РЅРµР·Р°РІРёСЃРёРјРѕ РѕС‚ С‚РѕРіРѕ,
-    РєР°РєРѕР№ РїРµСЂРёРѕРґ РІС‹Р±РµСЂРµС‚ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІ В«РђРЅР°Р»РёС‚РёРєРµВ» РїРѕР·Р¶Рµ.
+    Посуточные показатели оператора — заполняется ОДИН раз при загрузке
+    Monthly Report / Report (parse_to_daily_metrics), независимо от того,
+    какой период выберет пользователь в «Аналитике» позже.
 
-    РџСЂРѕРёР·РІРѕР»СЊРЅС‹Р№ РґРёР°РїР°Р·РѕРЅ РґР°С‚ СЃС‚СЂРѕРёС‚СЃСЏ С‡РµСЂРµР· SUM() РїРѕ СЌС‚РѕР№ С‚Р°Р±Р»РёС†Рµ вЂ”
-    Excel Р±РѕР»СЊС€Рµ РЅРµ РїР°СЂСЃРёС‚СЃСЏ РїРѕРІС‚РѕСЂРЅРѕ РїСЂРё РєР°Р¶РґРѕРј РЅРѕРІРѕРј РІС‹Р±РѕСЂРµ РїРµСЂРёРѕРґР°.
+    Произвольный диапазон дат строится через SUM() по этой таблице —
+    Excel больше не парсится повторно при каждом новом выборе периода.
     """
     __tablename__ = "operator_daily_metrics"
     __table_args__ = (
@@ -343,21 +343,21 @@ class OperatorDailyMetric(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
-    operator_name: Mapped[str] = mapped_column(String(255))  # СЃРЅРёРјРѕРє Р¤РРћ РЅР° РјРѕРјРµРЅС‚ РїР°СЂСЃРёРЅРіР° вЂ” РґР»СЏ РґРёР°РіРЅРѕСЃС‚РёРєРё
+    operator_name: Mapped[str] = mapped_column(String(255))  # снимок ФИО на момент парсинга — для диагностики
     group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("groups.id"), nullable=True)
     metric_date: Mapped[date] = mapped_column(Date, index=True)
 
     calls_count: Mapped[float] = mapped_column(Float, default=0)
 
-    quality_scores_json: Mapped[str] = mapped_column(Text, default="[]")  # JSON-СЃРїРёСЃРѕРє РѕС†РµРЅРѕРє Р·Р° РґРµРЅСЊ
+    quality_scores_json: Mapped[str] = mapped_column(Text, default="[]")  # JSON-список оценок за день
     quality_sum: Mapped[float] = mapped_column(Float, default=0)
     quality_count: Mapped[int] = mapped_column(Integer, default=0)
     quality_avg: Mapped[float] = mapped_column(Float, default=0)
 
     kvz: Mapped[float] = mapped_column(Float, default=0)
-    efficiency: Mapped[float] = mapped_column(Float, default=0)  # С‡Р°СЃС‹ РІ Р·РІРѕРЅРєРµ Р·Р° РґРµРЅСЊ (Р»РёСЃС‚ "Р­С„С„РµРєС‚РёРІРЅРѕСЃС‚СЊ")
+    efficiency: Mapped[float] = mapped_column(Float, default=0)  # часы в звонке за день (лист "Эффективность")
 
-    worked_hours: Mapped[float] = mapped_column(Float, default=0)       # Р»РёСЃС‚ "РћС‚СЂР°Р±РѕС‚Р°РЅРЅС‹Рµ С‡Р°СЃС‹"
+    worked_hours: Mapped[float] = mapped_column(Float, default=0)       # лист "Отработанные часы"
     tech_issue_hours: Mapped[float] = mapped_column(Float, default=0)
     training_hours: Mapped[float] = mapped_column(Float, default=0)
     offline_activity_hours: Mapped[float] = mapped_column(Float, default=0)
@@ -374,12 +374,12 @@ class OperatorDailyMetric(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
 
-# в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
-# Р РђР—Р”Р•Р› В«РќРћР РњР« Р§РђРЎРћР’В»
-# в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+# ═══════════════════════════════════════════════════════════════════
+# РАЗДЕЛ «НОРМЫ ЧАСОВ»
+# ═══════════════════════════════════════════════════════════════════
 
 class WorkNorm(Base):
-    """РќРѕСЂРјР° С‡Р°СЃРѕРІ РїРѕ СЃС‚Р°РІРєРµ Р·Р° РєРѕРЅРєСЂРµС‚РЅС‹Р№ РіРѕРґ/РјРµСЃСЏС†."""
+    """Норма часов по ставке за конкретный год/месяц."""
     __tablename__ = "work_norms"
     __table_args__ = (
         UniqueConstraint("year", "month", "rate", name="uq_work_norms_year_month_rate"),
@@ -397,12 +397,12 @@ class WorkNorm(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
 
-# в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
-# Р РђР—Р”Р•Р› В«РўР•РЎРўР«В» вЂ” РІРЅСѓС‚СЂРµРЅРЅРµРµ С‚РµСЃС‚РёСЂРѕРІР°РЅРёРµ РѕРїРµСЂР°С‚РѕСЂРѕРІ РїРѕ РїСЂРёРЅС†РёРїСѓ Р•РќРў
-# в•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђв•ђ
+# ═══════════════════════════════════════════════════════════════════
+# РАЗДЕЛ «ТЕСТЫ» — внутреннее тестирование операторов по принципу ЕНТ
+# ═══════════════════════════════════════════════════════════════════
 
 class Test(Base):
-    """РўРµСЃС‚: РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ + РЅР°СЃС‚СЂРѕР№РєРё РІСЂРµРјРµРЅРё/РЅР°РіСЂР°РґС‹/РїСЂРѕС…РѕРґРЅРѕРіРѕ РїСЂРѕС†РµРЅС‚Р°."""
+    """Тест: конструктор + настройки времени/награды/проходного процента."""
     __tablename__ = "tests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -428,7 +428,7 @@ class Test(Base):
     reward_points: Mapped[float] = mapped_column(Float, default=0)
     reward_coins: Mapped[int] = mapped_column(Integer, default=0)
     reward_min_percent: Mapped[float] = mapped_column(Float, default=70.0)
-    # fixed | proportional вЂ” СЂРµР¶РёРј РЅР°С‡РёСЃР»РµРЅРёСЏ РЅР°РіСЂР°РґС‹ (СЃРј. РўР— Рї.10.3)
+    # fixed | proportional — режим начисления награды (см. ТЗ п.10.3)
     reward_mode: Mapped[str] = mapped_column(String(32), default="fixed")
 
     created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
@@ -442,7 +442,7 @@ class Test(Base):
 
 
 class TestQuestion(Base):
-    """Р’РѕРїСЂРѕСЃ С‚РµСЃС‚Р°: С‚РµРєСЃС‚, С‚РёРї (РѕРґРёРЅ/РЅРµСЃРєРѕР»СЊРєРѕ РѕС‚РІРµС‚РѕРІ), РІРµСЃ РІ Р±Р°Р»Р»Р°С…."""
+    """Вопрос теста: текст, тип (один/несколько ответов), вес в баллах."""
     __tablename__ = "test_questions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -460,7 +460,7 @@ class TestQuestion(Base):
 
 
 class TestAnswerOption(Base):
-    """Р’Р°СЂРёР°РЅС‚ РѕС‚РІРµС‚Р° РЅР° РІРѕРїСЂРѕСЃ. is_correct РќРРљРћР“Р”Рђ РЅРµ РѕС‚РґР°С‘С‚СЃСЏ РѕРїРµСЂР°С‚РѕСЂСѓ РґРѕ Р·Р°РІРµСЂС€РµРЅРёСЏ С‚РµСЃС‚Р°."""
+    """Вариант ответа на вопрос. is_correct НИКОГДА не отдаётся оператору до завершения теста."""
     __tablename__ = "test_answers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -476,8 +476,8 @@ class TestAnswerOption(Base):
 
 class TestAssignment(Base):
     """
-    РќР°Р·РЅР°С‡РµРЅРёРµ С‚РµСЃС‚Р°: РєРѕРјСѓ РѕРЅ РІРёРґРµРЅ/РґРѕСЃС‚СѓРїРµРЅ.
-    target_type=all  -> target_id РёРіРЅРѕСЂРёСЂСѓРµС‚СЃСЏ (РІРёРґРµРЅ РІСЃРµРј РѕРїРµСЂР°С‚РѕСЂР°Рј)
+    Назначение теста: кому он виден/доступен.
+    target_type=all  -> target_id игнорируется (виден всем операторам)
     target_type=group -> target_id = groups.id
     target_type=operator -> target_id = operators.id
     """
@@ -494,10 +494,10 @@ class TestAssignment(Base):
 
 class TestAttempt(Base):
     """
-    РџРѕРїС‹С‚РєР° РїСЂРѕС…РѕР¶РґРµРЅРёСЏ С‚РµСЃС‚Р° РѕРґРЅРёРј РѕРїРµСЂР°С‚РѕСЂРѕРј. started_at/expires_at
-    С„РёРєСЃРёСЂСѓСЋС‚СЃСЏ РЅР° СЃРµСЂРІРµСЂРµ РїСЂРё СЃС‚Р°СЂС‚Рµ вЂ” СЌС‚Рѕ Рё РµСЃС‚СЊ Р·Р°С‰РёС‚Р° РѕС‚ "РїРµСЂРµР·Р°РїСѓСЃРєР°
-    С‚Р°Р№РјРµСЂР° С‡РµСЂРµР· F5" (СЃРј. РўР— Рї.7.3): С„СЂРѕРЅС‚РµРЅРґ РІСЃРµРіРґР° РІС‹С‡РёСЃР»СЏРµС‚ РѕСЃС‚Р°С‚РѕРє
-    РІСЂРµРјРµРЅРё РєР°Рє expires_at - now(), Р° РЅРµ С…СЂР°РЅРёС‚ С‚Р°Р№РјРµСЂ Р»РѕРєР°Р»СЊРЅРѕ.
+    Попытка прохождения теста одним оператором. started_at/expires_at
+    фиксируются на сервере при старте — это и есть защита от "перезапуска
+    таймера через F5" (см. ТЗ п.7.3): фронтенд всегда вычисляет остаток
+    времени как expires_at - now(), а не хранит таймер локально.
     """
     __tablename__ = "test_attempts"
     __table_args__ = (
@@ -536,10 +536,10 @@ class TestAttempt(Base):
 
 class TestAttemptAnswer(Base):
     """
-    Р§РµСЂРЅРѕРІРёРє/С„РёРЅР°Р»СЊРЅС‹Р№ РѕС‚РІРµС‚ РѕРїРµСЂР°С‚РѕСЂР° РЅР° РєРѕРЅРєСЂРµС‚РЅС‹Р№ РІРѕРїСЂРѕСЃ РІРЅСѓС‚СЂРё РїРѕРїС‹С‚РєРё.
-    selected_answer_ids С…СЂР°РЅРёС‚СЃСЏ РєР°Рє JSON-СЃРїРёСЃРѕРє ID РІР°СЂРёР°РЅС‚РѕРІ вЂ” РїРѕР·РІРѕР»СЏРµС‚
-    РєР°Рє single_choice (1 СЌР»РµРјРµРЅС‚), С‚Р°Рє Рё multiple_choice (РЅРµСЃРєРѕР»СЊРєРѕ).
-    РЎРѕС…СЂР°РЅСЏРµС‚СЃСЏ РїРѕ РєР°Р¶РґРѕРјСѓ "Р”Р°Р»РµРµ" вЂ” СЌС‚Рѕ Рё РµСЃС‚СЊ draft_answers РёР· РўР— Рї.7.3.
+    Черновик/финальный ответ оператора на конкретный вопрос внутри попытки.
+    selected_answer_ids хранится как JSON-список ID вариантов — позволяет
+    как single_choice (1 элемент), так и multiple_choice (несколько).
+    Сохраняется по каждому "Далее" — это и есть draft_answers из ТЗ п.7.3.
     """
     __tablename__ = "test_attempt_answers"
     __table_args__ = (
@@ -550,7 +550,7 @@ class TestAttemptAnswer(Base):
     attempt_id: Mapped[int] = mapped_column(ForeignKey("test_attempts.id"), index=True)
     question_id: Mapped[int] = mapped_column(ForeignKey("test_questions.id"), index=True)
     selected_answer_ids_json: Mapped[str] = mapped_column(Text, default="[]")
-    is_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)  # None РґРѕ РїСЂРѕРІРµСЂРєРё
+    is_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)  # None до проверки
     points_awarded: Mapped[float] = mapped_column(Float, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
