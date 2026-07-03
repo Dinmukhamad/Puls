@@ -12,22 +12,14 @@ heatmap, аналитику штрафов, сравнение групп и т.
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
-from statistics import mean
-from typing import Dict, List, Optional, Tuple
 
 from app.services.period_reports import (
     OperatorPeriodMetrics,
-    PeriodCalculationResult,
-    calculate_period_report,
-    normalize_name,
     parse_monthly_report,
     parse_report_file,
-    is_service_row,
-    compute_operator_metrics,
 )
-
 
 # ── Risk thresholds (настраиваемые пороги) ──────────────────────────────
 RISK_QUALITY_STABLE = 85
@@ -50,11 +42,11 @@ class OperatorAnalyticsRow:
     """Расширенная строка оператора для таблицы аналитики, с group_id/role-фильтрами."""
     full_name: str
     name_key: str
-    operator_id: Optional[int] = None
-    group_id: Optional[int] = None
-    group_name: Optional[str] = None
-    participation_status: Optional[str] = None
-    metrics: Optional[OperatorPeriodMetrics] = None
+    operator_id: int | None = None
+    group_id: int | None = None
+    group_name: str | None = None
+    participation_status: str | None = None
+    metrics: OperatorPeriodMetrics | None = None
     risk_status: str = "no_data"  # stable | watch | critical | no_data
 
 
@@ -100,10 +92,10 @@ def is_attention_zone(m: OperatorPeriodMetrics) -> bool:
 
 
 def build_analytics_rows(
-    operators_metrics: List[OperatorPeriodMetrics],
-    site_operator_map: Dict[str, dict],  # name_key -> {id, group_id, group_name, participation_status}
-) -> List[OperatorAnalyticsRow]:
-    rows: List[OperatorAnalyticsRow] = []
+    operators_metrics: list[OperatorPeriodMetrics],
+    site_operator_map: dict[str, dict],  # name_key -> {id, group_id, group_name, participation_status}
+) -> list[OperatorAnalyticsRow]:
+    rows: list[OperatorAnalyticsRow] = []
     for m in operators_metrics:
         site = site_operator_map.get(m.name_key, {})
         row = OperatorAnalyticsRow(
@@ -121,12 +113,12 @@ def build_analytics_rows(
 
 
 def filter_rows(
-    rows: List[OperatorAnalyticsRow],
-    group_id: Optional[int] = None,
-    operator_query: Optional[str] = None,
-    participation_status: Optional[str] = None,
+    rows: list[OperatorAnalyticsRow],
+    group_id: int | None = None,
+    operator_query: str | None = None,
+    participation_status: str | None = None,
     only_with_data: bool = False,
-) -> List[OperatorAnalyticsRow]:
+) -> list[OperatorAnalyticsRow]:
     out = rows
     if group_id is not None:
         out = [r for r in out if r.group_id == group_id]
@@ -142,7 +134,7 @@ def filter_rows(
 
 # ── KPI summary ──────────────────────────────────────────────────────────
 
-def compute_kpi_summary(rows: List[OperatorAnalyticsRow]) -> dict:
+def compute_kpi_summary(rows: list[OperatorAnalyticsRow]) -> dict:
     included = [r for r in rows if r.metrics and r.metrics.has_any_period_data]
     metrics = [r.metrics for r in included]
 
@@ -182,7 +174,7 @@ def compute_daily_dynamics(
     period_end: date,
     site_keys: set,
     metric: str = "calls",
-) -> List[dict]:
+) -> list[dict]:
     """
     Считает посуточную динамику для metric in {calls, kvz, operators}.
     Парсит report_file повторно по каждому дню в диапазоне (один день = период).
@@ -232,8 +224,8 @@ def compute_daily_dynamics(
 
 # ── Groups comparison ────────────────────────────────────────────────────
 
-def compute_groups_comparison(rows: List[OperatorAnalyticsRow]) -> List[dict]:
-    by_group: Dict[Tuple[Optional[int], str], List[OperatorAnalyticsRow]] = defaultdict(list)
+def compute_groups_comparison(rows: list[OperatorAnalyticsRow]) -> list[dict]:
+    by_group: dict[tuple[int | None, str], list[OperatorAnalyticsRow]] = defaultdict(list)
     for r in rows:
         if not (r.metrics and r.metrics.has_any_period_data):
             continue
@@ -276,7 +268,7 @@ def compute_groups_comparison(rows: List[OperatorAnalyticsRow]) -> List[dict]:
 
 # ── Quality x KVZ matrix ─────────────────────────────────────────────────
 
-def compute_quality_kvz_matrix(rows: List[OperatorAnalyticsRow]) -> List[dict]:
+def compute_quality_kvz_matrix(rows: list[OperatorAnalyticsRow]) -> list[dict]:
     out = []
     for r in rows:
         m = r.metrics
@@ -295,7 +287,7 @@ def compute_quality_kvz_matrix(rows: List[OperatorAnalyticsRow]) -> List[dict]:
 
 # ── Top / Attention zone ─────────────────────────────────────────────────
 
-def compute_top_and_attention(rows: List[OperatorAnalyticsRow], top_n: int = 5) -> dict:
+def compute_top_and_attention(rows: list[OperatorAnalyticsRow], top_n: int = 5) -> dict:
     included = [r for r in rows if r.metrics and r.metrics.has_any_period_data]
 
     def top_by(key_func, filter_func=None):
@@ -346,7 +338,7 @@ def _attention_reason(m: OperatorPeriodMetrics) -> str:
 
 # ── Penalties analytics ───────────────────────────────────────────────────
 
-def compute_penalties_analytics(rows: List[OperatorAnalyticsRow]) -> dict:
+def compute_penalties_analytics(rows: list[OperatorAnalyticsRow]) -> dict:
     with_penalty = [r for r in rows if r.metrics and r.metrics.penalty_sum > 0]
     total_minutes = sum(r.metrics.penalty_minutes for r in with_penalty)
     total_points_lost = sum(r.metrics.penalty_points for r in with_penalty)
@@ -377,7 +369,7 @@ def compute_penalties_analytics(rows: List[OperatorAnalyticsRow]) -> dict:
 
 # ── Points contribution breakdown ────────────────────────────────────────
 
-def compute_points_breakdown(rows: List[OperatorAnalyticsRow]) -> List[dict]:
+def compute_points_breakdown(rows: list[OperatorAnalyticsRow]) -> list[dict]:
     out = []
     for r in rows:
         m = r.metrics
@@ -400,11 +392,11 @@ def compute_points_breakdown(rows: List[OperatorAnalyticsRow]) -> List[dict]:
 # ── Heatmap by day ────────────────────────────────────────────────────────
 
 def compute_heatmap(
-    monthly_report_bytes: Optional[bytes],
+    monthly_report_bytes: bytes | None,
     report_bytes: bytes,
     period_start: date,
     period_end: date,
-    site_keys: Dict[str, str],  # name_key -> display_name
+    site_keys: dict[str, str],  # name_key -> display_name
     metric: str = "quality",
 ) -> dict:
     """metric in {quality, calls, kvz, efficiency, penalty}"""
@@ -414,7 +406,7 @@ def compute_heatmap(
         dates.append(cur)
         cur += timedelta(days=1)
 
-    operator_day_values: Dict[str, Dict[str, Optional[float]]] = {k: {} for k in site_keys}
+    operator_day_values: dict[str, dict[str, float | None]] = {k: {} for k in site_keys}
 
     if metric == "quality":
         if not monthly_report_bytes:
@@ -425,7 +417,6 @@ def compute_heatmap(
                 qr = day_quality.get(key)
                 operator_day_values[key][str(d)] = qr.avg if qr and qr.scores else None
     else:
-        sheet_map = {"calls": "Звонки", "kvz": None, "efficiency": None, "penalty": "Штрафы"}
         for d in dates:
             day_report = parse_report_file(report_bytes, d, d)
             for key in site_keys:
@@ -470,8 +461,8 @@ def compute_heatmap(
 
 # ── Risk pyramid ──────────────────────────────────────────────────────────
 
-def compute_risk_pyramid(rows: List[OperatorAnalyticsRow]) -> dict:
-    buckets: Dict[str, List[dict]] = {"stable": [], "watch": [], "critical": [], "no_data": []}
+def compute_risk_pyramid(rows: list[OperatorAnalyticsRow]) -> dict:
+    buckets: dict[str, list[dict]] = {"stable": [], "watch": [], "critical": [], "no_data": []}
     for r in rows:
         if not r.metrics:
             continue
@@ -495,7 +486,7 @@ def compute_risk_pyramid(rows: List[OperatorAnalyticsRow]) -> dict:
 
 # ── Quality coverage dashboard ────────────────────────────────────────────
 
-def compute_quality_coverage(rows: List[OperatorAnalyticsRow]) -> dict:
+def compute_quality_coverage(rows: list[OperatorAnalyticsRow]) -> dict:
     included = [r for r in rows if r.metrics and r.metrics.has_any_period_data]
     with_quality = [r for r in included if r.metrics.quality_calls_count > 0]
     without_quality = [r for r in included if r.metrics.quality_calls_count == 0]
@@ -503,7 +494,7 @@ def compute_quality_coverage(rows: List[OperatorAnalyticsRow]) -> dict:
     total_evaluated_calls = sum(r.metrics.quality_calls_count for r in with_quality)
     avg_per_operator = round(total_evaluated_calls / len(with_quality), 2) if with_quality else 0.0
 
-    by_group: Dict[str, dict] = defaultdict(lambda: {"operators": 0, "evaluated_calls": 0, "with_quality": 0, "quality_weighted_sum": 0.0})
+    by_group: dict[str, dict] = defaultdict(lambda: {"operators": 0, "evaluated_calls": 0, "with_quality": 0, "quality_weighted_sum": 0.0})
     for r in included:
         g = r.group_name or "Без группы"
         by_group[g]["operators"] += 1
@@ -551,7 +542,7 @@ def compute_quality_coverage(rows: List[OperatorAnalyticsRow]) -> dict:
 
 # ── Load vs efficiency scatter ────────────────────────────────────────────
 
-def compute_load_vs_efficiency(rows: List[OperatorAnalyticsRow]) -> List[dict]:
+def compute_load_vs_efficiency(rows: list[OperatorAnalyticsRow]) -> list[dict]:
     out = []
     for r in rows:
         m = r.metrics
@@ -571,7 +562,7 @@ def compute_load_vs_efficiency(rows: List[OperatorAnalyticsRow]) -> List[dict]:
 
 # ── Quality vs penalties control ──────────────────────────────────────────
 
-def compute_quality_vs_penalties(rows: List[OperatorAnalyticsRow]) -> List[dict]:
+def compute_quality_vs_penalties(rows: list[OperatorAnalyticsRow]) -> list[dict]:
     out = []
     for r in rows:
         m = r.metrics
@@ -638,7 +629,7 @@ def _main_change_reason(deltas: dict) -> str:
     return f"{direction} {label}: {sign}{round(val, 1)}"
 
 
-def _recommendation_for(m: OperatorPeriodMetrics, delta_final: Optional[float]) -> str:
+def _recommendation_for(m: OperatorPeriodMetrics, delta_final: float | None) -> str:
     if m.quality_calls_count == 0 and m.base_hours <= 0:
         return "Недостаточно данных для рекомендации — проверьте наличие оценок и табеля."
     parts = []
@@ -658,8 +649,8 @@ def _recommendation_for(m: OperatorPeriodMetrics, delta_final: Optional[float]) 
 
 
 def compute_points_analysis(
-    rows: List[OperatorAnalyticsRow],
-    prev_rows: Optional[List[OperatorAnalyticsRow]],
+    rows: list[OperatorAnalyticsRow],
+    prev_rows: list[OperatorAnalyticsRow] | None,
 ) -> dict:
     """
     Полный анализ итоговых баллов с разбором вклада и сравнением с прошлым
@@ -667,7 +658,7 @@ def compute_points_analysis(
     """
     included = [r for r in rows if r.metrics and r.metrics.has_any_period_data]
 
-    prev_by_key: Dict[str, OperatorPeriodMetrics] = {}
+    prev_by_key: dict[str, OperatorPeriodMetrics] = {}
     if prev_rows:
         for r in prev_rows:
             if r.metrics and r.metrics.has_any_period_data:
