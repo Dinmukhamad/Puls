@@ -23,6 +23,7 @@ from app.services.operator_levels import (
     assign_manual_level,
     ensure_default_levels,
     level_history_rows,
+    level_reward_overview_rows,
     operator_level_summary,
 )
 
@@ -242,6 +243,14 @@ def history(
     _: User = Depends(require_roles("manager", "admin")),
 ) -> list[dict]:
     return level_history_rows(db, operator_id, limit)
+
+
+@admin_router.get("/rewards")
+def rewards_overview(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("manager", "admin")),
+) -> dict:
+    return {"items": level_reward_overview_rows(db)}
 
 
 @me_router.get("/level", response_model=OperatorLevelSummary)
