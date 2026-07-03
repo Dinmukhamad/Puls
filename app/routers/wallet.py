@@ -7,6 +7,7 @@ from app.database.db import get_db
 from app.models.entities import CoinTransaction, Operator, User
 from app.schemas.wallet import CoinTransactionRead, ManualTransactionCreate, WalletRead
 from app.services.coins import add_transaction, operator_for_user_or_403
+from app.services.rating import rating_cache_invalidate
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 
@@ -55,7 +56,7 @@ def create_manual_transaction(
     try:
         payload.validate_business_rules()
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     operator = db.get(Operator, payload.operator_id)
     if not operator:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
@@ -73,5 +74,6 @@ def create_manual_transaction(
     full_comment = f"{reason}: {comment}" if comment else reason
     transaction = add_transaction(db, operator, payload.amount, transaction_type, full_comment, created_by=current_user)
     db.commit()
+    rating_cache_invalidate()  # баланс оператора виден в рейтинге/номинациях
     db.refresh(transaction)
     return transaction
