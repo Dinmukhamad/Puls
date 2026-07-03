@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-import json as _json
-from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.security import get_current_user
 from app.database.db import get_db
 from app.models.entities import Group, Operator, OperatorDailyMetric, PeriodReport, User
 from app.services.analytics import (
@@ -30,8 +28,8 @@ from app.services.analytics import (
     filter_rows,
 )
 from app.services.analytics_cache import cache_get, cache_key, cache_set
-from app.services.work_norms import calculate_norm_for_period
 from app.services.period_reports import OperatorPeriodMetrics, aggregate_daily_rows, normalize_name
+from app.services.work_norms import calculate_norm_for_period
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -45,11 +43,11 @@ def _require_analytics_access(current_user: User = Depends(get_current_user)) ->
     return current_user
 
 
-def _site_operators(db: Session) -> List[Operator]:
+def _site_operators(db: Session) -> list[Operator]:
     return list(db.scalars(select(Operator)))
 
 
-def _build_site_map(operators: List[Operator]) -> dict:
+def _build_site_map(operators: list[Operator]) -> dict:
     out = {}
     for o in operators:
         key = normalize_name(o.full_name)
@@ -146,7 +144,7 @@ def _period_is_calculated(db: Session, start_date: date, end_date: date) -> bool
     ) is not None
 
 
-def _available_data_date_range(db: Session) -> Optional[tuple]:
+def _available_data_date_range(db: Session) -> tuple | None:
     """Минимальная и максимальная дата, для которых есть посуточные данные."""
     row = db.execute(
         select(func.min(OperatorDailyMetric.metric_date), func.max(OperatorDailyMetric.metric_date))
@@ -160,7 +158,7 @@ def _aggregate_from_daily_metrics(
     db: Session,
     start_date: date,
     end_date: date,
-) -> tuple[Dict[int, OperatorPeriodMetrics], List[str]]:
+) -> tuple[dict[int, OperatorPeriodMetrics], list[str]]:
     """
     Агрегирует operator_daily_metrics за произвольный диапазон дат — БЕЗ
     обращения к Excel. Возвращает {operator_id: OperatorPeriodMetrics} и
@@ -175,7 +173,7 @@ def _aggregate_from_daily_metrics(
         )
     )
 
-    by_operator: Dict[int, List[dict]] = {}
+    by_operator: dict[int, list[dict]] = {}
     covered_dates: set = set()
     for r in daily_rows:
         covered_dates.add(r.metric_date)
@@ -191,7 +189,7 @@ def _aggregate_from_daily_metrics(
             "penalty_sum": r.penalty_sum,
         })
 
-    warnings: List[str] = []
+    warnings: list[str] = []
     total_days = (end_date - start_date).days + 1
     if not daily_rows:
         available = _available_data_date_range(db)
@@ -215,13 +213,13 @@ def _aggregate_from_daily_metrics(
             + ")."
         )
 
-    metrics_by_operator: Dict[int, OperatorPeriodMetrics] = {
+    metrics_by_operator: dict[int, OperatorPeriodMetrics] = {
         op_id: aggregate_daily_rows(rows) for op_id, rows in by_operator.items()
     }
     return metrics_by_operator, warnings
 
 
-def get_data_availability_warning(db: Session, start_date: date, end_date: date) -> Optional[str]:
+def get_data_availability_warning(db: Session, start_date: date, end_date: date) -> str | None:
     """
     Лёгкая проверка покрытия дат (без полной агрегации метрик) — используется
     эндпоинтом /summary, чтобы вернуть frontend понятное сообщение вида
@@ -329,11 +327,11 @@ def _get_rows(
     db: Session,
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = None,
-    operator_query: Optional[str] = None,
-    participation_status: Optional[str] = None,
+    group_id: int | None = None,
+    operator_query: str | None = None,
+    participation_status: str | None = None,
     only_with_data: bool = False,
-) -> List[OperatorAnalyticsRow]:
+) -> list[OperatorAnalyticsRow]:
     """
     Строит строки аналитики для ПРОИЗВОЛЬНОГО диапазона дат:
 
@@ -365,7 +363,7 @@ def _get_rows(
         o.id: o for o in db.scalars(select(Operator).where(Operator.id.in_(all_operator_ids)))
     }
 
-    rows: List[OperatorAnalyticsRow] = []
+    rows: list[OperatorAnalyticsRow] = []
     for operator_id in all_operator_ids:
         operator = operators.get(operator_id)
         if not operator:
@@ -440,9 +438,9 @@ def get_available_periods(
 def get_summary(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
-    operator_query: Optional[str] = Query(None),
-    participation_status: Optional[str] = Query(None),
+    group_id: int | None = Query(None),
+    operator_query: str | None = Query(None),
+    participation_status: str | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -468,7 +466,7 @@ def get_daily_dynamics(
     start_date: date,
     end_date: date,
     metric: str = Query("calls", pattern="^(calls|kvz|operators)$"),
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -501,9 +499,9 @@ def get_daily_dynamics(
 def get_operators_table(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
-    operator_query: Optional[str] = Query(None),
-    participation_status: Optional[str] = Query(None),
+    group_id: int | None = Query(None),
+    operator_query: str | None = Query(None),
+    participation_status: str | None = Query(None),
     only_with_data: bool = Query(False),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
@@ -578,7 +576,7 @@ def get_groups_comparison(
 def get_quality_kvz_matrix(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -596,7 +594,7 @@ def get_quality_kvz_matrix(
 def get_top_and_attention(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -614,7 +612,7 @@ def get_top_and_attention(
 def get_penalties(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -632,8 +630,8 @@ def get_penalties(
 def get_points_breakdown(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
-    operator_query: Optional[str] = Query(None),
+    group_id: int | None = Query(None),
+    operator_query: str | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -652,9 +650,9 @@ def get_points_breakdown(
 def get_points_analysis(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
-    operator_query: Optional[str] = Query(None),
-    participation_status: Optional[str] = Query(None),
+    group_id: int | None = Query(None),
+    operator_query: str | None = Query(None),
+    participation_status: str | None = Query(None),
     only_with_data: bool = Query(False),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
@@ -695,7 +693,7 @@ def get_heatmap(
     start_date: date,
     end_date: date,
     metric: str = Query("quality", pattern="^(quality|calls|kvz|efficiency|penalty)$"),
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -727,7 +725,7 @@ def get_heatmap(
 def get_risk_pyramid(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -745,7 +743,7 @@ def get_risk_pyramid(
 def get_quality_coverage(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -763,7 +761,7 @@ def get_quality_coverage(
 def get_load_vs_efficiency(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -781,7 +779,7 @@ def get_load_vs_efficiency(
 def get_quality_vs_penalties(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -800,9 +798,9 @@ def get_quality_vs_penalties(
 def get_overview(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
-    operator_query: Optional[str] = Query(None),
-    participation_status: Optional[str] = Query(None),
+    group_id: int | None = Query(None),
+    operator_query: str | None = Query(None),
+    participation_status: str | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -840,9 +838,9 @@ def get_overview(
 def get_operators_combined(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
-    operator_query: Optional[str] = Query(None),
-    participation_status: Optional[str] = Query(None),
+    group_id: int | None = Query(None),
+    operator_query: str | None = Query(None),
+    participation_status: str | None = Query(None),
     only_with_data: bool = Query(False),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
@@ -861,10 +859,14 @@ def get_operators_combined(
     rows = _get_rows(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data)
 
     def quality_band(q):
-        if q is None: return None
-        if q >= 90: return "green"
-        if q >= 80: return "yellow"
-        if q >= 70: return "orange"
+        if q is None:
+            return None
+        if q >= 90:
+            return "green"
+        if q >= 80:
+            return "yellow"
+        if q >= 70:
+            return "orange"
         return "red"
 
     ops_out = []
@@ -906,7 +908,7 @@ def get_operators_combined(
 def get_matrix_combined(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
@@ -931,7 +933,7 @@ def get_matrix_combined(
 def get_quality_combined(
     start_date: date,
     end_date: date,
-    group_id: Optional[int] = Query(None),
+    group_id: int | None = Query(None),
     db: Session = Depends(get_db),
     _: User = Depends(_require_analytics_access),
 ) -> dict:
