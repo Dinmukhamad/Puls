@@ -45,6 +45,9 @@ def _tx_row(tx: CoinTransaction, op: Operator, user: User | None) -> dict:
         "created_by_user_id": tx.created_by_user_id,
         "created_by_name": user.full_name if user else "Система",
         "related_purchase_id": tx.related_purchase_id,
+        "source_type": tx.source_type,
+        "source_id": tx.source_id,
+        "metadata": tx.metadata_json,
         "created_at": tx.created_at.isoformat(),
     }
 
