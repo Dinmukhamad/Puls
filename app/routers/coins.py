@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import local_day_bounds_utc
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
 from app.models.entities import CoinTransaction, Operator, ShopItem, ShopPurchase, User
 from app.services.coins import add_transaction, approve_purchase, complete_purchase, reject_purchase
+from app.services.rating import rating_cache_invalidate
 
 router = APIRouter(prefix="/coins", tags=["coins"])
 
@@ -31,7 +32,7 @@ class RejectRequest(BaseModel):
     reason: str = Field(min_length=3)
 
 
-def _tx_row(tx: CoinTransaction, op: Operator, user: Optional[User]) -> dict:
+def _tx_row(tx: CoinTransaction, op: Operator, user: User | None) -> dict:
     return {
         "id": tx.id,
         "operator_id": tx.operator_id,
@@ -48,7 +49,7 @@ def _tx_row(tx: CoinTransaction, op: Operator, user: Optional[User]) -> dict:
     }
 
 
-def _request_row(purchase: ShopPurchase, op: Operator, item: Optional[ShopItem]) -> dict:
+def _request_row(purchase: ShopPurchase, op: Operator, item: ShopItem | None) -> dict:
     return {
         "id": purchase.id,
         "operator_id": purchase.operator_id,
@@ -70,8 +71,11 @@ def _request_row(purchase: ShopPurchase, op: Operator, item: Optional[ShopItem])
 
 @router.get("/overview", dependencies=[ADMIN_DEP])
 def overview(db: Session = Depends(get_db)) -> dict:
-    today_start = datetime.combine(date.today(), time.min)
-    today_end = datetime.combine(date.today(), time.max)
+    # «Сегодня» — локальный бизнес-день Asia/Almaty, переведённый в UTC-границы
+    # для сравнения с created_at (naive UTC в БД). Раньше использовался
+    # date.today() сервера (UTC на Railway), и операции до 05:00 по Алматы
+    # попадали во «вчера» (ТЗ P1.1).
+    today_start, today_end = local_day_bounds_utc()
     today_txs = list(db.scalars(
         select(CoinTransaction).where(
             CoinTransaction.created_at >= today_start,
@@ -130,6 +134,7 @@ def manual_operation(
         comment = f"{comment}: {payload.comment.strip()}"
     tx = add_transaction(db, operator, amount, tx_type, comment, created_by=current_user)
     db.commit()
+    rating_cache_invalidate()  # ручное начисление/списание меняет баланс в рейтинге
     db.refresh(tx)
     return {"ok": True, "transaction": _tx_row(tx, operator, current_user)}
 
@@ -166,6 +171,7 @@ def approve_request(request_id: int, db: Session = Depends(get_db), current_user
         raise HTTPException(status_code=404, detail="Заявка не найдена")
     approve_purchase(db, purchase, current_user)
     db.commit()
+    rating_cache_invalidate()
     return {"ok": True}
 
 
@@ -176,6 +182,7 @@ def reject_request(request_id: int, payload: RejectRequest, db: Session = Depend
         raise HTTPException(status_code=404, detail="Заявка не найдена")
     reject_purchase(db, purchase, current_user, payload.reason)
     db.commit()
+    rating_cache_invalidate()
     return {"ok": True}
 
 
@@ -193,8 +200,8 @@ def complete_request(request_id: int, db: Session = Depends(get_db), current_use
 def transactions(
     type: str = "all",
     operator_id: str = "all",
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
     db: Session = Depends(get_db),
 ) -> dict:
     q = (
