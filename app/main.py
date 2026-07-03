@@ -2,30 +2,96 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Dict
-
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, Response
 from urllib.parse import urlparse
 
-from app.core.config import get_settings
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+
+from app.core.config import get_settings
 from app.database.db import Base, SessionLocal, engine
 from app.models import entities  # noqa: F401
-from app.routers import analytics, auth, coins, dashboard, groups, operator_levels, operators, period_reports, rating, shop, tests, users, wallet, weekly_results, work_norms
+from app.routers import (
+    analytics,
+    auth,
+    coins,
+    dashboard,
+    groups,
+    operator_levels,
+    operators,
+    period_reports,
+    rating,
+    shop,
+    tests,
+    users,
+    wallet,
+    weekly_results,
+    work_norms,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-app = FastAPI(title="Puls — Operator Performance Platform")
 
-settings = get_settings()
+def _run_startup_tasks() -> None:
+    """Startup-логика приложения (вызывается из lifespan, ТЗ P1.5)."""
+    # Production safety check
+    try:
+        settings.check_production_safety()
+    except RuntimeError as e:
+        logger.critical(str(e))
+        raise
+
+    # Schema: Alembic runs via start.sh before uvicorn starts.
+    # create_all is kept only as dev fallback (AUTO_CREATE_TABLES=true).
+    if settings.auto_create_tables:
+        logger.info("[startup] AUTO_CREATE_TABLES=true — creating missing tables...")
+        try:
+            Base.metadata.create_all(bind=engine)
+            logger.info("[startup] Tables OK")
+        except Exception as e:
+            logger.error(f"[startup] create_all failed: {e}")
+
+        try:
+            from app.services.schema_maintenance import ensure_operator_management_schema
+            ensure_operator_management_schema(engine)
+            logger.info("[startup] Schema compatibility OK")
+        except Exception as e:
+            logger.error(f"[startup] Schema maintenance failed (non-fatal): {e}")
+
+    # Seed initial data
+    if settings.auto_seed:
+        logger.info("[startup] Running seed...")
+        try:
+            from app.services.operator_levels import ensure_default_levels
+            from app.services.seed import seed_database
+            db = SessionLocal()
+            try:
+                ensure_default_levels(db)
+                seed_database(db)
+                db.commit()
+                logger.info("[startup] Seed OK")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"[startup] Seed failed (non-fatal): {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _run_startup_tasks()
+    yield
+
+
+app = FastAPI(title="Puls — Operator Performance Platform", lifespan=lifespan)
+
 _cors_origins = settings.cors_origin_list
 # If CORS is *, credentials must be False (browser restriction)
 # In production, set explicit domains in CORS_ORIGINS
@@ -134,64 +200,19 @@ app.include_router(tests.admin_router,    prefix=settings.api_prefix)
 app.include_router(work_norms.router,     prefix=settings.api_prefix)
 
 
-@app.on_event("startup")
-def startup() -> None:
-    settings = get_settings()
-    # Production safety check
-    try:
-        settings.check_production_safety()
-    except RuntimeError as e:
-        logger.critical(str(e))
-        raise
-
-    # Schema: Alembic runs via start.sh before uvicorn starts.
-    # create_all is kept only as dev fallback (AUTO_CREATE_TABLES=true).
-    if settings.auto_create_tables:
-        logger.info("[startup] AUTO_CREATE_TABLES=true — creating missing tables...")
-        try:
-            Base.metadata.create_all(bind=engine)
-            logger.info("[startup] Tables OK")
-        except Exception as e:
-            logger.error(f"[startup] create_all failed: {e}")
-
-        try:
-            from app.services.schema_maintenance import ensure_operator_management_schema
-            ensure_operator_management_schema(engine)
-            logger.info("[startup] Schema compatibility OK")
-        except Exception as e:
-            logger.error(f"[startup] Schema maintenance failed (non-fatal): {e}")
-
-    # Seed initial data
-    if settings.auto_seed:
-        logger.info("[startup] Running seed...")
-        try:
-            from app.services.seed import seed_database
-            from app.services.operator_levels import ensure_default_levels
-            db = SessionLocal()
-            try:
-                ensure_default_levels(db)
-                seed_database(db)
-                db.commit()
-                logger.info("[startup] Seed OK")
-            finally:
-                db.close()
-        except Exception as e:
-            logger.error(f"[startup] Seed failed (non-fatal): {e}")
-
 @app.get("/health")
-def health() -> Dict[str, str]:
+def health() -> dict[str, str]:
     return {"status": "ok", "port": os.environ.get("PORT", "unknown")}
 
 
 @app.get("/ready")
-def ready() -> Dict[str, str]:
+def ready() -> dict[str, str]:
     """Readiness check — verifies DB connection."""
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"status": "ready"}
     except Exception as e:
-        from fastapi.responses import JSONResponse
         return JSONResponse(status_code=503, content={"status": "not ready", "detail": str(e)})
 
 
@@ -218,9 +239,17 @@ for _folder in ("css", "js", "assets", "img"):
 
 _index = _root / "index.html"
 
+# Корень API без слешей ("api") — для отсечения опечаток вида /api/nominationz
+_api_root = settings.api_prefix.strip("/")
+
 
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str):
+    # Неизвестные пути под /api — честный JSON 404, а не index.html с кодом 200:
+    # иначе фронтенд получает HTML вместо ошибки и падает на парсинге JSON,
+    # маскируя реальную проблему (ТЗ P1.3).
+    if _api_root and (full_path == _api_root or full_path.startswith(_api_root + "/")):
+        raise HTTPException(status_code=404, detail="API endpoint not found")
     return FileResponse(
         str(_index),
         headers={
