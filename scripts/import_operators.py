@@ -34,7 +34,7 @@ import string
 import sys
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from xml.etree import ElementTree as ET
@@ -348,7 +348,7 @@ def main() -> int:
 
     xlsx_path = Path(args.file).expanduser().resolve()
     rows, warnings, errors = parse_operator_rows(xlsx_path)
-    now_stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    now_stamp = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
     group_slug = _slug(args.group)
 
     credentials_path = Path(args.credentials_output) if args.credentials_output else root / "secure_outputs" / f"operator_credentials_{group_slug}_{now_stamp}.csv"
@@ -459,7 +459,7 @@ def main() -> int:
                 operator.status = status_value
                 operator.is_active = is_active
                 operator.position = operator.position or "operator"
-                operator.updated_at = datetime.utcnow()
+                operator.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 if row.email:
                     operator.email = row.email
 
