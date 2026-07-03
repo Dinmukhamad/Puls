@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date
 from statistics import mean
-from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -11,19 +10,24 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.database.db import get_db
 from app.models.entities import CoinTransaction, Operator, PeriodReport, User
-from app.services.rating import latest_period, rating_rows
+from app.services.rating import (
+    latest_period,
+    nominations_cache_get,
+    nominations_cache_set,
+    rating_rows,
+)
 
 router = APIRouter(prefix="/rating", tags=["rating"])
 PRIVILEGED_RATING_ROLES = {"supervisor", "manager", "admin"}
 
 
-def _get_operator_for_user(db: Session, user: User) -> Optional[Operator]:
+def _get_operator_for_user(db: Session, user: User) -> Operator | None:
     if user.operator_id:
         return db.get(Operator, user.operator_id)
     return None
 
 
-def _get_requested_operator(db: Session, user: User, operator_id: Optional[int]) -> Optional[Operator]:
+def _get_requested_operator(db: Session, user: User, operator_id: int | None) -> Operator | None:
     if operator_id is None:
         return _get_operator_for_user(db, user)
 
@@ -40,7 +44,7 @@ def _week_label(ws: date, we: date) -> str:
     return f"{ws.strftime('%d.%m')}–{we.strftime('%d.%m.%Y')}"
 
 
-def _metric_value(row: Dict, metric: str) -> float:
+def _metric_value(row: dict, metric: str) -> float:
     if metric == "coins":
         return float(row.get("coins_earned") or 0)
     if metric == "quality":
@@ -52,8 +56,8 @@ def _metric_value(row: Dict, metric: str) -> float:
 
 @router.get("")
 def get_rating(
-    week_start: Optional[date] = None,
-    week_end: Optional[date] = None,
+    week_start: date | None = None,
+    week_end: date | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -79,7 +83,7 @@ def get_rating(
 
 @router.get("/me")
 def get_my_rating(
-    operator_id: Optional[int] = None,
+    operator_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -127,7 +131,7 @@ _CMP_CACHE: dict = {}
 @router.get("/me/comparison")
 def get_my_comparison(
     metric: str = "points",
-    operator_id: Optional[int] = None,
+    operator_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -136,7 +140,7 @@ def get_my_comparison(
     if not rows or not op:
         return {"metric": metric, "items": []}
 
-    def val(row: Dict) -> float:
+    def val(row: dict) -> float:
         return _metric_value(row, metric)
 
     selected_row = next((r for r in rows if r["operator_id"] == op.id), {})
@@ -164,7 +168,7 @@ def get_my_comparison(
 def get_operator_dynamics(
     mode: str = "points",        # points | coins | rank
     limit: int = 4,
-    operator_id: Optional[int] = None,
+    operator_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -172,9 +176,9 @@ def get_operator_dynamics(
     Динамика оператора за последние N рабочих дней с данными.
     Качество звонков НЕ учитывается (только часы, КВЗ, эффективность, штрафы).
     """
-    from app.models.entities import OperatorDailyMetric, WorkNorm
-    from sqlalchemy import func as sqlfunc
     import calendar
+
+    from app.models.entities import OperatorDailyMetric, WorkNorm
 
     op = _get_requested_operator(db, current_user, operator_id)
     if not op:
@@ -300,7 +304,6 @@ def get_operator_dynamics(
     # ── Место за каждый день ──────────────────────────────────────
     dates_needed = [i["date"] for i in items]
     if dates_needed:
-        from app.models.entities import Operator as OpModel
         # Все метрики всех операторов за нужные даты
         all_rows = list(db.execute(
             select(
@@ -396,7 +399,7 @@ def get_operator_dynamics(
 def get_my_dynamics(
     type: str = "place",
     weeks: int = 8,
-    operator_id: Optional[int] = None,
+    operator_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -435,10 +438,10 @@ def get_my_dynamics(
 @router.get("/me/transactions")
 def get_my_transactions(
     limit: int = 5,
-    operator_id: Optional[int] = None,
+    operator_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> List[dict]:
+) -> list[dict]:
     op = _get_requested_operator(db, current_user, operator_id)
     if not op:
         return []
@@ -461,30 +464,33 @@ def get_my_transactions(
     ]
 
 
-# Кеш номинаций — меняются только после пересчёта рейтинга, держим 5 минут
-_NOMINATIONS_CACHE: dict = {}
-_NOMINATIONS_TTL = 300
-
-def _nominations_cache_get():
-    e = _NOMINATIONS_CACHE.get("v")
-    if e and (time.time() - e["ts"]) < _NOMINATIONS_TTL:
-        return e["data"]
-    return None
-
-def _nominations_cache_set(data):
-    _NOMINATIONS_CACHE["v"] = {"data": data, "ts": time.time()}
-
-
 @router.get("/nominations")
 def get_nominations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    cached = _nominations_cache_get()
-    if cached is not None:
-        return cached
+    """
+    Номинации недели. Пользователь-независимая часть кешируется на 5 минут
+    (см. services/rating.py), персональный флаг is_current_user вычисляется
+    на каждый запрос — иначе первый пользователь «застолбил» бы свой флаг
+    в кеше для всех остальных.
+    """
+    data = nominations_cache_get()
+    if data is None:
+        data = _build_nominations(db)
+        nominations_cache_set(data)
 
     op = _get_operator_for_user(db, current_user)
+    my_operator_id = op.id if op else None
+    items = [
+        {**item, "is_current_user": item.get("winner_operator_id") == my_operator_id}
+        for item in data["items"]
+    ]
+    return {"items": items}
+
+
+def _build_nominations(db: Session) -> dict:
+    """Строит номинации из rating_rows. Без персональных полей — результат кешируемый."""
     rows = rating_rows(db)
     if not rows:
         return {"items": []}
@@ -492,15 +498,14 @@ def get_nominations(
     nominations = []
 
     # Best points — top-1
-    if rows:
-        top = rows[0]
-        nominations.append({
-            "title": "Лучший результат недели",
-            "winner_name": top["operator_name"],
-            "value": f"{top.get('contest_points') or top.get('final_score', 0):.0f} баллов",
-            "coins_bonus": 50,
-            "is_current_user": op and top["operator_id"] == op.id,
-        })
+    top = rows[0]
+    nominations.append({
+        "title": "Лучший результат недели",
+        "winner_name": top["operator_name"],
+        "winner_operator_id": top["operator_id"],
+        "value": f"{top.get('contest_points') or top.get('final_score', 0):.0f} баллов",
+        "coins_bonus": 50,
+    })
 
     # Best coins
     by_coins = sorted(rows, key=lambda r: r.get("coins_earned") or 0, reverse=True)
@@ -509,9 +514,9 @@ def get_nominations(
         nominations.append({
             "title": "Больше всего коинов",
             "winner_name": top_c["operator_name"],
+            "winner_operator_id": top_c["operator_id"],
             "value": f"{top_c.get('coins_earned', 0)} ₡",
             "coins_bonus": 30,
-            "is_current_user": op and top_c["operator_id"] == op.id,
         })
 
     # Best progress (biggest rank delta)
@@ -522,9 +527,9 @@ def get_nominations(
         nominations.append({
             "title": "Лучший прогресс недели",
             "winner_name": bp["operator_name"],
+            "winner_operator_id": bp["operator_id"],
             "value": f"+{best_progress[1]} позиций",
             "coins_bonus": 15,
-            "is_current_user": op and bp["operator_id"] == op.id,
         })
 
     return {"items": nominations}
@@ -541,9 +546,9 @@ def _initials(full_name: str) -> str:
 
 @router.get("/race")
 def get_rating_race(
-    group_id: Optional[int] = None,
+    group_id: int | None = None,
     mode: str = "top10",  # top10 | top20 | my_zone | all
-    operator_id: Optional[int] = None,
+    operator_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -572,7 +577,7 @@ def get_rating_race(
 
     # Фильтрация по группе
     if group_id is not None:
-        target_group = db.get(Operator, group_id) and None  # group_id здесь — это Group.id, не Operator.id
+        db.get(Operator, group_id) and None  # group_id здесь — это Group.id, не Operator.id
         from app.models.entities import Group
         grp = db.get(Group, group_id)
         group_name_filter = grp.name if grp else None
@@ -668,7 +673,7 @@ def get_rating_race(
         })
 
     # Сравнение по группам (средний балл каждой группы + личный балл оператора)
-    by_group: Dict[str, List[float]] = {}
+    by_group: dict[str, list[float]] = {}
     for r in all_rows:
         g = r["group_name"] or "Без группы"
         by_group.setdefault(g, []).append(r["contest_points"] or r["final_score"] or 0)
