@@ -19,10 +19,8 @@ import io
 import re
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Dict, List, Optional, Tuple
 
 import openpyxl
-
 
 # Заголовки-агрегаты, которые нельзя путать с датами
 _AGGREGATE_HEADERS = {
@@ -45,7 +43,7 @@ _SERVICE_ROWS = {
 }
 
 
-def normalize_name(name: Optional[str]) -> str:
+def normalize_name(name: str | None) -> str:
     """ФИО -> нормализованный ключ для сопоставления между файлами и сайтом."""
     if not name:
         return ""
@@ -55,7 +53,7 @@ def normalize_name(name: Optional[str]) -> str:
     return s.lower()
 
 
-def is_service_row(name: Optional[str]) -> bool:
+def is_service_row(name: str | None) -> bool:
     """True если строка — служебная (итого/причина/опоздание...), не оператор."""
     norm = normalize_name(name)
     if not norm:
@@ -63,7 +61,7 @@ def is_service_row(name: Optional[str]) -> bool:
     return norm in _SERVICE_ROWS
 
 
-def _parse_header_date(value, year: int) -> Optional[date]:
+def _parse_header_date(value, year: int) -> date | None:
     """Парсит заголовок колонки вида '15.06' в date(year, 6, 15). None если не дата."""
     if value is None:
         return None
@@ -85,7 +83,7 @@ def _parse_header_date(value, year: int) -> Optional[date]:
         return None
 
 
-def parse_scores(cell_value) -> List[float]:
+def parse_scores(cell_value) -> list[float]:
     """'100, 90, 100' -> [100.0, 90.0, 100.0]. Пустая ячейка -> []."""
     if cell_value is None:
         return []
@@ -106,7 +104,7 @@ def parse_scores(cell_value) -> List[float]:
 
 @dataclass
 class QualityResult:
-    scores: List[float] = field(default_factory=list)
+    scores: list[float] = field(default_factory=list)
     display_name: str = ""
 
     @property
@@ -122,8 +120,8 @@ def parse_monthly_report(
     file_bytes: bytes,
     period_start: date,
     period_end: date,
-    default_year: Optional[int] = None,
-) -> Dict[str, QualityResult]:
+    default_year: int | None = None,
+) -> dict[str, QualityResult]:
     """
     Парсит Monthly Report — несколько листов, на каждом несколько таблиц
     (блоки "ФИО + даты"). Служебные строки отфильтровываются сразу.
@@ -132,7 +130,7 @@ def parse_monthly_report(
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
     year = default_year or period_start.year
-    results: Dict[str, QualityResult] = {}
+    results: dict[str, QualityResult] = {}
 
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
@@ -146,7 +144,7 @@ def parse_monthly_report(
             first_cell = str(row[0]).strip().lower()
             if first_cell == "фио":
                 header = row
-                date_cols: List[Tuple[int, date]] = []
+                date_cols: list[tuple[int, date]] = []
                 for col_idx, h in enumerate(header):
                     d = _parse_header_date(h, year)
                     if d:
@@ -184,7 +182,7 @@ def _parse_simple_sheet(
     period_end: date,
     year: int,
     name_col: int = 0,
-) -> Dict[str, Tuple[str, float]]:
+) -> dict[str, tuple[str, float]]:
     """
     Общий парсер для листов вида: первая колонка — ФИО, остальные — даты,
     последние колонки — агрегаты. Возвращает {norm_name: (display_name, sum)}.
@@ -194,7 +192,7 @@ def _parse_simple_sheet(
     if not rows:
         return {}
     header = rows[0]
-    date_cols: List[Tuple[int, date]] = []
+    date_cols: list[tuple[int, date]] = []
     for col_idx, h in enumerate(header):
         if col_idx == name_col:
             continue
@@ -202,7 +200,7 @@ def _parse_simple_sheet(
         if d:
             date_cols.append((col_idx, d))
 
-    out: Dict[str, Tuple[str, float]] = {}
+    out: dict[str, tuple[str, float]] = {}
     for row in rows[1:]:
         if not row or not row[name_col]:
             continue
@@ -238,8 +236,8 @@ def parse_report_file(
     file_bytes: bytes,
     period_start: date,
     period_end: date,
-    default_year: Optional[int] = None,
-) -> Dict[str, Dict[str, Tuple[str, float]]]:
+    default_year: int | None = None,
+) -> dict[str, dict[str, tuple[str, float]]]:
     """
     Парсит Report — возвращает { sheet_name: { norm_name: (display_name, sum) } }.
     Бросает ValueError если обязательный лист отсутствует.
@@ -252,7 +250,7 @@ def parse_report_file(
         wb.close()
         raise ValueError(f"В файле Report отсутствуют листы: {', '.join(missing)}")
 
-    out: Dict[str, Dict[str, Tuple[str, float]]] = {}
+    out: dict[str, dict[str, tuple[str, float]]] = {}
     for sheet in REQUIRED_REPORT_SHEETS:
         ws = wb[sheet]
         out[sheet] = _parse_simple_sheet(ws, period_start, period_end, year)
@@ -267,7 +265,7 @@ class OperatorPeriodMetrics:
     name_key: str = ""
     quality_avg: float = 0.0
     quality_calls_count: int = 0
-    quality_scores: List[float] = field(default_factory=list)
+    quality_scores: list[float] = field(default_factory=list)
     total_hours: float = 0.0
     base_hours: float = 0.0
     tech_issue_hours: float = 0.0
@@ -282,15 +280,15 @@ class OperatorPeriodMetrics:
     penalty_points: float = 0.0
     final_points: float = 0.0
     has_any_period_data: bool = False
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     # Поля нормы часов (заполняются отдельно через work_norms сервис)
-    rate: Optional[float] = None
+    rate: float | None = None
     individual_norm_hours: float = 0.0
     norm_completion_percent: float = 0.0
     hours_points: float = 0.0
     overtime_hours: float = 0.0
     overtime_percent: float = 0.0
-    norm_warnings: List[str] = field(default_factory=list)
+    norm_warnings: list[str] = field(default_factory=list)
 
 
 PENALTY_RUB_PER_MINUTE = 50.0
@@ -300,8 +298,8 @@ PENALTY_POINTS_PER_MINUTE = 5.0
 def compute_operator_metrics(
     name_key: str,
     display_name: str,
-    quality: Optional[QualityResult],
-    report_data: Dict[str, Dict[str, Tuple[str, float]]],
+    quality: QualityResult | None,
+    report_data: dict[str, dict[str, tuple[str, float]]],
 ) -> OperatorPeriodMetrics:
     m = OperatorPeriodMetrics(full_name=display_name, name_key=name_key)
 
@@ -369,13 +367,13 @@ def compute_operator_metrics(
 
 @dataclass
 class PeriodCalculationResult:
-    operators: List[OperatorPeriodMetrics]              # только matched, с данными
-    warnings_site_only: List[str]                        # есть на сайте, нет в файле
-    warnings_file_only: List[str]                        # есть в файле, нет на сайте
-    warnings_no_quality: List[str]                       # нет оценок качества
-    warnings_no_base_hours: List[str]                    # нет базы часов
-    ignored_service_rows: List[str]                      # игнорированные служебные строки
-    summary: Dict[str, Optional[float]]                  # сводные показатели
+    operators: list[OperatorPeriodMetrics]              # только matched, с данными
+    warnings_site_only: list[str]                        # есть на сайте, нет в файле
+    warnings_file_only: list[str]                        # есть в файле, нет на сайте
+    warnings_no_quality: list[str]                       # нет оценок качества
+    warnings_no_base_hours: list[str]                    # нет базы часов
+    ignored_service_rows: list[str]                      # игнорированные служебные строки
+    summary: dict[str, float | None]                  # сводные показатели
 
 
 def calculate_period_report(
@@ -383,7 +381,7 @@ def calculate_period_report(
     report_bytes: bytes,
     period_start: date,
     period_end: date,
-    site_operator_names: List[str],
+    site_operator_names: list[str],
 ) -> PeriodCalculationResult:
     """
     site_operator_names — список full_name операторов из БД сайта.
@@ -400,7 +398,7 @@ def calculate_period_report(
     site_keys = {normalize_name(n): n for n in site_operator_names if n and not is_service_row(n)}
 
     # Все ключи из файлов (только реальные, не служебные — уже отфильтровано на парсинге)
-    file_keys: Dict[str, str] = {}
+    file_keys: dict[str, str] = {}
     for key, qr in quality_map.items():
         file_keys.setdefault(key, qr.display_name)
     for sheet_data in report_data.values():
@@ -411,9 +409,9 @@ def calculate_period_report(
     site_only_keys = set(site_keys.keys()) - set(file_keys.keys())
     file_only_keys = set(file_keys.keys()) - set(site_keys.keys())
 
-    operators: List[OperatorPeriodMetrics] = []
-    warnings_no_quality: List[str] = []
-    warnings_no_base_hours: List[str] = []
+    operators: list[OperatorPeriodMetrics] = []
+    warnings_no_quality: list[str] = []
+    warnings_no_base_hours: list[str] = []
 
     for key in sorted(matched_keys):
         display = site_keys.get(key) or file_keys.get(key) or key
@@ -438,7 +436,7 @@ def calculate_period_report(
     # Сводные показатели — считаем ТОЛЬКО по matched + has_any_period_data
     included = operators  # уже отфильтрованы выше
 
-    all_quality_scores: List[float] = []
+    all_quality_scores: list[float] = []
     for op in included:
         all_quality_scores.extend(op.quality_scores)
     avg_quality = round(sum(all_quality_scores) / len(all_quality_scores), 2) if all_quality_scores else None
@@ -496,19 +494,18 @@ def calculate_period_report(
 # произвольного диапазона эти поля ВСЕГДА пересчитываются заново из сумм
 # (см. aggregate_daily_metrics).
 
-from collections import defaultdict
 
 
 def parse_monthly_report_daily(
     file_bytes: bytes,
-    default_year: Optional[int] = None,
-) -> Dict[Tuple[str, date], Dict[str, object]]:
+    default_year: int | None = None,
+) -> dict[tuple[str, date], dict[str, object]]:
     """
     Возвращает { (name_key, date): {"display_name": str, "scores": [float, ...]} }
     по ВСЕМ датам, найденным в файле (без ограничения диапазоном).
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
-    out: Dict[Tuple[str, date], Dict[str, object]] = {}
+    out: dict[tuple[str, date], dict[str, object]] = {}
 
     # Определяем "опорный" год по первой найденной дате в файле (если возможно),
     # иначе используем текущий год — это резервный случай для совсем пустых файлов
@@ -528,7 +525,7 @@ def parse_monthly_report_daily(
                 header = row
                 if year_guess is None:
                     year_guess = date.today().year
-                date_cols: List[Tuple[int, date]] = []
+                date_cols: list[tuple[int, date]] = []
                 for col_idx, h in enumerate(header):
                     d = _parse_header_date(h, year_guess)
                     if d:
@@ -564,13 +561,13 @@ def parse_monthly_report_daily(
     return out
 
 
-def _parse_simple_sheet_daily(ws, year: int, name_col: int = 0) -> Dict[Tuple[str, date], Tuple[str, float]]:
+def _parse_simple_sheet_daily(ws, year: int, name_col: int = 0) -> dict[tuple[str, date], tuple[str, float]]:
     """Версия _parse_simple_sheet без диапазона — все даты, по отдельности."""
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         return {}
     header = rows[0]
-    date_cols: List[Tuple[int, date]] = []
+    date_cols: list[tuple[int, date]] = []
     for col_idx, h in enumerate(header):
         if col_idx == name_col:
             continue
@@ -578,7 +575,7 @@ def _parse_simple_sheet_daily(ws, year: int, name_col: int = 0) -> Dict[Tuple[st
         if d:
             date_cols.append((col_idx, d))
 
-    out: Dict[Tuple[str, date], Tuple[str, float]] = {}
+    out: dict[tuple[str, date], tuple[str, float]] = {}
     for row in rows[1:]:
         if not row or not row[name_col]:
             continue
@@ -607,8 +604,8 @@ def _parse_simple_sheet_daily(ws, year: int, name_col: int = 0) -> Dict[Tuple[st
 
 def parse_report_file_daily(
     file_bytes: bytes,
-    default_year: Optional[int] = None,
-) -> Dict[str, Dict[Tuple[str, date], Tuple[str, float]]]:
+    default_year: int | None = None,
+) -> dict[str, dict[tuple[str, date], tuple[str, float]]]:
     """
     Возвращает { sheet_name: { (name_key, date): (display_name, value) } }
     по ВСЕМ датам в файле. Бросает ValueError если обязательный лист отсутствует.
@@ -621,7 +618,7 @@ def parse_report_file_daily(
         wb.close()
         raise ValueError(f"В файле Report отсутствуют листы: {', '.join(missing)}")
 
-    out: Dict[str, Dict[Tuple[str, date], Tuple[str, float]]] = {}
+    out: dict[str, dict[tuple[str, date], tuple[str, float]]] = {}
     for sheet in REQUIRED_REPORT_SHEETS:
         ws = wb[sheet]
         out[sheet] = _parse_simple_sheet_daily(ws, year)
@@ -636,7 +633,7 @@ class DailyMetricRow:
     display_name: str
     metric_date: date
     calls_count: float = 0.0
-    quality_scores: List[float] = field(default_factory=list)
+    quality_scores: list[float] = field(default_factory=list)
     worked_hours: float = 0.0
     tech_issue_hours: float = 0.0
     training_hours: float = 0.0
@@ -648,8 +645,8 @@ class DailyMetricRow:
 def build_daily_metric_rows(
     monthly_bytes: bytes,
     report_bytes: bytes,
-    default_year: Optional[int] = None,
-) -> List[DailyMetricRow]:
+    default_year: int | None = None,
+) -> list[DailyMetricRow]:
     """
     Главная точка входа для посуточного парсинга. Объединяет Monthly Report
     (оценки качества) и Report (часы/звонки/штрафы) в единый список строк
@@ -664,14 +661,14 @@ def build_daily_metric_rows(
     for sheet_data in report_by_sheet.values():
         keys |= set(sheet_data.keys())
 
-    display_names: Dict[str, str] = {}
+    display_names: dict[str, str] = {}
     for (name_key, _d), data in quality_by_day.items():
         display_names.setdefault(name_key, data["display_name"])
     for sheet_data in report_by_sheet.values():
         for (name_key, _d), (disp, _val) in sheet_data.items():
             display_names.setdefault(name_key, disp)
 
-    rows: List[DailyMetricRow] = []
+    rows: list[DailyMetricRow] = []
     for name_key, metric_date in sorted(keys):
         q = quality_by_day.get((name_key, metric_date))
         row = DailyMetricRow(
@@ -692,7 +689,7 @@ def build_daily_metric_rows(
     return rows
 
 
-def aggregate_daily_rows(daily_rows: List[dict]) -> OperatorPeriodMetrics:
+def aggregate_daily_rows(daily_rows: list[dict]) -> OperatorPeriodMetrics:
     """
     Агрегирует список словарей-строк OperatorDailyMetric (за произвольный
     диапазон дат, для ОДНОГО оператора) в OperatorPeriodMetrics — те же
