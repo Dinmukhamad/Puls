@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
-from typing import Optional
+from datetime import date
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -18,7 +17,6 @@ from app.models.entities import (
     User,
     now_utc,
 )
-
 
 DEFAULT_LEVELS = [
     {
@@ -113,7 +111,7 @@ def ensure_default_levels(db: Session) -> None:
             ))
 
 
-def level_badge(level: Optional[OperatorLevel]) -> dict:
+def level_badge(level: OperatorLevel | None) -> dict:
     if not level:
         return {
             "id": None,
@@ -133,21 +131,21 @@ def level_badge(level: Optional[OperatorLevel]) -> dict:
     }
 
 
-def _operator_tenure_days(operator: Operator, as_of: Optional[date]) -> int:
+def _operator_tenure_days(operator: Operator, as_of: date | None) -> int:
     end = as_of or date.today()
     created = operator.created_at.date() if operator.created_at else date.today()
     start = operator.start_date or created
     return max(0, (end - start).days)
 
 
-def _period_report(db: Session, operator_id: int, start: Optional[date], end: Optional[date]) -> Optional[PeriodReport]:
+def _period_report(db: Session, operator_id: int, start: date | None, end: date | None) -> PeriodReport | None:
     stmt = select(PeriodReport).where(PeriodReport.operator_id == operator_id)
     if start and end:
         stmt = stmt.where(PeriodReport.period_start == start, PeriodReport.period_end == end)
     return db.scalar(stmt.order_by(PeriodReport.period_end.desc(), PeriodReport.created_at.desc()).limit(1))
 
 
-def _test_percent(db: Session, operator_id: int, start: Optional[date], end: Optional[date]) -> float:
+def _test_percent(db: Session, operator_id: int, start: date | None, end: date | None) -> float:
     stmt = select(func.avg(TestAttempt.score_percent)).where(
         TestAttempt.operator_id == operator_id,
         TestAttempt.status == "finished",
@@ -163,10 +161,10 @@ def _test_percent(db: Session, operator_id: int, start: Optional[date], end: Opt
 def operator_level_metrics(
     db: Session,
     operator: Operator,
-    period_start: Optional[date] = None,
-    period_end: Optional[date] = None,
+    period_start: date | None = None,
+    period_end: date | None = None,
     include_tests: bool = True,
-) -> tuple[dict, Optional[PeriodReport]]:
+) -> tuple[dict, PeriodReport | None]:
     report = _period_report(db, operator.id, period_start, period_end)
     as_of = period_end or (report.period_end if report else date.today())
     metrics = {
@@ -182,7 +180,7 @@ def operator_level_metrics(
     return metrics, report
 
 
-def _rule_ok(rule: OperatorLevelRule, current: Optional[float]) -> bool:
+def _rule_ok(rule: OperatorLevelRule, current: float | None) -> bool:
     value = float(current or 0)
     if rule.operator == "gte":
         return rule.value_min is None or value >= rule.value_min
@@ -237,9 +235,9 @@ def active_levels(db: Session) -> list[OperatorLevel]:
 def calculate_auto_level(
     db: Session,
     operator: Operator,
-    period_start: Optional[date] = None,
-    period_end: Optional[date] = None,
-) -> tuple[Optional[OperatorLevel], dict, Optional[PeriodReport]]:
+    period_start: date | None = None,
+    period_end: date | None = None,
+) -> tuple[OperatorLevel | None, dict, PeriodReport | None]:
     levels = active_levels(db)
     metrics, report = operator_level_metrics(db, operator, period_start, period_end)
     for level in sorted(levels, key=lambda lvl: (lvl.sort_order, lvl.id), reverse=True):
@@ -248,16 +246,16 @@ def calculate_auto_level(
     return (levels[0] if levels else None), metrics, report
 
 
-def _assignment(db: Session, operator_id: int) -> Optional[OperatorLevelAssignment]:
+def _assignment(db: Session, operator_id: int) -> OperatorLevelAssignment | None:
     return db.scalar(select(OperatorLevelAssignment).where(OperatorLevelAssignment.operator_id == operator_id))
 
 
 def assign_auto_level(
     db: Session,
     operator: Operator,
-    actor: Optional[User] = None,
-    period_start: Optional[date] = None,
-    period_end: Optional[date] = None,
+    actor: User | None = None,
+    period_start: date | None = None,
+    period_end: date | None = None,
     force: bool = False,
 ) -> OperatorLevelAssignment:
     current = _assignment(db, operator.id)
@@ -336,8 +334,8 @@ def assign_manual_level(
 def operator_level_summary(
     db: Session,
     operator: Operator,
-    period_start: Optional[date] = None,
-    period_end: Optional[date] = None,
+    period_start: date | None = None,
+    period_end: date | None = None,
 ) -> dict:
     assignment = _assignment(db, operator.id)
     levels = active_levels(db)
@@ -377,7 +375,7 @@ def operator_level_badge(db: Session, operator: Operator) -> dict:
     return operator_level_summary(db, operator)["level"]
 
 
-def level_history_rows(db: Session, operator_id: Optional[int] = None, limit: int = 100) -> list[dict]:
+def level_history_rows(db: Session, operator_id: int | None = None, limit: int = 100) -> list[dict]:
     stmt = (
         select(OperatorLevelHistory)
         .order_by(OperatorLevelHistory.changed_at.desc())
