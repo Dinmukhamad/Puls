@@ -17,6 +17,7 @@ source .venv/bin/activate          # Linux / macOS
 # .venv\Scripts\Activate.ps1     # Windows PowerShell
 
 pip install -r requirements.txt
+pip install -r requirements-dev.txt   # ruff + pytest (для разработки/CI)
 cp .env.example .env               # заполните переменные
 
 alembic upgrade head               # применить миграции
@@ -24,6 +25,14 @@ uvicorn app.main:app --reload      # запустить сервер
 ```
 
 Откройте http://localhost:8000
+
+Проверки перед коммитом:
+
+```bash
+ruff check app          # линт (конфиг в pyproject.toml)
+pytest -q               # автотесты (tests/, sqlite поднимается сам)
+npm run check:minified  # min-файлы не устарели (см. «Сборка фронтенда»)
+```
 
 ---
 
@@ -99,6 +108,58 @@ python scripts/import_operators.py --file /path/to/операторы.xlsx --gro
 Скрипт требует `DATABASE_URL`, создаёт группу при отсутствии, создаёт/обновляет операторов, ставит `must_change_password=true` для временных паролей и сохраняет одноразовый CSV с доступами в `secure_outputs/`. Этот каталог не коммитится.
 
 Нельзя коммитить одноразовые скрипты или таблицы с реальными ФИО, email, логинами и временными паролями. Если такие данные попали в Git, временные пароли нужно считать скомпрометированными и сразу сбросить.
+
+---
+
+## Сборка фронтенда (минификация)
+
+`index.html` подключает только `*.min.*`-бандлы. Min-файлы **коммитятся в
+репозиторий** — Railway (railpack, python-provider) не запускает npm при
+деплое, поэтому сборка выполняется локально перед пушем:
+
+```bash
+npm install        # однократно: terser + clean-css-cli (devDependencies)
+npm run build      # js/app.min.js, js/api.min.js, css/styles.min.css, css/tokens.min.css
+```
+
+После изменения `js/*.js` или `css/*.css` обязательно пересоберите бандлы и
+поднимите версию `?v=...` в `index.html` (иммутабельный кеш статики привязан
+к этому параметру, см. `CachedStaticFiles` в `app/main.py`).
+
+Страховка от «min-файл = копия исходника» (такое уже случалось):
+
+```bash
+npm run check:minified   # падает, если min идентичен исходнику или не меньше его
+```
+
+Эта же проверка выполняется в CI на каждый push/PR.
+
+---
+
+## Линт и тесты
+
+- **ruff** — единственный линтер (`pyproject.toml`: E/F/I/UP/B, line-length 100,
+  E501 в legacy-коде осознанно игнорируется). Запуск: `ruff check app`.
+- **pytest** — автотесты в `tests/`: кеш номинаций, безопасный 500 без
+  traceback, SPA-fallback для `/api/*`, границы локального дня, `/coins/overview`.
+  БД для тестов — временный sqlite, поднимается conftest'ом автоматически.
+- **CI** — `.github/workflows/checks.yml`: ruff, compileall, pytest,
+  `alembic upgrade head` на PostgreSQL 16 (service-container), проверка
+  минификации и отсутствия секретов в репозитории.
+
+---
+
+## Работа со временем
+
+Единый стандарт (модуль `app/core/datetime_utils.py`):
+
+- **В БД** время хранится как **naive UTC** (`now_utc()`); `datetime.utcnow()`
+  в коде запрещён.
+- **Бизнес-день** («операции за сегодня», отчёты) считается по таймзоне
+  колл-центра **Asia/Almaty** — используйте `local_day_bounds_utc()`, а не
+  `date.today()`.
+- На frontend отдаётся ISO; для локального отображения на бэке есть
+  `to_local_iso()`.
 
 ---
 
@@ -211,6 +272,7 @@ alembic downgrade -1
 - [ ] `gitleaks detect` перед релизом
 - [ ] `SEED_ADMIN_PASSWORD` убран после создания admin
 - [ ] В репозитории нет одноразовых файлов импорта с реальными ФИО/email/паролями
+- [ ] `npm run check:minified` зелёный (min-бандлы собраны из актуальных исходников)
 
 ---
 
