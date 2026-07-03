@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from typing import Iterable, Optional
+from collections.abc import Iterable
+from datetime import UTC, datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.database.db import get_db
 from app.models.entities import User
-
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -28,7 +27,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def create_access_token(subject: dict | str, role: str = "") -> str:
     settings = get_settings()
-    expires = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+    expires = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
     if isinstance(subject, dict):
         payload = {**subject, "exp": expires}
     else:
@@ -36,7 +35,7 @@ def create_access_token(subject: dict | str, role: str = "") -> str:
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def _extract_token(request: Request, credentials: Optional[HTTPAuthorizationCredentials]) -> Optional[str]:
+def _extract_token(request: Request, credentials: HTTPAuthorizationCredentials | None) -> str | None:
     """Try cookie first, then Authorization header (backward compat)."""
     cookie_token = request.cookies.get(get_settings().auth_cookie_name)
     if cookie_token:
@@ -48,7 +47,7 @@ def _extract_token(request: Request, credentials: Optional[HTTPAuthorizationCred
 
 def get_current_user(
     request: Request,
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
     token = _extract_token(request, credentials)
@@ -60,7 +59,7 @@ def get_current_user(
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         user_id = int(payload.get("sub"))
     except (JWTError, TypeError, ValueError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный токен")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный токен") from None
 
     user = db.get(User, user_id)
     if not user or not user.is_active:
