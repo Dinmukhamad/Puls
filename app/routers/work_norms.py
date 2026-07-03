@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
@@ -81,11 +80,11 @@ class WorkNormUpdate(BaseModel):
 
 
 class OperatorRateUpdate(BaseModel):
-    rate: Optional[float]
+    rate: float | None
 
     @field_validator("rate")
     @classmethod
-    def validate_rate(cls, v: Optional[float]) -> Optional[float]:
+    def validate_rate(cls, v: float | None) -> float | None:
         if v is not None and v not in VALID_RATES:
             raise ValueError(f"Ставка должна быть одной из: {sorted(VALID_RATES)}")
         return v
@@ -93,7 +92,7 @@ class OperatorRateUpdate(BaseModel):
 
 class WorkNormCalcOut(BaseModel):
     operator_id: int
-    rate: Optional[float]
+    rate: float | None
     period_start: date
     period_end: date
     individual_norm_hours: float
