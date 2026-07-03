@@ -18,7 +18,6 @@ from __future__ import annotations
 import time
 from collections import defaultdict
 from datetime import date
-from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,27 +26,57 @@ from app.models.entities import Operator, OperatorLevel, OperatorLevelAssignment
 
 # Простой in-memory кеш рейтинга — пересчёт тяжёлый (все PeriodReport + снапшоты),
 # а данные меняются редко (только после сохранения расчёта). Кеш живёт 60 секунд.
-_RATING_CACHE: Dict = {}
+_RATING_CACHE: dict = {}
 _RATING_CACHE_TTL = 60  # секунд
 
 
-def _rating_cache_get() -> Optional[List[Dict]]:
+def _rating_cache_get() -> list[dict] | None:
     entry = _RATING_CACHE.get("rows")
     if entry and (time.time() - entry["ts"]) < _RATING_CACHE_TTL:
         return entry["data"]
     return None
 
 
-def _rating_cache_set(rows: List[Dict]) -> None:
+def _rating_cache_set(rows: list[dict]) -> None:
     _RATING_CACHE["rows"] = {"data": rows, "ts": time.time()}
 
 
 def rating_cache_invalidate() -> None:
-    """Вызывать после сохранения нового PeriodReport."""
+    """
+    Единая точка инвалидации (ТЗ 10.3). Вызывать после изменения данных,
+    влияющих на rating_rows/номинации: сохранение PeriodReport, ручное
+    начисление/списание коинов, резерв/возврат по заявкам магазина,
+    изменение статуса/данных оператора.
+    """
     _RATING_CACHE.clear()
+    _NOMINATIONS_CACHE.clear()
 
 
-def latest_period(db: Session) -> Optional[Tuple[date, date]]:
+# ── Кеш номинаций недели (ТЗ P0.1) ───────────────────────────────────────────
+# Номинации строятся из rating_rows и меняются только вместе с рейтингом.
+# Кешируется ТОЛЬКО пользователь-независимая часть (winner_operator_id вместо
+# is_current_user) — персональный флаг «это вы» вычисляется на каждый запрос,
+# иначе кеш отдавал бы чужой флаг всем пользователям.
+_NOMINATIONS_CACHE: dict = {}
+_NOMINATIONS_TTL = 300  # 5 минут
+
+
+def nominations_cache_get() -> dict | None:
+    entry = _NOMINATIONS_CACHE.get("v")
+    if entry and (time.time() - entry["ts"]) < _NOMINATIONS_TTL:
+        return entry["data"]
+    return None
+
+
+def nominations_cache_set(data: dict) -> None:
+    _NOMINATIONS_CACHE["v"] = {"data": data, "ts": time.time()}
+
+
+def invalidate_nominations_cache() -> None:
+    _NOMINATIONS_CACHE.clear()
+
+
+def latest_period(db: Session) -> tuple[date, date] | None:
     """Последний сохранённый период по максимальной period_end среди всех расчётов."""
     result = db.execute(
         select(PeriodReport.period_start, PeriodReport.period_end)
@@ -57,7 +86,7 @@ def latest_period(db: Session) -> Optional[Tuple[date, date]]:
     return tuple(result) if result else None
 
 
-def _all_reports_grouped(db: Session) -> Dict[int, List[PeriodReport]]:
+def _all_reports_grouped(db: Session) -> dict[int, list[PeriodReport]]:
     """
     Загружает ВСЮ историю PeriodReport одним запросом и группирует по
     operator_id, каждый список отсортирован по period_end (затем created_at)
@@ -72,13 +101,13 @@ def _all_reports_grouped(db: Session) -> Dict[int, List[PeriodReport]]:
             )
         )
     )
-    grouped: Dict[int, List[PeriodReport]] = defaultdict(list)
+    grouped: dict[int, list[PeriodReport]] = defaultdict(list)
     for r in all_reports:
         grouped[r.operator_id].append(r)
     return grouped
 
 
-def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Optional[date] = None) -> List[Dict]:
+def rating_rows(db: Session, week_start: date | None = None, week_end: date | None = None) -> list[dict]:
     """
     Возвращает турнирную таблицу. week_start/week_end пока игнорируются для
     обратной совместимости сигнатуры — рейтинг строится по последнему
@@ -122,7 +151,7 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
     # в БД на каждого оператора — строим это полностью в памяти: для каждого
     # уникального as_of-момента один раз вычисляем полный отсортированный
     # снимок (kандидат = последний отчёт оператора с period_end <= as_of).
-    def snapshot_at(as_of: date) -> List[Tuple[int, float]]:
+    def snapshot_at(as_of: date) -> list[tuple[int, float]]:
         """Возвращает [(operator_id, final_points)] для всех операторов на момент as_of."""
         snap = []
         for op_id, reports in grouped.items():
@@ -137,9 +166,9 @@ def rating_rows(db: Session, week_start: Optional[date] = None, week_end: Option
     # Кешируем снимки по as_of-дате — разные операторы часто делят один и тот
     # же "предыдущий период", поэтому снимок пересчитывается не на каждого
     # оператора отдельно, а максимум один раз на каждую уникальную дату.
-    snapshot_cache: Dict[date, Dict[int, int]] = {}
+    snapshot_cache: dict[date, dict[int, int]] = {}
 
-    def rank_position_at(operator_id: int, as_of: date) -> Optional[int]:
+    def rank_position_at(operator_id: int, as_of: date) -> int | None:
         if as_of not in snapshot_cache:
             snap = snapshot_at(as_of)
             snapshot_cache[as_of] = {op_id: pos for pos, (op_id, _pts) in enumerate(snap, start=1)}
