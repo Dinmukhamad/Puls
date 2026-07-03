@@ -643,6 +643,8 @@ async function renderOperatorLevelsSettings() {
     return [];
   });
   STATE.operatorLevels = levels;
+  const rewardsData = await api.listOperatorLevelRewards().catch(() => ({ items: [] }));
+  const rewardRows = Array.isArray(rewardsData) ? rewardsData : (rewardsData.items || []);
 
   function metricLabel(code) {
     return {
@@ -663,6 +665,12 @@ async function renderOperatorLevelsSettings() {
     if (rule.operator === 'gte') return `${label} >= ${levelNum(rule.value_min)}`;
     if (rule.operator === 'lte') return `${label} <= ${levelNum(rule.value_max)}`;
     return `${label} = ${levelNum(rule.value_min)}`;
+  }
+
+  function rewardStatus(row) {
+    if (!row.reward_coins) return '<span class="status-pill muted">Без бонуса</span>';
+    if (row.reward_received) return '<span class="status-pill ok">Получен</span>';
+    return '<span class="status-pill warn">Ожидает повышения</span>';
   }
 
   el.innerHTML = `<div class="view-header level-view-header">
@@ -711,6 +719,43 @@ async function renderOperatorLevelsSettings() {
           <button class="btn-outline btn-sm danger" onclick="disableOperatorLevelUi(${level.id})">Отключить</button>
         </div>
       </article>`).join('')}
+    </div>
+  </div>
+  <div class="panel level-settings-shell" style="margin-top:18px">
+    <div class="level-settings-head">
+      <div>
+        <h3>Операторы и награды</h3>
+        <p>Контроль текущих уровней, разовых бонусов и связанных coin transactions. XP пока зарезервирован и равен 0.</p>
+      </div>
+      <span class="panel-badge">${rewardRows.length} операторов</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Оператор</th>
+            <th>Группа</th>
+            <th>Уровень</th>
+            <th class="num">Стаж</th>
+            <th class="num">XP</th>
+            <th class="num">Бонус</th>
+            <th>Статус</th>
+            <th class="num">Tx ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rewardRows.length ? rewardRows.map(row => `<tr>
+            <td class="name-cell">${esc(row.operator_name)}</td>
+            <td>${esc(row.group_name || '—')}</td>
+            <td>${levelBadgeHtml(row.level)}</td>
+            <td class="num">${levelNum(row.tenure_days, 0)} дн.</td>
+            <td class="num">${levelNum(row.total_xp || 0, 0)}</td>
+            <td class="num">${row.reward_coins ? `+${row.reward_coins} ₡` : '—'}</td>
+            <td>${rewardStatus(row)}</td>
+            <td class="num">${row.coin_transaction_id || '—'}</td>
+          </tr>`).join('') : '<tr><td colspan="8" class="empty-line">Нет данных</td></tr>'}
+        </tbody>
+      </table>
     </div>
   </div>`;
 }
