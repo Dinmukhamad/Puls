@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -9,8 +8,8 @@ from pydantic import BaseModel, Field
 class OperatorLevelRuleBase(BaseModel):
     metric_code: str
     operator: str = Field(pattern="^(gte|lte|eq|between)$")
-    value_min: Optional[float] = None
-    value_max: Optional[float] = None
+    value_min: float | None = None
+    value_max: float | None = None
     is_required: bool = True
 
 
@@ -19,11 +18,11 @@ class OperatorLevelRuleCreate(OperatorLevelRuleBase):
 
 
 class OperatorLevelRuleUpdate(BaseModel):
-    metric_code: Optional[str] = None
-    operator: Optional[str] = Field(default=None, pattern="^(gte|lte|eq|between)$")
-    value_min: Optional[float] = None
-    value_max: Optional[float] = None
-    is_required: Optional[bool] = None
+    metric_code: str | None = None
+    operator: str | None = Field(default=None, pattern="^(gte|lte|eq|between)$")
+    value_min: float | None = None
+    value_max: float | None = None
+    is_required: bool | None = None
 
 
 class OperatorLevelRuleRead(OperatorLevelRuleBase):
@@ -50,13 +49,13 @@ class OperatorLevelCreate(OperatorLevelBase):
 
 
 class OperatorLevelUpdate(BaseModel):
-    code: Optional[str] = None
-    name: Optional[str] = None
-    description: Optional[str] = None
-    color: Optional[str] = None
-    icon: Optional[str] = None
-    sort_order: Optional[int] = None
-    is_active: Optional[bool] = None
+    code: str | None = None
+    name: str | None = None
+    description: str | None = None
+    color: str | None = None
+    icon: str | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
 
 
 class OperatorLevelRead(OperatorLevelBase):
@@ -69,7 +68,7 @@ class OperatorLevelRead(OperatorLevelBase):
 
 
 class OperatorLevelBadge(BaseModel):
-    id: Optional[int] = None
+    id: int | None = None
     code: str = "trainee"
     name: str = "Стажёр"
     color: str = "#64748B"
@@ -81,9 +80,9 @@ class OperatorLevelGap(BaseModel):
     metric_code: str
     label: str
     operator: str
-    required_min: Optional[float] = None
-    required_max: Optional[float] = None
-    current: Optional[float] = None
+    required_min: float | None = None
+    required_max: float | None = None
+    current: float | None = None
     ok: bool
 
 
@@ -92,37 +91,37 @@ class OperatorLevelSummary(BaseModel):
     assignment_type: str = "auto"
     is_manual: bool = False
     level: OperatorLevelBadge
-    next_level: Optional[OperatorLevelBadge] = None
+    next_level: OperatorLevelBadge | None = None
     metrics: dict
     gaps: list[OperatorLevelGap] = Field(default_factory=list)
-    calculated_from: Optional[date] = None
-    calculated_to: Optional[date] = None
-    manual_reason: Optional[str] = None
-    manual_comment: Optional[str] = None
-    assigned_at: Optional[datetime] = None
+    calculated_from: date | None = None
+    calculated_to: date | None = None
+    manual_reason: str | None = None
+    manual_comment: str | None = None
+    assigned_at: datetime | None = None
 
 
 class OperatorLevelRecalculateRequest(BaseModel):
-    period_start: Optional[date] = None
-    period_end: Optional[date] = None
+    period_start: date | None = None
+    period_end: date | None = None
     mode: str = "all"
 
 
 class OperatorManualLevelRequest(BaseModel):
     level_id: int
     reason: str
-    comment: Optional[str] = ""
+    comment: str | None = ""
 
 
 class OperatorLevelHistoryRead(BaseModel):
     id: int
     operator_id: int
-    operator_name: Optional[str] = None
-    old_level: Optional[OperatorLevelBadge] = None
-    new_level: Optional[OperatorLevelBadge] = None
+    operator_name: str | None = None
+    old_level: OperatorLevelBadge | None = None
+    new_level: OperatorLevelBadge | None = None
     change_type: str
-    reason: Optional[str] = None
-    comment: Optional[str] = None
-    changed_by_name: Optional[str] = None
+    reason: str | None = None
+    comment: str | None = None
+    changed_by_name: str | None = None
     changed_at: datetime
-    metadata: Optional[dict] = None
+    metadata: dict | None = None
