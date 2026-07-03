@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import List, Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, LargeBinary, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.datetime_utils import (
+    now_utc,  # noqa: F401 — реэкспорт: from app.models.entities import now_utc
+)
 from app.database.db import Base
-
-
-def now_utc() -> datetime:
-    return datetime.utcnow()
 
 
 class User(Base):
@@ -21,17 +31,17 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(32), index=True)
-    operator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("operators.id"), nullable=True, index=True)
-    group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("groups.id"), nullable=True, index=True)
-    email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    phone: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
+    operator_id: Mapped[int | None] = mapped_column(ForeignKey("operators.id"), nullable=True, index=True)
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id"), nullable=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="active", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     can_manage_operators: Mapped[bool] = mapped_column(Boolean, default=False)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
-    operator: Mapped[Optional["Operator"]] = relationship("Operator", foreign_keys=[operator_id], post_update=True)
+    operator: Mapped[Operator | None] = relationship("Operator", foreign_keys=[operator_id], post_update=True)
 
 
 class Group(Base):
@@ -44,7 +54,7 @@ class Group(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    operators: Mapped[List["Operator"]] = relationship(back_populates="group")
+    operators: Mapped[list[Operator]] = relationship(back_populates="group")
 
 
 class Operator(Base):
@@ -54,31 +64,31 @@ class Operator(Base):
     full_name: Mapped[str] = mapped_column(String(255), index=True)
 
     # Группа — FK к таблице groups
-    group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("groups.id"), nullable=True, index=True)
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id"), nullable=True, index=True)
     group_name: Mapped[str] = mapped_column(String(120), index=True, default="")  # legacy compat
 
-    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     # Статус участия: participating | not_participating
     participation_status: Mapped[str] = mapped_column(String(32), default="participating", index=True)
     # Статус работы: active | dismissed
     employment_status: Mapped[str] = mapped_column(String(32), default="active", index=True)
-    dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Legacy compat fields
     status: Mapped[str] = mapped_column(String(32), default="active", index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Должность: operator | chat_manager
-    position: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    email: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    position: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # Legacy fields kept for DB compat (not used in new forms)
-    employee_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    start_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    employee_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     # Ставка: 0.5 | 0.75 | 1.0 — используется для расчёта нормы часов
-    rate: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    rate: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Балансы
     current_balance: Mapped[int] = mapped_column(Integer, default=0)
@@ -88,12 +98,12 @@ class Operator(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    user: Mapped[Optional["User"]] = relationship("User", foreign_keys=[user_id], post_update=True)
-    created_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[created_by_user_id])
-    group: Mapped[Optional["Group"]] = relationship("Group", back_populates="operators")
-    weekly_results: Mapped[List["WeeklyResult"]] = relationship(back_populates="operator")
-    transactions: Mapped[List["CoinTransaction"]] = relationship(back_populates="operator")
-    purchases: Mapped[List["ShopPurchase"]] = relationship(back_populates="operator")
+    user: Mapped[User | None] = relationship("User", foreign_keys=[user_id], post_update=True)
+    created_by: Mapped[User | None] = relationship("User", foreign_keys=[created_by_user_id])
+    group: Mapped[Group | None] = relationship("Group", back_populates="operators")
+    weekly_results: Mapped[list[WeeklyResult]] = relationship(back_populates="operator")
+    transactions: Mapped[list[CoinTransaction]] = relationship(back_populates="operator")
+    purchases: Mapped[list[ShopPurchase]] = relationship(back_populates="operator")
 
 
 class OperatorLevel(Base):
@@ -111,7 +121,7 @@ class OperatorLevel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    rules: Mapped[List["OperatorLevelRule"]] = relationship(
+    rules: Mapped[list[OperatorLevelRule]] = relationship(
         back_populates="level", cascade="all, delete-orphan", order_by="OperatorLevelRule.id"
     )
 
@@ -124,13 +134,13 @@ class OperatorLevelRule(Base):
     level_id: Mapped[int] = mapped_column(ForeignKey("operator_levels.id"), index=True)
     metric_code: Mapped[str] = mapped_column(String(64), index=True)
     operator: Mapped[str] = mapped_column(String(16))
-    value_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    value_max: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    value_min: Mapped[float | None] = mapped_column(Float, nullable=True)
+    value_max: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_required: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    level: Mapped["OperatorLevel"] = relationship(back_populates="rules")
+    level: Mapped[OperatorLevel] = relationship(back_populates="rules")
 
 
 class OperatorLevelAssignment(Base):
@@ -144,19 +154,19 @@ class OperatorLevelAssignment(Base):
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
     level_id: Mapped[int] = mapped_column(ForeignKey("operator_levels.id"), index=True)
     assignment_type: Mapped[str] = mapped_column(String(16), default="auto", index=True)
-    calculated_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-    calculated_to: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    calculated_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    calculated_to: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_manual: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    manual_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    manual_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    assigned_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    manual_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    manual_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assigned_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     assigned_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    operator: Mapped["Operator"] = relationship("Operator")
-    level: Mapped["OperatorLevel"] = relationship("OperatorLevel")
-    assigned_by_user: Mapped[Optional["User"]] = relationship("User")
+    operator: Mapped[Operator] = relationship("Operator")
+    level: Mapped[OperatorLevel] = relationship("OperatorLevel")
+    assigned_by_user: Mapped[User | None] = relationship("User")
 
 
 class OperatorLevelHistory(Base):
@@ -165,19 +175,19 @@ class OperatorLevelHistory(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
-    old_level_id: Mapped[Optional[int]] = mapped_column(ForeignKey("operator_levels.id"), nullable=True)
-    new_level_id: Mapped[Optional[int]] = mapped_column(ForeignKey("operator_levels.id"), nullable=True)
+    old_level_id: Mapped[int | None] = mapped_column(ForeignKey("operator_levels.id"), nullable=True)
+    new_level_id: Mapped[int | None] = mapped_column(ForeignKey("operator_levels.id"), nullable=True)
     change_type: Mapped[str] = mapped_column(String(16), index=True)
-    reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    changed_by: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    changed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     changed_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
-    metadata_json: Mapped[Optional[str]] = mapped_column("metadata", Text, nullable=True)
+    metadata_json: Mapped[str | None] = mapped_column("metadata", Text, nullable=True)
 
-    operator: Mapped["Operator"] = relationship("Operator")
-    old_level: Mapped[Optional["OperatorLevel"]] = relationship("OperatorLevel", foreign_keys=[old_level_id])
-    new_level: Mapped[Optional["OperatorLevel"]] = relationship("OperatorLevel", foreign_keys=[new_level_id])
-    changed_by_user: Mapped[Optional["User"]] = relationship("User")
+    operator: Mapped[Operator] = relationship("Operator")
+    old_level: Mapped[OperatorLevel | None] = relationship("OperatorLevel", foreign_keys=[old_level_id])
+    new_level: Mapped[OperatorLevel | None] = relationship("OperatorLevel", foreign_keys=[new_level_id])
+    changed_by_user: Mapped[User | None] = relationship("User")
 
 
 class WeeklyResult(Base):
@@ -190,8 +200,8 @@ class WeeklyResult(Base):
     week_end: Mapped[date] = mapped_column(Date)
     contest_points: Mapped[float] = mapped_column(Float, default=0)
     coins_earned: Mapped[int] = mapped_column(Integer, default=0)
-    rank_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    previous_rank_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    rank_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    previous_rank_position: Mapped[int | None] = mapped_column(Integer, nullable=True)
     hours_score: Mapped[float] = mapped_column(Float, default=0)
     overtime_score: Mapped[float] = mapped_column(Float, default=0)
     quality_score: Mapped[float] = mapped_column(Float, default=0)
@@ -213,12 +223,12 @@ class CoinTransaction(Base):
     amount: Mapped[int] = mapped_column(Integer)
     type: Mapped[str] = mapped_column(String(40), index=True)
     comment: Mapped[str] = mapped_column(Text)
-    created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
-    related_purchase_id: Mapped[Optional[int]] = mapped_column(ForeignKey("shop_purchases.id"), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    related_purchase_id: Mapped[int | None] = mapped_column(ForeignKey("shop_purchases.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
     operator: Mapped[Operator] = relationship(back_populates="transactions")
-    created_by: Mapped[Optional[User]] = relationship("User")
+    created_by: Mapped[User | None] = relationship("User")
 
 
 class ShopItem(Base):
@@ -231,7 +241,7 @@ class ShopItem(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
-    purchases: Mapped[List["ShopPurchase"]] = relationship(back_populates="shop_item")
+    purchases: Mapped[list[ShopPurchase]] = relationship(back_populates="shop_item")
 
 
 class ShopPurchase(Base):
@@ -242,15 +252,15 @@ class ShopPurchase(Base):
     shop_item_id: Mapped[int] = mapped_column(ForeignKey("shop_items.id"), index=True)
     price: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
-    reject_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
-    reviewed_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
-    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     operator: Mapped[Operator] = relationship(back_populates="purchases")
     shop_item: Mapped[ShopItem] = relationship(back_populates="purchases")
-    reviewed_by: Mapped[Optional[User]] = relationship("User")
+    reviewed_by: Mapped[User | None] = relationship("User")
 
 
 class AuditLog(Base):
@@ -260,16 +270,16 @@ class AuditLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     action: Mapped[str] = mapped_column(String(100), index=True)
     # Поддерживаем оба контракта: новый (entity_type/entity_id) и старый (operator_id)
-    entity_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    entity_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    operator_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)  # legacy compat
-    details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)         # legacy compat
-    performed_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
-    actor_user_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True) # legacy compat
+    entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    operator_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)  # legacy compat
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)         # legacy compat
+    performed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    actor_user_id: Mapped[int | None] = mapped_column(Integer, nullable=True) # legacy compat
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
-    performed_by: Mapped[Optional[User]] = relationship("User", foreign_keys=[performed_by_user_id])
+    performed_by: Mapped[User | None] = relationship("User", foreign_keys=[performed_by_user_id])
 
 
 class PeriodReport(Base):
@@ -306,9 +316,9 @@ class PeriodReport(Base):
     coins_awarded: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
-    created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
-    operator: Mapped["Operator"] = relationship("Operator")
+    operator: Mapped[Operator] = relationship("Operator")
 
 
 class UploadedReportFile(Base):
@@ -324,7 +334,7 @@ class UploadedReportFile(Base):
     filename: Mapped[str] = mapped_column(String(255))
     content: Mapped[bytes] = mapped_column(LargeBinary)
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
-    uploaded_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
 
 class OperatorDailyMetric(Base):
@@ -344,7 +354,7 @@ class OperatorDailyMetric(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
     operator_name: Mapped[str] = mapped_column(String(255))  # снимок ФИО на момент парсинга — для диагностики
-    group_id: Mapped[Optional[int]] = mapped_column(ForeignKey("groups.id"), nullable=True)
+    group_id: Mapped[int | None] = mapped_column(ForeignKey("groups.id"), nullable=True)
     metric_date: Mapped[date] = mapped_column(Date, index=True)
 
     calls_count: Mapped[float] = mapped_column(Float, default=0)
@@ -367,8 +377,8 @@ class OperatorDailyMetric(Base):
     penalty_minutes: Mapped[float] = mapped_column(Float, default=0)
     penalty_points: Mapped[float] = mapped_column(Float, default=0)
 
-    source_monthly_report_id: Mapped[Optional[int]] = mapped_column(ForeignKey("uploaded_report_files.id"), nullable=True)
-    source_report_id: Mapped[Optional[int]] = mapped_column(ForeignKey("uploaded_report_files.id"), nullable=True)
+    source_monthly_report_id: Mapped[int | None] = mapped_column(ForeignKey("uploaded_report_files.id"), nullable=True)
+    source_report_id: Mapped[int | None] = mapped_column(ForeignKey("uploaded_report_files.id"), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
@@ -392,7 +402,7 @@ class WorkNorm(Base):
     rate: Mapped[float] = mapped_column(Numeric(3, 2), nullable=False, index=True)
     monthly_norm_hours: Mapped[float] = mapped_column(Numeric(8, 2), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
@@ -414,8 +424,8 @@ class Test(Base):
     status: Mapped[str] = mapped_column(String(32), default="draft", index=True)
 
     time_limit_minutes: Mapped[int] = mapped_column(Integer, default=30)
-    opens_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    closes_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    opens_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    closes_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     passing_percent: Mapped[float] = mapped_column(Float, default=70.0)
     show_result_after_finish: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -431,14 +441,14 @@ class Test(Base):
     # fixed | proportional — режим начисления награды (см. ТЗ п.10.3)
     reward_mode: Mapped[str] = mapped_column(String(32), default="fixed")
 
-    created_by_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    questions: Mapped[List["TestQuestion"]] = relationship(back_populates="test", cascade="all, delete-orphan", order_by="TestQuestion.sort_order")
-    assignments: Mapped[List["TestAssignment"]] = relationship(back_populates="test", cascade="all, delete-orphan")
-    attempts: Mapped[List["TestAttempt"]] = relationship(back_populates="test", cascade="all, delete-orphan")
-    created_by: Mapped[Optional["User"]] = relationship("User")
+    questions: Mapped[list[TestQuestion]] = relationship(back_populates="test", cascade="all, delete-orphan", order_by="TestQuestion.sort_order")
+    assignments: Mapped[list[TestAssignment]] = relationship(back_populates="test", cascade="all, delete-orphan")
+    attempts: Mapped[list[TestAttempt]] = relationship(back_populates="test", cascade="all, delete-orphan")
+    created_by: Mapped[User | None] = relationship("User")
 
 
 class TestQuestion(Base):
@@ -455,8 +465,8 @@ class TestQuestion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    test: Mapped["Test"] = relationship(back_populates="questions")
-    answers: Mapped[List["TestAnswerOption"]] = relationship(back_populates="question", cascade="all, delete-orphan", order_by="TestAnswerOption.sort_order")
+    test: Mapped[Test] = relationship(back_populates="questions")
+    answers: Mapped[list[TestAnswerOption]] = relationship(back_populates="question", cascade="all, delete-orphan", order_by="TestAnswerOption.sort_order")
 
 
 class TestAnswerOption(Base):
@@ -471,7 +481,7 @@ class TestAnswerOption(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    question: Mapped["TestQuestion"] = relationship(back_populates="answers")
+    question: Mapped[TestQuestion] = relationship(back_populates="answers")
 
 
 class TestAssignment(Base):
@@ -486,10 +496,10 @@ class TestAssignment(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     test_id: Mapped[int] = mapped_column(ForeignKey("tests.id"), index=True)
     target_type: Mapped[str] = mapped_column(String(16))  # all | group | operator
-    target_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
-    test: Mapped["Test"] = relationship(back_populates="assignments")
+    test: Mapped[Test] = relationship(back_populates="assignments")
 
 
 class TestAttempt(Base):
@@ -513,7 +523,7 @@ class TestAttempt(Base):
 
     started_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     expires_at: Mapped[datetime] = mapped_column(DateTime)
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     score_points: Mapped[float] = mapped_column(Float, default=0)
     max_points: Mapped[float] = mapped_column(Float, default=0)
@@ -523,15 +533,15 @@ class TestAttempt(Base):
 
     reward_points: Mapped[float] = mapped_column(Float, default=0)
     reward_coins: Mapped[int] = mapped_column(Integer, default=0)
-    reward_transaction_id: Mapped[Optional[int]] = mapped_column(ForeignKey("coin_transactions.id"), nullable=True)
+    reward_transaction_id: Mapped[int | None] = mapped_column(ForeignKey("coin_transactions.id"), nullable=True)
 
     attempt_number: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    test: Mapped["Test"] = relationship(back_populates="attempts")
-    operator: Mapped["Operator"] = relationship("Operator")
-    answers: Mapped[List["TestAttemptAnswer"]] = relationship(back_populates="attempt", cascade="all, delete-orphan")
+    test: Mapped[Test] = relationship(back_populates="attempts")
+    operator: Mapped[Operator] = relationship("Operator")
+    answers: Mapped[list[TestAttemptAnswer]] = relationship(back_populates="attempt", cascade="all, delete-orphan")
 
 
 class TestAttemptAnswer(Base):
@@ -550,10 +560,10 @@ class TestAttemptAnswer(Base):
     attempt_id: Mapped[int] = mapped_column(ForeignKey("test_attempts.id"), index=True)
     question_id: Mapped[int] = mapped_column(ForeignKey("test_questions.id"), index=True)
     selected_answer_ids_json: Mapped[str] = mapped_column(Text, default="[]")
-    is_correct: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)  # None до проверки
+    is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)  # None до проверки
     points_awarded: Mapped[float] = mapped_column(Float, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    attempt: Mapped["TestAttempt"] = relationship(back_populates="answers")
-    question: Mapped["TestQuestion"] = relationship("TestQuestion")
+    attempt: Mapped[TestAttempt] = relationship(back_populates="answers")
+    question: Mapped[TestQuestion] = relationship("TestQuestion")
