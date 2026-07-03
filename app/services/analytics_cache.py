@@ -27,9 +27,9 @@ from __future__ import annotations
 
 import time
 from threading import Lock
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
-_CACHE: Dict[str, Tuple[float, Any]] = {}
+_CACHE: dict[str, tuple[float, Any]] = {}
 _LOCK = Lock()
 DEFAULT_TTL_SECONDS = 300  # 5 минут
 
@@ -39,7 +39,7 @@ def cache_key(endpoint: str, **params) -> str:
     return "|".join(parts)
 
 
-def cache_get(key: str) -> Optional[Any]:
+def cache_get(key: str) -> Any | None:
     with _LOCK:
         entry = _CACHE.get(key)
         if not entry:
