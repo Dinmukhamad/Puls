@@ -15,7 +15,7 @@ const SWR_PREFIX = 'puls-swr:';
 const SWR_DEFAULT_TTL_MS = 120_000;  // 2 минуты — динамичные данные (рейтинг, дашборд)
 const SWR_STATIC_TTL_MS  = 600_000; // 10 минут — статичные (уровни, магазин, группы)
 const SWR_USER_TTL_MS    = 300_000; // 5 минут — пользователи
-const SWR_VERSION = 'tenure-display-1'; // при смене версии весь кеш сбрасывается
+const SWR_VERSION = 'levels-load-fix-1'; // при смене версии весь кеш сбрасывается
 (function() {
   const stored = sessionStorage.getItem('puls-swr-version');
   if (stored !== SWR_VERSION) {
@@ -122,6 +122,14 @@ function levelNum(v, decimals = 1) {
   const n = Number(v);
   if (!Number.isFinite(n)) return '0';
   return n.toLocaleString('ru-RU', { maximumFractionDigits: decimals });
+}
+
+function withTimeout(promise, ms, message = 'Сервер не отвечает') {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
 }
 
 // Форматирование стажа: дни → читаемая строка
@@ -638,12 +646,29 @@ async function renderOperatorLevelsSettings() {
   </div>
   <div class="panel level-settings-shell"><div class="empty-state"><p>Загрузка уровней…</p></div></div>`;
 
-  const levels = await api.listAdminOperatorLevels().catch(err => {
-    el.innerHTML = `<div class="status-line status-error">${esc(err.message)}</div>`;
-    return [];
-  });
+  let levels = [];
+  try {
+    levels = await withTimeout(api.listAdminOperatorLevels(), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
+  } catch (adminErr) {
+    try {
+      levels = await withTimeout(api.listOperatorLevels(), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
+    } catch (publicErr) {
+      el.innerHTML = `<div class="view-header level-view-header">
+        <div>
+          <div class="section-kicker">Операторы</div>
+          <h2 class="section-title">Уровни операторов</h2>
+        </div>
+        <div class="header-right level-header-actions">
+          <button class="btn-outline btn-sm" onclick="renderOperatorLevelsSettings()">Обновить</button>
+        </div>
+      </div>
+      <div class="status-line status-error">${esc(publicErr.message || adminErr.message || 'Не удалось загрузить уровни')}</div>`;
+      return;
+    }
+  }
   STATE.operatorLevels = levels;
-  const rewardsData = await api.listOperatorLevelRewards().catch(() => ({ items: [] }));
+  const rewardsData = await withTimeout(api.listOperatorLevelRewards(), 10000)
+    .catch(() => ({ items: [] }));
   const rewardRows = Array.isArray(rewardsData) ? rewardsData : (rewardsData.items || []);
 
   function metricLabel(code) {
@@ -961,6 +986,19 @@ async function manualOperatorLevelUi(operatorId) {
 function renderCabinet() {
   const el = document.getElementById('view-cabinet');
   if (!el) return;
+  if (!(STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor')) {
+    el.innerHTML = `<div class="view-header">
+      <div>
+        <div class="section-kicker">Кабинет</div>
+        <h2 class="section-title">Мой кабинет</h2>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Администратор</h3>
+      <p class="muted">Личный кошелёк доступен только аккаунтам, привязанным к оператору.</p>
+    </div>`;
+    return;
+  }
   const w = STATE.wallet;
   if (!w) {
     el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div></div>
