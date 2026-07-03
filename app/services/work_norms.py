@@ -183,8 +183,8 @@ def calculate_norm_for_period(
                 current = date(year, month + 1, 1)
             continue
 
-        # Пропорциональная норма за кусок периода
-        chunk_norm = norm.monthly_norm_hours / days_in_month * chunk_days
+        # Numeric из PostgreSQL приходит как Decimal; дальше все расчёты в float.
+        chunk_norm = float(norm.monthly_norm_hours) / days_in_month * chunk_days
         individual_norm_hours += chunk_norm
 
         # Следующий месяц
