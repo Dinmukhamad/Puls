@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,13 +9,13 @@ from app.database.db import get_db
 from app.models.entities import Operator, WeeklyResult
 from app.schemas.weekly_results import WeeklyCalculateRequest, WeeklyResultCreate, WeeklyResultRead
 from app.services.coins import add_transaction, points_to_coins
-from app.services.rating import recalculate_period_ranks
+from app.services.rating import rating_cache_invalidate, recalculate_period_ranks
 
 router = APIRouter(prefix="/weekly-results", tags=["weekly-results"])
 
 
-@router.get("", response_model=List[WeeklyResultRead])
-def list_weekly_results(db: Session = Depends(get_db), _: object = Depends(require_roles("supervisor", "manager", "admin"))) -> List[WeeklyResult]:
+@router.get("", response_model=list[WeeklyResultRead])
+def list_weekly_results(db: Session = Depends(get_db), _: object = Depends(require_roles("supervisor", "manager", "admin"))) -> list[WeeklyResult]:
     return list(
         db.scalars(
             select(WeeklyResult).order_by(WeeklyResult.week_end.desc(), WeeklyResult.rank_position.asc().nulls_last())
@@ -75,12 +73,13 @@ def upsert_weekly_result(payload: WeeklyResultCreate, db: Session = Depends(get_
 
     recalculate_period_ranks(db, payload.week_start, payload.week_end)
     db.commit()
+    rating_cache_invalidate()
     db.refresh(row)
     return row
 
 
-@router.post("/recalculate", response_model=List[WeeklyResultRead], dependencies=[Depends(require_roles("supervisor", "manager", "admin"))])
-def recalculate_weekly_results(payload: WeeklyCalculateRequest, db: Session = Depends(get_db)) -> List[WeeklyResult]:
+@router.post("/recalculate", response_model=list[WeeklyResultRead], dependencies=[Depends(require_roles("supervisor", "manager", "admin"))])
+def recalculate_weekly_results(payload: WeeklyCalculateRequest, db: Session = Depends(get_db)) -> list[WeeklyResult]:
     rows = recalculate_period_ranks(db, payload.week_start, payload.week_end)
     db.commit()
     return rows
