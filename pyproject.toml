@@ -1,0 +1,19 @@
+[tool.ruff]
+line-length = 100
+# Единая версия с рантаймом проекта (README: Python 3.13) и CI.
+target-version = "py313"
+exclude = ["migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+# E501 (длина строки) в legacy-коде даёт сотни неавтофиксируемых срабатываний —
+# осознанно вне скоупа стабилизации; новые строки держим в пределах 100.
+ignore = ["E501"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Depends()/Query()/... в дефолтах аргументов — идиома FastAPI, не баг B008.
+extend-immutable-calls = [
+    "fastapi.Depends", "fastapi.Query", "fastapi.Body", "fastapi.Path",
+    "fastapi.Header", "fastapi.File", "fastapi.Form", "fastapi.Cookie",
+    "app.core.security.require_roles",
+]
