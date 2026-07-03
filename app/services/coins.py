@@ -20,6 +20,9 @@ def add_transaction(
     comment: str,
     created_by: User | None = None,
     purchase: ShopPurchase | None = None,
+    source_type: str | None = None,
+    source_id: int | None = None,
+    metadata: dict | None = None,
 ) -> CoinTransaction:
     if not comment.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Комментарий обязателен")
@@ -40,6 +43,9 @@ def add_transaction(
         comment=comment.strip(),
         created_by_user_id=created_by.id if created_by else None,
         related_purchase_id=purchase.id if purchase else None,
+        source_type=source_type,
+        source_id=source_id,
+        metadata_json=metadata,
     )
     db.add(transaction)
     return transaction
@@ -49,6 +55,20 @@ def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurcha
     item = db.get(ShopItem, item_id)
     if not item or not item.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бонус не найден")
+
+    if item.min_level_id:
+        from app.services.operator_levels import operator_level_summary
+
+        current_level = operator_level_summary(db, operator).get("level") or {}
+        required_level = item.min_level
+        current_sort = current_level.get("sort_order") or 0
+        required_sort = required_level.sort_order if required_level else 0
+        if current_sort < required_sort:
+            required_name = required_level.name if required_level else "нужного уровня"
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Доступно с уровня «{required_name}»",
+            )
 
     # Блокируем строку оператора на время транзакции (SELECT ... FOR UPDATE).
     # Без этого два одновременных запроса на покупку читают один и тот же
