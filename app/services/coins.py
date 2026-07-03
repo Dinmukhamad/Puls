@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from math import floor
-from typing import Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.entities import CoinTransaction, Operator, ShopItem, ShopPurchase, User, now_utc
@@ -20,8 +18,8 @@ def add_transaction(
     amount: int,
     transaction_type: str,
     comment: str,
-    created_by: Optional[User] = None,
-    purchase: Optional[ShopPurchase] = None,
+    created_by: User | None = None,
+    purchase: ShopPurchase | None = None,
 ) -> CoinTransaction:
     if not comment.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Комментарий обязателен")
