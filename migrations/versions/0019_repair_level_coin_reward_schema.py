@@ -1,13 +1,13 @@
 """Mark level coin reward schema repair as handled by startup maintenance.
 
-Revision ID: 0019_repair_level_coin_reward_schema
+Revision ID: 0019_level_coin_repair
 Revises: 0018_level_coin_rewards
 Create Date: 2026-07-03
 """
 from __future__ import annotations
 
 
-revision = "0019_repair_level_coin_reward_schema"
+revision = "0019_level_coin_repair"
 down_revision = "0018_level_coin_rewards"
 branch_labels = None
 depends_on = None
