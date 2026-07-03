@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import calendar
 from datetime import date
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -37,13 +36,13 @@ def list_norms(db: Session, active_only: bool = False) -> list[WorkNorm]:
     return list(db.scalars(stmt))
 
 
-def get_norm(db: Session, norm_id: int) -> Optional[WorkNorm]:
+def get_norm(db: Session, norm_id: int) -> WorkNorm | None:
     return db.get(WorkNorm, norm_id)
 
 
-def get_norm_for_month(db: Session, year: int, month: int, rate: float) -> Optional[WorkNorm]:
+def get_norm_for_month(db: Session, year: int, month: int, rate: float) -> WorkNorm | None:
     from decimal import Decimal
-    from sqlalchemy import func, cast, Numeric as SANumeric
+
     rate_dec = Decimal(str(rate))
     return db.scalar(
         select(WorkNorm).where(
@@ -61,7 +60,7 @@ def create_norm(
     month: int,
     rate: float,
     monthly_norm_hours: float,
-    created_by_user_id: Optional[int] = None,
+    created_by_user_id: int | None = None,
 ) -> WorkNorm:
     days = calendar.monthrange(year, month)[1]
     norm = WorkNorm(
@@ -95,7 +94,7 @@ class WorkNormResult:
 
     def __init__(
         self,
-        rate: Optional[float],
+        rate: float | None,
         individual_norm_hours: float,
         total_worked_hours: float,
         norm_completion_percent: float,
@@ -116,7 +115,7 @@ class WorkNormResult:
 
 def calculate_norm_for_period(
     db: Session,
-    rate: Optional[float],
+    rate: float | None,
     period_start: date,
     period_end: date,
     total_worked_hours: float,
