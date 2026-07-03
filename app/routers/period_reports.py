@@ -20,6 +20,7 @@ from app.models.entities import (
     User,
 )
 from app.services.analytics_cache import cache_clear_all
+from app.services.operator_levels import assign_auto_level
 from app.services.period_reports import (
     build_daily_metric_rows,
     calculate_period_report,
@@ -506,6 +507,7 @@ def save_period_report(
             pr.coins_awarded = old_coins
 
         db.add(pr)
+        assign_auto_level(db, db_op, current_user, payload.start_date, payload.end_date)
         saved += 1
         if existing_reports:
             updated += 1
