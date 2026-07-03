@@ -7228,7 +7228,7 @@ async function renderRatingProgressTab(content) {
 window.renderRating = renderRating;
 
 const WHEEL_PRIZE_ICON = {
-  coins: '🪙', shop_discount: '🏷️', extra_ticket: '🎟️', badge: '🏅', manual_reward: '🎁',
+  coins: '₡', shop_discount: '%', extra_ticket: '+1', badge: '★', manual_reward: '!',
 };
 
 function wheelPrizeTypeLabel(t) {
@@ -7252,7 +7252,7 @@ async function renderWheelOperatorView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">🎡 Wheel of WOW</h2>
+        <h2 class="section-title">Wheel of WOW</h2>
       </div>
     </div>
     <div class="panel"><div class="empty-state"><div class="loading-spinner"></div><p>Загрузка колеса…</p></div></div>`;
@@ -7265,14 +7265,14 @@ async function renderWheelOperatorView(el) {
       api.getWheelMyHistory().catch(() => ({ items: [] })),
     ]);
   } catch (err) {
-    el.innerHTML = `<div class="view-header"><h2 class="section-title">🎡 Wheel of WOW</h2></div>
+    el.innerHTML = `<div class="view-header"><h2 class="section-title">Wheel of WOW</h2></div>
       <div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
     return;
   }
 
   const items = prizes.items || [];
   if (!status.campaign || !items.length) {
-    el.innerHTML = `<div class="view-header"><h2 class="section-title">🎡 Wheel of WOW</h2></div>
+    el.innerHTML = `<div class="view-header"><h2 class="section-title">Wheel of WOW</h2></div>
       <div class="panel"><div class="empty-state"><p>Колесо сейчас недоступно. Загляните позже.</p></div></div>`;
     return;
   }
@@ -7297,7 +7297,7 @@ async function renderWheelOperatorView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">🎡 Wheel of WOW</h2>
+        <h2 class="section-title">Wheel of WOW</h2>
       </div>
       <div class="wheel-limits">
         <span title="Прокруток сегодня">Сегодня: ${status.spins_used_today}/${status.max_spins_per_day || '∞'}</span>
@@ -7469,14 +7469,14 @@ async function renderWheelStaffView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">🎡 Wheel of WOW</h2>
+        <h2 class="section-title">Wheel of WOW</h2>
       </div>
-      <div class="tab-switch">
-        <button class="tab-btn ${_wheelStaffTab === 'history' ? 'active' : ''}" data-wheel-tab="history">История прокруток</button>
-        <button class="tab-btn ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билет</button>
+      <div class="filter-tabs wheel-tabs">
+        <button class="filter-tab ${_wheelStaffTab === 'history' ? 'active' : ''}" data-wheel-tab="history">История</button>
+        <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билет</button>
       </div>
     </div>
-    <div id="wheel-staff-body"><div class="panel"><div class="empty-state"><div class="loading-spinner"></div></div></div></div>`;
+    <div id="wheel-staff-body"><div class="panel wheel-admin-panel"><div class="empty-state"><div class="loading-spinner"></div></div></div></div>`;
 
   el.querySelectorAll('[data-wheel-tab]').forEach(b => {
     b.onclick = () => { _wheelStaffTab = b.dataset.wheelTab; renderWheelStaffView(el); };
@@ -7500,23 +7500,31 @@ async function renderWheelSpinsTab(body) {
   }
   const rows = data.items || [];
   const totalCoins = rows.filter(r => r.prize_type === 'coins').reduce((s, r) => s + (r.amount || 0), 0);
+  const uniqueOperators = new Set(rows.map(r => r.operator_id).filter(Boolean)).size;
   body.innerHTML = `
-    <div class="panel">
-      <div class="wheel-stats-row">
-        <div class="wheel-stat"><span class="wheel-stat-num">${rows.length}</span><span>прокруток</span></div>
-        <div class="wheel-stat"><span class="wheel-stat-num">${totalCoins}</span><span>коинов выдано</span></div>
+    <div class="panel wheel-admin-panel">
+      <div class="panel-head">
+        <h3>История прокруток</h3>
+        <span class="panel-badge">${rows.length} записей</span>
       </div>
-      ${rows.length ? `<div class="table-wrap"><table class="data-table">
-        <thead><tr><th>Дата</th><th>Оператор</th><th>Группа</th><th>Причина</th><th>Приз</th><th>Тип</th></tr></thead>
-        <tbody>${rows.map(r => `<tr>
-          <td>${esc(fmtDateTime(r.date))}</td>
-          <td>${esc(r.operator_name)}</td>
-          <td>${esc(r.group_name || '—')}</td>
-          <td>${esc(r.reason || '—')}</td>
-          <td><strong>${esc(r.prize)}</strong></td>
-          <td>${WHEEL_PRIZE_ICON[r.prize_type] || ''} ${esc(wheelPrizeTypeLabel(r.prize_type))}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>` : '<div class="empty-state"><p>Прокруток пока нет.</p></div>'}
+      <div class="wheel-admin-content">
+        <div class="wheel-stats-row">
+          <div class="wheel-stat"><span class="wheel-stat-num">${rows.length}</span><span>прокруток</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${totalCoins}</span><span>коинов выдано</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${uniqueOperators}</span><span>участников</span></div>
+        </div>
+        ${rows.length ? `<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Дата</th><th>Оператор</th><th>Группа</th><th>Причина</th><th>Приз</th><th>Тип</th></tr></thead>
+          <tbody>${rows.map(r => `<tr>
+            <td>${esc(fmtDateTime(r.date))}</td>
+            <td class="name-cell">${esc(r.operator_name)}</td>
+            <td>${esc(r.group_name || '—')}</td>
+            <td>${esc(r.reason || '—')}</td>
+            <td><strong>${esc(r.prize)}</strong></td>
+            <td><span class="wheel-type-pill">${esc(wheelPrizeTypeLabel(r.prize_type))}</span></td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : '<div class="empty-state wheel-empty"><p>Прокруток пока нет.</p></div>'}
+      </div>
     </div>`;
 }
 
@@ -7531,26 +7539,33 @@ async function renderWheelIssueTab(body) {
 
   body.innerHTML = `
     <div class="panel wheel-issue-panel">
-      <h3 class="panel-title">Ручная выдача билета</h3>
-      <div class="form-grid">
+      <div class="panel-head">
+        <h3>Ручная выдача билета</h3>
+        <span class="panel-badge">Staff</span>
+      </div>
+      <div class="wheel-admin-content">
+      <div class="form-grid wheel-issue-grid">
         <label class="form-group">
-          <span>Оператор</span>
+          <span class="form-label">Оператор</span>
           <input type="text" id="wheel-op-search" class="form-input" placeholder="Поиск по имени, фамилии, группе…" autocomplete="off">
           <div id="wheel-op-results" class="wheel-op-results" hidden></div>
           <input type="hidden" id="wheel-op-id">
           <div id="wheel-op-chosen" class="wheel-op-chosen" hidden></div>
         </label>
         <label class="form-group">
-          <span>Причина</span>
+          <span class="form-label">Причина</span>
           <input type="text" id="wheel-reason" class="form-input" placeholder="Например: помощь новому сотруднику" maxlength="500">
         </label>
         <label class="form-group">
-          <span>Срок действия, дней</span>
+          <span class="form-label">Срок действия, дней</span>
           <input type="number" id="wheel-ttl" class="form-input" min="1" max="30" value="3">
         </label>
       </div>
-      <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билет</button>
+      <div class="wheel-issue-actions">
+        <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билет</button>
+      </div>
       <div id="wheel-issue-status" class="status-line" style="margin-top:10px"></div>
+      </div>
     </div>`;
 
   const search = document.getElementById('wheel-op-search');
