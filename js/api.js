@@ -278,6 +278,7 @@ const api = (() => {
   async function operatorLevel(operatorId) { return req('GET', `/api/operators/${operatorId}/level`); }
   async function recalculateOperatorLevels(payload) { return req('POST', '/api/admin/operator-levels/recalculate', payload || {}); }
   async function manualOperatorLevel(operatorId, payload) { return req('POST', `/api/admin/operators/${operatorId}/level/manual`, payload); }
+  async function listOperatorLevelRewards() { return req('GET', '/api/admin/operator-levels/rewards'); }
 
   return {
     getToken, login, me, logout,
@@ -303,7 +304,7 @@ const api = (() => {
     listOperatorLevels, listAdminOperatorLevels, myLevel, operatorLevel,
     createOperatorLevel, updateOperatorLevel, deleteOperatorLevel,
     addOperatorLevelRule, updateOperatorLevelRule, deleteOperatorLevelRule,
-    recalculateOperatorLevels, manualOperatorLevel,
+    recalculateOperatorLevels, manualOperatorLevel, listOperatorLevelRewards,
     loginOperator: login,
     _base,
     _req: req,
