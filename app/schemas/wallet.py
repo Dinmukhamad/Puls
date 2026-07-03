@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class ManualTransactionCreate(BaseModel):
@@ -28,8 +27,8 @@ class CoinTransactionRead(BaseModel):
     amount: int
     type: str
     comment: str
-    created_by_user_id: Optional[int]
-    related_purchase_id: Optional[int]
+    created_by_user_id: int | None
+    related_purchase_id: int | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -43,4 +42,4 @@ class WalletRead(BaseModel):
     reserved_balance: int
     total_earned: int
     total_spent: int
-    transactions: List[CoinTransactionRead]
+    transactions: list[CoinTransactionRead]
