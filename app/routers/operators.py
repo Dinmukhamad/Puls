@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import re
+import logging
 import random
+import re
 import secrets
 import string
-from datetime import datetime, date
-from typing import List, Optional
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -14,10 +14,22 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, hash_password, require_roles, verify_password
 from app.database.db import get_db
-from app.models.entities import AuditLog, CoinTransaction, Group, Operator, ShopPurchase, User, WeeklyResult
-from app.schemas.operators import OperatorCreate, OperatorRead, OperatorUpdate
+from app.models.entities import (
+    AuditLog,
+    CoinTransaction,
+    Group,
+    Operator,
+    ShopPurchase,
+    User,
+    WeeklyResult,
+    now_utc,
+)
 from app.schemas.operator_levels import OperatorLevelSummary
+from app.schemas.operators import OperatorRead, OperatorUpdate
 from app.services.operator_levels import operator_level_badge, operator_level_summary
+from app.services.rating import rating_cache_invalidate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/operators", tags=["operators"])
 
@@ -41,7 +53,7 @@ def _gen_username(db: Session, full_name: str) -> str:
     raise HTTPException(status_code=500, detail="Не удалось сгенерировать уникальный логин")
 
 
-def _gen_password(username: Optional[str] = None) -> str:
+def _gen_password(username: str | None = None) -> str:
     """Генерирует сложный временный пароль минимум 10 символов."""
     special_chars = "!@#$%&*?"
     chars = string.ascii_letters + string.digits + special_chars
@@ -62,7 +74,7 @@ def _gen_password(username: Optional[str] = None) -> str:
 
 
 def _audit(db: Session, action: str, entity_type: str, entity_id: int,
-           details: str, user: Optional[User] = None) -> None:
+           details: str, user: User | None = None) -> None:
     db.add(AuditLog(
         action=action,
         entity_type=entity_type,
@@ -72,7 +84,7 @@ def _audit(db: Session, action: str, entity_type: str, entity_id: int,
     ))
 
 
-def _operator_user(db: Session, op: Operator) -> Optional[User]:
+def _operator_user(db: Session, op: Operator) -> User | None:
     if op.user_id:
         return db.get(User, op.user_id)
     return db.scalar(select(User).where(User.operator_id == op.id))
@@ -133,7 +145,7 @@ def _operator_response(db: Session, op: Operator) -> dict:
     }
 
 
-def _validate_username(db: Session, username: str, current_user_id: Optional[int] = None) -> str:
+def _validate_username(db: Session, username: str, current_user_id: int | None = None) -> str:
     value = username.strip()
     if not value:
         raise HTTPException(status_code=400, detail="Логин обязателен")
@@ -179,7 +191,7 @@ class OperatorCreateFull(BaseModel):
     group_id: int                          # required — select from groups list
     participation_status: str = "participating"
     position: str = "operator"
-    email: Optional[str] = None
+    email: str | None = None
 
 
 class OperatorCreatedGroup(BaseModel):
@@ -195,7 +207,7 @@ class OperatorCreatedResponse(BaseModel):
     group_name: str
     participation_status: str
     position: str
-    email: Optional[str] = None
+    email: str | None = None
     login: str
     username: str
     temporary_password: str
@@ -226,34 +238,34 @@ class RestoreOperatorRequest(BaseModel):
 class OperatorFullRead(BaseModel):
     id: int
     full_name: str
-    group_id: Optional[int]
+    group_id: int | None
     group_name: str
     participation_status: str
     employment_status: str = "active"
     status: str
     is_active: bool
-    position: Optional[str]
-    email: Optional[str]
+    position: str | None
+    email: str | None
     current_balance: int
     reserved_balance: int
     total_earned: int
     total_spent: int
-    username: Optional[str] = None
+    username: str | None = None
     created_at: datetime
-    updated_at: Optional[datetime] = None
-    dismissed_at: Optional[datetime] = None
-    level: Optional[dict] = None
+    updated_at: datetime | None = None
+    dismissed_at: datetime | None = None
+    level: dict | None = None
 
     model_config = {"from_attributes": True}
 
 
 # ── Routes ────────────────────────────────────────────────────
 
-@router.get("", response_model=List[OperatorRead])
+@router.get("", response_model=list[OperatorRead])
 def list_operators(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("supervisor", "manager", "admin"))
-) -> List[dict]:
+) -> list[dict]:
     operators = list(db.scalars(
         select(Operator).order_by(Operator.group_name.asc(), Operator.full_name.asc())
     ))
@@ -479,7 +491,7 @@ def update_operator(
         if value == "dismissed":
             op.employment_status = "dismissed"
             op.participation_status = "not_participating"
-            op.dismissed_at = op.dismissed_at or datetime.utcnow()
+            op.dismissed_at = op.dismissed_at or now_utc()
         else:
             op.employment_status = "active"
             op.dismissed_at = None
@@ -517,17 +529,18 @@ def update_operator(
         if status_value == "dismissed":
             op.employment_status = "dismissed"
             op.participation_status = "not_participating"
-            op.dismissed_at = op.dismissed_at or datetime.utcnow()
+            op.dismissed_at = op.dismissed_at or now_utc()
             changes.append("status: legacy → dismissed")
         elif status_value in {"active", "inactive"}:
             op.participation_status = "participating" if status_value == "active" else "not_participating"
             changes.append(f"status: legacy → {status_value}")
 
-    op.updated_at = datetime.utcnow()
+    op.updated_at = now_utc()
     _sync_operator_state(db, op)
     _audit(db, "operator_updated", "operator", op.id,
            "; ".join(changes) if changes else "Без изменений", current_user)
     db.commit()
+    rating_cache_invalidate()  # ФИО/группа/статусы участия видны в рейтинге
     db.refresh(op)
     return _operator_response(db, op)
 
@@ -573,13 +586,14 @@ def dismiss_operator(
 
     op.employment_status = "dismissed"
     op.participation_status = "not_participating"
-    op.dismissed_at = datetime.utcnow()
-    op.updated_at = datetime.utcnow()
+    op.dismissed_at = now_utc()
+    op.updated_at = now_utc()
     _sync_operator_state(db, op)
     _audit(db, "operator_dismissed", "operator", op.id,
            f"Оператор {op.full_name} уволен. Вход заблокирован, участие отключено.",
            current_user)
     db.commit()
+    rating_cache_invalidate()  # уволенный выпадает из рейтинга и номинаций
     db.refresh(op)
     return _operator_response(db, op)
 
@@ -601,12 +615,13 @@ def restore_operator(
     op.employment_status = "active"
     op.participation_status = payload.participation_status
     op.dismissed_at = None
-    op.updated_at = datetime.utcnow()
+    op.updated_at = now_utc()
     _sync_operator_state(db, op)
     _audit(db, "operator_restored", "operator", op.id,
            f"Оператор {op.full_name} восстановлен со статусом участия {payload.participation_status}.",
            current_user)
     db.commit()
+    rating_cache_invalidate()
     db.refresh(op)
     return _operator_response(db, op)
 
@@ -621,7 +636,7 @@ def delete_operator(
     Полное удаление оператора из БД — только для admin.
     Каскадно удаляет всю историю (PeriodReport, DailyMetrics, уровни и т.д.).
     """
-    from sqlalchemy import inspect, text
+    from sqlalchemy import text
 
     # Только admin
     if current_user.role != "admin":
@@ -708,11 +723,13 @@ def delete_operator(
         )
 
         db.commit()
+        rating_cache_invalidate()  # оператор исчез из рейтинга
         return {"ok": True, "message": f"Оператор «{op_name}» удалён вместе с историей"}
 
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Ошибка при удалении: {str(e)}")
+        logger.exception("Не удалось удалить оператора id=%s", operator_id)
+        raise HTTPException(status_code=500, detail="Не удалось удалить оператора. Попробуйте позже или обратитесь к администратору.") from None
 
 
 @router.get("/{operator_id}/history")
