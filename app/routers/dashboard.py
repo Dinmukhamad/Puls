@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import List
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.security import require_roles
 from app.database.db import get_db
-from app.models.entities import CoinTransaction, Operator, ShopPurchase, User
+from app.models.entities import CoinTransaction, Operator, ShopPurchase, User, now_utc
 from app.schemas.dashboard import DashboardRead, GroupSummary, OperatorRow, RatingRow
 from app.services.rating import rating_rows
 
@@ -120,13 +117,13 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
         top_5_operators=top_rows,
         latest_coin_transactions=latest_transactions,
         group_summary=group_summary,
-        last_updated=datetime.utcnow().isoformat(),
+        last_updated=now_utc().isoformat(),
     )
 
 
-@router.get("/operators", response_model=List[OperatorRow],
+@router.get("/operators", response_model=list[OperatorRow],
             dependencies=[Depends(require_roles("supervisor", "manager", "admin"))])
-def admin_operators(db: Session = Depends(get_db)) -> List[OperatorRow]:
+def admin_operators(db: Session = Depends(get_db)) -> list[OperatorRow]:
     """Расширенная таблица операторов для админ-панели"""
     operators = list(db.scalars(
         select(Operator)
@@ -175,7 +172,7 @@ def admin_operators(db: Session = Depends(get_db)) -> List[OperatorRow]:
     return rows
 
 
-@router.get("/history", response_model=List[dict],
+@router.get("/history", response_model=list[dict],
             dependencies=[Depends(require_roles("supervisor", "manager", "admin"))])
 def transaction_history(
     skip: int = 0,
