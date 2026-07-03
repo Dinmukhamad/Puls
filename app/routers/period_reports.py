@@ -1,27 +1,38 @@
 from __future__ import annotations
 
+import json as _json
 from datetime import date
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.security import require_roles
 from app.database.db import get_db
-from app.models.entities import AuditLog, CoinTransaction, Operator, OperatorDailyMetric, PeriodReport, UploadedReportFile, User
-import json as _json
+from app.models.entities import (
+    AuditLog,
+    CoinTransaction,
+    Operator,
+    OperatorDailyMetric,
+    PeriodReport,
+    UploadedReportFile,
+    User,
+)
 from app.services.analytics_cache import cache_clear_all
-from app.services.period_reports import build_daily_metric_rows, calculate_period_report, normalize_name
-from app.services.work_norms import calculate_norm_for_period, MAX_HOURS_POINTS
+from app.services.period_reports import (
+    build_daily_metric_rows,
+    calculate_period_report,
+    normalize_name,
+)
 from app.services.rating import rating_cache_invalidate
+from app.services.work_norms import calculate_norm_for_period
 
 router = APIRouter(prefix="/reports", tags=["period-reports"])
 MAX_REPORT_FILE_BYTES = 15 * 1024 * 1024
 
 
-def _get_uploaded_bytes(db: Session, file_kind: str) -> Optional[bytes]:
+def _get_uploaded_bytes(db: Session, file_kind: str) -> bytes | None:
     """Читает загруженный xlsx-файл из БД (переживает редеплой/перезапуск)."""
     row = db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == file_kind))
     return row.content if row else None
@@ -42,8 +53,8 @@ def _save_uploaded_bytes(db: Session, file_kind: str, filename: str, content: by
 
 class OperatorMetricsOut(BaseModel):
     full_name: str
-    operator_id: Optional[int] = None
-    group_name: Optional[str] = None
+    operator_id: int | None = None
+    group_name: str | None = None
     quality_avg: float
     quality_calls_count: int
     total_hours: float
@@ -59,29 +70,29 @@ class OperatorMetricsOut(BaseModel):
     penalty_minutes: float
     penalty_points: float
     final_points: float
-    warnings: List[str] = []
+    warnings: list[str] = []
     # Норма часов
-    rate: Optional[float] = None
+    rate: float | None = None
     individual_norm_hours: float = 0.0
     norm_completion_percent: float = 0.0
     hours_points: float = 0.0
     overtime_hours: float = 0.0
     overtime_percent: float = 0.0
-    norm_warnings: List[str] = []
+    norm_warnings: list[str] = []
 
 
 class PeriodWarningsOut(BaseModel):
-    site_only: List[str] = []
-    file_only: List[str] = []
-    norm_warnings: List[str] = []
-    no_quality: List[str] = []
-    no_base_hours: List[str] = []
-    ignored_service_rows: List[str] = []
+    site_only: list[str] = []
+    file_only: list[str] = []
+    norm_warnings: list[str] = []
+    no_quality: list[str] = []
+    no_base_hours: list[str] = []
+    ignored_service_rows: list[str] = []
 
 
 class PeriodSummaryOut(BaseModel):
     period: dict
-    operators: List[OperatorMetricsOut]
+    operators: list[OperatorMetricsOut]
     warnings: PeriodWarningsOut
     summary: dict
 
@@ -146,7 +157,7 @@ def _rebuild_daily_metrics(db: Session, monthly_bytes: bytes, report_bytes: byte
     try:
         rows = build_daily_metric_rows(monthly_bytes, report_bytes)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     site_ops = list(db.scalars(select(Operator)))
     name_to_op = {normalize_name(o.full_name): o for o in site_ops if o.full_name}
@@ -264,7 +275,7 @@ def get_upload_status(
     }
 
 
-def _site_operator_names(db: Session) -> List[str]:
+def _site_operator_names(db: Session) -> list[str]:
     return [o.full_name for o in db.scalars(select(Operator)) if o.full_name]
 
 
@@ -294,13 +305,13 @@ def get_period_summary(
             start_date, end_date, site_operator_names=site_names,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     db_ops = list(db.scalars(select(Operator)))
     name_to_op = {normalize_name(o.full_name): o for o in db_ops}
 
-    operators_out: List[OperatorMetricsOut] = []
-    norm_warnings_global: List[str] = []
+    operators_out: list[OperatorMetricsOut] = []
+    norm_warnings_global: list[str] = []
 
     for m in result.operators:
         db_op = name_to_op.get(m.name_key)
@@ -425,7 +436,7 @@ def save_period_report(
             payload.start_date, payload.end_date, site_operator_names=site_names,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     db_ops = list(db.scalars(select(Operator)))
     name_to_op = {normalize_name(o.full_name): o for o in db_ops}
