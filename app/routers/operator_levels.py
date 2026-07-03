@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
-from app.models.entities import Operator, OperatorLevel, OperatorLevelRule, User
+from app.models.entities import Operator, OperatorLevel, OperatorLevelRule, User, now_utc
 from app.schemas.operator_levels import (
     OperatorLevelCreate,
     OperatorLevelRead,
@@ -134,7 +131,7 @@ def update_level(
         data.pop("code")
     for key, value in data.items():
         setattr(level, key, value)
-    level.updated_at = datetime.utcnow()
+    level.updated_at = now_utc()
     db.commit()
     db.refresh(level)
     return level
@@ -148,7 +145,7 @@ def disable_level(
 ) -> dict:
     level = _level_or_404(db, level_id)
     level.is_active = False
-    level.updated_at = datetime.utcnow()
+    level.updated_at = now_utc()
     db.commit()
     return {"ok": True}
 
@@ -178,7 +175,7 @@ def update_rule(
     rule = _rule_or_404(db, rule_id)
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(rule, key, value)
-    rule.updated_at = datetime.utcnow()
+    rule.updated_at = now_utc()
     db.commit()
     db.refresh(rule)
     return rule
@@ -239,7 +236,7 @@ def recalculate_levels(
 
 @admin_router.get("/history")
 def history(
-    operator_id: Optional[int] = None,
+    operator_id: int | None = None,
     limit: int = 100,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("manager", "admin")),
