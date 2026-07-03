@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -10,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
-from app.models.entities import AuditLog, Group, Operator, User
+from app.models.entities import AuditLog, Group, Operator, User, now_utc
 
 router = APIRouter(prefix="/groups", tags=["groups"])
 
@@ -21,8 +20,8 @@ class GroupCreate(BaseModel):
 
 
 class GroupUpdate(BaseModel):
-    name: Optional[str] = None
-    status: Optional[str] = None
+    name: str | None = None
+    status: str | None = None
 
 
 class GroupRead(BaseModel):
@@ -46,12 +45,12 @@ def _audit_group(db: Session, action: str, group: Group, details: str, user: Use
     ))
 
 
-@router.get("", response_model=List[GroupRead])
+@router.get("", response_model=list[GroupRead])
 def list_groups(
     active_only: bool = False,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
-) -> List[dict]:
+) -> list[dict]:
     """List all groups. Pass ?active_only=true to get only active groups."""
     q = select(
         Group,
@@ -137,7 +136,7 @@ def update_group(
             changes.append(f"status: {group.status} → {payload.status}")
             group.status = payload.status
     if payload.name is not None or payload.status is not None:
-        group.updated_at = datetime.utcnow()
+        group.updated_at = now_utc()
     if changes:
         _audit_group(db, "group_updated", group, "; ".join(changes), current_user)
 
@@ -160,7 +159,7 @@ def disable_group(
     if not group:
         raise HTTPException(status_code=404, detail="Группа не найдена")
     group.status = "inactive"
-    group.updated_at = datetime.utcnow()
+    group.updated_at = now_utc()
     _audit_group(db, "group_disabled", group, f"Группа {group.name} отключена", current_user)
     db.commit()
     db.refresh(group)
@@ -181,7 +180,7 @@ def enable_group(
     if not group:
         raise HTTPException(status_code=404, detail="Группа не найдена")
     group.status = "active"
-    group.updated_at = datetime.utcnow()
+    group.updated_at = now_utc()
     _audit_group(db, "group_enabled", group, f"Группа {group.name} включена", current_user)
     db.commit()
     db.refresh(group)
