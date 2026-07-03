@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -17,7 +16,7 @@ class WeeklyResultCreate(BaseModel):
     calls_per_hour_score: float = 0
     lateness_count: int = 0
     violation_count: int = 0
-    final_score: Optional[float] = None
+    final_score: float | None = None
 
 
 class WeeklyCalculateRequest(BaseModel):
@@ -32,8 +31,8 @@ class WeeklyResultRead(BaseModel):
     week_end: date
     contest_points: float
     coins_earned: int
-    rank_position: Optional[int]
-    previous_rank_position: Optional[int]
+    rank_position: int | None
+    previous_rank_position: int | None
     hours_score: float
     overtime_score: float
     quality_score: float
