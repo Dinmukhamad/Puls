@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
+
 from app.models.entities import AuditLog, Group
 
 logger = logging.getLogger(__name__)
