@@ -11,12 +11,14 @@ from app.models.entities import (
     OperatorLevel,
     OperatorLevelAssignment,
     OperatorLevelHistory,
+    OperatorLevelReward,
     OperatorLevelRule,
     PeriodReport,
     TestAttempt,
     User,
     now_utc,
 )
+from app.services.coins import add_transaction
 
 DEFAULT_LEVELS = [
     {
@@ -26,6 +28,7 @@ DEFAULT_LEVELS = [
         "color": "#64748B",
         "icon": "seedling",
         "sort_order": 10,
+        "reward_coins": 0,
         "rules": [("tenure_days", "between", 0, 7)],
     },
     {
@@ -35,6 +38,7 @@ DEFAULT_LEVELS = [
         "color": "#0EA5E9",
         "icon": "sparkles",
         "sort_order": 20,
+        "reward_coins": 3,
         "rules": [
             ("tenure_days", "between", 8, 30),
             ("quality", "gte", 70, None),
@@ -48,6 +52,7 @@ DEFAULT_LEVELS = [
         "color": "#2563EB",
         "icon": "badge-check",
         "sort_order": 30,
+        "reward_coins": 5,
         "rules": [
             ("tenure_days", "gte", 30, None),
             ("quality", "gte", 80, None),
@@ -63,6 +68,7 @@ DEFAULT_LEVELS = [
         "color": "#A855F7",
         "icon": "crown",
         "sort_order": 40,
+        "reward_coins": 8,
         "rules": [
             ("tenure_days", "gte", 30, None),
             ("quality", "gte", 90, None),
@@ -82,6 +88,7 @@ METRIC_LABELS = {
     "penalty_minutes": "Штрафы",
     "final_points": "Итоговые баллы",
     "test_percent": "Результат тестов",
+    "total_xp": "XP",
 }
 
 
@@ -97,6 +104,11 @@ def ensure_default_levels(db: Session) -> None:
             icon=item["icon"],
             sort_order=item["sort_order"],
             is_active=True,
+            min_total_xp=0,
+            reward_coins=item.get("reward_coins", 0),
+            reward_once=True,
+            coin_multiplier_percent=0,
+            shop_discount_percent=0,
         )
         db.add(level)
         db.flush()
@@ -120,6 +132,9 @@ def level_badge(level: OperatorLevel | None) -> dict:
             "color": "#64748B",
             "icon": "seedling",
             "sort_order": 10,
+            "reward_coins": 0,
+            "reward_once": True,
+            "min_total_xp": 0,
         }
     return {
         "id": level.id,
@@ -128,6 +143,9 @@ def level_badge(level: OperatorLevel | None) -> dict:
         "color": level.color,
         "icon": level.icon,
         "sort_order": level.sort_order,
+        "reward_coins": level.reward_coins,
+        "reward_once": level.reward_once,
+        "min_total_xp": level.min_total_xp,
     }
 
 
@@ -174,6 +192,7 @@ def operator_level_metrics(
         "efficiency": round(report.efficiency_percent or 0, 2) if report else 0,
         "penalty_minutes": round(report.penalty_minutes or 0, 2) if report else 0,
         "final_points": round(report.final_points or 0, 2) if report else 0,
+        "total_xp": 0,
     }
     if include_tests:
         metrics["test_percent"] = _test_percent(db, operator.id, period_start, period_end)
@@ -210,8 +229,71 @@ def rule_gap(rule: OperatorLevelRule, metrics: dict) -> dict:
 
 
 def level_matches(level: OperatorLevel, metrics: dict) -> bool:
+    if (level.min_total_xp or 0) > float(metrics.get("total_xp") or 0):
+        return False
     required_rules = [r for r in level.rules if r.is_required]
     return all(_rule_ok(rule, metrics.get(rule.metric_code, 0)) for rule in required_rules)
+
+
+def _level_sort(level: OperatorLevel | None) -> tuple[int, int]:
+    if not level:
+        return (-1, -1)
+    return (level.sort_order or 0, level.id or 0)
+
+
+def _level_reward_row(db: Session, operator_id: int, level_id: int) -> OperatorLevelReward | None:
+    return db.scalar(
+        select(OperatorLevelReward).where(
+            OperatorLevelReward.operator_id == operator_id,
+            OperatorLevelReward.level_id == level_id,
+        )
+    )
+
+
+def _award_level_reward_if_needed(
+    db: Session,
+    operator: Operator,
+    level: OperatorLevel,
+    actor: User | None,
+    old_level: OperatorLevel | None,
+    change_type: str,
+) -> OperatorLevelReward | None:
+    if not level.reward_once or (level.reward_coins or 0) <= 0:
+        return None
+    if old_level is None or _level_sort(level) <= _level_sort(old_level):
+        return None
+    if _level_reward_row(db, operator.id, level.id):
+        return None
+
+    reward = OperatorLevelReward(
+        operator_id=operator.id,
+        level_id=level.id,
+        reward_coins=level.reward_coins,
+        source_type="level_up",
+    )
+    db.add(reward)
+    db.flush()
+
+    transaction = add_transaction(
+        db,
+        operator,
+        level.reward_coins,
+        "level_up",
+        f"Бонус за достижение уровня: {level.name}",
+        created_by=actor,
+        source_type="level_up",
+        source_id=reward.id,
+        metadata={
+            "level_id": level.id,
+            "level_code": level.code,
+            "level_name": level.name,
+            "change_type": change_type,
+            "old_level_id": old_level.id if old_level else None,
+        },
+    )
+    db.flush()
+    reward.coin_transaction_id = transaction.id
+    return reward
 
 
 # Простой кеш active_levels на уровне сессии БД — identity map SQLAlchemy
@@ -267,6 +349,7 @@ def assign_auto_level(
         raise RuntimeError("Operator levels are not configured")
 
     old_level_id = current.level_id if current else None
+    old_level = db.get(OperatorLevel, old_level_id) if old_level_id else None
     if not current:
         current = OperatorLevelAssignment(operator_id=operator.id, level_id=new_level.id)
         db.add(current)
@@ -283,15 +366,23 @@ def assign_auto_level(
     current.calculated_to = period_end or (report.period_end if report else None)
 
     if old_level_id != new_level.id:
+        reward = _award_level_reward_if_needed(db, operator, new_level, actor, old_level, "auto")
         db.add(OperatorLevelHistory(
             operator_id=operator.id,
             old_level_id=old_level_id,
             new_level_id=new_level.id,
             change_type="auto",
             reason="automatic_recalculation",
-            comment="Автоматический расчёт уровня",
+            comment=(
+                f"Автоматический расчёт уровня. Начислено {reward.reward_coins} коинов."
+                if reward else "Автоматический расчёт уровня. Бонусы не пересчитаны."
+            ),
             changed_by=actor.id if actor else None,
-            metadata_json=json.dumps({"metrics": metrics}, ensure_ascii=False),
+            metadata_json=json.dumps({
+                "metrics": metrics,
+                "reward_coins": reward.reward_coins if reward else 0,
+                "coin_transaction_id": reward.coin_transaction_id if reward else None,
+            }, ensure_ascii=False),
         ))
     return current
 
@@ -306,6 +397,7 @@ def assign_manual_level(
 ) -> OperatorLevelAssignment:
     current = _assignment(db, operator.id)
     old_level_id = current.level_id if current else None
+    old_level = db.get(OperatorLevel, old_level_id) if old_level_id else None
     if not current:
         current = OperatorLevelAssignment(operator_id=operator.id, level_id=level.id)
         db.add(current)
@@ -319,14 +411,25 @@ def assign_manual_level(
     current.assigned_at = now_utc()
     current.updated_at = now_utc()
 
+    reward = None
+    if old_level_id != level.id:
+        reward = _award_level_reward_if_needed(db, operator, level, actor, old_level, "manual")
+
     db.add(OperatorLevelHistory(
         operator_id=operator.id,
         old_level_id=old_level_id,
         new_level_id=level.id,
         change_type="manual",
         reason=current.manual_reason,
-        comment=current.manual_comment,
+        comment=(
+            (current.manual_comment + " " if current.manual_comment else "")
+            + (f"Начислено {reward.reward_coins} коинов." if reward else "Бонусы не пересчитаны.")
+        ).strip(),
         changed_by=actor.id,
+        metadata_json=json.dumps({
+            "reward_coins": reward.reward_coins if reward else 0,
+            "coin_transaction_id": reward.coin_transaction_id if reward else None,
+        }, ensure_ascii=False),
     ))
     return current
 
@@ -354,6 +457,8 @@ def operator_level_summary(
     higher_levels = [lvl for lvl in levels if level and lvl.sort_order > level.sort_order]
     next_level = higher_levels[0] if higher_levels else None
     gaps = [rule_gap(rule, metrics) for rule in (next_level.rules if next_level else [])]
+    current_reward = _level_reward_row(db, operator.id, level.id) if level else None
+    next_reward = _level_reward_row(db, operator.id, next_level.id) if next_level else None
 
     return {
         "operator_id": operator.id,
@@ -368,6 +473,20 @@ def operator_level_summary(
         "manual_reason": assignment.manual_reason if assignment else None,
         "manual_comment": assignment.manual_comment if assignment else None,
         "assigned_at": assignment.assigned_at if assignment else None,
+        "current_level_reward": {
+            "level_id": level.id,
+            "reward_coins": level.reward_coins,
+            "received": bool(current_reward),
+            "coin_transaction_id": current_reward.coin_transaction_id if current_reward else None,
+            "created_at": current_reward.created_at if current_reward else None,
+        } if level else None,
+        "next_level_reward": {
+            "level_id": next_level.id,
+            "level_name": next_level.name,
+            "reward_coins": next_level.reward_coins,
+            "received": bool(next_reward),
+            "coin_transaction_id": next_reward.coin_transaction_id if next_reward else None,
+        } if next_level else None,
     }
 
 
@@ -406,5 +525,7 @@ def level_history_rows(db: Session, operator_id: int | None = None, limit: int =
             "changed_by_name": changed_by.full_name if changed_by else "Система",
             "changed_at": item.changed_at,
             "metadata": metadata,
+            "reward_coins": (metadata or {}).get("reward_coins", 0),
+            "coin_transaction_id": (metadata or {}).get("coin_transaction_id"),
         })
     return rows
