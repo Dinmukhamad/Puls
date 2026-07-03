@@ -5,8 +5,11 @@ export PYTHONPATH=/app
 echo "[start] PORT=$PORT"
 
 echo "[start] Running alembic upgrade head..."
-alembic upgrade head
-echo "[start] Migrations complete"
+if alembic upgrade head; then
+  echo "[start] Migrations complete"
+else
+  echo "[start] WARNING: Alembic failed; continuing with startup schema compatibility repair"
+fi
 
 # ВАЖНО: --workers 1.
 # Кеши рейтинга (rating._RATING_CACHE) и аналитики (analytics_cache) — process-local
