@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -14,10 +13,10 @@ class ShopItemCreate(BaseModel):
 
 
 class ShopItemUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    price: Optional[int] = Field(default=None, gt=0)
-    is_active: Optional[bool] = None
+    title: str | None = None
+    description: str | None = None
+    price: int | None = Field(default=None, gt=0)
+    is_active: bool | None = None
 
 
 class ShopItemRead(BaseModel):
@@ -45,10 +44,10 @@ class ShopPurchaseRead(BaseModel):
     shop_item_id: int
     price: int
     status: str
-    reject_reason: Optional[str]
+    reject_reason: str | None
     created_at: datetime
-    reviewed_by_user_id: Optional[int]
-    reviewed_at: Optional[datetime]
-    completed_at: Optional[datetime]
+    reviewed_by_user_id: int | None
+    reviewed_at: datetime | None
+    completed_at: datetime | None
 
     model_config = {"from_attributes": True}
