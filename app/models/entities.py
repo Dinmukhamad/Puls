@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    JSON,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -118,6 +119,11 @@ class OperatorLevel(Base):
     icon: Mapped[str] = mapped_column(String(64), default="")
     sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    min_total_xp: Mapped[int] = mapped_column(Integer, default=0)
+    reward_coins: Mapped[int] = mapped_column(Integer, default=0)
+    reward_once: Mapped[bool] = mapped_column(Boolean, default=True)
+    coin_multiplier_percent: Mapped[float] = mapped_column(Float, default=0)
+    shop_discount_percent: Mapped[float] = mapped_column(Float, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
@@ -225,6 +231,9 @@ class CoinTransaction(Base):
     comment: Mapped[str] = mapped_column(Text)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     related_purchase_id: Mapped[int | None] = mapped_column(ForeignKey("shop_purchases.id"), nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
     operator: Mapped[Operator] = relationship(back_populates="transactions")
@@ -238,10 +247,32 @@ class ShopItem(Base):
     title: Mapped[str] = mapped_column(String(180))
     description: Mapped[str] = mapped_column(Text, default="")
     price: Mapped[int] = mapped_column(Integer)
+    min_level_id: Mapped[int | None] = mapped_column(ForeignKey("operator_levels.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
     purchases: Mapped[list[ShopPurchase]] = relationship(back_populates="shop_item")
+    min_level: Mapped[OperatorLevel | None] = relationship("OperatorLevel")
+
+
+class OperatorLevelReward(Base):
+    """Разовая награда коинов за достижение уровня."""
+    __tablename__ = "operator_level_rewards"
+    __table_args__ = (
+        UniqueConstraint("operator_id", "level_id", name="uq_operator_level_reward"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    level_id: Mapped[int] = mapped_column(ForeignKey("operator_levels.id"), index=True)
+    coin_transaction_id: Mapped[int | None] = mapped_column(ForeignKey("coin_transactions.id"), nullable=True)
+    reward_coins: Mapped[int] = mapped_column(Integer, default=0)
+    source_type: Mapped[str] = mapped_column(String(50), default="level_up")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+
+    operator: Mapped[Operator] = relationship("Operator")
+    level: Mapped[OperatorLevel] = relationship("OperatorLevel")
+    coin_transaction: Mapped[CoinTransaction | None] = relationship("CoinTransaction")
 
 
 class ShopPurchase(Base):
