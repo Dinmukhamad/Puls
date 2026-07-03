@@ -9,6 +9,7 @@ class ShopItemCreate(BaseModel):
     title: str
     description: str = ""
     price: int = Field(gt=0)
+    min_level_id: int | None = None
     is_active: bool = True
 
 
@@ -16,6 +17,7 @@ class ShopItemUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     price: int | None = Field(default=None, gt=0)
+    min_level_id: int | None = None
     is_active: bool | None = None
 
 
@@ -24,6 +26,7 @@ class ShopItemRead(BaseModel):
     title: str
     description: str
     price: int
+    min_level_id: int | None = None
     is_active: bool
     created_at: datetime
 
