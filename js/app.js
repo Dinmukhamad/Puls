@@ -653,6 +653,7 @@ async function renderOperatorLevelsSettings() {
       penalty_minutes: 'Штрафы',
       final_points: 'Итоговые баллы',
       test_percent: 'Тесты',
+      total_xp: 'XP',
     }[code] || code;
   }
 
@@ -690,8 +691,9 @@ async function renderOperatorLevelsSettings() {
             <strong>${esc(level.name)}</strong>
             ${levelBadgeHtml(level)}
             <span class="level-order">#${level.sort_order ?? 0}</span>
+            ${level.reward_coins ? `<span class="level-order">+${level.reward_coins} ₡</span>` : ''}
           </div>
-          <div class="level-desc">${esc(level.description || 'Описание не задано')}</div>
+          <div class="level-desc">${esc(level.description || 'Описание не задано')}${level.min_total_xp ? ` · XP от ${level.min_total_xp}` : ''}</div>
         </div>
         <div class="level-rules-cell">
           ${(level.rules || []).length ? (level.rules || []).map(rule => `
@@ -756,6 +758,16 @@ function showOperatorLevelForm(level = null) {
         <input id="lvl-order" class="form-input" type="number" value="${esc(level?.sort_order ?? ((STATE.operatorLevels.length + 1) * 10))}">
       </div>
     </div>
+    <div class="form-grid-2">
+      <div class="form-group">
+        <label class="form-label">Минимальный XP</label>
+        <input id="lvl-min-xp" class="form-input" type="number" min="0" value="${esc(level?.min_total_xp ?? 0)}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Бонус коинов</label>
+        <input id="lvl-reward-coins" class="form-input" type="number" min="0" value="${esc(level?.reward_coins ?? 0)}">
+      </div>
+    </div>
     <div class="form-group">
       <label class="form-label">Описание</label>
       <textarea id="lvl-description" class="form-input" rows="3" placeholder="Короткое описание уровня">${esc(level?.description || '')}</textarea>
@@ -772,13 +784,16 @@ async function submitOperatorLevelForm(levelId) {
   const color = document.getElementById('lvl-color')?.value.trim() || '#64748B';
   const description = document.getElementById('lvl-description')?.value.trim() || '';
   const sort_order = Number(document.getElementById('lvl-order')?.value || 0);
+  const min_total_xp = Number(document.getElementById('lvl-min-xp')?.value || 0);
+  const reward_coins = Number(document.getElementById('lvl-reward-coins')?.value || 0);
   if (!name || (!levelId && !code)) {
     if (err) { err.textContent = 'Заполните название и код'; err.className = 'status-line status-error'; }
     return;
   }
   try {
-    if (levelId) await api.updateOperatorLevel(levelId, { name, color, description, sort_order });
-    else await api.createOperatorLevel({ code, name, color, description, icon: '', sort_order, is_active: true });
+    const payload = { name, color, description, sort_order, min_total_xp, reward_coins, reward_once: true };
+    if (levelId) await api.updateOperatorLevel(levelId, payload);
+    else await api.createOperatorLevel({ code, icon: '', is_active: true, ...payload });
     closeModal();
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
@@ -800,6 +815,7 @@ async function addOperatorLevelRuleUi(levelId) {
           <option value="penalty_minutes">Штрафы</option>
           <option value="final_points">Итоговые баллы</option>
           <option value="test_percent">Тесты</option>
+          <option value="total_xp">XP</option>
         </select>
       </div>
       <div class="form-group">
@@ -1928,15 +1944,20 @@ function renderShop() {
 }
 
 function shopCard(item, balance, role) {
-  const canBuy = role === 'operator' && balance >= item.price;
+  const levels = STATE.operatorLevels || [];
+  const requiredLevel = item.min_level_id ? levels.find(l => l.id === item.min_level_id) : null;
+  const currentLevel = STATE.myLevel?.level || null;
+  const levelLocked = role === 'operator' && requiredLevel && (!currentLevel || (currentLevel.sort_order || 0) < (requiredLevel.sort_order || 0));
+  const canBuy = role === 'operator' && balance >= item.price && !levelLocked;
   const needMore = role === 'operator' && balance < item.price ? item.price - balance : 0;
   return `<div class="shop-card ${canBuy?'shop-card-available':''}">
     <div class="shop-card-title">${esc(item.title)}</div>
     <div class="shop-card-desc">${esc(item.description)}</div>
     <div class="shop-card-price">${item.price} <span class="price-unit">коинов</span></div>
+    ${requiredLevel ? `<div class="shop-card-desc">Доступно с уровня «${esc(requiredLevel.name)}»</div>` : ''}
     <div class="shop-card-footer">
       ${role==='operator' ? `<button class="buy-btn ${canBuy?'btn-primary':'btn-disabled'}" data-id="${item.id}" ${canBuy?'':'disabled'}>
-        ${canBuy ? 'Купить' : `Нужно ещё ${needMore} ₡`}</button>` : ''}
+        ${canBuy ? 'Купить' : (levelLocked ? `Доступно с уровня «${esc(requiredLevel.name)}»` : `Нужно ещё ${needMore} ₡`)}</button>` : ''}
       ${isAdmin(role) ? `<button class="edit-item-btn btn-outline btn-sm" data-id="${item.id}">Изменить</button>` : ''}
     </div>
   </div>`;
@@ -4000,6 +4021,10 @@ function positionLabel(s) {
 }
 
 function showAddItemModal() {
+  const levelOptions = (STATE.operatorLevels || [])
+    .filter(l => l.is_active)
+    .map(l => `<option value="${l.id}">${esc(l.name)}</option>`)
+    .join('');
   showModal(`
     <h3 class="modal-title">Добавить бонус в магазин</h3>
     <div class="form-group"><label class="form-label">Название</label>
@@ -4008,6 +4033,11 @@ function showAddItemModal() {
       <input id="ni-desc" class="form-input" placeholder="Подарочная карта в кофейню"></div>
     <div class="form-group"><label class="form-label">Цена (коины)</label>
       <input id="ni-price" class="form-input" type="number" min="1" placeholder="120"></div>
+    <div class="form-group"><label class="form-label">Минимальный уровень</label>
+      <select id="ni-min-level" class="form-select">
+        <option value="">Без ограничения</option>
+        ${levelOptions}
+      </select></div>
     <div id="ni-err" class="status-line"></div>
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitAddItem()">Добавить</button>`);
 }
@@ -4015,16 +4045,22 @@ async function submitAddItem() {
   const title = document.getElementById('ni-title')?.value?.trim();
   const desc  = document.getElementById('ni-desc')?.value?.trim() || '';
   const price = +document.getElementById('ni-price')?.value;
+  const minLevelRaw = document.getElementById('ni-min-level')?.value || '';
+  const min_level_id = minLevelRaw ? Number(minLevelRaw) : null;
   const err   = document.getElementById('ni-err');
   if (!title || !price) { err.textContent = 'Заполните название и цену'; return; }
   try {
-    await api.createShopItem({ title, description: desc, price });
+    await api.createShopItem({ title, description: desc, price, min_level_id });
     closeModal(); showToast('Бонус добавлен', 'ok');
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }
 }
 
 function showEditItemModal(item) {
+  const levelOptions = (STATE.operatorLevels || [])
+    .filter(l => l.is_active)
+    .map(l => `<option value="${l.id}" ${item.min_level_id === l.id ? 'selected' : ''}>${esc(l.name)}</option>`)
+    .join('');
   showModal(`
     <h3 class="modal-title">Редактировать бонус</h3>
     <div class="form-group"><label class="form-label">Название</label>
@@ -4033,6 +4069,11 @@ function showEditItemModal(item) {
       <input id="ei-desc" class="form-input" value="${esc(item.description)}"></div>
     <div class="form-group"><label class="form-label">Цена (коины)</label>
       <input id="ei-price" class="form-input" type="number" value="${item.price}"></div>
+    <div class="form-group"><label class="form-label">Минимальный уровень</label>
+      <select id="ei-min-level" class="form-select">
+        <option value="" ${!item.min_level_id ? 'selected' : ''}>Без ограничения</option>
+        ${levelOptions}
+      </select></div>
     <div class="form-group"><label class="form-label">Статус</label>
       <select id="ei-active" class="form-select">
         <option value="true" ${item.is_active?'selected':''}>Активен</option>
@@ -4045,11 +4086,13 @@ async function submitEditItem(id) {
   const title     = document.getElementById('ei-title')?.value?.trim();
   const description = document.getElementById('ei-desc')?.value?.trim() || '';
   const price     = +document.getElementById('ei-price')?.value;
+  const minLevelRaw = document.getElementById('ei-min-level')?.value || '';
+  const min_level_id = minLevelRaw ? Number(minLevelRaw) : null;
   const is_active = document.getElementById('ei-active')?.value === 'true';
   const err       = document.getElementById('ei-err');
   if (!title || !price) { err.textContent = 'Заполните поля'; return; }
   try {
-    await api.updateShopItem(id, { title, description, price, is_active });
+    await api.updateShopItem(id, { title, description, price, min_level_id, is_active });
     closeModal(); showToast('Бонус обновлён', 'ok');
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }
