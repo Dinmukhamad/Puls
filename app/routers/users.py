@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
-from typing import Optional
-
-logger = logging.getLogger(__name__)
+from datetime import date as _date
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, or_, select
@@ -23,6 +20,8 @@ from app.schemas.users import (
     UserUpdateRequest,
 )
 from app.services.operator_levels import ensure_default_levels, operator_level_badge
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -55,7 +54,7 @@ def _active_admin_count(db: Session) -> int:
     return db.scalar(select(func.count(User.id)).where(User.role == "admin", User.is_active.is_(True))) or 0
 
 
-def _ensure_not_last_admin(db: Session, user: User, new_role: Optional[str] = None, new_active: Optional[bool] = None) -> None:
+def _ensure_not_last_admin(db: Session, user: User, new_role: str | None = None, new_active: bool | None = None) -> None:
     would_stop_being_admin = (
         user.role == "admin"
         and user.is_active
@@ -83,7 +82,7 @@ def _sync_active_from_status(user: User) -> None:
     user.is_active = user.status == "active"
 
 
-def _group_name(db: Session, user: User, operator: Optional[Operator] = None) -> Optional[str]:
+def _group_name(db: Session, user: User, operator: Operator | None = None) -> str | None:
     if operator and operator.group_name:
         return operator.group_name
     if user.group_id:
@@ -92,13 +91,11 @@ def _group_name(db: Session, user: User, operator: Optional[Operator] = None) ->
     return None
 
 
-def _operator_for_user(db: Session, user: User) -> Optional[Operator]:
+def _operator_for_user(db: Session, user: User) -> Operator | None:
     if user.operator_id:
         return db.get(Operator, user.operator_id)
     return None
 
-
-from datetime import date as _date
 
 def _tenure_days(operator) -> int | None:
     """Стаж оператора в днях от start_date (или created_at) до сегодня."""
@@ -170,10 +167,10 @@ def _visible_user_stmt(db: Session, actor: User):
 
 @router.get("", response_model=UserListOut)
 def list_users(
-    role: Optional[str] = None,
-    group_id: Optional[int] = None,
-    status: Optional[str] = None,
-    search: Optional[str] = None,
+    role: str | None = None,
+    group_id: int | None = None,
+    status: str | None = None,
+    search: str | None = None,
     page: int = 1,
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -201,7 +198,7 @@ def list_users(
     level_cache: dict = {}
     if operator_ids:
         try:
-            from app.models.entities import OperatorLevelAssignment, OperatorLevel
+            from app.models.entities import OperatorLevel, OperatorLevelAssignment
             rows = list(db.execute(
                 select(OperatorLevelAssignment, OperatorLevel)
                 .join(OperatorLevel, OperatorLevelAssignment.level_id == OperatorLevel.id)
