@@ -9,6 +9,7 @@ from app.routers import (
     shop,
     wallet,
     weekly_results,
+    wheel,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "shop",
     "wallet",
     "weekly_results",
+    "wheel",
 ]

@@ -280,6 +280,17 @@ const api = (() => {
   async function manualOperatorLevel(operatorId, payload) { return req('POST', `/api/admin/operators/${operatorId}/level/manual`, payload); }
   async function listOperatorLevelRewards() { return req('GET', '/api/admin/operator-levels/rewards'); }
 
+  /* ── Wheel of WOW ───────────────────────────────────────── */
+  async function getWheelStatus() { return req('GET', '/api/wheel/status'); }
+  async function getWheelPrizes() { return req('GET', '/api/wheel/prizes'); }
+  async function spinWheel() { return req('POST', '/api/wheel/spin'); }
+  async function getWheelMyHistory() { return req('GET', '/api/wheel/my-history'); }
+  async function getWheelSpins(params) {
+    const qs = new URLSearchParams(params || {}).toString();
+    return req('GET', '/api/admin/wheel/spins' + (qs ? '?' + qs : ''));
+  }
+  async function issueWheelTicket(payload) { return req('POST', '/api/admin/wheel/tickets', payload); }
+
   return {
     getToken, login, me, logout,
     listOperators, getOperator, myOperator, createOperator, updateOperator,
@@ -305,6 +316,7 @@ const api = (() => {
     createOperatorLevel, updateOperatorLevel, deleteOperatorLevel,
     addOperatorLevelRule, updateOperatorLevelRule, deleteOperatorLevelRule,
     recalculateOperatorLevels, manualOperatorLevel, listOperatorLevelRewards,
+    getWheelStatus, getWheelPrizes, spinWheel, getWheelMyHistory, getWheelSpins, issueWheelTicket,
     loginOperator: login,
     _base,
     _req: req,

@@ -31,6 +31,7 @@ from app.routers import (
     users,
     wallet,
     weekly_results,
+    wheel,
     work_norms,
 )
 
@@ -72,9 +73,11 @@ def _run_startup_tasks() -> None:
         try:
             from app.services.operator_levels import ensure_default_levels
             from app.services.seed import seed_database
+            from app.services.wheel_seed import ensure_default_wheel
             db = SessionLocal()
             try:
                 ensure_default_levels(db)
+                ensure_default_wheel(db)
                 seed_database(db)
                 db.commit()
                 logger.info("[startup] Seed OK")
@@ -198,6 +201,8 @@ app.include_router(dashboard.router,      prefix=settings.api_prefix)
 app.include_router(tests.router,          prefix=settings.api_prefix)
 app.include_router(tests.admin_router,    prefix=settings.api_prefix)
 app.include_router(work_norms.router,     prefix=settings.api_prefix)
+app.include_router(wheel.router,          prefix=settings.api_prefix)
+app.include_router(wheel.admin_router,    prefix=settings.api_prefix)
 
 
 @app.get("/health")

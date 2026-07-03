@@ -23,6 +23,7 @@ def add_transaction(
     source_type: str | None = None,
     source_id: int | None = None,
     metadata: dict | None = None,
+    related_spin_id: int | None = None,
 ) -> CoinTransaction:
     if not comment.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Комментарий обязателен")
@@ -43,6 +44,7 @@ def add_transaction(
         comment=comment.strip(),
         created_by_user_id=created_by.id if created_by else None,
         related_purchase_id=purchase.id if purchase else None,
+        related_spin_id=related_spin_id,
         source_type=source_type,
         source_id=source_id,
         metadata_json=metadata,

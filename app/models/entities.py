@@ -231,6 +231,7 @@ class CoinTransaction(Base):
     comment: Mapped[str] = mapped_column(Text)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     related_purchase_id: Mapped[int | None] = mapped_column(ForeignKey("shop_purchases.id"), nullable=True)
+    related_spin_id: Mapped[int | None] = mapped_column(ForeignKey("wheel_spins.id"), nullable=True)
     source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
@@ -598,3 +599,82 @@ class TestAttemptAnswer(Base):
 
     attempt: Mapped[TestAttempt] = relationship(back_populates="answers")
     question: Mapped[TestQuestion] = relationship("TestQuestion")
+
+
+class WheelCampaign(Base):
+    """Wheel of WOW campaign. Normally there is one active campaign."""
+    __tablename__ = "wheel_campaigns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    max_spins_per_day: Mapped[int] = mapped_column(Integer, default=1)
+    max_spins_per_week: Mapped[int] = mapped_column(Integer, default=3)
+    ticket_ttl_days: Mapped[int] = mapped_column(Integer, default=3)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    prizes: Mapped[list["WheelPrize"]] = relationship(back_populates="campaign", cascade="all, delete-orphan")
+
+
+class WheelPrize(Base):
+    """Wheel sector. There is no empty prize sector."""
+    __tablename__ = "wheel_prizes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("wheel_campaigns.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    prize_type: Mapped[str] = mapped_column(String(32))
+    amount: Mapped[int] = mapped_column(Integer, default=0)
+    weight: Mapped[int] = mapped_column(Integer, default=1)
+    color: Mapped[str] = mapped_column(String(16), default="#38BDF8")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    max_wins_total: Mapped[int] = mapped_column(Integer, default=0)
+    max_wins_per_operator: Mapped[int] = mapped_column(Integer, default=0)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    campaign: Mapped[WheelCampaign] = relationship(back_populates="prizes")
+
+
+class WheelTicket(Base):
+    """One-time ticket for a Wheel of WOW spin."""
+    __tablename__ = "wheel_tickets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("wheel_campaigns.id"), index=True)
+    reason_type: Mapped[str] = mapped_column(String(40), default="manual")
+    reason_text: Mapped[str] = mapped_column(Text, default="")
+    source_type: Mapped[str] = mapped_column(String(40), default="manual")
+    source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="available", index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    operator: Mapped[Operator] = relationship("Operator")
+
+
+class WheelSpin(Base):
+    """Recorded spin result with a JSON snapshot of the prize."""
+    __tablename__ = "wheel_spins"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("wheel_tickets.id"), index=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("wheel_campaigns.id"), index=True)
+    prize_id: Mapped[int | None] = mapped_column(ForeignKey("wheel_prizes.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="created", index=True)
+    result_payload_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    operator: Mapped[Operator] = relationship("Operator")
+    ticket: Mapped[WheelTicket] = relationship("WheelTicket")
+    prize: Mapped[WheelPrize | None] = relationship("WheelPrize")

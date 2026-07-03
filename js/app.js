@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Puls — Main App v2
  * FastAPI backend, full admin panel per TZ
  */
@@ -334,7 +334,7 @@ function initNav() {
 
 // Кеш отрендеренных разделов — не перерисовываем если уже есть актуальный HTML
 const VIEW_CACHE = {};
-const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report']); // эти разделы всегда рендерим заново
+const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel']); // эти разделы всегда рендерим заново
 
 function invalidateViewCache(view) {
   if (view) delete VIEW_CACHE[view];
@@ -387,6 +387,7 @@ function renderView(view) {
     case 'operators': renderAdminOperators(); break;
     case 'operator-levels': renderOperatorLevelsSettings(); break;
     case 'coins':    renderCoins();    break;
+    case 'wheel':    renderWheel();    break;
     case 'manual':   renderManual();   break;
     case 'requests': renderRequests(); break;
     case 'history':  renderHistory();  break;
@@ -498,8 +499,8 @@ async function bootApp() {
 
   // Restore last viewed section after F5 reload
   const restoredRoute = initialRouteForRole(role);
-  const adminViews = ['summary','operators','operator-levels','coins','groups','shop','rating','cabinet','period-report','analytics','tests'];
-  const operatorViews = ['cabinet','rating','shop','tests'];
+  const adminViews = ['summary','operators','operator-levels','coins','groups','shop','wheel','rating','cabinet','period-report','analytics','tests'];
+  const operatorViews = ['cabinet','rating','shop','wheel','tests'];
   const allowedViews = isAdmin(role) ? adminViews : operatorViews;
   const defaultView = isAdmin(role) ? 'summary' : 'cabinet';
   const start = allowedViews.includes(restoredRoute.view) ? restoredRoute.view : defaultView;
@@ -600,8 +601,8 @@ function buildViews(role) {
   const shell = document.getElementById('app-shell');
   if (!shell) return;
   const views = isAdmin(role)
-    ? ['summary', 'operators', ...(role === 'manager' || role === 'admin' ? ['operator-levels'] : []), 'coins', 'shop', 'tests', ...(canManageGroups(role) ? ['groups'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
-    : ['cabinet', 'rating', 'shop', 'tests'];
+    ? ['summary', 'operators', ...(role === 'manager' || role === 'admin' ? ['operator-levels'] : []), 'coins', 'shop', 'wheel', 'tests', ...(canManageGroups(role) ? ['groups'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
+    : ['cabinet', 'rating', 'shop', 'wheel', 'tests'];
   shell.innerHTML = views.map(v => `<section class="app-view" id="view-${v}"></section>`).join('');
 }
 
@@ -610,8 +611,8 @@ function renderSidebar(role) {
     const t = link.dataset.navTarget;
     const adminViews = ['summary','operators','coins','period-report','analytics'];
     const managerViews = ['operator-levels'];
-    const operatorViews = ['cabinet','rating','shop','tests'];
-    const sharedViews = ['shop','rating','cabinet','tests']; // «Тесты» доступен всем ролям (ТЗ п.1), разный функционал внутри
+    const operatorViews = ['cabinet','rating','shop','wheel','tests'];
+    const sharedViews = ['shop','rating','cabinet','wheel','tests']; // «Тесты» и «Колесо» доступны всем ролям
     let show = false;
     if (isAdmin(role)) {
       show = adminViews.includes(t) || sharedViews.includes(t);
@@ -7226,6 +7227,386 @@ async function renderRatingProgressTab(content) {
 
 window.renderRating = renderRating;
 
+const WHEEL_PRIZE_ICON = {
+  coins: '🪙', shop_discount: '🏷️', extra_ticket: '🎟️', badge: '🏅', manual_reward: '🎁',
+};
+
+function wheelPrizeTypeLabel(t) {
+  return { coins: 'коины', shop_discount: 'скидка', extra_ticket: 'билет', badge: 'бейдж', manual_reward: 'приз' }[t] || t;
+}
+
+function renderWheel() {
+  const el = document.getElementById('view-wheel');
+  if (!el) return;
+  const role = STATE.user?.role || 'operator';
+  if (isAdmin(role)) {
+    renderWheelStaffView(el);
+  } else {
+    renderWheelOperatorView(el);
+  }
+}
+
+/* ---------- Оператор: колесо ---------- */
+async function renderWheelOperatorView(el) {
+  el.innerHTML = `
+    <div class="view-header">
+      <div>
+        <div class="section-kicker">Геймификация</div>
+        <h2 class="section-title">🎡 Wheel of WOW</h2>
+      </div>
+    </div>
+    <div class="panel"><div class="empty-state"><div class="loading-spinner"></div><p>Загрузка колеса…</p></div></div>`;
+
+  let status, prizes, history;
+  try {
+    [status, prizes, history] = await Promise.all([
+      api.getWheelStatus(),
+      api.getWheelPrizes(),
+      api.getWheelMyHistory().catch(() => ({ items: [] })),
+    ]);
+  } catch (err) {
+    el.innerHTML = `<div class="view-header"><h2 class="section-title">🎡 Wheel of WOW</h2></div>
+      <div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+
+  const items = prizes.items || [];
+  if (!status.campaign || !items.length) {
+    el.innerHTML = `<div class="view-header"><h2 class="section-title">🎡 Wheel of WOW</h2></div>
+      <div class="panel"><div class="empty-state"><p>Колесо сейчас недоступно. Загляните позже.</p></div></div>`;
+    return;
+  }
+
+  const tickets = status.available_tickets || 0;
+  const canSpin = tickets > 0
+    && (!status.max_spins_per_day || status.spins_used_today < status.max_spins_per_day)
+    && (!status.max_spins_per_week || status.spins_used_this_week < status.max_spins_per_week);
+
+  const ticketCard = tickets > 0
+    ? `<div class="wheel-ticket-badge wheel-ticket-have">
+         <span class="wheel-ticket-count">${tickets}</span>
+         <span>${tickets === 1 ? 'доступная прокрутка' : 'доступных прокруток'}</span>
+         ${status.next_ticket_reason ? `<div class="wheel-ticket-reason">Причина: ${esc(status.next_ticket_reason)}</div>` : ''}
+       </div>`
+    : `<div class="wheel-ticket-badge wheel-ticket-none">
+         <strong>У вас пока нет доступных прокруток.</strong>
+         <div class="wheel-hint">Как получить билет:<br>• выполнить дневную цель (эффективность, норма часов, без опозданий);<br>• попасть в топ-3 рейтинга;<br>• получить билет от супервайзера.</div>
+       </div>`;
+
+  el.innerHTML = `
+    <div class="view-header">
+      <div>
+        <div class="section-kicker">Геймификация</div>
+        <h2 class="section-title">🎡 Wheel of WOW</h2>
+      </div>
+      <div class="wheel-limits">
+        <span title="Прокруток сегодня">Сегодня: ${status.spins_used_today}/${status.max_spins_per_day || '∞'}</span>
+        <span title="Прокруток за неделю">Неделя: ${status.spins_used_this_week}/${status.max_spins_per_week || '∞'}</span>
+      </div>
+    </div>
+
+    <div class="wheel-layout">
+      <div class="panel wheel-stage-panel">
+        <div class="wheel-stage">
+          <div class="wheel-pointer">▼</div>
+          <div class="wheel-rotor" id="wheel-rotor">${buildWheelSvg(items)}</div>
+          <div class="wheel-hub">WOW</div>
+        </div>
+        <div class="wheel-controls">
+          ${ticketCard}
+          <button class="btn-primary wheel-spin-btn" id="wheel-spin-btn" ${canSpin ? '' : 'disabled'}>
+            ${canSpin ? 'Крутить колесо' : (tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет билетов')}
+          </button>
+        </div>
+      </div>
+
+      <div class="panel wheel-history-panel">
+        <h3 class="panel-title">Мои выигрыши</h3>
+        <div id="wheel-history-body">${buildWheelHistory(history.items || [])}</div>
+      </div>
+    </div>`;
+
+  // Раскладываем сектора по кругу для дальнейшего расчёта угла остановки
+  STATE.wheel = { items, rotation: 0, spinning: false };
+
+  const btn = document.getElementById('wheel-spin-btn');
+  if (btn && canSpin) btn.onclick = () => doWheelSpin(el);
+}
+
+// Строит SVG-колесо: N равных секторов, подписи и иконки
+function buildWheelSvg(items) {
+  const n = items.length;
+  const cx = 160, cy = 160, r = 158;
+  const seg = 360 / n;
+  let paths = '';
+  let labels = '';
+  for (let i = 0; i < n; i++) {
+    const a0 = i * seg, a1 = (i + 1) * seg;
+    const p0 = wheelPoint(cx, cy, r, a0);
+    const p1 = wheelPoint(cx, cy, r, a1);
+    const large = seg > 180 ? 1 : 0;
+    paths += `<path d="M${cx},${cy} L${p0.x.toFixed(2)},${p0.y.toFixed(2)} A${r},${r} 0 ${large} 1 ${p1.x.toFixed(2)},${p1.y.toFixed(2)} Z" fill="${esc(items[i].color || '#38BDF8')}" stroke="rgba(0,0,0,.15)" stroke-width="1"/>`;
+    const mid = a0 + seg / 2;
+    const lp = wheelPoint(cx, cy, r * 0.66, mid);
+    const icon = WHEEL_PRIZE_ICON[items[i].type] || '★';
+    const short = items[i].type === 'coins' ? `+${items[i].amount}` : icon;
+    labels += `<text x="${lp.x.toFixed(1)}" y="${lp.y.toFixed(1)}" transform="rotate(${(mid).toFixed(1)} ${lp.x.toFixed(1)} ${lp.y.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" font-size="15" font-weight="700" fill="#0f172a">${esc(short)}</text>`;
+  }
+  return `<svg viewBox="0 0 320 320" class="wheel-svg" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(0,0,0,.2)" stroke-width="2"/>
+    ${paths}${labels}
+  </svg>`;
+}
+
+// Точка на окружности: угол в градусах, 0° = верх (12 часов), по часовой
+function wheelPoint(cx, cy, r, deg) {
+  const rad = (deg - 90) * Math.PI / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function buildWheelHistory(rows) {
+  if (!rows.length) return '<div class="empty-state"><p>Пока пусто. Выиграйте первый приз!</p></div>';
+  return `<ul class="wheel-history-list">${rows.map(r => `
+    <li class="wheel-history-item">
+      <span class="wheel-history-icon">${WHEEL_PRIZE_ICON[r.prize_type] || '★'}</span>
+      <span class="wheel-history-main">
+        <strong>${esc(r.prize)}</strong>
+        ${r.reason ? `<span class="wheel-history-reason">${esc(r.reason)}</span>` : ''}
+      </span>
+      <span class="wheel-history-date">${esc(fmtDate(r.date))}</span>
+    </li>`).join('')}</ul>`;
+}
+
+// Прокрутка: backend выбирает приз, frontend только докручивает колесо к нему
+async function doWheelSpin(el) {
+  const w = STATE.wheel;
+  if (!w || w.spinning) return;
+  const btn = document.getElementById('wheel-spin-btn');
+  const rotor = document.getElementById('wheel-rotor');
+  if (!rotor) return;
+
+  w.spinning = true;
+  if (btn) { btn.disabled = true; btn.textContent = 'Крутим…'; }
+
+  let result;
+  try {
+    result = await api.spinWheel();
+  } catch (err) {
+    w.spinning = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'Крутить колесо'; }
+    showToast(err.message || 'Не удалось прокрутить колесо', 'error');
+    return;
+  }
+
+  // Индекс выигранного сектора
+  const idx = w.items.findIndex(p => p.id === result.prize.id);
+  const n = w.items.length;
+  const seg = 360 / n;
+  const safeIdx = idx >= 0 ? idx : 0;
+  // Центр сектора относительно верхней стрелки; докручиваем так, чтобы он встал наверх.
+  const center = safeIdx * seg + seg / 2;
+  const jitter = (Math.random() - 0.5) * seg * 0.5; // лёгкий разброс внутри сектора
+  const spins = 5; // полных оборотов для эффекта
+  const target = spins * 360 - center - jitter;
+  const from = w.rotation % 360;
+  const total = from + (spins * 360 - center - jitter - (from % 360));
+  w.rotation = target;
+
+  rotor.style.transition = 'transform 4.2s cubic-bezier(0.16, 1, 0.3, 1)';
+  rotor.style.transform = `rotate(${target}deg)`;
+
+  setTimeout(() => {
+    w.spinning = false;
+    showWheelResultModal(result);
+    // Обновляем статус и историю без полной перерисовки колеса (оно уже стоит на призе)
+    refreshWheelSidebar(el);
+  }, 4400);
+}
+
+function showWheelResultModal(result) {
+  const icon = WHEEL_PRIZE_ICON[result.prize.type] || '🎉';
+  const html = `
+    <div class="modal-overlay wheel-result-overlay" id="wheel-result-modal">
+      <div class="modal-card wheel-result-card">
+        <div class="wheel-result-icon">${icon}</div>
+        <h3>Поздравляем!</h3>
+        <p class="wheel-result-prize">${esc(result.prize.title)}</p>
+        <p class="wheel-result-msg">${esc(result.message)}</p>
+        ${result.reason ? `<p class="wheel-result-reason">Причина допуска: ${esc(result.reason)}</p>` : ''}
+        ${result.prize.type === 'coins' ? '<p class="wheel-result-note">Коины уже добавлены на ваш баланс.</p>' : ''}
+        <button class="btn-primary" onclick="document.getElementById('wheel-result-modal')?.remove()">Отлично</button>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+async function refreshWheelSidebar(el) {
+  try {
+    const [status, history] = await Promise.all([
+      api.getWheelStatus(),
+      api.getWheelMyHistory().catch(() => ({ items: [] })),
+    ]);
+    const histBody = document.getElementById('wheel-history-body');
+    if (histBody) histBody.innerHTML = buildWheelHistory(history.items || []);
+    const btn = document.getElementById('wheel-spin-btn');
+    const tickets = status.available_tickets || 0;
+    const canSpin = tickets > 0
+      && (!status.max_spins_per_day || status.spins_used_today < status.max_spins_per_day)
+      && (!status.max_spins_per_week || status.spins_used_this_week < status.max_spins_per_week);
+    if (btn) {
+      btn.disabled = !canSpin;
+      btn.textContent = canSpin ? 'Крутить колесо' : (tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет билетов');
+      if (canSpin) btn.onclick = () => doWheelSpin(el);
+    }
+  } catch { /* тихо: колесо уже показало приз */ }
+}
+
+/* ---------- Супервайзер / руководитель ---------- */
+let _wheelStaffTab = 'history';
+
+async function renderWheelStaffView(el) {
+  el.innerHTML = `
+    <div class="view-header">
+      <div>
+        <div class="section-kicker">Геймификация</div>
+        <h2 class="section-title">🎡 Wheel of WOW</h2>
+      </div>
+      <div class="tab-switch">
+        <button class="tab-btn ${_wheelStaffTab === 'history' ? 'active' : ''}" data-wheel-tab="history">История прокруток</button>
+        <button class="tab-btn ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билет</button>
+      </div>
+    </div>
+    <div id="wheel-staff-body"><div class="panel"><div class="empty-state"><div class="loading-spinner"></div></div></div></div>`;
+
+  el.querySelectorAll('[data-wheel-tab]').forEach(b => {
+    b.onclick = () => { _wheelStaffTab = b.dataset.wheelTab; renderWheelStaffView(el); };
+  });
+
+  const body = document.getElementById('wheel-staff-body');
+  if (_wheelStaffTab === 'issue') {
+    await renderWheelIssueTab(body);
+  } else {
+    await renderWheelSpinsTab(body);
+  }
+}
+
+async function renderWheelSpinsTab(body) {
+  let data;
+  try {
+    data = await api.getWheelSpins({ limit: 200 });
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+  const rows = data.items || [];
+  const totalCoins = rows.filter(r => r.prize_type === 'coins').reduce((s, r) => s + (r.amount || 0), 0);
+  body.innerHTML = `
+    <div class="panel">
+      <div class="wheel-stats-row">
+        <div class="wheel-stat"><span class="wheel-stat-num">${rows.length}</span><span>прокруток</span></div>
+        <div class="wheel-stat"><span class="wheel-stat-num">${totalCoins}</span><span>коинов выдано</span></div>
+      </div>
+      ${rows.length ? `<div class="table-wrap"><table class="data-table">
+        <thead><tr><th>Дата</th><th>Оператор</th><th>Группа</th><th>Причина</th><th>Приз</th><th>Тип</th></tr></thead>
+        <tbody>${rows.map(r => `<tr>
+          <td>${esc(fmtDateTime(r.date))}</td>
+          <td>${esc(r.operator_name)}</td>
+          <td>${esc(r.group_name || '—')}</td>
+          <td>${esc(r.reason || '—')}</td>
+          <td><strong>${esc(r.prize)}</strong></td>
+          <td>${WHEEL_PRIZE_ICON[r.prize_type] || ''} ${esc(wheelPrizeTypeLabel(r.prize_type))}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>` : '<div class="empty-state"><p>Прокруток пока нет.</p></div>'}
+    </div>`;
+}
+
+async function renderWheelIssueTab(body) {
+  // Загружаем операторов для поиска (ТЗ п.4.2 — searchable dropdown)
+  let operators = STATE.adminOperators;
+  if (!operators || !operators.length) {
+    operators = await api.listOperators().catch(() => []);
+    STATE.adminOperators = operators;
+  }
+  const active = (operators || []).filter(o => o.is_active !== false);
+
+  body.innerHTML = `
+    <div class="panel wheel-issue-panel">
+      <h3 class="panel-title">Ручная выдача билета</h3>
+      <div class="form-grid">
+        <label class="form-group">
+          <span>Оператор</span>
+          <input type="text" id="wheel-op-search" class="form-input" placeholder="Поиск по имени, фамилии, группе…" autocomplete="off">
+          <div id="wheel-op-results" class="wheel-op-results" hidden></div>
+          <input type="hidden" id="wheel-op-id">
+          <div id="wheel-op-chosen" class="wheel-op-chosen" hidden></div>
+        </label>
+        <label class="form-group">
+          <span>Причина</span>
+          <input type="text" id="wheel-reason" class="form-input" placeholder="Например: помощь новому сотруднику" maxlength="500">
+        </label>
+        <label class="form-group">
+          <span>Срок действия, дней</span>
+          <input type="number" id="wheel-ttl" class="form-input" min="1" max="30" value="3">
+        </label>
+      </div>
+      <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билет</button>
+      <div id="wheel-issue-status" class="status-line" style="margin-top:10px"></div>
+    </div>`;
+
+  const search = document.getElementById('wheel-op-search');
+  const results = document.getElementById('wheel-op-results');
+  const hidden = document.getElementById('wheel-op-id');
+  const chosen = document.getElementById('wheel-op-chosen');
+  const issueBtn = document.getElementById('wheel-issue-btn');
+
+  function matches(o, q) {
+    const hay = `${o.full_name || ''} ${o.group_name || o.group || ''}`.toLowerCase();
+    return hay.includes(q);
+  }
+  search.oninput = () => {
+    const q = search.value.trim().toLowerCase();
+    if (!q) { results.hidden = true; return; }
+    const found = active.filter(o => matches(o, q)).slice(0, 8);
+    results.innerHTML = found.length
+      ? found.map(o => `<div class="wheel-op-option" data-op-id="${o.id}" data-op-name="${esc(o.full_name)}">
+          <strong>${esc(o.full_name)}</strong><span>${esc(o.group_name || o.group || '')}</span></div>`).join('')
+      : '<div class="wheel-op-empty">Не найдено</div>';
+    results.hidden = false;
+    results.querySelectorAll('[data-op-id]').forEach(opt => {
+      opt.onclick = () => {
+        hidden.value = opt.dataset.opId;
+        chosen.textContent = `Выбран: ${opt.dataset.opName}`;
+        chosen.hidden = false;
+        results.hidden = true;
+        search.value = opt.dataset.opName;
+        issueBtn.disabled = false;
+      };
+    });
+  };
+
+  issueBtn.onclick = async () => {
+    const operatorId = parseInt(hidden.value, 10);
+    const reason = document.getElementById('wheel-reason').value.trim();
+    const ttl = parseInt(document.getElementById('wheel-ttl').value, 10) || 3;
+    const statusEl = document.getElementById('wheel-issue-status');
+    if (!operatorId) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Выберите оператора'; return; }
+    if (!reason) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Укажите причину'; return; }
+    issueBtn.disabled = true;
+    try {
+      await api.issueWheelTicket({ operator_id: operatorId, reason_text: reason, ttl_days: ttl });
+      statusEl.className = 'status-line status-ok';
+      statusEl.textContent = 'Билет выдан';
+      showToast('Билет выдан', 'ok');
+      document.getElementById('wheel-reason').value = '';
+      chosen.hidden = true; hidden.value = ''; search.value = '';
+    } catch (err) {
+      statusEl.className = 'status-line status-error';
+      statusEl.textContent = err.message || 'Не удалось выдать билет';
+    } finally {
+      issueBtn.disabled = false;
+    }
+  };
+}
 
 /* ══════════════════════════════════════
    VIEW: ТЕСТЫ — общий диспетчер по роли

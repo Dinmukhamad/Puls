@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/tokens.min.css?v=stab-1">
-  <link rel="stylesheet" href="css/styles.min.css?v=stab-1">
-  <script src="js/api.min.js?v=level-rewards-1" defer></script>
+  <link rel="stylesheet" href="css/styles.min.css?v=wheel-1">
+  <script src="js/api.min.js?v=wheel-1" defer></script>
   <script>
     (function() {
       const t = localStorage.getItem('pulse-theme') || 'light'; /* Slate+Sky default */
@@ -126,6 +126,10 @@
       <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       <span>Тесты</span>
     </a>
+    <a class="side-nav-link" href="#" data-nav-target="wheel" title="Колесо WOW">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><path d="M12 3v6M12 15v6M3 12h6M15 12h6M5.6 5.6l4.2 4.2M14.2 14.2l4.2 4.2M18.4 5.6l-4.2 4.2M9.8 14.2l-4.2 4.2"/></svg>
+      <span>Колесо WOW</span>
+    </a>
     <a class="side-nav-link" href="#" data-nav-target="shop" title="Магазин">
       <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
       <span>Магазин</span>
@@ -175,6 +179,6 @@
 </main>
 
 <!-- SCRIPTS -->
-<script src="js/app.min.js?v=levels-load-fix-1" defer></script>
+<script src="js/app.min.js?v=wheel-1" defer></script>
 </body>
 </html>
