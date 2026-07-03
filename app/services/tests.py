@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -25,11 +24,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.entities import (
-    Operator, Test, TestAnswerOption, TestAssignment, TestAttempt,
-    TestAttemptAnswer, TestQuestion, User, now_utc,
+    Operator,
+    Test,
+    TestAssignment,
+    TestAttempt,
+    TestAttemptAnswer,
+    TestQuestion,
+    User,
+    now_utc,
 )
 from app.services.coins import add_transaction
-
 
 # ── Видимость и назначение ──────────────────────────────────────────
 
@@ -69,7 +73,7 @@ def activate_scheduled_tests(db: Session) -> int:
     return len(updated)
 
 
-def visible_tests_for_operator(db: Session, operator: Operator) -> List[Test]:
+def visible_tests_for_operator(db: Session, operator: Operator) -> list[Test]:
     """
     Оптимизированная версия: вместо отдельного SELECT на test_assignments
     для КАЖДОГО теста (N+1 — при 20 тестах это 20 лишних запросов на
@@ -89,7 +93,7 @@ def visible_tests_for_operator(db: Session, operator: Operator) -> List[Test]:
     all_assignments = list(
         db.scalars(select(TestAssignment).where(TestAssignment.test_id.in_(test_ids)))
     )
-    assignments_by_test: Dict[int, List[TestAssignment]] = {}
+    assignments_by_test: dict[int, list[TestAssignment]] = {}
     for a in all_assignments:
         assignments_by_test.setdefault(a.test_id, []).append(a)
 
@@ -108,7 +112,7 @@ def visible_tests_for_operator(db: Session, operator: Operator) -> List[Test]:
 
 # ── Статусы для оператора ────────────────────────────────────────────
 
-def _naive(dt: Optional[datetime]) -> Optional[datetime]:
+def _naive(dt: datetime | None) -> datetime | None:
     """
     Защитный второй уровень: некоторые записи в БД могли сохраниться с
     timezone-aware datetime ДО того как добавился _strip_tzinfo на уровне
@@ -122,7 +126,7 @@ def _naive(dt: Optional[datetime]) -> Optional[datetime]:
     return dt.replace(tzinfo=None) if dt.tzinfo else dt
 
 
-def operator_test_status(test: Test, attempt: Optional[TestAttempt], now: Optional[datetime] = None) -> str:
+def operator_test_status(test: Test, attempt: TestAttempt | None, now: datetime | None = None) -> str:
     """upcoming | available | in_progress | finished | expired | unavailable"""
     now = _naive(now) or now_utc()
 
@@ -142,7 +146,7 @@ def operator_test_status(test: Test, attempt: Optional[TestAttempt], now: Option
     return "available"
 
 
-def can_start_attempt(db: Session, test: Test, operator: Operator) -> tuple[bool, Optional[str]]:
+def can_start_attempt(db: Session, test: Test, operator: Operator) -> tuple[bool, str | None]:
     now = now_utc()
     if test.status != "open":
         return False, "Тест недоступен"
@@ -211,11 +215,11 @@ def start_attempt(db: Session, test: Test, operator: Operator) -> TestAttempt:
         # Гонка: два одновременных старта вычислили одинаковый attempt_number и
         # упёрлись в uq_test_attempt_number. Откатываем только вставку попытки
         # (SAVEPOINT), отдаём понятную ошибку вместо 500.
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Тест уже начат — обновите страницу")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Тест уже начат — обновите страницу") from None
     return attempt
 
 
-def get_active_or_recent_attempt(db: Session, test: Test, operator: Operator) -> Optional[TestAttempt]:
+def get_active_or_recent_attempt(db: Session, test: Test, operator: Operator) -> TestAttempt | None:
     return db.scalar(
         select(TestAttempt)
         .where(TestAttempt.test_id == test.id, TestAttempt.operator_id == operator.id)
@@ -226,7 +230,7 @@ def get_active_or_recent_attempt(db: Session, test: Test, operator: Operator) ->
 
 # ── Сохранение черновика ответа ──────────────────────────────────────
 
-def save_draft_answer(db: Session, attempt: TestAttempt, question_id: int, selected_answer_ids: List[int]) -> TestAttemptAnswer:
+def save_draft_answer(db: Session, attempt: TestAttempt, question_id: int, selected_answer_ids: list[int]) -> TestAttemptAnswer:
     if attempt.status != "in_progress":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Попытка уже завершена")
     if now_utc() > _naive(attempt.expires_at):
@@ -250,7 +254,7 @@ def save_draft_answer(db: Session, attempt: TestAttempt, question_id: int, selec
 
 # ── Проверка ответов и завершение попытки ────────────────────────────
 
-def _check_answer(question: TestQuestion, selected_ids: List[int]) -> tuple[bool, float]:
+def _check_answer(question: TestQuestion, selected_ids: list[int]) -> tuple[bool, float]:
     """
     Правило из ТЗ п.13: для multiple_choice ответ верен ТОЛЬКО если выбраны
     ВСЕ правильные варианты и НИ ОДНОГО лишнего (точное совпадение множеств).
@@ -263,7 +267,7 @@ def _check_answer(question: TestQuestion, selected_ids: List[int]) -> tuple[bool
     return is_correct, points
 
 
-def finish_attempt(db: Session, attempt: TestAttempt, reviewer: Optional[User] = None) -> TestAttempt:
+def finish_attempt(db: Session, attempt: TestAttempt, reviewer: User | None = None) -> TestAttempt:
     """
     Завершает попытку: проверяет все ответы (включая неотвеченные вопросы —
     считаются неправильными, см. ТЗ п.7.2), считает итоговый балл и процент,
@@ -327,7 +331,7 @@ def auto_expire_attempt(db: Session, attempt: TestAttempt) -> TestAttempt:
     return finish_attempt(db, attempt)
 
 
-def _maybe_award_reward(db: Session, attempt: TestAttempt, test: Test, reviewer: Optional[User]) -> None:
+def _maybe_award_reward(db: Session, attempt: TestAttempt, test: Test, reviewer: User | None) -> None:
     """
     Начисляет награду максимум один раз за попытку. Режимы:
       fixed         — проходной % достигнут -> начисляется reward_points/reward_coins целиком
@@ -395,6 +399,6 @@ def full_question_payload(question: TestQuestion) -> dict:
     """Включает is_correct — используется ТОЛЬКО для админского конструктора и
     после завершения попытки (если test.show_correct_answers=True)."""
     payload = safe_question_payload(question)
-    for a, src in zip(payload["answers"], question.answers):
+    for a, src in zip(payload["answers"], question.answers, strict=False):
         a["is_correct"] = src.is_correct
     return payload
