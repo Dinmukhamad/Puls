@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,14 +7,28 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
 from app.models.entities import ShopItem, ShopPurchase, User
-from app.schemas.shop import PurchaseCreate, RejectPurchaseRequest, ShopItemCreate, ShopItemRead, ShopItemUpdate, ShopPurchaseRead
-from app.services.coins import approve_purchase, complete_purchase, create_purchase, operator_for_user_or_403, reject_purchase
+from app.schemas.shop import (
+    PurchaseCreate,
+    RejectPurchaseRequest,
+    ShopItemCreate,
+    ShopItemRead,
+    ShopItemUpdate,
+    ShopPurchaseRead,
+)
+from app.services.coins import (
+    approve_purchase,
+    complete_purchase,
+    create_purchase,
+    operator_for_user_or_403,
+    reject_purchase,
+)
+from app.services.rating import rating_cache_invalidate
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
 
-@router.get("/items", response_model=List[ShopItemRead])
-def list_items(db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> List[ShopItem]:
+@router.get("/items", response_model=list[ShopItemRead])
+def list_items(db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> list[ShopItem]:
     return list(db.scalars(select(ShopItem).where(ShopItem.is_active.is_(True)).order_by(ShopItem.price.asc())))
 
 
@@ -49,12 +61,13 @@ def request_purchase(
 ) -> ShopPurchase:
     purchase = create_purchase(db, operator_for_user_or_403(db, current_user), payload.shop_item_id)
     db.commit()
+    rating_cache_invalidate()  # резерв меняет доступный баланс оператора
     db.refresh(purchase)
     return purchase
 
 
-@router.get("/purchases", response_model=List[ShopPurchaseRead])
-def list_purchases(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> List[ShopPurchase]:
+@router.get("/purchases", response_model=list[ShopPurchaseRead])
+def list_purchases(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[ShopPurchase]:
     query = select(ShopPurchase).order_by(ShopPurchase.created_at.desc(), ShopPurchase.id.desc())
     if current_user.role == "operator":
         operator = operator_for_user_or_403(db, current_user)
@@ -69,6 +82,7 @@ def approve(purchase_id: int, db: Session = Depends(get_db), current_user: User 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
     approve_purchase(db, purchase, current_user)
     db.commit()
+    rating_cache_invalidate()
     db.refresh(purchase)
     return purchase
 
@@ -85,6 +99,7 @@ def reject(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
     reject_purchase(db, purchase, current_user, payload.reason)
     db.commit()
+    rating_cache_invalidate()
     db.refresh(purchase)
     return purchase
 
