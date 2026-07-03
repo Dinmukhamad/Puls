@@ -42,6 +42,11 @@ class OperatorLevelBase(BaseModel):
     icon: str = ""
     sort_order: int = 0
     is_active: bool = True
+    min_total_xp: int = Field(default=0, ge=0)
+    reward_coins: int = Field(default=0, ge=0)
+    reward_once: bool = True
+    coin_multiplier_percent: float = 0
+    shop_discount_percent: float = 0
 
 
 class OperatorLevelCreate(OperatorLevelBase):
@@ -56,6 +61,11 @@ class OperatorLevelUpdate(BaseModel):
     icon: str | None = None
     sort_order: int | None = None
     is_active: bool | None = None
+    min_total_xp: int | None = Field(default=None, ge=0)
+    reward_coins: int | None = Field(default=None, ge=0)
+    reward_once: bool | None = None
+    coin_multiplier_percent: float | None = None
+    shop_discount_percent: float | None = None
 
 
 class OperatorLevelRead(OperatorLevelBase):
@@ -74,6 +84,9 @@ class OperatorLevelBadge(BaseModel):
     color: str = "#64748B"
     icon: str = ""
     sort_order: int = 10
+    reward_coins: int = 0
+    reward_once: bool = True
+    min_total_xp: int = 0
 
 
 class OperatorLevelGap(BaseModel):
@@ -99,6 +112,8 @@ class OperatorLevelSummary(BaseModel):
     manual_reason: str | None = None
     manual_comment: str | None = None
     assigned_at: datetime | None = None
+    current_level_reward: dict | None = None
+    next_level_reward: dict | None = None
 
 
 class OperatorLevelRecalculateRequest(BaseModel):
@@ -125,3 +140,5 @@ class OperatorLevelHistoryRead(BaseModel):
     changed_by_name: str | None = None
     changed_at: datetime
     metadata: dict | None = None
+    reward_coins: int = 0
+    coin_transaction_id: int | None = None
