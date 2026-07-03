@@ -29,6 +29,9 @@ class CoinTransactionRead(BaseModel):
     comment: str
     created_by_user_id: int | None
     related_purchase_id: int | None
+    source_type: str | None = None
+    source_id: int | None = None
+    metadata_json: dict | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
