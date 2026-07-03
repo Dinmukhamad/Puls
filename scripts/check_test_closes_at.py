@@ -22,7 +22,7 @@ def main() -> int:
 
     db = SessionLocal()
     try:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         tests = list(db.scalars(select(Test).order_by(Test.id)))
         print(f"Текущее время сервера (UTC): {now}\n")
         for t in tests:
