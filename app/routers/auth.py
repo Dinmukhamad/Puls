@@ -1,21 +1,24 @@
 from __future__ import annotations
 
-from typing import List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import (
-    create_access_token, get_current_user, hash_password,
-    require_roles, verify_password,
+    create_access_token,
+    get_current_user,
+    hash_password,
+    require_roles,
+    verify_password,
 )
 from app.database.db import get_db
-from app.models.entities import AuditLog, Operator, User
+from app.models.entities import AuditLog, User
 from app.schemas.auth import (
-    AccountCredentialsUpdate, LoginRequest,
-    UserCreate, UserRead,
+    AccountCredentialsUpdate,
+    LoginRequest,
+    UserCreate,
+    UserRead,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -106,8 +109,6 @@ def fix_session(
     admin/manager/supervisor пользователя. Вызывается автоматически
     фронтендом если обнаружен 403 при наличии валидного токена.
     """
-    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-    from typing import Optional as Opt
     settings = get_settings()
     cookie_token = request.cookies.get(settings.auth_cookie_name)
     if not cookie_token:
@@ -187,7 +188,6 @@ def change_my_login(
     response: Response = None,
 ) -> dict:
     """Change current user login. Requires current password verification."""
-    from pydantic import BaseModel
     import re as _re
 
     new_login   = (payload.get("new_login") or "").strip()
@@ -282,9 +282,9 @@ def create_user(
     return user
 
 
-@router.get("/users", response_model=List[UserRead])
+@router.get("/users", response_model=list[UserRead])
 def list_users(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin")),
-) -> List[User]:
+) -> list[User]:
     return list(db.scalars(select(User).order_by(User.id)))
