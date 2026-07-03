@@ -529,3 +529,36 @@ def level_history_rows(db: Session, operator_id: int | None = None, limit: int =
             "coin_transaction_id": (metadata or {}).get("coin_transaction_id"),
         })
     return rows
+
+
+def level_reward_overview_rows(db: Session) -> list[dict]:
+    operators = list(db.scalars(
+        select(Operator)
+        .where(Operator.employment_status == "active")
+        .order_by(Operator.full_name.asc())
+    ))
+    rows: list[dict] = []
+    for operator in operators:
+        summary = operator_level_summary(db, operator)
+        level = summary.get("level") or {}
+        reward = summary.get("current_level_reward") or {}
+        metrics = summary.get("metrics") or {}
+        rows.append({
+            "operator_id": operator.id,
+            "operator_name": operator.full_name,
+            "group_id": operator.group_id,
+            "group_name": operator.group_name,
+            "level": level,
+            "assignment_type": summary.get("assignment_type"),
+            "is_manual": summary.get("is_manual", False),
+            "tenure_days": metrics.get("tenure_days", 0),
+            "total_xp": metrics.get("total_xp", 0),
+            "reward_coins": reward.get("reward_coins", 0),
+            "reward_received": reward.get("received", False),
+            "coin_transaction_id": reward.get("coin_transaction_id"),
+            "reward_created_at": reward.get("created_at"),
+            "next_level": summary.get("next_level"),
+            "next_level_reward": summary.get("next_level_reward"),
+            "assigned_at": summary.get("assigned_at"),
+        })
+    return rows
