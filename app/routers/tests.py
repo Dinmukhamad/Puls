@@ -1,40 +1,56 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
-from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.security import get_current_user
 from app.database.db import get_db
 from app.models.entities import (
-    Group, Operator, Test, TestAnswerOption, TestAssignment, TestAttempt,
-    TestAttemptAnswer, TestQuestion, User, now_utc,
+    Operator,
+    Test,
+    TestAnswerOption,
+    TestAssignment,
+    TestAttempt,
+    TestAttemptAnswer,
+    TestQuestion,
+    User,
+    now_utc,
 )
 from app.services.coins import operator_for_user_or_403
 from app.services.tests import (
-    activate_scheduled_tests, auto_expire_attempt, can_start_attempt, finish_attempt,
-    full_question_payload, get_active_or_recent_attempt, is_test_assigned_to_operator,
-    operator_test_status, safe_question_payload, save_draft_answer, start_attempt,
+    activate_scheduled_tests,
+    auto_expire_attempt,
+    finish_attempt,
+    full_question_payload,
+    get_active_or_recent_attempt,
+    is_test_assigned_to_operator,
+    operator_test_status,
+    safe_question_payload,
+    save_draft_answer,
+    start_attempt,
     visible_tests_for_operator,
 )
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 admin_router = APIRouter(prefix="/admin/tests", tags=["tests-admin"])
 
+logger = logging.getLogger(__name__)
+
 STAFF_ROLES = ("supervisor", "manager", "admin")
 
 
-def _strip_tzinfo(value: Optional[datetime]) -> Optional[datetime]:
+def _strip_tzinfo(value: datetime | None) -> datetime | None:
     """
     Frontend отправляет opens_at/closes_at как ISO-строку с суффиксом Z
     (UTC), которую Pydantic парсит в timezone-AWARE datetime. Колонки
     tests.opens_at/closes_at в БД — naive DateTime (без timezone, как и
-    now_utc() = datetime.utcnow() везде в проекте). Сравнение aware vs naive
+    now_utc() везде в проекте — naive UTC). Сравнение aware vs naive
     datetime в Python бросает TypeError — именно это происходило при
     проверке test.closes_at (now_utc() > test.closes_at), из-за чего тест
     физически не закрывался по достижении времени: исключение прерывало
@@ -48,7 +64,7 @@ def _strip_tzinfo(value: Optional[datetime]) -> Optional[datetime]:
     return value.replace(tzinfo=None) if value.tzinfo else value
 
 
-def _utc_iso(dt: Optional[datetime]) -> Optional[str]:
+def _utc_iso(dt: datetime | None) -> str | None:
     """
     Сериализует naive datetime (хранится как UTC, см. now_utc()) в ISO-строку
     с явным суффиксом Z. Без этого JavaScript (new Date(str)) интерпретирует
@@ -67,7 +83,7 @@ def _require_staff(current_user: User = Depends(get_current_user)) -> User:
     return current_user
 
 
-def _supervisor_group_ids(current_user: User) -> Optional[set]:
+def _supervisor_group_ids(current_user: User) -> set | None:
     """
     Супервайзер видит/управляет только своей группой (ТЗ п.3.2). В модели
     User нет явного supervisor_group_id — используем operator_id оператора,
@@ -104,7 +120,7 @@ def my_tests(db: Session = Depends(get_db), current_user: User = Depends(get_cur
             .order_by(TestAttempt.test_id, TestAttempt.attempt_number.desc())
         )
     )
-    latest_attempt_by_test: Dict[int, TestAttempt] = {}
+    latest_attempt_by_test: dict[int, TestAttempt] = {}
     for a in all_attempts:
         if a.test_id not in latest_attempt_by_test:  # первая встреченная — самая свежая попытка (см. order_by выше)
             latest_attempt_by_test[a.test_id] = a
@@ -112,7 +128,7 @@ def my_tests(db: Session = Depends(get_db), current_user: User = Depends(get_cur
     all_questions = list(
         db.scalars(select(TestQuestion).where(TestQuestion.test_id.in_(test_ids)))
     )
-    questions_by_test: Dict[int, list] = {}
+    questions_by_test: dict[int, list] = {}
     for q in all_questions:
         questions_by_test.setdefault(q.test_id, []).append(q)
 
@@ -158,7 +174,7 @@ def start_test(test_id: int, db: Session = Depends(get_db), current_user: User =
             try:
                 auto_expire_attempt(db, existing)
                 db.commit()
-            except Exception as e:
+            except Exception:
                 # Если авто-завершение по таймеру упало (например ошибка в
                 # подсчёте баллов) — раньше исключение улетало наружу БЕЗ
                 # rollback и без изменения статуса попытки. Из-за этого
@@ -169,15 +185,14 @@ def start_test(test_id: int, db: Session = Depends(get_db), current_user: User =
                 # откатываем транзакцию и принудительно помечаем попытку
                 # как "expired" отдельным простым UPDATE (без сложной логики
                 # подсчёта баллов, которая и могла быть причиной сбоя),
-                # чтобы оператор не застревал навсегда.
+                # чтобы оператор не застревал навсегда. Детали ошибки — только
+                # в логи, клиенту внутренности не показываем (ТЗ 10.2).
+                logger.exception("Авто-завершение просроченной попытки attempt_id=%s упало", existing.id)
                 db.rollback()
                 existing.status = "expired"
                 existing.finished_at = now_utc()
                 db.commit()
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Время теста истекло (ошибка при подсчёте результата: {type(e).__name__}: {e})",
-                )
+                raise HTTPException(status_code=400, detail="Время теста истекло") from None
             raise HTTPException(status_code=400, detail="Время теста истекло")
         attempt = existing
     else:
@@ -200,7 +215,7 @@ def start_test(test_id: int, db: Session = Depends(get_db), current_user: User =
 
 class SaveAnswerPayload(BaseModel):
     question_id: int
-    selected_answer_ids: List[int] = Field(default_factory=list)
+    selected_answer_ids: list[int] = Field(default_factory=list)
 
 
 @router.post("/attempts/{attempt_id}/save-answer")
@@ -230,12 +245,18 @@ def finish_test(attempt_id: int, db: Session = Depends(get_db), current_user: Us
         db.commit()
         db.refresh(attempt)
         return _attempt_result_payload(attempt, attempt.test)
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        # Временная диагностика: возвращаем точный текст ошибки вместо
-        # голого 500, чтобы понять причину сбоя завершения теста.
-        import traceback
-        raise HTTPException(status_code=500, detail=f"Ошибка завершения теста: {type(e).__name__}: {e}\n{traceback.format_exc()[-800:]}")
+        raise
+    except Exception:
+        db.rollback()
+        # Полный traceback — в логи сервера; клиенту — только понятное сообщение
+        # без внутренних путей и деталей исключения (ТЗ P0.2 / 10.2).
+        logger.exception("Не удалось завершить попытку теста attempt_id=%s", attempt_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Не удалось завершить тест. Попробуйте позже или обратитесь к администратору.",
+        ) from None
 
 
 @router.get("/attempts/{attempt_id}/result")
@@ -292,7 +313,7 @@ class QuestionPayload(BaseModel):
     question_type: str = Field(pattern="^(single_choice|multiple_choice)$")
     points: float = 1.0
     sort_order: int = 0
-    answers: List[AnswerOptionPayload] = Field(default_factory=list, min_length=2, max_length=10)
+    answers: list[AnswerOptionPayload] = Field(default_factory=list, min_length=2, max_length=10)
 
 
 class TestCreatePayload(BaseModel):
@@ -300,8 +321,8 @@ class TestCreatePayload(BaseModel):
     description: str = ""
     instruction: str = ""
     time_limit_minutes: int = 30
-    opens_at: Optional[datetime] = None
-    closes_at: Optional[datetime] = None
+    opens_at: datetime | None = None
+    closes_at: datetime | None = None
     passing_percent: float = 70.0
     show_result_after_finish: bool = True
     show_correct_answers: bool = False
@@ -320,22 +341,22 @@ class TestCreatePayload(BaseModel):
 
 
 class TestUpdatePayload(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    instruction: Optional[str] = None
-    time_limit_minutes: Optional[int] = None
-    opens_at: Optional[datetime] = None
-    closes_at: Optional[datetime] = None
-    passing_percent: Optional[float] = None
-    show_result_after_finish: Optional[bool] = None
-    show_correct_answers: Optional[bool] = None
-    allow_retake: Optional[bool] = None
-    max_attempts: Optional[int] = None
-    reward_type: Optional[str] = None
-    reward_points: Optional[float] = None
-    reward_coins: Optional[int] = None
-    reward_min_percent: Optional[float] = None
-    reward_mode: Optional[str] = None
+    title: str | None = None
+    description: str | None = None
+    instruction: str | None = None
+    time_limit_minutes: int | None = None
+    opens_at: datetime | None = None
+    closes_at: datetime | None = None
+    passing_percent: float | None = None
+    show_result_after_finish: bool | None = None
+    show_correct_answers: bool | None = None
+    allow_retake: bool | None = None
+    max_attempts: int | None = None
+    reward_type: str | None = None
+    reward_points: float | None = None
+    reward_coins: int | None = None
+    reward_min_percent: float | None = None
+    reward_mode: str | None = None
 
     @field_validator("opens_at", "closes_at")
     @classmethod
@@ -345,7 +366,7 @@ class TestUpdatePayload(BaseModel):
 
 class AssignPayload(BaseModel):
     target_type: str = Field(pattern="^(all|group|operator)$")
-    target_ids: List[int] = Field(default_factory=list)  # для group/operator — список ID; для all — игнорируется
+    target_ids: list[int] = Field(default_factory=list)  # для group/operator — список ID; для all — игнорируется
 
 
 def _test_summary(db: Session, t: Test) -> dict:
@@ -390,22 +411,22 @@ def _test_summaries_bulk(db: Session, tests: list) -> list:
     test_ids = [t.id for t in tests]
 
     all_attempts = list(db.scalars(select(TestAttempt).where(TestAttempt.test_id.in_(test_ids))))
-    attempts_by_test: Dict[int, list] = {}
+    attempts_by_test: dict[int, list] = {}
     for a in all_attempts:
         attempts_by_test.setdefault(a.test_id, []).append(a)
 
     all_assignments = list(db.scalars(select(TestAssignment).where(TestAssignment.test_id.in_(test_ids))))
-    assignments_by_test: Dict[int, list] = {}
+    assignments_by_test: dict[int, list] = {}
     for a in all_assignments:
         assignments_by_test.setdefault(a.test_id, []).append(a)
 
     all_questions = list(db.scalars(select(TestQuestion).where(TestQuestion.test_id.in_(test_ids))))
-    questions_count_by_test: Dict[int, int] = {}
+    questions_count_by_test: dict[int, int] = {}
     for q in all_questions:
         questions_count_by_test[q.test_id] = questions_count_by_test.get(q.test_id, 0) + 1
 
     creator_ids = [t.created_by_user_id for t in tests if t.created_by_user_id]
-    creators_by_id: Dict[int, User] = {}
+    creators_by_id: dict[int, User] = {}
     if creator_ids:
         creators_by_id = {u.id: u for u in db.scalars(select(User).where(User.id.in_(creator_ids)))}
 
@@ -578,9 +599,9 @@ def close_test(test_id: int, db: Session = Depends(get_db), _: User = Depends(_r
 @admin_router.get("/{test_id}/results")
 def get_results(
     test_id: int,
-    group_id: Optional[int] = Query(None),
-    operator_query: Optional[str] = Query(None),
-    status_filter: Optional[str] = Query(None, alias="status"),
+    group_id: int | None = Query(None),
+    operator_query: str | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
     db: Session = Depends(get_db),
     _: User = Depends(_require_staff),
 ) -> dict:
@@ -674,7 +695,7 @@ def get_analytics(test_id: int, db: Session = Depends(get_db), _: User = Depends
             )
         )
     ) if question_ids else []
-    answers_by_question: Dict[int, list] = {}
+    answers_by_question: dict[int, list] = {}
     for a in all_answers_flat:
         answers_by_question.setdefault(a.question_id, []).append(a)
 
