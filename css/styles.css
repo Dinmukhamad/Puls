@@ -4232,6 +4232,27 @@ body.role-operator {
   font-weight: 500;
 }
 .wheel-admin-content { padding: 18px 20px 20px; }
+.wheel-fast-loading {
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--tx2);
+  text-align: center;
+}
+.wheel-fast-loading strong {
+  color: var(--tx);
+  font-size: 14px;
+  font-weight: 800;
+}
+.wheel-fast-loading span {
+  max-width: 360px;
+  color: var(--tx3);
+  font-size: 12px;
+  line-height: 1.45;
+}
 .wheel-campaign-grid,
 .wheel-rule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .wheel-campaign-shell {

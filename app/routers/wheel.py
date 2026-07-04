@@ -6,7 +6,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.datetime_utils import local_day_bounds_utc, now_utc, to_local_iso
 from app.core.security import get_current_user, require_roles
@@ -152,9 +152,13 @@ def admin_spins(
     operator_id: int | None = Query(default=None),
     prize_type: str | None = Query(default=None),
     spin_status: str | None = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(default=80, ge=1, le=1000),
 ):
-    stmt = select(WheelSpin).order_by(WheelSpin.created_at.desc())
+    stmt = (
+        select(WheelSpin)
+        .options(selectinload(WheelSpin.operator), selectinload(WheelSpin.ticket))
+        .order_by(WheelSpin.created_at.desc())
+    )
     if date_from:
         start, _ = local_day_bounds_utc(date_from)
         stmt = stmt.where(WheelSpin.created_at >= start)
@@ -451,9 +455,9 @@ def admin_list_tokens(
     db: Session = Depends(get_db),
     operator_id: int | None = Query(default=None),
     token_status: str | None = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(default=80, ge=1, le=1000),
 ):
-    stmt = select(WheelTicket).order_by(WheelTicket.created_at.desc())
+    stmt = select(WheelTicket).options(selectinload(WheelTicket.operator)).order_by(WheelTicket.created_at.desc())
     if operator_id:
         stmt = stmt.where(WheelTicket.operator_id == operator_id)
     if token_status:
@@ -518,7 +522,7 @@ def admin_evaluation_logs(
     operator_id: int | None = Query(default=None),
     rule_id: int | None = Query(default=None),
     eligible: bool | None = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=1000),
+    limit: int = Query(default=80, ge=1, le=1000),
 ):
     stmt = select(WheelRuleEvaluationLog).order_by(WheelRuleEvaluationLog.created_at.desc())
     if operator_id:
@@ -527,9 +531,14 @@ def admin_evaluation_logs(
         stmt = stmt.where(WheelRuleEvaluationLog.rule_id == rule_id)
     if eligible is not None:
         stmt = stmt.where(WheelRuleEvaluationLog.is_eligible.is_(eligible))
+    logs = list(db.scalars(stmt.limit(limit)))
+    operator_ids = {log.operator_id for log in logs if log.operator_id}
+    operators = {}
+    if operator_ids:
+        operators = {op.id: op for op in db.scalars(select(Operator).where(Operator.id.in_(operator_ids))).all()}
     rows = []
-    for log in db.scalars(stmt.limit(limit)):
-        op = db.get(Operator, log.operator_id)
+    for log in logs:
+        op = operators.get(log.operator_id)
         rows.append(EvaluationLogRow(
             id=log.id, operator_id=log.operator_id, operator_name=op.full_name if op else "—",
             rule_id=log.rule_id, source_module=log.source_module, source_entity_id=log.source_entity_id,

@@ -7325,6 +7325,45 @@ window.renderRating = renderRating;
 const WHEEL_PRIZE_ICON = {
   coins: '₡', shop_discount: '%', extra_ticket: '+1', badge: '★', manual_reward: '!',
 };
+const WHEEL_FAST_MS = 900;
+const WHEEL_TTL_MS = 45_000;
+const WHEEL_STATIC_TTL_MS = 5 * 60_000;
+
+function wheelCachedFetch(key, fetcher, fallback, onFresh, ttlMs = WHEEL_TTL_MS) {
+  const cached = swrReadRaw(key);
+  const saveFresh = (fresh, previous) => {
+    const changed = JSON.stringify(fresh) !== JSON.stringify(previous);
+    swrWriteRaw(key, { data: fresh, ts: Date.now() });
+    if (changed && onFresh) onFresh(fresh);
+  };
+  if (cached) {
+    if (Date.now() - cached.ts > ttlMs) {
+      fetcher().then(fresh => saveFresh(fresh, cached.data)).catch(() => {});
+    }
+    return Promise.resolve(cached.data);
+  }
+  let returnedFallback = false;
+  const request = fetcher()
+    .then(fresh => {
+      swrWriteRaw(key, { data: fresh, ts: Date.now() });
+      if (returnedFallback && onFresh) onFresh(fresh);
+      return fresh;
+    })
+    .catch(() => fallback);
+  return withTimeout(request, WHEEL_FAST_MS, 'wheel-fast-timeout').catch(() => {
+    returnedFallback = true;
+    request.catch(() => {});
+    return fallback;
+  });
+}
+
+function wheelRefreshIfTab(tab, renderer, body) {
+  if (STATE.currentView === 'wheel' && _wheelStaffTab === tab) renderer(body);
+}
+
+function wheelLoadingPanel(title = 'Загрузка Wheel of WOW') {
+  return `<div class="panel wheel-admin-panel"><div class="wheel-admin-content"><div class="wheel-fast-loading"><div class="loading-spinner"></div><strong>${esc(title)}</strong><span>Экран открывается сразу, данные обновятся в фоне.</span></div></div></div>`;
+}
 
 function wheelPrizeTypeLabel(t) {
   return {
@@ -7356,20 +7395,21 @@ async function renderWheelOperatorView(el) {
     </div>
     <div class="panel"><div class="empty-state"><div class="loading-spinner"></div><p>Загрузка колеса…</p></div></div>`;
 
-  let status, prizes, history;
-  try {
-    [status, prizes, history] = await Promise.all([
-      api.getWheelStatus(),
-      api.getWheelPrizes(),
-      api.getWheelMyHistory().catch(() => ({ items: [] })),
-    ]);
-  } catch (err) {
-    el.innerHTML = `<div class="view-header"><h2 class="section-title">Wheel of WOW</h2></div>
-      <div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
-    return;
-  }
+  const fallbackStatus = { __fallback: true, campaign: { id: 0, title: 'Wheel of WOW' }, available_tickets: 0, spins_used_today: 0, max_spins_per_day: 0, spins_used_this_week: 0, max_spins_per_week: 0, can_spin: false };
+  const fallbackItems = { __fallback: true, items: [] };
+  const fallbackHistory = { items: [] };
+  const rerenderFresh = () => { if (STATE.currentView === 'wheel' && !isAdmin(STATE.user?.role || 'operator')) renderWheelOperatorView(el); };
+  const [status, prizes, history] = await Promise.all([
+    wheelCachedFetch('wheel:status', () => api.getWheelStatus(), fallbackStatus, rerenderFresh, WHEEL_TTL_MS),
+    wheelCachedFetch('wheel:prizes', () => api.getWheelPrizes(), fallbackItems, rerenderFresh, WHEEL_STATIC_TTL_MS),
+    wheelCachedFetch('wheel:my-history', () => api.getWheelMyHistory().catch(() => ({ items: [] })), fallbackHistory, rerenderFresh, WHEEL_TTL_MS),
+  ]);
 
   const items = prizes.items || [];
+  if (status.__fallback || prizes.__fallback) {
+    el.innerHTML = `<div class="view-header"><h2 class="section-title">Wheel of WOW</h2></div>${wheelLoadingPanel('Готовим колесо')}`;
+    return;
+  }
   if (!status.campaign || !items.length) {
     el.innerHTML = `<div class="view-header"><h2 class="section-title">Wheel of WOW</h2></div>
       <div class="panel"><div class="empty-state"><p>Колесо сейчас недоступно. Загляните позже.</p></div></div>`;
@@ -7566,6 +7606,7 @@ async function doWheelSpin(el) {
   let result;
   try {
     result = await api.spinWheel();
+    swrInvalidate('wheel:');
   } catch (err) {
     w.spinning = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Крутить колесо'; }
@@ -7655,7 +7696,7 @@ async function renderWheelStaffView(el) {
         <button class="filter-tab ${_wheelStaffTab === 'logs' ? 'active' : ''}" data-wheel-tab="logs">Логи</button>
         <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билет</button>
     </div>
-    <div id="wheel-staff-body"><div class="panel wheel-admin-panel"><div class="empty-state"><div class="loading-spinner"></div></div></div></div>`;
+    <div id="wheel-staff-body">${wheelLoadingPanel()}</div>`;
 
   el.querySelectorAll('[data-wheel-tab]').forEach(b => {
     b.onclick = () => { _wheelStaffTab = b.dataset.wheelTab; renderWheelStaffView(el); };
@@ -7692,11 +7733,15 @@ const WHEEL_PRIZE_TYPES = [
 ];
 
 async function renderWheelCampaignTab(body) {
-  let data;
-  try {
-    data = await api.getWheelCampaigns();
-  } catch (err) {
-    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+  const data = await wheelCachedFetch(
+    'wheel:admin:campaigns',
+    () => api.getWheelCampaigns(),
+    { __fallback: true, items: [] },
+    () => wheelRefreshIfTab('campaign', renderWheelCampaignTab, body),
+    WHEEL_STATIC_TTL_MS
+  );
+  if (data.__fallback) {
+    body.innerHTML = wheelLoadingPanel('Загрузка кампании');
     return;
   }
   const items = data.items || [];
@@ -7814,6 +7859,7 @@ async function renderWheelCampaignTab(body) {
     if (!payload.title) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Укажите название'; return; }
     try {
       await api.updateWheelCampaign(current.id, payload);
+      swrInvalidate('wheel:admin:campaigns');
       showToast('Кампания сохранена', 'ok');
       renderWheelCampaignTab(body);
     } catch (err) {
@@ -7829,6 +7875,7 @@ async function createDefaultCampaign(body) {
       title: 'Wheel of WOW', description: '', is_active: true,
       max_spins_per_day: 1, max_spins_per_week: 3, ticket_ttl_days: 3,
     });
+    swrInvalidate('wheel:admin:campaigns');
     _wheelCampaignEditId = c.id;
     showToast('Кампания создана', 'ok');
     renderWheelCampaignTab(body);
@@ -7839,11 +7886,15 @@ async function createDefaultCampaign(body) {
 
 /* ---------- Стафф: сектора (ТЗ 11.2) ---------- */
 async function renderWheelPrizesTab(body) {
-  let data;
-  try {
-    data = await api.getWheelAdminPrizes();
-  } catch (err) {
-    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+  const data = await wheelCachedFetch(
+    'wheel:admin:prizes',
+    () => api.getWheelAdminPrizes(),
+    { __fallback: true, items: [] },
+    () => wheelRefreshIfTab('prizes', renderWheelPrizesTab, body),
+    WHEEL_STATIC_TTL_MS
+  );
+  if (data.__fallback) {
+    body.innerHTML = wheelLoadingPanel('Загрузка секторов');
     return;
   }
   const rows = data.items || [];
@@ -7907,6 +7958,8 @@ async function renderWheelPrizesTab(body) {
       if (!payload.title) { showToast('Укажите название сектора', 'error'); return; }
       try {
         await api.updateWheelPrize(id, payload);
+        swrInvalidate('wheel:admin:prizes');
+        swrInvalidate('wheel:prizes');
         showToast('Сектор сохранён', 'ok');
         renderWheelPrizesTab(body);
       } catch (err) { showToast(err.message || 'Не удалось сохранить', 'error'); }
@@ -7925,6 +7978,8 @@ async function renderWheelPrizesTab(body) {
     if (!payload.title) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Укажите название'; return; }
     try {
       await api.createWheelPrize(payload);
+      swrInvalidate('wheel:admin:prizes');
+      swrInvalidate('wheel:prizes');
       showToast('Сектор добавлен', 'ok');
       renderWheelPrizesTab(body);
     } catch (err) {
@@ -7938,19 +7993,13 @@ async function renderWheelPrizesTab(body) {
 let _wheelTicketFilter = '';
 async function renderWheelOperationsTab(body) {
   body.innerHTML = `<div class="panel wheel-admin-panel"><div class="empty-state"><div class="loading-spinner"></div></div></div>`;
-  let ticketsData = { items: [] };
-  let spinsData = { items: [] };
-  let stats = null;
-  try {
-    [ticketsData, spinsData, stats] = await Promise.all([
-      api.getWheelTokens(_wheelTicketFilter ? { token_status: _wheelTicketFilter, limit: 200 } : { limit: 200 }),
-      api.getWheelSpins({ limit: 200 }),
-      api.getWheelStats(),
-    ]);
-  } catch (err) {
-    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message || 'Не удалось загрузить операции колеса')}</div></div>`;
-    return;
-  }
+  const ticketKey = `wheel:admin:tokens:${_wheelTicketFilter || 'all'}`;
+  const rerender = () => wheelRefreshIfTab('operations', renderWheelOperationsTab, body);
+  const [ticketsData, spinsData, stats] = await Promise.all([
+    wheelCachedFetch(ticketKey, () => api.getWheelTokens(_wheelTicketFilter ? { token_status: _wheelTicketFilter, limit: 80 } : { limit: 80 }), { __fallback: true, items: [] }, rerender),
+    wheelCachedFetch('wheel:admin:spins', () => api.getWheelSpins({ limit: 80 }), { __fallback: true, items: [] }, rerender),
+    wheelCachedFetch('wheel:admin:stats', () => api.getWheelStats(), { __fallback: true, tokens_issued: 0, tokens_used: 0, tokens_expired: 0, spins_completed: 0, coins_awarded: 0, manual_granted: 0, prizes_histogram: [], top_sources: [] }, rerender),
+  ]);
 
   const tickets = ticketsData.items || [];
   const spins = spinsData.items || [];
@@ -8176,11 +8225,15 @@ function wheelSourceLabel(t) {
 
 /* ---------- Стафф: правила (ТЗ 15) ---------- */
 async function renderWheelRulesTab(body) {
-  let data;
-  try {
-    data = await api.getWheelRules();
-  } catch (err) {
-    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+  const data = await wheelCachedFetch(
+    'wheel:admin:rules',
+    () => api.getWheelRules(),
+    { __fallback: true, items: [] },
+    () => wheelRefreshIfTab('rules', renderWheelRulesTab, body),
+    WHEEL_STATIC_TTL_MS
+  );
+  if (data.__fallback) {
+    body.innerHTML = wheelLoadingPanel('Загрузка правил');
     return;
   }
   const rows = data.items || [];
@@ -8359,6 +8412,7 @@ async function renderWheelRulesTab(body) {
     }
     try {
       await api.createWheelRule(payload);
+      swrInvalidate('wheel:admin:rules');
       showToast('Правило добавлено', 'ok');
       renderWheelRulesTab(body);
     } catch (err) {
@@ -8370,11 +8424,14 @@ async function renderWheelRulesTab(body) {
 
 /* ---------- Стафф: логи проверок (ТЗ 8.7, 15) ---------- */
 async function renderWheelLogsTab(body) {
-  let data;
-  try {
-    data = await api.getWheelEvaluationLogs({ limit: 200 });
-  } catch (err) {
-    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+  const data = await wheelCachedFetch(
+    'wheel:admin:logs',
+    () => api.getWheelEvaluationLogs({ limit: 80 }),
+    { __fallback: true, items: [] },
+    () => wheelRefreshIfTab('logs', renderWheelLogsTab, body)
+  );
+  if (data.__fallback) {
+    body.innerHTML = wheelLoadingPanel('Загрузка логов');
     return;
   }
   const rows = data.items || [];
@@ -8402,7 +8459,16 @@ async function renderWheelIssueTab(body) {
   // Загружаем операторов для поиска (ТЗ п.4.2 — searchable dropdown)
   let operators = STATE.adminOperators;
   if (!operators || !operators.length) {
-    operators = await api.listOperators().catch(() => []);
+    operators = await wheelCachedFetch(
+      'wheel:operators',
+      () => api.listOperators().catch(() => []),
+      [],
+      (fresh) => {
+        STATE.adminOperators = fresh || [];
+        wheelRefreshIfTab('issue', renderWheelIssueTab, body);
+      },
+      SWR_USER_TTL_MS
+    );
     STATE.adminOperators = operators;
   }
   const active = (operators || []).filter(o => o.is_active !== false);
@@ -8479,6 +8545,7 @@ async function renderWheelIssueTab(body) {
     issueBtn.disabled = true;
     try {
       await api.issueWheelTicket({ operator_id: operatorId, reason_text: reason, ttl_days: ttl });
+      swrInvalidate('wheel:');
       statusEl.className = 'status-line status-ok';
       statusEl.textContent = 'Билет выдан';
       showToast('Билет выдан', 'ok');
