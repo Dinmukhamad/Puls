@@ -106,6 +106,7 @@ let STATE = {
   groups: [],
   currentView: 'cabinet',
   coinsOverview: null,
+  coinRequests: null,
   coinsTab: 'overview',
   navGen: 0,         // увеличивается при каждой смене раздела/вкладки —
   ratingTabGen: 0,   // используется для отмены "осиротевших" async-рендеров
@@ -579,9 +580,11 @@ async function loadData(role) {
         onUsersUpdate, SWR_USER_TTL_MS
       ).then(u => STATE.users = Array.isArray(u) ? u : (u.items || []))
     );
-    // История транзакций — грузим лениво, не блокируем загрузку
-    swrFetch('dashboard:history', () =>
-      api.getDashboardHistory(50).catch(() => []),
+    // История транзакций — грузим лениво, не блокируем загрузку.
+    // Используем единый coins-эндпоинт (/api/coins/transactions) — он отдаёт
+    // ВСЮ историю коинов, а не последние 50 записей, как /api/dashboard/history.
+    swrFetch('coins:transactions', () =>
+      api.listCoinTransactions().then(r => (Array.isArray(r) ? r : (r.items || []))).catch(() => []),
       onHistoryUpdate
     ).then(h => { STATE.history = h; });
   }
@@ -2571,6 +2574,8 @@ function renderCoins() {
 
 async function refreshCoinsModule() {
   STATE.coinsOverview = null;
+  STATE.coinRequests = null;
+  swrInvalidate('coins:transactions');
   await reloadData();
   if (STATE.currentView === 'coins') renderCoins();
 }
@@ -2896,6 +2901,12 @@ function renderManual() {
       el.querySelector('#manual-reason').value = '';
       clearOpSelection();
       showToast('Операция сохранена', 'ok');
+      // Ручное начисление/списание меняет и «Обзор» (KPI, последние операции),
+      // и «Историю». Сбрасываем кеш обзора (перезапросится при открытии) и
+      // инвалидируем кеш истории, чтобы reloadData подтянул свежие транзакции.
+      STATE.coinsOverview = null;
+      swrInvalidate('coins:transactions');
+      swrInvalidate('dashboard:main');
       await reloadData();
       // Update right column without re-render
       const hist = el.querySelector('#manual-history-list');
@@ -2956,7 +2967,7 @@ function initOpSearch(container, ops) {
     list.innerHTML = filtered.slice(0, 50).map(o => `
       <div class="op-search-item" data-id="${o.id}" data-name="${esc(o.full_name)}">
         <div class="op-search-name">${esc(o.full_name)}</div>
-        <div class="op-search-meta">Группа: ${esc(o.group_name)} · ${o.current_balance} ₡</div>
+        <div class="op-search-meta">Группа: ${esc(o.group_name || '—')} · ${o.current_balance} ₡</div>
       </div>`).join('');
 
     list.querySelectorAll('.op-search-item').forEach(item => {
@@ -2994,8 +3005,8 @@ function initOpSearch(container, ops) {
     const q = input.value.toLowerCase().trim();
     const filtered = q
       ? ops.filter(o =>
-          o.full_name.toLowerCase().includes(q) ||
-          o.group_name.toLowerCase().includes(q))
+          String(o.full_name || '').toLowerCase().includes(q) ||
+          String(o.group_name || '').toLowerCase().includes(q))
       : ops;
     renderList(filtered);
     dropdown.removeAttribute('hidden');
@@ -3009,10 +3020,49 @@ function initOpSearch(container, ops) {
 /* ══════════════════════════════════════
    VIEW: ЗАЯВКИ
 ══════════════════════════════════════ */
+/**
+ * После действий над заявкой (одобрить/отклонить/выполнить) данные меняются
+ * сразу в нескольких местах: сам список заявок, «Обзор» (KPI, последние
+ * заявки/операции) и «История» (появляется транзакция резерва/покупки/возврата).
+ * Эта функция синхронизирует всё разом: перезагружает заявки из единого
+ * coins-эндпоинта, сбрасывает кеш обзора (перезагрузится лениво при открытии)
+ * и обновляет историю коинов.
+ */
+async function refreshCoinsAfterAction() {
+  STATE.coinsOverview = null; // «Обзор» перезапросит свежие цифры при открытии
+  swrInvalidate('coins:transactions');
+  swrInvalidate('dashboard:main'); // сводка (KPI, «новых заявок») тоже меняется
+  const [reqs, txs] = await Promise.all([
+    api.listCoinRequests().then(r => (Array.isArray(r) ? r : (r.items || []))).catch(() => STATE.coinRequests || []),
+    api.listCoinTransactions().then(r => (Array.isArray(r) ? r : (r.items || []))).catch(() => STATE.history || []),
+  ]);
+  STATE.coinRequests = reqs;
+  STATE.history = txs;
+}
+
 function renderRequests() {
   const el = document.getElementById('view-requests');
   if (!el) return;
-  const all = STATE.purchases;
+
+  // Заявки читаются из единого coins-модуля (/api/coins/requests), а не из
+  // STATE.purchases (тот грузится только для роли operator и у админа пуст).
+  if (STATE.coinRequests == null) {
+    el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка заявок…</p></div>';
+    const myNavGen = STATE.navGen;
+    api.listCoinRequests()
+      .then(r => {
+        STATE.coinRequests = Array.isArray(r) ? r : (r.items || []);
+        if (!isNavStale(myNavGen) && STATE.currentView === 'coins' && STATE.coinsTab === 'requests') renderRequests();
+      })
+      .catch(err => {
+        if (!isNavStale(myNavGen)) {
+          el.innerHTML = `<div class="status-line status-error" style="padding:20px">Не удалось загрузить заявки: ${esc(err.message)}</div>`;
+        }
+      });
+    return;
+  }
+
+  const all = STATE.coinRequests;
   let activeFilter = 'new';
 
   function filtered() {
@@ -3024,16 +3074,13 @@ function renderRequests() {
   function renderList() {
     const list = filtered();
     if (!list.length) return '<div class="empty-state">Заявок нет</div>';
-    return list.map(p => {
-      const op = STATE.adminOperators.find(o => o.id === p.operator_id);
-      const item = STATE.shopItems.find(i => i.id === p.shop_item_id);
-      return `
+    return list.map(p => `
         <div class="request-card status-${p.status}">
           <div class="request-info">
-            <div class="request-title">${esc(item?.title || `Бонус #${p.shop_item_id}`)}</div>
+            <div class="request-title">${esc(p.bonus_name || `Бонус #${p.shop_item_id}`)}</div>
             <div class="request-meta">
-              <span><b>${esc(op?.full_name || `Оператор #${p.operator_id}`)}</b></span>
-              <span>·</span><span>${esc(op?.group_name || '—')}</span>
+              <span><b>${esc(p.operator_name || `Оператор #${p.operator_id}`)}</b></span>
+              <span>·</span><span>${esc(p.group_name || '—')}</span>
               <span>·</span><span class="accent-text">${p.price} ₡</span>
               <span>·</span><span>${fmtDate(p.created_at)}</span>
             </div>
@@ -3051,14 +3098,13 @@ function renderRequests() {
             <div class="request-actions">
               <button class="btn-ghost complete-btn" data-id="${p.id}">Отметить выполненной</button>
             </div>` : ''}
-        </div>`;
-    }).join('');
+        </div>`).join('');
   }
 
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Заявки</div><h2 class="section-title">Заявки из магазина</h2></div>
-      <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
+      <button class="btn-outline btn-sm" onclick="refreshCoinsModule()">Обновить</button>
     </div>
     <div class="filter-tabs" id="req-tabs">
       ${[
@@ -3080,17 +3126,22 @@ function renderRequests() {
     });
   });
 
+  // Полная перерисовка вкладки после действия — обновляет и счётчики в
+  // фильтрах, и сам список. Вызывается после того, как refreshCoinsAfterAction
+  // синхронизировал STATE.
+  function rerender() {
+    if (STATE.currentView === 'coins' && STATE.coinsTab === 'requests') renderRequests();
+  }
+
   function bindRequestActions() {
     el.querySelectorAll('.approve-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         try {
-          await api.approvePurchase(+btn.dataset.id);
+          await api.approveCoinRequest(+btn.dataset.id);
           showToast('Заявка одобрена', 'ok');
-          STATE.purchases = await api.listPurchases();
-          STATE.dashboard = await api.getDashboard().catch(() => STATE.dashboard);
-          el.querySelector('#requests-list').innerHTML = renderList();
-          bindRequestActions();
+          await refreshCoinsAfterAction();
+          rerender();
         } catch(err) { showToast(err.message, 'error'); btn.disabled = false; }
       });
     });
@@ -3100,25 +3151,22 @@ function renderRequests() {
         if (!reason?.trim()) return;
         btn.disabled = true;
         try {
-          await api.rejectPurchase(+btn.dataset.id, reason.trim());
+          await api.rejectCoinRequest(+btn.dataset.id, reason.trim());
           showToast('Заявка отклонена', 'ok');
-          STATE.purchases = await api.listPurchases();
-          STATE.dashboard = await api.getDashboard().catch(() => STATE.dashboard);
-          el.querySelector('#requests-list').innerHTML = renderList();
-          bindRequestActions();
+          await refreshCoinsAfterAction();
+          rerender();
         } catch(err) { showToast(err.message, 'error'); btn.disabled = false; }
       });
     });
     el.querySelectorAll('.complete-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
-        // Используем approve с пометкой completed
         try {
-          await api.completePurchase(btn.dataset.id);
-          STATE.purchases = await api.listPurchases();
-          el.querySelector('#requests-list').innerHTML = renderList();
-          bindRequestActions();
-        } catch { btn.disabled = false; }
+          await api.completeCoinRequest(+btn.dataset.id);
+          showToast('Заявка отмечена выполненной', 'ok');
+          await refreshCoinsAfterAction();
+          rerender();
+        } catch(err) { showToast(err.message, 'error'); btn.disabled = false; }
       });
     });
   }
@@ -4297,13 +4345,27 @@ function exportCSV() {
   downloadCSV([header, ...rows], 'pulse_operators');
 }
 
-function exportHistoryCSV() {
-  const header = ['Дата','Оператор','Группа','Тип','Коины','Причина','Автор'];
-  const rows = STATE.history.map(t => [
-    fmtDate(t.created_at), t.operator_name, t.group_name, t.type,
-    t.amount, t.comment, t.created_by_name||'Система',
-  ]);
-  downloadCSV([header, ...rows], 'pulse_history');
+async function exportHistoryCSV() {
+  // Полный экспорт берём с бэкенда (/api/coins/transactions/export) — он отдаёт
+  // ВСЕ транзакции, а не только то, что подгружено в STATE.history.
+  try {
+    const blob = await api.exportCoinTransactions();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `pulse_coin_transactions_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    return;
+  } catch (err) {
+    // Фолбэк: если серверный экспорт недоступен — выгружаем то, что есть на клиенте.
+    showToast('Серверный экспорт недоступен, выгружаю загруженные записи', 'error');
+    const header = ['Дата','Оператор','Группа','Тип','Коины','Причина','Автор'];
+    const rows = (STATE.history || []).map(t => [
+      fmtDate(t.created_at), t.operator_name, t.group_name, t.type,
+      t.amount, t.comment, t.created_by_name||'Система',
+    ]);
+    downloadCSV([header, ...rows], 'pulse_history');
+  }
 }
 
 function downloadCSV(rows, name) {
@@ -4828,7 +4890,7 @@ function renderPeriodReport() {
 
     function filteredSorted() {
       let r = ops.filter(o =>
-        (!searchVal || o.full_name.toLowerCase().includes(searchVal.toLowerCase())) &&
+        (!searchVal || String(o.full_name || '').toLowerCase().includes(searchVal.toLowerCase())) &&
         (!filterGroup || o.group_name === filterGroup)
       );
       r.sort((a, b) => {

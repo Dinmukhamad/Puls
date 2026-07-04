@@ -200,6 +200,21 @@ const api = (() => {
   async function completeCoinRequest(id) {
     return req('POST', `/api/coins/requests/${id}/complete`);
   }
+  // Полный CSV-экспорт всех транзакций коинов формируется на бэкенде
+  // (/api/coins/transactions/export), поэтому экспорт не ограничен тем,
+  // что подгружено на клиент. Возвращаем Blob для скачивания.
+  async function exportCoinTransactions() {
+    const res = await fetch(base() + '/api/coins/transactions/export', {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!res.ok) {
+      let detail = `Ошибка ${res.status}`;
+      try { const d = await res.json(); detail = d.detail || detail; } catch {}
+      throw new Error(detail);
+    }
+    return res.blob();
+  }
 
   /* ── Period reports ──────────────────────────────────────── */
   async function getPeriodReportStatus() {
@@ -333,7 +348,7 @@ const api = (() => {
     getDashboard, getDashboardOperators, getDashboardHistory,
     createUser, listUsers, updateUser, deactivateUser, changeUserRole, resetUserPassword,
     changeMyPassword, changeMyLogin, changeOperatorPassword, changeOperatorUsername,
-    getCoinsOverview, listCoinRequests, listCoinTransactions,
+    getCoinsOverview, listCoinRequests, listCoinTransactions, exportCoinTransactions,
     approveCoinRequest, rejectCoinRequest, completeCoinRequest,
     getPeriodReportStatus, uploadPeriodReportFiles, savePeriodReport,
     getAvailablePeriods, analyticsGet,
