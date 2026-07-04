@@ -4197,12 +4197,160 @@ body.role-operator {
 @keyframes wheelPop { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 /* Статистика/выдача (staff) */
-.wheel-tabs { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+.wheel-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding: 4px;
+  gap: 4px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+}
 .wheel-tabs::-webkit-scrollbar { height: 6px; }
 .wheel-tabs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
-.wheel-tabs .filter-tab { white-space: nowrap; flex: 0 0 auto; }
-.wheel-admin-panel { border-radius: var(--r-lg); }
+.wheel-tabs .filter-tab { white-space: nowrap; flex: 0 0 auto; border-radius: 8px; }
+.wheel-admin-panel {
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.wheel-admin-panel .panel-head {
+  min-height: 54px;
+  padding: 15px 20px;
+  background: linear-gradient(180deg, rgba(248,250,252,.9), rgba(241,245,249,.78));
+  border-bottom: 1px solid var(--border);
+}
+.wheel-admin-panel .panel-head h3 { margin: 0; }
+.panel-hint {
+  margin: 4px 0 0;
+  color: var(--tx3);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 500;
+}
 .wheel-admin-content { padding: 18px 20px 20px; }
+.wheel-campaign-grid,
+.wheel-rule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.wheel-check { min-height: 64px; align-items: flex-start; justify-content: center; }
+.wheel-check input[type="checkbox"] { width: 18px; height: 18px; margin-top: 7px; }
+.wheel-prizes-table { min-width: 1080px; }
+.wheel-prizes-table .form-input { min-height: 38px; }
+.wheel-prizes-table input[type="color"] {
+  width: 34px;
+  height: 34px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+.wheel-newprize {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+}
+.wheel-newprize-grid {
+  grid-template-columns: minmax(180px, 1fr) 170px 90px 90px 44px auto;
+  align-items: end;
+  gap: 10px;
+}
+.wheel-newprize-grid input[type="color"] {
+  width: 44px;
+  height: 40px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+.wheel-ops-shell { display: flex; flex-direction: column; gap: 16px; }
+.wheel-ops-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background:
+    linear-gradient(135deg, rgba(14,165,233,.12), rgba(255,255,255,.78) 44%, rgba(34,197,94,.10)),
+    var(--card-bg);
+  box-shadow: var(--shadow-sm);
+}
+.wheel-ops-hero h3 {
+  margin: 3px 0 4px;
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--tx);
+}
+.wheel-ops-hero p {
+  margin: 0;
+  max-width: 620px;
+  color: var(--tx2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.wheel-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.wheel-metric {
+  min-height: 92px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-sm);
+}
+.wheel-metric span {
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 900;
+  color: var(--accent-primary);
+}
+.wheel-metric p {
+  margin: 8px 0 0;
+  color: var(--tx3);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.wheel-ops-grid,
+.wheel-rules-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.wheel-table-wrap { max-height: 440px; overflow: auto; }
+.wheel-table-wrap .data-table { min-width: 720px; }
+.wheel-subtabs {
+  margin-bottom: 14px;
+  padding: 3px;
+  gap: 4px;
+  border-radius: 9px;
+  background: var(--surface-2, #f1f5f9);
+}
+.wheel-chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.wheel-data-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 999px;
+  background: var(--surface-2, #f1f5f9);
+  border: 1px solid var(--border-soft);
+  color: var(--tx2);
+  font-size: 12px;
+  font-weight: 700;
+}
+.wheel-data-chip strong { color: var(--tx); }
+.wheel-rule-form-panel { position: sticky; top: 12px; }
 .wheel-stats-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4255,7 +4403,15 @@ body.role-operator {
 .wheel-op-chosen { margin-top: 7px; font-size: 12px; font-weight: 600; color: var(--ok); }
 @media (max-width: 900px) {
   .wheel-stats-row,
-  .wheel-issue-grid { grid-template-columns: 1fr; }
+  .wheel-issue-grid,
+  .wheel-campaign-grid,
+  .wheel-rule-grid,
+  .wheel-newprize-grid,
+  .wheel-ops-grid,
+  .wheel-rules-layout,
+  .wheel-metric-grid { grid-template-columns: 1fr; }
+  .wheel-ops-hero { align-items: stretch; flex-direction: column; }
+  .wheel-rule-form-panel { position: static; }
 }
 
 /* ── Колесо WOW: карточка на главной оператора (ТЗ п.2) + доп. классы ── */

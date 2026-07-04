@@ -7637,7 +7637,7 @@ async function refreshWheelSidebar(el) {
 }
 
 /* ---------- Супервайзер / руководитель ---------- */
-let _wheelStaffTab = 'history';
+let _wheelStaffTab = 'operations';
 
 async function renderWheelStaffView(el) {
   el.innerHTML = `
@@ -7650,9 +7650,7 @@ async function renderWheelStaffView(el) {
     <div class="filter-tabs wheel-tabs">
         <button class="filter-tab ${_wheelStaffTab === 'campaign' ? 'active' : ''}" data-wheel-tab="campaign">Кампания</button>
         <button class="filter-tab ${_wheelStaffTab === 'prizes' ? 'active' : ''}" data-wheel-tab="prizes">Сектора</button>
-        <button class="filter-tab ${_wheelStaffTab === 'tickets' ? 'active' : ''}" data-wheel-tab="tickets">Билеты</button>
-        <button class="filter-tab ${_wheelStaffTab === 'history' ? 'active' : ''}" data-wheel-tab="history">История</button>
-        <button class="filter-tab ${_wheelStaffTab === 'stats' ? 'active' : ''}" data-wheel-tab="stats">Статистика</button>
+        <button class="filter-tab ${_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history' || _wheelStaffTab === 'stats' ? 'active' : ''}" data-wheel-tab="operations">Операции</button>
         <button class="filter-tab ${_wheelStaffTab === 'rules' ? 'active' : ''}" data-wheel-tab="rules">Правила</button>
         <button class="filter-tab ${_wheelStaffTab === 'logs' ? 'active' : ''}" data-wheel-tab="logs">Логи</button>
         <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билет</button>
@@ -7668,8 +7666,9 @@ async function renderWheelStaffView(el) {
     await renderWheelCampaignTab(body);
   } else if (_wheelStaffTab === 'prizes') {
     await renderWheelPrizesTab(body);
-  } else if (_wheelStaffTab === 'tickets') {
-    await renderWheelTicketsTab(body);
+  } else if (_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history' || _wheelStaffTab === 'stats') {
+    _wheelStaffTab = 'operations';
+    await renderWheelOperationsTab(body);
   } else if (_wheelStaffTab === 'issue') {
     await renderWheelIssueTab(body);
   } else if (_wheelStaffTab === 'stats') {
@@ -7679,7 +7678,8 @@ async function renderWheelStaffView(el) {
   } else if (_wheelStaffTab === 'logs') {
     await renderWheelLogsTab(body);
   } else {
-    await renderWheelSpinsTab(body);
+    _wheelStaffTab = 'operations';
+    await renderWheelOperationsTab(body);
   }
 }
 
@@ -7912,6 +7912,113 @@ async function renderWheelPrizesTab(body) {
 
 /* ---------- Стафф: билеты (ТЗ 12.3, 17) ---------- */
 let _wheelTicketFilter = '';
+async function renderWheelOperationsTab(body) {
+  body.innerHTML = `<div class="panel wheel-admin-panel"><div class="empty-state"><div class="loading-spinner"></div></div></div>`;
+  let ticketsData = { items: [] };
+  let spinsData = { items: [] };
+  let stats = null;
+  try {
+    [ticketsData, spinsData, stats] = await Promise.all([
+      api.getWheelTokens(_wheelTicketFilter ? { token_status: _wheelTicketFilter, limit: 200 } : { limit: 200 }),
+      api.getWheelSpins({ limit: 200 }),
+      api.getWheelStats(),
+    ]);
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message || 'Не удалось загрузить операции колеса')}</div></div>`;
+    return;
+  }
+
+  const tickets = ticketsData.items || [];
+  const spins = spinsData.items || [];
+  const statusBadge = { available: 'badge-ok', used: 'badge-muted', expired: 'badge-warning', cancelled: 'badge-muted' };
+  const statusLabel = { available: 'доступен', used: 'использован', expired: 'истёк', cancelled: 'отменён' };
+  const filters = [['', 'Все'], ['available', 'Доступные'], ['used', 'Использованные'], ['expired', 'Истёкшие'], ['cancelled', 'Отменённые']];
+  const uniqueOperators = new Set(spins.map(r => r.operator_id).filter(Boolean)).size;
+
+  body.innerHTML = `
+    <div class="wheel-ops-shell">
+      <div class="wheel-ops-hero">
+        <div>
+          <div class="section-kicker">Операции</div>
+          <h3>Билеты, прокрутки и статистика</h3>
+          <p>Единый контроль попыток Wheel of WOW без переключения между отдельными экранами.</p>
+        </div>
+        <button class="btn-primary" data-wheel-go-issue>Выдать билет</button>
+      </div>
+
+      <div class="wheel-metric-grid">
+        <div class="wheel-metric"><span>${stats?.tokens_issued ?? 0}</span><p>попыток выдано сегодня</p></div>
+        <div class="wheel-metric"><span>${stats?.tokens_used ?? 0}</span><p>использовано</p></div>
+        <div class="wheel-metric"><span>${stats?.spins_completed ?? 0}</span><p>прокруток сегодня</p></div>
+        <div class="wheel-metric"><span>${stats?.coins_awarded ?? 0}</span><p>коинов выдано</p></div>
+        <div class="wheel-metric"><span>${uniqueOperators}</span><p>участников в истории</p></div>
+      </div>
+
+      <div class="wheel-ops-grid">
+        <section class="panel wheel-admin-panel">
+          <div class="panel-head">
+            <h3>Билеты</h3>
+            <span class="panel-badge">${tickets.length}</span>
+          </div>
+          <div class="wheel-admin-content">
+            <div class="filter-tabs wheel-subtabs">
+              ${filters.map(([f, l]) => `<button class="filter-tab ${_wheelTicketFilter === f ? 'active' : ''}" data-ticket-filter="${f}">${l}</button>`).join('')}
+            </div>
+            ${tickets.length ? `<div class="table-wrap wheel-table-wrap"><table class="data-table">
+              <thead><tr><th>Оператор</th><th>Причина</th><th>Истекает</th><th>Статус</th></tr></thead>
+              <tbody>${tickets.map(t => `<tr>
+                <td class="name-cell"><strong>${esc(t.operator_name)}</strong><div class="muted-sm">${esc(fmtDateTime(t.created_at))}</div></td>
+                <td>${esc(t.reason_text || wheelSourceLabel(t.reason_type) || '—')}<div class="muted-sm">${esc(wheelSourceLabel(t.reason_type))}</div></td>
+                <td>${t.expires_at ? esc(fmtDateTime(t.expires_at)) : '—'}</td>
+                <td><span class="badge ${statusBadge[t.status] || 'badge-muted'}">${statusLabel[t.status] || t.status}</span></td>
+              </tr>`).join('')}</tbody>
+            </table></div>` : '<div class="empty-state wheel-empty"><p>Билетов пока нет.</p></div>'}
+          </div>
+        </section>
+
+        <section class="panel wheel-admin-panel">
+          <div class="panel-head">
+            <h3>История прокруток</h3>
+            <span class="panel-badge">${spins.length}</span>
+          </div>
+          <div class="wheel-admin-content">
+            ${spins.length ? `<div class="table-wrap wheel-table-wrap"><table class="data-table">
+              <thead><tr><th>Оператор</th><th>Приз</th><th>Причина</th><th>Дата</th></tr></thead>
+              <tbody>${spins.map(r => `<tr>
+                <td class="name-cell"><strong>${esc(r.operator_name)}</strong><div class="muted-sm">${esc(r.group_name || '—')}</div></td>
+                <td><span class="wheel-type-pill">${esc(wheelPrizeTypeLabel(r.prize_type))}</span><div><strong>${esc(r.prize)}</strong></div></td>
+                <td>${esc(r.reason || '—')}</td>
+                <td>${esc(fmtDateTime(r.date))}</td>
+              </tr>`).join('')}</tbody>
+            </table></div>` : '<div class="empty-state wheel-empty"><p>Прокруток пока нет.</p></div>'}
+          </div>
+        </section>
+      </div>
+
+      <section class="panel wheel-admin-panel">
+        <div class="panel-head"><h3>Статистика по призам и источникам</h3></div>
+        <div class="wheel-admin-content">
+          <div class="two-col-grid">
+            <div>
+              <h4 class="panel-subtitle">Частота призов</h4>
+              ${(stats?.prizes_histogram || []).length ? `<div class="wheel-chip-list">${stats.prizes_histogram.map(h => `<span class="wheel-data-chip"><strong>${esc(h.title)}</strong>${h.count}</span>`).join('')}</div>` : '<div class="empty-line">Прокруток сегодня нет</div>'}
+            </div>
+            <div>
+              <h4 class="panel-subtitle">Источники попыток</h4>
+              ${(stats?.top_sources || []).length ? `<div class="wheel-chip-list">${stats.top_sources.map(x => `<span class="wheel-data-chip"><strong>${esc(wheelSourceLabel(x.reason_type))}</strong>${x.count}</span>`).join('')}</div>` : '<div class="empty-line">Токенов сегодня не выдавалось</div>'}
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>`;
+
+  body.querySelectorAll('[data-ticket-filter]').forEach(b => {
+    b.onclick = () => { _wheelTicketFilter = b.dataset.ticketFilter; renderWheelOperationsTab(body); };
+  });
+  const issueBtn = body.querySelector('[data-wheel-go-issue]');
+  if (issueBtn) issueBtn.onclick = () => { _wheelStaffTab = 'issue'; renderWheelStaffView(document.getElementById('view-wheel')); };
+}
+
 async function renderWheelTicketsTab(body) {
   let data;
   try {
@@ -8034,6 +8141,7 @@ async function renderWheelStatsTab(body) {
 
 function wheelSourceLabel(t) {
   return {
+    tests: 'Тесты', period_reports: 'Расчёт периода', missions: 'Миссии',
     test_score: 'Тест дня', test_passed: 'Тест', simulation_passed: 'Симуляция',
     quality_score: 'Качество', no_late: 'Без опозданий', no_violations: 'Без нарушений',
     efficiency_percent: 'Эффективность', work_hours_percent: 'Норма часов',
@@ -8042,7 +8150,7 @@ function wheelSourceLabel(t) {
   }[t] || t;
 }
 
-/* ---------- Стафф: правила (ТЗ 15, read-only) ---------- */
+/* ---------- Стафф: правила (ТЗ 15) ---------- */
 async function renderWheelRulesTab(body) {
   let data;
   try {
@@ -8053,25 +8161,187 @@ async function renderWheelRulesTab(body) {
   }
   const rows = data.items || [];
   const opLabel = { gte: '≥', lte: '≤', eq: '=', between: 'между', is_true: 'да' };
+  const sourceOptions = [
+    ['tests', 'Тесты'],
+    ['period_reports', 'Расчёт периода'],
+    ['missions', 'Миссии'],
+    ['manual', 'Ручной источник'],
+  ];
+  const metricOptions = [
+    ['test_score', 'Результат теста'],
+    ['quality_avg', 'Качество звонков'],
+    ['late_minutes', 'Минуты опозданий'],
+    ['efficiency_percent', 'Эффективность'],
+    ['work_hours_percent', 'Норма часов'],
+    ['rating_place', 'Место в рейтинге'],
+    ['simulation_passed', 'Симуляция пройдена'],
+    ['custom', 'Свой показатель'],
+  ];
   body.innerHTML = `
-    <div class="panel wheel-admin-panel">
-      <div class="panel-head"><h3>Правила выдачи попыток</h3><span class="panel-badge">${rows.length}</span></div>
-      <div class="wheel-admin-content">
-        ${rows.length ? `<div class="table-wrap"><table class="data-table">
-          <thead><tr><th>Правило</th><th>Источник</th><th>Условие</th><th>Период</th><th>Лимит</th><th>TTL</th><th>Статус</th></tr></thead>
-          <tbody>${rows.map(r => `<tr>
-            <td><strong>${esc(r.title)}</strong><div class="muted-sm">${esc(r.code)}</div></td>
-            <td>${esc(r.source_module)}</td>
-            <td>${esc(r.metric_key || r.rule_type)} ${esc(opLabel[r.operator] || r.operator)} ${esc(String(r.threshold_value))}${r.operator === 'between' && r.threshold_value_max != null ? '…' + esc(String(r.threshold_value_max)) : ''}</td>
-            <td>${esc(r.period_type)}</td>
-            <td>${r.max_tokens_per_period}</td>
-            <td>${r.token_ttl_hours}ч</td>
-            <td><span class="badge ${r.is_active ? 'badge-ok' : 'badge-muted'}">${r.is_active ? 'активно' : 'выкл'}</span></td>
-          </tr>`).join('')}</tbody>
-        </table></div>` : '<div class="empty-state wheel-empty"><p>Правил пока нет.</p></div>'}
-        <div class="status-line muted" style="margin-top:10px">Редактирование правил доступно через API <code>/api/admin/wheel/rules</code>.</div>
-      </div>
+    <div class="wheel-rules-layout">
+      <section class="panel wheel-admin-panel">
+        <div class="panel-head">
+          <div>
+            <h3>Правила выдачи попыток</h3>
+            <p class="panel-hint">Условия, по которым операторы получают билеты Wheel of WOW.</p>
+          </div>
+          <span class="panel-badge">${rows.length}</span>
+        </div>
+        <div class="wheel-admin-content">
+          ${rows.length ? `<div class="table-wrap wheel-table-wrap"><table class="data-table">
+            <thead><tr><th>Правило</th><th>Источник</th><th>Условие</th><th>Период</th><th>Лимит</th><th>TTL</th><th>Статус</th></tr></thead>
+            <tbody>${rows.map(r => `<tr>
+              <td><strong>${esc(r.title)}</strong><div class="muted-sm">${esc(r.code)}</div></td>
+              <td><span class="wheel-type-pill">${esc(wheelSourceLabel(r.source_module))}</span></td>
+              <td>${esc(r.metric_key || r.rule_type)} ${esc(opLabel[r.operator] || r.operator)} ${esc(String(r.threshold_value))}${r.operator === 'between' && r.threshold_value_max != null ? '…' + esc(String(r.threshold_value_max)) : ''}</td>
+              <td>${esc(r.period_type)}</td>
+              <td>${r.max_tokens_per_period}</td>
+              <td>${r.token_ttl_hours}ч</td>
+              <td><span class="badge ${r.is_active ? 'badge-ok' : 'badge-muted'}">${r.is_active ? 'активно' : 'выкл'}</span></td>
+            </tr>`).join('')}</tbody>
+          </table></div>` : '<div class="empty-state wheel-empty"><p>Правил пока нет.</p></div>'}
+        </div>
+      </section>
+
+      <section class="panel wheel-admin-panel wheel-rule-form-panel">
+        <div class="panel-head">
+          <div>
+            <h3>Добавить правило</h3>
+            <p class="panel-hint">Доступно администраторам и руководителям.</p>
+          </div>
+        </div>
+        <div class="wheel-admin-content">
+          <div class="form-grid wheel-rule-grid">
+            <label class="form-group">
+              <span class="form-label">Название</span>
+              <input id="wr-title" class="form-input" placeholder="Например: Тест дня 80%+">
+            </label>
+            <label class="form-group">
+              <span class="form-label">Код</span>
+              <input id="wr-code" class="form-input" placeholder="test_score_80">
+            </label>
+            <label class="form-group">
+              <span class="form-label">Источник</span>
+              <select id="wr-source" class="form-input">${sourceOptions.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+            </label>
+            <label class="form-group">
+              <span class="form-label">Показатель</span>
+              <select id="wr-metric" class="form-input">${metricOptions.map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+            </label>
+            <label class="form-group">
+              <span class="form-label">Оператор</span>
+              <select id="wr-operator" class="form-input">
+                <option value="gte">Больше или равно</option>
+                <option value="lte">Меньше или равно</option>
+                <option value="eq">Равно</option>
+                <option value="between">Между</option>
+                <option value="is_true">Да/истина</option>
+              </select>
+            </label>
+            <label class="form-group">
+              <span class="form-label">Порог</span>
+              <input id="wr-threshold" class="form-input" type="number" step="0.01" value="80">
+            </label>
+            <label class="form-group">
+              <span class="form-label">Верхний порог</span>
+              <input id="wr-threshold-max" class="form-input" type="number" step="0.01" placeholder="для «между»">
+            </label>
+            <label class="form-group">
+              <span class="form-label">Период</span>
+              <select id="wr-period" class="form-input">
+                <option value="daily">День</option>
+                <option value="weekly">Неделя</option>
+                <option value="monthly">Месяц</option>
+                <option value="once">Один раз</option>
+              </select>
+            </label>
+            <label class="form-group">
+              <span class="form-label">Лимит билетов</span>
+              <input id="wr-limit" class="form-input" type="number" min="0" value="1">
+            </label>
+            <label class="form-group">
+              <span class="form-label">TTL, часов</span>
+              <input id="wr-ttl" class="form-input" type="number" min="1" value="24">
+            </label>
+            <label class="form-group">
+              <span class="form-label">Приоритет</span>
+              <input id="wr-priority" class="form-input" type="number" value="0">
+            </label>
+            <label class="form-group wheel-check">
+              <span class="form-label">Активно</span>
+              <input id="wr-active" type="checkbox" checked>
+            </label>
+            <label class="form-group" style="grid-column:1/-1">
+              <span class="form-label">Описание</span>
+              <input id="wr-description" class="form-input" placeholder="Коротко поясните, за что выдаётся билет">
+            </label>
+          </div>
+          <div class="wheel-issue-actions" style="gap:10px">
+            <button class="btn-primary" id="wr-create">Добавить правило</button>
+            <button class="btn-outline" id="wr-fill-quality">Шаблон качества 90+</button>
+          </div>
+          <div id="wr-status" class="status-line" style="margin-top:10px"></div>
+        </div>
+      </section>
     </div>`;
+
+  const setVal = (id, value) => { const n = document.getElementById(id); if (n) n.value = value; };
+  const titleEl = document.getElementById('wr-title');
+  if (titleEl) titleEl.addEventListener('input', () => {
+    const codeEl = document.getElementById('wr-code');
+    if (codeEl && !codeEl.dataset.touched) {
+      codeEl.value = titleEl.value.toLowerCase().replace(/[^a-zа-я0-9]+/gi, '_').replace(/^_+|_+$/g, '').slice(0, 64);
+    }
+  });
+  const codeEl = document.getElementById('wr-code');
+  if (codeEl) codeEl.addEventListener('input', () => { codeEl.dataset.touched = '1'; });
+  const tmpl = document.getElementById('wr-fill-quality');
+  if (tmpl) tmpl.onclick = () => {
+    setVal('wr-title', 'Качество звонков за период 90+');
+    setVal('wr-code', 'quality_90');
+    setVal('wr-source', 'period_reports');
+    setVal('wr-metric', 'quality_avg');
+    setVal('wr-operator', 'gte');
+    setVal('wr-threshold', '90');
+    setVal('wr-period', 'weekly');
+    setVal('wr-ttl', '72');
+    setVal('wr-description', 'Билет за высокое качество звонков по итогам периода');
+    if (codeEl) codeEl.dataset.touched = '1';
+  };
+  const createBtn = document.getElementById('wr-create');
+  if (createBtn) createBtn.onclick = async () => {
+    const statusEl = document.getElementById('wr-status');
+    const metric = document.getElementById('wr-metric').value;
+    const payload = {
+      title: document.getElementById('wr-title').value.trim(),
+      code: document.getElementById('wr-code').value.trim(),
+      description: document.getElementById('wr-description').value.trim(),
+      source_module: document.getElementById('wr-source').value,
+      rule_type: metric,
+      metric_key: metric === 'custom' ? '' : metric,
+      operator: document.getElementById('wr-operator').value,
+      threshold_value: parseFloat(document.getElementById('wr-threshold').value || '0'),
+      threshold_value_max: document.getElementById('wr-threshold-max').value ? parseFloat(document.getElementById('wr-threshold-max').value) : null,
+      period_type: document.getElementById('wr-period').value,
+      max_tokens_per_period: parseInt(document.getElementById('wr-limit').value, 10) || 0,
+      token_ttl_hours: parseInt(document.getElementById('wr-ttl').value, 10) || 24,
+      priority: parseInt(document.getElementById('wr-priority').value, 10) || 0,
+      is_active: document.getElementById('wr-active').checked,
+    };
+    if (!payload.title || !payload.code) {
+      statusEl.className = 'status-line status-error';
+      statusEl.textContent = 'Укажите название и код правила';
+      return;
+    }
+    try {
+      await api.createWheelRule(payload);
+      showToast('Правило добавлено', 'ok');
+      renderWheelRulesTab(body);
+    } catch (err) {
+      statusEl.className = 'status-line status-error';
+      statusEl.textContent = err.message || 'Не удалось добавить правило';
+    }
+  };
 }
 
 /* ---------- Стафф: логи проверок (ТЗ 8.7, 15) ---------- */

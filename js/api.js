@@ -298,6 +298,8 @@ const api = (() => {
     const qs = new URLSearchParams(params || {}).toString();
     return req('GET', '/api/admin/wheel/rules' + (qs ? '?' + qs : ''));
   }
+  async function createWheelRule(payload) { return req('POST', '/api/admin/wheel/rules', payload); }
+  async function updateWheelRule(id, payload) { return req('PATCH', '/api/admin/wheel/rules/' + id, payload); }
   async function getWheelTokens(params) {
     const qs = new URLSearchParams(params || {}).toString();
     return req('GET', '/api/admin/wheel/tokens' + (qs ? '?' + qs : ''));
@@ -344,7 +346,7 @@ const api = (() => {
     addOperatorLevelRule, updateOperatorLevelRule, deleteOperatorLevelRule,
     recalculateOperatorLevels, manualOperatorLevel, listOperatorLevelRewards,
     getWheelStatus, getWheelPrizes, spinWheel, getWheelMyHistory, getWheelSpins, issueWheelTicket,
-    getWheelStats, getWheelRules, getWheelTokens, getWheelEvaluationLogs, grantWheelTokens,
+    getWheelStats, getWheelRules, createWheelRule, updateWheelRule, getWheelTokens, getWheelEvaluationLogs, grantWheelTokens,
     getWheelWinnersToday, getWheelCampaigns, createWheelCampaign, updateWheelCampaign,
     getWheelAdminPrizes, createWheelPrize, updateWheelPrize,
     loginOperator: login,
