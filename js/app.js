@@ -7681,6 +7681,16 @@ async function refreshWheelSidebar(el) {
 let _wheelStaffTab = 'operations';
 
 async function renderWheelStaffView(el) {
+  if (!el.dataset.wheelRuleDelegated) {
+    el.dataset.wheelRuleDelegated = '1';
+    el.addEventListener('click', (event) => {
+      const openRuleBtn = event.target.closest('#wr-open-create');
+      if (!openRuleBtn) return;
+      event.preventDefault();
+      const body = document.getElementById('wheel-staff-body');
+      showWheelRuleModal(body);
+    });
+  }
   el.innerHTML = `
     <div class="view-header">
       <div>
@@ -8284,7 +8294,7 @@ async function renderWheelRulesTab(body) {
     </section>`;
 
   const btn = document.getElementById('wr-open-create');
-  if (btn) btn.onclick = () => showWheelRuleModal(body);
+  if (btn) btn.onclick = (event) => { event.preventDefault(); showWheelRuleModal(body); };
 }
 
 function showWheelRuleModal(body) {
