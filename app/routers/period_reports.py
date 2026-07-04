@@ -446,6 +446,7 @@ def save_period_report(
     created = 0
     updated = 0
     coins_delta_total = 0
+    saved_reports: list[PeriodReport] = []
 
     for m in result.operators:
         db_op = name_to_op.get(m.name_key)
@@ -507,6 +508,7 @@ def save_period_report(
             pr.coins_awarded = old_coins
 
         db.add(pr)
+        saved_reports.append(pr)
         assign_auto_level(db, db_op, current_user, payload.start_date, payload.end_date)
         saved += 1
         if existing_reports:
@@ -527,6 +529,13 @@ def save_period_report(
     db.commit()
     cache_clear_all()  # новый/обновлённый расчёт периода — сбрасываем кеш аналитики
     rating_cache_invalidate()  # рейтинг тоже изменился
+
+    # ТЗ 11.2: после создания/пересчёта PeriodReport — проверка правил колеса.
+    # Изолированная обёртка: сбой колеса не влияет на сохранение расчёта.
+    from app.services.wheel_eligibility import notify_period_report_saved
+    for _pr in saved_reports:
+        if _pr.id:
+            notify_period_report_saved(_pr.id)
 
     return {
         "ok": True,

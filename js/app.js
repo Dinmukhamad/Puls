@@ -1078,6 +1078,8 @@ function renderCabinet() {
 
     ${levelCard}
 
+    <div id="cabinet-wheel-card"></div>
+
     <div class="two-col-grid">
       <div class="panel">
         <div class="panel-head"><h3>История начислений</h3><span class="panel-badge">${w.transactions.length} записей</span></div>
@@ -1108,6 +1110,52 @@ function renderCabinet() {
       </div>
       <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
     </div>`;
+
+  renderCabinetWheelCard();
+}
+
+// Карточка «Колесо WOW» на главной панели оператора (ТЗ п.2). Грузится
+// асинхронно, чтобы не задерживать рендер кабинета; ошибки скрывают карточку.
+async function renderCabinetWheelCard() {
+  const host = document.getElementById('cabinet-wheel-card');
+  if (!host) return;
+  let status;
+  try {
+    status = await api.getWheelStatus();
+  } catch {
+    host.innerHTML = '';
+    return;
+  }
+  if (!status || !status.campaign) { host.innerHTML = ''; return; }
+
+  const tickets = status.available_tickets || 0;
+  const canSpin = status.can_spin;
+  const reason = status.next_ticket_reason;
+  const lp = status.last_prize;
+
+  if (tickets > 0) {
+    host.innerHTML = `
+      <div class="panel wheel-cabinet-card wheel-cabinet-have">
+        <div class="wheel-cabinet-main">
+          <div class="wheel-cabinet-kicker">🎡 Колесо WOW</div>
+          <div class="wheel-cabinet-title">Доступно вращений: <b>${tickets}</b></div>
+          ${reason ? `<div class="wheel-cabinet-sub">Получено за: ${esc(reason)}</div>` : ''}
+          ${!canSpin && status.reason_if_cannot_spin ? `<div class="wheel-cabinet-sub muted">${esc(status.reason_if_cannot_spin)}</div>` : ''}
+        </div>
+        <button class="btn-primary" onclick="navigateTo('wheel')">Крутить колесо</button>
+      </div>`;
+  } else {
+    host.innerHTML = `
+      <div class="panel wheel-cabinet-card wheel-cabinet-none">
+        <div class="wheel-cabinet-main">
+          <div class="wheel-cabinet-kicker">🎡 Колесо WOW</div>
+          <div class="wheel-cabinet-title">Сегодня вращений нет</div>
+          <div class="wheel-cabinet-sub muted">Чтобы получить попытку: пройди тест дня на 80%+, закрой день без опозданий, держи качество 90+.</div>
+          ${lp ? `<div class="wheel-cabinet-sub">Последний приз: ${esc(lp.title)}</div>` : ''}
+        </div>
+        <button class="btn-outline" onclick="navigateTo('wheel')">Открыть колесо</button>
+      </div>`;
+  }
 }
 
 async function reloadCabinet() {
@@ -7232,7 +7280,11 @@ const WHEEL_PRIZE_ICON = {
 };
 
 function wheelPrizeTypeLabel(t) {
-  return { coins: 'коины', shop_discount: 'скидка', extra_ticket: 'билет', badge: 'бейдж', manual_reward: 'приз' }[t] || t;
+  return {
+    coins: 'коины', xp: 'XP', shop_discount: 'скидка', extra_ticket: 'билет',
+    spin_token: 'ещё вращение', badge: 'бейдж', raffle_ticket: 'розыгрыш',
+    status: 'статус', manual_reward: 'приз', empty_consolation: 'приз',
+  }[t] || t;
 }
 
 function renderWheel() {
@@ -7278,9 +7330,14 @@ async function renderWheelOperatorView(el) {
   }
 
   const tickets = status.available_tickets || 0;
-  const canSpin = tickets > 0
-    && (!status.max_spins_per_day || status.spins_used_today < status.max_spins_per_day)
-    && (!status.max_spins_per_week || status.spins_used_this_week < status.max_spins_per_week);
+  // Единый источник истины — backend (ТЗ п.13/17). Если поля нет (старый
+  // ответ), падаем на прежний расчёт по лимитам.
+  const canSpin = (typeof status.can_spin === 'boolean')
+    ? status.can_spin
+    : (tickets > 0
+        && (!status.max_spins_per_day || status.spins_used_today < status.max_spins_per_day)
+        && (!status.max_spins_per_week || status.spins_used_this_week < status.max_spins_per_week));
+  const cannotReason = status.reason_if_cannot_spin || (tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет билетов');
 
   const ticketCard = tickets > 0
     ? `<div class="wheel-ticket-badge wheel-ticket-have">
@@ -7315,7 +7372,7 @@ async function renderWheelOperatorView(el) {
         <div class="wheel-controls">
           ${ticketCard}
           <button class="btn-primary wheel-spin-btn" id="wheel-spin-btn" ${canSpin ? '' : 'disabled'}>
-            ${canSpin ? 'Крутить колесо' : (tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет билетов')}
+            ${canSpin ? 'Крутить колесо' : esc(cannotReason)}
           </button>
         </div>
       </div>
@@ -7473,6 +7530,9 @@ async function renderWheelStaffView(el) {
       </div>
       <div class="filter-tabs wheel-tabs">
         <button class="filter-tab ${_wheelStaffTab === 'history' ? 'active' : ''}" data-wheel-tab="history">История</button>
+        <button class="filter-tab ${_wheelStaffTab === 'stats' ? 'active' : ''}" data-wheel-tab="stats">Статистика</button>
+        <button class="filter-tab ${_wheelStaffTab === 'rules' ? 'active' : ''}" data-wheel-tab="rules">Правила</button>
+        <button class="filter-tab ${_wheelStaffTab === 'logs' ? 'active' : ''}" data-wheel-tab="logs">Логи</button>
         <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билет</button>
       </div>
     </div>
@@ -7485,6 +7545,12 @@ async function renderWheelStaffView(el) {
   const body = document.getElementById('wheel-staff-body');
   if (_wheelStaffTab === 'issue') {
     await renderWheelIssueTab(body);
+  } else if (_wheelStaffTab === 'stats') {
+    await renderWheelStatsTab(body);
+  } else if (_wheelStaffTab === 'rules') {
+    await renderWheelRulesTab(body);
+  } else if (_wheelStaffTab === 'logs') {
+    await renderWheelLogsTab(body);
   } else {
     await renderWheelSpinsTab(body);
   }
@@ -7524,6 +7590,120 @@ async function renderWheelSpinsTab(body) {
             <td><span class="wheel-type-pill">${esc(wheelPrizeTypeLabel(r.prize_type))}</span></td>
           </tr>`).join('')}</tbody>
         </table></div>` : '<div class="empty-state wheel-empty"><p>Прокруток пока нет.</p></div>'}
+      </div>
+    </div>`;
+}
+
+/* ---------- Стафф: статистика (ТЗ 16) ---------- */
+async function renderWheelStatsTab(body) {
+  let s;
+  try {
+    s = await api.getWheelStats();
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+  const hist = s.prizes_histogram || [];
+  const src = s.top_sources || [];
+  body.innerHTML = `
+    <div class="panel wheel-admin-panel">
+      <div class="panel-head"><h3>Статистика за сегодня</h3></div>
+      <div class="wheel-admin-content">
+        <div class="wheel-stats-row">
+          <div class="wheel-stat"><span class="wheel-stat-num">${s.tokens_issued}</span><span>выдано попыток</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${s.tokens_used}</span><span>использовано</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${s.tokens_expired}</span><span>сгорело</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${s.coins_awarded}</span><span>коинов выдано</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${s.manual_granted}</span><span>выдано вручную</span></div>
+        </div>
+        <div class="two-col-grid">
+          <div>
+            <h4 class="panel-subtitle">Частота призов</h4>
+            ${hist.length ? `<div class="table-wrap"><table class="data-table">
+              <thead><tr><th>Приз</th><th>Раз</th></tr></thead>
+              <tbody>${hist.map(h => `<tr><td>${esc(h.title)}</td><td><strong>${h.count}</strong></td></tr>`).join('')}</tbody>
+            </table></div>` : '<div class="empty-line">Прокруток сегодня нет</div>'}
+          </div>
+          <div>
+            <h4 class="panel-subtitle">Топ источников попыток</h4>
+            ${src.length ? `<div class="table-wrap"><table class="data-table">
+              <thead><tr><th>Источник</th><th>Токенов</th></tr></thead>
+              <tbody>${src.map(x => `<tr><td>${esc(wheelSourceLabel(x.reason_type))}</td><td><strong>${x.count}</strong></td></tr>`).join('')}</tbody>
+            </table></div>` : '<div class="empty-line">Токенов сегодня не выдавалось</div>'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function wheelSourceLabel(t) {
+  return {
+    test_score: 'Тест дня', test_passed: 'Тест', simulation_passed: 'Симуляция',
+    quality_score: 'Качество', no_late: 'Без опозданий', no_violations: 'Без нарушений',
+    efficiency_percent: 'Эффективность', work_hours_percent: 'Норма часов',
+    rating_place: 'Рейтинг', manual: 'Вручную', manual_grant: 'Ручная выдача',
+    extra_ticket: 'Приз колеса',
+  }[t] || t;
+}
+
+/* ---------- Стафф: правила (ТЗ 15, read-only) ---------- */
+async function renderWheelRulesTab(body) {
+  let data;
+  try {
+    data = await api.getWheelRules();
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+  const rows = data.items || [];
+  const opLabel = { gte: '≥', lte: '≤', eq: '=', between: 'между', is_true: 'да' };
+  body.innerHTML = `
+    <div class="panel wheel-admin-panel">
+      <div class="panel-head"><h3>Правила выдачи попыток</h3><span class="panel-badge">${rows.length}</span></div>
+      <div class="wheel-admin-content">
+        ${rows.length ? `<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Правило</th><th>Источник</th><th>Условие</th><th>Период</th><th>Лимит</th><th>TTL</th><th>Статус</th></tr></thead>
+          <tbody>${rows.map(r => `<tr>
+            <td><strong>${esc(r.title)}</strong><div class="muted-sm">${esc(r.code)}</div></td>
+            <td>${esc(r.source_module)}</td>
+            <td>${esc(r.metric_key || r.rule_type)} ${esc(opLabel[r.operator] || r.operator)} ${esc(String(r.threshold_value))}${r.operator === 'between' && r.threshold_value_max != null ? '…' + esc(String(r.threshold_value_max)) : ''}</td>
+            <td>${esc(r.period_type)}</td>
+            <td>${r.max_tokens_per_period}</td>
+            <td>${r.token_ttl_hours}ч</td>
+            <td><span class="badge ${r.is_active ? 'badge-ok' : 'badge-muted'}">${r.is_active ? 'активно' : 'выкл'}</span></td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : '<div class="empty-state wheel-empty"><p>Правил пока нет.</p></div>'}
+        <div class="status-line muted" style="margin-top:10px">Редактирование правил доступно через API <code>/api/admin/wheel/rules</code>.</div>
+      </div>
+    </div>`;
+}
+
+/* ---------- Стафф: логи проверок (ТЗ 8.7, 15) ---------- */
+async function renderWheelLogsTab(body) {
+  let data;
+  try {
+    data = await api.getWheelEvaluationLogs({ limit: 200 });
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+  const rows = data.items || [];
+  body.innerHTML = `
+    <div class="panel wheel-admin-panel">
+      <div class="panel-head"><h3>Логи проверки условий</h3><span class="panel-badge">${rows.length}</span></div>
+      <div class="wheel-admin-content">
+        ${rows.length ? `<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Дата</th><th>Оператор</th><th>Источник</th><th>Значение</th><th>Порог</th><th>Итог</th><th>Причина</th></tr></thead>
+          <tbody>${rows.map(l => `<tr>
+            <td>${esc(fmtDateTime(l.created_at))}</td>
+            <td class="name-cell">${esc(l.operator_name)}</td>
+            <td>${esc(l.source_module)}${l.source_entity_id ? ' #' + l.source_entity_id : ''}</td>
+            <td>${l.metric_value != null ? esc(String(l.metric_value)) : '—'}</td>
+            <td>${l.threshold_value != null ? esc(l.operator) + ' ' + esc(String(l.threshold_value)) : '—'}</td>
+            <td><span class="badge ${l.is_eligible ? 'badge-ok' : 'badge-muted'}">${l.is_eligible ? 'выдан' : 'нет'}</span></td>
+            <td>${esc(l.reason || '—')}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : '<div class="empty-state wheel-empty"><p>Логов пока нет.</p></div>'}
       </div>
     </div>`;
 }

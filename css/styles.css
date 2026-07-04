@@ -4210,3 +4210,24 @@ body.role-operator {
   .wheel-stats-row,
   .wheel-issue-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Колесо WOW: карточка на главной оператора (ТЗ п.2) + доп. классы ── */
+.wheel-cabinet-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  flex-wrap: wrap; margin-top: 16px;
+  border-left: 4px solid var(--accent);
+}
+.wheel-cabinet-card.wheel-cabinet-none { border-left-color: var(--border, #e5e7eb); }
+.wheel-cabinet-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wheel-cabinet-kicker {
+  font-size: 12px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--accent);
+}
+.wheel-cabinet-title { font-size: 18px; font-weight: 700; }
+.wheel-cabinet-sub { font-size: 13px; color: var(--text-secondary, #555); }
+.wheel-cabinet-sub.muted { color: var(--text-muted, #888); }
+.panel-subtitle { font-size: 14px; font-weight: 600; margin: 4px 0 8px; }
+.muted-sm { font-size: 11px; color: var(--text-muted, #888); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.badge-ok { background: rgba(34,197,94,.15); color: #16a34a; }
+.badge-muted { background: rgba(148,163,184,.2); color: #64748b; }

@@ -244,6 +244,11 @@ def finish_test(attempt_id: int, db: Session = Depends(get_db), current_user: Us
         finish_attempt(db, attempt, reviewer=None)
         db.commit()
         db.refresh(attempt)
+        # ТЗ 11.1: после сохранения результата теста — проверка правил колеса.
+        # Обёртка изолирована (своя сессия + подавление ошибок), поэтому сбой
+        # колеса не влияет на завершение теста.
+        from app.services.wheel_eligibility import notify_test_attempt_finished
+        notify_test_attempt_finished(attempt.id)
         return _attempt_result_payload(attempt, attempt.test)
     except HTTPException:
         db.rollback()

@@ -23,7 +23,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import local_day_bounds_utc, now_local, now_utc
+from app.core.datetime_utils import local_day_bounds_utc, now_local, now_utc, to_local_iso
 from app.models.entities import (
     Operator,
     User,
@@ -43,7 +43,12 @@ TICKET_USED = "used"
 TICKET_EXPIRED = "expired"
 TICKET_CANCELLED = "cancelled"
 
-PRIZE_TYPES = ("coins", "shop_discount", "extra_ticket", "badge", "manual_reward")
+# extra_ticket / spin_token — синонимы (ТЗ п.7.1 «повторное вращение»);
+# empty_consolation допустим как тип, но ТЗ п.7.2 запрещает пустой сектор.
+PRIZE_TYPES = (
+    "coins", "shop_discount", "extra_ticket", "spin_token", "badge",
+    "manual_reward", "raffle_ticket", "status", "empty_consolation",
+)
 
 
 # ── Кампания ─────────────────────────────────────────────────────────────────
@@ -198,21 +203,71 @@ def wheel_status(db: Session, operator: Operator) -> dict:
             "spins_used_this_week": 0,
             "max_spins_per_week": 0,
             "next_ticket_reason": None,
+            "can_spin": False,
+            "reason_if_cannot_spin": "Активная кампания колеса не найдена",
+            "last_prize": None,
         }
     tickets = available_tickets(db, operator.id)
     next_ticket = tickets[0] if tickets else None
+    used_today = _spins_used_today(db, operator.id)
+    used_week = _spins_used_this_week(db, operator.id)
+
+    can_spin = True
+    reason = None
+    if not tickets:
+        can_spin, reason = False, "Нет доступных билетов"
+    elif campaign.max_spins_per_day and used_today >= campaign.max_spins_per_day:
+        can_spin, reason = False, "Достигнут дневной лимит прокруток"
+    elif campaign.max_spins_per_week and used_week >= campaign.max_spins_per_week:
+        can_spin, reason = False, "Достигнут недельный лимит прокруток"
+
+    last_prize = _last_prize(db, operator.id)
     return {
         "campaign": {"id": campaign.id, "title": campaign.title},
         "available_tickets": len(tickets),
-        "spins_used_today": _spins_used_today(db, operator.id),
+        "spins_used_today": used_today,
         "max_spins_per_day": campaign.max_spins_per_day,
-        "spins_used_this_week": _spins_used_this_week(db, operator.id),
+        "spins_used_this_week": used_week,
         "max_spins_per_week": campaign.max_spins_per_week,
         "next_ticket_reason": next_ticket.reason_text if next_ticket else None,
+        "can_spin": can_spin,
+        "reason_if_cannot_spin": reason,
+        "last_prize": last_prize,
+    }
+
+
+def _last_prize(db: Session, operator_id: int) -> dict | None:
+    from app.models.entities import WheelOperatorDailyState
+    state = db.scalars(
+        select(WheelOperatorDailyState)
+        .where(WheelOperatorDailyState.operator_id == operator_id, WheelOperatorDailyState.last_prize_title.is_not(None))
+        .order_by(WheelOperatorDailyState.date.desc())
+    ).first()
+    if not state or not state.last_prize_title:
+        return None
+    return {
+        "title": state.last_prize_title,
+        "type": state.last_prize_type,
+        "value": state.last_prize_value,
+        "at": to_local_iso(state.last_spin_at),
     }
 
 
 # ── Выбор приза по весу (ТЗ раздел 14) ───────────────────────────────────────
+
+def _wins_in_window(db, prize_id, *, operator_id=None, days=None) -> int:
+    stmt = select(func.count(WheelSpin.id)).where(
+        WheelSpin.prize_id == prize_id,
+        WheelSpin.status == "completed",
+    )
+    if operator_id is not None:
+        stmt = stmt.where(WheelSpin.operator_id == operator_id)
+    if days is not None:
+        day_start, _ = local_day_bounds_utc()
+        window_start = day_start - timedelta(days=days - 1)
+        stmt = stmt.where(WheelSpin.created_at >= window_start)
+    return db.scalar(stmt) or 0
+
 
 def _eligible_prizes(db: Session, campaign_id: int, operator_id: int) -> list[WheelPrize]:
     prizes = db.scalars(
@@ -225,27 +280,23 @@ def _eligible_prizes(db: Session, campaign_id: int, operator_id: int) -> list[Wh
 
     eligible: list[WheelPrize] = []
     for prize in prizes:
-        # Общий лимит выигрышей приза
-        if prize.max_wins_total:
-            total = db.scalar(
-                select(func.count(WheelSpin.id)).where(
-                    WheelSpin.prize_id == prize.id,
-                    WheelSpin.status == "completed",
-                )
-            ) or 0
-            if total >= prize.max_wins_total:
-                continue
-        # Персональный лимит выигрышей приза
-        if prize.max_wins_per_operator:
-            per_op = db.scalar(
-                select(func.count(WheelSpin.id)).where(
-                    WheelSpin.prize_id == prize.id,
-                    WheelSpin.operator_id == operator_id,
-                    WheelSpin.status == "completed",
-                )
-            ) or 0
-            if per_op >= prize.max_wins_per_operator:
-                continue
+        # Общий лимит выигрышей приза (за всё время)
+        if prize.max_wins_total and _wins_in_window(db, prize.id) >= prize.max_wins_total:
+            continue
+        # Персональный лимит выигрышей приза (за всё время)
+        if prize.max_wins_per_operator and _wins_in_window(db, prize.id, operator_id=operator_id) >= prize.max_wins_per_operator:
+            continue
+        # Лимиты по скользящим окнам (ТЗ 8.2)
+        if prize.daily_limit and _wins_in_window(db, prize.id, days=1) >= prize.daily_limit:
+            continue
+        if prize.weekly_limit and _wins_in_window(db, prize.id, days=7) >= prize.weekly_limit:
+            continue
+        if prize.monthly_limit and _wins_in_window(db, prize.id, days=30) >= prize.monthly_limit:
+            continue
+        if prize.per_operator_daily_limit and _wins_in_window(db, prize.id, operator_id=operator_id, days=1) >= prize.per_operator_daily_limit:
+            continue
+        if prize.per_operator_weekly_limit and _wins_in_window(db, prize.id, operator_id=operator_id, days=7) >= prize.per_operator_weekly_limit:
+            continue
         eligible.append(prize)
     return eligible
 
@@ -335,6 +386,8 @@ def spin(db: Session, operator: Operator, *, rng=_rng) -> dict:
     spin_row.status = "completed"
     spin_row.completed_at = now_utc()
 
+    _update_daily_state_after_spin(db, operator.id, prize)
+
     return {
         "spin_id": spin_row.id,
         "prize": {"id": prize.id, "title": prize.title, "type": prize.prize_type, "amount": prize.amount, "color": prize.color},
@@ -344,7 +397,8 @@ def spin(db: Session, operator: Operator, *, rng=_rng) -> dict:
 
 
 def _grant_prize(db, operator, campaign, prize: WheelPrize, spin_row: WheelSpin) -> str:
-    """Начисление приза по типу. Коины — ТОЛЬКО через add_transaction."""
+    """Начисление приза по типу. Коины — ТОЛЬКО через add_transaction.
+    XP-типа здесь нет намеренно: XP-модуля в системе пока не существует."""
     if prize.prize_type == "coins":
         add_transaction(
             db, operator, prize.amount, "wheel_of_wow",
@@ -353,9 +407,9 @@ def _grant_prize(db, operator, campaign, prize: WheelPrize, spin_row: WheelSpin)
         )
         return f"Вы выиграли {prize.title}"
 
-    if prize.prize_type == "extra_ticket":
-        # Доп. билет выдаём в обход дневного лимита выдачи — это сам приз колеса,
-        # а не новое достижение.
+    if prize.prize_type in ("extra_ticket", "spin_token"):
+        # Повторное вращение = новый токен, в обход дневного лимита ВЫДАЧИ
+        # (это сам приз колеса, а не новое достижение). ТЗ 12.2.
         issue_ticket(
             db, operator, campaign,
             reason_type="extra_ticket",
@@ -365,11 +419,51 @@ def _grant_prize(db, operator, campaign, prize: WheelPrize, spin_row: WheelSpin)
         )
         return "Вы выиграли дополнительный билет"
 
-    # shop_discount | badge | manual_reward — фиксируются в истории прокрутки,
-    # выдача/вручение — оффлайн-процесс руководителя. Баланс не трогаем.
+    # raffle_ticket | shop_discount | badge | status | manual_reward |
+    # empty_consolation — фиксируются в истории прокрутки; выдача/вручение —
+    # оффлайн-процесс руководителя (билет в розыгрыш, статус дня и т.п.).
+    # Баланс не трогаем.
     labels = {
         "shop_discount": f"Скидка в магазине: {prize.title}",
         "badge": f"Бейдж: {prize.title}",
+        "raffle_ticket": f"Билет в розыгрыш: {prize.title}",
+        "status": f"Статус: {prize.title}",
         "manual_reward": f"Ручной приз: {prize.title}",
+        "empty_consolation": prize.title,
     }
     return f"Вы выиграли {labels.get(prize.prize_type, prize.title)}"
+
+
+def _update_daily_state_after_spin(db: Session, operator_id: int, prize: WheelPrize) -> None:
+    """Обновляет wheel_operator_daily_state после прокрутки (ТЗ 8.8)."""
+    from app.core.datetime_utils import now_local
+    from app.models.entities import WheelOperatorDailyState
+    today = now_local().date()
+    day_start, day_end = local_day_bounds_utc(today)
+
+    def _count(status_):
+        return db.scalar(
+            select(func.count(WheelTicket.id)).where(
+                WheelTicket.operator_id == operator_id,
+                WheelTicket.status == status_,
+                WheelTicket.created_at >= day_start,
+                WheelTicket.created_at <= day_end,
+            )
+        ) or 0
+
+    state = db.scalars(
+        select(WheelOperatorDailyState).where(
+            WheelOperatorDailyState.operator_id == operator_id,
+            WheelOperatorDailyState.date == today,
+        )
+    ).first()
+    if not state:
+        state = WheelOperatorDailyState(operator_id=operator_id, date=today)
+        db.add(state)
+    state.active_tokens_count = _count(TICKET_AVAILABLE)
+    state.used_tokens_count = _count(TICKET_USED)
+    state.expired_tokens_count = _count(TICKET_EXPIRED)
+    state.last_spin_at = now_utc()
+    state.last_prize_title = prize.title
+    state.last_prize_type = prize.prize_type
+    state.last_prize_value = prize.amount

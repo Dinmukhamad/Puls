@@ -608,6 +608,9 @@ class WheelCampaign(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
+    # daily | weekly | seasonal | special (ТЗ 8.1). Влияет только на семантику
+    # правил/отчётов — сама механика прокрутки от типа не зависит.
+    campaign_type: Mapped[str] = mapped_column(String(32), default="daily")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -627,13 +630,21 @@ class WheelPrize(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("wheel_campaigns.id"), index=True)
     title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
     prize_type: Mapped[str] = mapped_column(String(32))
     amount: Mapped[int] = mapped_column(Integer, default=0)
     weight: Mapped[int] = mapped_column(Integer, default=1)
     color: Mapped[str] = mapped_column(String(16), default="#38BDF8")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    # Лимиты выпадения приза. 0 = без ограничения. total/per_operator — за всё
+    # время; *_daily_limit / *_weekly_limit / monthly_limit — скользящие окна.
     max_wins_total: Mapped[int] = mapped_column(Integer, default=0)
     max_wins_per_operator: Mapped[int] = mapped_column(Integer, default=0)
+    daily_limit: Mapped[int] = mapped_column(Integer, default=0)
+    weekly_limit: Mapped[int] = mapped_column(Integer, default=0)
+    monthly_limit: Mapped[int] = mapped_column(Integer, default=0)
+    per_operator_daily_limit: Mapped[int] = mapped_column(Integer, default=0)
+    per_operator_weekly_limit: Mapped[int] = mapped_column(Integer, default=0)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
@@ -642,20 +653,44 @@ class WheelPrize(Base):
 
 
 class WheelTicket(Base):
-    """One-time ticket for a Wheel of WOW spin."""
+    """
+    Право оператора на одну прокрутку («wheel_spin_token» из ТЗ п.8.5).
+    Исторически называется ticket — переименование таблицы деструктивно и не
+    требуется для функциональности, поэтому оставлено как есть.
+
+    Уникальный индекс (ТЗ п.9) запрещает выдать два токена за один и тот же
+    источник (тест/отчёт/миссию). NULL-значения в rule_id/source_entity_id
+    считаются различными и в Postgres, и в SQLite — поэтому ручные выдачи
+    (без правила и сущности) под ограничение не попадают.
+    """
     __tablename__ = "wheel_tickets"
+    __table_args__ = (
+        UniqueConstraint(
+            "operator_id", "campaign_id", "rule_id", "source_module", "source_entity_id",
+            name="uq_wheel_token_source",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("wheel_campaigns.id"), index=True)
+    rule_id: Mapped[int | None] = mapped_column(ForeignKey("wheel_eligibility_rules.id"), nullable=True, index=True)
     reason_type: Mapped[str] = mapped_column(String(40), default="manual")
     reason_text: Mapped[str] = mapped_column(Text, default="")
+    # source_type/source_id — исторические поля; source_module/source_entity_id —
+    # из ТЗ (обязательны для авто-выдачи по правилу, п.8.5 «source_entity_id обязателен»).
     source_type: Mapped[str] = mapped_column(String(40), default="manual")
     source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_module: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="available", index=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
     operator: Mapped[Operator] = relationship("Operator")
@@ -678,3 +713,119 @@ class WheelSpin(Base):
     operator: Mapped[Operator] = relationship("Operator")
     ticket: Mapped[WheelTicket] = relationship("WheelTicket")
     prize: Mapped[WheelPrize | None] = relationship("WheelPrize")
+
+
+class WheelEligibilityRule(Base):
+    """
+    Правило получения токена (ТЗ п.8.3). Описывает: из какого модуля берётся
+    метрика, как она сравнивается с порогом и сколько токенов можно выдать за
+    период. Движок правил (WheelEligibilityService) выполняет их декларативно.
+    """
+    __tablename__ = "wheel_eligibility_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("wheel_campaigns.id"), index=True)
+    code: Mapped[str] = mapped_column(String(64), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    # operators | tests | analytics | period_reports | rating | missions | manual
+    source_module: Mapped[str] = mapped_column(String(40), index=True)
+    # test_passed | test_score | simulation_passed | quality_score | no_late |
+    # no_violations | rating_place | work_hours_percent | efficiency_percent |
+    # manual_grant | mission_completed
+    rule_type: Mapped[str] = mapped_column(String(48))
+    metric_key: Mapped[str] = mapped_column(String(64), default="")
+    # gte | lte | eq | between | is_true
+    operator: Mapped[str] = mapped_column(String(12), default="gte")
+    threshold_value: Mapped[float] = mapped_column(Float, default=0)
+    threshold_value_max: Mapped[float | None] = mapped_column(Float, nullable=True)  # для between
+    # daily | weekly | monthly | period
+    period_type: Mapped[str] = mapped_column(String(16), default="daily")
+    max_tokens_per_period: Mapped[int] = mapped_column(Integer, default=1)
+    token_ttl_hours: Mapped[int] = mapped_column(Integer, default=24)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    priority: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    campaign: Mapped[WheelCampaign] = relationship("WheelCampaign")
+
+
+class WheelRuleEvaluationLog(Base):
+    """
+    Журнал проверки правил (ТЗ п.8.7). Пишется на КАЖДУЮ проверку — и когда
+    токен выдан, и когда нет. Даёт супервайзеру ответ «почему оператор получил
+    (или не получил) попытку» (Acceptance #15, #20).
+    """
+    __tablename__ = "wheel_rule_evaluation_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    campaign_id: Mapped[int | None] = mapped_column(ForeignKey("wheel_campaigns.id"), nullable=True, index=True)
+    rule_id: Mapped[int | None] = mapped_column(ForeignKey("wheel_eligibility_rules.id"), nullable=True, index=True)
+    source_module: Mapped[str] = mapped_column(String(40), default="")
+    source_entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    period_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    period_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    metric_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    operator: Mapped[str] = mapped_column(String(12), default="")
+    threshold_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_eligible: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    reason: Mapped[str] = mapped_column(Text, default="")
+    created_token_id: Mapped[int | None] = mapped_column(ForeignKey("wheel_tickets.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
+
+
+class WheelOperatorDailyState(Base):
+    """
+    Денормализованное дневное состояние оператора (ТЗ п.8.8) — для быстрой
+    карточки на главной без агрегаций на лету. Обновляется при выдаче токена и
+    прокрутке. Уникальна пара (operator_id, date).
+    """
+    __tablename__ = "wheel_operator_daily_state"
+    __table_args__ = (
+        UniqueConstraint("operator_id", "date", name="uq_wheel_daily_state_operator_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    active_tokens_count: Mapped[int] = mapped_column(Integer, default=0)
+    used_tokens_count: Mapped[int] = mapped_column(Integer, default=0)
+    expired_tokens_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_spin_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_prize_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    last_prize_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    last_prize_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+class WheelSetting(Base):
+    """Общие настройки колеса (ТЗ п.8.9). Простое key/value-хранилище."""
+    __tablename__ = "wheel_settings"
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_wheel_settings_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    key: Mapped[str] = mapped_column(String(64), index=True)
+    value: Mapped[str] = mapped_column(Text, default="")
+    description: Mapped[str] = mapped_column(Text, default="")
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+class WheelManualGrant(Base):
+    """Ручная выдача токенов супервайзером/руководителем (ТЗ п.8.10)."""
+    __tablename__ = "wheel_manual_grants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("wheel_campaigns.id"), index=True)
+    granted_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    tokens_count: Mapped[int] = mapped_column(Integer, default=1)
+    reason: Mapped[str] = mapped_column(String(200), default="")
+    comment: Mapped[str] = mapped_column(Text, default="")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)

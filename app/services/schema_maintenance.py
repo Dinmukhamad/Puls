@@ -131,3 +131,73 @@ def ensure_operator_management_schema(engine: Engine) -> None:
         AuditLog.__table__.create(bind=conn, checkfirst=True)
         logger.info("[schema] groups table ensured")
         logger.info("[schema] audit_logs table ensured")
+
+
+def ensure_wheel_schema(engine: Engine) -> None:
+    """
+    Аддитивная миграция схемы Wheel of WOW (ТЗ раздел 8). Безопасно запускать
+    многократно: добавляет недостающие колонки в существующие таблицы колеса и
+    создаёт новые таблицы движка правил. Деструктивных изменений нет.
+    """
+    from app.models.entities import (
+        WheelEligibilityRule,
+        WheelManualGrant,
+        WheelOperatorDailyState,
+        WheelRuleEvaluationLog,
+        WheelSetting,
+    )
+
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        tables = set(inspector.get_table_names())
+
+        col_migrations = {
+            "wheel_campaigns": [
+                ("campaign_type", "VARCHAR(32) NOT NULL DEFAULT 'daily'"),
+            ],
+            "wheel_prizes": [
+                ("description", "TEXT"),
+                ("daily_limit", "INTEGER NOT NULL DEFAULT 0"),
+                ("weekly_limit", "INTEGER NOT NULL DEFAULT 0"),
+                ("monthly_limit", "INTEGER NOT NULL DEFAULT 0"),
+                ("per_operator_daily_limit", "INTEGER NOT NULL DEFAULT 0"),
+                ("per_operator_weekly_limit", "INTEGER NOT NULL DEFAULT 0"),
+            ],
+            "wheel_tickets": [
+                ("rule_id", "INTEGER"),
+                ("source_module", "VARCHAR(40)"),
+                ("source_entity_id", "INTEGER"),
+                ("source_period_start", "DATE"),
+                ("source_period_end", "DATE"),
+                ("cancelled_at", "TIMESTAMP"),
+                ("cancel_reason", "TEXT"),
+            ],
+        }
+        for table, cols in col_migrations.items():
+            if table not in tables:
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table)}
+            for col_name, col_type in cols:
+                if col_name not in existing:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}"))
+                    logger.info("[schema] Added %s.%s", table, col_name)
+
+        # Новые таблицы движка правил
+        for model in (WheelEligibilityRule, WheelRuleEvaluationLog,
+                      WheelOperatorDailyState, WheelSetting, WheelManualGrant):
+            model.__table__.create(bind=conn, checkfirst=True)
+        logger.info("[schema] wheel rules-engine tables ensured")
+
+        # Уникальный индекс против дублей токенов (ТЗ п.9). NULL-и различны в
+        # обоих диалектах, ручные токены под ограничение не попадают.
+        if "wheel_tickets" in tables:
+            existing_idx = {ix["name"] for ix in inspect(conn).get_indexes("wheel_tickets")}
+            if "uq_wheel_token_source" not in existing_idx:
+                try:
+                    conn.execute(text(
+                        "CREATE UNIQUE INDEX uq_wheel_token_source ON wheel_tickets "
+                        "(operator_id, campaign_id, rule_id, source_module, source_entity_id)"
+                    ))
+                    logger.info("[schema] uq_wheel_token_source index created")
+                except Exception as e:  # noqa: BLE001 — не валим старт из-за возможных дублей
+                    logger.warning("[schema] uq_wheel_token_source not created: %s", e)

@@ -61,8 +61,12 @@ def _run_startup_tasks() -> None:
             logger.error(f"[startup] create_all failed: {e}")
 
     try:
-        from app.services.schema_maintenance import ensure_operator_management_schema
+        from app.services.schema_maintenance import (
+            ensure_operator_management_schema,
+            ensure_wheel_schema,
+        )
         ensure_operator_management_schema(engine)
+        ensure_wheel_schema(engine)
         logger.info("[startup] Schema compatibility OK")
     except Exception as e:
         logger.error(f"[startup] Schema maintenance failed (non-fatal): {e}")
