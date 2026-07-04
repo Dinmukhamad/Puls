@@ -4273,9 +4273,9 @@ body.role-operator {
   background: var(--surface-2, #f8fafc);
 }
 .wheel-campaign-main .form-group,
-.wheel-rule-form-panel .form-group { gap: 7px; }
+.wheel-rule-modal .form-group { gap: 7px; }
 .wheel-campaign-main .form-input,
-.wheel-rule-form-panel .form-input {
+.wheel-rule-modal .form-input {
   min-height: 42px;
   background: var(--card-bg);
 }
@@ -4449,6 +4449,62 @@ body.role-operator {
   gap: 16px;
   align-items: start;
 }
+.wheel-rules-panel { max-width: 100%; }
+.wheel-rules-head { align-items: center; }
+.wheel-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.wheel-rules-table-wrap { max-height: 520px; }
+.wheel-rules-table { min-width: 820px; }
+.wheel-rule-modal-overlay { padding: 24px; }
+.wheel-rule-modal {
+  width: min(860px, calc(100vw - 40px));
+  max-height: min(860px, calc(100vh - 40px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px;
+}
+.wheel-rule-modal-head {
+  flex: none;
+  align-items: flex-start;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(248,250,252,.96), rgba(241,245,249,.74));
+}
+.wheel-rule-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 22px;
+}
+.wheel-rule-modal-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.wheel-rule-modal-grid .form-input { min-height: 42px; background: var(--card-bg); }
+.wheel-rule-wide { grid-column: 1 / -1; }
+.wheel-rule-toggle {
+  min-height: 58px;
+  margin: 0;
+}
+.wheel-rule-modal-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--card-bg);
+}
+.wheel-rule-modal-actions #wr-status {
+  margin-right: auto;
+  padding: 0;
+}
 .wheel-table-wrap { max-height: 440px; overflow: auto; }
 .wheel-table-wrap .data-table { min-width: 720px; }
 .wheel-subtabs {
@@ -4472,7 +4528,6 @@ body.role-operator {
   font-weight: 700;
 }
 .wheel-data-chip strong { color: var(--tx); }
-.wheel-rule-form-panel { position: sticky; top: 12px; }
 .wheel-stats-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -4533,9 +4588,13 @@ body.role-operator {
   .wheel-newprize-grid,
   .wheel-ops-grid,
   .wheel-rules-layout,
+  .wheel-rule-modal-grid,
   .wheel-metric-grid { grid-template-columns: 1fr; }
   .wheel-ops-hero { align-items: stretch; flex-direction: column; }
-  .wheel-rule-form-panel { position: static; }
+  .wheel-rule-modal-overlay { padding: 12px; }
+  .wheel-rule-modal { width: calc(100vw - 24px); max-height: calc(100vh - 24px); }
+  .wheel-rule-modal-actions { align-items: stretch; flex-direction: column; }
+  .wheel-rule-modal-actions #wr-status { margin-right: 0; }
 }
 
 /* ── Колесо WOW: карточка на главной оператора (ТЗ п.2) + доп. классы ── */
