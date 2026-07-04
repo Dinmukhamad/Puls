@@ -106,7 +106,6 @@ let STATE = {
   groups: [],
   currentView: 'cabinet',
   coinsOverview: null,
-  coinRequests: null,
   coinsTab: 'overview',
   navGen: 0,         // увеличивается при каждой смене раздела/вкладки —
   ratingTabGen: 0,   // используется для отмены "осиротевших" async-рендеров
@@ -580,11 +579,9 @@ async function loadData(role) {
         onUsersUpdate, SWR_USER_TTL_MS
       ).then(u => STATE.users = Array.isArray(u) ? u : (u.items || []))
     );
-    // История транзакций — грузим лениво, не блокируем загрузку.
-    // Используем единый coins-эндпоинт (/api/coins/transactions) — он отдаёт
-    // ВСЮ историю коинов, а не последние 50 записей, как /api/dashboard/history.
-    swrFetch('coins:transactions', () =>
-      api.listCoinTransactions().then(r => (Array.isArray(r) ? r : (r.items || []))).catch(() => []),
+    // История транзакций — грузим лениво, не блокируем загрузку
+    swrFetch('dashboard:history', () =>
+      api.getDashboardHistory(50).catch(() => []),
       onHistoryUpdate
     ).then(h => { STATE.history = h; });
   }
@@ -2574,8 +2571,6 @@ function renderCoins() {
 
 async function refreshCoinsModule() {
   STATE.coinsOverview = null;
-  STATE.coinRequests = null;
-  swrInvalidate('coins:transactions');
   await reloadData();
   if (STATE.currentView === 'coins') renderCoins();
 }
@@ -2901,12 +2896,6 @@ function renderManual() {
       el.querySelector('#manual-reason').value = '';
       clearOpSelection();
       showToast('Операция сохранена', 'ok');
-      // Ручное начисление/списание меняет и «Обзор» (KPI, последние операции),
-      // и «Историю». Сбрасываем кеш обзора (перезапросится при открытии) и
-      // инвалидируем кеш истории, чтобы reloadData подтянул свежие транзакции.
-      STATE.coinsOverview = null;
-      swrInvalidate('coins:transactions');
-      swrInvalidate('dashboard:main');
       await reloadData();
       // Update right column without re-render
       const hist = el.querySelector('#manual-history-list');
@@ -2967,7 +2956,7 @@ function initOpSearch(container, ops) {
     list.innerHTML = filtered.slice(0, 50).map(o => `
       <div class="op-search-item" data-id="${o.id}" data-name="${esc(o.full_name)}">
         <div class="op-search-name">${esc(o.full_name)}</div>
-        <div class="op-search-meta">Группа: ${esc(o.group_name || '—')} · ${o.current_balance} ₡</div>
+        <div class="op-search-meta">Группа: ${esc(o.group_name)} · ${o.current_balance} ₡</div>
       </div>`).join('');
 
     list.querySelectorAll('.op-search-item').forEach(item => {
@@ -3005,8 +2994,8 @@ function initOpSearch(container, ops) {
     const q = input.value.toLowerCase().trim();
     const filtered = q
       ? ops.filter(o =>
-          String(o.full_name || '').toLowerCase().includes(q) ||
-          String(o.group_name || '').toLowerCase().includes(q))
+          o.full_name.toLowerCase().includes(q) ||
+          o.group_name.toLowerCase().includes(q))
       : ops;
     renderList(filtered);
     dropdown.removeAttribute('hidden');
@@ -3020,49 +3009,10 @@ function initOpSearch(container, ops) {
 /* ══════════════════════════════════════
    VIEW: ЗАЯВКИ
 ══════════════════════════════════════ */
-/**
- * После действий над заявкой (одобрить/отклонить/выполнить) данные меняются
- * сразу в нескольких местах: сам список заявок, «Обзор» (KPI, последние
- * заявки/операции) и «История» (появляется транзакция резерва/покупки/возврата).
- * Эта функция синхронизирует всё разом: перезагружает заявки из единого
- * coins-эндпоинта, сбрасывает кеш обзора (перезагрузится лениво при открытии)
- * и обновляет историю коинов.
- */
-async function refreshCoinsAfterAction() {
-  STATE.coinsOverview = null; // «Обзор» перезапросит свежие цифры при открытии
-  swrInvalidate('coins:transactions');
-  swrInvalidate('dashboard:main'); // сводка (KPI, «новых заявок») тоже меняется
-  const [reqs, txs] = await Promise.all([
-    api.listCoinRequests().then(r => (Array.isArray(r) ? r : (r.items || []))).catch(() => STATE.coinRequests || []),
-    api.listCoinTransactions().then(r => (Array.isArray(r) ? r : (r.items || []))).catch(() => STATE.history || []),
-  ]);
-  STATE.coinRequests = reqs;
-  STATE.history = txs;
-}
-
 function renderRequests() {
   const el = document.getElementById('view-requests');
   if (!el) return;
-
-  // Заявки читаются из единого coins-модуля (/api/coins/requests), а не из
-  // STATE.purchases (тот грузится только для роли operator и у админа пуст).
-  if (STATE.coinRequests == null) {
-    el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка заявок…</p></div>';
-    const myNavGen = STATE.navGen;
-    api.listCoinRequests()
-      .then(r => {
-        STATE.coinRequests = Array.isArray(r) ? r : (r.items || []);
-        if (!isNavStale(myNavGen) && STATE.currentView === 'coins' && STATE.coinsTab === 'requests') renderRequests();
-      })
-      .catch(err => {
-        if (!isNavStale(myNavGen)) {
-          el.innerHTML = `<div class="status-line status-error" style="padding:20px">Не удалось загрузить заявки: ${esc(err.message)}</div>`;
-        }
-      });
-    return;
-  }
-
-  const all = STATE.coinRequests;
+  const all = STATE.purchases;
   let activeFilter = 'new';
 
   function filtered() {
@@ -3074,13 +3024,16 @@ function renderRequests() {
   function renderList() {
     const list = filtered();
     if (!list.length) return '<div class="empty-state">Заявок нет</div>';
-    return list.map(p => `
+    return list.map(p => {
+      const op = STATE.adminOperators.find(o => o.id === p.operator_id);
+      const item = STATE.shopItems.find(i => i.id === p.shop_item_id);
+      return `
         <div class="request-card status-${p.status}">
           <div class="request-info">
-            <div class="request-title">${esc(p.bonus_name || `Бонус #${p.shop_item_id}`)}</div>
+            <div class="request-title">${esc(item?.title || `Бонус #${p.shop_item_id}`)}</div>
             <div class="request-meta">
-              <span><b>${esc(p.operator_name || `Оператор #${p.operator_id}`)}</b></span>
-              <span>·</span><span>${esc(p.group_name || '—')}</span>
+              <span><b>${esc(op?.full_name || `Оператор #${p.operator_id}`)}</b></span>
+              <span>·</span><span>${esc(op?.group_name || '—')}</span>
               <span>·</span><span class="accent-text">${p.price} ₡</span>
               <span>·</span><span>${fmtDate(p.created_at)}</span>
             </div>
@@ -3098,13 +3051,14 @@ function renderRequests() {
             <div class="request-actions">
               <button class="btn-ghost complete-btn" data-id="${p.id}">Отметить выполненной</button>
             </div>` : ''}
-        </div>`).join('');
+        </div>`;
+    }).join('');
   }
 
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Заявки</div><h2 class="section-title">Заявки из магазина</h2></div>
-      <button class="btn-outline btn-sm" onclick="refreshCoinsModule()">Обновить</button>
+      <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
     </div>
     <div class="filter-tabs" id="req-tabs">
       ${[
@@ -3126,22 +3080,17 @@ function renderRequests() {
     });
   });
 
-  // Полная перерисовка вкладки после действия — обновляет и счётчики в
-  // фильтрах, и сам список. Вызывается после того, как refreshCoinsAfterAction
-  // синхронизировал STATE.
-  function rerender() {
-    if (STATE.currentView === 'coins' && STATE.coinsTab === 'requests') renderRequests();
-  }
-
   function bindRequestActions() {
     el.querySelectorAll('.approve-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         try {
-          await api.approveCoinRequest(+btn.dataset.id);
+          await api.approvePurchase(+btn.dataset.id);
           showToast('Заявка одобрена', 'ok');
-          await refreshCoinsAfterAction();
-          rerender();
+          STATE.purchases = await api.listPurchases();
+          STATE.dashboard = await api.getDashboard().catch(() => STATE.dashboard);
+          el.querySelector('#requests-list').innerHTML = renderList();
+          bindRequestActions();
         } catch(err) { showToast(err.message, 'error'); btn.disabled = false; }
       });
     });
@@ -3151,22 +3100,25 @@ function renderRequests() {
         if (!reason?.trim()) return;
         btn.disabled = true;
         try {
-          await api.rejectCoinRequest(+btn.dataset.id, reason.trim());
+          await api.rejectPurchase(+btn.dataset.id, reason.trim());
           showToast('Заявка отклонена', 'ok');
-          await refreshCoinsAfterAction();
-          rerender();
+          STATE.purchases = await api.listPurchases();
+          STATE.dashboard = await api.getDashboard().catch(() => STATE.dashboard);
+          el.querySelector('#requests-list').innerHTML = renderList();
+          bindRequestActions();
         } catch(err) { showToast(err.message, 'error'); btn.disabled = false; }
       });
     });
     el.querySelectorAll('.complete-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
+        // Используем approve с пометкой completed
         try {
-          await api.completeCoinRequest(+btn.dataset.id);
-          showToast('Заявка отмечена выполненной', 'ok');
-          await refreshCoinsAfterAction();
-          rerender();
-        } catch(err) { showToast(err.message, 'error'); btn.disabled = false; }
+          await api.completePurchase(btn.dataset.id);
+          STATE.purchases = await api.listPurchases();
+          el.querySelector('#requests-list').innerHTML = renderList();
+          bindRequestActions();
+        } catch { btn.disabled = false; }
       });
     });
   }
@@ -4345,27 +4297,13 @@ function exportCSV() {
   downloadCSV([header, ...rows], 'pulse_operators');
 }
 
-async function exportHistoryCSV() {
-  // Полный экспорт берём с бэкенда (/api/coins/transactions/export) — он отдаёт
-  // ВСЕ транзакции, а не только то, что подгружено в STATE.history.
-  try {
-    const blob = await api.exportCoinTransactions();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `pulse_coin_transactions_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    return;
-  } catch (err) {
-    // Фолбэк: если серверный экспорт недоступен — выгружаем то, что есть на клиенте.
-    showToast('Серверный экспорт недоступен, выгружаю загруженные записи', 'error');
-    const header = ['Дата','Оператор','Группа','Тип','Коины','Причина','Автор'];
-    const rows = (STATE.history || []).map(t => [
-      fmtDate(t.created_at), t.operator_name, t.group_name, t.type,
-      t.amount, t.comment, t.created_by_name||'Система',
-    ]);
-    downloadCSV([header, ...rows], 'pulse_history');
-  }
+function exportHistoryCSV() {
+  const header = ['Дата','Оператор','Группа','Тип','Коины','Причина','Автор'];
+  const rows = STATE.history.map(t => [
+    fmtDate(t.created_at), t.operator_name, t.group_name, t.type,
+    t.amount, t.comment, t.created_by_name||'Система',
+  ]);
+  downloadCSV([header, ...rows], 'pulse_history');
 }
 
 function downloadCSV(rows, name) {
@@ -4890,7 +4828,7 @@ function renderPeriodReport() {
 
     function filteredSorted() {
       let r = ops.filter(o =>
-        (!searchVal || String(o.full_name || '').toLowerCase().includes(searchVal.toLowerCase())) &&
+        (!searchVal || o.full_name.toLowerCase().includes(searchVal.toLowerCase())) &&
         (!filterGroup || o.group_name === filterGroup)
       );
       r.sort((a, b) => {
@@ -7685,14 +7623,9 @@ async function doWheelSpin(el) {
   const center = safeIdx * seg + seg / 2;
   const jitter = (Math.random() - 0.5) * seg * 0.5; // лёгкий разброс внутри сектора
   const spins = 5; // полных оборотов для эффекта
-  // Копим угол ВСЕГДА вперёд относительно текущего положения ротора, иначе на
-  // второй прокрутке (не пересоздаём DOM колеса) он бы «дёргался» назад.
-  const current = w.rotation || 0;
-  const currentMod = ((current % 360) + 360) % 360;
-  const desiredMod = (((-center - jitter) % 360) + 360) % 360; // где должен встать сектор
-  let delta = desiredMod - currentMod;
-  if (delta < 0) delta += 360;                 // только вперёд
-  const target = current + spins * 360 + delta; // ≥5 полных оборотов каждый раз
+  const target = spins * 360 - center - jitter;
+  const from = w.rotation % 360;
+  const total = from + (spins * 360 - center - jitter - (from % 360));
   w.rotation = target;
 
   rotor.style.transition = 'transform 4.2s cubic-bezier(0.16, 1, 0.3, 1)';
@@ -7733,17 +7666,12 @@ async function refreshWheelSidebar(el) {
     if (histBody) histBody.innerHTML = buildWheelHistory(history.items || []);
     const btn = document.getElementById('wheel-spin-btn');
     const tickets = status.available_tickets || 0;
-    // Единый источник истины — backend (как и при первом рендере). Локальный
-    // расчёт по лимитам оставляем лишь как фолбэк для старого ответа без can_spin.
-    const canSpin = (typeof status.can_spin === 'boolean')
-      ? status.can_spin
-      : (tickets > 0
-          && (!status.max_spins_per_day || status.spins_used_today < status.max_spins_per_day)
-          && (!status.max_spins_per_week || status.spins_used_this_week < status.max_spins_per_week));
-    const cannotReason = status.reason_if_cannot_spin || (tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет билетов');
+    const canSpin = tickets > 0
+      && (!status.max_spins_per_day || status.spins_used_today < status.max_spins_per_day)
+      && (!status.max_spins_per_week || status.spins_used_this_week < status.max_spins_per_week);
     if (btn) {
       btn.disabled = !canSpin;
-      btn.textContent = canSpin ? 'Крутить колесо' : cannotReason;
+      btn.textContent = canSpin ? 'Крутить колесо' : (tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет билетов');
       if (canSpin) btn.onclick = () => doWheelSpin(el);
     }
   } catch { /* тихо: колесо уже показало приз */ }
@@ -7753,6 +7681,16 @@ async function refreshWheelSidebar(el) {
 let _wheelStaffTab = 'operations';
 
 async function renderWheelStaffView(el) {
+  if (!el.dataset.wheelRuleDelegated) {
+    el.dataset.wheelRuleDelegated = '1';
+    el.addEventListener('click', (event) => {
+      const openRuleBtn = event.target.closest('#wr-open-create, [data-wheel-rule-open]');
+      if (!openRuleBtn) return;
+      event.preventDefault();
+      const body = document.getElementById('wheel-staff-body');
+      showWheelRuleModal(body);
+    });
+  }
   el.innerHTML = `
     <div class="view-header">
       <div>
@@ -7761,12 +7699,12 @@ async function renderWheelStaffView(el) {
       </div>
     </div>
     <div class="filter-tabs wheel-tabs">
-        <button class="filter-tab ${_wheelStaffTab === 'campaign' ? 'active' : ''}" data-wheel-tab="campaign">Кампания и лимиты</button>
-        <button class="filter-tab ${_wheelStaffTab === 'prizes' ? 'active' : ''}" data-wheel-tab="prizes">Призы (сектора)</button>
-        <button class="filter-tab ${_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history' || _wheelStaffTab === 'stats' ? 'active' : ''}" data-wheel-tab="operations">Билеты и прокрутки</button>
-        <button class="filter-tab ${_wheelStaffTab === 'rules' ? 'active' : ''}" data-wheel-tab="rules">Правила выдачи</button>
-        <button class="filter-tab ${_wheelStaffTab === 'logs' ? 'active' : ''}" data-wheel-tab="logs">Логи проверок</button>
-        <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билеты</button>
+        <button class="filter-tab ${_wheelStaffTab === 'campaign' ? 'active' : ''}" data-wheel-tab="campaign">Кампания</button>
+        <button class="filter-tab ${_wheelStaffTab === 'prizes' ? 'active' : ''}" data-wheel-tab="prizes">Сектора</button>
+        <button class="filter-tab ${_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history' || _wheelStaffTab === 'stats' ? 'active' : ''}" data-wheel-tab="operations">Операции</button>
+        <button class="filter-tab ${_wheelStaffTab === 'rules' ? 'active' : ''}" data-wheel-tab="rules">Правила</button>
+        <button class="filter-tab ${_wheelStaffTab === 'logs' ? 'active' : ''}" data-wheel-tab="logs">Логи</button>
+        <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билет</button>
     </div>
     <div id="wheel-staff-body">${wheelLoadingPanel()}</div>`;
 
@@ -7779,15 +7717,18 @@ async function renderWheelStaffView(el) {
     await renderWheelCampaignTab(body);
   } else if (_wheelStaffTab === 'prizes') {
     await renderWheelPrizesTab(body);
+  } else if (_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history' || _wheelStaffTab === 'stats') {
+    _wheelStaffTab = 'operations';
+    await renderWheelOperationsTab(body);
   } else if (_wheelStaffTab === 'issue') {
     await renderWheelIssueTab(body);
+  } else if (_wheelStaffTab === 'stats') {
+    await renderWheelStatsTab(body);
   } else if (_wheelStaffTab === 'rules') {
     await renderWheelRulesTab(body);
   } else if (_wheelStaffTab === 'logs') {
     await renderWheelLogsTab(body);
   } else {
-    // «operations» и любые устаревшие значения (tickets/history/stats из старого
-    // кеша) сведены в единую вкладку «Операции».
     _wheelStaffTab = 'operations';
     await renderWheelOperationsTab(body);
   }
@@ -7827,28 +7768,21 @@ async function renderWheelCampaignTab(body) {
     return;
   }
 
-  const current = items.find(c => c.id === _wheelCampaignEditId) || items.find(c => c.is_active) || items[0];
+  const current = items.find(c => c.is_active) || items[0];
   _wheelCampaignEditId = current.id;
-  const d = (v) => v ? String(v).slice(0, 10) : '';
 
   body.innerHTML = `
     <div class="panel wheel-admin-panel">
       <div class="panel-head">
         <div>
           <h3>Настройки кампании</h3>
-          <p class="panel-hint">Период действия, лимиты прокруток и срок жизни билетов.</p>
+          <p class="panel-hint">Глобальные настройки колеса, лимиты прокруток и срок жизни билетов.</p>
         </div>
-        <span class="badge ${current.is_active ? 'badge-ok' : 'badge-muted'}">${current.is_active ? 'активна' : 'выключена'}</span>
+        <span class="badge badge-ok">активно всегда</span>
       </div>
       <div class="wheel-admin-content">
         <div class="wheel-campaign-shell">
           <section class="wheel-campaign-main">
-            ${items.length > 1 ? `<label class="form-group wheel-campaign-picker">
-              <span class="form-label">Кампания</span>
-              <select class="form-input" id="wheel-camp-select">
-                ${items.map(c => `<option value="${c.id}" ${c.id === current.id ? 'selected' : ''}>${esc(c.title)}${c.is_active ? ' · активна' : ''}</option>`).join('')}
-              </select>
-            </label>` : ''}
             <div class="wheel-campaign-title-card">
               <label class="form-group">
                 <span class="form-label">Название</span>
@@ -7860,14 +7794,6 @@ async function renderWheelCampaignTab(body) {
               </label>
             </div>
             <div class="form-grid wheel-campaign-grid">
-              <label class="form-group">
-                <span class="form-label">Дата начала</span>
-                <input type="date" id="wc-start" class="form-input" value="${d(current.start_date)}">
-              </label>
-              <label class="form-group">
-                <span class="form-label">Дата окончания</span>
-                <input type="date" id="wc-end" class="form-input" value="${d(current.end_date)}">
-              </label>
               <label class="form-group">
                 <span class="form-label">Прокруток в день</span>
                 <input type="number" id="wc-day" class="form-input" min="0" max="50" value="${current.max_spins_per_day}">
@@ -7884,17 +7810,10 @@ async function renderWheelCampaignTab(body) {
           </section>
 
           <aside class="wheel-campaign-side">
-            <div class="wheel-campaign-status ${current.is_active ? 'is-active' : 'is-muted'}">
-              <span>${current.is_active ? 'Активная кампания' : 'Кампания выключена'}</span>
+            <div class="wheel-campaign-status is-active">
+              <span>Колесо активно всегда</span>
               <strong>${esc(current.title)}</strong>
             </div>
-            <label class="wheel-toggle-row">
-              <span>
-                <strong>Активна</strong>
-                <small>Если включить, остальные кампании будут выключены.</small>
-              </span>
-              <input type="checkbox" id="wc-active" ${current.is_active ? 'checked' : ''}>
-            </label>
             <div class="wheel-campaign-summary">
               <div><span>${current.max_spins_per_day}</span><p>в день</p></div>
               <div><span>${current.max_spins_per_week}</span><p>в неделю</p></div>
@@ -7902,7 +7821,6 @@ async function renderWheelCampaignTab(body) {
             </div>
             <div class="wheel-campaign-actions">
               <button class="btn-primary" id="wc-save">Сохранить</button>
-              <button class="btn-outline" id="wc-new">Создать новую</button>
             </div>
             <div id="wc-status" class="status-line"></div>
           </aside>
@@ -7910,35 +7828,23 @@ async function renderWheelCampaignTab(body) {
       </div>
     </div>`;
 
-  const sel = document.getElementById('wheel-camp-select');
-  if (sel) sel.onchange = () => { _wheelCampaignEditId = parseInt(sel.value, 10); renderWheelCampaignTab(body); };
-  document.getElementById('wc-new').onclick = () => createDefaultCampaign(body);
   document.getElementById('wc-save').onclick = async () => {
     const statusEl = document.getElementById('wc-status');
     const payload = {
       title: document.getElementById('wc-title').value.trim(),
       description: document.getElementById('wc-desc').value.trim(),
-      start_date: document.getElementById('wc-start').value || null,
-      end_date: document.getElementById('wc-end').value || null,
       max_spins_per_day: parseInt(document.getElementById('wc-day').value, 10) || 0,
       max_spins_per_week: parseInt(document.getElementById('wc-week').value, 10) || 0,
       ticket_ttl_days: parseInt(document.getElementById('wc-ttl').value, 10) || 3,
-      is_active: document.getElementById('wc-active').checked,
+      is_active: true,
+      start_date: null,
+      end_date: null,
     };
     if (!payload.title) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Укажите название'; return; }
     try {
       await api.updateWheelCampaign(current.id, payload);
-      // Операторские лимиты прокруток берутся из кампании — сбрасываем их кеш,
-      // иначе изменение «прокруток в день/неделю» не подхватится у операторов.
       swrInvalidate('wheel:admin:campaigns');
-      swrInvalidate('wheel:status');
       showToast('Кампания сохранена', 'ok');
-      // Пишем свежий список прямо в кеш до перерисовки, чтобы вкладка не
-      // мигнула устаревшими значениями из-за фонового таймаута загрузки.
-      try {
-        const fresh = await api.getWheelCampaigns();
-        swrWriteRaw('wheel:admin:campaigns', { data: fresh, ts: Date.now() });
-      } catch { /* не критично: перерисовка сама дозагрузит */ }
       renderWheelCampaignTab(body);
     } catch (err) {
       statusEl.className = 'status-line status-error';
@@ -7955,24 +7861,7 @@ async function createDefaultCampaign(body) {
     });
     swrInvalidate('wheel:admin:campaigns');
     _wheelCampaignEditId = c.id;
-    // Засеваем стартовый набор секторов, чтобы колесо сразу работало у
-    // операторов (без активных призов оно показывает «недоступно»).
-    const defaults = [
-      { title: '+1 коин',      prize_type: 'coins',        amount: 1,  weight: 30, color: '#38BDF8' },
-      { title: '+3 коина',     prize_type: 'coins',        amount: 3,  weight: 24, color: '#818CF8' },
-      { title: '+5 коинов',    prize_type: 'coins',        amount: 5,  weight: 18, color: '#A78BFA' },
-      { title: '+10 коинов',   prize_type: 'coins',        amount: 10, weight: 10, color: '#F472B6' },
-      { title: 'Доп. билет',   prize_type: 'extra_ticket', amount: 1,  weight: 8,  color: '#FBBF24' },
-      { title: 'Ещё вращение', prize_type: 'spin_token',   amount: 1,  weight: 6,  color: '#34D399' },
-    ];
-    try {
-      for (const p of defaults) {
-        await api.createWheelPrize({ ...p, campaign_id: c.id });
-      }
-      swrInvalidate('wheel:admin:prizes');
-      swrInvalidate('wheel:prizes');
-    } catch { /* если сектора не создались — админ добавит вручную во вкладке «Призы» */ }
-    showToast('Кампания и стартовые сектора созданы', 'ok');
+    showToast('Кампания создана', 'ok');
     renderWheelCampaignTab(body);
   } catch (err) {
     showToast(err.message || 'Не удалось создать кампанию', 'error');
@@ -8004,18 +7893,23 @@ async function renderWheelPrizesTab(body) {
         <span class="panel-badge">${rows.length} · сумма весов ${totalWeight}</span>
       </div>
       <div class="wheel-admin-content">
-        <div class="table-wrap"><table class="data-table wheel-prizes-table">
+        <div class="table-wrap wheel-prizes-wrap"><table class="data-table wheel-prizes-table">
+          <colgroup>
+            <col class="wp-col-color"><col class="wp-col-title"><col class="wp-col-type">
+            <col class="wp-col-num"><col class="wp-col-num"><col class="wp-col-chance">
+            <col class="wp-col-limit"><col class="wp-col-limit"><col class="wp-col-active"><col class="wp-col-action">
+          </colgroup>
           <thead><tr><th>Цвет</th><th>Название</th><th>Тип</th><th>Кол-во</th><th>Вес</th><th title="Шанс выпадения">Шанс</th><th>Лимит всего</th><th>Лимит/оператор</th><th>Активен</th><th></th></tr></thead>
           <tbody>
           ${rows.map(r => `<tr data-prize-id="${r.id}">
             <td><input type="color" class="wp-color" value="${esc(r.color || '#38BDF8')}"></td>
-            <td><input type="text" class="form-input wp-title" value="${esc(r.title)}" style="min-width:150px"></td>
+            <td><input type="text" class="form-input wp-title" value="${esc(r.title)}"></td>
             <td><select class="form-input wp-type">${typeOptions(r.prize_type)}</select></td>
-            <td><input type="number" class="form-input wp-amount" value="${r.amount}" style="width:80px"></td>
-            <td><input type="number" class="form-input wp-weight" value="${r.weight}" min="0" style="width:70px"></td>
+            <td><input type="number" class="form-input wp-amount" value="${r.amount}"></td>
+            <td><input type="number" class="form-input wp-weight" value="${r.weight}" min="0"></td>
             <td><span class="wheel-chance">${chance(r.is_active ? r.weight : 0)}%</span></td>
-            <td><input type="number" class="form-input wp-maxtotal" value="${r.max_wins_total}" min="0" style="width:80px" title="0 — без лимита"></td>
-            <td><input type="number" class="form-input wp-maxop" value="${r.max_wins_per_operator}" min="0" style="width:80px" title="0 — без лимита"></td>
+            <td><input type="number" class="form-input wp-maxtotal" value="${r.max_wins_total}" min="0" title="0 — без лимита"></td>
+            <td><input type="number" class="form-input wp-maxop" value="${r.max_wins_per_operator}" min="0" title="0 — без лимита"></td>
             <td style="text-align:center"><input type="checkbox" class="wp-active" ${r.is_active ? 'checked' : ''}></td>
             <td><button class="btn-outline btn-sm wp-save">Сохранить</button></td>
           </tr>`).join('')}
@@ -8024,10 +7918,10 @@ async function renderWheelPrizesTab(body) {
         <div class="wheel-newprize">
           <h4 class="panel-subtitle">Добавить сектор</h4>
           <div class="form-grid wheel-newprize-grid">
-            <input type="text" id="np-title" class="form-input" placeholder="Название" style="min-width:150px">
+            <input type="text" id="np-title" class="form-input" placeholder="Название">
             <select id="np-type" class="form-input">${typeOptions('coins')}</select>
-            <input type="number" id="np-amount" class="form-input" placeholder="Кол-во" value="1" style="width:90px">
-            <input type="number" id="np-weight" class="form-input" placeholder="Вес" value="10" min="0" style="width:80px">
+            <input type="number" id="np-amount" class="form-input" placeholder="Кол-во" value="1">
+            <input type="number" id="np-weight" class="form-input" placeholder="Вес" value="10" min="0">
             <input type="color" id="np-color" value="#38BDF8">
             <button class="btn-primary" id="np-add">Добавить</button>
           </div>
@@ -8187,6 +8081,125 @@ async function renderWheelOperationsTab(body) {
   if (issueBtn) issueBtn.onclick = () => { _wheelStaffTab = 'issue'; renderWheelStaffView(document.getElementById('view-wheel')); };
 }
 
+async function renderWheelTicketsTab(body) {
+  let data;
+  try {
+    data = await api.getWheelTokens(_wheelTicketFilter ? { token_status: _wheelTicketFilter, limit: 300 } : { limit: 300 });
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+  const rows = data.items || [];
+  const statusBadge = { available: 'badge-ok', used: 'badge-muted', expired: 'badge-warning', cancelled: 'badge-muted' };
+  const statusLabel = { available: 'доступен', used: 'использован', expired: 'истёк', cancelled: 'отменён' };
+  const filters = [['', 'Все'], ['available', 'Доступные'], ['used', 'Использованные'], ['expired', 'Истёкшие'], ['cancelled', 'Отменённые']];
+
+  body.innerHTML = `
+    <div class="panel wheel-admin-panel">
+      <div class="panel-head"><h3>Билеты</h3><span class="panel-badge">${rows.length}</span></div>
+      <div class="wheel-admin-content">
+        <div class="filter-tabs" style="margin-bottom:14px">
+          ${filters.map(([f, l]) => `<button class="filter-tab ${_wheelTicketFilter === f ? 'active' : ''}" data-ticket-filter="${f}">${l}</button>`).join('')}
+        </div>
+        ${rows.length ? `<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Создан</th><th>Оператор</th><th>Причина</th><th>Источник</th><th>Истекает</th><th>Использован</th><th>Статус</th></tr></thead>
+          <tbody>${rows.map(t => `<tr>
+            <td>${esc(fmtDateTime(t.created_at))}</td>
+            <td class="name-cell">${esc(t.operator_name)}</td>
+            <td>${esc(t.reason_text || '—')}</td>
+            <td>${esc(wheelSourceLabel(t.reason_type))}</td>
+            <td>${t.expires_at ? esc(fmtDateTime(t.expires_at)) : '—'}</td>
+            <td>${t.used_at ? esc(fmtDateTime(t.used_at)) : '—'}</td>
+            <td><span class="badge ${statusBadge[t.status] || 'badge-muted'}">${statusLabel[t.status] || t.status}</span></td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : '<div class="empty-state wheel-empty"><p>Билетов пока нет.</p></div>'}
+      </div>
+    </div>`;
+
+  body.querySelectorAll('[data-ticket-filter]').forEach(b => {
+    b.onclick = () => { _wheelTicketFilter = b.dataset.ticketFilter; renderWheelTicketsTab(body); };
+  });
+}
+
+async function renderWheelSpinsTab(body) {
+  let data;
+  try {
+    data = await api.getWheelSpins({ limit: 200 });
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+  const rows = data.items || [];
+  const totalCoins = rows.filter(r => r.prize_type === 'coins').reduce((s, r) => s + (r.amount || 0), 0);
+  const uniqueOperators = new Set(rows.map(r => r.operator_id).filter(Boolean)).size;
+  body.innerHTML = `
+    <div class="panel wheel-admin-panel">
+      <div class="panel-head">
+        <h3>История прокруток</h3>
+        <span class="panel-badge">${rows.length} записей</span>
+      </div>
+      <div class="wheel-admin-content">
+        <div class="wheel-stats-row">
+          <div class="wheel-stat"><span class="wheel-stat-num">${rows.length}</span><span>прокруток</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${totalCoins}</span><span>коинов выдано</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${uniqueOperators}</span><span>участников</span></div>
+        </div>
+        ${rows.length ? `<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Дата</th><th>Оператор</th><th>Группа</th><th>Причина</th><th>Приз</th><th>Тип</th></tr></thead>
+          <tbody>${rows.map(r => `<tr>
+            <td>${esc(fmtDateTime(r.date))}</td>
+            <td class="name-cell">${esc(r.operator_name)}</td>
+            <td>${esc(r.group_name || '—')}</td>
+            <td>${esc(r.reason || '—')}</td>
+            <td><strong>${esc(r.prize)}</strong></td>
+            <td><span class="wheel-type-pill">${esc(wheelPrizeTypeLabel(r.prize_type))}</span></td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : '<div class="empty-state wheel-empty"><p>Прокруток пока нет.</p></div>'}
+      </div>
+    </div>`;
+}
+
+/* ---------- Стафф: статистика (ТЗ 16) ---------- */
+async function renderWheelStatsTab(body) {
+  let s;
+  try {
+    s = await api.getWheelStats();
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+  const hist = s.prizes_histogram || [];
+  const src = s.top_sources || [];
+  body.innerHTML = `
+    <div class="panel wheel-admin-panel">
+      <div class="panel-head"><h3>Статистика за сегодня</h3></div>
+      <div class="wheel-admin-content">
+        <div class="wheel-stats-row">
+          <div class="wheel-stat"><span class="wheel-stat-num">${s.tokens_issued}</span><span>выдано попыток</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${s.tokens_used}</span><span>использовано</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${s.tokens_expired}</span><span>сгорело</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${s.coins_awarded}</span><span>коинов выдано</span></div>
+          <div class="wheel-stat"><span class="wheel-stat-num">${s.manual_granted}</span><span>выдано вручную</span></div>
+        </div>
+        <div class="two-col-grid">
+          <div>
+            <h4 class="panel-subtitle">Частота призов</h4>
+            ${hist.length ? `<div class="table-wrap"><table class="data-table">
+              <thead><tr><th>Приз</th><th>Раз</th></tr></thead>
+              <tbody>${hist.map(h => `<tr><td>${esc(h.title)}</td><td><strong>${h.count}</strong></td></tr>`).join('')}</tbody>
+            </table></div>` : '<div class="empty-line">Прокруток сегодня нет</div>'}
+          </div>
+          <div>
+            <h4 class="panel-subtitle">Топ источников попыток</h4>
+            ${src.length ? `<div class="table-wrap"><table class="data-table">
+              <thead><tr><th>Источник</th><th>Токенов</th></tr></thead>
+              <tbody>${src.map(x => `<tr><td>${esc(wheelSourceLabel(x.reason_type))}</td><td><strong>${x.count}</strong></td></tr>`).join('')}</tbody>
+            </table></div>` : '<div class="empty-line">Токенов сегодня не выдавалось</div>'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
 
 function wheelSourceLabel(t) {
   return {
@@ -8240,12 +8253,12 @@ async function renderWheelRulesTab(body) {
         </div>
         <div class="wheel-head-actions">
           <span class="panel-badge">${rows.length}</span>
-          <button class="btn-primary btn-sm" id="wr-open-create" type="button">Добавить правило</button>
+          <button class="btn-primary btn-sm" id="wr-open-create" type="button" data-wheel-rule-open>Добавить правило</button>
         </div>
       </div>
       <div class="wheel-admin-content">
         ${rows.length ? `<div class="table-wrap wheel-table-wrap wheel-rules-table-wrap"><table class="data-table wheel-rules-table">
-          <thead><tr><th>Правило</th><th>Источник</th><th>Условие</th><th>Период</th><th>Лимит</th><th>TTL</th><th>Статус</th><th>Действия</th></tr></thead>
+          <thead><tr><th>Правило</th><th>Источник</th><th>Условие</th><th>Период</th><th>Лимит</th><th>TTL</th><th>Статус</th></tr></thead>
           <tbody>${rows.map(r => `<tr>
             <td><strong>${esc(r.title)}</strong><div class="muted-sm">${esc(r.code)}</div></td>
             <td><span class="wheel-type-pill">${esc(wheelSourceLabel(r.source_module))}</span></td>
@@ -8254,38 +8267,19 @@ async function renderWheelRulesTab(body) {
             <td>${r.max_tokens_per_period}</td>
             <td>${r.token_ttl_hours}ч</td>
             <td><span class="badge ${r.is_active ? 'badge-ok' : 'badge-muted'}">${r.is_active ? 'активно' : 'выкл'}</span></td>
-            <td style="white-space:nowrap">
-              <button class="btn-outline btn-sm wr-toggle" data-id="${r.id}" data-active="${r.is_active ? '1' : '0'}">${r.is_active ? 'Выключить' : 'Включить'}</button>
-              <button class="btn-outline btn-sm danger-text wr-delete" data-id="${r.id}" data-title="${esc(r.title)}">Удалить</button>
-            </td>
           </tr>`).join('')}</tbody>
         </table></div>` : '<div class="empty-state wheel-empty"><p>Правил пока нет.</p></div>'}
       </div>
     </section>`;
-  // Кнопку «Добавить правило» ловит единый глобальный обработчик (см. ниже).
-  body.querySelectorAll('.wr-toggle').forEach(btn => {
-    btn.onclick = async () => {
-      btn.disabled = true;
-      try {
-        await api.updateWheelRule(+btn.dataset.id, { is_active: btn.dataset.active !== '1' });
-        swrInvalidate('wheel:admin:rules');
-        showToast(btn.dataset.active === '1' ? 'Правило выключено' : 'Правило включено', 'ok');
-        renderWheelRulesTab(body);
-      } catch (err) { showToast(err.message || 'Не удалось изменить правило', 'error'); btn.disabled = false; }
-    };
-  });
-  body.querySelectorAll('.wr-delete').forEach(btn => {
-    btn.onclick = async () => {
-      if (!confirm(`Удалить правило «${btn.dataset.title}»? Действие необратимо.`)) return;
-      btn.disabled = true;
-      try {
-        await api.deleteWheelRule(+btn.dataset.id);
-        swrInvalidate('wheel:admin:rules');
-        showToast('Правило удалено', 'ok');
-        renderWheelRulesTab(body);
-      } catch (err) { showToast(err.message || 'Не удалось удалить правило', 'error'); btn.disabled = false; }
-    };
-  });
+
+  const btn = body.querySelector('#wr-open-create');
+  if (btn) {
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showWheelRuleModal(body);
+    });
+  }
 }
 
 function showWheelRuleModal(body) {
@@ -8449,16 +8443,19 @@ function showWheelRuleModal(body) {
   setTimeout(() => titleEl?.focus(), 30);
 }
 
-// Единый обработчик кнопки «Добавить правило». Делегирован на document, ставится
-// один раз — поэтому работает после любых перерисовок вкладки «Правила выдачи».
-if (!window.__wheelRuleOpenBound) {
-  window.__wheelRuleOpenBound = true;
+window.openWheelRuleModal = function openWheelRuleModal() {
+  showWheelRuleModal(document.getElementById('wheel-staff-body'));
+};
+
+if (!window.__pulsWheelRuleModalClickFix) {
+  window.__pulsWheelRuleModalClickFix = true;
   document.addEventListener('click', (event) => {
-    const trigger = event.target?.closest?.('#wr-open-create');
-    if (!trigger) return;
+    const btn = event.target?.closest?.('#wr-open-create, [data-wheel-rule-open]');
+    if (!btn) return;
     event.preventDefault();
-    showWheelRuleModal(document.getElementById('wheel-staff-body'));
-  });
+    event.stopPropagation();
+    window.openWheelRuleModal();
+  }, true);
 }
 
 /* ---------- Стафф: логи проверок (ТЗ 8.7, 15) ---------- */
@@ -8515,7 +8512,7 @@ async function renderWheelIssueTab(body) {
   body.innerHTML = `
     <div class="panel wheel-issue-panel">
       <div class="panel-head">
-        <h3>Ручная выдача билетов</h3>
+        <h3>Ручная выдача билета</h3>
         <span class="panel-badge">Staff</span>
       </div>
       <div class="wheel-admin-content">
@@ -8532,16 +8529,12 @@ async function renderWheelIssueTab(body) {
           <input type="text" id="wheel-reason" class="form-input" placeholder="Например: помощь новому сотруднику" maxlength="500">
         </label>
         <label class="form-group">
-          <span class="form-label">Количество билетов</span>
-          <input type="number" id="wheel-count" class="form-input" min="1" max="20" value="1">
-        </label>
-        <label class="form-group">
           <span class="form-label">Срок действия, дней</span>
           <input type="number" id="wheel-ttl" class="form-input" min="1" max="30" value="3">
         </label>
       </div>
       <div class="wheel-issue-actions">
-        <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билеты</button>
+        <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билет</button>
       </div>
       <div id="wheel-issue-status" class="status-line" style="margin-top:10px"></div>
       </div>
@@ -8582,25 +8575,21 @@ async function renderWheelIssueTab(body) {
     const operatorId = parseInt(hidden.value, 10);
     const reason = document.getElementById('wheel-reason').value.trim();
     const ttl = parseInt(document.getElementById('wheel-ttl').value, 10) || 3;
-    const count = Math.min(20, Math.max(1, parseInt(document.getElementById('wheel-count').value, 10) || 1));
     const statusEl = document.getElementById('wheel-issue-status');
     if (!operatorId) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Выберите оператора'; return; }
     if (!reason) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Укажите причину'; return; }
     issueBtn.disabled = true;
     try {
-      // Выдаём сразу нужное число билетов через grant-эндпоинт (tokens_count).
-      const res = await api.grantWheelTokens({ operator_id: operatorId, tokens_count: count, reason, ttl_hours: ttl * 24 });
+      await api.issueWheelTicket({ operator_id: operatorId, reason_text: reason, ttl_days: ttl });
       swrInvalidate('wheel:');
-      const granted = (res && typeof res.granted === 'number') ? res.granted : count;
       statusEl.className = 'status-line status-ok';
-      statusEl.textContent = `Выдано билетов: ${granted}`;
-      showToast(`Выдано билетов: ${granted}`, 'ok');
+      statusEl.textContent = 'Билет выдан';
+      showToast('Билет выдан', 'ok');
       document.getElementById('wheel-reason').value = '';
-      document.getElementById('wheel-count').value = '1';
       chosen.hidden = true; hidden.value = ''; search.value = '';
     } catch (err) {
       statusEl.className = 'status-line status-error';
-      statusEl.textContent = err.message || 'Не удалось выдать билеты';
+      statusEl.textContent = err.message || 'Не удалось выдать билет';
     } finally {
       issueBtn.disabled = false;
     }

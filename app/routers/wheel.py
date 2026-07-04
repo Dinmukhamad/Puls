@@ -169,19 +169,13 @@ def admin_spins(
         stmt = stmt.where(WheelSpin.operator_id == operator_id)
     if spin_status:
         stmt = stmt.where(WheelSpin.status == spin_status)
-    if prize_type:
-        # Фильтр по типу приза — на уровне SQL (join к призу), иначе при
-        # применении .limit() ДО python-фильтра можно получить меньше строк,
-        # чем limit. Используется текущий тип приза (WheelPrize.prize_type);
-        # для отображения строки берётся снапшот из result_payload_json.
-        stmt = stmt.join(WheelPrize, WheelPrize.id == WheelSpin.prize_id).where(
-            WheelPrize.prize_type == prize_type
-        )
     spins = db.scalars(stmt.limit(limit)).all()
 
     rows = []
     for spin in spins:
         p = _payload(spin)
+        if prize_type and p.get("type") != prize_type:
+            continue
         op = spin.operator
         rows.append(
             AdminSpinRow(
@@ -331,11 +325,12 @@ def admin_list_campaigns(db: Session = Depends(get_db)):
 
 @admin_router.post("/campaigns", response_model=CampaignRead, dependencies=[Depends(require_roles(*STAFF_ROLES))])
 def admin_create_campaign(payload: CampaignCreate, db: Session = Depends(get_db)):
-    campaign = WheelCampaign(**payload.model_dump())
+    data = payload.model_dump()
+    data.update({"is_active": True, "start_date": None, "end_date": None})
+    campaign = WheelCampaign(**data)
     db.add(campaign)
     db.flush()
-    if campaign.is_active:
-        _deactivate_other_campaigns(db, campaign.id)
+    _deactivate_other_campaigns(db, campaign.id)
     db.commit()
     db.refresh(campaign)
     return _campaign_read(campaign)
@@ -347,9 +342,13 @@ def admin_update_campaign(campaign_id: int, payload: CampaignUpdate, db: Session
     if not campaign:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Кампания не найдена")
     for field, value in payload.model_dump(exclude_unset=True).items():
+        if field in {"is_active", "start_date", "end_date"}:
+            continue
         setattr(campaign, field, value)
-    if campaign.is_active:
-        _deactivate_other_campaigns(db, campaign.id)
+    campaign.is_active = True
+    campaign.start_date = None
+    campaign.end_date = None
+    _deactivate_other_campaigns(db, campaign.id)
     db.commit()
     db.refresh(campaign)
     return _campaign_read(campaign)
@@ -403,21 +402,6 @@ def admin_update_rule(rule_id: int, payload: RuleUpdate, db: Session = Depends(g
     db.commit()
     db.refresh(rule)
     return _rule_read(rule)
-
-
-@admin_router.delete("/rules/{rule_id}", dependencies=[Depends(require_roles(*STAFF_ROLES))])
-def admin_delete_rule(rule_id: int, db: Session = Depends(get_db)):
-    rule = db.get(WheelEligibilityRule, rule_id)
-    if not rule:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Правило не найдено")
-    # rule_id у билетов и логов — nullable FK. Отвязываем их, чтобы удаление
-    # правила не нарушило внешние ключи и не потянуло за собой историю.
-    from sqlalchemy import update as _update
-    db.execute(_update(WheelTicket).where(WheelTicket.rule_id == rule_id).values(rule_id=None))
-    db.execute(_update(WheelRuleEvaluationLog).where(WheelRuleEvaluationLog.rule_id == rule_id).values(rule_id=None))
-    db.delete(rule)
-    db.commit()
-    return {"ok": True, "deleted": rule_id}
 
 
 # ── Админка: призы (ТЗ 14) ───────────────────────────────────────────────────

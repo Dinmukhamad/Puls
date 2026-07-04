@@ -55,23 +55,12 @@ PRIZE_TYPES = (
 
 def active_campaign(db: Session) -> WheelCampaign | None:
     """
-    Активная кампания. Если их несколько — берём самую свежую (по id), чтобы
-    поведение было детерминированным, а не зависело от порядка вставки.
-    Учитываем окно дат кампании (start_date/end_date), если заданы.
+    Wheel is always available while at least one campaign exists.
+    Dates and disabled flags are legacy settings and must not stop the wheel.
     """
-    today = now_local().date()
-    stmt = (
-        select(WheelCampaign)
-        .where(WheelCampaign.is_active.is_(True))
-        .order_by(WheelCampaign.id.desc())
+    return db.scalar(
+        select(WheelCampaign).order_by(WheelCampaign.is_active.desc(), WheelCampaign.id.desc())
     )
-    for campaign in db.scalars(stmt):
-        if campaign.start_date and today < campaign.start_date:
-            continue
-        if campaign.end_date and today > campaign.end_date:
-            continue
-        return campaign
-    return None
 
 
 def require_active_campaign(db: Session) -> WheelCampaign:

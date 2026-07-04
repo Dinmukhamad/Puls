@@ -662,9 +662,9 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 ══════════════════════════════════════════════════════════════ */
 .table-wrap {
   overflow-x: auto;
-  overflow-y: hidden;
   border-radius: 12px;
   border: 1px solid var(--border-default);
+  overflow: hidden;
 }
 .data-table {
   width: 100%; border-collapse: collapse;
@@ -4253,7 +4253,7 @@ body.role-operator {
   font-size: 12px;
   line-height: 1.45;
 }
-.wheel-campaign-grid,
+.wheel-campaign-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .wheel-rule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .wheel-campaign-shell {
   display: grid;
@@ -4358,12 +4358,34 @@ body.role-operator {
 .wheel-campaign-actions .btn-outline { min-height: 40px; }
 .wheel-check { min-height: 64px; align-items: flex-start; justify-content: center; }
 .wheel-check input[type="checkbox"] { width: 18px; height: 18px; margin-top: 7px; }
-.wheel-prizes-table { min-width: 1080px; }
-.wheel-prizes-table .form-input { min-height: 38px; }
+.wheel-prizes-wrap { overflow-x: auto; }
+.wheel-prizes-table {
+  min-width: 920px;
+  table-layout: fixed;
+}
+.wheel-prizes-table th,
+.wheel-prizes-table td {
+  padding: 9px 8px;
+  vertical-align: middle;
+}
+.wheel-prizes-table .form-input {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+}
+.wheel-prizes-table .btn-sm { min-height: 32px; padding: 6px 10px; }
+.wp-col-color { width: 48px; }
+.wp-col-title { width: 170px; }
+.wp-col-type { width: 145px; }
+.wp-col-num { width: 72px; }
+.wp-col-chance { width: 64px; }
+.wp-col-limit { width: 88px; }
+.wp-col-active { width: 72px; }
+.wp-col-action { width: 96px; }
 .wheel-prizes-table input[type="color"] {
-  width: 34px;
-  height: 34px;
-  padding: 3px;
+  width: 30px;
+  height: 30px;
+  padding: 2px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--card-bg);
@@ -4374,8 +4396,8 @@ body.role-operator {
   border-top: 1px solid var(--border-soft);
 }
 .wheel-newprize-grid {
-  grid-template-columns: minmax(180px, 1fr) 170px 90px 90px 44px auto;
-  align-items: end;
+  grid-template-columns: minmax(160px, 1fr) minmax(130px, .8fr) 86px 80px 40px 110px;
+  align-items: center;
   gap: 10px;
 }
 .wheel-newprize-grid input[type="color"] {
@@ -4442,12 +4464,7 @@ body.role-operator {
   letter-spacing: .06em;
   text-transform: uppercase;
 }
-.wheel-ops-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
+.wheel-ops-grid,
 .wheel-rules-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -4637,14 +4654,14 @@ body.role-operator {
 .wheel-winner-row-prize { font-size: 13px; font-weight: 700; color: var(--tx2); }
 
 /* Админка: кампания и сектора */
-.wheel-campaign-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.wheel-campaign-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
 .wheel-check { flex-direction: row; align-items: center; gap: 10px; }
 .wheel-check input[type="checkbox"] { width: 20px; height: 20px; }
 .wheel-prizes-table input.form-input { padding: 6px 8px; }
-.wheel-prizes-table input[type="color"] { width: 34px; height: 34px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); cursor: pointer; }
+.wheel-prizes-table input[type="color"] { width: 30px; height: 30px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--input-bg); cursor: pointer; }
 .wheel-chance { font-weight: 700; color: var(--accent-primary); }
 .wheel-newprize { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
-.wheel-newprize-grid { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.wheel-newprize-grid { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(130px, .8fr) 86px 80px 40px 110px; gap: 10px; align-items: center; }
 .wheel-newprize-grid input[type="color"] { width: 40px; height: 38px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
 .panel-subtitle { font-size: 14px; font-weight: 600; margin: 4px 0 8px; }
 .muted-sm { font-size: 11px; color: var(--text-muted, #888); }
