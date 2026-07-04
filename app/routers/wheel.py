@@ -405,6 +405,21 @@ def admin_update_rule(rule_id: int, payload: RuleUpdate, db: Session = Depends(g
     return _rule_read(rule)
 
 
+@admin_router.delete("/rules/{rule_id}", dependencies=[Depends(require_roles(*STAFF_ROLES))])
+def admin_delete_rule(rule_id: int, db: Session = Depends(get_db)):
+    rule = db.get(WheelEligibilityRule, rule_id)
+    if not rule:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Правило не найдено")
+    # rule_id у билетов и логов — nullable FK. Отвязываем их, чтобы удаление
+    # правила не нарушило внешние ключи и не потянуло за собой историю.
+    from sqlalchemy import update as _update
+    db.execute(_update(WheelTicket).where(WheelTicket.rule_id == rule_id).values(rule_id=None))
+    db.execute(_update(WheelRuleEvaluationLog).where(WheelRuleEvaluationLog.rule_id == rule_id).values(rule_id=None))
+    db.delete(rule)
+    db.commit()
+    return {"ok": True, "deleted": rule_id}
+
+
 # ── Админка: призы (ТЗ 14) ───────────────────────────────────────────────────
 
 def _prize_read(p: WheelPrize) -> dict:

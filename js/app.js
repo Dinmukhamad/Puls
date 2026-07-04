@@ -7753,16 +7753,6 @@ async function refreshWheelSidebar(el) {
 let _wheelStaffTab = 'operations';
 
 async function renderWheelStaffView(el) {
-  if (!el.dataset.wheelRuleDelegated) {
-    el.dataset.wheelRuleDelegated = '1';
-    el.addEventListener('click', (event) => {
-      const openRuleBtn = event.target.closest('#wr-open-create');
-      if (!openRuleBtn) return;
-      event.preventDefault();
-      const body = document.getElementById('wheel-staff-body');
-      showWheelRuleModal(body);
-    });
-  }
   el.innerHTML = `
     <div class="view-header">
       <div>
@@ -7771,12 +7761,12 @@ async function renderWheelStaffView(el) {
       </div>
     </div>
     <div class="filter-tabs wheel-tabs">
-        <button class="filter-tab ${_wheelStaffTab === 'campaign' ? 'active' : ''}" data-wheel-tab="campaign">Кампания</button>
-        <button class="filter-tab ${_wheelStaffTab === 'prizes' ? 'active' : ''}" data-wheel-tab="prizes">Сектора</button>
-        <button class="filter-tab ${_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history' || _wheelStaffTab === 'stats' ? 'active' : ''}" data-wheel-tab="operations">Операции</button>
-        <button class="filter-tab ${_wheelStaffTab === 'rules' ? 'active' : ''}" data-wheel-tab="rules">Правила</button>
-        <button class="filter-tab ${_wheelStaffTab === 'logs' ? 'active' : ''}" data-wheel-tab="logs">Логи</button>
-        <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билет</button>
+        <button class="filter-tab ${_wheelStaffTab === 'campaign' ? 'active' : ''}" data-wheel-tab="campaign">Кампания и лимиты</button>
+        <button class="filter-tab ${_wheelStaffTab === 'prizes' ? 'active' : ''}" data-wheel-tab="prizes">Призы (сектора)</button>
+        <button class="filter-tab ${_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history' || _wheelStaffTab === 'stats' ? 'active' : ''}" data-wheel-tab="operations">Билеты и прокрутки</button>
+        <button class="filter-tab ${_wheelStaffTab === 'rules' ? 'active' : ''}" data-wheel-tab="rules">Правила выдачи</button>
+        <button class="filter-tab ${_wheelStaffTab === 'logs' ? 'active' : ''}" data-wheel-tab="logs">Логи проверок</button>
+        <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билеты</button>
     </div>
     <div id="wheel-staff-body">${wheelLoadingPanel()}</div>`;
 
@@ -7938,8 +7928,17 @@ async function renderWheelCampaignTab(body) {
     if (!payload.title) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Укажите название'; return; }
     try {
       await api.updateWheelCampaign(current.id, payload);
+      // Операторские лимиты прокруток берутся из кампании — сбрасываем их кеш,
+      // иначе изменение «прокруток в день/неделю» не подхватится у операторов.
       swrInvalidate('wheel:admin:campaigns');
+      swrInvalidate('wheel:status');
       showToast('Кампания сохранена', 'ok');
+      // Пишем свежий список прямо в кеш до перерисовки, чтобы вкладка не
+      // мигнула устаревшими значениями из-за фонового таймаута загрузки.
+      try {
+        const fresh = await api.getWheelCampaigns();
+        swrWriteRaw('wheel:admin:campaigns', { data: fresh, ts: Date.now() });
+      } catch { /* не критично: перерисовка сама дозагрузит */ }
       renderWheelCampaignTab(body);
     } catch (err) {
       statusEl.className = 'status-line status-error';
@@ -7956,7 +7955,24 @@ async function createDefaultCampaign(body) {
     });
     swrInvalidate('wheel:admin:campaigns');
     _wheelCampaignEditId = c.id;
-    showToast('Кампания создана', 'ok');
+    // Засеваем стартовый набор секторов, чтобы колесо сразу работало у
+    // операторов (без активных призов оно показывает «недоступно»).
+    const defaults = [
+      { title: '+1 коин',      prize_type: 'coins',        amount: 1,  weight: 30, color: '#38BDF8' },
+      { title: '+3 коина',     prize_type: 'coins',        amount: 3,  weight: 24, color: '#818CF8' },
+      { title: '+5 коинов',    prize_type: 'coins',        amount: 5,  weight: 18, color: '#A78BFA' },
+      { title: '+10 коинов',   prize_type: 'coins',        amount: 10, weight: 10, color: '#F472B6' },
+      { title: 'Доп. билет',   prize_type: 'extra_ticket', amount: 1,  weight: 8,  color: '#FBBF24' },
+      { title: 'Ещё вращение', prize_type: 'spin_token',   amount: 1,  weight: 6,  color: '#34D399' },
+    ];
+    try {
+      for (const p of defaults) {
+        await api.createWheelPrize({ ...p, campaign_id: c.id });
+      }
+      swrInvalidate('wheel:admin:prizes');
+      swrInvalidate('wheel:prizes');
+    } catch { /* если сектора не создались — админ добавит вручную во вкладке «Призы» */ }
+    showToast('Кампания и стартовые сектора созданы', 'ok');
     renderWheelCampaignTab(body);
   } catch (err) {
     showToast(err.message || 'Не удалось создать кампанию', 'error');
@@ -8229,7 +8245,7 @@ async function renderWheelRulesTab(body) {
       </div>
       <div class="wheel-admin-content">
         ${rows.length ? `<div class="table-wrap wheel-table-wrap wheel-rules-table-wrap"><table class="data-table wheel-rules-table">
-          <thead><tr><th>Правило</th><th>Источник</th><th>Условие</th><th>Период</th><th>Лимит</th><th>TTL</th><th>Статус</th></tr></thead>
+          <thead><tr><th>Правило</th><th>Источник</th><th>Условие</th><th>Период</th><th>Лимит</th><th>TTL</th><th>Статус</th><th>Действия</th></tr></thead>
           <tbody>${rows.map(r => `<tr>
             <td><strong>${esc(r.title)}</strong><div class="muted-sm">${esc(r.code)}</div></td>
             <td><span class="wheel-type-pill">${esc(wheelSourceLabel(r.source_module))}</span></td>
@@ -8238,13 +8254,38 @@ async function renderWheelRulesTab(body) {
             <td>${r.max_tokens_per_period}</td>
             <td>${r.token_ttl_hours}ч</td>
             <td><span class="badge ${r.is_active ? 'badge-ok' : 'badge-muted'}">${r.is_active ? 'активно' : 'выкл'}</span></td>
+            <td style="white-space:nowrap">
+              <button class="btn-outline btn-sm wr-toggle" data-id="${r.id}" data-active="${r.is_active ? '1' : '0'}">${r.is_active ? 'Выключить' : 'Включить'}</button>
+              <button class="btn-outline btn-sm danger-text wr-delete" data-id="${r.id}" data-title="${esc(r.title)}">Удалить</button>
+            </td>
           </tr>`).join('')}</tbody>
         </table></div>` : '<div class="empty-state wheel-empty"><p>Правил пока нет.</p></div>'}
       </div>
     </section>`;
-  // Клик по «Добавить правило» обрабатывается делегированным слушателем на
-  // контейнере #view-wheel (см. renderWheelStaffView) — он переживает
-  // перерисовки этого тела вкладки, поэтому отдельная привязка не нужна.
+  // Кнопку «Добавить правило» ловит единый глобальный обработчик (см. ниже).
+  body.querySelectorAll('.wr-toggle').forEach(btn => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        await api.updateWheelRule(+btn.dataset.id, { is_active: btn.dataset.active !== '1' });
+        swrInvalidate('wheel:admin:rules');
+        showToast(btn.dataset.active === '1' ? 'Правило выключено' : 'Правило включено', 'ok');
+        renderWheelRulesTab(body);
+      } catch (err) { showToast(err.message || 'Не удалось изменить правило', 'error'); btn.disabled = false; }
+    };
+  });
+  body.querySelectorAll('.wr-delete').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm(`Удалить правило «${btn.dataset.title}»? Действие необратимо.`)) return;
+      btn.disabled = true;
+      try {
+        await api.deleteWheelRule(+btn.dataset.id);
+        swrInvalidate('wheel:admin:rules');
+        showToast('Правило удалено', 'ok');
+        renderWheelRulesTab(body);
+      } catch (err) { showToast(err.message || 'Не удалось удалить правило', 'error'); btn.disabled = false; }
+    };
+  });
 }
 
 function showWheelRuleModal(body) {
@@ -8408,6 +8449,18 @@ function showWheelRuleModal(body) {
   setTimeout(() => titleEl?.focus(), 30);
 }
 
+// Единый обработчик кнопки «Добавить правило». Делегирован на document, ставится
+// один раз — поэтому работает после любых перерисовок вкладки «Правила выдачи».
+if (!window.__wheelRuleOpenBound) {
+  window.__wheelRuleOpenBound = true;
+  document.addEventListener('click', (event) => {
+    const trigger = event.target?.closest?.('#wr-open-create');
+    if (!trigger) return;
+    event.preventDefault();
+    showWheelRuleModal(document.getElementById('wheel-staff-body'));
+  });
+}
+
 /* ---------- Стафф: логи проверок (ТЗ 8.7, 15) ---------- */
 async function renderWheelLogsTab(body) {
   const data = await wheelCachedFetch(
@@ -8462,7 +8515,7 @@ async function renderWheelIssueTab(body) {
   body.innerHTML = `
     <div class="panel wheel-issue-panel">
       <div class="panel-head">
-        <h3>Ручная выдача билета</h3>
+        <h3>Ручная выдача билетов</h3>
         <span class="panel-badge">Staff</span>
       </div>
       <div class="wheel-admin-content">
@@ -8479,12 +8532,16 @@ async function renderWheelIssueTab(body) {
           <input type="text" id="wheel-reason" class="form-input" placeholder="Например: помощь новому сотруднику" maxlength="500">
         </label>
         <label class="form-group">
+          <span class="form-label">Количество билетов</span>
+          <input type="number" id="wheel-count" class="form-input" min="1" max="20" value="1">
+        </label>
+        <label class="form-group">
           <span class="form-label">Срок действия, дней</span>
           <input type="number" id="wheel-ttl" class="form-input" min="1" max="30" value="3">
         </label>
       </div>
       <div class="wheel-issue-actions">
-        <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билет</button>
+        <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билеты</button>
       </div>
       <div id="wheel-issue-status" class="status-line" style="margin-top:10px"></div>
       </div>
@@ -8525,21 +8582,25 @@ async function renderWheelIssueTab(body) {
     const operatorId = parseInt(hidden.value, 10);
     const reason = document.getElementById('wheel-reason').value.trim();
     const ttl = parseInt(document.getElementById('wheel-ttl').value, 10) || 3;
+    const count = Math.min(20, Math.max(1, parseInt(document.getElementById('wheel-count').value, 10) || 1));
     const statusEl = document.getElementById('wheel-issue-status');
     if (!operatorId) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Выберите оператора'; return; }
     if (!reason) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Укажите причину'; return; }
     issueBtn.disabled = true;
     try {
-      await api.issueWheelTicket({ operator_id: operatorId, reason_text: reason, ttl_days: ttl });
+      // Выдаём сразу нужное число билетов через grant-эндпоинт (tokens_count).
+      const res = await api.grantWheelTokens({ operator_id: operatorId, tokens_count: count, reason, ttl_hours: ttl * 24 });
       swrInvalidate('wheel:');
+      const granted = (res && typeof res.granted === 'number') ? res.granted : count;
       statusEl.className = 'status-line status-ok';
-      statusEl.textContent = 'Билет выдан';
-      showToast('Билет выдан', 'ok');
+      statusEl.textContent = `Выдано билетов: ${granted}`;
+      showToast(`Выдано билетов: ${granted}`, 'ok');
       document.getElementById('wheel-reason').value = '';
+      document.getElementById('wheel-count').value = '1';
       chosen.hidden = true; hidden.value = ''; search.value = '';
     } catch (err) {
       statusEl.className = 'status-line status-error';
-      statusEl.textContent = err.message || 'Не удалось выдать билет';
+      statusEl.textContent = err.message || 'Не удалось выдать билеты';
     } finally {
       issueBtn.disabled = false;
     }
