@@ -7720,55 +7720,79 @@ async function renderWheelCampaignTab(body) {
   body.innerHTML = `
     <div class="panel wheel-admin-panel">
       <div class="panel-head">
-        <h3>Настройки кампании</h3>
+        <div>
+          <h3>Настройки кампании</h3>
+          <p class="panel-hint">Период действия, лимиты прокруток и срок жизни билетов.</p>
+        </div>
         <span class="badge ${current.is_active ? 'badge-ok' : 'badge-muted'}">${current.is_active ? 'активна' : 'выключена'}</span>
       </div>
       <div class="wheel-admin-content">
-        ${items.length > 1 ? `<label class="form-group" style="max-width:360px">
-          <span class="form-label">Выбрать кампанию</span>
-          <select class="form-input" id="wheel-camp-select">
-            ${items.map(c => `<option value="${c.id}" ${c.id === current.id ? 'selected' : ''}>${esc(c.title)}${c.is_active ? ' · активна' : ''}</option>`).join('')}
-          </select>
-        </label>` : ''}
-        <div class="form-grid wheel-campaign-grid">
-          <label class="form-group" style="grid-column:1/-1">
-            <span class="form-label">Название</span>
-            <input type="text" id="wc-title" class="form-input" value="${esc(current.title)}" maxlength="200">
-          </label>
-          <label class="form-group" style="grid-column:1/-1">
-            <span class="form-label">Описание</span>
-            <input type="text" id="wc-desc" class="form-input" value="${esc(current.description || '')}">
-          </label>
-          <label class="form-group">
-            <span class="form-label">Дата начала</span>
-            <input type="date" id="wc-start" class="form-input" value="${d(current.start_date)}">
-          </label>
-          <label class="form-group">
-            <span class="form-label">Дата окончания</span>
-            <input type="date" id="wc-end" class="form-input" value="${d(current.end_date)}">
-          </label>
-          <label class="form-group">
-            <span class="form-label">Прокруток в день</span>
-            <input type="number" id="wc-day" class="form-input" min="0" max="50" value="${current.max_spins_per_day}">
-          </label>
-          <label class="form-group">
-            <span class="form-label">Прокруток в неделю</span>
-            <input type="number" id="wc-week" class="form-input" min="0" max="200" value="${current.max_spins_per_week}">
-          </label>
-          <label class="form-group">
-            <span class="form-label">Билет действует, дней</span>
-            <input type="number" id="wc-ttl" class="form-input" min="1" max="90" value="${current.ticket_ttl_days}">
-          </label>
-          <label class="form-group wheel-check">
-            <span class="form-label">Активна</span>
-            <input type="checkbox" id="wc-active" ${current.is_active ? 'checked' : ''}>
-          </label>
+        <div class="wheel-campaign-shell">
+          <section class="wheel-campaign-main">
+            ${items.length > 1 ? `<label class="form-group wheel-campaign-picker">
+              <span class="form-label">Кампания</span>
+              <select class="form-input" id="wheel-camp-select">
+                ${items.map(c => `<option value="${c.id}" ${c.id === current.id ? 'selected' : ''}>${esc(c.title)}${c.is_active ? ' · активна' : ''}</option>`).join('')}
+              </select>
+            </label>` : ''}
+            <div class="wheel-campaign-title-card">
+              <label class="form-group">
+                <span class="form-label">Название</span>
+                <input type="text" id="wc-title" class="form-input" value="${esc(current.title)}" maxlength="200">
+              </label>
+              <label class="form-group">
+                <span class="form-label">Описание</span>
+                <input type="text" id="wc-desc" class="form-input" value="${esc(current.description || '')}">
+              </label>
+            </div>
+            <div class="form-grid wheel-campaign-grid">
+              <label class="form-group">
+                <span class="form-label">Дата начала</span>
+                <input type="date" id="wc-start" class="form-input" value="${d(current.start_date)}">
+              </label>
+              <label class="form-group">
+                <span class="form-label">Дата окончания</span>
+                <input type="date" id="wc-end" class="form-input" value="${d(current.end_date)}">
+              </label>
+              <label class="form-group">
+                <span class="form-label">Прокруток в день</span>
+                <input type="number" id="wc-day" class="form-input" min="0" max="50" value="${current.max_spins_per_day}">
+              </label>
+              <label class="form-group">
+                <span class="form-label">Прокруток в неделю</span>
+                <input type="number" id="wc-week" class="form-input" min="0" max="200" value="${current.max_spins_per_week}">
+              </label>
+              <label class="form-group">
+                <span class="form-label">Билет действует</span>
+                <input type="number" id="wc-ttl" class="form-input" min="1" max="90" value="${current.ticket_ttl_days}">
+              </label>
+            </div>
+          </section>
+
+          <aside class="wheel-campaign-side">
+            <div class="wheel-campaign-status ${current.is_active ? 'is-active' : 'is-muted'}">
+              <span>${current.is_active ? 'Активная кампания' : 'Кампания выключена'}</span>
+              <strong>${esc(current.title)}</strong>
+            </div>
+            <label class="wheel-toggle-row">
+              <span>
+                <strong>Активна</strong>
+                <small>Если включить, остальные кампании будут выключены.</small>
+              </span>
+              <input type="checkbox" id="wc-active" ${current.is_active ? 'checked' : ''}>
+            </label>
+            <div class="wheel-campaign-summary">
+              <div><span>${current.max_spins_per_day}</span><p>в день</p></div>
+              <div><span>${current.max_spins_per_week}</span><p>в неделю</p></div>
+              <div><span>${current.ticket_ttl_days}</span><p>дней билет</p></div>
+            </div>
+            <div class="wheel-campaign-actions">
+              <button class="btn-primary" id="wc-save">Сохранить</button>
+              <button class="btn-outline" id="wc-new">Создать новую</button>
+            </div>
+            <div id="wc-status" class="status-line"></div>
+          </aside>
         </div>
-        <div class="wheel-issue-actions" style="gap:10px">
-          <button class="btn-primary" id="wc-save">Сохранить</button>
-          <button class="btn-outline" id="wc-new">Создать новую</button>
-        </div>
-        <div id="wc-status" class="status-line" style="margin-top:10px"></div>
       </div>
     </div>`;
 
