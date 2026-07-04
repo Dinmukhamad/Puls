@@ -8274,7 +8274,7 @@ async function renderWheelRulesTab(body) {
         </div>
         <div class="wheel-head-actions">
           <span class="panel-badge">${rows.length}</span>
-          <button class="btn-primary btn-sm" id="wr-open-create">Добавить правило</button>
+          <button class="btn-primary btn-sm" id="wr-open-create" type="button" onclick="window.openWheelRuleModal?.()">Добавить правило</button>
         </div>
       </div>
       <div class="wheel-admin-content">
@@ -8457,6 +8457,22 @@ function showWheelRuleModal(body) {
   };
   setTimeout(() => titleEl?.focus(), 30);
 }
+
+window.openWheelRuleModal = function openWheelRuleModal() {
+  showWheelRuleModal(document.getElementById('wheel-staff-body'));
+};
+
+if (!window.__pulsWheelRuleModalClickFix) {
+  window.__pulsWheelRuleModalClickFix = true;
+  document.addEventListener('click', (event) => {
+    const btn = event.target?.closest?.('#wr-open-create');
+    if (!btn) return;
+    event.preventDefault();
+    event.stopPropagation();
+    window.openWheelRuleModal();
+  }, true);
+}
+
 /* ---------- Стафф: логи проверок (ТЗ 8.7, 15) ---------- */
 async function renderWheelLogsTab(body) {
   const data = await wheelCachedFetch(
