@@ -7365,7 +7365,15 @@ async function renderWheelOperatorView(el) {
     <div class="wheel-layout">
       <div class="panel wheel-stage-panel">
         <div class="wheel-stage">
-          <div class="wheel-pointer">▼</div>
+          <div class="wheel-pointer" aria-hidden="true">
+            <svg viewBox="0 0 40 52" width="38" height="49" xmlns="http://www.w3.org/2000/svg">
+              <defs><linearGradient id="wheelPinG" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#FDE68A"/><stop offset="1" stop-color="#F59E0B"/>
+              </linearGradient></defs>
+              <path d="M20 50 L5 21 A15 15 0 1 1 35 21 Z" fill="url(#wheelPinG)" stroke="#B45309" stroke-width="2"/>
+              <circle cx="20" cy="18" r="5.5" fill="#fff" opacity=".92"/>
+            </svg>
+          </div>
           <div class="wheel-rotor" id="wheel-rotor">${buildWheelSvg(items)}</div>
           <div class="wheel-hub">WOW</div>
         </div>
@@ -7378,7 +7386,7 @@ async function renderWheelOperatorView(el) {
       </div>
 
       <div class="panel wheel-history-panel">
-        <h3 class="panel-title">Мои выигрыши</h3>
+        <h3 class="panel-title">🏆 Мои выигрыши</h3>
         <div id="wheel-history-body">${buildWheelHistory(history.items || [])}</div>
       </div>
     </div>`;
@@ -7390,28 +7398,91 @@ async function renderWheelOperatorView(el) {
   if (btn && canSpin) btn.onclick = () => doWheelSpin(el);
 }
 
-// Строит SVG-колесо: N равных секторов, подписи и иконки
+// Резервная палитра, если у приза не задан цвет
+const WHEEL_FALLBACK_COLORS = ['#38BDF8', '#818CF8', '#A78BFA', '#F472B6', '#FB7185', '#FBBF24', '#34D399', '#22D3EE'];
+
+// hex -> {r,g,b}
+function wheelHexRgb(hex) {
+  const h = String(hex || '').trim().replace('#', '');
+  const s = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const n = parseInt(s || '38bdf8', 16);
+  if (Number.isNaN(n)) return { r: 56, g: 189, b: 248 };
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+// Осветлить (pct>0) или затемнить (pct<0) цвет — для объёмного градиента
+function wheelShade(hex, pct) {
+  const { r, g, b } = wheelHexRgb(hex);
+  const t = pct < 0 ? 0 : 255;
+  const p = Math.abs(pct);
+  const mix = (c) => Math.round((t - c) * p + c);
+  return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
+}
+// Контрастный цвет подписи, чтобы читалась на любом секторе
+function wheelTextColor(hex) {
+  const { r, g, b } = wheelHexRgb(hex);
+  const L = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return L > 0.62 ? '#1E293B' : '#FFFFFF';
+}
+
+// Строит SVG-колесо: N равных секторов с объёмом, золотым ободом и читаемыми подписями
 function buildWheelSvg(items) {
   const n = items.length;
-  const cx = 160, cy = 160, r = 158;
+  const cx = 160, cy = 160;
+  const rOuter = 158; // внешний золотой обод
+  const rSeg = 148;   // радиус секторов
   const seg = 360 / n;
+  let defs = '';
   let paths = '';
   let labels = '';
+  let lights = '';
+
   for (let i = 0; i < n; i++) {
+    const base = items[i].color || WHEEL_FALLBACK_COLORS[i % WHEEL_FALLBACK_COLORS.length];
     const a0 = i * seg, a1 = (i + 1) * seg;
-    const p0 = wheelPoint(cx, cy, r, a0);
-    const p1 = wheelPoint(cx, cy, r, a1);
+    const p0 = wheelPoint(cx, cy, rSeg, a0);
+    const p1 = wheelPoint(cx, cy, rSeg, a1);
     const large = seg > 180 ? 1 : 0;
-    paths += `<path d="M${cx},${cy} L${p0.x.toFixed(2)},${p0.y.toFixed(2)} A${r},${r} 0 ${large} 1 ${p1.x.toFixed(2)},${p1.y.toFixed(2)} Z" fill="${esc(items[i].color || '#38BDF8')}" stroke="rgba(0,0,0,.15)" stroke-width="1"/>`;
+    defs += `<radialGradient id="wheelSeg${i}" cx="50%" cy="50%" r="72%">`
+      + `<stop offset="0%" stop-color="${wheelShade(base, 0.30)}"/>`
+      + `<stop offset="62%" stop-color="${base}"/>`
+      + `<stop offset="100%" stop-color="${wheelShade(base, -0.16)}"/>`
+      + `</radialGradient>`;
+    paths += `<path d="M${cx},${cy} L${p0.x.toFixed(2)},${p0.y.toFixed(2)} A${rSeg},${rSeg} 0 ${large} 1 ${p1.x.toFixed(2)},${p1.y.toFixed(2)} Z" fill="url(#wheelSeg${i})" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>`;
+    // Подпись всегда вертикально (не вверх ногами), крупно и читаемо
     const mid = a0 + seg / 2;
-    const lp = wheelPoint(cx, cy, r * 0.66, mid);
+    const lp = wheelPoint(cx, cy, rSeg * 0.64, mid);
     const icon = WHEEL_PRIZE_ICON[items[i].type] || '★';
     const short = items[i].type === 'coins' ? `+${items[i].amount}` : icon;
-    labels += `<text x="${lp.x.toFixed(1)}" y="${lp.y.toFixed(1)}" transform="rotate(${(mid).toFixed(1)} ${lp.x.toFixed(1)} ${lp.y.toFixed(1)})" text-anchor="middle" dominant-baseline="middle" font-size="15" font-weight="700" fill="#0f172a">${esc(short)}</text>`;
+    labels += `<text x="${lp.x.toFixed(1)}" y="${lp.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="20" font-weight="800" fill="${wheelTextColor(base)}" style="paint-order:stroke;stroke:rgba(15,23,42,.16);stroke-width:.6px;">${esc(short)}</text>`;
   }
+
+  // Лампочки по ободу — «казино»-эффект
+  const nLights = n * 2;
+  for (let i = 0; i < nLights; i++) {
+    const lpt = wheelPoint(cx, cy, rSeg + 5.5, i * 360 / nLights);
+    lights += `<circle cx="${lpt.x.toFixed(1)}" cy="${lpt.y.toFixed(1)}" r="2.6" fill="#FFFFFF" opacity=".9"/>`;
+  }
+
   return `<svg viewBox="0 0 320 320" class="wheel-svg" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(0,0,0,.2)" stroke-width="2"/>
-    ${paths}${labels}
+    <defs>
+      ${defs}
+      <radialGradient id="wheelRim" cx="50%" cy="35%" r="75%">
+        <stop offset="0%" stop-color="#FDE68A"/>
+        <stop offset="45%" stop-color="#F59E0B"/>
+        <stop offset="100%" stop-color="#B45309"/>
+      </radialGradient>
+      <radialGradient id="wheelGloss" cx="50%" cy="26%" r="72%">
+        <stop offset="0%" stop-color="rgba(255,255,255,.5)"/>
+        <stop offset="38%" stop-color="rgba(255,255,255,.08)"/>
+        <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+      </radialGradient>
+    </defs>
+    <circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="url(#wheelRim)"/>
+    <circle cx="${cx}" cy="${cy}" r="${rSeg + 2}" fill="#0f172a" opacity=".08"/>
+    ${paths}
+    ${lights}
+    <circle cx="${cx}" cy="${cy}" r="${rSeg}" fill="url(#wheelGloss)" pointer-events="none"/>
+    ${labels}
   </svg>`;
 }
 
@@ -7422,7 +7493,7 @@ function wheelPoint(cx, cy, r, deg) {
 }
 
 function buildWheelHistory(rows) {
-  if (!rows.length) return '<div class="empty-state"><p>Пока пусто. Выиграйте первый приз!</p></div>';
+  if (!rows.length) return '<div class="wheel-history-empty"><span class="wheel-history-empty-emoji">🎁</span><p>Пока пусто.<br>Выиграйте первый приз!</p></div>';
   return `<ul class="wheel-history-list">${rows.map(r => `
     <li class="wheel-history-item">
       <span class="wheel-history-icon">${WHEEL_PRIZE_ICON[r.prize_type] || '★'}</span>
