@@ -169,13 +169,19 @@ def admin_spins(
         stmt = stmt.where(WheelSpin.operator_id == operator_id)
     if spin_status:
         stmt = stmt.where(WheelSpin.status == spin_status)
+    if prize_type:
+        # Фильтр по типу приза — на уровне SQL (join к призу), иначе при
+        # применении .limit() ДО python-фильтра можно получить меньше строк,
+        # чем limit. Используется текущий тип приза (WheelPrize.prize_type);
+        # для отображения строки берётся снапшот из result_payload_json.
+        stmt = stmt.join(WheelPrize, WheelPrize.id == WheelSpin.prize_id).where(
+            WheelPrize.prize_type == prize_type
+        )
     spins = db.scalars(stmt.limit(limit)).all()
 
     rows = []
     for spin in spins:
         p = _payload(spin)
-        if prize_type and p.get("type") != prize_type:
-            continue
         op = spin.operator
         rows.append(
             AdminSpinRow(
