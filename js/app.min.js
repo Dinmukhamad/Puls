@@ -8289,6 +8289,7 @@ function showWheelRuleModal(body) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay wheel-rule-modal-overlay';
   modal.id = 'wheel-rule-modal';
+  modal.style.display = 'flex';
   modal.innerHTML = `
     <div class="modal-card wheel-rule-modal" role="dialog" aria-modal="true" aria-labelledby="wheel-rule-modal-title">
       <div class="modal-head wheel-rule-modal-head">
