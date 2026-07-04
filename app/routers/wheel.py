@@ -24,6 +24,9 @@ from app.models.entities import (
 )
 from app.schemas.wheel import (
     AdminSpinRow,
+    CampaignCreate,
+    CampaignRead,
+    CampaignUpdate,
     EvaluationLogRow,
     GrantTokenRequest,
     IssueTicketRequest,
@@ -39,6 +42,8 @@ from app.schemas.wheel import (
     TokenRow,
     WheelPrizeRead,
     WheelStatus,
+    WinnerRow,
+    WinnersToday,
 )
 from app.services import wheel as wheel_service
 from app.services import wheel_eligibility
@@ -239,6 +244,105 @@ def wheel_history(
     limit: int = Query(default=50, ge=1, le=200),
 ):
     return my_history(db=db, current_user=current_user, limit=limit)
+
+
+# ── Победитель дня (ТЗ 10) ───────────────────────────────────────────────────
+
+# Условная «ценность» приза для выбора крупнейшего за день: коины — по сумме,
+# остальные типы — фиксированный ранг, чтобы редкие призы были заметны.
+_PRIZE_RANK = {
+    "manual_reward": 1000, "extra_ticket": 60, "shop_discount": 55,
+    "badge": 50, "spin_token": 45,
+}
+
+
+def _winner_weight(prize_type: str, amount: int) -> int:
+    if prize_type == "coins":
+        return int(amount or 0)
+    return _PRIZE_RANK.get(prize_type, 40)
+
+
+@router.get("/winners-today", response_model=WinnersToday)
+def winners_today(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Кто крутил колесо сегодня и самый крупный приз дня (ТЗ п.10)."""
+    start, end = local_day_bounds_utc(None)
+    spins = db.scalars(
+        select(WheelSpin)
+        .where(
+            WheelSpin.created_at >= start,
+            WheelSpin.created_at <= end,
+            WheelSpin.status == "completed",
+        )
+        .order_by(WheelSpin.created_at.desc())
+    ).all()
+
+    items: list[WinnerRow] = []
+    for spin in spins:
+        p = _payload(spin)
+        op = spin.operator
+        items.append(WinnerRow(
+            operator_id=spin.operator_id,
+            operator_name=op.full_name if op else "—",
+            group_name=(op.group_name or None) if op else None,
+            prize=p.get("title", "—"),
+            prize_type=p.get("type", ""),
+            amount=int(p.get("amount", 0) or 0),
+            reason=spin.ticket.reason_text if spin.ticket else None,
+            at=to_local_iso(spin.created_at) or "",
+        ))
+
+    top = max(items, key=lambda w: _winner_weight(w.prize_type, w.amount), default=None)
+    return WinnersToday(date=to_local_iso(start) or "", count=len(items), top=top, items=items)
+
+
+# ── Админка: кампания (ТЗ 11.1) ──────────────────────────────────────────────
+
+def _campaign_read(c: WheelCampaign) -> dict:
+    return CampaignRead(
+        id=c.id, title=c.title, description=c.description or "",
+        is_active=c.is_active, start_date=c.start_date, end_date=c.end_date,
+        max_spins_per_day=c.max_spins_per_day, max_spins_per_week=c.max_spins_per_week,
+        ticket_ttl_days=c.ticket_ttl_days,
+        created_at=to_local_iso(c.created_at), updated_at=to_local_iso(c.updated_at),
+    ).model_dump()
+
+
+def _deactivate_other_campaigns(db: Session, keep_id: int | None) -> None:
+    for other in db.scalars(select(WheelCampaign).where(WheelCampaign.is_active.is_(True))):
+        if other.id != keep_id:
+            other.is_active = False
+
+
+@admin_router.get("/campaigns", response_model=dict, dependencies=[Depends(require_roles(*STAFF_ROLES))])
+def admin_list_campaigns(db: Session = Depends(get_db)):
+    rows = db.scalars(select(WheelCampaign).order_by(WheelCampaign.is_active.desc(), WheelCampaign.id.desc()))
+    return {"items": [_campaign_read(c) for c in rows]}
+
+
+@admin_router.post("/campaigns", response_model=CampaignRead, dependencies=[Depends(require_roles(*STAFF_ROLES))])
+def admin_create_campaign(payload: CampaignCreate, db: Session = Depends(get_db)):
+    campaign = WheelCampaign(**payload.model_dump())
+    db.add(campaign)
+    db.flush()
+    if campaign.is_active:
+        _deactivate_other_campaigns(db, campaign.id)
+    db.commit()
+    db.refresh(campaign)
+    return _campaign_read(campaign)
+
+
+@admin_router.patch("/campaigns/{campaign_id}", response_model=CampaignRead, dependencies=[Depends(require_roles(*STAFF_ROLES))])
+def admin_update_campaign(campaign_id: int, payload: CampaignUpdate, db: Session = Depends(get_db)):
+    campaign = db.get(WheelCampaign, campaign_id)
+    if not campaign:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Кампания не найдена")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(campaign, field, value)
+    if campaign.is_active:
+        _deactivate_other_campaigns(db, campaign.id)
+    db.commit()
+    db.refresh(campaign)
+    return _campaign_read(campaign)
 
 
 # ── Админка: правила (ТЗ 14) ─────────────────────────────────────────────────

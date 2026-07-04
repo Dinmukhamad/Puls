@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -220,3 +220,57 @@ class EvaluationLogRow(BaseModel):
     reason: str
     created_token_id: int | None
     created_at: str
+
+
+# ── Админка: кампания (ТЗ 11.1, 12.1) ────────────────────────────────────────
+
+class CampaignBase(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    description: str = ""
+    is_active: bool = True
+    start_date: date | None = None
+    end_date: date | None = None
+    max_spins_per_day: int = Field(default=1, ge=0, le=50)
+    max_spins_per_week: int = Field(default=3, ge=0, le=200)
+    ticket_ttl_days: int = Field(default=3, ge=1, le=90)
+
+
+class CampaignCreate(CampaignBase):
+    pass
+
+
+class CampaignUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    is_active: bool | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    max_spins_per_day: int | None = Field(default=None, ge=0, le=50)
+    max_spins_per_week: int | None = Field(default=None, ge=0, le=200)
+    ticket_ttl_days: int | None = Field(default=None, ge=1, le=90)
+
+
+class CampaignRead(CampaignBase):
+    id: int
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+# ── Победитель дня (ТЗ 10) ───────────────────────────────────────────────────
+
+class WinnerRow(BaseModel):
+    operator_id: int
+    operator_name: str
+    group_name: str | None = None
+    prize: str
+    prize_type: str
+    amount: int
+    reason: str | None = None
+    at: str
+
+
+class WinnersToday(BaseModel):
+    date: str
+    count: int
+    top: WinnerRow | None = None
+    items: list[WinnerRow] = []

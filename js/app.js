@@ -1080,6 +1080,8 @@ function renderCabinet() {
 
     <div id="cabinet-wheel-card"></div>
 
+    <div id="cabinet-wheel-winners"></div>
+
     <div class="two-col-grid">
       <div class="panel">
         <div class="panel-head"><h3>История начислений</h3><span class="panel-badge">${w.transactions.length} записей</span></div>
@@ -1112,6 +1114,51 @@ function renderCabinet() {
     </div>`;
 
   renderCabinetWheelCard();
+  renderWheelWinnersToday();
+}
+
+// Блок «Победитель Wheel of WOW сегодня» на главной (ТЗ п.10). Грузится
+// асинхронно; если сегодня никто не крутил — блок скрыт.
+async function renderWheelWinnersToday() {
+  const host = document.getElementById('cabinet-wheel-winners');
+  if (!host) return;
+  let data;
+  try {
+    data = await api.getWheelWinnersToday();
+  } catch {
+    host.innerHTML = '';
+    return;
+  }
+  const items = data && data.items ? data.items : [];
+  if (!items.length || !data.top) { host.innerHTML = ''; return; }
+
+  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₡` : esc(w.prize);
+  const top = data.top;
+  const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
+
+  host.innerHTML = `
+    <div class="panel wheel-winner-card">
+      <div class="wheel-winner-head">
+        <span class="wheel-winner-kicker">🎡 Победитель Wheel of WOW сегодня</span>
+        <span class="wheel-winner-badge">Крупнейший приз дня</span>
+      </div>
+      <div class="wheel-winner-hero">
+        <div class="wheel-winner-avatar">${esc((top.operator_name || '?').trim().charAt(0))}</div>
+        <div class="wheel-winner-main">
+          <div class="wheel-winner-name">${esc(top.operator_name)}</div>
+          ${top.reason ? `<div class="wheel-winner-reason">Причина допуска: ${esc(top.reason)}</div>` : ''}
+        </div>
+        <div class="wheel-winner-prize">${prizeText(top)}</div>
+      </div>
+      ${rest.length ? `<div class="wheel-winner-list">
+        <div class="wheel-winner-list-title">Сегодня крутили колесо:</div>
+        ${rest.slice(0, 6).map(w => `<div class="wheel-winner-row">
+          <span class="wheel-winner-row-icon">${WHEEL_PRIZE_ICON[w.prize_type] || '★'}</span>
+          <span class="wheel-winner-row-name">${esc(w.operator_name)}</span>
+          <span class="wheel-winner-row-prize">${prizeText(w)}</span>
+        </div>`).join('')}
+      </div>` : ''}
+    </div>`;
 }
 
 // Карточка «Колесо WOW» на главной панели оператора (ТЗ п.2). Грузится
@@ -7600,6 +7647,9 @@ async function renderWheelStaffView(el) {
         <h2 class="section-title">Wheel of WOW</h2>
       </div>
       <div class="filter-tabs wheel-tabs">
+        <button class="filter-tab ${_wheelStaffTab === 'campaign' ? 'active' : ''}" data-wheel-tab="campaign">Кампания</button>
+        <button class="filter-tab ${_wheelStaffTab === 'prizes' ? 'active' : ''}" data-wheel-tab="prizes">Сектора</button>
+        <button class="filter-tab ${_wheelStaffTab === 'tickets' ? 'active' : ''}" data-wheel-tab="tickets">Билеты</button>
         <button class="filter-tab ${_wheelStaffTab === 'history' ? 'active' : ''}" data-wheel-tab="history">История</button>
         <button class="filter-tab ${_wheelStaffTab === 'stats' ? 'active' : ''}" data-wheel-tab="stats">Статистика</button>
         <button class="filter-tab ${_wheelStaffTab === 'rules' ? 'active' : ''}" data-wheel-tab="rules">Правила</button>
@@ -7614,7 +7664,13 @@ async function renderWheelStaffView(el) {
   });
 
   const body = document.getElementById('wheel-staff-body');
-  if (_wheelStaffTab === 'issue') {
+  if (_wheelStaffTab === 'campaign') {
+    await renderWheelCampaignTab(body);
+  } else if (_wheelStaffTab === 'prizes') {
+    await renderWheelPrizesTab(body);
+  } else if (_wheelStaffTab === 'tickets') {
+    await renderWheelTicketsTab(body);
+  } else if (_wheelStaffTab === 'issue') {
     await renderWheelIssueTab(body);
   } else if (_wheelStaffTab === 'stats') {
     await renderWheelStatsTab(body);
@@ -7625,6 +7681,275 @@ async function renderWheelStaffView(el) {
   } else {
     await renderWheelSpinsTab(body);
   }
+}
+
+/* ---------- Стафф: кампания (ТЗ 11.1) ---------- */
+let _wheelCampaignEditId = null;
+
+const WHEEL_PRIZE_TYPES = [
+  ['coins', 'Коины'], ['shop_discount', 'Скидка в магазине'], ['extra_ticket', 'Доп. билет'],
+  ['badge', 'Бейдж'], ['spin_token', 'Ещё вращение'], ['manual_reward', 'Ручной приз'],
+];
+
+async function renderWheelCampaignTab(body) {
+  let data;
+  try {
+    data = await api.getWheelCampaigns();
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+  const items = data.items || [];
+  if (!items.length) {
+    body.innerHTML = `
+      <div class="panel wheel-admin-panel">
+        <div class="panel-head"><h3>Кампания колеса</h3></div>
+        <div class="wheel-admin-content">
+          <div class="empty-state wheel-empty"><p>Кампаний пока нет.</p></div>
+          <button class="btn-primary" id="wheel-camp-create">Создать кампанию</button>
+        </div>
+      </div>`;
+    document.getElementById('wheel-camp-create').onclick = () => createDefaultCampaign(body);
+    return;
+  }
+
+  const current = items.find(c => c.id === _wheelCampaignEditId) || items.find(c => c.is_active) || items[0];
+  _wheelCampaignEditId = current.id;
+  const d = (v) => v ? String(v).slice(0, 10) : '';
+
+  body.innerHTML = `
+    <div class="panel wheel-admin-panel">
+      <div class="panel-head">
+        <h3>Настройки кампании</h3>
+        <span class="panel-badge ${current.is_active ? 'badge-ok' : 'badge-muted'}">${current.is_active ? 'активна' : 'выключена'}</span>
+      </div>
+      <div class="wheel-admin-content">
+        ${items.length > 1 ? `<label class="form-group" style="max-width:360px">
+          <span class="form-label">Выбрать кампанию</span>
+          <select class="form-input" id="wheel-camp-select">
+            ${items.map(c => `<option value="${c.id}" ${c.id === current.id ? 'selected' : ''}>${esc(c.title)}${c.is_active ? ' · активна' : ''}</option>`).join('')}
+          </select>
+        </label>` : ''}
+        <div class="form-grid wheel-campaign-grid">
+          <label class="form-group" style="grid-column:1/-1">
+            <span class="form-label">Название</span>
+            <input type="text" id="wc-title" class="form-input" value="${esc(current.title)}" maxlength="200">
+          </label>
+          <label class="form-group" style="grid-column:1/-1">
+            <span class="form-label">Описание</span>
+            <input type="text" id="wc-desc" class="form-input" value="${esc(current.description || '')}">
+          </label>
+          <label class="form-group">
+            <span class="form-label">Дата начала</span>
+            <input type="date" id="wc-start" class="form-input" value="${d(current.start_date)}">
+          </label>
+          <label class="form-group">
+            <span class="form-label">Дата окончания</span>
+            <input type="date" id="wc-end" class="form-input" value="${d(current.end_date)}">
+          </label>
+          <label class="form-group">
+            <span class="form-label">Прокруток в день</span>
+            <input type="number" id="wc-day" class="form-input" min="0" max="50" value="${current.max_spins_per_day}">
+          </label>
+          <label class="form-group">
+            <span class="form-label">Прокруток в неделю</span>
+            <input type="number" id="wc-week" class="form-input" min="0" max="200" value="${current.max_spins_per_week}">
+          </label>
+          <label class="form-group">
+            <span class="form-label">Билет действует, дней</span>
+            <input type="number" id="wc-ttl" class="form-input" min="1" max="90" value="${current.ticket_ttl_days}">
+          </label>
+          <label class="form-group wheel-check">
+            <span class="form-label">Активна</span>
+            <input type="checkbox" id="wc-active" ${current.is_active ? 'checked' : ''}>
+          </label>
+        </div>
+        <div class="wheel-issue-actions" style="gap:10px">
+          <button class="btn-primary" id="wc-save">Сохранить</button>
+          <button class="btn-outline" id="wc-new">Создать новую</button>
+        </div>
+        <div id="wc-status" class="status-line" style="margin-top:10px"></div>
+      </div>
+    </div>`;
+
+  const sel = document.getElementById('wheel-camp-select');
+  if (sel) sel.onchange = () => { _wheelCampaignEditId = parseInt(sel.value, 10); renderWheelCampaignTab(body); };
+  document.getElementById('wc-new').onclick = () => createDefaultCampaign(body);
+  document.getElementById('wc-save').onclick = async () => {
+    const statusEl = document.getElementById('wc-status');
+    const payload = {
+      title: document.getElementById('wc-title').value.trim(),
+      description: document.getElementById('wc-desc').value.trim(),
+      start_date: document.getElementById('wc-start').value || null,
+      end_date: document.getElementById('wc-end').value || null,
+      max_spins_per_day: parseInt(document.getElementById('wc-day').value, 10) || 0,
+      max_spins_per_week: parseInt(document.getElementById('wc-week').value, 10) || 0,
+      ticket_ttl_days: parseInt(document.getElementById('wc-ttl').value, 10) || 3,
+      is_active: document.getElementById('wc-active').checked,
+    };
+    if (!payload.title) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Укажите название'; return; }
+    try {
+      await api.updateWheelCampaign(current.id, payload);
+      showToast('Кампания сохранена', 'ok');
+      renderWheelCampaignTab(body);
+    } catch (err) {
+      statusEl.className = 'status-line status-error';
+      statusEl.textContent = err.message || 'Не удалось сохранить';
+    }
+  };
+}
+
+async function createDefaultCampaign(body) {
+  try {
+    const c = await api.createWheelCampaign({
+      title: 'Wheel of WOW', description: '', is_active: true,
+      max_spins_per_day: 1, max_spins_per_week: 3, ticket_ttl_days: 3,
+    });
+    _wheelCampaignEditId = c.id;
+    showToast('Кампания создана', 'ok');
+    renderWheelCampaignTab(body);
+  } catch (err) {
+    showToast(err.message || 'Не удалось создать кампанию', 'error');
+  }
+}
+
+/* ---------- Стафф: сектора (ТЗ 11.2) ---------- */
+async function renderWheelPrizesTab(body) {
+  let data;
+  try {
+    data = await api.getWheelAdminPrizes();
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+  const rows = data.items || [];
+  const totalWeight = rows.filter(r => r.is_active).reduce((s, r) => s + (r.weight || 0), 0);
+  const typeOptions = (val) => WHEEL_PRIZE_TYPES.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('');
+  const chance = (w) => totalWeight > 0 ? Math.round((w / totalWeight) * 100) : 0;
+
+  body.innerHTML = `
+    <div class="panel wheel-admin-panel">
+      <div class="panel-head">
+        <h3>Сектора колеса</h3>
+        <span class="panel-badge">${rows.length} · сумма весов ${totalWeight}</span>
+      </div>
+      <div class="wheel-admin-content">
+        <div class="table-wrap"><table class="data-table wheel-prizes-table">
+          <thead><tr><th>Цвет</th><th>Название</th><th>Тип</th><th>Кол-во</th><th>Вес</th><th title="Шанс выпадения">Шанс</th><th>Лимит всего</th><th>Лимит/оператор</th><th>Активен</th><th></th></tr></thead>
+          <tbody>
+          ${rows.map(r => `<tr data-prize-id="${r.id}">
+            <td><input type="color" class="wp-color" value="${esc(r.color || '#38BDF8')}"></td>
+            <td><input type="text" class="form-input wp-title" value="${esc(r.title)}" style="min-width:150px"></td>
+            <td><select class="form-input wp-type">${typeOptions(r.prize_type)}</select></td>
+            <td><input type="number" class="form-input wp-amount" value="${r.amount}" style="width:80px"></td>
+            <td><input type="number" class="form-input wp-weight" value="${r.weight}" min="0" style="width:70px"></td>
+            <td><span class="wheel-chance">${chance(r.is_active ? r.weight : 0)}%</span></td>
+            <td><input type="number" class="form-input wp-maxtotal" value="${r.max_wins_total}" min="0" style="width:80px" title="0 — без лимита"></td>
+            <td><input type="number" class="form-input wp-maxop" value="${r.max_wins_per_operator}" min="0" style="width:80px" title="0 — без лимита"></td>
+            <td style="text-align:center"><input type="checkbox" class="wp-active" ${r.is_active ? 'checked' : ''}></td>
+            <td><button class="btn-outline btn-sm wp-save">Сохранить</button></td>
+          </tr>`).join('')}
+          </tbody>
+        </table></div>
+        <div class="wheel-newprize">
+          <h4 class="panel-subtitle">Добавить сектор</h4>
+          <div class="form-grid wheel-newprize-grid">
+            <input type="text" id="np-title" class="form-input" placeholder="Название" style="min-width:150px">
+            <select id="np-type" class="form-input">${typeOptions('coins')}</select>
+            <input type="number" id="np-amount" class="form-input" placeholder="Кол-во" value="1" style="width:90px">
+            <input type="number" id="np-weight" class="form-input" placeholder="Вес" value="10" min="0" style="width:80px">
+            <input type="color" id="np-color" value="#38BDF8">
+            <button class="btn-primary" id="np-add">Добавить</button>
+          </div>
+          <div id="np-status" class="status-line" style="margin-top:8px"></div>
+        </div>
+        <div class="status-line muted" style="margin-top:10px">Сектор «ничего» запрещён (ТЗ п.6.3): минимальный приз — «+1 коин». Чтобы убрать сектор, выключите «Активен».</div>
+      </div>
+    </div>`;
+
+  body.querySelectorAll('tr[data-prize-id]').forEach(tr => {
+    const id = parseInt(tr.dataset.prizeId, 10);
+    tr.querySelector('.wp-save').onclick = async () => {
+      const payload = {
+        title: tr.querySelector('.wp-title').value.trim(),
+        prize_type: tr.querySelector('.wp-type').value,
+        amount: parseInt(tr.querySelector('.wp-amount').value, 10) || 0,
+        weight: parseInt(tr.querySelector('.wp-weight').value, 10) || 0,
+        color: tr.querySelector('.wp-color').value,
+        max_wins_total: parseInt(tr.querySelector('.wp-maxtotal').value, 10) || 0,
+        max_wins_per_operator: parseInt(tr.querySelector('.wp-maxop').value, 10) || 0,
+        is_active: tr.querySelector('.wp-active').checked,
+      };
+      if (!payload.title) { showToast('Укажите название сектора', 'error'); return; }
+      try {
+        await api.updateWheelPrize(id, payload);
+        showToast('Сектор сохранён', 'ok');
+        renderWheelPrizesTab(body);
+      } catch (err) { showToast(err.message || 'Не удалось сохранить', 'error'); }
+    };
+  });
+
+  document.getElementById('np-add').onclick = async () => {
+    const statusEl = document.getElementById('np-status');
+    const payload = {
+      title: document.getElementById('np-title').value.trim(),
+      prize_type: document.getElementById('np-type').value,
+      amount: parseInt(document.getElementById('np-amount').value, 10) || 0,
+      weight: parseInt(document.getElementById('np-weight').value, 10) || 0,
+      color: document.getElementById('np-color').value,
+    };
+    if (!payload.title) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Укажите название'; return; }
+    try {
+      await api.createWheelPrize(payload);
+      showToast('Сектор добавлен', 'ok');
+      renderWheelPrizesTab(body);
+    } catch (err) {
+      statusEl.className = 'status-line status-error';
+      statusEl.textContent = err.message || 'Не удалось добавить';
+    }
+  };
+}
+
+/* ---------- Стафф: билеты (ТЗ 12.3, 17) ---------- */
+let _wheelTicketFilter = '';
+async function renderWheelTicketsTab(body) {
+  let data;
+  try {
+    data = await api.getWheelTokens(_wheelTicketFilter ? { token_status: _wheelTicketFilter, limit: 300 } : { limit: 300 });
+  } catch (err) {
+    body.innerHTML = `<div class="panel"><div class="status-line status-error">${esc(err.message)}</div></div>`;
+    return;
+  }
+  const rows = data.items || [];
+  const statusBadge = { available: 'badge-ok', used: 'badge-muted', expired: 'badge-warning', cancelled: 'badge-muted' };
+  const statusLabel = { available: 'доступен', used: 'использован', expired: 'истёк', cancelled: 'отменён' };
+  const filters = [['', 'Все'], ['available', 'Доступные'], ['used', 'Использованные'], ['expired', 'Истёкшие'], ['cancelled', 'Отменённые']];
+
+  body.innerHTML = `
+    <div class="panel wheel-admin-panel">
+      <div class="panel-head"><h3>Билеты</h3><span class="panel-badge">${rows.length}</span></div>
+      <div class="wheel-admin-content">
+        <div class="filter-tabs" style="margin-bottom:14px">
+          ${filters.map(([f, l]) => `<button class="filter-tab ${_wheelTicketFilter === f ? 'active' : ''}" data-ticket-filter="${f}">${l}</button>`).join('')}
+        </div>
+        ${rows.length ? `<div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Создан</th><th>Оператор</th><th>Причина</th><th>Источник</th><th>Истекает</th><th>Использован</th><th>Статус</th></tr></thead>
+          <tbody>${rows.map(t => `<tr>
+            <td>${esc(fmtDateTime(t.created_at))}</td>
+            <td class="name-cell">${esc(t.operator_name)}</td>
+            <td>${esc(t.reason_text || '—')}</td>
+            <td>${esc(wheelSourceLabel(t.reason_type))}</td>
+            <td>${t.expires_at ? esc(fmtDateTime(t.expires_at)) : '—'}</td>
+            <td>${t.used_at ? esc(fmtDateTime(t.used_at)) : '—'}</td>
+            <td><span class="badge ${statusBadge[t.status] || 'badge-muted'}">${statusLabel[t.status] || t.status}</span></td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : '<div class="empty-state wheel-empty"><p>Билетов пока нет.</p></div>'}
+      </div>
+    </div>`;
+
+  body.querySelectorAll('[data-ticket-filter]').forEach(b => {
+    b.onclick = () => { _wheelTicketFilter = b.dataset.ticketFilter; renderWheelTicketsTab(body); };
+  });
 }
 
 async function renderWheelSpinsTab(body) {

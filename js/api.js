@@ -307,6 +307,16 @@ const api = (() => {
     return req('GET', '/api/admin/wheel/evaluation-logs' + (qs ? '?' + qs : ''));
   }
   async function grantWheelTokens(payload) { return req('POST', '/api/admin/wheel/tokens/grant', payload); }
+  async function getWheelWinnersToday() { return req('GET', '/api/wheel/winners-today'); }
+  async function getWheelCampaigns() { return req('GET', '/api/admin/wheel/campaigns'); }
+  async function createWheelCampaign(payload) { return req('POST', '/api/admin/wheel/campaigns', payload); }
+  async function updateWheelCampaign(id, payload) { return req('PATCH', '/api/admin/wheel/campaigns/' + id, payload); }
+  async function getWheelAdminPrizes(params) {
+    const qs = new URLSearchParams(params || {}).toString();
+    return req('GET', '/api/admin/wheel/prizes' + (qs ? '?' + qs : ''));
+  }
+  async function createWheelPrize(payload) { return req('POST', '/api/admin/wheel/prizes', payload); }
+  async function updateWheelPrize(id, payload) { return req('PATCH', '/api/admin/wheel/prizes/' + id, payload); }
 
   return {
     getToken, login, me, logout,
@@ -335,6 +345,8 @@ const api = (() => {
     recalculateOperatorLevels, manualOperatorLevel, listOperatorLevelRewards,
     getWheelStatus, getWheelPrizes, spinWheel, getWheelMyHistory, getWheelSpins, issueWheelTicket,
     getWheelStats, getWheelRules, getWheelTokens, getWheelEvaluationLogs, grantWheelTokens,
+    getWheelWinnersToday, getWheelCampaigns, createWheelCampaign, updateWheelCampaign,
+    getWheelAdminPrizes, createWheelPrize, updateWheelPrize,
     loginOperator: login,
     _base,
     _req: req,
