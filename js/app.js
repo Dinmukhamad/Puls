@@ -7646,7 +7646,8 @@ async function renderWheelStaffView(el) {
         <div class="section-kicker">Геймификация</div>
         <h2 class="section-title">Wheel of WOW</h2>
       </div>
-      <div class="filter-tabs wheel-tabs">
+    </div>
+    <div class="filter-tabs wheel-tabs">
         <button class="filter-tab ${_wheelStaffTab === 'campaign' ? 'active' : ''}" data-wheel-tab="campaign">Кампания</button>
         <button class="filter-tab ${_wheelStaffTab === 'prizes' ? 'active' : ''}" data-wheel-tab="prizes">Сектора</button>
         <button class="filter-tab ${_wheelStaffTab === 'tickets' ? 'active' : ''}" data-wheel-tab="tickets">Билеты</button>
@@ -7655,7 +7656,6 @@ async function renderWheelStaffView(el) {
         <button class="filter-tab ${_wheelStaffTab === 'rules' ? 'active' : ''}" data-wheel-tab="rules">Правила</button>
         <button class="filter-tab ${_wheelStaffTab === 'logs' ? 'active' : ''}" data-wheel-tab="logs">Логи</button>
         <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билет</button>
-      </div>
     </div>
     <div id="wheel-staff-body"><div class="panel wheel-admin-panel"><div class="empty-state"><div class="loading-spinner"></div></div></div></div>`;
 
@@ -7721,7 +7721,7 @@ async function renderWheelCampaignTab(body) {
     <div class="panel wheel-admin-panel">
       <div class="panel-head">
         <h3>Настройки кампании</h3>
-        <span class="panel-badge ${current.is_active ? 'badge-ok' : 'badge-muted'}">${current.is_active ? 'активна' : 'выключена'}</span>
+        <span class="badge ${current.is_active ? 'badge-ok' : 'badge-muted'}">${current.is_active ? 'активна' : 'выключена'}</span>
       </div>
       <div class="wheel-admin-content">
         ${items.length > 1 ? `<label class="form-group" style="max-width:360px">

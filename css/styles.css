@@ -4197,8 +4197,10 @@ body.role-operator {
 @keyframes wheelPop { from { transform: scale(.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 /* Статистика/выдача (staff) */
-.wheel-tabs { margin-left: auto; }
-.wheel-tabs .filter-tab { min-width: 112px; }
+.wheel-tabs { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+.wheel-tabs::-webkit-scrollbar { height: 6px; }
+.wheel-tabs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+.wheel-tabs .filter-tab { white-space: nowrap; flex: 0 0 auto; }
 .wheel-admin-panel { border-radius: var(--r-lg); }
 .wheel-admin-content { padding: 18px 20px 20px; }
 .wheel-stats-row {
@@ -4252,7 +4254,6 @@ body.role-operator {
 .wheel-op-empty { padding: 10px 12px; color: var(--tx3); font-size: 13px; }
 .wheel-op-chosen { margin-top: 7px; font-size: 12px; font-weight: 600; color: var(--ok); }
 @media (max-width: 900px) {
-  .wheel-tabs { width: 100%; }
   .wheel-stats-row,
   .wheel-issue-grid { grid-template-columns: 1fr; }
 }
