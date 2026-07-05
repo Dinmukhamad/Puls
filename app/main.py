@@ -31,8 +31,8 @@ def health() -> dict[str, str]:
     return {"status": "ok", "port": os.environ.get("PORT", "unknown")}
 
 
-@app.get("/ready")
-def ready() -> dict[str, str] | JSONResponse:
+@app.get("/ready", response_model=None)
+def ready():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
