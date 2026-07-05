@@ -333,3 +333,98 @@ GET  /api/dashboard/history              История транзакций (ad
 GET  /health                             Liveness check
 GET  /ready                              Readiness check (DB + migrations)
 ```
+
+---
+
+## Project structure after refactor
+
+### Backend
+
+`app/main.py` is now only the FastAPI entry point: it creates the app, attaches middleware, includes the API router, registers `/health` and `/ready`, and mounts static files.
+
+Main backend layout:
+
+```text
+app/
+  api/router.py          # one API router, mounted once with settings.api_prefix
+  core/lifespan.py       # startup checks, schema maintenance, seed
+  core/middleware.py     # CORS, gzip, CSRF origin guard
+  core/static.py         # static files and SPA fallback
+  modules/
+    analytics/
+    auth/
+    dashboard/
+    groups/
+    operator_levels/
+    operators/
+    rating/
+    reports/
+    shop/
+    tests/
+    users/
+    wallet/
+    weekly_results/
+    wheel/
+    work_norms/
+  routers/               # compatibility shims for old imports
+  services/              # compatibility shims for old imports
+```
+
+New code should be added under `app/modules/<domain>/`. The old `app/routers/*` and selected `app/services/*` files are kept as thin compatibility layers so existing imports do not break.
+
+### Frontend
+
+Frontend sources are split into editable modules:
+
+```text
+js/src/api/*.js          # API client sections
+js/src/app/*.js          # app shell and views
+css/src/*.css            # CSS layers by feature area
+```
+
+Generated entry files are still committed because Railway serves static files directly:
+
+```text
+js/api.js
+js/app.js
+css/styles.css
+js/api.min.js
+js/app.min.js
+css/styles.min.css
+css/tokens.min.css
+```
+
+After editing frontend source files, rebuild bundles:
+
+```powershell
+npm run build
+```
+
+If Node/npm is not installed, the safe fallback bundle command is:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-frontend.ps1
+```
+
+The fallback keeps JS semantics intact and minifies CSS conservatively. Full JS minification still requires `npm run build` with `terser`.
+
+### Required checks before publish
+
+```bash
+ruff check app
+pytest -q
+npm install
+npm run build
+npm run check:minified
+```
+
+Manual browser smoke-test before release:
+
+- login/logout
+- period report upload/save
+- coins and wallet
+- operator levels
+- Wheel of WOW: rules, tickets, spin, history, stats
+- shop purchases
+- tests
+- dashboard and analytics

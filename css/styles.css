@@ -1,3 +1,5 @@
+/* Generated from css/src/*.css. Run scripts/build-frontend.ps1 after editing. */
+/* source: 00-base-layout.css */
 /* ============================================================
    Puls — Operator Performance Platform
    Design System v2.0
@@ -1128,6 +1130,8 @@ body.must-change-password .side-nav-link[data-nav-target] {
   color: var(--tx3);
 }
 
+/* source: 10-manual-account.css */
+
 
 /* ══════════════════════════════════════════════════════
    MANUAL PAGE — Dashboard two-column layout
@@ -1462,6 +1466,8 @@ body.must-change-password .side-nav-link[data-nav-target] {
 
 
 
+
+/* source: 20-rating-shop-dashboard.css */
 /* ═══════════════════════════════════════════════════
    RATING PAGE — Clean dashboard layout
 ═══════════════════════════════════════════════════ */
@@ -2240,6 +2246,8 @@ body { padding-left: var(--nav-w, 220px); }
 }
 
 
+
+/* source: 30-analytics-rating-responsive.css */
 /* ══════════════════════════════════════════════
    COLLAPSED SIDEBAR — clean, no overflow
 ══════════════════════════════════════════════ */
@@ -3386,6 +3394,8 @@ body.role-operator {
   background: var(--danger-soft);
 }
 
+
+/* source: 40-coins-tests-wheel-overrides.css */
 /* Coins module */
 .section-subtitle {
   margin: 6px 0 0;
@@ -4682,3 +4692,4 @@ body.role-operator {
 .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .badge-ok { background: rgba(34,197,94,.15); color: #16a34a; }
 .badge-muted { background: rgba(148,163,184,.2); color: #64748b; }
+

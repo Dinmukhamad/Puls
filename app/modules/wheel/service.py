@@ -1,0 +1,458 @@
+"""
+Wheel of WOW — бизнес-логика (ТЗ разделы 13–15, 19).
+
+Инварианты безопасности (ТЗ п.19 «Что нельзя делать»):
+  * приз выбирается ТОЛЬКО здесь, на backend (frontend получает готовый
+    результат и лишь анимирует);
+  * коины начисляются ТОЛЬКО через coins.add_transaction (тип "wheel_of_wow",
+    related_spin_id) — прямое изменение баланса запрещено;
+  * билет используется строго один раз — гарантируется блокировкой строки
+    билета (SELECT FOR UPDATE) плюс проверкой статуса под этой блокировкой;
+  * ошибка на любом шаге прокрутки НЕ списывает билет и НЕ начисляет приз —
+    билет помечается used в самом конце, коммит один; при исключении вызывающий
+    роутер делает rollback, и билет остаётся available;
+  * повторный запрос не выдаёт второй приз — после used доступных билетов нет.
+"""
+from __future__ import annotations
+
+import json
+import random
+from datetime import timedelta
+
+from fastapi import HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.core.datetime_utils import local_day_bounds_utc, now_local, now_utc, to_local_iso
+from app.models.entities import (
+    Operator,
+    User,
+    WheelCampaign,
+    WheelPrize,
+    WheelSpin,
+    WheelTicket,
+)
+from app.modules.wallet.service import add_transaction
+
+# random.SystemRandom — криптостойкий источник: вес приза нельзя предсказать/
+# воспроизвести подбором сида. Для честной лотереи это правильный выбор.
+_rng = random.SystemRandom()
+
+TICKET_AVAILABLE = "available"
+TICKET_USED = "used"
+TICKET_EXPIRED = "expired"
+TICKET_CANCELLED = "cancelled"
+
+# extra_ticket / spin_token — синонимы (ТЗ п.7.1 «повторное вращение»);
+# empty_consolation допустим как тип, но ТЗ п.7.2 запрещает пустой сектор.
+PRIZE_TYPES = (
+    "coins", "shop_discount", "extra_ticket", "spin_token", "badge",
+    "manual_reward", "raffle_ticket", "status", "empty_consolation",
+)
+
+
+# ── Кампания ─────────────────────────────────────────────────────────────────
+
+def active_campaign(db: Session) -> WheelCampaign | None:
+    """
+    Wheel is always available while at least one campaign exists.
+    Dates and disabled flags are legacy settings and must not stop the wheel.
+    """
+    return db.scalar(
+        select(WheelCampaign).order_by(WheelCampaign.is_active.desc(), WheelCampaign.id.desc())
+    )
+
+
+def require_active_campaign(db: Session) -> WheelCampaign:
+    campaign = active_campaign(db)
+    if not campaign:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Активная кампания колеса не найдена")
+    return campaign
+
+
+# ── Билеты ───────────────────────────────────────────────────────────────────
+
+def _expire_stale_tickets(db: Session, operator_id: int) -> None:
+    """Ленивое истечение: available-билеты с истёкшим сроком → expired.
+    Вызывается при любом чтении статуса/прокрутке — отдельный крон не нужен."""
+    now = now_utc()
+    stale = db.scalars(
+        select(WheelTicket).where(
+            WheelTicket.operator_id == operator_id,
+            WheelTicket.status == TICKET_AVAILABLE,
+            WheelTicket.expires_at.is_not(None),
+            WheelTicket.expires_at < now,
+        )
+    ).all()
+    for ticket in stale:
+        ticket.status = TICKET_EXPIRED
+    if stale:
+        # SessionLocal настроен с autoflush=False — без явного flush последующий
+        # SELECT по status=available прочитает старое значение из БД и вернёт
+        # уже истёкший билет.
+        db.flush()
+
+
+def available_tickets(db: Session, operator_id: int) -> list[WheelTicket]:
+    _expire_stale_tickets(db, operator_id)
+    return db.scalars(
+        select(WheelTicket)
+        .where(
+            WheelTicket.operator_id == operator_id,
+            WheelTicket.status == TICKET_AVAILABLE,
+        )
+        .order_by(WheelTicket.created_at.asc())  # FIFO: старый билет сгорит первым
+    ).all()
+
+
+def issue_ticket(
+    db: Session,
+    operator: Operator,
+    campaign: WheelCampaign,
+    *,
+    reason_type: str,
+    reason_text: str,
+    source_type: str = "manual",
+    source_id: int | None = None,
+    created_by: User | None = None,
+    enforce_daily_cap: bool = True,
+) -> WheelTicket:
+    """
+    Выдаёт билет. По умолчанию соблюдает дневной лимит ВЫДАЧИ (ТЗ п.4.3:
+    «максимум 1 билет в день»), считая уже выданные за локальный день билеты.
+    Ручная выдача супервайзером может обходить лимит (enforce_daily_cap=False) —
+    это осознанное решение из ТЗ (ручная выдача за конкретную заслугу).
+    """
+    if enforce_daily_cap:
+        day_start, day_end = local_day_bounds_utc()
+        issued_today = db.scalar(
+            select(func.count(WheelTicket.id)).where(
+                WheelTicket.operator_id == operator.id,
+                WheelTicket.campaign_id == campaign.id,
+                WheelTicket.created_at >= day_start,
+                WheelTicket.created_at <= day_end,
+                WheelTicket.status != TICKET_CANCELLED,
+            )
+        )
+        if issued_today and issued_today >= 1:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Билет за сегодня уже выдан")
+
+    ttl_days = campaign.ticket_ttl_days or 3
+    ticket = WheelTicket(
+        operator_id=operator.id,
+        campaign_id=campaign.id,
+        reason_type=reason_type,
+        reason_text=reason_text.strip(),
+        source_type=source_type,
+        source_id=source_id,
+        status=TICKET_AVAILABLE,
+        expires_at=now_utc() + timedelta(days=ttl_days),
+        created_by_user_id=created_by.id if created_by else None,
+    )
+    db.add(ticket)
+    db.flush()
+    return ticket
+
+
+# ── Лимиты прокруток ─────────────────────────────────────────────────────────
+
+def _spins_used_today(db: Session, operator_id: int) -> int:
+    day_start, day_end = local_day_bounds_utc()
+    return db.scalar(
+        select(func.count(WheelSpin.id)).where(
+            WheelSpin.operator_id == operator_id,
+            WheelSpin.status == "completed",
+            WheelSpin.created_at >= day_start,
+            WheelSpin.created_at <= day_end,
+        )
+    ) or 0
+
+
+def _spins_used_this_week(db: Session, operator_id: int) -> int:
+    # Неделя = последние 7 локальных дней, считая сегодня (скользящее окно).
+    day_start, _ = local_day_bounds_utc()
+    week_start = day_start - timedelta(days=6)
+    return db.scalar(
+        select(func.count(WheelSpin.id)).where(
+            WheelSpin.operator_id == operator_id,
+            WheelSpin.status == "completed",
+            WheelSpin.created_at >= week_start,
+        )
+    ) or 0
+
+
+def wheel_status(db: Session, operator: Operator) -> dict:
+    campaign = active_campaign(db)
+    if not campaign:
+        return {
+            "campaign": None,
+            "available_tickets": 0,
+            "spins_used_today": 0,
+            "max_spins_per_day": 0,
+            "spins_used_this_week": 0,
+            "max_spins_per_week": 0,
+            "next_ticket_reason": None,
+            "can_spin": False,
+            "reason_if_cannot_spin": "Активная кампания колеса не найдена",
+            "last_prize": None,
+        }
+    tickets = available_tickets(db, operator.id)
+    next_ticket = tickets[0] if tickets else None
+    used_today = _spins_used_today(db, operator.id)
+    used_week = _spins_used_this_week(db, operator.id)
+
+    can_spin = True
+    reason = None
+    if not tickets:
+        can_spin, reason = False, "Нет доступных билетов"
+    elif campaign.max_spins_per_day and used_today >= campaign.max_spins_per_day:
+        can_spin, reason = False, "Достигнут дневной лимит прокруток"
+    elif campaign.max_spins_per_week and used_week >= campaign.max_spins_per_week:
+        can_spin, reason = False, "Достигнут недельный лимит прокруток"
+
+    last_prize = _last_prize(db, operator.id)
+    return {
+        "campaign": {"id": campaign.id, "title": campaign.title},
+        "available_tickets": len(tickets),
+        "spins_used_today": used_today,
+        "max_spins_per_day": campaign.max_spins_per_day,
+        "spins_used_this_week": used_week,
+        "max_spins_per_week": campaign.max_spins_per_week,
+        "next_ticket_reason": next_ticket.reason_text if next_ticket else None,
+        "can_spin": can_spin,
+        "reason_if_cannot_spin": reason,
+        "last_prize": last_prize,
+    }
+
+
+def _last_prize(db: Session, operator_id: int) -> dict | None:
+    from app.models.entities import WheelOperatorDailyState
+    state = db.scalars(
+        select(WheelOperatorDailyState)
+        .where(WheelOperatorDailyState.operator_id == operator_id, WheelOperatorDailyState.last_prize_title.is_not(None))
+        .order_by(WheelOperatorDailyState.date.desc())
+    ).first()
+    if not state or not state.last_prize_title:
+        return None
+    return {
+        "title": state.last_prize_title,
+        "type": state.last_prize_type,
+        "value": state.last_prize_value,
+        "at": to_local_iso(state.last_spin_at),
+    }
+
+
+# ── Выбор приза по весу (ТЗ раздел 14) ───────────────────────────────────────
+
+def _wins_in_window(db, prize_id, *, operator_id=None, days=None) -> int:
+    stmt = select(func.count(WheelSpin.id)).where(
+        WheelSpin.prize_id == prize_id,
+        WheelSpin.status == "completed",
+    )
+    if operator_id is not None:
+        stmt = stmt.where(WheelSpin.operator_id == operator_id)
+    if days is not None:
+        day_start, _ = local_day_bounds_utc()
+        window_start = day_start - timedelta(days=days - 1)
+        stmt = stmt.where(WheelSpin.created_at >= window_start)
+    return db.scalar(stmt) or 0
+
+
+def _eligible_prizes(db: Session, campaign_id: int, operator_id: int) -> list[WheelPrize]:
+    prizes = db.scalars(
+        select(WheelPrize).where(
+            WheelPrize.campaign_id == campaign_id,
+            WheelPrize.is_active.is_(True),
+            WheelPrize.weight > 0,
+        )
+    ).all()
+
+    eligible: list[WheelPrize] = []
+    for prize in prizes:
+        # Общий лимит выигрышей приза (за всё время)
+        if prize.max_wins_total and _wins_in_window(db, prize.id) >= prize.max_wins_total:
+            continue
+        # Персональный лимит выигрышей приза (за всё время)
+        if prize.max_wins_per_operator and _wins_in_window(db, prize.id, operator_id=operator_id) >= prize.max_wins_per_operator:
+            continue
+        # Лимиты по скользящим окнам (ТЗ 8.2)
+        if prize.daily_limit and _wins_in_window(db, prize.id, days=1) >= prize.daily_limit:
+            continue
+        if prize.weekly_limit and _wins_in_window(db, prize.id, days=7) >= prize.weekly_limit:
+            continue
+        if prize.monthly_limit and _wins_in_window(db, prize.id, days=30) >= prize.monthly_limit:
+            continue
+        if prize.per_operator_daily_limit and _wins_in_window(db, prize.id, operator_id=operator_id, days=1) >= prize.per_operator_daily_limit:
+            continue
+        if prize.per_operator_weekly_limit and _wins_in_window(db, prize.id, operator_id=operator_id, days=7) >= prize.per_operator_weekly_limit:
+            continue
+        eligible.append(prize)
+    return eligible
+
+
+def choose_prize(prizes: list[WheelPrize], rng=_rng) -> WheelPrize:
+    """
+    Взвешенный выбор. Вынесен отдельно и принимает rng — чтобы тесты могли
+    подать детерминированный генератор и проверить распределение/границы.
+    """
+    if not prizes:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Нет доступных призов")
+    total_weight = sum(p.weight for p in prizes)
+    if total_weight <= 0:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Нет доступных призов")
+    # 1..total_weight включительно, диапазонный обход
+    roll = rng.randint(1, total_weight)
+    cursor = 0
+    for prize in prizes:
+        cursor += prize.weight
+        if roll <= cursor:
+            return prize
+    return prizes[-1]  # недостижимо, страховка от ошибок округления
+
+
+# ── Прокрутка ────────────────────────────────────────────────────────────────
+
+def spin(db: Session, operator: Operator, *, rng=_rng) -> dict:
+    """
+    Атомарная прокрутка. Вся работа — в одной транзакции; коммит делает
+    вызывающий роутер, он же откатывает при исключении (билет не списывается).
+    """
+    campaign = require_active_campaign(db)
+
+    # Лимиты прокруток
+    if campaign.max_spins_per_day and _spins_used_today(db, operator.id) >= campaign.max_spins_per_day:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Достигнут дневной лимит прокруток")
+    if campaign.max_spins_per_week and _spins_used_this_week(db, operator.id) >= campaign.max_spins_per_week:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Достигнут недельный лимит прокруток")
+
+    _expire_stale_tickets(db, operator.id)
+
+    # Берём старейший доступный билет С БЛОКИРОВКОЙ строки. На PostgreSQL это
+    # сериализует параллельные прокрутки одного оператора: второй запрос ждёт
+    # первый, после коммита видит билет used и доступных не находит.
+    ticket = db.scalars(
+        select(WheelTicket)
+        .where(
+            WheelTicket.operator_id == operator.id,
+            WheelTicket.status == TICKET_AVAILABLE,
+        )
+        .order_by(WheelTicket.created_at.asc())
+        .limit(1)
+        .with_for_update()
+    ).first()
+    if not ticket:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Нет доступных билетов")
+    if ticket.expires_at and ticket.expires_at < now_utc():
+        ticket.status = TICKET_EXPIRED
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Билет истёк")
+
+    prize = choose_prize(_eligible_prizes(db, campaign.id, operator.id), rng=rng)
+
+    # Снимок приза — история не должна «поехать» при будущем редактировании секторов
+    payload = {
+        "prize_id": prize.id,
+        "title": prize.title,
+        "type": prize.prize_type,
+        "amount": prize.amount,
+        "color": prize.color,
+    }
+    spin_row = WheelSpin(
+        operator_id=operator.id,
+        ticket_id=ticket.id,
+        campaign_id=campaign.id,
+        prize_id=prize.id,
+        status="created",
+        result_payload_json=json.dumps(payload, ensure_ascii=False),
+    )
+    db.add(spin_row)
+    db.flush()  # нужен spin_row.id для related_spin_id
+
+    message = _grant_prize(db, operator, campaign, prize, spin_row)
+
+    # Завершаем в самом конце — если что-то выше упало, билет остался available
+    ticket.status = TICKET_USED
+    ticket.used_at = now_utc()
+    spin_row.status = "completed"
+    spin_row.completed_at = now_utc()
+
+    _update_daily_state_after_spin(db, operator.id, prize)
+
+    return {
+        "spin_id": spin_row.id,
+        "prize": {"id": prize.id, "title": prize.title, "type": prize.prize_type, "amount": prize.amount, "color": prize.color},
+        "reason": ticket.reason_text,
+        "message": message,
+    }
+
+
+def _grant_prize(db, operator, campaign, prize: WheelPrize, spin_row: WheelSpin) -> str:
+    """Начисление приза по типу. Коины — ТОЛЬКО через add_transaction.
+    XP-типа здесь нет намеренно: XP-модуля в системе пока не существует."""
+    if prize.prize_type == "coins":
+        add_transaction(
+            db, operator, prize.amount, "wheel_of_wow",
+            comment=f"Приз Wheel of WOW: {prize.title}",
+            related_spin_id=spin_row.id,
+        )
+        return f"Вы выиграли {prize.title}"
+
+    if prize.prize_type in ("extra_ticket", "spin_token"):
+        # Повторное вращение = новый токен, в обход дневного лимита ВЫДАЧИ
+        # (это сам приз колеса, а не новое достижение). ТЗ 12.2.
+        issue_ticket(
+            db, operator, campaign,
+            reason_type="extra_ticket",
+            reason_text=f"Дополнительный билет с колеса (прокрутка #{spin_row.id})",
+            source_type="wheel_spin", source_id=spin_row.id,
+            enforce_daily_cap=False,
+        )
+        return "Вы выиграли дополнительный билет"
+
+    # raffle_ticket | shop_discount | badge | status | manual_reward |
+    # empty_consolation — фиксируются в истории прокрутки; выдача/вручение —
+    # оффлайн-процесс руководителя (билет в розыгрыш, статус дня и т.п.).
+    # Баланс не трогаем.
+    labels = {
+        "shop_discount": f"Скидка в магазине: {prize.title}",
+        "badge": f"Бейдж: {prize.title}",
+        "raffle_ticket": f"Билет в розыгрыш: {prize.title}",
+        "status": f"Статус: {prize.title}",
+        "manual_reward": f"Ручной приз: {prize.title}",
+        "empty_consolation": prize.title,
+    }
+    return f"Вы выиграли {labels.get(prize.prize_type, prize.title)}"
+
+
+def _update_daily_state_after_spin(db: Session, operator_id: int, prize: WheelPrize) -> None:
+    """Обновляет wheel_operator_daily_state после прокрутки (ТЗ 8.8)."""
+    from app.core.datetime_utils import now_local
+    from app.models.entities import WheelOperatorDailyState
+    today = now_local().date()
+    day_start, day_end = local_day_bounds_utc(today)
+
+    def _count(status_):
+        return db.scalar(
+            select(func.count(WheelTicket.id)).where(
+                WheelTicket.operator_id == operator_id,
+                WheelTicket.status == status_,
+                WheelTicket.created_at >= day_start,
+                WheelTicket.created_at <= day_end,
+            )
+        ) or 0
+
+    state = db.scalars(
+        select(WheelOperatorDailyState).where(
+            WheelOperatorDailyState.operator_id == operator_id,
+            WheelOperatorDailyState.date == today,
+        )
+    ).first()
+    if not state:
+        state = WheelOperatorDailyState(operator_id=operator_id, date=today)
+        db.add(state)
+    state.active_tokens_count = _count(TICKET_AVAILABLE)
+    state.used_tokens_count = _count(TICKET_USED)
+    state.expired_tokens_count = _count(TICKET_EXPIRED)
+    state.last_spin_at = now_utc()
+    state.last_prize_title = prize.title
+    state.last_prize_type = prize.prize_type
+    state.last_prize_value = prize.amount

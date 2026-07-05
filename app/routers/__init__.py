@@ -1,27 +1,6 @@
-from app.routers import (
-    analytics,
-    auth,
-    dashboard,
-    groups,
-    operators,
-    period_reports,
-    rating,
-    shop,
-    wallet,
-    weekly_results,
-    wheel,
-)
+"""Legacy router package.
 
-__all__ = [
-    "analytics",
-    "auth",
-    "dashboard",
-    "groups",
-    "operators",
-    "period_reports",
-    "rating",
-    "shop",
-    "wallet",
-    "weekly_results",
-    "wheel",
-]
+New application wiring lives in app.api.router and app.modules.*.
+Keep this package lightweight so importing one legacy router does not import
+every large router module as a side effect.
+"""

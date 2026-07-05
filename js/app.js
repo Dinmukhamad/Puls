@@ -1,4 +1,5 @@
-﻿/**
+/* Generated from js/src/app/*.js. Run scripts/build-frontend.ps1 after editing. */
+/**
  * Puls — Main App v2
  * FastAPI backend, full admin panel per TZ
  */
@@ -628,6 +629,7 @@ function renderSidebar(role) {
 /* ══════════════════════════════════════
    VIEW: УРОВНИ ОПЕРАТОРОВ
 ══════════════════════════════════════ */
+
 async function renderOperatorLevelsSettings() {
   const el = document.getElementById('view-operator-levels');
   if (!el) return;
@@ -1277,6 +1279,7 @@ async function submitChangeUsername() {
 
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
+
 ══════════════════════════════════════ */
 async function renderRatingOverviewTab(el) {
   const role  = STATE.user?.role || 'operator';
@@ -2269,6 +2272,7 @@ function renderSummary() {
 /* ══════════════════════════════════════
    VIEW: ОПЕРАТОРЫ (ADMIN)
 ══════════════════════════════════════ */
+
 function renderAdminOperators() {
   return renderUsersPage();
 }
@@ -4650,6 +4654,7 @@ window.manualOperatorLevelUi = manualOperatorLevelUi;
 /* ══════════════════════════════════════
    VIEW: РАСЧЁТ ЗА ПЕРИОД
 ══════════════════════════════════════ */
+
 function renderPeriodReport() {
   const el = document.getElementById('view-period-report');
   if (!el) return;
@@ -6887,6 +6892,7 @@ const RATING_TABS = [
   { key: 'progress', label: 'Мой прогресс' },
 ];
 
+
 let _ratingActiveTab = 'overview';
 
 async function renderRating() {
@@ -7328,6 +7334,7 @@ const WHEEL_PRIZE_ICON = {
 const WHEEL_FAST_MS = 900;
 const WHEEL_TTL_MS = 45_000;
 const WHEEL_STATIC_TTL_MS = 5 * 60_000;
+
 
 function wheelCachedFetch(key, fetcher, fallback, onFresh, ttlMs = WHEEL_TTL_MS) {
   const cached = swrReadRaw(key);
@@ -9455,3 +9462,4 @@ async function loadTestAnalyticsBlock(testId) {
     body.innerHTML = `<div class="status-line status-error">${esc(e.message)}</div>`;
   }
 }
+

@@ -17,3 +17,6 @@ extend-immutable-calls = [
     "fastapi.Header", "fastapi.File", "fastapi.Form", "fastapi.Cookie",
     "app.core.security.require_roles",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

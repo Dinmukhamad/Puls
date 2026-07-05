@@ -1,3 +1,4 @@
+/* Generated from js/src/api/*.js. Run scripts/build-frontend.ps1 after editing. */
 /**
  * Puls — API client v3
  * Auth via HttpOnly cookie (pulse_access_token).
@@ -62,6 +63,7 @@ const api = (() => {
     }
     return data;
   }
+
 
   /* ── Auth ────────────────────────────────────────────────── */
   async function login(username, password) {
@@ -153,6 +155,7 @@ const api = (() => {
 
   function _base() { return base(); }
 
+
   /* ── Dashboard extras ───────────────────────────────────── */
   async function getDashboardOperators() {
     return req('GET', '/api/dashboard/operators');
@@ -200,21 +203,6 @@ const api = (() => {
   async function completeCoinRequest(id) {
     return req('POST', `/api/coins/requests/${id}/complete`);
   }
-  // Полный CSV-экспорт всех транзакций коинов формируется на бэкенде
-  // (/api/coins/transactions/export), поэтому экспорт не ограничен тем,
-  // что подгружено на клиент. Возвращаем Blob для скачивания.
-  async function exportCoinTransactions() {
-    const res = await fetch(base() + '/api/coins/transactions/export', {
-      method: 'GET',
-      credentials: 'include',
-    });
-    if (!res.ok) {
-      let detail = `Ошибка ${res.status}`;
-      try { const d = await res.json(); detail = d.detail || detail; } catch {}
-      throw new Error(detail);
-    }
-    return res.blob();
-  }
 
   /* ── Period reports ──────────────────────────────────────── */
   async function getPeriodReportStatus() {
@@ -254,6 +242,7 @@ const api = (() => {
     const qs = new URLSearchParams(params).toString();
     return req('GET', `/api/analytics/${path}` + (qs ? '?' + qs : ''));
   }
+
 
   /* ── Tests (Тесты) — operator side ──────────────────────────── */
   async function myTests() { return req('GET', '/api/tests/my'); }
@@ -315,7 +304,6 @@ const api = (() => {
   }
   async function createWheelRule(payload) { return req('POST', '/api/admin/wheel/rules', payload); }
   async function updateWheelRule(id, payload) { return req('PATCH', '/api/admin/wheel/rules/' + id, payload); }
-  async function deleteWheelRule(id) { return req('DELETE', '/api/admin/wheel/rules/' + id); }
   async function getWheelTokens(params) {
     const qs = new URLSearchParams(params || {}).toString();
     return req('GET', '/api/admin/wheel/tokens' + (qs ? '?' + qs : ''));
@@ -349,7 +337,7 @@ const api = (() => {
     getDashboard, getDashboardOperators, getDashboardHistory,
     createUser, listUsers, updateUser, deactivateUser, changeUserRole, resetUserPassword,
     changeMyPassword, changeMyLogin, changeOperatorPassword, changeOperatorUsername,
-    getCoinsOverview, listCoinRequests, listCoinTransactions, exportCoinTransactions,
+    getCoinsOverview, listCoinRequests, listCoinTransactions,
     approveCoinRequest, rejectCoinRequest, completeCoinRequest,
     getPeriodReportStatus, uploadPeriodReportFiles, savePeriodReport,
     getAvailablePeriods, analyticsGet,
@@ -362,7 +350,7 @@ const api = (() => {
     addOperatorLevelRule, updateOperatorLevelRule, deleteOperatorLevelRule,
     recalculateOperatorLevels, manualOperatorLevel, listOperatorLevelRewards,
     getWheelStatus, getWheelPrizes, spinWheel, getWheelMyHistory, getWheelSpins, issueWheelTicket,
-    getWheelStats, getWheelRules, createWheelRule, updateWheelRule, deleteWheelRule, getWheelTokens, getWheelEvaluationLogs, grantWheelTokens,
+    getWheelStats, getWheelRules, createWheelRule, updateWheelRule, getWheelTokens, getWheelEvaluationLogs, grantWheelTokens,
     getWheelWinnersToday, getWheelCampaigns, createWheelCampaign, updateWheelCampaign,
     getWheelAdminPrizes, createWheelPrize, updateWheelPrize,
     loginOperator: login,
@@ -370,3 +358,4 @@ const api = (() => {
     _req: req,
   };
 })();
+
