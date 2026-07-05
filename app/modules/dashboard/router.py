@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from app.core.security import require_roles
 from app.database.db import get_db
 from app.models.entities import CoinTransaction, Operator, ShopPurchase, User, now_utc
-from app.schemas.dashboard import DashboardRead, GroupSummary, OperatorRow, RatingRow
 from app.modules.rating.service import rating_rows
+from app.schemas.dashboard import DashboardRead, GroupSummary, OperatorRow, RatingRow
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 

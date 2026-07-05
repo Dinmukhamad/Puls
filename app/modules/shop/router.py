@@ -7,6 +7,14 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
 from app.models.entities import ShopItem, ShopPurchase, User
+from app.modules.rating.service import rating_cache_invalidate
+from app.modules.wallet.service import (
+    approve_purchase,
+    complete_purchase,
+    create_purchase,
+    operator_for_user_or_403,
+    reject_purchase,
+)
 from app.schemas.shop import (
     PurchaseCreate,
     RejectPurchaseRequest,
@@ -15,14 +23,6 @@ from app.schemas.shop import (
     ShopItemUpdate,
     ShopPurchaseRead,
 )
-from app.modules.wallet.service import (
-    approve_purchase,
-    complete_purchase,
-    create_purchase,
-    operator_for_user_or_403,
-    reject_purchase,
-)
-from app.modules.rating.service import rating_cache_invalidate
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 

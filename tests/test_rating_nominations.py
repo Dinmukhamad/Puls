@@ -38,7 +38,7 @@ def _rows(winner_id: int, winner_name: str = "Топ Оператор"):
 
 
 def test_first_request_builds_then_serves_cache(client, monkeypatch):
-    import app.routers.rating as rating_router
+    import app.modules.rating.router as rating_router
 
     monkeypatch.setattr(rating_router, "rating_rows", lambda db: _rows(101, "Победитель v1"))
     r = client.get("/api/rating/nominations")
@@ -58,7 +58,7 @@ def test_first_request_builds_then_serves_cache(client, monkeypatch):
 
 
 def test_invalidate_refreshes_data(client, monkeypatch):
-    import app.routers.rating as rating_router
+    import app.modules.rating.router as rating_router
     from app.services.rating import invalidate_nominations_cache
 
     monkeypatch.setattr(rating_router, "rating_rows", lambda db: _rows(101, "Победитель v1"))
@@ -71,7 +71,7 @@ def test_invalidate_refreshes_data(client, monkeypatch):
 
 def test_ttl_expiry_rebuilds(client, monkeypatch):
     """«Через 5 минут кеш обновляется» — состариваем запись вручную."""
-    import app.routers.rating as rating_router
+    import app.modules.rating.router as rating_router
     from app.services import rating as rating_service
 
     monkeypatch.setattr(rating_router, "rating_rows", lambda db: _rows(101, "Победитель v1"))
@@ -86,7 +86,7 @@ def test_ttl_expiry_rebuilds(client, monkeypatch):
 
 
 def test_empty_rating_is_cached_too(client, monkeypatch):
-    import app.routers.rating as rating_router
+    import app.modules.rating.router as rating_router
 
     monkeypatch.setattr(rating_router, "rating_rows", lambda db: [])
     assert client.get("/api/rating/nominations").json() == {"items": []}
@@ -98,7 +98,7 @@ def test_empty_rating_is_cached_too(client, monkeypatch):
 
 def test_is_current_user_is_per_request_not_cached(client, make_client, db_session, monkeypatch):
     """Регресс на утечку персонального флага через общий кеш."""
-    import app.routers.rating as rating_router
+    import app.modules.rating.router as rating_router
 
     op, user, password = make_operator_user(db_session)
     monkeypatch.setattr(rating_router, "rating_rows", lambda db: _rows(op.id, op.full_name))

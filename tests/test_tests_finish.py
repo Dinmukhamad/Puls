@@ -83,7 +83,7 @@ def test_finish_error_does_not_leak_traceback(make_client, db_session, monkeypat
     _test, _question, _correct, attempt = _make_attempt(db_session, op)
     c = _login_operator(make_client, user, password)
 
-    import app.routers.tests as tests_router
+    import app.modules.tests.router as tests_router
 
     def boom(db, attempt, reviewer=None):
         raise RuntimeError("boom at /app/app/routers/tests.py line 999")

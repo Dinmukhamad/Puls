@@ -22,7 +22,6 @@ from app.models.entities import (
     User,
     now_utc,
 )
-from app.modules.wallet.service import operator_for_user_or_403
 from app.modules.tests.service import (
     activate_scheduled_tests,
     auto_expire_attempt,
@@ -36,6 +35,7 @@ from app.modules.tests.service import (
     start_attempt,
     visible_tests_for_operator,
 )
+from app.modules.wallet.service import operator_for_user_or_403
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 admin_router = APIRouter(prefix="/admin/tests", tags=["tests-admin"])

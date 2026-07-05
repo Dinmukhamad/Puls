@@ -36,7 +36,7 @@ class _P:
 
 
 def test_choose_prize_respects_weight_ranges():
-    from app.services.wheel import choose_prize
+    from app.modules.wheel.service import choose_prize
     prizes = [_P(1, 30), _P(2, 25), _P(3, 3)]  # диапазоны: 1..30, 31..55, 56..58
     assert choose_prize(prizes, rng=_FixedRNG(1)).id == 1
     assert choose_prize(prizes, rng=_FixedRNG(30)).id == 1
@@ -48,7 +48,7 @@ def test_choose_prize_respects_weight_ranges():
 
 def test_choose_prize_empty_raises():
     from fastapi import HTTPException
-    from app.services.wheel import choose_prize
+    from app.modules.wheel.service import choose_prize
     with pytest.raises(HTTPException):
         choose_prize([], rng=_FixedRNG(1))
 
@@ -56,7 +56,7 @@ def test_choose_prize_empty_raises():
 # ── Билеты и статус ──────────────────────────────────────────────────────────
 
 def test_status_without_campaign_is_safe(client, db_session, monkeypatch):
-    import app.services.wheel as ws
+    import app.modules.wheel.service as ws
     op = make_operator(db_session)
     monkeypatch.setattr(ws, "active_campaign", lambda db: None)
     st = ws.wheel_status(db_session, op)
@@ -64,7 +64,7 @@ def test_status_without_campaign_is_safe(client, db_session, monkeypatch):
 
 
 def test_manual_ticket_and_spin_lifecycle(client, db_session):
-    from app.services import wheel as ws
+    from app.modules.wheel import service as ws
     from app.services.wheel_seed import ensure_default_wheel
 
     campaign = ensure_default_wheel(db_session)
@@ -88,7 +88,7 @@ def test_manual_ticket_and_spin_lifecycle(client, db_session):
 
 def test_coins_prize_goes_through_transaction(client, db_session):
     from app.models.entities import CoinTransaction, WheelPrize
-    from app.services import wheel as ws
+    from app.modules.wheel import service as ws
     from app.services.wheel_seed import ensure_default_wheel
 
     campaign = ensure_default_wheel(db_session)
@@ -114,7 +114,7 @@ def test_coins_prize_goes_through_transaction(client, db_session):
 
 
 def test_error_during_grant_does_not_consume_ticket(client, db_session, monkeypatch):
-    from app.services import wheel as ws
+    from app.modules.wheel import service as ws
     from app.services.wheel_seed import ensure_default_wheel
 
     campaign = ensure_default_wheel(db_session)
@@ -133,7 +133,7 @@ def test_error_during_grant_does_not_consume_ticket(client, db_session, monkeypa
 
 
 def test_expired_ticket_not_spendable(client, db_session):
-    from app.services import wheel as ws
+    from app.modules.wheel import service as ws
     from app.services.wheel_seed import ensure_default_wheel
 
     campaign = ensure_default_wheel(db_session)
@@ -153,7 +153,7 @@ def test_expired_ticket_not_spendable(client, db_session):
 def test_per_operator_prize_limit(client, db_session):
     """+10 коинов имеет max_wins_per_operator=1 — второй раз не выпадет."""
     from app.models.entities import WheelPrize
-    from app.services import wheel as ws
+    from app.modules.wheel import service as ws
     from app.services.wheel_seed import ensure_default_wheel
 
     campaign = ensure_default_wheel(db_session)
@@ -188,7 +188,7 @@ def test_no_nothing_sector_in_seed(client, db_session):
 def test_daily_spin_limit(client, db_session):
     """max_spins_per_day=1: после успешной прокрутки вторая — 409, даже с билетом."""
     from fastapi import HTTPException
-    from app.services import wheel as ws
+    from app.modules.wheel import service as ws
     from app.services.wheel_seed import ensure_default_wheel
 
     campaign = ensure_default_wheel(db_session)
@@ -207,7 +207,7 @@ def test_daily_spin_limit(client, db_session):
 
 def test_spin_endpoint_repeated_request_no_second_prize(make_client, db_session):
     """HTTP-уровень: после use повторный POST /spin → 409, не второй приз."""
-    from app.services import wheel as ws
+    from app.modules.wheel import service as ws
     from app.services.wheel_seed import ensure_default_wheel
 
     campaign = ensure_default_wheel(db_session)

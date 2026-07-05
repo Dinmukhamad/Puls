@@ -24,10 +24,10 @@ from app.models.entities import (
     WeeklyResult,
     now_utc,
 )
-from app.schemas.operator_levels import OperatorLevelSummary
-from app.schemas.operators import OperatorRead, OperatorUpdate
 from app.modules.operator_levels.service import operator_level_badge, operator_level_summary
 from app.modules.rating.service import rating_cache_invalidate
+from app.schemas.operator_levels import OperatorLevelSummary
+from app.schemas.operators import OperatorRead, OperatorUpdate
 
 logger = logging.getLogger(__name__)
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Date,
     DateTime,
@@ -14,7 +15,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    JSON,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -620,7 +620,7 @@ class WheelCampaign(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
-    prizes: Mapped[list["WheelPrize"]] = relationship(back_populates="campaign", cascade="all, delete-orphan")
+    prizes: Mapped[list[WheelPrize]] = relationship(back_populates="campaign", cascade="all, delete-orphan")
 
 
 class WheelPrize(Base):

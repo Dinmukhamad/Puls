@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.datetime_utils import local_day_bounds_utc, now_utc, to_local_iso
+from app.core.datetime_utils import local_day_bounds_utc, to_local_iso
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
 from app.models.entities import (
@@ -47,7 +47,6 @@ from app.schemas.wheel import (
 )
 from app.modules.rating.service import rating_cache_invalidate
 from app.modules.wallet.service import operator_for_user_or_403
-from app.modules.wheel import eligibility as wheel_eligibility
 from app.modules.wheel import service as wheel_service
 
 logger = logging.getLogger(__name__)

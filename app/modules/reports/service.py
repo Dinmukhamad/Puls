@@ -20,6 +20,7 @@ from app.models.entities import (
     User,
 )
 from app.modules.analytics.cache import cache_clear_all
+from app.modules.operator_levels.service import assign_auto_level
 from app.modules.rating.service import rating_cache_invalidate
 from app.modules.reports import repository as repo
 from app.modules.reports.excel_parser import normalize_name
@@ -33,7 +34,6 @@ from app.modules.reports.schemas import (
     PeriodWarningsOut,
     SavePeriodReportRequest,
 )
-from app.modules.operator_levels.service import assign_auto_level
 from app.modules.work_norms.service import calculate_norm_for_period
 
 MAX_REPORT_FILE_BYTES = 15 * 1024 * 1024
