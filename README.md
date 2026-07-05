@@ -382,10 +382,20 @@ Domain schemas live next to the owning module in `app/modules/<domain>/schemas.p
 Frontend sources are split into editable modules:
 
 ```text
-js/src/api/*.js          # API client sections
-js/src/app/*.js          # app shell and views
-css/src/*.css            # CSS layers by feature area
+js/src/api/client/       # base API request/auth client
+js/src/api/domains/      # domain API sections
+js/src/app/              # app shell, state, router, navigation
+js/src/auth/             # auth-specific frontend code
+js/src/components/       # reusable UI components
+js/src/utils/            # shared frontend helpers
+js/src/views/            # section views
+css/src/base/            # base styles and tokens usage
+css/src/layout/          # shell/layout styles
+css/src/components/      # reusable component styles
+css/src/views/           # section-specific styles
 ```
+
+The current frontend build intentionally stays on ordered concatenation instead of ES modules/Vite. Numeric filename prefixes (`00-`, `10-`, `20-`, ...) define execution order across nested folders; the bundlers sort by filename first so moving a file between folders does not change behavior.
 
 Generated entry files are still committed because Railway serves static files directly:
 

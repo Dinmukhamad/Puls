@@ -60,38 +60,72 @@ $CssSrc = Join-Path $Root "css\src"
 Ensure-Dir $AppSrc
 Ensure-Dir $ApiSrc
 Ensure-Dir $CssSrc
+Ensure-Dir (Join-Path $ApiSrc "client")
+Ensure-Dir (Join-Path $ApiSrc "domains")
+Ensure-Dir (Join-Path $JsSrc "auth")
+Ensure-Dir (Join-Path $JsSrc "components")
+Ensure-Dir (Join-Path $JsSrc "utils")
+Ensure-Dir (Join-Path $JsSrc "views")
+Ensure-Dir (Join-Path $CssSrc "base")
+Ensure-Dir (Join-Path $CssSrc "layout")
+Ensure-Dir (Join-Path $CssSrc "components")
+Ensure-Dir (Join-Path $CssSrc "views")
+
+function Get-OrderedFiles($Groups, $Filter) {
+    $result = @()
+    foreach ($group in $Groups) {
+        if (Test-Path -LiteralPath $group) {
+            $result += Get-ChildItem -Path $group -Filter $Filter -Recurse -File | Sort-Object Name, FullName | Select-Object -ExpandProperty FullName
+        }
+    }
+    return $result
+}
 
 if ($SplitFromCurrent) {
     $appLines = Read-Lines (Join-Path $Root "js\app.js")
     Write-LinesRange $appLines 1    630  (Join-Path $AppSrc "00-core-shell.js")
-    Write-LinesRange $appLines 631  1279 (Join-Path $AppSrc "10-levels-cabinet.js")
-    Write-LinesRange $appLines 1280 2271 (Join-Path $AppSrc "20-rating-shop-summary.js")
-    Write-LinesRange $appLines 2272 4652 (Join-Path $AppSrc "30-admin-coins-groups-operators.js")
-    Write-LinesRange $appLines 4653 6889 (Join-Path $AppSrc "40-reports-analytics.js")
-    Write-LinesRange $appLines 6890 7331 (Join-Path $AppSrc "50-rating-tabs.js")
-    Write-LinesRange $appLines 7332 $appLines.Length (Join-Path $AppSrc "60-wheel-tests.js")
+    Write-LinesRange $appLines 631  1279 (Join-Path $JsSrc "views\operator-levels\10-levels-cabinet.view.js")
+    Write-LinesRange $appLines 1280 2271 (Join-Path $JsSrc "views\rating\20-rating-shop-summary.view.js")
+    Write-LinesRange $appLines 2272 4652 (Join-Path $JsSrc "views\coins\30-admin-coins-groups-operators.view.js")
+    Write-LinesRange $appLines 4653 6889 (Join-Path $JsSrc "views\reports\40-reports-analytics.view.js")
+    Write-LinesRange $appLines 6890 7331 (Join-Path $JsSrc "views\rating\50-rating-tabs.view.js")
+    Write-LinesRange $appLines 7332 $appLines.Length (Join-Path $JsSrc "views\wheel\60-wheel-tests.view.js")
 
     $apiLines = Read-Lines (Join-Path $Root "js\api.js")
-    Write-LinesRange $apiLines 1   64  (Join-Path $ApiSrc "00-core-auth.js")
-    Write-LinesRange $apiLines 65  154 (Join-Path $ApiSrc "10-main-domains.js")
-    Write-LinesRange $apiLines 155 242 (Join-Path $ApiSrc "20-reports-analytics-tests.js")
-    Write-LinesRange $apiLines 243 $apiLines.Length (Join-Path $ApiSrc "30-levels-wheel-export.js")
+    Write-LinesRange $apiLines 1   64  (Join-Path $ApiSrc "client\00-client-auth.js")
+    Write-LinesRange $apiLines 65  154 (Join-Path $ApiSrc "domains\10-main-domains.api.js")
+    Write-LinesRange $apiLines 155 242 (Join-Path $ApiSrc "domains\20-reports-analytics-tests.api.js")
+    Write-LinesRange $apiLines 243 $apiLines.Length (Join-Path $ApiSrc "domains\30-levels-wheel-export.api.js")
 
     $cssLines = Read-Lines (Join-Path $Root "css\styles.css")
-    Write-LinesRange $cssLines 1    1129 (Join-Path $CssSrc "00-base-layout.css")
-    Write-LinesRange $cssLines 1130 1464 (Join-Path $CssSrc "10-manual-account.css")
-    Write-LinesRange $cssLines 1465 2242 (Join-Path $CssSrc "20-rating-shop-dashboard.css")
-    Write-LinesRange $cssLines 2243 3388 (Join-Path $CssSrc "30-analytics-rating-responsive.css")
-    Write-LinesRange $cssLines 3389 $cssLines.Length (Join-Path $CssSrc "40-coins-tests-wheel-overrides.css")
+    Write-LinesRange $cssLines 1    1129 (Join-Path $CssSrc "base\00-base-layout.css")
+    Write-LinesRange $cssLines 1130 1464 (Join-Path $CssSrc "views\10-manual-account.css")
+    Write-LinesRange $cssLines 1465 2242 (Join-Path $CssSrc "views\20-rating-shop-dashboard.css")
+    Write-LinesRange $cssLines 2243 3388 (Join-Path $CssSrc "views\30-analytics-rating-responsive.css")
+    Write-LinesRange $cssLines 3389 $cssLines.Length (Join-Path $CssSrc "views\40-coins-tests-wheel-overrides.css")
 }
 
-$appFiles = Get-ChildItem -Path $AppSrc -Filter "*.js" | Sort-Object Name | Select-Object -ExpandProperty FullName
-$apiFiles = Get-ChildItem -Path $ApiSrc -Filter "*.js" | Sort-Object Name | Select-Object -ExpandProperty FullName
-$cssFiles = Get-ChildItem -Path $CssSrc -Filter "*.css" | Sort-Object Name | Select-Object -ExpandProperty FullName
+$appFiles = Get-OrderedFiles @(
+    (Join-Path $JsSrc "app"),
+    (Join-Path $JsSrc "auth"),
+    (Join-Path $JsSrc "components"),
+    (Join-Path $JsSrc "utils"),
+    (Join-Path $JsSrc "views")
+) "*.js"
+$apiFiles = Get-OrderedFiles @(
+    (Join-Path $ApiSrc "client"),
+    (Join-Path $ApiSrc "domains")
+) "*.js"
+$cssFiles = Get-OrderedFiles @(
+    (Join-Path $CssSrc "base"),
+    (Join-Path $CssSrc "layout"),
+    (Join-Path $CssSrc "components"),
+    (Join-Path $CssSrc "views")
+) "*.css"
 
-Join-Files $apiFiles (Join-Path $Root "js\api.js") "/* Generated from js/src/api/*.js. Run scripts/build-frontend.ps1 after editing. */"
-Join-Files $appFiles (Join-Path $Root "js\app.js") "/* Generated from js/src/app/*.js. Run scripts/build-frontend.ps1 after editing. */"
-Join-Files $cssFiles (Join-Path $Root "css\styles.css") "/* Generated from css/src/*.css. Run scripts/build-frontend.ps1 after editing. */" -IncludeSourceComments
+Join-Files $apiFiles (Join-Path $Root "js\api.js") "/* Generated from js/src/api/**/*.js. Run npm run build after editing. */"
+Join-Files $appFiles (Join-Path $Root "js\app.js") "/* Generated from js/src/{app,auth,components,utils,views}/**/*.js. Run npm run build after editing. */"
+Join-Files $cssFiles (Join-Path $Root "css\styles.css") "/* Generated from css/src/{base,layout,components,views}/**/*.css. Run npm run build after editing. */" -IncludeSourceComments
 
 Rebuild-MinJsSafe (Join-Path $Root "js\api.js") (Join-Path $Root "js\api.min.js")
 Rebuild-MinJsSafe (Join-Path $Root "js\app.js") (Join-Path $Root "js\app.min.js")

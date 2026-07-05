@@ -7,17 +7,29 @@
  *
  * Порядок склейки — по имени файла (числовые префиксы 00-, 10-, ...).
  */
-import { readFileSync, writeFileSync, readdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
+import { basename, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function sortedFiles(dir, ext) {
-  return readdirSync(dir)
-    .filter((f) => f.endsWith(ext))
-    .sort()
-    .map((f) => join(dir, f));
+  if (!existsSync(dir)) {
+    return [];
+  }
+  return readdirSync(dir, { withFileTypes: true })
+    .flatMap((entry) => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        return sortedFiles(path, ext);
+      }
+      return entry.isFile() && entry.name.endsWith(ext) ? [path] : [];
+    })
+    .sort((a, b) => basename(a).localeCompare(basename(b)) || a.localeCompare(b));
+}
+
+function orderedFiles(groups, ext) {
+  return groups.flatMap((group) => sortedFiles(join(ROOT, ...group), ext));
 }
 
 function joinFiles(files, outPath, banner, includeSourceComments = false) {
@@ -33,23 +45,46 @@ function joinFiles(files, outPath, banner, includeSourceComments = false) {
   console.log(`bundled ${files.length} file(s) -> ${outPath.replace(ROOT + "/", "")}`);
 }
 
-const apiFiles = sortedFiles(join(ROOT, "js", "src", "api"), ".js");
-const appFiles = sortedFiles(join(ROOT, "js", "src", "app"), ".js");
-const cssFiles = sortedFiles(join(ROOT, "css", "src"), ".css");
+const apiFiles = orderedFiles(
+  [
+    ["js", "src", "api", "client"],
+    ["js", "src", "api", "domains"],
+  ],
+  ".js",
+);
+const appFiles = orderedFiles(
+  [
+    ["js", "src", "app"],
+    ["js", "src", "auth"],
+    ["js", "src", "components"],
+    ["js", "src", "utils"],
+    ["js", "src", "views"],
+  ],
+  ".js",
+);
+const cssFiles = orderedFiles(
+  [
+    ["css", "src", "base"],
+    ["css", "src", "layout"],
+    ["css", "src", "components"],
+    ["css", "src", "views"],
+  ],
+  ".css",
+);
 
 joinFiles(
   apiFiles,
   join(ROOT, "js", "api.js"),
-  "/* Generated from js/src/api/*.js. Run scripts/build-frontend.ps1 after editing. */",
+  "/* Generated from js/src/api/**/*.js. Run npm run build after editing. */",
 );
 joinFiles(
   appFiles,
   join(ROOT, "js", "app.js"),
-  "/* Generated from js/src/app/*.js. Run scripts/build-frontend.ps1 after editing. */",
+  "/* Generated from js/src/{app,auth,components,utils,views}/**/*.js. Run npm run build after editing. */",
 );
 joinFiles(
   cssFiles,
   join(ROOT, "css", "styles.css"),
-  "/* Generated from css/src/*.css. Run scripts/build-frontend.ps1 after editing. */",
+  "/* Generated from css/src/{base,layout,components,views}/**/*.css. Run npm run build after editing. */",
   true,
 );

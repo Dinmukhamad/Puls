@@ -1,4 +1,4 @@
-/* Generated from js/src/api/*.js. Run scripts/build-frontend.ps1 after editing. */
+/* Generated from js/src/api/**/*.js. Run npm run build after editing. */
 /**
  * Puls — API client v3
  * Auth via HttpOnly cookie (pulse_access_token).
