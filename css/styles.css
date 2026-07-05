@@ -4481,7 +4481,7 @@ body.role-operator {
 }
 .wheel-rules-table-wrap { max-height: 520px; }
 .wheel-rules-table { min-width: 820px; }
-.wheel-rule-modal-overlay { padding: 24px; z-index: 30000; }
+.wheel-rule-modal-overlay { display: flex !important; padding: 24px; z-index: 30000; }
 .wheel-rule-modal {
   width: min(860px, calc(100vw - 40px));
   max-height: min(860px, calc(100vh - 40px));

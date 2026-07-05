@@ -8253,7 +8253,7 @@ async function renderWheelRulesTab(body) {
         </div>
         <div class="wheel-head-actions">
           <span class="panel-badge">${rows.length}</span>
-          <button class="btn-primary btn-sm" id="wr-open-create" type="button" data-wheel-rule-open>Добавить правило</button>
+          <button class="btn-primary btn-sm" id="wr-open-create" type="button" data-wheel-rule-open onclick="window.openWheelRuleModal?.(); return false;">Добавить правило</button>
         </div>
       </div>
       <div class="wheel-admin-content">
