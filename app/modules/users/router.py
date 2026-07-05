@@ -12,7 +12,7 @@ from app.core.security import get_current_user, hash_password
 from app.database.db import get_db
 from app.models.entities import AuditLog, Group, Operator, User
 from app.modules.operator_levels.service import ensure_default_levels, operator_level_badge
-from app.schemas.users import (
+from app.modules.users.schemas import (
     UserChangeRoleRequest,
     UserCreateRequest,
     UserListOut,

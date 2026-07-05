@@ -9,7 +9,7 @@ from app.database.db import get_db
 from app.models.entities import Operator, WeeklyResult
 from app.modules.rating.service import rating_cache_invalidate, recalculate_period_ranks
 from app.modules.wallet.service import add_transaction, points_to_coins
-from app.schemas.weekly_results import WeeklyCalculateRequest, WeeklyResultCreate, WeeklyResultRead
+from app.modules.weekly_results.schemas import WeeklyCalculateRequest, WeeklyResultCreate, WeeklyResultRead
 
 router = APIRouter(prefix="/weekly-results", tags=["weekly-results"])
 

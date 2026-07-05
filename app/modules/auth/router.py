@@ -14,7 +14,7 @@ from app.core.security import (
 )
 from app.database.db import get_db
 from app.models.entities import AuditLog, User
-from app.schemas.auth import (
+from app.modules.auth.schemas import (
     AccountCredentialsUpdate,
     LoginRequest,
     UserCreate,

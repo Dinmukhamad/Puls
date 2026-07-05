@@ -368,9 +368,14 @@ app/
     work_norms/
   routers/               # compatibility shims for old imports
   services/              # compatibility shims for old imports
+  schemas/               # compatibility shims for old schema imports
 ```
 
 New code should be added under `app/modules/<domain>/`. The old `app/routers/*` and selected `app/services/*` files are kept as thin compatibility layers so existing imports do not break.
+
+Domain schemas live next to the owning module in `app/modules/<domain>/schemas.py`. The legacy `app/schemas/*` files are intentionally kept as `from app.modules.<domain>.schemas import *` shims for backwards compatibility.
+
+`coins` is intentionally grouped under the wallet domain: `app/modules/wallet/coins_router.py` serves `/api/coins/*`, `app/modules/wallet/wallet_router.py` serves `/api/wallet/*`, and `app/modules/wallet/router.py` includes both routers. This keeps coin balance operations and wallet views in one domain module without changing public URLs.
 
 ### Frontend
 
@@ -396,7 +401,7 @@ css/tokens.min.css
 
 After editing frontend source files, rebuild bundles:
 
-```powershell
+```bash
 npm run build
 ```
 
@@ -406,7 +411,7 @@ If Node/npm is not installed, the safe fallback bundle command is:
 powershell -ExecutionPolicy Bypass -File scripts/build-frontend.ps1
 ```
 
-The fallback keeps JS semantics intact and minifies CSS conservatively. Full JS minification still requires `npm run build` with `terser`.
+The fallback keeps JS semantics intact and minifies CSS conservatively. Full JS minification still requires `npm run build` with `terser`. Do not edit `*.min.js` or `*.min.css` manually; regenerate them from source files.
 
 ### Required checks before publish
 

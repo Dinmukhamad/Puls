@@ -15,7 +15,7 @@ from app.modules.wallet.service import (
     operator_for_user_or_403,
     reject_purchase,
 )
-from app.schemas.shop import (
+from app.modules.shop.schemas import (
     PurchaseCreate,
     RejectPurchaseRequest,
     ShopItemCreate,

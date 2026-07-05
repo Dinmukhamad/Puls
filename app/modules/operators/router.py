@@ -26,8 +26,8 @@ from app.models.entities import (
 )
 from app.modules.operator_levels.service import operator_level_badge, operator_level_summary
 from app.modules.rating.service import rating_cache_invalidate
-from app.schemas.operator_levels import OperatorLevelSummary
-from app.schemas.operators import OperatorRead, OperatorUpdate
+from app.modules.operator_levels.schemas import OperatorLevelSummary
+from app.modules.operators.schemas import OperatorRead, OperatorUpdate
 
 logger = logging.getLogger(__name__)
 

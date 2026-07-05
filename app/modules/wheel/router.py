@@ -22,7 +22,7 @@ from app.models.entities import (
     WheelSpin,
     WheelTicket,
 )
-from app.schemas.wheel import (
+from app.modules.wheel.schemas import (
     AdminSpinRow,
     CampaignCreate,
     CampaignRead,

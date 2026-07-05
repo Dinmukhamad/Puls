@@ -15,7 +15,7 @@ from app.modules.operator_levels.service import (
     level_reward_overview_rows,
     operator_level_summary,
 )
-from app.schemas.operator_levels import (
+from app.modules.operator_levels.schemas import (
     OperatorLevelCreate,
     OperatorLevelRead,
     OperatorLevelRecalculateRequest,
