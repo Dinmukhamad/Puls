@@ -17,15 +17,15 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 
 const PAIRS = [
-  ['js/app.js', 'js/app.min.js'],
-  ['js/api.js', 'js/api.min.js'],
-  ['css/styles.css', 'css/styles.min.css'],
-  ['css/tokens.css', 'css/tokens.min.css'],
+  ['js/app.js', 'js/app.min.js', 0.80],
+  ['js/api.js', 'js/api.min.js', 0.80],
+  ['css/styles.css', 'css/styles.min.css', 0.90],
+  ['css/tokens.css', 'css/tokens.min.css', 0.95],
 ];
 
 let failed = false;
 
-for (const [srcRel, minRel] of PAIRS) {
+for (const [srcRel, minRel, maxRatio] of PAIRS) {
   const src = path.join(ROOT, srcRel);
   const min = path.join(ROOT, minRel);
 
@@ -43,6 +43,11 @@ for (const [srcRel, minRel] of PAIRS) {
     failed = true;
   } else if (b.length >= a.length) {
     console.error(`FAIL  ${minRel}: ${b.length} байт — не меньше исходника (${a.length})`);
+    failed = true;
+  } else if ((b.length / a.length) > maxRatio) {
+    const pct = ((b.length / a.length) * 100).toFixed(1);
+    const expected = (maxRatio * 100).toFixed(0);
+    console.error(`FAIL  ${minRel}: ${pct}% of source size, expected <= ${expected}% - run npm run build`);
     failed = true;
   } else {
     const pct = (100 - (b.length / a.length) * 100).toFixed(1);
