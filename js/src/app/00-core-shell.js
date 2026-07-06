@@ -251,20 +251,6 @@ async function tryRestoreSession() {
   try {
     const u = await api.me();
     STATE.user = normalizeUser(u);
-    // Если у admin/manager/supervisor застрял флаг must_change_password —
-    // сбрасываем его через аварийный endpoint ДО загрузки приложения
-    if (STATE.user.must_change_password &&
-        ['admin','manager','supervisor'].includes(STATE.user.role)) {
-      try {
-        await fetch(api._base() + '/api/auth/fix-session', {
-          method: 'POST', credentials: 'include',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        // Перечитываем пользователя — флаг уже сброшен
-        const u2 = await api.me();
-        STATE.user = normalizeUser(u2);
-      } catch(e) { /* игнорируем — bootApp сам покажет модалку */ }
-    }
     await bootApp();
   } catch(err) {
     const msg = String(err?.message || '').toLowerCase();
