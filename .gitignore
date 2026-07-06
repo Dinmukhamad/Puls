@@ -52,3 +52,7 @@ desktop.ini
 # ── Кеши инструментов ────────────────────────────────────────────
 .pytest_cache/
 .ruff_cache/
+
+# Generated minified frontend artifacts are not committed.
+*.min.js
+*.min.css

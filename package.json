@@ -1,14 +1,11 @@
 {
   "name": "puls-frontend-build",
   "private": true,
-  "description": "Сборка фронтенда Puls: минификация JS/CSS. Min-файлы коммитятся в репозиторий (Railway не запускает npm при деплое) — перед пушем выполните `npm run build`.",
+  "description": "Frontend bundle assembly for Puls. The app serves source bundles directly without committed .min artifacts.",
   "scripts": {
     "bundle": "node scripts/build-frontend.mjs",
     "split:frontend": "powershell -ExecutionPolicy Bypass -File scripts/build-frontend.ps1 -SplitFromCurrent",
-    "minify:js": "terser js/api.js --compress --mangle -o js/api.min.js && terser js/app.js --compress --mangle -o js/app.min.js",
-    "minify:css": "cleancss -o css/styles.min.css css/styles.css && cleancss -o css/tokens.min.css css/tokens.css",
-    "build": "npm run bundle && npm run minify:js && npm run minify:css",
-    "check:minified": "node scripts/check-minified.js"
+    "build": "npm run bundle"
   },
   "devDependencies": {
     "clean-css-cli": "^5.6.3",

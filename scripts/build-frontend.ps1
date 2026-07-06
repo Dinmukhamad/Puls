@@ -37,14 +37,6 @@ function Join-Files($Files, $OutPath, $Banner, [switch]$IncludeSourceComments) {
     Write-Text $OutPath (($chunks -join "`n") + "`n")
 }
 
-function Minify-Css($Text) {
-    $Text = [regex]::Replace($Text, '/\*[\s\S]*?\*/', '')
-    $Text = [regex]::Replace($Text, '\s+', ' ')
-    $Text = [regex]::Replace($Text, '\s*([{}:;,>+~])\s*', '$1')
-    $Text = $Text.Replace(';}', '}')
-    return $Text.Trim()
-}
-
 $JsSrc = Join-Path $Root "js\src"
 $AppSrc = Join-Path $JsSrc "app"
 $ApiSrc = Join-Path $JsSrc "api"
@@ -115,16 +107,6 @@ $cssFiles = Get-OrderedFiles @(
     (Join-Path $CssSrc "views")
 ) "*.css"
 
-Join-Files $apiFiles (Join-Path $Root "js\api.js") "/* Generated from js/src/api/**/*.js. Run npm run build after editing. */"
-Join-Files $appFiles (Join-Path $Root "js\app.js") "/* Generated from js/src/{app,auth,components,utils,views}/**/*.js. Run npm run build after editing. */"
-Join-Files $cssFiles (Join-Path $Root "css\styles.css") "/* Generated from css/src/{base,layout,components,views}/**/*.css. Run npm run build after editing. */" -IncludeSourceComments
-
-# JS minification must be done by terser via npm run build. This fallback only
-# rebuilds source bundles and CSS min files so it cannot replace real minified JS
-# with a near-copy of the source.
-
-$styles = [System.IO.File]::ReadAllText((Join-Path $Root "css\styles.css"))
-Write-Text (Join-Path $Root "css\styles.min.css") (Minify-Css $styles)
-
-$tokens = [System.IO.File]::ReadAllText((Join-Path $Root "css\tokens.css"))
-Write-Text (Join-Path $Root "css\tokens.min.css") (Minify-Css $tokens)
+Join-Files $apiFiles (Join-Path $Root "js\api.js") "/* Generated from js/src/api source files. Run npm run build after editing. */"
+Join-Files $appFiles (Join-Path $Root "js\app.js") "/* Generated from js/src app source files. Run npm run build after editing. */"
+Join-Files $cssFiles (Join-Path $Root "css\styles.css") "/* Generated from css/src source files. Run npm run build after editing. */" -IncludeSourceComments

@@ -75,16 +75,16 @@ const cssFiles = orderedFiles(
 joinFiles(
   apiFiles,
   join(ROOT, "js", "api.js"),
-  "/* Generated from js/src/api/**/*.js. Run npm run build after editing. */",
+  "/* Generated from js/src/api source files. Run npm run build after editing. */",
 );
 joinFiles(
   appFiles,
   join(ROOT, "js", "app.js"),
-  "/* Generated from js/src/{app,auth,components,utils,views}/**/*.js. Run npm run build after editing. */",
+  "/* Generated from js/src app source files. Run npm run build after editing. */",
 );
 joinFiles(
   cssFiles,
   join(ROOT, "css", "styles.css"),
-  "/* Generated from css/src/{base,layout,components,views}/**/*.css. Run npm run build after editing. */",
+  "/* Generated from css/src source files. Run npm run build after editing. */",
   true,
 );

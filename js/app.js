@@ -1,4 +1,4 @@
-/* Generated from js/src/{app,auth,components,utils,views}/**/*.js. Run npm run build after editing. */
+/* Generated from js/src app source files. Run npm run build after editing. */
 /**
  * Puls — Main App v2
  * FastAPI backend, full admin panel per TZ

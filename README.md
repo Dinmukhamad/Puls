@@ -31,7 +31,7 @@ uvicorn app.main:app --reload      # запустить сервер
 ```bash
 ruff check app          # линт (конфиг в pyproject.toml)
 pytest -q               # автотесты (tests/, sqlite поднимается сам)
-npm run check:minified  # min-файлы не устарели (см. «Сборка фронтенда»)
+npm run build           # frontend bundles are up to date
 ```
 
 ---
@@ -111,28 +111,18 @@ python scripts/import_operators.py --file /path/to/операторы.xlsx --gro
 
 ---
 
-## Сборка фронтенда (минификация)
+## Сборка фронтенда
 
-`index.html` подключает только `*.min.*`-бандлы. Min-файлы **коммитятся в
-репозиторий** — Railway (railpack, python-provider) не запускает npm при
-деплое, поэтому сборка выполняется локально перед пушем:
+`index.html` подключает обычные source-bundles: `js/app.js`, `js/api.js`, `css/styles.css`, `css/tokens.css`. Minified artifacts are not committed.
 
 ```bash
-npm install        # однократно: terser + clean-css-cli (devDependencies)
-npm run build      # js/app.min.js, js/api.min.js, css/styles.min.css, css/tokens.min.css
+npm install        # one-time setup
+npm run build      # rebuild js/app.js, js/api.js, css/styles.css
 ```
 
-После изменения `js/*.js` или `css/*.css` обязательно пересоберите бандлы и
-поднимите версию `?v=...` в `index.html` (иммутабельный кеш статики привязан
-к этому параметру, см. `CachedStaticFiles` в `app/main.py`).
+После изменения `js/src/**` или `css/src/**` пересоберите бандлы и поднимите версию `?v=...` в `index.html`, чтобы сбросить immutable-кеш статики.
 
-Страховка от «min-файл = копия исходника» (такое уже случалось):
-
-```bash
-npm run check:minified   # падает, если min идентичен исходнику или не меньше его
-```
-
-Эта же проверка выполняется в CI на каждый push/PR.
+CI runs `npm run build` on every push/PR.
 
 ---
 
@@ -272,7 +262,7 @@ alembic downgrade -1
 - [ ] `gitleaks detect` перед релизом
 - [ ] `SEED_ADMIN_PASSWORD` убран после создания admin
 - [ ] В репозитории нет одноразовых файлов импорта с реальными ФИО/email/паролями
-- [ ] `npm run check:minified` зелёный (min-бандлы собраны из актуальных исходников)
+- [ ] `npm run build` зеленый (frontend bundles собраны из актуальных исходников)
 
 ---
 
@@ -403,10 +393,7 @@ Generated entry files are still committed because Railway serves static files di
 js/api.js
 js/app.js
 css/styles.css
-js/api.min.js
-js/app.min.js
-css/styles.min.css
-css/tokens.min.css
+css/tokens.css
 ```
 
 After editing frontend source files, rebuild bundles:
@@ -421,7 +408,7 @@ If Node/npm is not installed, the safe fallback bundle command is:
 powershell -ExecutionPolicy Bypass -File scripts/build-frontend.ps1
 ```
 
-The fallback rebuilds source bundles and minifies CSS conservatively, but it does not overwrite `js/*.min.js`. Full JS minification requires `npm run build` with `terser`. Do not edit `*.min.js` or `*.min.css` manually; regenerate them from source files.
+The fallback rebuilds the same source bundles as `npm run build`. The project no longer commits compressed frontend artifacts.
 
 ### Required checks before publish
 
@@ -430,7 +417,6 @@ ruff check app
 pytest -q
 npm install
 npm run build
-npm run check:minified
 ```
 
 Manual browser smoke-test before release:

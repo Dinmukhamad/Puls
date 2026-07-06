@@ -35,5 +35,3 @@ jobs:
         run: npm ci
       - name: Build frontend
         run: npm run build
-      - name: Check minified artifacts
-        run: npm run check:minified
