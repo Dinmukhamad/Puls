@@ -421,7 +421,7 @@ If Node/npm is not installed, the safe fallback bundle command is:
 powershell -ExecutionPolicy Bypass -File scripts/build-frontend.ps1
 ```
 
-The fallback keeps JS semantics intact and minifies CSS conservatively. Full JS minification still requires `npm run build` with `terser`. Do not edit `*.min.js` or `*.min.css` manually; regenerate them from source files.
+The fallback rebuilds source bundles and minifies CSS conservatively, but it does not overwrite `js/*.min.js`. Full JS minification requires `npm run build` with `terser`. Do not edit `*.min.js` or `*.min.css` manually; regenerate them from source files.
 
 ### Required checks before publish
 
