@@ -24,18 +24,8 @@ from app.modules.auth.schemas import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/login")
-def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    user = db.scalar(select(User).where(User.username == payload.username))
-    if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Неверный логин или пароль")
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Аккаунт деактивирован")
-
+def _set_auth_cookie(response: Response, user: User) -> None:
     token = create_access_token({"sub": str(user.id)}, role=user.role)
-
     settings = get_settings()
     cookie_options = {
         "key": settings.auth_cookie_name,
@@ -49,6 +39,19 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     if settings.auth_cookie_domain:
         cookie_options["domain"] = settings.auth_cookie_domain
     response.set_cookie(**cookie_options)
+
+
+@router.post("/login")
+def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
+    user = db.scalar(select(User).where(User.username == payload.username))
+    if not user or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Неверный логин или пароль")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Аккаунт деактивирован")
+
+    _set_auth_cookie(response, user)
     return {"ok": True}
 
 
@@ -64,7 +67,9 @@ def logout(response: Response, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserRead)
-def me(current_user: User = Depends(get_current_user)) -> User:
+def me(response: Response, current_user: User = Depends(get_current_user)) -> User:
+    # Sliding session: each successful app start extends the HttpOnly cookie.
+    _set_auth_cookie(response, current_user)
     return current_user
 
 

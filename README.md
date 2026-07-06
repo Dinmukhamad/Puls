@@ -1,15 +1,15 @@
-# Puls — платформа геймификации операторов
+# Puls вЂ” РїР»Р°С‚С„РѕСЂРјР° РіРµР№РјРёС„РёРєР°С†РёРё РѕРїРµСЂР°С‚РѕСЂРѕРІ
 
-Внутренняя система мотивации и геймификации для операторов колл-центра.
+Р’РЅСѓС‚СЂРµРЅРЅСЏСЏ СЃРёСЃС‚РµРјР° РјРѕС‚РёРІР°С†РёРё Рё РіРµР№РјРёС„РёРєР°С†РёРё РґР»СЏ РѕРїРµСЂР°С‚РѕСЂРѕРІ РєРѕР»Р»-С†РµРЅС‚СЂР°.
 
-**Роли:** оператор, супервайзер, руководитель, администратор  
-**Модули:** операторы, рейтинг, коины, магазин бонусов, заявки, история операций  
+**Р РѕР»Рё:** РѕРїРµСЂР°С‚РѕСЂ, СЃСѓРїРµСЂРІР°Р№Р·РµСЂ, СЂСѓРєРѕРІРѕРґРёС‚РµР»СЊ, Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ  
+**РњРѕРґСѓР»Рё:** РѕРїРµСЂР°С‚РѕСЂС‹, СЂРµР№С‚РёРЅРі, РєРѕРёРЅС‹, РјР°РіР°Р·РёРЅ Р±РѕРЅСѓСЃРѕРІ, Р·Р°СЏРІРєРё, РёСЃС‚РѕСЂРёСЏ РѕРїРµСЂР°С†РёР№  
 **Backend:** FastAPI + PostgreSQL  
-**Frontend:** HTML / CSS / Vanilla JS (раздаётся FastAPI)
+**Frontend:** HTML / CSS / Vanilla JS (СЂР°Р·РґР°С‘С‚СЃСЏ FastAPI)
 
 ---
 
-## Быстрый старт (локально)
+## Р‘С‹СЃС‚СЂС‹Р№ СЃС‚Р°СЂС‚ (Р»РѕРєР°Р»СЊРЅРѕ)
 
 ```bash
 python -m venv .venv
@@ -17,151 +17,151 @@ source .venv/bin/activate          # Linux / macOS
 # .venv\Scripts\Activate.ps1     # Windows PowerShell
 
 pip install -r requirements.txt
-pip install -r requirements-dev.txt   # ruff + pytest (для разработки/CI)
-cp .env.example .env               # заполните переменные
+pip install -r requirements-dev.txt   # ruff + pytest (РґР»СЏ СЂР°Р·СЂР°Р±РѕС‚РєРё/CI)
+cp .env.example .env               # Р·Р°РїРѕР»РЅРёС‚Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ
 
-alembic upgrade head               # применить миграции
-uvicorn app.main:app --reload      # запустить сервер
+alembic upgrade head               # РїСЂРёРјРµРЅРёС‚СЊ РјРёРіСЂР°С†РёРё
+uvicorn app.main:app --reload      # Р·Р°РїСѓСЃС‚РёС‚СЊ СЃРµСЂРІРµСЂ
 ```
 
-Откройте http://localhost:8000
+РћС‚РєСЂРѕР№С‚Рµ http://localhost:8000
 
-Проверки перед коммитом:
+РџСЂРѕРІРµСЂРєРё РїРµСЂРµРґ РєРѕРјРјРёС‚РѕРј:
 
 ```bash
-ruff check app          # линт (конфиг в pyproject.toml)
-pytest -q               # автотесты (tests/, sqlite поднимается сам)
+ruff check app          # Р»РёРЅС‚ (РєРѕРЅС„РёРі РІ pyproject.toml)
+pytest -q               # Р°РІС‚РѕС‚РµСЃС‚С‹ (tests/, sqlite РїРѕРґРЅРёРјР°РµС‚СЃСЏ СЃР°Рј)
 npm run build           # frontend bundles are up to date
 ```
 
 ---
 
-## Переменные окружения
+## РџРµСЂРµРјРµРЅРЅС‹Рµ РѕРєСЂСѓР¶РµРЅРёСЏ
 
-### Обязательные для production
+### РћР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РґР»СЏ production
 
-| Переменная | Описание |
+| РџРµСЂРµРјРµРЅРЅР°СЏ | РћРїРёСЃР°РЅРёРµ |
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET_KEY` | Секрет JWT — минимум 32 байта, уникальный |
-| `CORS_ORIGINS` | Домен фронтенда (не `*` в production) |
-| `SEED_ADMIN_USERNAME` | Логин admin при первом запуске |
-| `SEED_ADMIN_PASSWORD` | Пароль admin (только при первом запуске) |
+| `JWT_SECRET_KEY` | РЎРµРєСЂРµС‚ JWT вЂ” РјРёРЅРёРјСѓРј 32 Р±Р°Р№С‚Р°, СѓРЅРёРєР°Р»СЊРЅС‹Р№ |
+| `CORS_ORIGINS` | Р”РѕРјРµРЅ С„СЂРѕРЅС‚РµРЅРґР° (РЅРµ `*` РІ production) |
+| `SEED_ADMIN_USERNAME` | Р›РѕРіРёРЅ admin РїСЂРё РїРµСЂРІРѕРј Р·Р°РїСѓСЃРєРµ |
+| `SEED_ADMIN_PASSWORD` | РџР°СЂРѕР»СЊ admin (С‚РѕР»СЊРєРѕ РїСЂРё РїРµСЂРІРѕРј Р·Р°РїСѓСЃРєРµ) |
 
-### Опциональные
+### РћРїС†РёРѕРЅР°Р»СЊРЅС‹Рµ
 
-| Переменная | По умолчанию | Описание |
+| РџРµСЂРµРјРµРЅРЅР°СЏ | РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ | РћРїРёСЃР°РЅРёРµ |
 |---|---|---|
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | 720 | Время жизни токена (12 часов) |
-| `AUTO_SEED` | true | Создавать admin и demo-данные при старте |
-| `AUTO_CREATE_TABLES` | true | Создавать таблицы через create_all (dev only) |
-| `ENABLE_DEMO_DATA` | true | Создавать демо-операторов |
-| `AUTH_COOKIE_SECURE` | false | true в production (HTTPS) |
-| `AUTH_COOKIE_SAMESITE` | lax | lax или strict |
-| `APP_ENV` / `ENVIRONMENT` | development | production включает safety-check |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | 43200 | Срок жизни авторизации (30 дней) |
+| `AUTO_SEED` | true | РЎРѕР·РґР°РІР°С‚СЊ admin Рё demo-РґР°РЅРЅС‹Рµ РїСЂРё СЃС‚Р°СЂС‚Рµ |
+| `AUTO_CREATE_TABLES` | true | РЎРѕР·РґР°РІР°С‚СЊ С‚Р°Р±Р»РёС†С‹ С‡РµСЂРµР· create_all (dev only) |
+| `ENABLE_DEMO_DATA` | true | РЎРѕР·РґР°РІР°С‚СЊ РґРµРјРѕ-РѕРїРµСЂР°С‚РѕСЂРѕРІ |
+| `AUTH_COOKIE_SECURE` | false | true РІ production (HTTPS) |
+| `AUTH_COOKIE_SAMESITE` | lax | lax РёР»Рё strict |
+| `APP_ENV` / `ENVIRONMENT` | development | production РІРєР»СЋС‡Р°РµС‚ safety-check |
 
-Генерация JWT_SECRET_KEY:
+Р“РµРЅРµСЂР°С†РёСЏ JWT_SECRET_KEY:
 ```bash
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
 ---
 
-## Миграции (Alembic)
+## РњРёРіСЂР°С†РёРё (Alembic)
 
 ```bash
-alembic current          # текущая версия
-alembic heads            # последняя версия
-alembic upgrade head     # применить все миграции
-alembic downgrade -1     # откатить одну миграцию
+alembic current          # С‚РµРєСѓС‰Р°СЏ РІРµСЂСЃРёСЏ
+alembic heads            # РїРѕСЃР»РµРґРЅСЏСЏ РІРµСЂСЃРёСЏ
+alembic upgrade head     # РїСЂРёРјРµРЅРёС‚СЊ РІСЃРµ РјРёРіСЂР°С†РёРё
+alembic downgrade -1     # РѕС‚РєР°С‚РёС‚СЊ РѕРґРЅСѓ РјРёРіСЂР°С†РёСЋ
 
-# Создать новую миграцию после изменения модели:
-alembic revision --autogenerate -m "описание изменения"
+# РЎРѕР·РґР°С‚СЊ РЅРѕРІСѓСЋ РјРёРіСЂР°С†РёСЋ РїРѕСЃР»Рµ РёР·РјРµРЅРµРЅРёСЏ РјРѕРґРµР»Рё:
+alembic revision --autogenerate -m "РѕРїРёСЃР°РЅРёРµ РёР·РјРµРЅРµРЅРёСЏ"
 ```
 
-**Правило:** изменения схемы только через Alembic. Не менять применённые миграции.
+**РџСЂР°РІРёР»Рѕ:** РёР·РјРµРЅРµРЅРёСЏ СЃС…РµРјС‹ С‚РѕР»СЊРєРѕ С‡РµСЂРµР· Alembic. РќРµ РјРµРЅСЏС‚СЊ РїСЂРёРјРµРЅС‘РЅРЅС‹Рµ РјРёРіСЂР°С†РёРё.
 
 ---
 
-## Ручной импорт операторов из Excel
+## Р СѓС‡РЅРѕР№ РёРјРїРѕСЂС‚ РѕРїРµСЂР°С‚РѕСЂРѕРІ РёР· Excel
 
-> **Административная утилита.** Не вызывается приложением в рантайме, не запускается
-> при деплое (отсутствует в `start.sh`, `Procfile`, `railpack.json`). Запускается
-> вручную администратором при необходимости массово добавить/обновить операторов
-> произвольной группы.
+> **РђРґРјРёРЅРёСЃС‚СЂР°С‚РёРІРЅР°СЏ СѓС‚РёР»РёС‚Р°.** РќРµ РІС‹Р·С‹РІР°РµС‚СЃСЏ РїСЂРёР»РѕР¶РµРЅРёРµРј РІ СЂР°РЅС‚Р°Р№РјРµ, РЅРµ Р·Р°РїСѓСЃРєР°РµС‚СЃСЏ
+> РїСЂРё РґРµРїР»РѕРµ (РѕС‚СЃСѓС‚СЃС‚РІСѓРµС‚ РІ `start.sh`, `Procfile`, `railpack.json`). Р—Р°РїСѓСЃРєР°РµС‚СЃСЏ
+> РІСЂСѓС‡РЅСѓСЋ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂРѕРј РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё РјР°СЃСЃРѕРІРѕ РґРѕР±Р°РІРёС‚СЊ/РѕР±РЅРѕРІРёС‚СЊ РѕРїРµСЂР°С‚РѕСЂРѕРІ
+> РїСЂРѕРёР·РІРѕР»СЊРЅРѕР№ РіСЂСѓРїРїС‹.
 
-Для массового создания операторов нужной группы используйте скрипт `scripts/import_operators.py`,
-указав название группы через `--group` (группа может быть любой, не привязана к конкретному номеру):
-
-```bash
-python scripts/import_operators.py --file /path/to/операторы.xlsx --group "Группа 7"
-```
-
-По умолчанию это dry-run: скрипт проверяет файл, дубли и будущие изменения, но не пишет в БД.
-
-Для реальной записи:
+Р”Р»СЏ РјР°СЃСЃРѕРІРѕРіРѕ СЃРѕР·РґР°РЅРёСЏ РѕРїРµСЂР°С‚РѕСЂРѕРІ РЅСѓР¶РЅРѕР№ РіСЂСѓРїРїС‹ РёСЃРїРѕР»СЊР·СѓР№С‚Рµ СЃРєСЂРёРїС‚ `scripts/import_operators.py`,
+СѓРєР°Р·Р°РІ РЅР°Р·РІР°РЅРёРµ РіСЂСѓРїРїС‹ С‡РµСЂРµР· `--group` (РіСЂСѓРїРїР° РјРѕР¶РµС‚ Р±С‹С‚СЊ Р»СЋР±РѕР№, РЅРµ РїСЂРёРІСЏР·Р°РЅР° Рє РєРѕРЅРєСЂРµС‚РЅРѕРјСѓ РЅРѕРјРµСЂСѓ):
 
 ```bash
-python scripts/import_operators.py --file /path/to/операторы.xlsx --group "Группа 7" --apply
+python scripts/import_operators.py --file /path/to/РѕРїРµСЂР°С‚РѕСЂС‹.xlsx --group "Р“СЂСѓРїРїР° 7"
 ```
 
-Скрипт требует `DATABASE_URL`, создаёт группу при отсутствии, создаёт/обновляет операторов, ставит `must_change_password=true` для временных паролей и сохраняет одноразовый CSV с доступами в `secure_outputs/`. Этот каталог не коммитится.
+РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ СЌС‚Рѕ dry-run: СЃРєСЂРёРїС‚ РїСЂРѕРІРµСЂСЏРµС‚ С„Р°Р№Р», РґСѓР±Р»Рё Рё Р±СѓРґСѓС‰РёРµ РёР·РјРµРЅРµРЅРёСЏ, РЅРѕ РЅРµ РїРёС€РµС‚ РІ Р‘Р”.
 
-Нельзя коммитить одноразовые скрипты или таблицы с реальными ФИО, email, логинами и временными паролями. Если такие данные попали в Git, временные пароли нужно считать скомпрометированными и сразу сбросить.
+Р”Р»СЏ СЂРµР°Р»СЊРЅРѕР№ Р·Р°РїРёСЃРё:
+
+```bash
+python scripts/import_operators.py --file /path/to/РѕРїРµСЂР°С‚РѕСЂС‹.xlsx --group "Р“СЂСѓРїРїР° 7" --apply
+```
+
+РЎРєСЂРёРїС‚ С‚СЂРµР±СѓРµС‚ `DATABASE_URL`, СЃРѕР·РґР°С‘С‚ РіСЂСѓРїРїСѓ РїСЂРё РѕС‚СЃСѓС‚СЃС‚РІРёРё, СЃРѕР·РґР°С‘С‚/РѕР±РЅРѕРІР»СЏРµС‚ РѕРїРµСЂР°С‚РѕСЂРѕРІ, СЃС‚Р°РІРёС‚ `must_change_password=true` РґР»СЏ РІСЂРµРјРµРЅРЅС‹С… РїР°СЂРѕР»РµР№ Рё СЃРѕС…СЂР°РЅСЏРµС‚ РѕРґРЅРѕСЂР°Р·РѕРІС‹Р№ CSV СЃ РґРѕСЃС‚СѓРїР°РјРё РІ `secure_outputs/`. Р­С‚РѕС‚ РєР°С‚Р°Р»РѕРі РЅРµ РєРѕРјРјРёС‚РёС‚СЃСЏ.
+
+РќРµР»СЊР·СЏ РєРѕРјРјРёС‚РёС‚СЊ РѕРґРЅРѕСЂР°Р·РѕРІС‹Рµ СЃРєСЂРёРїС‚С‹ РёР»Рё С‚Р°Р±Р»РёС†С‹ СЃ СЂРµР°Р»СЊРЅС‹РјРё Р¤РРћ, email, Р»РѕРіРёРЅР°РјРё Рё РІСЂРµРјРµРЅРЅС‹РјРё РїР°СЂРѕР»СЏРјРё. Р•СЃР»Рё С‚Р°РєРёРµ РґР°РЅРЅС‹Рµ РїРѕРїР°Р»Рё РІ Git, РІСЂРµРјРµРЅРЅС‹Рµ РїР°СЂРѕР»Рё РЅСѓР¶РЅРѕ СЃС‡РёС‚Р°С‚СЊ СЃРєРѕРјРїСЂРѕРјРµС‚РёСЂРѕРІР°РЅРЅС‹РјРё Рё СЃСЂР°Р·Сѓ СЃР±СЂРѕСЃРёС‚СЊ.
 
 ---
 
-## Сборка фронтенда
+## РЎР±РѕСЂРєР° С„СЂРѕРЅС‚РµРЅРґР°
 
-`index.html` подключает обычные source-bundles: `js/app.js`, `js/api.js`, `css/styles.css`, `css/tokens.css`. Minified artifacts are not committed.
+`index.html` РїРѕРґРєР»СЋС‡Р°РµС‚ РѕР±С‹С‡РЅС‹Рµ source-bundles: `js/app.js`, `js/api.js`, `css/styles.css`, `css/tokens.css`. Minified artifacts are not committed.
 
 ```bash
 npm install        # one-time setup
 npm run build      # rebuild js/app.js, js/api.js, css/styles.css
 ```
 
-После изменения `js/src/**` или `css/src/**` пересоберите бандлы и поднимите версию `?v=...` в `index.html`, чтобы сбросить immutable-кеш статики.
+РџРѕСЃР»Рµ РёР·РјРµРЅРµРЅРёСЏ `js/src/**` РёР»Рё `css/src/**` РїРµСЂРµСЃРѕР±РµСЂРёС‚Рµ Р±Р°РЅРґР»С‹ Рё РїРѕРґРЅРёРјРёС‚Рµ РІРµСЂСЃРёСЋ `?v=...` РІ `index.html`, С‡С‚РѕР±С‹ СЃР±СЂРѕСЃРёС‚СЊ immutable-РєРµС€ СЃС‚Р°С‚РёРєРё.
 
 CI runs `npm run build` on every push/PR.
 
 ---
 
-## Линт и тесты
+## Р›РёРЅС‚ Рё С‚РµСЃС‚С‹
 
-- **ruff** — единственный линтер (`pyproject.toml`: E/F/I/UP/B, line-length 100,
-  E501 в legacy-коде осознанно игнорируется). Запуск: `ruff check app`.
-- **pytest** — автотесты в `tests/`: кеш номинаций, безопасный 500 без
-  traceback, SPA-fallback для `/api/*`, границы локального дня, `/coins/overview`.
-  БД для тестов — временный sqlite, поднимается conftest'ом автоматически.
-- **CI** — `.github/workflows/checks.yml`: ruff, compileall, pytest,
-  `alembic upgrade head` на PostgreSQL 16 (service-container), проверка
-  минификации и отсутствия секретов в репозитории.
+- **ruff** вЂ” РµРґРёРЅСЃС‚РІРµРЅРЅС‹Р№ Р»РёРЅС‚РµСЂ (`pyproject.toml`: E/F/I/UP/B, line-length 100,
+  E501 РІ legacy-РєРѕРґРµ РѕСЃРѕР·РЅР°РЅРЅРѕ РёРіРЅРѕСЂРёСЂСѓРµС‚СЃСЏ). Р—Р°РїСѓСЃРє: `ruff check app`.
+- **pytest** вЂ” Р°РІС‚РѕС‚РµСЃС‚С‹ РІ `tests/`: РєРµС€ РЅРѕРјРёРЅР°С†РёР№, Р±РµР·РѕРїР°СЃРЅС‹Р№ 500 Р±РµР·
+  traceback, SPA-fallback РґР»СЏ `/api/*`, РіСЂР°РЅРёС†С‹ Р»РѕРєР°Р»СЊРЅРѕРіРѕ РґРЅСЏ, `/coins/overview`.
+  Р‘Р” РґР»СЏ С‚РµСЃС‚РѕРІ вЂ” РІСЂРµРјРµРЅРЅС‹Р№ sqlite, РїРѕРґРЅРёРјР°РµС‚СЃСЏ conftest'РѕРј Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.
+- **CI** вЂ” `.github/workflows/checks.yml`: ruff, compileall, pytest,
+  `alembic upgrade head` РЅР° PostgreSQL 16 (service-container), РїСЂРѕРІРµСЂРєР°
+  РјРёРЅРёС„РёРєР°С†РёРё Рё РѕС‚СЃСѓС‚СЃС‚РІРёСЏ СЃРµРєСЂРµС‚РѕРІ РІ СЂРµРїРѕР·РёС‚РѕСЂРёРё.
 
 ---
 
-## Работа со временем
+## Р Р°Р±РѕС‚Р° СЃРѕ РІСЂРµРјРµРЅРµРј
 
-Единый стандарт (модуль `app/core/datetime_utils.py`):
+Р•РґРёРЅС‹Р№ СЃС‚Р°РЅРґР°СЂС‚ (РјРѕРґСѓР»СЊ `app/core/datetime_utils.py`):
 
-- **В БД** время хранится как **naive UTC** (`now_utc()`); `datetime.utcnow()`
-  в коде запрещён.
-- **Бизнес-день** («операции за сегодня», отчёты) считается по таймзоне
-  колл-центра **Asia/Almaty** — используйте `local_day_bounds_utc()`, а не
+- **Р’ Р‘Р”** РІСЂРµРјСЏ С…СЂР°РЅРёС‚СЃСЏ РєР°Рє **naive UTC** (`now_utc()`); `datetime.utcnow()`
+  РІ РєРѕРґРµ Р·Р°РїСЂРµС‰С‘РЅ.
+- **Р‘РёР·РЅРµСЃ-РґРµРЅСЊ** (В«РѕРїРµСЂР°С†РёРё Р·Р° СЃРµРіРѕРґРЅСЏВ», РѕС‚С‡С‘С‚С‹) СЃС‡РёС‚Р°РµС‚СЃСЏ РїРѕ С‚Р°Р№РјР·РѕРЅРµ
+  РєРѕР»Р»-С†РµРЅС‚СЂР° **Asia/Almaty** вЂ” РёСЃРїРѕР»СЊР·СѓР№С‚Рµ `local_day_bounds_utc()`, Р° РЅРµ
   `date.today()`.
-- На frontend отдаётся ISO; для локального отображения на бэке есть
+- РќР° frontend РѕС‚РґР°С‘С‚СЃСЏ ISO; РґР»СЏ Р»РѕРєР°Р»СЊРЅРѕРіРѕ РѕС‚РѕР±СЂР°Р¶РµРЅРёСЏ РЅР° Р±СЌРєРµ РµСЃС‚СЊ
   `to_local_iso()`.
 
 ---
 
 ## Railway deploy
 
-1. Создайте сервис PostgreSQL в Railway
-2. Задайте Variables (см. выше)
+1. РЎРѕР·РґР°Р№С‚Рµ СЃРµСЂРІРёСЃ PostgreSQL РІ Railway
+2. Р—Р°РґР°Р№С‚Рµ Variables (СЃРј. РІС‹С€Рµ)
 3. Custom Start Command: `bash start.sh`
 
-`start.sh` автоматически запускает `alembic upgrade head` перед стартом uvicorn.
+`start.sh` Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё Р·Р°РїСѓСЃРєР°РµС‚ `alembic upgrade head` РїРµСЂРµРґ СЃС‚Р°СЂС‚РѕРј uvicorn.
 
-Проверка деплоя:
+РџСЂРѕРІРµСЂРєР° РґРµРїР»РѕСЏ:
 ```bash
 curl https://<railway-domain>/health
 curl https://<railway-domain>/ready
@@ -169,17 +169,17 @@ curl https://<railway-domain>/ready
 
 ---
 
-## Создание администратора
+## РЎРѕР·РґР°РЅРёРµ Р°РґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂР°
 
-При первом запуске если задан `SEED_ADMIN_PASSWORD`:
-- создаётся пользователь с ролью `admin`
-- логин = `SEED_ADMIN_USERNAME` (по умолчанию `admin`)
+РџСЂРё РїРµСЂРІРѕРј Р·Р°РїСѓСЃРєРµ РµСЃР»Рё Р·Р°РґР°РЅ `SEED_ADMIN_PASSWORD`:
+- СЃРѕР·РґР°С‘С‚СЃСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЃ СЂРѕР»СЊСЋ `admin`
+- Р»РѕРіРёРЅ = `SEED_ADMIN_USERNAME` (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ `admin`)
 
-После создания admin — уберите `SEED_ADMIN_PASSWORD` из переменных или смените пароль.
+РџРѕСЃР»Рµ СЃРѕР·РґР°РЅРёСЏ admin вЂ” СѓР±РµСЂРёС‚Рµ `SEED_ADMIN_PASSWORD` РёР· РїРµСЂРµРјРµРЅРЅС‹С… РёР»Рё СЃРјРµРЅРёС‚Рµ РїР°СЂРѕР»СЊ.
 
 ---
 
-## Backup и restore
+## Backup Рё restore
 
 ```bash
 # Backup
@@ -189,136 +189,136 @@ pg_dump "$DATABASE_URL" > backup_$(date +%Y-%m-%d).sql
 psql "$DATABASE_URL" < backup_YYYY-MM-DD.sql
 ```
 
-Railway также предоставляет Backups в UI сервиса PostgreSQL.
+Railway С‚Р°РєР¶Рµ РїСЂРµРґРѕСЃС‚Р°РІР»СЏРµС‚ Backups РІ UI СЃРµСЂРІРёСЃР° PostgreSQL.
 
-**Делайте backup перед каждой деструктивной миграцией.**
+**Р”РµР»Р°Р№С‚Рµ backup РїРµСЂРµРґ РєР°Р¶РґРѕР№ РґРµСЃС‚СЂСѓРєС‚РёРІРЅРѕР№ РјРёРіСЂР°С†РёРµР№.**
 
 ---
 
 ## Rollback
 
 ```bash
-# Откат кода:
+# РћС‚РєР°С‚ РєРѕРґР°:
 git revert HEAD
 git push
 
-# Откат миграции:
+# РћС‚РєР°С‚ РјРёРіСЂР°С†РёРё:
 alembic downgrade -1
 
-# Если код уже откатили, а миграция применена —
-# нужен отдельный план. Деструктивные миграции (DROP COLUMN)
-# требуют предварительного backup.
+# Р•СЃР»Рё РєРѕРґ СѓР¶Рµ РѕС‚РєР°С‚РёР»Рё, Р° РјРёРіСЂР°С†РёСЏ РїСЂРёРјРµРЅРµРЅР° вЂ”
+# РЅСѓР¶РµРЅ РѕС‚РґРµР»СЊРЅС‹Р№ РїР»Р°РЅ. Р”РµСЃС‚СЂСѓРєС‚РёРІРЅС‹Рµ РјРёРіСЂР°С†РёРё (DROP COLUMN)
+# С‚СЂРµР±СѓСЋС‚ РїСЂРµРґРІР°СЂРёС‚РµР»СЊРЅРѕРіРѕ backup.
 ```
 
-В Railway: Deployments → предыдущий деплой → Redeploy.
+Р’ Railway: Deployments в†’ РїСЂРµРґС‹РґСѓС‰РёР№ РґРµРїР»РѕР№ в†’ Redeploy.
 
 ---
 
 ## Troubleshooting
 
-### `/api/auth/me` отдаёт 500
-- Проверьте Railway Deploy Logs на ошибку AttributeError
-- Убедитесь что `alembic upgrade head` прошёл успешно
-- Проверьте `DATABASE_URL` в Variables
+### `/api/auth/me` РѕС‚РґР°С‘С‚ 500
+- РџСЂРѕРІРµСЂСЊС‚Рµ Railway Deploy Logs РЅР° РѕС€РёР±РєСѓ AttributeError
+- РЈР±РµРґРёС‚РµСЃСЊ С‡С‚Рѕ `alembic upgrade head` РїСЂРѕС€С‘Р» СѓСЃРїРµС€РЅРѕ
+- РџСЂРѕРІРµСЂСЊС‚Рµ `DATABASE_URL` РІ Variables
 
-### `/health` отдаёт 502
-- Приложение не стартовало — смотрите Deploy Logs
-- Возможно не прошла Alembic миграция
-- Проверьте порт: `PORT` в Variables должен совпадать с командой запуска
+### `/health` РѕС‚РґР°С‘С‚ 502
+- РџСЂРёР»РѕР¶РµРЅРёРµ РЅРµ СЃС‚Р°СЂС‚РѕРІР°Р»Рѕ вЂ” СЃРјРѕС‚СЂРёС‚Рµ Deploy Logs
+- Р’РѕР·РјРѕР¶РЅРѕ РЅРµ РїСЂРѕС€Р»Р° Alembic РјРёРіСЂР°С†РёСЏ
+- РџСЂРѕРІРµСЂСЊС‚Рµ РїРѕСЂС‚: `PORT` РІ Variables РґРѕР»Р¶РµРЅ СЃРѕРІРїР°РґР°С‚СЊ СЃ РєРѕРјР°РЅРґРѕР№ Р·Р°РїСѓСЃРєР°
 
-### `alembic upgrade head` падает
-- Проверьте `DATABASE_URL`
-- Запустите `alembic current` — посмотрите текущую версию
-- Смотрите текст ошибки — чаще всего конфликт типов или дублирование колонки
+### `alembic upgrade head` РїР°РґР°РµС‚
+- РџСЂРѕРІРµСЂСЊС‚Рµ `DATABASE_URL`
+- Р—Р°РїСѓСЃС‚РёС‚Рµ `alembic current` вЂ” РїРѕСЃРјРѕС‚СЂРёС‚Рµ С‚РµРєСѓС‰СѓСЋ РІРµСЂСЃРёСЋ
+- РЎРјРѕС‚СЂРёС‚Рµ С‚РµРєСЃС‚ РѕС€РёР±РєРё вЂ” С‡Р°С‰Рµ РІСЃРµРіРѕ РєРѕРЅС„Р»РёРєС‚ С‚РёРїРѕРІ РёР»Рё РґСѓР±Р»РёСЂРѕРІР°РЅРёРµ РєРѕР»РѕРЅРєРё
 
-### Пользователь не может войти после смены JWT secret
-- Все текущие сессии инвалидируются — пользователи должны перелогиниться
-- Это нормальное поведение
+### РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РјРѕР¶РµС‚ РІРѕР№С‚Рё РїРѕСЃР»Рµ СЃРјРµРЅС‹ JWT secret
+- Р’СЃРµ С‚РµРєСѓС‰РёРµ СЃРµСЃСЃРёРё РёРЅРІР°Р»РёРґРёСЂСѓСЋС‚СЃСЏ вЂ” РїРѕР»СЊР·РѕРІР°С‚РµР»Рё РґРѕР»Р¶РЅС‹ РїРµСЂРµР»РѕРіРёРЅРёС‚СЊСЃСЏ
+- Р­С‚Рѕ РЅРѕСЂРјР°Р»СЊРЅРѕРµ РїРѕРІРµРґРµРЅРёРµ
 
-### CORS ошибка
-- Установите `CORS_ORIGINS=https://ваш-домен.railway.app`
-- Не используйте `*` в production при cookie-auth
+### CORS РѕС€РёР±РєР°
+- РЈСЃС‚Р°РЅРѕРІРёС‚Рµ `CORS_ORIGINS=https://РІР°С€-РґРѕРјРµРЅ.railway.app`
+- РќРµ РёСЃРїРѕР»СЊР·СѓР№С‚Рµ `*` РІ production РїСЂРё cookie-auth
 
-### База не подключается
-- Проверьте `DATABASE_URL` в Variables
-- Убедитесь что PostgreSQL сервис в Railway запущен
-- Проверьте `pg_isready -d "$DATABASE_URL"`
+### Р‘Р°Р·Р° РЅРµ РїРѕРґРєР»СЋС‡Р°РµС‚СЃСЏ
+- РџСЂРѕРІРµСЂСЊС‚Рµ `DATABASE_URL` РІ Variables
+- РЈР±РµРґРёС‚РµСЃСЊ С‡С‚Рѕ PostgreSQL СЃРµСЂРІРёСЃ РІ Railway Р·Р°РїСѓС‰РµРЅ
+- РџСЂРѕРІРµСЂСЊС‚Рµ `pg_isready -d "$DATABASE_URL"`
 
-### Не создаётся admin
-- Убедитесь что задан `SEED_ADMIN_PASSWORD`
-- Проверьте `AUTO_SEED=true`
-- Смотрите логи `[startup] Seed`
+### РќРµ СЃРѕР·РґР°С‘С‚СЃСЏ admin
+- РЈР±РµРґРёС‚РµСЃСЊ С‡С‚Рѕ Р·Р°РґР°РЅ `SEED_ADMIN_PASSWORD`
+- РџСЂРѕРІРµСЂСЊС‚Рµ `AUTO_SEED=true`
+- РЎРјРѕС‚СЂРёС‚Рµ Р»РѕРіРё `[startup] Seed`
 
 ---
 
 ## Security checklist
 
-- [ ] `.env` не коммитится (есть в `.gitignore`)
-- [ ] `JWT_SECRET_KEY` уникальный, не дефолтный
-- [ ] `CORS_ORIGINS` не `*` в production
-- [ ] `AUTH_COOKIE_SECURE=true` в production
-- [ ] Токены не отправляются в чат или issue
-- [ ] Backup перед деструктивными миграциями
-- [ ] `gitleaks detect` перед релизом
-- [ ] `SEED_ADMIN_PASSWORD` убран после создания admin
-- [ ] В репозитории нет одноразовых файлов импорта с реальными ФИО/email/паролями
-- [ ] `npm run build` зеленый (frontend bundles собраны из актуальных исходников)
+- [ ] `.env` РЅРµ РєРѕРјРјРёС‚РёС‚СЃСЏ (РµСЃС‚СЊ РІ `.gitignore`)
+- [ ] `JWT_SECRET_KEY` СѓРЅРёРєР°Р»СЊРЅС‹Р№, РЅРµ РґРµС„РѕР»С‚РЅС‹Р№
+- [ ] `CORS_ORIGINS` РЅРµ `*` РІ production
+- [ ] `AUTH_COOKIE_SECURE=true` РІ production
+- [ ] РўРѕРєРµРЅС‹ РЅРµ РѕС‚РїСЂР°РІР»СЏСЋС‚СЃСЏ РІ С‡Р°С‚ РёР»Рё issue
+- [ ] Backup РїРµСЂРµРґ РґРµСЃС‚СЂСѓРєС‚РёРІРЅС‹РјРё РјРёРіСЂР°С†РёСЏРјРё
+- [ ] `gitleaks detect` РїРµСЂРµРґ СЂРµР»РёР·РѕРј
+- [ ] `SEED_ADMIN_PASSWORD` СѓР±СЂР°РЅ РїРѕСЃР»Рµ СЃРѕР·РґР°РЅРёСЏ admin
+- [ ] Р’ СЂРµРїРѕР·РёС‚РѕСЂРёРё РЅРµС‚ РѕРґРЅРѕСЂР°Р·РѕРІС‹С… С„Р°Р№Р»РѕРІ РёРјРїРѕСЂС‚Р° СЃ СЂРµР°Р»СЊРЅС‹РјРё Р¤РРћ/email/РїР°СЂРѕР»СЏРјРё
+- [ ] `npm run build` Р·РµР»РµРЅС‹Р№ (frontend bundles СЃРѕР±СЂР°РЅС‹ РёР· Р°РєС‚СѓР°Р»СЊРЅС‹С… РёСЃС…РѕРґРЅРёРєРѕРІ)
 
 ---
 
-## Актуальная архитектура
+## РђРєС‚СѓР°Р»СЊРЅР°СЏ Р°СЂС…РёС‚РµРєС‚СѓСЂР°
 
 - **Backend:** FastAPI (Python 3.13)
-- **База данных:** PostgreSQL (Railway)
-- **Frontend:** Vanilla JS / HTML / CSS (раздаётся FastAPI)
+- **Р‘Р°Р·Р° РґР°РЅРЅС‹С…:** PostgreSQL (Railway)
+- **Frontend:** Vanilla JS / HTML / CSS (СЂР°Р·РґР°С‘С‚СЃСЏ FastAPI)
 - **Auth:** HttpOnly cookie (`pulse_access_token`)
-- **Миграции:** Alembic
-- **Рейтинг:** строится по сохранённым `PeriodReport`
-- Файл `server.js` удалён
-- Node.js backend не используется
-- JSON-файлы не используются как источник данных
+- **РњРёРіСЂР°С†РёРё:** Alembic
+- **Р РµР№С‚РёРЅРі:** СЃС‚СЂРѕРёС‚СЃСЏ РїРѕ СЃРѕС…СЂР°РЅС‘РЅРЅС‹Рј `PeriodReport`
+- Р¤Р°Р№Р» `server.js` СѓРґР°Р»С‘РЅ
+- Node.js backend РЅРµ РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ
+- JSON-С„Р°Р№Р»С‹ РЅРµ РёСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ РєР°Рє РёСЃС‚РѕС‡РЅРёРє РґР°РЅРЅС‹С…
 
 ---
 
-## API эндпоинты
+## API СЌРЅРґРїРѕРёРЅС‚С‹
 
 ```
-POST /api/auth/login                     Вход
-POST /api/auth/logout                    Выход (очищает cookie)
-GET  /api/auth/me                        Текущий пользователь
+POST /api/auth/login                     Р’С…РѕРґ
+POST /api/auth/logout                    Р’С‹С…РѕРґ (РѕС‡РёС‰Р°РµС‚ cookie)
+GET  /api/auth/me                        РўРµРєСѓС‰РёР№ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ
 
-GET  /api/operators                      Список операторов
-POST /api/operators                      Создать (+ авто-аккаунт)
-GET  /api/operators/{id}                 Карточка
-PATCH /api/operators/{id}                Редактировать
-POST /api/operators/{id}/reset-password  Сбросить пароль
-POST /api/operators/account/change-password  Сменить пароль
-POST /api/operators/account/change-username  Сменить логин
+GET  /api/operators                      РЎРїРёСЃРѕРє РѕРїРµСЂР°С‚РѕСЂРѕРІ
+POST /api/operators                      РЎРѕР·РґР°С‚СЊ (+ Р°РІС‚Рѕ-Р°РєРєР°СѓРЅС‚)
+GET  /api/operators/{id}                 РљР°СЂС‚РѕС‡РєР°
+PATCH /api/operators/{id}                Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ
+POST /api/operators/{id}/reset-password  РЎР±СЂРѕСЃРёС‚СЊ РїР°СЂРѕР»СЊ
+POST /api/operators/account/change-password  РЎРјРµРЅРёС‚СЊ РїР°СЂРѕР»СЊ
+POST /api/operators/account/change-username  РЎРјРµРЅРёС‚СЊ Р»РѕРіРёРЅ
 
-GET  /api/rating                         Рейтинг
-POST /api/weekly-results                 Legacy: ручная загрузка результатов недели
+GET  /api/rating                         Р РµР№С‚РёРЅРі
+POST /api/weekly-results                 Legacy: СЂСѓС‡РЅР°СЏ Р·Р°РіСЂСѓР·РєР° СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ РЅРµРґРµР»Рё
 
-POST /api/reports/period-report/upload   Загрузить Monthly Report и Report
-GET  /api/reports/period-report/status   Статус загруженных файлов
-GET  /api/reports/operators-period-summary Предпросмотр расчёта периода
-POST /api/reports/period-report/save     Сохранить расчёт периода
+POST /api/reports/period-report/upload   Р—Р°РіСЂСѓР·РёС‚СЊ Monthly Report Рё Report
+GET  /api/reports/period-report/status   РЎС‚Р°С‚СѓСЃ Р·Р°РіСЂСѓР¶РµРЅРЅС‹С… С„Р°Р№Р»РѕРІ
+GET  /api/reports/operators-period-summary РџСЂРµРґРїСЂРѕСЃРјРѕС‚СЂ СЂР°СЃС‡С‘С‚Р° РїРµСЂРёРѕРґР°
+POST /api/reports/period-report/save     РЎРѕС…СЂР°РЅРёС‚СЊ СЂР°СЃС‡С‘С‚ РїРµСЂРёРѕРґР°
 
-GET  /api/analytics/summary              KPI аналитики
-GET  /api/analytics/operators            Таблица операторов аналитики
-GET  /api/analytics/groups-comparison    Сравнение групп
-GET  /api/analytics/points               Анализ итоговых баллов
+GET  /api/analytics/summary              KPI Р°РЅР°Р»РёС‚РёРєРё
+GET  /api/analytics/operators            РўР°Р±Р»РёС†Р° РѕРїРµСЂР°С‚РѕСЂРѕРІ Р°РЅР°Р»РёС‚РёРєРё
+GET  /api/analytics/groups-comparison    РЎСЂР°РІРЅРµРЅРёРµ РіСЂСѓРїРї
+GET  /api/analytics/points               РђРЅР°Р»РёР· РёС‚РѕРіРѕРІС‹С… Р±Р°Р»Р»РѕРІ
 
-GET  /api/wallet/me                      Мой кошелёк
-POST /api/wallet/transactions            Ручное начисление
+GET  /api/wallet/me                      РњРѕР№ РєРѕС€РµР»С‘Рє
+POST /api/wallet/transactions            Р СѓС‡РЅРѕРµ РЅР°С‡РёСЃР»РµРЅРёРµ
 
-GET  /api/shop/items                     Магазин
-POST /api/shop/purchases                 Купить
-POST /api/shop/purchases/{id}/approve    Одобрить
-POST /api/shop/purchases/{id}/reject     Отклонить
+GET  /api/shop/items                     РњР°РіР°Р·РёРЅ
+POST /api/shop/purchases                 РљСѓРїРёС‚СЊ
+POST /api/shop/purchases/{id}/approve    РћРґРѕР±СЂРёС‚СЊ
+POST /api/shop/purchases/{id}/reject     РћС‚РєР»РѕРЅРёС‚СЊ
 
-GET  /api/dashboard                      Сводка (admin)
-GET  /api/dashboard/operators            Таблица операторов (admin)
-GET  /api/dashboard/history              История транзакций (admin)
+GET  /api/dashboard                      РЎРІРѕРґРєР° (admin)
+GET  /api/dashboard/operators            РўР°Р±Р»РёС†Р° РѕРїРµСЂР°С‚РѕСЂРѕРІ (admin)
+GET  /api/dashboard/history              РСЃС‚РѕСЂРёСЏ С‚СЂР°РЅР·Р°РєС†РёР№ (admin)
 
 GET  /health                             Liveness check
 GET  /ready                              Readiness check (DB + migrations)
@@ -429,3 +429,4 @@ Manual browser smoke-test before release:
 - shop purchases
 - tests
 - dashboard and analytics
+
