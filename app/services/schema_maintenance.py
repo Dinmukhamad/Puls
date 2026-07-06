@@ -5,7 +5,7 @@ import logging
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
-from app.models.entities import AuditLog, Group
+from app.models.entities import AuditLog, Group, UserSession
 
 logger = logging.getLogger(__name__)
 
@@ -129,8 +129,10 @@ def ensure_operator_management_schema(engine: Engine) -> None:
         # Ensure audit_logs table exists
         Group.__table__.create(bind=conn, checkfirst=True)
         AuditLog.__table__.create(bind=conn, checkfirst=True)
+        UserSession.__table__.create(bind=conn, checkfirst=True)
         logger.info("[schema] groups table ensured")
         logger.info("[schema] audit_logs table ensured")
+        logger.info("[schema] user_sessions table ensured")
 
 
 def ensure_wheel_schema(engine: Engine) -> None:

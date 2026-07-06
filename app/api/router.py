@@ -10,6 +10,7 @@ from app.modules.operator_levels import router as operator_levels_router
 from app.modules.operators.router import router as operators_router
 from app.modules.rating.router import router as rating_router
 from app.modules.reports.router import router as reports_router
+from app.modules.sessions.router import router as sessions_router
 from app.modules.shop.router import router as shop_router
 from app.modules.tests import router as tests_router
 from app.modules.users.router import router as users_router
@@ -29,6 +30,7 @@ api_router.include_router(operator_levels_router.admin_rules_router)
 api_router.include_router(operator_levels_router.admin_operator_router)
 api_router.include_router(groups_router)
 api_router.include_router(reports_router)
+api_router.include_router(sessions_router)
 api_router.include_router(analytics_router)
 api_router.include_router(operators_router)
 api_router.include_router(weekly_results_router)

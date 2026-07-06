@@ -87,4 +87,19 @@
   function changeUserRole(id, p)   { return req('POST', `/api/users/${id}/change-role`, p); }
   function resetUserPassword(id, p){ return req('POST', `/api/users/${id}/reset-password`, p); }
 
+  /* ── Sessions (admin) ───────────────────────────────────────── */
+  function listSessions(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/admin/sessions' + (qs ? '?' + qs : ''));
+  }
+  function revokeSession(sessionId) {
+    return req('POST', `/api/admin/sessions/${encodeURIComponent(sessionId)}/revoke`);
+  }
+  function revokeUserSessions(userId, excludeCurrent = true) {
+    return req('POST', '/api/admin/sessions/revoke-user', {
+      user_id: userId,
+      exclude_current: excludeCurrent,
+    });
+  }
+
   function _base() { return base(); }

@@ -5008,3 +5008,76 @@ body.role-operator {
   }
 }
 
+/* Admin sessions */
+.sessions-kpis {
+  margin-bottom: 16px;
+}
+
+.sessions-panel {
+  margin-top: 0;
+}
+
+.sessions-head {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.sessions-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sessions-filters .form-select {
+  width: 150px;
+}
+
+.sessions-filters .form-input {
+  width: min(360px, 42vw);
+}
+
+.sessions-loading {
+  min-height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--tx3);
+}
+
+.sessions-table-wrap {
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+
+.sessions-table {
+  min-width: 980px;
+}
+
+.sessions-device {
+  font-weight: 700;
+  color: var(--tx);
+}
+
+.sessions-ip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--accent-primary);
+  background: var(--accent-soft);
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+@media (max-width: 900px) {
+  .sessions-head {
+    flex-direction: column;
+  }
+  .sessions-filters,
+  .sessions-filters .form-select,
+  .sessions-filters .form-input {
+    width: 100%;
+  }
+}
+

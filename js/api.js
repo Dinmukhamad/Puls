@@ -153,6 +153,21 @@ const api = (() => {
   function changeUserRole(id, p)   { return req('POST', `/api/users/${id}/change-role`, p); }
   function resetUserPassword(id, p){ return req('POST', `/api/users/${id}/reset-password`, p); }
 
+  /* ── Sessions (admin) ───────────────────────────────────────── */
+  function listSessions(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/admin/sessions' + (qs ? '?' + qs : ''));
+  }
+  function revokeSession(sessionId) {
+    return req('POST', `/api/admin/sessions/${encodeURIComponent(sessionId)}/revoke`);
+  }
+  function revokeUserSessions(userId, excludeCurrent = true) {
+    return req('POST', '/api/admin/sessions/revoke-user', {
+      user_id: userId,
+      exclude_current: excludeCurrent,
+    });
+  }
+
   function _base() { return base(); }
 
 
@@ -336,6 +351,7 @@ const api = (() => {
     listGroups, createGroup, updateGroup, enableGroup, disableGroup, deleteGroup,
     getDashboard, getDashboardOperators, getDashboardHistory,
     createUser, listUsers, updateUser, deactivateUser, changeUserRole, resetUserPassword,
+    listSessions, revokeSession, revokeUserSessions,
     changeMyPassword, changeMyLogin, changeOperatorPassword, changeOperatorUsername,
     getCoinsOverview, listCoinRequests, listCoinTransactions,
     approveCoinRequest, rejectCoinRequest, completeCoinRequest,

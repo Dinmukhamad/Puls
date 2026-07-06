@@ -7,11 +7,13 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.datetime_utils import now_utc
 from app.database.db import get_db
-from app.models.entities import User
+from app.models.entities import User, UserSession
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -60,6 +62,25 @@ def get_current_user(
         user_id = int(payload.get("sub"))
     except (JWTError, TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный токен") from None
+
+    session_id = payload.get("sid")
+    if session_id:
+        auth_session = db.scalar(
+            select(UserSession).where(
+                UserSession.session_id == str(session_id),
+                UserSession.user_id == user_id,
+            )
+        )
+        now = now_utc()
+        if (
+            not auth_session
+            or auth_session.status != "active"
+            or auth_session.revoked_at is not None
+            or (auth_session.expires_at is not None and auth_session.expires_at < now)
+        ):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Сессия завершена")
+        request.state.session_id = auth_session.session_id
+        request.state.auth_session_id = auth_session.id
 
     user = db.get(User, user_id)
     if not user or not user.is_active:

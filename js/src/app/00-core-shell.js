@@ -320,7 +320,7 @@ function initNav() {
 
 // Кеш отрендеренных разделов — не перерисовываем если уже есть актуальный HTML
 const VIEW_CACHE = {};
-const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel']); // эти разделы всегда рендерим заново
+const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel', 'sessions']); // эти разделы всегда рендерим заново
 
 function invalidateViewCache(view) {
   if (view) delete VIEW_CACHE[view];
@@ -381,6 +381,7 @@ function renderView(view) {
     case 'period-report': renderPeriodReport(); break;
     case 'analytics': renderAnalytics(); break;
     case 'tests':    renderTests();    break;
+    case 'sessions': renderAdminSessions(); break;
   }
 }
 
@@ -485,7 +486,7 @@ async function bootApp() {
 
   // Restore last viewed section after F5 reload
   const restoredRoute = initialRouteForRole(role);
-  const adminViews = ['summary','operators','operator-levels','coins','groups','shop','wheel','rating','cabinet','period-report','analytics','tests'];
+  const adminViews = ['summary','operators','operator-levels','coins','groups','shop','wheel','rating','cabinet','period-report','analytics','tests','sessions'];
   const operatorViews = ['cabinet','rating','shop','wheel','tests'];
   const allowedViews = isAdmin(role) ? adminViews : operatorViews;
   const defaultView = isAdmin(role) ? 'summary' : 'cabinet';
@@ -587,7 +588,7 @@ function buildViews(role) {
   const shell = document.getElementById('app-shell');
   if (!shell) return;
   const views = isAdmin(role)
-    ? ['summary', 'operators', ...(role === 'manager' || role === 'admin' ? ['operator-levels'] : []), 'coins', 'shop', 'wheel', 'tests', ...(canManageGroups(role) ? ['groups'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
+    ? ['summary', 'operators', ...(role === 'manager' || role === 'admin' ? ['operator-levels'] : []), 'coins', 'shop', 'wheel', 'tests', ...(canManageGroups(role) ? ['groups'] : []), ...(role === 'admin' ? ['sessions'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
     : ['cabinet', 'rating', 'shop', 'wheel', 'tests'];
   shell.innerHTML = views.map(v => `<section class="app-view" id="view-${v}"></section>`).join('');
 }
@@ -604,6 +605,7 @@ function renderSidebar(role) {
       show = adminViews.includes(t) || sharedViews.includes(t);
       if (role === 'manager' || role === 'admin') show = show || managerViews.includes(t);
       if (canManageGroups(role)) show = show || t === 'groups';
+      if (role === 'admin') show = show || t === 'sessions';
     } else {
       show = operatorViews.includes(t);
     }

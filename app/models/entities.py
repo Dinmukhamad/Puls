@@ -43,6 +43,34 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
     operator: Mapped[Operator | None] = relationship("Operator", foreign_keys=[operator_id], post_update=True)
+    sessions: Mapped[list[UserSession]] = relationship(
+        "UserSession",
+        back_populates="user",
+        foreign_keys="UserSession.user_id",
+    )
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
+    device_label: Mapped[str] = mapped_column(String(255), default="")
+    browser_label: Mapped[str] = mapped_column(String(120), default="")
+    os_label: Mapped[str] = mapped_column(String(120), default="")
+    status: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    revoke_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    user: Mapped[User] = relationship("User", foreign_keys=[user_id], back_populates="sessions")
+    revoked_by: Mapped[User | None] = relationship("User", foreign_keys=[revoked_by_user_id])
 
 
 class Group(Base):

@@ -90,6 +90,7 @@
     listGroups, createGroup, updateGroup, enableGroup, disableGroup, deleteGroup,
     getDashboard, getDashboardOperators, getDashboardHistory,
     createUser, listUsers, updateUser, deactivateUser, changeUserRole, resetUserPassword,
+    listSessions, revokeSession, revokeUserSessions,
     changeMyPassword, changeMyLogin, changeOperatorPassword, changeOperatorUsername,
     getCoinsOverview, listCoinRequests, listCoinTransactions,
     approveCoinRequest, rejectCoinRequest, completeCoinRequest,

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from datetime import timedelta
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.datetime_utils import now_utc
 from app.core.security import (
     create_access_token,
     get_current_user,
@@ -13,7 +18,7 @@ from app.core.security import (
     verify_password,
 )
 from app.database.db import get_db
-from app.models.entities import AuditLog, User
+from app.models.entities import AuditLog, User, UserSession
 from app.modules.auth.schemas import (
     AccountCredentialsUpdate,
     LoginRequest,
@@ -24,8 +29,68 @@ from app.modules.auth.schemas import (
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _set_auth_cookie(response: Response, user: User) -> None:
-    token = create_access_token({"sub": str(user.id)}, role=user.role)
+def _client_ip(request: Request) -> str:
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    real_ip = (request.headers.get("x-real-ip") or "").strip()
+    return forwarded or real_ip or (request.client.host if request.client else "")
+
+
+def _device_info(user_agent: str) -> tuple[str, str, str]:
+    low = (user_agent or "").lower()
+    if "edg/" in low:
+        browser = "Edge"
+    elif "chrome" in low:
+        browser = "Chrome"
+    elif "firefox" in low:
+        browser = "Firefox"
+    elif "safari" in low:
+        browser = "Safari"
+    else:
+        browser = "Browser"
+
+    if "windows" in low:
+        os_label = "Windows"
+    elif "mac os" in low:
+        os_label = "macOS"
+    elif "iphone" in low or "ipad" in low:
+        os_label = "iOS"
+    elif "android" in low:
+        os_label = "Android"
+    elif "linux" in low:
+        os_label = "Linux"
+    else:
+        os_label = "Unknown OS"
+
+    device = "Mobile" if any(x in low for x in ("mobile", "iphone", "android")) else "Desktop"
+    return f"{device} · {browser} · {os_label}", browser, os_label
+
+
+def _create_auth_session(db: Session, request: Request, user: User) -> UserSession:
+    settings = get_settings()
+    now = now_utc()
+    user_agent = request.headers.get("user-agent") or ""
+    device_label, browser_label, os_label = _device_info(user_agent)
+    session = UserSession(
+        session_id=uuid4().hex,
+        user_id=user.id,
+        ip_address=_client_ip(request),
+        user_agent=user_agent[:4000],
+        device_label=device_label,
+        browser_label=browser_label,
+        os_label=os_label,
+        status="active",
+        created_at=now,
+        last_seen_at=now,
+        expires_at=now + timedelta(minutes=settings.access_token_expire_minutes),
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+def _set_auth_cookie(response: Response, user: User, session_id: str) -> None:
+    token = create_access_token({"sub": str(user.id), "sid": session_id}, role=user.role)
     settings = get_settings()
     cookie_options = {
         "key": settings.auth_cookie_name,
@@ -41,8 +106,21 @@ def _set_auth_cookie(response: Response, user: User) -> None:
     response.set_cookie(**cookie_options)
 
 
+def _session_id_from_cookie(request: Request) -> str | None:
+    settings = get_settings()
+    token = request.cookies.get(settings.auth_cookie_name)
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    except (JWTError, TypeError, ValueError):
+        return None
+    sid = payload.get("sid")
+    return str(sid) if sid else None
+
+
 @router.post("/login")
-def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.username == payload.username))
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
@@ -51,13 +129,22 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Аккаунт деактивирован")
 
-    _set_auth_cookie(response, user)
+    session = _create_auth_session(db, request, user)
+    _set_auth_cookie(response, user, session.session_id)
     return {"ok": True}
 
 
 @router.post("/logout")
-def logout(response: Response, db: Session = Depends(get_db)):
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     """Logout всегда работает — даже если JWT протух или невалиден."""
+    sid = _session_id_from_cookie(request)
+    if sid:
+        session = db.scalar(select(UserSession).where(UserSession.session_id == sid))
+        if session and session.status == "active":
+            session.status = "revoked"
+            session.revoked_at = now_utc()
+            session.revoke_reason = "logout"
+            db.commit()
     settings = get_settings()
     cookie_options = {"key": settings.auth_cookie_name, "path": "/"}
     if settings.auth_cookie_domain:
@@ -67,9 +154,24 @@ def logout(response: Response, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserRead)
-def me(response: Response, current_user: User = Depends(get_current_user)) -> User:
+def me(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> User:
     # Sliding session: each successful app start extends the HttpOnly cookie.
-    _set_auth_cookie(response, current_user)
+    sid = getattr(request.state, "session_id", None)
+    session = db.scalar(select(UserSession).where(UserSession.session_id == sid)) if sid else None
+    if session is None:
+        session = _create_auth_session(db, request, current_user)
+    else:
+        settings = get_settings()
+        now = now_utc()
+        session.last_seen_at = now
+        session.expires_at = now + timedelta(minutes=settings.access_token_expire_minutes)
+        db.commit()
+    _set_auth_cookie(response, current_user, session.session_id)
     return current_user
 
 
