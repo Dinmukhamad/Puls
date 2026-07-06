@@ -3692,7 +3692,8 @@ function showModal(html, options = {}) {
   }
   const forced = Boolean(options.force);
   overlay.dataset.force = forced ? 'true' : 'false';
-  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
+  const extraClass = options.className ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '') : '';
+  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
   overlay.style.display = 'flex';
   overlay.onclick = e => { if (e.target === overlay && !forced) closeModal(); };
 }
@@ -4015,10 +4016,10 @@ async function showAddOperatorModal() {
         </select>
       </div>
     </div>
-    <div id="new-op-err" class="status-line" style="margin-top:8px"></div>
-    <button id="create-operator-btn" class="btn-primary" style="width:100%;height:44px;margin-top:4px" onclick="submitAddOperator()" disabled>Создать пользователя</button>
+    <div id="new-op-err" class="status-line"></div>
+    <button id="create-operator-btn" class="btn-primary create-user-submit" onclick="submitAddOperator()" disabled>Создать пользователя</button>
     <div style="font-size:11px;color:var(--tx3);margin-top:6px">Пароль сохранится только в виде hash, при первом входе пользователь сменит его.</div>
-  `);
+  `, { className: 'modal-user-create' });
 
   const updateButton = () => {
     const btn = document.getElementById('create-operator-btn');
