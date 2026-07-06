@@ -4786,6 +4786,9 @@ body.role-operator {
 }
 
 .wheel-prizes-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   height: 38px;
   padding: 8px 10px;
   color: var(--tx3);
@@ -4802,12 +4805,78 @@ body.role-operator {
   background: var(--card-bg);
 }
 
+.wheel-prizes-table tbody tr[data-prize-id] td {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.wheel-prizes-table tbody tr[data-prize-id] td:nth-child(3),
+.wheel-prizes-table tbody tr[data-prize-id] td:nth-child(6),
+.wheel-prizes-table tbody tr[data-prize-id] td:nth-child(8),
+.wheel-prizes-table tbody tr[data-prize-id] td:nth-child(9) {
+  border-right: 1px solid var(--border-soft);
+}
+
 .wheel-prizes-table tbody tr {
   transition: background var(--t), box-shadow var(--t);
 }
 
-.wheel-prizes-table tbody tr:hover td {
+.wheel-prizes-table tbody tr[data-prize-id]:hover td {
   background: var(--surface-2, #f8fafc);
+}
+
+.wheel-prize-group-row td {
+  height: auto;
+  padding: 12px 12px 8px;
+  background: linear-gradient(90deg, var(--surface-2, #f8fafc), var(--card-bg));
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.wheel-prize-group-row:first-child td {
+  border-top: 0;
+}
+
+.wheel-prize-group-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+}
+
+.wheel-prize-group-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--tx);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.wheel-prize-group-name::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.wheel-prize-group-meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--tx3);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .wheel-prizes-table .form-input,
@@ -4922,6 +4991,13 @@ body.role-operator {
 @media (max-width: 900px) {
   .wheel-prizes-table {
     min-width: 980px;
+  }
+  .wheel-prize-group-title {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .wheel-prize-group-meta {
+    white-space: normal;
   }
   .wheel-newprize-grid {
     grid-template-columns: 1fr 1fr;
