@@ -65,8 +65,10 @@ class Settings(BaseSettings):
             (self.app_env or "").lower(),
             os.getenv("APP_ENV", "").lower(),
             os.getenv("ENVIRONMENT", "").lower(),
+            os.getenv("RAILWAY_ENVIRONMENT", "").lower(),
         }
-        if "production" not in env_values:
+        is_railway = bool(os.getenv("RAILWAY_PROJECT_ID") or os.getenv("RAILWAY_SERVICE_ID"))
+        if "production" not in env_values and not is_railway:
             return
 
         problems = []
