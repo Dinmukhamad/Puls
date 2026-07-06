@@ -554,6 +554,50 @@ async function renderWheelPrizesTab(body) {
   const totalWeight = rows.filter(r => r.is_active).reduce((s, r) => s + (r.weight || 0), 0);
   const typeOptions = (val) => WHEEL_PRIZE_TYPES.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('');
   const chance = (w) => totalWeight > 0 ? Math.round((w / totalWeight) * 100) : 0;
+  const typeOrder = new Map(WHEEL_PRIZE_TYPES.map(([value], index) => [value, index]));
+  const groupedRows = [...rows]
+    .sort((a, b) => {
+      const typeDiff = (typeOrder.get(a.prize_type) ?? 999) - (typeOrder.get(b.prize_type) ?? 999);
+      if (typeDiff) return typeDiff;
+      if (Boolean(a.is_active) !== Boolean(b.is_active)) return a.is_active ? -1 : 1;
+      const weightDiff = (b.weight || 0) - (a.weight || 0);
+      if (weightDiff) return weightDiff;
+      return String(a.title || '').localeCompare(String(b.title || ''), 'ru');
+    })
+    .reduce((groups, row) => {
+      let group = groups.find(item => item.type === row.prize_type);
+      if (!group) {
+        group = { type: row.prize_type, items: [] };
+        groups.push(group);
+      }
+      group.items.push(row);
+      return groups;
+    }, []);
+  const prizeRowHtml = (r) => `<tr data-prize-id="${r.id}">
+            <td><input type="color" class="wp-color" value="${esc(r.color || '#38BDF8')}"></td>
+            <td><input type="text" class="form-input wp-title" value="${esc(r.title)}"></td>
+            <td><select class="form-input wp-type">${typeOptions(r.prize_type)}</select></td>
+            <td><input type="number" class="form-input wp-amount" value="${r.amount}"></td>
+            <td><input type="number" class="form-input wp-weight" value="${r.weight}" min="0"></td>
+            <td><span class="wheel-chance">${chance(r.is_active ? r.weight : 0)}%</span></td>
+            <td><input type="number" class="form-input wp-maxtotal" value="${r.max_wins_total}" min="0" title="0 — без лимита"></td>
+            <td><input type="number" class="form-input wp-maxop" value="${r.max_wins_per_operator}" min="0" title="0 — без лимита"></td>
+            <td style="text-align:center"><input type="checkbox" class="wp-active" ${r.is_active ? 'checked' : ''}></td>
+            <td><button class="btn-outline btn-sm wp-save">Сохранить</button></td>
+          </tr>`;
+  const prizeGroupHtml = (group) => {
+    const activeItems = group.items.filter(r => r.is_active);
+    const groupWeight = activeItems.reduce((sum, r) => sum + (r.weight || 0), 0);
+    const groupChance = totalWeight > 0 ? Math.round((groupWeight / totalWeight) * 100) : 0;
+    const rawLabel = wheelPrizeTypeLabel(group.type) || group.type || 'Другое';
+    const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
+    return `<tr class="wheel-prize-group-row"><td colspan="10">
+              <div class="wheel-prize-group-title">
+                <span class="wheel-prize-group-name">${esc(label)}</span>
+                <span class="wheel-prize-group-meta">${group.items.length} сектор(ов) · активных ${activeItems.length} · вес ${groupWeight} · шанс ${groupChance}%</span>
+              </div>
+            </td></tr>${group.items.map(prizeRowHtml).join('')}`;
+  };
 
   body.innerHTML = `
     <div class="panel wheel-admin-panel">
@@ -570,18 +614,7 @@ async function renderWheelPrizesTab(body) {
           </colgroup>
           <thead><tr><th>Цвет</th><th>Название</th><th>Тип</th><th>Кол-во</th><th>Вес</th><th title="Шанс выпадения">Шанс</th><th>Лимит всего</th><th>Лимит/оператор</th><th>Активен</th><th></th></tr></thead>
           <tbody>
-          ${rows.map(r => `<tr data-prize-id="${r.id}">
-            <td><input type="color" class="wp-color" value="${esc(r.color || '#38BDF8')}"></td>
-            <td><input type="text" class="form-input wp-title" value="${esc(r.title)}"></td>
-            <td><select class="form-input wp-type">${typeOptions(r.prize_type)}</select></td>
-            <td><input type="number" class="form-input wp-amount" value="${r.amount}"></td>
-            <td><input type="number" class="form-input wp-weight" value="${r.weight}" min="0"></td>
-            <td><span class="wheel-chance">${chance(r.is_active ? r.weight : 0)}%</span></td>
-            <td><input type="number" class="form-input wp-maxtotal" value="${r.max_wins_total}" min="0" title="0 — без лимита"></td>
-            <td><input type="number" class="form-input wp-maxop" value="${r.max_wins_per_operator}" min="0" title="0 — без лимита"></td>
-            <td style="text-align:center"><input type="checkbox" class="wp-active" ${r.is_active ? 'checked' : ''}></td>
-            <td><button class="btn-outline btn-sm wp-save">Сохранить</button></td>
-          </tr>`).join('')}
+          ${groupedRows.map(prizeGroupHtml).join('') || '<tr><td colspan="10" class="empty-line">Секторов пока нет</td></tr>'}
           </tbody>
         </table></div>
         <div class="wheel-newprize">
