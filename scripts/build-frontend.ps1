@@ -45,14 +45,6 @@ function Minify-Css($Text) {
     return $Text.Trim()
 }
 
-function Rebuild-MinJsSafe($SourcePath, $OutPath) {
-    # Safe fallback when terser is unavailable: preserve JS semantics and only
-    # remove the generated banner. Real minification still belongs to terser.
-    $text = [System.IO.File]::ReadAllText($SourcePath)
-    $text = [regex]::Replace($text, '^/\* Generated from [\s\S]*?\*/\s*', '')
-    Write-Text $OutPath $text
-}
-
 $JsSrc = Join-Path $Root "js\src"
 $AppSrc = Join-Path $JsSrc "app"
 $ApiSrc = Join-Path $JsSrc "api"
@@ -127,8 +119,9 @@ Join-Files $apiFiles (Join-Path $Root "js\api.js") "/* Generated from js/src/api
 Join-Files $appFiles (Join-Path $Root "js\app.js") "/* Generated from js/src/{app,auth,components,utils,views}/**/*.js. Run npm run build after editing. */"
 Join-Files $cssFiles (Join-Path $Root "css\styles.css") "/* Generated from css/src/{base,layout,components,views}/**/*.css. Run npm run build after editing. */" -IncludeSourceComments
 
-Rebuild-MinJsSafe (Join-Path $Root "js\api.js") (Join-Path $Root "js\api.min.js")
-Rebuild-MinJsSafe (Join-Path $Root "js\app.js") (Join-Path $Root "js\app.min.js")
+# JS minification must be done by terser via npm run build. This fallback only
+# rebuilds source bundles and CSS min files so it cannot replace real minified JS
+# with a near-copy of the source.
 
 $styles = [System.IO.File]::ReadAllText((Join-Path $Root "css\styles.css"))
 Write-Text (Join-Path $Root "css\styles.min.css") (Minify-Css $styles)
