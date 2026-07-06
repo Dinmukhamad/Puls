@@ -44,12 +44,21 @@ def parse_args() -> argparse.Namespace:
     group.add_argument("--all", action="store_true", help="Удалить ВСЕХ операторов в системе")
     group.add_argument("--ids", type=str, help="Список ID операторов через запятую, например: 1,2,3")
     parser.add_argument("--apply", action="store_true", help="Выполнить реальное удаление (по умолчанию — dry-run)")
+    parser.add_argument("--confirm", default="", help="Required with --apply: WIPE_TEST_OPERATORS")
     parser.add_argument("--allow-default-db", action="store_true", help="Разрешить запуск без переменной DATABASE_URL")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    if args.apply and args.confirm != "WIPE_TEST_OPERATORS":
+        print(
+            "--apply requires --confirm WIPE_TEST_OPERATORS. "
+            "Run without --apply first to review the dry-run plan.",
+            file=sys.stderr,
+        )
+        return 2
+
     if not os.getenv("DATABASE_URL") and not args.allow_default_db:
         print("DATABASE_URL не задан. Укажите Railway DATABASE_URL перед запуском.", file=sys.stderr)
         return 2
