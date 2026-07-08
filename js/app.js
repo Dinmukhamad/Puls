@@ -255,10 +255,12 @@ async function tryRestoreSession() {
     await bootApp();
   } catch(err) {
     const msg = String(err?.message || '').toLowerCase();
-    const isAuthError = msg.includes('401') || msg.includes('403') ||
+    const isAuthError = err?.status === 401 || err?.status === 403 ||
+      msg.includes('401') || msg.includes('403') ||
       msg.includes('unauthorized') || msg.includes('авторизац') ||
       msg.includes('токен') || msg.includes('forbidden');
     if (isAuthError) {
+      clearSessionUiState();
       showAuth();
     } else {
       const shell = document.getElementById('app-shell');
