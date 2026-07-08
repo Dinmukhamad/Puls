@@ -23,6 +23,8 @@
 /* ── Light theme ── */
 :root,
 html[data-theme="light"] {
+  color-scheme: light;
+
   /* Page */
   --bg-page:          #F1F5F9;
   --bg-surface:       #FFFFFF;
@@ -76,6 +78,7 @@ html[data-theme="light"] {
   /* Legacy compat aliases */
   --bg: var(--bg-page);  --surface: var(--card-bg);
   --surface-2: var(--bg-muted);  --surface-3: var(--bg-subtle);
+  --surface-hover: var(--bg-surface-hover);
   --tx: var(--text-primary);  --tx2: var(--text-secondary);
   --tx3: var(--text-muted);   --tx4: var(--border-strong);
   --border: var(--border-default);
@@ -91,6 +94,8 @@ html[data-theme="light"] {
 
 /* ── Dark theme ── */
 html[data-theme="dark"] {
+  color-scheme: dark;
+
   --bg-page:          #0B1120;
   --bg-surface:       #111827;
   --bg-surface-hover: #1E293B;
@@ -135,6 +140,7 @@ html[data-theme="dark"] {
 
   --bg: var(--bg-page);  --surface: var(--card-bg);
   --surface-2: var(--bg-muted);  --surface-3: var(--bg-subtle);
+  --surface-hover: var(--bg-surface-hover);
   --tx: var(--text-primary);  --tx2: var(--text-secondary);
   --tx3: var(--text-muted);   --tx4: var(--border-strong);
   --border: var(--border-default);
