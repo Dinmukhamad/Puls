@@ -130,6 +130,31 @@ def ensure_operator_management_schema(engine: Engine) -> None:
         Group.__table__.create(bind=conn, checkfirst=True)
         AuditLog.__table__.create(bind=conn, checkfirst=True)
         UserSession.__table__.create(bind=conn, checkfirst=True)
+        inspector = inspect(conn)
+        tables = set(inspector.get_table_names())
+        if "user_sessions" in tables:
+            existing = {col["name"] for col in inspector.get_columns("user_sessions")}
+            created_default = "NOW()" if engine.dialect.name == "postgresql" else "CURRENT_TIMESTAMP"
+            migrations = [
+                ("session_id", "VARCHAR(64)"),
+                ("user_id", "INTEGER"),
+                ("ip_address", "VARCHAR(64)"),
+                ("user_agent", "TEXT"),
+                ("device_label", "VARCHAR(255) NOT NULL DEFAULT ''"),
+                ("browser_label", "VARCHAR(120) NOT NULL DEFAULT ''"),
+                ("os_label", "VARCHAR(120) NOT NULL DEFAULT ''"),
+                ("status", "VARCHAR(32) NOT NULL DEFAULT 'active'"),
+                ("created_at", f"TIMESTAMP NOT NULL DEFAULT {created_default}"),
+                ("last_seen_at", f"TIMESTAMP NOT NULL DEFAULT {created_default}"),
+                ("expires_at", "TIMESTAMP"),
+                ("revoked_at", "TIMESTAMP"),
+                ("revoked_by_user_id", "INTEGER"),
+                ("revoke_reason", "TEXT"),
+            ]
+            for col_name, col_type in migrations:
+                if col_name not in existing:
+                    conn.execute(text(f"ALTER TABLE user_sessions ADD COLUMN {col_name} {col_type}"))
+                    logger.info("[schema] Added user_sessions.%s", col_name)
         logger.info("[schema] groups table ensured")
         logger.info("[schema] audit_logs table ensured")
         logger.info("[schema] user_sessions table ensured")

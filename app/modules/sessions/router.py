@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.datetime_utils import now_utc, to_local_iso
 from app.core.security import get_current_user, require_roles
@@ -59,7 +59,15 @@ def list_sessions(
     current_session_id = getattr(request.state, "session_id", None)
     limit = max(1, min(limit, 500))
 
-    stmt = select(UserSession).join(User).order_by(UserSession.last_seen_at.desc())
+    stmt = (
+        select(UserSession)
+        .join(UserSession.user)
+        .options(
+            selectinload(UserSession.user),
+            selectinload(UserSession.revoked_by),
+        )
+        .order_by(UserSession.last_seen_at.desc())
+    )
     if status and status != "all":
         if status == "expired":
             stmt = stmt.where(UserSession.expires_at.is_not(None), UserSession.expires_at < now)
