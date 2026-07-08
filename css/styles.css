@@ -4224,9 +4224,10 @@ body.role-operator {
   box-shadow: 0 6px 16px rgba(15,23,42,.28), inset 0 -3px 6px rgba(15,23,42,.12), inset 0 3px 6px rgba(255,255,255,.9);
 }
 
-.wheel-controls { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 16px; align-items: stretch; z-index: 1; }
+.wheel-controls { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; align-items: stretch; z-index: 1; }
 .wheel-spin-btn {
-  font-size: 16px; padding: 15px; font-weight: 800; letter-spacing: .01em;
+  min-height: 52px;
+  font-size: 16px; padding: 0 18px; font-weight: 800; letter-spacing: .01em;
   border-radius: var(--radius-md);
   box-shadow: 0 8px 20px rgba(2,132,199,.35);
   transition: transform var(--transition-fast), box-shadow var(--transition-fast);
@@ -4234,6 +4235,17 @@ body.role-operator {
 .wheel-spin-btn:not(:disabled):hover { transform: translateY(-1px); box-shadow: 0 12px 26px rgba(2,132,199,.45); }
 .wheel-spin-btn:not(:disabled):active { transform: translateY(0); }
 .wheel-spin-btn:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
+.wheel-unavailable-reason {
+  padding: 11px 14px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+  color: var(--tx2);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: center;
+}
 
 .wheel-ticket-badge { text-align: center; padding: 18px 16px; border-radius: var(--radius-md); }
 .wheel-ticket-have { background: var(--success-soft); border: 1px solid rgba(22,163,74,.35); }

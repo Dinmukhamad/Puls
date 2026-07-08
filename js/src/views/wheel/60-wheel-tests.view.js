@@ -42,6 +42,14 @@ function wheelPrizeTypeLabel(t) {
   }[t] || t;
 }
 
+function wheelCleanText(value, fallback = '') {
+  const text = String(value || '').trim();
+  if (!text) return fallback;
+  const mojibakeScore = (text.match(/[РС][\u0400-\u04FF]?/g) || []).length;
+  if (mojibakeScore >= 3 || /вЂ|Рџ|Рљ|РЈ|Рќ|РЎ|Р“|Р’/.test(text)) return fallback;
+  return text;
+}
+
 function renderWheel() {
   const el = document.getElementById('view-wheel');
   if (!el) return;
@@ -94,6 +102,12 @@ async function renderWheelOperatorView(el) {
         && (!status.max_spins_per_day || status.spins_used_today < status.max_spins_per_day)
         && (!status.max_spins_per_week || status.spins_used_this_week < status.max_spins_per_week));
   const cannotReason = status.reason_if_cannot_spin || (tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет билетов');
+
+  const safeCannotReason = wheelCleanText(
+    status.reason_if_cannot_spin,
+    tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет доступных прокруток'
+  );
+  const safeNextTicketReason = wheelCleanText(status.next_ticket_reason);
 
   const ticketCard = tickets > 0
     ? `<div class="wheel-ticket-badge wheel-ticket-have">
@@ -151,6 +165,20 @@ async function renderWheelOperatorView(el) {
   STATE.wheel = { items, rotation: 0, spinning: false };
 
   const btn = document.getElementById('wheel-spin-btn');
+  if (btn) {
+    btn.textContent = 'Крутить колесо';
+    if (!canSpin) {
+      const note = document.createElement('div');
+      note.className = 'wheel-unavailable-reason';
+      note.textContent = safeCannotReason;
+      btn.insertAdjacentElement('afterend', note);
+    }
+  }
+  const ticketReasonEl = el.querySelector('.wheel-ticket-reason');
+  if (ticketReasonEl) {
+    if (safeNextTicketReason) ticketReasonEl.textContent = `Причина: ${safeNextTicketReason}`;
+    else ticketReasonEl.remove();
+  }
   if (btn && canSpin) btn.onclick = () => doWheelSpin(el);
 }
 
