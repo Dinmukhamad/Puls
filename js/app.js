@@ -417,6 +417,36 @@ function hideAuth() {
   document.body.classList.remove('operator-login-required');
 }
 
+let _authExpiredHandled = false;
+function clearSessionUiState() {
+  STATE.user = null;
+  STATE.wallet = null;
+  STATE.myLevel = null;
+  STATE.myOperator = null;
+  clearViewCache();
+  try {
+    Object.keys(sessionStorage)
+      .filter(k => k.startsWith(SWR_PREFIX))
+      .forEach(k => sessionStorage.removeItem(k));
+  } catch(e) { /* ignore */ }
+  document.body.classList.remove('role-admin', 'role-manager', 'role-operator');
+  document.body.classList.add('role-pending');
+}
+
+function handleAuthExpired(err) {
+  if (_authExpiredHandled || !STATE.user) return;
+  _authExpiredHandled = true;
+  clearSessionUiState();
+  showAuth();
+  const errEl = document.getElementById('auth-error');
+  if (errEl) {
+    errEl.textContent = 'Сессия была сброшена администратором. Войдите снова.';
+  }
+  const username = document.getElementById('auth-username');
+  if (username) setTimeout(() => username.focus(), 50);
+}
+window.handleAuthExpired = handleAuthExpired;
+
 document.addEventListener('click', async e => {
   if (e.target.id === 'auth-login-btn') {
     const username = document.getElementById('auth-username')?.value?.trim();
@@ -427,6 +457,7 @@ document.addEventListener('click', async e => {
     try {
       await api.login(username, password);
       STATE.user = normalizeUser(await api.me());
+      _authExpiredHandled = false;
       hideAuth();
       await bootApp();
     } catch (err) {

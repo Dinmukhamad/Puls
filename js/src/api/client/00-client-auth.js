@@ -58,7 +58,17 @@ const api = (() => {
     try { data = await res.json(); } catch {}
     if (!res.ok) {
       const msg = data.detail || data.error || `Ошибка ${res.status}`;
-      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      const error = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      error.status = res.status;
+      error.path = path;
+      if (res.status === 401 && path !== '/api/auth/me') {
+        setTimeout(() => {
+          if (typeof window !== 'undefined' && typeof window.handleAuthExpired === 'function') {
+            window.handleAuthExpired(error);
+          }
+        }, 0);
+      }
+      throw error;
     }
     return data;
   }
