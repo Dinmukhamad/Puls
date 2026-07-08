@@ -425,7 +425,7 @@ function clearSessionUiState() {
   STATE.wallet = null;
   STATE.myLevel = null;
   STATE.myOperator = null;
-  clearViewCache();
+  invalidateViewCache();
   try {
     Object.keys(sessionStorage)
       .filter(k => k.startsWith(SWR_PREFIX))
