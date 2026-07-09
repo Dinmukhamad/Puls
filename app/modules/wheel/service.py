@@ -34,6 +34,15 @@ from app.models.entities import (
 )
 from app.modules.wallet.service import add_transaction
 
+# Минимальный интервал между прокрутками одного оператора (секунды). Защита
+# от быстрых повторных кликов/прямых запросов к API: даже если фронтенд
+# по какой-то причине не заблокировал кнопку, backend не даст начать новую
+# прокрутку, пока не «отыграла» предыдущая анимация (см. wheel-spin-btn на
+# фронте — там анимация ~2.6с). Значение чуть меньше анимации, чтобы не
+# отклонять честный клик сразу после того, как кнопка снова стала активна.
+MIN_SECONDS_BETWEEN_SPINS = 2.5
+
+
 # random.SystemRandom вЂ” РєСЂРёРїС‚РѕСЃС‚РѕР№РєРёР№ РёСЃС‚РѕС‡РЅРёРє: РІРµСЃ РїСЂРёР·Р° РЅРµР»СЊР·СЏ РїСЂРµРґСЃРєР°Р·Р°С‚СЊ/
 # РІРѕСЃРїСЂРѕРёР·РІРµСЃС‚Рё РїРѕРґР±РѕСЂРѕРј СЃРёРґР°. Р”Р»СЏ С‡РµСЃС‚РЅРѕР№ Р»РѕС‚РµСЂРµРё СЌС‚Рѕ РїСЂР°РІРёР»СЊРЅС‹Р№ РІС‹Р±РѕСЂ.
 _rng = random.SystemRandom()
@@ -155,6 +164,17 @@ def issue_ticket(
 
 
 # в”Ђв”Ђ Р›РёРјРёС‚С‹ РїСЂРѕРєСЂСѓС‚РѕРє в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ
+
+def _last_spin_at(db: Session, operator_id: int):
+    """Момент последней ЗАВЕРШЁННОЙ прокрутки — источник для проверки
+    минимального интервала между прокрутками (см. MIN_SECONDS_BETWEEN_SPINS)."""
+    return db.scalar(
+        select(func.max(WheelSpin.completed_at)).where(
+            WheelSpin.operator_id == operator_id,
+            WheelSpin.status == "completed",
+        )
+    )
+
 
 def _spins_used_today(db: Session, operator_id: int) -> int:
     day_start, day_end = local_day_bounds_utc()
@@ -314,12 +334,12 @@ def choose_prize(prizes: list[WheelPrize], rng=_rng) -> WheelPrize:
 
 def spin(db: Session, operator: Operator, *, rng=_rng) -> dict:
     """
-    РђС‚РѕРјР°СЂРЅР°СЏ РїСЂРѕРєСЂСѓС‚РєР°. Р’СЃСЏ СЂР°Р±РѕС‚Р° вЂ” РІ РѕРґРЅРѕР№ С‚СЂР°РЅР·Р°РєС†РёРё; РєРѕРјРјРёС‚ РґРµР»Р°РµС‚
-    РІС‹Р·С‹РІР°СЋС‰РёР№ СЂРѕСѓС‚РµСЂ, РѕРЅ Р¶Рµ РѕС‚РєР°С‚С‹РІР°РµС‚ РїСЂРё РёСЃРєР»СЋС‡РµРЅРёРё (Р±РёР»РµС‚ РЅРµ СЃРїРёСЃС‹РІР°РµС‚СЃСЏ).
+    Атомарная прокрутка. Вся работа — в одной транзакции; коммит делает
+    вызывающий роутер, он же откатывает при исключении (билет не списывается).
     """
     campaign = require_active_campaign(db)
 
-    # Р›РёРјРёС‚С‹ РїСЂРѕРєСЂСѓС‚РѕРє
+    # Лимиты прокруток
     if campaign.max_spins_per_day and _spins_used_today(db, operator.id) >= campaign.max_spins_per_day:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Достигнут дневной лимит прокруток")
     if campaign.max_spins_per_week and _spins_used_this_week(db, operator.id) >= campaign.max_spins_per_week:
@@ -327,9 +347,9 @@ def spin(db: Session, operator: Operator, *, rng=_rng) -> dict:
 
     _expire_stale_tickets(db, operator.id)
 
-    # Р‘РµСЂС‘Рј СЃС‚Р°СЂРµР№С€РёР№ РґРѕСЃС‚СѓРїРЅС‹Р№ Р±РёР»РµС‚ РЎ Р‘Р›РћРљРР РћР’РљРћР™ СЃС‚СЂРѕРєРё. РќР° PostgreSQL СЌС‚Рѕ
-    # СЃРµСЂРёР°Р»РёР·СѓРµС‚ РїР°СЂР°Р»Р»РµР»СЊРЅС‹Рµ РїСЂРѕРєСЂСѓС‚РєРё РѕРґРЅРѕРіРѕ РѕРїРµСЂР°С‚РѕСЂР°: РІС‚РѕСЂРѕР№ Р·Р°РїСЂРѕСЃ Р¶РґС‘С‚
-    # РїРµСЂРІС‹Р№, РїРѕСЃР»Рµ РєРѕРјРјРёС‚Р° РІРёРґРёС‚ Р±РёР»РµС‚ used Рё РґРѕСЃС‚СѓРїРЅС‹С… РЅРµ РЅР°С…РѕРґРёС‚.
+    # Берём старейший доступный билет С БЛОКИРОВКОЙ строки. На PostgreSQL это
+    # сериализует параллельные прокрутки одного оператора: второй запрос ждёт
+    # первый, после коммита видит билет used и доступных не находит.
     ticket = db.scalars(
         select(WheelTicket)
         .where(
@@ -345,6 +365,21 @@ def spin(db: Session, operator: Operator, *, rng=_rng) -> dict:
     if ticket.expires_at and ticket.expires_at < now_utc():
         ticket.status = TICKET_EXPIRED
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Билет истёк")
+
+    # Защита от слишком быстрых повторных прокруток (см. MIN_SECONDS_BETWEEN_SPINS
+    # выше) — только теперь, когда мы точно знаем, что билет есть и он валиден:
+    # «нет билетов» (409) должно оставаться приоритетнее «слишком быстро» (429),
+    # а не наоборот. Даже если фронтенд не заблокировал кнопку вовремя или запрос
+    # пришёл напрямую в API, следующая прокрутка не начнётся, пока не «отыграла»
+    # предыдущая.
+    last_spin_at = _last_spin_at(db, operator.id)
+    if last_spin_at is not None:
+        elapsed = (now_utc() - last_spin_at).total_seconds()
+        if elapsed < MIN_SECONDS_BETWEEN_SPINS:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Подождите ещё {MIN_SECONDS_BETWEEN_SPINS - elapsed:.1f} сек. перед следующей прокруткой",
+            )
 
     prize = choose_prize(_eligible_prizes(db, campaign.id, operator.id), rng=rng)
 

@@ -48,6 +48,7 @@ def test_choose_prize_respects_weight_ranges():
 
 def test_choose_prize_empty_raises():
     from fastapi import HTTPException
+
     from app.modules.wheel.service import choose_prize
     with pytest.raises(HTTPException):
         choose_prize([], rng=_FixedRNG(1))
@@ -188,6 +189,7 @@ def test_no_nothing_sector_in_seed(client, db_session):
 def test_daily_spin_limit(client, db_session):
     """max_spins_per_day=1: после успешной прокрутки вторая — 409, даже с билетом."""
     from fastapi import HTTPException
+
     from app.modules.wheel import service as ws
     from app.services.wheel_seed import ensure_default_wheel
 
@@ -203,6 +205,102 @@ def test_daily_spin_limit(client, db_session):
     with pytest.raises(HTTPException) as exc:
         ws.spin(db_session, op, rng=_FixedRNG(1))
     assert exc.value.status_code == 409
+
+
+def test_rapid_second_spin_blocked_by_cooldown_not_a_second_prize(db_session):
+    """Защита от быстрых повторных прокруток (жалоба: «нажал второй раз сразу
+    же — выпал следующий приз»). Даже с двумя реальными билетами и без
+    дневного/недельного лимита — вторая прокрутка сразу после первой должна
+    получить 429, а не полноценный второй приз."""
+    from fastapi import HTTPException
+
+    from app.modules.wheel import service as ws
+    from app.services.wheel_seed import ensure_default_wheel
+
+    campaign = ensure_default_wheel(db_session)
+    op = make_operator(db_session)
+    campaign.max_spins_per_day = 0  # без лимита — изолируем именно cooldown
+    campaign.max_spins_per_week = 0
+    ws.issue_ticket(db_session, op, campaign, reason_type="manual", reason_text="1", enforce_daily_cap=False)
+    ws.issue_ticket(db_session, op, campaign, reason_type="manual", reason_text="2", enforce_daily_cap=False)
+    db_session.commit()
+
+    ws.spin(db_session, op, rng=_FixedRNG(1))
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        ws.spin(db_session, op, rng=_FixedRNG(1))
+    assert exc.value.status_code == 429
+    # второй билет остался нетронутым — не «сгорел» на отклонённой попытке
+    assert len(ws.available_tickets(db_session, op.id)) == 1
+
+
+def test_spin_allowed_again_after_cooldown_elapses(db_session):
+    """После того как «отыграл» минимальный интервал — вторая честная
+    прокрутка обычным порядком проходит и списывает второй билет.
+
+    Настраиваем «прошлый спин» напрямую в БД (а не через реальный первый
+    ws.spin()) — так тест не зависит от того, какие призы у кампании сейчас
+    активны/лимитированы из-за побочных эффектов других тестов в этом файле.
+    """
+    from datetime import timedelta
+
+    from app.models.entities import WheelSpin
+    from app.modules.wheel import service as ws
+    from app.services.wheel_seed import ensure_default_wheel
+
+    campaign = ensure_default_wheel(db_session)
+    op = make_operator(db_session)
+    campaign.max_spins_per_day = 0
+    campaign.max_spins_per_week = 0
+    ticket = ws.issue_ticket(db_session, op, campaign, reason_type="manual", reason_text="1", enforce_daily_cap=False)
+    db_session.commit()
+
+    old_spin = WheelSpin(
+        operator_id=op.id, ticket_id=ticket.id, campaign_id=campaign.id, prize_id=None,
+        status="completed", result_payload_json="{}",
+        completed_at=ws.now_utc() - timedelta(seconds=ws.MIN_SECONDS_BETWEEN_SPINS + 1),
+    )
+    db_session.add(old_spin)
+    db_session.commit()
+
+    result = ws.spin(db_session, op, rng=_FixedRNG(1))
+    db_session.commit()
+    assert result["spin_id"]
+    assert len(ws.available_tickets(db_session, op.id)) == 0
+
+
+def test_spin_blocked_when_last_spin_was_recent(db_session):
+    """Симметричный случай: если последний завершённый спин был совсем
+    недавно (по данным в БД), новая прокрутка должна получить 429 — билет
+    при этом остаётся нетронутым."""
+    from datetime import timedelta
+
+    from fastapi import HTTPException
+
+    from app.models.entities import WheelSpin
+    from app.modules.wheel import service as ws
+    from app.services.wheel_seed import ensure_default_wheel
+
+    campaign = ensure_default_wheel(db_session)
+    op = make_operator(db_session)
+    campaign.max_spins_per_day = 0
+    campaign.max_spins_per_week = 0
+    ticket = ws.issue_ticket(db_session, op, campaign, reason_type="manual", reason_text="1", enforce_daily_cap=False)
+    db_session.commit()
+
+    recent_spin = WheelSpin(
+        operator_id=op.id, ticket_id=ticket.id, campaign_id=campaign.id, prize_id=None,
+        status="completed", result_payload_json="{}",
+        completed_at=ws.now_utc() - timedelta(seconds=0.5),
+    )
+    db_session.add(recent_spin)
+    db_session.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        ws.spin(db_session, op, rng=_FixedRNG(1))
+    assert exc.value.status_code == 429
+    assert len(ws.available_tickets(db_session, op.id)) == 1
 
 
 def test_spin_endpoint_repeated_request_no_second_prize(make_client, db_session):
@@ -222,3 +320,60 @@ def test_spin_endpoint_repeated_request_no_second_prize(make_client, db_session)
     assert r1.status_code == 200, r1.text
     r2 = c.post("/api/wheel/spin")
     assert r2.status_code == 409
+
+
+# ── Массовая выдача билетов ──────────────────────────────────────────────────
+
+def test_bulk_issue_tickets_multiple_operators_and_quantity(client, db_session):
+    from app.services.wheel_seed import ensure_default_wheel
+
+    ensure_default_wheel(db_session)
+    op1 = make_operator(db_session, full_name="Массовый1")
+    op2 = make_operator(db_session, full_name="Массовый2")
+
+    r = client.post("/api/admin/wheel/tickets/bulk", json={
+        "operator_ids": [op1.id, op2.id],
+        "quantity": 3,
+        "reason_text": "Массовая выдача за конкурс",
+    })
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["issued_count"] == 6  # 2 оператора × 3 билета
+    assert len(data["ticket_ids"]) == 6
+    assert data["failed"] == []
+
+    from app.modules.wheel import service as ws
+    assert len(ws.available_tickets(db_session, op1.id)) == 3
+    assert len(ws.available_tickets(db_session, op2.id)) == 3
+
+
+def test_bulk_issue_tickets_unknown_operator_reported_but_others_succeed(client, db_session):
+    from app.services.wheel_seed import ensure_default_wheel
+
+    ensure_default_wheel(db_session)
+    op = make_operator(db_session, full_name="Массовый3")
+    bogus_id = 999_999
+
+    r = client.post("/api/admin/wheel/tickets/bulk", json={
+        "operator_ids": [op.id, bogus_id],
+        "quantity": 1,
+        "reason_text": "тест",
+    })
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["issued_count"] == 1
+    assert len(data["failed"]) == 1
+    assert data["failed"][0]["operator_id"] == bogus_id
+
+
+def test_bulk_issue_tickets_requires_staff_role(make_client, db_session):
+    from app.services.wheel_seed import ensure_default_wheel
+    from tests.test_coin_rules_and_group_scope import _login
+
+    ensure_default_wheel(db_session)
+    op, user, pwd = make_operator_user(db_session)
+    op_client = _login(make_client, user.username, pwd)
+    r = op_client.post("/api/admin/wheel/tickets/bulk", json={
+        "operator_ids": [op.id], "quantity": 1, "reason_text": "тест",
+    })
+    assert r.status_code == 403

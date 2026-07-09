@@ -910,6 +910,7 @@
 .wheel-tabs .filter-tab { white-space: nowrap; flex: 0 0 auto; border-radius: 8px; }
 .wheel-admin-panel {
   overflow: hidden;
+  min-width: 0; /* защита от grid blowout — см. комментарий у .wheel-subtabs выше */
   border-radius: var(--r-lg);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
@@ -1072,6 +1073,18 @@
 }
 .wheel-prizes-table .btn-sm { min-height: 32px; padding: 6px 10px; }
 .wp-col-color { width: 48px; }
+.wp-col-select { width: 36px; }
+.wheel-newprize-field { display: flex; flex-direction: column; gap: 4px; }
+.wheel-newprize-field .form-label { font-size: 11px; color: var(--tx3); }
+.wheel-newprize-grid #np-add { align-self: end; }
+
+.wheel-bulk-bar {
+  display: none; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; margin-bottom: 12px; border-radius: 10px;
+  background: var(--accent-secondary-soft, rgba(56,189,248,.12));
+  font-size: 13px;
+}
+.wheel-bulk-bar.is-visible { display: flex; }
 .wp-col-title { width: 170px; }
 .wp-col-type { width: 145px; }
 .wp-col-num { width: 72px; }
@@ -1244,6 +1257,13 @@
   gap: 4px;
   border-radius: 9px;
   background: var(--surface-2, #f1f5f9);
+  /* Внутри wheel-ops-grid (два равных столбца) .filter-tabs с его
+     width:fit-content и без flex-wrap распирал панель «Билеты» шире
+     соседней панели «История прокруток» у которой такой строки фильтров
+     нет — из-за этого «История» визуально выглядела уже. Разрешаем перенос
+     на вторую строку вместо распирания контейнера по ширине. */
+  width: 100%;
+  flex-wrap: wrap;
 }
 .wheel-chip-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .wheel-data-chip {
@@ -1290,8 +1310,20 @@
 }
 .wheel-empty { min-height: 120px; display: flex; align-items: center; justify-content: center; }
 .wheel-issue-panel .form-grid { display: grid; gap: 14px; margin-bottom: 16px; }
-.wheel-issue-grid { grid-template-columns: minmax(260px, 1.2fr) minmax(260px, 1.4fr) 180px; align-items: start; }
+.wheel-issue-grid { grid-template-columns: minmax(240px, 1.3fr) 140px minmax(220px, 1.2fr) 140px; align-items: start; }
 .wheel-issue-actions { display: flex; justify-content: flex-start; }
+.wheel-op-chosen-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; min-height: 0; }
+.wheel-op-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 6px 5px 10px; border-radius: 999px;
+  background: var(--ok-soft, rgba(34,197,94,.12)); color: var(--ok);
+  font-size: 12px; font-weight: 600;
+}
+.wheel-op-chip button {
+  border: none; background: transparent; color: inherit; cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0 4px; border-radius: 50%;
+}
+.wheel-op-chip button:hover { background: rgba(0,0,0,.08); }
 .wheel-op-results {
   position: relative;
   margin-top: 6px;

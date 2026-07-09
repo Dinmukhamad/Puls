@@ -89,6 +89,27 @@ class TicketIssuedResponse(BaseModel):
     expires_at: datetime | None
 
 
+class BulkIssueTicketRequest(BaseModel):
+    """Массовая выдача: несколько операторов и/или несколько билетов каждому
+    за один вызов (раньше форма умела выдавать только по одному)."""
+    operator_ids: list[int] = Field(min_length=1, max_length=200)
+    quantity: int = Field(default=1, ge=1, le=20)
+    campaign_id: int | None = None
+    reason_text: str = Field(min_length=1, max_length=500)
+    ttl_days: int | None = Field(default=None, ge=1, le=30)
+
+
+class BulkIssueFailure(BaseModel):
+    operator_id: int
+    error: str
+
+
+class BulkTicketIssuedResponse(BaseModel):
+    issued_count: int
+    ticket_ids: list[int]
+    failed: list[BulkIssueFailure]
+
+
 # ── Админка: правила (ТЗ 8.3, 14) ────────────────────────────────────────────
 
 class RuleBase(BaseModel):

@@ -22,8 +22,14 @@ from app.models.entities import (
     WheelSpin,
     WheelTicket,
 )
+from app.modules.rating.service import rating_cache_invalidate
+from app.modules.wallet.service import operator_for_user_or_403
+from app.modules.wheel import service as wheel_service
 from app.modules.wheel.schemas import (
     AdminSpinRow,
+    BulkIssueFailure,
+    BulkIssueTicketRequest,
+    BulkTicketIssuedResponse,
     CampaignCreate,
     CampaignRead,
     CampaignUpdate,
@@ -45,9 +51,6 @@ from app.modules.wheel.schemas import (
     WinnerRow,
     WinnersToday,
 )
-from app.modules.rating.service import rating_cache_invalidate
-from app.modules.wallet.service import operator_for_user_or_403
-from app.modules.wheel import service as wheel_service
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +240,55 @@ def issue_ticket(
         ticket_id=ticket.id, operator_id=ticket.operator_id,
         status=ticket.status, expires_at=ticket.expires_at,
     )
+
+
+@admin_router.post("/tickets/bulk", response_model=BulkTicketIssuedResponse, dependencies=[Depends(require_roles(*STAFF_ROLES))])
+def issue_tickets_bulk(
+    payload: BulkIssueTicketRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Массовая выдача — несколько операторов и/или несколько билетов каждому
+    за один вызов. Каждая (оператор × билет) обрабатывается независимо: если
+    один оператор не найден или для него что-то пошло не так, это не должно
+    остановить выдачу остальным — ошибка просто попадает в `failed`."""
+    if payload.campaign_id:
+        campaign = db.get(WheelCampaign, payload.campaign_id)
+        if not campaign or not campaign.is_active:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Кампания не найдена или неактивна")
+    else:
+        campaign = wheel_service.require_active_campaign(db)
+
+    ticket_ids: list[int] = []
+    failed: list[BulkIssueFailure] = []
+    campaign_ttl_backup = campaign.ticket_ttl_days
+    if payload.ttl_days:
+        campaign.ticket_ttl_days = payload.ttl_days
+
+    try:
+        for operator_id in payload.operator_ids:
+            operator = db.get(Operator, operator_id)
+            if not operator:
+                failed.append(BulkIssueFailure(operator_id=operator_id, error="Оператор не найден"))
+                continue
+            for _ in range(payload.quantity):
+                try:
+                    with db.begin_nested():
+                        ticket = wheel_service.issue_ticket(
+                            db, operator, campaign,
+                            reason_type="manual", reason_text=payload.reason_text,
+                            source_type="manual", created_by=current_user,
+                            enforce_daily_cap=False,
+                        )
+                        db.flush()
+                    ticket_ids.append(ticket.id)
+                except Exception as exc:  # noqa: BLE001 — один сбой не должен обрывать всю пачку
+                    failed.append(BulkIssueFailure(operator_id=operator_id, error=str(exc)[:300]))
+    finally:
+        campaign.ticket_ttl_days = campaign_ttl_backup
+
+    db.commit()
+    return BulkTicketIssuedResponse(issued_count=len(ticket_ids), ticket_ids=ticket_ids, failed=failed)
 
 
 # Алиас ТЗ п.13: GET /api/wheel/history (та же выдача, что и /my-history)

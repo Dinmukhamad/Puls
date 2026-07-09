@@ -319,13 +319,14 @@ async function doWheelSpin(el) {
   // Центр сектора относительно верхней стрелки; докручиваем так, чтобы он встал наверх.
   const center = safeIdx * seg + seg / 2;
   const jitter = (Math.random() - 0.5) * seg * 0.5; // лёгкий разброс внутри сектора
-  const spins = 5; // полных оборотов для эффекта
+  const spins = 3; // полных оборотов — достаточно для эффекта при более быстрой анимации
   const target = spins * 360 - center - jitter;
   const from = w.rotation % 360;
   const total = from + (spins * 360 - center - jitter - (from % 360));
   w.rotation = target;
 
-  rotor.style.transition = 'transform 4.2s cubic-bezier(0.16, 1, 0.3, 1)';
+  const SPIN_ANIMATION_MS = 2600; // держим синхронно с MIN_SECONDS_BETWEEN_SPINS на backend
+  rotor.style.transition = `transform ${SPIN_ANIMATION_MS / 1000}s cubic-bezier(0.16, 1, 0.3, 1)`;
   rotor.style.transform = `rotate(${target}deg)`;
 
   setTimeout(() => {
@@ -333,7 +334,7 @@ async function doWheelSpin(el) {
     showWheelResultModal(result);
     // Обновляем статус и историю без полной перерисовки колеса (оно уже стоит на призе)
     refreshWheelSidebar(el);
-  }, 4400);
+  }, SPIN_ANIMATION_MS + 100);
 }
 
 function showWheelResultModal(result) {
@@ -566,6 +567,8 @@ async function createDefaultCampaign(body) {
 }
 
 /* ---------- Стафф: сектора (ТЗ 11.2) ---------- */
+let _wheelSelectedPrizeIds = new Set();
+
 async function renderWheelPrizesTab(body) {
   const data = await wheelCachedFetch(
     'wheel:admin:prizes',
@@ -579,6 +582,7 @@ async function renderWheelPrizesTab(body) {
     return;
   }
   const rows = data.items || [];
+  _wheelSelectedPrizeIds = new Set([..._wheelSelectedPrizeIds].filter(id => rows.some(r => r.id === id)));
   const totalWeight = rows.filter(r => r.is_active).reduce((s, r) => s + (r.weight || 0), 0);
   const typeOptions = (val) => WHEEL_PRIZE_TYPES.map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('');
   const chance = (w) => totalWeight > 0 ? Math.round((w / totalWeight) * 100) : 0;
@@ -602,6 +606,7 @@ async function renderWheelPrizesTab(body) {
       return groups;
     }, []);
   const prizeRowHtml = (r) => `<tr data-prize-id="${r.id}">
+            <td><input type="checkbox" class="wp-select" ${_wheelSelectedPrizeIds.has(r.id) ? 'checked' : ''}></td>
             <td><input type="color" class="wp-color" value="${esc(r.color || '#38BDF8')}"></td>
             <td><input type="text" class="form-input wp-title" value="${esc(r.title)}"></td>
             <td><select class="form-input wp-type">${typeOptions(r.prize_type)}</select></td>
@@ -619,7 +624,7 @@ async function renderWheelPrizesTab(body) {
     const groupChance = totalWeight > 0 ? Math.round((groupWeight / totalWeight) * 100) : 0;
     const rawLabel = wheelPrizeTypeLabel(group.type) || group.type || 'Другое';
     const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
-    return `<tr class="wheel-prize-group-row"><td colspan="10">
+    return `<tr class="wheel-prize-group-row"><td colspan="11">
               <div class="wheel-prize-group-title">
                 <span class="wheel-prize-group-name">${esc(label)}</span>
                 <span class="wheel-prize-group-meta">${group.items.length} сектор(ов) · активных ${activeItems.length} · вес ${groupWeight} · шанс ${groupChance}%</span>
@@ -634,35 +639,58 @@ async function renderWheelPrizesTab(body) {
         <span class="panel-badge">${rows.length} · сумма весов ${totalWeight}</span>
       </div>
       <div class="wheel-admin-content">
+        <div class="wheel-bulk-bar ${_wheelSelectedPrizeIds.size ? 'is-visible' : ''}" id="wheel-bulk-bar">
+          <span><b id="wheel-bulk-count">${_wheelSelectedPrizeIds.size}</b> выбрано</span>
+          <button class="btn-outline btn-sm" id="wheel-bulk-disable">Отключить выбранные</button>
+          <button class="btn-outline btn-sm" id="wheel-bulk-enable">Включить выбранные</button>
+          <button class="btn-link" id="wheel-bulk-clear">Снять выбор</button>
+        </div>
         <div class="table-wrap wheel-prizes-wrap"><table class="data-table wheel-prizes-table">
           <colgroup>
-            <col class="wp-col-color"><col class="wp-col-title"><col class="wp-col-type">
+            <col class="wp-col-select"><col class="wp-col-color"><col class="wp-col-title"><col class="wp-col-type">
             <col class="wp-col-num"><col class="wp-col-num"><col class="wp-col-chance">
             <col class="wp-col-limit"><col class="wp-col-limit"><col class="wp-col-active"><col class="wp-col-action">
           </colgroup>
-          <thead><tr><th>Цвет</th><th>Название</th><th>Тип</th><th>Кол-во</th><th>Вес</th><th title="Шанс выпадения">Шанс</th><th>Лимит всего</th><th>Лимит/оператор</th><th>Активен</th><th></th></tr></thead>
+          <thead><tr>
+            <th><input type="checkbox" id="wp-select-all" title="Выбрать все"></th>
+            <th>Цвет</th><th>Название</th><th>Тип</th><th>Кол-во</th><th>Вес</th>
+            <th title="Шанс выпадения">Шанс</th><th>Лимит всего</th><th>Лимит/оператор</th><th>Активен</th><th></th>
+          </tr></thead>
           <tbody>
-          ${groupedRows.map(prizeGroupHtml).join('') || '<tr><td colspan="10" class="empty-line">Секторов пока нет</td></tr>'}
+          ${groupedRows.map(prizeGroupHtml).join('') || '<tr><td colspan="11" class="empty-line">Секторов пока нет</td></tr>'}
           </tbody>
         </table></div>
         <div class="wheel-newprize">
           <h4 class="panel-subtitle">Добавить сектор</h4>
           <div class="form-grid wheel-newprize-grid">
-            <input type="text" id="np-title" class="form-input" placeholder="Название">
-            <select id="np-type" class="form-input">${typeOptions('coins')}</select>
-            <input type="number" id="np-amount" class="form-input" placeholder="Кол-во" value="1">
-            <input type="number" id="np-weight" class="form-input" placeholder="Вес" value="10" min="0">
-            <input type="color" id="np-color" value="#38BDF8">
+            <label class="wheel-newprize-field"><span class="form-label">Название</span><input type="text" id="np-title" class="form-input" placeholder="Название"></label>
+            <label class="wheel-newprize-field"><span class="form-label">Тип</span><select id="np-type" class="form-input">${typeOptions('coins')}</select></label>
+            <label class="wheel-newprize-field"><span class="form-label">Кол-во</span><input type="number" id="np-amount" class="form-input" placeholder="Кол-во" value="1"></label>
+            <label class="wheel-newprize-field"><span class="form-label">Вес</span><input type="number" id="np-weight" class="form-input" placeholder="Вес" value="10" min="0"></label>
+            <label class="wheel-newprize-field"><span class="form-label">Цвет</span><input type="color" id="np-color" value="#38BDF8"></label>
             <button class="btn-primary" id="np-add">Добавить</button>
           </div>
           <div id="np-status" class="status-line" style="margin-top:8px"></div>
         </div>
-        <div class="status-line muted" style="margin-top:10px">Сектор «ничего» запрещён (ТЗ п.6.3): минимальный приз — «+1 коин». Чтобы убрать сектор, выключите «Активен».</div>
+        <div class="status-line muted" style="margin-top:10px">Сектор «ничего» запрещён (ТЗ п.6.3): минимальный приз — «+1 коин». Чтобы убрать сектор, выключите «Активен» (или выберите несколько и нажмите «Отключить выбранные»).</div>
       </div>
     </div>`;
 
+  function updateBulkBar() {
+    const bar = document.getElementById('wheel-bulk-bar');
+    const count = document.getElementById('wheel-bulk-count');
+    if (!bar || !count) return;
+    count.textContent = _wheelSelectedPrizeIds.size;
+    bar.classList.toggle('is-visible', _wheelSelectedPrizeIds.size > 0);
+  }
+
   body.querySelectorAll('tr[data-prize-id]').forEach(tr => {
     const id = parseInt(tr.dataset.prizeId, 10);
+    tr.querySelector('.wp-select').onchange = (e) => {
+      if (e.target.checked) _wheelSelectedPrizeIds.add(id);
+      else _wheelSelectedPrizeIds.delete(id);
+      updateBulkBar();
+    };
     tr.querySelector('.wp-save').onclick = async () => {
       const payload = {
         title: tr.querySelector('.wp-title').value.trim(),
@@ -684,6 +712,30 @@ async function renderWheelPrizesTab(body) {
       } catch (err) { showToast(err.message || 'Не удалось сохранить', 'error'); }
     };
   });
+
+  document.getElementById('wp-select-all').onchange = (e) => {
+    body.querySelectorAll('tr[data-prize-id]').forEach(tr => {
+      const id = parseInt(tr.dataset.prizeId, 10);
+      tr.querySelector('.wp-select').checked = e.target.checked;
+      if (e.target.checked) _wheelSelectedPrizeIds.add(id); else _wheelSelectedPrizeIds.delete(id);
+    });
+    updateBulkBar();
+  };
+
+  async function bulkSetActive(isActive) {
+    const ids = [..._wheelSelectedPrizeIds];
+    if (!ids.length) return;
+    const results = await Promise.allSettled(ids.map(id => api.updateWheelPrize(id, { is_active: isActive })));
+    const failed = results.filter(r => r.status === 'rejected').length;
+    swrInvalidate('wheel:admin:prizes');
+    swrInvalidate('wheel:prizes');
+    showToast(failed ? `Готово, но ${failed} не удалось` : `${isActive ? 'Включено' : 'Отключено'}: ${ids.length}`, failed ? 'error' : 'ok');
+    _wheelSelectedPrizeIds.clear();
+    renderWheelPrizesTab(body);
+  }
+  document.getElementById('wheel-bulk-disable').onclick = () => bulkSetActive(false);
+  document.getElementById('wheel-bulk-enable').onclick = () => bulkSetActive(true);
+  document.getElementById('wheel-bulk-clear').onclick = () => { _wheelSelectedPrizeIds.clear(); renderWheelPrizesTab(body); };
 
   document.getElementById('np-add').onclick = async () => {
     const statusEl = document.getElementById('np-status');
@@ -1217,10 +1269,20 @@ async function renderWheelLogsTab(body) {
             <td><span class="badge ${l.is_eligible ? 'badge-ok' : 'badge-muted'}">${l.is_eligible ? 'выдан' : 'нет'}</span></td>
             <td>${esc(l.reason || '—')}</td>
           </tr>`).join('')}</tbody>
-        </table></div>` : '<div class="empty-state wheel-empty"><p>Логов пока нет.</p></div>'}
+        </table></div>` : `<div class="empty-state wheel-empty">
+          <p>Логов пока нет.</p>
+          <p class="cell-muted" style="font-size:12px;max-width:480px;margin:6px auto 0">
+            Запись появляется автоматически, когда оператор завершает тест или сохраняется расчёт периода —
+            и только если для этого источника есть активное правило допуска (вкладка «Правила»)
+            в активной кампании. Если ни один оператор ещё не завершал тест/расчёт периода после
+            включения колеса — здесь и должно быть пусто.
+          </p>
+        </div>`}
       </div>
     </div>`;
 }
+
+let _wheelIssueSelected = [];
 
 async function renderWheelIssueTab(body) {
   // Загружаем операторов для поиска (ТЗ п.4.2 — searchable dropdown)
@@ -1239,21 +1301,24 @@ async function renderWheelIssueTab(body) {
     STATE.adminOperators = operators;
   }
   const active = (operators || []).filter(o => o.is_active !== false);
+  _wheelIssueSelected = _wheelIssueSelected.filter(sel => active.some(o => o.id === sel.id));
 
   body.innerHTML = `
     <div class="panel wheel-issue-panel">
       <div class="panel-head">
-        <h3>Ручная выдача билета</h3>
+        <h3>Ручная выдача билетов</h3>
         <span class="panel-badge">Staff</span>
       </div>
       <div class="wheel-admin-content">
       <div class="form-grid wheel-issue-grid">
         <label class="form-group">
-          <span class="form-label">Оператор</span>
+          <span class="form-label">Операторы</span>
           <input type="text" id="wheel-op-search" class="form-input" placeholder="Поиск по имени, фамилии, группе…" autocomplete="off">
           <div id="wheel-op-results" class="wheel-op-results" hidden></div>
-          <input type="hidden" id="wheel-op-id">
-          <div id="wheel-op-chosen" class="wheel-op-chosen" hidden></div>
+        </label>
+        <label class="form-group">
+          <span class="form-label">Билетов на каждого</span>
+          <input type="number" id="wheel-qty" class="form-input" min="1" max="20" value="1">
         </label>
         <label class="form-group">
           <span class="form-label">Причина</span>
@@ -1264,8 +1329,9 @@ async function renderWheelIssueTab(body) {
           <input type="number" id="wheel-ttl" class="form-input" min="1" max="30" value="3">
         </label>
       </div>
+      <div id="wheel-op-chosen-list" class="wheel-op-chosen-list"></div>
       <div class="wheel-issue-actions">
-        <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билет</button>
+        <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билеты</button>
       </div>
       <div id="wheel-issue-status" class="status-line" style="margin-top:10px"></div>
       </div>
@@ -1273,18 +1339,32 @@ async function renderWheelIssueTab(body) {
 
   const search = document.getElementById('wheel-op-search');
   const results = document.getElementById('wheel-op-results');
-  const hidden = document.getElementById('wheel-op-id');
-  const chosen = document.getElementById('wheel-op-chosen');
+  const chosenList = document.getElementById('wheel-op-chosen-list');
   const issueBtn = document.getElementById('wheel-issue-btn');
 
   function matches(o, q) {
     const hay = `${o.full_name || ''} ${o.group_name || o.group || ''}`.toLowerCase();
     return hay.includes(q);
   }
+  function renderChosenList() {
+    chosenList.innerHTML = _wheelIssueSelected.map(sel => `
+      <span class="wheel-op-chip" data-chip-id="${sel.id}">${esc(sel.full_name)} <button type="button" aria-label="Убрать">×</button></span>
+    `).join('');
+    chosenList.querySelectorAll('[data-chip-id]').forEach(chip => {
+      chip.querySelector('button').onclick = () => {
+        const id = parseInt(chip.dataset.chipId, 10);
+        _wheelIssueSelected = _wheelIssueSelected.filter(s => s.id !== id);
+        renderChosenList();
+        issueBtn.disabled = _wheelIssueSelected.length === 0;
+      };
+    });
+  }
+  renderChosenList();
+
   search.oninput = () => {
     const q = search.value.trim().toLowerCase();
     if (!q) { results.hidden = true; return; }
-    const found = active.filter(o => matches(o, q)).slice(0, 8);
+    const found = active.filter(o => matches(o, q) && !_wheelIssueSelected.some(s => s.id === o.id)).slice(0, 8);
     results.innerHTML = found.length
       ? found.map(o => `<div class="wheel-op-option" data-op-id="${o.id}" data-op-name="${esc(o.full_name)}">
           <strong>${esc(o.full_name)}</strong><span>${esc(o.group_name || o.group || '')}</span></div>`).join('')
@@ -1292,37 +1372,42 @@ async function renderWheelIssueTab(body) {
     results.hidden = false;
     results.querySelectorAll('[data-op-id]').forEach(opt => {
       opt.onclick = () => {
-        hidden.value = opt.dataset.opId;
-        chosen.textContent = `Выбран: ${opt.dataset.opName}`;
-        chosen.hidden = false;
+        _wheelIssueSelected.push({ id: parseInt(opt.dataset.opId, 10), full_name: opt.dataset.opName });
+        renderChosenList();
         results.hidden = true;
-        search.value = opt.dataset.opName;
+        search.value = '';
         issueBtn.disabled = false;
       };
     });
   };
 
   issueBtn.onclick = async () => {
-    const operatorId = parseInt(hidden.value, 10);
     const reason = document.getElementById('wheel-reason').value.trim();
     const ttl = parseInt(document.getElementById('wheel-ttl').value, 10) || 3;
+    const quantity = parseInt(document.getElementById('wheel-qty').value, 10) || 1;
     const statusEl = document.getElementById('wheel-issue-status');
-    if (!operatorId) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Выберите оператора'; return; }
+    if (!_wheelIssueSelected.length) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Выберите хотя бы одного оператора'; return; }
     if (!reason) { statusEl.className = 'status-line status-error'; statusEl.textContent = 'Укажите причину'; return; }
     issueBtn.disabled = true;
     try {
-      await api.issueWheelTicket({ operator_id: operatorId, reason_text: reason, ttl_days: ttl });
+      const res = await api.issueWheelTicketsBulk({
+        operator_ids: _wheelIssueSelected.map(s => s.id),
+        quantity, reason_text: reason, ttl_days: ttl,
+      });
       swrInvalidate('wheel:');
-      statusEl.className = 'status-line status-ok';
-      statusEl.textContent = 'Билет выдан';
-      showToast('Билет выдан', 'ok');
+      const failedNote = res.failed?.length ? ` Не удалось: ${res.failed.length} (см. подробности в консоли).` : '';
+      if (res.failed?.length) console.warn('Wheel bulk issue failures:', res.failed);
+      statusEl.className = res.issued_count > 0 ? 'status-line status-ok' : 'status-line status-error';
+      statusEl.textContent = `Выдано билетов: ${res.issued_count}.${failedNote}`;
+      showToast(`Выдано билетов: ${res.issued_count}`, res.issued_count > 0 ? 'ok' : 'error');
       document.getElementById('wheel-reason').value = '';
-      chosen.hidden = true; hidden.value = ''; search.value = '';
+      _wheelIssueSelected = [];
+      renderChosenList();
     } catch (err) {
       statusEl.className = 'status-line status-error';
-      statusEl.textContent = err.message || 'Не удалось выдать билет';
+      statusEl.textContent = err.message || 'Не удалось выдать билеты';
     } finally {
-      issueBtn.disabled = false;
+      issueBtn.disabled = _wheelIssueSelected.length === 0;
     }
   };
 }

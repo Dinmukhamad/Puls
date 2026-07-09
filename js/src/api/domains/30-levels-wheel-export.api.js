@@ -48,6 +48,7 @@
     return req('GET', '/api/admin/wheel/spins' + (qs ? '?' + qs : ''));
   }
   async function issueWheelTicket(payload) { return req('POST', '/api/admin/wheel/tickets', payload); }
+  async function issueWheelTicketsBulk(payload) { return req('POST', '/api/admin/wheel/tickets/bulk', payload); }
   async function getWheelStats(params) {
     const qs = new URLSearchParams(params || {}).toString();
     return req('GET', '/api/admin/wheel/stats' + (qs ? '?' + qs : ''));
@@ -104,7 +105,7 @@
     createOperatorLevel, updateOperatorLevel, deleteOperatorLevel,
     addOperatorLevelRule, updateOperatorLevelRule, deleteOperatorLevelRule,
     recalculateOperatorLevels, manualOperatorLevel, listOperatorLevelRewards,
-    getWheelStatus, getWheelPrizes, spinWheel, getWheelMyHistory, getWheelSpins, issueWheelTicket,
+    getWheelStatus, getWheelPrizes, spinWheel, getWheelMyHistory, getWheelSpins, issueWheelTicket, issueWheelTicketsBulk,
     getWheelStats, getWheelRules, createWheelRule, updateWheelRule, getWheelTokens, getWheelEvaluationLogs, grantWheelTokens,
     getWheelWinnersToday, getWheelCampaigns, createWheelCampaign, updateWheelCampaign,
     getWheelAdminPrizes, createWheelPrize, updateWheelPrize,
