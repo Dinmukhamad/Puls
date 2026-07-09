@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     LargeBinary,
     Numeric,
@@ -226,7 +227,14 @@ class OperatorLevelHistory(Base):
 
 class WeeklyResult(Base):
     __tablename__ = "weekly_results"
-    __table_args__ = (UniqueConstraint("operator_id", "week_start", "week_end", name="uq_weekly_operator_period"),)
+    __table_args__ = (
+        UniqueConstraint("operator_id", "week_start", "week_end", name="uq_weekly_operator_period"),
+        # Отдельный индекс на период (ТЗ §11): запросы вида «все WeeklyResult за
+        # неделю X» (accrual_service, dashboard/admin-summary, exports, cabinet)
+        # идут без operator_id, а уникальный constraint выше по leftmost-prefix
+        # для такого запроса бесполезен.
+        Index("ix_weekly_results_period", "week_start", "week_end"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
@@ -243,10 +251,112 @@ class WeeklyResult(Base):
     calls_per_hour_score: Mapped[float] = mapped_column(Float, default=0)
     lateness_count: Mapped[int] = mapped_column(Integer, default=0)
     violation_count: Mapped[int] = mapped_column(Integer, default=0)
+    thanks_count: Mapped[int] = mapped_column(Integer, default=0)
     final_score: Mapped[float] = mapped_column(Float, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
     operator: Mapped[Operator] = relationship(back_populates="weekly_results")
+
+
+class WeeklyAccrualRun(Base):
+    """История запусков автоматического еженедельного расчёта (ТЗ 3.6-3.7)."""
+    __tablename__ = "weekly_accrual_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    period_start: Mapped[date] = mapped_column(Date, index=True)
+    period_end: Mapped[date] = mapped_column(Date, index=True)
+    mode: Mapped[str] = mapped_column(String(16))  # auto | manual
+    status: Mapped[str] = mapped_column(String(16))  # success | failed
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by: Mapped[str] = mapped_column(String(32), default="system")
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    operators_count: Mapped[int] = mapped_column(Integer, default=0)
+    skipped_existing_count: Mapped[int] = mapped_column(Integer, default=0)
+    total_base_coins: Mapped[int] = mapped_column(Integer, default=0)
+    total_bonus_coins: Mapped[int] = mapped_column(Integer, default=0)
+    total_coins: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+
+    created_by_user: Mapped[User | None] = relationship("User")
+    details: Mapped[list[WeeklyAccrualDetail]] = relationship(back_populates="run")
+
+
+class WeeklyAccrualDetail(Base):
+    """Построчная детализация начисления по оператору (ТЗ 3.7). Уникальность
+    по (operator_id, period_start, period_end) — защита от повторного начисления
+    (ТЗ 3.4), независимо от того, каким run'ом и сколько раз запускали apply."""
+    __tablename__ = "weekly_accrual_details"
+    __table_args__ = (
+        UniqueConstraint("operator_id", "period_start", "period_end", name="uq_weekly_accrual_detail_period"),
+        Index("ix_weekly_accrual_details_period_only", "period_start", "period_end"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("weekly_accrual_runs.id"), index=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    period_start: Mapped[date] = mapped_column(Date)
+    period_end: Mapped[date] = mapped_column(Date)
+    contest_points: Mapped[float] = mapped_column(Float, default=0)
+    base_coins: Mapped[int] = mapped_column(Integer, default=0)
+    bonus_top_coins: Mapped[int] = mapped_column(Integer, default=0)
+    bonus_no_late_coins: Mapped[int] = mapped_column(Integer, default=0)
+    bonus_no_violation_coins: Mapped[int] = mapped_column(Integer, default=0)
+    bonus_nomination_coins: Mapped[int] = mapped_column(Integer, default=0)
+    bonus_thanks_coins: Mapped[int] = mapped_column(Integer, default=0)
+    total_coins: Mapped[int] = mapped_column(Integer, default=0)
+    rank_place: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    previous_rank_place: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rank_delta: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+
+    run: Mapped[WeeklyAccrualRun] = relationship(back_populates="details")
+    operator: Mapped[Operator] = relationship("Operator")
+
+
+class Achievement(Base):
+    """Бейджи и достижения (ТЗ §7). condition_type определяет, какой чекер
+    проверяет условие — см. app/modules/achievements/service.py."""
+    __tablename__ = "achievements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    icon: Mapped[str] = mapped_column(String(64), default="🏆")
+    # top_3_week | no_late_streak | quality_threshold | calls_leader_week |
+    # efficiency_leader_week | total_coins | test_score | manual
+    condition_type: Mapped[str] = mapped_column(String(32))
+    condition_value: Mapped[float] = mapped_column(Float, default=0)
+    reward_coins: Mapped[int] = mapped_column(Integer, default=0)
+    is_repeatable: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+class OperatorAchievement(Base):
+    """Состояние достижения у оператора — одна строка на пару (ТЗ §7.2/7.6:
+    повторное получение не создаёт дублей, только увеличивает times_awarded)."""
+    __tablename__ = "operator_achievements"
+    __table_args__ = (
+        UniqueConstraint("operator_id", "achievement_id", name="uq_operator_achievement"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    achievement_id: Mapped[int] = mapped_column(ForeignKey("achievements.id"), index=True)
+    progress_value: Mapped[float] = mapped_column(Float, default=0)
+    is_completed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    times_awarded: Mapped[int] = mapped_column(Integer, default=0)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_awarded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    operator: Mapped[Operator] = relationship("Operator")
+    achievement: Mapped[Achievement] = relationship("Achievement")
 
 
 class CoinTransaction(Base):
@@ -257,16 +367,48 @@ class CoinTransaction(Base):
     amount: Mapped[int] = mapped_column(Integer)
     type: Mapped[str] = mapped_column(String(40), index=True)
     comment: Mapped[str] = mapped_column(Text)
-    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     related_purchase_id: Mapped[int | None] = mapped_column(ForeignKey("shop_purchases.id"), nullable=True)
     related_spin_id: Mapped[int | None] = mapped_column(ForeignKey("wheel_spins.id"), nullable=True)
-    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
 
     operator: Mapped[Operator] = relationship(back_populates="transactions")
     created_by: Mapped[User | None] = relationship("User")
+
+
+class CoinRule(Base):
+    """Настраиваемые правила начисления коинов (ТЗ §4). Активна всегда одна запись."""
+    __tablename__ = "coin_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    points_per_coin: Mapped[int] = mapped_column(Integer, default=5)
+    rounding_mode: Mapped[str] = mapped_column(String(16), default="floor")  # floor | ceil | round
+    min_points_for_accrual: Mapped[float] = mapped_column(Float, default=0)
+    top_1_bonus: Mapped[int] = mapped_column(Integer, default=15)
+    top_2_bonus: Mapped[int] = mapped_column(Integer, default=10)
+    top_3_bonus: Mapped[int] = mapped_column(Integer, default=7)
+    no_late_bonus: Mapped[int] = mapped_column(Integer, default=5)
+    no_violation_bonus: Mapped[int] = mapped_column(Integer, default=3)
+    nomination_bonus: Mapped[int] = mapped_column(Integer, default=5)
+    driver_thanks_bonus: Mapped[int] = mapped_column(Integer, default=3)
+    # Тумблеры конкретных номинаций (ТЗ 4.3). «Без опозданий» здесь не дублируется —
+    # она уже покрыта no_late_bonus как отдельная flat-бонус-категория.
+    nomination_calls_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    nomination_quality_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    nomination_efficiency_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    nomination_progress_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    nomination_thanks_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    accrue_to_fired: Mapped[bool] = mapped_column(Boolean, default=False)
+    accrue_to_inactive: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    updated_by: Mapped[User | None] = relationship("User")
 
 
 class ShopItem(Base):
@@ -313,7 +455,7 @@ class ShopPurchase(Base):
     price: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
     reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

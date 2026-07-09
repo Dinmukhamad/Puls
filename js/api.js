@@ -94,7 +94,10 @@ const api = (() => {
   }
 
   /* ── Operators ───────────────────────────────────────────── */
-  function listOperators()         { return req('GET', '/api/operators'); }
+  function listOperators(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/operators' + (qs ? '?' + qs : ''));
+  }
   function getOperator(id)         { return req('GET', `/api/operators/${id}`); }
   function myOperator()            { return req('GET', '/api/operators/me'); }
   function createOperator(p)       { return req('POST', '/api/operators', p); }
@@ -106,14 +109,20 @@ const api = (() => {
   function operatorHistory(id)     { return req('GET', `/api/operators/${id}/history`); }
 
   /* ── Weekly results ──────────────────────────────────────── */
-  function listWeekly()            { return req('GET', '/api/weekly-results'); }
+  function listWeekly(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/weekly-results' + (qs ? '?' + qs : ''));
+  }
   function upsertWeekly(p)         { return req('POST', '/api/weekly-results', p); }
 
   /* ── Rating ──────────────────────────────────────────────── */
-  function getRating(ws, we) {
-    let url = '/api/rating';
-    if (ws && we) url += `?week_start=${ws}&week_end=${we}`;
-    return req('GET', url);
+  function getRating(ws, we, limit, offset) {
+    const params = {};
+    if (ws && we) { params.week_start = ws; params.week_end = we; }
+    if (limit != null) params.limit = limit;
+    if (offset != null) params.offset = offset;
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/rating' + (qs ? '?' + qs : ''));
   }
 
   /* ── Wallet ──────────────────────────────────────────────── */
@@ -134,7 +143,10 @@ const api = (() => {
   function listShopItems()         { return req('GET', '/api/shop/items'); }
   function createShopItem(p)       { return req('POST', '/api/shop/items', p); }
   function updateShopItem(id, p)   { return req('PATCH', `/api/shop/items/${id}`, p); }
-  function listPurchases()         { return req('GET', '/api/shop/purchases'); }
+  function listPurchases(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/shop/purchases' + (qs ? '?' + qs : ''));
+  }
   function buyItem(itemId)         { return req('POST', '/api/shop/purchases', { shop_item_id: itemId }); }
   function approvePurchase(id)     { return req('POST', `/api/shop/purchases/${id}/approve`); }
   function rejectPurchase(id, r)   { return req('POST', `/api/shop/purchases/${id}/reject`, { reason: r }); }
@@ -269,6 +281,43 @@ const api = (() => {
   }
 
 
+/* ── Личный кабинет (ТЗ §5) ──────────────────────────────── */
+async function getMyCabinet() { return req('GET', '/api/cabinet/me'); }
+async function getOperatorCabinet(operatorId) { return req('GET', `/api/cabinet/operator/${operatorId}`); }
+
+/* ── Настройки начислений (ТЗ §4) ────────────────────────── */
+async function getCoinRulesSettings() { return req('GET', '/api/settings/coin-rules'); }
+async function updateCoinRulesSettings(payload) { return req('PUT', '/api/settings/coin-rules', payload); }
+
+/* ── Автоматический еженедельный расчёт (ТЗ §3) ──────────── */
+async function previewWeeklyAccrual(periodStart, periodEnd) {
+  return req('GET', `/api/weekly-results/preview?period_start=${periodStart}&period_end=${periodEnd}`);
+}
+async function applyWeeklyAccrual(payload) { return req('POST', '/api/weekly-results/apply', payload); }
+async function listAccrualRuns() { return req('GET', '/api/weekly-results/runs'); }
+
+/* ── Бейджи и достижения (ТЗ §7) ──────────────────────────── */
+async function listAchievements() { return req('GET', '/api/achievements'); }
+async function updateAchievement(id, payload) { return req('PATCH', `/api/achievements/${id}`, payload); }
+async function getMyAchievements() { return req('GET', '/api/achievements/me'); }
+async function getOperatorAchievements(operatorId) { return req('GET', `/api/achievements/operator/${operatorId}`); }
+async function grantAchievement(id, payload) { return req('POST', `/api/achievements/${id}/grant`, payload); }
+
+/* ── Админская сводка (ТЗ §9) ─────────────────────────────── */
+async function getAdminSummary(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return req('GET', '/api/dashboard/admin-summary' + (qs ? '?' + qs : ''));
+}
+
+/* ── Экспорт CSV/XLSX (ТЗ §8) ─────────────────────────────── */
+// Файловые ответы — не через req() (не JSON), просто собираем URL для
+// window.open()/ссылки-скачивания. Куки уходят автоматически, т.к. это
+// GET-навигация в пределах того же origin.
+function exportUrl(path, params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return base() + path + (qs ? '?' + qs : '');
+}
+
   /* ── Tests (Тесты) — operator side ──────────────────────────── */
   async function myTests() { return req('GET', '/api/tests/my'); }
   async function startTest(testId) { return req('POST', `/api/tests/${testId}/start`); }
@@ -379,6 +428,11 @@ const api = (() => {
     getWheelStats, getWheelRules, createWheelRule, updateWheelRule, getWheelTokens, getWheelEvaluationLogs, grantWheelTokens,
     getWheelWinnersToday, getWheelCampaigns, createWheelCampaign, updateWheelCampaign,
     getWheelAdminPrizes, createWheelPrize, updateWheelPrize,
+    getMyCabinet, getOperatorCabinet,
+    getCoinRulesSettings, updateCoinRulesSettings,
+    previewWeeklyAccrual, applyWeeklyAccrual, listAccrualRuns,
+    listAchievements, updateAchievement, getMyAchievements, getOperatorAchievements, grantAchievement,
+    getAdminSummary, exportUrl,
     loginOperator: login,
     _base,
     _req: req,

@@ -42,6 +42,7 @@ def run_startup_tasks() -> None:
     if settings.auto_seed:
         logger.info("[startup] Running seed...")
         try:
+            from app.modules.achievements.service import ensure_default_achievements
             from app.services.operator_levels import ensure_default_levels
             from app.services.seed import seed_database
             from app.services.wheel_seed import ensure_default_wheel
@@ -50,6 +51,7 @@ def run_startup_tasks() -> None:
             try:
                 ensure_default_levels(db)
                 ensure_default_wheel(db)
+                ensure_default_achievements(db)
                 seed_database(db)
                 db.commit()
                 logger.info("[startup] Seed OK")
@@ -62,4 +64,17 @@ def run_startup_tasks() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     run_startup_tasks()
+
+    scheduler = None
+    if settings.enable_weekly_accrual_cron:
+        try:
+            from app.core.scheduler import start_scheduler
+            scheduler = start_scheduler()
+        except Exception:
+            logger.exception("[startup] Не удалось запустить планировщик еженедельного расчёта (non-fatal)")
+
     yield
+
+    if scheduler is not None:
+        from app.core.scheduler import stop_scheduler
+        stop_scheduler()

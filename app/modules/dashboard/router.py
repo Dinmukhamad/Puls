@@ -1,14 +1,27 @@
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.security import require_roles
+from app.core.security import get_current_user, require_roles, supervisor_scope_group_id
 from app.database.db import get_db
-from app.models.entities import CoinTransaction, Operator, ShopPurchase, User, now_utc
-from app.modules.rating.service import rating_rows
+from app.models.entities import (
+    CoinTransaction,
+    Operator,
+    ShopPurchase,
+    User,
+    WeeklyAccrualDetail,
+    now_utc,
+)
 from app.modules.dashboard.schemas import DashboardRead, GroupSummary, OperatorRow, RatingRow
+from app.modules.rating.service import rating_rows
+from app.modules.weekly_results.accrual_service import (
+    calculate_period_accrual,
+    latest_weekly_period,
+)
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -205,3 +218,157 @@ def transaction_history(
         }
         for tx, op, user in db.execute(q)
     ]
+
+
+@router.get("/admin-summary", dependencies=[Depends(require_roles("supervisor", "manager", "admin"))])
+def admin_summary(
+    period_start: date | None = None,
+    period_end: date | None = None,
+    group_id: int | None = None,
+    participation_status: str | None = None,
+    position: str | None = None,
+    has_lateness: bool | None = None,
+    has_violations: bool | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Админская сводка (ТЗ §9). Период по умолчанию — последняя неделя, за
+    которую есть хоть один WeeklyResult; если она уже применена — цифры берём
+    из зафиксированного WeeklyAccrualDetail, иначе считаем предварительно тем
+    же движком, что /weekly-results/preview (согласованность с кабинетом и
+    экспортами — везде одни и те же числа)."""
+    if period_start is None or period_end is None:
+        resolved = latest_weekly_period(db)
+        if resolved:
+            period_start, period_end = resolved
+
+    supervisor_group_id = supervisor_scope_group_id(db, current_user)
+    effective_group_id = group_id if group_id is not None else supervisor_group_id
+    # supervisor не может расширить область видимости фильтром на чужую группу
+    if supervisor_group_id is not None and group_id is not None and group_id != supervisor_group_id:
+        effective_group_id = supervisor_group_id
+
+    operators_q = select(Operator)
+    if effective_group_id is not None:
+        operators_q = operators_q.where(Operator.group_id == effective_group_id)
+    all_operators = {op.id: op for op in db.scalars(operators_q)}
+
+    operators_total = len(all_operators)
+    active_competition_operators = sum(
+        1 for op in all_operators.values()
+        if op.participation_status == "participating" and op.employment_status == "active" and op.is_active
+    )
+    total_coins_balance = sum(op.current_balance or 0 for op in all_operators.values())
+
+    new_shop_requests_q = select(func.count(ShopPurchase.id)).where(ShopPurchase.status.in_(["pending", "new"]))
+    if effective_group_id is not None:
+        new_shop_requests_q = new_shop_requests_q.join(Operator, Operator.id == ShopPurchase.operator_id).where(
+            Operator.group_id == effective_group_id
+        )
+    new_shop_requests = db.scalar(new_shop_requests_q) or 0
+
+    week_rows: list[dict] = []
+    coins_accrued_this_week = 0
+    rank_places: list[int] = []
+
+    if period_start and period_end:
+        details = list(db.scalars(
+            select(WeeklyAccrualDetail).where(
+                WeeklyAccrualDetail.period_start == period_start,
+                WeeklyAccrualDetail.period_end == period_end,
+            )
+        ))
+        if details:
+            for d in details:
+                op = all_operators.get(d.operator_id)
+                if not op:
+                    continue
+                coins_accrued_this_week += d.total_coins
+                if d.rank_place:
+                    rank_places.append(d.rank_place)
+                week_rows.append({
+                    "operator": op, "week_points": d.contest_points, "week_coins": d.total_coins,
+                    "rank_place": d.rank_place, "lateness_count": None, "violation_count": None,
+                    "quality": None, "efficiency": None,
+                })
+            # Опоздания/нарушения/качество/эффективность в WeeklyAccrualDetail не
+            # хранятся (это снимок бонусов, не сырых метрик) — берём из WeeklyResult.
+            from app.models.entities import WeeklyResult
+            wr_by_op = {
+                r.operator_id: r for r in db.scalars(
+                    select(WeeklyResult).where(
+                        WeeklyResult.week_start == period_start, WeeklyResult.week_end == period_end,
+                    )
+                )
+            }
+            for row in week_rows:
+                wr = wr_by_op.get(row["operator"].id)
+                if wr:
+                    row["lateness_count"] = wr.lateness_count
+                    row["violation_count"] = wr.violation_count
+                    row["quality"] = wr.quality_score
+                    row["efficiency"] = wr.efficiency_score
+        else:
+            accruals = calculate_period_accrual(db, period_start, period_end)
+            for a in accruals:
+                if a.operator.id not in all_operators:
+                    continue
+                coins_accrued_this_week += a.total_coins
+                if a.rank_place:
+                    rank_places.append(a.rank_place)
+                week_rows.append({
+                    "operator": a.operator, "week_points": a.contest_points, "week_coins": a.total_coins,
+                    "rank_place": a.rank_place, "lateness_count": a.weekly_result.lateness_count,
+                    "violation_count": a.weekly_result.violation_count,
+                    "quality": a.weekly_result.quality_score, "efficiency": a.weekly_result.efficiency_score,
+                })
+
+    average_team_rank = round(sum(rank_places) / len(rank_places), 2) if rank_places else None
+
+    def _matches_filters(row: dict) -> bool:
+        op = row["operator"]
+        if participation_status and op.participation_status != participation_status:
+            return False
+        if position and op.position != position:
+            return False
+        if has_lateness is not None:
+            if ((row["lateness_count"] or 0) > 0) != has_lateness:
+                return False
+        if has_violations is not None:
+            if ((row["violation_count"] or 0) > 0) != has_violations:
+                return False
+        return True
+
+    operators_out = [
+        {
+            "id": row["operator"].id,
+            "full_name": row["operator"].full_name,
+            "group_name": row["operator"].group_name,
+            "participation_status": row["operator"].participation_status,
+            "employment_status": row["operator"].employment_status,
+            "position": row["operator"].position,
+            "week_points": row["week_points"],
+            "week_coins": row["week_coins"],
+            "total_balance": row["operator"].current_balance,
+            "lateness_count": row["lateness_count"],
+            "violation_count": row["violation_count"],
+            "quality": row["quality"],
+            "efficiency": row["efficiency"],
+            "rank_place": row["rank_place"],
+        }
+        for row in week_rows
+        if _matches_filters(row)
+    ]
+    operators_out.sort(key=lambda r: (r["rank_place"] is None, r["rank_place"]))
+
+    return {
+        "period_start": str(period_start) if period_start else None,
+        "period_end": str(period_end) if period_end else None,
+        "operators_total": operators_total,
+        "active_competition_operators": active_competition_operators,
+        "coins_accrued_this_week": coins_accrued_this_week,
+        "new_shop_requests": new_shop_requests,
+        "average_team_rank": average_team_rank,
+        "total_coins_balance": total_coins_balance,
+        "operators": operators_out,
+    }

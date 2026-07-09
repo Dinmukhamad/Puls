@@ -2,15 +2,19 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
+from app.modules.achievements.router import router as achievements_router
 from app.modules.analytics.router import router as analytics_router
+from app.modules.cabinet.router import router as cabinet_router
 from app.modules.auth.router import router as auth_router
 from app.modules.dashboard.router import router as dashboard_router
+from app.modules.exports.router import router as exports_router
 from app.modules.groups.router import router as groups_router
 from app.modules.operator_levels import router as operator_levels_router
 from app.modules.operators.router import router as operators_router
 from app.modules.rating.router import router as rating_router
 from app.modules.reports.router import router as reports_router
 from app.modules.sessions.router import router as sessions_router
+from app.modules.settings.router import router as settings_router
 from app.modules.shop.router import router as shop_router
 from app.modules.tests import router as tests_router
 from app.modules.users.router import router as users_router
@@ -38,6 +42,10 @@ api_router.include_router(wallet_router)
 api_router.include_router(rating_router)
 api_router.include_router(shop_router)
 api_router.include_router(dashboard_router)
+api_router.include_router(exports_router)
+api_router.include_router(settings_router)
+api_router.include_router(achievements_router)
+api_router.include_router(cabinet_router)
 api_router.include_router(tests_router.router)
 api_router.include_router(tests_router.admin_router)
 api_router.include_router(work_norms_router)

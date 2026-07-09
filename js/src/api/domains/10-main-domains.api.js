@@ -18,7 +18,10 @@
   }
 
   /* ── Operators ───────────────────────────────────────────── */
-  function listOperators()         { return req('GET', '/api/operators'); }
+  function listOperators(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/operators' + (qs ? '?' + qs : ''));
+  }
   function getOperator(id)         { return req('GET', `/api/operators/${id}`); }
   function myOperator()            { return req('GET', '/api/operators/me'); }
   function createOperator(p)       { return req('POST', '/api/operators', p); }
@@ -30,14 +33,20 @@
   function operatorHistory(id)     { return req('GET', `/api/operators/${id}/history`); }
 
   /* ── Weekly results ──────────────────────────────────────── */
-  function listWeekly()            { return req('GET', '/api/weekly-results'); }
+  function listWeekly(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/weekly-results' + (qs ? '?' + qs : ''));
+  }
   function upsertWeekly(p)         { return req('POST', '/api/weekly-results', p); }
 
   /* ── Rating ──────────────────────────────────────────────── */
-  function getRating(ws, we) {
-    let url = '/api/rating';
-    if (ws && we) url += `?week_start=${ws}&week_end=${we}`;
-    return req('GET', url);
+  function getRating(ws, we, limit, offset) {
+    const params = {};
+    if (ws && we) { params.week_start = ws; params.week_end = we; }
+    if (limit != null) params.limit = limit;
+    if (offset != null) params.offset = offset;
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/rating' + (qs ? '?' + qs : ''));
   }
 
   /* ── Wallet ──────────────────────────────────────────────── */
@@ -58,7 +67,10 @@
   function listShopItems()         { return req('GET', '/api/shop/items'); }
   function createShopItem(p)       { return req('POST', '/api/shop/items', p); }
   function updateShopItem(id, p)   { return req('PATCH', `/api/shop/items/${id}`, p); }
-  function listPurchases()         { return req('GET', '/api/shop/purchases'); }
+  function listPurchases(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return req('GET', '/api/shop/purchases' + (qs ? '?' + qs : ''));
+  }
   function buyItem(itemId)         { return req('POST', '/api/shop/purchases', { shop_item_id: itemId }); }
   function approvePurchase(id)     { return req('POST', `/api/shop/purchases/${id}/approve`); }
   function rejectPurchase(id, r)   { return req('POST', `/api/shop/purchases/${id}/reject`, { reason: r }); }

@@ -20,6 +20,7 @@ os.environ["SEED_ADMIN_PASSWORD"] = "TestAdmin123!"
 os.environ["ENABLE_DEMO_DATA"] = "false"
 os.environ["AUTO_CREATE_TABLES"] = "true"
 os.environ["AUTO_SEED"] = "true"
+os.environ["ENABLE_WEEKLY_ACCRUAL_CRON"] = "false"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

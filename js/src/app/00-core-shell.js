@@ -104,6 +104,8 @@ let STATE = {
   operatorLevels: [],
   history: [],
   groups: [],
+  cabinetData: null,
+  opLevelsTab: 'levels',
   currentView: 'cabinet',
   coinsOverview: null,
   coinsTab: 'overview',
@@ -193,7 +195,7 @@ function isRatingTabStale(token) { return token !== STATE.ratingTabGen; }
 function bumpAnalyticsTabGen() { return ++STATE.analyticsTabGen; }
 function isAnalyticsTabStale(token) { return token !== STATE.analyticsTabGen; }
 
-const COIN_TABS = ['overview', 'accrual', 'requests', 'history', 'rules'];
+const COIN_TABS = ['overview', 'accrual', 'requests', 'history', 'rules', 'weekly', 'settings'];
 const LEGACY_COIN_VIEW_TAB = { accrual: 'accrual', manual: 'accrual', requests: 'requests', history: 'history' };
 
 function normalizeCoinTab(tab) {

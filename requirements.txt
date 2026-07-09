@@ -13,3 +13,4 @@ aiofiles==23.2.1
 python-multipart==0.0.20
 openpyxl>=3.1.0
 tzdata>=2024.1  # zoneinfo Asia/Almaty гарантированно доступна в любом окружении
+APScheduler==3.10.4  # автоматический еженедельный расчёт коинов (ТЗ 3.2)

@@ -1,4 +1,3 @@
-══════════════════════════════════════ */
 async function renderRatingOverviewTab(el) {
   const role  = STATE.user?.role || 'operator';
   const isOp  = role === 'operator';
@@ -984,7 +983,11 @@ function renderSummary() {
           </tbody>
         </table>
       </div>
-    </div>`;
+    </div>
+
+    <div id="admin-summary-extra"></div>`;
+
+  renderAdminSummaryDetail();
 }
 
 /* ══════════════════════════════════════

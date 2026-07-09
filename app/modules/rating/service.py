@@ -153,7 +153,10 @@ def recalculate_period_ranks(db: Session, week_start: date, week_end: date):
 
 # ── Payload'ы для endpoint'ов (перенос тел из routers/rating.py) ──────────────
 
-def rating_overview(db: Session, op: Operator | None, week_start: date | None, week_end: date | None) -> dict:
+def rating_overview(
+    db: Session, op: Operator | None, week_start: date | None, week_end: date | None,
+    limit: int | None = None, offset: int = 0,
+) -> dict:
     rows = rating_rows(db, week_start, week_end)
     period = latest_period(db)
     period_label = calc.week_label(*period) if period else "—"
@@ -163,13 +166,18 @@ def rating_overview(db: Session, op: Operator | None, week_start: date | None, w
     for row in rows:
         row["is_current_user"] = op and row["operator_id"] == op.id
 
+    total = len(rows)
+    page = rows[offset:offset + limit] if limit is not None else rows
+
     return {
         "period": period_label,
         "week_start": str(period[0]) if period else None,
         "week_end":   str(period[1]) if period else None,
-        "total":      len(rows),
+        "total":      total,
+        "limit":      limit,
+        "offset":     offset,
         "updated_at": last_updated.isoformat() if last_updated else None,
-        "items":      rows,
+        "items":      page,
     }
 
 

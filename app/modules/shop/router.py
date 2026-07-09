@@ -1,20 +1,13 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.security import get_current_user, require_roles, supervisor_scope_group_id
 from app.database.db import get_db
-from app.models.entities import ShopItem, ShopPurchase, User
+from app.models.entities import Operator, ShopItem, ShopPurchase, User
 from app.modules.rating.service import rating_cache_invalidate
-from app.modules.wallet.service import (
-    approve_purchase,
-    complete_purchase,
-    create_purchase,
-    operator_for_user_or_403,
-    reject_purchase,
-)
 from app.modules.shop.schemas import (
     PurchaseCreate,
     RejectPurchaseRequest,
@@ -22,6 +15,13 @@ from app.modules.shop.schemas import (
     ShopItemRead,
     ShopItemUpdate,
     ShopPurchaseRead,
+)
+from app.modules.wallet.service import (
+    approve_purchase,
+    complete_purchase,
+    create_purchase,
+    operator_for_user_or_403,
+    reject_purchase,
 )
 
 router = APIRouter(prefix="/shop", tags=["shop"])
@@ -67,12 +67,32 @@ def request_purchase(
 
 
 @router.get("/purchases", response_model=list[ShopPurchaseRead])
-def list_purchases(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[ShopPurchase]:
+def list_purchases(
+    limit: int | None = Query(None, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ShopPurchase]:
     query = select(ShopPurchase).order_by(ShopPurchase.created_at.desc(), ShopPurchase.id.desc())
     if current_user.role == "operator":
         operator = operator_for_user_or_403(db, current_user)
         query = query.where(ShopPurchase.operator_id == operator.id)
+    else:
+        group_id = supervisor_scope_group_id(db, current_user)
+        if group_id is not None:
+            query = query.join(Operator, Operator.id == ShopPurchase.operator_id).where(Operator.group_id == group_id)
+    if limit is not None:
+        query = query.offset(offset).limit(limit)
     return list(db.scalars(query))
+
+
+def _assert_purchase_in_scope(db: Session, purchase: ShopPurchase, current_user: User) -> None:
+    group_id = supervisor_scope_group_id(db, current_user)
+    if group_id is None:
+        return
+    operator = db.get(Operator, purchase.operator_id)
+    if not operator or operator.group_id != group_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Заявка вне вашей группы")
 
 
 @router.post("/purchases/{purchase_id}/approve", response_model=ShopPurchaseRead, dependencies=[Depends(require_roles("supervisor", "manager", "admin"))])
@@ -80,6 +100,7 @@ def approve(purchase_id: int, db: Session = Depends(get_db), current_user: User 
     purchase = db.get(ShopPurchase, purchase_id)
     if not purchase:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
+    _assert_purchase_in_scope(db, purchase, current_user)
     approve_purchase(db, purchase, current_user)
     db.commit()
     rating_cache_invalidate()
@@ -97,6 +118,7 @@ def reject(
     purchase = db.get(ShopPurchase, purchase_id)
     if not purchase:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
+    _assert_purchase_in_scope(db, purchase, current_user)
     reject_purchase(db, purchase, current_user, payload.reason)
     db.commit()
     rating_cache_invalidate()
@@ -109,6 +131,7 @@ def complete(purchase_id: int, db: Session = Depends(get_db), current_user: User
     purchase = db.get(ShopPurchase, purchase_id)
     if not purchase:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
+    _assert_purchase_in_scope(db, purchase, current_user)
     complete_purchase(db, purchase, current_user)
     db.commit()
     db.refresh(purchase)

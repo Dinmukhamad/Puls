@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.datetime_utils import now_utc
 from app.database.db import get_db
-from app.models.entities import User, UserSession
+from app.models.entities import Operator, User, UserSession
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -25,6 +25,28 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
+
+
+def supervisor_scope_group_id(db: Session, user: User) -> int | None:
+    """group_id, если user — супервайзер, иначе None (без ограничения).
+
+    Единая точка правды для «супервайзер видит/меняет только свою группу»
+    (ТЗ 10.2). manager/admin — без ограничений. Группа берётся из User.group_id,
+    а если он не заполнен — из привязанного Operator.group_id (тот же способ,
+    что уже использовался для dismiss/restore в operators/router.py).
+
+    Используется во всех местах, где supervisor работает с чужими операторами:
+    /coins/*, /shop/purchases/*, GET /operators.
+    """
+    if user.role != "supervisor":
+        return None
+    if user.group_id:
+        return user.group_id
+    if user.operator_id:
+        operator = db.get(Operator, user.operator_id)
+        if operator:
+            return operator.group_id
+    return None
 
 
 def create_access_token(subject: dict | str, role: str = "") -> str:

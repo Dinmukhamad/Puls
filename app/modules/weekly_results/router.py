@@ -1,26 +1,45 @@
 from __future__ import annotations
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import require_roles
+from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
-from app.models.entities import Operator, WeeklyResult
+from app.models.entities import Operator, User, WeeklyResult
 from app.modules.rating.service import rating_cache_invalidate, recalculate_period_ranks
 from app.modules.wallet.service import add_transaction, points_to_coins
-from app.modules.weekly_results.schemas import WeeklyCalculateRequest, WeeklyResultCreate, WeeklyResultRead
+from app.modules.weekly_results.accrual_service import (
+    apply_period_accrual,
+    calculate_period_accrual,
+    run_history,
+)
+from app.modules.weekly_results.schemas import (
+    WeeklyAccrualApplyRequest,
+    WeeklyAccrualOperatorPreview,
+    WeeklyAccrualPreviewResponse,
+    WeeklyAccrualRunRead,
+    WeeklyCalculateRequest,
+    WeeklyResultCreate,
+    WeeklyResultRead,
+)
 
 router = APIRouter(prefix="/weekly-results", tags=["weekly-results"])
 
 
 @router.get("", response_model=list[WeeklyResultRead])
-def list_weekly_results(db: Session = Depends(get_db), _: object = Depends(require_roles("supervisor", "manager", "admin"))) -> list[WeeklyResult]:
-    return list(
-        db.scalars(
-            select(WeeklyResult).order_by(WeeklyResult.week_end.desc(), WeeklyResult.rank_position.asc().nulls_last())
-        )
-    )
+def list_weekly_results(
+    limit: int | None = None,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    _: object = Depends(require_roles("supervisor", "manager", "admin")),
+) -> list[WeeklyResult]:
+    q = select(WeeklyResult).order_by(WeeklyResult.week_end.desc(), WeeklyResult.rank_position.asc().nulls_last())
+    if limit is not None:
+        q = q.offset(offset).limit(limit)
+    return list(db.scalars(q))
 
 
 @router.post("", response_model=WeeklyResultRead, dependencies=[Depends(require_roles("supervisor", "manager", "admin"))])
@@ -48,7 +67,7 @@ def upsert_weekly_result(payload: WeeklyResultCreate, db: Session = Depends(get_
             - payload.lateness_count
             - payload.violation_count
         )
-    coins = points_to_coins(final_score)
+    coins = points_to_coins(final_score, db)
     row = db.scalar(
         select(WeeklyResult).where(
             WeeklyResult.operator_id == payload.operator_id,
@@ -83,3 +102,77 @@ def recalculate_weekly_results(payload: WeeklyCalculateRequest, db: Session = De
     rows = recalculate_period_ranks(db, payload.week_start, payload.week_end)
     db.commit()
     return rows
+
+
+# ── Автоматический еженедельный расчёт (ТЗ §3.6) ────────────────────────────
+
+@router.get(
+    "/preview",
+    response_model=WeeklyAccrualPreviewResponse,
+    dependencies=[Depends(require_roles("supervisor", "manager", "admin"))],
+)
+def preview_weekly_accrual(
+    period_start: date,
+    period_end: date,
+    db: Session = Depends(get_db),
+) -> WeeklyAccrualPreviewResponse:
+    """Предварительный расчёт без начисления — можно вызывать сколько угодно раз."""
+    if period_end < period_start:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Дата окончания раньше даты начала")
+    accruals = calculate_period_accrual(db, period_start, period_end)
+    items = [
+        WeeklyAccrualOperatorPreview(
+            operator_id=a.operator.id,
+            operator_name=a.operator.full_name,
+            group_name=a.operator.group_name or None,
+            contest_points=a.contest_points,
+            base_coins=a.base_coins,
+            bonus_top_coins=a.bonus_top_coins,
+            bonus_no_late_coins=a.bonus_no_late_coins,
+            bonus_no_violation_coins=a.bonus_no_violation_coins,
+            bonus_nomination_coins=a.bonus_nomination_coins,
+            bonus_thanks_coins=a.bonus_thanks_coins,
+            total_coins=a.total_coins,
+            rank_place=a.rank_place,
+            previous_rank_place=a.previous_rank_place,
+            rank_delta=a.rank_delta,
+            already_accrued=a.already_accrued,
+        )
+        for a in accruals
+    ]
+    return WeeklyAccrualPreviewResponse(
+        period_start=period_start,
+        period_end=period_end,
+        operators=items,
+        total_operators=len(items),
+        total_base_coins=sum(i.base_coins for i in items if not i.already_accrued),
+        total_bonus_coins=sum(i.total_coins - i.base_coins for i in items if not i.already_accrued),
+        total_coins=sum(i.total_coins for i in items if not i.already_accrued),
+    )
+
+
+@router.post(
+    "/apply",
+    response_model=WeeklyAccrualRunRead,
+    dependencies=[Depends(require_roles("manager", "admin"))],
+)
+def apply_weekly_accrual(
+    payload: WeeklyAccrualApplyRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WeeklyAccrualRunRead:
+    """Фактическое начисление. Доступ — только manager/admin (ТЗ 3.6)."""
+    if payload.period_end < payload.period_start:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Дата окончания раньше даты начала")
+    run = apply_period_accrual(db, payload.period_start, payload.period_end, current_user, payload.mode)
+    rating_cache_invalidate()
+    return WeeklyAccrualRunRead.model_validate(run)
+
+
+@router.get(
+    "/runs",
+    response_model=list[WeeklyAccrualRunRead],
+    dependencies=[Depends(require_roles("supervisor", "manager", "admin"))],
+)
+def list_accrual_runs(db: Session = Depends(get_db)) -> list[WeeklyAccrualRunRead]:
+    return [WeeklyAccrualRunRead.model_validate(r) for r in run_history(db)]

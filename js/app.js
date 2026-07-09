@@ -105,6 +105,8 @@ let STATE = {
   operatorLevels: [],
   history: [],
   groups: [],
+  cabinetData: null,
+  opLevelsTab: 'levels',
   currentView: 'cabinet',
   coinsOverview: null,
   coinsTab: 'overview',
@@ -194,7 +196,7 @@ function isRatingTabStale(token) { return token !== STATE.ratingTabGen; }
 function bumpAnalyticsTabGen() { return ++STATE.analyticsTabGen; }
 function isAnalyticsTabStale(token) { return token !== STATE.analyticsTabGen; }
 
-const COIN_TABS = ['overview', 'accrual', 'requests', 'history', 'rules'];
+const COIN_TABS = ['overview', 'accrual', 'requests', 'history', 'rules', 'weekly', 'settings'];
 const LEGACY_COIN_VIEW_TAB = { accrual: 'accrual', manual: 'accrual', requests: 'requests', history: 'history' };
 
 function normalizeCoinTab(tab) {
@@ -658,6 +660,27 @@ async function renderOperatorLevelsSettings() {
     el.innerHTML = '<div class="empty-state"><p>Недостаточно прав</p></div>';
     return;
   }
+
+  const tab = STATE.opLevelsTab === 'achievements' ? 'achievements' : 'levels';
+  el.innerHTML = `
+    <div class="filter-tabs" style="margin-bottom:16px">
+      <button class="filter-tab ${tab === 'levels' ? 'active' : ''}" data-op-levels-tab="levels">Уровни</button>
+      <button class="filter-tab ${tab === 'achievements' ? 'active' : ''}" data-op-levels-tab="achievements">Достижения</button>
+    </div>
+    <div id="op-levels-tab-body"></div>`;
+  el.querySelectorAll('[data-op-levels-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      STATE.opLevelsTab = btn.dataset.opLevelsTab;
+      renderOperatorLevelsSettings();
+    });
+  });
+  const bodyEl = el.querySelector('#op-levels-tab-body');
+  if (tab === 'achievements') { renderAchievementsAdminTab(bodyEl); return; }
+  return renderLevelsTabContent(bodyEl);
+}
+
+async function renderLevelsTabContent(el) {
+  if (!el) return;
   el.innerHTML = `<div class="view-header level-view-header">
     <div>
       <div class="section-kicker">Операторы</div>
@@ -1105,6 +1128,10 @@ function renderCabinet() {
 
     <div id="cabinet-wheel-winners"></div>
 
+    <div id="cabinet-weekly-detail"></div>
+
+    <div id="cabinet-achievements"></div>
+
     <div class="two-col-grid">
       <div class="panel">
         <div class="panel-head"><h3>История начислений</h3><span class="panel-badge">${w.transactions.length} записей</span></div>
@@ -1138,6 +1165,8 @@ function renderCabinet() {
 
   renderCabinetWheelCard();
   renderWheelWinnersToday();
+  renderCabinetWeeklyDetail();
+  renderCabinetAchievements();
 }
 
 // Блок «Победитель Wheel of WOW сегодня» на главной (ТЗ п.10). Грузится
@@ -1235,6 +1264,7 @@ async function reloadCabinet() {
   setText('side-level', STATE.myLevel?.level?.name || '—');
   const ratingResp = await api.getRating().catch(() => ({ items: STATE.rating }));
   STATE.rating = Array.isArray(ratingResp) ? ratingResp : (ratingResp.items || []);
+  STATE.cabinetData = null;
   renderCabinet();
 }
 
@@ -1300,8 +1330,304 @@ async function submitChangeUsername() {
 
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
-
 ══════════════════════════════════════ */
+
+/* ══════════════════════════════════════
+   УРОВНИ: вкладка «Достижения» (ТЗ §7) — каталог, включение/выключение, ручная выдача
+══════════════════════════════════════ */
+
+async function renderAchievementsAdminTab(el) {
+  if (!el) return;
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка достижений…</p></div>';
+
+  let achievements;
+  try {
+    achievements = await api.listAchievements();
+  } catch (e) {
+    el.innerHTML = `<div class="empty-line">Ошибка загрузки: ${esc(e.message)}</div>`;
+    return;
+  }
+  STATE._achievementsCatalog = achievements;
+
+  if (!STATE.adminOperators.length) {
+    try { STATE.adminOperators = await api.getDashboardOperators(); } catch { /* форма выдачи покажет пустой список */ }
+  }
+
+  const conditionLabel = {
+    top_3_week: 'Топ-3 недели', no_late_streak: 'Без опозданий N недель подряд',
+    quality_threshold: 'Качество ≥ значения', calls_leader_week: 'Лучший по звонкам за неделю',
+    efficiency_leader_week: 'Лучший по эффективности за неделю', total_coins: 'Всего начислено коинов ≥ значения',
+    manual: 'Только ручная выдача', test_score: 'Результат теста ≥ значения (%)',
+  };
+
+  el.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Каталог достижений</h3>
+        <span class="panel-badge">${achievements.length}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr>
+            <th></th><th>Название</th><th>Условие</th><th>Награда</th><th>Повторяемое</th><th>Активно</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${achievements.map(a => `
+              <tr>
+                <td style="font-size:20px">${esc(a.icon || '🏆')}</td>
+                <td>
+                  <div class="name-cell">${esc(a.title)}</div>
+                  <div class="cell-muted" style="font-size:11px">${esc(a.description)}</div>
+                </td>
+                <td style="font-size:12px">${esc(conditionLabel[a.condition_type] || a.condition_type)}${a.condition_value > 0 ? ` (${levelNum(a.condition_value)})` : ''}</td>
+                <td>
+                  <input type="number" class="form-input" style="width:80px" id="ach-reward-${a.id}" value="${a.reward_coins}" min="0" step="1">
+                  <button class="btn-link" style="font-size:11px" onclick="saveAchievementReward(${a.id})">Сохранить</button>
+                </td>
+                <td>${a.is_repeatable ? 'Да' : 'Нет'}</td>
+                <td>
+                  <label class="an-checkbox-label">
+                    <input type="checkbox" ${a.is_active ? 'checked' : ''} onchange="toggleAchievementActive(${a.id}, this.checked)">
+                  </label>
+                </td>
+                <td><button class="btn-outline btn-sm" onclick="openGrantAchievementForm(${a.id})">Выдать вручную</button></td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div id="grant-achievement-host"></div>`;
+}
+
+async function toggleAchievementActive(id, isActive) {
+  try {
+    await api.updateAchievement(id, { is_active: isActive });
+    showToast(isActive ? 'Достижение включено' : 'Достижение выключено', 'ok');
+    const a = (STATE._achievementsCatalog || []).find(x => x.id === id);
+    if (a) a.is_active = isActive;
+  } catch (e) {
+    showToast(e.message, 'error');
+    const body = document.getElementById('op-levels-tab-body');
+    if (body) renderAchievementsAdminTab(body);
+  }
+}
+
+async function saveAchievementReward(id) {
+  const val = Number(document.getElementById(`ach-reward-${id}`)?.value);
+  try {
+    await api.updateAchievement(id, { reward_coins: val });
+    showToast('Награда обновлена', 'ok');
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+function openGrantAchievementForm(achievementId) {
+  const host = document.getElementById('grant-achievement-host');
+  if (!host) return;
+  const a = (STATE._achievementsCatalog || []).find(x => x.id === achievementId);
+  const ops = (STATE.adminOperators || []).slice().sort((x, y) => (x.full_name || '').localeCompare(y.full_name || ''));
+
+  host.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Выдать «${esc(a?.title || '')}» вручную</h3>
+        <button class="btn-link" onclick="document.getElementById('grant-achievement-host').innerHTML=''">Закрыть</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Оператор</label>
+        <select id="grant-ach-operator" class="form-input">
+          <option value="">Выберите оператора…</option>
+          ${ops.map(o => `<option value="${o.id}">${esc(o.full_name)}${o.group_name ? ' — ' + esc(o.group_name) : ''}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Комментарий <span class="optional">(необязательно)</span></label>
+        <input id="grant-ach-comment" class="form-input" type="text" placeholder="Например: помог новому сотруднику освоиться">
+      </div>
+      <button class="btn-primary" onclick="submitGrantAchievement(${achievementId})">Выдать достижение</button>
+    </div>`;
+}
+
+async function submitGrantAchievement(achievementId) {
+  const operatorId = Number(document.getElementById('grant-ach-operator')?.value);
+  const comment = document.getElementById('grant-ach-comment')?.value || '';
+  if (!operatorId) { showToast('Выберите оператора', 'error'); return; }
+  try {
+    await api.grantAchievement(achievementId, { operator_id: operatorId, comment });
+    showToast('Достижение выдано', 'ok');
+    document.getElementById('grant-achievement-host').innerHTML = '';
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+/* ══════════════════════════════════════
+   КАБИНЕТ: показатели недели, прозрачный расчёт коинов, достижения (ТЗ §5, §7)
+   Один общий фетч /api/cabinet/me — данные шарятся между обоими блоками.
+══════════════════════════════════════ */
+
+function _cabinetIsOperatorLike() {
+  return STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor';
+}
+
+// Общий загрузчик: гарантирует ровно один запрос, даже если оба блока
+// (показатели недели и достижения) рендерятся почти одновременно.
+function _loadCabinetData() {
+  if (STATE.cabinetData) return Promise.resolve(STATE.cabinetData);
+  if (!STATE._cabinetDataPromise) {
+    STATE._cabinetDataPromise = api.getMyCabinet()
+      .then(data => { STATE.cabinetData = data; return data; })
+      .finally(() => { STATE._cabinetDataPromise = null; });
+  }
+  return STATE._cabinetDataPromise;
+}
+
+function _metricBarHtml(label, value, target, unit = '') {
+  const v = Number(value) || 0;
+  const t = Number(target) || 0;
+  const pct = t > 0 ? Math.min(100, Math.round((v / t) * 100)) : (v > 0 ? 100 : 0);
+  const overTarget = t > 0 && v >= t;
+  return `
+    <div class="metric-progress-row">
+      <div class="metric-progress-label">
+        <span>${esc(label)}</span>
+        <b>${levelNum(v)}${esc(unit)}${t > 0 ? ` <span class="cell-muted">/ цель ${levelNum(t)}${esc(unit)}</span>` : ''}</b>
+      </div>
+      <div class="metric-progress-bar">
+        <div class="metric-progress-fill ${overTarget ? 'ok' : ''}" style="width:${pct}%"></div>
+      </div>
+    </div>`;
+}
+
+function _antiMetricHtml(label, value) {
+  const v = Number(value) || 0;
+  return `
+    <div class="metric-anti-row ${v > 0 ? 'bad' : 'ok'}">
+      <span>${esc(label)}</span>
+      <b>${v}</b>
+    </div>`;
+}
+
+async function renderCabinetWeeklyDetail() {
+  const host = document.getElementById('cabinet-weekly-detail');
+  if (!host || !_cabinetIsOperatorLike()) { if (host) host.innerHTML = ''; return; }
+
+  let data;
+  try {
+    data = await _loadCabinetData();
+  } catch {
+    host.innerHTML = '';
+    return;
+  }
+  const wm = data.week_metrics;
+  const cc = data.coin_calculation;
+  if (!wm && !cc) {
+    host.innerHTML = `
+      <div class="panel">
+        <div class="panel-head"><h3>Показатели недели</h3></div>
+        <div class="empty-line">Нет данных за последнюю неделю.</div>
+      </div>`;
+    return;
+  }
+
+  const bonusLabels = {
+    top: 'Место в рейтинге недели', no_late: 'Неделя без опозданий',
+    no_violation: 'Неделя без нарушений', nomination: 'Номинация недели',
+    driver_thanks: 'Благодарность от водителя',
+  };
+
+  host.innerHTML = `
+    <div class="two-col-grid">
+      ${wm ? `
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Показатели недели</h3>
+          <span class="panel-badge">${esc(wm.period_start)} — ${esc(wm.period_end)}</span>
+        </div>
+        ${_metricBarHtml('Выработка часов', wm.hours, wm.hours_target, ' ч')}
+        ${_metricBarHtml('Качество', wm.quality, wm.quality_target, '%')}
+        ${_metricBarHtml('Эффективность', wm.efficiency, 0, '%')}
+        <div class="metric-mini-row">
+          <span>Звонков в час: <b>${levelNum(wm.calls_per_hour)}</b></span>
+        </div>
+        <div class="metric-anti-grid">
+          ${_antiMetricHtml('Опоздания (мин)', wm.late_minutes)}
+          ${_antiMetricHtml('Нарушения', wm.violations)}
+          <div class="metric-anti-row ${wm.thanks_count > 0 ? 'good' : ''}">
+            <span>Благодарности</span><b>${wm.thanks_count || 0}</b>
+          </div>
+        </div>
+      </div>` : ''}
+
+      ${cc ? `
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Расчёт коинов за неделю</h3>
+          <span class="panel-badge ${cc.is_final ? 'badge-final' : 'badge-pending'}">${cc.is_final ? 'Начислено' : 'Предварительно'}</span>
+        </div>
+        <div class="coin-calc-row">
+          <span>Итоговый балл</span><b>${levelNum(cc.contest_points)}</b>
+        </div>
+        <div class="coin-calc-row">
+          <span>Базовые коины</span><b>${cc.base_coins} ₡</b>
+        </div>
+        ${cc.bonuses.map(b => `
+          <div class="coin-calc-row coin-calc-bonus">
+            <span>+ ${esc(bonusLabels[b.type] || b.label)}</span><b>+${b.coins} ₡</b>
+          </div>`).join('')}
+        <div class="coin-calc-row coin-calc-total">
+          <span>Итого за неделю</span><b>${cc.total_week_coins} ₡</b>
+        </div>
+        ${!cc.is_final ? '<div class="empty-line" style="margin-top:8px">Расчёт предварительный — начисление ещё не применено.</div>' : ''}
+      </div>` : ''}
+    </div>`;
+}
+
+async function renderCabinetAchievements() {
+  const host = document.getElementById('cabinet-achievements');
+  if (!host || !_cabinetIsOperatorLike()) { if (host) host.innerHTML = ''; return; }
+
+  let data;
+  try {
+    data = await _loadCabinetData();
+  } catch {
+    host.innerHTML = '';
+    return;
+  }
+  const ach = data.achievements || { completed: [], in_progress: [] };
+
+  const badgeHtml = (row, completed) => {
+    const a = row.achievement;
+    return `
+    <div class="achievement-badge ${completed ? 'unlocked' : 'locked'}" title="${esc(a.description)}">
+      <div class="achievement-icon">${esc(a.icon || '🏆')}</div>
+      <div class="achievement-info">
+        <div class="achievement-title">${esc(a.title)}</div>
+        <div class="achievement-desc">${esc(a.description)}</div>
+        ${completed
+          ? `<div class="achievement-meta">Получено ×${row.times_awarded}${row.completed_at ? ' · ' + fmtDate(row.completed_at) : ''}</div>`
+          : (a.condition_value > 0
+              ? `<div class="achievement-progress-line">${levelNum(row.progress_value)} / ${levelNum(a.condition_value)}</div>`
+              : '<div class="achievement-progress-line cell-muted">Не выполнено</div>')}
+      </div>
+    </div>`;
+  };
+
+  host.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Мои достижения</h3>
+        <span class="panel-badge">${ach.completed.length} получено</span>
+      </div>
+      <div class="achievements-grid">
+        ${ach.completed.map(r => badgeHtml(r, true)).join('')}
+        ${ach.in_progress.map(r => badgeHtml(r, false)).join('')}
+        ${!ach.completed.length && !ach.in_progress.length ? '<div class="empty-line">Достижения скоро появятся.</div>' : ''}
+      </div>
+    </div>`;
+}
+
 async function renderRatingOverviewTab(el) {
   const role  = STATE.user?.role || 'operator';
   const isOp  = role === 'operator';
@@ -2287,12 +2613,175 @@ function renderSummary() {
           </tbody>
         </table>
       </div>
-    </div>`;
+    </div>
+
+    <div id="admin-summary-extra"></div>`;
+
+  renderAdminSummaryDetail();
 }
 
 /* ══════════════════════════════════════
    VIEW: ОПЕРАТОРЫ (ADMIN)
 ══════════════════════════════════════ */
+
+/* ══════════════════════════════════════
+   СВОДКА: детальная сводка по неделе с фильтрами (ТЗ §9)
+══════════════════════════════════════ */
+
+const _adminSummaryState = { filters: {}, data: null };
+
+async function renderAdminSummaryDetail() {
+  const host = document.getElementById('admin-summary-extra');
+  if (!host) return;
+  host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка сводки за неделю…</p></div>';
+
+  if (!STATE.groups.length) {
+    try { STATE.groups = await api.listGroups(); } catch { /* фильтр по группе просто будет пуст */ }
+  }
+
+  await _loadAdminSummaryDetail();
+}
+
+async function _loadAdminSummaryDetail() {
+  const host = document.getElementById('admin-summary-extra');
+  if (!host) return;
+  const f = _adminSummaryState.filters;
+  const params = {};
+  if (f.period_start) params.period_start = f.period_start;
+  if (f.period_end) params.period_end = f.period_end;
+  if (f.group_id) params.group_id = f.group_id;
+  if (f.participation_status) params.participation_status = f.participation_status;
+  if (f.position) params.position = f.position;
+  if (f.has_lateness != null) params.has_lateness = f.has_lateness;
+  if (f.has_violations != null) params.has_violations = f.has_violations;
+
+  let data;
+  try {
+    data = await api.getAdminSummary(params);
+  } catch (e) {
+    host.innerHTML = `<div class="empty-line">Ошибка загрузки сводки: ${esc(e.message)}</div>`;
+    return;
+  }
+  _adminSummaryState.data = data;
+  if (!f.period_start) _adminSummaryState.filters.period_start = data.period_start;
+  if (!f.period_end) _adminSummaryState.filters.period_end = data.period_end;
+
+  const groups = STATE.groups || [];
+
+  host.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Детальная сводка за неделю</h3>
+        ${data.period_start ? `<span class="panel-badge">${esc(data.period_start)} — ${esc(data.period_end)}</span>` : '<span class="panel-badge">Нет расчётов за неделю</span>'}
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:18px">
+        <div class="kpi-card">
+          <div class="kpi-label">Средняя позиция по группе</div>
+          <div class="kpi-value">${data.average_team_rank ?? '—'}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Коинов в обороте</div>
+          <div class="kpi-value">${data.total_coins_balance} <span class="kpi-unit">₡</span></div>
+        </div>
+        <div class="kpi-card ${data.new_shop_requests > 0 ? 'kpi-warn' : ''}">
+          <div class="kpi-label">Новых заявок магазина</div>
+          <div class="kpi-value">${data.new_shop_requests}</div>
+        </div>
+      </div>
+
+      <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:16px">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Начало периода</label>
+          <input type="date" id="as-period-start" class="form-input" value="${esc(_adminSummaryState.filters.period_start || '')}">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Конец периода</label>
+          <input type="date" id="as-period-end" class="form-input" value="${esc(_adminSummaryState.filters.period_end || '')}">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Группа</label>
+          <select id="as-group" class="form-input">
+            <option value="">Все группы</option>
+            ${groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Участие</label>
+          <select id="as-participation" class="form-input">
+            <option value="">Все</option>
+            <option value="participating">Участвует</option>
+            <option value="not_participating">Не участвует</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Должность</label>
+          <select id="as-position" class="form-input">
+            <option value="">Все</option>
+            <option value="operator">Оператор</option>
+            <option value="chat_manager">Чат-менеджер</option>
+          </select>
+        </div>
+        <label class="an-checkbox-label"><input type="checkbox" id="as-has-lateness"> Есть опоздания</label>
+        <label class="an-checkbox-label"><input type="checkbox" id="as-has-violations"> Есть нарушения</label>
+        <button class="btn-primary btn-sm" onclick="applyAdminSummaryFilters()">Применить</button>
+        <button class="btn-outline btn-sm" onclick="exportAdminSummary()">Экспорт CSV</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr>
+            <th>Место</th><th>ФИО</th><th>Группа</th><th>Статус</th>
+            <th>Баллы недели</th><th>Коины недели</th><th>Баланс</th>
+            <th>Опоздания</th><th>Нарушения</th><th>Качество</th><th>Эффективность</th>
+          </tr></thead>
+          <tbody>
+            ${data.operators.length ? data.operators.map(o => `
+              <tr>
+                <td><span class="rank-badge ${(o.rank_place||99)<=3?'rank-top':''}">${o.rank_place ?? '—'}</span></td>
+                <td class="name-cell">${esc(o.full_name)}</td>
+                <td>${esc(o.group_name || '')}</td>
+                <td>${o.participation_status === 'participating' ? 'Участвует' : 'Не участвует'}</td>
+                <td>${o.week_points != null ? levelNum(o.week_points) : '—'}</td>
+                <td>${o.week_coins != null ? `<b class="accent-text">${o.week_coins} ₡</b>` : '—'}</td>
+                <td>${o.total_balance} ₡</td>
+                <td style="color:${o.lateness_count > 0 ? 'var(--danger)' : 'inherit'}">${o.lateness_count ?? '—'}</td>
+                <td style="color:${o.violation_count > 0 ? 'var(--danger)' : 'inherit'}">${o.violation_count ?? '—'}</td>
+                <td>${o.quality != null ? levelNum(o.quality) + '%' : '—'}</td>
+                <td>${o.efficiency != null ? levelNum(o.efficiency) + '%' : '—'}</td>
+              </tr>`).join('') : '<tr><td colspan="11" class="empty-line">Нет данных за выбранный период/фильтры</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+  document.getElementById('as-group').value = f.group_id || '';
+  document.getElementById('as-participation').value = f.participation_status || '';
+  document.getElementById('as-position').value = f.position || '';
+  document.getElementById('as-has-lateness').checked = f.has_lateness === true;
+  document.getElementById('as-has-violations').checked = f.has_violations === true;
+}
+
+function applyAdminSummaryFilters() {
+  const f = _adminSummaryState.filters;
+  f.period_start = document.getElementById('as-period-start')?.value || '';
+  f.period_end = document.getElementById('as-period-end')?.value || '';
+  f.group_id = document.getElementById('as-group')?.value || '';
+  f.participation_status = document.getElementById('as-participation')?.value || '';
+  f.position = document.getElementById('as-position')?.value || '';
+  const lateChecked = document.getElementById('as-has-lateness')?.checked;
+  const violChecked = document.getElementById('as-has-violations')?.checked;
+  f.has_lateness = lateChecked ? true : null;
+  f.has_violations = violChecked ? true : null;
+  _loadAdminSummaryDetail();
+}
+
+function exportAdminSummary() {
+  const f = _adminSummaryState.filters;
+  const params = { period_start: f.period_start, period_end: f.period_end, format: 'csv' };
+  if (f.group_id) params.group_id = f.group_id;
+  window.open(api.exportUrl('/api/exports/rating', params), '_blank');
+}
 
 function renderAdminOperators() {
   return renderUsersPage();
@@ -2435,6 +2924,7 @@ function renderUsersPage() {
       <div><div class="section-kicker">Пользователи</div><h2 class="section-title">Пользователи</h2></div>
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="exportCSV()">Экспорт CSV</button>
+        <button class="btn-outline btn-sm" onclick="exportOperatorsXLSX()">Экспорт XLSX</button>
         <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
         ${['manager','admin'].includes(STATE.user?.role) ? `
           <button class="btn-outline btn-sm" onclick="showWorkNormsModal()">Нормы часов</button>
@@ -2553,6 +3043,8 @@ function renderCoins() {
     ['accrual', 'Начисление'],
     ['requests', 'Заявки'],
     ['history', 'История'],
+    ['weekly', 'Еженедельный расчёт'],
+    ['settings', 'Настройки начислений'],
     ['rules', 'Правила'],
   ];
 
@@ -2564,7 +3056,6 @@ function renderCoins() {
         <p class="section-subtitle">Управление начислениями, заявками и историей операций</p>
       </div>
       <div class="header-right">
-        ${tab === 'history' ? '<button class="btn-outline btn-sm" onclick="exportHistoryCSV()">Экспорт CSV</button>' : ''}
         <button class="btn-outline btn-sm" onclick="refreshCoinsModule()">Обновить</button>
       </div>
     </div>
@@ -2592,6 +3083,8 @@ function renderCoins() {
     renderHistory();
   }
   if (tab === 'rules') renderCoinRules(body);
+  if (tab === 'weekly') renderWeeklyAccrualTab(body);
+  if (tab === 'settings') renderCoinRulesSettingsTab(body);
 }
 
 async function refreshCoinsModule() {
@@ -2691,6 +3184,14 @@ function transactionTypeLabel(type) {
     refund: 'Возврат коинов',
     request_completed: 'Заявка выполнена',
     period_report: 'Расчет периода',
+    period_report_adjustment: 'Корректировка расчёта периода',
+    bonus_top: 'Бонус: место в рейтинге',
+    bonus_no_late: 'Бонус: без опозданий',
+    bonus_no_violation: 'Бонус: без нарушений',
+    bonus_nomination: 'Бонус: номинация недели',
+    bonus_driver_thanks: 'Бонус: благодарность водителя',
+    achievement_reward: 'Награда за достижение',
+    test_reward: 'Награда за тест',
   }[type] || type;
 }
 
@@ -3153,60 +3654,169 @@ function renderRequests() {
 /* ══════════════════════════════════════
    VIEW: ИСТОРИЯ ОПЕРАЦИЙ
 ══════════════════════════════════════ */
+const _historyTabState = {
+  filters: { type: 'all', operator_id: 'all', source: 'all', created_by: 'all', start_date: '', end_date: '' },
+  limit: 50, offset: 0, data: null,
+};
+
+const _historySourceLabels = {
+  weekly_auto_accrual: 'Автоначисление', achievement: 'Достижение',
+};
+
 function renderHistory() {
   const el = document.getElementById('view-history');
   if (!el) return;
-  const history = STATE.history;
-
-  const typeLabels = {
-    weekly_accrual: 'Авт. начисление',
-    manual_add: 'Ручное начисление',
-    manual_subtract: 'Ручное списание',
-    manual_accrual: 'Ручное начисление',
-    manual_deduction: 'Ручное списание',
-    reserve: 'Резервирование',
-    reservation: 'Резервирование',
-    purchase: 'Покупка бонуса',
-    refund: 'Возврат коинов',
-    request_completed: 'Заявка выполнена',
-    period_report: 'Расчет периода',
-  };
+  const f = _historyTabState.filters;
 
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">История</div><h2 class="section-title">История операций</h2></div>
       <div class="header-right">
-        <button class="btn-outline btn-sm" onclick="exportHistoryCSV()">Экспорт CSV</button>
-        <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
+        <button class="btn-outline btn-sm" onclick="exportHistoryServerSide()">Экспорт CSV</button>
+        <button class="btn-outline btn-sm" onclick="exportHistoryServerSide('xlsx')">Экспорт XLSX</button>
+        <button class="btn-outline btn-sm" onclick="reloadHistoryTab()">Обновить</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px">
+      <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Тип</label>
+          <select id="hist-f-type" class="form-input">
+            <option value="all">Все</option>
+            <option value="weekly_accrual">Авт. начисление</option>
+            <option value="bonus_top">Бонус: топ недели</option>
+            <option value="bonus_no_late">Бонус: без опозданий</option>
+            <option value="bonus_no_violation">Бонус: без нарушений</option>
+            <option value="bonus_nomination">Бонус: номинация</option>
+            <option value="bonus_driver_thanks">Бонус: благодарность</option>
+            <option value="achievement_reward">Достижение</option>
+            <option value="manual_add">Ручное начисление</option>
+            <option value="manual_subtract">Ручное списание</option>
+            <option value="purchase">Покупка бонуса</option>
+            <option value="refund">Возврат коинов</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Источник</label>
+          <select id="hist-f-source" class="form-input">
+            <option value="all">Все</option>
+            <option value="weekly_auto_accrual">Еженедельный расчёт</option>
+            <option value="achievement">Достижение</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Дата от</label>
+          <input type="date" id="hist-f-start" class="form-input" value="${esc(f.start_date)}">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Дата до</label>
+          <input type="date" id="hist-f-end" class="form-input" value="${esc(f.end_date)}">
+        </div>
+        <button class="btn-primary btn-sm" onclick="applyHistoryFilters()">Применить</button>
       </div>
     </div>
 
     <div class="panel">
       <div class="panel-head">
-        <h3>Все транзакции</h3>
-        <span class="panel-badge">${history.length} записей</span>
+        <h3>Транзакции</h3>
+        <span class="panel-badge" id="hist-total-badge">…</span>
       </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr>
-            <th>Дата</th><th>Оператор</th><th>Группа</th>
-            <th>Тип</th><th>Коины</th><th>Причина</th><th>Автор</th>
-          </tr></thead>
-          <tbody>
-            ${history.length ? history.map(t => `
-              <tr>
-                <td style="white-space:nowrap">${fmtDate(t.created_at)}</td>
-                <td class="name-cell">${esc(t.operator_name)}</td>
-                <td>${esc(t.group_name)}</td>
-                <td><span style="font-size:11px;color:var(--tx3)">${typeLabels[t.type]||t.type}</span></td>
-                <td><b style="color:${t.amount>=0?'var(--ok)':'var(--danger)'}">${t.amount>=0?'+':''}${t.amount} ₡</b></td>
-                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.comment)}">${esc(t.comment)}</td>
-                <td style="font-size:12px;color:var(--tx3)">${esc(t.created_by_name||'Система')}</td>
-              </tr>`).join('') : '<tr><td colspan="7" class="empty-line">История пуста</td></tr>'}
-          </tbody>
-        </table>
+      <div class="table-wrap" id="hist-table-host">
+        <div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>
       </div>
+      <div class="panel-footer" id="hist-pagination-host"></div>
     </div>`;
+
+  document.getElementById('hist-f-type').value = f.type;
+  document.getElementById('hist-f-source').value = f.source;
+  loadHistoryTabData();
+}
+
+async function loadHistoryTabData() {
+  const tableHost = document.getElementById('hist-table-host');
+  const badge = document.getElementById('hist-total-badge');
+  if (!tableHost) return;
+  const f = _historyTabState.filters;
+  const params = { limit: _historyTabState.limit, offset: _historyTabState.offset };
+  if (f.type !== 'all') params.type = f.type;
+  if (f.source !== 'all') params.source = f.source;
+  if (f.start_date) params.start_date = f.start_date;
+  if (f.end_date) params.end_date = f.end_date;
+
+  let data;
+  try {
+    data = await api.listCoinTransactions(params);
+  } catch (e) {
+    tableHost.innerHTML = `<div class="empty-line">Ошибка: ${esc(e.message)}</div>`;
+    return;
+  }
+  _historyTabState.data = data;
+  const items = data.items || [];
+  if (badge) badge.textContent = `${data.total ?? items.length} записей`;
+
+  tableHost.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Дата</th><th>Оператор</th><th>Группа</th>
+        <th>Тип</th><th>Коины</th><th>Причина</th><th>Автор</th><th>Источник</th>
+      </tr></thead>
+      <tbody>
+        ${items.length ? items.map(t => `
+          <tr>
+            <td style="white-space:nowrap">${fmtDate(t.created_at)}</td>
+            <td class="name-cell">${esc(t.operator_name)}</td>
+            <td>${esc(t.group_name)}</td>
+            <td><span style="font-size:11px;color:var(--tx3)">${esc(transactionTypeLabel(t.type))}</span></td>
+            <td><b style="color:${t.amount>=0?'var(--ok)':'var(--danger)'}">${t.amount>=0?'+':''}${t.amount} ₡</b></td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.comment)}">${esc(t.comment)}</td>
+            <td style="font-size:12px;color:var(--tx3)">${esc(t.created_by_name||'Система')}</td>
+            <td style="font-size:11px;color:var(--tx3)">${esc(_historySourceLabels[t.source_type] || t.source_type || '—')}</td>
+          </tr>`).join('') : '<tr><td colspan="8" class="empty-line">Нет операций по заданным фильтрам</td></tr>'}
+      </tbody>
+    </table>`;
+
+  const pager = document.getElementById('hist-pagination-host');
+  if (pager) {
+    const total = data.total ?? items.length;
+    const from = _historyTabState.offset + 1;
+    const to = Math.min(total, _historyTabState.offset + _historyTabState.limit);
+    pager.innerHTML = `
+      <span class="cell-muted">${total ? `${from}–${to} из ${total}` : ''}</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" ${_historyTabState.offset === 0 ? 'disabled' : ''} onclick="historyPagePrev()">← Назад</button>
+        <button class="btn-outline btn-sm" ${to >= total ? 'disabled' : ''} onclick="historyPageNext()">Далее →</button>
+      </div>`;
+  }
+}
+
+function applyHistoryFilters() {
+  _historyTabState.filters.type = document.getElementById('hist-f-type')?.value || 'all';
+  _historyTabState.filters.source = document.getElementById('hist-f-source')?.value || 'all';
+  _historyTabState.filters.start_date = document.getElementById('hist-f-start')?.value || '';
+  _historyTabState.filters.end_date = document.getElementById('hist-f-end')?.value || '';
+  _historyTabState.offset = 0;
+  loadHistoryTabData();
+}
+
+function historyPagePrev() {
+  _historyTabState.offset = Math.max(0, _historyTabState.offset - _historyTabState.limit);
+  loadHistoryTabData();
+}
+function historyPageNext() {
+  _historyTabState.offset += _historyTabState.limit;
+  loadHistoryTabData();
+}
+function reloadHistoryTab() { loadHistoryTabData(); }
+
+function exportHistoryServerSide(format = 'csv') {
+  const f = _historyTabState.filters;
+  const params = { format };
+  if (f.type !== 'all') params.type = f.type;
+  if (f.source !== 'all') params.source = f.source;
+  if (f.start_date) params.start_date = f.start_date;
+  if (f.end_date) params.end_date = f.end_date;
+  window.open(api.exportUrl('/api/exports/coin-transactions', params), '_blank');
 }
 
 /* ══════════════════════════════════════
@@ -4307,20 +4917,10 @@ async function submitEditItem(id) {
    EXPORT
 ══════════════════════════════════════ */
 function exportCSV() {
-  const ops = STATE.adminOperators;
-  const header = ['ФИО','Группа','Должность','Статус участия','Статус работы','Email','Логин','Баланс','Коины нед.'];
-  const rows = ops.map(o => [
-    o.full_name,
-    o.group_name,
-    positionLabel(o.position || 'operator'),
-    participationStatusLabel(o.participation_status || 'participating'),
-    isOperatorDismissed(o) ? 'Уволен' : 'Активен',
-    o.email || '',
-    o.username || '',
-    o.current_balance,
-    o.coins_earned_week,
-  ]);
-  downloadCSV([header, ...rows], 'pulse_operators');
+  window.open(api.exportUrl('/api/exports/operators', { format: 'csv' }), '_blank');
+}
+function exportOperatorsXLSX() {
+  window.open(api.exportUrl('/api/exports/operators', { format: 'xlsx' }), '_blank');
 }
 
 function exportHistoryCSV() {
@@ -4676,6 +5276,317 @@ window.manualOperatorLevelUi = manualOperatorLevelUi;
 /* ══════════════════════════════════════
    VIEW: РАСЧЁТ ЗА ПЕРИОД
 ══════════════════════════════════════ */
+
+/* ══════════════════════════════════════
+   КОИНЫ: Еженедельный расчёт (ТЗ §3) — preview / apply / история запусков
+══════════════════════════════════════ */
+
+function canApplyAccrual(role) { return role === 'manager' || role === 'admin'; }
+
+function _mondayOfWeek(d) {
+  const day = (d.getDay() + 6) % 7; // 0 = понедельник
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - day);
+  return monday;
+}
+function _isoDate(d) { return d.toISOString().slice(0, 10); }
+
+// Прошлая календарная неделя пн-вс — тот же расчёт, что у cron-задачи на бэкенде.
+function _defaultAccrualPeriod() {
+  const today = new Date();
+  const thisMonday = _mondayOfWeek(today);
+  const prevMonday = new Date(thisMonday); prevMonday.setDate(thisMonday.getDate() - 7);
+  const prevSunday = new Date(thisMonday); prevSunday.setDate(thisMonday.getDate() - 1);
+  return { start: _isoDate(prevMonday), end: _isoDate(prevSunday) };
+}
+
+const _weeklyAccrualState = { start: null, end: null, preview: null, runs: null };
+
+function renderWeeklyAccrualTab(body) {
+  if (!_weeklyAccrualState.start) {
+    const def = _defaultAccrualPeriod();
+    _weeklyAccrualState.start = def.start;
+    _weeklyAccrualState.end = def.end;
+  }
+  const canApply = canApplyAccrual(STATE.user?.role);
+  const s = _weeklyAccrualState;
+
+  body.innerHTML = `
+    <div class="panel">
+      <div class="panel-head"><h3>Расчёт за период</h3></div>
+      <div class="filter-row" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Начало периода</label>
+          <input type="date" id="wa-period-start" class="form-input" value="${esc(s.start)}">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Конец периода</label>
+          <input type="date" id="wa-period-end" class="form-input" value="${esc(s.end)}">
+        </div>
+        <button class="btn-outline btn-sm" onclick="runWeeklyAccrualPreview()">Предварительный расчёт</button>
+        ${canApply ? `<button class="btn-primary btn-sm" onclick="runWeeklyAccrualApply()">Начислить коины за период</button>` : ''}
+        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod()">Экспорт CSV</button>
+      </div>
+    </div>
+
+    <div id="wa-preview-host"></div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>История запусков</h3>
+        <button class="btn-link" onclick="loadWeeklyAccrualRuns()">Обновить</button>
+      </div>
+      <div id="wa-runs-host"><div class="empty-line">Загрузка…</div></div>
+    </div>`;
+
+  if (_weeklyAccrualState.preview) _renderWeeklyAccrualPreview();
+  loadWeeklyAccrualRuns();
+}
+
+function _readAccrualPeriodInputs() {
+  const start = document.getElementById('wa-period-start')?.value;
+  const end = document.getElementById('wa-period-end')?.value;
+  if (start) _weeklyAccrualState.start = start;
+  if (end) _weeklyAccrualState.end = end;
+  return { start: _weeklyAccrualState.start, end: _weeklyAccrualState.end };
+}
+
+async function runWeeklyAccrualPreview() {
+  const { start, end } = _readAccrualPeriodInputs();
+  if (!start || !end) { showToast('Укажите период', 'error'); return; }
+  const host = document.getElementById('wa-preview-host');
+  if (host) host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем…</p></div>';
+  try {
+    _weeklyAccrualState.preview = await api.previewWeeklyAccrual(start, end);
+  } catch (e) {
+    if (host) host.innerHTML = `<div class="empty-line">Ошибка: ${esc(e.message)}</div>`;
+    return;
+  }
+  _renderWeeklyAccrualPreview();
+}
+
+const _bonusColLabels = [
+  ['bonus_top_coins', 'Топ'], ['bonus_no_late_coins', 'Без опозд.'],
+  ['bonus_no_violation_coins', 'Без наруш.'], ['bonus_nomination_coins', 'Номинация'],
+  ['bonus_thanks_coins', 'Благодарность'],
+];
+
+function _renderWeeklyAccrualPreview() {
+  const host = document.getElementById('wa-preview-host');
+  if (!host) return;
+  const p = _weeklyAccrualState.preview;
+  if (!p) { host.innerHTML = ''; return; }
+
+  host.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Предварительный расчёт: ${esc(p.period_start)} — ${esc(p.period_end)}</h3>
+        <span class="panel-badge">${p.total_operators} операторов · ${p.total_coins} ₡</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr>
+            <th>Место</th><th>Оператор</th><th>Группа</th><th>Баллы</th><th>База</th>
+            ${_bonusColLabels.map(([, l]) => `<th>${l}</th>`).join('')}
+            <th>Итого</th><th>Динамика</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${p.operators.length ? p.operators.slice().sort((a, b) => (a.rank_place ?? 999) - (b.rank_place ?? 999)).map(o => `
+              <tr class="${o.already_accrued ? 'row-muted' : ''}">
+                <td><span class="rank-badge ${(o.rank_place || 99) <= 3 ? 'rank-top' : ''}">${o.rank_place ?? '—'}</span></td>
+                <td class="name-cell">${esc(o.operator_name)}</td>
+                <td>${esc(o.group_name || '')}</td>
+                <td>${levelNum(o.contest_points)}</td>
+                <td>${o.base_coins} ₡</td>
+                ${_bonusColLabels.map(([key]) => `<td>${o[key] ? '+' + o[key] : '—'}</td>`).join('')}
+                <td><b class="accent-text">${o.total_coins} ₡</b></td>
+                <td>${o.rank_delta != null ? `<span class="rank-delta ${o.rank_delta > 0 ? 'up' : o.rank_delta < 0 ? 'down' : ''}">${o.rank_delta > 0 ? '↑' + o.rank_delta : o.rank_delta < 0 ? '↓' + Math.abs(o.rank_delta) : '—'}</span>` : '—'}</td>
+                <td>${o.already_accrued ? '<span class="cell-muted">уже начислено</span>' : ''}</td>
+              </tr>`).join('') : '<tr><td colspan="12" class="empty-line">Нет данных WeeklyResult за этот период</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+async function runWeeklyAccrualApply() {
+  const { start, end } = _readAccrualPeriodInputs();
+  if (!start || !end) { showToast('Укажите период', 'error'); return; }
+  if (!confirm(`Вы уверены, что хотите начислить коины за период ${start} — ${end}? Действие необратимо (повторный запуск не задвоит начисление, но и не отменит его).`)) return;
+
+  try {
+    const run = await api.applyWeeklyAccrual({ period_start: start, period_end: end, mode: 'manual' });
+    if (run.status === 'success') {
+      showToast(`Начислено: ${run.operators_count} операторов, ${run.total_coins} ₡ (пропущено уже начисленных: ${run.skipped_existing_count})`, 'ok');
+    } else {
+      showToast(`Расчёт завершился с ошибкой: ${run.error_message || 'см. историю запусков'}`, 'error');
+    }
+  } catch (e) {
+    showToast(e.message, 'error');
+    return;
+  }
+  _weeklyAccrualState.preview = null;
+  document.getElementById('wa-preview-host').innerHTML = '';
+  loadWeeklyAccrualRuns();
+  // Баланс/история могли измениться — сбрасываем зависимые кеши
+  STATE.coinsOverview = null;
+  STATE.history = [];
+}
+
+async function loadWeeklyAccrualRuns() {
+  const host = document.getElementById('wa-runs-host');
+  if (!host) return;
+  try {
+    _weeklyAccrualState.runs = await api.listAccrualRuns();
+  } catch {
+    host.innerHTML = '<div class="empty-line">Не удалось загрузить историю запусков</div>';
+    return;
+  }
+  const runs = _weeklyAccrualState.runs || [];
+  host.innerHTML = `
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Период</th><th>Режим</th><th>Статус</th><th>Запущен</th><th>Операторов</th><th>Коинов</th><th>Автор</th></tr></thead>
+        <tbody>
+          ${runs.length ? runs.map(r => `
+            <tr>
+              <td>${esc(r.period_start)} — ${esc(r.period_end)}</td>
+              <td>${r.mode === 'auto' ? 'Авто (cron)' : 'Вручную'}</td>
+              <td><span class="status-pill ${r.status === 'success' ? 'ok' : 'error'}">${r.status === 'success' ? 'Успешно' : 'Ошибка'}</span></td>
+              <td style="white-space:nowrap">${fmtDateTime(r.started_at)}</td>
+              <td>${r.operators_count}${r.skipped_existing_count ? ` <span class="cell-muted">(+${r.skipped_existing_count} пропущено)</span>` : ''}</td>
+              <td><b>${r.total_coins} ₡</b></td>
+              <td>${esc(r.created_by)}</td>
+            </tr>`).join('') : '<tr><td colspan="7" class="empty-line">Запусков ещё не было</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function exportWeeklyAccrualPeriod() {
+  const { start, end } = _readAccrualPeriodInputs();
+  if (!start || !end) { showToast('Укажите период', 'error'); return; }
+  window.open(api.exportUrl('/api/exports/weekly-results', { period_start: start, period_end: end, format: 'csv' }), '_blank');
+}
+
+/* ══════════════════════════════════════
+   КОИНЫ: Настройки начислений (ТЗ §4) — GET/PUT /api/settings/coin-rules
+══════════════════════════════════════ */
+
+function canEditCoinRules(role) { return role === 'manager' || role === 'admin'; }
+
+const _NOMINATION_TOGGLES = [
+  ['nomination_calls_enabled', 'Лучший по звонкам'],
+  ['nomination_quality_enabled', 'Лучшее качество'],
+  ['nomination_efficiency_enabled', 'Топ по эффективности'],
+  ['nomination_progress_enabled', 'Лучший прогресс недели'],
+  ['nomination_thanks_enabled', 'Больше всего благодарностей'],
+];
+
+async function renderCoinRulesSettingsTab(body) {
+  body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка настроек…</p></div>';
+  let rules;
+  try {
+    rules = await api.getCoinRulesSettings();
+  } catch (e) {
+    body.innerHTML = `<div class="empty-line">Ошибка загрузки: ${esc(e.message)}</div>`;
+    return;
+  }
+  const canEdit = canEditCoinRules(STATE.user?.role);
+
+  const numField = (id, label, value, hint = '') => `
+    <div class="coin-rules-field">
+      <label for="cr-${id}">${esc(label)}</label>
+      <input id="cr-${id}" class="form-input" type="number" step="1" value="${value}" ${canEdit ? '' : 'disabled'}>
+      ${hint ? `<span class="hint">${esc(hint)}</span>` : ''}
+    </div>`;
+
+  body.innerHTML = `
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Настройки начислений</h3>
+        ${!canEdit ? '<span class="panel-badge">Только просмотр</span>' : ''}
+        ${rules.updated_by_name ? `<span class="cell-muted" style="font-size:11px">Изменено: ${esc(rules.updated_by_name)}</span>` : ''}
+      </div>
+
+      <div class="coin-rules-section-title">Курс перевода</div>
+      <div class="coin-rules-form">
+        ${numField('points_per_coin', 'Баллов за 1 коин', rules.points_per_coin, 'Например, 5 = 5 баллов конвертируются в 1 коин')}
+        <div class="coin-rules-field">
+          <label for="cr-rounding_mode">Округление</label>
+          <select id="cr-rounding_mode" class="form-input" ${canEdit ? '' : 'disabled'}>
+            ${['floor', 'ceil', 'round'].map(m => `<option value="${m}" ${rules.rounding_mode === m ? 'selected' : ''}>${{ floor: 'Вниз', ceil: 'Вверх', round: 'Округление' }[m]}</option>`).join('')}
+          </select>
+        </div>
+        ${numField('min_points_for_accrual', 'Минимальный балл для начисления', rules.min_points_for_accrual)}
+      </div>
+
+      <div class="coin-rules-section-title">Бонусы за рейтинг недели</div>
+      <div class="coin-rules-form">
+        ${numField('top_1_bonus', '1 место', rules.top_1_bonus)}
+        ${numField('top_2_bonus', '2 место', rules.top_2_bonus)}
+        ${numField('top_3_bonus', '3 место', rules.top_3_bonus)}
+      </div>
+
+      <div class="coin-rules-section-title">Бонусы за дисциплину и признание</div>
+      <div class="coin-rules-form">
+        ${numField('no_late_bonus', 'Неделя без опозданий', rules.no_late_bonus)}
+        ${numField('no_violation_bonus', 'Неделя без нарушений', rules.no_violation_bonus)}
+        ${numField('nomination_bonus', 'Номинация недели (за каждую)', rules.nomination_bonus)}
+        ${numField('driver_thanks_bonus', 'Благодарность от водителя', rules.driver_thanks_bonus)}
+      </div>
+
+      <div class="coin-rules-section-title">Включённые номинации</div>
+      ${_NOMINATION_TOGGLES.map(([key, label]) => `
+        <div class="coin-rules-toggle-row">
+          <span>${esc(label)}</span>
+          <label class="an-checkbox-label"><input type="checkbox" id="cr-${key}" ${rules[key] ? 'checked' : ''} ${canEdit ? '' : 'disabled'}></label>
+        </div>`).join('')}
+
+      <div class="coin-rules-section-title">Ограничения начисления</div>
+      <div class="coin-rules-toggle-row">
+        <span>Начислять уволенным операторам</span>
+        <label class="an-checkbox-label"><input type="checkbox" id="cr-accrue_to_fired" ${rules.accrue_to_fired ? 'checked' : ''} ${canEdit ? '' : 'disabled'}></label>
+      </div>
+      <div class="coin-rules-toggle-row">
+        <span>Начислять неучаствующим операторам</span>
+        <label class="an-checkbox-label"><input type="checkbox" id="cr-accrue_to_inactive" ${rules.accrue_to_inactive ? 'checked' : ''} ${canEdit ? '' : 'disabled'}></label>
+      </div>
+
+      ${canEdit ? `
+        <div class="panel-footer" style="margin-top:18px">
+          <button class="btn-primary" onclick="saveCoinRulesSettings()">Сохранить настройки</button>
+        </div>
+        <div class="empty-line" style="margin-top:6px">Изменения применяются к следующему расчёту — старые начисления не пересчитываются.</div>
+      ` : ''}
+    </div>`;
+}
+
+async function saveCoinRulesSettings() {
+  const val = id => Number(document.getElementById(`cr-${id}`)?.value);
+  const checked = id => !!document.getElementById(`cr-${id}`)?.checked;
+
+  const payload = {
+    points_per_coin: val('points_per_coin'),
+    rounding_mode: document.getElementById('cr-rounding_mode')?.value,
+    min_points_for_accrual: val('min_points_for_accrual'),
+    top_1_bonus: val('top_1_bonus'), top_2_bonus: val('top_2_bonus'), top_3_bonus: val('top_3_bonus'),
+    no_late_bonus: val('no_late_bonus'), no_violation_bonus: val('no_violation_bonus'),
+    nomination_bonus: val('nomination_bonus'), driver_thanks_bonus: val('driver_thanks_bonus'),
+    accrue_to_fired: checked('accrue_to_fired'), accrue_to_inactive: checked('accrue_to_inactive'),
+  };
+  for (const [key] of _NOMINATION_TOGGLES) payload[key] = checked(key);
+
+  try {
+    await api.updateCoinRulesSettings(payload);
+    showToast('Настройки начислений сохранены', 'ok');
+  } catch (e) {
+    showToast(e.message, 'error');
+    return;
+  }
+  const body = document.getElementById('coins-tab-body');
+  if (body) renderCoinRulesSettingsTab(body);
+}
 
 let _sessionFilterStatus = 'active';
 let _sessionFilterQuery = '';
@@ -7087,6 +7998,16 @@ const RATING_TABS = [
 
 let _ratingActiveTab = 'overview';
 
+async function exportRatingFromRatingPage() {
+  try {
+    const summary = await api.getAdminSummary({});
+    if (!summary.period_start) { showToast('Нет рассчитанных недель для экспорта', 'error'); return; }
+    window.open(api.exportUrl('/api/exports/rating', { period_start: summary.period_start, period_end: summary.period_end, format: 'csv' }), '_blank');
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
 async function renderRating() {
   const el = document.getElementById('view-rating');
   if (!el) return;
@@ -7095,7 +8016,10 @@ async function renderRating() {
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
-      <div class="header-right"><button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button></div>
+      <div class="header-right">
+        ${isAdmin(STATE.user?.role) ? '<button class="btn-outline btn-sm" onclick="exportRatingFromRatingPage()">Экспорт CSV</button>' : ''}
+        <button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button>
+      </div>
     </div>
     <div class="analytics-tabs" id="rating-tabs">
       ${RATING_TABS.map(t => `<button class="analytics-tab ${t.key===_ratingActiveTab?'active':''}" data-tab="${t.key}">${esc(t.label)}</button>`).join('')}

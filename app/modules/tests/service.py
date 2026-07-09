@@ -318,6 +318,12 @@ def finish_attempt(db: Session, attempt: TestAttempt, reviewer: User | None = No
     attempt.questions_count = len(questions)
 
     _maybe_award_reward(db, attempt, test, reviewer)
+
+    from app.modules.achievements.service import check_test_score_achievement
+    operator = db.get(Operator, attempt.operator_id)
+    if operator:
+        check_test_score_achievement(db, operator, attempt.score_percent, reviewer)
+
     return attempt
 
 

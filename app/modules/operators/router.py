@@ -7,12 +7,18 @@ import secrets
 import string
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, hash_password, require_roles, verify_password
+from app.core.security import (
+    get_current_user,
+    hash_password,
+    require_roles,
+    supervisor_scope_group_id,
+    verify_password,
+)
 from app.database.db import get_db
 from app.models.entities import (
     AuditLog,
@@ -24,10 +30,10 @@ from app.models.entities import (
     WeeklyResult,
     now_utc,
 )
-from app.modules.operator_levels.service import operator_level_badge, operator_level_summary
-from app.modules.rating.service import rating_cache_invalidate
 from app.modules.operator_levels.schemas import OperatorLevelSummary
+from app.modules.operator_levels.service import operator_level_badge, operator_level_summary
 from app.modules.operators.schemas import OperatorRead, OperatorUpdate
+from app.modules.rating.service import rating_cache_invalidate
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +185,21 @@ def require_operator_management_access(current_user: User = Depends(get_current_
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
 
 
+def _get_operator_or_404_scoped(db: Session, operator_id: int, current_user: User) -> Operator:
+    """Загружает оператора и проверяет, что супервайзер не выходит за пределы
+    своей группы (ТЗ 10.2) — единая точка для всех операций над одним
+    оператором по ID (просмотр, редактирование, увольнение, восстановление,
+    сброс пароля). manager/admin — без ограничений.
+    """
+    op = db.get(Operator, operator_id)
+    if not op:
+        raise HTTPException(status_code=404, detail="Оператор не найден")
+    group_id = supervisor_scope_group_id(db, current_user)
+    if group_id is not None and op.group_id != group_id:
+        raise HTTPException(status_code=403, detail="Нет доступа к оператору другой группы")
+    return op
+
+
 # ── Schemas ────────────────────────────────────────────────────
 
 VALID_POSITIONS = ("operator", "chat_manager")
@@ -263,12 +284,18 @@ class OperatorFullRead(BaseModel):
 
 @router.get("", response_model=list[OperatorRead])
 def list_operators(
+    limit: int | None = Query(None, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("supervisor", "manager", "admin"))
+    current_user: User = Depends(require_roles("supervisor", "manager", "admin"))
 ) -> list[dict]:
-    operators = list(db.scalars(
-        select(Operator).order_by(Operator.group_name.asc(), Operator.full_name.asc())
-    ))
+    query = select(Operator).order_by(Operator.group_name.asc(), Operator.full_name.asc())
+    group_id = supervisor_scope_group_id(db, current_user)
+    if group_id is not None:
+        query = query.where(Operator.group_id == group_id)
+    if limit is not None:
+        query = query.offset(offset).limit(limit)
+    operators = list(db.scalars(query))
     return [_operator_response(db, op) for op in operators]
 
 
@@ -309,6 +336,9 @@ def create_operator(
         raise HTTPException(status_code=404, detail="Группа не найдена")
     if group.status != "active":
         raise HTTPException(status_code=400, detail="Нельзя добавить оператора в отключённую группу")
+    supervisor_group_id = supervisor_scope_group_id(db, current_user)
+    if supervisor_group_id is not None and group.id != supervisor_group_id:
+        raise HTTPException(status_code=403, detail="Можно добавлять операторов только в свою группу")
 
     # Validate email
     email = payload.email.strip() if payload.email else None
@@ -416,9 +446,7 @@ def get_operator(
 ) -> dict:
     if current_user.role == "operator" and current_user.operator_id != operator_id:
         raise HTTPException(status_code=403, detail="Нет доступа")
-    op = db.get(Operator, operator_id)
-    if not op:
-        raise HTTPException(status_code=404, detail="Оператор не найден")
+    op = _get_operator_or_404_scoped(db, operator_id, current_user)
     return _operator_response(db, op)
 
 
@@ -428,15 +456,9 @@ def get_operator_level(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    op = db.get(Operator, operator_id)
-    if not op:
-        raise HTTPException(status_code=404, detail="Оператор не найден")
     if current_user.role == "operator" and current_user.operator_id != operator_id:
         raise HTTPException(status_code=403, detail="Нет доступа")
-    if current_user.role == "supervisor" and current_user.operator_id:
-        supervisor_op = db.get(Operator, current_user.operator_id)
-        if supervisor_op and supervisor_op.group_id != op.group_id:
-            raise HTTPException(status_code=403, detail="Нет доступа к оператору другой группы")
+    op = _get_operator_or_404_scoped(db, operator_id, current_user)
     return operator_level_summary(db, op)
 
 
@@ -447,9 +469,7 @@ def update_operator(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_operator_management_access)
 ) -> dict:
-    op = db.get(Operator, operator_id)
-    if not op:
-        raise HTTPException(status_code=404, detail="Оператор не найден")
+    op = _get_operator_or_404_scoped(db, operator_id, current_user)
     changes = []
 
     data = payload.model_dump(exclude_unset=True)
@@ -551,9 +571,7 @@ def reset_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_operator_management_access)
 ) -> ResetPasswordResponse:
-    op = db.get(Operator, operator_id)
-    if not op:
-        raise HTTPException(status_code=404, detail="Оператор не найден")
+    op = _get_operator_or_404_scoped(db, operator_id, current_user)
     user = _operator_user(db, op)
     if not user:
         raise HTTPException(status_code=400, detail="У оператора нет аккаунта")
@@ -578,9 +596,7 @@ def dismiss_operator(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_operator_management_access),
 ) -> dict:
-    op = db.get(Operator, operator_id)
-    if not op:
-        raise HTTPException(status_code=404, detail="Оператор не найден")
+    op = _get_operator_or_404_scoped(db, operator_id, current_user)
     if op.employment_status == "dismissed":
         return _operator_response(db, op)
 
@@ -608,9 +624,7 @@ def restore_operator(
     if payload.participation_status not in VALID_PARTICIPATION:
         raise HTTPException(status_code=400, detail="Некорректный статус участия")
 
-    op = db.get(Operator, operator_id)
-    if not op:
-        raise HTTPException(status_code=404, detail="Оператор не найден")
+    op = _get_operator_or_404_scoped(db, operator_id, current_user)
 
     op.employment_status = "active"
     op.participation_status = payload.participation_status

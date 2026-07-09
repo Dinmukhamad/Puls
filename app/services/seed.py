@@ -136,7 +136,7 @@ def seed_database(db: Session) -> None:
     demo_scores = [92.5, 88.0, 75.5, 81.0, 69.0, 95.0]
 
     for op, points in zip(demo_operators, demo_scores, strict=False):
-        coins = points_to_coins(points)
+        coins = points_to_coins(points, db)
         result = WeeklyResult(
             operator_id=op.id,
             week_start=week_start,

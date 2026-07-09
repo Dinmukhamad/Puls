@@ -139,6 +139,7 @@ function renderUsersPage() {
       <div><div class="section-kicker">Пользователи</div><h2 class="section-title">Пользователи</h2></div>
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="exportCSV()">Экспорт CSV</button>
+        <button class="btn-outline btn-sm" onclick="exportOperatorsXLSX()">Экспорт XLSX</button>
         <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
         ${['manager','admin'].includes(STATE.user?.role) ? `
           <button class="btn-outline btn-sm" onclick="showWorkNormsModal()">Нормы часов</button>
@@ -257,6 +258,8 @@ function renderCoins() {
     ['accrual', 'Начисление'],
     ['requests', 'Заявки'],
     ['history', 'История'],
+    ['weekly', 'Еженедельный расчёт'],
+    ['settings', 'Настройки начислений'],
     ['rules', 'Правила'],
   ];
 
@@ -268,7 +271,6 @@ function renderCoins() {
         <p class="section-subtitle">Управление начислениями, заявками и историей операций</p>
       </div>
       <div class="header-right">
-        ${tab === 'history' ? '<button class="btn-outline btn-sm" onclick="exportHistoryCSV()">Экспорт CSV</button>' : ''}
         <button class="btn-outline btn-sm" onclick="refreshCoinsModule()">Обновить</button>
       </div>
     </div>
@@ -296,6 +298,8 @@ function renderCoins() {
     renderHistory();
   }
   if (tab === 'rules') renderCoinRules(body);
+  if (tab === 'weekly') renderWeeklyAccrualTab(body);
+  if (tab === 'settings') renderCoinRulesSettingsTab(body);
 }
 
 async function refreshCoinsModule() {
@@ -395,6 +399,14 @@ function transactionTypeLabel(type) {
     refund: 'Возврат коинов',
     request_completed: 'Заявка выполнена',
     period_report: 'Расчет периода',
+    period_report_adjustment: 'Корректировка расчёта периода',
+    bonus_top: 'Бонус: место в рейтинге',
+    bonus_no_late: 'Бонус: без опозданий',
+    bonus_no_violation: 'Бонус: без нарушений',
+    bonus_nomination: 'Бонус: номинация недели',
+    bonus_driver_thanks: 'Бонус: благодарность водителя',
+    achievement_reward: 'Награда за достижение',
+    test_reward: 'Награда за тест',
   }[type] || type;
 }
 
@@ -857,60 +869,169 @@ function renderRequests() {
 /* ══════════════════════════════════════
    VIEW: ИСТОРИЯ ОПЕРАЦИЙ
 ══════════════════════════════════════ */
+const _historyTabState = {
+  filters: { type: 'all', operator_id: 'all', source: 'all', created_by: 'all', start_date: '', end_date: '' },
+  limit: 50, offset: 0, data: null,
+};
+
+const _historySourceLabels = {
+  weekly_auto_accrual: 'Автоначисление', achievement: 'Достижение',
+};
+
 function renderHistory() {
   const el = document.getElementById('view-history');
   if (!el) return;
-  const history = STATE.history;
-
-  const typeLabels = {
-    weekly_accrual: 'Авт. начисление',
-    manual_add: 'Ручное начисление',
-    manual_subtract: 'Ручное списание',
-    manual_accrual: 'Ручное начисление',
-    manual_deduction: 'Ручное списание',
-    reserve: 'Резервирование',
-    reservation: 'Резервирование',
-    purchase: 'Покупка бонуса',
-    refund: 'Возврат коинов',
-    request_completed: 'Заявка выполнена',
-    period_report: 'Расчет периода',
-  };
+  const f = _historyTabState.filters;
 
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">История</div><h2 class="section-title">История операций</h2></div>
       <div class="header-right">
-        <button class="btn-outline btn-sm" onclick="exportHistoryCSV()">Экспорт CSV</button>
-        <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
+        <button class="btn-outline btn-sm" onclick="exportHistoryServerSide()">Экспорт CSV</button>
+        <button class="btn-outline btn-sm" onclick="exportHistoryServerSide('xlsx')">Экспорт XLSX</button>
+        <button class="btn-outline btn-sm" onclick="reloadHistoryTab()">Обновить</button>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px">
+      <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Тип</label>
+          <select id="hist-f-type" class="form-input">
+            <option value="all">Все</option>
+            <option value="weekly_accrual">Авт. начисление</option>
+            <option value="bonus_top">Бонус: топ недели</option>
+            <option value="bonus_no_late">Бонус: без опозданий</option>
+            <option value="bonus_no_violation">Бонус: без нарушений</option>
+            <option value="bonus_nomination">Бонус: номинация</option>
+            <option value="bonus_driver_thanks">Бонус: благодарность</option>
+            <option value="achievement_reward">Достижение</option>
+            <option value="manual_add">Ручное начисление</option>
+            <option value="manual_subtract">Ручное списание</option>
+            <option value="purchase">Покупка бонуса</option>
+            <option value="refund">Возврат коинов</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Источник</label>
+          <select id="hist-f-source" class="form-input">
+            <option value="all">Все</option>
+            <option value="weekly_auto_accrual">Еженедельный расчёт</option>
+            <option value="achievement">Достижение</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Дата от</label>
+          <input type="date" id="hist-f-start" class="form-input" value="${esc(f.start_date)}">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Дата до</label>
+          <input type="date" id="hist-f-end" class="form-input" value="${esc(f.end_date)}">
+        </div>
+        <button class="btn-primary btn-sm" onclick="applyHistoryFilters()">Применить</button>
       </div>
     </div>
 
     <div class="panel">
       <div class="panel-head">
-        <h3>Все транзакции</h3>
-        <span class="panel-badge">${history.length} записей</span>
+        <h3>Транзакции</h3>
+        <span class="panel-badge" id="hist-total-badge">…</span>
       </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr>
-            <th>Дата</th><th>Оператор</th><th>Группа</th>
-            <th>Тип</th><th>Коины</th><th>Причина</th><th>Автор</th>
-          </tr></thead>
-          <tbody>
-            ${history.length ? history.map(t => `
-              <tr>
-                <td style="white-space:nowrap">${fmtDate(t.created_at)}</td>
-                <td class="name-cell">${esc(t.operator_name)}</td>
-                <td>${esc(t.group_name)}</td>
-                <td><span style="font-size:11px;color:var(--tx3)">${typeLabels[t.type]||t.type}</span></td>
-                <td><b style="color:${t.amount>=0?'var(--ok)':'var(--danger)'}">${t.amount>=0?'+':''}${t.amount} ₡</b></td>
-                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.comment)}">${esc(t.comment)}</td>
-                <td style="font-size:12px;color:var(--tx3)">${esc(t.created_by_name||'Система')}</td>
-              </tr>`).join('') : '<tr><td colspan="7" class="empty-line">История пуста</td></tr>'}
-          </tbody>
-        </table>
+      <div class="table-wrap" id="hist-table-host">
+        <div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>
       </div>
+      <div class="panel-footer" id="hist-pagination-host"></div>
     </div>`;
+
+  document.getElementById('hist-f-type').value = f.type;
+  document.getElementById('hist-f-source').value = f.source;
+  loadHistoryTabData();
+}
+
+async function loadHistoryTabData() {
+  const tableHost = document.getElementById('hist-table-host');
+  const badge = document.getElementById('hist-total-badge');
+  if (!tableHost) return;
+  const f = _historyTabState.filters;
+  const params = { limit: _historyTabState.limit, offset: _historyTabState.offset };
+  if (f.type !== 'all') params.type = f.type;
+  if (f.source !== 'all') params.source = f.source;
+  if (f.start_date) params.start_date = f.start_date;
+  if (f.end_date) params.end_date = f.end_date;
+
+  let data;
+  try {
+    data = await api.listCoinTransactions(params);
+  } catch (e) {
+    tableHost.innerHTML = `<div class="empty-line">Ошибка: ${esc(e.message)}</div>`;
+    return;
+  }
+  _historyTabState.data = data;
+  const items = data.items || [];
+  if (badge) badge.textContent = `${data.total ?? items.length} записей`;
+
+  tableHost.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Дата</th><th>Оператор</th><th>Группа</th>
+        <th>Тип</th><th>Коины</th><th>Причина</th><th>Автор</th><th>Источник</th>
+      </tr></thead>
+      <tbody>
+        ${items.length ? items.map(t => `
+          <tr>
+            <td style="white-space:nowrap">${fmtDate(t.created_at)}</td>
+            <td class="name-cell">${esc(t.operator_name)}</td>
+            <td>${esc(t.group_name)}</td>
+            <td><span style="font-size:11px;color:var(--tx3)">${esc(transactionTypeLabel(t.type))}</span></td>
+            <td><b style="color:${t.amount>=0?'var(--ok)':'var(--danger)'}">${t.amount>=0?'+':''}${t.amount} ₡</b></td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.comment)}">${esc(t.comment)}</td>
+            <td style="font-size:12px;color:var(--tx3)">${esc(t.created_by_name||'Система')}</td>
+            <td style="font-size:11px;color:var(--tx3)">${esc(_historySourceLabels[t.source_type] || t.source_type || '—')}</td>
+          </tr>`).join('') : '<tr><td colspan="8" class="empty-line">Нет операций по заданным фильтрам</td></tr>'}
+      </tbody>
+    </table>`;
+
+  const pager = document.getElementById('hist-pagination-host');
+  if (pager) {
+    const total = data.total ?? items.length;
+    const from = _historyTabState.offset + 1;
+    const to = Math.min(total, _historyTabState.offset + _historyTabState.limit);
+    pager.innerHTML = `
+      <span class="cell-muted">${total ? `${from}–${to} из ${total}` : ''}</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" ${_historyTabState.offset === 0 ? 'disabled' : ''} onclick="historyPagePrev()">← Назад</button>
+        <button class="btn-outline btn-sm" ${to >= total ? 'disabled' : ''} onclick="historyPageNext()">Далее →</button>
+      </div>`;
+  }
+}
+
+function applyHistoryFilters() {
+  _historyTabState.filters.type = document.getElementById('hist-f-type')?.value || 'all';
+  _historyTabState.filters.source = document.getElementById('hist-f-source')?.value || 'all';
+  _historyTabState.filters.start_date = document.getElementById('hist-f-start')?.value || '';
+  _historyTabState.filters.end_date = document.getElementById('hist-f-end')?.value || '';
+  _historyTabState.offset = 0;
+  loadHistoryTabData();
+}
+
+function historyPagePrev() {
+  _historyTabState.offset = Math.max(0, _historyTabState.offset - _historyTabState.limit);
+  loadHistoryTabData();
+}
+function historyPageNext() {
+  _historyTabState.offset += _historyTabState.limit;
+  loadHistoryTabData();
+}
+function reloadHistoryTab() { loadHistoryTabData(); }
+
+function exportHistoryServerSide(format = 'csv') {
+  const f = _historyTabState.filters;
+  const params = { format };
+  if (f.type !== 'all') params.type = f.type;
+  if (f.source !== 'all') params.source = f.source;
+  if (f.start_date) params.start_date = f.start_date;
+  if (f.end_date) params.end_date = f.end_date;
+  window.open(api.exportUrl('/api/exports/coin-transactions', params), '_blank');
 }
 
 /* ══════════════════════════════════════
@@ -2011,20 +2132,10 @@ async function submitEditItem(id) {
    EXPORT
 ══════════════════════════════════════ */
 function exportCSV() {
-  const ops = STATE.adminOperators;
-  const header = ['ФИО','Группа','Должность','Статус участия','Статус работы','Email','Логин','Баланс','Коины нед.'];
-  const rows = ops.map(o => [
-    o.full_name,
-    o.group_name,
-    positionLabel(o.position || 'operator'),
-    participationStatusLabel(o.participation_status || 'participating'),
-    isOperatorDismissed(o) ? 'Уволен' : 'Активен',
-    o.email || '',
-    o.username || '',
-    o.current_balance,
-    o.coins_earned_week,
-  ]);
-  downloadCSV([header, ...rows], 'pulse_operators');
+  window.open(api.exportUrl('/api/exports/operators', { format: 'csv' }), '_blank');
+}
+function exportOperatorsXLSX() {
+  window.open(api.exportUrl('/api/exports/operators', { format: 'xlsx' }), '_blank');
 }
 
 function exportHistoryCSV() {

@@ -5234,3 +5234,84 @@ html[data-theme="dark"] .wheel-result-note {
   color: var(--success) !important;
 }
 
+/* source: 50-cabinet-achievements.css */
+/* ══════════════════════════════════════
+   Кабинет: показатели недели, расчёт коинов, достижения (ТЗ §5, §7)
+══════════════════════════════════════ */
+
+.metric-progress-row { margin-bottom: 14px; }
+.metric-progress-label {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 13px; margin-bottom: 6px;
+}
+.metric-progress-label b { font-size: 13px; }
+.metric-progress-bar {
+  height: 7px; background: var(--bg-muted); border-radius: 999px; overflow: hidden;
+}
+.metric-progress-fill {
+  height: 100%; background: var(--accent); border-radius: 999px;
+  transition: width .3s ease;
+}
+.metric-progress-fill.ok { background: var(--ok); }
+
+.metric-mini-row { font-size: 13px; color: var(--text-muted); margin: 10px 0 12px; }
+
+.metric-anti-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
+.metric-anti-row {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 8px 10px; border-radius: var(--r-md);
+  background: var(--bg-muted); font-size: 12px;
+}
+.metric-anti-row b { font-size: 16px; }
+.metric-anti-row.bad { background: var(--danger-soft); color: var(--danger); }
+.metric-anti-row.good { background: var(--ok-soft); color: var(--ok); }
+
+.coin-calc-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 0; font-size: 13px; border-bottom: 1px dashed var(--border);
+}
+.coin-calc-row:last-child { border-bottom: none; }
+.coin-calc-bonus { color: var(--ok); font-size: 12.5px; }
+.coin-calc-total { font-weight: 700; font-size: 15px; border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; }
+
+.panel-badge.badge-final { background: var(--ok-soft); color: var(--ok); }
+.panel-badge.badge-pending { background: var(--warn-soft); color: var(--warn); }
+
+.achievements-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px;
+}
+.achievement-badge {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 12px; border-radius: var(--r-md); border: 1px solid var(--border);
+  background: var(--bg-muted);
+}
+.achievement-badge.unlocked { border-color: var(--ok); background: var(--ok-soft); }
+.achievement-badge.locked { opacity: .55; }
+.achievement-icon { font-size: 24px; line-height: 1; flex-shrink: 0; }
+.achievement-info { min-width: 0; }
+.achievement-title { font-weight: 600; font-size: 13px; }
+.achievement-desc { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.achievement-meta { font-size: 11px; color: var(--ok); margin-top: 4px; font-weight: 600; }
+.achievement-progress-line { font-size: 11.5px; margin-top: 4px; font-weight: 600; }
+
+@media (max-width: 640px) {
+  .metric-anti-grid { grid-template-columns: 1fr 1fr; }
+  .achievements-grid { grid-template-columns: 1fr; }
+}
+
+/* ══════════════════════════════════════
+   Коины: еженедельный расчёт, настройки начислений (ТЗ §3, §4)
+══════════════════════════════════════ */
+
+.status-pill.error { color: var(--danger); background: var(--danger-soft); }
+.row-muted { opacity: .5; }
+.row-muted td { color: var(--text-muted); }
+
+.coin-rules-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.coin-rules-field { display: flex; flex-direction: column; gap: 4px; }
+.coin-rules-field label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+.coin-rules-field .hint { font-size: 11px; color: var(--text-muted); }
+.coin-rules-section-title { font-size: 13px; font-weight: 700; margin: 18px 0 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .03em; }
+.coin-rules-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
+.coin-rules-toggle-row:last-child { border-bottom: none; }
+

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user
@@ -53,11 +53,13 @@ def _get_requested_operator(db: Session, user: User, operator_id: int | None) ->
 def get_rating(
     week_start: date | None = None,
     week_end: date | None = None,
+    limit: int | None = Query(None, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     op = _get_operator_for_user(db, current_user)
-    return service.rating_overview(db, op, week_start, week_end)
+    return service.rating_overview(db, op, week_start, week_end, limit, offset)
 
 
 @router.get("/me")

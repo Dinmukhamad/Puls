@@ -18,6 +18,7 @@ from app.models.entities import (
     CoinTransaction,
     PeriodReport,
     User,
+    WeeklyResult,
 )
 from app.modules.analytics.cache import cache_clear_all
 from app.modules.operator_levels.service import assign_auto_level
@@ -270,6 +271,40 @@ def _apply_metrics(pr: PeriodReport, m, user_id: int) -> None:
     pr.created_by_user_id = user_id
 
 
+def _sync_weekly_result(db: Session, db_op, m, pr: PeriodReport, period_start: date, period_end: date) -> None:
+    """Мост в новый движок автоматического еженедельного расчёта (ТЗ §3).
+
+    Переносит реальные метрики из Excel-расчёта в WeeklyResult, чтобы
+    /weekly-results/preview|apply (бонусы: топ-3, без опозданий/нарушений,
+    номинации) работали на реальных данных, а не только на ручном вводе.
+
+    coins_earned синхронизируется с pr.coins_awarded — это единый источник
+    правды «сколько базовых коинов за период уже начислено», независимо от
+    того, каким путём (Excel save или /weekly-results/apply) это произошло;
+    apply_period_accrual() досчитывает дельту от этого значения, а не
+    начисляет заново, поэтому оба пути не задваивают коины.
+
+    lateness_count/violation_count/thanks_count НЕ трогаем: в исходном Excel
+    есть только один общий столбец «Штрафы» (m.penalty_sum), без разбивки на
+    опоздания/нарушения, и столбца благодарностей нет вовсе — раздельные
+    бонусы по ним останутся на значениях по умолчанию (0), пока эти данные не
+    появятся отдельными колонками. Если строка уже существует и в неё эти
+    поля вводили вручную через POST /weekly-results — сохраняем их как есть.
+    """
+    row = repo.weekly_result_for(db, db_op.id, period_start, period_end)
+    if row is None:
+        row = WeeklyResult(operator_id=db_op.id, week_start=period_start, week_end=period_end)
+        db.add(row)
+
+    row.hours_score = m.total_hours
+    row.quality_score = m.quality_avg
+    row.efficiency_score = m.efficiency_percent
+    row.calls_per_hour_score = m.kvz
+    row.final_score = m.final_points
+    row.contest_points = m.final_points
+    row.coins_earned = pr.coins_awarded or 0
+
+
 def save_period_report(db: Session, payload: SavePeriodReportRequest, current_user: User) -> dict:
     """Пересчитывает период (только matched-операторы) и сохраняет результаты в БД."""
     if payload.start_date > payload.end_date:
@@ -353,6 +388,8 @@ def save_period_report(db: Session, payload: SavePeriodReportRequest, current_us
                 ))
         else:
             pr.coins_awarded = old_coins
+
+        _sync_weekly_result(db, db_op, m, pr, payload.start_date, payload.end_date)
 
         db.add(pr)
         saved_reports.append(pr)

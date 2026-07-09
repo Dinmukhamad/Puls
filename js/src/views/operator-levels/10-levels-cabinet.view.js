@@ -5,6 +5,27 @@ async function renderOperatorLevelsSettings() {
     el.innerHTML = '<div class="empty-state"><p>Недостаточно прав</p></div>';
     return;
   }
+
+  const tab = STATE.opLevelsTab === 'achievements' ? 'achievements' : 'levels';
+  el.innerHTML = `
+    <div class="filter-tabs" style="margin-bottom:16px">
+      <button class="filter-tab ${tab === 'levels' ? 'active' : ''}" data-op-levels-tab="levels">Уровни</button>
+      <button class="filter-tab ${tab === 'achievements' ? 'active' : ''}" data-op-levels-tab="achievements">Достижения</button>
+    </div>
+    <div id="op-levels-tab-body"></div>`;
+  el.querySelectorAll('[data-op-levels-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      STATE.opLevelsTab = btn.dataset.opLevelsTab;
+      renderOperatorLevelsSettings();
+    });
+  });
+  const bodyEl = el.querySelector('#op-levels-tab-body');
+  if (tab === 'achievements') { renderAchievementsAdminTab(bodyEl); return; }
+  return renderLevelsTabContent(bodyEl);
+}
+
+async function renderLevelsTabContent(el) {
+  if (!el) return;
   el.innerHTML = `<div class="view-header level-view-header">
     <div>
       <div class="section-kicker">Операторы</div>
@@ -452,6 +473,10 @@ function renderCabinet() {
 
     <div id="cabinet-wheel-winners"></div>
 
+    <div id="cabinet-weekly-detail"></div>
+
+    <div id="cabinet-achievements"></div>
+
     <div class="two-col-grid">
       <div class="panel">
         <div class="panel-head"><h3>История начислений</h3><span class="panel-badge">${w.transactions.length} записей</span></div>
@@ -485,6 +510,8 @@ function renderCabinet() {
 
   renderCabinetWheelCard();
   renderWheelWinnersToday();
+  renderCabinetWeeklyDetail();
+  renderCabinetAchievements();
 }
 
 // Блок «Победитель Wheel of WOW сегодня» на главной (ТЗ п.10). Грузится
@@ -582,6 +609,7 @@ async function reloadCabinet() {
   setText('side-level', STATE.myLevel?.level?.name || '—');
   const ratingResp = await api.getRating().catch(() => ({ items: STATE.rating }));
   STATE.rating = Array.isArray(ratingResp) ? ratingResp : (ratingResp.items || []);
+  STATE.cabinetData = null;
   renderCabinet();
 }
 
@@ -647,3 +675,4 @@ async function submitChangeUsername() {
 
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
+══════════════════════════════════════ */

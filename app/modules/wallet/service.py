@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from math import floor
+from math import ceil, floor
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -8,7 +8,29 @@ from sqlalchemy.orm import Session
 from app.models.entities import CoinTransaction, Operator, ShopItem, ShopPurchase, User, now_utc
 
 
-def points_to_coins(points: float) -> int:
+def points_to_coins(points: float, db: Session | None = None) -> int:
+    """Переводит баллы в коины по настраиваемому курсу (ТЗ §4).
+
+    Если передана сессия БД — берёт активные правила (`coin_rules`): курс,
+    режим округления и минимальный порог. Без сессии (например, вызов вне
+    запроса) — старое поведение по умолчанию: floor(points / 5).
+    """
+    if db is not None:
+        from app.modules.settings.service import get_active_coin_rule
+
+        rule = get_active_coin_rule(db)
+        rate = rule.points_per_coin or 5
+        min_points = rule.min_points_for_accrual or 0
+        if points < min_points:
+            return 0
+        ratio = points / rate
+        if rule.rounding_mode == "ceil":
+            value = ceil(ratio)
+        elif rule.rounding_mode == "round":
+            value = round(ratio)
+        else:
+            value = floor(ratio)
+        return max(0, int(value))
     return max(0, floor(points / 5))
 
 

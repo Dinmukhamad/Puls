@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # Demo data
     enable_demo_data: bool = True
 
+    # Автоматический еженедельный расчёт коинов (ТЗ 3.2): пн 09:00 Asia/Almaty
+    enable_weekly_accrual_cron: bool = True
+
     @property
     def cors_origin_list(self) -> list[str]:
         if self.cors_origins.strip() == "*":

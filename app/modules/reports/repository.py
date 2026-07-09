@@ -16,6 +16,7 @@ from app.models.entities import (
     OperatorDailyMetric,
     PeriodReport,
     UploadedReportFile,
+    WeeklyResult,
 )
 
 
@@ -106,3 +107,16 @@ def existing_period_reports_for(db: Session, operator_id: int, start_date: date,
         )
         .order_by(PeriodReport.created_at.desc(), PeriodReport.id.desc())
     ))
+
+
+def weekly_result_for(db: Session, operator_id: int, week_start: date, week_end: date) -> WeeklyResult | None:
+    """Мост reports → weekly_results (ТЗ §3): найти существующую строку WeeklyResult
+    за тот же период, чтобы не создавать дубликат и не затирать вручную введённые
+    lateness_count/violation_count/thanks_count."""
+    return db.scalar(
+        select(WeeklyResult).where(
+            WeeklyResult.operator_id == operator_id,
+            WeeklyResult.week_start == week_start,
+            WeeklyResult.week_end == week_end,
+        )
+    )

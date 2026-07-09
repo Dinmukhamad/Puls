@@ -1,5 +1,15 @@
 let _ratingActiveTab = 'overview';
 
+async function exportRatingFromRatingPage() {
+  try {
+    const summary = await api.getAdminSummary({});
+    if (!summary.period_start) { showToast('Нет рассчитанных недель для экспорта', 'error'); return; }
+    window.open(api.exportUrl('/api/exports/rating', { period_start: summary.period_start, period_end: summary.period_end, format: 'csv' }), '_blank');
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
 async function renderRating() {
   const el = document.getElementById('view-rating');
   if (!el) return;
@@ -8,7 +18,10 @@ async function renderRating() {
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
-      <div class="header-right"><button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button></div>
+      <div class="header-right">
+        ${isAdmin(STATE.user?.role) ? '<button class="btn-outline btn-sm" onclick="exportRatingFromRatingPage()">Экспорт CSV</button>' : ''}
+        <button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button>
+      </div>
     </div>
     <div class="analytics-tabs" id="rating-tabs">
       ${RATING_TABS.map(t => `<button class="analytics-tab ${t.key===_ratingActiveTab?'active':''}" data-tab="${t.key}">${esc(t.label)}</button>`).join('')}
