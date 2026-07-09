@@ -160,3 +160,30 @@ def test_operator_cannot_export_anything(make_client, db_session):
 def test_invalid_format_rejected(client):
     r = client.get("/api/exports/operators?format=pdf")
     assert r.status_code == 400
+
+
+def test_shop_requests_operator_id_filter(client, db_session):
+    from app.models import entities as m
+
+    op_a = make_operator(db_session, full_name="ФильтрПоОператоруА")
+    op_b = make_operator(db_session, full_name="ФильтрПоОператоруБ")
+    item = m.ShopItem(title="Фильтр-товар", price=5)
+    db_session.add(item)
+    db_session.commit()
+    db_session.refresh(item)
+    db_session.add_all([
+        m.ShopPurchase(operator_id=op_a.id, shop_item_id=item.id, price=5, status="new"),
+        m.ShopPurchase(operator_id=op_b.id, shop_item_id=item.id, price=5, status="new"),
+    ])
+    db_session.commit()
+
+    r = client.get(f"/api/coins/requests?operator_id={op_a.id}")
+    assert r.status_code == 200, r.text
+    names = [row["operator_name"] for row in r.json()["items"]]
+    assert all(n.startswith("ФильтрПоОператоруА") for n in names)
+    assert len(names) == 1
+
+    r_export = client.get(f"/api/exports/shop-requests?operator_id={op_a.id}&format=csv")
+    assert r_export.status_code == 200, r_export.text
+    assert "ФильтрПоОператоруА" in r_export.text
+    assert "ФильтрПоОператоруБ" not in r_export.text

@@ -107,7 +107,7 @@ async function _loadAdminSummaryDetail() {
           <thead><tr>
             <th>Место</th><th>ФИО</th><th>Группа</th><th>Статус</th>
             <th>Баллы недели</th><th>Коины недели</th><th>Баланс</th>
-            <th>Опоздания</th><th>Нарушения</th><th>Качество</th><th>Эффективность</th>
+            <th>Опоздания</th><th>Нарушения</th><th>Качество</th><th>Эффективность</th><th>Действия</th>
           </tr></thead>
           <tbody>
             ${data.operators.length ? data.operators.map(o => `
@@ -123,7 +123,8 @@ async function _loadAdminSummaryDetail() {
                 <td style="color:${o.violation_count > 0 ? 'var(--danger)' : 'inherit'}">${o.violation_count ?? '—'}</td>
                 <td>${o.quality != null ? levelNum(o.quality) + '%' : '—'}</td>
                 <td>${o.efficiency != null ? levelNum(o.efficiency) + '%' : '—'}</td>
-              </tr>`).join('') : '<tr><td colspan="11" class="empty-line">Нет данных за выбранный период/фильтры</td></tr>'}
+                <td>${summaryRowActionsHtml(o.id, o.full_name)}</td>
+              </tr>`).join('') : '<tr><td colspan="12" class="empty-line">Нет данных за выбранный период/фильтры</td></tr>'}
           </tbody>
         </table>
       </div>

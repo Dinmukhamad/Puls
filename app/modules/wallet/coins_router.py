@@ -179,6 +179,7 @@ def requests(
     status_filter: str = Query("all", alias="status"),
     group_id: str = "all",
     bonus_id: str = "all",
+    operator_id: str = "all",
     limit: int | None = Query(None, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -198,6 +199,8 @@ def requests(
         q = q.where(Operator.group_id == int(group_id))
     if bonus_id != "all":
         q = q.where(ShopPurchase.shop_item_id == int(bonus_id))
+    if operator_id != "all":
+        q = q.where(ShopPurchase.operator_id == int(operator_id))
     supervisor_group_id = _supervisor_group_id(db, current_user)
     if supervisor_group_id is not None:
         q = q.where(Operator.group_id == supervisor_group_id)

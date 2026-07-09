@@ -92,6 +92,7 @@ def export_operators(
 @router.get("/shop-requests", dependencies=[ADMIN_DEP])
 def export_shop_requests(
     status_filter: str = Query("all", alias="status"),
+    operator_id: str = "all",
     format: str = Query("csv"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -107,6 +108,8 @@ def export_shop_requests(
         q = q.where(ShopPurchase.status.in_(["pending", "new"]))
     elif status_filter != "all":
         q = q.where(ShopPurchase.status == status_filter)
+    if operator_id != "all":
+        q = q.where(ShopPurchase.operator_id == int(operator_id))
     group_id = supervisor_scope_group_id(db, current_user)
     if group_id is not None:
         q = q.where(Operator.group_id == group_id)

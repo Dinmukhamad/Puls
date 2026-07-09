@@ -5315,3 +5315,18 @@ html[data-theme="dark"] .wheel-result-note {
 .coin-rules-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 13px; }
 .coin-rules-toggle-row:last-child { border-bottom: none; }
 
+.filter-active-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; margin-bottom: 14px;
+  background: var(--accent-soft); border-radius: var(--r-md);
+  font-size: 13px;
+}
+
+.row-actions-group { display: flex; gap: 4px; }
+.btn-icon-sm {
+  width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--bg-muted);
+  cursor: pointer; font-size: 12px; transition: background .15s ease;
+}
+.btn-icon-sm:hover { background: var(--accent-soft); border-color: var(--accent); }
+
