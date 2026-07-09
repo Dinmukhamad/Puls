@@ -303,6 +303,25 @@ def test_spin_blocked_when_last_spin_was_recent(db_session):
     assert len(ws.available_tickets(db_session, op.id)) == 1
 
 
+def test_campaign_accepts_spin_limits_up_to_new_ceiling(client, db_session):
+    """Регрессия: раньше max_spins_per_day/week были ограничены 50/200 —
+    легитимное значение вроде 100 в день отклонялось 422 с сырым JSON вместо
+    понятной ошибки. Потолок поднят (500/2000), 0 по-прежнему значит
+    «без лимита» (см. wheel/service.py)."""
+    from app.services.wheel_seed import ensure_default_wheel
+
+    campaign = ensure_default_wheel(db_session)
+    r = client.patch(f"/api/admin/wheel/campaigns/{campaign.id}", json={
+        "max_spins_per_day": 100, "max_spins_per_week": 500,
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["max_spins_per_day"] == 100
+    assert r.json()["max_spins_per_week"] == 500
+
+    r_over = client.patch(f"/api/admin/wheel/campaigns/{campaign.id}", json={"max_spins_per_day": 501})
+    assert r_over.status_code == 422
+
+
 def test_spin_endpoint_repeated_request_no_second_prize(make_client, db_session):
     """HTTP-уровень: после use повторный POST /spin → 409, не второй приз."""
     from app.modules.wheel import service as ws

@@ -251,8 +251,8 @@ class CampaignBase(BaseModel):
     is_active: bool = True
     start_date: date | None = None
     end_date: date | None = None
-    max_spins_per_day: int = Field(default=1, ge=0, le=50)
-    max_spins_per_week: int = Field(default=3, ge=0, le=200)
+    max_spins_per_day: int = Field(default=1, ge=0, le=500)
+    max_spins_per_week: int = Field(default=3, ge=0, le=2000)
     ticket_ttl_days: int = Field(default=3, ge=1, le=90)
 
 
@@ -266,8 +266,8 @@ class CampaignUpdate(BaseModel):
     is_active: bool | None = None
     start_date: date | None = None
     end_date: date | None = None
-    max_spins_per_day: int | None = Field(default=None, ge=0, le=50)
-    max_spins_per_week: int | None = Field(default=None, ge=0, le=200)
+    max_spins_per_day: int | None = Field(default=None, ge=0, le=500)
+    max_spins_per_week: int | None = Field(default=None, ge=0, le=2000)
     ticket_ttl_days: int | None = Field(default=None, ge=1, le=90)
 
 
