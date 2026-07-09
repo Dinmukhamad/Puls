@@ -320,9 +320,18 @@ async function doWheelSpin(el) {
   const center = safeIdx * seg + seg / 2;
   const jitter = (Math.random() - 0.5) * seg * 0.5; // лёгкий разброс внутри сектора
   const spins = 3; // полных оборотов — достаточно для эффекта при более быстрой анимации
-  const target = spins * 360 - center - jitter;
-  const from = w.rotation % 360;
-  const total = from + (spins * 360 - center - jitter - (from % 360));
+
+  // Баг был здесь: раньше target считался как АБСОЛЮТНЫЙ угол (spins*360 - center),
+  // то есть всегда попадал в один и тот же узкий диапазон ~[720°,1080°] независимо
+  // от того, где колесо уже стоит. При второй и последующих прокрутках CSS-переход
+  // просто анимировал крошечную разницу между «уже стоим на ~900°» и «новая цель
+  // тоже ~900°» — визуально колесо чуть дёргалось вместо полного оборота. Правильно:
+  // всегда крутить ВПЕРЁД от текущего угла минимум на spins полных оборотов.
+  const desiredFinalAngle = (((360 - center - jitter) % 360) + 360) % 360;
+  const currentAngle = ((w.rotation % 360) + 360) % 360;
+  let forwardDelta = desiredFinalAngle - currentAngle;
+  if (forwardDelta <= 0) forwardDelta += 360; // никогда не крутим назад и не остаёмся на месте
+  const target = w.rotation + spins * 360 + forwardDelta;
   w.rotation = target;
 
   const SPIN_ANIMATION_MS = 2600; // держим синхронно с MIN_SECONDS_BETWEEN_SPINS на backend
