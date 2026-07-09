@@ -46,7 +46,8 @@ function renderWeeklyAccrualTab(body) {
         </div>
         <button class="btn-outline btn-sm" onclick="runWeeklyAccrualPreview()">Предварительный расчёт</button>
         ${canApply ? `<button class="btn-primary btn-sm" onclick="runWeeklyAccrualApply()">Начислить коины за период</button>` : ''}
-        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod()">Экспорт CSV</button>
+        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod('csv')">Экспорт CSV</button>
+        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod('xlsx')">Экспорт XLSX</button>
       </div>
     </div>
 
@@ -86,11 +87,21 @@ async function runWeeklyAccrualPreview() {
   _renderWeeklyAccrualPreview();
 }
 
-const _bonusColLabels = [
-  ['bonus_top_coins', 'Топ'], ['bonus_no_late_coins', 'Без опозд.'],
-  ['bonus_no_violation_coins', 'Без наруш.'], ['bonus_nomination_coins', 'Номинация'],
-  ['bonus_thanks_coins', 'Благодарность'],
+const _bonusChipDefs = [
+  ['bonus_top_coins', '🏆', 'Топ недели'],
+  ['bonus_no_late_coins', '⏰', 'Без опозданий'],
+  ['bonus_no_violation_coins', '✅', 'Без нарушений'],
+  ['bonus_nomination_coins', '⭐', 'Номинация'],
+  ['bonus_thanks_coins', '🚌', 'Благодарность водителя'],
 ];
+
+function _bonusChipsHtml(o) {
+  const chips = _bonusChipDefs
+    .filter(([key]) => o[key])
+    .map(([key, icon, title]) => `<span class="bonus-chip" title="${esc(title)}">${icon} +${o[key]}</span>`)
+    .join('');
+  return chips || '<span class="cell-muted">—</span>';
+}
 
 function _renderWeeklyAccrualPreview() {
   const host = document.getElementById('wa-preview-host');
@@ -108,22 +119,20 @@ function _renderWeeklyAccrualPreview() {
         <table class="data-table">
           <thead><tr>
             <th>Место</th><th>Оператор</th><th>Группа</th><th>Баллы</th><th>База</th>
-            ${_bonusColLabels.map(([, l]) => `<th>${l}</th>`).join('')}
-            <th>Итого</th><th>Динамика</th><th></th>
+            <th>Бонусы</th><th>Итого</th><th>Динамика</th>
           </tr></thead>
           <tbody>
             ${p.operators.length ? p.operators.slice().sort((a, b) => (a.rank_place ?? 999) - (b.rank_place ?? 999)).map(o => `
               <tr class="${o.already_accrued ? 'row-muted' : ''}">
                 <td><span class="rank-badge ${(o.rank_place || 99) <= 3 ? 'rank-top' : ''}">${o.rank_place ?? '—'}</span></td>
-                <td class="name-cell">${esc(o.operator_name)}</td>
+                <td class="name-cell">${esc(o.operator_name)}${o.already_accrued ? '<div class="cell-muted" style="font-size:11px">уже начислено</div>' : ''}</td>
                 <td>${esc(o.group_name || '')}</td>
                 <td>${levelNum(o.contest_points)}</td>
                 <td>${o.base_coins} ₡</td>
-                ${_bonusColLabels.map(([key]) => `<td>${o[key] ? '+' + o[key] : '—'}</td>`).join('')}
+                <td>${_bonusChipsHtml(o)}</td>
                 <td><b class="accent-text">${o.total_coins} ₡</b></td>
                 <td>${o.rank_delta != null ? `<span class="rank-delta ${o.rank_delta > 0 ? 'up' : o.rank_delta < 0 ? 'down' : ''}">${o.rank_delta > 0 ? '↑' + o.rank_delta : o.rank_delta < 0 ? '↓' + Math.abs(o.rank_delta) : '—'}</span>` : '—'}</td>
-                <td>${o.already_accrued ? '<span class="cell-muted">уже начислено</span>' : ''}</td>
-              </tr>`).join('') : '<tr><td colspan="12" class="empty-line">Нет данных WeeklyResult за этот период</td></tr>'}
+              </tr>`).join('') : '<tr><td colspan="8" class="empty-line">Нет данных WeeklyResult за этот период</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -184,8 +193,8 @@ async function loadWeeklyAccrualRuns() {
     </div>`;
 }
 
-function exportWeeklyAccrualPeriod() {
+function exportWeeklyAccrualPeriod(format = 'csv') {
   const { start, end } = _readAccrualPeriodInputs();
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
-  window.open(api.exportUrl('/api/exports/weekly-results', { period_start: start, period_end: end, format: 'csv' }), '_blank');
+  window.open(api.exportUrl('/api/exports/weekly-results', { period_start: start, period_end: end, format }), '_blank');
 }

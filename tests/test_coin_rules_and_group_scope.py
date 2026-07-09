@@ -67,6 +67,14 @@ def test_coin_rules_defaults_and_view_access(client, db_session, make_client):
     assert data["points_per_coin"] == 5
     assert data["rounding_mode"] == "floor"
     assert data["top_1_bonus"] == 15
+    # Регрессия: эти 5 полей были в модели, но отсутствовали в CoinRuleRead —
+    # API их молча не отдавал, фронт показывал галочки выключенными, а Сохранить
+    # реально выключало номинации, даже если админ их не трогал.
+    assert data["nomination_calls_enabled"] is True
+    assert data["nomination_quality_enabled"] is True
+    assert data["nomination_efficiency_enabled"] is True
+    assert data["nomination_progress_enabled"] is True
+    assert data["nomination_thanks_enabled"] is True
 
     supervisor, pwd = _make_role_user(db_session, role="supervisor")
     sup_client = _login(make_client, supervisor.username, pwd)
@@ -111,6 +119,24 @@ def test_manager_can_update_coin_rules_and_rate_is_used(client, db_session):
     # возвращаем курс на дефолт, чтобы не аукнулось другим тестам сессии
     r_reset = client.put("/api/settings/coin-rules", json={"points_per_coin": 5, "top_1_bonus": 15})
     assert r_reset.status_code == 200
+
+
+def test_update_nomination_toggle_persists_and_others_untouched(client):
+    """Регрессия: PUT с одним переключённым тумблером не должен молча
+    выключать остальные четыре (раньше все 5 не были объявлены в
+    CoinRuleUpdate и просто отбрасывались Pydantic'ом)."""
+    r = client.put("/api/settings/coin-rules", json={"nomination_thanks_enabled": False})
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["nomination_thanks_enabled"] is False
+    assert data["nomination_calls_enabled"] is True
+    assert data["nomination_quality_enabled"] is True
+    assert data["nomination_efficiency_enabled"] is True
+    assert data["nomination_progress_enabled"] is True
+
+    r_reset = client.put("/api/settings/coin-rules", json={"nomination_thanks_enabled": True})
+    assert r_reset.status_code == 200
+    assert r_reset.json()["nomination_thanks_enabled"] is True
 
 
 # ── §10: супервайзер ограничен своей группой в /coins/* ─────────────────────

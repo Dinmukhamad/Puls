@@ -5,12 +5,26 @@
 function canEditCoinRules(role) { return role === 'manager' || role === 'admin'; }
 
 const _NOMINATION_TOGGLES = [
-  ['nomination_calls_enabled', 'Лучший по звонкам'],
-  ['nomination_quality_enabled', 'Лучшее качество'],
-  ['nomination_efficiency_enabled', 'Топ по эффективности'],
-  ['nomination_progress_enabled', 'Лучший прогресс недели'],
-  ['nomination_thanks_enabled', 'Больше всего благодарностей'],
+  ['nomination_calls_enabled', 'Лучший по звонкам', 'Больше всего звонков в час за неделю'],
+  ['nomination_quality_enabled', 'Лучшее качество', 'Самое высокое качество звонков за неделю'],
+  ['nomination_efficiency_enabled', 'Топ по эффективности', 'Самая высокая эффективность за неделю'],
+  ['nomination_progress_enabled', 'Лучший прогресс недели', 'Наибольший рост места в рейтинге'],
+  ['nomination_thanks_enabled', 'Больше всего благодарностей', 'Больше всего благодарностей от водителей'],
 ];
+
+function _toggleRowHtml(id, label, checked, canEdit, hint = '') {
+  return `
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-row-label">${esc(label)}</div>
+        ${hint ? `<div class="toggle-row-hint">${esc(hint)}</div>` : ''}
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="cr-${id}" ${checked ? 'checked' : ''} ${canEdit ? '' : 'disabled'}>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>`;
+}
 
 async function renderCoinRulesSettingsTab(body) {
   body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка настроек…</p></div>';
@@ -31,14 +45,14 @@ async function renderCoinRulesSettingsTab(body) {
     </div>`;
 
   body.innerHTML = `
-    <div class="panel">
-      <div class="panel-head">
-        <h3>Настройки начислений</h3>
-        ${!canEdit ? '<span class="panel-badge">Только просмотр</span>' : ''}
-        ${rules.updated_by_name ? `<span class="cell-muted" style="font-size:11px">Изменено: ${esc(rules.updated_by_name)}</span>` : ''}
+    <div class="an-card">
+      <div class="an-card-head-row">
+        <div class="an-card-head">Курс перевода</div>
+        <div>
+          ${!canEdit ? '<span class="panel-badge">Только просмотр</span>' : ''}
+          ${rules.updated_by_name ? `<span class="cell-muted" style="font-size:12px">Изменено: ${esc(rules.updated_by_name)}</span>` : ''}
+        </div>
       </div>
-
-      <div class="coin-rules-section-title">Курс перевода</div>
       <div class="coin-rules-form">
         ${numField('points_per_coin', 'Баллов за 1 коин', rules.points_per_coin, 'Например, 5 = 5 баллов конвертируются в 1 коин')}
         <div class="coin-rules-field">
@@ -49,46 +63,44 @@ async function renderCoinRulesSettingsTab(body) {
         </div>
         ${numField('min_points_for_accrual', 'Минимальный балл для начисления', rules.min_points_for_accrual)}
       </div>
+    </div>
 
-      <div class="coin-rules-section-title">Бонусы за рейтинг недели</div>
+    <div class="an-card">
+      <div class="an-card-head">Бонусы за рейтинг недели</div>
       <div class="coin-rules-form">
         ${numField('top_1_bonus', '1 место', rules.top_1_bonus)}
         ${numField('top_2_bonus', '2 место', rules.top_2_bonus)}
         ${numField('top_3_bonus', '3 место', rules.top_3_bonus)}
       </div>
+    </div>
 
-      <div class="coin-rules-section-title">Бонусы за дисциплину и признание</div>
+    <div class="an-card">
+      <div class="an-card-head">Бонусы за дисциплину и признание</div>
       <div class="coin-rules-form">
         ${numField('no_late_bonus', 'Неделя без опозданий', rules.no_late_bonus)}
         ${numField('no_violation_bonus', 'Неделя без нарушений', rules.no_violation_bonus)}
         ${numField('nomination_bonus', 'Номинация недели (за каждую)', rules.nomination_bonus)}
         ${numField('driver_thanks_bonus', 'Благодарность от водителя', rules.driver_thanks_bonus)}
       </div>
+    </div>
 
-      <div class="coin-rules-section-title">Включённые номинации</div>
-      ${_NOMINATION_TOGGLES.map(([key, label]) => `
-        <div class="coin-rules-toggle-row">
-          <span>${esc(label)}</span>
-          <label class="an-checkbox-label"><input type="checkbox" id="cr-${key}" ${rules[key] ? 'checked' : ''} ${canEdit ? '' : 'disabled'}></label>
-        </div>`).join('')}
+    <div class="an-card">
+      <div class="an-card-head">Включённые номинации</div>
+      ${_NOMINATION_TOGGLES.map(([key, label, hint]) => _toggleRowHtml(key, label, rules[key], canEdit, hint)).join('')}
+    </div>
 
-      <div class="coin-rules-section-title">Ограничения начисления</div>
-      <div class="coin-rules-toggle-row">
-        <span>Начислять уволенным операторам</span>
-        <label class="an-checkbox-label"><input type="checkbox" id="cr-accrue_to_fired" ${rules.accrue_to_fired ? 'checked' : ''} ${canEdit ? '' : 'disabled'}></label>
+    <div class="an-card">
+      <div class="an-card-head">Ограничения начисления</div>
+      ${_toggleRowHtml('accrue_to_fired', 'Начислять уволенным операторам', rules.accrue_to_fired, canEdit)}
+      ${_toggleRowHtml('accrue_to_inactive', 'Начислять неучаствующим операторам', rules.accrue_to_inactive, canEdit)}
+    </div>
+
+    ${canEdit ? `
+      <div class="panel-footer">
+        <button class="btn-primary" onclick="saveCoinRulesSettings()">Сохранить настройки</button>
       </div>
-      <div class="coin-rules-toggle-row">
-        <span>Начислять неучаствующим операторам</span>
-        <label class="an-checkbox-label"><input type="checkbox" id="cr-accrue_to_inactive" ${rules.accrue_to_inactive ? 'checked' : ''} ${canEdit ? '' : 'disabled'}></label>
-      </div>
-
-      ${canEdit ? `
-        <div class="panel-footer" style="margin-top:18px">
-          <button class="btn-primary" onclick="saveCoinRulesSettings()">Сохранить настройки</button>
-        </div>
-        <div class="empty-line" style="margin-top:6px">Изменения применяются к следующему расчёту — старые начисления не пересчитываются.</div>
-      ` : ''}
-    </div>`;
+      <div class="empty-line" style="margin-top:6px">Изменения применяются к следующему расчёту — старые начисления не пересчитываются.</div>
+    ` : ''}`;
 }
 
 async function saveCoinRulesSettings() {

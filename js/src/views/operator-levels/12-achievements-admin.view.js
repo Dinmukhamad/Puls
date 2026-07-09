@@ -19,50 +19,59 @@ async function renderAchievementsAdminTab(el) {
     try { STATE.adminOperators = await api.getDashboardOperators(); } catch { /* форма выдачи покажет пустой список */ }
   }
 
-  const conditionLabel = {
-    top_3_week: 'Топ-3 недели', no_late_streak: 'Без опозданий N недель подряд',
-    quality_threshold: 'Качество ≥ значения', calls_leader_week: 'Лучший по звонкам за неделю',
-    efficiency_leader_week: 'Лучший по эффективности за неделю', total_coins: 'Всего начислено коинов ≥ значения',
-    manual: 'Только ручная выдача', test_score: 'Результат теста ≥ значения (%)',
+  const conditionLabel = (a) => {
+    const v = levelNum(a.condition_value);
+    return {
+      top_3_week: 'Топ-3 недели',
+      no_late_streak: `${v} недели подряд без опозданий`,
+      quality_threshold: `Качество ≥ ${v}%`,
+      calls_leader_week: 'Лучший по звонкам за неделю',
+      efficiency_leader_week: 'Лучший по эффективности за неделю',
+      total_coins: `Всего начислено ≥ ${v} ₡`,
+      manual: 'Только ручная выдача',
+      test_score: `Результат теста ≥ ${v}%`,
+    }[a.condition_type] || a.condition_type;
   };
 
   el.innerHTML = `
-    <div class="panel">
-      <div class="panel-head">
-        <h3>Каталог достижений</h3>
-        <span class="panel-badge">${achievements.length}</span>
-      </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr>
-            <th></th><th>Название</th><th>Условие</th><th>Награда</th><th>Повторяемое</th><th>Активно</th><th></th>
-          </tr></thead>
-          <tbody>
-            ${achievements.map(a => `
-              <tr>
-                <td style="font-size:20px">${esc(a.icon || '🏆')}</td>
-                <td>
-                  <div class="name-cell">${esc(a.title)}</div>
-                  <div class="cell-muted" style="font-size:11px">${esc(a.description)}</div>
-                </td>
-                <td style="font-size:12px">${esc(conditionLabel[a.condition_type] || a.condition_type)}${a.condition_value > 0 ? ` (${levelNum(a.condition_value)})` : ''}</td>
-                <td>
-                  <input type="number" class="form-input" style="width:80px" id="ach-reward-${a.id}" value="${a.reward_coins}" min="0" step="1">
-                  <button class="btn-link" style="font-size:11px" onclick="saveAchievementReward(${a.id})">Сохранить</button>
-                </td>
-                <td>${a.is_repeatable ? 'Да' : 'Нет'}</td>
-                <td>
-                  <label class="an-checkbox-label">
-                    <input type="checkbox" ${a.is_active ? 'checked' : ''} onchange="toggleAchievementActive(${a.id}, this.checked)">
-                  </label>
-                </td>
-                <td><button class="btn-outline btn-sm" onclick="openGrantAchievementForm(${a.id})">Выдать вручную</button></td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
+    <div class="an-card-head-row" style="margin-bottom:14px">
+      <div class="an-card-head" style="margin-bottom:0">Каталог достижений</div>
+      <span class="panel-badge">${achievements.length}</span>
     </div>
-    <div id="grant-achievement-host"></div>`;
+
+    <div class="achievements-admin-grid">
+      ${achievements.map(a => `
+        <div class="achievement-admin-card ${a.is_active ? '' : 'is-inactive'}">
+          <div class="achievement-admin-head">
+            <div class="achievement-admin-icon">${esc(a.icon || '🏆')}</div>
+            <div>
+              <div class="achievement-admin-title">${esc(a.title)}</div>
+              <div class="achievement-admin-desc">${esc(a.description)}</div>
+            </div>
+          </div>
+
+          <div class="achievement-admin-condition">${esc(conditionLabel(a))}</div>
+
+          <div class="achievement-admin-tags">
+            <span class="achievement-admin-tag ${a.is_repeatable ? 'repeatable' : ''}">${a.is_repeatable ? 'Повторяемое' : 'Одноразовое'}</span>
+          </div>
+
+          <div class="achievement-admin-reward-row">
+            <label for="ach-reward-${a.id}">Награда</label>
+            <input type="number" class="form-input" id="ach-reward-${a.id}" value="${a.reward_coins}" min="0" step="1">
+            <span>₡</span>
+            <button class="btn-link" onclick="saveAchievementReward(${a.id})">Сохранить</button>
+          </div>
+
+          <div class="achievement-admin-footer">
+            <label class="toggle-switch" title="${a.is_active ? 'Активно' : 'Выключено'}">
+              <input type="checkbox" ${a.is_active ? 'checked' : ''} onchange="toggleAchievementActive(${a.id}, this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+            <button class="btn-outline btn-sm" onclick="openGrantAchievementForm(${a.id})">Выдать вручную</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
 }
 
 async function toggleAchievementActive(id, isActive) {
@@ -89,41 +98,39 @@ async function saveAchievementReward(id) {
 }
 
 function openGrantAchievementForm(achievementId) {
-  const host = document.getElementById('grant-achievement-host');
-  if (!host) return;
   const a = (STATE._achievementsCatalog || []).find(x => x.id === achievementId);
   const ops = (STATE.adminOperators || []).slice().sort((x, y) => (x.full_name || '').localeCompare(y.full_name || ''));
 
-  host.innerHTML = `
-    <div class="panel">
-      <div class="panel-head">
-        <h3>Выдать «${esc(a?.title || '')}» вручную</h3>
-        <button class="btn-link" onclick="document.getElementById('grant-achievement-host').innerHTML=''">Закрыть</button>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Оператор</label>
-        <select id="grant-ach-operator" class="form-input">
-          <option value="">Выберите оператора…</option>
-          ${ops.map(o => `<option value="${o.id}">${esc(o.full_name)}${o.group_name ? ' — ' + esc(o.group_name) : ''}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Комментарий <span class="optional">(необязательно)</span></label>
-        <input id="grant-ach-comment" class="form-input" type="text" placeholder="Например: помог новому сотруднику освоиться">
-      </div>
+  showModal(`
+    <h3 class="modal-title">Выдать «${esc(a?.title || '')}» вручную</h3>
+    <div class="form-group">
+      <label class="form-label">Оператор</label>
+      <select id="grant-ach-operator" class="form-input">
+        <option value="">Выберите оператора…</option>
+        ${ops.map(o => `<option value="${o.id}">${esc(o.full_name)}${o.group_name ? ' — ' + esc(o.group_name) : ''}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Комментарий <span class="optional">(необязательно)</span></label>
+      <input id="grant-ach-comment" class="form-input" type="text" placeholder="Например: помог новому сотруднику освоиться">
+    </div>
+    <div id="grant-ach-err" class="status-line"></div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeModal()">Отмена</button>
       <button class="btn-primary" onclick="submitGrantAchievement(${achievementId})">Выдать достижение</button>
-    </div>`;
+    </div>`);
 }
 
 async function submitGrantAchievement(achievementId) {
   const operatorId = Number(document.getElementById('grant-ach-operator')?.value);
   const comment = document.getElementById('grant-ach-comment')?.value || '';
-  if (!operatorId) { showToast('Выберите оператора', 'error'); return; }
+  const errEl = document.getElementById('grant-ach-err');
+  if (!operatorId) { if (errEl) errEl.textContent = 'Выберите оператора'; return; }
   try {
     await api.grantAchievement(achievementId, { operator_id: operatorId, comment });
     showToast('Достижение выдано', 'ok');
-    document.getElementById('grant-achievement-host').innerHTML = '';
+    closeModal();
   } catch (e) {
-    showToast(e.message, 'error');
+    if (errEl) errEl.textContent = e.message;
   }
 }

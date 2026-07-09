@@ -92,3 +92,63 @@
   cursor: pointer; font-size: 12px; transition: background .15s ease;
 }
 .btn-icon-sm:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+/* ── Переключатель (тумблер) — вместо голых checkbox для вкл/выкл настроек ── */
+.toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-switch .toggle-slider {
+  position: absolute; inset: 0; cursor: pointer;
+  background: var(--bg-muted); border: 1px solid var(--border);
+  border-radius: 999px; transition: background .18s ease, border-color .18s ease;
+}
+.toggle-switch .toggle-slider::before {
+  content: ''; position: absolute; height: 16px; width: 16px; left: 2px; top: 2px;
+  background: #fff; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,.25);
+  transition: transform .18s ease;
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(18px); }
+.toggle-switch input:disabled + .toggle-slider { opacity: .5; cursor: not-allowed; }
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px dashed var(--border); gap: 12px;
+}
+.toggle-row:last-child { border-bottom: none; }
+.toggle-row-label { font-size: 13px; }
+.toggle-row-hint { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* ── Каталог достижений (админ) — карточки вместо плотной таблицы ── */
+.achievements-admin-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px;
+}
+.achievement-admin-card {
+  background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 16px; display: flex; flex-direction: column; gap: 10px;
+}
+.achievement-admin-card.is-inactive { opacity: .55; }
+.achievement-admin-head { display: flex; gap: 10px; align-items: flex-start; }
+.achievement-admin-icon { font-size: 26px; line-height: 1; }
+.achievement-admin-title { font-weight: 700; font-size: 14px; }
+.achievement-admin-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.achievement-admin-condition {
+  font-size: 11.5px; color: var(--text-muted); background: var(--bg-muted);
+  border-radius: var(--r-sm); padding: 5px 9px; display: inline-block; align-self: flex-start;
+}
+.achievement-admin-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.achievement-admin-tag {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .02em;
+  padding: 2px 8px; border-radius: 999px; background: var(--bg-muted); color: var(--text-muted);
+}
+.achievement-admin-tag.repeatable { background: var(--accent-soft); color: var(--accent); }
+.achievement-admin-reward-row { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+.achievement-admin-reward-row label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.achievement-admin-reward-row input { width: 64px; }
+.achievement-admin-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.bonus-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; font-weight: 600; padding: 2px 7px; margin: 1px;
+  border-radius: 999px; background: var(--ok-soft); color: var(--ok); white-space: nowrap;
+}
+.bonus-chip.discipline-ok { background: var(--ok-soft); color: var(--ok); }
+.bonus-chip.discipline-bad { background: var(--danger-soft); color: var(--danger); }

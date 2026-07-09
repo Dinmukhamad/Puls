@@ -17,6 +17,11 @@ class CoinRuleRead(BaseModel):
     no_violation_bonus: int
     nomination_bonus: int
     driver_thanks_bonus: int
+    nomination_calls_enabled: bool
+    nomination_quality_enabled: bool
+    nomination_efficiency_enabled: bool
+    nomination_progress_enabled: bool
+    nomination_thanks_enabled: bool
     accrue_to_fired: bool
     accrue_to_inactive: bool
     is_active: bool
@@ -41,5 +46,10 @@ class CoinRuleUpdate(BaseModel):
     no_violation_bonus: int | None = Field(default=None, ge=0)
     nomination_bonus: int | None = Field(default=None, ge=0)
     driver_thanks_bonus: int | None = Field(default=None, ge=0)
+    nomination_calls_enabled: bool | None = None
+    nomination_quality_enabled: bool | None = None
+    nomination_efficiency_enabled: bool | None = None
+    nomination_progress_enabled: bool | None = None
+    nomination_thanks_enabled: bool | None = None
     accrue_to_fired: bool | None = None
     accrue_to_inactive: bool | None = None

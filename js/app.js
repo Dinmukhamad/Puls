@@ -1353,50 +1353,59 @@ async function renderAchievementsAdminTab(el) {
     try { STATE.adminOperators = await api.getDashboardOperators(); } catch { /* форма выдачи покажет пустой список */ }
   }
 
-  const conditionLabel = {
-    top_3_week: 'Топ-3 недели', no_late_streak: 'Без опозданий N недель подряд',
-    quality_threshold: 'Качество ≥ значения', calls_leader_week: 'Лучший по звонкам за неделю',
-    efficiency_leader_week: 'Лучший по эффективности за неделю', total_coins: 'Всего начислено коинов ≥ значения',
-    manual: 'Только ручная выдача', test_score: 'Результат теста ≥ значения (%)',
+  const conditionLabel = (a) => {
+    const v = levelNum(a.condition_value);
+    return {
+      top_3_week: 'Топ-3 недели',
+      no_late_streak: `${v} недели подряд без опозданий`,
+      quality_threshold: `Качество ≥ ${v}%`,
+      calls_leader_week: 'Лучший по звонкам за неделю',
+      efficiency_leader_week: 'Лучший по эффективности за неделю',
+      total_coins: `Всего начислено ≥ ${v} ₡`,
+      manual: 'Только ручная выдача',
+      test_score: `Результат теста ≥ ${v}%`,
+    }[a.condition_type] || a.condition_type;
   };
 
   el.innerHTML = `
-    <div class="panel">
-      <div class="panel-head">
-        <h3>Каталог достижений</h3>
-        <span class="panel-badge">${achievements.length}</span>
-      </div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr>
-            <th></th><th>Название</th><th>Условие</th><th>Награда</th><th>Повторяемое</th><th>Активно</th><th></th>
-          </tr></thead>
-          <tbody>
-            ${achievements.map(a => `
-              <tr>
-                <td style="font-size:20px">${esc(a.icon || '🏆')}</td>
-                <td>
-                  <div class="name-cell">${esc(a.title)}</div>
-                  <div class="cell-muted" style="font-size:11px">${esc(a.description)}</div>
-                </td>
-                <td style="font-size:12px">${esc(conditionLabel[a.condition_type] || a.condition_type)}${a.condition_value > 0 ? ` (${levelNum(a.condition_value)})` : ''}</td>
-                <td>
-                  <input type="number" class="form-input" style="width:80px" id="ach-reward-${a.id}" value="${a.reward_coins}" min="0" step="1">
-                  <button class="btn-link" style="font-size:11px" onclick="saveAchievementReward(${a.id})">Сохранить</button>
-                </td>
-                <td>${a.is_repeatable ? 'Да' : 'Нет'}</td>
-                <td>
-                  <label class="an-checkbox-label">
-                    <input type="checkbox" ${a.is_active ? 'checked' : ''} onchange="toggleAchievementActive(${a.id}, this.checked)">
-                  </label>
-                </td>
-                <td><button class="btn-outline btn-sm" onclick="openGrantAchievementForm(${a.id})">Выдать вручную</button></td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
+    <div class="an-card-head-row" style="margin-bottom:14px">
+      <div class="an-card-head" style="margin-bottom:0">Каталог достижений</div>
+      <span class="panel-badge">${achievements.length}</span>
     </div>
-    <div id="grant-achievement-host"></div>`;
+
+    <div class="achievements-admin-grid">
+      ${achievements.map(a => `
+        <div class="achievement-admin-card ${a.is_active ? '' : 'is-inactive'}">
+          <div class="achievement-admin-head">
+            <div class="achievement-admin-icon">${esc(a.icon || '🏆')}</div>
+            <div>
+              <div class="achievement-admin-title">${esc(a.title)}</div>
+              <div class="achievement-admin-desc">${esc(a.description)}</div>
+            </div>
+          </div>
+
+          <div class="achievement-admin-condition">${esc(conditionLabel(a))}</div>
+
+          <div class="achievement-admin-tags">
+            <span class="achievement-admin-tag ${a.is_repeatable ? 'repeatable' : ''}">${a.is_repeatable ? 'Повторяемое' : 'Одноразовое'}</span>
+          </div>
+
+          <div class="achievement-admin-reward-row">
+            <label for="ach-reward-${a.id}">Награда</label>
+            <input type="number" class="form-input" id="ach-reward-${a.id}" value="${a.reward_coins}" min="0" step="1">
+            <span>₡</span>
+            <button class="btn-link" onclick="saveAchievementReward(${a.id})">Сохранить</button>
+          </div>
+
+          <div class="achievement-admin-footer">
+            <label class="toggle-switch" title="${a.is_active ? 'Активно' : 'Выключено'}">
+              <input type="checkbox" ${a.is_active ? 'checked' : ''} onchange="toggleAchievementActive(${a.id}, this.checked)">
+              <span class="toggle-slider"></span>
+            </label>
+            <button class="btn-outline btn-sm" onclick="openGrantAchievementForm(${a.id})">Выдать вручную</button>
+          </div>
+        </div>`).join('')}
+    </div>`;
 }
 
 async function toggleAchievementActive(id, isActive) {
@@ -1423,42 +1432,40 @@ async function saveAchievementReward(id) {
 }
 
 function openGrantAchievementForm(achievementId) {
-  const host = document.getElementById('grant-achievement-host');
-  if (!host) return;
   const a = (STATE._achievementsCatalog || []).find(x => x.id === achievementId);
   const ops = (STATE.adminOperators || []).slice().sort((x, y) => (x.full_name || '').localeCompare(y.full_name || ''));
 
-  host.innerHTML = `
-    <div class="panel">
-      <div class="panel-head">
-        <h3>Выдать «${esc(a?.title || '')}» вручную</h3>
-        <button class="btn-link" onclick="document.getElementById('grant-achievement-host').innerHTML=''">Закрыть</button>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Оператор</label>
-        <select id="grant-ach-operator" class="form-input">
-          <option value="">Выберите оператора…</option>
-          ${ops.map(o => `<option value="${o.id}">${esc(o.full_name)}${o.group_name ? ' — ' + esc(o.group_name) : ''}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Комментарий <span class="optional">(необязательно)</span></label>
-        <input id="grant-ach-comment" class="form-input" type="text" placeholder="Например: помог новому сотруднику освоиться">
-      </div>
+  showModal(`
+    <h3 class="modal-title">Выдать «${esc(a?.title || '')}» вручную</h3>
+    <div class="form-group">
+      <label class="form-label">Оператор</label>
+      <select id="grant-ach-operator" class="form-input">
+        <option value="">Выберите оператора…</option>
+        ${ops.map(o => `<option value="${o.id}">${esc(o.full_name)}${o.group_name ? ' — ' + esc(o.group_name) : ''}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Комментарий <span class="optional">(необязательно)</span></label>
+      <input id="grant-ach-comment" class="form-input" type="text" placeholder="Например: помог новому сотруднику освоиться">
+    </div>
+    <div id="grant-ach-err" class="status-line"></div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeModal()">Отмена</button>
       <button class="btn-primary" onclick="submitGrantAchievement(${achievementId})">Выдать достижение</button>
-    </div>`;
+    </div>`);
 }
 
 async function submitGrantAchievement(achievementId) {
   const operatorId = Number(document.getElementById('grant-ach-operator')?.value);
   const comment = document.getElementById('grant-ach-comment')?.value || '';
-  if (!operatorId) { showToast('Выберите оператора', 'error'); return; }
+  const errEl = document.getElementById('grant-ach-err');
+  if (!operatorId) { if (errEl) errEl.textContent = 'Выберите оператора'; return; }
   try {
     await api.grantAchievement(achievementId, { operator_id: operatorId, comment });
     showToast('Достижение выдано', 'ok');
-    document.getElementById('grant-achievement-host').innerHTML = '';
+    closeModal();
   } catch (e) {
-    showToast(e.message, 'error');
+    if (errEl) errEl.textContent = e.message;
   }
 }
 
@@ -2630,6 +2637,26 @@ function renderSummary() {
 
 const _adminSummaryState = { filters: {}, data: null };
 
+function _disciplineCellHtml(o) {
+  const late = o.lateness_count;
+  const viol = o.violation_count;
+  if (late == null && viol == null) return '<span class="cell-muted">—</span>';
+  const badge = (value, label) => {
+    const v = value ?? 0;
+    const cls = v > 0 ? 'bonus-chip discipline-bad' : 'bonus-chip discipline-ok';
+    return `<span class="${cls}" title="${esc(label)}">${label}: ${v}</span>`;
+  };
+  return `${badge(late, 'Опоздания')} ${badge(viol, 'Нарушения')}`;
+}
+
+function _metricsCellHtml(o) {
+  if (o.quality == null && o.efficiency == null) return '<span class="cell-muted">—</span>';
+  const parts = [];
+  if (o.quality != null) parts.push(`Кач. ${levelNum(o.quality)}%`);
+  if (o.efficiency != null) parts.push(`Эфф. ${levelNum(o.efficiency)}%`);
+  return `<span style="font-size:12.5px">${parts.join(' · ')}</span>`;
+}
+
 async function renderAdminSummaryDetail() {
   const host = document.getElementById('admin-summary-extra');
   if (!host) return;
@@ -2733,7 +2760,7 @@ async function _loadAdminSummaryDetail() {
           <thead><tr>
             <th>Место</th><th>ФИО</th><th>Группа</th><th>Статус</th>
             <th>Баллы недели</th><th>Коины недели</th><th>Баланс</th>
-            <th>Опоздания</th><th>Нарушения</th><th>Качество</th><th>Эффективность</th><th>Действия</th>
+            <th>Дисциплина</th><th>Показатели</th><th>Действия</th>
           </tr></thead>
           <tbody>
             ${data.operators.length ? data.operators.map(o => `
@@ -2745,12 +2772,10 @@ async function _loadAdminSummaryDetail() {
                 <td>${o.week_points != null ? levelNum(o.week_points) : '—'}</td>
                 <td>${o.week_coins != null ? `<b class="accent-text">${o.week_coins} ₡</b>` : '—'}</td>
                 <td>${o.total_balance} ₡</td>
-                <td style="color:${o.lateness_count > 0 ? 'var(--danger)' : 'inherit'}">${o.lateness_count ?? '—'}</td>
-                <td style="color:${o.violation_count > 0 ? 'var(--danger)' : 'inherit'}">${o.violation_count ?? '—'}</td>
-                <td>${o.quality != null ? levelNum(o.quality) + '%' : '—'}</td>
-                <td>${o.efficiency != null ? levelNum(o.efficiency) + '%' : '—'}</td>
+                <td>${_disciplineCellHtml(o)}</td>
+                <td>${_metricsCellHtml(o)}</td>
                 <td>${summaryRowActionsHtml(o.id, o.full_name)}</td>
-              </tr>`).join('') : '<tr><td colspan="12" class="empty-line">Нет данных за выбранный период/фильтры</td></tr>'}
+              </tr>`).join('') : '<tr><td colspan="10" class="empty-line">Нет данных за выбранный период/фильтры</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -3309,6 +3334,8 @@ function transactionTypeLabel(type) {
     bonus_driver_thanks: 'Бонус: благодарность водителя',
     achievement_reward: 'Награда за достижение',
     test_reward: 'Награда за тест',
+    level_up: 'Повышение уровня',
+    wheel_of_wow: 'Колесо WOW',
   }[type] || type;
 }
 
@@ -3670,15 +3697,6 @@ async function renderRequests() {
   const items = STATE.shopItems || [];
 
   el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">Заявки</div><h2 class="section-title">Заявки из магазина</h2></div>
-      <div class="header-right">
-        <button class="btn-outline btn-sm" onclick="exportShopRequests('csv')">Экспорт CSV</button>
-        <button class="btn-outline btn-sm" onclick="exportShopRequests('xlsx')">Экспорт XLSX</button>
-        <button class="btn-outline btn-sm" onclick="reloadRequestsTab()">Обновить</button>
-      </div>
-    </div>
-
     ${s.operator_id !== 'all' ? `
       <div class="filter-active-banner">
         Показаны только заявки оператора <b>${esc(s.operator_name || '#' + s.operator_id)}</b>
@@ -3694,22 +3712,32 @@ async function renderRequests() {
       ].map(([f, label]) => `<button class="filter-tab ${s.status===f?'active':''}" data-filter="${f}">${label}</button>`).join('')}
     </div>
 
-    <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:12px 0">
-      <div class="form-group" style="margin:0">
-        <label class="form-label">Группа</label>
-        <select id="req-f-group" class="form-input">
-          <option value="all">Все группы</option>
-          ${groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}
-        </select>
+    <div class="panel" style="margin:12px 0">
+      <div class="panel-head">
+        <h3>Фильтры</h3>
+        <div class="header-right">
+          <button class="btn-outline btn-sm" onclick="exportShopRequests('csv')">Экспорт CSV</button>
+          <button class="btn-outline btn-sm" onclick="exportShopRequests('xlsx')">Экспорт XLSX</button>
+          <button class="btn-outline btn-sm" onclick="reloadRequestsTab()">Обновить</button>
+        </div>
       </div>
-      <div class="form-group" style="margin:0">
-        <label class="form-label">Товар</label>
-        <select id="req-f-bonus" class="form-input">
-          <option value="all">Все товары</option>
-          ${items.map(i => `<option value="${i.id}">${esc(i.title)}</option>`).join('')}
-        </select>
+      <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Группа</label>
+          <select id="req-f-group" class="form-input">
+            <option value="all">Все группы</option>
+            ${groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Товар</label>
+          <select id="req-f-bonus" class="form-input">
+            <option value="all">Все товары</option>
+            ${items.map(i => `<option value="${i.id}">${esc(i.title)}</option>`).join('')}
+          </select>
+        </div>
+        <button class="btn-primary btn-sm" onclick="applyRequestsFilters()">Применить</button>
       </div>
-      <button class="btn-primary btn-sm" onclick="applyRequestsFilters()">Применить</button>
     </div>
 
     <div class="panel">
@@ -3890,7 +3918,12 @@ const _historyTabState = {
 };
 
 const _historySourceLabels = {
-  weekly_auto_accrual: 'Автоначисление', achievement: 'Достижение',
+  weekly_auto_accrual: 'Автоматический расчёт',
+  achievement: 'Достижение',
+  level_up: 'Повышение уровня',
+  manual: 'Ручная операция',
+  manual_grant: 'Ручная выдача',
+  wheel_spin: 'Колесо WOW',
 };
 
 function renderHistory() {
@@ -3899,15 +3932,6 @@ function renderHistory() {
   const f = _historyTabState.filters;
 
   el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">История</div><h2 class="section-title">История операций</h2></div>
-      <div class="header-right">
-        <button class="btn-outline btn-sm" onclick="exportHistoryServerSide()">Экспорт CSV</button>
-        <button class="btn-outline btn-sm" onclick="exportHistoryServerSide('xlsx')">Экспорт XLSX</button>
-        <button class="btn-outline btn-sm" onclick="reloadHistoryTab()">Обновить</button>
-      </div>
-    </div>
-
     ${f.operator_id !== 'all' ? `
       <div class="filter-active-banner">
         Показаны только операции оператора <b>${esc(f.operator_name || '#' + f.operator_id)}</b>
@@ -3915,6 +3939,14 @@ function renderHistory() {
       </div>` : ''}
 
     <div class="panel" style="margin-bottom:16px">
+      <div class="panel-head">
+        <h3>Фильтры</h3>
+        <div class="header-right">
+          <button class="btn-outline btn-sm" onclick="exportHistoryServerSide()">Экспорт CSV</button>
+          <button class="btn-outline btn-sm" onclick="exportHistoryServerSide('xlsx')">Экспорт XLSX</button>
+          <button class="btn-outline btn-sm" onclick="reloadHistoryTab()">Обновить</button>
+        </div>
+      </div>
       <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
         <div class="form-group" style="margin:0">
           <label class="form-label">Тип</label>
@@ -3939,6 +3971,10 @@ function renderHistory() {
             <option value="all">Все</option>
             <option value="weekly_auto_accrual">Еженедельный расчёт</option>
             <option value="achievement">Достижение</option>
+            <option value="level_up">Повышение уровня</option>
+            <option value="wheel_spin">Колесо WOW</option>
+            <option value="manual">Ручная операция</option>
+            <option value="manual_grant">Ручная выдача</option>
           </select>
         </div>
         <div class="form-group" style="margin:0">
@@ -5575,7 +5611,8 @@ function renderWeeklyAccrualTab(body) {
         </div>
         <button class="btn-outline btn-sm" onclick="runWeeklyAccrualPreview()">Предварительный расчёт</button>
         ${canApply ? `<button class="btn-primary btn-sm" onclick="runWeeklyAccrualApply()">Начислить коины за период</button>` : ''}
-        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod()">Экспорт CSV</button>
+        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod('csv')">Экспорт CSV</button>
+        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod('xlsx')">Экспорт XLSX</button>
       </div>
     </div>
 
@@ -5615,11 +5652,21 @@ async function runWeeklyAccrualPreview() {
   _renderWeeklyAccrualPreview();
 }
 
-const _bonusColLabels = [
-  ['bonus_top_coins', 'Топ'], ['bonus_no_late_coins', 'Без опозд.'],
-  ['bonus_no_violation_coins', 'Без наруш.'], ['bonus_nomination_coins', 'Номинация'],
-  ['bonus_thanks_coins', 'Благодарность'],
+const _bonusChipDefs = [
+  ['bonus_top_coins', '🏆', 'Топ недели'],
+  ['bonus_no_late_coins', '⏰', 'Без опозданий'],
+  ['bonus_no_violation_coins', '✅', 'Без нарушений'],
+  ['bonus_nomination_coins', '⭐', 'Номинация'],
+  ['bonus_thanks_coins', '🚌', 'Благодарность водителя'],
 ];
+
+function _bonusChipsHtml(o) {
+  const chips = _bonusChipDefs
+    .filter(([key]) => o[key])
+    .map(([key, icon, title]) => `<span class="bonus-chip" title="${esc(title)}">${icon} +${o[key]}</span>`)
+    .join('');
+  return chips || '<span class="cell-muted">—</span>';
+}
 
 function _renderWeeklyAccrualPreview() {
   const host = document.getElementById('wa-preview-host');
@@ -5637,22 +5684,20 @@ function _renderWeeklyAccrualPreview() {
         <table class="data-table">
           <thead><tr>
             <th>Место</th><th>Оператор</th><th>Группа</th><th>Баллы</th><th>База</th>
-            ${_bonusColLabels.map(([, l]) => `<th>${l}</th>`).join('')}
-            <th>Итого</th><th>Динамика</th><th></th>
+            <th>Бонусы</th><th>Итого</th><th>Динамика</th>
           </tr></thead>
           <tbody>
             ${p.operators.length ? p.operators.slice().sort((a, b) => (a.rank_place ?? 999) - (b.rank_place ?? 999)).map(o => `
               <tr class="${o.already_accrued ? 'row-muted' : ''}">
                 <td><span class="rank-badge ${(o.rank_place || 99) <= 3 ? 'rank-top' : ''}">${o.rank_place ?? '—'}</span></td>
-                <td class="name-cell">${esc(o.operator_name)}</td>
+                <td class="name-cell">${esc(o.operator_name)}${o.already_accrued ? '<div class="cell-muted" style="font-size:11px">уже начислено</div>' : ''}</td>
                 <td>${esc(o.group_name || '')}</td>
                 <td>${levelNum(o.contest_points)}</td>
                 <td>${o.base_coins} ₡</td>
-                ${_bonusColLabels.map(([key]) => `<td>${o[key] ? '+' + o[key] : '—'}</td>`).join('')}
+                <td>${_bonusChipsHtml(o)}</td>
                 <td><b class="accent-text">${o.total_coins} ₡</b></td>
                 <td>${o.rank_delta != null ? `<span class="rank-delta ${o.rank_delta > 0 ? 'up' : o.rank_delta < 0 ? 'down' : ''}">${o.rank_delta > 0 ? '↑' + o.rank_delta : o.rank_delta < 0 ? '↓' + Math.abs(o.rank_delta) : '—'}</span>` : '—'}</td>
-                <td>${o.already_accrued ? '<span class="cell-muted">уже начислено</span>' : ''}</td>
-              </tr>`).join('') : '<tr><td colspan="12" class="empty-line">Нет данных WeeklyResult за этот период</td></tr>'}
+              </tr>`).join('') : '<tr><td colspan="8" class="empty-line">Нет данных WeeklyResult за этот период</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -5713,10 +5758,10 @@ async function loadWeeklyAccrualRuns() {
     </div>`;
 }
 
-function exportWeeklyAccrualPeriod() {
+function exportWeeklyAccrualPeriod(format = 'csv') {
   const { start, end } = _readAccrualPeriodInputs();
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
-  window.open(api.exportUrl('/api/exports/weekly-results', { period_start: start, period_end: end, format: 'csv' }), '_blank');
+  window.open(api.exportUrl('/api/exports/weekly-results', { period_start: start, period_end: end, format }), '_blank');
 }
 
 /* ══════════════════════════════════════
@@ -5726,12 +5771,26 @@ function exportWeeklyAccrualPeriod() {
 function canEditCoinRules(role) { return role === 'manager' || role === 'admin'; }
 
 const _NOMINATION_TOGGLES = [
-  ['nomination_calls_enabled', 'Лучший по звонкам'],
-  ['nomination_quality_enabled', 'Лучшее качество'],
-  ['nomination_efficiency_enabled', 'Топ по эффективности'],
-  ['nomination_progress_enabled', 'Лучший прогресс недели'],
-  ['nomination_thanks_enabled', 'Больше всего благодарностей'],
+  ['nomination_calls_enabled', 'Лучший по звонкам', 'Больше всего звонков в час за неделю'],
+  ['nomination_quality_enabled', 'Лучшее качество', 'Самое высокое качество звонков за неделю'],
+  ['nomination_efficiency_enabled', 'Топ по эффективности', 'Самая высокая эффективность за неделю'],
+  ['nomination_progress_enabled', 'Лучший прогресс недели', 'Наибольший рост места в рейтинге'],
+  ['nomination_thanks_enabled', 'Больше всего благодарностей', 'Больше всего благодарностей от водителей'],
 ];
+
+function _toggleRowHtml(id, label, checked, canEdit, hint = '') {
+  return `
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-row-label">${esc(label)}</div>
+        ${hint ? `<div class="toggle-row-hint">${esc(hint)}</div>` : ''}
+      </div>
+      <label class="toggle-switch">
+        <input type="checkbox" id="cr-${id}" ${checked ? 'checked' : ''} ${canEdit ? '' : 'disabled'}>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>`;
+}
 
 async function renderCoinRulesSettingsTab(body) {
   body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка настроек…</p></div>';
@@ -5752,14 +5811,14 @@ async function renderCoinRulesSettingsTab(body) {
     </div>`;
 
   body.innerHTML = `
-    <div class="panel">
-      <div class="panel-head">
-        <h3>Настройки начислений</h3>
-        ${!canEdit ? '<span class="panel-badge">Только просмотр</span>' : ''}
-        ${rules.updated_by_name ? `<span class="cell-muted" style="font-size:11px">Изменено: ${esc(rules.updated_by_name)}</span>` : ''}
+    <div class="an-card">
+      <div class="an-card-head-row">
+        <div class="an-card-head">Курс перевода</div>
+        <div>
+          ${!canEdit ? '<span class="panel-badge">Только просмотр</span>' : ''}
+          ${rules.updated_by_name ? `<span class="cell-muted" style="font-size:12px">Изменено: ${esc(rules.updated_by_name)}</span>` : ''}
+        </div>
       </div>
-
-      <div class="coin-rules-section-title">Курс перевода</div>
       <div class="coin-rules-form">
         ${numField('points_per_coin', 'Баллов за 1 коин', rules.points_per_coin, 'Например, 5 = 5 баллов конвертируются в 1 коин')}
         <div class="coin-rules-field">
@@ -5770,46 +5829,44 @@ async function renderCoinRulesSettingsTab(body) {
         </div>
         ${numField('min_points_for_accrual', 'Минимальный балл для начисления', rules.min_points_for_accrual)}
       </div>
+    </div>
 
-      <div class="coin-rules-section-title">Бонусы за рейтинг недели</div>
+    <div class="an-card">
+      <div class="an-card-head">Бонусы за рейтинг недели</div>
       <div class="coin-rules-form">
         ${numField('top_1_bonus', '1 место', rules.top_1_bonus)}
         ${numField('top_2_bonus', '2 место', rules.top_2_bonus)}
         ${numField('top_3_bonus', '3 место', rules.top_3_bonus)}
       </div>
+    </div>
 
-      <div class="coin-rules-section-title">Бонусы за дисциплину и признание</div>
+    <div class="an-card">
+      <div class="an-card-head">Бонусы за дисциплину и признание</div>
       <div class="coin-rules-form">
         ${numField('no_late_bonus', 'Неделя без опозданий', rules.no_late_bonus)}
         ${numField('no_violation_bonus', 'Неделя без нарушений', rules.no_violation_bonus)}
         ${numField('nomination_bonus', 'Номинация недели (за каждую)', rules.nomination_bonus)}
         ${numField('driver_thanks_bonus', 'Благодарность от водителя', rules.driver_thanks_bonus)}
       </div>
+    </div>
 
-      <div class="coin-rules-section-title">Включённые номинации</div>
-      ${_NOMINATION_TOGGLES.map(([key, label]) => `
-        <div class="coin-rules-toggle-row">
-          <span>${esc(label)}</span>
-          <label class="an-checkbox-label"><input type="checkbox" id="cr-${key}" ${rules[key] ? 'checked' : ''} ${canEdit ? '' : 'disabled'}></label>
-        </div>`).join('')}
+    <div class="an-card">
+      <div class="an-card-head">Включённые номинации</div>
+      ${_NOMINATION_TOGGLES.map(([key, label, hint]) => _toggleRowHtml(key, label, rules[key], canEdit, hint)).join('')}
+    </div>
 
-      <div class="coin-rules-section-title">Ограничения начисления</div>
-      <div class="coin-rules-toggle-row">
-        <span>Начислять уволенным операторам</span>
-        <label class="an-checkbox-label"><input type="checkbox" id="cr-accrue_to_fired" ${rules.accrue_to_fired ? 'checked' : ''} ${canEdit ? '' : 'disabled'}></label>
+    <div class="an-card">
+      <div class="an-card-head">Ограничения начисления</div>
+      ${_toggleRowHtml('accrue_to_fired', 'Начислять уволенным операторам', rules.accrue_to_fired, canEdit)}
+      ${_toggleRowHtml('accrue_to_inactive', 'Начислять неучаствующим операторам', rules.accrue_to_inactive, canEdit)}
+    </div>
+
+    ${canEdit ? `
+      <div class="panel-footer">
+        <button class="btn-primary" onclick="saveCoinRulesSettings()">Сохранить настройки</button>
       </div>
-      <div class="coin-rules-toggle-row">
-        <span>Начислять неучаствующим операторам</span>
-        <label class="an-checkbox-label"><input type="checkbox" id="cr-accrue_to_inactive" ${rules.accrue_to_inactive ? 'checked' : ''} ${canEdit ? '' : 'disabled'}></label>
-      </div>
-
-      ${canEdit ? `
-        <div class="panel-footer" style="margin-top:18px">
-          <button class="btn-primary" onclick="saveCoinRulesSettings()">Сохранить настройки</button>
-        </div>
-        <div class="empty-line" style="margin-top:6px">Изменения применяются к следующему расчёту — старые начисления не пересчитываются.</div>
-      ` : ''}
-    </div>`;
+      <div class="empty-line" style="margin-top:6px">Изменения применяются к следующему расчёту — старые начисления не пересчитываются.</div>
+    ` : ''}`;
 }
 
 async function saveCoinRulesSettings() {

@@ -4,6 +4,26 @@
 
 const _adminSummaryState = { filters: {}, data: null };
 
+function _disciplineCellHtml(o) {
+  const late = o.lateness_count;
+  const viol = o.violation_count;
+  if (late == null && viol == null) return '<span class="cell-muted">—</span>';
+  const badge = (value, label) => {
+    const v = value ?? 0;
+    const cls = v > 0 ? 'bonus-chip discipline-bad' : 'bonus-chip discipline-ok';
+    return `<span class="${cls}" title="${esc(label)}">${label}: ${v}</span>`;
+  };
+  return `${badge(late, 'Опоздания')} ${badge(viol, 'Нарушения')}`;
+}
+
+function _metricsCellHtml(o) {
+  if (o.quality == null && o.efficiency == null) return '<span class="cell-muted">—</span>';
+  const parts = [];
+  if (o.quality != null) parts.push(`Кач. ${levelNum(o.quality)}%`);
+  if (o.efficiency != null) parts.push(`Эфф. ${levelNum(o.efficiency)}%`);
+  return `<span style="font-size:12.5px">${parts.join(' · ')}</span>`;
+}
+
 async function renderAdminSummaryDetail() {
   const host = document.getElementById('admin-summary-extra');
   if (!host) return;
@@ -107,7 +127,7 @@ async function _loadAdminSummaryDetail() {
           <thead><tr>
             <th>Место</th><th>ФИО</th><th>Группа</th><th>Статус</th>
             <th>Баллы недели</th><th>Коины недели</th><th>Баланс</th>
-            <th>Опоздания</th><th>Нарушения</th><th>Качество</th><th>Эффективность</th><th>Действия</th>
+            <th>Дисциплина</th><th>Показатели</th><th>Действия</th>
           </tr></thead>
           <tbody>
             ${data.operators.length ? data.operators.map(o => `
@@ -119,12 +139,10 @@ async function _loadAdminSummaryDetail() {
                 <td>${o.week_points != null ? levelNum(o.week_points) : '—'}</td>
                 <td>${o.week_coins != null ? `<b class="accent-text">${o.week_coins} ₡</b>` : '—'}</td>
                 <td>${o.total_balance} ₡</td>
-                <td style="color:${o.lateness_count > 0 ? 'var(--danger)' : 'inherit'}">${o.lateness_count ?? '—'}</td>
-                <td style="color:${o.violation_count > 0 ? 'var(--danger)' : 'inherit'}">${o.violation_count ?? '—'}</td>
-                <td>${o.quality != null ? levelNum(o.quality) + '%' : '—'}</td>
-                <td>${o.efficiency != null ? levelNum(o.efficiency) + '%' : '—'}</td>
+                <td>${_disciplineCellHtml(o)}</td>
+                <td>${_metricsCellHtml(o)}</td>
                 <td>${summaryRowActionsHtml(o.id, o.full_name)}</td>
-              </tr>`).join('') : '<tr><td colspan="12" class="empty-line">Нет данных за выбранный период/фильтры</td></tr>'}
+              </tr>`).join('') : '<tr><td colspan="10" class="empty-line">Нет данных за выбранный период/фильтры</td></tr>'}
           </tbody>
         </table>
       </div>

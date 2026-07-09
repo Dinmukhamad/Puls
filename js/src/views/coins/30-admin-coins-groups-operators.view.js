@@ -407,6 +407,8 @@ function transactionTypeLabel(type) {
     bonus_driver_thanks: 'Бонус: благодарность водителя',
     achievement_reward: 'Награда за достижение',
     test_reward: 'Награда за тест',
+    level_up: 'Повышение уровня',
+    wheel_of_wow: 'Колесо WOW',
   }[type] || type;
 }
 
@@ -768,15 +770,6 @@ async function renderRequests() {
   const items = STATE.shopItems || [];
 
   el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">Заявки</div><h2 class="section-title">Заявки из магазина</h2></div>
-      <div class="header-right">
-        <button class="btn-outline btn-sm" onclick="exportShopRequests('csv')">Экспорт CSV</button>
-        <button class="btn-outline btn-sm" onclick="exportShopRequests('xlsx')">Экспорт XLSX</button>
-        <button class="btn-outline btn-sm" onclick="reloadRequestsTab()">Обновить</button>
-      </div>
-    </div>
-
     ${s.operator_id !== 'all' ? `
       <div class="filter-active-banner">
         Показаны только заявки оператора <b>${esc(s.operator_name || '#' + s.operator_id)}</b>
@@ -792,22 +785,32 @@ async function renderRequests() {
       ].map(([f, label]) => `<button class="filter-tab ${s.status===f?'active':''}" data-filter="${f}">${label}</button>`).join('')}
     </div>
 
-    <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin:12px 0">
-      <div class="form-group" style="margin:0">
-        <label class="form-label">Группа</label>
-        <select id="req-f-group" class="form-input">
-          <option value="all">Все группы</option>
-          ${groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}
-        </select>
+    <div class="panel" style="margin:12px 0">
+      <div class="panel-head">
+        <h3>Фильтры</h3>
+        <div class="header-right">
+          <button class="btn-outline btn-sm" onclick="exportShopRequests('csv')">Экспорт CSV</button>
+          <button class="btn-outline btn-sm" onclick="exportShopRequests('xlsx')">Экспорт XLSX</button>
+          <button class="btn-outline btn-sm" onclick="reloadRequestsTab()">Обновить</button>
+        </div>
       </div>
-      <div class="form-group" style="margin:0">
-        <label class="form-label">Товар</label>
-        <select id="req-f-bonus" class="form-input">
-          <option value="all">Все товары</option>
-          ${items.map(i => `<option value="${i.id}">${esc(i.title)}</option>`).join('')}
-        </select>
+      <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Группа</label>
+          <select id="req-f-group" class="form-input">
+            <option value="all">Все группы</option>
+            ${groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Товар</label>
+          <select id="req-f-bonus" class="form-input">
+            <option value="all">Все товары</option>
+            ${items.map(i => `<option value="${i.id}">${esc(i.title)}</option>`).join('')}
+          </select>
+        </div>
+        <button class="btn-primary btn-sm" onclick="applyRequestsFilters()">Применить</button>
       </div>
-      <button class="btn-primary btn-sm" onclick="applyRequestsFilters()">Применить</button>
     </div>
 
     <div class="panel">
@@ -988,7 +991,12 @@ const _historyTabState = {
 };
 
 const _historySourceLabels = {
-  weekly_auto_accrual: 'Автоначисление', achievement: 'Достижение',
+  weekly_auto_accrual: 'Автоматический расчёт',
+  achievement: 'Достижение',
+  level_up: 'Повышение уровня',
+  manual: 'Ручная операция',
+  manual_grant: 'Ручная выдача',
+  wheel_spin: 'Колесо WOW',
 };
 
 function renderHistory() {
@@ -997,15 +1005,6 @@ function renderHistory() {
   const f = _historyTabState.filters;
 
   el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">История</div><h2 class="section-title">История операций</h2></div>
-      <div class="header-right">
-        <button class="btn-outline btn-sm" onclick="exportHistoryServerSide()">Экспорт CSV</button>
-        <button class="btn-outline btn-sm" onclick="exportHistoryServerSide('xlsx')">Экспорт XLSX</button>
-        <button class="btn-outline btn-sm" onclick="reloadHistoryTab()">Обновить</button>
-      </div>
-    </div>
-
     ${f.operator_id !== 'all' ? `
       <div class="filter-active-banner">
         Показаны только операции оператора <b>${esc(f.operator_name || '#' + f.operator_id)}</b>
@@ -1013,6 +1012,14 @@ function renderHistory() {
       </div>` : ''}
 
     <div class="panel" style="margin-bottom:16px">
+      <div class="panel-head">
+        <h3>Фильтры</h3>
+        <div class="header-right">
+          <button class="btn-outline btn-sm" onclick="exportHistoryServerSide()">Экспорт CSV</button>
+          <button class="btn-outline btn-sm" onclick="exportHistoryServerSide('xlsx')">Экспорт XLSX</button>
+          <button class="btn-outline btn-sm" onclick="reloadHistoryTab()">Обновить</button>
+        </div>
+      </div>
       <div class="filter-row" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end">
         <div class="form-group" style="margin:0">
           <label class="form-label">Тип</label>
@@ -1037,6 +1044,10 @@ function renderHistory() {
             <option value="all">Все</option>
             <option value="weekly_auto_accrual">Еженедельный расчёт</option>
             <option value="achievement">Достижение</option>
+            <option value="level_up">Повышение уровня</option>
+            <option value="wheel_spin">Колесо WOW</option>
+            <option value="manual">Ручная операция</option>
+            <option value="manual_grant">Ручная выдача</option>
           </select>
         </div>
         <div class="form-group" style="margin:0">
