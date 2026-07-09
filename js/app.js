@@ -609,6 +609,8 @@ async function loadData(role) {
     ).then(h => { STATE.history = h; });
   }
   await Promise.all(tasks);
+  refreshNotificationBadge();
+  startNotificationPolling();
 }
 
 async function reloadData() {
@@ -652,6 +654,105 @@ function renderSidebar(role) {
 /* ══════════════════════════════════════
    VIEW: УРОВНИ ОПЕРАТОРОВ
 ══════════════════════════════════════ */
+
+/* ══════════════════════════════════════
+   УВЕДОМЛЕНИЯ (ТЗ P2) — колокольчик в сайдбаре, модалка со списком
+══════════════════════════════════════ */
+
+let _notificationPollTimer = null;
+const NOTIFICATION_POLL_MS = 30000; // 30с — не хуже других SWR-опросов в приложении
+
+function startNotificationPolling() {
+  if (_notificationPollTimer) return; // reloadData() может вызвать loadData() повторно — не плодим таймеры
+  _notificationPollTimer = setInterval(refreshNotificationBadge, NOTIFICATION_POLL_MS);
+}
+
+async function refreshNotificationBadge() {
+  const badge = document.getElementById('side-bell-badge');
+  if (!badge) return;
+  try {
+    const { unread_count } = await api.getUnreadNotificationCount();
+    if (unread_count > 0) {
+      badge.textContent = unread_count > 99 ? '99+' : String(unread_count);
+      badge.hidden = false;
+    } else {
+      badge.hidden = true;
+    }
+  } catch {
+    // не авторизован / сеть — тихо пропускаем, это фоновый опрос
+  }
+}
+
+const _notificationTypeIcons = {
+  achievement: '🏆', purchase_approved: '✅', purchase_rejected: '❌', purchase_completed: '🎁',
+  weekly_accrual: '📊', wheel_prize: '🎡', manual_operation: '✍️',
+};
+
+function _notificationLinkTarget(link) {
+  const known = ['cabinet', 'shop', 'wheel', 'rating', 'coins', 'summary'];
+  return known.includes(link) ? link : null;
+}
+
+async function showNotificationsModal() {
+  showModal(`
+    <h3 class="modal-title">Уведомления</h3>
+    <div class="notif-modal-actions">
+      <button class="btn-link" id="notif-mark-all">Отметить все прочитанными</button>
+    </div>
+    <div id="notif-list-host"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div>`);
+
+  document.getElementById('notif-mark-all').onclick = async () => {
+    try {
+      await api.markAllNotificationsRead();
+      await _loadNotificationsIntoModal();
+      refreshNotificationBadge();
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+
+  await _loadNotificationsIntoModal();
+  refreshNotificationBadge();
+}
+
+async function _loadNotificationsIntoModal() {
+  const host = document.getElementById('notif-list-host');
+  if (!host) return;
+  let data;
+  try {
+    data = await api.listNotifications({ limit: 30 });
+  } catch (e) {
+    host.innerHTML = `<div class="empty-line">Ошибка: ${esc(e.message)}</div>`;
+    return;
+  }
+  const items = data.items || [];
+  host.innerHTML = items.length ? items.map(n => `
+    <div class="notif-row ${n.is_read ? '' : 'is-unread'}" data-notif-id="${n.id}">
+      <div class="notif-icon">${_notificationTypeIcons[n.type] || '🔔'}</div>
+      <div class="notif-body">
+        <div class="notif-title">${esc(n.title)}</div>
+        ${n.body ? `<div class="notif-text">${esc(n.body)}</div>` : ''}
+        <div class="notif-time">${fmtDateTime(n.created_at)}</div>
+      </div>
+      ${!n.is_read ? '<span class="notif-dot" title="Не прочитано"></span>' : ''}
+    </div>`).join('') : '<div class="empty-state">Пока нет уведомлений</div>';
+
+  host.querySelectorAll('.notif-row').forEach(row => {
+    row.addEventListener('click', async () => {
+      const id = parseInt(row.dataset.notifId, 10);
+      const notif = items.find(n => n.id === id);
+      if (notif && !notif.is_read) {
+        try {
+          await api.markNotificationRead(id);
+          row.classList.remove('is-unread');
+          const dot = row.querySelector('.notif-dot');
+          if (dot) dot.remove();
+          refreshNotificationBadge();
+        } catch { /* тихо — клик по уведомлению не должен ломать модалку */ }
+      }
+      const target = notif ? _notificationLinkTarget(notif.link) : null;
+      if (target) { closeModal(); navigateTo(target); }
+    });
+  });
+}
 
 async function renderOperatorLevelsSettings() {
   const el = document.getElementById('view-operator-levels');
@@ -2484,16 +2585,40 @@ function shopCard(item, balance, role) {
   const requiredLevel = item.min_level_id ? levels.find(l => l.id === item.min_level_id) : null;
   const currentLevel = STATE.myLevel?.level || null;
   const levelLocked = role === 'operator' && requiredLevel && (!currentLevel || (currentLevel.sort_order || 0) < (requiredLevel.sort_order || 0));
-  const canBuy = role === 'operator' && balance >= item.price && !levelLocked;
+
+  const now = new Date();
+  const notStartedYet = item.starts_at && new Date(item.starts_at) > now;
+  const alreadyEnded = item.ends_at && new Date(item.ends_at) < now;
+  const outOfStock = item.stock_remaining != null && item.stock_remaining <= 0;
+  const personalLimitHit = !!item.operator_limit_reached;
+  const seasonalBlocked = notStartedYet || alreadyEnded || outOfStock || personalLimitHit;
+
+  const canBuy = role === 'operator' && balance >= item.price && !levelLocked && !seasonalBlocked;
   const needMore = role === 'operator' && balance < item.price ? item.price - balance : 0;
-  return `<div class="shop-card ${canBuy?'shop-card-available':''}">
+
+  let buyLabel = 'Купить';
+  if (levelLocked) buyLabel = `Доступно с уровня «${esc(requiredLevel.name)}»`;
+  else if (notStartedYet) buyLabel = `Доступно с ${fmtDate(item.starts_at)}`;
+  else if (alreadyEnded) buyLabel = 'Раздача завершена';
+  else if (outOfStock) buyLabel = 'Закончилось';
+  else if (personalLimitHit) buyLabel = 'Лимит получен';
+  else if (needMore > 0) buyLabel = `Нужно ещё ${needMore} ₡`;
+
+  const seasonBadges = [];
+  if (item.stock_remaining != null) seasonBadges.push(`<span class="shop-badge ${outOfStock ? 'shop-badge-danger' : ''}">Осталось: ${item.stock_remaining}</span>`);
+  if (item.purchase_limit_per_operator > 0 && role === 'operator') seasonBadges.push(`<span class="shop-badge">Взято: ${item.operator_purchased_count || 0} из ${item.purchase_limit_per_operator}</span>`);
+  if (notStartedYet) seasonBadges.push(`<span class="shop-badge shop-badge-info">Скоро: с ${fmtDate(item.starts_at)}</span>`);
+  else if (item.ends_at && !alreadyEnded) seasonBadges.push(`<span class="shop-badge shop-badge-info">До ${fmtDate(item.ends_at)}</span>`);
+  else if (alreadyEnded) seasonBadges.push(`<span class="shop-badge shop-badge-danger">Завершено</span>`);
+
+  return `<div class="shop-card ${canBuy?'shop-card-available':''} ${seasonalBlocked && role==='operator' ? 'shop-card-unavailable' : ''}">
     <div class="shop-card-title">${esc(item.title)}</div>
     <div class="shop-card-desc">${esc(item.description)}</div>
     <div class="shop-card-price">${item.price} <span class="price-unit">коинов</span></div>
     ${requiredLevel ? `<div class="shop-card-desc">Доступно с уровня «${esc(requiredLevel.name)}»</div>` : ''}
+    ${seasonBadges.length ? `<div class="shop-card-badges">${seasonBadges.join('')}</div>` : ''}
     <div class="shop-card-footer">
-      ${role==='operator' ? `<button class="buy-btn ${canBuy?'btn-primary':'btn-disabled'}" data-id="${item.id}" ${canBuy?'':'disabled'}>
-        ${canBuy ? 'Купить' : (levelLocked ? `Доступно с уровня «${esc(requiredLevel.name)}»` : `Нужно ещё ${needMore} ₡`)}</button>` : ''}
+      ${role==='operator' ? `<button class="buy-btn ${canBuy?'btn-primary':'btn-disabled'}" data-id="${item.id}" ${canBuy?'':'disabled'}>${buyLabel}</button>` : ''}
       ${isAdmin(role) ? `<button class="edit-item-btn btn-outline btn-sm" data-id="${item.id}">Изменить</button>` : ''}
     </div>
   </div>`;
@@ -5139,6 +5264,17 @@ function showAddItemModal() {
         <option value="">Без ограничения</option>
         ${levelOptions}
       </select></div>
+    <div class="coin-rules-section-title" style="margin-top:14px">Сезонность и лимиты <span class="cell-muted" style="font-weight:400;text-transform:none">(необязательно)</span></div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Доступен с</label>
+        <input id="ni-starts" class="form-input" type="datetime-local"></div>
+      <div class="form-group"><label class="form-label">Доступен до</label>
+        <input id="ni-ends" class="form-input" type="datetime-local"></div>
+      <div class="form-group"><label class="form-label">Лимит остатка <span class="hint">(0 = без лимита)</span></label>
+        <input id="ni-stock" class="form-input" type="number" min="0" value="0"></div>
+      <div class="form-group"><label class="form-label">Лимит на оператора <span class="hint">(0 = без лимита)</span></label>
+        <input id="ni-oplimit" class="form-input" type="number" min="0" value="0"></div>
+    </div>
     <div id="ni-err" class="status-line"></div>
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitAddItem()">Добавить</button>`);
 }
@@ -5148,10 +5284,14 @@ async function submitAddItem() {
   const price = +document.getElementById('ni-price')?.value;
   const minLevelRaw = document.getElementById('ni-min-level')?.value || '';
   const min_level_id = minLevelRaw ? Number(minLevelRaw) : null;
+  const starts_at = document.getElementById('ni-starts')?.value || null;
+  const ends_at = document.getElementById('ni-ends')?.value || null;
+  const stock_limit = +(document.getElementById('ni-stock')?.value || 0);
+  const purchase_limit_per_operator = +(document.getElementById('ni-oplimit')?.value || 0);
   const err   = document.getElementById('ni-err');
   if (!title || !price) { err.textContent = 'Заполните название и цену'; return; }
   try {
-    await api.createShopItem({ title, description: desc, price, min_level_id });
+    await api.createShopItem({ title, description: desc, price, min_level_id, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
     closeModal(); showToast('Бонус добавлен', 'ok');
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }
@@ -5162,6 +5302,7 @@ function showEditItemModal(item) {
     .filter(l => l.is_active)
     .map(l => `<option value="${l.id}" ${item.min_level_id === l.id ? 'selected' : ''}>${esc(l.name)}</option>`)
     .join('');
+  const toLocalInput = (iso) => iso ? String(iso).slice(0, 16) : '';
   showModal(`
     <h3 class="modal-title">Редактировать бонус</h3>
     <div class="form-group"><label class="form-label">Название</label>
@@ -5180,6 +5321,18 @@ function showEditItemModal(item) {
         <option value="true" ${item.is_active?'selected':''}>Активен</option>
         <option value="false" ${!item.is_active?'selected':''}>Отключён</option>
       </select></div>
+    <div class="coin-rules-section-title" style="margin-top:14px">Сезонность и лимиты <span class="cell-muted" style="font-weight:400;text-transform:none">(необязательно)</span></div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Доступен с</label>
+        <input id="ei-starts" class="form-input" type="datetime-local" value="${toLocalInput(item.starts_at)}"></div>
+      <div class="form-group"><label class="form-label">Доступен до</label>
+        <input id="ei-ends" class="form-input" type="datetime-local" value="${toLocalInput(item.ends_at)}"></div>
+      <div class="form-group"><label class="form-label">Лимит остатка <span class="hint">(0 = без лимита)</span></label>
+        <input id="ei-stock" class="form-input" type="number" min="0" value="${item.stock_limit ?? 0}"></div>
+      <div class="form-group"><label class="form-label">Лимит на оператора <span class="hint">(0 = без лимита)</span></label>
+        <input id="ei-oplimit" class="form-input" type="number" min="0" value="${item.purchase_limit_per_operator ?? 0}"></div>
+    </div>
+    ${item.stock_remaining != null ? `<div class="status-line">Сейчас остаток: ${item.stock_remaining}</div>` : ''}
     <div id="ei-err" class="status-line"></div>
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitEditItem(${item.id})">Сохранить</button>`);
 }
@@ -5190,10 +5343,14 @@ async function submitEditItem(id) {
   const minLevelRaw = document.getElementById('ei-min-level')?.value || '';
   const min_level_id = minLevelRaw ? Number(minLevelRaw) : null;
   const is_active = document.getElementById('ei-active')?.value === 'true';
+  const starts_at = document.getElementById('ei-starts')?.value || null;
+  const ends_at = document.getElementById('ei-ends')?.value || null;
+  const stock_limit = +(document.getElementById('ei-stock')?.value || 0);
+  const purchase_limit_per_operator = +(document.getElementById('ei-oplimit')?.value || 0);
   const err       = document.getElementById('ei-err');
   if (!title || !price) { err.textContent = 'Заполните поля'; return; }
   try {
-    await api.updateShopItem(id, { title, description, price, min_level_id, is_active });
+    await api.updateShopItem(id, { title, description, price, min_level_id, is_active, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
     closeModal(); showToast('Бонус обновлён', 'ok');
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }

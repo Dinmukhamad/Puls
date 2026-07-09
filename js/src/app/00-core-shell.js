@@ -608,6 +608,8 @@ async function loadData(role) {
     ).then(h => { STATE.history = h; });
   }
   await Promise.all(tasks);
+  refreshNotificationBadge();
+  startNotificationPolling();
 }
 
 async function reloadData() {

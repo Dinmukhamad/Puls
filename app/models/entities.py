@@ -411,6 +411,26 @@ class CoinRule(Base):
     updated_by: Mapped[User | None] = relationship("User")
 
 
+class Notification(Base):
+    """Уведомления пользователю (ТЗ P2). Привязаны к User (не Operator) —
+    так одна и та же инфраструктура обслуживает и операторов, и штат
+    (например, в будущем — «новая заявка на рассмотрение» для supervisor)."""
+    __tablename__ = "notifications"
+    __table_args__ = (Index("ix_notifications_user_unread", "user_id", "is_read"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    type: Mapped[str] = mapped_column(String(50), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text, default="")
+    link: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    user: Mapped[User] = relationship("User")
+
+
 class ShopItem(Base):
     __tablename__ = "shop_items"
 
@@ -420,6 +440,12 @@ class ShopItem(Base):
     price: Mapped[int] = mapped_column(Integer)
     min_level_id: Mapped[int | None] = mapped_column(ForeignKey("operator_levels.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Сезонный магазин (ТЗ P2): окно доступности + лимиты. 0 в лимитах = без лимита,
+    # как и у секторов Wheel of WOW — единообразный принцип по всему проекту.
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    stock_limit: Mapped[int] = mapped_column(Integer, default=0)
+    purchase_limit_per_operator: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
 
     purchases: Mapped[list[ShopPurchase]] = relationship(back_populates="shop_item")

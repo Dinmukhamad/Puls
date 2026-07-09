@@ -288,6 +288,9 @@ def apply_period_accrual(
             from app.modules.achievements.service import check_weekly_achievements
             check_weekly_achievements(db, acc, current_user)
 
+            from app.modules.notifications.service import notify_weekly_accrual
+            notify_weekly_accrual(db, acc.operator.id, acc.total_coins, f"{period_start}–{period_end}")
+
         run.status = "success"
         run.finished_at = now_utc()
         run.operators_count = operators_count

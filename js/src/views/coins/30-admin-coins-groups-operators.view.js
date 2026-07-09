@@ -2212,6 +2212,17 @@ function showAddItemModal() {
         <option value="">Без ограничения</option>
         ${levelOptions}
       </select></div>
+    <div class="coin-rules-section-title" style="margin-top:14px">Сезонность и лимиты <span class="cell-muted" style="font-weight:400;text-transform:none">(необязательно)</span></div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Доступен с</label>
+        <input id="ni-starts" class="form-input" type="datetime-local"></div>
+      <div class="form-group"><label class="form-label">Доступен до</label>
+        <input id="ni-ends" class="form-input" type="datetime-local"></div>
+      <div class="form-group"><label class="form-label">Лимит остатка <span class="hint">(0 = без лимита)</span></label>
+        <input id="ni-stock" class="form-input" type="number" min="0" value="0"></div>
+      <div class="form-group"><label class="form-label">Лимит на оператора <span class="hint">(0 = без лимита)</span></label>
+        <input id="ni-oplimit" class="form-input" type="number" min="0" value="0"></div>
+    </div>
     <div id="ni-err" class="status-line"></div>
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitAddItem()">Добавить</button>`);
 }
@@ -2221,10 +2232,14 @@ async function submitAddItem() {
   const price = +document.getElementById('ni-price')?.value;
   const minLevelRaw = document.getElementById('ni-min-level')?.value || '';
   const min_level_id = minLevelRaw ? Number(minLevelRaw) : null;
+  const starts_at = document.getElementById('ni-starts')?.value || null;
+  const ends_at = document.getElementById('ni-ends')?.value || null;
+  const stock_limit = +(document.getElementById('ni-stock')?.value || 0);
+  const purchase_limit_per_operator = +(document.getElementById('ni-oplimit')?.value || 0);
   const err   = document.getElementById('ni-err');
   if (!title || !price) { err.textContent = 'Заполните название и цену'; return; }
   try {
-    await api.createShopItem({ title, description: desc, price, min_level_id });
+    await api.createShopItem({ title, description: desc, price, min_level_id, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
     closeModal(); showToast('Бонус добавлен', 'ok');
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }
@@ -2235,6 +2250,7 @@ function showEditItemModal(item) {
     .filter(l => l.is_active)
     .map(l => `<option value="${l.id}" ${item.min_level_id === l.id ? 'selected' : ''}>${esc(l.name)}</option>`)
     .join('');
+  const toLocalInput = (iso) => iso ? String(iso).slice(0, 16) : '';
   showModal(`
     <h3 class="modal-title">Редактировать бонус</h3>
     <div class="form-group"><label class="form-label">Название</label>
@@ -2253,6 +2269,18 @@ function showEditItemModal(item) {
         <option value="true" ${item.is_active?'selected':''}>Активен</option>
         <option value="false" ${!item.is_active?'selected':''}>Отключён</option>
       </select></div>
+    <div class="coin-rules-section-title" style="margin-top:14px">Сезонность и лимиты <span class="cell-muted" style="font-weight:400;text-transform:none">(необязательно)</span></div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Доступен с</label>
+        <input id="ei-starts" class="form-input" type="datetime-local" value="${toLocalInput(item.starts_at)}"></div>
+      <div class="form-group"><label class="form-label">Доступен до</label>
+        <input id="ei-ends" class="form-input" type="datetime-local" value="${toLocalInput(item.ends_at)}"></div>
+      <div class="form-group"><label class="form-label">Лимит остатка <span class="hint">(0 = без лимита)</span></label>
+        <input id="ei-stock" class="form-input" type="number" min="0" value="${item.stock_limit ?? 0}"></div>
+      <div class="form-group"><label class="form-label">Лимит на оператора <span class="hint">(0 = без лимита)</span></label>
+        <input id="ei-oplimit" class="form-input" type="number" min="0" value="${item.purchase_limit_per_operator ?? 0}"></div>
+    </div>
+    ${item.stock_remaining != null ? `<div class="status-line">Сейчас остаток: ${item.stock_remaining}</div>` : ''}
     <div id="ei-err" class="status-line"></div>
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitEditItem(${item.id})">Сохранить</button>`);
 }
@@ -2263,10 +2291,14 @@ async function submitEditItem(id) {
   const minLevelRaw = document.getElementById('ei-min-level')?.value || '';
   const min_level_id = minLevelRaw ? Number(minLevelRaw) : null;
   const is_active = document.getElementById('ei-active')?.value === 'true';
+  const starts_at = document.getElementById('ei-starts')?.value || null;
+  const ends_at = document.getElementById('ei-ends')?.value || null;
+  const stock_limit = +(document.getElementById('ei-stock')?.value || 0);
+  const purchase_limit_per_operator = +(document.getElementById('ei-oplimit')?.value || 0);
   const err       = document.getElementById('ei-err');
   if (!title || !price) { err.textContent = 'Заполните поля'; return; }
   try {
-    await api.updateShopItem(id, { title, description, price, min_level_id, is_active });
+    await api.updateShopItem(id, { title, description, price, min_level_id, is_active, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
     closeModal(); showToast('Бонус обновлён', 'ok');
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }

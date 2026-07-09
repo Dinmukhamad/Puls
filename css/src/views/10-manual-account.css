@@ -254,6 +254,32 @@
   color: var(--text-primary);
 }
 
+.side-bell-btn {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--sidebar-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sidebar-text);
+  cursor: pointer;
+}
+.side-bell-btn:hover {
+  background: var(--sidebar-hover-bg);
+  color: var(--text-primary);
+}
+.side-bell-badge {
+  position: absolute; top: -4px; right: -4px;
+  min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 999px; background: var(--danger, #ef4444); color: #fff;
+  font-size: 9px; font-weight: 700; line-height: 15px; text-align: center;
+  border: 1.5px solid var(--sidebar-bg, #0B1120);
+}
+
 /* ── Account settings modal ─────────────────────────────────── */
 .acc-modal { display: flex; flex-direction: column; gap: 0; }
 

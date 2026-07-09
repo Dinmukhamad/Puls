@@ -318,6 +318,15 @@ function exportUrl(path, params = {}) {
   return base() + path + (qs ? '?' + qs : '');
 }
 
+/* ── Уведомления (ТЗ P2) ──────────────────────────────────── */
+async function listNotifications(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return req('GET', '/api/notifications' + (qs ? '?' + qs : ''));
+}
+async function getUnreadNotificationCount() { return req('GET', '/api/notifications/unread-count'); }
+async function markNotificationRead(id) { return req('POST', `/api/notifications/${id}/read`); }
+async function markAllNotificationsRead() { return req('POST', '/api/notifications/read-all'); }
+
   /* ── Tests (Тесты) — operator side ──────────────────────────── */
   async function myTests() { return req('GET', '/api/tests/my'); }
   async function startTest(testId) { return req('POST', `/api/tests/${testId}/start`); }
@@ -434,6 +443,7 @@ function exportUrl(path, params = {}) {
     previewWeeklyAccrual, applyWeeklyAccrual, listAccrualRuns,
     listAchievements, updateAchievement, getMyAchievements, getOperatorAchievements, grantAchievement,
     getAdminSummary, exportUrl,
+    listNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead,
     loginOperator: login,
     _base,
     _req: req,

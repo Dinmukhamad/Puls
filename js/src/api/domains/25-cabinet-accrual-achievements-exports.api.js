@@ -34,3 +34,12 @@ function exportUrl(path, params = {}) {
   const qs = new URLSearchParams(params).toString();
   return base() + path + (qs ? '?' + qs : '');
 }
+
+/* ── Уведомления (ТЗ P2) ──────────────────────────────────── */
+async function listNotifications(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return req('GET', '/api/notifications' + (qs ? '?' + qs : ''));
+}
+async function getUnreadNotificationCount() { return req('GET', '/api/notifications/unread-count'); }
+async function markNotificationRead(id) { return req('POST', `/api/notifications/${id}/read`); }
+async function markAllNotificationsRead() { return req('POST', '/api/notifications/read-all'); }

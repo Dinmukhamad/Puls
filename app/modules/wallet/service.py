@@ -3,6 +3,7 @@ from __future__ import annotations
 from math import ceil, floor
 
 from fastapi import HTTPException, status
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.entities import CoinTransaction, Operator, ShopItem, ShopPurchase, User, now_utc
@@ -75,10 +76,84 @@ def add_transaction(
     return transaction
 
 
+_STOCK_CONSUMING_STATUSES = ("new", "approved", "completed")  # всё, кроме rejected — тот резерв реален
+
+
+def shop_item_claimed_count(db: Session, item_id: int) -> int:
+    """Сколько единиц товара уже разобрано (заявки не в статусе rejected)."""
+    return db.scalar(
+        select(func.count(ShopPurchase.id)).where(
+            ShopPurchase.shop_item_id == item_id,
+            ShopPurchase.status.in_(_STOCK_CONSUMING_STATUSES),
+        )
+    ) or 0
+
+
+def shop_item_operator_purchase_count(db: Session, item_id: int, operator_id: int) -> int:
+    """Сколько раз этот оператор уже брал именно этот товар (без rejected)."""
+    return db.scalar(
+        select(func.count(ShopPurchase.id)).where(
+            ShopPurchase.shop_item_id == item_id,
+            ShopPurchase.operator_id == operator_id,
+            ShopPurchase.status.in_(_STOCK_CONSUMING_STATUSES),
+        )
+    ) or 0
+
+
+def shop_item_availability(db: Session, item: ShopItem, operator_id: int) -> dict:
+    """Персонализированные поля для ShopItemRead (ТЗ P2, сезонный магазин):
+    остаток, сколько уже взял этот оператор, доступен ли товар прямо сейчас."""
+    now = now_utc()
+    stock_remaining = None
+    if item.stock_limit > 0:
+        stock_remaining = max(0, item.stock_limit - shop_item_claimed_count(db, item.id))
+
+    operator_count = shop_item_operator_purchase_count(db, item.id, operator_id) if operator_id else 0
+    limit_reached = bool(item.purchase_limit_per_operator > 0 and operator_count >= item.purchase_limit_per_operator)
+
+    in_season = True
+    if item.starts_at and now < item.starts_at:
+        in_season = False
+    if item.ends_at and now > item.ends_at:
+        in_season = False
+
+    is_available = bool(item.is_active and in_season and not limit_reached and (stock_remaining is None or stock_remaining > 0))
+
+    return {
+        "stock_remaining": stock_remaining,
+        "operator_purchased_count": operator_count,
+        "operator_limit_reached": limit_reached,
+        "is_available_now": is_available,
+    }
+
+
 def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurchase:
-    item = db.get(ShopItem, item_id)
+    # Блокируем и строку товара: лимит остатка (stock_limit) читается и
+    # проверяется здесь же, и без FOR UPDATE два одновременных запроса на
+    # последнюю единицу товара оба прошли бы проверку и оба списали бы —
+    # тот же класс гонки, что и с балансом оператора ниже.
+    item = db.get(ShopItem, item_id, with_for_update=True)
     if not item or not item.is_active:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Бонус не найден")
+
+    now = now_utc()
+    if item.starts_at and now < item.starts_at:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Товар пока не доступен — раздача ещё не началась")
+    if item.ends_at and now > item.ends_at:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Товар больше не доступен — раздача завершена")
+
+    if item.stock_limit > 0:
+        claimed = shop_item_claimed_count(db, item.id)
+        if claimed >= item.stock_limit:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Товар закончился")
+
+    if item.purchase_limit_per_operator > 0:
+        already = shop_item_operator_purchase_count(db, item.id, operator.id)
+        if already >= item.purchase_limit_per_operator:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Лимит на одного оператора: {item.purchase_limit_per_operator}",
+            )
 
     if item.min_level_id:
         from app.modules.operator_levels.service import operator_level_summary
@@ -156,6 +231,9 @@ def approve_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sho
             related_purchase_id=purchase.id,
         )
     )
+    from app.modules.notifications.service import notify_purchase_status
+    item = db.get(ShopItem, purchase.shop_item_id)
+    notify_purchase_status(db, operator.id, item.title if item else "бонус", "approved")
     return purchase
 
 
@@ -184,6 +262,9 @@ def reject_purchase(db: Session, purchase: ShopPurchase, reviewer: User, reason:
             related_purchase_id=purchase.id,
         )
     )
+    from app.modules.notifications.service import notify_purchase_status
+    item = db.get(ShopItem, purchase.shop_item_id)
+    notify_purchase_status(db, operator.id, item.title if item else "бонус", "rejected", reason)
     return purchase
 
 
@@ -206,6 +287,9 @@ def complete_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sh
             related_purchase_id=purchase.id,
         )
     )
+    from app.modules.notifications.service import notify_purchase_status
+    item = db.get(ShopItem, purchase.shop_item_id)
+    notify_purchase_status(db, purchase.operator_id, item.title if item else "бонус", "completed")
     return purchase
 
 

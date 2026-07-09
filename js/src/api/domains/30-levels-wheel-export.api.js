@@ -114,6 +114,7 @@
     previewWeeklyAccrual, applyWeeklyAccrual, listAccrualRuns,
     listAchievements, updateAchievement, getMyAchievements, getOperatorAchievements, grantAchievement,
     getAdminSummary, exportUrl,
+    listNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead,
     loginOperator: login,
     _base,
     _req: req,

@@ -847,16 +847,40 @@ function shopCard(item, balance, role) {
   const requiredLevel = item.min_level_id ? levels.find(l => l.id === item.min_level_id) : null;
   const currentLevel = STATE.myLevel?.level || null;
   const levelLocked = role === 'operator' && requiredLevel && (!currentLevel || (currentLevel.sort_order || 0) < (requiredLevel.sort_order || 0));
-  const canBuy = role === 'operator' && balance >= item.price && !levelLocked;
+
+  const now = new Date();
+  const notStartedYet = item.starts_at && new Date(item.starts_at) > now;
+  const alreadyEnded = item.ends_at && new Date(item.ends_at) < now;
+  const outOfStock = item.stock_remaining != null && item.stock_remaining <= 0;
+  const personalLimitHit = !!item.operator_limit_reached;
+  const seasonalBlocked = notStartedYet || alreadyEnded || outOfStock || personalLimitHit;
+
+  const canBuy = role === 'operator' && balance >= item.price && !levelLocked && !seasonalBlocked;
   const needMore = role === 'operator' && balance < item.price ? item.price - balance : 0;
-  return `<div class="shop-card ${canBuy?'shop-card-available':''}">
+
+  let buyLabel = 'Купить';
+  if (levelLocked) buyLabel = `Доступно с уровня «${esc(requiredLevel.name)}»`;
+  else if (notStartedYet) buyLabel = `Доступно с ${fmtDate(item.starts_at)}`;
+  else if (alreadyEnded) buyLabel = 'Раздача завершена';
+  else if (outOfStock) buyLabel = 'Закончилось';
+  else if (personalLimitHit) buyLabel = 'Лимит получен';
+  else if (needMore > 0) buyLabel = `Нужно ещё ${needMore} ₡`;
+
+  const seasonBadges = [];
+  if (item.stock_remaining != null) seasonBadges.push(`<span class="shop-badge ${outOfStock ? 'shop-badge-danger' : ''}">Осталось: ${item.stock_remaining}</span>`);
+  if (item.purchase_limit_per_operator > 0 && role === 'operator') seasonBadges.push(`<span class="shop-badge">Взято: ${item.operator_purchased_count || 0} из ${item.purchase_limit_per_operator}</span>`);
+  if (notStartedYet) seasonBadges.push(`<span class="shop-badge shop-badge-info">Скоро: с ${fmtDate(item.starts_at)}</span>`);
+  else if (item.ends_at && !alreadyEnded) seasonBadges.push(`<span class="shop-badge shop-badge-info">До ${fmtDate(item.ends_at)}</span>`);
+  else if (alreadyEnded) seasonBadges.push(`<span class="shop-badge shop-badge-danger">Завершено</span>`);
+
+  return `<div class="shop-card ${canBuy?'shop-card-available':''} ${seasonalBlocked && role==='operator' ? 'shop-card-unavailable' : ''}">
     <div class="shop-card-title">${esc(item.title)}</div>
     <div class="shop-card-desc">${esc(item.description)}</div>
     <div class="shop-card-price">${item.price} <span class="price-unit">коинов</span></div>
     ${requiredLevel ? `<div class="shop-card-desc">Доступно с уровня «${esc(requiredLevel.name)}»</div>` : ''}
+    ${seasonBadges.length ? `<div class="shop-card-badges">${seasonBadges.join('')}</div>` : ''}
     <div class="shop-card-footer">
-      ${role==='operator' ? `<button class="buy-btn ${canBuy?'btn-primary':'btn-disabled'}" data-id="${item.id}" ${canBuy?'':'disabled'}>
-        ${canBuy ? 'Купить' : (levelLocked ? `Доступно с уровня «${esc(requiredLevel.name)}»` : `Нужно ещё ${needMore} ₡`)}</button>` : ''}
+      ${role==='operator' ? `<button class="buy-btn ${canBuy?'btn-primary':'btn-disabled'}" data-id="${item.id}" ${canBuy?'':'disabled'}>${buyLabel}</button>` : ''}
       ${isAdmin(role) ? `<button class="edit-item-btn btn-outline btn-sm" data-id="${item.id}">Изменить</button>` : ''}
     </div>
   </div>`;

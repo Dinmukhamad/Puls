@@ -412,6 +412,9 @@ def spin(db: Session, operator: Operator, *, rng=_rng) -> dict:
 
     _update_daily_state_after_spin(db, operator.id, prize)
 
+    from app.modules.notifications.service import notify_wheel_prize
+    notify_wheel_prize(db, operator.id, prize.title)
+
     return {
         "spin_id": spin_row.id,
         "prize": {"id": prize.id, "title": prize.title, "type": prize.prize_type, "amount": prize.amount, "color": prize.color},

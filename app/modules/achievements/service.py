@@ -114,6 +114,10 @@ def _award(
             f"Достижение: {achievement.title}",
             created_by=current_user, source_type="achievement", source_id=achievement.id,
         )
+
+    from app.modules.notifications.service import notify_achievement_granted
+    notify_achievement_granted(db, operator.id, achievement.title, achievement.reward_coins)
+
     return state
 
 

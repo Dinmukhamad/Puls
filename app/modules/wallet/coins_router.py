@@ -168,6 +168,8 @@ def manual_operation(
     if payload.comment.strip():
         comment = f"{comment}: {payload.comment.strip()}"
     tx = add_transaction(db, operator, amount, tx_type, comment, created_by=current_user)
+    from app.modules.notifications.service import notify_manual_coin_operation
+    notify_manual_coin_operation(db, operator.id, amount, payload.reason.strip())
     db.commit()
     rating_cache_invalidate()  # ручное начисление/списание меняет баланс в рейтинге
     db.refresh(tx)

@@ -11,6 +11,10 @@ class ShopItemCreate(BaseModel):
     price: int = Field(gt=0)
     min_level_id: int | None = None
     is_active: bool = True
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    stock_limit: int = Field(default=0, ge=0)
+    purchase_limit_per_operator: int = Field(default=0, ge=0)
 
 
 class ShopItemUpdate(BaseModel):
@@ -19,6 +23,10 @@ class ShopItemUpdate(BaseModel):
     price: int | None = Field(default=None, gt=0)
     min_level_id: int | None = None
     is_active: bool | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    stock_limit: int | None = Field(default=None, ge=0)
+    purchase_limit_per_operator: int | None = Field(default=None, ge=0)
 
 
 class ShopItemRead(BaseModel):
@@ -28,7 +36,18 @@ class ShopItemRead(BaseModel):
     price: int
     min_level_id: int | None = None
     is_active: bool
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    stock_limit: int
+    purchase_limit_per_operator: int
     created_at: datetime
+
+    # Персонализированные поля (ТЗ P2) — считаются на момент запроса относительно
+    # текущего оператора и текущего времени, не хранятся в БД:
+    stock_remaining: int | None = None          # None = без лимита остатка
+    operator_purchased_count: int = 0           # сколько раз ЭТОТ оператор уже брал
+    operator_limit_reached: bool = False        # достигнут ли personal лимит
+    is_available_now: bool = True               # прошло starts_at, не наступил ends_at, остаток > 0
 
     model_config = {"from_attributes": True}
 

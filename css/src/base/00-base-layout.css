@@ -631,6 +631,15 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   font-size: 14px; font-weight: 600; color: var(--tx); letter-spacing: 0;
 }
 .shop-card-desc { font-size: 12px; color: var(--tx2); line-height: 1.55; flex: 1; }
+.shop-card-unavailable { opacity: .65; }
+.shop-card-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.shop-badge {
+  display: inline-flex; align-items: center;
+  font-size: 11px; font-weight: 600; padding: 3px 9px;
+  border-radius: 999px; background: var(--bg-muted); color: var(--tx3);
+}
+.shop-badge-danger { background: var(--danger-soft); color: var(--danger); }
+.shop-badge-info { background: var(--accent-soft); color: var(--accent); }
 .shop-card-price {
   font-family: 'Inter', sans-serif;
   font-size: 18px; font-weight: 600; color: var(--accent); letter-spacing: 0;

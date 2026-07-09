@@ -22,14 +22,22 @@ from app.modules.wallet.service import (
     create_purchase,
     operator_for_user_or_403,
     reject_purchase,
+    shop_item_availability,
 )
 
 router = APIRouter(prefix="/shop", tags=["shop"])
 
 
 @router.get("/items", response_model=list[ShopItemRead])
-def list_items(db: Session = Depends(get_db), _: User = Depends(get_current_user)) -> list[ShopItem]:
-    return list(db.scalars(select(ShopItem).where(ShopItem.is_active.is_(True)).order_by(ShopItem.price.asc())))
+def list_items(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict]:
+    items = list(db.scalars(select(ShopItem).where(ShopItem.is_active.is_(True)).order_by(ShopItem.price.asc())))
+    operator_id = current_user.operator_id if current_user.role == "operator" else None
+    result = []
+    for item in items:
+        row = ShopItemRead.model_validate(item).model_dump()
+        row.update(shop_item_availability(db, item, operator_id))
+        result.append(row)
+    return result
 
 
 @router.post("/items", response_model=ShopItemRead, dependencies=[Depends(require_roles("admin"))])
