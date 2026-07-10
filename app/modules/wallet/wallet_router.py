@@ -6,8 +6,8 @@ from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
 from app.models.entities import CoinTransaction, Operator, User
 from app.modules.rating.service import rating_cache_invalidate
-from app.modules.wallet.service import add_transaction, operator_for_user_or_403
 from app.modules.wallet.schemas import CoinTransactionRead, ManualTransactionCreate, WalletRead
+from app.modules.wallet.service import add_transaction, operator_for_user_or_403
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
 

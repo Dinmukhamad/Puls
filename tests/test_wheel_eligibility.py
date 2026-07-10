@@ -74,7 +74,7 @@ def test_evaluation_log_written_on_success_and_failure(client, db_session):
     evaluate_after_test_attempt(db_session, a1.id)
     db_session.commit()
     logs1 = db_session.query(WheelRuleEvaluationLog).filter_by(operator_id=op1.id).all()
-    assert any(l.is_eligible for l in logs1), "должен быть лог с is_eligible=true"
+    assert any(log.is_eligible for log in logs1), "должен быть лог с is_eligible=true"
 
     # провал (ниже порога)
     op2 = make_operator(db_session)
@@ -83,7 +83,7 @@ def test_evaluation_log_written_on_success_and_failure(client, db_session):
     db_session.commit()
     logs2 = db_session.query(WheelRuleEvaluationLog).filter_by(operator_id=op2.id).all()
     assert logs2, "лог проверки должен писаться даже при отказе"
-    assert all(not l.is_eligible for l in logs2 if l.source_module == "tests" and l.metric_value == 50)
+    assert all(not log.is_eligible for log in logs2 if log.source_module == "tests" and log.metric_value == 50)
 
 
 def test_no_duplicate_token_for_same_attempt(client, db_session):

@@ -4,7 +4,7 @@ Asia/Almaty (UTC+5, без DST) и локальная ISO-сериализаци
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 from app.core.datetime_utils import (
     LOCAL_TZ,
@@ -18,7 +18,7 @@ from app.core.datetime_utils import (
 def test_now_utc_is_naive_and_correct():
     value = now_utc()
     assert value.tzinfo is None, "проектный стандарт БД — naive UTC"
-    reference = datetime.now(timezone.utc).replace(tzinfo=None)
+    reference = datetime.now(UTC).replace(tzinfo=None)
     assert abs(reference - value) < timedelta(seconds=5)
 
 
@@ -47,5 +47,5 @@ def test_to_local_iso_converts_naive_utc():
     assert to_local_iso(datetime(2026, 7, 3, 12, 0, 0)) == "2026-07-03T17:00:00+05:00"
     assert to_local_iso(None) is None
     # aware-вход тоже корректен
-    aware = datetime(2026, 7, 3, 12, 0, 0, tzinfo=timezone.utc)
+    aware = datetime(2026, 7, 3, 12, 0, 0, tzinfo=UTC)
     assert to_local_iso(aware) == "2026-07-03T17:00:00+05:00"

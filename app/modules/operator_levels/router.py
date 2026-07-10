@@ -7,14 +7,6 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
 from app.models.entities import Operator, OperatorLevel, OperatorLevelRule, User, now_utc
-from app.modules.operator_levels.service import (
-    assign_auto_level,
-    assign_manual_level,
-    ensure_default_levels,
-    level_history_rows,
-    level_reward_overview_rows,
-    operator_level_summary,
-)
 from app.modules.operator_levels.schemas import (
     OperatorLevelCreate,
     OperatorLevelRead,
@@ -25,6 +17,14 @@ from app.modules.operator_levels.schemas import (
     OperatorLevelSummary,
     OperatorLevelUpdate,
     OperatorManualLevelRequest,
+)
+from app.modules.operator_levels.service import (
+    assign_auto_level,
+    assign_manual_level,
+    ensure_default_levels,
+    level_history_rows,
+    level_reward_overview_rows,
+    operator_level_summary,
 )
 
 router = APIRouter(prefix="/operator-levels", tags=["operator-levels"])
