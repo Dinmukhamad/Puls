@@ -115,6 +115,7 @@
     listAchievements, updateAchievement, getMyAchievements, getOperatorAchievements, grantAchievement,
     getAdminSummary, exportUrl,
     listNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead,
+    getMyRaffles, enterRaffle, listRafflesAdmin, createRaffle, drawRaffle, cancelRaffle,
     loginOperator: login,
     _base,
     _req: req,

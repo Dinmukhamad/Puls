@@ -125,6 +125,9 @@ class Operator(Base):
     reserved_balance: Mapped[int] = mapped_column(Integer, default=0)
     total_earned: Mapped[int] = mapped_column(Integer, default=0)
     total_spent: Mapped[int] = mapped_column(Integer, default=0)
+    # Пул билетов розыгрыша (ТЗ P2): начисляется призом raffle_ticket из Колеса WOW,
+    # тратится при входе в розыгрыш. За коины не покупается.
+    raffle_tickets: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
@@ -1025,3 +1028,54 @@ class WheelManualGrant(Base):
     comment: Mapped[str] = mapped_column(Text, default="")
     expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+
+
+class Raffle(Base):
+    """Розыгрыш (ТЗ P2). Участие — билетами из Колеса WOW (не за коины).
+    Победителей может быть несколько (winners_count)."""
+    __tablename__ = "raffles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    description: Mapped[str] = mapped_column(Text, default="")
+    prize_coins: Mapped[int] = mapped_column(Integer, default=0)
+    prize_description: Mapped[str] = mapped_column(String(300), default="")
+    winners_count: Mapped[int] = mapped_column(Integer, default=1)
+    # active | drawn | cancelled
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    drawn_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    entries: Mapped[list[RaffleEntry]] = relationship(back_populates="raffle")
+    winners: Mapped[list[RaffleWinner]] = relationship(back_populates="raffle")
+
+
+class RaffleEntry(Base):
+    """Участие оператора: сколько своих билетов он вложил в этот розыгрыш."""
+    __tablename__ = "raffle_entries"
+    __table_args__ = (UniqueConstraint("raffle_id", "operator_id", name="uq_raffle_entry_operator"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raffle_id: Mapped[int] = mapped_column(ForeignKey("raffles.id"), index=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    tickets: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+
+    raffle: Mapped[Raffle] = relationship(back_populates="entries")
+    operator: Mapped[Operator] = relationship("Operator")
+
+
+class RaffleWinner(Base):
+    __tablename__ = "raffle_winners"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    raffle_id: Mapped[int] = mapped_column(ForeignKey("raffles.id"), index=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    tickets_at_draw: Mapped[int] = mapped_column(Integer, default=0)
+    prize_coins: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+
+    raffle: Mapped[Raffle] = relationship(back_populates="winners")
+    operator: Mapped[Operator] = relationship("Operator")

@@ -378,6 +378,7 @@ function renderView(view) {
     case 'operator-levels': renderOperatorLevelsSettings(); break;
     case 'coins':    renderCoins();    break;
     case 'wheel':    renderWheel();    break;
+    case 'raffles':  renderRaffles();  break;
     case 'manual':   renderManual();   break;
     case 'requests': renderRequests(); break;
     case 'history':  renderHistory();  break;
@@ -625,8 +626,8 @@ function buildViews(role) {
   const shell = document.getElementById('app-shell');
   if (!shell) return;
   const views = isAdmin(role)
-    ? ['summary', 'operators', ...(role === 'manager' || role === 'admin' ? ['operator-levels'] : []), 'coins', 'shop', 'wheel', 'tests', ...(canManageGroups(role) ? ['groups'] : []), ...(role === 'admin' ? ['sessions'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
-    : ['cabinet', 'rating', 'shop', 'wheel', 'tests'];
+    ? ['summary', 'operators', ...(role === 'manager' || role === 'admin' ? ['operator-levels'] : []), 'coins', 'shop', 'wheel', 'raffles', 'tests', ...(canManageGroups(role) ? ['groups'] : []), ...(role === 'admin' ? ['sessions'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
+    : ['cabinet', 'rating', 'shop', 'wheel', 'raffles', 'tests'];
   shell.innerHTML = views.map(v => `<section class="app-view" id="view-${v}"></section>`).join('');
 }
 

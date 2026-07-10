@@ -12,6 +12,8 @@ from app.modules.groups.router import router as groups_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.operator_levels import router as operator_levels_router
 from app.modules.operators.router import router as operators_router
+from app.modules.raffles.router import admin_router as raffles_admin_router
+from app.modules.raffles.router import router as raffles_router
 from app.modules.rating.router import router as rating_router
 from app.modules.reports.router import router as reports_router
 from app.modules.sessions.router import router as sessions_router
@@ -45,6 +47,8 @@ api_router.include_router(shop_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(exports_router)
 api_router.include_router(notifications_router)
+api_router.include_router(raffles_router)
+api_router.include_router(raffles_admin_router)
 api_router.include_router(settings_router)
 api_router.include_router(achievements_router)
 api_router.include_router(cabinet_router)

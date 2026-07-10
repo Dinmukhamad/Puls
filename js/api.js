@@ -367,6 +367,14 @@ async function getUnreadNotificationCount() { return req('GET', '/api/notificati
 async function markNotificationRead(id) { return req('POST', `/api/notifications/${id}/read`); }
 async function markAllNotificationsRead() { return req('POST', '/api/notifications/read-all'); }
 
+/* ── Розыгрыши (ТЗ P2) ──────────────────────────────────── */
+async function getMyRaffles() { return req('GET', '/api/raffles'); }
+async function enterRaffle(id, tickets) { return req('POST', `/api/raffles/${id}/enter`, { tickets }); }
+async function listRafflesAdmin() { return req('GET', '/api/admin/raffles'); }
+async function createRaffle(payload) { return req('POST', '/api/admin/raffles', payload); }
+async function drawRaffle(id) { return req('POST', `/api/admin/raffles/${id}/draw`); }
+async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/cancel`); }
+
   /* ── Tests (Тесты) — operator side ──────────────────────────── */
   async function myTests() { return req('GET', '/api/tests/my'); }
   async function startTest(testId) { return req('POST', `/api/tests/${testId}/start`); }
@@ -484,6 +492,7 @@ async function markAllNotificationsRead() { return req('POST', '/api/notificatio
     listAchievements, updateAchievement, getMyAchievements, getOperatorAchievements, grantAchievement,
     getAdminSummary, exportUrl,
     listNotifications, getUnreadNotificationCount, markNotificationRead, markAllNotificationsRead,
+    getMyRaffles, enterRaffle, listRafflesAdmin, createRaffle, drawRaffle, cancelRaffle,
     loginOperator: login,
     _base,
     _req: req,

@@ -446,10 +446,16 @@ def _grant_prize(db, operator, campaign, prize: WheelPrize, spin_row: WheelSpin)
         )
         return "Вы выиграли дополнительный билет"
 
-    # raffle_ticket | shop_discount | badge | status | manual_reward |
-    # empty_consolation вЂ” С„РёРєСЃРёСЂСѓСЋС‚СЃСЏ РІ РёСЃС‚РѕСЂРёРё РїСЂРѕРєСЂСѓС‚РєРё; РІС‹РґР°С‡Р°/РІСЂСѓС‡РµРЅРёРµ вЂ”
-    # РѕС„С„Р»Р°Р№РЅ-РїСЂРѕС†РµСЃСЃ СЂСѓРєРѕРІРѕРґРёС‚РµР»СЏ (Р±РёР»РµС‚ РІ СЂРѕР·С‹РіСЂС‹С€, СЃС‚Р°С‚СѓСЃ РґРЅСЏ Рё С‚.Рї.).
-    # Р‘Р°Р»Р°РЅСЃ РЅРµ С‚СЂРѕРіР°РµРј.
+    if prize.prize_type == "raffle_ticket":
+        # Раньше приз только фиксировался в истории. Теперь реально начисляем
+        # билет розыгрыша в пул оператора (см. raffles/service.grant_raffle_ticket).
+        from app.modules.raffles.service import grant_raffle_ticket
+        grant_raffle_ticket(db, operator, prize.amount if prize.amount and prize.amount > 0 else 1)
+        return f"Вы выиграли билет в розыгрыш: {prize.title}"
+
+    # shop_discount | badge | status | manual_reward |
+    # empty_consolation — фиксируются в истории прокрутки; выдача/вручение —
+    # офлайн-процесс руководителя (статус дня и т.п.). Баланс не трогаем.
     labels = {
         "shop_discount": f"Скидка в магазине: {prize.title}",
         "badge": f"Бейдж: {prize.title}",

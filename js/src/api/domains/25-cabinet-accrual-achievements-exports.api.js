@@ -43,3 +43,11 @@ async function listNotifications(params = {}) {
 async function getUnreadNotificationCount() { return req('GET', '/api/notifications/unread-count'); }
 async function markNotificationRead(id) { return req('POST', `/api/notifications/${id}/read`); }
 async function markAllNotificationsRead() { return req('POST', '/api/notifications/read-all'); }
+
+/* ── Розыгрыши (ТЗ P2) ──────────────────────────────────── */
+async function getMyRaffles() { return req('GET', '/api/raffles'); }
+async function enterRaffle(id, tickets) { return req('POST', `/api/raffles/${id}/enter`, { tickets }); }
+async function listRafflesAdmin() { return req('GET', '/api/admin/raffles'); }
+async function createRaffle(payload) { return req('POST', '/api/admin/raffles', payload); }
+async function drawRaffle(id) { return req('POST', `/api/admin/raffles/${id}/draw`); }
+async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/cancel`); }
