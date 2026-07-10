@@ -5092,6 +5092,23 @@ body.role-operator {
   margin-bottom: 16px;
 }
 
+/* Панель фильтров: две строки вкладок (роли + тип устройства) */
+.sessions-filterbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  margin-bottom: 14px;
+  align-items: center;
+}
+.sessions-filterbar .filter-tabs { margin-bottom: 0; flex-wrap: wrap; }
+.filter-tab-count {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 16px; padding: 0 5px; margin-left: 6px;
+  border-radius: 999px; font-size: 10px; font-weight: 700; line-height: 1;
+  background: var(--bg-muted); color: var(--text-muted);
+}
+.filter-tab.active .filter-tab-count { background: rgba(255,255,255,.25); color: #fff; }
+
 .sessions-panel {
   margin-top: 0;
 }

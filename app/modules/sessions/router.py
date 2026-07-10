@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.datetime_utils import now_utc, to_local_iso
-from app.core.security import get_current_user, require_roles
+from app.core.security import require_roles
 from app.database.db import get_db
 from app.models.entities import User, UserSession
 
@@ -51,6 +51,8 @@ def list_sessions(
     request: Request,
     status: str = "active",
     q: str = "",
+    role: str = "all",
+    device: str = "all",
     limit: int = 200,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("admin")),
@@ -58,6 +60,15 @@ def list_sessions(
     now = now_utc()
     current_session_id = getattr(request.state, "session_id", None)
     limit = max(1, min(limit, 500))
+
+    # Признак мобильного устройства выводим из device_label — он формируется при
+    # логине и всегда начинается с "Mobile" или "Desktop" (см. auth/router._device_info),
+    # плюс подстраховываемся по OS/строке UA. Отдельного поля в БД нет и не нужно.
+    mobile_markers = ("mobile", "iphone", "ipad", "android", "ios")
+
+    def _is_mobile(session: UserSession) -> bool:
+        haystack = f"{session.device_label or ''} {session.os_label or ''} {session.user_agent or ''}".lower()
+        return any(m in haystack for m in mobile_markers)
 
     stmt = (
         select(UserSession)
@@ -78,6 +89,8 @@ def list_sessions(
             )
         else:
             stmt = stmt.where(UserSession.status == status)
+    if role and role != "all":
+        stmt = stmt.where(User.role == role)
     if q:
         like = f"%{q.strip()}%"
         stmt = stmt.where(
@@ -92,7 +105,15 @@ def list_sessions(
             )
         )
 
-    sessions = db.scalars(stmt.limit(limit)).all()
+    # Фильтр по типу устройства применяем в Python (а не в SQL) — device_label
+    # это уже собранная человекочитаемая строка, и разбирать её через ilike было бы
+    # хрупко. Берём чуть больше строк из БД, затем фильтруем и режем до limit.
+    fetched = db.scalars(stmt.limit(limit * 3 if device in ("pc", "mobile") else limit)).all()
+    if device == "mobile":
+        fetched = [s for s in fetched if _is_mobile(s)]
+    elif device == "pc":
+        fetched = [s for s in fetched if not _is_mobile(s)]
+    sessions = fetched[:limit]
     active_count = db.scalar(
         select(func.count()).select_from(UserSession).where(
             UserSession.status == "active",
@@ -109,6 +130,29 @@ def list_sessions(
         )
     ) or 0
 
+    # Разбивка активных сессий по ролям и типу устройства — для фильтров-вкладок
+    # и счётчиков «Все / ПК / Телефон». Считаем по тем же критериям активности.
+    active_filter = (
+        UserSession.status == "active",
+        or_(UserSession.expires_at.is_(None), UserSession.expires_at >= now),
+    )
+    role_rows = db.execute(
+        select(User.role, func.count(UserSession.id))
+        .select_from(UserSession).join(UserSession.user)
+        .where(*active_filter).group_by(User.role)
+    ).all()
+    by_role = {r: c for r, c in role_rows}
+    total_users = db.scalar(
+        select(func.count(func.distinct(UserSession.user_id))).where(*active_filter)
+    ) or 0
+
+    # Тип устройства по активным сессиям — тоже в Python по device_label/OS/UA.
+    active_sessions_for_device = db.scalars(
+        select(UserSession).where(*active_filter)
+    ).all()
+    mobile_count = sum(1 for s in active_sessions_for_device if _is_mobile(s))
+    pc_count = len(active_sessions_for_device) - mobile_count
+
     return {
         "items": [_session_payload(s, current_session_id) for s in sessions],
         "stats": {
@@ -116,6 +160,13 @@ def list_sessions(
             "revoked": revoked_count,
             "expired": expired_count,
             "shown": len(sessions),
+            "total_users": total_users,
+            "by_role": {
+                "admin": by_role.get("admin", 0),
+                "supervisor": by_role.get("supervisor", 0),
+                "operator": by_role.get("operator", 0),
+            },
+            "by_device": {"pc": pc_count, "mobile": mobile_count},
         },
     }
 

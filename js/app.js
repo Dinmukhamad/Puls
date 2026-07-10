@@ -6054,6 +6054,8 @@ async function saveCoinRulesSettings() {
 
 let _sessionFilterStatus = 'active';
 let _sessionFilterQuery = '';
+let _sessionFilterRole = 'all';
+let _sessionFilterDevice = 'all';
 
 function sessionsDebounce(fn, delay = 300) {
   let timer = null;
@@ -6099,6 +6101,8 @@ async function renderAdminSessions() {
     const data = await api.listSessions({
       status: _sessionFilterStatus,
       q: _sessionFilterQuery,
+      role: _sessionFilterRole,
+      device: _sessionFilterDevice,
       limit: 250,
     });
     paintAdminSessions(el, data || { items: [], stats: {} });
@@ -6122,10 +6126,28 @@ function paintAdminSessions(el, data) {
     </div>
 
     <div class="kpi-grid sessions-kpis">
-      <div class="kpi-card kpi-accent"><div class="kpi-label">Активные</div><div class="kpi-value">${stats.active || 0}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Показано</div><div class="kpi-value">${stats.shown || items.length}</div></div>
+      <div class="kpi-card kpi-accent"><div class="kpi-label">Активные сессии</div><div class="kpi-value">${stats.active || 0}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Пользователей онлайн</div><div class="kpi-value">${stats.total_users != null ? stats.total_users : '—'}</div></div>
       <div class="kpi-card kpi-warn"><div class="kpi-label">Истёкшие</div><div class="kpi-value">${stats.expired || 0}</div></div>
       <div class="kpi-card"><div class="kpi-label">Сброшенные</div><div class="kpi-value">${stats.revoked || 0}</div></div>
+    </div>
+
+    <div class="sessions-filterbar">
+      <div class="filter-tabs" id="sessions-role-tabs">
+        ${[
+          ['all', 'Все', stats.active || 0],
+          ['admin', 'Админы', (stats.by_role && stats.by_role.admin) || 0],
+          ['supervisor', 'Супервайзеры', (stats.by_role && stats.by_role.supervisor) || 0],
+          ['operator', 'Операторы', (stats.by_role && stats.by_role.operator) || 0],
+        ].map(([v, t, c]) => `<button class="filter-tab ${_sessionFilterRole === v ? 'active' : ''}" data-role="${v}">${t}<span class="filter-tab-count">${c}</span></button>`).join('')}
+      </div>
+      <div class="filter-tabs" id="sessions-device-tabs">
+        ${[
+          ['all', 'Все устройства', stats.active || 0],
+          ['pc', 'ПК', (stats.by_device && stats.by_device.pc) || 0],
+          ['mobile', 'Телефон', (stats.by_device && stats.by_device.mobile) || 0],
+        ].map(([v, t, c]) => `<button class="filter-tab ${_sessionFilterDevice === v ? 'active' : ''}" data-device="${v}">${t}<span class="filter-tab-count">${c}</span></button>`).join('')}
+      </div>
     </div>
 
     <div class="panel sessions-panel">
@@ -6164,6 +6186,18 @@ function paintAdminSessions(el, data) {
   el.querySelector('#sessions-refresh-btn')?.addEventListener('click', () => renderAdminSessions());
   el.querySelector('#sessions-status')?.addEventListener('change', e => {
     _sessionFilterStatus = e.target.value || 'active';
+    renderAdminSessions();
+  });
+  el.querySelector('#sessions-role-tabs')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-role]');
+    if (!btn) return;
+    _sessionFilterRole = btn.dataset.role || 'all';
+    renderAdminSessions();
+  });
+  el.querySelector('#sessions-device-tabs')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-device]');
+    if (!btn) return;
+    _sessionFilterDevice = btn.dataset.device || 'all';
     renderAdminSessions();
   });
   el.querySelector('#sessions-query')?.addEventListener('input', sessionsDebounce(e => {
