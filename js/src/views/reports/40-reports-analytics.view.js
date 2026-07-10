@@ -80,7 +80,7 @@ function renderPeriodReport() {
   // Проверяем, сохранены ли файлы в БД (переживают редеплой)
   (async () => {
     try {
-      const status = await api.getPeriodReportStatus();
+      const status = await swrFetch('period-report:status', () => api.getPeriodReportStatus(), null, SWR_FAST_TTL_MS);
       const statusEl = el.querySelector('#pr-upload-status');
       if (status.monthly && status.report) {
         statusEl.innerHTML = `✓ Файлы уже загружены и сохранены: <b>${esc(status.monthly.filename)}</b>, <b>${esc(status.report.filename)}</b>. Можно сразу выбрать период.`;
@@ -118,6 +118,7 @@ function renderPeriodReport() {
 
     try {
       const data = await api.uploadPeriodReportFiles(formData);
+      swrInvalidate('period-report:');
       statusEl.textContent = '✓ ' + data.message;
       statusEl.className = 'status-line status-ok';
     } catch (e) {
@@ -386,6 +387,10 @@ function renderPeriodReport() {
             award_coins: awardCoins,
           });
           closeModal();
+          swrInvalidate('period-report:');
+          swrInvalidate('analytics:');
+          swrInvalidate('coins:');
+          swrInvalidate('rating:');
           showToast(result.message, 'ok');
           if (result.skipped_no_match?.length) {
             console.warn('Не сопоставлены с операторами в БД:', result.skipped_no_match);
@@ -2234,4 +2239,3 @@ const RATING_TABS = [
   { key: 'groups',   label: 'Сравнение групп' },
   { key: 'progress', label: 'Мой прогресс' },
 ];
-

@@ -16,7 +16,8 @@ const SWR_PREFIX = 'puls-swr:';
 const SWR_DEFAULT_TTL_MS = 120_000;  // 2 минуты — динамичные данные (рейтинг, дашборд)
 const SWR_STATIC_TTL_MS  = 600_000; // 10 минут — статичные (уровни, магазин, группы)
 const SWR_USER_TTL_MS    = 300_000; // 5 минут — пользователи
-const SWR_VERSION = 'levels-load-fix-1'; // при смене версии весь кеш сбрасывается
+const SWR_FAST_TTL_MS    = 45_000;  // короткий кеш для разделов, которые должны открываться сразу
+const SWR_VERSION = 'section-prefetch-1'; // при смене версии весь кеш сбрасывается
 (function() {
   const stored = sessionStorage.getItem('puls-swr-version');
   if (stored !== SWR_VERSION) {
@@ -85,6 +86,10 @@ function swrInvalidate(keyOrPrefix) {
     const keys = Object.keys(sessionStorage).filter(k => k.startsWith(SWR_PREFIX + keyOrPrefix));
     keys.forEach(k => sessionStorage.removeItem(k));
   } catch(e) { /* ignore */ }
+}
+
+function stableParamsKey(params = {}) {
+  return Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
 }
 
 /* ══════════════════════════════════════
@@ -513,6 +518,7 @@ async function bootApp() {
   if (role === 'admin' || role === 'manager') {
     setTimeout(() => prefetchAnalyticsInBackground(), 3000);
   }
+  setTimeout(() => prefetchAppSectionsInBackground(role), 700);
 
   // Lazy preload групп
   if (isAdmin(role)) {
@@ -612,6 +618,65 @@ async function loadData(role) {
   await Promise.all(tasks);
   refreshNotificationBadge();
   startNotificationPolling();
+}
+
+async function runWarmupQueue(tasks, gapMs = 140) {
+  for (const task of tasks) {
+    try { await Promise.resolve(task()); } catch(e) { /* warmup is best-effort */ }
+    await new Promise(resolve => setTimeout(resolve, gapMs));
+  }
+}
+
+function prefetchAppSectionsInBackground(role) {
+  const admin = isAdmin(role);
+  const tasks = [
+    () => swrFetch('shop:items', () => api.listShopItems(), null, SWR_STATIC_TTL_MS),
+    () => swrFetch('rating:list', () => api.getRating(), null, SWR_DEFAULT_TTL_MS),
+    () => swrFetch('rating:nominations', () => api._req('GET', '/api/rating/nominations'), null, SWR_STATIC_TTL_MS),
+    () => swrFetch('levels:list', () => api.listOperatorLevels(), null, SWR_STATIC_TTL_MS),
+  ];
+
+  if (role === 'operator' || role === 'supervisor') {
+    tasks.push(
+      () => swrFetch('cabinet:me', () => api.getMyCabinet(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('shop:purchases:me', () => api.listPurchases(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('wheel:status', () => api.getWheelStatus(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('wheel:prizes', () => api.getWheelPrizes(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('wheel:my-history', () => api.getWheelMyHistory(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('tests:my', () => api.myTests(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('raffles:me', () => api.getMyRaffles(), null, SWR_FAST_TTL_MS),
+    );
+  }
+
+  if (admin) {
+    tasks.push(
+      () => swrFetch('dashboard:main', () => api.getDashboard(), null, SWR_DEFAULT_TTL_MS),
+      () => swrFetch('dashboard:operators', () => api.getDashboardOperators(), null, SWR_USER_TTL_MS),
+      () => swrFetch('users:list', () => api.listUsers({ limit: 200 }), null, SWR_USER_TTL_MS),
+      () => swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('groups:active', () => api.listGroups(true), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('admin-summary:', () => api.getAdminSummary({}), null, SWR_FAST_TTL_MS),
+      () => swrFetch('achievements:list', () => api.listAchievements(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('levels:admin', () => api.listAdminOperatorLevels(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('levels:rewards', () => api.listOperatorLevelRewards(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('coin-rules:settings', () => api.getCoinRulesSettings(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('coins:overview', () => api.getCoinsOverview(), null, SWR_DEFAULT_TTL_MS),
+      () => swrFetch('coins:requests:new', () => api.listCoinRequests({ status: 'new', limit: 20 }), null, SWR_FAST_TTL_MS),
+      () => swrFetch('coins:transactions:latest', () => api.listCoinTransactions({ limit: 50 }), null, SWR_FAST_TTL_MS),
+      () => swrFetch('period-report:status', () => api.getPeriodReportStatus(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('wheel:admin:campaigns', () => api.getWheelCampaigns(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('wheel:admin:prizes', () => api.getWheelAdminPrizes(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('wheel:admin:rules', () => api.getWheelRules(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('wheel:admin:spins', () => api.getWheelSpins({ limit: 80 }), null, SWR_FAST_TTL_MS),
+      () => swrFetch('wheel:admin:stats', () => api.getWheelStats(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('tests:admin-list', () => api.listAdminTests(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('raffles:admin', () => api.listRafflesAdmin(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('sessions:list:active:all:all:', () => api.listSessions({ status: 'active', q: '', role: 'all', device: 'all', limit: 250 }), null, SWR_FAST_TTL_MS),
+    );
+  }
+
+  runWarmupQueue(tasks);
 }
 
 async function reloadData() {
@@ -797,10 +862,10 @@ async function renderLevelsTabContent(el) {
 
   let levels = [];
   try {
-    levels = await withTimeout(api.listAdminOperatorLevels(), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
+    levels = await withTimeout(swrFetch('levels:admin', () => api.listAdminOperatorLevels(), null, SWR_STATIC_TTL_MS), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
   } catch (adminErr) {
     try {
-      levels = await withTimeout(api.listOperatorLevels(), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
+      levels = await withTimeout(swrFetch('levels:list', () => api.listOperatorLevels(), null, SWR_STATIC_TTL_MS), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
     } catch (publicErr) {
       el.innerHTML = `<div class="view-header level-view-header">
         <div>
@@ -816,7 +881,7 @@ async function renderLevelsTabContent(el) {
     }
   }
   STATE.operatorLevels = levels;
-  const rewardsData = await withTimeout(api.listOperatorLevelRewards(), 10000)
+  const rewardsData = await withTimeout(swrFetch('levels:rewards', () => api.listOperatorLevelRewards(), null, SWR_FAST_TTL_MS), 10000)
     .catch(() => ({ items: [] }));
   const rewardRows = Array.isArray(rewardsData) ? rewardsData : (rewardsData.items || []);
 
@@ -937,6 +1002,7 @@ async function renderLevelsTabContent(el) {
 async function recalculateOperatorLevelsUi() {
   try {
     const res = await api.recalculateOperatorLevels({ mode: 'all' });
+    swrInvalidate('levels:');
     showToast(`Пересчитано: ${res.processed}, изменено: ${res.updated}`, 'ok');
     swrInvalidate('rating:list');
     await reloadData();
@@ -1013,6 +1079,7 @@ async function submitOperatorLevelForm(levelId) {
     const payload = { name, color, description, sort_order, min_total_xp, reward_coins, reward_once: true };
     if (levelId) await api.updateOperatorLevel(levelId, payload);
     else await api.createOperatorLevel({ code, icon: '', is_active: true, ...payload });
+    swrInvalidate('levels:');
     closeModal();
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
@@ -1087,6 +1154,7 @@ async function submitOperatorLevelRuleForm(levelId) {
   }
   try {
     await api.addOperatorLevelRule(levelId, payload);
+    swrInvalidate('levels:');
     closeModal();
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
@@ -1096,6 +1164,7 @@ async function deleteOperatorLevelRuleUi(ruleId) {
   if (!confirm('Удалить показатель уровня?')) return;
   try {
     await api.deleteOperatorLevelRule(ruleId);
+    swrInvalidate('levels:');
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
 }
@@ -1104,6 +1173,7 @@ async function disableOperatorLevelUi(levelId) {
   if (!confirm('Отключить уровень?')) return;
   try {
     await api.deleteOperatorLevel(levelId);
+    swrInvalidate('levels:');
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
 }
@@ -1123,6 +1193,7 @@ async function manualOperatorLevelUi(operatorId) {
   const comment = prompt('Комментарий', '') || '';
   try {
     await api.manualOperatorLevel(operatorId, { level_id: levelId, reason, comment });
+    swrInvalidate('levels:');
     showToast('Уровень изменён', 'ok');
     swrInvalidate('rating:list');
     await reloadData();
@@ -1153,7 +1224,7 @@ function renderCabinet() {
     el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div></div>
       <div class="empty-state"><p>Данные загружаются…</p></div>`;
     const _cabinetGen = STATE.navGen;
-    api.myWallet().then(data => {
+    swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS).then(data => {
       STATE.wallet = data;
       if (!isNavStale(_cabinetGen)) renderCabinet();
     }).catch(() => {});
@@ -1360,7 +1431,7 @@ async function renderCabinetWheelCard() {
 }
 
 async function reloadCabinet() {
-  STATE.wallet = await api.myWallet().catch(() => STATE.wallet);
+  STATE.wallet = await swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS).catch(() => STATE.wallet);
   STATE.myLevel = await api.myLevel().catch(() => STATE.myLevel);
   STATE.myOperator = await api.myOperator().catch(() => STATE.myOperator);
   setText('side-level', STATE.myLevel?.level?.name || '—');
@@ -1444,7 +1515,7 @@ async function renderAchievementsAdminTab(el) {
 
   let achievements;
   try {
-    achievements = await api.listAchievements();
+    achievements = await swrFetch('achievements:list', () => api.listAchievements(), null, SWR_STATIC_TTL_MS);
   } catch (e) {
     el.innerHTML = `<div class="empty-line">Ошибка загрузки: ${esc(e.message)}</div>`;
     return;
@@ -1452,7 +1523,7 @@ async function renderAchievementsAdminTab(el) {
   STATE._achievementsCatalog = achievements;
 
   if (!STATE.adminOperators.length) {
-    try { STATE.adminOperators = await api.getDashboardOperators(); } catch { /* форма выдачи покажет пустой список */ }
+    try { STATE.adminOperators = await swrFetch('dashboard:operators', () => api.getDashboardOperators(), null, SWR_USER_TTL_MS); } catch { /* форма выдачи покажет пустой список */ }
   }
 
   const conditionLabel = (a) => {
@@ -1513,6 +1584,7 @@ async function renderAchievementsAdminTab(el) {
 async function toggleAchievementActive(id, isActive) {
   try {
     await api.updateAchievement(id, { is_active: isActive });
+    swrInvalidate('achievements:');
     showToast(isActive ? 'Достижение включено' : 'Достижение выключено', 'ok');
     const a = (STATE._achievementsCatalog || []).find(x => x.id === id);
     if (a) a.is_active = isActive;
@@ -1527,6 +1599,7 @@ async function saveAchievementReward(id) {
   const val = Number(document.getElementById(`ach-reward-${id}`)?.value);
   try {
     await api.updateAchievement(id, { reward_coins: val });
+    swrInvalidate('achievements:');
     showToast('Награда обновлена', 'ok');
   } catch (e) {
     showToast(e.message, 'error');
@@ -1564,6 +1637,9 @@ async function submitGrantAchievement(achievementId) {
   if (!operatorId) { if (errEl) errEl.textContent = 'Выберите оператора'; return; }
   try {
     await api.grantAchievement(achievementId, { operator_id: operatorId, comment });
+    swrInvalidate('achievements:');
+    swrInvalidate('coins:');
+    swrInvalidate('rating:');
     showToast('Достижение выдано', 'ok');
     closeModal();
   } catch (e) {
@@ -2789,7 +2865,7 @@ async function renderAdminSummaryDetail() {
   host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка сводки за неделю…</p></div>';
 
   if (!STATE.groups.length) {
-    try { STATE.groups = await api.listGroups(); } catch { /* фильтр по группе просто будет пуст */ }
+    try { STATE.groups = await swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS); } catch { /* фильтр по группе просто будет пуст */ }
   }
 
   await _loadAdminSummaryDetail();
@@ -2810,7 +2886,12 @@ async function _loadAdminSummaryDetail() {
 
   let data;
   try {
-    data = await api.getAdminSummary(params);
+    data = await swrFetch(`admin-summary:${stableParamsKey(params)}`, () => api.getAdminSummary(params), fresh => {
+      if (STATE.currentView === 'summary') {
+        _adminSummaryState.data = fresh;
+        _loadAdminSummaryDetail();
+      }
+    }, SWR_FAST_TTL_MS);
   } catch (e) {
     host.innerHTML = `<div class="empty-line">Ошибка загрузки сводки: ${esc(e.message)}</div>`;
     return;
@@ -3356,6 +3437,9 @@ function renderCoins() {
 }
 
 async function refreshCoinsModule() {
+  swrInvalidate('coins:');
+  swrInvalidate('groups:');
+  swrInvalidate('shop:items');
   STATE.coinsOverview = null;
   await reloadData();
   if (STATE.currentView === 'coins') renderCoins();
@@ -3366,7 +3450,10 @@ function renderCoinsOverview(body) {
   if (!overview) {
     body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка данных…</p></div>';
     const myNavGen = STATE.navGen;
-    api.getCoinsOverview().then(data => {
+    swrFetch('coins:overview', () => api.getCoinsOverview(), data => {
+      STATE.coinsOverview = data;
+      if (!isNavStale(myNavGen) && STATE.currentView === 'coins' && STATE.coinsTab === 'overview') renderCoins();
+    }, SWR_FAST_TTL_MS).then(data => {
       STATE.coinsOverview = data;
       if (!isNavStale(myNavGen) && STATE.currentView === 'coins' && STATE.coinsTab === 'overview') renderCoins();
     }).catch(err => {
@@ -3685,6 +3772,7 @@ function renderManual() {
 
     try {
       await api.manualTransaction({ operator_id: +opId, amount: finalAmount, reason: reason, comment: comment });
+      invalidateCoinsData();
       statusEl.textContent = `✓ Сохранено: ${finalAmount > 0 ? '+' : ''}${finalAmount} ₡`;
       statusEl.className = 'status-line status-ok';
       el.querySelector('#manual-amount').value = '';
@@ -3807,16 +3895,27 @@ function initOpSearch(container, ops) {
 ══════════════════════════════════════ */
 const _requestsTabState = { status: 'new', group_id: 'all', bonus_id: 'all', operator_id: 'all', operator_name: '', limit: 20, offset: 0, data: null, newCount: null };
 
+function invalidateCoinsData() {
+  swrInvalidate('coins:');
+  swrInvalidate('dashboard:');
+  swrInvalidate('rating:');
+  swrInvalidate('shop:purchases:');
+}
+
+async function ensureCoinFiltersLoaded() {
+  if (!STATE.groups.length) {
+    STATE.groups = await swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS).catch(() => STATE.groups || []);
+  }
+  if (!STATE.shopItems.length) {
+    STATE.shopItems = await swrFetch('shop:items', () => api.listShopItems(), null, SWR_STATIC_TTL_MS).catch(() => STATE.shopItems || []);
+  }
+}
+
 async function renderRequests() {
   const el = document.getElementById('view-requests');
   if (!el) return;
 
-  if (!STATE.groups.length) {
-    try { STATE.groups = await api.listGroups(); } catch { /* фильтр по группе будет пуст */ }
-  }
-  if (!STATE.shopItems.length) {
-    try { STATE.shopItems = await api.listShopItems(); } catch { /* фильтр по товару будет пуст */ }
-  }
+  await ensureCoinFiltersLoaded();
 
   const s = _requestsTabState;
   const groups = STATE.groups || [];
@@ -3893,7 +3992,7 @@ async function refreshNewRequestsBadge() {
   const badge = document.getElementById('req-new-badge');
   if (!badge) return;
   try {
-    const r = await api.listCoinRequests({ status: 'new', limit: 1 });
+    const r = await swrFetch('coins:requests:badge:new', () => api.listCoinRequests({ status: 'new', limit: 1 }), null, SWR_FAST_TTL_MS);
     badge.textContent = r.total ?? 0;
   } catch { badge.textContent = '?'; }
 }
@@ -3914,12 +4013,24 @@ async function loadRequestsTabData() {
   if (s.operator_id !== 'all') params.operator_id = s.operator_id;
 
   let data;
+  const key = `coins:requests:${stableParamsKey(params)}`;
+  const renderFresh = fresh => {
+    if (STATE.currentView === 'coins' && STATE.coinsTab === 'requests') paintRequestsTabData(fresh);
+  };
   try {
-    data = await api.listCoinRequests(params);
+    data = await swrFetch(key, () => api.listCoinRequests(params), renderFresh, SWR_FAST_TTL_MS);
   } catch (e) {
     listHost.innerHTML = `<div class="empty-line">Ошибка: ${esc(e.message)}</div>`;
     return;
   }
+  paintRequestsTabData(data);
+}
+
+function paintRequestsTabData(data) {
+  const listHost = document.getElementById('requests-list');
+  const totalBadge = document.getElementById('req-total-badge');
+  if (!listHost || STATE.currentView !== 'coins' || STATE.coinsTab !== 'requests') return;
+  const s = _requestsTabState;
   s.data = data;
   const rows = data.items || [];
   if (totalBadge) totalBadge.textContent = `${data.total ?? rows.length} записей`;
@@ -4003,8 +4114,9 @@ function bindRequestActions() {
       btn.disabled = true;
       try {
         await api.approveCoinRequest(+btn.dataset.id);
+        invalidateCoinsData();
         showToast('Заявка одобрена', 'ok');
-        STATE.dashboard = await api.getDashboard().catch(() => STATE.dashboard);
+        STATE.dashboard = await swrFetch('dashboard:main', () => api.getDashboard().catch(() => STATE.dashboard), null, SWR_DEFAULT_TTL_MS);
         loadRequestsTabData();
         refreshNewRequestsBadge();
       } catch (err) { showToast(err.message, 'error'); btn.disabled = false; }
@@ -4017,8 +4129,9 @@ function bindRequestActions() {
       btn.disabled = true;
       try {
         await api.rejectCoinRequest(+btn.dataset.id, reason.trim());
+        invalidateCoinsData();
         showToast('Заявка отклонена', 'ok');
-        STATE.dashboard = await api.getDashboard().catch(() => STATE.dashboard);
+        STATE.dashboard = await swrFetch('dashboard:main', () => api.getDashboard().catch(() => STATE.dashboard), null, SWR_DEFAULT_TTL_MS);
         loadRequestsTabData();
         refreshNewRequestsBadge();
       } catch (err) { showToast(err.message, 'error'); btn.disabled = false; }
@@ -4029,6 +4142,7 @@ function bindRequestActions() {
       btn.disabled = true;
       try {
         await api.completeCoinRequest(+btn.dataset.id);
+        invalidateCoinsData();
         loadRequestsTabData();
       } catch (err) { showToast(err.message, 'error'); btn.disabled = false; }
     });
@@ -4144,12 +4258,23 @@ async function loadHistoryTabData() {
   if (f.end_date) params.end_date = f.end_date;
 
   let data;
+  const key = `coins:transactions:${stableParamsKey(params)}`;
+  const renderFresh = fresh => {
+    if (STATE.currentView === 'coins' && STATE.coinsTab === 'history') paintHistoryTabData(fresh);
+  };
   try {
-    data = await api.listCoinTransactions(params);
+    data = await swrFetch(key, () => api.listCoinTransactions(params), renderFresh, SWR_FAST_TTL_MS);
   } catch (e) {
     tableHost.innerHTML = `<div class="empty-line">Ошибка: ${esc(e.message)}</div>`;
     return;
   }
+  paintHistoryTabData(data);
+}
+
+function paintHistoryTabData(data) {
+  const tableHost = document.getElementById('hist-table-host');
+  const badge = document.getElementById('hist-total-badge');
+  if (!tableHost || STATE.currentView !== 'coins' || STATE.coinsTab !== 'history') return;
   _historyTabState.data = data;
   const items = data.items || [];
   if (badge) badge.textContent = `${data.total ?? items.length} записей`;
@@ -4261,7 +4386,7 @@ async function renderGroups() {
     </div>`;
 
   try {
-    STATE.groups = await api.listGroups(false);
+    STATE.groups = await swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS);
   } catch(e) {
     if (isNavStale(myNavGen)) return;
     el.innerHTML = `
@@ -4351,6 +4476,7 @@ async function submitAddGroup() {
   }
   try {
     await api.createGroup({ name, status });
+    swrInvalidate('groups:');
     closeModal();
     showToast('Группа создана', 'ok');
     await renderGroups();
@@ -4391,6 +4517,7 @@ async function submitEditGroup(id) {
   }
   try {
     await api.updateGroup(id, { name, status });
+    swrInvalidate('groups:');
     closeModal();
     showToast('Группа обновлена', 'ok');
     await renderGroups();
@@ -4423,6 +4550,7 @@ async function applyGroupStatus(id, nextStatus) {
     } else {
       await api.disableGroup(id);
     }
+    swrInvalidate('groups:');
     closeModal();
     showToast(nextStatus === 'active' ? 'Группа включена' : 'Группа отключена', 'ok');
     await renderGroups();
@@ -4449,6 +4577,7 @@ function confirmDeleteGroup(id) {
 async function deleteGroup(id) {
   try {
     await api.deleteGroup(id);
+    swrInvalidate('groups:');
     closeModal();
     showToast('Группа удалена', 'ok');
     await renderGroups();
@@ -4459,7 +4588,7 @@ async function deleteGroup(id) {
 
 async function ensureGroupsLoaded() {
   if (!STATE.groups.length) {
-    STATE.groups = await api.listGroups(false);
+    STATE.groups = await swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS);
   }
   return STATE.groups;
 }
@@ -4979,7 +5108,7 @@ async function showAddOperatorModal() {
   let groups = [];
   let groupsError = '';
   try {
-    groups = await api.listGroups(true);
+    groups = await swrFetch('groups:active', () => api.listGroups(true), null, SWR_STATIC_TTL_MS);
   } catch(e) {
     groupsError = 'Не удалось загрузить список групп';
   }
@@ -5954,7 +6083,7 @@ async function renderCoinRulesSettingsTab(body) {
   body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка настроек…</p></div>';
   let rules;
   try {
-    rules = await api.getCoinRulesSettings();
+    rules = await swrFetch('coin-rules:settings', () => api.getCoinRulesSettings(), null, SWR_STATIC_TTL_MS);
   } catch (e) {
     body.innerHTML = `<div class="empty-line">Ошибка загрузки: ${esc(e.message)}</div>`;
     return;
@@ -6044,6 +6173,8 @@ async function saveCoinRulesSettings() {
 
   try {
     await api.updateCoinRulesSettings(payload);
+    swrInvalidate('coin-rules:');
+    swrInvalidate('coins:');
     showToast('Настройки начислений сохранены', 'ok');
   } catch (e) {
     showToast(e.message, 'error');
@@ -6076,6 +6207,25 @@ function sessionSafeDate(value) {
   return value ? esc(fmtDateTime(value)) : '—';
 }
 
+function sessionsCacheKey() {
+  return `sessions:list:${_sessionFilterStatus}:${_sessionFilterRole}:${_sessionFilterDevice}:${_sessionFilterQuery || ''}`;
+}
+
+function sessionsFetchCurrent(onFresh) {
+  return swrFetch(
+    sessionsCacheKey(),
+    () => api.listSessions({
+      status: _sessionFilterStatus,
+      q: _sessionFilterQuery,
+      role: _sessionFilterRole,
+      device: _sessionFilterDevice,
+      limit: 250,
+    }),
+    onFresh,
+    SWR_FAST_TTL_MS,
+  );
+}
+
 async function renderAdminSessions() {
   const el = document.getElementById('view-sessions');
   if (!el) return;
@@ -6099,12 +6249,8 @@ async function renderAdminSessions() {
     </div>`;
 
   try {
-    const data = await api.listSessions({
-      status: _sessionFilterStatus,
-      q: _sessionFilterQuery,
-      role: _sessionFilterRole,
-      device: _sessionFilterDevice,
-      limit: 250,
+    const data = await sessionsFetchCurrent((fresh) => {
+      if (STATE.currentView === 'sessions') paintAdminSessions(el, fresh || { items: [], stats: {} });
     });
     paintAdminSessions(el, data || { items: [], stats: {} });
   } catch (err) {
@@ -6235,6 +6381,7 @@ async function revokeUserSession(sessionId) {
   if (!confirm('Сбросить эту сессию? Пользователь выйдет из аккаунта на этом устройстве.')) return;
   try {
     await api.revokeSession(sessionId);
+    swrInvalidate('sessions:list:');
     showToast('Сессия сброшена', 'ok');
     renderAdminSessions();
   } catch (err) {
@@ -6247,6 +6394,7 @@ async function revokeAllUserSessions(userId) {
   if (!confirm('Сбросить все активные сессии этого пользователя?')) return;
   try {
     const result = await api.revokeUserSessions(userId, true);
+    swrInvalidate('sessions:list:');
     showToast(`Сброшено сессий: ${result.revoked || 0}`, 'ok');
     renderAdminSessions();
   } catch (err) {
@@ -6339,7 +6487,7 @@ function renderPeriodReport() {
   // Проверяем, сохранены ли файлы в БД (переживают редеплой)
   (async () => {
     try {
-      const status = await api.getPeriodReportStatus();
+      const status = await swrFetch('period-report:status', () => api.getPeriodReportStatus(), null, SWR_FAST_TTL_MS);
       const statusEl = el.querySelector('#pr-upload-status');
       if (status.monthly && status.report) {
         statusEl.innerHTML = `✓ Файлы уже загружены и сохранены: <b>${esc(status.monthly.filename)}</b>, <b>${esc(status.report.filename)}</b>. Можно сразу выбрать период.`;
@@ -6377,6 +6525,7 @@ function renderPeriodReport() {
 
     try {
       const data = await api.uploadPeriodReportFiles(formData);
+      swrInvalidate('period-report:');
       statusEl.textContent = '✓ ' + data.message;
       statusEl.className = 'status-line status-ok';
     } catch (e) {
@@ -6645,6 +6794,10 @@ function renderPeriodReport() {
             award_coins: awardCoins,
           });
           closeModal();
+          swrInvalidate('period-report:');
+          swrInvalidate('analytics:');
+          swrInvalidate('coins:');
+          swrInvalidate('rating:');
           showToast(result.message, 'ok');
           if (result.skipped_no_match?.length) {
             console.warn('Не сопоставлены с операторами в БД:', result.skipped_no_match);
@@ -8494,12 +8647,11 @@ const RATING_TABS = [
   { key: 'progress', label: 'Мой прогресс' },
 ];
 
-
 let _ratingActiveTab = 'overview';
 
 async function exportRatingFromRatingPage() {
   try {
-    const summary = await api.getAdminSummary({});
+    const summary = await swrFetch('admin-summary:', () => api.getAdminSummary({}), null, SWR_FAST_TTL_MS);
     if (!summary.period_start) { showToast('Нет рассчитанных недель для экспорта', 'error'); return; }
     window.open(api.exportUrl('/api/exports/rating', { period_start: summary.period_start, period_end: summary.period_end, format: 'csv' }), '_blank');
   } catch (e) {
@@ -8585,7 +8737,7 @@ async function fetchRace(params, onUpdate) {
 async function renderRatingRaceTab(content) {
   let groupOptions = '<option value="">Все группы</option>';
   try {
-    const groups = await api.listGroups(true);
+    const groups = await swrFetch('groups:active', () => api.listGroups(true), null, SWR_STATIC_TTL_MS);
     groupOptions += (groups || []).map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
   } catch(e) { /* ignore */ }
 
@@ -8949,7 +9101,6 @@ const WHEEL_PRIZE_ICON = {
 const WHEEL_FAST_MS = 900;
 const WHEEL_TTL_MS = 45_000;
 const WHEEL_STATIC_TTL_MS = 5 * 60_000;
-
 
 function wheelCachedFetch(key, fetcher, fallback, onFresh, ttlMs = WHEEL_TTL_MS) {
   const cached = swrReadRaw(key);
@@ -11278,7 +11429,12 @@ async function renderRaffles() {
 
 /* ── Оператор ─────────────────────────────────────────── */
 async function renderRafflesOperator(el) {
-  const data = await api.getMyRaffles();
+  const data = await swrFetch(
+    'raffles:me',
+    () => api.getMyRaffles(),
+    () => { if (STATE.currentView === 'raffles' && !isAdmin(STATE.user?.role)) renderRafflesOperator(el); },
+    SWR_FAST_TTL_MS,
+  );
   const tickets = data.raffle_tickets || 0;
   const raffles = data.raffles || [];
   const active = raffles.filter(r => r.status === 'active');
@@ -11347,6 +11503,8 @@ async function submitEnterRaffle(raffleId) {
   if (!tickets || tickets < 1) { if (errEl) errEl.textContent = 'Укажите число билетов'; return; }
   try {
     await api.enterRaffle(raffleId, tickets);
+    swrInvalidate('raffles:');
+    swrInvalidate('wheel:');
     showToast('Вы в игре! Удачи 🍀', 'ok');
     closeModal();
     renderRaffles();
@@ -11357,7 +11515,12 @@ async function submitEnterRaffle(raffleId) {
 
 /* ── Админ ────────────────────────────────────────────── */
 async function renderRafflesAdmin(el) {
-  const raffles = await api.listRafflesAdmin();
+  const raffles = await swrFetch(
+    'raffles:admin',
+    () => api.listRafflesAdmin(),
+    () => { if (STATE.currentView === 'raffles' && isAdmin(STATE.user?.role)) renderRafflesAdmin(el); },
+    SWR_FAST_TTL_MS,
+  );
   const active = raffles.filter(r => r.status === 'active');
   const finished = raffles.filter(r => r.status !== 'active');
 
@@ -11383,14 +11546,14 @@ async function renderRafflesAdmin(el) {
   el.querySelectorAll('[data-draw-raffle]').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('Запустить тираж сейчас? Победители определятся окончательно.')) return;
-      try { await api.drawRaffle(parseInt(btn.dataset.drawRaffle, 10)); showToast('Розыгрыш проведён', 'ok'); renderRaffles(); }
+      try { await api.drawRaffle(parseInt(btn.dataset.drawRaffle, 10)); swrInvalidate('raffles:'); showToast('Розыгрыш проведён', 'ok'); renderRaffles(); }
       catch (e) { showToast(e.message, 'error'); }
     };
   });
   el.querySelectorAll('[data-cancel-raffle]').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('Отменить розыгрыш? Вложенные билеты вернутся участникам.')) return;
-      try { await api.cancelRaffle(parseInt(btn.dataset.cancelRaffle, 10)); showToast('Розыгрыш отменён', 'ok'); renderRaffles(); }
+      try { await api.cancelRaffle(parseInt(btn.dataset.cancelRaffle, 10)); swrInvalidate('raffles:'); showToast('Розыгрыш отменён', 'ok'); renderRaffles(); }
       catch (e) { showToast(e.message, 'error'); }
     };
   });
@@ -11455,6 +11618,7 @@ async function submitCreateRaffle() {
   };
   try {
     await api.createRaffle(payload);
+    swrInvalidate('raffles:');
     showToast('Розыгрыш создан', 'ok');
     closeModal();
     renderRaffles();

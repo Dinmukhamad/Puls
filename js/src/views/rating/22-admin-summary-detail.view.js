@@ -30,7 +30,7 @@ async function renderAdminSummaryDetail() {
   host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка сводки за неделю…</p></div>';
 
   if (!STATE.groups.length) {
-    try { STATE.groups = await api.listGroups(); } catch { /* фильтр по группе просто будет пуст */ }
+    try { STATE.groups = await swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS); } catch { /* фильтр по группе просто будет пуст */ }
   }
 
   await _loadAdminSummaryDetail();
@@ -51,7 +51,12 @@ async function _loadAdminSummaryDetail() {
 
   let data;
   try {
-    data = await api.getAdminSummary(params);
+    data = await swrFetch(`admin-summary:${stableParamsKey(params)}`, () => api.getAdminSummary(params), fresh => {
+      if (STATE.currentView === 'summary') {
+        _adminSummaryState.data = fresh;
+        _loadAdminSummaryDetail();
+      }
+    }, SWR_FAST_TTL_MS);
   } catch (e) {
     host.innerHTML = `<div class="empty-line">Ошибка загрузки сводки: ${esc(e.message)}</div>`;
     return;

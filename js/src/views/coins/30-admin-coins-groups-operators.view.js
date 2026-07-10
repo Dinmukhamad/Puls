@@ -303,6 +303,9 @@ function renderCoins() {
 }
 
 async function refreshCoinsModule() {
+  swrInvalidate('coins:');
+  swrInvalidate('groups:');
+  swrInvalidate('shop:items');
   STATE.coinsOverview = null;
   await reloadData();
   if (STATE.currentView === 'coins') renderCoins();
@@ -313,7 +316,10 @@ function renderCoinsOverview(body) {
   if (!overview) {
     body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка данных…</p></div>';
     const myNavGen = STATE.navGen;
-    api.getCoinsOverview().then(data => {
+    swrFetch('coins:overview', () => api.getCoinsOverview(), data => {
+      STATE.coinsOverview = data;
+      if (!isNavStale(myNavGen) && STATE.currentView === 'coins' && STATE.coinsTab === 'overview') renderCoins();
+    }, SWR_FAST_TTL_MS).then(data => {
       STATE.coinsOverview = data;
       if (!isNavStale(myNavGen) && STATE.currentView === 'coins' && STATE.coinsTab === 'overview') renderCoins();
     }).catch(err => {
@@ -632,6 +638,7 @@ function renderManual() {
 
     try {
       await api.manualTransaction({ operator_id: +opId, amount: finalAmount, reason: reason, comment: comment });
+      invalidateCoinsData();
       statusEl.textContent = `✓ Сохранено: ${finalAmount > 0 ? '+' : ''}${finalAmount} ₡`;
       statusEl.className = 'status-line status-ok';
       el.querySelector('#manual-amount').value = '';
@@ -754,16 +761,27 @@ function initOpSearch(container, ops) {
 ══════════════════════════════════════ */
 const _requestsTabState = { status: 'new', group_id: 'all', bonus_id: 'all', operator_id: 'all', operator_name: '', limit: 20, offset: 0, data: null, newCount: null };
 
+function invalidateCoinsData() {
+  swrInvalidate('coins:');
+  swrInvalidate('dashboard:');
+  swrInvalidate('rating:');
+  swrInvalidate('shop:purchases:');
+}
+
+async function ensureCoinFiltersLoaded() {
+  if (!STATE.groups.length) {
+    STATE.groups = await swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS).catch(() => STATE.groups || []);
+  }
+  if (!STATE.shopItems.length) {
+    STATE.shopItems = await swrFetch('shop:items', () => api.listShopItems(), null, SWR_STATIC_TTL_MS).catch(() => STATE.shopItems || []);
+  }
+}
+
 async function renderRequests() {
   const el = document.getElementById('view-requests');
   if (!el) return;
 
-  if (!STATE.groups.length) {
-    try { STATE.groups = await api.listGroups(); } catch { /* фильтр по группе будет пуст */ }
-  }
-  if (!STATE.shopItems.length) {
-    try { STATE.shopItems = await api.listShopItems(); } catch { /* фильтр по товару будет пуст */ }
-  }
+  await ensureCoinFiltersLoaded();
 
   const s = _requestsTabState;
   const groups = STATE.groups || [];
@@ -840,7 +858,7 @@ async function refreshNewRequestsBadge() {
   const badge = document.getElementById('req-new-badge');
   if (!badge) return;
   try {
-    const r = await api.listCoinRequests({ status: 'new', limit: 1 });
+    const r = await swrFetch('coins:requests:badge:new', () => api.listCoinRequests({ status: 'new', limit: 1 }), null, SWR_FAST_TTL_MS);
     badge.textContent = r.total ?? 0;
   } catch { badge.textContent = '?'; }
 }
@@ -861,12 +879,24 @@ async function loadRequestsTabData() {
   if (s.operator_id !== 'all') params.operator_id = s.operator_id;
 
   let data;
+  const key = `coins:requests:${stableParamsKey(params)}`;
+  const renderFresh = fresh => {
+    if (STATE.currentView === 'coins' && STATE.coinsTab === 'requests') paintRequestsTabData(fresh);
+  };
   try {
-    data = await api.listCoinRequests(params);
+    data = await swrFetch(key, () => api.listCoinRequests(params), renderFresh, SWR_FAST_TTL_MS);
   } catch (e) {
     listHost.innerHTML = `<div class="empty-line">Ошибка: ${esc(e.message)}</div>`;
     return;
   }
+  paintRequestsTabData(data);
+}
+
+function paintRequestsTabData(data) {
+  const listHost = document.getElementById('requests-list');
+  const totalBadge = document.getElementById('req-total-badge');
+  if (!listHost || STATE.currentView !== 'coins' || STATE.coinsTab !== 'requests') return;
+  const s = _requestsTabState;
   s.data = data;
   const rows = data.items || [];
   if (totalBadge) totalBadge.textContent = `${data.total ?? rows.length} записей`;
@@ -950,8 +980,9 @@ function bindRequestActions() {
       btn.disabled = true;
       try {
         await api.approveCoinRequest(+btn.dataset.id);
+        invalidateCoinsData();
         showToast('Заявка одобрена', 'ok');
-        STATE.dashboard = await api.getDashboard().catch(() => STATE.dashboard);
+        STATE.dashboard = await swrFetch('dashboard:main', () => api.getDashboard().catch(() => STATE.dashboard), null, SWR_DEFAULT_TTL_MS);
         loadRequestsTabData();
         refreshNewRequestsBadge();
       } catch (err) { showToast(err.message, 'error'); btn.disabled = false; }
@@ -964,8 +995,9 @@ function bindRequestActions() {
       btn.disabled = true;
       try {
         await api.rejectCoinRequest(+btn.dataset.id, reason.trim());
+        invalidateCoinsData();
         showToast('Заявка отклонена', 'ok');
-        STATE.dashboard = await api.getDashboard().catch(() => STATE.dashboard);
+        STATE.dashboard = await swrFetch('dashboard:main', () => api.getDashboard().catch(() => STATE.dashboard), null, SWR_DEFAULT_TTL_MS);
         loadRequestsTabData();
         refreshNewRequestsBadge();
       } catch (err) { showToast(err.message, 'error'); btn.disabled = false; }
@@ -976,6 +1008,7 @@ function bindRequestActions() {
       btn.disabled = true;
       try {
         await api.completeCoinRequest(+btn.dataset.id);
+        invalidateCoinsData();
         loadRequestsTabData();
       } catch (err) { showToast(err.message, 'error'); btn.disabled = false; }
     });
@@ -1091,12 +1124,23 @@ async function loadHistoryTabData() {
   if (f.end_date) params.end_date = f.end_date;
 
   let data;
+  const key = `coins:transactions:${stableParamsKey(params)}`;
+  const renderFresh = fresh => {
+    if (STATE.currentView === 'coins' && STATE.coinsTab === 'history') paintHistoryTabData(fresh);
+  };
   try {
-    data = await api.listCoinTransactions(params);
+    data = await swrFetch(key, () => api.listCoinTransactions(params), renderFresh, SWR_FAST_TTL_MS);
   } catch (e) {
     tableHost.innerHTML = `<div class="empty-line">Ошибка: ${esc(e.message)}</div>`;
     return;
   }
+  paintHistoryTabData(data);
+}
+
+function paintHistoryTabData(data) {
+  const tableHost = document.getElementById('hist-table-host');
+  const badge = document.getElementById('hist-total-badge');
+  if (!tableHost || STATE.currentView !== 'coins' || STATE.coinsTab !== 'history') return;
   _historyTabState.data = data;
   const items = data.items || [];
   if (badge) badge.textContent = `${data.total ?? items.length} записей`;
@@ -1208,7 +1252,7 @@ async function renderGroups() {
     </div>`;
 
   try {
-    STATE.groups = await api.listGroups(false);
+    STATE.groups = await swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS);
   } catch(e) {
     if (isNavStale(myNavGen)) return;
     el.innerHTML = `
@@ -1298,6 +1342,7 @@ async function submitAddGroup() {
   }
   try {
     await api.createGroup({ name, status });
+    swrInvalidate('groups:');
     closeModal();
     showToast('Группа создана', 'ok');
     await renderGroups();
@@ -1338,6 +1383,7 @@ async function submitEditGroup(id) {
   }
   try {
     await api.updateGroup(id, { name, status });
+    swrInvalidate('groups:');
     closeModal();
     showToast('Группа обновлена', 'ok');
     await renderGroups();
@@ -1370,6 +1416,7 @@ async function applyGroupStatus(id, nextStatus) {
     } else {
       await api.disableGroup(id);
     }
+    swrInvalidate('groups:');
     closeModal();
     showToast(nextStatus === 'active' ? 'Группа включена' : 'Группа отключена', 'ok');
     await renderGroups();
@@ -1396,6 +1443,7 @@ function confirmDeleteGroup(id) {
 async function deleteGroup(id) {
   try {
     await api.deleteGroup(id);
+    swrInvalidate('groups:');
     closeModal();
     showToast('Группа удалена', 'ok');
     await renderGroups();
@@ -1406,7 +1454,7 @@ async function deleteGroup(id) {
 
 async function ensureGroupsLoaded() {
   if (!STATE.groups.length) {
-    STATE.groups = await api.listGroups(false);
+    STATE.groups = await swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS);
   }
   return STATE.groups;
 }
@@ -1926,7 +1974,7 @@ async function showAddOperatorModal() {
   let groups = [];
   let groupsError = '';
   try {
-    groups = await api.listGroups(true);
+    groups = await swrFetch('groups:active', () => api.listGroups(true), null, SWR_STATIC_TTL_MS);
   } catch(e) {
     groupsError = 'Не удалось загрузить список групп';
   }

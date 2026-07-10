@@ -40,10 +40,10 @@ async function renderLevelsTabContent(el) {
 
   let levels = [];
   try {
-    levels = await withTimeout(api.listAdminOperatorLevels(), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
+    levels = await withTimeout(swrFetch('levels:admin', () => api.listAdminOperatorLevels(), null, SWR_STATIC_TTL_MS), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
   } catch (adminErr) {
     try {
-      levels = await withTimeout(api.listOperatorLevels(), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
+      levels = await withTimeout(swrFetch('levels:list', () => api.listOperatorLevels(), null, SWR_STATIC_TTL_MS), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
     } catch (publicErr) {
       el.innerHTML = `<div class="view-header level-view-header">
         <div>
@@ -59,7 +59,7 @@ async function renderLevelsTabContent(el) {
     }
   }
   STATE.operatorLevels = levels;
-  const rewardsData = await withTimeout(api.listOperatorLevelRewards(), 10000)
+  const rewardsData = await withTimeout(swrFetch('levels:rewards', () => api.listOperatorLevelRewards(), null, SWR_FAST_TTL_MS), 10000)
     .catch(() => ({ items: [] }));
   const rewardRows = Array.isArray(rewardsData) ? rewardsData : (rewardsData.items || []);
 
@@ -180,6 +180,7 @@ async function renderLevelsTabContent(el) {
 async function recalculateOperatorLevelsUi() {
   try {
     const res = await api.recalculateOperatorLevels({ mode: 'all' });
+    swrInvalidate('levels:');
     showToast(`Пересчитано: ${res.processed}, изменено: ${res.updated}`, 'ok');
     swrInvalidate('rating:list');
     await reloadData();
@@ -256,6 +257,7 @@ async function submitOperatorLevelForm(levelId) {
     const payload = { name, color, description, sort_order, min_total_xp, reward_coins, reward_once: true };
     if (levelId) await api.updateOperatorLevel(levelId, payload);
     else await api.createOperatorLevel({ code, icon: '', is_active: true, ...payload });
+    swrInvalidate('levels:');
     closeModal();
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
@@ -330,6 +332,7 @@ async function submitOperatorLevelRuleForm(levelId) {
   }
   try {
     await api.addOperatorLevelRule(levelId, payload);
+    swrInvalidate('levels:');
     closeModal();
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
@@ -339,6 +342,7 @@ async function deleteOperatorLevelRuleUi(ruleId) {
   if (!confirm('Удалить показатель уровня?')) return;
   try {
     await api.deleteOperatorLevelRule(ruleId);
+    swrInvalidate('levels:');
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
 }
@@ -347,6 +351,7 @@ async function disableOperatorLevelUi(levelId) {
   if (!confirm('Отключить уровень?')) return;
   try {
     await api.deleteOperatorLevel(levelId);
+    swrInvalidate('levels:');
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }
 }
@@ -366,6 +371,7 @@ async function manualOperatorLevelUi(operatorId) {
   const comment = prompt('Комментарий', '') || '';
   try {
     await api.manualOperatorLevel(operatorId, { level_id: levelId, reason, comment });
+    swrInvalidate('levels:');
     showToast('Уровень изменён', 'ok');
     swrInvalidate('rating:list');
     await reloadData();
@@ -396,7 +402,7 @@ function renderCabinet() {
     el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div></div>
       <div class="empty-state"><p>Данные загружаются…</p></div>`;
     const _cabinetGen = STATE.navGen;
-    api.myWallet().then(data => {
+    swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS).then(data => {
       STATE.wallet = data;
       if (!isNavStale(_cabinetGen)) renderCabinet();
     }).catch(() => {});
@@ -603,7 +609,7 @@ async function renderCabinetWheelCard() {
 }
 
 async function reloadCabinet() {
-  STATE.wallet = await api.myWallet().catch(() => STATE.wallet);
+  STATE.wallet = await swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS).catch(() => STATE.wallet);
   STATE.myLevel = await api.myLevel().catch(() => STATE.myLevel);
   STATE.myOperator = await api.myOperator().catch(() => STATE.myOperator);
   setText('side-level', STATE.myLevel?.level?.name || '—');

@@ -43,7 +43,12 @@ async function renderRaffles() {
 
 /* ── Оператор ─────────────────────────────────────────── */
 async function renderRafflesOperator(el) {
-  const data = await api.getMyRaffles();
+  const data = await swrFetch(
+    'raffles:me',
+    () => api.getMyRaffles(),
+    () => { if (STATE.currentView === 'raffles' && !isAdmin(STATE.user?.role)) renderRafflesOperator(el); },
+    SWR_FAST_TTL_MS,
+  );
   const tickets = data.raffle_tickets || 0;
   const raffles = data.raffles || [];
   const active = raffles.filter(r => r.status === 'active');
@@ -112,6 +117,8 @@ async function submitEnterRaffle(raffleId) {
   if (!tickets || tickets < 1) { if (errEl) errEl.textContent = 'Укажите число билетов'; return; }
   try {
     await api.enterRaffle(raffleId, tickets);
+    swrInvalidate('raffles:');
+    swrInvalidate('wheel:');
     showToast('Вы в игре! Удачи 🍀', 'ok');
     closeModal();
     renderRaffles();
@@ -122,7 +129,12 @@ async function submitEnterRaffle(raffleId) {
 
 /* ── Админ ────────────────────────────────────────────── */
 async function renderRafflesAdmin(el) {
-  const raffles = await api.listRafflesAdmin();
+  const raffles = await swrFetch(
+    'raffles:admin',
+    () => api.listRafflesAdmin(),
+    () => { if (STATE.currentView === 'raffles' && isAdmin(STATE.user?.role)) renderRafflesAdmin(el); },
+    SWR_FAST_TTL_MS,
+  );
   const active = raffles.filter(r => r.status === 'active');
   const finished = raffles.filter(r => r.status !== 'active');
 
@@ -148,14 +160,14 @@ async function renderRafflesAdmin(el) {
   el.querySelectorAll('[data-draw-raffle]').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('Запустить тираж сейчас? Победители определятся окончательно.')) return;
-      try { await api.drawRaffle(parseInt(btn.dataset.drawRaffle, 10)); showToast('Розыгрыш проведён', 'ok'); renderRaffles(); }
+      try { await api.drawRaffle(parseInt(btn.dataset.drawRaffle, 10)); swrInvalidate('raffles:'); showToast('Розыгрыш проведён', 'ok'); renderRaffles(); }
       catch (e) { showToast(e.message, 'error'); }
     };
   });
   el.querySelectorAll('[data-cancel-raffle]').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('Отменить розыгрыш? Вложенные билеты вернутся участникам.')) return;
-      try { await api.cancelRaffle(parseInt(btn.dataset.cancelRaffle, 10)); showToast('Розыгрыш отменён', 'ok'); renderRaffles(); }
+      try { await api.cancelRaffle(parseInt(btn.dataset.cancelRaffle, 10)); swrInvalidate('raffles:'); showToast('Розыгрыш отменён', 'ok'); renderRaffles(); }
       catch (e) { showToast(e.message, 'error'); }
     };
   });
@@ -220,6 +232,7 @@ async function submitCreateRaffle() {
   };
   try {
     await api.createRaffle(payload);
+    swrInvalidate('raffles:');
     showToast('Розыгрыш создан', 'ok');
     closeModal();
     renderRaffles();

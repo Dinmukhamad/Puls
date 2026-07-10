@@ -8,7 +8,7 @@ async function renderAchievementsAdminTab(el) {
 
   let achievements;
   try {
-    achievements = await api.listAchievements();
+    achievements = await swrFetch('achievements:list', () => api.listAchievements(), null, SWR_STATIC_TTL_MS);
   } catch (e) {
     el.innerHTML = `<div class="empty-line">Ошибка загрузки: ${esc(e.message)}</div>`;
     return;
@@ -16,7 +16,7 @@ async function renderAchievementsAdminTab(el) {
   STATE._achievementsCatalog = achievements;
 
   if (!STATE.adminOperators.length) {
-    try { STATE.adminOperators = await api.getDashboardOperators(); } catch { /* форма выдачи покажет пустой список */ }
+    try { STATE.adminOperators = await swrFetch('dashboard:operators', () => api.getDashboardOperators(), null, SWR_USER_TTL_MS); } catch { /* форма выдачи покажет пустой список */ }
   }
 
   const conditionLabel = (a) => {
@@ -77,6 +77,7 @@ async function renderAchievementsAdminTab(el) {
 async function toggleAchievementActive(id, isActive) {
   try {
     await api.updateAchievement(id, { is_active: isActive });
+    swrInvalidate('achievements:');
     showToast(isActive ? 'Достижение включено' : 'Достижение выключено', 'ok');
     const a = (STATE._achievementsCatalog || []).find(x => x.id === id);
     if (a) a.is_active = isActive;
@@ -91,6 +92,7 @@ async function saveAchievementReward(id) {
   const val = Number(document.getElementById(`ach-reward-${id}`)?.value);
   try {
     await api.updateAchievement(id, { reward_coins: val });
+    swrInvalidate('achievements:');
     showToast('Награда обновлена', 'ok');
   } catch (e) {
     showToast(e.message, 'error');
@@ -128,6 +130,9 @@ async function submitGrantAchievement(achievementId) {
   if (!operatorId) { if (errEl) errEl.textContent = 'Выберите оператора'; return; }
   try {
     await api.grantAchievement(achievementId, { operator_id: operatorId, comment });
+    swrInvalidate('achievements:');
+    swrInvalidate('coins:');
+    swrInvalidate('rating:');
     showToast('Достижение выдано', 'ok');
     closeModal();
   } catch (e) {

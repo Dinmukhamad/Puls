@@ -15,7 +15,8 @@ const SWR_PREFIX = 'puls-swr:';
 const SWR_DEFAULT_TTL_MS = 120_000;  // 2 минуты — динамичные данные (рейтинг, дашборд)
 const SWR_STATIC_TTL_MS  = 600_000; // 10 минут — статичные (уровни, магазин, группы)
 const SWR_USER_TTL_MS    = 300_000; // 5 минут — пользователи
-const SWR_VERSION = 'levels-load-fix-1'; // при смене версии весь кеш сбрасывается
+const SWR_FAST_TTL_MS    = 45_000;  // короткий кеш для разделов, которые должны открываться сразу
+const SWR_VERSION = 'section-prefetch-1'; // при смене версии весь кеш сбрасывается
 (function() {
   const stored = sessionStorage.getItem('puls-swr-version');
   if (stored !== SWR_VERSION) {
@@ -84,6 +85,10 @@ function swrInvalidate(keyOrPrefix) {
     const keys = Object.keys(sessionStorage).filter(k => k.startsWith(SWR_PREFIX + keyOrPrefix));
     keys.forEach(k => sessionStorage.removeItem(k));
   } catch(e) { /* ignore */ }
+}
+
+function stableParamsKey(params = {}) {
+  return Object.keys(params).sort().map(k => `${k}=${params[k]}`).join('&');
 }
 
 /* ══════════════════════════════════════
@@ -512,6 +517,7 @@ async function bootApp() {
   if (role === 'admin' || role === 'manager') {
     setTimeout(() => prefetchAnalyticsInBackground(), 3000);
   }
+  setTimeout(() => prefetchAppSectionsInBackground(role), 700);
 
   // Lazy preload групп
   if (isAdmin(role)) {
@@ -611,6 +617,65 @@ async function loadData(role) {
   await Promise.all(tasks);
   refreshNotificationBadge();
   startNotificationPolling();
+}
+
+async function runWarmupQueue(tasks, gapMs = 140) {
+  for (const task of tasks) {
+    try { await Promise.resolve(task()); } catch(e) { /* warmup is best-effort */ }
+    await new Promise(resolve => setTimeout(resolve, gapMs));
+  }
+}
+
+function prefetchAppSectionsInBackground(role) {
+  const admin = isAdmin(role);
+  const tasks = [
+    () => swrFetch('shop:items', () => api.listShopItems(), null, SWR_STATIC_TTL_MS),
+    () => swrFetch('rating:list', () => api.getRating(), null, SWR_DEFAULT_TTL_MS),
+    () => swrFetch('rating:nominations', () => api._req('GET', '/api/rating/nominations'), null, SWR_STATIC_TTL_MS),
+    () => swrFetch('levels:list', () => api.listOperatorLevels(), null, SWR_STATIC_TTL_MS),
+  ];
+
+  if (role === 'operator' || role === 'supervisor') {
+    tasks.push(
+      () => swrFetch('cabinet:me', () => api.getMyCabinet(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('shop:purchases:me', () => api.listPurchases(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('wheel:status', () => api.getWheelStatus(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('wheel:prizes', () => api.getWheelPrizes(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('wheel:my-history', () => api.getWheelMyHistory(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('tests:my', () => api.myTests(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('raffles:me', () => api.getMyRaffles(), null, SWR_FAST_TTL_MS),
+    );
+  }
+
+  if (admin) {
+    tasks.push(
+      () => swrFetch('dashboard:main', () => api.getDashboard(), null, SWR_DEFAULT_TTL_MS),
+      () => swrFetch('dashboard:operators', () => api.getDashboardOperators(), null, SWR_USER_TTL_MS),
+      () => swrFetch('users:list', () => api.listUsers({ limit: 200 }), null, SWR_USER_TTL_MS),
+      () => swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('groups:active', () => api.listGroups(true), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('admin-summary:', () => api.getAdminSummary({}), null, SWR_FAST_TTL_MS),
+      () => swrFetch('achievements:list', () => api.listAchievements(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('levels:admin', () => api.listAdminOperatorLevels(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('levels:rewards', () => api.listOperatorLevelRewards(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('coin-rules:settings', () => api.getCoinRulesSettings(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('coins:overview', () => api.getCoinsOverview(), null, SWR_DEFAULT_TTL_MS),
+      () => swrFetch('coins:requests:new', () => api.listCoinRequests({ status: 'new', limit: 20 }), null, SWR_FAST_TTL_MS),
+      () => swrFetch('coins:transactions:latest', () => api.listCoinTransactions({ limit: 50 }), null, SWR_FAST_TTL_MS),
+      () => swrFetch('period-report:status', () => api.getPeriodReportStatus(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('wheel:admin:campaigns', () => api.getWheelCampaigns(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('wheel:admin:prizes', () => api.getWheelAdminPrizes(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('wheel:admin:rules', () => api.getWheelRules(), null, SWR_STATIC_TTL_MS),
+      () => swrFetch('wheel:admin:spins', () => api.getWheelSpins({ limit: 80 }), null, SWR_FAST_TTL_MS),
+      () => swrFetch('wheel:admin:stats', () => api.getWheelStats(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('tests:admin-list', () => api.listAdminTests(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('raffles:admin', () => api.listRafflesAdmin(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('sessions:list:active:all:all:', () => api.listSessions({ status: 'active', q: '', role: 'all', device: 'all', limit: 250 }), null, SWR_FAST_TTL_MS),
+    );
+  }
+
+  runWarmupQueue(tasks);
 }
 
 async function reloadData() {

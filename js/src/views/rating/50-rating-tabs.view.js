@@ -2,7 +2,7 @@ let _ratingActiveTab = 'overview';
 
 async function exportRatingFromRatingPage() {
   try {
-    const summary = await api.getAdminSummary({});
+    const summary = await swrFetch('admin-summary:', () => api.getAdminSummary({}), null, SWR_FAST_TTL_MS);
     if (!summary.period_start) { showToast('Нет рассчитанных недель для экспорта', 'error'); return; }
     window.open(api.exportUrl('/api/exports/rating', { period_start: summary.period_start, period_end: summary.period_end, format: 'csv' }), '_blank');
   } catch (e) {
@@ -88,7 +88,7 @@ async function fetchRace(params, onUpdate) {
 async function renderRatingRaceTab(content) {
   let groupOptions = '<option value="">Все группы</option>';
   try {
-    const groups = await api.listGroups(true);
+    const groups = await swrFetch('groups:active', () => api.listGroups(true), null, SWR_STATIC_TTL_MS);
     groupOptions += (groups || []).map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
   } catch(e) { /* ignore */ }
 
@@ -452,4 +452,3 @@ const WHEEL_PRIZE_ICON = {
 const WHEEL_FAST_MS = 900;
 const WHEEL_TTL_MS = 45_000;
 const WHEEL_STATIC_TTL_MS = 5 * 60_000;
-

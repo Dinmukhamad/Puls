@@ -21,6 +21,25 @@ function sessionSafeDate(value) {
   return value ? esc(fmtDateTime(value)) : '—';
 }
 
+function sessionsCacheKey() {
+  return `sessions:list:${_sessionFilterStatus}:${_sessionFilterRole}:${_sessionFilterDevice}:${_sessionFilterQuery || ''}`;
+}
+
+function sessionsFetchCurrent(onFresh) {
+  return swrFetch(
+    sessionsCacheKey(),
+    () => api.listSessions({
+      status: _sessionFilterStatus,
+      q: _sessionFilterQuery,
+      role: _sessionFilterRole,
+      device: _sessionFilterDevice,
+      limit: 250,
+    }),
+    onFresh,
+    SWR_FAST_TTL_MS,
+  );
+}
+
 async function renderAdminSessions() {
   const el = document.getElementById('view-sessions');
   if (!el) return;
@@ -44,12 +63,8 @@ async function renderAdminSessions() {
     </div>`;
 
   try {
-    const data = await api.listSessions({
-      status: _sessionFilterStatus,
-      q: _sessionFilterQuery,
-      role: _sessionFilterRole,
-      device: _sessionFilterDevice,
-      limit: 250,
+    const data = await sessionsFetchCurrent((fresh) => {
+      if (STATE.currentView === 'sessions') paintAdminSessions(el, fresh || { items: [], stats: {} });
     });
     paintAdminSessions(el, data || { items: [], stats: {} });
   } catch (err) {
@@ -180,6 +195,7 @@ async function revokeUserSession(sessionId) {
   if (!confirm('Сбросить эту сессию? Пользователь выйдет из аккаунта на этом устройстве.')) return;
   try {
     await api.revokeSession(sessionId);
+    swrInvalidate('sessions:list:');
     showToast('Сессия сброшена', 'ok');
     renderAdminSessions();
   } catch (err) {
@@ -192,6 +208,7 @@ async function revokeAllUserSessions(userId) {
   if (!confirm('Сбросить все активные сессии этого пользователя?')) return;
   try {
     const result = await api.revokeUserSessions(userId, true);
+    swrInvalidate('sessions:list:');
     showToast(`Сброшено сессий: ${result.revoked || 0}`, 'ok');
     renderAdminSessions();
   } catch (err) {

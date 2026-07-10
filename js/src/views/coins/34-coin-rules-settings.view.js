@@ -30,7 +30,7 @@ async function renderCoinRulesSettingsTab(body) {
   body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка настроек…</p></div>';
   let rules;
   try {
-    rules = await api.getCoinRulesSettings();
+    rules = await swrFetch('coin-rules:settings', () => api.getCoinRulesSettings(), null, SWR_STATIC_TTL_MS);
   } catch (e) {
     body.innerHTML = `<div class="empty-line">Ошибка загрузки: ${esc(e.message)}</div>`;
     return;
@@ -120,6 +120,8 @@ async function saveCoinRulesSettings() {
 
   try {
     await api.updateCoinRulesSettings(payload);
+    swrInvalidate('coin-rules:');
+    swrInvalidate('coins:');
     showToast('Настройки начислений сохранены', 'ok');
   } catch (e) {
     showToast(e.message, 'error');
