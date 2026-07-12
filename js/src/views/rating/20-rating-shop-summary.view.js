@@ -6,6 +6,8 @@ async function renderRatingOverviewTab(el) {
   let searchVal = '';
   let filterGroup = '';
   let filterLevel = '';
+  let ratingPage = 1;
+  const RATING_PAGE_SIZE = 25;
   let operatorSearchVal = '';
   let cmpMetric = 'points';
   let dynType = 'place';
@@ -626,6 +628,10 @@ async function renderRatingOverviewTab(el) {
         <div class="r-empty-title">Рейтинг пока не сформирован.</div>
         <div class="r-empty-sub">Данные появятся после расчёта конкурса.</div>
       </div>`;
+      const totalPages = Math.max(1, Math.ceil(fr.length / RATING_PAGE_SIZE));
+      if (ratingPage > totalPages) ratingPage = totalPages;
+      const pageStart = (ratingPage - 1) * RATING_PAGE_SIZE;
+      const pageRows = fr.slice(pageStart, pageStart + RATING_PAGE_SIZE);
       const myData = personal.myData || {};
       const myOpId = myData.operator_id || null;
       return `<div class="table-wrap rating-table-wrap"><table class="data-table rating-table">
@@ -638,7 +644,7 @@ async function renderRatingOverviewTab(el) {
           <th style="text-align:center">Дин.</th>
         </tr></thead>
         <tbody>
-          ${fr.map(r => {
+          ${pageRows.map(r => {
             const isMe = r.is_current_user || (myOpId && r.operator_id == myOpId) || (selectedOpId && r.operator_id == selectedOpId);
             const place = isNum(r.rank_position) && Number(r.rank_position) > 0 ? Number(r.rank_position) : null;
             const d = isNum(r.rank_delta) ? Number(r.rank_delta) : null;
@@ -659,7 +665,36 @@ async function renderRatingOverviewTab(el) {
           }).join('')}
         </tbody>
       </table></div>
+      ${(() => {
+        const fr = filteredRows();
+        const totalPages = Math.max(1, Math.ceil(fr.length / RATING_PAGE_SIZE));
+        if (totalPages <= 1) return '';
+        const from = (ratingPage - 1) * RATING_PAGE_SIZE + 1;
+        const to = Math.min(ratingPage * RATING_PAGE_SIZE, fr.length);
+        return `<div class="pagination-bar">
+          <span class="pagination-info">${from}–${to} из ${fr.length}</span>
+          <div class="pagination-controls">
+            <button class="btn-outline btn-sm" data-rating-prev ${ratingPage <= 1 ? 'disabled' : ''}>← Назад</button>
+            <span class="pagination-page">Стр. ${ratingPage} / ${totalPages}</span>
+            <button class="btn-outline btn-sm" data-rating-next ${ratingPage >= totalPages ? 'disabled' : ''}>Вперёд →</button>
+          </div>
+        </div>`;
+      })()}
       ${isNum(myData.place) && Number(myData.place) > 10 ? `<div class="rating-my-sticky">Ваше место: <b>#${Number(myData.place)}</b> · ${esc(myData.full_name||'')} · ${cleanNumber(myData.weekly_points,1)} баллов · ${cleanCoins(myData.weekly_coins)}</div>` : ''}`;
+    }
+
+    // Перерисовка таблицы + перепривязка кнопок пагинации (в одном месте,
+    // чтобы обработчики фильтров и страниц не расходились).
+    function refreshRatingTable() {
+      const body = el.querySelector('#rating-table-body');
+      if (!body) return;
+      body.innerHTML = renderTable();
+      body.querySelector('[data-rating-prev]')?.addEventListener('click', () => {
+        if (ratingPage > 1) { ratingPage--; refreshRatingTable(); }
+      });
+      body.querySelector('[data-rating-next]')?.addEventListener('click', () => {
+        ratingPage++; refreshRatingTable();
+      });
     }
 
     function buildPage() {
@@ -729,15 +764,18 @@ async function renderRatingOverviewTab(el) {
       // Events
       el.querySelector('#rating-search')?.addEventListener('input', e => {
         searchVal = e.target.value;
-        el.querySelector('#rating-table-body').innerHTML = renderTable();
+        ratingPage = 1;
+        refreshRatingTable();
       });
       el.querySelector('#rating-group-filter')?.addEventListener('change', e => {
         filterGroup = e.target.value;
-        el.querySelector('#rating-table-body').innerHTML = renderTable();
+        ratingPage = 1;
+        refreshRatingTable();
       });
       el.querySelector('#rating-level-filter')?.addEventListener('change', e => {
         filterLevel = e.target.value;
-        el.querySelector('#rating-table-body').innerHTML = renderTable();
+        ratingPage = 1;
+        refreshRatingTable();
       });
       el.querySelector('#rating-op-search')?.addEventListener('input', e => {
         operatorSearchVal = e.target.value;
@@ -767,6 +805,15 @@ async function renderRatingOverviewTab(el) {
         personal = await fetchPersonalData(selectedOpId);
         buildPage();
         setTimeout(() => loadPersonalExtras(), 50);
+      });
+
+      // Привязываем кнопки пагинации таблицы (первый рендер body был сделан
+      // синхронно в innerHTML выше — обработчики навешиваем здесь).
+      el.querySelector('[data-rating-prev]')?.addEventListener('click', () => {
+        if (ratingPage > 1) { ratingPage--; refreshRatingTable(); }
+      });
+      el.querySelector('[data-rating-next]')?.addEventListener('click', () => {
+        ratingPage++; refreshRatingTable();
       });
     }
 

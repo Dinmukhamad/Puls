@@ -1136,3 +1136,13 @@ body.must-change-password .side-nav-link[data-nav-target] {
   font-size: 12px;
   color: var(--tx3);
 }
+
+/* ── Пагинация (общая: Пользователи, Рейтинг) ── */
+.pagination-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; padding: 12px 4px 4px;
+}
+.pagination-info { font-size: 12px; color: var(--tx3); }
+.pagination-controls { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.pagination-page { font-size: 12px; color: var(--tx2); font-weight: 600; min-width: 90px; text-align: center; }
+.pagination-controls button[disabled] { opacity: .45; cursor: not-allowed; }

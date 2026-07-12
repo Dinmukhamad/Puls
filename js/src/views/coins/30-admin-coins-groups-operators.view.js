@@ -23,6 +23,8 @@ function renderUsersPage() {
   let filterStatus = '';
   let filterLevel = '';
   let activeTab = 'all';
+  let currentPage = 1;
+  const PAGE_SIZE = 25;
 
   const groups = [...new Set(ops.map(o => o.group_name).filter(Boolean))].sort();
   const levels = STATE.operatorLevels.length
@@ -74,6 +76,10 @@ function renderUsersPage() {
 
   function renderTable() {
     const list = filteredOps();
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const pageStart = (currentPage - 1) * PAGE_SIZE;
+    const pageList = list.slice(pageStart, pageStart + PAGE_SIZE);
     return `
       <div class="table-wrap">
         <table class="data-table users-table-compact">
@@ -87,7 +93,7 @@ function renderUsersPage() {
             <th class="tc">Действия</th>
           </tr></thead>
           <tbody>
-            ${list.length ? list.map(o => {
+            ${pageList.length ? pageList.map(o => {
               const dismissed = isDismissed(o);
               const isOp = o.role === 'operator';
               return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}">
@@ -114,6 +120,22 @@ function renderUsersPage() {
             }).join('') : '<tr><td colspan="7" class="empty-line">Нет пользователей</td></tr>'}
           </tbody>
         </table>
+      </div>
+      ${_usersPaginationHtml(list.length, totalPages)}`;
+  }
+
+  function _usersPaginationHtml(totalItems, totalPages) {
+    if (totalPages <= 1) return '';
+    const from = (currentPage - 1) * PAGE_SIZE + 1;
+    const to = Math.min(currentPage * PAGE_SIZE, totalItems);
+    return `
+      <div class="pagination-bar">
+        <span class="pagination-info">${from}–${to} из ${totalItems}</span>
+        <div class="pagination-controls">
+          <button class="btn-outline btn-sm" data-page-prev ${currentPage <= 1 ? 'disabled' : ''}>← Назад</button>
+          <span class="pagination-page">Стр. ${currentPage} / ${totalPages}</span>
+          <button class="btn-outline btn-sm" data-page-next ${currentPage >= totalPages ? 'disabled' : ''}>Вперёд →</button>
+        </div>
       </div>`;
   }
 
@@ -179,7 +201,7 @@ function renderUsersPage() {
   function rebindOps() {
     el.querySelectorAll('.ops-tab').forEach(btn => {
       btn.addEventListener('click', () => {
-        activeTab = btn.dataset.tab;
+        activeTab = btn.dataset.tab; currentPage = 1;
         el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
         el.querySelector('#ops-table-wrap').innerHTML = renderTable();
         el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
@@ -187,32 +209,32 @@ function renderUsersPage() {
       });
     });
     el.querySelector('#ops-search')?.addEventListener('input', e => {
-      searchVal = e.target.value;
+      searchVal = e.target.value; currentPage = 1;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-group')?.addEventListener('change', e => {
-      filterGroup = e.target.value;
+      filterGroup = e.target.value; currentPage = 1;
       el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       rebindOps();
     });
     el.querySelector('#ops-role')?.addEventListener('change', e => {
-      filterRole = e.target.value;
+      filterRole = e.target.value; currentPage = 1;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-status')?.addEventListener('change', e => {
-      filterStatus = e.target.value;
+      filterStatus = e.target.value; currentPage = 1;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-level')?.addEventListener('change', e => {
-      filterLevel = e.target.value;
+      filterLevel = e.target.value; currentPage = 1;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
@@ -221,6 +243,12 @@ function renderUsersPage() {
   }
   rebindOps();
   function bindOpsActions() {
+    el.querySelector('[data-page-prev]')?.addEventListener('click', () => {
+      if (currentPage > 1) { currentPage--; el.querySelector('#ops-table-wrap').innerHTML = renderTable(); bindOpsActions(); }
+    });
+    el.querySelector('[data-page-next]')?.addEventListener('click', () => {
+      currentPage++; el.querySelector('#ops-table-wrap').innerHTML = renderTable(); bindOpsActions();
+    });
     el.querySelectorAll('.quick-charge-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         navigateTo('manual');
@@ -236,7 +264,6 @@ function renderUsersPage() {
       });
     });
   }
-  bindOpsActions();
 }
 
 /* ══════════════════════════════════════

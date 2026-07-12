@@ -602,7 +602,7 @@ async function loadData(role) {
     );
     tasks.push(
       swrFetch('users:list', () =>
-        api.listUsers({ limit: 200 }).catch(err => {
+        fetchAllUsers().catch(err => {
           console.error('[users:list] ошибка загрузки:', err?.message || err);
           return { items: [] };
         }),
@@ -653,7 +653,7 @@ function prefetchAppSectionsInBackground(role) {
     tasks.push(
       () => swrFetch('dashboard:main', () => api.getDashboard(), null, SWR_DEFAULT_TTL_MS),
       () => swrFetch('dashboard:operators', () => api.getDashboardOperators(), null, SWR_USER_TTL_MS),
-      () => swrFetch('users:list', () => api.listUsers({ limit: 200 }), null, SWR_USER_TTL_MS),
+      () => swrFetch('users:list', () => fetchAllUsers(), null, SWR_USER_TTL_MS),
       () => swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS),
       () => swrFetch('groups:active', () => api.listGroups(true), null, SWR_STATIC_TTL_MS),
       () => swrFetch('admin-summary:', () => api.getAdminSummary({}), null, SWR_FAST_TTL_MS),
@@ -677,6 +677,25 @@ function prefetchAppSectionsInBackground(role) {
   }
 
   runWarmupQueue(tasks);
+}
+
+// Тянем всех пользователей постранично: backend ограничивает limit 200,
+// а на фронте фильтры/поиск работают по всему массиву STATE.users, поэтому
+// нужны все записи (иначе при >200 пользователях часть просто не грузилась).
+async function fetchAllUsers() {
+  const limit = 200;
+  let page = 1;
+  let all = [];
+  let total = Infinity;
+  while (all.length < total && page <= 50) { // предохранитель на 10000 записей
+    const res = await api.listUsers({ page, limit });
+    const items = res.items || [];
+    all = all.concat(items);
+    total = res.total != null ? res.total : items.length;
+    if (!items.length) break;
+    page += 1;
+  }
+  return { items: all, total: all.length };
 }
 
 async function reloadData() {
@@ -1821,6 +1840,8 @@ async function renderRatingOverviewTab(el) {
   let searchVal = '';
   let filterGroup = '';
   let filterLevel = '';
+  let ratingPage = 1;
+  const RATING_PAGE_SIZE = 25;
   let operatorSearchVal = '';
   let cmpMetric = 'points';
   let dynType = 'place';
@@ -2441,6 +2462,10 @@ async function renderRatingOverviewTab(el) {
         <div class="r-empty-title">Рейтинг пока не сформирован.</div>
         <div class="r-empty-sub">Данные появятся после расчёта конкурса.</div>
       </div>`;
+      const totalPages = Math.max(1, Math.ceil(fr.length / RATING_PAGE_SIZE));
+      if (ratingPage > totalPages) ratingPage = totalPages;
+      const pageStart = (ratingPage - 1) * RATING_PAGE_SIZE;
+      const pageRows = fr.slice(pageStart, pageStart + RATING_PAGE_SIZE);
       const myData = personal.myData || {};
       const myOpId = myData.operator_id || null;
       return `<div class="table-wrap rating-table-wrap"><table class="data-table rating-table">
@@ -2453,7 +2478,7 @@ async function renderRatingOverviewTab(el) {
           <th style="text-align:center">Дин.</th>
         </tr></thead>
         <tbody>
-          ${fr.map(r => {
+          ${pageRows.map(r => {
             const isMe = r.is_current_user || (myOpId && r.operator_id == myOpId) || (selectedOpId && r.operator_id == selectedOpId);
             const place = isNum(r.rank_position) && Number(r.rank_position) > 0 ? Number(r.rank_position) : null;
             const d = isNum(r.rank_delta) ? Number(r.rank_delta) : null;
@@ -2474,7 +2499,36 @@ async function renderRatingOverviewTab(el) {
           }).join('')}
         </tbody>
       </table></div>
+      ${(() => {
+        const fr = filteredRows();
+        const totalPages = Math.max(1, Math.ceil(fr.length / RATING_PAGE_SIZE));
+        if (totalPages <= 1) return '';
+        const from = (ratingPage - 1) * RATING_PAGE_SIZE + 1;
+        const to = Math.min(ratingPage * RATING_PAGE_SIZE, fr.length);
+        return `<div class="pagination-bar">
+          <span class="pagination-info">${from}–${to} из ${fr.length}</span>
+          <div class="pagination-controls">
+            <button class="btn-outline btn-sm" data-rating-prev ${ratingPage <= 1 ? 'disabled' : ''}>← Назад</button>
+            <span class="pagination-page">Стр. ${ratingPage} / ${totalPages}</span>
+            <button class="btn-outline btn-sm" data-rating-next ${ratingPage >= totalPages ? 'disabled' : ''}>Вперёд →</button>
+          </div>
+        </div>`;
+      })()}
       ${isNum(myData.place) && Number(myData.place) > 10 ? `<div class="rating-my-sticky">Ваше место: <b>#${Number(myData.place)}</b> · ${esc(myData.full_name||'')} · ${cleanNumber(myData.weekly_points,1)} баллов · ${cleanCoins(myData.weekly_coins)}</div>` : ''}`;
+    }
+
+    // Перерисовка таблицы + перепривязка кнопок пагинации (в одном месте,
+    // чтобы обработчики фильтров и страниц не расходились).
+    function refreshRatingTable() {
+      const body = el.querySelector('#rating-table-body');
+      if (!body) return;
+      body.innerHTML = renderTable();
+      body.querySelector('[data-rating-prev]')?.addEventListener('click', () => {
+        if (ratingPage > 1) { ratingPage--; refreshRatingTable(); }
+      });
+      body.querySelector('[data-rating-next]')?.addEventListener('click', () => {
+        ratingPage++; refreshRatingTable();
+      });
     }
 
     function buildPage() {
@@ -2544,15 +2598,18 @@ async function renderRatingOverviewTab(el) {
       // Events
       el.querySelector('#rating-search')?.addEventListener('input', e => {
         searchVal = e.target.value;
-        el.querySelector('#rating-table-body').innerHTML = renderTable();
+        ratingPage = 1;
+        refreshRatingTable();
       });
       el.querySelector('#rating-group-filter')?.addEventListener('change', e => {
         filterGroup = e.target.value;
-        el.querySelector('#rating-table-body').innerHTML = renderTable();
+        ratingPage = 1;
+        refreshRatingTable();
       });
       el.querySelector('#rating-level-filter')?.addEventListener('change', e => {
         filterLevel = e.target.value;
-        el.querySelector('#rating-table-body').innerHTML = renderTable();
+        ratingPage = 1;
+        refreshRatingTable();
       });
       el.querySelector('#rating-op-search')?.addEventListener('input', e => {
         operatorSearchVal = e.target.value;
@@ -2582,6 +2639,15 @@ async function renderRatingOverviewTab(el) {
         personal = await fetchPersonalData(selectedOpId);
         buildPage();
         setTimeout(() => loadPersonalExtras(), 50);
+      });
+
+      // Привязываем кнопки пагинации таблицы (первый рендер body был сделан
+      // синхронно в innerHTML выше — обработчики навешиваем здесь).
+      el.querySelector('[data-rating-prev]')?.addEventListener('click', () => {
+        if (ratingPage > 1) { ratingPage--; refreshRatingTable(); }
+      });
+      el.querySelector('[data-rating-next]')?.addEventListener('click', () => {
+        ratingPage++; refreshRatingTable();
       });
     }
 
@@ -3157,6 +3223,8 @@ function renderUsersPage() {
   let filterStatus = '';
   let filterLevel = '';
   let activeTab = 'all';
+  let currentPage = 1;
+  const PAGE_SIZE = 25;
 
   const groups = [...new Set(ops.map(o => o.group_name).filter(Boolean))].sort();
   const levels = STATE.operatorLevels.length
@@ -3208,6 +3276,10 @@ function renderUsersPage() {
 
   function renderTable() {
     const list = filteredOps();
+    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (currentPage > totalPages) currentPage = totalPages;
+    const pageStart = (currentPage - 1) * PAGE_SIZE;
+    const pageList = list.slice(pageStart, pageStart + PAGE_SIZE);
     return `
       <div class="table-wrap">
         <table class="data-table users-table-compact">
@@ -3221,7 +3293,7 @@ function renderUsersPage() {
             <th class="tc">Действия</th>
           </tr></thead>
           <tbody>
-            ${list.length ? list.map(o => {
+            ${pageList.length ? pageList.map(o => {
               const dismissed = isDismissed(o);
               const isOp = o.role === 'operator';
               return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}">
@@ -3248,6 +3320,22 @@ function renderUsersPage() {
             }).join('') : '<tr><td colspan="7" class="empty-line">Нет пользователей</td></tr>'}
           </tbody>
         </table>
+      </div>
+      ${_usersPaginationHtml(list.length, totalPages)}`;
+  }
+
+  function _usersPaginationHtml(totalItems, totalPages) {
+    if (totalPages <= 1) return '';
+    const from = (currentPage - 1) * PAGE_SIZE + 1;
+    const to = Math.min(currentPage * PAGE_SIZE, totalItems);
+    return `
+      <div class="pagination-bar">
+        <span class="pagination-info">${from}–${to} из ${totalItems}</span>
+        <div class="pagination-controls">
+          <button class="btn-outline btn-sm" data-page-prev ${currentPage <= 1 ? 'disabled' : ''}>← Назад</button>
+          <span class="pagination-page">Стр. ${currentPage} / ${totalPages}</span>
+          <button class="btn-outline btn-sm" data-page-next ${currentPage >= totalPages ? 'disabled' : ''}>Вперёд →</button>
+        </div>
       </div>`;
   }
 
@@ -3313,7 +3401,7 @@ function renderUsersPage() {
   function rebindOps() {
     el.querySelectorAll('.ops-tab').forEach(btn => {
       btn.addEventListener('click', () => {
-        activeTab = btn.dataset.tab;
+        activeTab = btn.dataset.tab; currentPage = 1;
         el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
         el.querySelector('#ops-table-wrap').innerHTML = renderTable();
         el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
@@ -3321,32 +3409,32 @@ function renderUsersPage() {
       });
     });
     el.querySelector('#ops-search')?.addEventListener('input', e => {
-      searchVal = e.target.value;
+      searchVal = e.target.value; currentPage = 1;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-group')?.addEventListener('change', e => {
-      filterGroup = e.target.value;
+      filterGroup = e.target.value; currentPage = 1;
       el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       rebindOps();
     });
     el.querySelector('#ops-role')?.addEventListener('change', e => {
-      filterRole = e.target.value;
+      filterRole = e.target.value; currentPage = 1;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-status')?.addEventListener('change', e => {
-      filterStatus = e.target.value;
+      filterStatus = e.target.value; currentPage = 1;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-level')?.addEventListener('change', e => {
-      filterLevel = e.target.value;
+      filterLevel = e.target.value; currentPage = 1;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
@@ -3355,6 +3443,12 @@ function renderUsersPage() {
   }
   rebindOps();
   function bindOpsActions() {
+    el.querySelector('[data-page-prev]')?.addEventListener('click', () => {
+      if (currentPage > 1) { currentPage--; el.querySelector('#ops-table-wrap').innerHTML = renderTable(); bindOpsActions(); }
+    });
+    el.querySelector('[data-page-next]')?.addEventListener('click', () => {
+      currentPage++; el.querySelector('#ops-table-wrap').innerHTML = renderTable(); bindOpsActions();
+    });
     el.querySelectorAll('.quick-charge-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         navigateTo('manual');
@@ -3370,7 +3464,6 @@ function renderUsersPage() {
       });
     });
   }
-  bindOpsActions();
 }
 
 /* ══════════════════════════════════════
