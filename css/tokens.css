@@ -1,12 +1,12 @@
 /* ═══════════════════════════════════════════════════════════
-   PULSE DESIGN TOKENS — Вариант 7: Slate + Sky
-   Тёмный Slate сайдбар, светло-серый фон, голубой акцент
+   PULS DESIGN TOKENS — Variant 2: Minimal gamification
+   Dark sidebar, light canvas, measured blue/violet/cyan accents.
 ═══════════════════════════════════════════════════════════ */
 
 :root {
   --radius-sm:  8px;
-  --radius-md:  12px;
-  --radius-lg:  16px;
+  --radius-md:  10px;
+  --radius-lg:  14px;
   --radius-xl:  20px;
 
   --space-1: 4px;   --space-2: 8px;   --space-3: 12px;
@@ -17,7 +17,12 @@
   --font-brand: Syne, Inter, sans-serif;
 
   --transition-fast:    0.12s ease;
-  --transition-default: 0.18s ease;
+  --transition-default: 0.22s ease;
+
+  --nav-w: 236px;
+  --nav-w-collapsed: 76px;
+  --content-max: 1440px;
+  --content-pad: clamp(20px, 2.2vw, 32px);
 }
 
 /* ── Light theme ── */
@@ -26,7 +31,7 @@ html[data-theme="light"] {
   color-scheme: light;
 
   /* Page */
-  --bg-page:          #F1F5F9;
+  --bg-page:          #F4F7FB;
   --bg-surface:       #FFFFFF;
   --bg-surface-hover: #F8FAFC;
   --bg-muted:         #E2E8F0;
@@ -34,34 +39,38 @@ html[data-theme="light"] {
 
   /* Text */
   --text-primary:   #0F172A;
-  --text-secondary: #475569;
+  --text-secondary: #64748B;
   --text-muted:     #94A3B8;
   --text-inverse:   #FFFFFF;
 
   /* Borders */
-  --border-default: #CBD5E1;
-  --border-soft:    #E2E8F0;
+  --border-default: #DCE5F0;
+  --border-soft:    #EAF0F7;
   --border-strong:  #94A3B8;
 
-  /* Accent — Sky blue */
-  --accent-primary:       #0284C7;
-  --accent-primary-hover: #0369A1;
-  --accent-secondary:     #38BDF8;
-  --accent-secondary-soft:#E0F2FE;
+  /* Accents */
+  --accent-primary:       #168BFF;
+  --accent-primary-hover: #2563EB;
+  --accent-secondary:     #2563EB;
+  --accent-secondary-soft:#E8F2FF;
+  --accent-violet:        #6D5DFB;
+  --accent-violet-soft:   #EFEEFF;
+  --accent-cyan:          #24C7E8;
+  --accent-cyan-soft:     #E7FAFE;
 
   /* Semantic */
-  --success:      #16A34A;  --success-soft: #DCFCE7;
-  --danger:       #DC2626;  --danger-soft:  #FEE2E2;
-  --warning:      #D97706;  --warning-soft: #FEF3C7;
-  --info:         #0284C7;  --info-soft:    #E0F2FE;
+  --success:      #18A66A;  --success-soft: #E7F8EF;
+  --danger:       #E54865;  --danger-soft:  #FDECF0;
+  --warning:      #F5A524;  --warning-soft: #FFF5DC;
+  --info:         #24C7E8;  --info-soft:    #E7FAFE;
 
   /* Sidebar — Slate dark */
-  --sidebar-bg:          #1E293B;
-  --sidebar-border:      #334155;
-  --sidebar-text:        #94A3B8;
+  --sidebar-bg:          #111B2E;
+  --sidebar-border:      #243451;
+  --sidebar-text:        #9AA9BF;
   --sidebar-text-active: #F8FAFC;
-  --sidebar-active-bg:   #38BDF8;
-  --sidebar-hover-bg:    #334155;
+  --sidebar-active-bg:   linear-gradient(135deg, #168BFF 0%, #6D5DFB 100%);
+  --sidebar-hover-bg:    #18243A;
 
   /* Components */
   --card-bg:         #FFFFFF;
@@ -71,8 +80,8 @@ html[data-theme="light"] {
   --modal-overlay:   rgba(15,23,42,0.5);
 
   /* Shadows */
-  --shadow-sm:    0 1px 2px rgba(15,23,42,0.06), 0 1px 6px rgba(15,23,42,0.04);
-  --shadow-card:  0 1px 3px rgba(15,23,42,0.07), 0 4px 16px rgba(15,23,42,0.05);
+  --shadow-sm:    0 1px 2px rgba(15,23,42,0.04), 0 4px 14px rgba(15,23,42,0.05);
+  --shadow-card:  0 4px 14px rgba(15,23,42,0.05);
   --shadow-modal: 0 24px 60px rgba(15,23,42,0.2);
 
   /* Legacy compat aliases */
@@ -113,8 +122,12 @@ html[data-theme="dark"] {
 
   --accent-primary:       #38BDF8;
   --accent-primary-hover: #7DD3FC;
-  --accent-secondary:     #38BDF8;
+  --accent-secondary:     #6D5DFB;
   --accent-secondary-soft:rgba(56,189,248,0.14);
+  --accent-violet:        #8B7CFD;
+  --accent-violet-soft:   rgba(109,93,251,0.18);
+  --accent-cyan:          #24C7E8;
+  --accent-cyan-soft:     rgba(36,199,232,0.16);
 
   --success:      #22C55E;  --success-soft: rgba(34,197,94,0.14);
   --danger:       #F87171;  --danger-soft:  rgba(248,113,113,0.14);
@@ -125,7 +138,7 @@ html[data-theme="dark"] {
   --sidebar-border:      #1E293B;
   --sidebar-text:        #64748B;
   --sidebar-text-active: #F1F5F9;
-  --sidebar-active-bg:   #0284C7;
+  --sidebar-active-bg:   linear-gradient(135deg, #168BFF 0%, #6D5DFB 100%);
   --sidebar-hover-bg:    #1E293B;
 
   --card-bg:         #111827;
