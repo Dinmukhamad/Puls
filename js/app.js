@@ -9428,6 +9428,85 @@ function wheelCleanText(value, fallback = '') {
   return text;
 }
 
+function wheelPrizePresentation(prize) {
+  const type = prize?.type || prize?.prize_type || '';
+  const amount = Number(prize?.amount || 0);
+  const title = wheelCleanText(prize?.title || prize?.prize, 'Приз Wheel of WOW');
+  const map = {
+    coins: {
+      badge: `+${amount}`,
+      line1: `+${amount}`,
+      line2: amount === 1 ? 'коин' : 'коинов',
+      description: 'Коины сразу поступят на ваш баланс.',
+    },
+    shop_discount: {
+      badge: `${amount}%`,
+      line1: `${amount}%`,
+      line2: 'скидка',
+      description: 'Скидка будет доступна для покупки в магазине.',
+    },
+    extra_ticket: {
+      badge: '+1',
+      line1: '+1',
+      line2: 'билет',
+      description: 'Дополнительная попытка вращения колеса.',
+    },
+    spin_token: {
+      badge: '+1',
+      line1: 'Ещё',
+      line2: 'вращение',
+      description: 'Ещё одна попытка вращения колеса.',
+    },
+    badge: {
+      badge: 'B',
+      line1: 'Бейдж',
+      line2: 'дня',
+      description: 'Памятный бейдж появится в вашем профиле.',
+    },
+    raffle_ticket: {
+      badge: 'R',
+      line1: 'Билет',
+      line2: 'розыгрыша',
+      description: 'Билет автоматически добавится в активный розыгрыш.',
+    },
+    manual_reward: {
+      badge: 'WOW',
+      line1: 'Особый',
+      line2: 'приз',
+      description: 'Руководитель свяжется с вами для вручения приза.',
+    },
+    status: {
+      badge: 'S',
+      line1: 'Особый',
+      line2: 'статус',
+      description: 'Специальный статус оператора.',
+    },
+  };
+  return { title, color: prize?.color || '#1F8FFF', ...(map[type] || {
+    badge: 'WOW', line1: title.split(' ')[0] || 'Приз', line2: title.split(' ').slice(1, 3).join(' '),
+    description: 'Описание и порядок получения указаны в названии приза.',
+  }) };
+}
+
+function buildWheelPrizeCatalog(items) {
+  return `<div class="wheel-v2-prize-list">${items.map(prize => {
+    const ui = wheelPrizePresentation(prize);
+    return `<article class="wheel-v2-prize-item">
+      <span class="wheel-v2-prize-mark" style="--prize-color:${esc(ui.color)}">${esc(ui.badge)}</span>
+      <div><b>${esc(ui.title)}</b><small>${esc(ui.description)}</small></div>
+    </article>`;
+  }).join('')}</div>`;
+}
+
+function wheelTicketGuide() {
+  return `<div class="wheel-v2-guide">
+    <span>Получить билет можно за:</span>
+    <div><b>01</b> дневную цель</div>
+    <div><b>02</b> место в топ-3</div>
+    <div><b>03</b> выдачу руководителем</div>
+  </div>`;
+}
+
 function renderWheel() {
   const el = document.getElementById('view-wheel');
   if (!el) return;
@@ -9487,76 +9566,63 @@ async function renderWheelOperatorView(el) {
   );
   const safeNextTicketReason = wheelCleanText(status.next_ticket_reason);
 
-  const ticketCard = tickets > 0
-    ? `<div class="wheel-ticket-badge wheel-ticket-have">
-         <span class="wheel-ticket-count">${tickets}</span>
-         <span>${tickets === 1 ? 'доступная прокрутка' : 'доступных прокруток'}</span>
-         ${status.next_ticket_reason ? `<div class="wheel-ticket-reason">Причина: ${esc(status.next_ticket_reason)}</div>` : ''}
-       </div>`
-    : `<div class="wheel-ticket-badge wheel-ticket-none">
-         <strong>У вас пока нет доступных прокруток.</strong>
-         <div class="wheel-hint">Как получить билет:<br>• выполнить дневную цель (эффективность, норма часов, без опозданий);<br>• попасть в топ-3 рейтинга;<br>• получить билет от супервайзера.</div>
-       </div>`;
-
   el.innerHTML = `
-    <div class="view-header">
+    <div class="view-header wheel-v2-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">Wheel of WOW</h2>
+        <h2 class="section-title">Колесо наград</h2>
+        <p class="wheel-v2-subtitle">Используйте билет и получите один из призов Wheel of WOW</p>
       </div>
-      <div class="wheel-limits">
-        <span title="Прокруток сегодня">Сегодня: ${status.spins_used_today}/${status.max_spins_per_day || '∞'}</span>
-        <span title="Прокруток за неделю">Неделя: ${status.spins_used_this_week}/${status.max_spins_per_week || '∞'}</span>
+      <div class="wheel-v2-counters">
+        <div><span>Билеты</span><b id="wheel-ticket-count-value">${tickets}</b></div>
+        <div><span>Сегодня</span><b id="wheel-today-limit">${status.spins_used_today} из ${status.max_spins_per_day || '∞'}</b></div>
+        <div><span>Неделя</span><b id="wheel-week-limit">${status.spins_used_this_week} из ${status.max_spins_per_week || '∞'}</b></div>
       </div>
     </div>
 
-    <div class="wheel-layout">
-      <div class="panel wheel-stage-panel">
-        <div class="wheel-stage">
-          <div class="wheel-pointer" aria-hidden="true">
-            <svg viewBox="0 0 40 52" width="38" height="49" xmlns="http://www.w3.org/2000/svg">
-              <defs><linearGradient id="wheelPinG" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="#FDE68A"/><stop offset="1" stop-color="#F59E0B"/>
-              </linearGradient></defs>
-              <path d="M20 50 L5 21 A15 15 0 1 1 35 21 Z" fill="url(#wheelPinG)" stroke="#B45309" stroke-width="2"/>
-              <circle cx="20" cy="18" r="5.5" fill="#fff" opacity=".92"/>
-            </svg>
+    <div class="wheel-v2-layout">
+      <section class="panel wheel-v2-stage-panel">
+        <div class="wheel-v2-panel-head">
+          <div><span>Ваш билет</span><h3>${canSpin ? 'Всё готово к вращению' : 'Сначала получите билет'}</h3></div>
+          <span class="wheel-v2-status ${canSpin ? 'is-ready' : ''}">${canSpin ? 'Доступно' : 'Нет билета'}</span>
+        </div>
+        <div class="wheel-v2-stage-body">
+          <div class="wheel-stage">
+            <div class="wheel-pointer wheel-pointer-v2" aria-hidden="true"></div>
+            <div class="wheel-rotor" id="wheel-rotor">${buildWheelSvg(items)}</div>
+            <div class="wheel-hub"><span>Puls</span><b>WOW</b></div>
           </div>
-          <div class="wheel-rotor" id="wheel-rotor">${buildWheelSvg(items)}</div>
-          <div class="wheel-hub">WOW</div>
+          <div class="wheel-v2-action">
+            <div class="wheel-v2-ticket-summary">
+              <span>Доступно вращений</span>
+              <strong>${tickets}</strong>
+              <small>${safeNextTicketReason ? `Билет получен: ${esc(safeNextTicketReason)}` : esc(safeCannotReason)}</small>
+            </div>
+            <button class="btn-primary wheel-spin-btn" id="wheel-spin-btn" ${canSpin ? '' : 'disabled'}>
+              ${canSpin ? 'Использовать билет' : 'Нет доступных билетов'}
+            </button>
+            ${!canSpin ? wheelTicketGuide() : '<p class="wheel-v2-action-note">После нажатия колесо остановится на одном из указанных призов.</p>'}
+          </div>
         </div>
-        <div class="wheel-controls">
-          ${ticketCard}
-          <button class="btn-primary wheel-spin-btn" id="wheel-spin-btn" ${canSpin ? '' : 'disabled'}>
-            ${canSpin ? 'Крутить колесо' : esc(cannotReason)}
-          </button>
-        </div>
-      </div>
+      </section>
 
-      <div class="panel wheel-history-panel">
-        <h3 class="panel-title">🏆 Мои выигрыши</h3>
-        <div id="wheel-history-body">${buildWheelHistory(history.items || [])}</div>
-      </div>
-    </div>`;
+      <section class="panel wheel-v2-prizes-panel">
+        <div class="wheel-v2-panel-head"><div><span>Состав колеса</span><h3>Что можно выиграть</h3></div><b>${items.length} призов</b></div>
+        ${buildWheelPrizeCatalog(items)}
+        <p class="wheel-v2-prize-note">Каждый активный сектор приносит приз. Пустых секторов в колесе нет.</p>
+      </section>
+    </div>
+
+    <section class="panel wheel-v2-history-panel">
+      <div class="wheel-v2-panel-head"><div><span>История</span><h3>Мои выигрыши</h3></div><b>${(history.items || []).length} записей</b></div>
+      <div id="wheel-history-body">${buildWheelHistory(history.items || [])}</div>
+    </section>`;
 
   // Раскладываем сектора по кругу для дальнейшего расчёта угла остановки
   STATE.wheel = { items, rotation: 0, spinning: false };
 
   const btn = document.getElementById('wheel-spin-btn');
-  if (btn) {
-    btn.textContent = 'Крутить колесо';
-    if (!canSpin) {
-      const note = document.createElement('div');
-      note.className = 'wheel-unavailable-reason';
-      note.textContent = safeCannotReason;
-      btn.insertAdjacentElement('afterend', note);
-    }
-  }
-  const ticketReasonEl = el.querySelector('.wheel-ticket-reason');
-  if (ticketReasonEl) {
-    if (safeNextTicketReason) ticketReasonEl.textContent = `Причина: ${safeNextTicketReason}`;
-    else ticketReasonEl.remove();
-  }
+  if (btn) btn.textContent = canSpin ? 'Использовать билет' : 'Нет доступных билетов';
   if (btn && canSpin) btn.onclick = () => doWheelSpin(el);
 }
 
@@ -9586,17 +9652,16 @@ function wheelTextColor(hex) {
   return L > 0.62 ? '#1E293B' : '#FFFFFF';
 }
 
-// Строит SVG-колесо: N равных секторов с объёмом, золотым ободом и читаемыми подписями
+// Строит спокойное плоское колесо Puls с понятными двухстрочными названиями.
 function buildWheelSvg(items) {
   const n = items.length;
   const cx = 160, cy = 160;
-  const rOuter = 158; // внешний золотой обод
-  const rSeg = 148;   // радиус секторов
+  const rOuter = 158;
+  const rSeg = 148;
   const seg = 360 / n;
   let defs = '';
   let paths = '';
   let labels = '';
-  let lights = '';
 
   for (let i = 0; i < n; i++) {
     const base = items[i].color || WHEEL_FALLBACK_COLORS[i % WHEEL_FALLBACK_COLORS.length];
@@ -9604,46 +9669,21 @@ function buildWheelSvg(items) {
     const p0 = wheelPoint(cx, cy, rSeg, a0);
     const p1 = wheelPoint(cx, cy, rSeg, a1);
     const large = seg > 180 ? 1 : 0;
-    defs += `<radialGradient id="wheelSeg${i}" cx="50%" cy="50%" r="72%">`
-      + `<stop offset="0%" stop-color="${wheelShade(base, 0.30)}"/>`
-      + `<stop offset="62%" stop-color="${base}"/>`
-      + `<stop offset="100%" stop-color="${wheelShade(base, -0.16)}"/>`
-      + `</radialGradient>`;
-    paths += `<path d="M${cx},${cy} L${p0.x.toFixed(2)},${p0.y.toFixed(2)} A${rSeg},${rSeg} 0 ${large} 1 ${p1.x.toFixed(2)},${p1.y.toFixed(2)} Z" fill="url(#wheelSeg${i})" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>`;
-    // Подпись всегда вертикально (не вверх ногами), крупно и читаемо
+    defs += `<linearGradient id="wheelSeg${i}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${wheelShade(base, 0.23)}"/><stop offset="100%" stop-color="${base}"/></linearGradient>`;
+    paths += `<path d="M${cx},${cy} L${p0.x.toFixed(2)},${p0.y.toFixed(2)} A${rSeg},${rSeg} 0 ${large} 1 ${p1.x.toFixed(2)},${p1.y.toFixed(2)} Z" fill="url(#wheelSeg${i})" stroke="rgba(255,255,255,.92)" stroke-width="2" stroke-linejoin="round"/>`;
     const mid = a0 + seg / 2;
-    const lp = wheelPoint(cx, cy, rSeg * 0.64, mid);
-    const icon = WHEEL_PRIZE_ICON[items[i].type] || '★';
-    const short = items[i].type === 'coins' ? `+${items[i].amount}` : icon;
-    labels += `<text x="${lp.x.toFixed(1)}" y="${lp.y.toFixed(1)}" text-anchor="middle" dominant-baseline="central" font-size="20" font-weight="800" fill="${wheelTextColor(base)}" style="paint-order:stroke;stroke:rgba(15,23,42,.16);stroke-width:.6px;">${esc(short)}</text>`;
-  }
-
-  // Лампочки по ободу — «казино»-эффект
-  const nLights = n * 2;
-  for (let i = 0; i < nLights; i++) {
-    const lpt = wheelPoint(cx, cy, rSeg + 5.5, i * 360 / nLights);
-    lights += `<circle cx="${lpt.x.toFixed(1)}" cy="${lpt.y.toFixed(1)}" r="2.6" fill="#FFFFFF" opacity=".9"/>`;
+    const lp = wheelPoint(cx, cy, rSeg * 0.67, mid);
+    const ui = wheelPrizePresentation(items[i]);
+    labels += `<text x="${lp.x.toFixed(1)}" y="${(lp.y - 6).toFixed(1)}" text-anchor="middle" font-size="15" font-weight="800" fill="${wheelTextColor(base)}"><tspan x="${lp.x.toFixed(1)}">${esc(ui.line1)}</tspan><tspan x="${lp.x.toFixed(1)}" dy="16" font-size="9.5" font-weight="700">${esc(ui.line2)}</tspan></text>`;
   }
 
   return `<svg viewBox="0 0 320 320" class="wheel-svg" xmlns="http://www.w3.org/2000/svg">
     <defs>
       ${defs}
-      <radialGradient id="wheelRim" cx="50%" cy="35%" r="75%">
-        <stop offset="0%" stop-color="#FDE68A"/>
-        <stop offset="45%" stop-color="#F59E0B"/>
-        <stop offset="100%" stop-color="#B45309"/>
-      </radialGradient>
-      <radialGradient id="wheelGloss" cx="50%" cy="26%" r="72%">
-        <stop offset="0%" stop-color="rgba(255,255,255,.5)"/>
-        <stop offset="38%" stop-color="rgba(255,255,255,.08)"/>
-        <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
-      </radialGradient>
     </defs>
-    <circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="url(#wheelRim)"/>
-    <circle cx="${cx}" cy="${cy}" r="${rSeg + 2}" fill="#0f172a" opacity=".08"/>
+    <circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="#E2E8F0"/>
+    <circle cx="${cx}" cy="${cy}" r="${rSeg + 3}" fill="#FFFFFF"/>
     ${paths}
-    ${lights}
-    <circle cx="${cx}" cy="${cy}" r="${rSeg}" fill="url(#wheelGloss)" pointer-events="none"/>
     ${labels}
   </svg>`;
 }
@@ -9655,13 +9695,13 @@ function wheelPoint(cx, cy, r, deg) {
 }
 
 function buildWheelHistory(rows) {
-  if (!rows.length) return '<div class="wheel-history-empty"><span class="wheel-history-empty-emoji">🎁</span><p>Пока пусто.<br>Выиграйте первый приз!</p></div>';
+  if (!rows.length) return '<div class="wheel-history-empty"><p>Выигрышей пока нет. Используйте первый билет, и приз появится здесь.</p></div>';
   return `<ul class="wheel-history-list">${rows.map(r => `
     <li class="wheel-history-item">
-      <span class="wheel-history-icon">${WHEEL_PRIZE_ICON[r.prize_type] || '★'}</span>
+      <span class="wheel-history-icon">${esc(wheelPrizePresentation({ type:r.prize_type, amount:r.amount, title:r.prize }).badge)}</span>
       <span class="wheel-history-main">
         <strong>${esc(r.prize)}</strong>
-        ${r.reason ? `<span class="wheel-history-reason">${esc(r.reason)}</span>` : ''}
+        <span class="wheel-history-reason">${esc(wheelPrizePresentation({ type:r.prize_type, amount:r.amount, title:r.prize }).description)}</span>
       </span>
       <span class="wheel-history-date">${esc(fmtDate(r.date))}</span>
     </li>`).join('')}</ul>`;
@@ -9684,7 +9724,7 @@ async function doWheelSpin(el) {
     swrInvalidate('wheel:');
   } catch (err) {
     w.spinning = false;
-    if (btn) { btn.disabled = false; btn.textContent = 'Крутить колесо'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Использовать билет'; }
     showToast(err.message || 'Не удалось прокрутить колесо', 'error');
     return;
   }
@@ -9725,17 +9765,18 @@ async function doWheelSpin(el) {
 }
 
 function showWheelResultModal(result) {
-  const icon = WHEEL_PRIZE_ICON[result.prize.type] || '🎉';
+  const ui = wheelPrizePresentation(result.prize);
   const html = `
     <div class="modal-overlay wheel-result-overlay" id="wheel-result-modal">
       <div class="modal-card wheel-result-card">
-        <div class="wheel-result-icon">${icon}</div>
-        <h3>Поздравляем!</h3>
+        <div class="wheel-result-icon">${esc(ui.badge)}</div>
+        <span class="wheel-result-kicker">Ваш приз</span>
+        <h3>Поздравляем</h3>
         <p class="wheel-result-prize">${esc(result.prize.title)}</p>
-        <p class="wheel-result-msg">${esc(result.message)}</p>
+        <p class="wheel-result-msg">${esc(ui.description)}</p>
         ${result.reason ? `<p class="wheel-result-reason">Причина допуска: ${esc(result.reason)}</p>` : ''}
         ${result.prize.type === 'coins' ? '<p class="wheel-result-note">Коины уже добавлены на ваш баланс.</p>' : ''}
-        <button class="btn-primary" onclick="document.getElementById('wheel-result-modal')?.remove()">Отлично</button>
+        <button class="btn-primary" onclick="document.getElementById('wheel-result-modal')?.remove()">Понятно</button>
       </div>
     </div>`;
   document.body.insertAdjacentHTML('beforeend', html);
@@ -9756,9 +9797,15 @@ async function refreshWheelSidebar(el) {
       && (!status.max_spins_per_week || status.spins_used_this_week < status.max_spins_per_week);
     if (btn) {
       btn.disabled = !canSpin;
-      btn.textContent = canSpin ? 'Крутить колесо' : (tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет билетов');
+      btn.textContent = canSpin ? 'Использовать билет' : (tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет доступных билетов');
       if (canSpin) btn.onclick = () => doWheelSpin(el);
     }
+    const ticketCount = document.getElementById('wheel-ticket-count-value');
+    if (ticketCount) ticketCount.textContent = String(tickets);
+    const todayLimit = document.getElementById('wheel-today-limit');
+    if (todayLimit) todayLimit.textContent = `${status.spins_used_today} из ${status.max_spins_per_day || '∞'}`;
+    const weekLimit = document.getElementById('wheel-week-limit');
+    if (weekLimit) weekLimit.textContent = `${status.spins_used_this_week} из ${status.max_spins_per_week || '∞'}`;
   } catch { /* тихо: колесо уже показало приз */ }
 }
 
