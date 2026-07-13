@@ -2,7 +2,23 @@
    СВОДКА: детальная сводка по неделе с фильтрами (ТЗ §9)
 ══════════════════════════════════════ */
 
-const _adminSummaryState = { filters: {}, data: null };
+const _adminSummaryState = { filters: {}, data: null, open: false };
+
+function toggleAdminSummaryDetail() {
+  const host = document.getElementById('admin-summary-extra');
+  const button = document.getElementById('admin-summary-detail-toggle');
+  if (!host) return;
+
+  _adminSummaryState.open = !_adminSummaryState.open;
+  if (!_adminSummaryState.open) {
+    host.innerHTML = '';
+    if (button) button.textContent = 'Расширенная выборка';
+    return;
+  }
+
+  if (button) button.textContent = 'Скрыть выборку';
+  renderAdminSummaryDetail();
+}
 
 function _disciplineCellHtml(o) {
   const late = o.lateness_count;
@@ -26,7 +42,7 @@ function _metricsCellHtml(o) {
 
 async function renderAdminSummaryDetail() {
   const host = document.getElementById('admin-summary-extra');
-  if (!host) return;
+  if (!host || !_adminSummaryState.open) return;
   host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка сводки за неделю…</p></div>';
 
   if (!STATE.groups.length) {
@@ -38,7 +54,7 @@ async function renderAdminSummaryDetail() {
 
 async function _loadAdminSummaryDetail() {
   const host = document.getElementById('admin-summary-extra');
-  if (!host) return;
+  if (!host || !_adminSummaryState.open) return;
   const f = _adminSummaryState.filters;
   const params = {};
   if (f.period_start) params.period_start = f.period_start;
@@ -52,7 +68,7 @@ async function _loadAdminSummaryDetail() {
   let data;
   try {
     data = await swrFetch(`admin-summary:${stableParamsKey(params)}`, () => api.getAdminSummary(params), fresh => {
-      if (STATE.currentView === 'summary') {
+      if (STATE.currentView === 'summary' && _adminSummaryState.open) {
         _adminSummaryState.data = fresh;
         _loadAdminSummaryDetail();
       }

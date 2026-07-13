@@ -1059,7 +1059,7 @@ function renderSummary() {
   if (!el) return;
   const d = STATE.dashboard;
   if (!d) {
-    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Сводка</div><h2 class="section-title">Панель управления</h2></div></div>
+    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Сводка</div><h2 class="section-title">Рабочая сводка</h2></div></div>
       <div class="empty-state"><p>Загрузка данных…</p></div>`;
     const _summaryGen = STATE.navGen;
     api.getDashboard().then(data => {
@@ -1069,114 +1069,141 @@ function renderSummary() {
     return;
   }
 
+  const leaders = d.top_5_operators || [];
+  const groups = d.group_summary || [];
+  const transactions = (d.latest_coin_transactions || []).slice(0, 6);
+  const pending = d.pending_purchases_count || 0;
+  const inactive = Math.max(0, (d.total_operators || 0) - (d.active_operators || 0));
+  const lateness = d.total_lateness_week || 0;
+  const violations = d.total_violations_week || 0;
+  const disciplineTotal = lateness + violations;
+  const maxGroupScore = Math.max(1, ...groups.map(group => Number(group.average_score) || 0));
+
+  const initials = name => String(name || '?')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(part => part.charAt(0))
+    .join('')
+    .toUpperCase();
+
   el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">Сводка</div><h2 class="section-title">Панель управления</h2></div>
+    <div class="view-header summary-v2-header">
+      <div>
+        <div class="section-kicker">Сводка</div>
+        <h2 class="section-title">Рабочая сводка</h2>
+        <p class="summary-v2-subtitle">Главное за неделю: команда, результаты и вопросы, требующие решения.</p>
+      </div>
       <div class="header-right">
         <span class="tx-date">Обновлено: ${fmtDateTime(d.last_updated)}</span>
         <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
       </div>
     </div>
 
-    <!-- KPI карточки -->
-    <div class="kpi-grid" style="grid-template-columns:repeat(5,minmax(0,1fr))">
-      <div class="kpi-card kpi-accent">
-        <div class="kpi-label">Операторов</div>
-        <div class="kpi-value">${d.active_operators}<span class="kpi-unit"> / ${d.total_operators}</span></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Коинов за неделю</div>
-        <div class="kpi-value">${d.coins_earned_this_week} <span class="kpi-unit">₡</span></div>
-      </div>
-      <div class="kpi-card ${d.pending_purchases_count > 0 ? 'kpi-warn' : ''}">
-        <div class="kpi-label">Новых заявок</div>
-        <div class="kpi-value">${d.pending_purchases_count}</div>
-        ${d.pending_purchases_count > 0 ? `<div class="kpi-action"><button class="btn-link" onclick="navigateTo('coins',{tab:'requests'})">Рассмотреть →</button></div>` : ''}
-      </div>
-      <div class="kpi-card ${d.total_lateness_week > 0 ? 'kpi-warn' : ''}">
-        <div class="kpi-label">Опозданий за неделю</div>
-        <div class="kpi-value">${d.total_lateness_week}</div>
-      </div>
-      <div class="kpi-card ${d.total_violations_week > 0 ? 'kpi-warn' : ''}">
-        <div class="kpi-label">Нарушений за неделю</div>
-        <div class="kpi-value">${d.total_violations_week}</div>
-      </div>
-    </div>
+    <section class="summary-v2-kpis" aria-label="Ключевые показатели">
+      <button class="summary-v2-kpi summary-v2-kpi-primary" onclick="navigateTo('operators')">
+        <span class="summary-v2-kpi-label">Команда на линии</span>
+        <strong>${d.active_operators}<small> из ${d.total_operators}</small></strong>
+        <span>${inactive ? `${inactive} сейчас неактивны` : 'Все операторы активны'}</span>
+      </button>
+      <button class="summary-v2-kpi" onclick="navigateTo('rating')">
+        <span class="summary-v2-kpi-label">Результат недели</span>
+        <strong>${d.coins_earned_this_week}<small> коинов</small></strong>
+        <span>Начислено команде</span>
+      </button>
+      <button class="summary-v2-kpi ${pending ? 'summary-v2-kpi-warning' : ''}" onclick="navigateTo('coins',{tab:'requests'})">
+        <span class="summary-v2-kpi-label">Заявки магазина</span>
+        <strong>${pending}</strong>
+        <span>${pending ? 'Ожидают решения' : 'Новых заявок нет'}</span>
+      </button>
+      <button class="summary-v2-kpi ${disciplineTotal ? 'summary-v2-kpi-danger' : ''}" onclick="navigateTo('analytics')">
+        <span class="summary-v2-kpi-label">Дисциплина</span>
+        <strong>${disciplineTotal}</strong>
+        <span>${lateness} опозданий · ${violations} нарушений</span>
+      </button>
+    </section>
 
-    <!-- Заявки статусы -->
-    <div class="kpi-grid" style="grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:20px">
-      <div class="kpi-card">
-        <div class="kpi-label">Одобрено заявок</div>
-        <div class="kpi-value" style="color:var(--ok)">${d.approved_purchases_count}</div>
+    <section class="summary-v2-layout summary-v2-layout-leaders">
+      <div class="panel summary-v2-panel summary-v2-leaders">
+        <div class="panel-head">
+          <div><h3>Лидеры недели</h3><p>Пять лучших результатов команды</p></div>
+          <button class="btn-link" onclick="navigateTo('rating')">Открыть рейтинг</button>
+        </div>
+        ${leaders.length ? `<div class="summary-v2-leader-grid">
+          ${leaders.map((op, index) => `
+            <button class="summary-v2-leader" onclick="navigateTo('rating')">
+              <span class="summary-v2-rank">${op.rank_position || index + 1}</span>
+              <span class="summary-v2-avatar">${esc(initials(op.full_name))}</span>
+              <span class="summary-v2-leader-name">${esc(op.full_name)}</span>
+              <span class="summary-v2-leader-group">${esc(op.group_name || 'Без группы')}</span>
+              <strong>${levelNum(op.final_score || 0)} балла</strong>
+              <span>${op.coins_earned || 0} коинов</span>
+            </button>`).join('')}
+        </div>` : '<div class="summary-v2-empty">Рейтинг появится после первого расчёта периода.</div>'}
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Отклонено заявок</div>
-        <div class="kpi-value" style="color:var(--danger)">${d.rejected_purchases_count}</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Групп</div>
-        <div class="kpi-value">${d.group_summary?.length || 0}</div>
-      </div>
-    </div>
 
-    <!-- Топ-5 + последние транзакции -->
-    <div class="two-col-grid">
-      <div class="panel">
-        <div class="panel-head"><h3>Топ-5 недели</h3></div>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead><tr><th>#</th><th>Оператор</th><th>Группа</th><th>Коины</th><th>Балл</th></tr></thead>
-            <tbody>
-              ${d.top_5_operators?.length ? d.top_5_operators.map(op => `
-                <tr>
-                  <td class="rank-cell"><span class="rank-badge ${op.rank_position<=3?'rank-top':''}">${op.rank_position||'—'}</span></td>
-                  <td class="name-cell">${esc(op.full_name)}</td>
-                  <td>${esc(op.group_name)}</td>
-                  <td><b class="accent-text">${op.coins_earned} ₡</b></td>
-                  <td>${op.final_score?.toFixed(1)||0}</td>
-                </tr>`).join('') : '<tr><td colspan="5" class="empty-line">Нет данных</td></tr>'}
-            </tbody>
-          </table>
+      <div class="panel summary-v2-panel summary-v2-attention">
+        <div class="panel-head"><div><h3>Требует внимания</h3><p>Задачи на текущий момент</p></div></div>
+        <div class="summary-v2-attention-list">
+          <button onclick="navigateTo('coins',{tab:'requests'})">
+            <span class="summary-v2-status ${pending ? 'is-warning' : 'is-ok'}"></span>
+            <span><strong>Заявки магазина</strong><small>${pending ? `${pending} ожидают решения` : 'Очередь обработана'}</small></span>
+            <b>${pending}</b>
+          </button>
+          <button onclick="navigateTo('operators')">
+            <span class="summary-v2-status ${inactive ? 'is-muted' : 'is-ok'}"></span>
+            <span><strong>Активность команды</strong><small>${inactive ? `${inactive} операторов неактивны` : 'Вся команда активна'}</small></span>
+            <b>${inactive}</b>
+          </button>
+          <button onclick="navigateTo('analytics')">
+            <span class="summary-v2-status ${disciplineTotal ? 'is-danger' : 'is-ok'}"></span>
+            <span><strong>Дисциплина недели</strong><small>${disciplineTotal ? 'Есть отклонения' : 'Отклонений нет'}</small></span>
+            <b>${disciplineTotal}</b>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="summary-v2-layout">
+      <div class="panel summary-v2-panel">
+        <div class="panel-head"><div><h3>Группы</h3><p>Средний результат и общий баланс</p></div></div>
+        <div class="summary-v2-group-list">
+          ${groups.length ? groups.map(group => {
+            const score = Number(group.average_score) || 0;
+            const width = Math.max(4, Math.round(score / maxGroupScore * 100));
+            return `<div class="summary-v2-group-row">
+              <div><strong>${esc(group.group_name)}</strong><span>${group.operators_count} операторов</span></div>
+              <div class="summary-v2-progress"><i style="width:${width}%"></i></div>
+              <b>${levelNum(score)}</b>
+              <span>${group.total_balance} коинов</span>
+            </div>`;
+          }).join('') : '<div class="summary-v2-empty">Группы пока не созданы.</div>'}
         </div>
       </div>
 
-      <div class="panel">
-        <div class="panel-head"><h3>Последние действия</h3><button class="btn-link" onclick="navigateTo('coins',{tab:'history'})">Все →</button></div>
-        <div class="tx-list">
-          ${d.latest_coin_transactions?.length ? d.latest_coin_transactions.slice(0,10).map(t => `
-            <div class="tx-row ${t.amount>=0?'tx-plus':'tx-minus'}">
-              <div class="tx-info">
-                <span class="tx-comment"><b>${esc(t.operator_name)}</b> — ${esc(t.comment)}</span>
-                <span class="tx-date">${esc(t.group_name)} · ${fmtDate(t.created_at)}</span>
-              </div>
-              <div class="tx-amount">${t.amount>=0?'+':''}${t.amount} ₡</div>
-            </div>`).join('') : '<div class="empty-line">Нет данных</div>'}
+      <div class="panel summary-v2-panel">
+        <div class="panel-head">
+          <div><h3>Последние начисления</h3><p>Недавние изменения баланса</p></div>
+          <button class="btn-link" onclick="navigateTo('coins',{tab:'history'})">Вся история</button>
+        </div>
+        <div class="summary-v2-activity-list">
+          ${transactions.length ? transactions.map(t => `
+            <div class="summary-v2-activity">
+              <span class="summary-v2-avatar">${esc(initials(t.operator_name))}</span>
+              <span><strong>${esc(t.operator_name)}</strong><small>${esc(t.comment || 'Операция с балансом')} · ${fmtDate(t.created_at)}</small></span>
+              <b class="${t.amount >= 0 ? 'is-positive' : 'is-negative'}">${t.amount >= 0 ? '+' : ''}${t.amount}</b>
+            </div>`).join('') : '<div class="summary-v2-empty">Операций пока нет.</div>'}
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Группы -->
-    <div class="panel">
-      <div class="panel-head"><h3>Сводка по группам</h3></div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Группа</th><th>Операторов</th><th>Средний балл</th><th>Суммарный баланс</th></tr></thead>
-          <tbody>
-            ${d.group_summary?.map(g => `
-              <tr>
-                <td class="name-cell">${esc(g.group_name)}</td>
-                <td>${g.operators_count}</td>
-                <td>${(g.average_score||0).toFixed(1)}</td>
-                <td><b>${g.total_balance} ₡</b></td>
-              </tr>`).join('') || '<tr><td colspan="4" class="empty-line">Нет данных</td></tr>'}
-          </tbody>
-        </table>
-      </div>
-    </div>
-
+    <section class="summary-v2-actions" aria-label="Быстрые переходы">
+      <div><strong>Нужен подробный разбор?</strong><span>Показатели и динамика находятся в профильных разделах.</span></div>
+      <button class="btn-outline" onclick="navigateTo('analytics')">Аналитика</button>
+      <button class="btn-outline" onclick="navigateTo('period-report')">Расчёт периода</button>
+      <button class="btn-outline" id="admin-summary-detail-toggle" onclick="toggleAdminSummaryDetail()">Расширенная выборка</button>
+    </section>
     <div id="admin-summary-extra"></div>`;
-
-  renderAdminSummaryDetail();
 }
 
 /* ══════════════════════════════════════

@@ -14,6 +14,7 @@ from app.models.entities import (
     ShopPurchase,
     User,
     WeeklyAccrualDetail,
+    WeeklyResult,
     now_utc,
 )
 from app.modules.dashboard.schemas import DashboardRead, GroupSummary, OperatorRow, RatingRow
@@ -31,6 +32,19 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
     rating = rating_rows(db)
     rating_by_operator = {row["operator_id"]: row for row in rating}
+    latest_period = latest_weekly_period(db)
+    weekly_by_operator: dict[int, WeeklyResult] = {}
+    if latest_period:
+        period_start, period_end = latest_period
+        weekly_by_operator = {
+            row.operator_id: row
+            for row in db.scalars(
+                select(WeeklyResult).where(
+                    WeeklyResult.week_start == period_start,
+                    WeeklyResult.week_end == period_end,
+                )
+            )
+        }
 
     top_rows = [
         RatingRow(
@@ -43,14 +57,16 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
             final_score=row.get("final_score") or row.get("contest_points") or 0,
             coins_earned=row.get("coins_earned") or 0,
             current_balance=row.get("total_balance") or 0,
-            lateness_count=0,
-            violation_count=0,
+            lateness_count=(weekly_by_operator.get(row["operator_id"]).lateness_count
+                            if weekly_by_operator.get(row["operator_id"]) else 0),
+            violation_count=(weekly_by_operator.get(row["operator_id"]).violation_count
+                             if weekly_by_operator.get(row["operator_id"]) else 0),
         )
         for row in rating[:5]
     ]
     coins_this_week = sum(row.get("coins_earned") or 0 for row in rating)
-    lateness_week = 0
-    violations_week = 0
+    lateness_week = sum(result.lateness_count or 0 for result in weekly_by_operator.values())
+    violations_week = sum(result.violation_count or 0 for result in weekly_by_operator.values())
 
     active_operators = list(db.scalars(
         select(Operator)
