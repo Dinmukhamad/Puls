@@ -13,7 +13,10 @@ class CachedStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         response = await super().get_response(path, scope)
         if response.status_code == 200:
-            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+            if path.endswith((".css", ".js")):
+                response.headers["Cache-Control"] = "no-cache, must-revalidate"
+            else:
+                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
 
 

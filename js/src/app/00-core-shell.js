@@ -16,7 +16,7 @@ const SWR_DEFAULT_TTL_MS = 120_000;  // 2 минуты — динамичные 
 const SWR_STATIC_TTL_MS  = 600_000; // 10 минут — статичные (уровни, магазин, группы)
 const SWR_USER_TTL_MS    = 300_000; // 5 минут — пользователи
 const SWR_FAST_TTL_MS    = 45_000;  // короткий кеш для разделов, которые должны открываться сразу
-const SWR_VERSION = 'section-prefetch-1'; // при смене версии весь кеш сбрасывается
+const SWR_VERSION = 'redesign-v2-2'; // при смене версии весь кеш сбрасывается
 (function() {
   const stored = sessionStorage.getItem('puls-swr-version');
   if (stored !== SWR_VERSION) {
@@ -601,7 +601,7 @@ async function loadData(role) {
     );
     tasks.push(
       swrFetch('users:list', () =>
-        fetchAllUsers().catch(err => {
+        api.listUsers({ limit: 200 }).catch(err => {
           console.error('[users:list] ошибка загрузки:', err?.message || err);
           return { items: [] };
         }),
@@ -652,7 +652,7 @@ function prefetchAppSectionsInBackground(role) {
     tasks.push(
       () => swrFetch('dashboard:main', () => api.getDashboard(), null, SWR_DEFAULT_TTL_MS),
       () => swrFetch('dashboard:operators', () => api.getDashboardOperators(), null, SWR_USER_TTL_MS),
-      () => swrFetch('users:list', () => fetchAllUsers(), null, SWR_USER_TTL_MS),
+      () => swrFetch('users:list', () => api.listUsers({ limit: 200 }), null, SWR_USER_TTL_MS),
       () => swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS),
       () => swrFetch('groups:active', () => api.listGroups(true), null, SWR_STATIC_TTL_MS),
       () => swrFetch('admin-summary:', () => api.getAdminSummary({}), null, SWR_FAST_TTL_MS),
@@ -676,25 +676,6 @@ function prefetchAppSectionsInBackground(role) {
   }
 
   runWarmupQueue(tasks);
-}
-
-// Тянем всех пользователей постранично: backend ограничивает limit 200,
-// а на фронте фильтры/поиск работают по всему массиву STATE.users, поэтому
-// нужны все записи (иначе при >200 пользователях часть просто не грузилась).
-async function fetchAllUsers() {
-  const limit = 200;
-  let page = 1;
-  let all = [];
-  let total = Infinity;
-  while (all.length < total && page <= 50) { // предохранитель на 10000 записей
-    const res = await api.listUsers({ page, limit });
-    const items = res.items || [];
-    all = all.concat(items);
-    total = res.total != null ? res.total : items.length;
-    if (!items.length) break;
-    page += 1;
-  }
-  return { items: all, total: all.length };
 }
 
 async function reloadData() {
