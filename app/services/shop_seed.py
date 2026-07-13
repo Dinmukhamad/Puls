@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import ShopItem
 
-
 DEFAULT_SHOP_ITEMS = (
     {
         "title": "Кофе или чай за счёт компании",
