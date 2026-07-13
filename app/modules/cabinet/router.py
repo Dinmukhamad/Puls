@@ -3,6 +3,7 @@
 коинов, достижения, история). Данные не пересчитываются здесь — берутся из
 уже существующих источников (wallet, rating, weekly_results/accrual_service,
 achievements), это просто витрина."""
+
 from __future__ import annotations
 
 import json
@@ -14,7 +15,14 @@ from sqlalchemy.orm import Session
 from app.core.datetime_utils import local_day_bounds_utc, now_utc, to_local_iso
 from app.core.security import get_current_user, supervisor_scope_group_id
 from app.database.db import get_db
-from app.models.entities import CoinTransaction, Operator, User, WeeklyAccrualDetail, WeeklyResult, WheelSpin
+from app.models.entities import (
+    CoinTransaction,
+    Operator,
+    User,
+    WeeklyAccrualDetail,
+    WeeklyResult,
+    WheelSpin,
+)
 from app.modules.achievements.service import get_operator_achievements_payload
 from app.modules.operator_levels.service import operator_level_summary
 from app.modules.rating.service import my_rating, rating_rows

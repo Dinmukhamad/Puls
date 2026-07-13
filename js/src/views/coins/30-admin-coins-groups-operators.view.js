@@ -73,8 +73,11 @@ function renderUsersPage() {
         <table class="data-table users-table-compact">
           <thead><tr>
             <th>Сотрудник</th>
-            <th>Роль / Группа</th>
-            <th>Рабочие параметры</th>
+            <th>Роль</th>
+            <th>Группа</th>
+            <th class="tc">Ставка</th>
+            <th class="tc">Уровень</th>
+            <th class="tc">Стаж</th>
             <th class="tc">Статус</th>
             <th class="tc">Действия</th>
           </tr></thead>
@@ -88,20 +91,16 @@ function renderUsersPage() {
                   ${o.email ? `<div class="user-cell-sub">${esc(o.email)}</div>` : ''}
                 </td>
                 <td>
-                  <div>${roleBadge(o.role)}</div>
-                  ${o.group_name ? `<div class="user-cell-sub" style="margin-top:4px">${esc(o.group_name)}</div>` : ''}
+                  ${roleBadge(o.role)}
                 </td>
-                <td>
-                  ${isOp ? `<div class="user-work-params">
-                    <div><span>Ставка</span>${rateBadgeHtml(o.rate, o.operator_id)}</div>
-                    <div><span>Уровень</span>${levelBadgeHtml(o.level)}</div>
-                    <div><span>Стаж</span>${o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">—</span>'}</div>
-                  </div>` : '<span class="cell-muted">Не применяется</span>'}
-                </td>
+                <td><span class="user-table-value">${o.group_name ? esc(o.group_name) : '—'}</span></td>
+                <td class="tc">${isOp ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">—</span>'}</td>
+                <td class="tc">${isOp ? levelBadgeHtml(o.level) : '<span class="cell-muted">—</span>'}</td>
+                <td class="tc">${isOp && o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">—</span>'}</td>
                 <td class="tc">${userStatusBadge(o.status)}</td>
                 <td class="tc">${operatorActions(o)}</td>
               </tr>`;
-            }).join('') : '<tr><td colspan="5" class="empty-line">Нет пользователей</td></tr>'}
+            }).join('') : '<tr><td colspan="8" class="empty-line">Нет пользователей</td></tr>'}
           </tbody>
         </table>
       </div>`;

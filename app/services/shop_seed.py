@@ -1,4 +1,5 @@
 """Default operator rewards for the Puls shop."""
+
 from __future__ import annotations
 
 from sqlalchemy import select
