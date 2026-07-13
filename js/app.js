@@ -9331,18 +9331,12 @@ async function renderWheelOperatorView(el) {
 
     <div class="wheel-layout">
       <div class="panel wheel-stage-panel">
-        <div class="wheel-stage">
-          <div class="wheel-pointer" aria-hidden="true">
-            <svg viewBox="0 0 40 52" width="38" height="49" xmlns="http://www.w3.org/2000/svg">
-              <defs><linearGradient id="wheelPinG" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="#FDE68A"/><stop offset="1" stop-color="#F59E0B"/>
-              </linearGradient></defs>
-              <path d="M20 50 L5 21 A15 15 0 1 1 35 21 Z" fill="url(#wheelPinG)" stroke="#B45309" stroke-width="2"/>
-              <circle cx="20" cy="18" r="5.5" fill="#fff" opacity=".92"/>
-            </svg>
-          </div>
+        <div class="wheel-stage wheel-stage-neon">
+          <div class="wheel-pointer wheel-pointer-neon" aria-hidden="true"></div>
           <div class="wheel-rotor" id="wheel-rotor">${buildWheelSvg(items)}</div>
-          <div class="wheel-hub">WOW</div>
+          <div class="wheel-hub wheel-hub-neon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><use href="#wheelic-pulse"></use></svg>
+          </div>
         </div>
         <div class="wheel-controls">
           ${ticketCard}
@@ -9405,8 +9399,107 @@ function wheelTextColor(hex) {
   return L > 0.62 ? '#1E293B' : '#FFFFFF';
 }
 
-// Строит SVG-колесо: N равных секторов с объёмом, золотым ободом и читаемыми подписями
+// Тип приза -> иконка (id спрайта) + неоновый цвет. Единый источник вида колеса
+// (дизайн-кит Puls): цвет и иконка берутся по ТИПУ приза, а не из настроек сектора.
+const WHEEL_TYPE_STYLE = {
+  coins:            { icon: 'wheelic-coins',    color: '#33C9F3' },
+  shop_discount:    { icon: 'wheelic-discount', color: '#43D7D2' },
+  raffle_ticket:    { icon: 'wheelic-ticket',   color: '#8E7DFF' },
+  extra_ticket:     { icon: 'wheelic-ticket',   color: '#8E7DFF' },
+  spin_token:       { icon: 'wheelic-refresh',  color: '#35D6D2' },
+  badge:            { icon: 'wheelic-crown',    color: '#F0BD4A' },
+  status:           { icon: 'wheelic-shield',   color: '#5F9CFF' },
+  manual_reward:    { icon: 'wheelic-gift',     color: '#E77BD0' },
+  empty_consolation:{ icon: 'wheelic-gift',     color: '#8D9CAF' },
+};
+function wheelTypeStyle(type) {
+  return WHEEL_TYPE_STYLE[type] || { icon: 'wheelic-gift', color: '#33C9F3' };
+}
+
+// Короткое значение в центре сектора (то, что бросается в глаза): для коинов
+// «+N», для скидки — сама скидка, иначе — короткая суть по типу.
+function wheelShortValue(item) {
+  if (item.type === 'coins') return `+${item.amount}`;
+  if (item.type === 'shop_discount') return item.amount ? `−${item.amount}%` : 'Скидка';
+  if (item.type === 'spin_token') return 'Ещё';
+  if (item.type === 'extra_ticket' || item.type === 'raffle_ticket') return '×' + (item.amount || 1);
+  return '';
+}
+function wheelShortLabel(item) {
+  const map = {
+    coins: 'коинов', shop_discount: 'в магазине', raffle_ticket: 'билет',
+    extra_ticket: 'билет', spin_token: 'вращение', badge: 'бейдж',
+    status: 'статус', manual_reward: 'приз', empty_consolation: '',
+  };
+  return map[item.type] || '';
+}
+
+// SVG-спрайт иконок призов из дизайн-кита. Вставляется один раз в DOM,
+// иконки подключаются через <use href="#wheelic-...">.
+function wheelIconSprite() {
+  if (document.getElementById('wheel-icon-sprite')) return '';
+  return `<svg id="wheel-icon-sprite" class="wheel-svg-sprite" aria-hidden="true" style="position:absolute;width:0;height:0;overflow:hidden">
+    <symbol id="wheelic-pulse" viewBox="0 0 24 24"><path d="M2 13h4l2-6 4 11 2-5h8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="wheelic-coins" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="6.5" ry="2.7" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 6v4c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V6M5.5 10v4c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7v-4M5.5 14v3.5c0 1.5 2.9 2.7 6.5 2.7s6.5-1.2 6.5-2.7V14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="wheelic-discount" viewBox="0 0 24 24"><path d="M4 7.5V4h3.5l10 10a2 2 0 0 1 0 2.8l-2.7 2.7a2 2 0 0 1-2.8 0L2.5 10V7.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="7.2" cy="7.2" r="1" fill="currentColor"/><path d="m10 15 4-4M10.5 11.2h.01M13.5 14.8h.01" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="wheelic-ticket" viewBox="0 0 24 24"><path d="M4 7h16v3a2.5 2.5 0 0 0 0 5v3H4v-3a2.5 2.5 0 0 0 0-5V7Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 8.5v7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="1.5 2"/></symbol>
+    <symbol id="wheelic-crown" viewBox="0 0 24 24"><path d="m4 8 4 4 4-7 4 7 4-4-2 10H6L4 8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M7 21h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="wheelic-gift" viewBox="0 0 24 24"><path d="M4 10h16v10H4zM3 7h18v3H3zM12 7v13" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 7H8.2A2.2 2.2 0 1 1 10 3.5L12 7Zm0 0h3.8A2.2 2.2 0 1 0 14 3.5L12 7Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+    <symbol id="wheelic-refresh" viewBox="0 0 24 24"><path d="M20 8V4l-2.2 2.2A8 8 0 1 0 20 12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="wheelic-shield" viewBox="0 0 24 24"><path d="M12 3 19 6v5c0 4.8-2.8 8.1-7 10-4.2-1.9-7-5.2-7-10V6l7-3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m9.2 12 1.8 1.8 3.8-4.2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </svg>`;
+}
+
+// Строит колесо в стиле дизайн-кита Puls: сектора — conic-gradient (CSS),
+// призы — абсолютно позиционированные элементы с иконкой/значением по типу.
+// Крутится контейнер #wheel-rotor (см. doWheelSpin) — механика вращения прежняя.
 function buildWheelSvg(items) {
+  const n = items.length || 1;
+  const seg = 360 / n;
+  const half = seg / 2;
+
+  // Сектора-заливки: чередуем тёмно-синие тона (нейтральный фон), поверх —
+  // тонкие разделители. Цвет самого приза несёт иконка/текст, а не заливка.
+  const segFills = ['#11243A', '#0F2A32', '#131F38', '#191F37', '#122738', '#1A2037', '#10283A', '#132236'];
+  let conic = `conic-gradient(from ${-half}deg,`;
+  for (let i = 0; i < n; i++) {
+    const c = segFills[i % segFills.length];
+    conic += `${c} ${(i * seg).toFixed(3)}deg ${((i + 1) * seg).toFixed(3)}deg${i < n - 1 ? ',' : ''}`;
+  }
+  conic += ')';
+
+  // Разделительные линии между секторами
+  let lines = '';
+  for (let i = 0; i < n; i++) {
+    lines += `<div class="wheel-seg-line" style="transform:translate(-50%,-100%) rotate(${(i * seg).toFixed(3)}deg)"></div>`;
+  }
+
+  // Призы — по кругу, иконка + значение + подпись, каждый в цвете своего типа
+  let prizeEls = '';
+  for (let i = 0; i < n; i++) {
+    const it = items[i];
+    const style = wheelTypeStyle(it.type);
+    const angle = i * seg + half;
+    const value = wheelShortValue(it);
+    const label = wheelShortLabel(it);
+    prizeEls += `<div class="wheel-prize-item" style="--wp-angle:${angle.toFixed(3)}deg;--wp-counter:${(-angle).toFixed(3)}deg;--wp-color:${style.color}">
+      <svg class="wheel-prize-ic" aria-hidden="true"><use href="#${style.icon}"></use></svg>
+      ${value ? `<strong>${esc(value)}</strong>` : ''}
+      ${label ? `<span>${esc(label)}</span>` : ''}
+    </div>`;
+  }
+
+  return `${wheelIconSprite()}
+    <div class="wheel-disc">
+      <div class="wheel-seg-fill" style="background:${conic}"></div>
+      <div class="wheel-seg-lines">${lines}</div>
+      <div class="wheel-prizes">${prizeEls}</div>
+    </div>`;
+}
+
+// Старый геометрический хелпер SVG-версии больше не используется для отрисовки,
+// но оставлен на случай внешних вызовов.
+function buildWheelSvgLegacy(items) {
   const n = items.length;
   const cx = 160, cy = 160;
   const rOuter = 158; // внешний золотой обод
@@ -9532,11 +9625,14 @@ async function doWheelSpin(el) {
   w.rotation = target;
 
   const SPIN_ANIMATION_MS = 2600; // держим синхронно с MIN_SECONDS_BETWEEN_SPINS на backend
+  const stageNeon = rotor.closest('.wheel-stage-neon');
+  if (stageNeon) stageNeon.classList.add('is-spinning');
   rotor.style.transition = `transform ${SPIN_ANIMATION_MS / 1000}s cubic-bezier(0.16, 1, 0.3, 1)`;
   rotor.style.transform = `rotate(${target}deg)`;
 
   setTimeout(() => {
     w.spinning = false;
+    if (stageNeon) stageNeon.classList.remove('is-spinning');
     showWheelResultModal(result);
     // Обновляем статус и историю без полной перерисовки колеса (оно уже стоит на призе)
     refreshWheelSidebar(el);
