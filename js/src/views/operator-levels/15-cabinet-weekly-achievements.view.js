@@ -74,7 +74,7 @@ async function renderCabinetWeeklyDetail() {
   };
 
   host.innerHTML = `
-    <div class="two-col-grid">
+    <div class="cabinet-week-grid">
       ${wm ? `
       <div class="panel">
         <div class="panel-head">

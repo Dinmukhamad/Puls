@@ -1305,7 +1305,7 @@ function renderCabinet() {
 
     <div id="cabinet-achievements"></div>
 
-    <div class="two-col-grid">
+    <div class="cabinet-bottom-grid">
       <div class="panel">
         <div class="panel-head"><h3>История начислений</h3><span class="panel-badge">${w.transactions.length} записей</span></div>
         <div class="tx-list">
@@ -1723,7 +1723,7 @@ async function renderCabinetWeeklyDetail() {
   };
 
   host.innerHTML = `
-    <div class="two-col-grid">
+    <div class="cabinet-week-grid">
       ${wm ? `
       <div class="panel">
         <div class="panel-head">

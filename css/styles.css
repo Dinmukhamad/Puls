@@ -6742,11 +6742,27 @@ html[data-theme="dark"] .level-settings-shell {
   border-color: var(--border-default);
 }
 
-#view-cabinet .two-col-grid {
+#view-cabinet .cabinet-week-grid,
+#view-cabinet .cabinet-bottom-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, .72fr);
+  width: 100%;
   gap: 18px;
   align-items: start;
+  margin: 0;
+}
+
+#view-cabinet .cabinet-week-grid {
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr);
+}
+
+#view-cabinet .cabinet-bottom-grid {
+  grid-template-columns: minmax(0, 1.05fr) minmax(360px, .75fr);
+}
+
+#view-cabinet .cabinet-week-grid > .panel,
+#view-cabinet .cabinet-bottom-grid > .panel {
+  min-width: 0;
+  width: 100%;
 }
 
 #view-cabinet .panel > .panel-head + .tx-list,
@@ -6755,9 +6771,114 @@ html[data-theme="dark"] .level-settings-shell {
   padding: 16px 20px;
 }
 
+#view-cabinet .cabinet-week-grid .panel {
+  padding-bottom: 16px;
+}
+
+#view-cabinet .cabinet-week-grid .metric-progress-row,
+#view-cabinet .cabinet-week-grid .metric-mini-row,
+#view-cabinet .cabinet-week-grid .metric-anti-grid,
+#view-cabinet .cabinet-week-grid .coin-calc-row,
+#view-cabinet .cabinet-week-grid .empty-line {
+  margin-left: 20px;
+  margin-right: 20px;
+}
+
+#view-cabinet .cabinet-week-grid .metric-progress-row:first-of-type,
+#view-cabinet .cabinet-week-grid .coin-calc-row:first-of-type {
+  margin-top: 16px;
+}
+
+#view-cabinet .metric-progress-row {
+  margin-bottom: 16px;
+}
+
+#view-cabinet .metric-progress-label {
+  gap: 14px;
+  min-width: 0;
+}
+
+#view-cabinet .metric-progress-label span:first-child {
+  color: var(--text-primary);
+}
+
+#view-cabinet .metric-progress-label b {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+#view-cabinet .metric-progress-bar {
+  height: 8px;
+  background: var(--bg-muted);
+}
+
+#view-cabinet .metric-progress-fill {
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-cyan));
+}
+
+#view-cabinet .metric-progress-fill.ok {
+  background: linear-gradient(90deg, var(--success), #31C48D);
+}
+
+#view-cabinet .metric-mini-row {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+#view-cabinet .metric-anti-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#view-cabinet .metric-anti-row {
+  min-height: 58px;
+  justify-content: center;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+}
+
+#view-cabinet .metric-anti-row b {
+  color: var(--text-primary);
+}
+
+#view-cabinet .coin-calc-row {
+  min-height: 34px;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom-color: var(--border-soft);
+}
+
+#view-cabinet .coin-calc-row span {
+  min-width: 0;
+  color: var(--text-secondary);
+}
+
+#view-cabinet .coin-calc-row b {
+  flex: 0 0 auto;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+#view-cabinet .coin-calc-bonus span,
+#view-cabinet .coin-calc-bonus b {
+  color: var(--success);
+}
+
+#view-cabinet .coin-calc-total {
+  margin-top: 8px;
+  padding-top: 12px;
+  font-size: 16px;
+  border-top-color: var(--border-default);
+}
+
 #view-cabinet .tx-list {
   display: grid;
   gap: 8px;
+  max-height: 360px;
 }
 
 #view-cabinet .tx-row {
@@ -6765,6 +6886,18 @@ html[data-theme="dark"] .level-settings-shell {
   border: 1px solid var(--border-soft);
   border-radius: 10px;
   background: var(--card-bg);
+}
+
+#view-cabinet .mini-rating {
+  display: grid;
+  gap: 8px;
+}
+
+#view-cabinet .mini-row {
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  background: var(--bg-surface-hover);
 }
 
 #view-cabinet .shop-banner {
@@ -6797,7 +6930,8 @@ html[data-theme="dark"] #view-cabinet .shop-banner {
 
 @media (max-width: 900px) {
   #view-cabinet .kpi-grid,
-  #view-cabinet .two-col-grid {
+  #view-cabinet .cabinet-week-grid,
+  #view-cabinet .cabinet-bottom-grid {
     grid-template-columns: 1fr;
   }
 
@@ -6811,6 +6945,26 @@ html[data-theme="dark"] #view-cabinet .shop-banner {
   #view-cabinet .wheel-cabinet-card .btn-outline,
   #view-cabinet .shop-banner .btn-primary {
     width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  #view-cabinet .metric-anti-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #view-cabinet .cabinet-week-grid .metric-progress-row,
+  #view-cabinet .cabinet-week-grid .metric-mini-row,
+  #view-cabinet .cabinet-week-grid .metric-anti-grid,
+  #view-cabinet .cabinet-week-grid .coin-calc-row,
+  #view-cabinet .cabinet-week-grid .empty-line,
+  #view-cabinet .level-card > .level-tenure-row,
+  #view-cabinet .level-card > .level-next,
+  #view-cabinet .level-card > .level-gap-list,
+  #view-cabinet .level-card > .empty-line,
+  #view-cabinet .level-card > .status-line {
+    margin-left: 16px;
+    margin-right: 16px;
   }
 }
 
