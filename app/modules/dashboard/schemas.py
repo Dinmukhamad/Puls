@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class RatingRow(BaseModel):
@@ -54,6 +54,8 @@ class OperatorRow(BaseModel):
 
 
 class TransactionRow(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     operator_id: int
     operator_name: str
@@ -63,10 +65,6 @@ class TransactionRow(BaseModel):
     comment: str
     created_by_name: str | None = None
     created_at: datetime
-
-    class Config:
-        from_attributes = True
-
 
 class DashboardRead(BaseModel):
     total_operators: int

@@ -27,7 +27,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import local_day_bounds_utc, now_utc
+from app.core.datetime_utils import local_day_bounds_utc, now_local, now_utc
 from app.database.db import SessionLocal
 from app.models.entities import (
     Operator,
@@ -160,7 +160,9 @@ def create_spin_token_if_allowed(
     Возвращает выданный токен или None. Всегда пишет строку в журнал проверок.
     Не коммитит — это делает вызывающий (notify_* или тест).
     """
-    ref = period_end or (now_utc().date())
+    # Периодные лимиты считаются по бизнес-дню Asia/Almaty. UTC-дата после
+    # 19:00 UTC уже отстаёт от локальной на сутки и выбирает неверное окно.
+    ref = period_end or now_local().date()
 
     # 1. Колесо включено?
     if not wheel_enabled(db):

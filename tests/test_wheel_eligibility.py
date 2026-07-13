@@ -12,7 +12,7 @@ Wheel of WOW — автотесты движка правил (ТЗ 8.3, 8.4, 8.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from tests.conftest import make_operator
 
@@ -112,11 +112,20 @@ def test_no_duplicate_token_for_same_attempt(client, db_session):
     assert len(_active_tokens(db_session, op.id)) == 1
 
 
-def test_period_cap_blocks_second_token_same_day(client, db_session):
+def test_period_cap_blocks_second_token_same_day(client, db_session, monkeypatch):
     """max_tokens_per_period=1 (daily): второй разный тест в тот же день — без токена."""
+    from app.core.datetime_utils import LOCAL_TZ
     from app.models.entities import WheelEligibilityRule
+    from app.modules.wheel import eligibility
     from app.services.wheel_eligibility import evaluate_after_test_attempt
     from app.services.wheel_seed import ensure_default_wheel
+
+    # 20:00 UTC — уже следующий календарный день в Алматы. Раньше лимит брал
+    # UTC-дату (13 июля), строил окно локального 13 июля и не видел первый токен.
+    fixed_utc = datetime(2026, 7, 13, 20, 0)
+    fixed_local = fixed_utc.replace(tzinfo=UTC).astimezone(LOCAL_TZ)
+    monkeypatch.setattr(eligibility, "now_utc", lambda: fixed_utc)
+    monkeypatch.setattr(eligibility, "now_local", lambda: fixed_local)
 
     campaign = ensure_default_wheel(db_session)
     # Тесты в файле делят одну БД — фиксируем нужный лимит явно (другой тест мог
@@ -132,6 +141,7 @@ def test_period_cap_blocks_second_token_same_day(client, db_session):
     _, a2 = _make_finished_attempt(db_session, op, score=91)
 
     first = evaluate_after_test_attempt(db_session, a1.id)
+    first[0].created_at = fixed_utc
     db_session.commit()
     second = evaluate_after_test_attempt(db_session, a2.id)
     db_session.commit()
