@@ -620,6 +620,275 @@ async function reloadCabinet() {
   renderCabinet();
 }
 
+function cabinetFormatCoin(value) {
+  return `${levelNum(value || 0, 0)} <span class="kpi-unit">₸</span>`;
+}
+
+function syncCabinetSnapshot(snapshot) {
+  if (!snapshot) return;
+  const wallet = snapshot.wallet || {};
+  const transactions = snapshot.recent_transactions || [];
+  STATE.cabinetSnapshot = snapshot;
+  STATE.cabinetData = snapshot;
+  STATE.cabinetFetchedAt = snapshot.generated_at || new Date().toISOString();
+  STATE.myLevel = snapshot.level || STATE.myLevel;
+  STATE.myOperator = snapshot.operator || STATE.myOperator;
+  STATE.wallet = {
+    operator_id: snapshot.operator?.id,
+    current_balance: wallet.balance || 0,
+    total_earned: wallet.total_earned || 0,
+    total_spent: wallet.total_spent || 0,
+    transactions: transactions.map(t => ({ ...t, created_at: t.created_at || t.date })),
+  };
+  STATE.rating = snapshot.top_week || STATE.rating || [];
+  if (snapshot.level?.level) setText('side-level', snapshot.level.level.name || '—');
+}
+
+async function loadCabinetSnapshot(force = false) {
+  if (force) {
+    swrInvalidate('cabinet:me');
+    STATE.cabinetSnapshot = null;
+    STATE.cabinetData = null;
+  }
+  if (STATE.cabinetSnapshot && !force) return STATE.cabinetSnapshot;
+  if (!STATE._cabinetSnapshotPromise) {
+    STATE._cabinetSnapshotPromise = withTimeout(
+      swrFetch('cabinet:me', () => (api.getMyCabinetV2 ? api.getMyCabinetV2() : api.getMyCabinet()), null, SWR_FAST_TTL_MS),
+      12000,
+      'Кабинет не загрузился: сервер не ответил за 12 секунд'
+    ).then(data => {
+      syncCabinetSnapshot(data);
+      STATE.cabinetError = null;
+      return data;
+    }).catch(err => {
+      STATE.cabinetError = err.message || 'Не удалось загрузить кабинет';
+      throw err;
+    }).finally(() => {
+      STATE._cabinetSnapshotPromise = null;
+    });
+  }
+  return STATE._cabinetSnapshotPromise;
+}
+
+function cabinetLoadingHtml() {
+  return `
+    <div class="view-header">
+      <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+    </div>
+    <div class="cabinet-skeleton-grid">
+      <div class="cabinet-skeleton wide"></div>
+      <div class="cabinet-skeleton"></div>
+      <div class="cabinet-skeleton"></div>
+    </div>`;
+}
+
+function cabinetLevelCard(levelInfo) {
+  if (!levelInfo) return '';
+  const tenureDays = levelInfo.metrics?.tenure_days ?? STATE.myOperator?.tenure_days ?? null;
+  const tenureStr = tenureDays != null ? formatTenureDays(tenureDays) : '—';
+  return `
+    <div class="panel level-card">
+      <div class="panel-head">
+        <h3>Мой уровень</h3>
+        ${levelBadgeHtml(levelInfo.level, 'level-badge-lg')}
+      </div>
+      <div class="level-tenure-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Стаж: <b>${esc(tenureStr)}</b></span>
+      </div>
+      ${levelInfo.next_level ? `
+        <div class="level-next">До следующего уровня: ${levelBadgeHtml(levelInfo.next_level)}</div>
+        <div class="level-gap-list">
+          ${(levelInfo.gaps || []).map(g => `
+            <div class="level-gap-row ${g.ok ? 'ok' : 'miss'}">
+              <span>${esc(g.label)}</span>
+              <b>${metricValueHtml(g)}</b>
+              <em>${g.ok ? 'готово' : levelRequirementHtml(g)}</em>
+            </div>`).join('')}
+        </div>` : '<div class="empty-line">Вы достигли максимального уровня.</div>'}
+      ${levelInfo.is_manual ? `<div class="status-line">Ручной уровень: ${esc(levelInfo.manual_reason || '')}</div>` : ''}
+    </div>`;
+}
+
+function cabinetWheelCard(status) {
+  if (!status || !status.campaign) return '';
+  const tickets = Number(status.available_tickets || 0);
+  const lp = status.last_prize;
+  return `
+    <div class="panel wheel-cabinet-card ${tickets > 0 ? 'wheel-cabinet-have' : 'wheel-cabinet-none'}">
+      <div class="wheel-cabinet-main">
+        <div class="wheel-cabinet-kicker">Колесо WOW</div>
+        <div class="wheel-cabinet-title">${tickets > 0 ? `Доступно вращений: <b>${tickets}</b>` : 'Сегодня вращений нет'}</div>
+        <div class="wheel-cabinet-sub ${tickets > 0 ? '' : 'muted'}">${esc(status.message || status.reason_if_cannot_spin || 'Пока нет доступных билетов')}</div>
+        ${lp ? `<div class="wheel-cabinet-sub">Последний приз: ${esc(lp.title || lp.value || '')}</div>` : ''}
+      </div>
+      <button class="${tickets > 0 ? 'btn-primary' : 'btn-outline'}" onclick="navigateTo('wheel')">${tickets > 0 ? 'Крутить колесо' : 'Открыть колесо'}</button>
+    </div>`;
+}
+
+function cabinetWinnersCard(data) {
+  const items = data?.items || [];
+  const top = data?.top;
+  if (!items.length || !top) return '';
+  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₸` : esc(w.prize || '—');
+  const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
+  return `
+    <div class="panel wheel-winner-card">
+      <div class="wheel-winner-head">
+        <span class="wheel-winner-kicker">Победитель Wheel of WOW сегодня</span>
+        <span class="wheel-winner-badge">Крупнейший приз дня</span>
+      </div>
+      <div class="wheel-winner-hero">
+        <div class="wheel-winner-avatar">${esc((top.operator_name || '?').trim().charAt(0))}</div>
+        <div class="wheel-winner-main">
+          <div class="wheel-winner-name">${esc(top.operator_name)}</div>
+          ${top.reason ? `<div class="wheel-winner-reason">Причина допуска: ${esc(top.reason)}</div>` : ''}
+        </div>
+        <div class="wheel-winner-prize">${prizeText(top)}</div>
+      </div>
+      ${rest.length ? `<div class="wheel-winner-list">
+        ${rest.slice(0, 5).map(w => `<div class="wheel-winner-row">
+          <span class="wheel-winner-row-icon">${WHEEL_PRIZE_ICON[w.prize_type] || '★'}</span>
+          <span class="wheel-winner-row-name">${esc(w.operator_name)}</span>
+          <span class="wheel-winner-row-prize">${prizeText(w)}</span>
+        </div>`).join('')}
+      </div>` : ''}
+    </div>`;
+}
+
+function cabinetTransactionsHtml(items) {
+  return items.length ? items.map(t => `
+    <div class="tx-row ${Number(t.amount || 0) >= 0 ? 'tx-plus' : 'tx-minus'}">
+      <div class="tx-info">
+        <span class="tx-comment">${esc(t.comment || t.type || 'Операция')}</span>
+        <span class="tx-date">${fmtDate(t.created_at || t.date)}</span>
+      </div>
+      <div class="tx-amount">${Number(t.amount || 0) >= 0 ? '+' : ''}${levelNum(t.amount || 0, 0)} ₸</div>
+    </div>`).join('') : '<div class="empty-line">Операций пока нет</div>';
+}
+
+function cabinetTopWeekHtml(rows, currentId) {
+  return rows.length ? `<div class="mini-rating">
+    ${rows.map((r, idx) => `<div class="mini-row ${r.operator_id === currentId ? 'current' : ''}">
+      <span class="mini-rank">${r.rank_position || idx + 1}</span>
+      <span class="mini-name">${esc(r.operator_name || r.full_name || '—')} ${r.level ? levelBadgeHtml(r.level) : ''}</span>
+      <b>${levelNum(r.coins_earned || r.total_balance || 0, 0)} ₸</b>
+      <em>${levelNum(r.contest_points || r.final_score || 0)}</em>
+    </div>`).join('')}
+  </div>` : '<div class="empty-line">Рейтинг пока не рассчитан</div>';
+}
+
+function renderCabinet() {
+  const el = document.getElementById('view-cabinet');
+  if (!el) return;
+  if (!(STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor')) {
+    el.innerHTML = `<div class="view-header">
+      <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+    </div>
+    <div class="panel">
+      <h3>Администратор</h3>
+      <p class="muted">Личный кабинет доступен только аккаунтам, привязанным к оператору.</p>
+    </div>`;
+    return;
+  }
+
+  const snapshot = STATE.cabinetSnapshot;
+  if (!snapshot) {
+    el.innerHTML = cabinetLoadingHtml();
+    const cabinetGen = STATE.navGen;
+    loadCabinetSnapshot(false).then(() => {
+      if (!isNavStale(cabinetGen)) renderCabinet();
+    }).catch(() => {
+      if (!isNavStale(cabinetGen)) renderCabinet();
+    });
+    if (STATE.cabinetError) {
+      el.innerHTML = `<div class="view-header">
+        <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+        <button class="btn-outline btn-sm" onclick="reloadCabinet()">Повторить</button>
+      </div><div class="panel empty-state"><p>${esc(STATE.cabinetError)}</p></div>`;
+    }
+    return;
+  }
+
+  syncCabinetSnapshot(snapshot);
+  const wallet = snapshot.wallet || {};
+  const rating = snapshot.rating || {};
+  const levelInfo = snapshot.level;
+  const tenureDays = levelInfo?.metrics?.tenure_days ?? STATE.myOperator?.tenure_days ?? null;
+  const tenureStr = tenureDays != null ? formatTenureDays(tenureDays) : '—';
+  const rank = rating.place;
+  const total = rating.total_participants || '—';
+  const delta = rating.delta;
+  const transactions = snapshot.recent_transactions || [];
+  const topWeek = snapshot.top_week || [];
+  const generatedAt = STATE.cabinetFetchedAt ? fmtDate(STATE.cabinetFetchedAt) : '';
+
+  el.innerHTML = `
+    <div class="view-header cabinet-v2-header">
+      <div>
+        <div class="section-kicker">Кабинет</div>
+        <h2 class="section-title">Мой кабинет</h2>
+        ${generatedAt ? `<div class="cabinet-snapshot-note">Обновлено: ${esc(generatedAt)}</div>` : ''}
+      </div>
+      <button class="btn-outline btn-sm" onclick="reloadCabinet()" ${STATE.cabinetLoading ? 'disabled' : ''}>${STATE.cabinetLoading ? 'Обновляем...' : 'Обновить'}</button>
+    </div>
+
+    <div class="kpi-grid cabinet-kpi-grid">
+      <div class="kpi-card kpi-accent"><div class="kpi-label">Баланс коинов</div><div class="kpi-value">${cabinetFormatCoin(wallet.balance)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Всего заработано</div><div class="kpi-value">${cabinetFormatCoin(wallet.total_earned)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Потрачено</div><div class="kpi-value">${cabinetFormatCoin(wallet.total_spent)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Место в рейтинге</div><div class="kpi-value">${rank ? `${rank} <span class="kpi-unit">из ${total}</span>` : '<span class="kpi-unit">Пока не рассчитано</span>'}${delta != null ? `<span class="rank-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${delta > 0 ? '↑'+delta : delta < 0 ? '↓'+Math.abs(delta) : 'без изм.'}</span>` : ''}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Стаж в компании</div><div class="kpi-value cabinet-tenure-value">${esc(tenureStr)}</div></div>
+    </div>
+
+    ${cabinetLevelCard(levelInfo)}
+
+    <div class="cabinet-wow-grid">
+      <div id="cabinet-wheel-card">${cabinetWheelCard(snapshot.wheel)}</div>
+      <div id="cabinet-wheel-winners">${cabinetWinnersCard(snapshot.winners_today)}</div>
+    </div>
+
+    <div id="cabinet-weekly-detail"></div>
+    <div id="cabinet-achievements"></div>
+
+    <div class="cabinet-bottom-grid">
+      <div class="panel">
+        <div class="panel-head"><h3>История начислений</h3><span class="panel-badge">${transactions.length} записей</span></div>
+        <div class="tx-list">${cabinetTransactionsHtml(transactions)}</div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Топ-5 недели</h3></div>
+        ${cabinetTopWeekHtml(topWeek, snapshot.operator?.id)}
+        <div class="panel-footer"><button class="btn-link" onclick="navigateTo('rating')">Полный рейтинг →</button></div>
+      </div>
+    </div>
+
+    <div class="shop-banner">
+      <div>
+        <div class="shop-banner-title">Магазин бонусов</div>
+        <div class="shop-banner-sub">У вас ${levelNum(wallet.balance || 0, 0)} ₸ — можно обменять коины на доступные бонусы.</div>
+      </div>
+      <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
+    </div>`;
+
+  renderCabinetWeeklyDetail();
+  renderCabinetAchievements();
+}
+
+async function reloadCabinet() {
+  STATE.cabinetLoading = true;
+  renderCabinet();
+  try {
+    await loadCabinetSnapshot(true);
+    showToast('Кабинет обновлён', 'ok');
+  } catch(e) {
+    showToast(e.message || 'Не удалось обновить кабинет', 'error');
+  } finally {
+    STATE.cabinetLoading = false;
+    renderCabinet();
+  }
+}
+
 function showChangePasswordModal() {
   showModal(`
     <h3 class="modal-title">Сменить пароль</h3>

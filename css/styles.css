@@ -7003,3 +7003,132 @@ html[data-theme="dark"] #view-cabinet .shop-banner {
   }
 }
 
+/* source: 95-operator-cabinet-v2.css */
+/* Operator cabinet v2: unified snapshot dashboard. */
+#view-cabinet.app-view.active {
+  align-content: start;
+}
+
+#view-cabinet.app-view.active > * {
+  max-width: min(1360px, calc(100vw - 72px));
+}
+
+#view-cabinet .cabinet-v2-header {
+  align-items: flex-start;
+}
+
+#view-cabinet .cabinet-snapshot-note {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#view-cabinet .cabinet-kpi-grid {
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+}
+
+#view-cabinet .cabinet-tenure-value {
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+#view-cabinet .cabinet-skeleton-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#view-cabinet .cabinet-skeleton {
+  min-height: 180px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(90deg, transparent, var(--bg-surface-hover), transparent),
+    var(--card-bg);
+  background-size: 220% 100%;
+  animation: cabinetSkeleton 1.2s ease-in-out infinite;
+  box-shadow: var(--shadow-card);
+}
+
+#view-cabinet .cabinet-skeleton.wide {
+  grid-column: 1 / -1;
+  min-height: 112px;
+}
+
+#view-cabinet .cabinet-wow-grid,
+#view-cabinet .cabinet-week-grid,
+#view-cabinet .cabinet-bottom-grid {
+  align-items: stretch;
+}
+
+#view-cabinet .cabinet-wow-grid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(380px, .65fr);
+}
+
+#view-cabinet .cabinet-week-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(380px, .8fr);
+}
+
+#view-cabinet .cabinet-bottom-grid {
+  grid-template-columns: minmax(0, 1.1fr) minmax(380px, .75fr);
+}
+
+#view-cabinet .wheel-cabinet-card,
+#view-cabinet .shop-banner {
+  min-height: 104px;
+}
+
+#view-cabinet .mini-row .level-badge {
+  margin-left: 8px;
+}
+
+#view-cabinet .mini-row em {
+  color: var(--text-muted);
+  font-style: normal;
+  font-weight: 700;
+}
+
+#view-cabinet .achievements-grid {
+  padding: 18px 20px 20px;
+}
+
+@keyframes cabinetSkeleton {
+  0% { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
+@media (max-width: 1180px) {
+  #view-cabinet.app-view.active > * {
+    max-width: min(100%, calc(100vw - 32px));
+  }
+
+  #view-cabinet .cabinet-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  #view-cabinet .cabinet-kpi-grid,
+  #view-cabinet .cabinet-skeleton-grid,
+  #view-cabinet .cabinet-wow-grid,
+  #view-cabinet .cabinet-week-grid,
+  #view-cabinet .cabinet-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #view-cabinet .cabinet-skeleton.wide {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  #view-cabinet.app-view.active > * {
+    max-width: 100%;
+  }
+
+  #view-cabinet .cabinet-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

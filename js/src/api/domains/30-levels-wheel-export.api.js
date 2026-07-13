@@ -109,7 +109,7 @@
     getWheelStats, getWheelRules, createWheelRule, updateWheelRule, getWheelTokens, getWheelEvaluationLogs, grantWheelTokens,
     getWheelWinnersToday, getWheelCampaigns, createWheelCampaign, updateWheelCampaign,
     getWheelAdminPrizes, createWheelPrize, updateWheelPrize,
-    getMyCabinet, getOperatorCabinet,
+    getMyCabinet, getMyCabinetV2, getOperatorCabinet,
     getCoinRulesSettings, updateCoinRulesSettings,
     previewWeeklyAccrual, applyWeeklyAccrual, listAccrualRuns,
     listAchievements, updateAchievement, getMyAchievements, getOperatorAchievements, grantAchievement,

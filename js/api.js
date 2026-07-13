@@ -323,6 +323,7 @@ const api = (() => {
 
 /* ── Личный кабинет (ТЗ §5) ──────────────────────────────── */
 async function getMyCabinet() { return req('GET', '/api/cabinet/me'); }
+async function getMyCabinetV2() { return req('GET', '/api/cabinet/me'); }
 async function getOperatorCabinet(operatorId) { return req('GET', `/api/cabinet/operator/${operatorId}`); }
 
 /* ── Настройки начислений (ТЗ §4) ────────────────────────── */
@@ -486,7 +487,7 @@ async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/c
     getWheelStats, getWheelRules, createWheelRule, updateWheelRule, getWheelTokens, getWheelEvaluationLogs, grantWheelTokens,
     getWheelWinnersToday, getWheelCampaigns, createWheelCampaign, updateWheelCampaign,
     getWheelAdminPrizes, createWheelPrize, updateWheelPrize,
-    getMyCabinet, getOperatorCabinet,
+    getMyCabinet, getMyCabinetV2, getOperatorCabinet,
     getCoinRulesSettings, updateCoinRulesSettings,
     previewWeeklyAccrual, applyWeeklyAccrual, listAccrualRuns,
     listAchievements, updateAchievement, getMyAchievements, getOperatorAchievements, grantAchievement,

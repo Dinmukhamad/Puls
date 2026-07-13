@@ -134,7 +134,7 @@ async function renderCabinetAchievements() {
   const ach = data.achievements || { completed: [], in_progress: [] };
 
   const badgeHtml = (row, completed) => {
-    const a = row.achievement;
+    const a = row.achievement || row;
     return `
     <div class="achievement-badge ${completed ? 'unlocked' : 'locked'}" title="${esc(a.description)}">
       <div class="achievement-icon">${esc(a.icon || '🏆')}</div>

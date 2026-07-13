@@ -1,5 +1,6 @@
 /* ── Личный кабинет (ТЗ §5) ──────────────────────────────── */
 async function getMyCabinet() { return req('GET', '/api/cabinet/me'); }
+async function getMyCabinetV2() { return req('GET', '/api/cabinet/me'); }
 async function getOperatorCabinet(operatorId) { return req('GET', `/api/cabinet/operator/${operatorId}`); }
 
 /* ── Настройки начислений (ТЗ §4) ────────────────────────── */
