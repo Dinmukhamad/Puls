@@ -475,9 +475,10 @@ function renderCabinet() {
 
     ${levelCard}
 
-    <div id="cabinet-wheel-card"></div>
-
-    <div id="cabinet-wheel-winners"></div>
+    <div class="cabinet-wow-grid">
+      <div id="cabinet-wheel-card"></div>
+      <div id="cabinet-wheel-winners"></div>
+    </div>
 
     <div id="cabinet-weekly-detail"></div>
 

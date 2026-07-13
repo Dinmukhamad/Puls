@@ -1049,10 +1049,26 @@ html[data-theme="dark"] .level-settings-shell {
 #view-cabinet {
   display: grid;
   gap: 18px;
+  width: 100%;
+  max-width: min(1280px, var(--content-max));
+  margin-inline: auto;
+  justify-items: stretch;
 }
 
 #view-cabinet.app-view.active > * {
   max-width: min(1280px, var(--content-max));
+  width: 100%;
+  justify-self: stretch;
+}
+
+#view-cabinet > *,
+#view-cabinet .panel,
+#cabinet-wheel-card,
+#cabinet-wheel-winners,
+#cabinet-weekly-detail,
+#cabinet-achievements {
+  width: 100%;
+  min-width: 0;
 }
 
 #view-cabinet .view-header {
@@ -1170,6 +1186,7 @@ html[data-theme="dark"] .level-settings-shell {
 }
 
 #view-cabinet .wheel-cabinet-card {
+  width: 100%;
   margin: 0;
   display: flex;
   align-items: center;
@@ -1204,6 +1221,7 @@ html[data-theme="dark"] .level-settings-shell {
 }
 
 #view-cabinet .wheel-winner-card {
+  width: 100%;
   margin-top: 0;
 }
 
@@ -1211,6 +1229,22 @@ html[data-theme="dark"] .level-settings-shell {
   background:
     linear-gradient(90deg, var(--bg-surface-hover), var(--card-bg));
   border-color: var(--border-default);
+}
+
+#view-cabinet .cabinet-wow-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(360px, .82fr);
+  gap: 18px;
+  align-items: stretch;
+  width: 100%;
+}
+
+#view-cabinet .cabinet-wow-grid:has(#cabinet-wheel-winners:empty) {
+  grid-template-columns: 1fr;
+}
+
+#view-cabinet .cabinet-wow-grid:has(#cabinet-wheel-winners:empty) #cabinet-wheel-winners {
+  display: none;
 }
 
 #view-cabinet .cabinet-week-grid,
@@ -1401,6 +1435,7 @@ html[data-theme="dark"] #view-cabinet .shop-banner {
 
 @media (max-width: 900px) {
   #view-cabinet .kpi-grid,
+  #view-cabinet .cabinet-wow-grid,
   #view-cabinet .cabinet-week-grid,
   #view-cabinet .cabinet-bottom-grid {
     grid-template-columns: 1fr;
