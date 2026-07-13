@@ -1,7 +1,10 @@
 #!/bin/bash
 set -e
-cd /app
-export PYTHONPATH=/app
+# Переходим в директорию самого скрипта — так работает и в Docker (/app),
+# и на Render/любом хосте, где код лежит в другом месте. Раньше был жёстко
+# зашит `cd /app`, из-за чего на Render старт падал: папки /app там нет.
+cd "$(dirname "$0")"
+export PYTHONPATH="$(pwd)"
 echo "[start] PORT=$PORT"
 
 echo "[start] Running alembic upgrade head..."

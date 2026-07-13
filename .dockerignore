@@ -1,0 +1,25 @@
+# Локальные и служебные файлы — в образ не нужны
+.git
+.gitignore
+node_modules
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+tests
+*.db
+*.sqlite
+*.sqlite3
+.env
+.env.*
+!.env.example
+venv
+.venv
+*.log
+.DS_Store
+docker-compose.yml
+Dockerfile
+.dockerignore
+README*.md
+deploy
