@@ -1,6 +1,8 @@
 """Users list: canonical display names and group filtering."""
 from __future__ import annotations
 
+from datetime import date
+
 from app.models.entities import Group
 from tests.conftest import make_operator_user
 
@@ -38,3 +40,37 @@ def test_users_list_group_filter_is_applied(client, db_session):
     ids = {row["id"] for row in response.json()["items"]}
     assert user_one.id in ids
     assert user_two.id not in ids
+
+
+def test_update_operator_profile_fields(client, db_session):
+    group = Group(name="Рабочая группа", status="active")
+    db_session.add(group)
+    db_session.flush()
+    operator, user, _ = make_operator_user(db_session)
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/users/{user.id}",
+        json={
+            "full_name": "Обновленный оператор",
+            "group_id": group.id,
+            "position": "chat_manager",
+            "participation_status": "not_participating",
+            "start_date": "2026-07-01",
+            "rate": 0.75,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["full_name"] == "Обновленный оператор"
+    assert payload["group_id"] == group.id
+    assert payload["position"] == "chat_manager"
+    assert payload["participation_status"] == "not_participating"
+    assert payload["start_date"] == "2026-07-01"
+    assert payload["rate"] == 0.75
+
+    db_session.refresh(operator)
+    assert operator.full_name == "Обновленный оператор"
+    assert operator.group_id == group.id
+    assert operator.start_date == date(2026, 7, 1)

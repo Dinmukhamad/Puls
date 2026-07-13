@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,10 @@ class UserUpdateRequest(BaseModel):
     group_id: int | None = None
     status: str | None = None
     is_active: bool | None = None
+    position: str | None = None
+    participation_status: str | None = None
+    start_date: date | None = None
+    rate: float | None = None
 
 
 class UserChangeRoleRequest(BaseModel):
@@ -59,6 +63,9 @@ class UserReadOut(BaseModel):
     rate: float | None = None
     tenure_days: int | None = None
     start_date: str | None = None
+    position: str | None = None
+    participation_status: str | None = None
+    employment_status: str | None = None
 
 
 class UserListOut(BaseModel):

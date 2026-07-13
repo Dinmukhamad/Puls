@@ -142,6 +142,9 @@ def _user_out(db: Session, user: User, level_cache: dict | None = None) -> dict:
         "operator_id": user.operator_id,
         "level": level,
         "rate": float(operator.rate) if operator and operator.rate is not None else None,
+        "position": operator.position if operator else None,
+        "participation_status": operator.participation_status if operator else None,
+        "employment_status": operator.employment_status if operator else None,
         "status": _user_status(user),
         "is_active": user.is_active,
         "must_change_password": user.must_change_password,
@@ -320,6 +323,14 @@ def update_user(
         _ensure_not_last_admin(db, user, new_active=bool(data["is_active"]))
         user.is_active = bool(data["is_active"])
         user.status = "active" if user.is_active else "inactive"
+    if "position" in data and data["position"] not in {"operator", "chat_manager"}:
+        raise HTTPException(status_code=400, detail="Некорректная должность")
+    if "participation_status" in data and data["participation_status"] not in {
+        "participating", "not_participating"
+    }:
+        raise HTTPException(status_code=400, detail="Некорректный статус участия")
+    if "rate" in data and data["rate"] is not None and data["rate"] not in {0.5, 0.75, 1.0}:
+        raise HTTPException(status_code=400, detail="Ставка должна быть 0.5, 0.75 или 1.0")
     if "login" in data and data["login"]:
         login = data["login"].strip()
         existing = db.scalar(select(User).where(User.username == login, User.id != user.id))
@@ -331,13 +342,26 @@ def update_user(
             setattr(user, field, data[field])
     operator = _operator_for_user(db, user)
     if operator:
+        if "group_id" in data and data["group_id"] is None:
+            raise HTTPException(status_code=400, detail="Оператору необходимо выбрать группу")
         operator.full_name = user.full_name
         operator.email = user.email
-        if user.group_id:
+        operator.is_active = user.is_active
+        operator.status = user.status
+        if "group_id" in data and user.group_id:
             group = db.get(Group, user.group_id)
-            if group:
-                operator.group_id = group.id
-                operator.group_name = group.name
+            if not group:
+                raise HTTPException(status_code=400, detail="Группа не найдена")
+            operator.group_id = group.id
+            operator.group_name = group.name
+        if "position" in data:
+            operator.position = data["position"]
+        if "participation_status" in data:
+            operator.participation_status = data["participation_status"]
+        if "start_date" in data:
+            operator.start_date = data["start_date"]
+        if "rate" in data:
+            operator.rate = data["rate"]
     _audit(db, "user_updated", user.id, "", "updated", current_user, "")
     db.commit()
     db.refresh(user)
