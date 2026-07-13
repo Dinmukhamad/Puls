@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.security import hash_password
-from app.models.entities import Group, Operator, ShopItem, User, WeeklyResult
+from app.models.entities import Group, Operator, User, WeeklyResult
 from app.services.coins import add_transaction, points_to_coins
 from app.services.rating import recalculate_period_ranks
 
@@ -117,18 +117,6 @@ def seed_database(db: Session) -> None:
         db.add(user)
         db.flush()
         op.user_id = user.id
-
-    # ── Демо-магазин ───────────────────────────────────────────
-    db.add_all([
-        ShopItem(title="Участие в розыгрыше",        description="1 билет в ежемесячный розыгрыш приза",           price=50),
-        ShopItem(title="Статус «Звезда недели»",     description="Бейдж и упоминание в общем чате команды",         price=30),
-        ShopItem(title="Дополнительный перерыв",      description="+15 минут к перерыву, согласовывается с руководителем", price=80),
-        ShopItem(title="Сертификат на кофе",          description="Подарочная карта в кофейню",                     price=120),
-        ShopItem(title="Корпоративная пицца",         description="Пицца для вас и двух коллег на смене",           price=180),
-        ShopItem(title="Мерч компании",               description="Кружка, худи, блокнот или шоппер на выбор",      price=200),
-        ShopItem(title="Обед за счёт компании",       description="Оплаченный обед или сертификат на питание",      price=300),
-        ShopItem(title="Сертификат маркетплейс",      description="Подарочная карта Kaspi, Wildberries и др.",      price=400),
-    ])
 
     # ── Демо-результаты за прошлую неделю ─────────────────────
     week_start = date(2026, 6, 16)

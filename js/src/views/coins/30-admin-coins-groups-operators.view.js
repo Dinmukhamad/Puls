@@ -23,8 +23,6 @@ function renderUsersPage() {
   let filterStatus = '';
   let filterLevel = '';
   let activeTab = 'all';
-  let currentPage = 1;
-  const PAGE_SIZE = 25;
 
   const groups = [...new Set(ops.map(o => o.group_name).filter(Boolean))].sort();
   const levels = STATE.operatorLevels.length
@@ -76,10 +74,6 @@ function renderUsersPage() {
 
   function renderTable() {
     const list = filteredOps();
-    const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
-    if (currentPage > totalPages) currentPage = totalPages;
-    const pageStart = (currentPage - 1) * PAGE_SIZE;
-    const pageList = list.slice(pageStart, pageStart + PAGE_SIZE);
     return `
       <div class="table-wrap">
         <table class="data-table users-table-compact">
@@ -93,7 +87,7 @@ function renderUsersPage() {
             <th class="tc">Действия</th>
           </tr></thead>
           <tbody>
-            ${pageList.length ? pageList.map(o => {
+            ${list.length ? list.map(o => {
               const dismissed = isDismissed(o);
               const isOp = o.role === 'operator';
               return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}">
@@ -120,22 +114,6 @@ function renderUsersPage() {
             }).join('') : '<tr><td colspan="7" class="empty-line">Нет пользователей</td></tr>'}
           </tbody>
         </table>
-      </div>
-      ${_usersPaginationHtml(list.length, totalPages)}`;
-  }
-
-  function _usersPaginationHtml(totalItems, totalPages) {
-    if (totalPages <= 1) return '';
-    const from = (currentPage - 1) * PAGE_SIZE + 1;
-    const to = Math.min(currentPage * PAGE_SIZE, totalItems);
-    return `
-      <div class="pagination-bar">
-        <span class="pagination-info">${from}–${to} из ${totalItems}</span>
-        <div class="pagination-controls">
-          <button class="btn-outline btn-sm" data-page-prev ${currentPage <= 1 ? 'disabled' : ''}>← Назад</button>
-          <span class="pagination-page">Стр. ${currentPage} / ${totalPages}</span>
-          <button class="btn-outline btn-sm" data-page-next ${currentPage >= totalPages ? 'disabled' : ''}>Вперёд →</button>
-        </div>
       </div>`;
   }
 
@@ -201,7 +179,7 @@ function renderUsersPage() {
   function rebindOps() {
     el.querySelectorAll('.ops-tab').forEach(btn => {
       btn.addEventListener('click', () => {
-        activeTab = btn.dataset.tab; currentPage = 1;
+        activeTab = btn.dataset.tab;
         el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
         el.querySelector('#ops-table-wrap').innerHTML = renderTable();
         el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
@@ -209,32 +187,32 @@ function renderUsersPage() {
       });
     });
     el.querySelector('#ops-search')?.addEventListener('input', e => {
-      searchVal = e.target.value; currentPage = 1;
+      searchVal = e.target.value;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-group')?.addEventListener('change', e => {
-      filterGroup = e.target.value; currentPage = 1;
+      filterGroup = e.target.value;
       el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       rebindOps();
     });
     el.querySelector('#ops-role')?.addEventListener('change', e => {
-      filterRole = e.target.value; currentPage = 1;
+      filterRole = e.target.value;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-status')?.addEventListener('change', e => {
-      filterStatus = e.target.value; currentPage = 1;
+      filterStatus = e.target.value;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-level')?.addEventListener('change', e => {
-      filterLevel = e.target.value; currentPage = 1;
+      filterLevel = e.target.value;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
@@ -243,12 +221,6 @@ function renderUsersPage() {
   }
   rebindOps();
   function bindOpsActions() {
-    el.querySelector('[data-page-prev]')?.addEventListener('click', () => {
-      if (currentPage > 1) { currentPage--; el.querySelector('#ops-table-wrap').innerHTML = renderTable(); bindOpsActions(); }
-    });
-    el.querySelector('[data-page-next]')?.addEventListener('click', () => {
-      currentPage++; el.querySelector('#ops-table-wrap').innerHTML = renderTable(); bindOpsActions();
-    });
     el.querySelectorAll('.quick-charge-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         navigateTo('manual');
@@ -264,6 +236,7 @@ function renderUsersPage() {
       });
     });
   }
+  bindOpsActions();
 }
 
 /* ══════════════════════════════════════
@@ -2280,6 +2253,14 @@ function showAddItemModal() {
       <input id="ni-title" class="form-input" placeholder="Сертификат на кофе"></div>
     <div class="form-group"><label class="form-label">Описание</label>
       <input id="ni-desc" class="form-input" placeholder="Подарочная карта в кофейню"></div>
+    <div class="form-group"><label class="form-label">Категория</label>
+      <select id="ni-category" class="form-select">
+        <option value="quick">Быстрые бонусы</option>
+        <option value="workday">Комфорт на смене</option>
+        <option value="recognition">Признание</option>
+        <option value="gifts">Подарки</option>
+        <option value="other">Другие</option>
+      </select></div>
     <div class="form-group"><label class="form-label">Цена (коины)</label>
       <input id="ni-price" class="form-input" type="number" min="1" placeholder="120"></div>
     <div class="form-group"><label class="form-label">Минимальный уровень</label>
@@ -2304,6 +2285,7 @@ function showAddItemModal() {
 async function submitAddItem() {
   const title = document.getElementById('ni-title')?.value?.trim();
   const desc  = document.getElementById('ni-desc')?.value?.trim() || '';
+  const category = document.getElementById('ni-category')?.value || 'other';
   const price = +document.getElementById('ni-price')?.value;
   const minLevelRaw = document.getElementById('ni-min-level')?.value || '';
   const min_level_id = minLevelRaw ? Number(minLevelRaw) : null;
@@ -2314,7 +2296,7 @@ async function submitAddItem() {
   const err   = document.getElementById('ni-err');
   if (!title || !price) { err.textContent = 'Заполните название и цену'; return; }
   try {
-    await api.createShopItem({ title, description: desc, price, min_level_id, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
+    await api.createShopItem({ title, description: desc, category, price, min_level_id, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
     closeModal(); showToast('Бонус добавлен', 'ok');
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }
@@ -2332,6 +2314,14 @@ function showEditItemModal(item) {
       <input id="ei-title" class="form-input" value="${esc(item.title)}"></div>
     <div class="form-group"><label class="form-label">Описание</label>
       <input id="ei-desc" class="form-input" value="${esc(item.description)}"></div>
+    <div class="form-group"><label class="form-label">Категория</label>
+      <select id="ei-category" class="form-select">
+        <option value="quick" ${item.category === 'quick' ? 'selected' : ''}>Быстрые бонусы</option>
+        <option value="workday" ${item.category === 'workday' ? 'selected' : ''}>Комфорт на смене</option>
+        <option value="recognition" ${item.category === 'recognition' ? 'selected' : ''}>Признание</option>
+        <option value="gifts" ${item.category === 'gifts' ? 'selected' : ''}>Подарки</option>
+        <option value="other" ${!item.category || item.category === 'other' ? 'selected' : ''}>Другие</option>
+      </select></div>
     <div class="form-group"><label class="form-label">Цена (коины)</label>
       <input id="ei-price" class="form-input" type="number" value="${item.price}"></div>
     <div class="form-group"><label class="form-label">Минимальный уровень</label>
@@ -2362,6 +2352,7 @@ function showEditItemModal(item) {
 async function submitEditItem(id) {
   const title     = document.getElementById('ei-title')?.value?.trim();
   const description = document.getElementById('ei-desc')?.value?.trim() || '';
+  const category  = document.getElementById('ei-category')?.value || 'other';
   const price     = +document.getElementById('ei-price')?.value;
   const minLevelRaw = document.getElementById('ei-min-level')?.value || '';
   const min_level_id = minLevelRaw ? Number(minLevelRaw) : null;
@@ -2373,7 +2364,7 @@ async function submitEditItem(id) {
   const err       = document.getElementById('ei-err');
   if (!title || !price) { err.textContent = 'Заполните поля'; return; }
   try {
-    await api.updateShopItem(id, { title, description, price, min_level_id, is_active, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
+    await api.updateShopItem(id, { title, description, category, price, min_level_id, is_active, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
     closeModal(); showToast('Бонус обновлён', 'ok');
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }

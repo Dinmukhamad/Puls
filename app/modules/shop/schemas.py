@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class ShopItemCreate(BaseModel):
     title: str
     description: str = ""
+    category: str = Field(default="other", pattern="^(quick|workday|recognition|gifts|other)$")
     price: int = Field(gt=0)
     min_level_id: int | None = None
     is_active: bool = True
@@ -20,6 +21,7 @@ class ShopItemCreate(BaseModel):
 class ShopItemUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
+    category: str | None = Field(default=None, pattern="^(quick|workday|recognition|gifts|other)$")
     price: int | None = Field(default=None, gt=0)
     min_level_id: int | None = None
     is_active: bool | None = None
@@ -33,6 +35,7 @@ class ShopItemRead(BaseModel):
     id: int
     title: str
     description: str
+    category: str = "other"
     price: int
     min_level_id: int | None = None
     is_active: bool

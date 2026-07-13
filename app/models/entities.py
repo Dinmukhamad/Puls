@@ -440,6 +440,7 @@ class ShopItem(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     title: Mapped[str] = mapped_column(String(180))
     description: Mapped[str] = mapped_column(Text, default="")
+    category: Mapped[str] = mapped_column(String(32), default="other", index=True)
     price: Mapped[int] = mapped_column(Integer)
     min_level_id: Mapped[int | None] = mapped_column(ForeignKey("operator_levels.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

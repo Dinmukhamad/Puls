@@ -6,8 +6,6 @@ async function renderRatingOverviewTab(el) {
   let searchVal = '';
   let filterGroup = '';
   let filterLevel = '';
-  let ratingPage = 1;
-  const RATING_PAGE_SIZE = 25;
   let operatorSearchVal = '';
   let cmpMetric = 'points';
   let dynType = 'place';
@@ -628,10 +626,6 @@ async function renderRatingOverviewTab(el) {
         <div class="r-empty-title">Рейтинг пока не сформирован.</div>
         <div class="r-empty-sub">Данные появятся после расчёта конкурса.</div>
       </div>`;
-      const totalPages = Math.max(1, Math.ceil(fr.length / RATING_PAGE_SIZE));
-      if (ratingPage > totalPages) ratingPage = totalPages;
-      const pageStart = (ratingPage - 1) * RATING_PAGE_SIZE;
-      const pageRows = fr.slice(pageStart, pageStart + RATING_PAGE_SIZE);
       const myData = personal.myData || {};
       const myOpId = myData.operator_id || null;
       return `<div class="table-wrap rating-table-wrap"><table class="data-table rating-table">
@@ -644,7 +638,7 @@ async function renderRatingOverviewTab(el) {
           <th style="text-align:center">Дин.</th>
         </tr></thead>
         <tbody>
-          ${pageRows.map(r => {
+          ${fr.map(r => {
             const isMe = r.is_current_user || (myOpId && r.operator_id == myOpId) || (selectedOpId && r.operator_id == selectedOpId);
             const place = isNum(r.rank_position) && Number(r.rank_position) > 0 ? Number(r.rank_position) : null;
             const d = isNum(r.rank_delta) ? Number(r.rank_delta) : null;
@@ -665,36 +659,7 @@ async function renderRatingOverviewTab(el) {
           }).join('')}
         </tbody>
       </table></div>
-      ${(() => {
-        const fr = filteredRows();
-        const totalPages = Math.max(1, Math.ceil(fr.length / RATING_PAGE_SIZE));
-        if (totalPages <= 1) return '';
-        const from = (ratingPage - 1) * RATING_PAGE_SIZE + 1;
-        const to = Math.min(ratingPage * RATING_PAGE_SIZE, fr.length);
-        return `<div class="pagination-bar">
-          <span class="pagination-info">${from}–${to} из ${fr.length}</span>
-          <div class="pagination-controls">
-            <button class="btn-outline btn-sm" data-rating-prev ${ratingPage <= 1 ? 'disabled' : ''}>← Назад</button>
-            <span class="pagination-page">Стр. ${ratingPage} / ${totalPages}</span>
-            <button class="btn-outline btn-sm" data-rating-next ${ratingPage >= totalPages ? 'disabled' : ''}>Вперёд →</button>
-          </div>
-        </div>`;
-      })()}
       ${isNum(myData.place) && Number(myData.place) > 10 ? `<div class="rating-my-sticky">Ваше место: <b>#${Number(myData.place)}</b> · ${esc(myData.full_name||'')} · ${cleanNumber(myData.weekly_points,1)} баллов · ${cleanCoins(myData.weekly_coins)}</div>` : ''}`;
-    }
-
-    // Перерисовка таблицы + перепривязка кнопок пагинации (в одном месте,
-    // чтобы обработчики фильтров и страниц не расходились).
-    function refreshRatingTable() {
-      const body = el.querySelector('#rating-table-body');
-      if (!body) return;
-      body.innerHTML = renderTable();
-      body.querySelector('[data-rating-prev]')?.addEventListener('click', () => {
-        if (ratingPage > 1) { ratingPage--; refreshRatingTable(); }
-      });
-      body.querySelector('[data-rating-next]')?.addEventListener('click', () => {
-        ratingPage++; refreshRatingTable();
-      });
     }
 
     function buildPage() {
@@ -764,18 +729,15 @@ async function renderRatingOverviewTab(el) {
       // Events
       el.querySelector('#rating-search')?.addEventListener('input', e => {
         searchVal = e.target.value;
-        ratingPage = 1;
-        refreshRatingTable();
+        el.querySelector('#rating-table-body').innerHTML = renderTable();
       });
       el.querySelector('#rating-group-filter')?.addEventListener('change', e => {
         filterGroup = e.target.value;
-        ratingPage = 1;
-        refreshRatingTable();
+        el.querySelector('#rating-table-body').innerHTML = renderTable();
       });
       el.querySelector('#rating-level-filter')?.addEventListener('change', e => {
         filterLevel = e.target.value;
-        ratingPage = 1;
-        refreshRatingTable();
+        el.querySelector('#rating-table-body').innerHTML = renderTable();
       });
       el.querySelector('#rating-op-search')?.addEventListener('input', e => {
         operatorSearchVal = e.target.value;
@@ -805,15 +767,6 @@ async function renderRatingOverviewTab(el) {
         personal = await fetchPersonalData(selectedOpId);
         buildPage();
         setTimeout(() => loadPersonalExtras(), 50);
-      });
-
-      // Привязываем кнопки пагинации таблицы (первый рендер body был сделан
-      // синхронно в innerHTML выше — обработчики навешиваем здесь).
-      el.querySelector('[data-rating-prev]')?.addEventListener('click', () => {
-        if (ratingPage > 1) { ratingPage--; refreshRatingTable(); }
-      });
-      el.querySelector('[data-rating-next]')?.addEventListener('click', () => {
-        ratingPage++; refreshRatingTable();
       });
     }
 
@@ -850,12 +803,68 @@ function miniRating(limit, highlightId) {
 /* ══════════════════════════════════════
    VIEW: МАГАЗИН
 ══════════════════════════════════════ */
+const SHOP_CATEGORIES = {
+  all: { label: 'Все бонусы' },
+  quick: { label: 'Быстрые' },
+  workday: { label: 'Комфорт на смене' },
+  recognition: { label: 'Признание' },
+  gifts: { label: 'Подарки' },
+  other: { label: 'Другие' },
+};
+let _shopCategory = 'all';
+let _shopAffordableOnly = false;
+
+function shopCategory(item) {
+  return SHOP_CATEGORIES[item?.category] ? item.category : 'other';
+}
+
+function shopCategoryIcon(category) {
+  const common = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+  const paths = {
+    quick: '<path d="M12 2v6m0 8v6M4.93 4.93l4.24 4.24m5.66 5.66 4.24 4.24M2 12h6m8 0h6M4.93 19.07l4.24-4.24m5.66-5.66 4.24-4.24"/>',
+    workday: '<path d="M8 2v4m8-4v4M3 10h18"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 15h8"/>',
+    recognition: '<path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/>',
+    gifts: '<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M7.5 8C5 8 4 6.8 4 5.5S5 3 6.5 3C9 3 12 8 12 8m4.5 0C19 8 20 6.8 20 5.5S19 3 17.5 3C15 3 12 8 12 8"/>',
+    other: '<path d="M4 7h16M4 12h16M4 17h10"/>',
+  };
+  return `<svg ${common}>${paths[category] || paths.other}</svg>`;
+}
+
+function shopItemState(item, balance, role = 'operator') {
+  const levels = STATE.operatorLevels || [];
+  const requiredLevel = item.min_level_id ? levels.find(level => level.id === item.min_level_id) : null;
+  const currentLevel = STATE.myLevel?.level || null;
+  const levelLocked = role === 'operator' && requiredLevel
+    && (!currentLevel || (currentLevel.sort_order || 0) < (requiredLevel.sort_order || 0));
+  const now = new Date();
+  const notStartedYet = item.starts_at && new Date(item.starts_at) > now;
+  const alreadyEnded = item.ends_at && new Date(item.ends_at) < now;
+  const outOfStock = item.stock_remaining != null && item.stock_remaining <= 0;
+  const personalLimitHit = !!item.operator_limit_reached;
+  const blocked = !!(notStartedYet || alreadyEnded || outOfStock || personalLimitHit);
+  const canBuy = role === 'operator' && balance >= item.price && !levelLocked && !blocked;
+  const needMore = role === 'operator' && balance < item.price ? item.price - balance : 0;
+  let label = 'Получить бонус';
+  if (levelLocked) label = `С уровня «${requiredLevel.name}»`;
+  else if (notStartedYet) label = `Доступно с ${fmtDate(item.starts_at)}`;
+  else if (alreadyEnded) label = 'Предложение завершено';
+  else if (outOfStock) label = 'Закончилось';
+  else if (personalLimitHit) label = 'Лимит использован';
+  else if (needMore > 0) label = `Нужно ещё ${needMore} ₡`;
+  return { requiredLevel, levelLocked, notStartedYet, alreadyEnded, outOfStock, personalLimitHit, blocked, canBuy, needMore, label };
+}
+
 function renderShop() {
   const el = document.getElementById('view-shop');
   if (!el) return;
-  const items = STATE.shopItems;
+  const items = STATE.shopItems || [];
   const balance = STATE.wallet?.current_balance ?? 0;
   const role = STATE.user?.role;
+
+  if (role === 'operator') {
+    renderOperatorShop(el, items, balance);
+    return;
+  }
 
   el.innerHTML = `
     <div class="view-header">
@@ -869,49 +878,158 @@ function renderShop() {
       ${items.length ? items.map(item => shopCard(item, balance, role)).join('') : '<div class="empty-state">Магазин пуст</div>'}
     </div>`;
 
-  el.querySelectorAll('.buy-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const item = items.find(i => i.id === +btn.dataset.id);
-      if (!item || !confirm(`Купить «${item.title}» за ${item.price} ₡?`)) return;
-      btn.disabled = true; btn.textContent = 'Оформляем…';
-      try {
-        await api.buyItem(item.id);
-        STATE.wallet = await api.myWallet();
-        STATE.purchases = await api.listPurchases();
-        showToast('Заявка отправлена на рассмотрение', 'ok');
-        renderShop();
-      } catch(err) { showToast(err.message, 'error'); btn.disabled = false; btn.textContent = 'Купить'; }
-    });
-  });
   el.querySelectorAll('.edit-item-btn').forEach(btn => {
     const item = items.find(i => i.id === +btn.dataset.id);
     if (item) btn.addEventListener('click', () => showEditItemModal(item));
   });
 }
 
+function renderOperatorShop(el, items, balance) {
+  const purchases = STATE.purchases || [];
+  const states = new Map(items.map(item => [item.id, shopItemState(item, balance)]));
+  const affordableCount = items.filter(item => states.get(item.id).canBuy).length;
+  const activeRequests = purchases.filter(row => ['new', 'pending', 'approved'].includes(row.status)).length;
+  const categoryItems = items.filter(item => _shopCategory === 'all' || shopCategory(item) === _shopCategory);
+  const visibleItems = categoryItems.filter(item => !_shopAffordableOnly || states.get(item.id).canBuy);
+  const availableCategories = Object.keys(SHOP_CATEGORIES).filter(category =>
+    category === 'all' || items.some(item => shopCategory(item) === category)
+  );
+
+  el.innerHTML = `
+    <div class="view-header shop-v2-header">
+      <div>
+        <div class="section-kicker">Магазин</div>
+        <h2 class="section-title">Бонусы за ваши результаты</h2>
+        <p class="shop-v2-subtitle">Обменивайте заработанные коины на полезные бонусы для работы и отдыха.</p>
+      </div>
+      <div class="shop-v2-balance"><span>Ваш баланс</span><b>${balance} ₡</b></div>
+    </div>
+
+    <section class="shop-v2-summary" aria-label="Сводка магазина">
+      <div><span>Можно получить сейчас</span><b>${affordableCount}</b><small>по текущему балансу</small></div>
+      <div><span>Активные заявки</span><b>${activeRequests}</b><small>ожидают или выполняются</small></div>
+      <div><span>Как это работает</span><b>3 шага</b><small>выберите, отправьте, получите</small></div>
+    </section>
+
+    <section class="panel shop-v2-catalog">
+      <div class="shop-v2-catalog-head">
+        <div><span>Каталог</span><h3>Выберите бонус</h3></div>
+        <label class="shop-v2-affordable"><input type="checkbox" id="shop-affordable-only" ${_shopAffordableOnly ? 'checked' : ''}><span>Только доступные</span></label>
+      </div>
+      <div class="shop-v2-tabs" role="tablist">
+        ${availableCategories.map(category => {
+          const count = category === 'all' ? items.length : items.filter(item => shopCategory(item) === category).length;
+          return `<button type="button" class="shop-v2-tab ${_shopCategory === category ? 'active' : ''}" data-shop-category="${category}">${SHOP_CATEGORIES[category].label}<span>${count}</span></button>`;
+        }).join('')}
+      </div>
+      <div class="shop-v2-grid">
+        ${visibleItems.length ? visibleItems.map(item => shopOperatorCard(item, balance, states.get(item.id))).join('') : `
+          <div class="shop-v2-empty"><b>В этой категории пока ничего нет</b><span>Снимите фильтр или выберите другой раздел каталога.</span></div>`}
+      </div>
+    </section>
+
+    <section class="panel shop-v2-history">
+      <div class="shop-v2-history-head"><div><span>Мои заказы</span><h3>История заявок</h3></div><b>${purchases.length}</b></div>
+      ${shopPurchaseHistory(purchases, items)}
+    </section>`;
+
+  el.querySelectorAll('[data-shop-category]').forEach(button => {
+    button.addEventListener('click', () => {
+      _shopCategory = button.dataset.shopCategory || 'all';
+      renderShop();
+    });
+  });
+  el.querySelector('#shop-affordable-only')?.addEventListener('change', event => {
+    _shopAffordableOnly = event.target.checked;
+    renderShop();
+  });
+  el.querySelectorAll('.shop-v2-buy').forEach(button => {
+    button.addEventListener('click', () => openShopPurchaseModal(+button.dataset.id));
+  });
+}
+
+function shopOperatorCard(item, balance, state = shopItemState(item, balance)) {
+  const category = shopCategory(item);
+  const badges = [];
+  if (state.requiredLevel) badges.push(`<span>С уровня «${esc(state.requiredLevel.name)}»</span>`);
+  if (item.stock_remaining != null) badges.push(`<span>${state.outOfStock ? 'Нет в наличии' : `Осталось ${item.stock_remaining}`}</span>`);
+  if (item.purchase_limit_per_operator > 0) badges.push(`<span>${item.operator_purchased_count || 0} из ${item.purchase_limit_per_operator} получено</span>`);
+  if (item.ends_at && !state.alreadyEnded) badges.push(`<span>До ${fmtDate(item.ends_at)}</span>`);
+  return `<article class="shop-v2-card ${state.canBuy ? 'is-available' : ''} ${state.blocked ? 'is-blocked' : ''}">
+    <div class="shop-v2-card-top">
+      <span class="shop-v2-icon is-${category}">${shopCategoryIcon(category)}</span>
+      <span class="shop-v2-category">${SHOP_CATEGORIES[category].label}</span>
+    </div>
+    <div class="shop-v2-card-copy"><h4>${esc(item.title)}</h4><p>${esc(item.description || 'Описание бонуса уточняется у руководителя.')}</p></div>
+    ${badges.length ? `<div class="shop-v2-card-badges">${badges.join('')}</div>` : ''}
+    <div class="shop-v2-card-footer">
+      <div><b>${item.price} ₡</b>${state.needMore > 0 ? `<small>Не хватает ${state.needMore} ₡</small>` : '<small>спишутся после оформления</small>'}</div>
+      <button type="button" class="${state.canBuy ? 'btn-primary' : 'btn-disabled'} shop-v2-buy" data-id="${item.id}" ${state.canBuy ? '' : 'disabled'}>${esc(state.label)}</button>
+    </div>
+  </article>`;
+}
+
+function shopPurchaseHistory(purchases, items) {
+  if (!purchases.length) return '<div class="shop-v2-history-empty"><b>Заявок пока нет</b><span>Выбранные бонусы и их статусы появятся здесь.</span></div>';
+  const statusMeta = {
+    new: ['На рассмотрении', 'is-waiting'], pending: ['На рассмотрении', 'is-waiting'],
+    approved: ['Одобрено', 'is-approved'], completed: ['Получено', 'is-completed'], rejected: ['Отклонено', 'is-rejected'],
+  };
+  return `<div class="shop-v2-order-list">${purchases.slice(0, 8).map(row => {
+    const item = items.find(candidate => candidate.id === row.shop_item_id);
+    const meta = statusMeta[row.status] || [row.status, ''];
+    return `<div class="shop-v2-order">
+      <span class="shop-v2-order-icon">${shopCategoryIcon(shopCategory(item))}</span>
+      <div><b>${esc(item?.title || `Бонус #${row.shop_item_id}`)}</b><small>${fmtDate(row.created_at)} · ${row.price} ₡${row.reject_reason ? ` · ${esc(row.reject_reason)}` : ''}</small></div>
+      <span class="shop-v2-order-status ${meta[1]}">${meta[0]}</span>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function openShopPurchaseModal(itemId) {
+  const item = (STATE.shopItems || []).find(candidate => candidate.id === itemId);
+  if (!item) return;
+  const balance = STATE.wallet?.current_balance ?? 0;
+  const state = shopItemState(item, balance);
+  if (!state.canBuy) return;
+  const category = shopCategory(item);
+  showModal(`
+    <div class="shop-v2-confirm">
+      <span class="shop-v2-icon is-${category}">${shopCategoryIcon(category)}</span>
+      <div class="section-kicker">Подтверждение</div>
+      <h3 class="modal-title">${esc(item.title)}</h3>
+      <p>${esc(item.description || '')}</p>
+      <div class="shop-v2-confirm-price"><span>Стоимость</span><b>${item.price} ₡</b></div>
+      <div class="shop-v2-confirm-price"><span>Останется на балансе</span><b>${Math.max(0, balance - item.price)} ₡</b></div>
+      <small>После оформления коины резервируются. Если заявку отклонят, они автоматически вернутся на баланс.</small>
+      <div id="shop-buy-error" class="status-line"></div>
+      <div class="shop-v2-confirm-actions"><button class="btn-outline" onclick="closeModal()">Отмена</button><button class="btn-primary" id="shop-confirm-buy" onclick="submitShopPurchase(${item.id})">Отправить заявку</button></div>
+    </div>`);
+}
+
+async function submitShopPurchase(itemId) {
+  const button = document.getElementById('shop-confirm-buy');
+  const error = document.getElementById('shop-buy-error');
+  if (button) { button.disabled = true; button.textContent = 'Оформляем…'; }
+  try {
+    await api.buyItem(itemId);
+    swrInvalidate('shop:');
+    const [wallet, purchases, items] = await Promise.all([api.myWallet(), api.listPurchases(), api.listShopItems()]);
+    STATE.wallet = wallet;
+    STATE.purchases = purchases;
+    STATE.shopItems = items;
+    closeModal();
+    showToast('Заявка отправлена руководителю', 'ok');
+    renderShop();
+  } catch (err) {
+    if (error) error.textContent = err.message || 'Не удалось оформить заявку';
+    if (button) { button.disabled = false; button.textContent = 'Отправить заявку'; }
+  }
+}
+
 function shopCard(item, balance, role) {
-  const levels = STATE.operatorLevels || [];
-  const requiredLevel = item.min_level_id ? levels.find(l => l.id === item.min_level_id) : null;
-  const currentLevel = STATE.myLevel?.level || null;
-  const levelLocked = role === 'operator' && requiredLevel && (!currentLevel || (currentLevel.sort_order || 0) < (requiredLevel.sort_order || 0));
-
-  const now = new Date();
-  const notStartedYet = item.starts_at && new Date(item.starts_at) > now;
-  const alreadyEnded = item.ends_at && new Date(item.ends_at) < now;
-  const outOfStock = item.stock_remaining != null && item.stock_remaining <= 0;
-  const personalLimitHit = !!item.operator_limit_reached;
-  const seasonalBlocked = notStartedYet || alreadyEnded || outOfStock || personalLimitHit;
-
-  const canBuy = role === 'operator' && balance >= item.price && !levelLocked && !seasonalBlocked;
-  const needMore = role === 'operator' && balance < item.price ? item.price - balance : 0;
-
-  let buyLabel = 'Купить';
-  if (levelLocked) buyLabel = `Доступно с уровня «${esc(requiredLevel.name)}»`;
-  else if (notStartedYet) buyLabel = `Доступно с ${fmtDate(item.starts_at)}`;
-  else if (alreadyEnded) buyLabel = 'Раздача завершена';
-  else if (outOfStock) buyLabel = 'Закончилось';
-  else if (personalLimitHit) buyLabel = 'Лимит получен';
-  else if (needMore > 0) buyLabel = `Нужно ещё ${needMore} ₡`;
+  const state = shopItemState(item, balance, role);
+  const { requiredLevel, notStartedYet, alreadyEnded, outOfStock, canBuy } = state;
 
   const seasonBadges = [];
   if (item.stock_remaining != null) seasonBadges.push(`<span class="shop-badge ${outOfStock ? 'shop-badge-danger' : ''}">Осталось: ${item.stock_remaining}</span>`);
@@ -920,14 +1038,14 @@ function shopCard(item, balance, role) {
   else if (item.ends_at && !alreadyEnded) seasonBadges.push(`<span class="shop-badge shop-badge-info">До ${fmtDate(item.ends_at)}</span>`);
   else if (alreadyEnded) seasonBadges.push(`<span class="shop-badge shop-badge-danger">Завершено</span>`);
 
-  return `<div class="shop-card ${canBuy?'shop-card-available':''} ${seasonalBlocked && role==='operator' ? 'shop-card-unavailable' : ''}">
+  return `<div class="shop-card ${canBuy?'shop-card-available':''} ${state.blocked && role==='operator' ? 'shop-card-unavailable' : ''}">
     <div class="shop-card-title">${esc(item.title)}</div>
     <div class="shop-card-desc">${esc(item.description)}</div>
     <div class="shop-card-price">${item.price} <span class="price-unit">коинов</span></div>
     ${requiredLevel ? `<div class="shop-card-desc">Доступно с уровня «${esc(requiredLevel.name)}»</div>` : ''}
     ${seasonBadges.length ? `<div class="shop-card-badges">${seasonBadges.join('')}</div>` : ''}
     <div class="shop-card-footer">
-      ${role==='operator' ? `<button class="buy-btn ${canBuy?'btn-primary':'btn-disabled'}" data-id="${item.id}" ${canBuy?'':'disabled'}>${buyLabel}</button>` : ''}
+      ${role==='operator' ? `<button class="buy-btn ${canBuy?'btn-primary':'btn-disabled'}" data-id="${item.id}" ${canBuy?'':'disabled'}>${state.label}</button>` : ''}
       ${isAdmin(role) ? `<button class="edit-item-btn btn-outline btn-sm" data-id="${item.id}">Изменить</button>` : ''}
     </div>
   </div>`;

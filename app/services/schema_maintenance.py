@@ -97,6 +97,10 @@ def ensure_operator_management_schema(engine: Engine) -> None:
             if "min_level_id" not in existing:
                 conn.execute(text("ALTER TABLE shop_items ADD COLUMN min_level_id INTEGER"))
                 logger.info("[schema] Added shop_items.min_level_id")
+            if "category" not in existing:
+                conn.execute(text("ALTER TABLE shop_items ADD COLUMN category VARCHAR(32) NOT NULL DEFAULT 'other'"))
+                logger.info("[schema] Added shop_items.category")
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_shop_items_category ON shop_items (category)"))
 
         if "operator_level_rewards" not in tables:
             id_type = "SERIAL PRIMARY KEY" if engine.dialect.name == "postgresql" else "INTEGER PRIMARY KEY"

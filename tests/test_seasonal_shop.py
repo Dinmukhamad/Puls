@@ -131,6 +131,7 @@ def test_list_items_shows_personalized_availability_fields(db_session, make_clie
     row0 = next(i for i in r0.json() if i["id"] == item.id)
     assert row0["stock_remaining"] == 3
     assert row0["operator_purchased_count"] == 0
+    assert row0["category"] == "other"
     assert row0["operator_limit_reached"] is False
     assert row0["is_available_now"] is True
 
@@ -166,12 +167,14 @@ def test_unlimited_item_has_null_stock_remaining(db_session, make_client):
 def test_admin_can_set_seasonal_fields_on_create_and_update(client, db_session):
     r_create = client.post("/api/shop/items", json={
         "title": "Новый сезонный товар", "price": 20,
+        "category": "recognition",
         "starts_at": "2026-08-01T00:00:00", "ends_at": "2026-08-31T23:59:59",
         "stock_limit": 5, "purchase_limit_per_operator": 1,
     })
     assert r_create.status_code == 200, r_create.text
     item_id = r_create.json()["id"]
     assert r_create.json()["stock_limit"] == 5
+    assert r_create.json()["category"] == "recognition"
 
     r_update = client.patch(f"/api/shop/items/{item_id}", json={"stock_limit": 10})
     assert r_update.status_code == 200, r_update.text
