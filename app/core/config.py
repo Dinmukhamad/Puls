@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Puls вЂ” РїР»Р°С‚С„РѕСЂРјР° РіРµР№РјРёС„РёРєР°С†РёРё РѕРїРµСЂР°С‚РѕСЂРѕРІ"
+    app_name: str = "Puls — платформа геймификации операторов"
     app_env: str = "development"  # set to 'production' in Railway
     api_prefix: str = "/api"
 
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Seed admin вЂ” Р±РµСЂС‘Рј РёР· Railway env, РЅРёРєРѕРіРґР° РЅРµ С…Р°СЂРґРєРѕРґРёРј
     seed_admin_username: str = "admin"
     seed_admin_password: str = ""          # РћР‘РЇР—РђРўР•Р›Р¬РќРћ Р·Р°РґР°С‚СЊ РІ Railway
-    seed_admin_fullname: str = "РђРґРјРёРЅРёСЃС‚СЂР°С‚РѕСЂ"
+    seed_admin_fullname: str = "Администратор"
 
     # Seed supervisor/manager (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
     seed_supervisor_username: str = "supervisor"

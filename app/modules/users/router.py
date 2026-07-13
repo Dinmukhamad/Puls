@@ -118,6 +118,10 @@ def _safe_level_badge(db: Session, operator) -> dict | None:
 
 def _user_out(db: Session, user: User, level_cache: dict | None = None) -> dict:
     operator = _operator_for_user(db, user)
+    # Для операторских аккаунтов карточка оператора является источником ФИО.
+    # Это не даёт спискам и фильтрам расходиться, если старые записи users и
+    # operators были созданы в разное время.
+    display_name = operator.full_name if operator and user.role == "operator" else user.full_name
     # level берём из кеша (preloaded) или пропускаем — не делаем N+1 запросов
     if level_cache is not None and operator and user.role == "operator":
         level = level_cache.get(operator.id)
@@ -127,7 +131,7 @@ def _user_out(db: Session, user: User, level_cache: dict | None = None) -> dict:
         level = None
     return {
         "id": user.id,
-        "full_name": user.full_name,
+        "full_name": display_name,
         "login": user.username,
         "username": user.username,
         "email": user.email or (operator.email if operator else None),

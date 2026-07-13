@@ -105,6 +105,14 @@ let STATE = {
   dashboard: null,
   adminOperators: [],
   users: [],
+  usersFilters: {
+    search: '',
+    group: '',
+    role: '',
+    status: '',
+    level: '',
+    tab: 'all',
+  },
   myLevel: null,
   myOperator: null,
   operatorLevels: [],
@@ -3633,12 +3641,13 @@ function renderUsersPage() {
   const el = document.getElementById('view-operators');
   if (!el) return;
   const ops = STATE.users;
-  let searchVal = '';
-  let filterGroup = '';
-  let filterRole = '';
-  let filterStatus = '';
-  let filterLevel = '';
-  let activeTab = 'all';
+  const savedFilters = STATE.usersFilters || (STATE.usersFilters = {});
+  let searchVal = savedFilters.search || '';
+  let filterGroup = savedFilters.group || '';
+  let filterRole = savedFilters.role || '';
+  let filterStatus = savedFilters.status || '';
+  let filterLevel = savedFilters.level || '';
+  let activeTab = savedFilters.tab || 'all';
 
   const groups = [...new Set(ops.map(o => o.group_name).filter(Boolean))].sort();
   const levels = STATE.operatorLevels.length
@@ -3680,12 +3689,15 @@ function renderUsersPage() {
   function operatorActions(o) {
     const isAdmin = STATE.user?.role === 'admin';
     return `
-      <div class="row-actions">
-        <button class="btn-icon btn-ghost" onclick="showUserResetPasswordModal(${o.id})" title="Сбросить пароль" aria-label="Сбросить пароль">↻</button>
-        ${o.status === 'active' ? `<button class="btn-icon btn-ghost danger" onclick="deactivateUserUi(${o.id})" title="Деактивировать" aria-label="Деактивировать">!</button>` : ''}
-        ${o.role === 'operator' && o.operator_id ? `<button class="btn-icon btn-ghost" onclick="manualOperatorLevelUi(${o.operator_id})" title="Сменить уровень" aria-label="Сменить уровень">★</button>` : ''}
-        ${isAdmin && o.role === 'operator' && o.operator_id ? `<button class="btn-icon btn-ghost danger" onclick="confirmDeleteOperator(${o.operator_id})" title="Удалить оператора" aria-label="Удалить оператора" style="color:var(--danger)">🗑</button>` : ''}
-      </div>`;
+      <details class="user-actions-menu">
+        <summary title="Действия с пользователем" aria-label="Действия с пользователем">•••</summary>
+        <div class="user-actions-popover">
+          <button onclick="showUserResetPasswordModal(${o.id})"><span aria-hidden="true">↻</span>Сбросить пароль</button>
+          ${o.role === 'operator' && o.operator_id ? `<button onclick="manualOperatorLevelUi(${o.operator_id})"><span aria-hidden="true">★</span>Сменить уровень</button>` : ''}
+          ${o.status === 'active' ? `<button class="is-danger" onclick="deactivateUserUi(${o.id})"><span aria-hidden="true">!</span>Деактивировать</button>` : ''}
+          ${isAdmin && o.role === 'operator' && o.operator_id ? `<button class="is-danger" onclick="confirmDeleteOperator(${o.operator_id})"><span aria-hidden="true">×</span>Удалить оператора</button>` : ''}
+        </div>
+      </details>`;
   }
 
   function renderTable() {
@@ -3696,9 +3708,7 @@ function renderUsersPage() {
           <thead><tr>
             <th>Сотрудник</th>
             <th>Роль / Группа</th>
-            <th class="tc">Ставка</th>
-            <th>Уровень</th>
-            <th class="tc">Стаж</th>
+            <th>Рабочие параметры</th>
             <th class="tc">Статус</th>
             <th class="tc">Действия</th>
           </tr></thead>
@@ -3715,19 +3725,17 @@ function renderUsersPage() {
                   <div>${roleBadge(o.role)}</div>
                   ${o.group_name ? `<div class="user-cell-sub" style="margin-top:4px">${esc(o.group_name)}</div>` : ''}
                 </td>
-                <td class="tc">
-                  ${isOp ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">—</span>'}
-                </td>
                 <td>
-                  ${isOp ? levelBadgeHtml(o.level) : '<span class="cell-muted">—</span>'}
-                </td>
-                <td class="tc">
-                  ${isOp && o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">—</span>'}
+                  ${isOp ? `<div class="user-work-params">
+                    <div><span>Ставка</span>${rateBadgeHtml(o.rate, o.operator_id)}</div>
+                    <div><span>Уровень</span>${levelBadgeHtml(o.level)}</div>
+                    <div><span>Стаж</span>${o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">—</span>'}</div>
+                  </div>` : '<span class="cell-muted">Не применяется</span>'}
                 </td>
                 <td class="tc">${userStatusBadge(o.status)}</td>
                 <td class="tc">${operatorActions(o)}</td>
               </tr>`;
-            }).join('') : '<tr><td colspan="7" class="empty-line">Нет пользователей</td></tr>'}
+            }).join('') : '<tr><td colspan="5" class="empty-line">Нет пользователей</td></tr>'}
           </tbody>
         </table>
       </div>`;
@@ -3754,8 +3762,6 @@ function renderUsersPage() {
     <div class="view-header">
       <div><div class="section-kicker">Пользователи</div><h2 class="section-title">Пользователи</h2></div>
       <div class="header-right">
-        <button class="btn-outline btn-sm" onclick="exportCSV()">Экспорт CSV</button>
-        <button class="btn-outline btn-sm" onclick="exportOperatorsXLSX()">Экспорт XLSX</button>
         <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
         ${['manager','admin'].includes(STATE.user?.role) ? `
           <button class="btn-outline btn-sm" onclick="showWorkNormsModal()">Нормы часов</button>
@@ -3796,6 +3802,7 @@ function renderUsersPage() {
     el.querySelectorAll('.ops-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         activeTab = btn.dataset.tab;
+        savedFilters.tab = activeTab;
         el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
         el.querySelector('#ops-table-wrap').innerHTML = renderTable();
         el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
@@ -3804,12 +3811,14 @@ function renderUsersPage() {
     });
     el.querySelector('#ops-search')?.addEventListener('input', e => {
       searchVal = e.target.value;
+      savedFilters.search = searchVal;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-group')?.addEventListener('change', e => {
       filterGroup = e.target.value;
+      savedFilters.group = filterGroup;
       el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
@@ -3817,18 +3826,21 @@ function renderUsersPage() {
     });
     el.querySelector('#ops-role')?.addEventListener('change', e => {
       filterRole = e.target.value;
+      savedFilters.role = filterRole;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-status')?.addEventListener('change', e => {
       filterStatus = e.target.value;
+      savedFilters.status = filterStatus;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     el.querySelector('#ops-level')?.addEventListener('change', e => {
       filterLevel = e.target.value;
+      savedFilters.level = filterLevel;
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
@@ -3837,6 +3849,16 @@ function renderUsersPage() {
   }
   rebindOps();
   function bindOpsActions() {
+    el.querySelectorAll('.user-actions-menu').forEach(menu => {
+      if (menu.dataset.bound === '1') return;
+      menu.dataset.bound = '1';
+      menu.addEventListener('toggle', () => {
+        if (!menu.open) return;
+        el.querySelectorAll('.user-actions-menu[open]').forEach(other => {
+          if (other !== menu) other.open = false;
+        });
+      });
+    });
     el.querySelectorAll('.quick-charge-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         navigateTo('manual');
