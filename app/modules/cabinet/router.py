@@ -249,11 +249,12 @@ def _build_cabinet_payload(db: Session, operator: Operator) -> dict:
     place_change = rating.get("place_change")
     previous_place = (place + place_change) if (place is not None and place_change is not None) else None
 
+    latest_result = _latest_weekly_result(db, operator.id)
     level = operator_level_summary(
         db,
         operator,
-        row.week_start if (row := _latest_weekly_result(db, operator.id)) else None,
-        row.week_end if row else None,
+        latest_result.week_start if latest_result else None,
+        latest_result.week_end if latest_result else None,
     )
 
     return {

@@ -621,7 +621,7 @@ async function reloadCabinet() {
 }
 
 function cabinetFormatCoin(value) {
-  return `${levelNum(value || 0, 0)} <span class="kpi-unit">₸</span>`;
+  return `${levelNum(value || 0, 0)} <span class="kpi-unit">₡</span>`;
 }
 
 function syncCabinetSnapshot(snapshot) {
@@ -730,7 +730,7 @@ function cabinetWinnersCard(data) {
   const items = data?.items || [];
   const top = data?.top;
   if (!items.length || !top) return '';
-  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₸` : esc(w.prize || '—');
+  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₡` : esc(w.prize || '—');
   const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
   return `
     <div class="panel wheel-winner-card">
@@ -763,7 +763,7 @@ function cabinetTransactionsHtml(items) {
         <span class="tx-comment">${esc(t.comment || t.type || 'Операция')}</span>
         <span class="tx-date">${fmtDate(t.created_at || t.date)}</span>
       </div>
-      <div class="tx-amount">${Number(t.amount || 0) >= 0 ? '+' : ''}${levelNum(t.amount || 0, 0)} ₸</div>
+      <div class="tx-amount">${Number(t.amount || 0) >= 0 ? '+' : ''}${levelNum(t.amount || 0, 0)} ₡</div>
     </div>`).join('') : '<div class="empty-line">Операций пока нет</div>';
 }
 
@@ -772,7 +772,7 @@ function cabinetTopWeekHtml(rows, currentId) {
     ${rows.map((r, idx) => `<div class="mini-row ${r.operator_id === currentId ? 'current' : ''}">
       <span class="mini-rank">${r.rank_position || idx + 1}</span>
       <span class="mini-name">${esc(r.operator_name || r.full_name || '—')} ${r.level ? levelBadgeHtml(r.level) : ''}</span>
-      <b>${levelNum(r.coins_earned || r.total_balance || 0, 0)} ₸</b>
+      <b>${levelNum(r.coins_earned || r.total_balance || 0, 0)} ₡</b>
       <em>${levelNum(r.contest_points || r.final_score || 0)}</em>
     </div>`).join('')}
   </div>` : '<div class="empty-line">Рейтинг пока не рассчитан</div>';
@@ -866,7 +866,7 @@ function renderCabinet() {
     <div class="shop-banner">
       <div>
         <div class="shop-banner-title">Магазин бонусов</div>
-        <div class="shop-banner-sub">У вас ${levelNum(wallet.balance || 0, 0)} ₸ — можно обменять коины на доступные бонусы.</div>
+        <div class="shop-banner-sub">У вас ${levelNum(wallet.balance || 0, 0)} ₡ — можно обменять коины на доступные бонусы.</div>
       </div>
       <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
     </div>`;
