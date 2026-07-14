@@ -1985,7 +1985,7 @@ async function renderTestsStaffView(el) {
 
   let data;
   try {
-    data = await swrFetch('tests:admin-list', () => api.listAdminTests(), null, TESTS_SWR_TTL_MS);
+    data = await swrFetch('tests:admin-list', () => api.listAdminTests(), null, SWR_FAST_TTL_MS);
   } catch(e) {
     if (isNavStale(myNavGen)) return;
     el.querySelector('#tests-staff-body').innerHTML = `<div class="status-line status-error">${esc(e.message)}</div>`;
