@@ -229,6 +229,16 @@ function parseStoredView(value) {
   return { view, tab: params.get('tab') || '' };
 }
 
+function allowedViewsForRole(role) {
+  if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests'];
+
+  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'tests', 'period-report', 'analytics'];
+  if (role === 'manager' || role === 'admin') views.push('operator-levels');
+  if (canManageGroups(role)) views.push('groups');
+  if (role === 'admin') views.push('sessions', 'cabinet', 'rating');
+  return views;
+}
+
 function initialRouteForRole(role) {
   const path = location.pathname.replace(/^\/+|\/+$/g, '');
   const params = new URLSearchParams(location.search);
@@ -358,6 +368,11 @@ function navigateTo(view, options = {}) {
   if (LEGACY_COIN_VIEW_TAB[view]) {
     options = { ...options, tab: LEGACY_COIN_VIEW_TAB[view] };
     view = 'coins';
+  }
+  const role = STATE.user?.role;
+  if (role && !allowedViewsForRole(role).includes(view)) {
+    view = isAdmin(role) ? 'summary' : 'cabinet';
+    options = {};
   }
   STATE.currentView = view;
   if (view === 'coins') STATE.coinsTab = normalizeCoinTab(options.tab || STATE.coinsTab);
@@ -541,9 +556,7 @@ async function bootApp() {
 
   // Restore last viewed section after F5 reload
   const restoredRoute = initialRouteForRole(role);
-  const adminViews = ['summary','operators','operator-levels','coins','groups','shop','wheel','rating','cabinet','period-report','analytics','tests','sessions'];
-  const operatorViews = ['cabinet','rating','shop','wheel','tests'];
-  const allowedViews = isAdmin(role) ? adminViews : operatorViews;
+  const allowedViews = allowedViewsForRole(role);
   const defaultView = isAdmin(role) ? 'summary' : 'cabinet';
   const start = allowedViews.includes(restoredRoute.view) ? restoredRoute.view : defaultView;
   navigateTo(start, { tab: restoredRoute.tab });
@@ -703,29 +716,15 @@ async function reloadData() {
 function buildViews(role) {
   const shell = document.getElementById('app-shell');
   if (!shell) return;
-  const views = isAdmin(role)
-    ? ['summary', 'operators', ...(role === 'manager' || role === 'admin' ? ['operator-levels'] : []), 'coins', 'shop', 'wheel', 'raffles', 'tests', ...(canManageGroups(role) ? ['groups'] : []), ...(role === 'admin' ? ['sessions'] : []), 'period-report', 'analytics', 'cabinet', 'rating']
-    : ['cabinet', 'rating', 'shop', 'wheel', 'raffles', 'tests'];
+  const views = allowedViewsForRole(role);
   shell.innerHTML = views.map(v => `<section class="app-view" id="view-${v}"></section>`).join('');
 }
 
 function renderSidebar(role) {
+  const allowedViews = new Set(allowedViewsForRole(role));
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     const t = link.dataset.navTarget;
-    const adminViews = ['summary','operators','coins','period-report','analytics'];
-    const managerViews = ['operator-levels'];
-    const operatorViews = ['cabinet','rating','shop','wheel','tests'];
-    const sharedViews = ['shop','rating','cabinet','wheel','tests']; // «Тесты» и «Колесо» доступны всем ролям
-    let show = false;
-    if (isAdmin(role)) {
-      show = adminViews.includes(t) || sharedViews.includes(t);
-      if (role === 'manager' || role === 'admin') show = show || managerViews.includes(t);
-      if (canManageGroups(role)) show = show || t === 'groups';
-      if (role === 'admin') show = show || t === 'sessions';
-    } else {
-      show = operatorViews.includes(t);
-    }
-    link.style.display = show ? '' : 'none';
+    link.style.display = allowedViews.has(t) ? '' : 'none';
   });
 }
 
