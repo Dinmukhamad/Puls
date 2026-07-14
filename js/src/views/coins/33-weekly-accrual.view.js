@@ -33,7 +33,7 @@ function renderWeeklyAccrualTab(body) {
   const s = _weeklyAccrualState;
 
   body.innerHTML = `
-    <div class="panel">
+    <div class="panel coins-weekly-toolbar">
       <div class="panel-head"><h3>Расчёт за период</h3></div>
       <div class="filter-row" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
         <div class="form-group" style="margin:0">
@@ -46,8 +46,6 @@ function renderWeeklyAccrualTab(body) {
         </div>
         <button class="btn-outline btn-sm" onclick="runWeeklyAccrualPreview()">Предварительный расчёт</button>
         ${canApply ? `<button class="btn-primary btn-sm" onclick="runWeeklyAccrualApply()">Начислить коины за период</button>` : ''}
-        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod('csv')">Экспорт CSV</button>
-        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod('xlsx')">Экспорт XLSX</button>
       </div>
     </div>
 

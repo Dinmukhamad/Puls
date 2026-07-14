@@ -3927,18 +3927,18 @@ function renderCoins() {
   ];
 
   el.innerHTML = `
-    <div class="view-header coins-header">
+    <div class="coins-page-head">
       <div>
         <div class="section-kicker">Коины</div>
         <h2 class="section-title">Операции с коинами</h2>
-        <p class="section-subtitle">Управление начислениями, заявками и историей операций</p>
+        <p>Начисления, заявки и правила в одном рабочем пространстве</p>
       </div>
-      <div class="header-right">
+      <div class="coins-head-actions">
         <button class="btn-outline btn-sm" onclick="refreshCoinsModule()">Обновить</button>
       </div>
     </div>
-    <div class="filter-tabs coins-tabs">
-      ${tabs.map(([id, label]) => `<button class="filter-tab ${tab === id ? 'active' : ''}" data-coins-tab="${id}">${label}</button>`).join('')}
+    <div class="coins-page-tabs" role="tablist" aria-label="Разделы операций с коинами">
+      ${tabs.map(([id, label]) => `<button class="coins-page-tab ${tab === id ? 'is-active' : ''}" type="button" role="tab" aria-selected="${tab === id}" data-coins-tab="${id}">${label}</button>`).join('')}
     </div>
     <div id="coins-tab-body" class="coins-tab-body"></div>`;
 
@@ -3996,16 +3996,22 @@ function renderCoinsOverview(body) {
   const tx = overview.latest_transactions || [];
   const req = overview.latest_requests || [];
   body.innerHTML = `
-    <div class="kpi-grid coins-kpi-grid">
-      <div class="kpi-card kpi-accent"><div class="kpi-label">Операций сегодня</div><div class="kpi-value">${overview.today_operations || 0}</div></div>
-      <div class="kpi-card kpi-ok"><div class="kpi-label">Начислено сегодня</div><div class="kpi-value">+${overview.today_credited || 0}<span class="kpi-unit"> ₡</span></div></div>
-      <div class="kpi-card"><div class="kpi-label">Списано сегодня</div><div class="kpi-value">-${overview.today_debited || 0}<span class="kpi-unit"> ₡</span></div></div>
-      <div class="kpi-card ${overview.new_requests ? 'kpi-warn' : ''}"><div class="kpi-label">Новых заявок</div><div class="kpi-value">${overview.new_requests || 0}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Зарезервировано</div><div class="kpi-value">${overview.reserved_coins || 0}<span class="kpi-unit"> ₡</span></div></div>
-      <div class="kpi-card"><div class="kpi-label">Всего операций</div><div class="kpi-value">${overview.total_operations || 0}</div></div>
+    <div class="coins-summary-grid">
+      <button class="coins-summary-card is-accent" type="button" onclick="navigateTo('coins',{tab:'history'})">
+        <span>Операций сегодня</span><strong>${overview.today_operations || 0}</strong><small>Всего: ${overview.total_operations || 0}</small>
+      </button>
+      <button class="coins-summary-card is-positive" type="button" onclick="navigateTo('coins',{tab:'history'})">
+        <span>Баланс дня</span><strong>${(overview.today_credited || 0) - (overview.today_debited || 0) >= 0 ? '+' : ''}${(overview.today_credited || 0) - (overview.today_debited || 0)} ₡</strong><small>+${overview.today_credited || 0} / -${overview.today_debited || 0}</small>
+      </button>
+      <button class="coins-summary-card ${overview.new_requests ? 'has-alert' : ''}" type="button" onclick="navigateTo('coins',{tab:'requests'})">
+        <span>Новые заявки</span><strong>${overview.new_requests || 0}</strong><small>${overview.new_requests ? 'Требуют решения' : 'Очередь обработана'}</small>
+      </button>
+      <div class="coins-summary-card">
+        <span>Зарезервировано</span><strong>${overview.reserved_coins || 0} ₡</strong><small>В активных заявках</small>
+      </div>
     </div>
     <div class="coins-overview-grid">
-      <div class="panel">
+      <section class="coins-surface">
         <div class="panel-head"><h3>Последние операции</h3><button class="btn-link" onclick="navigateTo('coins',{tab:'history'})">Открыть историю</button></div>
         <div class="coins-list">
           ${tx.length ? tx.map(t => `
@@ -4017,8 +4023,8 @@ function renderCoinsOverview(body) {
               </div>
             </div>`).join('') : '<div class="empty-line">Операций пока нет</div>'}
         </div>
-      </div>
-      <div class="panel">
+      </section>
+      <section class="coins-surface">
         <div class="panel-head"><h3>Последние заявки</h3><button class="btn-link" onclick="navigateTo('coins',{tab:'requests'})">Открыть заявки</button></div>
         <div class="coins-list">
           ${req.length ? req.map(p => `
@@ -4030,21 +4036,14 @@ function renderCoinsOverview(body) {
               </div>
             </div>`).join('') : '<div class="empty-line">Заявок нет</div>'}
         </div>
-      </div>
+      </section>
     </div>
-    <div class="panel coins-actions">
-      <div class="panel-head"><h3>Быстрые действия</h3></div>
-      <div class="coins-action-row">
-        <button class="btn-primary" onclick="navigateTo('coins',{tab:'accrual'})">Начислить коины</button>
-        <button class="btn-outline" onclick="navigateTo('coins',{tab:'requests'})">Открыть заявки</button>
-        <button class="btn-outline" onclick="navigateTo('coins',{tab:'history'})">Открыть историю</button>
-      </div>
-    </div>`;
+    `;
 }
 
 function renderCoinRules(body) {
   body.innerHTML = `
-    <div class="panel">
+    <div class="coins-surface coins-rules-surface">
       <div class="panel-head"><h3>Правила операций с коинами</h3></div>
       <div class="manual-rules coins-rules">
         <div class="manual-rule"><span class="rule-coin">1</span><span>Любое изменение баланса создается через транзакцию и попадает в историю.</span></div>
@@ -4087,7 +4086,7 @@ function renderManual() {
 
   // Load operators if empty
   if (!STATE.adminOperators.length) {
-    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div></div><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>`;
+    el.innerHTML = `<div class="coins-section-head"><div><div class="section-kicker">Начисление</div><h3>Ручная операция</h3></div></div><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>`;
     api.getDashboardOperators()
       .then(ops => { STATE.adminOperators = ops; renderManual(); })
       .catch(() => { el.innerHTML += '<p style="color:var(--danger);padding:20px">Не удалось загрузить операторов</p>'; });
@@ -4125,11 +4124,8 @@ function renderManual() {
   const st = todayStats();
 
   el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">Начисление</div><h2 class="section-title">Ручное начисление коинов</h2></div>
-      <div class="header-right">
-        <button class="btn-outline btn-sm" onclick="reloadData().then(()=>renderManual())">Обновить</button>
-      </div>
+    <div class="coins-section-head">
+      <div><div class="section-kicker">Начисление</div><h3>Ручная операция</h3><p>Изменение баланса с обязательной записью в историю</p></div>
     </div>
 
     <div class="manual-layout">
@@ -4466,12 +4462,10 @@ async function renderRequests() {
       ].map(([f, label]) => `<button class="filter-tab ${s.status===f?'active':''}" data-filter="${f}">${label}</button>`).join('')}
     </div>
 
-    <div class="panel" style="margin:12px 0">
+    <div class="panel coins-filter-panel" style="margin:12px 0">
       <div class="panel-head">
         <h3>Фильтры</h3>
         <div class="header-right">
-          <button class="btn-outline btn-sm" onclick="exportShopRequests('csv')">Экспорт CSV</button>
-          <button class="btn-outline btn-sm" onclick="exportShopRequests('xlsx')">Экспорт XLSX</button>
           <button class="btn-outline btn-sm" onclick="reloadRequestsTab()">Обновить</button>
         </div>
       </div>
@@ -4707,12 +4701,10 @@ function renderHistory() {
         <button class="btn-link" onclick="clearHistoryOperatorFilter()">Сбросить</button>
       </div>` : ''}
 
-    <div class="panel" style="margin-bottom:16px">
+    <div class="panel coins-filter-panel" style="margin-bottom:16px">
       <div class="panel-head">
         <h3>Фильтры</h3>
         <div class="header-right">
-          <button class="btn-outline btn-sm" onclick="exportHistoryServerSide()">Экспорт CSV</button>
-          <button class="btn-outline btn-sm" onclick="exportHistoryServerSide('xlsx')">Экспорт XLSX</button>
           <button class="btn-outline btn-sm" onclick="reloadHistoryTab()">Обновить</button>
         </div>
       </div>
@@ -6671,7 +6663,7 @@ function renderWeeklyAccrualTab(body) {
   const s = _weeklyAccrualState;
 
   body.innerHTML = `
-    <div class="panel">
+    <div class="panel coins-weekly-toolbar">
       <div class="panel-head"><h3>Расчёт за период</h3></div>
       <div class="filter-row" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
         <div class="form-group" style="margin:0">
@@ -6684,8 +6676,6 @@ function renderWeeklyAccrualTab(body) {
         </div>
         <button class="btn-outline btn-sm" onclick="runWeeklyAccrualPreview()">Предварительный расчёт</button>
         ${canApply ? `<button class="btn-primary btn-sm" onclick="runWeeklyAccrualApply()">Начислить коины за период</button>` : ''}
-        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod('csv')">Экспорт CSV</button>
-        <button class="btn-outline btn-sm" onclick="exportWeeklyAccrualPeriod('xlsx')">Экспорт XLSX</button>
       </div>
     </div>
 
