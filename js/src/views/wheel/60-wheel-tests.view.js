@@ -1489,8 +1489,6 @@ function renderTests() {
    ОПЕРАТОРСКАЯ ЧАСТЬ
 ──────────────────────────────────────────────────────────────── */
 
-const TESTS_SWR_TTL_MS = 15_000; // короткий TTL — статус теста (открыт/просрочен) должен быстро актуализироваться
-
 async function renderTestsOperatorView(el) {
   const myNavGen = STATE.navGen;
   el.innerHTML = `
@@ -1502,7 +1500,12 @@ async function renderTestsOperatorView(el) {
 
   let data;
   try {
-    data = await swrFetch('tests:my', () => api.myTests(), null, TESTS_SWR_TTL_MS);
+    // Статус попытки нельзя брать из stale-while-revalidate кеша: sessionStorage
+    // переживает F5, поэтому сохранённый до старта список мог вернуть тест как
+    // available и скрыть уже идущую попытку. Для этого экрана всегда читаем
+    // серверное состояние напрямую и лишь обновляем кеш для фонового prefetch.
+    data = await api.myTests();
+    swrWriteRaw('tests:my', { data, ts: Date.now() });
   } catch(e) {
     if (isNavStale(myNavGen)) return;
     el.querySelector('#tests-op-body').innerHTML = `<div class="status-line status-error">Не удалось загрузить тесты: ${esc(e.message)}</div>`;
@@ -1672,6 +1675,8 @@ async function resumeTestRunner(testId) {
       answers: data.saved_answers || {},
       expiresAt: new Date(data.expires_at).getTime(),
     };
+    swrInvalidate('tests:my');
+    invalidateViewCache('tests');
     renderTestRunnerScreen();
     return true;
   } catch(e) {
@@ -1707,6 +1712,8 @@ async function openTestRunner(testId) {
         answers: data.saved_answers || {},
         expiresAt: new Date(data.expires_at).getTime(),
       };
+      swrInvalidate('tests:my');
+      invalidateViewCache('tests');
       renderTestRunnerScreen();
     } catch(e) {
       closeModal();
@@ -1889,6 +1896,7 @@ async function finishTestRun() {
     _activeTestRun.questionObserver?.disconnect?.();
     _activeTestRun = null;
     swrInvalidate('tests:my'); // статус теста изменился (finished) — следующий заход в список не должен показать устаревшее "in_progress"
+    invalidateViewCache('tests');
     renderTestResultScreen(result);
   } catch(e) {
     showToast(e.message || 'Не удалось завершить тест', 'error');

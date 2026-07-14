@@ -351,7 +351,7 @@ function initNav() {
 
 // Кеш отрендеренных разделов — не перерисовываем если уже есть актуальный HTML
 const VIEW_CACHE = {};
-const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel', 'sessions']); // эти разделы всегда рендерим заново
+const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel', 'sessions', 'tests']); // эти разделы всегда рендерим заново
 
 function invalidateViewCache(view) {
   if (view) delete VIEW_CACHE[view];
