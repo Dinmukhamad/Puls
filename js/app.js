@@ -12863,7 +12863,7 @@ async function loadRatingTab(tab) {
   host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>';
   try {
     if (tab === 'overview') await opRenderRatingOverview(host);
-    else if (tab === 'race') await opRenderRatingRace(host);
+    else if (tab === 'race') await opRenderRatingRaceRestored(host);
     else if (tab === 'groups') await opRenderRatingGroups(host);
     else await opRenderRatingProgress(host);
   } catch (error) {
@@ -12918,6 +12918,12 @@ async function opRenderRatingRace(host) {
   const current = data.current_user;
   const max = Math.max(...items.map(item => Number(item.points || 0)), 1);
   host.innerHTML = `${opPanel('Гонка баллов', `<div class="op-race-intro"><div><b>${current?.rank ? `Вы на ${current.rank}-м месте` : 'Ваше место пока не рассчитано'}</b><span>${current?.points_to_next_rank ? `До следующего места: ${opNum(current.points_to_next_rank, 1)} балла` : 'Сравнение строится по итоговому баллу периода'}</span></div><div class="op-race-legend"><span><i></i>Вы</span><span><i></i>Другие участники</span></div></div>${items.length ? `<div class="op-race-list">${items.map((row, i) => opRatingRow({ ...row, contest_points: row.points }, i, max)).join('')}</div>` : opEmpty('Нет участников гонки', 'Данные появятся после расчёта периода.')}`, `${items.length} участников`, 'op-race-panel')}`;
+}
+
+async function opRenderRatingRaceRestored(host) {
+  // Keep the redesigned page shell, but use the complete race component with
+  // group filters, view modes and the Formula 1 car visualization.
+  await renderRatingRaceTab(host);
 }
 
 async function opRenderRatingGroups(host) {
