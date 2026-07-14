@@ -387,6 +387,7 @@ async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/c
 
   /* ── Tests (Тесты) — admin/supervisor/manager side ──────────── */
   async function listAdminTests() { return req('GET', '/api/admin/tests'); }
+  async function getAdminTest(testId) { return req('GET', `/api/admin/tests/${testId}`); }
   async function createTest(payload) { return req('POST', '/api/admin/tests', payload); }
   async function updateTest(testId, payload) { return req('PATCH', `/api/admin/tests/${testId}`, payload); }
   async function addTestQuestion(testId, payload) { return req('POST', `/api/admin/tests/${testId}/questions`, payload); }
@@ -477,7 +478,7 @@ async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/c
     getAvailablePeriods, analyticsGet,
     getRatingRace, getMyRatingDynamics,
     myTests, startTest, saveTestAnswer, finishTest, getTestResult,
-    listAdminTests, createTest, updateTest, addTestQuestion, updateTestQuestion, deleteTestQuestion,
+    listAdminTests, getAdminTest, createTest, updateTest, addTestQuestion, updateTestQuestion, deleteTestQuestion,
     assignTest, publishTest, closeTest, getTestResults, getTestAnalytics,
     listOperatorLevels, listAdminOperatorLevels, myLevel, operatorLevel,
     createOperatorLevel, updateOperatorLevel, deleteOperatorLevel,

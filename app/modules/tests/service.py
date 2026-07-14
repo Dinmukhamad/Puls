@@ -379,6 +379,9 @@ def _maybe_award_reward(db: Session, attempt: TestAttempt, test: Test, reviewer:
             db, operator, reward_coins, "test_reward",
             f"Награда за прохождение теста: {test.title}",
             created_by=reviewer,
+            source_type="test_attempt",
+            source_id=attempt.id,
+            metadata={"test_id": test.id, "score_percent": attempt.score_percent},
         )
         db.flush()
         attempt.reward_transaction_id = transaction.id

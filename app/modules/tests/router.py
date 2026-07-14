@@ -308,35 +308,35 @@ def _attempt_result_payload(attempt: TestAttempt, test: Test) -> dict:
 # ══════════════════════════════════════════════════════════════════
 
 class AnswerOptionPayload(BaseModel):
-    answer_text: str
+    answer_text: str = Field(min_length=1, max_length=1000)
     is_correct: bool = False
     sort_order: int = 0
 
 
 class QuestionPayload(BaseModel):
-    question_text: str
+    question_text: str = Field(min_length=1, max_length=2000)
     question_type: str = Field(pattern="^(single_choice|multiple_choice)$")
-    points: float = 1.0
+    points: float = Field(default=1.0, ge=0, le=10000)
     sort_order: int = 0
     answers: list[AnswerOptionPayload] = Field(default_factory=list, min_length=2, max_length=10)
 
 
 class TestCreatePayload(BaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=255)
     description: str = ""
     instruction: str = ""
-    time_limit_minutes: int = 30
+    time_limit_minutes: int = Field(default=30, ge=1, le=1440)
     opens_at: datetime | None = None
     closes_at: datetime | None = None
-    passing_percent: float = 70.0
+    passing_percent: float = Field(default=70.0, ge=0, le=100)
     show_result_after_finish: bool = True
     show_correct_answers: bool = False
     allow_retake: bool = False
-    max_attempts: int = 1
+    max_attempts: int = Field(default=1, ge=1, le=100)
     reward_type: str = Field(default="none", pattern="^(none|points|coins|points_and_coins)$")
-    reward_points: float = 0
-    reward_coins: int = 0
-    reward_min_percent: float = 70.0
+    reward_points: float = Field(default=0, ge=0)
+    reward_coins: int = Field(default=0, ge=0)
+    reward_min_percent: float = Field(default=70.0, ge=0, le=100)
     reward_mode: str = Field(default="fixed", pattern="^(fixed|proportional)$")
 
     @field_validator("opens_at", "closes_at")
@@ -346,22 +346,22 @@ class TestCreatePayload(BaseModel):
 
 
 class TestUpdatePayload(BaseModel):
-    title: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     instruction: str | None = None
-    time_limit_minutes: int | None = None
+    time_limit_minutes: int | None = Field(default=None, ge=1, le=1440)
     opens_at: datetime | None = None
     closes_at: datetime | None = None
-    passing_percent: float | None = None
+    passing_percent: float | None = Field(default=None, ge=0, le=100)
     show_result_after_finish: bool | None = None
     show_correct_answers: bool | None = None
     allow_retake: bool | None = None
-    max_attempts: int | None = None
-    reward_type: str | None = None
-    reward_points: float | None = None
-    reward_coins: int | None = None
-    reward_min_percent: float | None = None
-    reward_mode: str | None = None
+    max_attempts: int | None = Field(default=None, ge=1, le=100)
+    reward_type: str | None = Field(default=None, pattern="^(none|points|coins|points_and_coins)$")
+    reward_points: float | None = Field(default=None, ge=0)
+    reward_coins: int | None = Field(default=None, ge=0)
+    reward_min_percent: float | None = Field(default=None, ge=0, le=100)
+    reward_mode: str | None = Field(default=None, pattern="^(fixed|proportional)$")
 
     @field_validator("opens_at", "closes_at")
     @classmethod
@@ -372,6 +372,22 @@ class TestUpdatePayload(BaseModel):
 class AssignPayload(BaseModel):
     target_type: str = Field(pattern="^(all|group|operator)$")
     target_ids: list[int] = Field(default_factory=list)  # для group/operator — список ID; для all — игнорируется
+
+
+def _validate_test_window(opens_at: datetime | None, closes_at: datetime | None) -> None:
+    if opens_at and closes_at and closes_at <= opens_at:
+        raise HTTPException(status_code=400, detail="Дата закрытия должна быть позже даты открытия")
+
+
+def _validate_question_answers(payload: QuestionPayload) -> None:
+    correct_count = sum(1 for answer in payload.answers if answer.is_correct)
+    if correct_count == 0:
+        raise HTTPException(status_code=400, detail="Нужно отметить хотя бы один правильный вариант")
+    if payload.question_type == "single_choice" and correct_count != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Для вопроса с одним ответом должен быть отмечен ровно один вариант",
+        )
 
 
 def _test_summary(db: Session, t: Test) -> dict:
@@ -395,12 +411,49 @@ def _test_summary(db: Session, t: Test) -> dict:
     }
 
 
+def _test_detail(t: Test) -> dict:
+    """Полная конфигурация теста для административного конструктора."""
+    return {
+        "id": t.id,
+        "title": t.title,
+        "description": t.description,
+        "instruction": t.instruction,
+        "status": t.status,
+        "time_limit_minutes": t.time_limit_minutes,
+        "opens_at": _utc_iso(t.opens_at),
+        "closes_at": _utc_iso(t.closes_at),
+        "passing_percent": t.passing_percent,
+        "show_result_after_finish": t.show_result_after_finish,
+        "show_correct_answers": t.show_correct_answers,
+        "allow_retake": t.allow_retake,
+        "max_attempts": t.max_attempts,
+        "reward_type": t.reward_type,
+        "reward_points": t.reward_points,
+        "reward_coins": t.reward_coins,
+        "reward_min_percent": t.reward_min_percent,
+        "reward_mode": t.reward_mode,
+        "questions": [full_question_payload(question) for question in t.questions],
+        "assignments": [
+            {"target_type": assignment.target_type, "target_id": assignment.target_id}
+            for assignment in t.assignments
+        ],
+    }
+
+
 @admin_router.get("")
 def list_tests(db: Session = Depends(get_db), _: User = Depends(_require_staff)) -> dict:
     activate_scheduled_tests(db)
     db.commit()
     tests = list(db.scalars(select(Test).order_by(Test.created_at.desc())))
     return {"items": _test_summaries_bulk(db, tests)}
+
+
+@admin_router.get("/{test_id}")
+def get_test_detail(test_id: int, db: Session = Depends(get_db), _: User = Depends(_require_staff)) -> dict:
+    test = db.get(Test, test_id)
+    if not test:
+        raise HTTPException(status_code=404, detail="Тест не найден")
+    return _test_detail(test)
 
 
 def _test_summaries_bulk(db: Session, tests: list) -> list:
@@ -461,6 +514,7 @@ def _test_summaries_bulk(db: Session, tests: list) -> list:
 
 @admin_router.post("")
 def create_test(payload: TestCreatePayload, db: Session = Depends(get_db), current_user: User = Depends(_require_staff)) -> dict:
+    _validate_test_window(payload.opens_at, payload.closes_at)
     test = Test(**payload.model_dump(), created_by_user_id=current_user.id, status="draft")
     db.add(test)
     db.commit()
@@ -471,16 +525,17 @@ def create_test(payload: TestCreatePayload, db: Session = Depends(get_db), curre
 @admin_router.patch("/{test_id}")
 def update_test(test_id: int, payload: TestUpdatePayload, db: Session = Depends(get_db), _: User = Depends(_require_staff)) -> dict:
     test = db.get(Test, test_id)
+    updates = payload.model_dump(exclude_unset=True)
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
     if test.status == "open":
         # ТЗ п.26: открытый тест — нельзя менять вопросы/правильные ответы, только закрыть/продлить
         allowed_fields = {"closes_at", "status"}
-        updates = payload.model_dump(exclude_unset=True)
         forbidden = set(updates.keys()) - allowed_fields
         if forbidden:
             raise HTTPException(status_code=400, detail=f"Тест уже открыт — нельзя менять: {', '.join(forbidden)}")
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    _validate_test_window(updates.get("opens_at", test.opens_at), updates.get("closes_at", test.closes_at))
+    for key, value in updates.items():
         setattr(test, key, value)
     db.commit()
     return _test_summary(db, test)
@@ -494,11 +549,7 @@ def add_question(test_id: int, payload: QuestionPayload, db: Session = Depends(g
     if test.status == "open":
         raise HTTPException(status_code=400, detail="Нельзя добавлять вопросы в открытый тест")
 
-    correct_count = sum(1 for a in payload.answers if a.is_correct)
-    if correct_count == 0:
-        raise HTTPException(status_code=400, detail="Нужно отметить хотя бы один правильный вариант")
-    if payload.question_type == "single_choice" and correct_count != 1:
-        raise HTTPException(status_code=400, detail="Для одного правильного ответа должен быть отмечен ровно один вариант")
+    _validate_question_answers(payload)
 
     question = TestQuestion(
         test_id=test.id, question_text=payload.question_text,
@@ -520,6 +571,8 @@ def update_question(question_id: int, payload: QuestionPayload, db: Session = De
         raise HTTPException(status_code=404, detail="Вопрос не найден")
     if question.test.status == "open":
         raise HTTPException(status_code=400, detail="Нельзя редактировать вопросы открытого теста")
+
+    _validate_question_answers(payload)
 
     question.question_text = payload.question_text
     question.question_type = payload.question_type

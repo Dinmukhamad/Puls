@@ -1495,7 +1495,7 @@ async function renderTestsOperatorView(el) {
   const myNavGen = STATE.navGen;
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Тесты</div><h2 class="section-title">Мои тесты</h2></div>
+      <div><div class="section-kicker">Обучение</div><h2 class="section-title">Мои тесты</h2><div class="section-subtitle">Проверяйте знания и получайте награды за результат.</div></div>
       <button class="btn-outline btn-sm" onclick="renderTests()">Обновить</button>
     </div>
     <div id="tests-op-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
@@ -1541,12 +1541,20 @@ async function renderTestsOperatorView(el) {
   }
 
   body.innerHTML = `
-    ${upcoming.length ? `<div class="rcard-title" style="margin-top:6px">Скоро откроются</div><div class="test-card-grid">${upcoming.map(testCardHtml).join('')}</div>` : ''}
-    <div class="rcard-title" style="margin-top:18px">Доступные</div>
-    ${available.length ? `<div class="test-card-grid">${available.map(testCardHtml).join('')}</div>` : `<div class="empty-line">Доступных тестов пока нет.</div>`}
-    <div class="rcard-title" style="margin-top:18px">Завершённые / история</div>
-    ${finished.length ? `<div class="test-card-grid">${finished.map(testCardHtml).join('')}</div>` : `<div class="empty-line">Вы пока не проходили тесты.</div>`}
-  `;
+    <div class="tests-summary-strip">
+      <div><span>Доступно</span><strong>${available.length}</strong></div>
+      <div><span>Ожидают</span><strong>${upcoming.length}</strong></div>
+      <div><span>Завершено</span><strong>${finished.length}</strong></div>
+    </div>
+    <section class="tests-section">
+      <div class="tests-section-head"><div><h3>Доступные тесты</h3><p>Сначала показаны тесты, которые можно пройти сейчас.</p></div><span>${available.length}</span></div>
+      ${available.length ? `<div class="test-card-grid">${available.map(testCardHtml).join('')}</div>` : `<div class="tests-empty-compact">Сейчас нет тестов для прохождения.</div>`}
+    </section>
+    ${upcoming.length ? `<section class="tests-section"><div class="tests-section-head"><div><h3>Запланировано</h3><p>Откроются автоматически в указанное время.</p></div><span>${upcoming.length}</span></div><div class="test-card-grid">${upcoming.map(testCardHtml).join('')}</div></section>` : ''}
+    <section class="tests-section">
+      <div class="tests-section-head"><div><h3>История</h3><p>Результаты завершённых тестов и полученные награды.</p></div><span>${finished.length}</span></div>
+      ${finished.length ? `<div class="test-card-grid test-card-grid-history">${finished.map(testCardHtml).join('')}</div>` : `<div class="tests-empty-compact">История пока пустая.</div>`}
+    </section>`;
 
   body.querySelectorAll('[data-test-action]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1572,8 +1580,10 @@ function testStatusBadge(status) {
 }
 
 function testCardHtml(t) {
-  const rewardLine = t.reward_type === 'none' ? '' :
-    `<div class="test-card-row"><span>Награда</span><span>${t.reward_type.includes('coins') ? `до ${t.reward_coins} коинов` : ''}${t.reward_type.includes('points') ? ` ${t.reward_points} баллов` : ''}</span></div>`;
+  const rewardParts = [];
+  if (t.reward_type?.includes('coins')) rewardParts.push(`${t.reward_coins} ₡`);
+  if (t.reward_type?.includes('points')) rewardParts.push(`${fmtA(t.reward_points, 0)} баллов`);
+  const rewardLabel = rewardParts.join(' + ') || 'Без награды';
 
   let actionHtml = '';
   if (t.status === 'available') {
@@ -1583,8 +1593,8 @@ function testCardHtml(t) {
   } else if (t.status === 'upcoming') {
     actionHtml = `<div class="test-card-disabled-note">Тест откроется ${fmtDateTime(t.opens_at)}</div>`;
   } else if (t.status === 'finished') {
-    actionHtml = `<div class="test-card-result"><b>Результат:</b> ${t.correct_count} / ${t.questions_count} · <b>${fmtA(t.score_percent,0)}%</b></div>
-      ${t.reward_coins_earned ? `<div class="test-card-result">+${t.reward_coins_earned} коинов</div>` : ''}
+    actionHtml = `<div class="test-card-result"><b>${fmtA(t.score_percent,0)}%</b><span>${t.correct_count} из ${t.questions_count} верно</span></div>
+      ${t.reward_coins_earned ? `<div class="test-card-reward-earned">Получено +${t.reward_coins_earned} ₡</div>` : ''}
       <button class="btn-outline btn-sm" data-test-action="result" data-attempt-id="${t.attempt_id}">Подробнее</button>`;
   } else if (t.status === 'expired') {
     actionHtml = `<div class="test-card-disabled-note">Срок прохождения истёк</div>`;
@@ -1592,21 +1602,17 @@ function testCardHtml(t) {
     actionHtml = `<div class="test-card-disabled-note">Недоступен</div>`;
   }
 
-  return `<div class="test-card">
+  return `<article class="test-card">
     <div class="test-card-head">
-      <div class="test-card-title">${esc(t.title)}</div>
+      <div><div class="test-card-title">${esc(t.title)}</div>${t.description ? `<div class="test-card-desc">${esc(t.description)}</div>` : ''}</div>
       ${testStatusBadge(t.status)}
     </div>
-    ${t.description ? `<div class="test-card-desc">${esc(t.description)}</div>` : ''}
     <div class="test-card-meta">
-      ${t.opens_at ? `<div class="test-card-row"><span>Открыт</span><span>${fmtDateTime(t.opens_at)}</span></div>` : ''}
-      ${t.closes_at ? `<div class="test-card-row"><span>Закрывается</span><span>${fmtDateTime(t.closes_at)}</span></div>` : ''}
-      <div class="test-card-row"><span>Время на прохождение</span><span>${t.time_limit_minutes} мин</span></div>
-      <div class="test-card-row"><span>Вопросов</span><span>${t.questions_count}</span></div>
-      ${rewardLine}
+      <span>${t.questions_count} вопросов</span><span>${t.time_limit_minutes} мин</span><span class="test-card-reward">${esc(rewardLabel)}</span>
     </div>
+    ${t.closes_at ? `<div class="test-card-deadline">До ${fmtDateTime(t.closes_at)}</div>` : ''}
     <div class="test-card-actions">${actionHtml}</div>
-  </div>`;
+  </article>`;
 }
 
 
@@ -1843,10 +1849,10 @@ async function renderTestsStaffView(el) {
   const myNavGen = STATE.navGen;
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Тесты</div><h2 class="section-title">Управление тестами</h2></div>
+      <div><div class="section-kicker">Обучение команды</div><h2 class="section-title">Тесты</h2><div class="section-subtitle">Создавайте проверки знаний и отслеживайте результаты операторов.</div></div>
       <div class="header-right">
-        <button class="btn-primary btn-sm" id="tests-new-btn">+ Новый тест</button>
         <button class="btn-outline btn-sm" onclick="renderTests()">Обновить</button>
+        <button class="btn-primary btn-sm" id="tests-new-btn">Создать тест</button>
       </div>
     </div>
     <div id="tests-staff-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
@@ -1873,32 +1879,56 @@ async function renderTestsStaffView(el) {
   const statusLabel = { draft: 'Черновик', scheduled: 'Запланирован', open: 'Открыт', finished: 'Завершён', archived: 'Архив' };
   const statusBadgeClass = { draft: 'badge-neutral', scheduled: 'badge-info', open: 'badge-success', finished: 'badge-warning', archived: 'badge-neutral' };
 
-  body.innerHTML = `<div class="table-wrap"><table class="data-table">
-    <thead><tr>
-      <th>Название</th><th>Статус</th><th>Автор</th><th>Открытие</th><th>Закрытие</th>
-      <th class="num">Вопросов</th><th class="num">Прошли</th><th class="num">Средний %</th><th>Действия</th>
-    </tr></thead>
-    <tbody>
-      ${items.map(t => `<tr>
-        <td class="name-cell">${esc(t.title)}</td>
-        <td><span class="badge ${statusBadgeClass[t.status]||'badge-neutral'}">${statusLabel[t.status]||t.status}</span></td>
-        <td>${esc(t.created_by_name||'—')}</td>
-        <td>${t.opens_at?fmtDateTime(t.opens_at):'—'}</td>
-        <td>${t.closes_at?fmtDateTime(t.closes_at):'—'}</td>
-        <td class="num">${t.questions_count}</td>
-        <td class="num">${t.attempts_finished}</td>
-        <td class="num">${t.average_percent!=null?t.average_percent+'%':'—'}</td>
-        <td>
-          <div style="display:flex;gap:6px">
-            <button class="btn-outline btn-sm" data-test-edit="${t.id}">Изменить</button>
+  const openCount = items.filter(t => t.status === 'open').length;
+  const draftCount = items.filter(t => ['draft', 'scheduled'].includes(t.status)).length;
+  const finishedAttempts = items.reduce((sum, t) => sum + Number(t.attempts_finished || 0), 0);
+  const averages = items.filter(t => t.average_percent != null).map(t => Number(t.average_percent));
+  const averageScore = averages.length ? Math.round(averages.reduce((sum, value) => sum + value, 0) / averages.length) : 0;
+
+  body.innerHTML = `
+    <div class="tests-admin-summary">
+      <div><span>Всего тестов</span><strong>${items.length}</strong></div>
+      <div><span>Открыты сейчас</span><strong>${openCount}</strong></div>
+      <div><span>Черновики и планы</span><strong>${draftCount}</strong></div>
+      <div><span>Завершено попыток</span><strong>${finishedAttempts}</strong></div>
+      <div><span>Средний результат</span><strong>${averageScore}%</strong></div>
+    </div>
+    <div class="tests-admin-panel">
+      <div class="tests-admin-toolbar">
+        <div class="filter-tabs tests-filter-tabs">
+          <button class="filter-tab active" data-tests-filter="all">Все <span>${items.length}</span></button>
+          <button class="filter-tab" data-tests-filter="open">Открытые <span>${openCount}</span></button>
+          <button class="filter-tab" data-tests-filter="draft">Черновики <span>${draftCount}</span></button>
+          <button class="filter-tab" data-tests-filter="finished">Завершённые <span>${items.filter(t => t.status === 'finished').length}</span></button>
+        </div>
+      </div>
+      <div class="tests-admin-list">
+        ${items.map(t => `<article class="tests-admin-row" data-test-status="${t.status}">
+          <div class="tests-admin-main">
+            <div class="tests-admin-title-line"><h3>${esc(t.title)}</h3><span class="badge ${statusBadgeClass[t.status]||'badge-neutral'}">${statusLabel[t.status]||t.status}</span></div>
+            <div class="tests-admin-meta"><span>${t.questions_count} вопросов</span><span>${t.time_limit_minutes} мин</span><span>${t.opens_at ? `Старт ${fmtDateTime(t.opens_at)}` : 'Без даты старта'}</span></div>
+          </div>
+          <div class="tests-admin-result"><span>Прошли</span><strong>${t.attempts_finished}</strong></div>
+          <div class="tests-admin-result"><span>Средний результат</span><strong>${t.average_percent != null ? t.average_percent + '%' : '—'}</strong></div>
+          <div class="tests-admin-actions">
             <button class="btn-outline btn-sm" data-test-results="${t.id}">Результаты</button>
+            <button class="btn-outline btn-sm" data-test-edit="${t.id}">Настроить</button>
             ${t.status==='draft'||t.status==='scheduled' ? `<button class="btn-primary btn-sm" data-test-publish="${t.id}">Опубликовать</button>` : ''}
             ${t.status==='open' ? `<button class="btn-outline btn-sm" data-test-close="${t.id}">Закрыть</button>` : ''}
           </div>
-        </td>
-      </tr>`).join('')}
-    </tbody>
-  </table></div>`;
+        </article>`).join('')}
+      </div>
+    </div>`;
+
+  body.querySelectorAll('[data-tests-filter]').forEach(button => button.addEventListener('click', () => {
+    body.querySelectorAll('[data-tests-filter]').forEach(item => item.classList.toggle('active', item === button));
+    const filter = button.dataset.testsFilter;
+    body.querySelectorAll('[data-test-status]').forEach(row => {
+      const status = row.dataset.testStatus;
+      const visible = filter === 'all' || status === filter || (filter === 'draft' && ['draft', 'scheduled'].includes(status));
+      row.hidden = !visible;
+    });
+  }));
 
   body.querySelectorAll('[data-test-edit]').forEach(btn => btn.addEventListener('click', () => openTestBuilder(Number(btn.dataset.testEdit))));
   body.querySelectorAll('[data-test-results]').forEach(btn => btn.addEventListener('click', () => openTestResultsView(Number(btn.dataset.testResults))));
@@ -1930,33 +1960,38 @@ async function openTestBuilder(testId) {
   if (!el) return;
 
   let test = null;
-  let questions = [];
   if (testId) {
     try {
-      const list = await api.listAdminTests();
-      test = (list.items || []).find(t => t.id === testId);
-    } catch(e) { /* fallthrough — test stays null, builder treats as new */ }
+      test = await api.getAdminTest(testId);
+    } catch(e) {
+      showToast(e.message || 'Не удалось загрузить тест', 'error');
+      return;
+    }
   }
 
   _testBuilderState = {
     testId: testId,
     title: test?.title || '',
-    description: '',
-    instruction: '',
+    description: test?.description || '',
+    instruction: test?.instruction || '',
     time_limit_minutes: test?.time_limit_minutes || 30,
     opens_at: utcISOStringToLocalDateTimeInput(test?.opens_at),
     closes_at: utcISOStringToLocalDateTimeInput(test?.closes_at),
-    passing_percent: 70,
-    show_result_after_finish: true,
-    show_correct_answers: false,
-    allow_retake: false,
-    max_attempts: 1,
-    reward_type: 'none',
-    reward_points: 0,
-    reward_coins: 0,
-    reward_min_percent: 70,
-    reward_mode: 'fixed',
-    questions: [],
+    passing_percent: test?.passing_percent ?? 70,
+    show_result_after_finish: test?.show_result_after_finish ?? true,
+    show_correct_answers: test?.show_correct_answers ?? false,
+    allow_retake: test?.allow_retake ?? false,
+    max_attempts: test?.max_attempts ?? 1,
+    reward_type: test?.reward_type || 'none',
+    reward_points: test?.reward_points ?? 0,
+    reward_coins: test?.reward_coins ?? 0,
+    reward_min_percent: test?.reward_min_percent ?? 70,
+    reward_mode: test?.reward_mode || 'fixed',
+    questions: (test?.questions || []).map(question => ({
+      ...question,
+      answers: (question.answers || []).map(answer => ({ ...answer })),
+    })),
+    deletedQuestionIds: [],
     assignTargetType: test?.assignments?.[0]?.target_type || 'all',
     assignTargetIds: (test?.assignments || []).filter(a => a.target_id != null).map(a => a.target_id),
     status: test?.status || 'draft',
@@ -1972,112 +2007,126 @@ function renderTestBuilderScreen() {
   const isOpen = s.status === 'open';
 
   el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">Тесты</div><h2 class="section-title">${s.testId ? 'Редактирование теста' : 'Новый тест'}</h2></div>
+    <div class="view-header test-builder-header">
+      <div><div class="section-kicker">Конструктор теста</div><h2 class="section-title">${s.testId ? 'Настройка теста' : 'Новый тест'}</h2><div class="section-subtitle">Заполните параметры, добавьте вопросы и назначьте аудиторию.</div></div>
       <button class="btn-outline btn-sm" onclick="renderTests()">К списку</button>
     </div>
-    ${isOpen ? '<div class="status-line status-error" style="margin-bottom:14px">Тест уже открыт — можно изменить только дату закрытия и назначение.</div>' : ''}
-    <div class="test-builder-card">
-      <div class="rcard-title">1. Основная информация</div>
-      <div class="form-grid-2">
-        <div class="form-group"><label class="form-label">Название теста</label><input id="tb-title" class="form-input" value="${esc(s.title)}" ${isOpen?'disabled':''}></div>
-        <div class="form-group"><label class="form-label">Время на прохождение (мин)</label><input id="tb-time-limit" type="number" min="1" class="form-input" value="${s.time_limit_minutes}" ${isOpen?'disabled':''}></div>
-      </div>
-      <div class="form-group"><label class="form-label">Описание</label><textarea id="tb-description" class="form-input" rows="2" ${isOpen?'disabled':''}>${esc(s.description)}</textarea></div>
-      <div class="form-group"><label class="form-label">Инструкция для операторов</label><textarea id="tb-instruction" class="form-input" rows="2" ${isOpen?'disabled':''}>${esc(s.instruction)}</textarea></div>
-      <div class="form-grid-2">
-        <div class="form-group"><label class="form-label">Дата и время открытия</label><input id="tb-opens-at" type="datetime-local" class="form-input" value="${s.opens_at}" ${isOpen?'disabled':''}></div>
-        <div class="form-group"><label class="form-label">Дата и время закрытия</label><input id="tb-closes-at" type="datetime-local" class="form-input" value="${s.closes_at}"></div>
-      </div>
-      <div class="form-grid-2">
-        <div class="form-group"><label class="form-label">Проходной процент</label><input id="tb-passing-percent" type="number" min="0" max="100" class="form-input" value="${s.passing_percent}" ${isOpen?'disabled':''}></div>
-        <div class="form-group"><label class="form-label">Максимум попыток</label><input id="tb-max-attempts" type="number" min="1" class="form-input" value="${s.max_attempts}" ${isOpen?'disabled':''}></div>
-      </div>
-      <label class="an-checkbox-label"><input type="checkbox" id="tb-show-result" ${s.show_result_after_finish?'checked':''} ${isOpen?'disabled':''}> Показывать результат сразу после завершения</label>
-      <label class="an-checkbox-label"><input type="checkbox" id="tb-show-correct" ${s.show_correct_answers?'checked':''} ${isOpen?'disabled':''}> Показывать правильные ответы после завершения</label>
-      <label class="an-checkbox-label"><input type="checkbox" id="tb-allow-retake" ${s.allow_retake?'checked':''} ${isOpen?'disabled':''}> Разрешить повторное прохождение</label>
-    </div>
-
-    <div class="test-builder-card">
-      <div class="rcard-title">Награда</div>
-      <div class="form-group"><label class="form-label">Тип награды</label>
-        <select id="tb-reward-type" class="form-select" ${isOpen?'disabled':''}>
-          <option value="none" ${s.reward_type==='none'?'selected':''}>Без награды</option>
-          <option value="points" ${s.reward_type==='points'?'selected':''}>Баллы</option>
-          <option value="coins" ${s.reward_type==='coins'?'selected':''}>Коины</option>
-          <option value="points_and_coins" ${s.reward_type==='points_and_coins'?'selected':''}>Баллы + коины</option>
-        </select>
-      </div>
-      <div class="form-grid-2">
-        <div class="form-group"><label class="form-label">Максимум баллов</label><input id="tb-reward-points" type="number" min="0" class="form-input" value="${s.reward_points}" ${isOpen?'disabled':''}></div>
-        <div class="form-group"><label class="form-label">Максимум коинов</label><input id="tb-reward-coins" type="number" min="0" class="form-input" value="${s.reward_coins}" ${isOpen?'disabled':''}></div>
-      </div>
-      <div class="form-grid-2">
-        <div class="form-group"><label class="form-label">Минимальный % для награды</label><input id="tb-reward-min-percent" type="number" min="0" max="100" class="form-input" value="${s.reward_min_percent}" ${isOpen?'disabled':''}></div>
-        <div class="form-group"><label class="form-label">Режим начисления</label>
-          <select id="tb-reward-mode" class="form-select" ${isOpen?'disabled':''}>
-            <option value="fixed" ${s.reward_mode==='fixed'?'selected':''}>Фиксированная</option>
-            <option value="proportional" ${s.reward_mode==='proportional'?'selected':''}>Пропорциональная</option>
-          </select>
+    ${isOpen ? '<div class="test-builder-notice">Тест уже открыт. Можно изменить дату закрытия и назначение.</div>' : ''}
+    <div class="test-builder-shell">
+      <section class="test-builder-section">
+        <div class="test-builder-section-head"><span>01</span><div><h3>Основные параметры</h3><p>Название, расписание и условия прохождения.</p></div></div>
+        <div class="test-builder-fields">
+          <div class="form-group test-builder-span-2"><label class="form-label">Название теста</label><input id="tb-title" class="form-input" placeholder="Например: Проверка знаний продукта" value="${esc(s.title)}" ${isOpen?'disabled':''}></div>
+          <div class="form-group test-builder-span-2"><label class="form-label">Краткое описание</label><textarea id="tb-description" class="form-input" rows="2" placeholder="Что проверяет этот тест" ${isOpen?'disabled':''}>${esc(s.description)}</textarea></div>
+          <div class="form-group test-builder-span-2"><label class="form-label">Инструкция оператору</label><textarea id="tb-instruction" class="form-input" rows="2" placeholder="Что важно знать перед началом" ${isOpen?'disabled':''}>${esc(s.instruction)}</textarea></div>
+          <div class="form-group"><label class="form-label">Открытие</label><input id="tb-opens-at" type="datetime-local" class="form-input" value="${s.opens_at}" ${isOpen?'disabled':''}></div>
+          <div class="form-group"><label class="form-label">Закрытие</label><input id="tb-closes-at" type="datetime-local" class="form-input" value="${s.closes_at}"></div>
+          <div class="form-group"><label class="form-label">Время, минут</label><input id="tb-time-limit" type="number" min="1" class="form-input" value="${s.time_limit_minutes}" ${isOpen?'disabled':''}></div>
+          <div class="form-group"><label class="form-label">Проходной результат, %</label><input id="tb-passing-percent" type="number" min="0" max="100" class="form-input" value="${s.passing_percent}" ${isOpen?'disabled':''}></div>
+          <div class="form-group"><label class="form-label">Максимум попыток</label><input id="tb-max-attempts" type="number" min="1" class="form-input" value="${s.max_attempts}" ${isOpen?'disabled':''}></div>
         </div>
-      </div>
-    </div>
+        <div class="test-toggle-list">
+          <label class="test-toggle-row"><span><strong>Показать результат</strong><small>Оператор увидит процент и статус сразу после завершения.</small></span><input type="checkbox" id="tb-show-result" ${s.show_result_after_finish?'checked':''} ${isOpen?'disabled':''}><i></i></label>
+          <label class="test-toggle-row"><span><strong>Показать правильные ответы</strong><small>После завершения будут доступны верные варианты.</small></span><input type="checkbox" id="tb-show-correct" ${s.show_correct_answers?'checked':''} ${isOpen?'disabled':''}><i></i></label>
+          <label class="test-toggle-row"><span><strong>Разрешить повторное прохождение</strong><small>Количество попыток ограничивается значением выше.</small></span><input type="checkbox" id="tb-allow-retake" ${s.allow_retake?'checked':''} ${isOpen?'disabled':''}><i></i></label>
+        </div>
+      </section>
 
-    <div class="test-builder-card">
-      <div class="rcard-title-row"><div class="rcard-title">2. Вопросы</div>${!isOpen?'<button class="btn-outline btn-sm" id="tb-add-question">+ Добавить вопрос</button>':''}</div>
-      <div id="tb-questions-list">${s.questions.map((q,i) => questionEditorHtml(q,i,isOpen)).join('') || '<div class="empty-line">Вопросов пока нет</div>'}</div>
-    </div>
+      <section class="test-builder-section">
+        <div class="test-builder-section-head"><span>02</span><div><h3>Награда</h3><p>Коины начисляются автоматически после успешного завершения.</p></div></div>
+        <div class="test-builder-fields">
+          <div class="form-group test-builder-span-2"><label class="form-label">Тип награды</label><select id="tb-reward-type" class="form-select" ${isOpen?'disabled':''}><option value="none" ${s.reward_type==='none'?'selected':''}>Без награды</option><option value="points" ${s.reward_type==='points'?'selected':''}>Баллы</option><option value="coins" ${s.reward_type==='coins'?'selected':''}>Коины</option><option value="points_and_coins" ${s.reward_type==='points_and_coins'?'selected':''}>Баллы и коины</option></select></div>
+          <div class="form-group" data-reward-field="points"><label class="form-label">Баллы</label><input id="tb-reward-points" type="number" min="0" class="form-input" value="${s.reward_points}" ${isOpen?'disabled':''}></div>
+          <div class="form-group" data-reward-field="coins"><label class="form-label">Коины</label><input id="tb-reward-coins" type="number" min="0" class="form-input" value="${s.reward_coins}" ${isOpen?'disabled':''}></div>
+          <div class="form-group" data-reward-field="settings"><label class="form-label">Порог для награды, %</label><input id="tb-reward-min-percent" type="number" min="0" max="100" class="form-input" value="${s.reward_min_percent}" ${isOpen?'disabled':''}></div>
+          <div class="form-group" data-reward-field="settings"><label class="form-label">Начисление</label><select id="tb-reward-mode" class="form-select" ${isOpen?'disabled':''}><option value="fixed" ${s.reward_mode==='fixed'?'selected':''}>Фиксированное</option><option value="proportional" ${s.reward_mode==='proportional'?'selected':''}>По результату</option></select></div>
+        </div>
+        <div class="test-reward-note" id="tb-reward-note"></div>
+      </section>
 
-    <div class="test-builder-card">
-      <div class="rcard-title">3. Назначение — кому назначить тест</div>
-      <div class="form-group">
-        <select id="tb-assign-type" class="form-select">
-          <option value="all" ${s.assignTargetType==='all'?'selected':''}>Все операторы</option>
-          <option value="group" ${s.assignTargetType==='group'?'selected':''}>По группам</option>
-          <option value="operator" ${s.assignTargetType==='operator'?'selected':''}>Отдельные операторы</option>
-        </select>
-      </div>
-      <div id="tb-assign-targets"></div>
-    </div>
+      <section class="test-builder-section">
+        <div class="test-builder-section-head test-builder-section-head-action"><span>03</span><div><h3>Вопросы</h3><p>${s.questions.length ? `${s.questions.length} ${s.questions.length === 1 ? 'вопрос' : 'вопросов'} в тесте` : 'Добавьте первый вопрос и варианты ответа.'}</p></div>${!isOpen?'<button class="btn-outline btn-sm" id="tb-add-question">Добавить вопрос</button>':''}</div>
+        <div id="tb-questions-list" class="test-questions-list">${s.questions.map((q,i) => questionEditorHtml(q,i,isOpen)).join('') || '<div class="tests-empty-compact">Вопросов пока нет.</div>'}</div>
+      </section>
 
-    <div style="display:flex;gap:10px;margin-top:18px">
-      <button class="btn-outline" id="tb-save-draft">Сохранить ${s.testId?'':'как черновик'}</button>
-      <button class="btn-primary" id="tb-save-and-publish">${s.status==='open'?'Сохранить изменения':'Сохранить и опубликовать'}</button>
+      <section class="test-builder-section">
+        <div class="test-builder-section-head"><span>04</span><div><h3>Назначение</h3><p>Выберите операторов, которым будет доступен тест.</p></div></div>
+        <div class="form-group"><label class="form-label">Аудитория</label><select id="tb-assign-type" class="form-select"><option value="all" ${s.assignTargetType==='all'?'selected':''}>Все операторы</option><option value="group" ${s.assignTargetType==='group'?'selected':''}>Выбранные группы</option><option value="operator" ${s.assignTargetType==='operator'?'selected':''}>Отдельные операторы</option></select></div>
+        <div id="tb-assign-targets"></div>
+      </section>
     </div>
-  `;
+    <div class="test-builder-actions"><button class="btn-outline" id="tb-save-draft">Сохранить${s.testId?'':' черновик'}</button><button class="btn-primary" id="tb-save-and-publish">${s.status==='open'?'Сохранить изменения':'Сохранить и опубликовать'}</button></div>`;
 
   el.querySelector('#tb-add-question')?.addEventListener('click', () => {
+    captureTestBuilderForm(el);
     s.questions.push({ question_text: '', question_type: 'single_choice', points: 1, answers: [{answer_text:'',is_correct:false},{answer_text:'',is_correct:false}] });
     renderTestBuilderScreen();
   });
 
   bindQuestionEditorEvents(el, isOpen);
   renderAssignTargetsBlock(el);
+  updateTestRewardFields(el);
+  el.querySelector('#tb-reward-type')?.addEventListener('change', () => updateTestRewardFields(el));
   el.querySelector('#tb-assign-type').addEventListener('change', (e) => { s.assignTargetType = e.target.value; renderAssignTargetsBlock(el); });
 
   el.querySelector('#tb-save-draft').addEventListener('click', () => saveTestBuilder(false));
   el.querySelector('#tb-save-and-publish').addEventListener('click', () => saveTestBuilder(true));
 }
 
+function captureTestBuilderForm(el) {
+  const s = _testBuilderState;
+  if (!s || !el?.querySelector('#tb-title')) return;
+  s.title = el.querySelector('#tb-title').value;
+  s.description = el.querySelector('#tb-description').value;
+  s.instruction = el.querySelector('#tb-instruction').value;
+  s.time_limit_minutes = Number(el.querySelector('#tb-time-limit').value);
+  s.opens_at = el.querySelector('#tb-opens-at').value;
+  s.closes_at = el.querySelector('#tb-closes-at').value;
+  s.passing_percent = Number(el.querySelector('#tb-passing-percent').value);
+  s.max_attempts = Number(el.querySelector('#tb-max-attempts').value);
+  s.show_result_after_finish = el.querySelector('#tb-show-result').checked;
+  s.show_correct_answers = el.querySelector('#tb-show-correct').checked;
+  s.allow_retake = el.querySelector('#tb-allow-retake').checked;
+  s.reward_type = el.querySelector('#tb-reward-type').value;
+  s.reward_points = Number(el.querySelector('#tb-reward-points').value);
+  s.reward_coins = Number(el.querySelector('#tb-reward-coins').value);
+  s.reward_min_percent = Number(el.querySelector('#tb-reward-min-percent').value);
+  s.reward_mode = el.querySelector('#tb-reward-mode').value;
+}
+
+function updateTestRewardFields(el) {
+  const type = el.querySelector('#tb-reward-type')?.value || 'none';
+  el.querySelectorAll('[data-reward-field]').forEach(field => {
+    const kind = field.dataset.rewardField;
+    field.hidden = type === 'none' || (kind === 'points' && !type.includes('points')) || (kind === 'coins' && !type.includes('coins'));
+  });
+  const note = el.querySelector('#tb-reward-note');
+  if (note) note.textContent = type === 'none' ? 'Тест будет проверять знания без начисления награды.' : 'Награда создаётся одной транзакцией после успешной проверки результата.';
+}
+
 function questionEditorHtml(q, index, isOpen) {
   return `<div class="test-question-editor" data-q-index="${index}">
-    <div class="test-question-editor-head">
-      <input class="form-input" placeholder="Текст вопроса" value="${esc(q.question_text)}" data-q-field="question_text" ${isOpen?'disabled':''}>
-      <select class="form-select" data-q-field="question_type" style="max-width:200px" ${isOpen?'disabled':''}>
+    <div class="test-question-number">${String(index + 1).padStart(2, '0')}</div>
+    <div class="test-question-content">
+      <div class="test-question-editor-head">
+        <div class="form-group test-question-title-field"><label class="form-label">Вопрос</label><input class="form-input" placeholder="Введите текст вопроса" value="${esc(q.question_text)}" data-q-field="question_text" ${isOpen?'disabled':''}></div>
+        <div class="form-group"><label class="form-label">Тип ответа</label><select class="form-select" data-q-field="question_type" ${isOpen?'disabled':''}>
         <option value="single_choice" ${q.question_type==='single_choice'?'selected':''}>Один ответ</option>
         <option value="multiple_choice" ${q.question_type==='multiple_choice'?'selected':''}>Несколько ответов</option>
-      </select>
-      <input class="form-input" type="number" min="0" style="max-width:90px" placeholder="Баллы" value="${q.points}" data-q-field="points" ${isOpen?'disabled':''}>
-      ${!isOpen?`<button class="btn-outline btn-sm" data-q-delete>×</button>`:''}
+        </select></div>
+        <div class="form-group test-question-points"><label class="form-label">Баллы</label><input class="form-input" type="number" min="0" value="${q.points}" data-q-field="points" ${isOpen?'disabled':''}></div>
+        ${!isOpen?`<button class="test-icon-button test-question-delete" data-q-delete title="Удалить вопрос" aria-label="Удалить вопрос">×</button>`:''}
+      </div>
+      <div class="test-answer-label">Варианты ответа <span>Отметьте правильный</span></div>
+      <div class="test-answer-options">
+        ${q.answers.map((a,ai) => `<div class="test-answer-option-row" data-a-index="${ai}">
+          <label class="test-correct-control" title="Правильный ответ"><input type="${q.question_type==='multiple_choice'?'checkbox':'radio'}" name="correct-${index}" data-a-field="is_correct" ${a.is_correct?'checked':''} ${isOpen?'disabled':''}><i></i></label>
+          <input class="form-input" placeholder="Вариант ${ai + 1}" value="${esc(a.answer_text)}" data-a-field="answer_text" ${isOpen?'disabled':''}>
+          ${!isOpen&&q.answers.length>2?`<button class="test-icon-button" data-a-delete title="Удалить вариант" aria-label="Удалить вариант">×</button>`:''}
+        </div>`).join('')}
+      </div>
+      ${!isOpen && q.answers.length < 10 ? `<button class="btn-outline btn-sm test-add-answer" data-q-add-answer>Добавить вариант</button>` : ''}
     </div>
-    <div class="test-answer-options">
-      ${q.answers.map((a,ai) => `<div class="test-answer-option-row" data-a-index="${ai}">
-        <input type="${q.question_type==='multiple_choice'?'checkbox':'radio'}" data-a-field="is_correct" ${a.is_correct?'checked':''} ${isOpen?'disabled':''}>
-        <input class="form-input" placeholder="Вариант ответа" value="${esc(a.answer_text)}" data-a-field="answer_text" ${isOpen?'disabled':''}>
-        ${!isOpen&&q.answers.length>2?`<button class="btn-outline btn-sm" data-a-delete>×</button>`:''}
-      </div>`).join('')}
-    </div>
-    ${!isOpen && q.answers.length < 10 ? `<button class="btn-outline btn-sm" data-q-add-answer>+ Добавить вариант ответа</button>` : ''}
   </div>`;
 }
 
@@ -2088,11 +2137,20 @@ function bindQuestionEditorEvents(el, isOpen) {
     qDiv.querySelectorAll('[data-q-field]').forEach(input => {
       input.addEventListener('input', () => { s.questions[qi][input.dataset.qField] = input.type === 'number' ? Number(input.value) : input.value; });
       input.addEventListener('change', () => {
-        if (input.dataset.qField === 'question_type') renderTestBuilderScreen();
+        if (input.dataset.qField === 'question_type') {
+          captureTestBuilderForm(el);
+          renderTestBuilderScreen();
+        }
       });
     });
-    qDiv.querySelector('[data-q-delete]')?.addEventListener('click', () => { s.questions.splice(qi,1); renderTestBuilderScreen(); });
-    qDiv.querySelector('[data-q-add-answer]')?.addEventListener('click', () => { s.questions[qi].answers.push({answer_text:'',is_correct:false}); renderTestBuilderScreen(); });
+    qDiv.querySelector('[data-q-delete]')?.addEventListener('click', () => {
+      captureTestBuilderForm(el);
+      const removed = s.questions[qi];
+      if (removed?.id) s.deletedQuestionIds.push(removed.id);
+      s.questions.splice(qi, 1);
+      renderTestBuilderScreen();
+    });
+    qDiv.querySelector('[data-q-add-answer]')?.addEventListener('click', () => { captureTestBuilderForm(el); s.questions[qi].answers.push({answer_text:'',is_correct:false}); renderTestBuilderScreen(); });
 
     qDiv.querySelectorAll('[data-a-index]').forEach(aDiv => {
       const ai = Number(aDiv.dataset.aIndex);
@@ -2108,7 +2166,7 @@ function bindQuestionEditorEvents(el, isOpen) {
           }
         });
       });
-      aDiv.querySelector('[data-a-delete]')?.addEventListener('click', () => { s.questions[qi].answers.splice(ai,1); renderTestBuilderScreen(); });
+      aDiv.querySelector('[data-a-delete]')?.addEventListener('click', () => { captureTestBuilderForm(el); s.questions[qi].answers.splice(ai,1); renderTestBuilderScreen(); });
     });
   });
 }
@@ -2119,11 +2177,11 @@ function renderAssignTargetsBlock(el) {
   if (s.assignTargetType === 'all') { box.innerHTML = ''; return; }
   if (s.assignTargetType === 'group') {
     box.innerHTML = `<div class="form-group"><label class="form-label">Группы</label>
-      <div class="test-target-checklist">${(STATE.groups||[]).map(g => `<label class="an-checkbox-label"><input type="checkbox" value="${g.id}" ${s.assignTargetIds.includes(g.id)?'checked':''}> ${esc(g.name)}</label>`).join('')}</div></div>`;
+      <div class="test-target-checklist">${(STATE.groups||[]).map(g => `<label class="test-target-option"><input type="checkbox" value="${g.id}" ${s.assignTargetIds.includes(g.id)?'checked':''}><i></i><span>${esc(g.name)}</span></label>`).join('')}</div></div>`;
   } else {
     box.innerHTML = `<div class="form-group"><label class="form-label">Операторы</label>
-      <input class="form-input" id="tb-operator-search" placeholder="Поиск по ФИО" style="margin-bottom:8px">
-      <div class="test-target-checklist" id="tb-operator-checklist">${(STATE.adminOperators||[]).map(o => `<label class="an-checkbox-label" data-op-name="${esc(o.full_name).toLowerCase()}"><input type="checkbox" value="${o.id}" ${s.assignTargetIds.includes(o.id)?'checked':''}> ${esc(o.full_name)}</label>`).join('')}</div></div>`;
+      <input class="form-input" id="tb-operator-search" placeholder="Поиск по ФИО">
+      <div class="test-target-checklist" id="tb-operator-checklist">${(STATE.adminOperators||[]).map(o => `<label class="test-target-option" data-op-name="${esc(o.full_name).toLowerCase()}"><input type="checkbox" value="${o.id}" ${s.assignTargetIds.includes(o.id)?'checked':''}><i></i><span>${esc(o.full_name)}</span></label>`).join('')}</div></div>`;
     box.querySelector('#tb-operator-search')?.addEventListener('input', (e) => {
       const q = e.target.value.toLowerCase();
       box.querySelectorAll('[data-op-name]').forEach(label => { label.style.display = label.dataset.opName.includes(q) ? '' : 'none'; });
@@ -2170,7 +2228,9 @@ async function saveTestBuilder(publish) {
   const s = _testBuilderState;
   const el = document.getElementById('view-tests');
 
-  const payload = {
+  const payload = s.status === 'open' ? {
+    closes_at: localDateTimeInputToUTCISOString(el.querySelector('#tb-closes-at').value),
+  } : {
     title: el.querySelector('#tb-title').value,
     description: el.querySelector('#tb-description').value,
     instruction: el.querySelector('#tb-instruction').value,
@@ -2189,7 +2249,18 @@ async function saveTestBuilder(publish) {
     reward_mode: el.querySelector('#tb-reward-mode').value,
   };
 
-  if (!payload.title.trim()) { showToast('Укажите название теста', 'error'); return; }
+  if (s.status !== 'open' && !payload.title.trim()) { showToast('Укажите название теста', 'error'); return; }
+  if (s.status !== 'open') {
+    if (publish && !s.questions.length) { showToast('Добавьте хотя бы один вопрос', 'error'); return; }
+    if (publish && s.assignTargetType !== 'all' && !s.assignTargetIds.length) { showToast('Выберите аудиторию теста', 'error'); return; }
+    for (const question of s.questions) {
+      if (!question.question_text.trim()) { showToast('Заполните текст каждого вопроса', 'error'); return; }
+      if (question.answers.some(answer => !answer.answer_text.trim())) { showToast(`Заполните все варианты ответа в вопросе «${question.question_text}»`, 'error'); return; }
+      const correctCount = question.answers.filter(answer => answer.is_correct).length;
+      if (!correctCount) { showToast(`У вопроса «${question.question_text}» не указан правильный ответ`, 'error'); return; }
+      if (question.question_type === 'single_choice' && correctCount !== 1) { showToast(`В вопросе «${question.question_text}» должен быть один правильный ответ`, 'error'); return; }
+    }
+  }
 
   try {
     let testId = s.testId;
@@ -2201,19 +2272,20 @@ async function saveTestBuilder(publish) {
       s.testId = testId;
     }
 
-    for (const q of s.questions) {
-      if (q.answers.filter(a => a.is_correct).length === 0) {
-        showToast(`У вопроса "${q.question_text || '(без текста)'}" не указан правильный ответ`, 'error');
-        return;
-      }
-      const qPayload = { question_text: q.question_text, question_type: q.question_type, points: q.points, sort_order: 0, answers: q.answers };
+    for (const questionId of (s.status === 'open' ? [] : s.deletedQuestionIds)) {
+      await api.deleteTestQuestion(questionId);
+    }
+    s.deletedQuestionIds = [];
+
+    for (const [questionIndex, q] of (s.status === 'open' ? [] : s.questions).entries()) {
+      const qPayload = { question_text: q.question_text, question_type: q.question_type, points: q.points, sort_order: questionIndex, answers: q.answers.map((answer, answerIndex) => ({ ...answer, sort_order: answerIndex })) };
       if (q.id) await api.updateTestQuestion(q.id, qPayload);
       else { const created = await api.addTestQuestion(testId, qPayload); q.id = created.id; }
     }
 
     await api.assignTest(testId, { target_type: s.assignTargetType, target_ids: s.assignTargetIds });
 
-    if (publish) {
+    if (publish && s.status !== 'open') {
       await api.publishTest(testId);
       showToast('Тест сохранён и опубликован', 'ok');
     } else {
