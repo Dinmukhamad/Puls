@@ -251,6 +251,12 @@ def get_rows(
 
     daily_metrics, warnings = aggregate_from_daily_metrics(db, start_date, end_date)
 
+    if not daily_metrics and not existing_reports and repo.available_data_date_range(db) is None:
+        from app.modules.reports.service import ensure_daily_metrics_from_saved_files
+
+        if ensure_daily_metrics_from_saved_files(db):
+            daily_metrics, warnings = aggregate_from_daily_metrics(db, start_date, end_date)
+
     if not daily_metrics and not existing_reports:
         raise HTTPException(status_code=404, detail=" ".join(warnings) or PERIOD_NOT_CALCULATED_MESSAGE)
 
@@ -334,7 +340,19 @@ def _operator_row_payload(r: OperatorAnalyticsRow, include_operator_id: bool) ->
 # ── Payload-функции эндпоинтов ────────────────────────────────────────────────
 
 def available_periods(db: Session) -> dict:
-    rows = repo.distinct_periods(db)
+    # PeriodReport is a calculated snapshot and may legitimately be empty
+    # after new Excel files are uploaded. Analytics itself reads arbitrary
+    # ranges from OperatorDailyMetric, so expose that range as well.
+    periods = {tuple(row) for row in repo.distinct_periods(db)}
+    daily_range = repo.available_data_date_range(db)
+    if not daily_range:
+        from app.modules.reports.service import ensure_daily_metrics_from_saved_files
+
+        if ensure_daily_metrics_from_saved_files(db):
+            daily_range = repo.available_data_date_range(db)
+    if daily_range:
+        periods.add(tuple(daily_range))
+    rows = sorted(periods, key=lambda row: (row[1], row[0]), reverse=True)
     return {
         "items": [
             {"start_date": str(s), "end_date": str(e), "label": f"{s.strftime('%d.%m.%Y')} – {e.strftime('%d.%m.%Y')}"}

@@ -8,6 +8,7 @@ routers/period_reports.py дословно; формулы и §16 не меня
 from __future__ import annotations
 
 import json as _json
+import logging
 from datetime import date
 
 from fastapi import HTTPException
@@ -38,6 +39,7 @@ from app.modules.reports.schemas import (
 from app.modules.work_norms.service import calculate_norm_for_period
 
 MAX_REPORT_FILE_BYTES = 15 * 1024 * 1024
+logger = logging.getLogger(__name__)
 
 
 def process_upload(
@@ -65,7 +67,14 @@ def process_upload(
     }
 
 
-def _rebuild_daily_metrics(db: Session, monthly_bytes: bytes, report_bytes: bytes, actor_user_id: int) -> dict:
+def _rebuild_daily_metrics(
+    db: Session,
+    monthly_bytes: bytes,
+    report_bytes: bytes,
+    actor_user_id: int,
+    *,
+    invalidate_period_reports: bool = True,
+) -> dict:
     """
     Парсит оба файла ПОСУТОЧНО (build_daily_metric_rows) и записывает результат
     в operator_daily_metrics одним bulk upsert-запросом. Также удаляет ранее
@@ -130,7 +139,7 @@ def _rebuild_daily_metrics(db: Session, monthly_bytes: bytes, report_bytes: byte
 
     # Старые сохранённые расчёты периодов больше не гарантированно актуальны —
     # инвалидируем (п.9 ТЗ). Пользователь при необходимости пересчитает заново.
-    deleted_reports = repo.delete_all_period_reports(db)
+    deleted_reports = repo.delete_all_period_reports(db) if invalidate_period_reports else 0
 
     db.commit()
 
@@ -140,6 +149,33 @@ def _rebuild_daily_metrics(db: Session, monthly_bytes: bytes, report_bytes: byte
         "unmatched_operators_sample": sorted(unmatched_names)[:20],
         "invalidated_period_reports": deleted_reports,
     }
+
+
+def ensure_daily_metrics_from_saved_files(db: Session) -> bool:
+    """Backfill daily analytics for files uploaded before daily metrics existed."""
+    monthly_row = repo.uploaded_file(db, "monthly")
+    report_row = repo.uploaded_file(db, "report")
+    if not monthly_row or not report_row or not monthly_row.content or not report_row.content:
+        return False
+
+    actor_user_id = monthly_row.uploaded_by_user_id or report_row.uploaded_by_user_id or 0
+    try:
+        stats = _rebuild_daily_metrics(
+            db,
+            monthly_row.content,
+            report_row.content,
+            actor_user_id,
+            invalidate_period_reports=False,
+        )
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to backfill daily analytics from saved report files")
+        return False
+
+    if stats["matched_daily_rows"]:
+        cache_clear_all()
+        return True
+    return False
 
 
 def upload_status(db: Session) -> dict:

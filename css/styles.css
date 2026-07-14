@@ -3428,7 +3428,11 @@ body.role-operator {
   color: var(--danger);
   background: var(--danger-soft);
 }
-
+.an-period-availability {
+  margin-top: 10px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
 
 /* source: 40-coins-tests-wheel-overrides.css */
 /* Coins module */

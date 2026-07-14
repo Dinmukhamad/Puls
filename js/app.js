@@ -8193,6 +8193,7 @@ async function prefetchAnalyticsInBackground() {
     }).then(r => r.ok ? r.json() : null).catch(() => null);
 
     if (periods?.items?.length) {
+      _analyticsState.availablePeriods = periods.items;
       // Берём самый свежий период из уже рассчитанных
       const latest = periods.items[0];
       startDate = latest.start_date;
@@ -8286,6 +8287,7 @@ let _analyticsState = {
   participationStatus: 'all',
   onlyWithData: false,
   groups: [],
+  availablePeriods: [],
 };
 
 function analyticsApiUrl(path, params) {
@@ -8311,10 +8313,36 @@ async function analyticsFetch(path, params, onUpdate) {
     }
     if (!res.ok) {
       const msg = data.detail || data.error || `Ошибка ${res.status}`;
-      throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      const error = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      error.status = res.status;
+      throw error;
     }
     return data;
   }, onUpdate, ANALYTICS_SWR_TTL_MS);
+}
+
+async function resolveInitialAnalyticsPeriod(urlParams) {
+  let periods = [];
+  try {
+    const data = await analyticsFetch('available-periods', {});
+    periods = Array.isArray(data?.items) ? data.items : [];
+  } catch { /* the regular empty state will explain unavailable data */ }
+
+  _analyticsState.availablePeriods = periods;
+  const requestedStart = urlParams.start;
+  const requestedEnd = urlParams.end;
+  const requestedHasData = requestedStart && requestedEnd && periods.some(period =>
+    requestedStart <= period.end_date && requestedEnd >= period.start_date
+  );
+
+  if (requestedHasData) return { start: requestedStart, end: requestedEnd };
+  if (periods.length) return { start: periods[0].start_date, end: periods[0].end_date };
+  if (requestedStart && requestedEnd) return { start: requestedStart, end: requestedEnd };
+
+  const today = new Date();
+  const weekAgo = new Date(today);
+  weekAgo.setDate(today.getDate() - 6);
+  return { start: weekAgo.toISOString().slice(0, 10), end: today.toISOString().slice(0, 10) };
 }
 
 function fmtA(v, decimals = 2, suffix = '') {
@@ -8345,10 +8373,10 @@ async function renderAnalytics() {
   const urlParams = getAnalyticsParams();
 
   if (!_analyticsState.startDate) {
-    const today = new Date();
-    const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 6);
-    _analyticsState.startDate = urlParams.start || weekAgo.toISOString().slice(0, 10);
-    _analyticsState.endDate = urlParams.end || today.toISOString().slice(0, 10);
+    const initialPeriod = await resolveInitialAnalyticsPeriod(urlParams);
+    if (isNavStale(myNavGen)) return;
+    _analyticsState.startDate = initialPeriod.start;
+    _analyticsState.endDate = initialPeriod.end;
     _analyticsState.tab = urlParams.tab;
     _analyticsState.groupId = urlParams.group;
     _analyticsState.operatorQuery = urlParams.operator;
@@ -8392,6 +8420,7 @@ async function renderAnalytics() {
         </label>
         <button class="btn-primary" id="an-apply-btn">Применить</button>
       </div>
+      ${_analyticsState.availablePeriods.length ? `<div class="an-period-availability">Доступные данные: ${esc(_analyticsState.availablePeriods[0].label)}</div>` : ''}
       <div id="an-availability-warning"></div>
     </div>
 
@@ -8452,14 +8481,14 @@ async function renderAnalytics() {
       const base = analyticsBaseParams();
       const full = analyticsOpParams();
       switch(tab) {
-        case 'overview':   analyticsFetch('overview', full); break;
-        case 'operators':  analyticsFetch('operators-combined', full); break;
-        case 'groups':     analyticsFetch('groups-comparison', base); break;
-        case 'matrix':     analyticsFetch('matrix-combined', base); break;
-        case 'quality':    analyticsFetch('quality-combined', base); break;
-        case 'penalties':  analyticsFetch('penalties', base); break;
-        case 'risks':      analyticsFetch('risk-pyramid', base); break;
-        case 'points':     analyticsFetch('points', full); break;
+        case 'overview':   analyticsFetch('overview', full).catch(() => {}); break;
+        case 'operators':  analyticsFetch('operators-combined', full).catch(() => {}); break;
+        case 'groups':     analyticsFetch('groups-comparison', base).catch(() => {}); break;
+        case 'matrix':     analyticsFetch('matrix-combined', base).catch(() => {}); break;
+        case 'quality':    analyticsFetch('quality-combined', base).catch(() => {}); break;
+        case 'penalties':  analyticsFetch('penalties', base).catch(() => {}); break;
+        case 'risks':      analyticsFetch('risk-pyramid', base).catch(() => {}); break;
+        case 'points':     analyticsFetch('points', full).catch(() => {}); break;
       }
     }, { passive: true });
     btn.addEventListener('click', () => {
