@@ -88,7 +88,7 @@
     getRating,
     myWallet, operatorWallet, manualTransaction,
     listShopItems, createShopItem, updateShopItem,
-    listPurchases, buyItem, approvePurchase, rejectPurchase, completePurchase,
+    listPurchases, listShopDiscounts, buyItem, approvePurchase, rejectPurchase, completePurchase,
     listGroups, createGroup, updateGroup, enableGroup, disableGroup, deleteGroup,
     getDashboard, getDashboardOperators, getDashboardHistory,
     createUser, listUsers, updateUser, deactivateUser, changeUserRole, resetUserPassword,

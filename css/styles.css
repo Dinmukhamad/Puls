@@ -8473,6 +8473,36 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
   box-shadow: var(--shadow-sm);
 }
 
+#view-shop .shop-v2-header-meta {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+#view-shop .shop-v2-coupon-chip {
+  min-width: 170px;
+  padding: 11px 15px;
+  color: var(--success);
+  background: var(--success-soft);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border-default));
+  border-radius: 8px;
+}
+
+#view-shop .shop-v2-coupon-chip span,
+#view-shop .shop-v2-coupon-chip b {
+  display: block;
+}
+
+#view-shop .shop-v2-coupon-chip span {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+#view-shop .shop-v2-coupon-chip b {
+  margin-top: 4px;
+  font-size: 17px;
+}
+
 #view-shop .shop-v2-balance span,
 #view-shop .shop-v2-balance b {
   display: block;
@@ -8653,8 +8683,8 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 270px;
-  padding: 14px;
+  min-height: 230px;
+  padding: 16px;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
   border-radius: 8px;
@@ -8672,7 +8702,7 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
 }
 
 #view-shop .shop-v2-card.is-blocked {
-  opacity: .72;
+  opacity: .82;
 }
 
 #view-shop .shop-v2-card-top {
@@ -8685,8 +8715,8 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
 #view-shop .shop-v2-icon {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 48px;
+  height: 48px;
   color: var(--accent-primary);
   background: var(--accent-secondary-soft);
   border-radius: 7px;
@@ -8694,8 +8724,8 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
 
 #view-shop .shop-v2-icon svg,
 .shop-v2-confirm .shop-v2-icon svg {
-  width: 19px;
-  height: 19px;
+  width: 24px;
+  height: 24px;
 }
 
 #view-shop .shop-v2-icon.is-workday,
@@ -8725,7 +8755,7 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
 #view-shop .shop-v2-category {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
   text-overflow: ellipsis;
   text-transform: uppercase;
@@ -8734,13 +8764,13 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
 
 #view-shop .shop-v2-card-copy {
   flex: 1;
-  margin-top: 13px;
+  margin-top: 16px;
 }
 
 #view-shop .shop-v2-card-copy h4 {
   margin: 0;
-  font-size: 13px;
-  line-height: 1.35;
+  font-size: 16px;
+  line-height: 1.4;
 }
 
 #view-shop .shop-v2-card-copy p {
@@ -8783,18 +8813,61 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
   gap: 8px;
 }
 
+#view-shop .shop-v2-card-footer .shop-v2-price-row {
+  align-items: flex-end;
+}
+
+#view-shop .shop-v2-price-stack {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px 7px;
+  min-width: 0;
+}
+
+#view-shop .shop-v2-price-stack s {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+#view-shop .shop-v2-price-stack b span {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#view-shop .shop-v2-price-stack em {
+  flex-basis: 100%;
+  color: var(--success);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
 #view-shop .shop-v2-card-footer b {
   color: var(--accent-primary);
-  font-size: 17px;
+  font-size: 21px;
 }
 
 #view-shop .shop-v2-card-footer small {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 8.5px;
+  font-size: 10px;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+#view-shop .shop-v2-shortfall {
+  max-width: 110px;
+  padding: 5px 7px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--border-default));
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: right;
 }
 
 #view-shop .shop-v2-card-footer button {
@@ -8802,7 +8875,7 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
   min-height: 36px;
   overflow: hidden;
   border-radius: 6px;
-  font-size: 10px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -8938,6 +9011,42 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
   line-height: 1.5;
 }
 
+.shop-v2-discount-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin: 16px 0 10px;
+  padding: 13px;
+  color: var(--success);
+  background: var(--success-soft);
+  border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border-default));
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.shop-v2-discount-option input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--success);
+}
+
+.shop-v2-discount-option span,
+.shop-v2-discount-option b,
+.shop-v2-discount-option small {
+  display: block;
+}
+
+.shop-v2-discount-option b {
+  font-size: 13px;
+}
+
+.shop-v2-discount-option small {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
 .shop-v2-confirm-price {
   display: flex;
   align-items: center;
@@ -8979,18 +9088,27 @@ html[data-theme="dark"] .shop-v2-confirm .shop-v2-icon.is-recognition { color: #
 html[data-theme="dark"] #view-shop .shop-v2-icon.is-gifts,
 html[data-theme="dark"] .shop-v2-confirm .shop-v2-icon.is-gifts { color: #C4B5FD; background: rgba(124, 58, 237, .18); }
 
+html[data-theme="dark"] #view-shop .shop-v2-shortfall {
+  color: #FDA4AF;
+  background: rgba(225, 29, 72, .15);
+  border-color: rgba(251, 113, 133, .35);
+}
+
 @media (max-width: 1120px) {
   #view-shop .shop-v2-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 820px) {
   #view-shop .shop-v2-header { align-items: flex-start; flex-direction: column; }
+  #view-shop .shop-v2-header-meta { width: 100%; }
+  #view-shop .shop-v2-header-meta > * { flex: 1; }
   #view-shop .shop-v2-balance { width: 100%; }
   #view-shop .shop-v2-summary { grid-template-columns: 1fr; }
   #view-shop .shop-v2-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 560px) {
+  #view-shop .shop-v2-header-meta { flex-direction: column; }
   #view-shop .shop-v2-catalog-head { align-items: flex-start; flex-direction: column; }
   #view-shop .shop-v2-grid { grid-template-columns: 1fr; padding-inline: 12px; }
   #view-shop .shop-v2-order { grid-template-columns: 32px minmax(0, 1fr); padding: 9px 0; }

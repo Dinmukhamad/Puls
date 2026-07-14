@@ -101,6 +101,7 @@ let STATE = {
   rating: [],
   nominations: { items: [] },
   shopItems: [],
+  shopDiscounts: [],
   purchases: [],
   dashboard: null,
   adminOperators: [],
@@ -613,6 +614,7 @@ async function loadData(role) {
   if (role === 'operator') {
     tasks.push(api.myWallet().catch(() => null).then(w => STATE.wallet = w)); // личный баланс — всегда свежий, без кеша
     tasks.push(api.listPurchases().catch(() => []).then(p => STATE.purchases = p));
+    tasks.push(api.listShopDiscounts().catch(() => []).then(c => STATE.shopDiscounts = c));
   }
   if (isAdmin(role)) {
     tasks.push(
@@ -672,6 +674,10 @@ function prefetchAppSectionsInBackground(role) {
       () => swrFetch('tests:my', () => api.myTests(), null, SWR_FAST_TTL_MS),
       () => swrFetch('raffles:me', () => api.getMyRaffles(), null, SWR_FAST_TTL_MS),
     );
+  }
+
+  if (role === 'operator') {
+    tasks.push(() => swrFetch('shop:discounts:me', () => api.listShopDiscounts(), null, SWR_FAST_TTL_MS));
   }
 
   if (admin) {
@@ -2972,7 +2978,29 @@ function shopCategoryIcon(category) {
   return `<svg ${common}>${paths[category] || paths.other}</svg>`;
 }
 
-function shopItemState(item, balance, role = 'operator') {
+function shopItemIcon(item) {
+  const common = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
+  const text = `${item?.title || ''} ${item?.category || ''}`.toLowerCase();
+  let path = '';
+  if (/музык|плейлист/.test(text)) path = '<path d="M9 18V5l10-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/>';
+  else if (/кофе|чай/.test(text)) path = '<path d="M4 8h12v7a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V8Z"/><path d="M16 10h2a2 2 0 0 1 0 4h-2M6 3v2m4-2v2m4-2v2"/>';
+  else if (/перерыв|отдых/.test(text)) path = '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>';
+  else if (/мест|смен/.test(text)) path = '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8m-4-4v4"/>';
+  else if (/круж/.test(text)) path = '<path d="M5 7h11v9a4 4 0 0 1-4 4H9a4 4 0 0 1-4-4V7Z"/><path d="M16 9h2a2 2 0 0 1 0 4h-2"/>';
+  else if (/обед|пицц|еда/.test(text)) path = '<path d="M7 3v8m-3-8v5a3 3 0 0 0 6 0V3m7 0v18m0-18c-2 2-3 4-3 7h3"/>';
+  else if (/сертификат|подар/.test(text)) path = '<rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M7.5 8C5 8 4 6.8 4 5.5S5 3 6.5 3C9 3 12 8 12 8m4.5 0C19 8 20 6.8 20 5.5S19 3 17.5 3C15 3 12 8 12 8"/>';
+  else if (/благодар|статус|звезд/.test(text)) path = '<path d="m12 2 3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z"/>';
+  else path = shopCategoryIcon(shopCategory(item)).replace(/^<svg[^>]*>|<\/svg>$/g, '');
+  return `<svg ${common}>${path}</svg>`;
+}
+
+function shopAvailableCoupons() {
+  return (STATE.shopDiscounts || [])
+    .filter(coupon => coupon.status === 'available')
+    .sort((a, b) => (Number(b.percent) - Number(a.percent)) || (Number(a.id) - Number(b.id)));
+}
+
+function shopItemState(item, balance, role = 'operator', coupon = null) {
   const levels = STATE.operatorLevels || [];
   const requiredLevel = item.min_level_id ? levels.find(level => level.id === item.min_level_id) : null;
   const currentLevel = STATE.myLevel?.level || null;
@@ -2984,16 +3012,20 @@ function shopItemState(item, balance, role = 'operator') {
   const outOfStock = item.stock_remaining != null && item.stock_remaining <= 0;
   const personalLimitHit = !!item.operator_limit_reached;
   const blocked = !!(notStartedYet || alreadyEnded || outOfStock || personalLimitHit);
-  const canBuy = role === 'operator' && balance >= item.price && !levelLocked && !blocked;
-  const needMore = role === 'operator' && balance < item.price ? item.price - balance : 0;
+  const originalPrice = Number(item.price) || 0;
+  const discountPercent = coupon ? Math.max(1, Math.min(90, Number(coupon.percent) || 10)) : 0;
+  const discountAmount = Math.floor(originalPrice * discountPercent / 100);
+  const effectivePrice = Math.max(0, originalPrice - discountAmount);
+  const canBuy = role === 'operator' && balance >= effectivePrice && !levelLocked && !blocked;
+  const needMore = role === 'operator' && balance < effectivePrice ? effectivePrice - balance : 0;
   let label = 'Получить бонус';
   if (levelLocked) label = `С уровня «${requiredLevel.name}»`;
   else if (notStartedYet) label = `Доступно с ${fmtDate(item.starts_at)}`;
   else if (alreadyEnded) label = 'Предложение завершено';
   else if (outOfStock) label = 'Закончилось';
   else if (personalLimitHit) label = 'Лимит использован';
-  else if (needMore > 0) label = `Нужно ещё ${needMore} ₡`;
-  return { requiredLevel, levelLocked, notStartedYet, alreadyEnded, outOfStock, personalLimitHit, blocked, canBuy, needMore, label };
+  else if (needMore > 0) label = `Нужно ещё ${needMore} коинов`;
+  return { requiredLevel, levelLocked, notStartedYet, alreadyEnded, outOfStock, personalLimitHit, blocked, canBuy, needMore, label, originalPrice, discountPercent, discountAmount, effectivePrice, coupon };
 }
 
 function renderShop() {
@@ -3028,7 +3060,9 @@ function renderShop() {
 
 function renderOperatorShop(el, items, balance) {
   const purchases = STATE.purchases || [];
-  const states = new Map(items.map(item => [item.id, shopItemState(item, balance)]));
+  const coupons = shopAvailableCoupons();
+  const bestCoupon = coupons[0] || null;
+  const states = new Map(items.map(item => [item.id, shopItemState(item, balance, 'operator', bestCoupon)]));
   const affordableCount = items.filter(item => states.get(item.id).canBuy).length;
   const activeRequests = purchases.filter(row => ['new', 'pending', 'approved'].includes(row.status)).length;
   const categoryItems = items.filter(item => _shopCategory === 'all' || shopCategory(item) === _shopCategory);
@@ -3044,13 +3078,16 @@ function renderOperatorShop(el, items, balance) {
         <h2 class="section-title">Бонусы за ваши результаты</h2>
         <p class="shop-v2-subtitle">Обменивайте заработанные коины на полезные бонусы для работы и отдыха.</p>
       </div>
-      <div class="shop-v2-balance"><span>Ваш баланс</span><b>${balance} ₡</b></div>
+      <div class="shop-v2-header-meta">
+        ${coupons.length ? `<div class="shop-v2-coupon-chip"><span>Скидки Wheel of WOW</span><b>${coupons.length} × ${bestCoupon.percent}%</b></div>` : ''}
+        <div class="shop-v2-balance"><span>Ваш баланс</span><b>${balance} коинов</b></div>
+      </div>
     </div>
 
     <section class="shop-v2-summary" aria-label="Сводка магазина">
       <div><span>Можно получить сейчас</span><b>${affordableCount}</b><small>по текущему балансу</small></div>
       <div><span>Активные заявки</span><b>${activeRequests}</b><small>ожидают или выполняются</small></div>
-      <div><span>Как это работает</span><b>3 шага</b><small>выберите, отправьте, получите</small></div>
+      <div><span>Скидки Wheel of WOW</span><b>${coupons.length}</b><small>${coupons.length ? `каждая применяется отдельно, по ${bestCoupon.percent}%` : 'пока нет доступных купонов'}</small></div>
     </section>
 
     <section class="panel shop-v2-catalog">
@@ -3099,13 +3136,18 @@ function shopOperatorCard(item, balance, state = shopItemState(item, balance)) {
   if (item.ends_at && !state.alreadyEnded) badges.push(`<span>До ${fmtDate(item.ends_at)}</span>`);
   return `<article class="shop-v2-card ${state.canBuy ? 'is-available' : ''} ${state.blocked ? 'is-blocked' : ''}">
     <div class="shop-v2-card-top">
-      <span class="shop-v2-icon is-${category}">${shopCategoryIcon(category)}</span>
+      <span class="shop-v2-icon is-${category}">${shopItemIcon(item)}</span>
       <span class="shop-v2-category">${SHOP_CATEGORIES[category].label}</span>
     </div>
-    <div class="shop-v2-card-copy"><h4>${esc(item.title)}</h4><p>${esc(item.description || 'Описание бонуса уточняется у руководителя.')}</p></div>
+    <div class="shop-v2-card-copy"><h4>${esc(item.title)}</h4></div>
     ${badges.length ? `<div class="shop-v2-card-badges">${badges.join('')}</div>` : ''}
     <div class="shop-v2-card-footer">
-      <div><b>${item.price} ₡</b>${state.needMore > 0 ? `<small>Не хватает ${state.needMore} ₡</small>` : '<small>спишутся после оформления</small>'}</div>
+      <div class="shop-v2-price-row">
+        <div class="shop-v2-price-stack">
+          ${state.discountPercent ? `<s>${state.originalPrice}</s><b>${state.effectivePrice} <span>коинов</span></b><em>−${state.discountPercent}% по купону</em>` : `<b>${state.originalPrice} <span>коинов</span></b>`}
+        </div>
+        ${state.needMore > 0 ? `<strong class="shop-v2-shortfall">Не хватает ${state.needMore} коинов</strong>` : '<small>спишутся после оформления</small>'}
+      </div>
       <button type="button" class="${state.canBuy ? 'btn-primary' : 'btn-disabled'} shop-v2-buy" data-id="${item.id}" ${state.canBuy ? '' : 'disabled'}>${esc(state.label)}</button>
     </div>
   </article>`;
@@ -3121,8 +3163,8 @@ function shopPurchaseHistory(purchases, items) {
     const item = items.find(candidate => candidate.id === row.shop_item_id);
     const meta = statusMeta[row.status] || [row.status, ''];
     return `<div class="shop-v2-order">
-      <span class="shop-v2-order-icon">${shopCategoryIcon(shopCategory(item))}</span>
-      <div><b>${esc(item?.title || `Бонус #${row.shop_item_id}`)}</b><small>${fmtDate(row.created_at)} · ${row.price} ₡${row.reject_reason ? ` · ${esc(row.reject_reason)}` : ''}</small></div>
+      <span class="shop-v2-order-icon">${shopItemIcon(item)}</span>
+      <div><b>${esc(item?.title || `Бонус #${row.shop_item_id}`)}</b><small>${fmtDate(row.created_at)} · ${row.price} коинов${row.discount_percent ? ` · скидка ${row.discount_percent}%` : ''}${row.reject_reason ? ` · ${esc(row.reject_reason)}` : ''}</small></div>
       <span class="shop-v2-order-status ${meta[1]}">${meta[0]}</span>
     </div>`;
   }).join('')}</div>`;
@@ -3132,21 +3174,40 @@ function openShopPurchaseModal(itemId) {
   const item = (STATE.shopItems || []).find(candidate => candidate.id === itemId);
   if (!item) return;
   const balance = STATE.wallet?.current_balance ?? 0;
-  const state = shopItemState(item, balance);
+  const coupon = shopAvailableCoupons()[0] || null;
+  const state = shopItemState(item, balance, 'operator', coupon);
   if (!state.canBuy) return;
   const category = shopCategory(item);
   showModal(`
     <div class="shop-v2-confirm">
-      <span class="shop-v2-icon is-${category}">${shopCategoryIcon(category)}</span>
+      <span class="shop-v2-icon is-${category}">${shopItemIcon(item)}</span>
       <div class="section-kicker">Подтверждение</div>
       <h3 class="modal-title">${esc(item.title)}</h3>
-      <p>${esc(item.description || '')}</p>
-      <div class="shop-v2-confirm-price"><span>Стоимость</span><b>${item.price} ₡</b></div>
-      <div class="shop-v2-confirm-price"><span>Останется на балансе</span><b>${Math.max(0, balance - item.price)} ₡</b></div>
+      ${coupon ? `<label class="shop-v2-discount-option">
+        <input type="checkbox" id="shop-use-discount" data-coupon-id="${coupon.id}" data-original-price="${state.originalPrice}" data-discounted-price="${state.effectivePrice}" data-balance="${balance}" checked onchange="updateShopDiscountPreview()">
+        <span><b>Применить скидку ${coupon.percent}%</b><small>Доступно купонов: ${shopAvailableCoupons().length}. Спишется только один.</small></span>
+      </label>` : ''}
+      <div class="shop-v2-confirm-price"><span>Стоимость</span><b id="shop-confirm-price">${state.effectivePrice} коинов</b></div>
+      <div class="shop-v2-confirm-price"><span>Останется на балансе</span><b id="shop-confirm-rest">${Math.max(0, balance - state.effectivePrice)} коинов</b></div>
       <small>После оформления коины резервируются. Если заявку отклонят, они автоматически вернутся на баланс.</small>
       <div id="shop-buy-error" class="status-line"></div>
       <div class="shop-v2-confirm-actions"><button class="btn-outline" onclick="closeModal()">Отмена</button><button class="btn-primary" id="shop-confirm-buy" onclick="submitShopPurchase(${item.id})">Отправить заявку</button></div>
     </div>`);
+}
+
+function updateShopDiscountPreview() {
+  const toggle = document.getElementById('shop-use-discount');
+  if (!toggle) return;
+  const originalPrice = Number(toggle.dataset.originalPrice) || 0;
+  const discountedPrice = Number(toggle.dataset.discountedPrice) || originalPrice;
+  const balance = Number(toggle.dataset.balance) || 0;
+  const price = toggle.checked ? discountedPrice : originalPrice;
+  const priceEl = document.getElementById('shop-confirm-price');
+  const restEl = document.getElementById('shop-confirm-rest');
+  const submit = document.getElementById('shop-confirm-buy');
+  if (priceEl) priceEl.textContent = `${price} коинов`;
+  if (restEl) restEl.textContent = `${Math.max(0, balance - price)} коинов`;
+  if (submit) submit.disabled = balance < price;
 }
 
 async function submitShopPurchase(itemId) {
@@ -3154,12 +3215,15 @@ async function submitShopPurchase(itemId) {
   const error = document.getElementById('shop-buy-error');
   if (button) { button.disabled = true; button.textContent = 'Оформляем…'; }
   try {
-    await api.buyItem(itemId);
+    const couponToggle = document.getElementById('shop-use-discount');
+    const couponId = couponToggle?.checked ? Number(couponToggle.dataset.couponId) : null;
+    await api.buyItem(itemId, couponId);
     swrInvalidate('shop:');
-    const [wallet, purchases, items] = await Promise.all([api.myWallet(), api.listPurchases(), api.listShopItems()]);
+    const [wallet, purchases, items, discounts] = await Promise.all([api.myWallet(), api.listPurchases(), api.listShopItems(), api.listShopDiscounts()]);
     STATE.wallet = wallet;
     STATE.purchases = purchases;
     STATE.shopItems = items;
+    STATE.shopDiscounts = discounts;
     closeModal();
     showToast('Заявка отправлена руководителю', 'ok');
     renderShop();

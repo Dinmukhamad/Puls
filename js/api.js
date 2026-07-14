@@ -187,7 +187,12 @@ const api = (() => {
     const qs = new URLSearchParams(params).toString();
     return req('GET', '/api/shop/purchases' + (qs ? '?' + qs : ''));
   }
-  function buyItem(itemId)         { return req('POST', '/api/shop/purchases', { shop_item_id: itemId }); }
+  function listShopDiscounts()     { return req('GET', '/api/shop/discounts'); }
+  function buyItem(itemId, discountCouponId = null) {
+    const payload = { shop_item_id: itemId };
+    if (discountCouponId != null) payload.discount_coupon_id = discountCouponId;
+    return req('POST', '/api/shop/purchases', payload);
+  }
   function approvePurchase(id)     { return req('POST', `/api/shop/purchases/${id}/approve`); }
   function rejectPurchase(id, r)   { return req('POST', `/api/shop/purchases/${id}/reject`, { reason: r }); }
 
@@ -466,7 +471,7 @@ async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/c
     getRating,
     myWallet, operatorWallet, manualTransaction,
     listShopItems, createShopItem, updateShopItem,
-    listPurchases, buyItem, approvePurchase, rejectPurchase, completePurchase,
+    listPurchases, listShopDiscounts, buyItem, approvePurchase, rejectPurchase, completePurchase,
     listGroups, createGroup, updateGroup, enableGroup, disableGroup, deleteGroup,
     getDashboard, getDashboardOperators, getDashboardHistory,
     createUser, listUsers, updateUser, deactivateUser, changeUserRole, resetUserPassword,

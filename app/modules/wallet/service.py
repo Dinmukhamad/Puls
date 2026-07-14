@@ -1,12 +1,22 @@
 from __future__ import annotations
 
+import json
 from math import ceil, floor
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.entities import CoinTransaction, Operator, ShopItem, ShopPurchase, User, now_utc
+from app.models.entities import (
+    CoinTransaction,
+    Operator,
+    ShopDiscountCoupon,
+    ShopItem,
+    ShopPurchase,
+    User,
+    WheelSpin,
+    now_utc,
+)
 
 
 def points_to_coins(points: float, db: Session | None = None) -> int:
@@ -127,7 +137,51 @@ def shop_item_availability(db: Session, item: ShopItem, operator_id: int) -> dic
     }
 
 
-def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurchase:
+def sync_shop_discount_coupons(db: Session, operator_id: int) -> list[ShopDiscountCoupon]:
+    """Materialize coupons for shop-discount spins created before coupon support."""
+    spins = list(db.scalars(
+        select(WheelSpin).where(
+            WheelSpin.operator_id == operator_id,
+            WheelSpin.status == "completed",
+        )
+    ))
+    existing_spin_ids = set(db.scalars(
+        select(ShopDiscountCoupon.wheel_spin_id).where(ShopDiscountCoupon.operator_id == operator_id)
+    ))
+    for spin in spins:
+        if spin.id in existing_spin_ids:
+            continue
+        try:
+            payload = json.loads(spin.result_payload_json or "{}")
+        except (TypeError, ValueError):
+            continue
+        if payload.get("type") != "shop_discount":
+            continue
+        percent = max(1, min(90, int(payload.get("amount") or 10)))
+        db.add(ShopDiscountCoupon(
+            operator_id=operator_id,
+            wheel_spin_id=spin.id,
+            title=str(payload.get("title") or "Скидка в магазине"),
+            percent=percent,
+        ))
+        existing_spin_ids.add(spin.id)
+    db.flush()
+    return list(db.scalars(
+        select(ShopDiscountCoupon)
+        .where(
+            ShopDiscountCoupon.operator_id == operator_id,
+            ShopDiscountCoupon.status == "available",
+        )
+        .order_by(ShopDiscountCoupon.percent.desc(), ShopDiscountCoupon.created_at.asc())
+    ))
+
+
+def create_purchase(
+    db: Session,
+    operator: Operator,
+    item_id: int,
+    discount_coupon_id: int | None = None,
+) -> ShopPurchase:
     # Блокируем и строку товара: лимит остатка (stock_limit) читается и
     # проверяется здесь же, и без FOR UPDATE два одновременных запроса на
     # последнюю единицу товара оба прошли бы проверку и оба списали бы —
@@ -178,16 +232,49 @@ def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurcha
     if operator is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
 
-    if operator.current_balance < item.price:
+    coupon = None
+    discount_percent = 0
+    discount_amount = 0
+    final_price = item.price
+    if discount_coupon_id is not None:
+        sync_shop_discount_coupons(db, operator.id)
+        coupon = db.scalar(
+            select(ShopDiscountCoupon)
+            .where(ShopDiscountCoupon.id == discount_coupon_id)
+            .with_for_update()
+        )
+        if not coupon or coupon.operator_id != operator.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Скидка не найдена")
+        if coupon.status != "available":
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Эта скидка уже используется")
+        discount_percent = max(1, min(90, int(coupon.percent or 10)))
+        discount_amount = (item.price * discount_percent) // 100
+        final_price = max(0, item.price - discount_amount)
+
+    if operator.current_balance < final_price:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недостаточно коинов")
 
-    purchase = ShopPurchase(operator_id=operator.id, shop_item_id=item.id, price=item.price, status="new")
+    purchase = ShopPurchase(
+        operator_id=operator.id,
+        shop_item_id=item.id,
+        price=final_price,
+        original_price=item.price,
+        discount_percent=discount_percent,
+        discount_amount=discount_amount,
+        discount_coupon_id=coupon.id if coupon else None,
+        status="new",
+    )
     db.add(purchase)
     db.flush()
 
+    if coupon:
+        coupon.status = "reserved"
+        coupon.reserved_purchase_id = purchase.id
+        coupon.reserved_at = now
+
     # Резервирование: коины уходят с доступного баланса, но еще не считаются потраченными.
-    operator.current_balance -= item.price
-    operator.reserved_balance += item.price
+    operator.current_balance -= final_price
+    operator.reserved_balance += final_price
 
     # Страховка: баланс не должен уйти в минус ни при каких рассогласованиях.
     if operator.current_balance < 0:
@@ -196,9 +283,12 @@ def create_purchase(db: Session, operator: Operator, item_id: int) -> ShopPurcha
     db.add(
         CoinTransaction(
             operator_id=operator.id,
-            amount=-item.price,
+            amount=-final_price,
             type="reservation",
-            comment=f"Резерв заявки: {item.title}",
+            comment=(
+                f"Резерв заявки: {item.title} (скидка {discount_percent}%)"
+                if coupon else f"Резерв заявки: {item.title}"
+            ),
             related_purchase_id=purchase.id,
         )
     )
@@ -221,6 +311,15 @@ def approve_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sho
     purchase.reviewed_by_user_id = reviewer.id
 
     purchase.reviewed_at = now_utc()
+    if purchase.discount_coupon_id:
+        coupon = db.scalar(
+            select(ShopDiscountCoupon)
+            .where(ShopDiscountCoupon.id == purchase.discount_coupon_id)
+            .with_for_update()
+        )
+        if coupon and coupon.status == "reserved" and coupon.reserved_purchase_id == purchase.id:
+            coupon.status = "used"
+            coupon.used_at = purchase.reviewed_at
     db.add(
         CoinTransaction(
             operator_id=operator.id,
@@ -252,6 +351,16 @@ def reject_purchase(db: Session, purchase: ShopPurchase, reviewer: User, reason:
     purchase.reviewed_by_user_id = reviewer.id
 
     purchase.reviewed_at = now_utc()
+    if purchase.discount_coupon_id:
+        coupon = db.scalar(
+            select(ShopDiscountCoupon)
+            .where(ShopDiscountCoupon.id == purchase.discount_coupon_id)
+            .with_for_update()
+        )
+        if coupon and coupon.status == "reserved" and coupon.reserved_purchase_id == purchase.id:
+            coupon.status = "available"
+            coupon.reserved_purchase_id = None
+            coupon.reserved_at = None
     db.add(
         CoinTransaction(
             operator_id=operator.id,

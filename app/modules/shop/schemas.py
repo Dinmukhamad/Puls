@@ -57,6 +57,7 @@ class ShopItemRead(BaseModel):
 
 class PurchaseCreate(BaseModel):
     shop_item_id: int
+    discount_coupon_id: int | None = None
 
 
 class RejectPurchaseRequest(BaseModel):
@@ -68,11 +69,25 @@ class ShopPurchaseRead(BaseModel):
     operator_id: int
     shop_item_id: int
     price: int
+    original_price: int = 0
+    discount_percent: int = 0
+    discount_amount: int = 0
+    discount_coupon_id: int | None = None
     status: str
     reject_reason: str | None
     created_at: datetime
     reviewed_by_user_id: int | None
     reviewed_at: datetime | None
     completed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class ShopDiscountCouponRead(BaseModel):
+    id: int
+    title: str
+    percent: int
+    status: str
+    created_at: datetime
 
     model_config = {"from_attributes": True}

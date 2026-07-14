@@ -171,6 +171,7 @@ def ensure_wheel_schema(engine: Engine) -> None:
     создаёт новые таблицы движка правил. Деструктивных изменений нет.
     """
     from app.models.entities import (
+        ShopDiscountCoupon,
         WheelEligibilityRule,
         WheelManualGrant,
         WheelOperatorDailyState,
@@ -203,6 +204,12 @@ def ensure_wheel_schema(engine: Engine) -> None:
                 ("cancelled_at", "TIMESTAMP"),
                 ("cancel_reason", "TEXT"),
             ],
+            "shop_purchases": [
+                ("original_price", "INTEGER NOT NULL DEFAULT 0"),
+                ("discount_percent", "INTEGER NOT NULL DEFAULT 0"),
+                ("discount_amount", "INTEGER NOT NULL DEFAULT 0"),
+                ("discount_coupon_id", "INTEGER"),
+            ],
         }
         for table, cols in col_migrations.items():
             if table not in tables:
@@ -217,6 +224,7 @@ def ensure_wheel_schema(engine: Engine) -> None:
         for model in (WheelEligibilityRule, WheelRuleEvaluationLog,
                       WheelOperatorDailyState, WheelSetting, WheelManualGrant):
             model.__table__.create(bind=conn, checkfirst=True)
+        ShopDiscountCoupon.__table__.create(bind=conn, checkfirst=True)
         logger.info("[schema] wheel rules-engine tables ensured")
 
         # Уникальный индекс против дублей токенов (ТЗ п.9). NULL-и различны в

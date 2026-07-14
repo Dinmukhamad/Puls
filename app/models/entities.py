@@ -483,6 +483,12 @@ class ShopPurchase(Base):
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
     shop_item_id: Mapped[int] = mapped_column(ForeignKey("shop_items.id"), index=True)
     price: Mapped[int] = mapped_column(Integer)
+    original_price: Mapped[int] = mapped_column(Integer, default=0)
+    discount_percent: Mapped[int] = mapped_column(Integer, default=0)
+    discount_amount: Mapped[int] = mapped_column(Integer, default=0)
+    discount_coupon_id: Mapped[int | None] = mapped_column(
+        ForeignKey("shop_discount_coupons.id"), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
@@ -913,6 +919,27 @@ class WheelSpin(Base):
     operator: Mapped[Operator] = relationship("Operator")
     ticket: Mapped[WheelTicket] = relationship("WheelTicket")
     prize: Mapped[WheelPrize | None] = relationship("WheelPrize")
+
+
+class ShopDiscountCoupon(Base):
+    """One non-stackable shop discount won from Wheel of WOW."""
+    __tablename__ = "shop_discount_coupons"
+    __table_args__ = (
+        UniqueConstraint("wheel_spin_id", name="uq_shop_discount_coupon_spin"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    wheel_spin_id: Mapped[int] = mapped_column(ForeignKey("wheel_spins.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200), default="Скидка в магазине")
+    percent: Mapped[int] = mapped_column(Integer, default=10)
+    status: Mapped[str] = mapped_column(String(20), default="available", index=True)
+    reserved_purchase_id: Mapped[int | None] = mapped_column(
+        ForeignKey("shop_purchases.id"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    reserved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class WheelEligibilityRule(Base):

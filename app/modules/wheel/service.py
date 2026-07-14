@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from app.core.datetime_utils import local_day_bounds_utc, now_local, now_utc, to_local_iso
 from app.models.entities import (
     Operator,
+    ShopDiscountCoupon,
     User,
     WheelCampaign,
     WheelPrize,
@@ -445,6 +446,15 @@ def _grant_prize(db, operator, campaign, prize: WheelPrize, spin_row: WheelSpin)
             enforce_daily_cap=False,
         )
         return "Вы выиграли дополнительный билет"
+
+    if prize.prize_type == "shop_discount":
+        db.add(ShopDiscountCoupon(
+            operator_id=operator.id,
+            wheel_spin_id=spin_row.id,
+            title=prize.title,
+            percent=max(1, min(90, int(prize.amount or 10))),
+        ))
+        return f"Вы выиграли скидку {max(1, min(90, int(prize.amount or 10)))}% в магазине"
 
     if prize.prize_type == "raffle_ticket":
         # Раньше приз только фиксировался в истории. Теперь реально начисляем

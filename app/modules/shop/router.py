@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles, supervisor_scope_group_id
 from app.database.db import get_db
-from app.models.entities import Operator, ShopItem, ShopPurchase, User
+from app.models.entities import Operator, ShopDiscountCoupon, ShopItem, ShopPurchase, User
 from app.modules.rating.service import rating_cache_invalidate
 from app.modules.shop.schemas import (
     PurchaseCreate,
@@ -14,6 +14,7 @@ from app.modules.shop.schemas import (
     ShopItemCreate,
     ShopItemRead,
     ShopItemUpdate,
+    ShopDiscountCouponRead,
     ShopPurchaseRead,
 )
 from app.modules.wallet.service import (
@@ -23,6 +24,7 @@ from app.modules.wallet.service import (
     operator_for_user_or_403,
     reject_purchase,
     shop_item_availability,
+    sync_shop_discount_coupons,
 )
 
 router = APIRouter(prefix="/shop", tags=["shop"])
@@ -67,11 +69,27 @@ def request_purchase(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ShopPurchase:
-    purchase = create_purchase(db, operator_for_user_or_403(db, current_user), payload.shop_item_id)
+    purchase = create_purchase(
+        db,
+        operator_for_user_or_403(db, current_user),
+        payload.shop_item_id,
+        payload.discount_coupon_id,
+    )
     db.commit()
     rating_cache_invalidate()  # резерв меняет доступный баланс оператора
     db.refresh(purchase)
     return purchase
+
+
+@router.get("/discounts", response_model=list[ShopDiscountCouponRead])
+def list_discounts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("operator")),
+) -> list[ShopDiscountCoupon]:
+    operator = operator_for_user_or_403(db, current_user)
+    coupons = sync_shop_discount_coupons(db, operator.id)
+    db.commit()
+    return coupons
 
 
 @router.get("/purchases", response_model=list[ShopPurchaseRead])

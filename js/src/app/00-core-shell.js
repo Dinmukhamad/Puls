@@ -100,6 +100,7 @@ let STATE = {
   rating: [],
   nominations: { items: [] },
   shopItems: [],
+  shopDiscounts: [],
   purchases: [],
   dashboard: null,
   adminOperators: [],
@@ -612,6 +613,7 @@ async function loadData(role) {
   if (role === 'operator') {
     tasks.push(api.myWallet().catch(() => null).then(w => STATE.wallet = w)); // личный баланс — всегда свежий, без кеша
     tasks.push(api.listPurchases().catch(() => []).then(p => STATE.purchases = p));
+    tasks.push(api.listShopDiscounts().catch(() => []).then(c => STATE.shopDiscounts = c));
   }
   if (isAdmin(role)) {
     tasks.push(
@@ -671,6 +673,10 @@ function prefetchAppSectionsInBackground(role) {
       () => swrFetch('tests:my', () => api.myTests(), null, SWR_FAST_TTL_MS),
       () => swrFetch('raffles:me', () => api.getMyRaffles(), null, SWR_FAST_TTL_MS),
     );
+  }
+
+  if (role === 'operator') {
+    tasks.push(() => swrFetch('shop:discounts:me', () => api.listShopDiscounts(), null, SWR_FAST_TTL_MS));
   }
 
   if (admin) {
