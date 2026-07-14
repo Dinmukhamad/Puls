@@ -130,6 +130,27 @@ def test_finish_awards_coins_once(make_client, db_session):
     ).count() == 1
 
 
+def test_resume_returns_saved_answers(make_client, db_session):
+    from app.models import entities as m
+
+    op, user, password = make_operator_user(db_session)
+    test, question, correct, attempt = _make_attempt(db_session, op)
+    db_session.add(m.TestAssignment(test_id=test.id, target_type="all", target_id=None))
+    db_session.commit()
+    c = _login_operator(make_client, user, password)
+
+    saved = c.post(
+        f"/api/tests/attempts/{attempt.id}/save-answer",
+        json={"question_id": question.id, "selected_answer_ids": [correct.id]},
+    )
+    assert saved.status_code == 200, saved.text
+
+    resumed = c.post(f"/api/tests/{test.id}/start")
+    assert resumed.status_code == 200, resumed.text
+    assert resumed.json()["attempt_id"] == attempt.id
+    assert resumed.json()["saved_answers"][str(question.id)] == [correct.id]
+
+
 def test_admin_detail_returns_builder_configuration(client, db_session):
     from app.models import entities as m
 

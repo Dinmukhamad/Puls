@@ -210,6 +210,10 @@ def start_test(test_id: int, db: Session = Depends(get_db), current_user: User =
         "expires_at": _utc_iso(attempt.expires_at),
         "questions": questions,
         "attempt_number": attempt.attempt_number,
+        "saved_answers": {
+            answer.question_id: json.loads(answer.selected_answer_ids_json or "[]")
+            for answer in attempt.answers
+        },
     }
 
 
