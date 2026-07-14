@@ -10637,22 +10637,38 @@ async function renderWheelPrizesTab(body) {
   const prizeRowHtml = (r) => `<article class="wheel-prize-card ${r.is_active ? '' : 'is-disabled'}" data-prize-id="${r.id}" style="--wheel-prize-color:${esc(r.color || '#38BDF8')}">
             <div class="wheel-prize-card-head">
               <label class="wheel-prize-select"><input type="checkbox" class="wp-select" ${_wheelSelectedPrizeIds.has(r.id) ? 'checked' : ''}><span>Выбрать</span></label>
-              <span class="wheel-chance">${chance(r.is_active ? r.weight : 0)}% шанс</span>
+              <div class="wheel-prize-card-summary">
+                <span class="wheel-chance">${chance(r.is_active ? r.weight : 0)}% шанс</span>
+                <span class="badge ${r.is_active ? 'badge-ok' : 'badge-muted'}">${r.is_active ? 'Активен' : 'Выключен'}</span>
+              </div>
             </div>
             <div class="wheel-prize-identity">
-              <input type="color" class="wp-color" value="${esc(r.color || '#38BDF8')}" title="Цвет сектора">
+              <label class="wheel-prize-color"><span class="form-label">Цвет</span><input type="color" class="wp-color" value="${esc(r.color || '#38BDF8')}" title="Цвет сектора"></label>
               <label class="form-group"><span class="form-label">Название приза</span><input type="text" class="form-input wp-title" value="${esc(r.title)}"></label>
             </div>
-            <div class="wheel-prize-fields">
-              <label class="form-group wheel-prize-type"><span class="form-label">Тип награды</span><select class="form-input wp-type">${typeOptions(r.prize_type)}</select></label>
-              <label class="form-group"><span class="form-label">Количество</span><input type="number" class="form-input wp-amount" value="${r.amount}"></label>
-              <label class="form-group"><span class="form-label">Вес</span><input type="number" class="form-input wp-weight" value="${r.weight}" min="0"></label>
-              <label class="form-group"><span class="form-label">Общий лимит</span><input type="number" class="form-input wp-maxtotal" value="${r.max_wins_total}" min="0" title="0 — без лимита"></label>
-              <label class="form-group"><span class="form-label">На оператора</span><input type="number" class="form-input wp-maxop" value="${r.max_wins_per_operator}" min="0" title="0 — без лимита"></label>
+            <div class="wheel-prize-config">
+              <section class="wheel-prize-config-block">
+                <div class="wheel-prize-config-title"><strong>Награда</strong><span>Что получит оператор</span></div>
+                <div class="wheel-prize-config-fields wheel-prize-reward-fields">
+                  <label class="form-group wheel-prize-type"><span class="form-label">Тип</span><select class="form-input wp-type">${typeOptions(r.prize_type)}</select></label>
+                  <label class="form-group"><span class="form-label">Количество</span><input type="number" class="form-input wp-amount" value="${r.amount}"></label>
+                </div>
+              </section>
+              <section class="wheel-prize-config-block">
+                <div class="wheel-prize-config-title"><strong>Вероятность</strong><span>Доля сектора на колесе</span></div>
+                <label class="form-group"><span class="form-label">Вес приза</span><input type="number" class="form-input wp-weight" value="${r.weight}" min="0"></label>
+              </section>
+              <section class="wheel-prize-config-block">
+                <div class="wheel-prize-config-title"><strong>Ограничения</strong><span>0 означает без лимита</span></div>
+                <div class="wheel-prize-config-fields">
+                  <label class="form-group"><span class="form-label">Всего выдач</span><input type="number" class="form-input wp-maxtotal" value="${r.max_wins_total}" min="0" title="0 — без лимита"></label>
+                  <label class="form-group"><span class="form-label">Одному оператору</span><input type="number" class="form-input wp-maxop" value="${r.max_wins_per_operator}" min="0" title="0 — без лимита"></label>
+                </div>
+              </section>
             </div>
             <div class="wheel-prize-card-foot">
-              <label class="wheel-switch-label"><input type="checkbox" class="wp-active" ${r.is_active ? 'checked' : ''}><span>${r.is_active ? 'Приз активен' : 'Приз выключен'}</span></label>
-              <button class="btn-primary btn-sm wp-save">Сохранить</button>
+              <label class="wheel-switch-label"><input type="checkbox" class="wp-active" ${r.is_active ? 'checked' : ''}><span>Доступен для розыгрыша</span></label>
+              <button class="btn-primary btn-sm wp-save">Сохранить изменения</button>
             </div>
           </article>`;
   const prizeGroupHtml = (group) => {
@@ -11339,28 +11355,30 @@ async function renderWheelIssueTab(body) {
         <span class="panel-badge">Staff</span>
       </div>
       <div class="wheel-admin-content">
-      <div class="form-grid wheel-issue-grid">
+      <div class="wheel-issue-recipient">
         <label class="form-group">
-          <span class="form-label">Операторы</span>
-          <input type="text" id="wheel-op-search" class="form-input" placeholder="Поиск по имени, фамилии, группе…" autocomplete="off">
+          <span class="form-label">Получатели</span>
+          <input type="text" id="wheel-op-search" class="form-input" placeholder="Найдите оператора по имени или группе" autocomplete="off">
           <div id="wheel-op-results" class="wheel-op-results" hidden></div>
         </label>
+        <div id="wheel-op-chosen-list" class="wheel-op-chosen-list"></div>
+      </div>
+      <div class="form-grid wheel-issue-grid">
         <label class="form-group">
-          <span class="form-label">Билетов на каждого</span>
+          <span class="form-label">Билетов оператору</span>
           <input type="number" id="wheel-qty" class="form-input" min="1" max="20" value="1">
         </label>
-        <label class="form-group">
-          <span class="form-label">Причина</span>
+        <label class="form-group wheel-issue-reason">
+          <span class="form-label">Причина выдачи</span>
           <input type="text" id="wheel-reason" class="form-input" placeholder="Например: помощь новому сотруднику" maxlength="500">
         </label>
         <label class="form-group">
-          <span class="form-label">Срок действия, дней</span>
+          <span class="form-label">Действует, дней</span>
           <input type="number" id="wheel-ttl" class="form-input" min="1" max="30" value="3">
         </label>
-      </div>
-      <div id="wheel-op-chosen-list" class="wheel-op-chosen-list"></div>
-      <div class="wheel-issue-actions">
-        <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билеты</button>
+        <div class="wheel-issue-actions">
+          <button class="btn-primary" id="wheel-issue-btn" disabled>Выдать билеты</button>
+        </div>
       </div>
       <div id="wheel-issue-status" class="status-line" style="margin-top:10px"></div>
       </div>
