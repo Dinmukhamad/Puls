@@ -91,6 +91,64 @@ METRIC_LABELS = {
     "total_xp": "XP",
 }
 
+METRIC_UNITS = {
+    "tenure_days": "дн.",
+    "quality": "%",
+    "efficiency": "%",
+    "penalty_minutes": "мин.",
+    "final_points": "баллов",
+    "test_percent": "%",
+    "total_xp": "XP",
+}
+
+OPERATOR_LABELS = {
+    "gte": "не ниже",
+    "lte": "не выше",
+    "eq": "равно",
+    "between": "в диапазоне",
+}
+
+
+def _display_number(value: float | None) -> str:
+    if value is None:
+        return "—"
+    return str(int(value)) if float(value).is_integer() else str(round(float(value), 2))
+
+
+def coin_word(value: int) -> str:
+    value = abs(value) % 100
+    if 11 <= value <= 14:
+        return "коинов"
+    tail = value % 10
+    if tail == 1:
+        return "коин"
+    if 2 <= tail <= 4:
+        return "коина"
+    return "коинов"
+
+
+def rule_presentation(rule: OperatorLevelRule) -> dict[str, str]:
+    """Человекочитаемое представление условия для административного API."""
+    label = METRIC_LABELS.get(rule.metric_code, rule.metric_code)
+    unit = METRIC_UNITS.get(rule.metric_code, "")
+    suffix = unit if unit == "%" else (f" {unit}" if unit else "")
+    if rule.operator == "between":
+        condition = (
+            f"{label}: от {_display_number(rule.value_min)} до "
+            f"{_display_number(rule.value_max)}{suffix}"
+        )
+    elif rule.operator == "lte":
+        condition = f"{label}: не выше {_display_number(rule.value_max)}{suffix}"
+    elif rule.operator == "eq":
+        condition = f"{label}: равно {_display_number(rule.value_min)}{suffix}"
+    else:
+        condition = f"{label}: не ниже {_display_number(rule.value_min)}{suffix}"
+    return {
+        "metric_label": label,
+        "operator_label": OPERATOR_LABELS.get(rule.operator, rule.operator),
+        "condition_text": condition,
+    }
+
 
 def ensure_default_levels(db: Session) -> None:
     if db.scalar(select(func.count(OperatorLevel.id))) or 0:

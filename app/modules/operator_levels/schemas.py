@@ -1,12 +1,24 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
+OperatorLevelMetricCode = Literal[
+    "tenure_days",
+    "quality",
+    "kvz",
+    "efficiency",
+    "penalty_minutes",
+    "final_points",
+    "test_percent",
+    "total_xp",
+]
+
 
 class OperatorLevelRuleBase(BaseModel):
-    metric_code: str
+    metric_code: OperatorLevelMetricCode
     operator: str = Field(pattern="^(gte|lte|eq|between)$")
     value_min: float | None = None
     value_max: float | None = None
@@ -18,7 +30,7 @@ class OperatorLevelRuleCreate(OperatorLevelRuleBase):
 
 
 class OperatorLevelRuleUpdate(BaseModel):
-    metric_code: str | None = None
+    metric_code: OperatorLevelMetricCode | None = None
     operator: str | None = Field(default=None, pattern="^(gte|lte|eq|between)$")
     value_min: float | None = None
     value_max: float | None = None
@@ -28,6 +40,9 @@ class OperatorLevelRuleUpdate(BaseModel):
 class OperatorLevelRuleRead(OperatorLevelRuleBase):
     id: int
     level_id: int
+    metric_label: str = ""
+    operator_label: str = ""
+    condition_text: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -70,6 +85,9 @@ class OperatorLevelUpdate(BaseModel):
 
 class OperatorLevelRead(OperatorLevelBase):
     id: int
+    stage_number: int = 0
+    rules_count: int = 0
+    reward_label: str = "Без награды за повышение"
     created_at: datetime
     updated_at: datetime
     rules: list[OperatorLevelRuleRead] = Field(default_factory=list)

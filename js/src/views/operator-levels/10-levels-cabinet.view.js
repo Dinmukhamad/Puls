@@ -8,9 +8,24 @@ async function renderOperatorLevelsSettings() {
 
   const tab = STATE.opLevelsTab === 'achievements' ? 'achievements' : 'levels';
   el.innerHTML = `
-    <div class="filter-tabs" style="margin-bottom:16px">
-      <button class="filter-tab ${tab === 'levels' ? 'active' : ''}" data-op-levels-tab="levels">Уровни</button>
-      <button class="filter-tab ${tab === 'achievements' ? 'active' : ''}" data-op-levels-tab="achievements">Достижения</button>
+    <div class="levels-page-head">
+      <div>
+        <div class="section-kicker">Развитие команды</div>
+        <h2 class="section-title">Уровни операторов</h2>
+        <p>Настройте путь роста, требования к каждому этапу и награды за повышение.</p>
+      </div>
+      <div class="header-right level-header-actions" ${tab === 'levels' ? '' : 'hidden'}>
+        <button class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi()">Пересчитать уровни</button>
+        <button class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">+ Добавить уровень</button>
+      </div>
+    </div>
+    <div class="levels-page-tabs" role="tablist" aria-label="Разделы развития операторов">
+      <button class="levels-page-tab ${tab === 'levels' ? 'is-active' : ''}" data-op-levels-tab="levels" role="tab" aria-selected="${tab === 'levels'}">
+        <span>Уровни</span><small>Этапы роста и условия</small>
+      </button>
+      <button class="levels-page-tab ${tab === 'achievements' ? 'is-active' : ''}" data-op-levels-tab="achievements" role="tab" aria-selected="${tab === 'achievements'}">
+        <span>Достижения</span><small>Награды за отдельные результаты</small>
+      </button>
     </div>
     <div id="op-levels-tab-body"></div>`;
   el.querySelectorAll('[data-op-levels-tab]').forEach(btn => {
@@ -26,17 +41,7 @@ async function renderOperatorLevelsSettings() {
 
 async function renderLevelsTabContent(el) {
   if (!el) return;
-  el.innerHTML = `<div class="view-header level-view-header">
-    <div>
-      <div class="section-kicker">Операторы</div>
-      <h2 class="section-title">Уровни операторов</h2>
-    </div>
-    <div class="header-right level-header-actions">
-      <button class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi()">Пересчитать</button>
-      <button class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">Добавить уровень</button>
-    </div>
-  </div>
-  <div class="panel level-settings-shell"><div class="empty-state"><p>Загрузка уровней…</p></div></div>`;
+  el.innerHTML = '<div class="panel level-settings-shell"><div class="empty-state"><p>Загрузка уровней…</p></div></div>';
 
   let levels = [];
   try {
@@ -45,16 +50,8 @@ async function renderLevelsTabContent(el) {
     try {
       levels = await withTimeout(swrFetch('levels:list', () => api.listOperatorLevels(), null, SWR_STATIC_TTL_MS), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
     } catch (publicErr) {
-      el.innerHTML = `<div class="view-header level-view-header">
-        <div>
-          <div class="section-kicker">Операторы</div>
-          <h2 class="section-title">Уровни операторов</h2>
-        </div>
-        <div class="header-right level-header-actions">
-          <button class="btn-outline btn-sm" onclick="renderOperatorLevelsSettings()">Обновить</button>
-        </div>
-      </div>
-      <div class="status-line status-error">${esc(publicErr.message || adminErr.message || 'Не удалось загрузить уровни')}</div>`;
+      el.innerHTML = `<div class="status-line status-error">${esc(publicErr.message || adminErr.message || 'Не удалось загрузить уровни')}</div>
+        <button class="btn-outline btn-sm" onclick="renderOperatorLevelsSettings()">Попробовать снова</button>`;
       return;
     }
   }
@@ -63,25 +60,16 @@ async function renderLevelsTabContent(el) {
     .catch(() => ({ items: [] }));
   const rewardRows = Array.isArray(rewardsData) ? rewardsData : (rewardsData.items || []);
 
-  function metricLabel(code) {
-    return {
-      tenure_days: 'Стаж',
-      quality: 'Качество',
-      kvz: 'КВЗ',
-      efficiency: 'Эффективность',
-      penalty_minutes: 'Штрафы',
-      final_points: 'Итоговые баллы',
-      test_percent: 'Тесты',
-      total_xp: 'XP',
-    }[code] || code;
-  }
-
   function ruleText(rule) {
-    const label = metricLabel(rule.metric_code);
-    if (rule.operator === 'between') return `${label}: ${levelNum(rule.value_min)}-${levelNum(rule.value_max)}`;
-    if (rule.operator === 'gte') return `${label} >= ${levelNum(rule.value_min)}`;
-    if (rule.operator === 'lte') return `${label} <= ${levelNum(rule.value_max)}`;
-    return `${label} = ${levelNum(rule.value_min)}`;
+    if (rule.condition_text) return rule.condition_text;
+    const metricLabel = {
+      tenure_days: 'Стаж', quality: 'Качество', kvz: 'КВЗ', efficiency: 'Эффективность',
+      penalty_minutes: 'Штрафы', final_points: 'Итоговые баллы', test_percent: 'Тесты', total_xp: 'XP',
+    }[rule.metric_code] || rule.metric_code;
+    if (rule.operator === 'between') return `${metricLabel}: от ${levelNum(rule.value_min)} до ${levelNum(rule.value_max)}`;
+    if (rule.operator === 'gte') return `${metricLabel}: не ниже ${levelNum(rule.value_min)}`;
+    if (rule.operator === 'lte') return `${metricLabel}: не выше ${levelNum(rule.value_max)}`;
+    return `${metricLabel}: равно ${levelNum(rule.value_min)}`;
   }
 
   function rewardStatus(row) {
@@ -90,59 +78,69 @@ async function renderLevelsTabContent(el) {
     return '<span class="status-pill warn">Ожидает повышения</span>';
   }
 
-  el.innerHTML = `<div class="view-header level-view-header">
-    <div>
-      <div class="section-kicker">Операторы</div>
-      <h2 class="section-title">Уровни операторов</h2>
-    </div>
-    <div class="header-right level-header-actions">
-      <button class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi()">Пересчитать</button>
-      <button class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">Добавить уровень</button>
-    </div>
+  function coinAmount(value, prefix = '') {
+    const amount = Number(value || 0);
+    const mod100 = Math.abs(amount) % 100;
+    const mod10 = mod100 % 10;
+    const word = mod100 >= 11 && mod100 <= 14 ? 'коинов' : mod10 === 1 ? 'коин' : mod10 >= 2 && mod10 <= 4 ? 'коина' : 'коинов';
+    return `${prefix}${amount} ${word}`;
+  }
+
+  const activeLevels = levels.filter(level => level.is_active).length;
+  const rewardsConfigured = levels.filter(level => Number(level.reward_coins) > 0).length;
+  el.innerHTML = `<div class="levels-overview-grid">
+    <div class="levels-overview-card"><span>Этапов роста</span><strong>${levels.length}</strong><small>${activeLevels} используются в расчёте</small></div>
+    <div class="levels-overview-card"><span>Условий перехода</span><strong>${levels.reduce((sum, level) => sum + (level.rules_count ?? level.rules?.length ?? 0), 0)}</strong><small>проверяются автоматически</small></div>
+    <div class="levels-overview-card"><span>Награды настроены</span><strong>${rewardsConfigured}</strong><small>разовый бонус при повышении</small></div>
   </div>
-  <div class="panel level-settings-shell">
-    <div class="level-settings-head">
-      <div>
-        <h3>Правила уровней</h3>
-        <p>Уровень считается отдельно от роли доступа. Чем выше порядок, тем выше игровой статус оператора.</p>
+  <div class="levels-explainer">
+    <strong>Как работает система уровней</strong>
+    <span>Этапы идут сверху вниз. Оператор получает самый высокий активный уровень, для которого выполнены все обязательные условия.</span>
+  </div>
+  <div class="level-progression-list">
+    ${levels.map((level, index) => `<article class="level-progression-card ${level.is_active ? '' : 'is-disabled'}">
+      <div class="level-stage-rail">
+        <span style="--level-color:${esc(level.color || '#64748B')}">${level.stage_number || index + 1}</span>
+        ${index < levels.length - 1 ? '<i></i>' : ''}
       </div>
-      <span class="panel-badge">${levels.filter(l => l.is_active).length} активных</span>
-    </div>
-    <div class="level-settings-list">
-      ${levels.map(level => `<article class="level-settings-row ${level.is_active ? '' : 'is-disabled'}">
-        <div class="level-main-cell">
-          <div class="level-title-line">
-            <span class="level-color-dot" style="background:${esc(level.color || '#64748B')}"></span>
-            <strong>${esc(level.name)}</strong>
-            ${levelBadgeHtml(level)}
-            <span class="level-order">#${level.sort_order ?? 0}</span>
-            ${level.reward_coins ? `<span class="level-order">+${level.reward_coins} ₡</span>` : ''}
+      <div class="level-progression-content">
+        <header class="level-card-head">
+          <div class="level-card-title">
+            <div class="level-card-eyebrow">Этап ${level.stage_number || index + 1}</div>
+            <div class="level-card-name"><span class="level-color-dot" style="background:${esc(level.color || '#64748B')}"></span><h3>${esc(level.name)}</h3>${levelBadgeHtml(level)}</div>
+            <p>${esc(level.description || 'Добавьте короткое описание роли этого уровня в системе развития.')}</p>
           </div>
-          <div class="level-desc">${esc(level.description || 'Описание не задано')}${level.min_total_xp ? ` · XP от ${level.min_total_xp}` : ''}</div>
+          <div class="level-card-controls">
+            <span class="status-pill ${level.is_active ? 'ok' : 'muted'}">${level.is_active ? 'Участвует в расчёте' : 'Отключён'}</span>
+            <button class="btn-outline btn-sm" onclick="editOperatorLevelUi(${level.id})">Редактировать</button>
+            <button class="btn-outline btn-sm ${level.is_active ? 'danger' : ''}" onclick="toggleOperatorLevelUi(${level.id}, ${!level.is_active})">${level.is_active ? 'Отключить' : 'Включить'}</button>
+          </div>
+        </header>
+        <div class="level-card-body">
+          <section class="level-conditions-block">
+            <div class="level-block-head"><div><span>Условия получения уровня</span><small>Нужно выполнить все обязательные условия</small></div><button class="btn-outline btn-sm" onclick="addOperatorLevelRuleUi(${level.id})">+ Добавить условие</button></div>
+            <div class="level-condition-list">
+              ${(level.rules || []).length ? level.rules.map(rule => `<div class="level-condition-row">
+                <span class="level-condition-check">✓</span>
+                <div><strong>${esc(rule.metric_label || ruleText(rule).split(':')[0])}</strong><span>${esc(ruleText(rule))}</span></div>
+                <button type="button" onclick="deleteOperatorLevelRuleUi(${rule.id})" aria-label="Удалить условие" title="Удалить условие">×</button>
+              </div>`).join('') : '<div class="level-condition-empty">Условия пока не настроены. Без условий уровень доступен всем операторам.</div>'}
+            </div>
+          </section>
+          <aside class="level-reward-block ${level.reward_coins ? 'has-reward' : ''}">
+            <span>Награда за повышение</span>
+            <strong>${level.reward_coins ? coinAmount(level.reward_coins, '+') : 'Без награды'}</strong>
+            <small>${level.reward_coins ? 'Начисляется один раз при первом переходе на этот уровень.' : 'Можно добавить разовый бонус в настройках уровня.'}</small>
+          </aside>
         </div>
-        <div class="level-rules-cell">
-          ${(level.rules || []).length ? (level.rules || []).map(rule => `
-            <span class="level-rule-chip" title="${esc(ruleText(rule))}">
-              ${esc(ruleText(rule))}
-              <button type="button" onclick="deleteOperatorLevelRuleUi(${rule.id})" aria-label="Удалить показатель">×</button>
-            </span>`).join('') : '<span class="cell-muted">Показатели не настроены</span>'}
-        </div>
-        <div class="level-status-cell">
-          <span class="status-pill ${level.is_active ? 'ok' : 'muted'}">${level.is_active ? 'Активен' : 'Отключён'}</span>
-        </div>
-        <div class="level-actions-cell">
-          <button class="btn-outline btn-sm" onclick="editOperatorLevelUi(${level.id})">Изменить</button>
-          <button class="btn-outline btn-sm" onclick="addOperatorLevelRuleUi(${level.id})">Показатель</button>
-          <button class="btn-outline btn-sm danger" onclick="disableOperatorLevelUi(${level.id})">Отключить</button>
-        </div>
-      </article>`).join('')}
-    </div>
+      </div>
+    </article>`).join('')}
   </div>
   <div class="panel level-settings-shell" style="margin-top:18px">
     <div class="level-settings-head">
       <div>
-        <h3>Операторы и награды</h3>
-        <p>Контроль текущих уровней, разовых бонусов и связанных coin transactions. XP пока зарезервирован и равен 0.</p>
+        <h3>Текущие уровни операторов</h3>
+        <p>Кто находится на каждом этапе и была ли начислена награда за последнее повышение.</p>
       </div>
       <span class="panel-badge">${rewardRows.length} операторов</span>
     </div>
@@ -154,10 +152,8 @@ async function renderLevelsTabContent(el) {
             <th>Группа</th>
             <th>Уровень</th>
             <th class="num">Стаж</th>
-            <th class="num">XP</th>
-            <th class="num">Бонус</th>
-            <th>Статус</th>
-            <th class="num">Tx ID</th>
+            <th class="num">Награда</th>
+            <th>Состояние награды</th>
           </tr>
         </thead>
         <tbody>
@@ -166,11 +162,9 @@ async function renderLevelsTabContent(el) {
             <td>${esc(row.group_name || '—')}</td>
             <td>${levelBadgeHtml(row.level)}</td>
             <td class="num">${levelNum(row.tenure_days, 0)} дн.</td>
-            <td class="num">${levelNum(row.total_xp || 0, 0)}</td>
-            <td class="num">${row.reward_coins ? `+${row.reward_coins} ₡` : '—'}</td>
+            <td class="num">${row.reward_coins ? coinAmount(row.reward_coins, '+') : '—'}</td>
             <td>${rewardStatus(row)}</td>
-            <td class="num">${row.coin_transaction_id || '—'}</td>
-          </tr>`).join('') : '<tr><td colspan="8" class="empty-line">Нет данных</td></tr>'}
+          </tr>`).join('') : '<tr><td colspan="6" class="empty-line">Нет данных</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -217,20 +211,13 @@ function showOperatorLevelForm(level = null) {
         <input id="lvl-color" class="form-input" value="${esc(level?.color || '#64748B')}" placeholder="#64748B">
       </div>
       <div class="form-group">
-        <label class="form-label">Порядок</label>
-        <input id="lvl-order" class="form-input" type="number" value="${esc(level?.sort_order ?? ((STATE.operatorLevels.length + 1) * 10))}">
-      </div>
-    </div>
-    <div class="form-grid-2">
-      <div class="form-group">
-        <label class="form-label">Минимальный XP</label>
-        <input id="lvl-min-xp" class="form-input" type="number" min="0" value="${esc(level?.min_total_xp ?? 0)}">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Бонус коинов</label>
+        <label class="form-label">Награда за повышение</label>
         <input id="lvl-reward-coins" class="form-input" type="number" min="0" value="${esc(level?.reward_coins ?? 0)}">
+        <div class="form-hint">Количество коинов, которое оператор получит один раз при первом переходе.</div>
       </div>
     </div>
+    <input id="lvl-order" type="hidden" value="${esc(level?.sort_order ?? ((STATE.operatorLevels.length + 1) * 10))}">
+    <input id="lvl-min-xp" type="hidden" value="${esc(level?.min_total_xp ?? 0)}">
     <div class="form-group">
       <label class="form-label">Описание</label>
       <textarea id="lvl-description" class="form-input" rows="3" placeholder="Короткое описание уровня">${esc(level?.description || '')}</textarea>
@@ -351,6 +338,16 @@ async function disableOperatorLevelUi(levelId) {
   if (!confirm('Отключить уровень?')) return;
   try {
     await api.deleteOperatorLevel(levelId);
+    swrInvalidate('levels:');
+    await renderOperatorLevelsSettings();
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+async function toggleOperatorLevelUi(levelId, isActive) {
+  const verb = isActive ? 'включить' : 'отключить';
+  if (!confirm(`${verb.charAt(0).toUpperCase() + verb.slice(1)} уровень?`)) return;
+  try {
+    await api.updateOperatorLevel(levelId, { is_active: isActive });
     swrInvalidate('levels:');
     await renderOperatorLevelsSettings();
   } catch(e) { showToast(e.message, 'error'); }

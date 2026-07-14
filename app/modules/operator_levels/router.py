@@ -21,10 +21,12 @@ from app.modules.operator_levels.schemas import (
 from app.modules.operator_levels.service import (
     assign_auto_level,
     assign_manual_level,
+    coin_word,
     ensure_default_levels,
     level_history_rows,
     level_reward_overview_rows,
     operator_level_summary,
+    rule_presentation,
 )
 
 router = APIRouter(prefix="/operator-levels", tags=["operator-levels"])
@@ -70,25 +72,45 @@ def _check_operator_level_view_access(user: User, operator: Operator) -> None:
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
 
 
+def _serialize_level(level: OperatorLevel, stage_number: int) -> dict:
+    data = OperatorLevelRead.model_validate(level).model_dump()
+    data["stage_number"] = stage_number
+    data["rules_count"] = len(level.rules)
+    data["reward_label"] = (
+        f"{level.reward_coins} {coin_word(level.reward_coins)} при повышении"
+        if level.reward_coins
+        else "Без награды за повышение"
+    )
+    data["rules"] = [
+        {
+            **OperatorLevelRuleRead.model_validate(rule).model_dump(),
+            **rule_presentation(rule),
+        }
+        for rule in level.rules
+    ]
+    return data
+
+
 @router.get("", response_model=list[OperatorLevelRead])
 def list_levels(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
-) -> list[OperatorLevel]:
+) -> list[dict]:
     ensure_default_levels(db)
     db.commit()
-    return list(db.scalars(
+    levels = list(db.scalars(
         select(OperatorLevel)
         .options(selectinload(OperatorLevel.rules))
         .order_by(OperatorLevel.sort_order.asc(), OperatorLevel.id.asc())
     ))
+    return [_serialize_level(level, index) for index, level in enumerate(levels, start=1)]
 
 
 @admin_router.get("", response_model=list[OperatorLevelRead])
 def admin_list_levels(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("manager", "admin")),
-) -> list[OperatorLevel]:
+) -> list[dict]:
     return list_levels(db, _)
 
 

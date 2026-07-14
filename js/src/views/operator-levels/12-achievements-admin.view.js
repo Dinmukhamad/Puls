@@ -24,18 +24,18 @@ async function renderAchievementsAdminTab(el) {
     return {
       top_3_week: 'Топ-3 недели',
       no_late_streak: `${v} недели подряд без опозданий`,
-      quality_threshold: `Качество ≥ ${v}%`,
+      quality_threshold: `Качество не ниже ${v}%`,
       calls_leader_week: 'Лучший по звонкам за неделю',
       efficiency_leader_week: 'Лучший по эффективности за неделю',
-      total_coins: `Всего начислено ≥ ${v} ₡`,
+      total_coins: `Всего начислено не меньше ${v} коинов`,
       manual: 'Только ручная выдача',
-      test_score: `Результат теста ≥ ${v}%`,
+      test_score: `Результат теста не ниже ${v}%`,
     }[a.condition_type] || a.condition_type;
   };
 
   el.innerHTML = `
     <div class="an-card-head-row" style="margin-bottom:14px">
-      <div class="an-card-head" style="margin-bottom:0">Каталог достижений</div>
+      <div><div class="an-card-head" style="margin-bottom:2px">Каталог достижений</div><div class="user-cell-sub">Отдельные награды за результаты, не связанные с переходом между уровнями.</div></div>
       <span class="panel-badge">${achievements.length}</span>
     </div>
 
@@ -59,7 +59,7 @@ async function renderAchievementsAdminTab(el) {
           <div class="achievement-admin-reward-row">
             <label for="ach-reward-${a.id}">Награда</label>
             <input type="number" class="form-input" id="ach-reward-${a.id}" value="${a.reward_coins}" min="0" step="1">
-            <span>₡</span>
+            <span>коинов</span>
             <button class="btn-link" onclick="saveAchievementReward(${a.id})">Сохранить</button>
           </div>
 
