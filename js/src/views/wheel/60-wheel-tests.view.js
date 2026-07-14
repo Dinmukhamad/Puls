@@ -448,17 +448,18 @@ async function renderWheelStaffView(el) {
   el.innerHTML = `
     <div class="view-header">
       <div>
-        <div class="section-kicker">Геймификация</div>
+        <div class="section-kicker">Управление мотивацией</div>
         <h2 class="section-title">Wheel of WOW</h2>
+        <p class="section-subtitle">Настройте призы, правила получения попыток и контролируйте прокрутки.</p>
       </div>
     </div>
     <div class="filter-tabs wheel-tabs">
-        <button class="filter-tab ${_wheelStaffTab === 'campaign' ? 'active' : ''}" data-wheel-tab="campaign">Кампания</button>
-        <button class="filter-tab ${_wheelStaffTab === 'prizes' ? 'active' : ''}" data-wheel-tab="prizes">Сектора</button>
+        <button class="filter-tab ${_wheelStaffTab === 'campaign' ? 'active' : ''}" data-wheel-tab="campaign">Настройки</button>
+        <button class="filter-tab ${_wheelStaffTab === 'prizes' ? 'active' : ''}" data-wheel-tab="prizes">Призы</button>
         <button class="filter-tab ${_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history' || _wheelStaffTab === 'stats' ? 'active' : ''}" data-wheel-tab="operations">Операции</button>
-        <button class="filter-tab ${_wheelStaffTab === 'rules' ? 'active' : ''}" data-wheel-tab="rules">Правила</button>
-        <button class="filter-tab ${_wheelStaffTab === 'logs' ? 'active' : ''}" data-wheel-tab="logs">Логи</button>
-        <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдать билет</button>
+        <button class="filter-tab ${_wheelStaffTab === 'rules' ? 'active' : ''}" data-wheel-tab="rules">Автоматизация</button>
+        <button class="filter-tab ${_wheelStaffTab === 'logs' ? 'active' : ''}" data-wheel-tab="logs">Журнал</button>
+        <button class="filter-tab ${_wheelStaffTab === 'issue' ? 'active' : ''}" data-wheel-tab="issue">Выдача билетов</button>
     </div>
     <div id="wheel-staff-body">${wheelLoadingPanel()}</div>`;
 
@@ -661,38 +662,47 @@ async function renderWheelPrizesTab(body) {
       group.items.push(row);
       return groups;
     }, []);
-  const prizeRowHtml = (r) => `<tr data-prize-id="${r.id}">
-            <td><input type="checkbox" class="wp-select" ${_wheelSelectedPrizeIds.has(r.id) ? 'checked' : ''}></td>
-            <td><input type="color" class="wp-color" value="${esc(r.color || '#38BDF8')}"></td>
-            <td><input type="text" class="form-input wp-title" value="${esc(r.title)}"></td>
-            <td><select class="form-input wp-type">${typeOptions(r.prize_type)}</select></td>
-            <td><input type="number" class="form-input wp-amount" value="${r.amount}"></td>
-            <td><input type="number" class="form-input wp-weight" value="${r.weight}" min="0"></td>
-            <td><span class="wheel-chance">${chance(r.is_active ? r.weight : 0)}%</span></td>
-            <td><input type="number" class="form-input wp-maxtotal" value="${r.max_wins_total}" min="0" title="0 — без лимита"></td>
-            <td><input type="number" class="form-input wp-maxop" value="${r.max_wins_per_operator}" min="0" title="0 — без лимита"></td>
-            <td style="text-align:center"><input type="checkbox" class="wp-active" ${r.is_active ? 'checked' : ''}></td>
-            <td><button class="btn-outline btn-sm wp-save">Сохранить</button></td>
-          </tr>`;
+  const prizeRowHtml = (r) => `<article class="wheel-prize-card ${r.is_active ? '' : 'is-disabled'}" data-prize-id="${r.id}" style="--wheel-prize-color:${esc(r.color || '#38BDF8')}">
+            <div class="wheel-prize-card-head">
+              <label class="wheel-prize-select"><input type="checkbox" class="wp-select" ${_wheelSelectedPrizeIds.has(r.id) ? 'checked' : ''}><span>Выбрать</span></label>
+              <span class="wheel-chance">${chance(r.is_active ? r.weight : 0)}% шанс</span>
+            </div>
+            <div class="wheel-prize-identity">
+              <input type="color" class="wp-color" value="${esc(r.color || '#38BDF8')}" title="Цвет сектора">
+              <label class="form-group"><span class="form-label">Название приза</span><input type="text" class="form-input wp-title" value="${esc(r.title)}"></label>
+            </div>
+            <div class="wheel-prize-fields">
+              <label class="form-group wheel-prize-type"><span class="form-label">Тип награды</span><select class="form-input wp-type">${typeOptions(r.prize_type)}</select></label>
+              <label class="form-group"><span class="form-label">Количество</span><input type="number" class="form-input wp-amount" value="${r.amount}"></label>
+              <label class="form-group"><span class="form-label">Вес</span><input type="number" class="form-input wp-weight" value="${r.weight}" min="0"></label>
+              <label class="form-group"><span class="form-label">Общий лимит</span><input type="number" class="form-input wp-maxtotal" value="${r.max_wins_total}" min="0" title="0 — без лимита"></label>
+              <label class="form-group"><span class="form-label">На оператора</span><input type="number" class="form-input wp-maxop" value="${r.max_wins_per_operator}" min="0" title="0 — без лимита"></label>
+            </div>
+            <div class="wheel-prize-card-foot">
+              <label class="wheel-switch-label"><input type="checkbox" class="wp-active" ${r.is_active ? 'checked' : ''}><span>${r.is_active ? 'Приз активен' : 'Приз выключен'}</span></label>
+              <button class="btn-primary btn-sm wp-save">Сохранить</button>
+            </div>
+          </article>`;
   const prizeGroupHtml = (group) => {
     const activeItems = group.items.filter(r => r.is_active);
     const groupWeight = activeItems.reduce((sum, r) => sum + (r.weight || 0), 0);
     const groupChance = totalWeight > 0 ? Math.round((groupWeight / totalWeight) * 100) : 0;
     const rawLabel = wheelPrizeTypeLabel(group.type) || group.type || 'Другое';
     const label = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
-    return `<tr class="wheel-prize-group-row"><td colspan="11">
+    return `<section class="wheel-prize-group">
               <div class="wheel-prize-group-title">
-                <span class="wheel-prize-group-name">${esc(label)}</span>
-                <span class="wheel-prize-group-meta">${group.items.length} сектор(ов) · активных ${activeItems.length} · вес ${groupWeight} · шанс ${groupChance}%</span>
+                <div><span class="wheel-prize-group-name">${esc(label)}</span><small>${group.items.length} ${group.items.length === 1 ? 'приз' : 'приза'}</small></div>
+                <span class="wheel-prize-group-meta">Активных: ${activeItems.length} · общий шанс: ${groupChance}%</span>
               </div>
-            </td></tr>${group.items.map(prizeRowHtml).join('')}`;
+              <div class="wheel-prize-card-grid">${group.items.map(prizeRowHtml).join('')}</div>
+            </section>`;
   };
 
   body.innerHTML = `
     <div class="panel wheel-admin-panel">
       <div class="panel-head">
-        <h3>Сектора колеса</h3>
-        <span class="panel-badge">${rows.length} · сумма весов ${totalWeight}</span>
+        <div><h3>Призы колеса</h3><p class="panel-hint">Каждая карточка — отдельный сектор. Чем больше вес, тем выше вероятность выпадения.</p></div>
+        <span class="panel-badge">${rows.length} призов · вес ${totalWeight}</span>
       </div>
       <div class="wheel-admin-content">
         <div class="wheel-bulk-bar ${_wheelSelectedPrizeIds.size ? 'is-visible' : ''}" id="wheel-bulk-bar">
@@ -701,21 +711,8 @@ async function renderWheelPrizesTab(body) {
           <button class="btn-outline btn-sm" id="wheel-bulk-enable">Включить выбранные</button>
           <button class="btn-link" id="wheel-bulk-clear">Снять выбор</button>
         </div>
-        <div class="table-wrap wheel-prizes-wrap"><table class="data-table wheel-prizes-table">
-          <colgroup>
-            <col class="wp-col-select"><col class="wp-col-color"><col class="wp-col-title"><col class="wp-col-type">
-            <col class="wp-col-num"><col class="wp-col-num"><col class="wp-col-chance">
-            <col class="wp-col-limit"><col class="wp-col-limit"><col class="wp-col-active"><col class="wp-col-action">
-          </colgroup>
-          <thead><tr>
-            <th><input type="checkbox" id="wp-select-all" title="Выбрать все"></th>
-            <th>Цвет</th><th>Название</th><th>Тип</th><th>Кол-во</th><th>Вес</th>
-            <th title="Шанс выпадения">Шанс</th><th>Лимит всего</th><th>Лимит/оператор</th><th>Активен</th><th></th>
-          </tr></thead>
-          <tbody>
-          ${groupedRows.map(prizeGroupHtml).join('') || '<tr><td colspan="11" class="empty-line">Секторов пока нет</td></tr>'}
-          </tbody>
-        </table></div>
+        <label class="wheel-select-all"><input type="checkbox" id="wp-select-all"><span>Выбрать все призы</span></label>
+        <div class="wheel-prize-groups">${groupedRows.map(prizeGroupHtml).join('') || '<div class="empty-state wheel-empty"><p>Призов пока нет.</p></div>'}</div>
         <div class="wheel-newprize">
           <h4 class="panel-subtitle">Добавить сектор</h4>
           <div class="form-grid wheel-newprize-grid">
@@ -740,23 +737,23 @@ async function renderWheelPrizesTab(body) {
     bar.classList.toggle('is-visible', _wheelSelectedPrizeIds.size > 0);
   }
 
-  body.querySelectorAll('tr[data-prize-id]').forEach(tr => {
-    const id = parseInt(tr.dataset.prizeId, 10);
-    tr.querySelector('.wp-select').onchange = (e) => {
+  body.querySelectorAll('[data-prize-id]').forEach(card => {
+    const id = parseInt(card.dataset.prizeId, 10);
+    card.querySelector('.wp-select').onchange = (e) => {
       if (e.target.checked) _wheelSelectedPrizeIds.add(id);
       else _wheelSelectedPrizeIds.delete(id);
       updateBulkBar();
     };
-    tr.querySelector('.wp-save').onclick = async () => {
+    card.querySelector('.wp-save').onclick = async () => {
       const payload = {
-        title: tr.querySelector('.wp-title').value.trim(),
-        prize_type: tr.querySelector('.wp-type').value,
-        amount: parseInt(tr.querySelector('.wp-amount').value, 10) || 0,
-        weight: parseInt(tr.querySelector('.wp-weight').value, 10) || 0,
-        color: tr.querySelector('.wp-color').value,
-        max_wins_total: parseInt(tr.querySelector('.wp-maxtotal').value, 10) || 0,
-        max_wins_per_operator: parseInt(tr.querySelector('.wp-maxop').value, 10) || 0,
-        is_active: tr.querySelector('.wp-active').checked,
+        title: card.querySelector('.wp-title').value.trim(),
+        prize_type: card.querySelector('.wp-type').value,
+        amount: parseInt(card.querySelector('.wp-amount').value, 10) || 0,
+        weight: parseInt(card.querySelector('.wp-weight').value, 10) || 0,
+        color: card.querySelector('.wp-color').value,
+        max_wins_total: parseInt(card.querySelector('.wp-maxtotal').value, 10) || 0,
+        max_wins_per_operator: parseInt(card.querySelector('.wp-maxop').value, 10) || 0,
+        is_active: card.querySelector('.wp-active').checked,
       };
       if (!payload.title) { showToast('Укажите название сектора', 'error'); return; }
       try {
@@ -770,9 +767,9 @@ async function renderWheelPrizesTab(body) {
   });
 
   document.getElementById('wp-select-all').onchange = (e) => {
-    body.querySelectorAll('tr[data-prize-id]').forEach(tr => {
-      const id = parseInt(tr.dataset.prizeId, 10);
-      tr.querySelector('.wp-select').checked = e.target.checked;
+    body.querySelectorAll('[data-prize-id]').forEach(card => {
+      const id = parseInt(card.dataset.prizeId, 10);
+      card.querySelector('.wp-select').checked = e.target.checked;
       if (e.target.checked) _wheelSelectedPrizeIds.add(id); else _wheelSelectedPrizeIds.delete(id);
     });
     updateBulkBar();
@@ -864,15 +861,11 @@ async function renderWheelOperationsTab(body) {
             <div class="filter-tabs wheel-subtabs">
               ${filters.map(([f, l]) => `<button class="filter-tab ${_wheelTicketFilter === f ? 'active' : ''}" data-ticket-filter="${f}">${l}</button>`).join('')}
             </div>
-            ${tickets.length ? `<div class="table-wrap wheel-table-wrap"><table class="data-table">
-              <thead><tr><th>Оператор</th><th>Причина</th><th>Истекает</th><th>Статус</th></tr></thead>
-              <tbody>${tickets.map(t => `<tr>
-                <td class="name-cell"><strong>${esc(t.operator_name)}</strong><div class="muted-sm">${esc(fmtDateTime(t.created_at))}</div></td>
-                <td>${esc(t.reason_text || wheelSourceLabel(t.reason_type) || '—')}<div class="muted-sm">${esc(wheelSourceLabel(t.reason_type))}</div></td>
-                <td>${t.expires_at ? esc(fmtDateTime(t.expires_at)) : '—'}</td>
-                <td><span class="badge ${statusBadge[t.status] || 'badge-muted'}">${statusLabel[t.status] || t.status}</span></td>
-              </tr>`).join('')}</tbody>
-            </table></div>` : '<div class="empty-state wheel-empty"><p>Билетов пока нет.</p></div>'}
+            ${tickets.length ? `<div class="wheel-record-list">${tickets.map(t => `<article class="wheel-record-row">
+                <div class="wheel-record-main"><strong>${esc(t.operator_name)}</strong><span>${esc(t.reason_text || wheelSourceLabel(t.reason_type) || 'Без пояснения')}</span></div>
+                <div class="wheel-record-meta"><span>Выдан ${esc(fmtDateTime(t.created_at))}</span><span>${t.expires_at ? 'До ' + esc(fmtDateTime(t.expires_at)) : 'Без срока'}</span></div>
+                <span class="badge ${statusBadge[t.status] || 'badge-muted'}">${statusLabel[t.status] || t.status}</span>
+              </article>`).join('')}</div>` : '<div class="empty-state wheel-empty"><p>Билетов пока нет.</p></div>'}
           </div>
         </section>
 
@@ -882,15 +875,12 @@ async function renderWheelOperationsTab(body) {
             <span class="panel-badge">${spins.length}</span>
           </div>
           <div class="wheel-admin-content">
-            ${spins.length ? `<div class="table-wrap wheel-table-wrap"><table class="data-table">
-              <thead><tr><th>Оператор</th><th>Приз</th><th>Причина</th><th>Дата</th></tr></thead>
-              <tbody>${spins.map(r => `<tr>
-                <td class="name-cell"><strong>${esc(r.operator_name)}</strong><div class="muted-sm">${esc(r.group_name || '—')}</div></td>
-                <td><span class="wheel-type-pill">${esc(wheelPrizeTypeLabel(r.prize_type))}</span><div><strong>${esc(r.prize)}</strong></div></td>
-                <td>${esc(r.reason || '—')}</td>
-                <td>${esc(fmtDateTime(r.date))}</td>
-              </tr>`).join('')}</tbody>
-            </table></div>` : '<div class="empty-state wheel-empty"><p>Прокруток пока нет.</p></div>'}
+            ${spins.length ? `<div class="wheel-record-list">${spins.map(r => `<article class="wheel-record-row wheel-spin-record">
+                <div class="wheel-record-main"><strong>${esc(r.operator_name)}</strong><span>${esc(r.group_name || 'Без группы')}</span></div>
+                <div class="wheel-record-prize"><span class="wheel-type-pill">${esc(wheelPrizeTypeLabel(r.prize_type))}</span><strong>${esc(r.prize)}</strong></div>
+                <div class="wheel-record-reason">${esc(r.reason || 'Без пояснения')}</div>
+                <time>${esc(fmtDateTime(r.date))}</time>
+              </article>`).join('')}</div>` : '<div class="empty-state wheel-empty"><p>Прокруток пока нет.</p></div>'}
           </div>
         </section>
       </div>
@@ -1050,6 +1040,27 @@ function wheelSourceLabel(t) {
   }[t] || t;
 }
 
+function wheelRuleMetricLabel(metric) {
+  return {
+    test_score: 'Результат теста',
+    quality_avg: 'Среднее качество звонков',
+    late_minutes: 'Минуты опозданий',
+    efficiency_percent: 'Эффективность',
+    work_hours_percent: 'Выполнение нормы часов',
+    rating_place: 'Место в рейтинге',
+    simulation_passed: 'Симуляция пройдена',
+  }[metric] || metric || 'Показатель';
+}
+
+function wheelRulePeriodLabel(period) {
+  return {
+    daily: 'Каждый день',
+    weekly: 'Каждую неделю',
+    monthly: 'Каждый месяц',
+    once: 'Один раз',
+  }[period] || period || 'Без периода';
+}
+
 /* ---------- Стафф: правила (ТЗ 15) ---------- */
 const WHEEL_RULE_SOURCE_OPTIONS = [
   ['tests', 'Тесты'],
@@ -1095,18 +1106,12 @@ async function renderWheelRulesTab(body) {
         </div>
       </div>
       <div class="wheel-admin-content">
-        ${rows.length ? `<div class="table-wrap wheel-table-wrap wheel-rules-table-wrap"><table class="data-table wheel-rules-table">
-          <thead><tr><th>Правило</th><th>Источник</th><th>Условие</th><th>Период</th><th>Лимит</th><th>TTL</th><th>Статус</th></tr></thead>
-          <tbody>${rows.map(r => `<tr>
-            <td><strong>${esc(r.title)}</strong><div class="muted-sm">${esc(r.code)}</div></td>
-            <td><span class="wheel-type-pill">${esc(wheelSourceLabel(r.source_module))}</span></td>
-            <td>${esc(r.metric_key || r.rule_type)} ${esc(opLabel[r.operator] || r.operator)} ${esc(String(r.threshold_value))}${r.operator === 'between' && r.threshold_value_max != null ? '…' + esc(String(r.threshold_value_max)) : ''}</td>
-            <td>${esc(r.period_type)}</td>
-            <td>${r.max_tokens_per_period}</td>
-            <td>${r.token_ttl_hours}ч</td>
-            <td><span class="badge ${r.is_active ? 'badge-ok' : 'badge-muted'}">${r.is_active ? 'активно' : 'выкл'}</span></td>
-          </tr>`).join('')}</tbody>
-        </table></div>` : '<div class="empty-state wheel-empty"><p>Правил пока нет.</p></div>'}
+        ${rows.length ? `<div class="wheel-rule-card-grid">${rows.map(r => `<article class="wheel-rule-card">
+          <div class="wheel-rule-card-head"><span class="wheel-type-pill">${esc(wheelSourceLabel(r.source_module))}</span><span class="badge ${r.is_active ? 'badge-ok' : 'badge-muted'}">${r.is_active ? 'Работает' : 'Выключено'}</span></div>
+          <div><h4>${esc(r.title)}</h4><code>${esc(r.code)}</code></div>
+          <div class="wheel-rule-condition"><span>Условие</span><strong>${esc(wheelRuleMetricLabel(r.metric_key || r.rule_type))} ${esc(opLabel[r.operator] || r.operator)} ${esc(String(r.threshold_value))}${r.operator === 'between' && r.threshold_value_max != null ? '…' + esc(String(r.threshold_value_max)) : ''}</strong></div>
+          <div class="wheel-rule-facts"><span><b>${esc(wheelRulePeriodLabel(r.period_type))}</b> периодичность</span><span><b>${r.max_tokens_per_period}</b> ${r.max_tokens_per_period === 1 ? 'билет' : 'билета'}</span><span><b>${r.token_ttl_hours} ч</b> срок билета</span></div>
+        </article>`).join('')}</div>` : '<div class="empty-state wheel-empty"><p>Правил пока нет.</p></div>'}
       </div>
     </section>`;
 
@@ -1310,22 +1315,18 @@ async function renderWheelLogsTab(body) {
     return;
   }
   const rows = data.items || [];
+  const opLabel = { gte: '≥', lte: '≤', eq: '=', between: 'между', is_true: 'да' };
   body.innerHTML = `
     <div class="panel wheel-admin-panel">
       <div class="panel-head"><h3>Логи проверки условий</h3><span class="panel-badge">${rows.length}</span></div>
       <div class="wheel-admin-content">
-        ${rows.length ? `<div class="table-wrap"><table class="data-table">
-          <thead><tr><th>Дата</th><th>Оператор</th><th>Источник</th><th>Значение</th><th>Порог</th><th>Итог</th><th>Причина</th></tr></thead>
-          <tbody>${rows.map(l => `<tr>
-            <td>${esc(fmtDateTime(l.created_at))}</td>
-            <td class="name-cell">${esc(l.operator_name)}</td>
-            <td>${esc(l.source_module)}${l.source_entity_id ? ' #' + l.source_entity_id : ''}</td>
-            <td>${l.metric_value != null ? esc(String(l.metric_value)) : '—'}</td>
-            <td>${l.threshold_value != null ? esc(l.operator) + ' ' + esc(String(l.threshold_value)) : '—'}</td>
-            <td><span class="badge ${l.is_eligible ? 'badge-ok' : 'badge-muted'}">${l.is_eligible ? 'выдан' : 'нет'}</span></td>
-            <td>${esc(l.reason || '—')}</td>
-          </tr>`).join('')}</tbody>
-        </table></div>` : `<div class="empty-state wheel-empty">
+        ${rows.length ? `<div class="wheel-log-list">${rows.map(l => `<article class="wheel-log-row">
+            <time>${esc(fmtDateTime(l.created_at))}</time>
+            <div class="wheel-log-operator"><strong>${esc(l.operator_name)}</strong><span>${esc(wheelSourceLabel(l.source_module))}${l.source_entity_id ? ' · запись ' + l.source_entity_id : ''}</span></div>
+            <div class="wheel-log-condition"><span>Значение: <b>${l.metric_value != null ? esc(String(l.metric_value)) : 'нет данных'}</b></span><span>Условие: <b>${l.threshold_value != null ? esc(opLabel[l.operator] || l.operator) + ' ' + esc(String(l.threshold_value)) : '—'}</b></span></div>
+            <span class="badge ${l.is_eligible ? 'badge-ok' : 'badge-muted'}">${l.is_eligible ? 'Билет выдан' : 'Не выдан'}</span>
+            <p>${esc(l.reason || 'Причина не указана')}</p>
+          </article>`).join('')}</div>` : `<div class="empty-state wheel-empty">
           <p>Логов пока нет.</p>
           <p class="cell-muted" style="font-size:12px;max-width:480px;margin:6px auto 0">
             Запись появляется автоматически, когда оператор завершает тест или сохраняется расчёт периода —
