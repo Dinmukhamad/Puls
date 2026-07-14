@@ -84,6 +84,7 @@ def test_finish_awards_coins_once(make_client, db_session):
     from app.models import entities as m
 
     op, user, password = make_operator_user(db_session)
+    initial_balance = op.current_balance
     _test, question, correct, attempt = _make_attempt(
         db_session,
         op,
@@ -107,21 +108,23 @@ def test_finish_awards_coins_once(make_client, db_session):
     db_session.expire_all()
     fresh_operator = db_session.get(m.Operator, op.id)
     fresh_attempt = db_session.get(m.TestAttempt, attempt.id)
-    assert fresh_operator.current_balance == 10
     assert fresh_attempt.reward_transaction_id is not None
+    transactions = db_session.query(m.CoinTransaction).filter_by(operator_id=op.id).all()
+    assert fresh_operator.current_balance == initial_balance + sum(item.amount for item in transactions)
     transaction = db_session.query(m.CoinTransaction).filter_by(
         operator_id=op.id, type="test_reward"
     ).one()
     assert transaction.amount == 10
     assert transaction.source_type == "test_attempt"
     assert transaction.source_id == attempt.id
+    balance_after_first_finish = fresh_operator.current_balance
 
     second = c.post(f"/api/tests/attempts/{attempt.id}/finish")
     assert second.status_code == 200, second.text
     assert second.json()["reward_coins"] == 10
 
     db_session.expire_all()
-    assert db_session.get(m.Operator, op.id).current_balance == 10
+    assert db_session.get(m.Operator, op.id).current_balance == balance_after_first_finish
     assert db_session.query(m.CoinTransaction).filter_by(
         operator_id=op.id, type="test_reward"
     ).count() == 1
