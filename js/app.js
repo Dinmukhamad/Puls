@@ -11439,8 +11439,15 @@ async function renderTestsOperatorView(el) {
   }
 
   const available = items.filter(t => ['available', 'in_progress'].includes(t.status));
-  const finished = items.filter(t => ['finished', 'expired'].includes(t.status));
+  const completed = items.filter(t => t.status === 'finished');
+  const expired = items.filter(t => t.status === 'expired');
+  const history = [...completed, ...expired].sort((a, b) =>
+    new Date(b.finished_at || 0) - new Date(a.finished_at || 0)
+  );
   const upcoming = items.filter(t => t.status === 'upcoming');
+  const averageScore = completed.length
+    ? completed.reduce((sum, test) => sum + Number(test.score_percent || 0), 0) / completed.length
+    : null;
 
   const body = el.querySelector('#tests-op-body');
   if (!items.length) {
@@ -11450,18 +11457,18 @@ async function renderTestsOperatorView(el) {
 
   body.innerHTML = `
     <div class="tests-summary-strip">
-      <div><span>Доступно</span><strong>${available.length}</strong></div>
-      <div><span>Ожидают</span><strong>${upcoming.length}</strong></div>
-      <div><span>Завершено</span><strong>${finished.length}</strong></div>
+      <div><span>Новые задания</span><strong>${available.length}</strong></div>
+      <div><span>Пройдено тестов</span><strong>${completed.length}</strong></div>
+      <div><span>Средний результат</span><strong>${averageScore === null ? '—' : `${fmtA(averageScore, 0)}%`}</strong></div>
     </div>
     <section class="tests-section">
-      <div class="tests-section-head"><div><h3>Доступные тесты</h3><p>Сначала показаны тесты, которые можно пройти сейчас.</p></div><span>${available.length}</span></div>
+      <div class="tests-section-head"><div><h3>Новые задания</h3><p>Тесты, которые можно пройти сейчас.</p></div></div>
       ${available.length ? `<div class="test-card-grid">${available.map(testCardHtml).join('')}</div>` : `<div class="tests-empty-compact">Сейчас нет тестов для прохождения.</div>`}
     </section>
-    ${upcoming.length ? `<section class="tests-section"><div class="tests-section-head"><div><h3>Запланировано</h3><p>Откроются автоматически в указанное время.</p></div><span>${upcoming.length}</span></div><div class="test-card-grid">${upcoming.map(testCardHtml).join('')}</div></section>` : ''}
+    ${upcoming.length ? `<section class="tests-section"><div class="tests-section-head"><div><h3>Скоро откроются</h3><p>Будущие задания.</p></div></div><div class="test-card-grid">${upcoming.map(testCardHtml).join('')}</div></section>` : ''}
     <section class="tests-section">
-      <div class="tests-section-head"><div><h3>История</h3><p>Результаты завершённых тестов и полученные награды.</p></div><span>${finished.length}</span></div>
-      ${finished.length ? `<div class="test-card-grid test-card-grid-history">${finished.map(testCardHtml).join('')}</div>` : `<div class="tests-empty-compact">История пока пустая.</div>`}
+      <div class="tests-section-head"><div><h3>Мои результаты</h3><p>Пройденные тесты и полученные награды.</p></div></div>
+      ${history.length ? `<div class="test-history-list">${history.map(testHistoryItemHtml).join('')}</div>` : `<div class="tests-empty-compact">Завершённых тестов пока нет.</div>`}
     </section>`;
 
   body.querySelectorAll('[data-test-action]').forEach(btn => {
@@ -11472,6 +11479,34 @@ async function renderTestsOperatorView(el) {
       if (action === 'result') openTestResultModal(btn.dataset.attemptId);
     });
   });
+}
+
+function testHistoryItemHtml(t) {
+  const isFinished = t.status === 'finished';
+  const dateLabel = t.finished_at ? fmtDate(t.finished_at) : 'Дата не указана';
+  const resultLabel = t.passed === true ? 'Пройден' : (t.passed === false ? 'Нужно повторить' : 'Не завершён');
+  const resultClass = t.passed === true ? 'is-passed' : (t.passed === false ? 'is-failed' : 'is-expired');
+  const earned = [];
+  if (Number(t.reward_coins_earned) > 0) earned.push(`+${fmtA(t.reward_coins_earned, 0)} коинов`);
+  if (Number(t.reward_points_earned) > 0) earned.push(`+${fmtA(t.reward_points_earned, 0)} баллов`);
+
+  return `<article class="test-history-item">
+    <div class="test-history-main">
+      <div class="test-history-date">${esc(dateLabel)}</div>
+      <h4>${esc(t.title)}</h4>
+      ${t.description ? `<p>${esc(t.description)}</p>` : `<p>${t.questions_count} вопросов</p>`}
+    </div>
+    <div class="test-history-score">
+      ${isFinished ? `<strong>${fmtA(t.score_percent, 0)}%</strong><span>${t.correct_count} из ${t.questions_count} правильно</span>` : `<strong>—</strong><span>Тест не завершён</span>`}
+    </div>
+    <div class="test-history-outcome">
+      <span class="test-history-status ${resultClass}">${resultLabel}</span>
+      ${earned.length ? `<small>${earned.join(' · ')}</small>` : '<small>Без награды</small>'}
+    </div>
+    <div class="test-history-action">
+      ${isFinished ? `<button class="btn-outline btn-sm" data-test-action="result" data-attempt-id="${t.attempt_id}">Посмотреть результат</button>` : ''}
+    </div>
+  </article>`;
 }
 
 function testStatusBadge(status) {
@@ -11518,7 +11553,7 @@ function testCardHtml(t) {
     <div class="test-card-meta">
       <span>${t.questions_count} вопросов</span><span>${t.time_limit_minutes} мин</span><span class="test-card-reward">${esc(rewardLabel)}</span>
     </div>
-    ${t.closes_at ? `<div class="test-card-deadline">До ${fmtDateTime(t.closes_at)}</div>` : ''}
+    ${t.closes_at && ['available', 'in_progress', 'upcoming'].includes(t.status) ? `<div class="test-card-deadline">До ${fmtDateTime(t.closes_at)}</div>` : ''}
     <div class="test-card-actions">${actionHtml}</div>
   </article>`;
 }

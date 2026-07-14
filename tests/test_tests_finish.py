@@ -151,6 +151,33 @@ def test_resume_returns_saved_answers(make_client, db_session):
     assert resumed.json()["saved_answers"][str(question.id)] == [correct.id]
 
 
+def test_my_tests_returns_operator_history_fields(make_client, db_session):
+    from app.models import entities as m
+
+    op, user, password = make_operator_user(db_session)
+    test, question, correct, attempt = _make_attempt(db_session, op, passing_percent=70)
+    db_session.add(m.TestAssignment(test_id=test.id, target_type="all", target_id=None))
+    db_session.commit()
+    c = _login_operator(make_client, user, password)
+
+    saved = c.post(
+        f"/api/tests/attempts/{attempt.id}/save-answer",
+        json={"question_id": question.id, "selected_answer_ids": [correct.id]},
+    )
+    assert saved.status_code == 200, saved.text
+    finished = c.post(f"/api/tests/attempts/{attempt.id}/finish")
+    assert finished.status_code == 200, finished.text
+
+    response = c.get("/api/tests/my")
+    assert response.status_code == 200, response.text
+    item = next(row for row in response.json()["items"] if row["id"] == test.id)
+    assert item["status"] == "finished"
+    assert item["finished_at"] is not None
+    assert item["passed"] is True
+    assert item["reward_coins_earned"] == 0
+    assert item["reward_points_earned"] == 0
+
+
 def test_admin_detail_returns_builder_configuration(client, db_session):
     from app.models import entities as m
 

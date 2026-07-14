@@ -152,9 +152,15 @@ def my_tests(db: Session = Depends(get_db), current_user: User = Depends(get_cur
             "reward_coins": t.reward_coins,
             "attempt_id": attempt.id if attempt else None,
             "attempt_status": attempt.status if attempt else None,
+            "finished_at": _utc_iso(attempt.finished_at) if attempt else None,
             "score_percent": attempt.score_percent if attempt and attempt.status == "finished" else None,
             "correct_count": attempt.correct_count if attempt and attempt.status == "finished" else None,
+            "passed": (
+                attempt.score_percent >= t.passing_percent
+                if attempt and attempt.status == "finished" else None
+            ),
             "reward_coins_earned": attempt.reward_coins if attempt and attempt.status == "finished" else None,
+            "reward_points_earned": attempt.reward_points if attempt and attempt.status == "finished" else None,
         })
     return {"items": items}
 
