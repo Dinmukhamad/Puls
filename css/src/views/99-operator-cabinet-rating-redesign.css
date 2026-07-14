@@ -109,7 +109,8 @@
 .op-achievement-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .op-achievement { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; min-height: 68px; padding: 10px; background: var(--bg-muted); border: 1px solid transparent; border-radius: 6px; opacity: .72; }
 .op-achievement.is-done { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 18%, transparent); opacity: 1; }
-.op-achievement-icon { display: grid; place-items: center; width: 34px; height: 34px; font-size: 20px; }
+.op-achievement-icon { display: grid; place-items: center; width: 34px; height: 34px; color: var(--accent-primary); background: var(--accent-soft); border-radius: 6px; }
+.op-achievement-svg { width: 18px; height: 18px; }
 .op-achievement b, .op-achievement small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .op-achievement b { font-size: 12px; }
 .op-achievement small { margin-top: 3px; color: var(--text-muted); font-size: 10px; }

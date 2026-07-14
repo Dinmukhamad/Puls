@@ -60,7 +60,7 @@ function opCabinetAchievements(data) {
     const progress = Number(row.progress_value || 0);
     const pct = row.done ? 100 : (goal > 0 ? Math.min(100, progress / goal * 100) : 0);
     return `<article class="op-achievement ${row.done ? 'is-done' : ''}">
-      <span class="op-achievement-icon">${esc(row.icon || '★')}</span>
+      <span class="op-achievement-icon">${achievementVisualIcon(row, 'op-achievement-svg')}</span>
       <div><b>${esc(row.title || 'Достижение')}</b><small>${row.done ? 'Получено' : `${opNum(progress, 1)} из ${opNum(goal, 1)}`}</small><div class="op-mini-progress"><i style="width:${pct}%"></i></div></div>
     </article>`;
   }).join('')}</div>`;
