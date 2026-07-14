@@ -227,16 +227,31 @@
 .op-group-list article > div small, .op-group-list article > strong small { margin-top: 3px; color: var(--text-muted); font-size: 9px; }
 .op-group-list article > strong { text-align: right; font-size: 12px; }
 .op-group-list article > strong small { display: block; font-weight: 500; }
-.op-progress-table { overflow-x: auto; }
-.op-progress-head, .op-progress-row { display: grid; grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(100px, .55fr)); align-items: center; min-width: 620px; }
-.op-progress-head { min-height: 36px; color: var(--text-muted); background: var(--bg-subtle); font-size: 10px; font-weight: 700; text-transform: uppercase; }
-.op-progress-head span, .op-progress-row > * { padding-inline: 12px; }
-.op-progress-row { min-height: 54px; border-bottom: 1px solid var(--border-soft); }
-.op-progress-row:last-child { border-bottom: 0; }
-.op-progress-row b, .op-progress-row small { display: block; }
-.op-progress-row b { font-size: 12px; }
-.op-progress-row small { margin-top: 3px; color: var(--text-muted); font-size: 10px; }
-.op-progress-row > strong { font-size: 12px; }
+.op-progress-chart-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 18px; }
+.op-progress-chart-head b, .op-progress-chart-head span { display: block; }
+.op-progress-chart-head b { font-size: 13px; }
+.op-progress-chart-head > div:first-child span { margin-top: 4px; color: var(--text-muted); font-size: 10px; }
+.op-progress-legend { display: flex; align-items: center; gap: 14px; }
+.op-progress-legend span { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 10px; white-space: nowrap; }
+.op-progress-legend i { width: 9px; height: 9px; background: var(--accent-primary); border-radius: 2px; }
+.op-progress-legend span:last-child i { background: var(--success); border-radius: 50%; }
+.op-progress-chart-scroll { overflow-x: auto; padding: 2px 2px 8px; }
+.op-progress-chart { display: grid; grid-template-columns: repeat(var(--progress-days, 8), minmax(72px, 1fr)); gap: 12px; min-width: 680px; padding: 16px 14px 8px; background: var(--bg-subtle); border: 1px solid var(--border-soft); border-radius: 8px; }
+.op-progress-day { display: grid; grid-template-rows: 24px 156px 24px 20px 18px; min-width: 0; text-align: center; }
+.op-progress-day > strong { align-self: center; color: var(--text-secondary); font-size: 11px; }
+.op-progress-bar-track { display: flex; width: 42px; height: 148px; align-self: end; align-items: flex-end; justify-self: center; overflow: hidden; background: var(--bg-muted); border-radius: 6px 6px 2px 2px; }
+.op-progress-bar-track i { display: block; width: 100%; height: var(--progress-height); min-height: 8px; background: var(--accent-primary); border-radius: inherit; transition: height .2s ease; }
+.op-progress-day.is-best .op-progress-bar-track i { background: var(--success); }
+.op-progress-day.is-current .op-progress-bar-track { outline: 2px solid color-mix(in srgb, var(--accent-primary) 32%, transparent); outline-offset: 3px; }
+.op-progress-coin-value { align-self: center; justify-self: center; padding: 3px 7px; color: var(--success); background: var(--success-soft); border-radius: 10px; font-size: 9px; font-weight: 800; white-space: nowrap; }
+.op-progress-day > b { align-self: end; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.op-progress-day > small { overflow: hidden; color: var(--text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.op-progress-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.op-progress-insights > div { min-width: 0; padding: 12px 14px; background: var(--bg-muted); border-radius: 6px; }
+.op-progress-insights span, .op-progress-insights b, .op-progress-insights small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.op-progress-insights span { color: var(--text-muted); font-size: 9px; text-transform: uppercase; }
+.op-progress-insights b { margin-top: 5px; font-size: 13px; }
+.op-progress-insights small { margin-top: 3px; color: var(--text-muted); font-size: 9px; }
 .op-empty { display: flex; min-height: 120px; flex-direction: column; align-items: center; justify-content: center; gap: 5px; padding: 20px; color: var(--text-muted); text-align: center; }
 .op-empty-mark { display: grid; place-items: center; width: 32px; height: 32px; background: var(--bg-muted); border-radius: 50%; }
 .op-empty b { color: var(--text-secondary); font-size: 13px; }
@@ -268,7 +283,10 @@ html[data-theme="dark"] .op-podium article > span { background: #050b18; }
   .op-leader-row .op-score-bar, .op-leader-row > em { display: none; }
   .op-group-list article { grid-template-columns: 30px minmax(130px, 1fr) 90px; }
   .op-group-list article > i { display: none; }
+  .op-rating-page > .op-tabs { width: 100%; box-sizing: border-box; }
   .op-tabs button { padding-inline: 13px; }
+  .op-progress-chart-scroll { max-width: 100%; }
+  .op-progress-insights { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 440px) {

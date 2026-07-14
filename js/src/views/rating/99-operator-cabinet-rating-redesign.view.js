@@ -264,7 +264,54 @@ async function opRenderRatingProgress(host) {
   ]);
   const items = points.items || [];
   host.innerHTML = `<div class="op-rating-summary"><div><span>Текущий результат</span><b>${opNum(points.summary?.today_value, 1)} балла</b></div><div><span>Среднее</span><b>${opNum(points.summary?.average_4_days, 1)}</b></div><div><span>Коины за день</span><b>${opCoin(coins.summary?.today_value)}</b></div><div><span>Текущее место</span><b>${me.place ? `#${me.place}` : '—'}</b></div></div>
-  ${opPanel('Мой прогресс', items.length ? `<div class="op-progress-table"><div class="op-progress-head"><span>Дата</span><span>Баллы</span><span>Коины</span><span>Место</span></div>${items.map((item, i) => `<div class="op-progress-row"><div><b>${esc(item.label || item.date)}</b><small>${esc(item.weekday || '')}</small></div><strong>${opNum(item.daily_points, 1)}</strong><strong>${opCoin(coins.items?.[i]?.daily_coins || item.daily_coins)}</strong><strong>${ranks.items?.[i]?.rank ? `#${ranks.items[i].rank}` : '—'}</strong></div>`).join('')}</div>` : opEmpty('Истории прогресса пока нет', 'Загрузите рабочие показатели минимум за два дня. После этого здесь появится динамика баллов, коинов и места.'), `${items.length} дней`)}`;
+  ${opPanel('Динамика результатов', items.length ? opProgressInfographic(items, coins.items || [], ranks.items || []) : opEmpty('Истории прогресса пока нет', 'Загрузите рабочие показатели минимум за два дня. После этого здесь появится динамика баллов, коинов и места.'), `${items.length} дней`)}`;
+}
+
+function opProgressInfographic(pointItems, coinItems, rankItems) {
+  const keyOf = item => String(item?.date || item?.label || '');
+  const coinByDay = new Map(coinItems.map(item => [keyOf(item), Number(item.daily_coins || item.value || 0)]));
+  const rankByDay = new Map(rankItems.map(item => [keyOf(item), Number(item.rank || item.value || 0)]));
+  const days = pointItems.map((item, index) => ({
+    date: item.label || item.date || `День ${index + 1}`,
+    weekday: item.weekday || '',
+    points: Number(item.daily_points || item.value || 0),
+    coins: coinByDay.get(keyOf(item)) ?? Number(coinItems[index]?.daily_coins || item.daily_coins || 0),
+    rank: rankByDay.get(keyOf(item)) ?? Number(rankItems[index]?.rank || 0),
+  }));
+  const maxPoints = Math.max(...days.map(day => day.points), 1);
+  const minPoints = Math.min(...days.map(day => day.points));
+  const bestIndex = days.findIndex(day => day.points === maxPoints);
+  const latestIndex = days.length - 1;
+  const rankedDays = days.filter(day => day.rank > 0);
+  const stableRankDays = rankedDays.filter(day => day.rank === rankedDays[latestIndex]?.rank || day.rank === days[latestIndex]?.rank).length;
+  const spread = Math.max(0, maxPoints - minPoints);
+
+  return `<div class="op-progress-infographic">
+    <div class="op-progress-chart-head">
+      <div><b>Баллы по дням</b><span>Высота столбца показывает итоговый результат дня</span></div>
+      <div class="op-progress-legend"><span><i></i>Баллы</span><span><i></i>Коины</span></div>
+    </div>
+    <div class="op-progress-chart-scroll">
+      <div class="op-progress-chart" style="--progress-days:${days.length}" role="img" aria-label="Динамика баллов и коинов за ${days.length} дней">
+        ${days.map((day, index) => {
+          const height = Math.max(8, Math.round(day.points / maxPoints * 100));
+          const state = `${index === bestIndex ? ' is-best' : ''}${index === latestIndex ? ' is-current' : ''}`;
+          return `<article class="op-progress-day${state}" style="--progress-height:${height}%">
+            <strong>${opNum(day.points, 1)}</strong>
+            <div class="op-progress-bar-track"><i></i></div>
+            <span class="op-progress-coin-value">${opCoin(day.coins)}</span>
+            <b>${esc(day.date)}</b>
+            <small>${esc(day.weekday)}${day.rank ? ` · #${day.rank}` : ''}</small>
+          </article>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="op-progress-insights">
+      <div><span>Лучший день</span><b>${esc(days[bestIndex].date)}</b><small>${opNum(maxPoints, 1)} балла</small></div>
+      <div><span>Разброс результатов</span><b>${opNum(spread, 1)} балла</b><small>${spread <= 20 ? 'Стабильная динамика' : 'Есть заметные колебания'}</small></div>
+      <div><span>Позиция удержана</span><b>${stableRankDays} из ${rankedDays.length || days.length} дней</b><small>${days[latestIndex].rank ? `Сейчас место #${days[latestIndex].rank}` : 'Место пока не рассчитано'}</small></div>
+    </div>
+  </div>`;
 }
 
 window.renderCabinet = renderCabinet;
