@@ -16,7 +16,7 @@ def _operator_client(db, make_client, balance=200):
 def _discount_spin(db, operator, *, percent=10, materialize=False):
     from app.models import entities as m
 
-    campaign = m.WheelCampaign(title="Discount test")
+    campaign = m.WheelCampaign(title="Discount test", is_active=False)
     db.add(campaign)
     db.flush()
     prize = m.WheelPrize(
