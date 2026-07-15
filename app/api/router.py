@@ -21,9 +21,6 @@ from app.modules.settings.router import router as settings_router
 from app.modules.shop.router import router as shop_router
 from app.modules.tests import router as tests_router
 from app.modules.users.router import router as users_router
-from app.modules.users.temp_import_router import (
-    router as temp_import_router,  # ВРЕМЕННО: удалить после импорта
-)
 from app.modules.wallet.router import router as wallet_router
 from app.modules.weekly_results.router import router as weekly_results_router
 from app.modules.wheel import router as wheel_router
@@ -33,7 +30,6 @@ api_router = APIRouter()
 
 api_router.include_router(auth_router)
 api_router.include_router(users_router)
-api_router.include_router(temp_import_router)  # ВРЕМЕННО: удалить после импорта операторов
 api_router.include_router(operator_levels_router.router)
 api_router.include_router(operator_levels_router.me_router)
 api_router.include_router(operator_levels_router.admin_router)
