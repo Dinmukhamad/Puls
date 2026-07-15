@@ -11412,6 +11412,86 @@ textarea:focus {
   box-shadow: 0 5px 12px rgba(22, 139, 255, .18);
 }
 
+/* Wheel workspace navigation: compact, balanced and visually connected. */
+#view-wheel .filter-tabs.wheel-tabs {
+  display: flex !important;
+  width: max-content !important;
+  max-width: calc(100% - 32px);
+  min-height: 42px;
+  margin: 0 auto 18px !important;
+  padding: 4px !important;
+  align-items: center;
+  justify-content: center;
+  gap: 2px !important;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--bg-muted) 76%, var(--card-bg));
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
+  scrollbar-width: none;
+}
+
+#view-wheel .filter-tabs.wheel-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+#view-wheel .filter-tabs.wheel-tabs .filter-tab {
+  position: relative;
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 32px !important;
+  padding: 7px 15px !important;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  background: transparent;
+  border: 0 !important;
+  border-radius: 7px !important;
+  box-shadow: none;
+  transition: color .16s ease, background-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+#view-wheel .filter-tabs.wheel-tabs .filter-tab:hover:not(.active) {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--card-bg) 72%, transparent);
+}
+
+#view-wheel .filter-tabs.wheel-tabs .filter-tab.active {
+  color: #fff;
+  background: var(--primary-gradient);
+  box-shadow: 0 4px 10px rgba(79, 70, 229, .22);
+}
+
+#view-wheel .filter-tabs.wheel-tabs .filter-tab:active {
+  transform: translateY(1px);
+}
+
+#view-wheel .filter-tabs.wheel-tabs .filter-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+html[data-theme="dark"] #view-wheel .filter-tabs.wheel-tabs {
+  background: color-mix(in srgb, var(--bg-muted) 82%, var(--card-bg));
+  border-color: var(--border-default);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .18);
+}
+
+@media (max-width: 760px) {
+  #view-wheel .filter-tabs.wheel-tabs {
+    width: calc(100% - 24px) !important;
+    max-width: none;
+    margin-inline: 12px !important;
+    justify-content: flex-start;
+  }
+
+  #view-wheel .filter-tabs.wheel-tabs .filter-tab {
+    padding-inline: 13px !important;
+  }
+}
+
 .table-wrap,
 .data-table-wrap {
   border-color: var(--border-default);
