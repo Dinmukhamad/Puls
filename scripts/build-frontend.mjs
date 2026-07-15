@@ -39,7 +39,12 @@ function joinFiles(files, outPath, banner, includeSourceComments = false) {
       const name = file.split(/[\\/]/).pop();
       chunks.push(`/* source: ${name} */`);
     }
-    chunks.push(readFileSync(file, "utf8"));
+    // Keep generated bundles deterministic across Windows and Linux checkouts.
+    chunks.push(
+      readFileSync(file, "utf8")
+        .replace(/\r\n?/g, "\n")
+        .replace(/\n+$/g, ""),
+    );
   }
   writeFileSync(outPath, chunks.join("\n") + "\n", "utf8");
   console.log(`bundled ${files.length} file(s) -> ${outPath.replace(ROOT + "/", "")}`);

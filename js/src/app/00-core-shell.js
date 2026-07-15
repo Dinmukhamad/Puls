@@ -230,9 +230,9 @@ function parseStoredView(value) {
 }
 
 function allowedViewsForRole(role) {
-  if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests'];
+  if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests', 'missions'];
 
-  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'tests', 'period-report', 'analytics'];
+  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'tests', 'missions', 'period-report', 'analytics'];
   if (role === 'manager' || role === 'admin') views.push('operator-levels');
   if (canManageGroups(role)) views.push('groups');
   if (role === 'admin') views.push('sessions', 'cabinet', 'rating');
@@ -352,7 +352,7 @@ function initNav() {
 
 // Кеш отрендеренных разделов — не перерисовываем если уже есть актуальный HTML
 const VIEW_CACHE = {};
-const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel', 'sessions', 'tests']); // эти разделы всегда рендерим заново
+const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel', 'sessions', 'tests', 'missions']); // эти разделы всегда рендерим заново
 
 function invalidateViewCache(view) {
   if (view) delete VIEW_CACHE[view];
@@ -419,6 +419,7 @@ function renderView(view) {
     case 'period-report': renderPeriodReport(); break;
     case 'analytics': renderAnalytics(); break;
     case 'tests':    renderTests();    break;
+    case 'missions': renderMissions(); break;
     case 'sessions': renderAdminSessions(); break;
   }
 }
@@ -671,6 +672,7 @@ function prefetchAppSectionsInBackground(role) {
       () => swrFetch('wheel:prizes', () => api.getWheelPrizes(), null, SWR_STATIC_TTL_MS),
       () => swrFetch('wheel:my-history', () => api.getWheelMyHistory(), null, SWR_FAST_TTL_MS),
       () => swrFetch('tests:my', () => api.myTests(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('missions:map', () => api.getMissions(), null, SWR_FAST_TTL_MS),
       () => swrFetch('raffles:me', () => api.getMyRaffles(), null, SWR_FAST_TTL_MS),
     );
   }
@@ -701,6 +703,7 @@ function prefetchAppSectionsInBackground(role) {
       () => swrFetch('wheel:admin:spins', () => api.getWheelSpins({ limit: 80 }), null, SWR_FAST_TTL_MS),
       () => swrFetch('wheel:admin:stats', () => api.getWheelStats(), null, SWR_FAST_TTL_MS),
       () => swrFetch('tests:admin-list', () => api.listAdminTests(), null, SWR_FAST_TTL_MS),
+      () => swrFetch('missions:admin-stats', () => api.getMissionStats(), null, SWR_FAST_TTL_MS),
       () => swrFetch('raffles:admin', () => api.listRafflesAdmin(), null, SWR_FAST_TTL_MS),
       () => swrFetch('sessions:list:active:all:all:', () => api.listSessions({ status: 'active', q: '', role: 'all', device: 'all', limit: 250 }), null, SWR_FAST_TTL_MS),
     );

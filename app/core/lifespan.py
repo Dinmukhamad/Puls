@@ -43,6 +43,7 @@ def run_startup_tasks() -> None:
         logger.info("[startup] Running seed...")
         try:
             from app.modules.achievements.service import ensure_default_achievements
+            from app.modules.missions.seed import ensure_default_missions
             from app.services.operator_levels import ensure_default_levels
             from app.services.seed import seed_database
             from app.services.shop_seed import ensure_default_shop
@@ -54,6 +55,7 @@ def run_startup_tasks() -> None:
                 ensure_default_wheel(db)
                 ensure_default_achievements(db)
                 ensure_default_shop(db)
+                ensure_default_missions(db)
                 seed_database(db)
                 db.commit()
                 logger.info("[startup] Seed OK")

@@ -63,10 +63,10 @@ const api = (() => {
     return `Ошибка ${status}`;
   }
 
-  async function req(method, path, body) {
+  async function req(method, path, body, extraHeaders = {}) {
     const opts = {
       method,
-      headers: headers(),
+      headers: { ...headers(), ...extraHeaders },
       credentials: 'include',  // Send HttpOnly cookie
     };
     if (body !== undefined) opts.body = JSON.stringify(body);
@@ -113,7 +113,6 @@ const api = (() => {
     }
     return data;
   }
-
 
   /* ── Auth ────────────────────────────────────────────────── */
   async function login(username, password) {
@@ -237,7 +236,6 @@ const api = (() => {
 
   function _base() { return base(); }
 
-
   /* ── Dashboard extras ───────────────────────────────────── */
   async function getDashboardOperators() {
     return req('GET', '/api/dashboard/operators');
@@ -324,8 +322,6 @@ const api = (() => {
     const qs = new URLSearchParams(params).toString();
     return req('GET', `/api/analytics/${path}` + (qs ? '?' + qs : ''));
   }
-
-
 /* ── Личный кабинет (ТЗ §5) ──────────────────────────────── */
 async function getMyCabinet() { return req('GET', '/api/cabinet/me'); }
 async function getMyCabinetV2() { return req('GET', '/api/cabinet/me'); }
@@ -380,7 +376,6 @@ async function listRafflesAdmin() { return req('GET', '/api/admin/raffles'); }
 async function createRaffle(payload) { return req('POST', '/api/admin/raffles', payload); }
 async function drawRaffle(id) { return req('POST', `/api/admin/raffles/${id}/draw`); }
 async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/cancel`); }
-
   /* ── Tests (Тесты) — operator side ──────────────────────────── */
   async function myTests() { return req('GET', '/api/tests/my'); }
   async function startTest(testId) { return req('POST', `/api/tests/${testId}/start`); }
@@ -505,4 +500,61 @@ async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/c
     _req: req,
   };
 })();
+/* ── Missions ──────────────────────────────────────────────────────────── */
+(function attachMissionsApi() {
+  function missionIdempotencyKey(prefix) {
+    const random = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return `${prefix}-${random}`;
+  }
 
+  function getMissions() { return api._req('GET', '/api/missions'); }
+  function getMission(code) { return api._req('GET', `/api/missions/${encodeURIComponent(code)}`); }
+  function startMission(code, key) {
+    return api._req(
+      'POST',
+      `/api/missions/${encodeURIComponent(code)}/start`,
+      undefined,
+      { 'Idempotency-Key': key || missionIdempotencyKey('mission-start') },
+    );
+  }
+  function getMissionAttempt(attemptId) {
+    return api._req('GET', `/api/missions/attempts/${attemptId}`);
+  }
+  function submitMissionAction(attemptId, actionKey, payload = {}) {
+    return api._req('POST', `/api/missions/attempts/${attemptId}/actions`, {
+      action_key: actionKey,
+      payload,
+    });
+  }
+  function requestMissionHint(attemptId) {
+    return api._req('POST', `/api/missions/attempts/${attemptId}/hint`);
+  }
+  function restartMission(attemptId, key) {
+    return api._req(
+      'POST',
+      `/api/missions/attempts/${attemptId}/restart`,
+      undefined,
+      { 'Idempotency-Key': key || missionIdempotencyKey('mission-restart') },
+    );
+  }
+  function getMissionStats(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return api._req('GET', '/api/admin/missions/stats' + (qs ? `?${qs}` : ''));
+  }
+  function listMissionAttempts(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return api._req('GET', '/api/admin/missions/attempts' + (qs ? `?${qs}` : ''));
+  }
+
+  Object.assign(api, {
+    getMissions,
+    getMission,
+    startMission,
+    getMissionAttempt,
+    submitMissionAction,
+    requestMissionHint,
+    restartMission,
+    getMissionStats,
+    listMissionAttempts,
+  });
+})();

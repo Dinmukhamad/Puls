@@ -62,10 +62,10 @@ const api = (() => {
     return `Ошибка ${status}`;
   }
 
-  async function req(method, path, body) {
+  async function req(method, path, body, extraHeaders = {}) {
     const opts = {
       method,
-      headers: headers(),
+      headers: { ...headers(), ...extraHeaders },
       credentials: 'include',  // Send HttpOnly cookie
     };
     if (body !== undefined) opts.body = JSON.stringify(body);

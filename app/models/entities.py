@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -364,6 +365,16 @@ class OperatorAchievement(Base):
 
 class CoinTransaction(Base):
     __tablename__ = "coin_transactions"
+    __table_args__ = (
+        Index(
+            "uq_coin_transactions_mission_reward",
+            "source_type",
+            "source_id",
+            unique=True,
+            postgresql_where=text("source_type = 'mission_reward'"),
+            sqlite_where=text("source_type = 'mission_reward'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
@@ -805,6 +816,144 @@ class TestAttemptAnswer(Base):
 
     attempt: Mapped[TestAttempt] = relationship(back_populates="answers")
     question: Mapped[TestQuestion] = relationship("TestQuestion")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# РАЗДЕЛ «МИССИИ» — интерактивное обучение операторов
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class Mission(Base):
+    __tablename__ = "missions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, default="")
+    mission_type: Mapped[str] = mapped_column(String(32), default="tutorial", index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    reward_coins: Mapped[int] = mapped_column(Integer, default=0)
+    estimated_minutes: Mapped[int] = mapped_column(Integer, default=5)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    prerequisites_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    steps: Mapped[list[MissionStep]] = relationship(
+        back_populates="mission",
+        cascade="all, delete-orphan",
+        order_by="MissionStep.step_order",
+    )
+
+
+class MissionStep(Base):
+    __tablename__ = "mission_steps"
+    __table_args__ = (
+        UniqueConstraint(
+            "mission_id", "mission_version", "step_key", name="uq_mission_steps_key"
+        ),
+        UniqueConstraint(
+            "mission_id", "mission_version", "step_order", name="uq_mission_steps_order"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mission_id: Mapped[int] = mapped_column(ForeignKey("missions.id", ondelete="CASCADE"), index=True)
+    mission_version: Mapped[int] = mapped_column(Integer, default=1, index=True)
+    step_key: Mapped[str] = mapped_column(String(80))
+    step_order: Mapped[int] = mapped_column(Integer)
+    step_type: Mapped[str] = mapped_column(String(40))
+    screen_key: Mapped[str] = mapped_column(String(80))
+    action_key: Mapped[str] = mapped_column(String(80))
+    content_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    hint_text: Mapped[str] = mapped_column(Text, default="")
+    is_required: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    mission: Mapped[Mission] = relationship(back_populates="steps")
+
+
+class OperatorMissionProgress(Base):
+    __tablename__ = "operator_mission_progress"
+    __table_args__ = (
+        UniqueConstraint("operator_id", "mission_id", name="uq_operator_mission_progress"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    mission_id: Mapped[int] = mapped_column(ForeignKey("missions.id"), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="available", index=True)
+    current_step_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    best_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    attempts_count: Mapped[int] = mapped_column(Integer, default=0)
+    reward_claimed: Mapped[bool] = mapped_column(Boolean, default=False)
+    reward_claimed_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reward_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("coin_transactions.id"), nullable=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    mission: Mapped[Mission] = relationship("Mission")
+    operator: Mapped[Operator] = relationship("Operator")
+    reward_transaction: Mapped[CoinTransaction | None] = relationship("CoinTransaction")
+
+
+class MissionAttempt(Base):
+    __tablename__ = "mission_attempts"
+    __table_args__ = (
+        UniqueConstraint(
+            "operator_id", "mission_id", "attempt_number", name="uq_mission_attempt_number"
+        ),
+        UniqueConstraint("idempotency_key", name="uq_mission_attempt_idempotency_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    mission_id: Mapped[int] = mapped_column(ForeignKey("missions.id"), index=True)
+    mission_version: Mapped[int] = mapped_column(Integer)
+    attempt_number: Mapped[int] = mapped_column(Integer, default=1)
+    idempotency_key: Mapped[str] = mapped_column(String(120))
+    mode: Mapped[str] = mapped_column(String(32), default="tutorial")
+    status: Mapped[str] = mapped_column(String(32), default="in_progress", index=True)
+    current_step_key: Mapped[str] = mapped_column(String(80), default="intro")
+    demo_code_seed: Mapped[str] = mapped_column(String(80))
+    demo_code_hash: Mapped[str] = mapped_column(String(64))
+    score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    errors_count: Mapped[int] = mapped_column(Integer, default=0)
+    hints_used: Mapped[int] = mapped_column(Integer, default=0)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reward_awarded: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    mission: Mapped[Mission] = relationship("Mission")
+    operator: Mapped[Operator] = relationship("Operator")
+    events: Mapped[list[MissionEvent]] = relationship(
+        back_populates="attempt",
+        cascade="all, delete-orphan",
+        order_by="MissionEvent.created_at",
+    )
+
+
+class MissionEvent(Base):
+    __tablename__ = "mission_events"
+    __table_args__ = (Index("ix_mission_events_attempt_created", "attempt_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("mission_attempts.id", ondelete="CASCADE"), index=True
+    )
+    step_key: Mapped[str] = mapped_column(String(80))
+    event_type: Mapped[str] = mapped_column(String(40), index=True)
+    action_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
+
+    attempt: Mapped[MissionAttempt] = relationship(back_populates="events")
 
 
 class WheelCampaign(Base):

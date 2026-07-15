@@ -9,6 +9,8 @@ from app.modules.cabinet.router import router as cabinet_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.exports.router import router as exports_router
 from app.modules.groups.router import router as groups_router
+from app.modules.missions.router import admin_router as missions_admin_router
+from app.modules.missions.router import router as missions_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.operator_levels import router as operator_levels_router
 from app.modules.operators.router import router as operators_router
@@ -36,6 +38,8 @@ api_router.include_router(operator_levels_router.admin_router)
 api_router.include_router(operator_levels_router.admin_rules_router)
 api_router.include_router(operator_levels_router.admin_operator_router)
 api_router.include_router(groups_router)
+api_router.include_router(missions_router)
+api_router.include_router(missions_admin_router)
 api_router.include_router(reports_router)
 api_router.include_router(sessions_router)
 api_router.include_router(analytics_router)
