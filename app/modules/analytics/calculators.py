@@ -333,6 +333,271 @@ def _attention_reason(m: OperatorPeriodMetrics) -> str:
     return ", ".join(reasons) if reasons else "—"
 
 
+# ── Management dashboard ────────────────────────────────────────────────
+
+MANAGEMENT_TARGETS = {
+    "quality": 85.0,
+    "kvz": 10.0,
+    "efficiency": 50.0,
+    "penalty": 5.0,
+    "norm": 100.0,
+}
+
+
+def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
+    return max(low, min(high, value))
+
+
+def _metric_issue(
+    key: str,
+    label: str,
+    value: float | None,
+    target: float,
+    critical: float,
+    *,
+    lower_is_better: bool = False,
+    unit: str = "",
+) -> dict | None:
+    if value is None:
+        return {
+            "metric": key,
+            "label": label,
+            "value": None,
+            "target": target,
+            "gap": None,
+            "unit": unit,
+            "severity": "no_data",
+        }
+
+    is_below_target = value > target if lower_is_better else value < target
+    if not is_below_target:
+        return None
+
+    is_critical = value > critical if lower_is_better else value < critical
+    gap = value - target if lower_is_better else target - value
+    return {
+        "metric": key,
+        "label": label,
+        "value": round(value, 2),
+        "target": target,
+        "gap": round(abs(gap), 2),
+        "unit": unit,
+        "severity": "critical" if is_critical else "watch",
+    }
+
+
+def _operator_health_snapshot(row: OperatorAnalyticsRow) -> dict:
+    m = row.metrics
+    if not m or not m.has_any_period_data:
+        return {
+            "operator_id": row.operator_id,
+            "full_name": row.full_name,
+            "group_name": row.group_name or "Без группы",
+            "health_score": 0,
+            "status": "no_data",
+            "priority_score": 100,
+            "issues": [{
+                "metric": "data",
+                "label": "Данные за период",
+                "value": None,
+                "target": None,
+                "gap": None,
+                "unit": "",
+                "severity": "no_data",
+            }],
+            "recommendation": "Проверить загрузку отчётов и наличие данных по оператору.",
+            "metrics": {},
+        }
+
+    quality = m.quality_avg if m.quality_calls_count > 0 else None
+    kvz = m.kvz if m.base_hours > 0 else None
+    efficiency = m.efficiency_percent if m.base_hours > 0 else None
+
+    issues = [
+        _metric_issue("quality", "Качество", quality, 85, 70, unit="%"),
+        _metric_issue("kvz", "Звонков в час", kvz, 10, 8),
+        _metric_issue("efficiency", "Эффективность", efficiency, 50, 40, unit="%"),
+        _metric_issue("penalty", "Штрафы", m.penalty_minutes, 5, 20, lower_is_better=True, unit=" мин"),
+    ]
+    if m.individual_norm_hours > 0:
+        issues.append(_metric_issue("norm", "Выполнение нормы", m.norm_completion_percent, 100, 80, unit="%"))
+    issues = [issue for issue in issues if issue]
+
+    component_scores = [
+        _clamp((quality or 0) / MANAGEMENT_TARGETS["quality"] * 100),
+        _clamp((kvz or 0) / MANAGEMENT_TARGETS["kvz"] * 100),
+        _clamp((efficiency or 0) / MANAGEMENT_TARGETS["efficiency"] * 100),
+        _clamp(100 - (m.penalty_minutes / max(MANAGEMENT_TARGETS["penalty"], 1) * 20)),
+    ]
+    if m.individual_norm_hours > 0:
+        component_scores.append(_clamp(m.norm_completion_percent))
+    health_score = round(sum(component_scores) / len(component_scores)) if component_scores else 0
+
+    critical_count = sum(issue["severity"] in ("critical", "no_data") for issue in issues)
+    watch_count = sum(issue["severity"] == "watch" for issue in issues)
+    priority_score = critical_count * 30 + watch_count * 12 + max(0, 70 - health_score)
+    if critical_count:
+        status = "critical"
+    elif watch_count:
+        status = "watch"
+    else:
+        status = "stable"
+
+    first_issue = next((issue for issue in issues if issue["severity"] in ("critical", "no_data")), None)
+    first_issue = first_issue or (issues[0] if issues else None)
+    recommendations = {
+        "data": "Проверить загрузку отчётов и сопоставление оператора с данными периода.",
+        "quality": "Провести разбор звонков и согласовать план улучшения качества.",
+        "kvz": "Проверить нагрузку, длительность обработки и организацию смены.",
+        "efficiency": "Разобрать структуру рабочего времени и причины простоев.",
+        "penalty": "Проверить причины штрафов и договориться о контрольной точке.",
+        "norm": "Проверить график и причины невыполнения индивидуальной нормы.",
+    }
+    recommendation = recommendations.get(first_issue["metric"], "Показатели в целевой зоне.") if first_issue else "Показатели в целевой зоне."
+
+    return {
+        "operator_id": row.operator_id,
+        "full_name": row.full_name,
+        "group_name": row.group_name or "Без группы",
+        "health_score": health_score,
+        "status": status,
+        "priority_score": round(priority_score, 1),
+        "issues": issues,
+        "recommendation": recommendation,
+        "metrics": {
+            "quality": round(quality, 2) if quality is not None else None,
+            "kvz": round(kvz, 2) if kvz is not None else None,
+            "efficiency": round(efficiency, 2) if efficiency is not None else None,
+            "penalty_minutes": round(m.penalty_minutes, 2),
+            "norm_completion": round(m.norm_completion_percent, 1) if m.individual_norm_hours > 0 else None,
+            "final_points": round(m.final_points, 2),
+        },
+    }
+
+
+def _management_metric_cards(rows: list[OperatorAnalyticsRow]) -> list[dict]:
+    included = [row for row in rows if row.metrics and row.metrics.has_any_period_data]
+    specs = [
+        ("quality", "Качество", 85.0, "%", lambda m: m.quality_avg if m.quality_calls_count > 0 else None, False),
+        ("kvz", "Звонков в час", 10.0, "", lambda m: m.kvz if m.base_hours > 0 else None, False),
+        ("efficiency", "Эффективность", 50.0, "%", lambda m: m.efficiency_percent if m.base_hours > 0 else None, False),
+        ("penalty", "Штрафы", 5.0, " мин", lambda m: m.penalty_minutes, True),
+    ]
+    cards = []
+    for key, label, target, unit, getter, lower_is_better in specs:
+        values = [getter(row.metrics) for row in included]
+        values = [value for value in values if value is not None]
+        current = round(sum(values) / len(values), 2) if values else None
+        below = sum((value > target if lower_is_better else value < target) for value in values)
+        if current is None:
+            status = "no_data"
+            attainment = 0
+        else:
+            attainment = _clamp((target / max(current, 0.01) * 100) if lower_is_better else (current / target * 100))
+            status = "stable" if below == 0 else ("critical" if below > len(values) / 2 else "watch")
+        cards.append({
+            "key": key,
+            "label": label,
+            "value": current,
+            "target": target,
+            "unit": unit,
+            "attainment": round(attainment),
+            "operators_below_target": below,
+            "operators_with_data": len(values),
+            "status": status,
+        })
+    return cards
+
+
+def compute_management_dashboard(rows: list[OperatorAnalyticsRow]) -> dict:
+    """Builds a decision-first payload for the management analytics overview."""
+    snapshots = [_operator_health_snapshot(row) for row in rows]
+    snapshots.sort(key=lambda item: (-item["priority_score"], item["full_name"]))
+    included = [item for item in snapshots if item["status"] != "no_data"]
+
+    status_counts = {"stable": 0, "watch": 0, "critical": 0, "no_data": 0}
+    for item in snapshots:
+        status_counts[item["status"]] += 1
+
+    bottlenecks: dict[str, dict] = {}
+    for item in snapshots:
+        for issue in item["issues"]:
+            bucket = bottlenecks.setdefault(issue["metric"], {
+                "metric": issue["metric"],
+                "label": issue["label"],
+                "count": 0,
+                "critical_count": 0,
+                "operators": [],
+            })
+            bucket["count"] += 1
+            if issue["severity"] in ("critical", "no_data"):
+                bucket["critical_count"] += 1
+            if len(bucket["operators"]) < 5:
+                bucket["operators"].append(item["full_name"])
+    bottlenecks_out = sorted(bottlenecks.values(), key=lambda item: (-item["critical_count"], -item["count"], item["label"]))
+
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for item in snapshots:
+        grouped[item["group_name"]].append(item)
+    groups = []
+    for group_name, members in grouped.items():
+        measured = [member for member in members if member["status"] != "no_data"]
+        health = round(sum(member["health_score"] for member in measured) / len(measured)) if measured else 0
+        risk_count = sum(member["status"] in ("watch", "critical") for member in members)
+        critical_count = sum(member["status"] == "critical" for member in members)
+        status = "critical" if critical_count else ("watch" if risk_count else ("stable" if measured else "no_data"))
+        groups.append({
+            "group_name": group_name,
+            "health_score": health,
+            "status": status,
+            "operators_count": len(members),
+            "operators_in_risk": risk_count,
+            "critical_count": critical_count,
+            "coverage_percent": round(len(measured) / len(members) * 100) if members else 0,
+            "attention_operators": [member["full_name"] for member in members if member["status"] in ("critical", "watch")][:4],
+        })
+    groups.sort(key=lambda item: (item["health_score"], -item["critical_count"], item["group_name"]))
+
+    team_health = round(sum(item["health_score"] for item in included) / len(included)) if included else 0
+    attention_count = status_counts["critical"] + status_counts["watch"]
+    total = len(snapshots)
+    quality_measured = sum(1 for row in rows if row.metrics and row.metrics.quality_calls_count > 0)
+
+    top_performers = sorted(
+        included,
+        key=lambda item: (item["metrics"].get("final_points") or 0, item["health_score"]),
+        reverse=True,
+    )[:5]
+
+    if not included:
+        team_status = "no_data"
+    elif status_counts["critical"] > max(1, len(included) // 3) or team_health < 70:
+        team_status = "critical"
+    elif status_counts["critical"] or status_counts["watch"] or team_health < 85:
+        team_status = "watch"
+    else:
+        team_status = "stable"
+
+    return {
+        "team_health": {
+            "score": team_health,
+            "status": team_status,
+            "operators_count": total,
+            "attention_count": attention_count,
+            "critical_count": status_counts["critical"],
+            "data_coverage_percent": round(len(included) / total * 100) if total else 0,
+            "quality_coverage_percent": round(quality_measured / total * 100) if total else 0,
+        },
+        "risk_distribution": status_counts,
+        "metric_cards": _management_metric_cards(rows),
+        "bottlenecks": bottlenecks_out,
+        "groups": groups,
+        "priority_operators": [item for item in snapshots if item["status"] in ("critical", "watch", "no_data")][:12],
+        "top_performers": top_performers,
+        "targets": MANAGEMENT_TARGETS,
+    }
+
+
 # ── Penalties analytics ───────────────────────────────────────────────────
 
 def compute_penalties_analytics(rows: list[OperatorAnalyticsRow]) -> dict:

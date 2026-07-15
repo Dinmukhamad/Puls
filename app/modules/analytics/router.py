@@ -217,6 +217,21 @@ def get_overview(
     return service.overview(db, start_date, end_date, group_id, operator_query, participation_status)
 
 
+@router.get("/management-dashboard")
+def get_management_dashboard(
+    start_date: date,
+    end_date: date,
+    group_id: int | None = Query(None),
+    operator_query: str | None = Query(None),
+    participation_status: str | None = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(_require_analytics_access),
+) -> dict:
+    return service.management_dashboard(
+        db, start_date, end_date, group_id, operator_query, participation_status
+    )
+
+
 @router.get("/operators-combined")
 def get_operators_combined(
     start_date: date,

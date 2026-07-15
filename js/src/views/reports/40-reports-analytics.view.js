@@ -1038,7 +1038,7 @@ async function prefetchAnalyticsInBackground() {
   // Грузим все основные вкладки параллельно, тихо — ошибки игнорируем
   // Приоритет: сначала Обзор (самая частая), потом остальные
   const prefetchQueue = [
-    () => analyticsFetch('overview',            full),
+    () => analyticsFetch('management-dashboard', full),
     () => analyticsFetch('operators-combined',  full),
     () => analyticsFetch('groups-comparison',   base),
     () => analyticsFetch('matrix-combined',     base),
@@ -1058,7 +1058,7 @@ async function prefetchAnalyticsInBackground() {
 }
 
 const ANALYTICS_TABS = [
-  { key: 'overview',   label: 'Обзор' },
+  { key: 'overview',   label: 'Команда' },
   { key: 'operators',  label: 'Операторы' },
   { key: 'groups',     label: 'Группы' },
   { key: 'matrix',     label: 'Матрицы' },
@@ -1203,7 +1203,7 @@ async function renderAnalytics() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Аналитика</div><h2 class="section-title">Управленческая аналитика</h2></div>
+      <div><div class="section-kicker">Аналитика</div><h2 class="section-title">Пульс команды</h2><p class="section-subtitle">Риски, отклонения и приоритеты руководителя за выбранный период.</p></div>
     </div>
     <div class="an-filters-card">
       <div class="an-filters-row">
@@ -1298,7 +1298,7 @@ async function renderAnalytics() {
       const base = analyticsBaseParams();
       const full = analyticsOpParams();
       switch(tab) {
-        case 'overview':   analyticsFetch('overview', full).catch(() => {}); break;
+        case 'overview':   analyticsFetch('management-dashboard', full).catch(() => {}); break;
         case 'operators':  analyticsFetch('operators-combined', full).catch(() => {}); break;
         case 'groups':     analyticsFetch('groups-comparison', base).catch(() => {}); break;
         case 'matrix':     analyticsFetch('matrix-combined', base).catch(() => {}); break;
@@ -1404,75 +1404,150 @@ async function loadAnalyticsTab(tab) {
 
 /* ── Вкладка: Обзор ──────────────────────────────────────────*/
 async function loadOverviewTab(content) {
-  // Один комбинированный запрос вместо 4 отдельных (summary + groups + risks)
-  // daily-dynamics грузится параллельно и независимо — не блокирует рендер
-  const [overview, dynamics] = await Promise.all([
-    analyticsFetch('overview', analyticsOpParams()),
+  const [dashboard, dynamics] = await Promise.all([
+    analyticsFetch('management-dashboard', analyticsOpParams()),
     analyticsFetch('daily-dynamics', { ...analyticsBaseParams(), metric: 'calls' }).catch(() => ({ items: [] })),
   ]);
 
-  // Обновляем warning под фильтрами без лишнего запроса
   const warnBox = document.getElementById('an-availability-warning');
-  if (warnBox && overview.data_availability_warning) {
-    warnBox.innerHTML = `<div class="an-availability-note">${esc(overview.data_availability_warning)}</div>`;
+  if (warnBox && dashboard.data_availability_warning) {
+    warnBox.innerHTML = `<div class="an-availability-note">${esc(dashboard.data_availability_warning)}</div>`;
   } else if (warnBox) {
     warnBox.innerHTML = '';
   }
 
-  content.innerHTML =
-    renderKpiBlock(overview) +
-    '<div class="an-grid-2">' +
-      '<div class="an-card"><div class="an-card-head">Динамика звонков</div><div id="an-ov-dyn">' + renderDynChart(dynamics.items||[], 'calls') + '</div></div>' +
-      '<div class="an-card"><div class="an-card-head">Сравнение групп по баллам</div>' + renderMiniGroupsChart(overview.groups_comparison||[]) + '</div>' +
-    '</div>' +
-    renderMiniRiskPyramid(overview.risk_pyramid||{}) +
-    renderAnalyticsWarningsBlock(overview.warnings||[]);
-
-  if (!overview.kpi || overview.kpi.operators_count === 0) {
-    content.innerHTML = renderAnalyticsEmptyState() + content.innerHTML;
-  }
+  content.innerHTML = renderManagementDashboard(dashboard, dynamics.items || []);
+  bindManagementDashboard(content);
 }
 
-function renderMiniGroupsChart(items) {
-  if (!items.length) return '<div class="empty-line">Нет данных</div>';
-  const maxPts = Math.max(...items.map(g => g.final_points_sum || 0), 1);
-  return `<div class="an-bar-chart">
-    ${items.slice(0,6).map(g => `<div class="an-bar-row">
-      <div class="an-bar-date" style="width:110px">${esc(g.group_name)}</div>
-      <div class="an-bar-track"><div class="an-bar-fill" style="width:${Math.round((g.final_points_sum/maxPts)*100)}%"></div></div>
-      <div class="an-bar-val">${fmtA(g.final_points_sum,0)}</div>
-    </div>`).join('')}
-  </div>`;
+function analyticsStatusLabel(status) {
+  return ({ stable: 'В норме', watch: 'Наблюдать', critical: 'Критично', no_data: 'Нет данных' })[status] || 'Нет данных';
 }
 
-function renderMiniRiskPyramid(riskPyramid) {
-  const statuses = [
-    { key: 'stable', label: 'Стабильные', icon: '🟢' },
-    { key: 'watch', label: 'Нужен контроль', icon: '🟡' },
-    { key: 'critical', label: 'Критично', icon: '🔴' },
-    { key: 'no_data', label: 'Нет данных', icon: '⚪' },
-  ];
-  return `<div class="an-card">
-    <div class="an-card-head">Состояние команды</div>
-    <div class="an-risk-grid">
-      ${statuses.map(s => {
-        const bucket = riskPyramid[s.key] || { count: 0 };
-        return `<div class="an-risk-cell" style="cursor:default">
-          <div class="an-risk-icon">${s.icon}</div>
-          <div class="an-risk-count">${bucket.count}</div>
-          <div class="an-risk-label">${s.label}</div>
-        </div>`;
-      }).join('')}
+function analyticsMetricValue(value, unit) {
+  return value == null ? '—' : `${fmtA(value, value % 1 ? 1 : 0)}${unit || ''}`;
+}
+
+function renderManagementDashboard(data, dynamics) {
+  const health = data.team_health || {};
+  const metrics = data.metric_cards || [];
+  const risks = data.risk_distribution || {};
+  const bottlenecks = data.bottlenecks || [];
+  const groups = data.groups || [];
+  const priorities = data.priority_operators || [];
+  const leaders = data.top_performers || [];
+  const totalRisk = (risks.stable || 0) + (risks.watch || 0) + (risks.critical || 0) + (risks.no_data || 0) || 1;
+  const maxBottleneck = Math.max(...bottlenecks.map(item => item.count || 0), 1);
+
+  if (!health.operators_count) return renderAnalyticsEmptyState();
+
+  return `<div class="an-executive-dashboard">
+    <section class="an-exec-hero an-status-${esc(health.status || 'no_data')}">
+      <div class="an-health-ring" style="--an-health:${Math.max(0, Math.min(100, health.score || 0))}">
+        <div><strong>${health.score || 0}</strong><span>из 100</span></div>
+      </div>
+      <div class="an-exec-hero-copy">
+        <span class="an-exec-eyebrow">Здоровье команды</span>
+        <h3>${analyticsStatusLabel(health.status)}</h3>
+        <p>${health.attention_count ? `${health.attention_count} оператор(ов) требуют внимания, из них критично: ${health.critical_count || 0}.` : 'Все операторы с данными находятся в целевой зоне.'}</p>
+      </div>
+      <div class="an-exec-hero-stats">
+        <div><span>Операторов</span><strong>${health.operators_count || 0}</strong></div>
+        <div><span>Покрытие данных</span><strong>${health.data_coverage_percent || 0}%</strong></div>
+        <div><span>Покрытие качества</span><strong>${health.quality_coverage_percent || 0}%</strong></div>
+      </div>
+    </section>
+
+    <section class="an-exec-section">
+      <div class="an-exec-section-head"><div><span>Ключевые показатели</span><small>Факт относительно управленческой цели</small></div></div>
+      <div class="an-exec-metrics">
+        ${metrics.map(metric => `<article class="an-exec-metric an-status-${esc(metric.status)}">
+          <div class="an-exec-metric-head"><span>${esc(metric.label)}</span><b>${analyticsStatusLabel(metric.status)}</b></div>
+          <strong>${analyticsMetricValue(metric.value, metric.unit)}</strong>
+          <div class="an-exec-goal"><span>Цель ${analyticsMetricValue(metric.target, metric.unit)}</span><span>${metric.attainment || 0}%</span></div>
+          <div class="an-exec-progress"><i style="width:${Math.min(100, metric.attainment || 0)}%"></i></div>
+          <small>${metric.operators_below_target || 0} из ${metric.operators_with_data || 0} ниже цели</small>
+        </article>`).join('')}
+      </div>
+    </section>
+
+    <div class="an-exec-grid an-exec-grid-main">
+      <section class="an-exec-section">
+        <div class="an-exec-section-head"><div><span>Карта рисков</span><small>Распределение команды по зонам</small></div><button type="button" data-an-open-tab="risks">Подробнее</button></div>
+        <div class="an-risk-strip" aria-label="Распределение рисков">
+          ${['stable','watch','critical','no_data'].map(key => `<i class="an-risk-strip-${key}" style="width:${((risks[key] || 0) / totalRisk) * 100}%"></i>`).join('')}
+        </div>
+        <div class="an-risk-legend-v2">
+          ${[['stable','В норме'],['watch','Наблюдать'],['critical','Критично'],['no_data','Нет данных']].map(([key,label]) => `<button type="button" data-an-open-tab="risks" class="an-risk-legend-item an-status-${key}"><i></i><span>${label}</span><strong>${risks[key] || 0}</strong></button>`).join('')}
+        </div>
+      </section>
+      <section class="an-exec-section">
+        <div class="an-exec-section-head"><div><span>Что тормозит результат</span><small>Частые причины попадания в зону внимания</small></div></div>
+        <div class="an-bottleneck-list">
+          ${bottlenecks.length ? bottlenecks.slice(0,5).map(item => `<div class="an-bottleneck-row">
+            <div><span>${esc(item.label)}</span><small>${item.critical_count || 0} критично</small></div>
+            <div class="an-bottleneck-track"><i style="width:${Math.round((item.count / maxBottleneck) * 100)}%"></i></div>
+            <strong>${item.count}</strong>
+          </div>`).join('') : '<div class="empty-line">Отклонений не обнаружено</div>'}
+        </div>
+      </section>
     </div>
+
+    <section class="an-exec-section">
+      <div class="an-exec-section-head"><div><span>Состояние групп</span><small>Сначала показаны группы с наибольшим риском</small></div><button type="button" data-an-open-tab="groups">Сравнить группы</button></div>
+      <div class="an-group-health-list">
+        ${groups.length ? groups.map(group => `<article class="an-group-health-row an-status-${esc(group.status)}">
+          <div class="an-group-health-name"><i></i><div><strong>${esc(group.group_name)}</strong><small>${group.operators_count} оператор(ов) · данные ${group.coverage_percent}%</small></div></div>
+          <div class="an-group-health-meter"><span><i style="width:${group.health_score}%"></i></span><b>${group.health_score}/100</b></div>
+          <div class="an-group-health-risk"><strong>${group.operators_in_risk}</strong><span>требуют внимания</span></div>
+        </article>`).join('') : '<div class="empty-line">Нет данных по группам</div>'}
+      </div>
+    </section>
+
+    <div class="an-exec-grid an-exec-grid-operators">
+      <section class="an-exec-section">
+        <div class="an-exec-section-head"><div><span>Приоритет на разбор</span><small>Операторы отсортированы по срочности</small></div><button type="button" data-an-open-tab="operators">Все операторы</button></div>
+        <div class="an-priority-list">
+          ${priorities.length ? priorities.slice(0,6).map((operator, index) => `<article class="an-priority-row an-status-${esc(operator.status)}">
+            <div class="an-priority-rank">${index + 1}</div>
+            <div class="an-priority-person"><strong>${esc(operator.full_name)}</strong><small>${esc(operator.group_name || 'Без группы')}</small></div>
+            <div class="an-priority-issues">${(operator.issues || []).slice(0,2).map(issue => `<span class="an-issue-chip an-status-${esc(issue.severity)}">${esc(issue.label)} ${issue.value == null ? 'нет данных' : analyticsMetricValue(issue.value, issue.unit)}</span>`).join('')}</div>
+            <div class="an-priority-score"><strong>${operator.health_score}</strong><span>индекс</span></div>
+            <p>${esc(operator.recommendation)}</p>
+          </article>`).join('') : '<div class="an-positive-state">Все показатели команды находятся в целевой зоне.</div>'}
+        </div>
+      </section>
+      <aside class="an-exec-section">
+        <div class="an-exec-section-head"><div><span>Лидеры периода</span><small>По итоговому баллу</small></div></div>
+        <div class="an-leader-list">
+          ${leaders.length ? leaders.map((operator, index) => `<div class="an-leader-row"><b>${index + 1}</b><div><strong>${esc(operator.full_name)}</strong><small>${esc(operator.group_name || 'Без группы')}</small></div><span>${fmtA(operator.metrics?.final_points || 0, 1)}</span></div>`).join('') : '<div class="empty-line">Нет данных</div>'}
+        </div>
+      </aside>
+    </div>
+
+    <section class="an-exec-section">
+      <div class="an-exec-section-head"><div><span>Нагрузка по дням</span><small>Количество обработанных звонков</small></div><button type="button" data-an-open-tab="dynamics">Открыть динамику</button></div>
+      <div class="an-exec-dynamics">${renderDynChart(dynamics, 'calls')}</div>
+    </section>
   </div>`;
+}
+
+function bindManagementDashboard(content) {
+  content.querySelectorAll('[data-an-open-tab]').forEach(button => {
+    button.addEventListener('click', () => {
+      const tab = button.dataset.anOpenTab;
+      const tabButton = document.querySelector(`#an-tabs [data-tab="${tab}"]`);
+      if (tabButton) tabButton.click();
+    });
+  });
 }
 
 function renderAnalyticsEmptyState() {
-  return `<div class="an-card"><div class="an-empty-state">
-    <div class="an-empty-icon">📊</div>
+  return `<div class="an-exec-section"><div class="an-empty-state">
+    <div class="an-empty-mark" aria-hidden="true"></div>
     <div class="an-empty-title">Нет данных для аналитики</div>
-    <div class="an-empty-sub">Загрузите файлы Report и Monthly Report в разделе «Расчёт периода»</div>
-    <button class="btn-primary btn-sm" onclick="navigateTo('period-report')" style="margin-top:12px">Перейти к загрузке файлов</button>
+    <div class="an-empty-sub">Загрузите Report и Monthly Report, затем выполните расчёт периода.</div>
+    <button class="btn-primary btn-sm" onclick="navigateTo('period-report')" style="margin-top:12px">Перейти к расчёту периода</button>
   </div></div>`;
 }
 

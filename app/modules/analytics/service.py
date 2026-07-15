@@ -22,6 +22,7 @@ from app.modules.analytics.calculators import (
     compute_heatmap,
     compute_kpi_summary,
     compute_load_vs_efficiency,
+    compute_management_dashboard,
     compute_penalties_analytics,
     compute_points_analysis,
     compute_points_breakdown,
@@ -580,6 +581,22 @@ def overview(db, start_date, end_date, group_id, operator_query, participation_s
         "warnings": [],
     }
     cache_set(key, result, ttl_seconds=600)  # 10 минут — дольше стандартного
+    return result
+
+
+def management_dashboard(db, start_date, end_date, group_id, operator_query, participation_status) -> dict:
+    key = cache_key("management-dashboard", start_date=start_date, end_date=end_date,
+                    group_id=group_id, operator_query=operator_query,
+                    participation_status=participation_status)
+    cached = cache_get(key)
+    if cached is not None:
+        return cached
+
+    rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
+    result = compute_management_dashboard(rows)
+    result["period"] = {"start": str(start_date), "end": str(end_date)}
+    result["data_availability_warning"] = data_availability_warning(db, start_date, end_date)
+    cache_set(key, result, ttl_seconds=300)
     return result
 
 
