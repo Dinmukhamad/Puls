@@ -12875,8 +12875,13 @@ async function renderMissions() {
   }
 
   try {
-    const data = await api.getMissions();
-    renderMissionMap(el, data);
+    if (_missionWorldCode) {
+      const world = await api.getMissionWorld(_missionWorldCode);
+      renderLearningWorldRoute(el, world);
+    } else {
+      const data = await api.getMissionWorlds();
+      renderLearningWorldMap(el, data);
+    }
   } catch (error) {
     renderMissionError(el, error);
   }
@@ -13004,6 +13009,7 @@ function renderMissionAttempt(el, attempt, feedback = '') {
     </footer>
   </div>`;
   requestAnimationFrame(() => el.querySelector('.mission-phone button:not([disabled]), .mission-phone input')?.focus());
+  scheduleSaparProcessing(attempt);
 }
 
 function renderMissionPhone(attempt) {
@@ -13021,6 +13027,7 @@ function renderMissionPhoneScreen(attempt) {
   if (attempt.status === 'completed') {
     return `<div class="phone-complete"><div class="phone-complete-pulse">✓</div><span>Миссия завершена</span><h2>Отличная работа!</h2><p>${esc(attempt.reward_message || 'Результат сохранён')}</p><button type="button" onclick="backToMissionMap(true)">Вернуться к карте</button></div>`;
   }
+  if (attempt.mission_code === 'smz_sapar_provider_transfer') return renderSaparMissionScreen(attempt);
   if (attempt.mission_code === 'photo_control_basics') return renderPhotoControlScreen(attempt);
   if (step.screen_key === 'intro') {
     return `<div class="phone-intro"><span class="phone-pulse-logo">Puls.</span><div class="phone-intro-wave" aria-hidden="true">⌁</div><h2>Безопасный учебный режим</h2><p>Здесь можно ошибаться: мы не отправляем данные в реальные сервисы.</p><button type="button" onclick="missionAction('begin')">Начать обучение</button></div>`;
@@ -13209,13 +13216,26 @@ function backToMissionMap(force = false) {
 
 async function renderMissionsAdmin(el) {
   try {
-    const [stats, attempts] = await Promise.all([
+    const [stats, attempts, worlds] = await Promise.all([
       api.getMissionStats(),
       api.listMissionAttempts({ limit: 100 }),
+      api.getAdminMissionWorlds(),
     ]);
+    const saparMission = worlds.flatMap(world => world.missions || []).find(mission => mission.code === 'smz_sapar_provider_transfer');
+    let saparSetting = null;
+    let windowPreview = null;
+    if (saparMission) {
+      const settings = await api.getMissionSettings(saparMission.id);
+      saparSetting = settings.find(setting => setting.key === 'provider_transfer_window' && setting.is_active) || settings[0] || null;
+      if (saparSetting) {
+        const now = new Date();
+        windowPreview = await api.previewProviderWindow(saparMission.id, { start_day: saparSetting.value.start_day, end_day: saparSetting.value.end_day, year: now.getFullYear(), month: now.getMonth() + 1 });
+      }
+    }
     const dropOff = Object.entries(stats.drop_off_by_step || {});
     el.innerHTML = `<div class="missions-page missions-admin">
       <header class="missions-header"><div><span class="missions-eyebrow">Обучение операторов</span><h1>Миссии</h1><p>Статистика прохождения интерактивных учебных сценариев</p></div><span class="mission-admin-badge">Только просмотр</span></header>
+      ${missionAdminConfiguration(worlds, saparMission, saparSetting, windowPreview)}
       <section class="mission-admin-stats">
         <article><span>Начали</span><strong>${stats.started_operators}</strong><small>уникальных операторов</small></article>
         <article><span>Завершили</span><strong>${stats.completed_operators}</strong><small>${stats.conversion_percent}% конверсия</small></article>
@@ -13232,6 +13252,85 @@ async function renderMissionsAdmin(el) {
   } catch (error) {
     renderMissionError(el, error);
   }
+}
+
+function missionAdminConfiguration(worlds, saparMission, setting, preview) {
+  const canEdit = STATE.user?.role === 'admin';
+  const rule = setting?.value || { start_day: 16, end_day: 1, operator_message: '' };
+  const allowed = (preview?.days || []).filter(day => day.allowed).length;
+  return `<section class="panel mission-admin-config"><div class="missions-section-head"><div><span>Структура обучения</span><h2>Территории и период SAPAR</h2></div><b>${worlds.length} территории</b></div>
+    <div class="mission-admin-worlds">${worlds.map(world => `<article style="--world-accent:${esc(world.accent_color)}"><i>${learningWorldIllustration(world)}</i><div><b>${esc(world.title)}</b><small>${(world.missions || []).length} мисс. · ${esc(world.availability)}</small></div></article>`).join('')}</div>
+    ${saparMission ? `<div class="mission-window-editor"><div><h3>Период смены провайдера</h3><p>Версия ${setting?.version || 1}. Активные попытки продолжают использовать сохранённую версию.</p></div><label>Начало<input id="mission-window-start" type="number" min="1" max="31" value="${rule.start_day}"></label><label>Окончание<input id="mission-window-end" type="number" min="1" max="31" value="${rule.end_day}"></label><label class="mission-window-message">Сообщение оператору<input id="mission-window-message" value="${esc(rule.operator_message || '')}" maxlength="1000"></label><button class="btn-primary" type="button" ${canEdit ? '' : 'disabled'} onclick="saveMissionProviderWindow(${saparMission.id})">${canEdit ? 'Опубликовать версию' : 'Только просмотр'}</button><div class="mission-window-preview"><b>${allowed}</b><span>разрешённых дней в текущем месяце</span></div></div>` : '<p class="missions-empty">Миссия SAPAR ещё не назначена территории.</p>'}
+  </section>`;
+}
+
+async function saveMissionProviderWindow(missionId) {
+  const start = Number(document.getElementById('mission-window-start')?.value);
+  const end = Number(document.getElementById('mission-window-end')?.value);
+  const message = document.getElementById('mission-window-message')?.value?.trim();
+  if (!start || !end || !message) { showToast('Заполните период и сообщение оператору', 'error'); return; }
+  try {
+    await api.updateProviderWindow(missionId, { start_day: start, end_day: end, timezone: 'Asia/Almaty', operator_message: message, is_active: true });
+    showToast('Новая версия периода опубликована', 'ok');
+    renderMissions();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
+}
+let _missionWorldCode = sessionStorage.getItem('puls-mission-world') || '';
+
+function learningWorldIllustration(world) {
+  const icon = ({
+    yandex_pro: '<rect x="27" y="20" width="46" height="74" rx="12"/><path d="M36 70 49 57l10 8 8-13"/><circle cx="50" cy="84" r="3"/>',
+    taxi_pro: '<path d="M18 68h82l-9-27H38L25 55Z"/><circle cx="38" cy="72" r="10"/><circle cx="82" cy="72" r="10"/><path d="M60 30v24m-12-12h24"/>',
+    crm_requests: '<rect x="24" y="17" width="72" height="82" rx="12"/><path d="M40 39h40M40 56h40M40 73h25"/><circle cx="85" cy="82" r="14"/><path d="m79 82 4 4 8-10"/>',
+    self_employment_docs: '<path d="M31 16h45l17 18v65H31Z"/><path d="M76 16v19h17M45 51h34M45 66h22"/><circle cx="76" cy="80" r="16"/><path d="m69 80 5 5 10-13"/>',
+  })[world.code] || '<circle cx="60" cy="60" r="38"/>';
+  return `<svg viewBox="0 0 120 120" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">${icon}</g></svg>`;
+}
+
+function renderLearningWorldMap(el, data) {
+  const worlds = data.worlds || [];
+  el.innerHTML = `<div class="missions-page learning-world-page">
+    <header class="missions-header world-map-header"><div><span class="missions-eyebrow">Карта обучения</span><h1>Рабочие территории</h1><p>Выбери систему или тему и пройди её практический маршрут.</p></div><div class="world-overall"><b>${data.percent || 0}%</b><span>${data.completed || 0} из ${data.total || 0} миссий</span></div></header>
+    <div class="world-pulse-line" aria-hidden="true"></div>
+    <section class="learning-world-grid" aria-label="Территории обучения">
+      ${worlds.map((world, index) => learningWorldCard(world, index)).join('')}
+    </section>
+    <aside class="world-pulsar-note"><div>${pulsarSvg('idle')}</div><p><b>Пульсар рядом.</b> Прогресс считается отдельно для каждой темы, а награды остаются в общем кошельке Pulse.</p></aside>
+  </div>`;
+}
+
+function learningWorldCard(world, index) {
+  const soon = world.availability === 'coming_soon';
+  const status = soon ? 'Уроки готовятся' : (world.percent === 100 && world.total_count ? 'Завершено' : 'Доступно');
+  return `<article class="learning-world-card ${soon ? 'is-soon' : ''}" style="--world-accent:${esc(world.accent_color)}" data-world-index="${index}">
+    <div class="world-card-visual">${learningWorldIllustration(world)}</div>
+    <div class="world-card-copy"><div class="world-card-status"><span>${esc(status)}</span><b>${world.completed_count}/${world.total_count}</b></div><h2>${esc(world.title)}</h2><p>${esc(world.description)}</p>
+      <div class="world-card-progress" aria-label="Прогресс ${world.percent}%"><i style="width:${world.percent}%"></i></div>
+      <div class="world-card-meta"><span>${world.total_count ? `${world.total_count} мисс.` : 'Новые уроки'}</span><span>P ${missionCoinLabel(world.coins_available)}</span></div>
+    </div>
+    <button type="button" ${soon ? 'disabled' : ''} onclick="openLearningWorld('${esc(world.code)}')">${soon ? 'Скоро' : 'Открыть маршрут'}</button>
+  </article>`;
+}
+
+async function openLearningWorld(code) {
+  const el = document.getElementById('view-missions');
+  _missionWorldCode = code;
+  sessionStorage.setItem('puls-mission-world', code);
+  missionLoading(el, 'Открываем территорию');
+  try {
+    const world = await api.getMissionWorld(code);
+    renderLearningWorldRoute(el, world);
+  } catch (error) {
+    renderMissionError(el, error);
+  }
+}
+
+function backToLearningWorlds() {
+  _missionWorldCode = '';
+  sessionStorage.removeItem('puls-mission-world');
+  renderMissions();
 }
 let _photoDialogReturnFocus = null;
 
@@ -13345,6 +13444,84 @@ function closeMissionPreviewDialog() {
   document.querySelector('.mission-preview-backdrop')?.remove();
   _photoDialogReturnFocus?.focus?.();
   _photoDialogReturnFocus = null;
+}
+function renderLearningWorldRoute(el, world) {
+  const missions = world.missions || [];
+  el.innerHTML = `<div class="missions-page world-route-page" style="--world-accent:${esc(world.accent_color)}">
+    <header class="world-route-header"><button type="button" class="mission-back-btn" onclick="backToLearningWorlds()">← <span>Все территории</span></button><div class="world-route-title"><div>${learningWorldIllustration(world)}</div><span class="missions-eyebrow">Территория</span><h1>${esc(world.title)}</h1><p>${esc(world.description)}</p></div><div class="world-route-summary"><b>${world.percent}%</b><span>${world.completed_count} из ${world.total_count}</span><small>P ${missionCoinLabel(world.coins_available)} доступно</small></div></header>
+    <section class="world-mission-route panel" aria-label="Маршрут миссий">
+      <div class="world-route-track" aria-hidden="true"></div>
+      ${missions.length ? missions.map((mission, index) => `<div class="world-route-node ${index % 2 ? 'is-right' : ''}">${missionRouteCard(mission)}</div>`).join('') : '<div class="missions-empty">Уроки этой территории готовятся.</div>'}
+      <article class="world-coming-node" aria-disabled="true"><span>+</span><div><b>Следующий урок</b><small>Скоро появится на маршруте</small></div></article>
+    </section>
+  </div>`;
+}
+function saparRow(icon, title, action = '', accent = false, subtitle = '') {
+  const attrs = action ? `onclick="${action}"` : 'disabled';
+  return `<button type="button" class="sapar-list-row ${accent ? 'is-target' : ''}" ${attrs}><i>${icon}</i><span><b>${esc(title)}</b>${subtitle ? `<small>${esc(subtitle)}</small>` : ''}</span><em>›</em></button>`;
+}
+
+function renderSaparMissionScreen(attempt) {
+  const step = attempt.current_step;
+  const state = attempt.state || {};
+  const rule = state.provider_rule || {};
+  if (step.screen_key === 'sapar_intro') {
+    return `<div class="sapar-intro"><span class="sapar-badge">СМЗ · ЭДО</span><div class="sapar-doc-icon">✓</div><h2>Перевод на SAPAR</h2><p>Без реальных данных, согласий и внешних запросов. Ты пройдёшь весь путь в учебном режиме.</p><button type="button" onclick="missionAction('begin')">Начать урок</button></div>`;
+  }
+  if (step.screen_key === 'driver_status') {
+    return `<div class="sapar-question"><span class="sapar-step-chip">Проверка обращения</span><h2>Водитель является самозанятым?</h2><div class="sapar-driver-card"><i>Д</i><div><b>Данияр</b><span>Статус: Самозанятый</span><small>Учебный профиль · без персональных данных</small></div></div><div class="sapar-choice-grid"><button type="button" onclick="missionAction('answer_driver_status',{is_self_employed:true})">Да, является</button><button type="button" onclick="missionAction('answer_driver_status',{is_self_employed:false})">Нет</button></div></div>`;
+  }
+  if (step.screen_key === 'date_eligibility') {
+    const shown = new Date(`${state.simulated_date}T12:00:00`).toLocaleDateString('ru-RU', {day:'numeric',month:'long',year:'numeric'});
+    return `<div class="sapar-question sapar-date-question"><span class="sapar-step-chip">Правило сроков · версия ${state.setting_version}</span><h2>Можно ли сменить провайдера?</h2><div class="sapar-date-card"><span>Учебная дата</span><strong>${esc(shown)}</strong></div><p>${esc(rule.operator_message || '')}</p><div class="sapar-choice-grid"><button type="button" onclick="missionAction('answer_date_rule',{allowed:true})">Да, можно</button><button type="button" onclick="missionAction('answer_date_rule',{allowed:false})">Нет, сообщить период</button></div></div>`;
+  }
+  if (step.screen_key === 'sapar_profile') {
+    return `<div class="sapar-dark-screen sapar-profile"><div class="sapar-profile-head"><i>Д</i><b>Данияр</b></div>${saparRow('▤','Яндекс Гараж')}${saparRow('◉','Яндекс Заправки')}${saparRow('%','Промокоды')}${saparRow('◫','Обучение')}${saparRow('▣','Юридическая документация',`missionAction('open_legal_docs',{section:'legal_docs'})`,true)}${saparRow('⚙','Настройки')}</div>`;
+  }
+  if (step.screen_key === 'legal_docs') {
+    return `<div class="sapar-dark-screen"><header><span>←</span><b>Юридическая документация</b></header>${saparRow('▣','Правовые документы',`missionAction('open_edo',{section:'wrong'})`)}${saparRow('▣','Электронный документооборот',`missionAction('open_edo',{section:'edo'})`,true)}${saparRow('▣','Закрывающие документы',`missionAction('open_edo',{section:'wrong'})`)}</div>`;
+  }
+  if (step.screen_key === 'edo_home') {
+    return `<div class="sapar-dark-screen"><header><span>←</span><b>Электронный документооборот</b></header><div class="sapar-provider-current"><i>Б</i><span><b>Бухта</b><small>Активный провайдер</small></span><em>✓</em></div><h3>Документы в этом месяце</h3>${saparRow('!','Выбрать провайдера ЭДО',`missionAction('open_provider_list')`,true)}</div>`;
+  }
+  if (step.screen_key === 'provider_list') {
+    const providers = [['Ц','ЦНТ','cnt'],['P','Payda','payda'],['◆','SAPAR','sapar'],['P','Partners Pay','partners_pay'],['V','Vezunchik.Pro','vezunchik'],['▱','Бумажный документооборот','paper']];
+    return `<div class="sapar-dark-screen sapar-providers"><header><span>←</span><b>Провайдер</b></header><div class="sapar-provider-current"><i>Б</i><span><b>Бухта</b><small>Активный провайдер</small></span><em>✓</em></div><h3>Доступные провайдеры</h3>${providers.map(([icon,name,code]) => saparRow(icon,name,`missionAction('select_provider',{provider_code:'${code}'})`,code === 'sapar')).join('')}</div>`;
+  }
+  if (step.screen_key === 'sapar_details') {
+    return `<div class="sapar-dark-screen sapar-details"><header><span>←</span><b>Провайдер</b></header><div class="sapar-provider-logo">◆ <b>SAPAR</b></div><p>После выбора нового ЭДО-провайдера документы можно будет подписывать со следующего месяца.</p><div class="sapar-rule-note"><b>Актуальный период</b><span>${esc(rule.operator_message || '')}</span></div>${saparRow('i','Тарифы и условия')}<button class="sapar-yellow" type="button" onclick="missionAction('view_terms')">Сменить провайдера</button></div>`;
+  }
+  if (step.screen_key === 'sapar_consent') {
+    return `<div class="sapar-dark-screen sapar-consent"><header><span>←</span><b>Смена провайдера</b></header><p>${esc(step.content.legal_text || '')}</p><label class="sapar-consent-check"><input id="sapar-consent-box" type="checkbox" onchange="toggleSaparConsent()"><span>Я прочитал учебные условия и понимаю, что действие не создаёт реального согласия.</span></label><button id="sapar-consent-submit" class="sapar-yellow" type="button" disabled onclick="missionAction('confirm_consent',{accepted:true})">Подтвердить</button></div>`;
+  }
+  if (step.screen_key === 'sapar_processing') {
+    return `<div class="sapar-processing" role="status" aria-live="polite"><div></div><h2>Меняем провайдера…</h2><p>Учебная обработка, без внешнего запроса</p></div>`;
+  }
+  if (step.screen_key === 'sapar_success') {
+    return `<div class="sapar-success"><span>✓</span><h2>Провайдер поменялся</h2><p>Проверь итог и отметь оба верных последствия.</p><label><input class="sapar-outcome" type="checkbox" onchange="toggleSaparOutcomes()"> Документы подписываются через нового провайдера со следующего месяца</label><label><input class="sapar-outcome" type="checkbox" onchange="toggleSaparOutcomes()"> Далее водитель выбирает тариф и заключает договор</label><button id="sapar-outcomes-submit" type="button" disabled onclick="missionAction('confirm_outcomes',{next_month:true,contract_and_tariff:true})">Проверить результат</button></div>`;
+  }
+  const score = Math.round(attempt.score || 0);
+  const passed = score >= 80;
+  return `<div class="sapar-result"><div class="sapar-score ${passed ? 'is-passed' : ''}"><b>${score}</b><span>из 100</span></div><h2>${passed ? 'Маршрут освоен' : 'Нужно повторить'}</h2><p>${passed ? 'Ты правильно провёл самозанятого водителя до SAPAR.' : 'Повтори зоны с ошибками. Лучший результат сохранён.'}</p>${passed ? `<button type="button" onclick="missionAction('complete')">Завершить миссию</button>` : `<button type="button" onclick="restartCurrentMission()">Попробовать ещё раз</button>`}</div>`;
+}
+
+function toggleSaparConsent() {
+  const box = document.getElementById('sapar-consent-box');
+  const button = document.getElementById('sapar-consent-submit');
+  if (button) button.disabled = !box?.checked;
+}
+
+function toggleSaparOutcomes() {
+  const boxes = Array.from(document.querySelectorAll('.sapar-outcome'));
+  const button = document.getElementById('sapar-outcomes-submit');
+  if (button) button.disabled = boxes.length !== 2 || boxes.some(box => !box.checked);
+}
+
+function scheduleSaparProcessing(attempt) {
+  if (attempt.mission_code !== 'smz_sapar_provider_transfer' || attempt.current_step.screen_key !== 'sapar_processing') return;
+  window.setTimeout(() => {
+    if (_missionAttempt?.id === attempt.id && _missionAttempt?.current_step?.screen_key === 'sapar_processing') missionAction('finish_processing');
+  }, 1200);
 }
 /* Operator workspace v3: one visual system for cabinet and rating. */
 

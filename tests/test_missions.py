@@ -71,11 +71,13 @@ def test_mission_map_start_resume_and_refresh(db_session, make_client):
     mission_map = client.get("/api/missions")
     assert mission_map.status_code == 200
     data = mission_map.json()
-    assert data["total"] == 2
+    assert data["total"] == 3
     assert data["missions"][0]["code"] == "login_first_time"
     assert data["missions"][0]["action_label"] == "Начать"
     assert data["missions"][1]["code"] == "photo_control_basics"
     assert data["missions"][1]["status"] == "locked"
+    assert data["missions"][2]["code"] == "smz_sapar_provider_transfer"
+    assert data["missions"][2]["status"] == "available"
 
     first = _start(client, "mission-resume-start-0001")
     resumed = _start(client, "mission-resume-start-0002")

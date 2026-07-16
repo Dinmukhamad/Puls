@@ -49,8 +49,13 @@ async function renderMissions() {
   }
 
   try {
-    const data = await api.getMissions();
-    renderMissionMap(el, data);
+    if (_missionWorldCode) {
+      const world = await api.getMissionWorld(_missionWorldCode);
+      renderLearningWorldRoute(el, world);
+    } else {
+      const data = await api.getMissionWorlds();
+      renderLearningWorldMap(el, data);
+    }
   } catch (error) {
     renderMissionError(el, error);
   }
@@ -178,6 +183,7 @@ function renderMissionAttempt(el, attempt, feedback = '') {
     </footer>
   </div>`;
   requestAnimationFrame(() => el.querySelector('.mission-phone button:not([disabled]), .mission-phone input')?.focus());
+  scheduleSaparProcessing(attempt);
 }
 
 function renderMissionPhone(attempt) {
@@ -195,6 +201,7 @@ function renderMissionPhoneScreen(attempt) {
   if (attempt.status === 'completed') {
     return `<div class="phone-complete"><div class="phone-complete-pulse">✓</div><span>Миссия завершена</span><h2>Отличная работа!</h2><p>${esc(attempt.reward_message || 'Результат сохранён')}</p><button type="button" onclick="backToMissionMap(true)">Вернуться к карте</button></div>`;
   }
+  if (attempt.mission_code === 'smz_sapar_provider_transfer') return renderSaparMissionScreen(attempt);
   if (attempt.mission_code === 'photo_control_basics') return renderPhotoControlScreen(attempt);
   if (step.screen_key === 'intro') {
     return `<div class="phone-intro"><span class="phone-pulse-logo">Puls.</span><div class="phone-intro-wave" aria-hidden="true">⌁</div><h2>Безопасный учебный режим</h2><p>Здесь можно ошибаться: мы не отправляем данные в реальные сервисы.</p><button type="button" onclick="missionAction('begin')">Начать обучение</button></div>`;
@@ -383,13 +390,26 @@ function backToMissionMap(force = false) {
 
 async function renderMissionsAdmin(el) {
   try {
-    const [stats, attempts] = await Promise.all([
+    const [stats, attempts, worlds] = await Promise.all([
       api.getMissionStats(),
       api.listMissionAttempts({ limit: 100 }),
+      api.getAdminMissionWorlds(),
     ]);
+    const saparMission = worlds.flatMap(world => world.missions || []).find(mission => mission.code === 'smz_sapar_provider_transfer');
+    let saparSetting = null;
+    let windowPreview = null;
+    if (saparMission) {
+      const settings = await api.getMissionSettings(saparMission.id);
+      saparSetting = settings.find(setting => setting.key === 'provider_transfer_window' && setting.is_active) || settings[0] || null;
+      if (saparSetting) {
+        const now = new Date();
+        windowPreview = await api.previewProviderWindow(saparMission.id, { start_day: saparSetting.value.start_day, end_day: saparSetting.value.end_day, year: now.getFullYear(), month: now.getMonth() + 1 });
+      }
+    }
     const dropOff = Object.entries(stats.drop_off_by_step || {});
     el.innerHTML = `<div class="missions-page missions-admin">
       <header class="missions-header"><div><span class="missions-eyebrow">Обучение операторов</span><h1>Миссии</h1><p>Статистика прохождения интерактивных учебных сценариев</p></div><span class="mission-admin-badge">Только просмотр</span></header>
+      ${missionAdminConfiguration(worlds, saparMission, saparSetting, windowPreview)}
       <section class="mission-admin-stats">
         <article><span>Начали</span><strong>${stats.started_operators}</strong><small>уникальных операторов</small></article>
         <article><span>Завершили</span><strong>${stats.completed_operators}</strong><small>${stats.conversion_percent}% конверсия</small></article>
@@ -405,5 +425,29 @@ async function renderMissionsAdmin(el) {
     </div>`;
   } catch (error) {
     renderMissionError(el, error);
+  }
+}
+
+function missionAdminConfiguration(worlds, saparMission, setting, preview) {
+  const canEdit = STATE.user?.role === 'admin';
+  const rule = setting?.value || { start_day: 16, end_day: 1, operator_message: '' };
+  const allowed = (preview?.days || []).filter(day => day.allowed).length;
+  return `<section class="panel mission-admin-config"><div class="missions-section-head"><div><span>Структура обучения</span><h2>Территории и период SAPAR</h2></div><b>${worlds.length} территории</b></div>
+    <div class="mission-admin-worlds">${worlds.map(world => `<article style="--world-accent:${esc(world.accent_color)}"><i>${learningWorldIllustration(world)}</i><div><b>${esc(world.title)}</b><small>${(world.missions || []).length} мисс. · ${esc(world.availability)}</small></div></article>`).join('')}</div>
+    ${saparMission ? `<div class="mission-window-editor"><div><h3>Период смены провайдера</h3><p>Версия ${setting?.version || 1}. Активные попытки продолжают использовать сохранённую версию.</p></div><label>Начало<input id="mission-window-start" type="number" min="1" max="31" value="${rule.start_day}"></label><label>Окончание<input id="mission-window-end" type="number" min="1" max="31" value="${rule.end_day}"></label><label class="mission-window-message">Сообщение оператору<input id="mission-window-message" value="${esc(rule.operator_message || '')}" maxlength="1000"></label><button class="btn-primary" type="button" ${canEdit ? '' : 'disabled'} onclick="saveMissionProviderWindow(${saparMission.id})">${canEdit ? 'Опубликовать версию' : 'Только просмотр'}</button><div class="mission-window-preview"><b>${allowed}</b><span>разрешённых дней в текущем месяце</span></div></div>` : '<p class="missions-empty">Миссия SAPAR ещё не назначена территории.</p>'}
+  </section>`;
+}
+
+async function saveMissionProviderWindow(missionId) {
+  const start = Number(document.getElementById('mission-window-start')?.value);
+  const end = Number(document.getElementById('mission-window-end')?.value);
+  const message = document.getElementById('mission-window-message')?.value?.trim();
+  if (!start || !end || !message) { showToast('Заполните период и сообщение оператору', 'error'); return; }
+  try {
+    await api.updateProviderWindow(missionId, { start_day: start, end_day: end, timezone: 'Asia/Almaty', operator_message: message, is_active: true });
+    showToast('Новая версия периода опубликована', 'ok');
+    renderMissions();
+  } catch (error) {
+    showToast(error.message, 'error');
   }
 }

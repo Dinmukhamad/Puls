@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.entities import Mission, MissionStep
 from app.modules.missions.photo_seed import ensure_photo_control_mission
+from app.modules.missions.sapar_seed import ensure_learning_worlds_and_sapar
 
 MISSION_CODE = "login_first_time"
 
@@ -141,4 +142,5 @@ def ensure_default_missions(db: Session) -> Mission:
 
     db.flush()
     ensure_photo_control_mission(db)
+    ensure_learning_worlds_and_sapar(db)
     return mission

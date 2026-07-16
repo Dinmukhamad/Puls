@@ -823,6 +823,25 @@ class TestAttemptAnswer(Base):
 # ══════════════════════════════════════════════════════════════════════════════
 
 
+class LearningWorld(Base):
+    __tablename__ = "learning_worlds"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text, default="")
+    icon: Mapped[str] = mapped_column(String(80), default="map")
+    illustration_key: Mapped[str] = mapped_column(String(80), default="city")
+    accent_color: Mapped[str] = mapped_column(String(16), default="#4F46E5")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    availability: Mapped[str] = mapped_column(String(32), default="available", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    missions: Mapped[list[Mission]] = relationship(back_populates="world")
+
+
 class Mission(Base):
     __tablename__ = "missions"
 
@@ -837,6 +856,10 @@ class Mission(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     version: Mapped[int] = mapped_column(Integer, default=1)
     prerequisites_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    world_id: Mapped[int | None] = mapped_column(
+        ForeignKey("learning_worlds.id"), nullable=True, index=True
+    )
+    world_sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
@@ -845,6 +868,32 @@ class Mission(Base):
         cascade="all, delete-orphan",
         order_by="MissionStep.step_order",
     )
+    world: Mapped[LearningWorld | None] = relationship(back_populates="missions")
+    settings: Mapped[list[MissionSetting]] = relationship(
+        back_populates="mission", cascade="all, delete-orphan"
+    )
+
+
+class MissionSetting(Base):
+    __tablename__ = "mission_settings"
+    __table_args__ = (
+        UniqueConstraint("mission_id", "key", "version", name="uq_mission_setting_version"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    mission_id: Mapped[int] = mapped_column(
+        ForeignKey("missions.id", ondelete="CASCADE"), index=True
+    )
+    key: Mapped[str] = mapped_column(String(80), index=True)
+    value_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    effective_from: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    mission: Mapped[Mission] = relationship(back_populates="settings")
+    updater: Mapped[User | None] = relationship("User")
 
 
 class MissionStep(Base):

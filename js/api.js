@@ -508,6 +508,8 @@ async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/c
   }
 
   function getMissions() { return api._req('GET', '/api/missions'); }
+  function getMissionWorlds() { return api._req('GET', '/api/missions/worlds'); }
+  function getMissionWorld(code) { return api._req('GET', `/api/missions/worlds/${encodeURIComponent(code)}`); }
   function getMission(code) { return api._req('GET', `/api/missions/${encodeURIComponent(code)}`); }
   function startMission(code, key) {
     return api._req(
@@ -547,9 +549,20 @@ async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/c
     const qs = new URLSearchParams(params).toString();
     return api._req('GET', '/api/admin/missions/attempts' + (qs ? `?${qs}` : ''));
   }
+  function getAdminMissionWorlds() { return api._req('GET', '/api/admin/missions/worlds'); }
+  function getMissionSettings(missionId) { return api._req('GET', `/api/admin/missions/${missionId}/settings`); }
+  function updateProviderWindow(missionId, payload) {
+    return api._req('PATCH', `/api/admin/missions/${missionId}/settings/provider-transfer-window`, payload);
+  }
+  function previewProviderWindow(missionId, params) {
+    const qs = new URLSearchParams(params).toString();
+    return api._req('GET', `/api/admin/missions/${missionId}/settings/provider-transfer-window/preview?${qs}`);
+  }
 
   Object.assign(api, {
     getMissions,
+    getMissionWorlds,
+    getMissionWorld,
     getMission,
     startMission,
     getMissionAttempt,
@@ -558,5 +571,9 @@ async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/c
     restartMission,
     getMissionStats,
     listMissionAttempts,
+    getAdminMissionWorlds,
+    getMissionSettings,
+    updateProviderWindow,
+    previewProviderWindow,
   });
 })();

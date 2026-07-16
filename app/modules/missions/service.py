@@ -11,7 +11,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.datetime_utils import now_utc
+from app.core.datetime_utils import now_local, now_utc
 from app.models.entities import (
     CoinTransaction,
     Mission,
@@ -23,6 +23,7 @@ from app.models.entities import (
     OperatorLevelAssignment,
     OperatorMissionProgress,
 )
+from app.modules.missions.sapar_seed import SAPAR_MISSION_CODE
 from app.modules.wallet.service import add_transaction
 
 PROFILE_TARGETS = ("name", "status", "park", "rating")
@@ -165,6 +166,28 @@ def _demo_code(seed: str) -> str:
     return f"{int(digest[:12], 16) % 1_000_000:06d}"
 
 
+def mission_metadata_by_id(db: Session, mission_id: int) -> dict[str, Any]:
+    mission = db.get(Mission, mission_id)
+    if mission is None:
+        raise HTTPException(status_code=404, detail="Миссия не найдена")
+    steps_count = db.scalar(
+        select(func.count(MissionStep.id)).where(
+            MissionStep.mission_id == mission.id,
+            MissionStep.mission_version == mission.version,
+        )
+    ) or 0
+    return {
+        "code": mission.code,
+        "title": mission.title,
+        "description": mission.description,
+        "mission_type": mission.mission_type,
+        "reward_coins": mission.reward_coins,
+        "estimated_minutes": mission.estimated_minutes,
+        "version": mission.version,
+        "steps_count": steps_count,
+    }
+
+
 def _code_hash(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
@@ -195,6 +218,28 @@ def _new_attempt(
             "checks": {"car": "pending", "driver_license": "pending"},
             "instruction_seen": False,
             "final_statuses_confirmed": False,
+        }
+    elif mission.code == SAPAR_MISSION_CODE:
+        from app.modules.missions.world_service import active_setting, is_day_allowed
+
+        setting = active_setting(db, mission.id)
+        rule = dict(setting.value_json or {})
+        shown_date = now_local().date()
+        initial_state = {
+            "setting_version": setting.version,
+            "provider_rule": rule,
+            "simulated_date": shown_date.isoformat(),
+            "date_allowed": is_day_allowed(
+                shown_date.day, int(rule["start_day"]), int(rule["end_day"])
+            ) if rule.get("is_active", True) else True,
+            "current_provider": "bukhta",
+            "driver_status_errors": 0,
+            "date_errors": 0,
+            "navigation_errors": 0,
+            "provider_errors": 0,
+            "terms_viewed": False,
+            "consent_confirmed": False,
+            "outcomes_confirmed": False,
         }
     attempt = MissionAttempt(
         operator_id=operator.id,
@@ -738,6 +783,148 @@ def _apply_photo_action(
     return True, "Шаг сохранён"
 
 
+def _sapar_score(attempt: MissionAttempt, state: dict[str, Any]) -> int:
+    driver = max(0, 10 - int(state.get("driver_status_errors", 0)) * 5)
+    date_errors = int(state.get("date_errors", 0))
+    date_points = 20 if date_errors == 0 else (10 if date_errors == 1 else 0)
+    navigation = max(0, 20 - int(state.get("navigation_errors", 0)) * 2)
+    provider = max(0, 20 - int(state.get("provider_errors", 0)) * 5)
+    consent = 15 if state.get("terms_viewed") and state.get("consent_confirmed") else 0
+    outcomes = 10 if state.get("outcomes_confirmed") else 0
+    independence = max(0, 5 - attempt.hints_used)
+    return driver + date_points + navigation + provider + consent + outcomes + independence
+
+
+def _apply_sapar_action(
+    db: Session,
+    attempt: MissionAttempt,
+    step: MissionStep,
+    action_key: str,
+    payload: dict[str, Any],
+    idempotency_key: str | None,
+) -> tuple[bool, str]:
+    state = dict(attempt.state_json or {})
+
+    def reject(message: str, event_type: str, counter: str | None = None) -> tuple[bool, str]:
+        if counter:
+            state[counter] = int(state.get(counter, 0)) + 1
+        attempt.state_json = state
+        return _invalid_action(
+            db,
+            attempt,
+            action_key,
+            message,
+            event_type=event_type,
+            idempotency_key=idempotency_key,
+        )
+
+    if action_key != step.action_key:
+        return reject(
+            "Сейчас требуется другое действие. Следуй подсказке Пульсара.",
+            "navigation_error",
+            "navigation_errors",
+        )
+
+    event_type = action_key
+    safe_payload: dict[str, Any] = {}
+    if action_key == "answer_driver_status":
+        answer = payload.get("is_self_employed")
+        if answer is not True:
+            return reject(
+                "Этот путь применяется только к самозанятому водителю. Проверь статус и выбери «Да».",
+                "driver_status_answer",
+                "driver_status_errors",
+            )
+        safe_payload = {"is_self_employed": True}
+        event_type = "driver_status_answer"
+    elif action_key == "answer_date_rule":
+        answer = payload.get("allowed")
+        expected = bool(state.get("date_allowed"))
+        if not isinstance(answer, bool) or answer != expected:
+            rule = state.get("provider_rule", {})
+            return reject(
+                str(rule.get("operator_message") or "Проверь разрешённый период ещё раз."),
+                "date_rule_answer",
+                "date_errors",
+            )
+        safe_payload = {"allowed": answer, "simulated_date": state.get("simulated_date")}
+        event_type = "date_rule_answer"
+    elif action_key == "open_legal_docs":
+        if payload.get("section") not in {None, "legal_docs"}:
+            return reject("Нужен раздел «Юридическая документация».", "navigation_error", "navigation_errors")
+        safe_payload = {"section": "legal_docs"}
+    elif action_key == "open_edo":
+        if payload.get("section") not in {None, "edo"}:
+            return reject("Открой «Электронный документооборот».", "navigation_error", "navigation_errors")
+        safe_payload = {"section": "edo"}
+    elif action_key == "open_provider_list":
+        safe_payload = {"current_provider": state.get("current_provider")}
+    elif action_key == "select_provider":
+        provider = str(payload.get("provider_code", ""))
+        allowed = {"cnt", "payda", "sapar", "partners_pay", "vezunchik", "paper"}
+        if provider not in allowed:
+            return reject("Неизвестный учебный провайдер.", "provider_error", "provider_errors")
+        if provider != "sapar":
+            return reject("Для этого обращения выбери SAPAR.", "provider_error", "provider_errors")
+        state["selected_provider"] = "sapar"
+        safe_payload = {"provider_code": "sapar"}
+    elif action_key == "view_terms":
+        state["terms_viewed"] = True
+    elif action_key == "confirm_consent":
+        if payload.get("accepted") is not True or not state.get("terms_viewed"):
+            return reject("Сначала прочитай условия и отметь учебное согласие.", "consent_error")
+        state["consent_confirmed"] = True
+        safe_payload = {"accepted": True, "training_only": True}
+    elif action_key == "finish_processing":
+        state["processing_complete"] = True
+    elif action_key == "confirm_outcomes":
+        if payload.get("next_month") is not True or payload.get("contract_and_tariff") is not True:
+            return reject(
+                "Отметь оба последствия: документы со следующего месяца и оформление договора/тарифа.",
+                "outcome_error",
+            )
+        state["outcomes_confirmed"] = True
+        safe_payload = {"next_month": True, "contract_and_tariff": True}
+    elif action_key == "complete":
+        attempt.score = _sapar_score(attempt, state)
+        attempt.max_score = 100
+        progress = _progress(db, attempt.operator_id, attempt.mission_id)
+        if progress:
+            progress.best_score = max(progress.best_score or 0, attempt.score)
+        _record_event(
+            db,
+            attempt,
+            "complete",
+            action_key=action_key,
+            is_correct=True,
+            payload={"score": attempt.score, "setting_version": state.get("setting_version")},
+            idempotency_key=idempotency_key,
+        )
+        result = _complete(db, attempt)
+        db.flush()
+        return result
+
+    attempt.state_json = state
+    _record_event(
+        db,
+        attempt,
+        event_type,
+        action_key=action_key,
+        is_correct=True,
+        payload=safe_payload,
+        idempotency_key=idempotency_key,
+    )
+    if action_key == "confirm_outcomes":
+        attempt.score = _sapar_score(attempt, state)
+        attempt.max_score = 100
+        progress = _progress(db, attempt.operator_id, attempt.mission_id)
+        if progress:
+            progress.best_score = max(progress.best_score or 0, attempt.score)
+    _advance(db, attempt, step)
+    db.flush()
+    return True, "Шаг сохранён"
+
+
 def apply_action(
     db: Session,
     attempt: MissionAttempt,
@@ -770,6 +957,8 @@ def apply_action(
         return _apply_photo_action(
             db, attempt, step, action_key, payload, idempotency_key
         )
+    if mission and mission.code == SAPAR_MISSION_CODE:
+        return _apply_sapar_action(db, attempt, step, action_key, payload, idempotency_key)
     if action_key != step.action_key:
         feedback = (
             "Для этой тренировки выбери вход по номеру телефона."

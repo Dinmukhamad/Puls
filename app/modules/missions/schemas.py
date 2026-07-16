@@ -22,6 +22,8 @@ class MissionCardRead(BaseModel):
     current_step_key: str | None = None
     attempts_count: int = 0
     reward_claimed: bool = False
+    best_score: float | None = None
+    completed_at: datetime | None = None
     action_label: str
 
 
@@ -31,6 +33,118 @@ class MissionMapRead(BaseModel):
     total: int
     percent: int
     earned_coins: int
+
+
+class LearningWorldRead(BaseModel):
+    id: int
+    code: str
+    title: str
+    description: str
+    icon: str
+    illustration_key: str
+    accent_color: str
+    sort_order: int
+    availability: str
+    completed_count: int
+    total_count: int
+    percent: int
+    coins_available: int
+
+
+class LearningWorldMapRead(BaseModel):
+    worlds: list[LearningWorldRead]
+    completed: int
+    total: int
+    percent: int
+
+
+class LearningWorldRouteRead(LearningWorldRead):
+    missions: list[MissionCardRead]
+
+
+class AdminWorldMissionRead(BaseModel):
+    id: int
+    code: str
+    title: str
+    world_sort_order: int
+
+    model_config = {"from_attributes": True}
+
+
+class LearningWorldAdminRead(BaseModel):
+    id: int
+    code: str
+    title: str
+    description: str
+    icon: str
+    illustration_key: str
+    accent_color: str
+    sort_order: int
+    is_active: bool
+    availability: str
+    created_at: datetime
+    updated_at: datetime
+    missions: list[AdminWorldMissionRead] = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
+class LearningWorldCreate(BaseModel):
+    code: str = Field(min_length=3, max_length=80)
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(default="", max_length=2000)
+    icon: str = Field(default="map", max_length=80)
+    illustration_key: str = Field(default="city", max_length=80)
+    accent_color: str = Field(default="#4F46E5", max_length=16)
+    sort_order: int = 0
+    availability: str = "available"
+    is_active: bool = True
+
+
+class LearningWorldPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    icon: str | None = Field(default=None, max_length=80)
+    illustration_key: str | None = Field(default=None, max_length=80)
+    accent_color: str | None = Field(default=None, max_length=16)
+    sort_order: int | None = None
+    availability: str | None = None
+    is_active: bool | None = None
+
+
+class MissionWorldAssignment(BaseModel):
+    world_id: int = Field(ge=1)
+    world_sort_order: int = Field(ge=0)
+
+
+class MissionSettingRead(BaseModel):
+    id: int
+    mission_id: int
+    key: str
+    value: dict[str, Any]
+    version: int
+    effective_from: datetime
+    is_active: bool
+    updated_by: int | None
+    updated_at: datetime
+
+
+class ProviderWindowUpdate(BaseModel):
+    start_day: int = Field(ge=1, le=31)
+    end_day: int = Field(ge=1, le=31)
+    timezone: str = "Asia/Almaty"
+    operator_message: str = Field(min_length=1, max_length=1000)
+    effective_from: datetime | None = None
+    is_active: bool = True
+
+
+class ProviderWindowPreview(BaseModel):
+    year: int
+    month: int
+    start_day: int
+    end_day: int
+    timezone: str
+    days: list[dict[str, Any]]
 
 
 class MissionMetadataRead(BaseModel):

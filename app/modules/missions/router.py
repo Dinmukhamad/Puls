@@ -7,9 +7,14 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
-from app.models.entities import Operator, User
-from app.modules.missions import service
+from app.models.entities import LearningWorld, Mission, Operator, User
+from app.modules.missions import service, world_service
 from app.modules.missions.schemas import (
+    LearningWorldAdminRead,
+    LearningWorldCreate,
+    LearningWorldMapRead,
+    LearningWorldPatch,
+    LearningWorldRouteRead,
     MissionActionRequest,
     MissionActionResult,
     MissionAttemptAdminList,
@@ -17,7 +22,11 @@ from app.modules.missions.schemas import (
     MissionHintRead,
     MissionMapRead,
     MissionMetadataRead,
+    MissionSettingRead,
     MissionStatsRead,
+    MissionWorldAssignment,
+    ProviderWindowPreview,
+    ProviderWindowUpdate,
 )
 from app.modules.wallet.service import operator_for_user_or_403
 
@@ -41,6 +50,23 @@ def list_missions(
     user: User = Depends(get_current_user),
 ):
     return service.mission_map(db, _active_operator(db, user))
+
+
+@router.get("/worlds", response_model=LearningWorldMapRead)
+def list_learning_worlds(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return world_service.worlds_map(db, _active_operator(db, user))
+
+
+@router.get("/worlds/{code}", response_model=LearningWorldRouteRead)
+def get_learning_world(
+    code: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return world_service.world_route(db, _active_operator(db, user), code)
 
 
 @router.get("/{code}", response_model=MissionMetadataRead)
@@ -151,6 +177,97 @@ def get_mission_stats(
     _user: User = Depends(require_roles("supervisor", "manager", "admin")),
 ):
     return service.admin_stats(db, mission)
+
+
+@admin_router.get("/worlds", response_model=list[LearningWorldAdminRead])
+def list_admin_worlds(
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles("supervisor", "manager", "admin")),
+):
+    return world_service.admin_worlds(db)
+
+
+@admin_router.post("/worlds", response_model=LearningWorldAdminRead)
+def create_admin_world(
+    payload: LearningWorldCreate,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles("admin")),
+):
+    world = world_service.create_world(db, payload.model_dump())
+    db.commit()
+    db.refresh(world)
+    return world
+
+
+@admin_router.patch("/worlds/{world_id}", response_model=LearningWorldAdminRead)
+def patch_admin_world(
+    world_id: int,
+    payload: LearningWorldPatch,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles("admin")),
+):
+    world = db.get(LearningWorld, world_id)
+    if world is None:
+        raise HTTPException(status_code=404, detail="Территория не найдена")
+    world_service.update_world(world, payload.model_dump(exclude_unset=True))
+    db.commit()
+    db.refresh(world)
+    return world
+
+
+@admin_router.patch("/{mission_id}/world", response_model=MissionMetadataRead)
+def assign_mission_world(
+    mission_id: int,
+    payload: MissionWorldAssignment,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles("admin")),
+):
+    mission = world_service.assign_world(db, mission_id, payload.world_id, payload.world_sort_order)
+    db.commit()
+    return service.mission_metadata_by_id(db, mission.id)
+
+
+@admin_router.get("/{mission_id}/settings", response_model=list[MissionSettingRead])
+def list_mission_settings(
+    mission_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles("supervisor", "manager", "admin")),
+):
+    return [world_service.setting_payload(row) for row in world_service.setting_list(db, mission_id)]
+
+
+@admin_router.patch(
+    "/{mission_id}/settings/provider-transfer-window",
+    response_model=MissionSettingRead,
+)
+def update_provider_window(
+    mission_id: int,
+    payload: ProviderWindowUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin")),
+):
+    setting = world_service.publish_window(db, mission_id, payload.model_dump(), user)
+    db.commit()
+    db.refresh(setting)
+    return world_service.setting_payload(setting)
+
+
+@admin_router.get(
+    "/{mission_id}/settings/provider-transfer-window/preview",
+    response_model=ProviderWindowPreview,
+)
+def preview_provider_window(
+    mission_id: int,
+    start_day: int = Query(ge=1, le=31),
+    end_day: int = Query(ge=1, le=31),
+    year: int = Query(ge=2000, le=2200),
+    month: int = Query(ge=1, le=12),
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles("supervisor", "manager", "admin")),
+):
+    if db.get(Mission, mission_id) is None:
+        raise HTTPException(status_code=404, detail="Миссия не найдена")
+    return world_service.window_preview(start_day, end_day, year, month)
 
 
 @admin_router.get("/attempts", response_model=MissionAttemptAdminList)
