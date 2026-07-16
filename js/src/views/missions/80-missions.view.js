@@ -67,7 +67,6 @@ function renderMissionError(el, error) {
 
 function renderMissionMap(el, data) {
   const missions = data.missions || [];
-  const mission = missions[0];
   el.innerHTML = `<div class="missions-page">
     <header class="missions-header">
       <div><span class="missions-eyebrow">Практика</span><h1>Миссии</h1>
@@ -82,10 +81,10 @@ function renderMissionMap(el, data) {
       <section class="missions-route panel" aria-labelledby="mission-route-title">
         <div class="missions-section-head"><div><span>Учебный маршрут</span><h2 id="mission-route-title">Твой путь практики</h2></div><b>${data.completed}/${data.total}</b></div>
         <div class="missions-route-list">
-          ${mission ? missionRouteCard(mission) : '<div class="missions-empty">Активных миссий пока нет</div>'}
+          ${missions.length ? missions.map(missionRouteCard).join('<div class="missions-route-line" aria-hidden="true"></div>') : '<div class="missions-empty">Активных миссий пока нет</div>'}
           <div class="missions-route-line" aria-hidden="true"></div>
           <article class="mission-card mission-card-soon" aria-disabled="true">
-            <div class="mission-number"><span>02</span></div>
+            <div class="mission-number"><span>${String(missions.length + 1).padStart(2, '0')}</span></div>
             <div class="mission-card-main"><span class="mission-type">Скоро</span><h3>Продолжение маршрута</h3><p>Следующая практическая ситуация уже готовится.</p></div>
             <button class="btn-outline" type="button" disabled>Недоступно</button>
           </article>
@@ -109,7 +108,7 @@ function renderMissionMap(el, data) {
 function missionRouteCard(mission) {
   const disabled = mission.status === 'locked';
   return `<article class="mission-card is-${esc(mission.status)}">
-    <div class="mission-number"><span>01</span><i aria-hidden="true"></i></div>
+    <div class="mission-number"><span>${String(mission.sort_order || 1).padStart(2, '0')}</span><i aria-hidden="true"></i></div>
     <div class="mission-card-main">
       <div class="mission-card-tags"><span class="mission-type">Обучение</span><span class="mission-status">${esc(missionStatusLabel(mission.status))}</span></div>
       <h3>${esc(mission.title)}</h3><p>${esc(mission.description)}</p>
@@ -120,7 +119,7 @@ function missionRouteCard(mission) {
 }
 
 async function startMissionFromMap(code) {
-  const button = document.querySelector('.mission-start-btn');
+  const button = document.querySelector(`.mission-card button[onclick*="${code}"]`);
   if (button) button.disabled = true;
   try {
     _missionAttempt = await api.startMission(code);
@@ -154,7 +153,7 @@ function renderMissionAttempt(el, attempt, feedback = '') {
   el.innerHTML = `<div class="mission-player">
     <header class="mission-player-top">
       <button class="mission-back-btn" type="button" onclick="backToMissionMap()" aria-label="Назад к карте миссий">← <span>К карте</span></button>
-      <div class="mission-player-title"><span>Миссия 1</span><strong>${esc(attempt.mission_title)}</strong></div>
+      <div class="mission-player-title"><span>Миссия ${attempt.mission_code === 'photo_control_basics' ? 2 : 1}</span><strong>${esc(attempt.mission_title)}</strong></div>
       <div class="mission-step-progress" aria-label="Прогресс: ${attempt.progress_percent}%"><div><i style="width:${attempt.progress_percent}%"></i></div><span>${displayStep} из ${step.total_steps}</span></div>
       <button class="btn-outline mission-restart-btn" type="button" onclick="restartCurrentMission()" ${isComplete ? 'hidden' : ''}>Начать заново</button>
     </header>
@@ -196,6 +195,7 @@ function renderMissionPhoneScreen(attempt) {
   if (attempt.status === 'completed') {
     return `<div class="phone-complete"><div class="phone-complete-pulse">✓</div><span>Миссия завершена</span><h2>Отличная работа!</h2><p>${esc(attempt.reward_message || 'Результат сохранён')}</p><button type="button" onclick="backToMissionMap(true)">Вернуться к карте</button></div>`;
   }
+  if (attempt.mission_code === 'photo_control_basics') return renderPhotoControlScreen(attempt);
   if (step.screen_key === 'intro') {
     return `<div class="phone-intro"><span class="phone-pulse-logo">Puls.</span><div class="phone-intro-wave" aria-hidden="true">⌁</div><h2>Безопасный учебный режим</h2><p>Здесь можно ошибаться: мы не отправляем данные в реальные сервисы.</p><button type="button" onclick="missionAction('begin')">Начать обучение</button></div>`;
   }

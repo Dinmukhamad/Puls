@@ -520,11 +520,13 @@ async function cancelRaffle(id) { return req('POST', `/api/admin/raffles/${id}/c
   function getMissionAttempt(attemptId) {
     return api._req('GET', `/api/missions/attempts/${attemptId}`);
   }
-  function submitMissionAction(attemptId, actionKey, payload = {}) {
-    return api._req('POST', `/api/missions/attempts/${attemptId}/actions`, {
-      action_key: actionKey,
-      payload,
-    });
+  function submitMissionAction(attemptId, actionKey, payload = {}, key) {
+    return api._req(
+      'POST',
+      `/api/missions/attempts/${attemptId}/actions`,
+      { action_key: actionKey, payload },
+      { 'Idempotency-Key': key || missionIdempotencyKey('mission-action') },
+    );
   }
   function requestMissionHint(attemptId) {
     return api._req('POST', `/api/missions/attempts/${attemptId}/hint`);

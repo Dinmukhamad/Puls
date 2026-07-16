@@ -19,12 +19,24 @@ from app.models.entities import (
     MissionEvent,
     MissionStep,
     Operator,
+    OperatorLevel,
+    OperatorLevelAssignment,
     OperatorMissionProgress,
 )
 from app.modules.wallet.service import add_transaction
 
 PROFILE_TARGETS = ("name", "status", "park", "rating")
 PHONE_MASK_RE = re.compile(r"^\+7 \(\*{3}\) \*{3}-\*{2}-\d{2}$")
+PHOTO_MISSION_CODE = "photo_control_basics"
+CAR_ASSETS = {
+    "front": "car-front-v1",
+    "left": "car-left-v1",
+    "rear": "car-rear-v1",
+    "right": "car-right-v1",
+    "front_seats": "car-front-seats-v1",
+    "rear_seats": "car-rear-seats-v1",
+    "trunk": "car-trunk-v1",
+}
 
 
 def _mission_or_404(db: Session, code: str, *, active_only: bool = True) -> Mission:
@@ -165,6 +177,25 @@ def _new_attempt(
     idempotency_key: str,
 ) -> MissionAttempt:
     seed = secrets.token_urlsafe(32)
+    first_step = db.scalar(
+        select(MissionStep)
+        .where(
+            MissionStep.mission_id == mission.id,
+            MissionStep.mission_version == mission.version,
+        )
+        .order_by(MissionStep.step_order)
+    )
+    if first_step is None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="У миссии нет шагов")
+    initial_state = {}
+    if mission.code == PHOTO_MISSION_CODE:
+        initial_state = {
+            "car_slots": {},
+            "license_slots": {},
+            "checks": {"car": "pending", "driver_license": "pending"},
+            "instruction_seen": False,
+            "final_statuses_confirmed": False,
+        }
     attempt = MissionAttempt(
         operator_id=operator.id,
         mission_id=mission.id,
@@ -173,13 +204,14 @@ def _new_attempt(
         idempotency_key=idempotency_key,
         mode=mission.mission_type,
         status="in_progress",
-        current_step_key="intro",
+        current_step_key=first_step.step_key,
         demo_code_seed=seed,
         demo_code_hash=_code_hash(_demo_code(seed)),
+        state_json=initial_state,
     )
     db.add(attempt)
     progress.status = "in_progress"
-    progress.current_step_key = "intro"
+    progress.current_step_key = first_step.step_key
     progress.attempts_count += 1
     progress.started_at = now_utc()
     progress.updated_at = now_utc()
@@ -311,6 +343,17 @@ def attempt_read(db: Session, attempt: MissionAttempt) -> dict[str, Any]:
             "income_mode": "Эффективный",
             "tariffs": "0 из 5",
         }
+    level_name = "Стажёр"
+    if operator:
+        assignment = db.scalar(
+            select(OperatorLevelAssignment).where(
+                OperatorLevelAssignment.operator_id == operator.id
+            )
+        )
+        if assignment:
+            level = db.get(OperatorLevel, assignment.level_id)
+            if level:
+                level_name = level.name
 
     completed_targets = _profile_targets_done(db, attempt.id) if step.step_key == "inspect_profile" else []
     required_target = None
@@ -364,6 +407,15 @@ def attempt_read(db: Session, attempt: MissionAttempt) -> dict[str, Any]:
         "reward_eligible": reward_eligible,
         "reward_awarded": attempt.reward_awarded,
         "reward_message": reward_message,
+        "score": attempt.score,
+        "max_score": attempt.max_score,
+        "best_score": progress.best_score if progress else None,
+        "state": attempt.state_json or {},
+        "license_identity": {
+            "full_name": operator.full_name if operator and operator.full_name else "Учебный водитель",
+            "level": level_name,
+            "fleet": "iTaxi",
+        },
         "errors_count": attempt.errors_count,
         "hints_used": attempt.hints_used,
         "started_at": attempt.started_at,
@@ -380,6 +432,7 @@ def _record_event(
     action_key: str | None = None,
     is_correct: bool | None = None,
     payload: dict[str, Any] | None = None,
+    idempotency_key: str | None = None,
 ) -> MissionEvent:
     event = MissionEvent(
         attempt_id=attempt.id,
@@ -388,6 +441,7 @@ def _record_event(
         action_key=action_key,
         is_correct=is_correct,
         payload_json=payload or {},
+        idempotency_key=idempotency_key,
     )
     db.add(event)
     return event
@@ -398,9 +452,19 @@ def _invalid_action(
     attempt: MissionAttempt,
     action_key: str,
     feedback: str,
+    *,
+    event_type: str = "action",
+    idempotency_key: str | None = None,
 ) -> tuple[bool, str]:
     attempt.errors_count += 1
-    _record_event(db, attempt, "action", action_key=action_key, is_correct=False)
+    _record_event(
+        db,
+        attempt,
+        event_type,
+        action_key=action_key,
+        is_correct=False,
+        idempotency_key=idempotency_key,
+    )
     return False, feedback
 
 
@@ -437,6 +501,9 @@ def _complete(db: Session, attempt: MissionAttempt) -> tuple[bool, str]:
     )
     if mission is None or progress is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Прогресс миссии не найден")
+    passing_score = int((mission.prerequisites_json or {}).get("passing_score", 0))
+    if passing_score and (attempt.score or 0) < passing_score:
+        return False, f"Набрано {int(attempt.score or 0)} из 100. Разбери ошибки и попробуй ещё раз."
 
     completed_at = now_utc()
     attempt.status = "completed"
@@ -475,12 +542,219 @@ def _complete(db: Session, attempt: MissionAttempt) -> tuple[bool, str]:
     return True, "Миссия повторно пройдена — награда уже получена"
 
 
+def _photo_score(db: Session, attempt: MissionAttempt, state: dict[str, Any]) -> int:
+    wrong_navigation = db.scalar(
+        select(func.count(MissionEvent.id)).where(
+            MissionEvent.attempt_id == attempt.id,
+            MissionEvent.event_type == "wrong_navigation",
+        )
+    ) or 0
+    premature = db.scalar(
+        select(func.count(MissionEvent.id)).where(
+            MissionEvent.attempt_id == attempt.id,
+            MissionEvent.event_type == "incomplete_submit",
+        )
+    ) or 0
+    car_points = min(7, len(state.get("car_slots", {}))) * 7
+    license_points = min(2, len(state.get("license_slots", {}))) * 10
+    navigation_points = max(0, 10 - int(wrong_navigation) * 2)
+    submit_points = max(0, 6 - int(premature) * 3)
+    independence_points = max(0, 10 - attempt.hints_used * 2)
+    final_points = 5 if state.get("final_statuses_confirmed") else 0
+    return int(
+        car_points
+        + license_points
+        + navigation_points
+        + submit_points
+        + independence_points
+        + final_points
+    )
+
+
+def _apply_photo_action(
+    db: Session,
+    attempt: MissionAttempt,
+    step: MissionStep,
+    action_key: str,
+    payload: dict[str, Any],
+    idempotency_key: str | None,
+) -> tuple[bool, str]:
+    premature_submit = (
+        (step.screen_key == "car_grid" and action_key == "submit_car_check")
+        or (step.screen_key == "license_grid" and action_key == "submit_license_check")
+    )
+    if action_key != step.action_key and not premature_submit:
+        return _invalid_action(
+            db,
+            attempt,
+            action_key,
+            "Сейчас требуется другое действие. Следуй подсказке Пульсара.",
+            event_type="wrong_navigation",
+            idempotency_key=idempotency_key,
+        )
+
+    state = dict(attempt.state_json or {})
+    state["car_slots"] = dict(state.get("car_slots", {}))
+    state["license_slots"] = dict(state.get("license_slots", {}))
+    state["checks"] = dict(
+        state.get("checks", {"car": "pending", "driver_license": "pending"})
+    )
+    event_type = action_key
+    safe_payload: dict[str, Any] = {}
+
+    if action_key == "select_check":
+        expected = str((step.content_json or {}).get("check_type", ""))
+        selected = str(payload.get("check_type", ""))
+        if selected != expected:
+            return _invalid_action(
+                db,
+                attempt,
+                action_key,
+                "Выбери подсвеченную обязательную проверку.",
+                event_type="wrong_navigation",
+                idempotency_key=idempotency_key,
+            )
+        safe_payload = {"check_type": selected}
+    elif action_key == "view_instruction":
+        state["instruction_seen"] = True
+    elif action_key == "confirm_car_slot":
+        expected_slot = str((step.content_json or {}).get("slot_key", ""))
+        slot_key = str(payload.get("slot_key", ""))
+        asset_id = str(payload.get("asset_id", ""))
+        if slot_key != expected_slot:
+            return _invalid_action(
+                db,
+                attempt,
+                action_key,
+                "Заполняй ракурсы по порядку — текущий слот подсвечен.",
+                event_type="wrong_navigation",
+                idempotency_key=idempotency_key,
+            )
+        if CAR_ASSETS.get(slot_key) != asset_id:
+            return _invalid_action(
+                db,
+                attempt,
+                action_key,
+                "Этот учебный кадр не относится к выбранному слоту.",
+                event_type="invalid_asset",
+                idempotency_key=idempotency_key,
+            )
+        state["car_slots"][slot_key] = {"asset_id": asset_id, "status": "filled"}
+        safe_payload = {"slot_key": slot_key, "asset_id": asset_id}
+        event_type = "fill_slot"
+    elif action_key == "submit_car_check":
+        if set(state["car_slots"]) != set(CAR_ASSETS):
+            missing = len(CAR_ASSETS) - len(state["car_slots"])
+            return _invalid_action(
+                db,
+                attempt,
+                action_key,
+                f"Добавьте ещё {missing} фото.",
+                event_type="incomplete_submit",
+                idempotency_key=idempotency_key,
+            )
+        state["checks"]["car"] = "passed"
+        event_type = "submit_check"
+    elif action_key == "confirm_license_side":
+        expected_side = str((step.content_json or {}).get("side", ""))
+        side = str(payload.get("side", ""))
+        if side != expected_side or side not in {"front", "back"}:
+            return _invalid_action(
+                db,
+                attempt,
+                action_key,
+                "Добавь подсвеченную сторону учебного удостоверения.",
+                event_type="wrong_navigation",
+                idempotency_key=idempotency_key,
+            )
+        state["license_slots"][side] = {"status": "filled", "asset_id": f"license-{side}-v1"}
+        safe_payload = {"side": side, "asset_id": f"license-{side}-v1"}
+        event_type = "fill_slot"
+    elif action_key == "submit_license_check":
+        if set(state["license_slots"]) != {"front", "back"}:
+            return _invalid_action(
+                db,
+                attempt,
+                action_key,
+                "Добавьте лицевую и обратную стороны.",
+                event_type="incomplete_submit",
+                idempotency_key=idempotency_key,
+            )
+        state["checks"]["driver_license"] = "passed"
+        event_type = "submit_check"
+    elif action_key == "confirm_final_statuses":
+        if state["checks"] != {"car": "passed", "driver_license": "passed"}:
+            return _invalid_action(
+                db,
+                attempt,
+                action_key,
+                "Сначала успешно отправь обе обязательные проверки.",
+                event_type="incomplete_submit",
+                idempotency_key=idempotency_key,
+            )
+        if payload.get("car") is not True or payload.get("driver_license") is not True:
+            return _invalid_action(
+                db,
+                attempt,
+                action_key,
+                "Подтверди обе зелёные галочки.",
+                event_type="wrong_navigation",
+                idempotency_key=idempotency_key,
+            )
+        state["final_statuses_confirmed"] = True
+        safe_payload = {"car": True, "driver_license": True}
+    elif action_key == "complete":
+        _record_event(
+            db,
+            attempt,
+            "complete",
+            action_key=action_key,
+            is_correct=True,
+            idempotency_key=idempotency_key,
+        )
+        result = _complete(db, attempt)
+        db.flush()
+        return result
+
+    attempt.state_json = state
+    _record_event(
+        db,
+        attempt,
+        event_type,
+        action_key=action_key,
+        is_correct=True,
+        payload=safe_payload,
+        idempotency_key=idempotency_key,
+    )
+    if action_key == "confirm_final_statuses":
+        attempt.score = _photo_score(db, attempt, state)
+        attempt.max_score = 100
+        progress = _progress(db, attempt.operator_id, attempt.mission_id)
+        if progress:
+            progress.best_score = max(progress.best_score or 0, attempt.score)
+    _advance(db, attempt, step)
+    db.flush()
+    return True, "Шаг сохранён"
+
+
 def apply_action(
     db: Session,
     attempt: MissionAttempt,
     action_key: str,
     payload: dict[str, Any],
+    idempotency_key: str | None = None,
 ) -> tuple[bool, str]:
+    if idempotency_key:
+        existing = db.scalar(
+            select(MissionEvent).where(MissionEvent.idempotency_key == idempotency_key)
+        )
+        if existing:
+            if existing.attempt_id != attempt.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Ключ действия уже использован для другой попытки",
+                )
+            return bool(existing.is_correct), "Результат действия уже сохранён"
     if attempt.status == "completed":
         return (True, "Результат уже сохранён") if action_key == "complete" else (
             False,
@@ -490,13 +764,20 @@ def apply_action(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Попытка не активна")
 
     step = _step_for_attempt(db, attempt)
+    mission = db.get(Mission, attempt.mission_id)
+    if mission and mission.code == PHOTO_MISSION_CODE:
+        return _apply_photo_action(
+            db, attempt, step, action_key, payload, idempotency_key
+        )
     if action_key != step.action_key:
         feedback = (
             "Для этой тренировки выбери вход по номеру телефона."
             if step.step_key == "choose_login"
             else "Сейчас требуется другое действие. Следуй подсказке Пульсара."
         )
-        return _invalid_action(db, attempt, action_key, feedback)
+        return _invalid_action(
+            db, attempt, action_key, feedback, idempotency_key=idempotency_key
+        )
 
     safe_payload: dict[str, Any] = {}
     if step.step_key == "enter_phone":
@@ -548,7 +829,14 @@ def apply_action(
         db.flush()
         return True, "Профиль проверен — можно завершать миссию"
     elif step.step_key == "completion":
-        _record_event(db, attempt, "action", action_key=action_key, is_correct=True)
+        _record_event(
+            db,
+            attempt,
+            "action",
+            action_key=action_key,
+            is_correct=True,
+            idempotency_key=idempotency_key,
+        )
         result = _complete(db, attempt)
         db.flush()
         return result
@@ -560,6 +848,7 @@ def apply_action(
         action_key=action_key,
         is_correct=True,
         payload=safe_payload,
+        idempotency_key=idempotency_key,
     )
     _advance(db, attempt, step)
     db.flush()
@@ -629,6 +918,21 @@ def admin_stats(db: Session, mission_code: str | None = None) -> dict[str, Any]:
         reward_attempt = db.get(MissionAttempt, transaction.source_id)
         if mission_ids is None or (reward_attempt and reward_attempt.mission_id in mission_ids):
             awarded += transaction.amount
+    scored = [float(attempt.score) for attempt in attempts if attempt.score is not None]
+    attempt_ids = [attempt.id for attempt in attempts]
+    error_rows = db.scalars(
+        select(MissionEvent).where(
+            MissionEvent.attempt_id.in_(attempt_ids or [-1]),
+            MissionEvent.is_correct.is_(False),
+        )
+    ).all()
+    errors_by_type: dict[str, int] = {}
+    problem_slots: dict[str, int] = {}
+    for event in error_rows:
+        errors_by_type[event.event_type] = errors_by_type.get(event.event_type, 0) + 1
+        slot = str((event.payload_json or {}).get("slot_key", ""))
+        if slot:
+            problem_slots[slot] = problem_slots.get(slot, 0) + 1
     return {
         "mission_code": mission_code,
         "started_operators": len(started_ops),
@@ -638,6 +942,10 @@ def admin_stats(db: Session, mission_code: str | None = None) -> dict[str, Any]:
         "repeat_operators": len(repeated_ops),
         "awarded_coins": awarded,
         "drop_off_by_step": drop_off,
+        "average_score": round(sum(scored) / len(scored), 1) if scored else 0,
+        "best_score": max(scored) if scored else 0,
+        "errors_by_type": errors_by_type,
+        "problem_slots": problem_slots,
     }
 
 

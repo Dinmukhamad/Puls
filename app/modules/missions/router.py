@@ -84,12 +84,24 @@ def get_attempt(
 def submit_action(
     attempt_id: int,
     payload: MissionActionRequest,
+    idempotency_key: str | None = Header(
+        default=None,
+        alias="Idempotency-Key",
+        min_length=8,
+        max_length=120,
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     operator = _active_operator(db, user)
     attempt = service.attempt_for_operator(db, attempt_id, operator.id)
-    accepted, feedback = service.apply_action(db, attempt, payload.action_key, payload.payload)
+    accepted, feedback = service.apply_action(
+        db,
+        attempt,
+        payload.action_key,
+        payload.payload,
+        idempotency_key,
+    )
     db.commit()
     db.refresh(attempt)
     return {

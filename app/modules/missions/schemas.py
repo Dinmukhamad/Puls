@@ -69,6 +69,11 @@ class MissionAttemptRead(BaseModel):
     reward_eligible: bool
     reward_awarded: bool
     reward_message: str | None = None
+    score: float | None = None
+    max_score: float | None = None
+    best_score: float | None = None
+    state: dict[str, Any] = Field(default_factory=dict)
+    license_identity: dict[str, str] = Field(default_factory=dict)
     errors_count: int
     hints_used: int
     started_at: datetime
@@ -113,6 +118,10 @@ class MissionStatsRead(BaseModel):
     repeat_operators: int
     awarded_coins: int
     drop_off_by_step: dict[str, int]
+    average_score: float = 0
+    best_score: float = 0
+    errors_by_type: dict[str, int] = Field(default_factory=dict)
+    problem_slots: dict[str, int] = Field(default_factory=dict)
 
 
 class MissionAttemptAdminRead(BaseModel):

@@ -928,6 +928,7 @@ class MissionAttempt(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reward_awarded: Mapped[bool] = mapped_column(Boolean, default=False)
+    state_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
     mission: Mapped[Mission] = relationship("Mission")
     operator: Mapped[Operator] = relationship("Operator")
@@ -949,6 +950,7 @@ class MissionEvent(Base):
     step_key: Mapped[str] = mapped_column(String(80))
     event_type: Mapped[str] = mapped_column(String(40), index=True)
     action_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True)
     is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     payload_json: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
