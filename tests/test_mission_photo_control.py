@@ -20,7 +20,9 @@ def _start_photo(client, key: str) -> dict:
         headers={"Idempotency-Key": key},
     )
     assert response.status_code == 200, response.text
-    return response.json()
+    attempt = response.json()
+    assert attempt["current_step"]["action_key"] == "begin"
+    return attempt
 
 
 def _reach_car_grid(client, attempt: dict) -> dict:
@@ -44,10 +46,12 @@ def _complete_photo(client, attempt: dict) -> dict:
             {"slot_key": slot, "asset_id": asset},
         )
         assert result["accepted"] is True
+    assert result["attempt"]["current_step"]["action_key"] == "submit_car_check"
     _action(client, attempt_id, "submit_car_check")
     _action(client, attempt_id, "select_check", {"check_type": "driver_license"})
     _action(client, attempt_id, "confirm_license_side", {"side": "front"})
-    _action(client, attempt_id, "confirm_license_side", {"side": "back"})
+    license_ready = _action(client, attempt_id, "confirm_license_side", {"side": "back"})
+    assert license_ready["attempt"]["current_step"]["action_key"] == "submit_license_check"
     _action(client, attempt_id, "submit_license_check")
     scored = _action(
         client,

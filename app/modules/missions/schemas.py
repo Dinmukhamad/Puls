@@ -50,6 +50,7 @@ class MissionStepRead(BaseModel):
     total_steps: int
     step_type: str
     screen_key: str
+    action_key: str
     content: dict[str, Any]
     hint_available: bool
     completed_targets: list[str] = Field(default_factory=list)

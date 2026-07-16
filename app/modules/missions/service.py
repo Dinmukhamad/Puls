@@ -397,6 +397,7 @@ def attempt_read(db: Session, attempt: MissionAttempt) -> dict[str, Any]:
             "total_steps": step_count,
             "step_type": step.step_type,
             "screen_key": step.screen_key,
+            "action_key": step.action_key,
             "content": content,
             "hint_available": bool(step.hint_text),
             "completed_targets": completed_targets,
