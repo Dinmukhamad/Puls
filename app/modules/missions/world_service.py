@@ -18,6 +18,7 @@ from app.models.entities import (
     OperatorMissionProgress,
     User,
 )
+from app.modules.missions.document_signing_seed import DOCUMENT_SIGNING_SETTING_KEY
 from app.modules.missions.sapar_seed import WINDOW_SETTING_KEY
 
 WORLD_AVAILABILITY = {"available", "coming_soon", "hidden"}
@@ -251,4 +252,100 @@ def setting_payload(row: MissionSetting) -> dict[str, Any]:
         "is_active": row.is_active,
         "updated_by": row.updated_by,
         "updated_at": row.updated_at,
+    }
+
+
+def publish_document_signing_window(
+    db: Session, mission_id: int, payload: dict[str, Any], user: User
+) -> MissionSetting:
+    mission = db.get(Mission, mission_id)
+    if mission is None:
+        raise HTTPException(status_code=404, detail="Миссия не найдена")
+    start_day = int(payload.get("start_day", 5))
+    end_day = int(payload.get("end_day", 15))
+    if start_day > end_day:
+        raise HTTPException(status_code=422, detail="Начало периода не может быть позже окончания")
+    timezone = str(payload.get("timezone", "Asia/Almaty"))
+    if timezone != "Asia/Almaty":
+        raise HTTPException(status_code=422, detail="Поддерживается таймзона Asia/Almaty")
+    exception_end = payload.get("exception_end_day")
+    exception_month = payload.get("exception_year_month")
+    if (exception_end is None) != (exception_month is None):
+        raise HTTPException(status_code=422, detail="Для исключения укажите месяц и конечный день")
+    if exception_month is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", str(exception_month)):
+        raise HTTPException(status_code=422, detail="Месяц исключения должен быть в формате YYYY-MM")
+    if exception_end is not None and int(exception_end) < end_day:
+        raise HTTPException(status_code=422, detail="Исключение может только продлевать период")
+    current_version = db.scalar(
+        select(func.max(MissionSetting.version)).where(
+            MissionSetting.mission_id == mission_id,
+            MissionSetting.key == DOCUMENT_SIGNING_SETTING_KEY,
+        )
+    ) or 0
+    db.query(MissionSetting).filter(
+        MissionSetting.mission_id == mission_id,
+        MissionSetting.key == DOCUMENT_SIGNING_SETTING_KEY,
+        MissionSetting.is_active.is_(True),
+    ).update({MissionSetting.is_active: False})
+    row = MissionSetting(
+        mission_id=mission_id,
+        key=DOCUMENT_SIGNING_SETTING_KEY,
+        version=current_version + 1,
+        value_json={
+            "start_day": start_day,
+            "end_day": end_day,
+            "timezone": timezone,
+            "exception_end_day": int(exception_end) if exception_end is not None else None,
+            "exception_year_month": str(exception_month) if exception_month else None,
+            "operator_message": str(payload.get("operator_message") or "Документы подписываются с 5-го по 15-е число включительно."),
+        },
+        effective_from=payload.get("effective_from") or now_utc(),
+        is_active=True,
+        updated_by=user.id,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def document_signing_preview(
+    start_day: int,
+    end_day: int,
+    year: int,
+    month: int,
+    exception_end_day: int | None = None,
+    exception_year_month: str | None = None,
+) -> dict[str, Any]:
+    if not 1 <= month <= 12 or not 2000 <= year <= 2200:
+        raise HTTPException(status_code=422, detail="Некорректный месяц или год")
+    if not 1 <= start_day <= end_day <= 31:
+        raise HTTPException(status_code=422, detail="Некорректный базовый период")
+    year_month = f"{year:04d}-{month:02d}"
+    effective_end = end_day
+    if exception_year_month == year_month and exception_end_day is not None:
+        effective_end = int(exception_end_day)
+    max_day = calendar.monthrange(year, month)[1]
+    effective_end = min(effective_end, max_day)
+    target_year, target_month = (year - 1, 12) if month == 1 else (year, month - 1)
+    months = ("январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь")
+    return {
+        "year": year,
+        "month": month,
+        "start_day": start_day,
+        "base_end_day": end_day,
+        "effective_end_day": effective_end,
+        "effective_end_date": date(year, month, effective_end).isoformat(),
+        "timezone": "Asia/Almaty",
+        "target_period": {
+            "year": target_year,
+            "month": target_month,
+            "label": f"за {months[target_month - 1]} {target_year}",
+        },
+        "days": [
+            {
+                "date": date(year, month, day).isoformat(),
+                "allowed": start_day <= day <= effective_end,
+            }
+            for day in range(1, max_day + 1)
+        ],
     }

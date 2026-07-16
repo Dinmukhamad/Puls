@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import re
 import secrets
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -23,6 +23,10 @@ from app.models.entities import (
     OperatorLevelAssignment,
     OperatorMissionProgress,
 )
+from app.modules.missions.document_signing_seed import (
+    DOCUMENT_SIGNING_MISSION_CODE,
+    DOCUMENT_SIGNING_SETTING_KEY,
+)
 from app.modules.missions.sapar_seed import SAPAR_MISSION_CODE
 from app.modules.wallet.service import add_transaction
 
@@ -38,6 +42,49 @@ CAR_ASSETS = {
     "rear_seats": "car-rear-seats-v1",
     "trunk": "car-trunk-v1",
 }
+
+RU_MONTHS = (
+    "январь",
+    "февраль",
+    "март",
+    "апрель",
+    "май",
+    "июнь",
+    "июль",
+    "август",
+    "сентябрь",
+    "октябрь",
+    "ноябрь",
+    "декабрь",
+)
+RU_MONTHS_GENITIVE = (
+    "январь",
+    "февраль",
+    "март",
+    "апрель",
+    "май",
+    "июнь",
+    "июль",
+    "август",
+    "сентябрь",
+    "октябрь",
+    "ноябрь",
+    "декабрь",
+)
+
+
+def _previous_period(value: date) -> tuple[int, int]:
+    return (value.year - 1, 12) if value.month == 1 else (value.year, value.month - 1)
+
+
+def _period_label(year: int, month: int, *, prefix: bool = True) -> str:
+    value = f"{RU_MONTHS_GENITIVE[month - 1]} {year}"
+    return f"за {value}" if prefix else value
+
+
+def _training_code(seed: str, purpose: str) -> str:
+    digest = hashlib.sha256(f"{seed}:{purpose}:smz-signing".encode()).hexdigest()
+    return f"{int(digest[:8], 16) % 10000:04d}"
 
 
 def _mission_or_404(db: Session, code: str, *, active_only: bool = True) -> Mission:
@@ -241,6 +288,50 @@ def _new_attempt(
             "consent_confirmed": False,
             "outcomes_confirmed": False,
         }
+    elif mission.code == DOCUMENT_SIGNING_MISSION_CODE:
+        from app.modules.missions.world_service import active_setting
+
+        setting = active_setting(db, mission.id, DOCUMENT_SIGNING_SETTING_KEY)
+        rule = dict(setting.value_json or {})
+        shown_date = now_local().date()
+        target_year, target_month = _previous_period(shown_date)
+        year_month = f"{shown_date.year:04d}-{shown_date.month:02d}"
+        effective_end_day = int(rule.get("end_day", 15))
+        if (
+            rule.get("exception_year_month") == year_month
+            and rule.get("exception_end_day") is not None
+        ):
+            effective_end_day = int(rule["exception_end_day"])
+        initial_state = {
+            "setting_version": setting.version,
+            "signing_rule": rule,
+            "current_date": shown_date.isoformat(),
+            "current_month": f"{RU_MONTHS[shown_date.month - 1]} {shown_date.year}",
+            "target_period": {
+                "year": target_year,
+                "month": target_month,
+                "label": _period_label(target_year, target_month),
+            },
+            "effective_end_day": effective_end_day,
+            "date_allowed": int(rule.get("start_day", 5))
+            <= shown_date.day
+            <= effective_end_day,
+            "auth_signature_state": "not_started",
+            "docs_signature_state": "not_started",
+            "challenge_verified": {"auth": False, "documents": False},
+            "challenge_ids": {
+                purpose: hashlib.sha256(f"{seed}:{purpose}".encode()).hexdigest()[:16]
+                for purpose in ("auth", "documents")
+            },
+            "code_errors": {"auth": 0, "documents": 0},
+            "date_errors": 0,
+            "period_errors": 0,
+            "auth_returned": False,
+            "logged_in": False,
+            "package_state": "not_viewed",
+            "docs_returned": False,
+            "save_state": "not_saved",
+        }
     attempt = MissionAttempt(
         operator_id=operator.id,
         mission_id=mission.id,
@@ -371,6 +462,21 @@ def attempt_read(db: Session, attempt: MissionAttempt) -> dict[str, Any]:
         "{first_name}": _first_name(operator) if operator else "",
         "{demo_code}": _demo_code(attempt.demo_code_seed),
     }
+    if mission.code == DOCUMENT_SIGNING_MISSION_CODE:
+        state = attempt.state_json or {}
+        target = state.get("target_period") or {}
+        purpose = (
+            "documents"
+            if step.screen_key in {"signing_egov_code_documents", "signing_egov_sign_documents"}
+            else "auth"
+        )
+        replacements.update(
+            {
+                "{current_month}": str(state.get("current_month", "")),
+                "{previous_month}": str(target.get("label", "")),
+                "{training_code}": _training_code(attempt.demo_code_seed, purpose),
+            }
+        )
     for key, value in list(content.items()):
         if isinstance(value, str):
             for marker, replacement in replacements.items():
@@ -925,6 +1031,230 @@ def _apply_sapar_action(
     return True, "Шаг сохранён"
 
 
+def _document_signing_score(state: dict[str, Any]) -> int:
+    date_points = max(0, 15 - min(1, int(state.get("date_errors", 0))) * 10)
+    period_points = max(0, 15 - min(1, int(state.get("period_errors", 0))) * 10)
+    code_errors = state.get("code_errors") or {}
+    auth_penalty = 5 if int(code_errors.get("auth", 0)) >= 2 else 0
+    docs_penalty = 5 if int(code_errors.get("documents", 0)) >= 2 else 0
+    auth_points = (
+        max(0, 15 - auth_penalty)
+        if state.get("auth_signature_state") == "approved" and state.get("auth_returned")
+        else 0
+    )
+    navigation_points = 10 if state.get("logged_in") else 0
+    package_points = 15 if state.get("package_state") == "viewed" else 0
+    docs_points = (
+        max(0, 20 - docs_penalty)
+        if state.get("docs_signature_state") == "approved" and state.get("docs_returned")
+        else 0
+    )
+    save_points = 10 if state.get("save_state") == "saved" else 0
+    return (
+        date_points
+        + period_points
+        + auth_points
+        + navigation_points
+        + package_points
+        + docs_points
+        + save_points
+    )
+
+
+def _apply_document_signing_action(
+    db: Session,
+    attempt: MissionAttempt,
+    step: MissionStep,
+    action_key: str,
+    payload: dict[str, Any],
+    idempotency_key: str | None,
+) -> tuple[bool, str]:
+    state = dict(attempt.state_json or {})
+    state["challenge_verified"] = dict(state.get("challenge_verified") or {})
+    state["code_errors"] = dict(state.get("code_errors") or {})
+
+    def reject(
+        message: str, event_type: str, counter: str | None = None
+    ) -> tuple[bool, str]:
+        if counter:
+            state[counter] = int(state.get(counter, 0)) + 1
+        attempt.state_json = state
+        return _invalid_action(
+            db,
+            attempt,
+            action_key,
+            message,
+            event_type=event_type,
+            idempotency_key=idempotency_key,
+        )
+
+    if action_key == "decline_signature" and step.screen_key in {
+        "signing_egov_sign_auth",
+        "signing_egov_sign_documents",
+    }:
+        purpose = str(payload.get("purpose", ""))
+        expected = "documents" if "documents" in step.screen_key else "auth"
+        if purpose != expected:
+            return reject("Выбрана другая учебная сессия подписи.", "signature_purpose_error")
+        state[f"{purpose if purpose == 'auth' else 'docs'}_signature_state"] = "declined"
+        attempt.state_json = state
+        _record_event(
+            db,
+            attempt,
+            "decline_signature",
+            action_key=action_key,
+            is_correct=False,
+            payload={"purpose": purpose},
+            idempotency_key=idempotency_key,
+        )
+        attempt.errors_count += 1
+        db.flush()
+        return False, "Подпись отклонена. Без неё вход или документы не подтвердятся — попробуй ещё раз."
+
+    if action_key != step.action_key:
+        return reject(
+            "Сейчас требуется другое действие. Следуй выделенной кнопке и подсказке Пульсара.",
+            "navigation_error",
+        )
+
+    event_type = action_key
+    safe_payload: dict[str, Any] = {}
+    if action_key == "answer_date_eligibility":
+        answer = payload.get("allowed")
+        if not isinstance(answer, bool) or answer != bool(state.get("date_allowed")):
+            return reject(
+                str((state.get("signing_rule") or {}).get("operator_message") or "Проверь период 5–15."),
+                "date_answer",
+                "date_errors",
+            )
+        safe_payload = {"allowed": answer, "current_date": state.get("current_date")}
+        event_type = "date_answer"
+    elif action_key == "answer_target_period":
+        target = state.get("target_period") or {}
+        try:
+            answer = (int(payload.get("year")), int(payload.get("month")))
+        except (TypeError, ValueError):
+            answer = (0, 0)
+        if answer != (target.get("year"), target.get("month")):
+            return reject(
+                f"В текущем месяце подписываются документы {target.get('label', 'за предыдущий месяц')}.",
+                "period_answer",
+                "period_errors",
+            )
+        safe_payload = {"year": answer[0], "month": answer[1]}
+        event_type = "period_answer"
+    elif action_key == "start_egov_signature":
+        purpose = str(payload.get("purpose", ""))
+        expected = "documents" if step.screen_key == "signing_avr_package" else "auth"
+        if purpose != expected:
+            return reject("Не перепутай подпись входа и подпись документов.", "signature_purpose_error")
+        if purpose == "documents" and state.get("package_state") != "viewed":
+            return reject("Сначала открой комплект из трёх АВР.", "package_error")
+        state[f"{purpose if purpose == 'auth' else 'docs'}_signature_state"] = "code_required"
+        state["challenge_verified"][purpose] = False
+        safe_payload = {
+            "purpose": purpose,
+            "challenge_id": (state.get("challenge_ids") or {}).get(purpose),
+        }
+        event_type = f"start_egov_{purpose}"
+    elif action_key == "submit_training_code":
+        purpose = str(payload.get("purpose", ""))
+        expected = "documents" if "documents" in step.screen_key else "auth"
+        code = str(payload.get("code", ""))
+        if purpose != expected:
+            return reject("Код относится к другой учебной подписи.", "signature_purpose_error")
+        if not re.fullmatch(r"\d{4}", code) or not hmac.compare_digest(
+            code, _training_code(attempt.demo_code_seed, purpose)
+        ):
+            state["code_errors"][purpose] = int(state["code_errors"].get(purpose, 0)) + 1
+            attempt.state_json = state
+            return _invalid_action(
+                db,
+                attempt,
+                action_key,
+                "Код не подошёл. Сверь четыре цифры с сообщением Пульсара.",
+                event_type=f"{purpose}_code_error",
+                idempotency_key=idempotency_key,
+            )
+        state["challenge_verified"][purpose] = True
+        safe_payload = {"purpose": purpose, "code_verified": True}
+        event_type = f"{purpose}_code_verified"
+    elif action_key == "approve_signature":
+        purpose = str(payload.get("purpose", ""))
+        expected = "documents" if "documents" in step.screen_key else "auth"
+        if purpose != expected or not state["challenge_verified"].get(purpose):
+            return reject("Сначала введи код текущей eGov-сессии.", "signature_purpose_error")
+        state[f"{purpose if purpose == 'auth' else 'docs'}_signature_state"] = "approved"
+        safe_payload = {"purpose": purpose, "approved": True}
+        event_type = f"approve_{purpose}"
+    elif action_key == "return_to_sapar":
+        purpose = str(payload.get("purpose", ""))
+        expected = "documents" if "documents" in step.screen_key else "auth"
+        signature_key = "docs_signature_state" if purpose == "documents" else "auth_signature_state"
+        if purpose != expected or state.get(signature_key) != "approved":
+            return reject("Сначала подтверди текущую учебную подпись.", "return_error")
+        state[f"{purpose if purpose == 'auth' else 'docs'}_returned"] = True
+        safe_payload = {"purpose": purpose}
+        event_type = "return_sapar"
+    elif action_key == "enter_sapar":
+        if not state.get("auth_returned"):
+            return reject("Сначала вернись после подписи авторизации.", "enter_error")
+        state["logged_in"] = True
+    elif action_key == "open_target_avr":
+        if not state.get("logged_in"):
+            return reject("Сначала войди в учебный профиль SAPAR.", "navigation_error")
+        safe_payload = dict(state.get("target_period") or {})
+        event_type = "open_avr"
+    elif action_key == "open_avr_package":
+        state["package_state"] = "viewed"
+        safe_payload = {"documents": ["АВР 1", "АВР 2", "АВР 3"]}
+        event_type = "view_package"
+    elif action_key == "save_signed_documents":
+        if state.get("docs_signature_state") != "approved" or not state.get("docs_returned"):
+            return reject("Сначала подпиши документы и вернись на SAPAR.", "save_error")
+        state["save_state"] = "saved"
+        attempt.score = _document_signing_score(state)
+        attempt.max_score = 100
+        progress = _progress(db, attempt.operator_id, attempt.mission_id)
+        if progress:
+            progress.best_score = max(progress.best_score or 0, attempt.score)
+        event_type = "save_documents"
+    elif action_key == "complete":
+        if state.get("save_state") != "saved":
+            return reject("Подпись ещё не сохранена на SAPAR.", "save_error")
+        attempt.score = _document_signing_score(state)
+        attempt.max_score = 100
+        progress = _progress(db, attempt.operator_id, attempt.mission_id)
+        if progress:
+            progress.best_score = max(progress.best_score or 0, attempt.score)
+        _record_event(
+            db,
+            attempt,
+            "complete",
+            action_key=action_key,
+            is_correct=True,
+            payload={"score": attempt.score, "setting_version": state.get("setting_version")},
+            idempotency_key=idempotency_key,
+        )
+        result = _complete(db, attempt)
+        db.flush()
+        return result
+
+    attempt.state_json = state
+    _record_event(
+        db,
+        attempt,
+        event_type,
+        action_key=action_key,
+        is_correct=True,
+        payload=safe_payload,
+        idempotency_key=idempotency_key,
+    )
+    _advance(db, attempt, step)
+    db.flush()
+    return True, "Шаг сохранён"
+
+
 def apply_action(
     db: Session,
     attempt: MissionAttempt,
@@ -959,6 +1289,10 @@ def apply_action(
         )
     if mission and mission.code == SAPAR_MISSION_CODE:
         return _apply_sapar_action(db, attempt, step, action_key, payload, idempotency_key)
+    if mission and mission.code == DOCUMENT_SIGNING_MISSION_CODE:
+        return _apply_document_signing_action(
+            db, attempt, step, action_key, payload, idempotency_key
+        )
     if action_key != step.action_key:
         feedback = (
             "Для этой тренировки выбери вход по номеру телефона."

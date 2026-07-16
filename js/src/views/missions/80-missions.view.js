@@ -158,7 +158,7 @@ function renderMissionAttempt(el, attempt, feedback = '') {
   el.innerHTML = `<div class="mission-player">
     <header class="mission-player-top">
       <button class="mission-back-btn" type="button" onclick="backToMissionMap()" aria-label="Назад к карте миссий">← <span>К карте</span></button>
-      <div class="mission-player-title"><span>Миссия ${attempt.mission_code === 'photo_control_basics' ? 2 : 1}</span><strong>${esc(attempt.mission_title)}</strong></div>
+      <div class="mission-player-title"><span>Миссия ${attempt.mission_code === 'photo_control_basics' || attempt.mission_code === 'smz_sign_previous_month_acts' ? 2 : 1}</span><strong>${esc(attempt.mission_title)}</strong></div>
       <div class="mission-step-progress" aria-label="Прогресс: ${attempt.progress_percent}%"><div><i style="width:${attempt.progress_percent}%"></i></div><span>${displayStep} из ${step.total_steps}</span></div>
       <button class="btn-outline mission-restart-btn" type="button" onclick="restartCurrentMission()" ${isComplete ? 'hidden' : ''}>Начать заново</button>
     </header>
@@ -201,6 +201,7 @@ function renderMissionPhoneScreen(attempt) {
   if (attempt.status === 'completed') {
     return `<div class="phone-complete"><div class="phone-complete-pulse">✓</div><span>Миссия завершена</span><h2>Отличная работа!</h2><p>${esc(attempt.reward_message || 'Результат сохранён')}</p><button type="button" onclick="backToMissionMap(true)">Вернуться к карте</button></div>`;
   }
+  if (attempt.mission_code === 'smz_sign_previous_month_acts') return renderSmzDocumentSigningScreen(attempt);
   if (attempt.mission_code === 'smz_sapar_provider_transfer') return renderSaparMissionScreen(attempt);
   if (attempt.mission_code === 'photo_control_basics') return renderPhotoControlScreen(attempt);
   if (step.screen_key === 'intro') {
@@ -396,8 +397,11 @@ async function renderMissionsAdmin(el) {
       api.getAdminMissionWorlds(),
     ]);
     const saparMission = worlds.flatMap(world => world.missions || []).find(mission => mission.code === 'smz_sapar_provider_transfer');
+    const signingMission = worlds.flatMap(world => world.missions || []).find(mission => mission.code === 'smz_sign_previous_month_acts');
     let saparSetting = null;
     let windowPreview = null;
+    let signingSetting = null;
+    let signingPreview = null;
     if (saparMission) {
       const settings = await api.getMissionSettings(saparMission.id);
       saparSetting = settings.find(setting => setting.key === 'provider_transfer_window' && setting.is_active) || settings[0] || null;
@@ -406,10 +410,21 @@ async function renderMissionsAdmin(el) {
         windowPreview = await api.previewProviderWindow(saparMission.id, { start_day: saparSetting.value.start_day, end_day: saparSetting.value.end_day, year: now.getFullYear(), month: now.getMonth() + 1 });
       }
     }
+    if (signingMission) {
+      const settings = await api.getMissionSettings(signingMission.id);
+      signingSetting = settings.find(setting => setting.key === 'document_signing_window' && setting.is_active) || settings[0] || null;
+      if (signingSetting) {
+        const now = new Date();
+        const rule = signingSetting.value;
+        const params = {year: now.getFullYear(), month: now.getMonth() + 1, start_day: rule.start_day, end_day: rule.end_day};
+        if (rule.exception_end_day && rule.exception_year_month) Object.assign(params, {exception_end_day: rule.exception_end_day, exception_year_month: rule.exception_year_month});
+        signingPreview = await api.previewDocumentSigningWindow(signingMission.id, params);
+      }
+    }
     const dropOff = Object.entries(stats.drop_off_by_step || {});
     el.innerHTML = `<div class="missions-page missions-admin">
       <header class="missions-header"><div><span class="missions-eyebrow">Обучение операторов</span><h1>Миссии</h1><p>Статистика прохождения интерактивных учебных сценариев</p></div><span class="mission-admin-badge">Только просмотр</span></header>
-      ${missionAdminConfiguration(worlds, saparMission, saparSetting, windowPreview)}
+      ${missionAdminConfiguration(worlds, saparMission, saparSetting, windowPreview, signingMission, signingSetting, signingPreview)}
       <section class="mission-admin-stats">
         <article><span>Начали</span><strong>${stats.started_operators}</strong><small>уникальных операторов</small></article>
         <article><span>Завершили</span><strong>${stats.completed_operators}</strong><small>${stats.conversion_percent}% конверсия</small></article>
@@ -428,14 +443,34 @@ async function renderMissionsAdmin(el) {
   }
 }
 
-function missionAdminConfiguration(worlds, saparMission, setting, preview) {
+function missionAdminConfiguration(worlds, saparMission, setting, preview, signingMission, signingSetting, signingPreview) {
   const canEdit = STATE.user?.role === 'admin';
   const rule = setting?.value || { start_day: 16, end_day: 1, operator_message: '' };
   const allowed = (preview?.days || []).filter(day => day.allowed).length;
   return `<section class="panel mission-admin-config"><div class="missions-section-head"><div><span>Структура обучения</span><h2>Территории и период SAPAR</h2></div><b>${worlds.length} территории</b></div>
     <div class="mission-admin-worlds">${worlds.map(world => `<article style="--world-accent:${esc(world.accent_color)}"><i>${learningWorldIllustration(world)}</i><div><b>${esc(world.title)}</b><small>${(world.missions || []).length} мисс. · ${esc(world.availability)}</small></div></article>`).join('')}</div>
     ${saparMission ? `<div class="mission-window-editor"><div><h3>Период смены провайдера</h3><p>Версия ${setting?.version || 1}. Активные попытки продолжают использовать сохранённую версию.</p></div><label>Начало<input id="mission-window-start" type="number" min="1" max="31" value="${rule.start_day}"></label><label>Окончание<input id="mission-window-end" type="number" min="1" max="31" value="${rule.end_day}"></label><label class="mission-window-message">Сообщение оператору<input id="mission-window-message" value="${esc(rule.operator_message || '')}" maxlength="1000"></label><button class="btn-primary" type="button" ${canEdit ? '' : 'disabled'} onclick="saveMissionProviderWindow(${saparMission.id})">${canEdit ? 'Опубликовать версию' : 'Только просмотр'}</button><div class="mission-window-preview"><b>${allowed}</b><span>разрешённых дней в текущем месяце</span></div></div>` : '<p class="missions-empty">Миссия SAPAR ещё не назначена территории.</p>'}
+    ${signingMission ? documentSigningWindowEditor(signingMission, signingSetting, signingPreview, canEdit) : ''}
   </section>`;
+}
+
+function documentSigningWindowEditor(mission, setting, preview, canEdit) {
+  const rule = setting?.value || {start_day:5,end_day:15,exception_end_day:null,exception_year_month:null,operator_message:''};
+  return `<div class="mission-window-editor smz-window-editor"><div><h3>Подписание АВР</h3><p>Версия ${setting?.version || 1}. Базовый период и исключение сохраняются в активной попытке.</p></div><label>Начало<input id="smz-window-start" type="number" min="1" max="31" value="${rule.start_day}"></label><label>Окончание<input id="smz-window-end" type="number" min="1" max="31" value="${rule.end_day}"></label><label>Продлить до<input id="smz-window-exception-end" type="number" min="1" max="31" value="${rule.exception_end_day || ''}" placeholder="25"></label><label>Месяц исключения<input id="smz-window-exception-month" type="month" value="${rule.exception_year_month || ''}"></label><label class="mission-window-message">Сообщение оператору<input id="smz-window-message" value="${esc(rule.operator_message || '')}" maxlength="1000"></label><button class="btn-primary" type="button" ${canEdit ? '' : 'disabled'} onclick="saveDocumentSigningWindow(${mission.id})">${canEdit ? 'Опубликовать версию' : 'Только просмотр'}</button><div class="mission-window-preview"><b>${esc(preview?.effective_end_date || String(rule.end_day))}</b><span>фактическая конечная дата · документы ${esc(preview?.target_period?.label || '')}</span></div></div>`;
+}
+
+async function saveDocumentSigningWindow(missionId) {
+  const start = Number(document.getElementById('smz-window-start')?.value);
+  const end = Number(document.getElementById('smz-window-end')?.value);
+  const exceptionEnd = Number(document.getElementById('smz-window-exception-end')?.value) || null;
+  const exceptionMonth = document.getElementById('smz-window-exception-month')?.value || null;
+  const message = document.getElementById('smz-window-message')?.value?.trim();
+  if (!start || !end || !message || Boolean(exceptionEnd) !== Boolean(exceptionMonth)) { showToast('Заполните базовый период; для исключения нужны и месяц, и день', 'error'); return; }
+  try {
+    await api.updateDocumentSigningWindow(missionId, {start_day:start,end_day:end,timezone:'Asia/Almaty',exception_end_day:exceptionEnd,exception_year_month:exceptionMonth,operator_message:message});
+    showToast('Новая версия периода подписания опубликована', 'ok');
+    renderMissions();
+  } catch (error) { showToast(error.message, 'error'); }
 }
 
 async function saveMissionProviderWindow(missionId) {

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import now_utc
 from app.models.entities import LearningWorld, Mission, MissionSetting, MissionStep
+from app.modules.missions.document_signing_seed import ensure_document_signing_mission
 
 SAPAR_MISSION_CODE = "smz_sapar_provider_transfer"
 WINDOW_SETTING_KEY = "provider_transfer_window"
@@ -119,4 +120,5 @@ def ensure_learning_worlds_and_sapar(db: Session) -> Mission:
         )
         db.add(setting)
     db.flush()
+    ensure_document_signing_mission(db, worlds["self_employment_docs"].id)
     return mission

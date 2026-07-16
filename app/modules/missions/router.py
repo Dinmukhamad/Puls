@@ -10,6 +10,8 @@ from app.database.db import get_db
 from app.models.entities import LearningWorld, Mission, Operator, User
 from app.modules.missions import service, world_service
 from app.modules.missions.schemas import (
+    DocumentSigningWindowPreview,
+    DocumentSigningWindowUpdate,
     LearningWorldAdminRead,
     LearningWorldCreate,
     LearningWorldMapRead,
@@ -268,6 +270,51 @@ def preview_provider_window(
     if db.get(Mission, mission_id) is None:
         raise HTTPException(status_code=404, detail="Миссия не найдена")
     return world_service.window_preview(start_day, end_day, year, month)
+
+
+@admin_router.patch(
+    "/{mission_id}/settings/document-signing-window",
+    response_model=MissionSettingRead,
+)
+def update_document_signing_window(
+    mission_id: int,
+    payload: DocumentSigningWindowUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("admin")),
+):
+    setting = world_service.publish_document_signing_window(
+        db, mission_id, payload.model_dump(), user
+    )
+    db.commit()
+    db.refresh(setting)
+    return world_service.setting_payload(setting)
+
+
+@admin_router.get(
+    "/{mission_id}/settings/document-signing-window/preview",
+    response_model=DocumentSigningWindowPreview,
+)
+def preview_document_signing_window(
+    mission_id: int,
+    start_day: int = Query(default=5, ge=1, le=31),
+    end_day: int = Query(default=15, ge=1, le=31),
+    year: int = Query(ge=2000, le=2200),
+    month: int = Query(ge=1, le=12),
+    exception_end_day: int | None = Query(default=None, ge=1, le=31),
+    exception_year_month: str | None = Query(default=None, max_length=7),
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_roles("supervisor", "manager", "admin")),
+):
+    if db.get(Mission, mission_id) is None:
+        raise HTTPException(status_code=404, detail="Миссия не найдена")
+    return world_service.document_signing_preview(
+        start_day,
+        end_day,
+        year,
+        month,
+        exception_end_day,
+        exception_year_month,
+    )
 
 
 @admin_router.get("/attempts", response_model=MissionAttemptAdminList)

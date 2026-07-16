@@ -56,6 +56,13 @@
     const qs = new URLSearchParams(params).toString();
     return api._req('GET', `/api/admin/missions/${missionId}/settings/provider-transfer-window/preview?${qs}`);
   }
+  function updateDocumentSigningWindow(missionId, payload) {
+    return api._req('PATCH', `/api/admin/missions/${missionId}/settings/document-signing-window`, payload);
+  }
+  function previewDocumentSigningWindow(missionId, params) {
+    const qs = new URLSearchParams(params).toString();
+    return api._req('GET', `/api/admin/missions/${missionId}/settings/document-signing-window/preview?${qs}`);
+  }
 
   Object.assign(api, {
     getMissions,
@@ -73,5 +80,7 @@
     getMissionSettings,
     updateProviderWindow,
     previewProviderWindow,
+    updateDocumentSigningWindow,
+    previewDocumentSigningWindow,
   });
 })();

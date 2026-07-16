@@ -147,6 +147,28 @@ class ProviderWindowPreview(BaseModel):
     days: list[dict[str, Any]]
 
 
+class DocumentSigningWindowUpdate(BaseModel):
+    start_day: int = Field(default=5, ge=1, le=31)
+    end_day: int = Field(default=15, ge=1, le=31)
+    timezone: str = "Asia/Almaty"
+    exception_end_day: int | None = Field(default=None, ge=1, le=31)
+    exception_year_month: str | None = Field(default=None, max_length=7)
+    operator_message: str = Field(min_length=1, max_length=1000)
+    effective_from: datetime | None = None
+
+
+class DocumentSigningWindowPreview(BaseModel):
+    year: int
+    month: int
+    start_day: int
+    base_end_day: int
+    effective_end_day: int
+    effective_end_date: str
+    timezone: str
+    target_period: dict[str, Any]
+    days: list[dict[str, Any]]
+
+
 class MissionMetadataRead(BaseModel):
     code: str
     title: str
