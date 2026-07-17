@@ -139,3 +139,12 @@ class ItemPriceRead(BaseModel):
     version: int
 
     model_config = {"from_attributes": True}
+
+
+# --- Склад призов --------------------------------------------------------------
+
+class InventoryUpsert(BaseModel):
+    shop_item_id: int
+    # Добавить к приходу (0 = только настройка порога)
+    add_received: int = Field(default=0, ge=0)
+    min_stock_alert: int | None = Field(default=None, ge=0)

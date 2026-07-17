@@ -44,6 +44,8 @@ def notify_purchase_status(db: Session, operator_id: int, item_title: str, statu
         title, body = f"Заявка на «{item_title}» отклонена", reject_reason or ""
     elif status == "completed":
         title, body = f"Бонус «{item_title}» выдан", ""
+    elif status == "refunded":
+        title, body = f"Возврат по бонусу «{item_title}»", reject_reason or "Коины возвращены на баланс"
     else:
         return
     notify_operator(db, operator_id, type=f"purchase_{status}", title=title, body=body, link="shop")

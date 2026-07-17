@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from math import ceil, floor
 
 from fastapi import HTTPException, status
@@ -12,11 +13,28 @@ from app.models.entities import (
     Operator,
     ShopDiscountCoupon,
     ShopItem,
+    ShopItemInventory,
     ShopPurchase,
     User,
     WheelSpin,
     now_utc,
 )
+
+# Жизненный цикл заказа (ТЗ «Экономика коинов» §12.1):
+# new(=created+reserved) → approved(=ready) → completed(=issued);
+# rejected(=cancelled) / refunded / expired.
+PENDING_EXPIRE_DAYS = 7    # заявка не обработана ревьюером → автоотмена с возвратом
+READY_PICKUP_DAYS = 14     # приз готов, но не забран → автоистечение с возвратом
+
+
+def _inventory_for_update(db: Session, item_id: int) -> ShopItemInventory | None:
+    """Строка склада с блокировкой FOR UPDATE (если складской учёт включён).
+    Блокировка обязательна: reserve/issue/return меняют счётчики конкурентно."""
+    return db.scalar(
+        select(ShopItemInventory)
+        .where(ShopItemInventory.shop_item_id == item_id)
+        .with_for_update()
+    )
 
 
 def points_to_coins(points: float, db: Session | None = None) -> int:
@@ -127,7 +145,14 @@ def shop_item_availability(db: Session, item: ShopItem, operator_id: int) -> dic
     остаток, сколько уже взял этот оператор, доступен ли товар прямо сейчас."""
     now = now_utc()
     stock_remaining = None
-    if item.stock_limit > 0:
+    # Складской учёт (ТЗ §12.1 prize_inventory): если для товара включены
+    # счётчики — они источник истины по остатку; иначе fallback на stock_limit.
+    inventory = db.scalar(
+        select(ShopItemInventory).where(ShopItemInventory.shop_item_id == item.id)
+    )
+    if inventory is not None:
+        stock_remaining = max(0, inventory.available)
+    elif item.stock_limit > 0:
         stock_remaining = max(0, item.stock_limit - shop_item_claimed_count(db, item.id))
 
     operator_count = shop_item_operator_purchase_count(db, item.id, operator_id) if operator_id else 0
@@ -193,7 +218,18 @@ def create_purchase(
     operator: Operator,
     item_id: int,
     discount_coupon_id: int | None = None,
+    idempotency_key: str | None = None,
 ) -> ShopPurchase:
+    # Idempotency-Key (ТЗ §14): повторная отправка формы (double-click, retry
+    # сети) возвращает уже созданный заказ, не создавая второй резерв.
+    # Уникальный индекс в БД страхует от гонки двух одновременных запросов.
+    if idempotency_key:
+        existing = db.scalar(
+            select(ShopPurchase).where(ShopPurchase.idempotency_key == idempotency_key)
+        )
+        if existing is not None:
+            return existing
+
     # Блокируем и строку товара: лимит остатка (stock_limit) читается и
     # проверяется здесь же, и без FOR UPDATE два одновременных запроса на
     # последнюю единицу товара оба прошли бы проверку и оба списали бы —
@@ -208,7 +244,13 @@ def create_purchase(
     if item.ends_at and now > item.ends_at:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Товар больше не доступен — раздача завершена")
 
-    if item.stock_limit > 0:
+    # Складской учёт (ТЗ §12.1): при включённых счётчиках остаток по ним —
+    # источник истины; строка склада заблокирована FOR UPDATE на всю покупку.
+    inventory = _inventory_for_update(db, item.id)
+    if inventory is not None and inventory.available <= 0:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Товар закончился")
+
+    if inventory is None and item.stock_limit > 0:
         claimed = shop_item_claimed_count(db, item.id)
         if claimed >= item.stock_limit:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Товар закончился")
@@ -282,10 +324,16 @@ def create_purchase(
         discount_amount=discount_amount,
         discount_coupon_id=coupon.id if coupon else None,
         season_id=active_season.id if active_season else None,
+        idempotency_key=idempotency_key,
         status="new",
     )
     db.add(purchase)
     db.flush()
+
+    # Резерв единицы на складе (счётчик снимается при reject/expire,
+    # переходит в issued при выдаче).
+    if inventory is not None:
+        inventory.quantity_reserved += 1
 
     if coupon:
         coupon.status = "reserved"
@@ -331,6 +379,9 @@ def approve_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sho
     purchase.reviewed_by_user_id = reviewer.id
 
     purchase.reviewed_at = now_utc()
+    # Дедлайн получения приза (ТЗ §12.1 expired): не забрал за
+    # READY_PICKUP_DAYS — заказ истекает с возвратом коинов.
+    purchase.expires_at = purchase.reviewed_at + timedelta(days=READY_PICKUP_DAYS)
     if purchase.discount_coupon_id:
         coupon = db.scalar(
             select(ShopDiscountCoupon)
@@ -369,6 +420,10 @@ def reject_purchase(db: Session, purchase: ShopPurchase, reviewer: User, reason:
     purchase.status = "rejected"
     purchase.reject_reason = reason
     purchase.reviewed_by_user_id = reviewer.id
+    # Возврат складского резерва (ТЗ §12.1): единица снова доступна.
+    inventory = _inventory_for_update(db, purchase.shop_item_id)
+    if inventory is not None:
+        inventory.quantity_reserved = max(0, inventory.quantity_reserved - 1)
 
     purchase.reviewed_at = now_utc()
     if purchase.discount_coupon_id:
@@ -405,7 +460,15 @@ def complete_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sh
         )
     purchase.status = "completed"
     purchase.reviewed_by_user_id = purchase.reviewed_by_user_id or reviewer.id
+    # completed = issued (ТЗ §12.1): фиксируем, кто фактически выдал приз.
+    purchase.issued_by_user_id = reviewer.id
     purchase.completed_at = now_utc()
+    purchase.expires_at = None
+    # Склад: резерв переходит в выдачу.
+    inventory = _inventory_for_update(db, purchase.shop_item_id)
+    if inventory is not None:
+        inventory.quantity_reserved = max(0, inventory.quantity_reserved - 1)
+        inventory.quantity_issued += 1
     db.add(
         CoinTransaction(
             operator_id=purchase.operator_id,
@@ -420,6 +483,154 @@ def complete_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sh
     item = db.get(ShopItem, purchase.shop_item_id)
     notify_purchase_status(db, purchase.operator_id, item.title if item else "бонус", "completed")
     return purchase
+
+
+def refund_purchase(db: Session, purchase: ShopPurchase, admin: User, reason: str) -> ShopPurchase:
+    """Возврат выданного приза (ТЗ §12.1 refunded, §6 «Возврат/аннулирование
+    покупки — только администратор»).
+
+    Только из completed(=issued). Деньги возвращаются ОТДЕЛЬНОЙ обратной
+    транзакцией (ТЗ §5.4: «возврат должен быть... с обратной транзакцией»),
+    идемпотентной по ключу purchase:{id}:refund — повторный вызов не создаст
+    второй возврат. Склад: issued--, returned++ (единица снова в остатке)."""
+    operator = db.get(Operator, purchase.operator_id, with_for_update=True)
+    db.refresh(purchase)
+    if purchase.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Вернуть можно только выданный приз",
+        )
+    if operator is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
+
+    refund_tx = add_transaction(
+        db,
+        operator,
+        purchase.price,
+        "refund",
+        f"Возврат выданного приза: {reason}",
+        created_by=admin,
+        purchase=purchase,
+        source_type="purchase_refund",
+        source_id=purchase.id,
+        idempotency_key=f"purchase:{purchase.id}:refund",
+    )
+    db.flush()
+    # add_transaction вернул существующую транзакцию → возврат уже проведён.
+    if refund_tx.created_by_user_id != admin.id or purchase.status == "refunded":
+        db.refresh(purchase)
+        return purchase
+
+    operator.total_spent = max(0, operator.total_spent - purchase.price)
+    purchase.status = "refunded"
+    purchase.reject_reason = reason
+
+    inventory = _inventory_for_update(db, purchase.shop_item_id)
+    if inventory is not None:
+        # Счётчики исторические: quantity_issued НЕ уменьшается (это журнал
+        # выдач); возврат отражается только в quantity_returned. Остаток
+        # available = приход + возврат − резерв − выдача снова растёт на 1.
+        inventory.quantity_returned += 1
+
+    from app.modules.notifications.service import notify_purchase_status
+    item = db.get(ShopItem, purchase.shop_item_id)
+    notify_purchase_status(db, operator.id, item.title if item else "бонус", "refunded", reason)
+    return purchase
+
+
+def expire_stale_purchases(
+    db: Session,
+    *,
+    pending_days: int = PENDING_EXPIRE_DAYS,
+    now: datetime | None = None,
+) -> dict:
+    """Автоистечение заказов (ТЗ §12.1 expired). Два случая:
+
+    1. new старше pending_days — заявку так и не обработали: возврат резерва
+       коинов и склада, освобождение купона.
+    2. approved с истёкшим expires_at — приз не забрали: коины уже в
+       total_spent, возвращаем и current_balance, и total_spent.
+
+    В обоих случаях возврат — отдельная транзакция с идемпотентным ключом
+    purchase:{id}:expire. Вызывается ежедневной cron-задачей и вручную из
+    админки. Возвращает счётчики для лога/ответа."""
+    moment = now or now_utc()
+    pending_deadline = moment - timedelta(days=pending_days)
+    expired_pending = 0
+    expired_ready = 0
+
+    stale_new = list(
+        db.scalars(
+            select(ShopPurchase)
+            .where(ShopPurchase.status == "new", ShopPurchase.created_at < pending_deadline)
+            .with_for_update()
+        )
+    )
+    stale_ready = list(
+        db.scalars(
+            select(ShopPurchase)
+            .where(
+                ShopPurchase.status == "approved",
+                ShopPurchase.expires_at.is_not(None),
+                ShopPurchase.expires_at < moment,
+            )
+            .with_for_update()
+        )
+    )
+
+    for purchase in stale_new:
+        operator = db.get(Operator, purchase.operator_id, with_for_update=True)
+        if operator is None:
+            continue
+        operator.reserved_balance = max(0, operator.reserved_balance - purchase.price)
+        add_transaction(
+            db,
+            operator,
+            purchase.price,
+            "refund",
+            "Срок обработки заявки истёк — коины возвращены",
+            purchase=purchase,
+            source_type="purchase_expire",
+            source_id=purchase.id,
+            idempotency_key=f"purchase:{purchase.id}:expire",
+        )
+        purchase.status = "expired"
+        purchase.reject_reason = "Срок обработки заявки истёк"
+        inventory = _inventory_for_update(db, purchase.shop_item_id)
+        if inventory is not None:
+            inventory.quantity_reserved = max(0, inventory.quantity_reserved - 1)
+        if purchase.discount_coupon_id:
+            coupon = db.get(ShopDiscountCoupon, purchase.discount_coupon_id, with_for_update=True)
+            if coupon and coupon.status == "reserved" and coupon.reserved_purchase_id == purchase.id:
+                coupon.status = "available"
+                coupon.reserved_purchase_id = None
+                coupon.reserved_at = None
+        expired_pending += 1
+
+    for purchase in stale_ready:
+        operator = db.get(Operator, purchase.operator_id, with_for_update=True)
+        if operator is None:
+            continue
+        add_transaction(
+            db,
+            operator,
+            purchase.price,
+            "refund",
+            "Приз не был получен в срок — коины возвращены",
+            purchase=purchase,
+            source_type="purchase_expire",
+            source_id=purchase.id,
+            idempotency_key=f"purchase:{purchase.id}:expire",
+        )
+        operator.total_spent = max(0, operator.total_spent - purchase.price)
+        purchase.status = "expired"
+        purchase.reject_reason = "Приз не был получен в срок"
+        inventory = _inventory_for_update(db, purchase.shop_item_id)
+        if inventory is not None:
+            inventory.quantity_reserved = max(0, inventory.quantity_reserved - 1)
+        expired_ready += 1
+
+    return {"expired_pending": expired_pending, "expired_ready": expired_ready}
 
 
 def operator_for_user_or_403(db: Session, user: User) -> Operator:

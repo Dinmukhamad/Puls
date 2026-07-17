@@ -84,6 +84,7 @@ def request_purchase(
         operator_for_user_or_403(db, current_user),
         payload.shop_item_id,
         payload.discount_coupon_id,
+        idempotency_key=payload.idempotency_key,
     )
     db.commit()
     rating_cache_invalidate()  # резерв меняет доступный баланс оператора
@@ -170,5 +171,30 @@ def complete(purchase_id: int, db: Session = Depends(get_db), current_user: User
     _assert_purchase_in_scope(db, purchase, current_user)
     complete_purchase(db, purchase, current_user)
     db.commit()
+    db.refresh(purchase)
+    return purchase
+
+
+@router.post(
+    "/purchases/{purchase_id}/refund",
+    response_model=ShopPurchaseRead,
+    dependencies=[Depends(require_roles("admin"))],
+)
+def refund(
+    purchase_id: int,
+    payload: RejectPurchaseRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ShopPurchase:
+    """Возврат выданного приза — только администратор (ТЗ «Экономика коинов»
+    §6). Обратная транзакция идемпотентна, склад получает единицу обратно."""
+    from app.modules.wallet.service import refund_purchase
+
+    purchase = db.get(ShopPurchase, purchase_id)
+    if not purchase:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
+    refund_purchase(db, purchase, current_user, payload.reason)
+    db.commit()
+    rating_cache_invalidate()
     db.refresh(purchase)
     return purchase

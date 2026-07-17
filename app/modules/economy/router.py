@@ -29,6 +29,7 @@ from app.models.entities import (
     now_utc,
 )
 from app.modules.economy.schemas import (
+    InventoryUpsert,
     ItemPriceRead,
     ItemPriceUpsert,
     RewardRuleCreate,
@@ -349,3 +350,95 @@ def upsert_item_price(
 def active_season(db: Session = Depends(get_db)) -> dict:
     season = get_active_season(db)
     return {"season": SeasonRead.model_validate(season).model_dump() if season else None}
+
+
+# ---------------------------------------------------------------------------
+# Админ: складской учёт призов (ТЗ §12.1 prize_inventory, §10.3)
+# ---------------------------------------------------------------------------
+
+@admin_router.get("/inventory")
+def list_inventory(db: Session = Depends(get_db)) -> list[dict]:
+    from app.models.entities import ShopItemInventory
+
+    rows = list(
+        db.scalars(
+            select(ShopItemInventory).order_by(ShopItemInventory.shop_item_id)
+        )
+    )
+    return [
+        {
+            "id": inv.id,
+            "shop_item_id": inv.shop_item_id,
+            "shop_item_title": inv.shop_item.title if inv.shop_item else None,
+            "quantity_received": inv.quantity_received,
+            "quantity_reserved": inv.quantity_reserved,
+            "quantity_issued": inv.quantity_issued,
+            "quantity_returned": inv.quantity_returned,
+            "available": inv.available,
+            "min_stock_alert": inv.min_stock_alert,
+            # Флаг «пора пополнить склад» (ТЗ §10.3: уведомление о низком остатке)
+            "low_stock": bool(inv.min_stock_alert > 0 and inv.available <= inv.min_stock_alert),
+        }
+        for inv in rows
+    ]
+
+
+@admin_router.post("/inventory")
+def upsert_inventory(
+    payload: InventoryUpsert,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Приход на склад / настройка порога. quantity_received только растёт
+    (add_received добавляет к приходу) — историю приходов не переписываем."""
+    from app.models.entities import ShopItemInventory
+
+    if not db.get(ShopItem, payload.shop_item_id):
+        raise HTTPException(status_code=404, detail="Товар не найден")
+    inv = db.scalar(
+        select(ShopItemInventory)
+        .where(ShopItemInventory.shop_item_id == payload.shop_item_id)
+        .with_for_update()
+    )
+    if inv is None:
+        inv = ShopItemInventory(shop_item_id=payload.shop_item_id)
+        db.add(inv)
+        db.flush()
+        before = None
+    else:
+        before = {
+            "quantity_received": inv.quantity_received,
+            "min_stock_alert": inv.min_stock_alert,
+        }
+    if payload.add_received:
+        inv.quantity_received += payload.add_received
+    if payload.min_stock_alert is not None:
+        inv.min_stock_alert = payload.min_stock_alert
+    inv.updated_at = now_utc()
+    _audit(db, current_user, "shop_inventory_upsert", "shop_item_inventory", inv.id,
+           before, {"quantity_received": inv.quantity_received,
+                    "min_stock_alert": inv.min_stock_alert})
+    db.commit()
+    db.refresh(inv)
+    return {
+        "id": inv.id,
+        "shop_item_id": inv.shop_item_id,
+        "quantity_received": inv.quantity_received,
+        "available": inv.available,
+        "min_stock_alert": inv.min_stock_alert,
+    }
+
+
+@admin_router.post("/orders/expire")
+def expire_orders(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Ручной запуск автоистечения заказов (ТЗ §12.1 expired). Та же логика
+    выполняется ежедневной cron-задачей; эндпоинт — для админки и отладки."""
+    from app.modules.wallet.service import expire_stale_purchases
+
+    result = expire_stale_purchases(db)
+    _audit(db, current_user, "orders_expire_run", "shop_purchase", 0, None, result)
+    db.commit()
+    return result

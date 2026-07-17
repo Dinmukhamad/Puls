@@ -53,6 +53,28 @@ def run_weekly_accrual_job() -> None:
         db.close()
 
 
+def run_purchase_expire_job() -> None:
+    """Ежедневное автоистечение заказов магазина (ТЗ «Экономика коинов»
+    §12.1 expired): необработанные заявки и не забранные в срок призы
+    закрываются с возвратом коинов. Своя сессия, ошибки не валят планировщик."""
+    from app.modules.wallet.service import expire_stale_purchases
+
+    db = SessionLocal()
+    try:
+        result = expire_stale_purchases(db)
+        db.commit()
+        if result["expired_pending"] or result["expired_ready"]:
+            logger.info(
+                "[purchase-expire] закрыто заявок: необработанных=%s, не забранных=%s",
+                result["expired_pending"], result["expired_ready"],
+            )
+    except Exception:
+        db.rollback()
+        logger.exception("[purchase-expire] автозапуск завершился ошибкой")
+    finally:
+        db.close()
+
+
 def start_scheduler() -> BackgroundScheduler | None:
     """Идемпотентен: повторный вызов не создаёт второй планировщик."""
     global _scheduler
@@ -65,6 +87,13 @@ def start_scheduler() -> BackgroundScheduler | None:
         id="weekly_accrual",
         replace_existing=True,
         misfire_grace_time=3600,  # если контейнер был недоступен в 09:00 — догнать в течение часа
+    )
+    _scheduler.add_job(
+        run_purchase_expire_job,
+        CronTrigger(hour=3, minute=30, timezone=LOCAL_TZ),
+        id="purchase_expire",
+        replace_existing=True,
+        misfire_grace_time=3600 * 6,
     )
     _scheduler.start()
     logger.info("[startup] Планировщик еженедельного расчёта запущен (пн 09:00 Asia/Almaty)")

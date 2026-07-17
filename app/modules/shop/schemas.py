@@ -66,6 +66,9 @@ class ShopItemRead(BaseModel):
 class PurchaseCreate(BaseModel):
     shop_item_id: int
     discount_coupon_id: int | None = None
+    # Idempotency-Key (ТЗ «Экономика коинов» §14): клиент генерирует ключ на
+    # открытие формы; повторная отправка не создаёт второй заказ.
+    idempotency_key: str | None = Field(default=None, max_length=200)
 
 
 class RejectPurchaseRequest(BaseModel):

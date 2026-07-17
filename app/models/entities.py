@@ -524,10 +524,27 @@ class ShopPurchase(Base):
     reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Жизненный цикл заказа (ТЗ «Экономика коинов» §12.1 prize_orders):
+    # new(=created+reserved) → approved(=ready) → completed(=issued);
+    # rejected(=cancelled) / refunded / expired.
+    # issued_by — кто фактически выдал приз (может отличаться от ревьюера);
+    # completed_at играет роль issued_at.
+    issued_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    # Дедлайн получения приза после готовности (approved); просроченные
+    # заказы закрывает expire_stale_purchases со статусом expired и возвратом.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    # Idempotency-Key запроса POST /shop/purchases (ТЗ §14): повторная отправка
+    # формы не создаёт второй заказ и второй резерв.
+    idempotency_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
+
+    __table_args__ = (
+        Index("uq_shop_purchases_idempotency_key", "idempotency_key", unique=True),
+    )
 
     operator: Mapped[Operator] = relationship(back_populates="purchases")
     shop_item: Mapped[ShopItem] = relationship(back_populates="purchases")
-    reviewed_by: Mapped[User | None] = relationship("User")
+    reviewed_by: Mapped[User | None] = relationship("User", foreign_keys=[reviewed_by_user_id])
+    issued_by: Mapped[User | None] = relationship("User", foreign_keys=[issued_by_user_id])
 
 
 class AuditLog(Base):
@@ -1435,3 +1452,43 @@ class ShopItemPrice(Base):
 
     shop_item: Mapped[ShopItem] = relationship("ShopItem")
     season: Mapped[EconomySeason] = relationship(back_populates="item_prices")
+
+
+class ShopItemInventory(Base):
+    """Складской учёт приза счётчиками (ТЗ §12.1 prize_inventory):
+    приход / резерв / выдача / возврат.
+
+    available = quantity_received + quantity_returned
+                - quantity_reserved - quantity_issued
+
+    Запись опциональна: товары без неё продолжают жить на stock_limit
+    (лимит раздачи, посчитанный по заявкам). Если запись есть — она
+    становится источником истины по остатку. min_stock_alert — порог
+    уведомления администратора о низком остатке (ТЗ §10.3)."""
+    __tablename__ = "shop_item_inventory"
+    __table_args__ = (
+        UniqueConstraint("shop_item_id", name="uq_shop_item_inventory_item"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shop_item_id: Mapped[int] = mapped_column(
+        ForeignKey("shop_items.id", ondelete="CASCADE"), index=True
+    )
+    quantity_received: Mapped[int] = mapped_column(Integer, default=0)
+    quantity_reserved: Mapped[int] = mapped_column(Integer, default=0)
+    quantity_issued: Mapped[int] = mapped_column(Integer, default=0)
+    quantity_returned: Mapped[int] = mapped_column(Integer, default=0)
+    min_stock_alert: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    shop_item: Mapped[ShopItem] = relationship("ShopItem")
+
+    @property
+    def available(self) -> int:
+        return (
+            self.quantity_received
+            + self.quantity_returned
+            - self.quantity_reserved
+            - self.quantity_issued
+        )
