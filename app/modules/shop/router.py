@@ -32,12 +32,22 @@ router = APIRouter(prefix="/shop", tags=["shop"])
 
 @router.get("/items", response_model=list[ShopItemRead])
 def list_items(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> list[dict]:
+    from app.modules.economy.service import effective_item_pricing, get_active_season
+
     items = list(db.scalars(select(ShopItem).where(ShopItem.is_active.is_(True)).order_by(ShopItem.price.asc())))
     operator_id = current_user.operator_id if current_user.role == "operator" else None
+    active_season = get_active_season(db)
     result = []
     for item in items:
         row = ShopItemRead.model_validate(item).model_dump()
         row.update(shop_item_availability(db, item, operator_id))
+        pricing = effective_item_pricing(db, item, active_season, _season_resolved=True)
+        row.update(
+            effective_price=pricing["price"],
+            regular_price=pricing["regular_price"],
+            is_seasonal_price=pricing["is_seasonal_price"],
+            season_ends_at=pricing["season_ends_at"],
+        )
         result.append(row)
     return result
 

@@ -52,6 +52,14 @@ class ShopItemRead(BaseModel):
     operator_limit_reached: bool = False        # достигнут ли personal лимит
     is_available_now: bool = True               # прошло starts_at, не наступил ends_at, остаток > 0
 
+    # Сезонная цена (ТЗ «Экономика коинов» §7, §9): price выше — БАЗОВАЯ цена;
+    # effective_price — цена продажи сейчас. При is_seasonal_price=True карточка
+    # обязана показать метку «Стартовая цена», regular_price и season_ends_at.
+    effective_price: int | None = None
+    regular_price: int | None = None
+    is_seasonal_price: bool = False
+    season_ends_at: datetime | None = None
+
     model_config = {"from_attributes": True}
 
 

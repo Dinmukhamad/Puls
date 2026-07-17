@@ -7,6 +7,8 @@ from app.modules.analytics.router import router as analytics_router
 from app.modules.auth.router import router as auth_router
 from app.modules.cabinet.router import router as cabinet_router
 from app.modules.dashboard.router import router as dashboard_router
+from app.modules.economy.router import admin_router as economy_admin_router
+from app.modules.economy.router import router as economy_router
 from app.modules.exports.router import router as exports_router
 from app.modules.groups.router import router as groups_router
 from app.modules.missions.router import admin_router as missions_admin_router
@@ -48,6 +50,8 @@ api_router.include_router(weekly_results_router)
 api_router.include_router(wallet_router)
 api_router.include_router(rating_router)
 api_router.include_router(shop_router)
+api_router.include_router(economy_router)
+api_router.include_router(economy_admin_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(exports_router)
 api_router.include_router(notifications_router)

@@ -35,6 +35,9 @@ class CoinManualOperation(BaseModel):
     amount: int = Field(gt=0)
     reason: str = Field(min_length=1)
     comment: str = ""
+    # ТЗ «Экономика коинов» §15: начисление свыше лимита требует
+    # дополнительного подтверждения — UI показывает отдельный шаг.
+    confirm_over_limit: bool = False
 
 
 class RejectRequest(BaseModel):
@@ -167,6 +170,11 @@ def manual_operation(
 
     amount = payload.amount if payload.operation == "credit" else -payload.amount
     tx_type = "manual_accrual" if amount > 0 else "manual_deduction"
+    # ТЗ «Экономика коинов» §6/§15: запрет self-award; свыше лимита — подтверждение.
+    from app.modules.economy.service import assert_manual_accrual_allowed
+    assert_manual_accrual_allowed(
+        current_user, operator, amount, confirmed_over_limit=payload.confirm_over_limit
+    )
     comment = payload.reason.strip()
     if payload.comment.strip():
         comment = f"{comment}: {payload.comment.strip()}"

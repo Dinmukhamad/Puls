@@ -57,9 +57,20 @@ def add_transaction(
     source_id: int | None = None,
     metadata: dict | None = None,
     related_spin_id: int | None = None,
+    idempotency_key: str | None = None,
 ) -> CoinTransaction:
     if not comment.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Комментарий обязателен")
+
+    # Идемпотентность (ТЗ «Экономика коинов» §14): повторное событие с тем же
+    # ключом возвращает ранее созданную транзакцию без повторного изменения
+    # баланса. Уникальный индекс в БД — вторая линия защиты от гонки.
+    if idempotency_key:
+        existing = db.scalar(
+            select(CoinTransaction).where(CoinTransaction.idempotency_key == idempotency_key)
+        )
+        if existing is not None:
+            return existing
 
     operator.current_balance += amount
     if amount > 0:
@@ -81,6 +92,7 @@ def add_transaction(
         source_type=source_type,
         source_id=source_id,
         metadata_json=metadata,
+        idempotency_key=idempotency_key,
     )
     db.add(transaction)
     return transaction
@@ -235,7 +247,14 @@ def create_purchase(
     coupon = None
     discount_percent = 0
     discount_amount = 0
-    final_price = item.price
+    # Эффективная цена сезона (ТЗ «Экономика коинов» §7, §9.1): backend в той же
+    # транзакции повторно определяет сезон и цену — frontend не источник истины.
+    from app.modules.economy.service import effective_item_pricing, get_active_season
+
+    active_season = get_active_season(db, now)
+    pricing = effective_item_pricing(db, item, active_season, _season_resolved=True)
+    effective_price = pricing["price"]
+    final_price = effective_price
     if discount_coupon_id is not None:
         sync_shop_discount_coupons(db, operator.id)
         coupon = db.scalar(
@@ -248,8 +267,8 @@ def create_purchase(
         if coupon.status != "available":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Эта скидка уже используется")
         discount_percent = max(1, min(90, int(coupon.percent or 10)))
-        discount_amount = (item.price * discount_percent) // 100
-        final_price = max(0, item.price - discount_amount)
+        discount_amount = (effective_price * discount_percent) // 100
+        final_price = max(0, effective_price - discount_amount)
 
     if operator.current_balance < final_price:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недостаточно коинов")
@@ -258,10 +277,11 @@ def create_purchase(
         operator_id=operator.id,
         shop_item_id=item.id,
         price=final_price,
-        original_price=item.price,
+        original_price=effective_price,
         discount_percent=discount_percent,
         discount_amount=discount_amount,
         discount_coupon_id=coupon.id if coupon else None,
+        season_id=active_season.id if active_season else None,
         status="new",
     )
     db.add(purchase)

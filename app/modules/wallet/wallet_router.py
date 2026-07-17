@@ -68,6 +68,12 @@ def create_manual_transaction(
             detail="Нельзя начислять коины уволенному оператору",
         )
     transaction_type = "manual_accrual" if payload.amount >= 0 else "manual_deduction"
+    # ТЗ «Экономика коинов» §6/§15: запрет self-award; свыше лимита — подтверждение.
+    from app.modules.economy.service import assert_manual_accrual_allowed
+    assert_manual_accrual_allowed(
+        current_user, operator, payload.amount,
+        confirmed_over_limit=payload.confirm_over_limit,
+    )
     # Build full comment: "Reason: comment" or just "Reason"
     reason = payload.reason.strip()
     comment = payload.comment.strip()

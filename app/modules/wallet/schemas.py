@@ -10,6 +10,8 @@ class ManualTransactionCreate(BaseModel):
     amount: int
     comment: str = ""
     reason: str = ""  # required, validated in router
+    # ТЗ «Экономика коинов» §15: начисление свыше лимита требует подтверждения.
+    confirm_over_limit: bool = False
 
     def validate_business_rules(self) -> None:
         """Backend validation per TZ."""

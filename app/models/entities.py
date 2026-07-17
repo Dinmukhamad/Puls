@@ -374,6 +374,14 @@ class CoinTransaction(Base):
             postgresql_where=text("source_type = 'mission_reward'"),
             sqlite_where=text("source_type = 'mission_reward'"),
         ),
+        # ТЗ «Экономика коинов» §12.1: UNIQUE idempotency_key. NULL допускается
+        # (legacy-транзакции и ручные операции без ключа) — и в PostgreSQL, и в
+        # SQLite несколько NULL в уникальном индексе не конфликтуют.
+        Index(
+            "uq_coin_transactions_idempotency_key",
+            "idempotency_key",
+            unique=True,
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -386,6 +394,10 @@ class CoinTransaction(Base):
     related_spin_id: Mapped[int | None] = mapped_column(ForeignKey("wheel_spins.id"), nullable=True)
     source_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # ТЗ «Экономика коинов» §14: стабильный ключ идемпотентности, например
+    # "mission:12:operator:7:first_complete". Повторное событие с тем же ключом
+    # возвращает уже созданную транзакцию и не меняет баланс.
+    idempotency_key: Mapped[str | None] = mapped_column(String(200), nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
 
@@ -499,6 +511,12 @@ class ShopPurchase(Base):
     discount_amount: Mapped[int] = mapped_column(Integer, default=0)
     discount_coupon_id: Mapped[int | None] = mapped_column(
         ForeignKey("shop_discount_coupons.id"), nullable=True, index=True
+    )
+    # ТЗ «Экономика коинов» §12: снапшот сезона на момент покупки. Цена в поле
+    # price уже является снапшотом; season_id фиксирует, по какой сезонной
+    # модели она была рассчитана. NULL = покупка вне сезонной модели (legacy).
+    season_id: Mapped[int | None] = mapped_column(
+        ForeignKey("economy_seasons.id"), nullable=True, index=True
     )
     status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     reject_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -1307,3 +1325,113 @@ class RaffleWinner(Base):
 
     raffle: Mapped[Raffle] = relationship(back_populates="winners")
     operator: Mapped[Operator] = relationship("Operator")
+
+
+# ============================================================================
+# Экономика коинов: сезоны, правила наград, сезонные цены
+# (ТЗ «Экономика коинов, магазин призов и стартовый сезон Puls», §7, §11, §12)
+# ============================================================================
+
+
+class EconomySeason(Base):
+    """Сезон экономики (ТЗ §7): стартовый сезон с повышенными наградами и
+    стартовыми ценами, переходный период с уведомлением и обычный сезон.
+
+    Статусы: draft → announced → active → completed. Активным считается
+    сезон в статусе active, чьё окно дат покрывает текущий момент
+    (naive UTC, как всё время в БД)."""
+    __tablename__ = "economy_seasons"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_economy_seasons_code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(80), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    # Не позднее чем за 7 дней операторы получают уведомление о переходе (ТЗ §7.3)
+    notification_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    config_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Версионирование (ТЗ §11): изменения влияют только на новые события/покупки
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    created_by: Mapped[User | None] = relationship("User")
+    reward_rules: Mapped[list[RewardRule]] = relationship(back_populates="season")
+    item_prices: Mapped[list[ShopItemPrice]] = relationship(back_populates="season")
+
+
+class RewardRule(Base):
+    """Правило начисления коинов (ТЗ §4, §11): источник + условие + сумма
+    управляются администратором, а не числом, зашитым во frontend.
+
+    source_type — класс события: mission, test, weekly, onboarding, contest…
+    source_code — конкретное событие внутри класса: например
+        mission:first_complete, test:score_80_89, weekly:quality_96_98,
+        onboarding:profile_filled. Пара (source_type, source_code) — контракт
+        между источником события и движком наград.
+    season_id — NULL: правило действует во всех сезонах; иначе — только в
+        указанном. Сезонное правило имеет приоритет над глобальным.
+    threshold — числовой порог (проходной балл, минимум оценённых звонков…);
+        интерпретация зависит от источника.
+    period / period_limit — ограничение частоты: сколько выплат допустимо
+        на оператора за период ('all_time', 'week', 'month'). 1 + all_time =
+        классическая одноразовая награда."""
+    __tablename__ = "reward_rules"
+    __table_args__ = (
+        Index("ix_reward_rules_lookup", "source_type", "source_code", "active"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    season_id: Mapped[int | None] = mapped_column(
+        ForeignKey("economy_seasons.id"), nullable=True, index=True
+    )
+    source_type: Mapped[str] = mapped_column(String(50))
+    source_code: Mapped[str] = mapped_column(String(120))
+    name: Mapped[str] = mapped_column(String(200), default="")
+    amount: Mapped[int] = mapped_column(Integer)
+    threshold: Mapped[float | None] = mapped_column(Float, nullable=True)
+    period: Mapped[str] = mapped_column(String(20), default="all_time")  # all_time | week | month
+    period_limit: Mapped[int] = mapped_column(Integer, default=1)  # 0 = без лимита
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    valid_from: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+
+    season: Mapped[EconomySeason | None] = relationship(back_populates="reward_rules")
+    updated_by: Mapped[User | None] = relationship("User")
+
+
+class ShopItemPrice(Base):
+    """Сезонная цена товара магазина (ТЗ §7, §8, §12 prize_prices).
+
+    Базовая (обычная) цена остаётся в ShopItem.price — это «будущая цена»,
+    которую карточка показывает рядом со стартовой (ТЗ: «Нельзя повышать
+    цены скрытно»). Запись здесь — переопределение цены для конкретного
+    сезона. Эффективная цена = сезонная (если есть активная запись для
+    активного сезона), иначе базовая."""
+    __tablename__ = "shop_item_prices"
+    __table_args__ = (
+        UniqueConstraint("shop_item_id", "season_id", name="uq_shop_item_prices_item_season"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    shop_item_id: Mapped[int] = mapped_column(
+        ForeignKey("shop_items.id", ondelete="CASCADE"), index=True
+    )
+    season_id: Mapped[int] = mapped_column(ForeignKey("economy_seasons.id"), index=True)
+    coin_price: Mapped[int] = mapped_column(Integer)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
+
+    shop_item: Mapped[ShopItem] = relationship("ShopItem")
+    season: Mapped[EconomySeason] = relationship(back_populates="item_prices")
