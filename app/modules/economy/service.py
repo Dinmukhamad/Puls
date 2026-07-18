@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from statistics import median
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -26,6 +27,7 @@ from app.models.entities import (
     RewardRule,
     ShopItem,
     ShopItemPrice,
+    ShopPurchase,
     User,
 )
 
@@ -185,6 +187,7 @@ def accrue_reward(
     score: float | None = None,
     comment: str | None = None,
     created_by: User | None = None,
+    idempotency_key_override: str | None = None,
 ) -> dict:
     """Оценка подтверждённого события и начисление по правилу (ТЗ §14).
 
@@ -211,7 +214,7 @@ def accrue_reward(
     key_parts = [source_type, source_code, "operator", str(operator.id)]
     if event_key:
         key_parts.append(str(event_key))
-    idempotency_key = ":".join(key_parts)
+    idempotency_key = idempotency_key_override or ":".join(key_parts)
 
     # Дубликат проверяется РАНЬШЕ лимита периода: повторное событие обязано
     # вернуть ранее созданный результат, а не абстрактный отказ (ТЗ §14 п.6).
@@ -242,6 +245,7 @@ def accrue_reward(
         created_by=created_by,
         source_type=source_type,
         source_id=source_id,
+        reason_code=source_code,
         metadata={
             "source_code": source_code,
             "rule_id": rule.id,
@@ -310,6 +314,7 @@ def economy_me(db: Session, operator: Operator) -> dict:
         select(func.coalesce(func.sum(CoinTransaction.amount), 0)).where(
             CoinTransaction.operator_id == operator.id,
             CoinTransaction.amount > 0,
+            CoinTransaction.type.not_in(("refund", "opening_balance")),
             CoinTransaction.created_at >= week_start,
         )
     ) or 0
@@ -325,7 +330,11 @@ def economy_me(db: Session, operator: Operator) -> dict:
         ),
         key=lambda pair: pair[0]["price"],
     )
+    from app.modules.wallet.service import shop_item_availability
+
     for pricing, item in priced:
+        if not shop_item_availability(db, item, operator.id)["is_available_now"]:
+            continue
         if pricing["price"] > operator.current_balance:
             nearest_goal = {
                 "shop_item_id": item.id,
@@ -352,4 +361,117 @@ def economy_me(db: Session, operator: Operator) -> dict:
             else None
         ),
         "nearest_goal": nearest_goal,
+    }
+
+
+def economy_analytics(db: Session, at: datetime | None = None) -> dict:
+    """Управленческие метрики экономики из ТЗ §16.
+
+    Opening balance и возвраты не считаются заработком. В медиану заработка
+    входят и операторы с нулём — иначе отчёт завышал бы скорость накопления.
+    """
+    moment = at or now_utc()
+    active_operators = list(
+        db.scalars(
+            select(Operator).where(
+                Operator.employment_status == "active",
+                Operator.participation_status == "participating",
+                Operator.is_active.is_(True),
+            )
+        )
+    )
+    active_ids = {operator.id for operator in active_operators}
+    transactions = list(db.scalars(select(CoinTransaction)))
+    purchases = list(db.scalars(select(ShopPurchase)))
+
+    def is_earned(tx: CoinTransaction) -> bool:
+        return bool(
+            tx.amount > 0
+            and tx.type not in {"refund", "opening_balance"}
+            and tx.reason_code not in {"opening_balance", "purchase_refund", "purchase_expire"}
+        )
+
+    medians: dict[str, float] = {}
+    for days in (7, 14, 30):
+        since = moment - timedelta(days=days)
+        totals = [
+            sum(
+                tx.amount
+                for tx in transactions
+                if tx.operator_id == operator.id
+                and tx.created_at >= since
+                and is_earned(tx)
+            )
+            for operator in active_operators
+        ]
+        medians[str(days)] = float(median(totals)) if totals else 0.0
+
+    first_purchase_days: list[float] = []
+    bought_within_14_days = 0
+    for operator in active_operators:
+        operator_orders = sorted(
+            (
+                order
+                for order in purchases
+                if order.operator_id == operator.id
+                and order.status in {"approved", "completed"}
+            ),
+            key=lambda order: order.created_at,
+        )
+        if not operator_orders:
+            continue
+        days = max(
+            0.0,
+            (operator_orders[0].created_at - operator.created_at).total_seconds() / 86400,
+        )
+        first_purchase_days.append(days)
+        if days <= 14:
+            bought_within_14_days += 1
+
+    active_orders = [
+        order
+        for order in purchases
+        if order.operator_id in active_ids and order.status not in {"rejected", "refunded", "expired"}
+    ]
+    spent_orders = [order for order in active_orders if order.status in {"approved", "completed"}]
+    earned_transactions = [tx for tx in transactions if is_earned(tx)]
+    manual_transactions = [
+        tx
+        for tx in earned_transactions
+        if tx.type.startswith("manual") or (tx.reason_code or "").startswith("manual")
+    ]
+
+    out_of_stock = 0
+    from app.modules.wallet.service import shop_item_availability
+
+    for item in db.scalars(select(ShopItem).where(ShopItem.is_active.is_(True))):
+        availability = shop_item_availability(db, item, 0)
+        if availability["stock_remaining"] == 0:
+            out_of_stock += 1
+
+    balances = [operator.current_balance for operator in active_operators]
+    return {
+        "generated_at": moment,
+        "active_operators": len(active_operators),
+        "median_earnings": medians,
+        "median_days_to_first_purchase": (
+            round(float(median(first_purchase_days)), 2) if first_purchase_days else None
+        ),
+        "purchased_within_14_days_percent": (
+            round(bought_within_14_days / len(active_operators) * 100, 2)
+            if active_operators
+            else 0.0
+        ),
+        "accrued_coins": sum(tx.amount for tx in earned_transactions),
+        "spent_coins": sum(order.price for order in spent_orders),
+        "average_balance": round(sum(balances) / len(balances), 2) if balances else 0.0,
+        "median_balance": float(median(balances)) if balances else 0.0,
+        "orders_count": len(active_orders),
+        "issued_orders_count": sum(order.status == "completed" for order in active_orders),
+        "out_of_stock_items": out_of_stock,
+        "manual_accrual_share_percent": (
+            round(len(manual_transactions) / len(earned_transactions) * 100, 2)
+            if earned_transactions
+            else 0.0
+        ),
     }

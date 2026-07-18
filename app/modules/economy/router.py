@@ -40,6 +40,7 @@ from app.modules.economy.schemas import (
     SeasonUpdate,
 )
 from app.modules.economy.service import (
+    economy_analytics,
     economy_me,
     effective_item_pricing,
     get_active_season,
@@ -140,6 +141,7 @@ def my_transactions(
                 "type": tx.type,
                 "comment": tx.comment,
                 "source_type": tx.source_type,
+                "reason_code": tx.reason_code or tx.source_type or tx.type,
                 "created_at": tx.created_at,
             }
             for tx in rows
@@ -350,6 +352,11 @@ def upsert_item_price(
 def active_season(db: Session = Depends(get_db)) -> dict:
     season = get_active_season(db)
     return {"season": SeasonRead.model_validate(season).model_dump() if season else None}
+
+
+@admin_router.get("/analytics")
+def analytics(db: Session = Depends(get_db)) -> dict:
+    return economy_analytics(db)
 
 
 # ---------------------------------------------------------------------------
