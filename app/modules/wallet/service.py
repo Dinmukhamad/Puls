@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.entities import (
+    AuditLog,
     CoinTransaction,
     Operator,
     ShopDiscountCoupon,
@@ -25,6 +26,29 @@ from app.models.entities import (
 # rejected(=cancelled) / refunded / expired.
 PENDING_EXPIRE_DAYS = 7    # заявка не обработана ревьюером → автоотмена с возвратом
 READY_PICKUP_DAYS = 14     # приз готов, но не забран → автоистечение с возвратом
+
+
+def _audit_purchase_status(
+    db: Session,
+    purchase: ShopPurchase,
+    before: str,
+    actor: User | None,
+    *,
+    reason: str | None = None,
+) -> None:
+    db.add(
+        AuditLog(
+            action="shop_order_status_change",
+            entity_type="shop_purchase",
+            entity_id=purchase.id,
+            operator_id=purchase.operator_id,
+            details=json.dumps(
+                {"before": before, "after": purchase.status, "reason": reason},
+                ensure_ascii=False,
+            ),
+            performed_by_user_id=actor.id if actor else None,
+        )
+    )
 
 
 def _inventory_for_update(db: Session, item_id: int) -> ShopItemInventory | None:
@@ -73,6 +97,7 @@ def add_transaction(
     purchase: ShopPurchase | None = None,
     source_type: str | None = None,
     source_id: int | None = None,
+    reason_code: str | None = None,
     metadata: dict | None = None,
     related_spin_id: int | None = None,
     idempotency_key: str | None = None,
@@ -109,6 +134,7 @@ def add_transaction(
         related_spin_id=related_spin_id,
         source_type=source_type,
         source_id=source_id,
+        reason_code=reason_code or source_type or transaction_type,
         metadata_json=metadata,
         idempotency_key=idempotency_key,
     )
@@ -313,7 +339,7 @@ def create_purchase(
         final_price = max(0, effective_price - discount_amount)
 
     if operator.current_balance < final_price:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Недостаточно коинов")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Недостаточно коинов")
 
     purchase = ShopPurchase(
         operator_id=operator.id,
@@ -358,6 +384,7 @@ def create_purchase(
                 if coupon else f"Резерв заявки: {item.title}"
             ),
             related_purchase_id=purchase.id,
+            reason_code="purchase_reservation",
         )
     )
     return purchase
@@ -373,6 +400,7 @@ def approve_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sho
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Заявка уже обработана")
     if operator is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
+    before_status = purchase.status
     operator.reserved_balance = max(0, operator.reserved_balance - purchase.price)
     operator.total_spent += purchase.price
     purchase.status = "approved"
@@ -399,8 +427,10 @@ def approve_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sho
             comment="Заявка одобрена, резерв списан окончательно",
             created_by_user_id=reviewer.id,
             related_purchase_id=purchase.id,
+            reason_code="purchase_approved",
         )
     )
+    _audit_purchase_status(db, purchase, before_status, reviewer)
     from app.modules.notifications.service import notify_purchase_status
     item = db.get(ShopItem, purchase.shop_item_id)
     notify_purchase_status(db, operator.id, item.title if item else "бонус", "approved")
@@ -415,6 +445,7 @@ def reject_purchase(db: Session, purchase: ShopPurchase, reviewer: User, reason:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Заявка уже обработана")
     if operator is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
+    before_status = purchase.status
     operator.reserved_balance = max(0, operator.reserved_balance - purchase.price)
     operator.current_balance += purchase.price
     purchase.status = "rejected"
@@ -444,8 +475,10 @@ def reject_purchase(db: Session, purchase: ShopPurchase, reviewer: User, reason:
             comment=f"Возврат по отклоненной заявке: {reason}",
             created_by_user_id=reviewer.id,
             related_purchase_id=purchase.id,
+            reason_code="purchase_refund",
         )
     )
+    _audit_purchase_status(db, purchase, before_status, reviewer, reason=reason)
     from app.modules.notifications.service import notify_purchase_status
     item = db.get(ShopItem, purchase.shop_item_id)
     notify_purchase_status(db, operator.id, item.title if item else "бонус", "rejected", reason)
@@ -458,6 +491,7 @@ def complete_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sh
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Выполнить можно только одобренную заявку",
         )
+    before_status = purchase.status
     purchase.status = "completed"
     purchase.reviewed_by_user_id = purchase.reviewed_by_user_id or reviewer.id
     # completed = issued (ТЗ §12.1): фиксируем, кто фактически выдал приз.
@@ -477,8 +511,10 @@ def complete_purchase(db: Session, purchase: ShopPurchase, reviewer: User) -> Sh
             comment="Заявка отмечена выполненной",
             created_by_user_id=reviewer.id,
             related_purchase_id=purchase.id,
+            reason_code="prize_issued",
         )
     )
+    _audit_purchase_status(db, purchase, before_status, reviewer)
     from app.modules.notifications.service import notify_purchase_status
     item = db.get(ShopItem, purchase.shop_item_id)
     notify_purchase_status(db, purchase.operator_id, item.title if item else "бонус", "completed")
@@ -521,9 +557,11 @@ def refund_purchase(db: Session, purchase: ShopPurchase, admin: User, reason: st
         db.refresh(purchase)
         return purchase
 
+    before_status = purchase.status
     operator.total_spent = max(0, operator.total_spent - purchase.price)
     purchase.status = "refunded"
     purchase.reject_reason = reason
+    _audit_purchase_status(db, purchase, before_status, admin, reason=reason)
 
     inventory = _inventory_for_update(db, purchase.shop_item_id)
     if inventory is not None:
@@ -582,6 +620,7 @@ def expire_stale_purchases(
         operator = db.get(Operator, purchase.operator_id, with_for_update=True)
         if operator is None:
             continue
+        before_status = purchase.status
         operator.reserved_balance = max(0, operator.reserved_balance - purchase.price)
         add_transaction(
             db,
@@ -596,6 +635,13 @@ def expire_stale_purchases(
         )
         purchase.status = "expired"
         purchase.reject_reason = "Срок обработки заявки истёк"
+        _audit_purchase_status(
+            db,
+            purchase,
+            before_status,
+            None,
+            reason=purchase.reject_reason,
+        )
         inventory = _inventory_for_update(db, purchase.shop_item_id)
         if inventory is not None:
             inventory.quantity_reserved = max(0, inventory.quantity_reserved - 1)
@@ -611,6 +657,7 @@ def expire_stale_purchases(
         operator = db.get(Operator, purchase.operator_id, with_for_update=True)
         if operator is None:
             continue
+        before_status = purchase.status
         add_transaction(
             db,
             operator,
@@ -625,6 +672,13 @@ def expire_stale_purchases(
         operator.total_spent = max(0, operator.total_spent - purchase.price)
         purchase.status = "expired"
         purchase.reject_reason = "Приз не был получен в срок"
+        _audit_purchase_status(
+            db,
+            purchase,
+            before_status,
+            None,
+            reason=purchase.reject_reason,
+        )
         inventory = _inventory_for_update(db, purchase.shop_item_id)
         if inventory is not None:
             inventory.quantity_reserved = max(0, inventory.quantity_reserved - 1)
