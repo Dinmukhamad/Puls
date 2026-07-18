@@ -432,6 +432,7 @@ def _grant_prize(db, operator, campaign, prize: WheelPrize, spin_row: WheelSpin)
             db, operator, prize.amount, "wheel_of_wow",
             comment=f"Приз Wheel of WOW: {prize.title}",
             related_spin_id=spin_row.id,
+            reason_code="wheel_reward",
         )
         return f"Вы выиграли {prize.title}"
 
