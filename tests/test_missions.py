@@ -165,7 +165,7 @@ def test_completion_reward_is_idempotent_and_replay_has_no_reward(db_session, ma
 
     db_session.expire_all()
     refreshed_operator = db_session.get(m.Operator, operator.id)
-    assert refreshed_operator.current_balance == starting_balance + 50
+    assert refreshed_operator.current_balance == starting_balance + 100
     rewards = db_session.query(m.CoinTransaction).filter_by(
         operator_id=operator.id,
         source_type="mission_reward",
@@ -179,7 +179,7 @@ def test_completion_reward_is_idempotent_and_replay_has_no_reward(db_session, ma
     assert replay_result["reward_awarded"] is False
     assert "награда уже получена" in replay_result["reward_message"]
     db_session.expire_all()
-    assert db_session.get(m.Operator, operator.id).current_balance == starting_balance + 50
+    assert db_session.get(m.Operator, operator.id).current_balance == starting_balance + 100
     assert db_session.query(m.CoinTransaction).filter_by(
         operator_id=operator.id,
         source_type="mission_reward",

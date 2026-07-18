@@ -166,7 +166,7 @@ def test_document_signing_two_sessions_unsaved_restore_score_and_reward(
     assert completed["reward_awarded"] is True
 
     db_session.expire_all()
-    assert db_session.get(m.Operator, operator.id).current_balance == before + 120
+    assert db_session.get(m.Operator, operator.id).current_balance == before + 200
     rewards = db_session.query(m.CoinTransaction).filter_by(
         source_type="mission_reward", source_id=attempt["id"]
     ).all()

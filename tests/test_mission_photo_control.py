@@ -124,7 +124,7 @@ def test_photo_completion_score_reward_and_safe_state(db_session, make_client):
     assert set(completed["state"]["license_slots"]) == {"front", "back"}
 
     db_session.expire_all()
-    assert db_session.get(m.Operator, operator.id).current_balance == before + 75
+    assert db_session.get(m.Operator, operator.id).current_balance == before + 150
     mission = db_session.query(m.Mission).filter_by(code="photo_control_basics").one()
     rewards = (
         db_session.query(m.CoinTransaction)

@@ -82,7 +82,7 @@ def test_sapar_happy_path_score_reward_and_idempotency(db_session, make_client):
     repeated = _action(operator_client, completed["id"], "complete")
     assert repeated["accepted"] is True
     db_session.expire_all()
-    assert db_session.get(m.Operator, operator.id).current_balance == before + 100
+    assert db_session.get(m.Operator, operator.id).current_balance == before + 150
     rewards = db_session.query(m.CoinTransaction).filter_by(
         source_type="mission_reward", source_id=completed["id"]
     ).all()

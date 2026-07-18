@@ -66,6 +66,9 @@ def test_repair_migration_restores_stamped_economy_schema(tmp_path: Path):
         transaction_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(coin_transactions)")
         }
+        item_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(shop_items)")
+        }
         purchase_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(shop_purchases)")
         }
@@ -83,6 +86,8 @@ def test_repair_migration_restores_stamped_economy_schema(tmp_path: Path):
         "shop_item_inventory",
     } <= tables
     assert "idempotency_key" in transaction_columns
+    assert "reason_code" in transaction_columns
+    assert {"code", "prize_type", "image_url", "issue_policy", "issue_days"} <= item_columns
     assert {
         "original_price",
         "discount_percent",
@@ -93,5 +98,65 @@ def test_repair_migration_restores_stamped_economy_schema(tmp_path: Path):
         "expires_at",
         "idempotency_key",
     } <= purchase_columns
-    assert version == "0037_repair_economy_schema"
+    assert version == "0038_coin_economy_blueprint"
     assert preserved_purchase == (50, "pending")
+
+
+def test_coin_economy_migration_preserves_balance_with_opening_ledger(tmp_path: Path):
+    database_path = tmp_path / "opening-balance.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE operators (
+                id INTEGER PRIMARY KEY,
+                current_balance INTEGER NOT NULL
+            );
+            CREATE TABLE shop_items (
+                id INTEGER PRIMARY KEY,
+                category VARCHAR(32)
+            );
+            CREATE TABLE coin_transactions (
+                id INTEGER PRIMARY KEY,
+                operator_id INTEGER NOT NULL,
+                amount INTEGER NOT NULL,
+                type VARCHAR(32) NOT NULL,
+                comment TEXT,
+                source_type VARCHAR(50),
+                source_id INTEGER,
+                idempotency_key VARCHAR(200),
+                metadata JSON,
+                created_at TIMESTAMP NOT NULL
+            );
+            CREATE TABLE alembic_version (
+                version_num VARCHAR(64) NOT NULL PRIMARY KEY
+            );
+            INSERT INTO alembic_version (version_num)
+            VALUES ('0037_repair_economy_schema');
+            INSERT INTO operators (id, current_balance) VALUES (7, 250);
+            INSERT INTO coin_transactions
+                (operator_id, amount, type, comment, source_type, source_id,
+                 idempotency_key, metadata, created_at)
+            VALUES
+                (7, 100, 'reward', 'Старая награда', 'mission', 1,
+                 'old-event', '{}', '2026-01-01 00:00:00');
+            """
+        )
+        connection.commit()
+
+    _alembic(database_path, "upgrade", "head")
+
+    with sqlite3.connect(database_path) as connection:
+        rows = connection.execute(
+            "SELECT amount, type, reason_code, idempotency_key "
+            "FROM coin_transactions WHERE operator_id = 7 ORDER BY id"
+        ).fetchall()
+        balance = connection.execute(
+            "SELECT current_balance FROM operators WHERE id = 7"
+        ).fetchone()[0]
+
+    assert balance == 250
+    assert rows == [
+        (100, "reward", "mission", "old-event"),
+        (150, "opening_balance", "opening_balance", "opening_balance:operator:7"),
+    ]
+    assert sum(row[0] for row in rows) == balance
