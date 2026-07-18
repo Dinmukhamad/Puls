@@ -170,3 +170,47 @@ def test_manager_operators_not_restricted_by_group(client, db_session):
 
     assert client.get(f"/api/operators/{op_a.id}").status_code == 200
     assert client.get(f"/api/operators/{op_b.id}").status_code == 200
+
+
+# -- /wallet ---------------------------------------------------------------
+
+def test_supervisor_wallet_access_and_transactions_scoped_to_own_group(
+    db_session, make_client
+):
+    group_a = _make_group(db_session, "WalletA")
+    group_b = _make_group(db_session, "WalletB")
+    op_a = _make_operator_in_group(db_session, group_a, full_name="Wallet Operator A")
+    op_b = _make_operator_in_group(db_session, group_b, full_name="Wallet Operator B")
+
+    supervisor, pwd = _supervisor_with_group(db_session, group_a)
+    sup_client = _login(make_client, supervisor.username, pwd)
+
+    assert sup_client.get(f"/api/wallet/{op_a.id}").status_code == 200
+    assert sup_client.get(f"/api/wallet/{op_b.id}").status_code == 403
+
+    own_transaction = sup_client.post(
+        "/api/wallet/transactions",
+        json={"operator_id": op_a.id, "amount": 5, "reason": "Test"},
+    )
+    assert own_transaction.status_code == 200, own_transaction.text
+
+    other_transaction = sup_client.post(
+        "/api/wallet/transactions",
+        json={"operator_id": op_b.id, "amount": 5, "reason": "Test"},
+    )
+    assert other_transaction.status_code == 403, other_transaction.text
+
+    db_session.refresh(op_b)
+    assert op_b.current_balance == 0
+
+
+def test_manager_wallet_access_not_restricted_by_group(client, db_session):
+    group = _make_group(db_session, "WalletManager")
+    operator = _make_operator_in_group(db_session, group, full_name="Wallet Manager Target")
+
+    assert client.get(f"/api/wallet/{operator.id}").status_code == 200
+    transaction = client.post(
+        "/api/wallet/transactions",
+        json={"operator_id": operator.id, "amount": 5, "reason": "Test"},
+    )
+    assert transaction.status_code == 200, transaction.text
