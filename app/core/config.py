@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     app_env: str = "development"  # set to 'production' in Railway
     api_prefix: str = "/api"
 
-    # PostgreSQL вЂ” РѕР±СЏР·Р°С‚РµР»РµРЅ РЅР° РїСЂРѕРґРµ, SQLite РґР»СЏ Р»РѕРєР°Р»РєРё
+    # PostgreSQL — обязателен на проде, SQLite для локалки
     database_url: str = "sqlite:///./pulse.db"
 
     # JWT
@@ -21,16 +21,16 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "*"
 
-    # РўР°Р±Р»РёС†С‹ Рё seed
+    # Таблицы и seed
     auto_create_tables: bool = True
     auto_seed: bool = True
 
-    # Seed admin вЂ” Р±РµСЂС‘Рј РёР· Railway env, РЅРёРєРѕРіРґР° РЅРµ С…Р°СЂРґРєРѕРґРёРј
+    # Seed admin — берём из Railway env, никогда не хардкодим
     seed_admin_username: str = "admin"
-    seed_admin_password: str = ""          # РћР‘РЇР—РђРўР•Р›Р¬РќРћ Р·Р°РґР°С‚СЊ РІ Railway
+    seed_admin_password: str = ""          # ОБЯЗАТЕЛЬНО задать в Railway
     seed_admin_fullname: str = "Администратор"
 
-    # Seed supervisor/manager (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)
+    # Seed supervisor/manager (опционально)
     seed_supervisor_username: str = "supervisor"
     seed_supervisor_password: str = ""
     seed_manager_username: str = "manager"
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Cookie auth settings (Р‘Р»РѕРє 3 РўР—)
+    # Cookie auth settings (Блок 3 ТЗ)
     auth_cookie_name: str = "pulse_access_token"
     auth_cookie_secure: bool = False   # True in production
     auth_cookie_samesite: str = "lax"
@@ -77,7 +77,13 @@ class Settings(BaseSettings):
         problems = []
         if (
             self.jwt_secret_key
-            in ("change-me-in-env", "Р·Р°РјРµРЅРёС‚Рµ-РЅР°-СЃР»СѓС‡Р°Р№РЅСѓСЋ-СЃС‚СЂРѕРєСѓ-РјРёРЅРёРјСѓРј-32-СЃРёРјРІРѕР»Р°")
+            in (
+                "change-me-in-env",
+                "замените-на-случайную-строку-минимум-32-символа",
+                # Плейсхолдер из .env.example: он длиннее 32 символов, поэтому
+                # без явного блоклиста прошёл бы проверку длины.
+                "dev-secret-key-change-in-production-at-least-32-chars",
+            )
             or len(self.jwt_secret_key) < 32
         ):
             problems.append("JWT_SECRET_KEY must be a non-default secret with at least 32 characters")
