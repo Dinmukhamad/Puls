@@ -1,11 +1,20 @@
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
-from alembic import context
-from sqlalchemy import engine_from_config, pool
+# ``alembic`` is commonly launched through its installed console script. In
+# that case Python puts the script directory (rather than this repository) on
+# ``sys.path``, so application imports would depend on an external PYTHONPATH.
+project_root = Path(__file__).resolve().parents[1]
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
-from app.core.config import get_settings
-from app.database.db import Base, normalize_database_url
-from app.models import entities  # noqa: F401
+from alembic import context  # noqa: E402
+from sqlalchemy import engine_from_config, pool  # noqa: E402
+
+from app.core.config import get_settings  # noqa: E402
+from app.database.db import Base, normalize_database_url  # noqa: E402
+from app.models import entities  # noqa: E402, F401
 
 config = context.config
 # Keep Alembic on exactly the same normalized URL as the application. Render,
