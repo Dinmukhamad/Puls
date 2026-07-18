@@ -1,0 +1,7 @@
+# Собранные фронтенд-бандлы — генерируются scripts/build-frontend.mjs из js/src и css/src.
+# Правки вносить только в исходники, затем `npm run build`.
+# linguist-generated=true: GitHub сворачивает эти файлы в диффах PR
+# и не учитывает их в статистике языков репозитория.
+js/app.js linguist-generated=true
+js/api.js linguist-generated=true
+css/styles.css linguist-generated=true

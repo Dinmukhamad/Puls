@@ -55,3 +55,17 @@ jobs:
         run: npm ci
       - name: Build frontend
         run: npm run build
+      # Бандлы js/app.js, js/api.js, css/styles.css закоммичены (их напрямую
+      # отдаёт деплой: Dockerfile/railpack без Node). Этот шаг гарантирует,
+      # что они пересобраны из js/src и css/src: если кто-то поменял исходники
+      # и забыл `npm run build` (или отредактировал бандл руками) — CI упадёт.
+      - name: Verify committed bundles match sources
+        run: |
+          CHANGED="$(git status --porcelain -- js/app.js js/api.js css/styles.css)"
+          if [ -n "$CHANGED" ]; then
+            echo "::error::Бандлы рассинхронизированы с исходниками js/src и css/src."
+            git --no-pager diff --stat -- js/app.js js/api.js css/styles.css
+            echo "Выполните локально 'npm run build' и закоммитьте обновлённые js/app.js, js/api.js, css/styles.css вместе с изменениями исходников."
+            exit 1
+          fi
+          echo "Бандлы синхронны с исходниками."
