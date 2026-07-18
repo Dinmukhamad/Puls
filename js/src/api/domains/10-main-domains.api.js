@@ -72,10 +72,15 @@
     return req('GET', '/api/shop/purchases' + (qs ? '?' + qs : ''));
   }
   function listShopDiscounts()     { return req('GET', '/api/shop/discounts'); }
-  function buyItem(itemId, discountCouponId = null) {
+  function buyItem(itemId, discountCouponId = null, idempotencyKey = null) {
     const payload = { shop_item_id: itemId };
     if (discountCouponId != null) payload.discount_coupon_id = discountCouponId;
-    return req('POST', '/api/shop/purchases', payload);
+    return req(
+      'POST',
+      '/api/store/orders',
+      payload,
+      { 'Idempotency-Key': idempotencyKey || `shop-order-${itemId}-${Date.now()}` },
+    );
   }
   function approvePurchase(id)     { return req('POST', `/api/shop/purchases/${id}/approve`); }
   function rejectPurchase(id, r)   { return req('POST', `/api/shop/purchases/${id}/reject`, { reason: r }); }
