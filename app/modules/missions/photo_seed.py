@@ -68,7 +68,7 @@ def ensure_photo_control_mission(db: Session) -> Mission:
     mission.description = "Научись находить непройденные проверки и заполнять семь кадров машины и две стороны учебного удостоверения."
     mission.mission_type = "assessment_tutorial"
     mission.sort_order = 2
-    mission.reward_coins = 75
+    mission.reward_coins = 150
     mission.estimated_minutes = 10
     mission.is_active = True
     mission.version = 1

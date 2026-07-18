@@ -105,7 +105,7 @@ def ensure_default_missions(db: Session) -> Mission:
     mission.description = "Научись безопасно проводить водителя через вход и проверку профиля."
     mission.mission_type = "tutorial"
     mission.sort_order = 1
-    mission.reward_coins = 50
+    mission.reward_coins = 100
     mission.estimated_minutes = 5
     mission.is_active = True
     mission.version = 1

@@ -81,7 +81,7 @@ def ensure_learning_worlds_and_sapar(db: Session) -> Mission:
     mission.sort_order = 3
     mission.world_id = worlds["self_employment_docs"].id
     mission.world_sort_order = 1
-    mission.reward_coins = 100
+    mission.reward_coins = 150
     mission.estimated_minutes = 7
     mission.is_active = True
     mission.version = 1

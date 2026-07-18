@@ -172,7 +172,7 @@ def ensure_document_signing_mission(db: Session, world_id: int) -> Mission:
     mission.sort_order = 4
     mission.world_id = world_id
     mission.world_sort_order = 2
-    mission.reward_coins = 120
+    mission.reward_coins = 200
     mission.estimated_minutes = 9
     mission.is_active = True
     mission.version = 1
