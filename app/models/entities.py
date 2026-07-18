@@ -394,6 +394,10 @@ class CoinTransaction(Base):
     related_spin_id: Mapped[int | None] = mapped_column(ForeignKey("wheel_spins.id"), nullable=True)
     source_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     source_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Стабильная бизнес-причина операции для аналитики. В отличие от `type`
+    # (технический вид проводки), reason_code не меняется при рефакторинге
+    # обработчика: wheel_reward, opening_balance, purchase_refund и т. п.
+    reason_code: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     # ТЗ «Экономика коинов» §14: стабильный ключ идемпотентности, например
     # "mission:12:operator:7:first_complete". Повторное событие с тем же ключом
     # возвращает уже созданную транзакцию и не меняет баланс.
@@ -461,9 +465,15 @@ class ShopItem(Base):
     __tablename__ = "shop_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str | None] = mapped_column(String(100), nullable=True, unique=True, index=True)
     title: Mapped[str] = mapped_column(String(180))
     description: Mapped[str] = mapped_column(Text, default="")
     category: Mapped[str] = mapped_column(String(32), default="other", index=True)
+    # physical | digital | privilege — фильтры и политика выдачи из ТЗ §9.
+    prize_type: Mapped[str] = mapped_column(String(24), default="physical", index=True)
+    image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    issue_policy: Mapped[str] = mapped_column(Text, default="")
+    issue_days: Mapped[int] = mapped_column(Integer, default=14)
     price: Mapped[int] = mapped_column(Integer)
     min_level_id: Mapped[int | None] = mapped_column(ForeignKey("operator_levels.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
