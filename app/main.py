@@ -37,10 +37,11 @@ def ready():
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return {"status": "ready"}
-    except Exception as exc:
+    except Exception:
+        logger.exception("[ready] Database readiness check failed")
         return JSONResponse(
             status_code=503,
-            content={"status": "not ready", "detail": str(exc)},
+            content={"status": "not ready"},
         )
 
 
