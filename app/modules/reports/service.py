@@ -421,6 +421,7 @@ def save_period_report(db: Session, payload: SavePeriodReportRequest, current_us
                         f"{m.final_points} баллов, коины {old_coins} → {desired_coins}"
                     ),
                     created_by_user_id=current_user.id,
+                    reason_code="period_report_adjustment" if existing_reports else "period_report",
                 ))
         else:
             pr.coins_awarded = old_coins
