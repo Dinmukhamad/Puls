@@ -106,6 +106,29 @@ def _set_auth_cookie(response: Response, user: User, session_id: str) -> None:
     response.set_cookie(**cookie_options)
 
 
+def _delete_auth_cookie(response: Response) -> None:
+    settings = get_settings()
+    cookie_options = {"key": settings.auth_cookie_name, "path": "/"}
+    if settings.auth_cookie_domain:
+        cookie_options["domain"] = settings.auth_cookie_domain
+    response.delete_cookie(**cookie_options)
+
+
+def _revoke_user_sessions(db: Session, user: User, reason: str) -> None:
+    now = now_utc()
+    sessions = db.scalars(
+        select(UserSession).where(
+            UserSession.user_id == user.id,
+            UserSession.status == "active",
+        )
+    )
+    for session in sessions:
+        session.status = "revoked"
+        session.revoked_at = now
+        session.revoked_by_user_id = user.id
+        session.revoke_reason = reason
+
+
 def _session_id_from_cookie(request: Request) -> str | None:
     settings = get_settings()
     token = request.cookies.get(settings.auth_cookie_name)
@@ -179,6 +202,7 @@ def me(
 @router.post("/account", response_model=UserRead)
 def update_account(
     payload: AccountCredentialsUpdate,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> User:
@@ -194,6 +218,7 @@ def update_account(
             raise HTTPException(status_code=400, detail="Пароли не совпадают")
         current_user.password_hash = hash_password(payload.new_password or "")
         current_user.must_change_password = False
+        _revoke_user_sessions(db, current_user, "password_changed")
         if current_user.operator_id:
             db.add(AuditLog(
                 operator_id=current_user.operator_id,
@@ -222,6 +247,8 @@ def update_account(
 
     db.commit()
     db.refresh(current_user)
+    if wants_password:
+        _delete_auth_cookie(response)
     return current_user
 
 
@@ -267,9 +294,9 @@ def change_my_login(
 @router.patch("/me/password")
 def change_my_password(
     payload: dict,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    response: Response = None,
 ) -> dict:
     """Change current user password. Logs out after change."""
     current_pwd = payload.get("current_password") or ""
@@ -287,6 +314,7 @@ def change_my_password(
 
     current_user.password_hash = hash_password(new_pwd)
     current_user.must_change_password = False
+    _revoke_user_sessions(db, current_user, "password_changed")
     db.add(AuditLog(
         action="password_changed",
         entity_type="user",
@@ -296,9 +324,7 @@ def change_my_password(
     ))
     db.commit()
     # Clear auth cookie → force re-login
-    settings = get_settings()
-    if response:
-        response.delete_cookie(key=settings.auth_cookie_name, path="/")
+    _delete_auth_cookie(response)
     return {"ok": True, "message": "Пароль изменён. Войдите снова.", "logout": True}
 
 
