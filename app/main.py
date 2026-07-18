@@ -14,6 +14,7 @@ from app.core.middleware import setup_middlewares
 from app.core.static import setup_static
 from app.database.db import engine
 from app.models import entities  # noqa: F401
+from app.services.database_readiness import assert_database_schema_current
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ def ready():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+            assert_database_schema_current(conn)
         return {"status": "ready"}
     except Exception:
         logger.exception("[ready] Database readiness check failed")
