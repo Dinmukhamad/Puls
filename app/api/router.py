@@ -22,6 +22,7 @@ from app.modules.rating.router import router as rating_router
 from app.modules.reports.router import router as reports_router
 from app.modules.sessions.router import router as sessions_router
 from app.modules.settings.router import router as settings_router
+from app.modules.shop.router import admin_store_router, store_router
 from app.modules.shop.router import router as shop_router
 from app.modules.tests import router as tests_router
 from app.modules.users.router import router as users_router
@@ -50,6 +51,8 @@ api_router.include_router(weekly_results_router)
 api_router.include_router(wallet_router)
 api_router.include_router(rating_router)
 api_router.include_router(shop_router)
+api_router.include_router(store_router)
+api_router.include_router(admin_store_router)
 api_router.include_router(economy_router)
 api_router.include_router(economy_admin_router)
 api_router.include_router(dashboard_router)
