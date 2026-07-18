@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from app.core.config import get_settings
 from app.database.db import Base, SessionLocal, engine
+from app.services.database_migrations import upgrade_database_schema
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -18,6 +19,10 @@ def run_startup_tasks() -> None:
     except RuntimeError as exc:
         logger.critical(str(exc))
         raise
+
+    if engine.dialect.name != "sqlite":
+        logger.info("[startup] Applying pending database migrations...")
+        upgrade_database_schema()
 
     if settings.auto_create_tables:
         logger.info("[startup] AUTO_CREATE_TABLES=true - creating missing tables...")
