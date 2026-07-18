@@ -7,6 +7,20 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: puls
+          POSTGRES_PASSWORD: puls
+          POSTGRES_DB: puls
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U puls -d puls"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -16,6 +30,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+      - name: PostgreSQL migration smoke test
+        env:
+          DATABASE_URL: postgresql://puls:puls@localhost:5432/puls
+        run: |
+          alembic upgrade head
+          alembic current
       - name: Ruff
         run: ruff check app tests
       - name: Compile Python
