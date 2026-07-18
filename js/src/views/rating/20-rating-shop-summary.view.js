@@ -811,11 +811,54 @@ const SHOP_CATEGORIES = {
   gifts: { label: 'Подарки' },
   other: { label: 'Другие' },
 };
-let _shopCategory = 'all';
+const SHOP_FILTERS = {
+  all: 'Все',
+  upto400: 'До 400',
+  upto700: 'До 700',
+  upto1100: 'До 1 100',
+  digital: 'Цифровые',
+  physical: 'Физические',
+  privilege: 'Привилегии',
+  in_stock: 'В наличии',
+};
+let _shopFilter = 'all';
 let _shopAffordableOnly = false;
+let _shopPurchaseIdempotencyKey = null;
 
 function shopCategory(item) {
   return SHOP_CATEGORIES[item?.category] ? item.category : 'other';
+}
+
+function shopSalePrice(item) {
+  return Number(item?.effective_price ?? item?.price) || 0;
+}
+
+function shopMatchesFilter(item, filter) {
+  const price = shopSalePrice(item);
+  if (filter === 'upto400') return price <= 400;
+  if (filter === 'upto700') return price <= 700;
+  if (filter === 'upto1100') return price <= 1100;
+  if (filter === 'digital' || filter === 'physical' || filter === 'privilege') return item.prize_type === filter;
+  if (filter === 'in_stock') return item.stock_remaining == null || item.stock_remaining > 0;
+  return true;
+}
+
+function shopOrderStorageKey(itemId) {
+  return `puls:shop-order:${itemId}`;
+}
+
+function shopOrderIdempotencyKey(itemId) {
+  const storageKey = shopOrderStorageKey(itemId);
+  try {
+    const existing = sessionStorage.getItem(storageKey);
+    if (existing) return existing;
+    const random = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const key = `shop-order:${itemId}:${random}`;
+    sessionStorage.setItem(storageKey, key);
+    return key;
+  } catch {
+    return `shop-order:${itemId}:${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
 }
 
 function shopCategoryIcon(category) {
@@ -864,10 +907,11 @@ function shopItemState(item, balance, role = 'operator', coupon = null) {
   const outOfStock = item.stock_remaining != null && item.stock_remaining <= 0;
   const personalLimitHit = !!item.operator_limit_reached;
   const blocked = !!(notStartedYet || alreadyEnded || outOfStock || personalLimitHit);
-  const originalPrice = Number(item.price) || 0;
+  const salePrice = shopSalePrice(item);
+  const regularPrice = Number(item.regular_price ?? item.price) || salePrice;
   const discountPercent = coupon ? Math.max(1, Math.min(90, Number(coupon.percent) || 10)) : 0;
-  const discountAmount = Math.floor(originalPrice * discountPercent / 100);
-  const effectivePrice = Math.max(0, originalPrice - discountAmount);
+  const discountAmount = Math.floor(salePrice * discountPercent / 100);
+  const effectivePrice = Math.max(0, salePrice - discountAmount);
   const canBuy = role === 'operator' && balance >= effectivePrice && !levelLocked && !blocked;
   const needMore = role === 'operator' && balance < effectivePrice ? effectivePrice - balance : 0;
   let label = 'Получить бонус';
@@ -877,7 +921,12 @@ function shopItemState(item, balance, role = 'operator', coupon = null) {
   else if (outOfStock) label = 'Закончилось';
   else if (personalLimitHit) label = 'Лимит использован';
   else if (needMore > 0) label = `Нужно ещё ${needMore} коинов`;
-  return { requiredLevel, levelLocked, notStartedYet, alreadyEnded, outOfStock, personalLimitHit, blocked, canBuy, needMore, label, originalPrice, discountPercent, discountAmount, effectivePrice, coupon };
+  return {
+    requiredLevel, levelLocked, notStartedYet, alreadyEnded, outOfStock,
+    personalLimitHit, blocked, canBuy, needMore, label, salePrice, regularPrice,
+    isSeasonalPrice: !!item.is_seasonal_price, discountPercent, discountAmount,
+    effectivePrice, coupon,
+  };
 }
 
 function renderShop() {
@@ -917,11 +966,8 @@ function renderOperatorShop(el, items, balance) {
   const states = new Map(items.map(item => [item.id, shopItemState(item, balance, 'operator', bestCoupon)]));
   const affordableCount = items.filter(item => states.get(item.id).canBuy).length;
   const activeRequests = purchases.filter(row => ['new', 'pending', 'approved'].includes(row.status)).length;
-  const categoryItems = items.filter(item => _shopCategory === 'all' || shopCategory(item) === _shopCategory);
-  const visibleItems = categoryItems.filter(item => !_shopAffordableOnly || states.get(item.id).canBuy);
-  const availableCategories = Object.keys(SHOP_CATEGORIES).filter(category =>
-    category === 'all' || items.some(item => shopCategory(item) === category)
-  );
+  const filteredItems = items.filter(item => shopMatchesFilter(item, _shopFilter));
+  const visibleItems = filteredItems.filter(item => !_shopAffordableOnly || states.get(item.id).canBuy);
 
   el.innerHTML = `
     <div class="view-header shop-v2-header">
@@ -948,9 +994,9 @@ function renderOperatorShop(el, items, balance) {
         <label class="shop-v2-affordable"><input type="checkbox" id="shop-affordable-only" ${_shopAffordableOnly ? 'checked' : ''}><span>Только доступные</span></label>
       </div>
       <div class="shop-v2-tabs" role="tablist">
-        ${availableCategories.map(category => {
-          const count = category === 'all' ? items.length : items.filter(item => shopCategory(item) === category).length;
-          return `<button type="button" class="shop-v2-tab ${_shopCategory === category ? 'active' : ''}" data-shop-category="${category}">${SHOP_CATEGORIES[category].label}<span>${count}</span></button>`;
+        ${Object.entries(SHOP_FILTERS).map(([filter, label]) => {
+          const count = items.filter(item => shopMatchesFilter(item, filter)).length;
+          return `<button type="button" role="tab" aria-selected="${_shopFilter === filter}" class="shop-v2-tab ${_shopFilter === filter ? 'active' : ''}" data-shop-filter="${filter}">${label}<span>${count}</span></button>`;
         }).join('')}
       </div>
       <div class="shop-v2-grid">
@@ -964,9 +1010,9 @@ function renderOperatorShop(el, items, balance) {
       ${shopPurchaseHistory(purchases, items)}
     </section>`;
 
-  el.querySelectorAll('[data-shop-category]').forEach(button => {
+  el.querySelectorAll('[data-shop-filter]').forEach(button => {
     button.addEventListener('click', () => {
-      _shopCategory = button.dataset.shopCategory || 'all';
+      _shopFilter = button.dataset.shopFilter || 'all';
       renderShop();
     });
   });
@@ -986,17 +1032,20 @@ function shopOperatorCard(item, balance, state = shopItemState(item, balance)) {
   if (item.stock_remaining != null) badges.push(`<span>${state.outOfStock ? 'Нет в наличии' : `Осталось ${item.stock_remaining}`}</span>`);
   if (item.purchase_limit_per_operator > 0) badges.push(`<span>${item.operator_purchased_count || 0} из ${item.purchase_limit_per_operator} получено</span>`);
   if (item.ends_at && !state.alreadyEnded) badges.push(`<span>До ${fmtDate(item.ends_at)}</span>`);
+  if (state.isSeasonalPrice) badges.push(`<span>Стартовая цена до ${fmtDate(item.season_ends_at)}</span>`);
+  if (item.issue_days) badges.push(`<span>Получение: до ${item.issue_days} дн.</span>`);
   return `<article class="shop-v2-card ${state.canBuy ? 'is-available' : ''} ${state.blocked ? 'is-blocked' : ''}">
     <div class="shop-v2-card-top">
       <span class="shop-v2-icon is-${category}">${shopItemIcon(item)}</span>
       <span class="shop-v2-category">${SHOP_CATEGORIES[category].label}</span>
     </div>
-    <div class="shop-v2-card-copy"><h4>${esc(item.title)}</h4></div>
+    <div class="shop-v2-card-copy"><h4>${esc(item.title)}</h4><p>${esc(item.description || item.issue_policy || '')}</p></div>
     ${badges.length ? `<div class="shop-v2-card-badges">${badges.join('')}</div>` : ''}
     <div class="shop-v2-card-footer">
       <div class="shop-v2-price-row">
         <div class="shop-v2-price-stack">
-          ${state.discountPercent ? `<s>${state.originalPrice}</s><b>${state.effectivePrice} <span>коинов</span></b><em>−${state.discountPercent}% по купону</em>` : `<b>${state.originalPrice} <span>коинов</span></b>`}
+          ${state.discountPercent ? `<s>${state.salePrice}</s><b>${state.effectivePrice} <span>коинов</span></b><em>−${state.discountPercent}% по купону</em>` : `<b>${state.salePrice} <span>коинов</span></b>`}
+          ${state.isSeasonalPrice ? `<em class="shop-v2-season-price">Стартовая цена · затем ${state.regularPrice}</em>` : ''}
         </div>
         ${state.needMore > 0 ? `<strong class="shop-v2-shortfall">Не хватает ${state.needMore} коинов</strong>` : '<small>спишутся после оформления</small>'}
       </div>
@@ -1010,6 +1059,7 @@ function shopPurchaseHistory(purchases, items) {
   const statusMeta = {
     new: ['На рассмотрении', 'is-waiting'], pending: ['На рассмотрении', 'is-waiting'],
     approved: ['Одобрено', 'is-approved'], completed: ['Получено', 'is-completed'], rejected: ['Отклонено', 'is-rejected'],
+    refunded: ['Возвращено', 'is-refunded'], expired: ['Срок истёк', 'is-expired'],
   };
   return `<div class="shop-v2-order-list">${purchases.slice(0, 8).map(row => {
     const item = items.find(candidate => candidate.id === row.shop_item_id);
@@ -1029,18 +1079,22 @@ function openShopPurchaseModal(itemId) {
   const coupon = shopAvailableCoupons()[0] || null;
   const state = shopItemState(item, balance, 'operator', coupon);
   if (!state.canBuy) return;
+  _shopPurchaseIdempotencyKey = shopOrderIdempotencyKey(itemId);
   const category = shopCategory(item);
   showModal(`
     <div class="shop-v2-confirm">
       <span class="shop-v2-icon is-${category}">${shopItemIcon(item)}</span>
       <div class="section-kicker">Подтверждение</div>
       <h3 class="modal-title">${esc(item.title)}</h3>
+      <p>${esc(item.description || '')}</p>
       ${coupon ? `<label class="shop-v2-discount-option">
-        <input type="checkbox" id="shop-use-discount" data-coupon-id="${coupon.id}" data-original-price="${state.originalPrice}" data-discounted-price="${state.effectivePrice}" data-balance="${balance}" checked onchange="updateShopDiscountPreview()">
+        <input type="checkbox" id="shop-use-discount" data-coupon-id="${coupon.id}" data-original-price="${state.salePrice}" data-discounted-price="${state.effectivePrice}" data-balance="${balance}" checked onchange="updateShopDiscountPreview()">
         <span><b>Применить скидку ${coupon.percent}%</b><small>Доступно купонов: ${shopAvailableCoupons().length}. Спишется только один.</small></span>
       </label>` : ''}
       <div class="shop-v2-confirm-price"><span>Стоимость</span><b id="shop-confirm-price">${state.effectivePrice} коинов</b></div>
       <div class="shop-v2-confirm-price"><span>Останется на балансе</span><b id="shop-confirm-rest">${Math.max(0, balance - state.effectivePrice)} коинов</b></div>
+      ${state.isSeasonalPrice ? `<small>Стартовое предложение действует до ${fmtDate(item.season_ends_at)}. Обычная цена после сезона — ${state.regularPrice} коинов.</small>` : ''}
+      ${item.issue_policy ? `<small><b>Получение:</b> ${esc(item.issue_policy)}</small>` : ''}
       <small>После оформления коины резервируются. Если заявку отклонят, они автоматически вернутся на баланс.</small>
       <div id="shop-buy-error" class="status-line"></div>
       <div class="shop-v2-confirm-actions"><button class="btn-outline" onclick="closeModal()">Отмена</button><button class="btn-primary" id="shop-confirm-buy" onclick="submitShopPurchase(${item.id})">Отправить заявку</button></div>
@@ -1063,22 +1117,37 @@ function updateShopDiscountPreview() {
 }
 
 async function submitShopPurchase(itemId) {
+  const item = (STATE.shopItems || []).find(candidate => candidate.id === itemId);
   const button = document.getElementById('shop-confirm-buy');
   const error = document.getElementById('shop-buy-error');
   if (button) { button.disabled = true; button.textContent = 'Оформляем…'; }
   try {
     const couponToggle = document.getElementById('shop-use-discount');
     const couponId = couponToggle?.checked ? Number(couponToggle.dataset.couponId) : null;
-    await api.buyItem(itemId, couponId);
+    const order = await api.buyItem(itemId, couponId, _shopPurchaseIdempotencyKey);
+    try { sessionStorage.removeItem(shopOrderStorageKey(itemId)); } catch {}
+    _shopPurchaseIdempotencyKey = null;
     swrInvalidate('shop:');
     const [wallet, purchases, items, discounts] = await Promise.all([api.myWallet(), api.listPurchases(), api.listShopItems(), api.listShopDiscounts()]);
     STATE.wallet = wallet;
     STATE.purchases = purchases;
     STATE.shopItems = items;
     STATE.shopDiscounts = discounts;
-    closeModal();
-    showToast('Заявка отправлена руководителю', 'ok');
     renderShop();
+    const orderNumber = order.order_number || `PULS-${String(order.id).padStart(6, '0')}`;
+    const workflowLabel = {
+      created: 'создан', reserved: 'зарезервирован', ready: 'готов к выдаче',
+      issued: 'выдан', cancelled: 'отменён', refunded: 'возвращён', expired: 'истёк',
+    }[order.workflow_status] || 'на рассмотрении';
+    showModal(`
+      <div class="shop-v2-confirm shop-v2-success">
+        <div class="section-kicker">Заказ создан</div>
+        <h3 class="modal-title">Заказ ${esc(orderNumber)}</h3>
+        <p>Статус: ${esc(workflowLabel)}. Коины зарезервированы и вернутся автоматически, если заказ будет отменён.</p>
+        ${item?.issue_policy ? `<small><b>Получение:</b> ${esc(item.issue_policy)}</small>` : ''}
+        <div class="shop-v2-confirm-actions"><button class="btn-primary" onclick="closeModal()">Понятно</button></div>
+      </div>`);
+    showToast(`Заказ ${orderNumber} создан`, 'ok');
   } catch (err) {
     if (error) error.textContent = err.message || 'Не удалось оформить заявку';
     if (button) { button.disabled = false; button.textContent = 'Отправить заявку'; }
