@@ -340,17 +340,17 @@ def _operator_row_payload(r: OperatorAnalyticsRow, include_operator_id: bool) ->
 
 # ── Payload-функции эндпоинтов ────────────────────────────────────────────────
 
-def available_periods(db: Session) -> dict:
+def available_periods(db: Session, group_id: int | None = None) -> dict:
     # PeriodReport is a calculated snapshot and may legitimately be empty
     # after new Excel files are uploaded. Analytics itself reads arbitrary
     # ranges from OperatorDailyMetric, so expose that range as well.
-    periods = {tuple(row) for row in repo.distinct_periods(db)}
-    daily_range = repo.available_data_date_range(db)
+    periods = {tuple(row) for row in repo.distinct_periods(db, group_id)}
+    daily_range = repo.available_data_date_range(db, group_id)
     if not daily_range:
         from app.modules.reports.service import ensure_daily_metrics_from_saved_files
 
         if ensure_daily_metrics_from_saved_files(db):
-            daily_range = repo.available_data_date_range(db)
+            daily_range = repo.available_data_date_range(db, group_id)
     if daily_range:
         periods.add(tuple(daily_range))
     rows = sorted(periods, key=lambda row: (row[1], row[0]), reverse=True)
@@ -410,12 +410,14 @@ def operators_table(db, start_date, end_date, group_id, operator_query, particip
     return {"items": out}
 
 
-def groups_comparison(db, start_date, end_date) -> dict:
-    key = cache_key("groups-comparison", start_date=start_date, end_date=end_date)
+def groups_comparison(db, start_date, end_date, group_id=None) -> dict:
+    key = cache_key(
+        "groups-comparison", start_date=start_date, end_date=end_date, group_id=group_id
+    )
     cached = cache_get(key)
     if cached is not None:
         return cached
-    rows = get_rows(db, start_date, end_date)
+    rows = get_rows(db, start_date, end_date, group_id)
     result = {"items": compute_groups_comparison(rows)}
     cache_set(key, result)
     return result
@@ -649,6 +651,6 @@ def quality_combined(db, start_date, end_date, group_id) -> dict:
     return result
 
 
-def groups_list(db) -> dict:
-    groups = repo.active_groups(db)
+def groups_list(db, group_id=None) -> dict:
+    groups = repo.active_groups(db, group_id)
     return {"items": [{"id": g.id, "name": g.name} for g in groups]}

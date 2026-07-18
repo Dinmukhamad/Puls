@@ -23,8 +23,11 @@ def site_operators(db: Session) -> list[Operator]:
     return list(db.scalars(select(Operator)))
 
 
-def active_groups(db: Session) -> list[Group]:
-    return list(db.scalars(select(Group).where(Group.status == "active")))
+def active_groups(db: Session, group_id: int | None = None) -> list[Group]:
+    query = select(Group).where(Group.status == "active")
+    if group_id is not None:
+        query = query.where(Group.id == group_id)
+    return list(db.scalars(query))
 
 
 def period_is_calculated(db: Session, start_date: date, end_date: date) -> bool:
@@ -35,19 +38,26 @@ def period_is_calculated(db: Session, start_date: date, end_date: date) -> bool:
     ) is not None
 
 
-def distinct_periods(db: Session) -> list:
-    return db.execute(
-        select(PeriodReport.period_start, PeriodReport.period_end)
-        .distinct()
-        .order_by(PeriodReport.period_end.desc())
-    ).all()
+def distinct_periods(db: Session, group_id: int | None = None) -> list:
+    query = select(PeriodReport.period_start, PeriodReport.period_end)
+    if group_id is not None:
+        query = query.join(Operator, Operator.id == PeriodReport.operator_id).where(
+            Operator.group_id == group_id
+        )
+    return db.execute(query.distinct().order_by(PeriodReport.period_end.desc())).all()
 
 
-def available_data_date_range(db: Session) -> tuple | None:
+def available_data_date_range(db: Session, group_id: int | None = None) -> tuple | None:
     """Минимальная и максимальная дата, для которых есть посуточные данные."""
-    row = db.execute(
-        select(func.min(OperatorDailyMetric.metric_date), func.max(OperatorDailyMetric.metric_date))
-    ).first()
+    query = select(
+        func.min(OperatorDailyMetric.metric_date),
+        func.max(OperatorDailyMetric.metric_date),
+    )
+    if group_id is not None:
+        query = query.join(Operator, Operator.id == OperatorDailyMetric.operator_id).where(
+            Operator.group_id == group_id
+        )
+    row = db.execute(query).first()
     if not row or row[0] is None:
         return None
     return row[0], row[1]
