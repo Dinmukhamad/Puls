@@ -8,7 +8,7 @@ class Base(DeclarativeBase):
     pass
 
 
-def _fix_database_url(url: str) -> str:
+def normalize_database_url(url: str) -> str:
     """
     Railway даёт DATABASE_URL в формате postgres:// или postgresql://
     SQLAlchemy 2.x требует postgresql+psycopg2:// для psycopg2
@@ -25,7 +25,7 @@ def _fix_database_url(url: str) -> str:
 
 settings = get_settings()
 
-_db_url = _fix_database_url(settings.database_url)
+_db_url = normalize_database_url(settings.database_url)
 _is_sqlite = _db_url.startswith("sqlite")
 _connect_args = {"check_same_thread": False} if _is_sqlite else {}
 
