@@ -2470,6 +2470,8 @@ function showAddItemModal() {
     .join('');
   showModal(`
     <h3 class="modal-title">Добавить бонус в магазин</h3>
+    <div class="form-group"><label class="form-label">Код приза</label>
+      <input id="ni-code" class="form-input" maxlength="80" placeholder="coffee-500"></div>
     <div class="form-group"><label class="form-label">Название</label>
       <input id="ni-title" class="form-input" placeholder="Сертификат на кофе"></div>
     <div class="form-group"><label class="form-label">Описание</label>
@@ -2482,6 +2484,20 @@ function showAddItemModal() {
         <option value="gifts">Подарки</option>
         <option value="other">Другие</option>
       </select></div>
+    <div class="form-group"><label class="form-label">Тип приза</label>
+      <select id="ni-prize-type" class="form-select">
+        <option value="physical">Физический</option>
+        <option value="digital">Цифровой</option>
+        <option value="privilege">Привилегия</option>
+      </select></div>
+    <div class="form-group"><label class="form-label">Условия получения</label>
+      <input id="ni-issue-policy" class="form-input" maxlength="500" placeholder="После подтверждения руководителем"></div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Срок выдачи, дней</label>
+        <input id="ni-issue-days" class="form-input" type="number" min="1" value="14"></div>
+      <div class="form-group"><label class="form-label">URL изображения</label>
+        <input id="ni-image-url" class="form-input" type="url" placeholder="https://..."></div>
+    </div>
     <div class="form-group"><label class="form-label">Цена (коины)</label>
       <input id="ni-price" class="form-input" type="number" min="1" placeholder="120"></div>
     <div class="form-group"><label class="form-label">Минимальный уровень</label>
@@ -2504,9 +2520,14 @@ function showAddItemModal() {
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitAddItem()">Добавить</button>`);
 }
 async function submitAddItem() {
+  const code = document.getElementById('ni-code')?.value?.trim() || null;
   const title = document.getElementById('ni-title')?.value?.trim();
   const desc  = document.getElementById('ni-desc')?.value?.trim() || '';
   const category = document.getElementById('ni-category')?.value || 'other';
+  const prize_type = document.getElementById('ni-prize-type')?.value || 'physical';
+  const issue_policy = document.getElementById('ni-issue-policy')?.value?.trim() || null;
+  const issue_days = +(document.getElementById('ni-issue-days')?.value || 14);
+  const image_url = document.getElementById('ni-image-url')?.value?.trim() || null;
   const price = +document.getElementById('ni-price')?.value;
   const minLevelRaw = document.getElementById('ni-min-level')?.value || '';
   const min_level_id = minLevelRaw ? Number(minLevelRaw) : null;
@@ -2517,7 +2538,7 @@ async function submitAddItem() {
   const err   = document.getElementById('ni-err');
   if (!title || !price) { err.textContent = 'Заполните название и цену'; return; }
   try {
-    await api.createShopItem({ title, description: desc, category, price, min_level_id, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
+    await api.createShopItem({ code, title, description: desc, category, prize_type, image_url, issue_policy, issue_days, price, min_level_id, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
     closeModal(); showToast('Бонус добавлен', 'ok');
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }
@@ -2531,6 +2552,8 @@ function showEditItemModal(item) {
   const toLocalInput = (iso) => iso ? String(iso).slice(0, 16) : '';
   showModal(`
     <h3 class="modal-title">Редактировать бонус</h3>
+    <div class="form-group"><label class="form-label">Код приза</label>
+      <input id="ei-code" class="form-input" maxlength="80" value="${esc(item.code || '')}"></div>
     <div class="form-group"><label class="form-label">Название</label>
       <input id="ei-title" class="form-input" value="${esc(item.title)}"></div>
     <div class="form-group"><label class="form-label">Описание</label>
@@ -2543,6 +2566,20 @@ function showEditItemModal(item) {
         <option value="gifts" ${item.category === 'gifts' ? 'selected' : ''}>Подарки</option>
         <option value="other" ${!item.category || item.category === 'other' ? 'selected' : ''}>Другие</option>
       </select></div>
+    <div class="form-group"><label class="form-label">Тип приза</label>
+      <select id="ei-prize-type" class="form-select">
+        <option value="physical" ${item.prize_type === 'physical' ? 'selected' : ''}>Физический</option>
+        <option value="digital" ${item.prize_type === 'digital' ? 'selected' : ''}>Цифровой</option>
+        <option value="privilege" ${item.prize_type === 'privilege' ? 'selected' : ''}>Привилегия</option>
+      </select></div>
+    <div class="form-group"><label class="form-label">Условия получения</label>
+      <input id="ei-issue-policy" class="form-input" maxlength="500" value="${esc(item.issue_policy || '')}"></div>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group"><label class="form-label">Срок выдачи, дней</label>
+        <input id="ei-issue-days" class="form-input" type="number" min="1" value="${item.issue_days ?? 14}"></div>
+      <div class="form-group"><label class="form-label">URL изображения</label>
+        <input id="ei-image-url" class="form-input" type="url" value="${esc(item.image_url || '')}"></div>
+    </div>
     <div class="form-group"><label class="form-label">Цена (коины)</label>
       <input id="ei-price" class="form-input" type="number" value="${item.price}"></div>
     <div class="form-group"><label class="form-label">Минимальный уровень</label>
@@ -2571,9 +2608,14 @@ function showEditItemModal(item) {
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitEditItem(${item.id})">Сохранить</button>`);
 }
 async function submitEditItem(id) {
+  const code = document.getElementById('ei-code')?.value?.trim() || null;
   const title     = document.getElementById('ei-title')?.value?.trim();
   const description = document.getElementById('ei-desc')?.value?.trim() || '';
   const category  = document.getElementById('ei-category')?.value || 'other';
+  const prize_type = document.getElementById('ei-prize-type')?.value || 'physical';
+  const issue_policy = document.getElementById('ei-issue-policy')?.value?.trim() || null;
+  const issue_days = +(document.getElementById('ei-issue-days')?.value || 14);
+  const image_url = document.getElementById('ei-image-url')?.value?.trim() || null;
   const price     = +document.getElementById('ei-price')?.value;
   const minLevelRaw = document.getElementById('ei-min-level')?.value || '';
   const min_level_id = minLevelRaw ? Number(minLevelRaw) : null;
@@ -2585,7 +2627,7 @@ async function submitEditItem(id) {
   const err       = document.getElementById('ei-err');
   if (!title || !price) { err.textContent = 'Заполните поля'; return; }
   try {
-    await api.updateShopItem(id, { title, description, category, price, min_level_id, is_active, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
+    await api.updateShopItem(id, { code, title, description, category, prize_type, image_url, issue_policy, issue_days, price, min_level_id, is_active, starts_at, ends_at, stock_limit, purchase_limit_per_operator });
     closeModal(); showToast('Бонус обновлён', 'ok');
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }
