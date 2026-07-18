@@ -37,6 +37,6 @@ EXPOSE 8080
 
 # Healthcheck для docker — дергает /health (лёгкий, без БД).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD curl -fsS "http://localhost:${PORT:-8080}/health" || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8080}/ready" || exit 1
 
 CMD ["bash", "start.sh"]
