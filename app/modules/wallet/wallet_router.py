@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.security import get_current_user, require_roles, supervisor_scope_group_id
 from app.database.db import get_db
 from app.models.entities import CoinTransaction, Operator, User
 from app.modules.rating.service import rating_cache_invalidate
@@ -10,6 +10,15 @@ from app.modules.wallet.schemas import CoinTransactionRead, ManualTransactionCre
 from app.modules.wallet.service import add_transaction, operator_for_user_or_403
 
 router = APIRouter(prefix="/wallet", tags=["wallet"])
+
+
+def _require_operator_in_scope(db: Session, current_user: User, operator: Operator) -> None:
+    group_id = supervisor_scope_group_id(db, current_user)
+    if group_id is not None and operator.group_id != group_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Оператор не входит в вашу группу",
+        )
 
 
 def build_wallet(db: Session, operator: Operator) -> WalletRead:
@@ -39,10 +48,15 @@ def my_wallet(db: Session = Depends(get_db), current_user: User = Depends(get_cu
 
 
 @router.get("/{operator_id}", response_model=WalletRead)
-def operator_wallet(operator_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("supervisor", "manager", "admin"))) -> WalletRead:
+def operator_wallet(
+    operator_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("supervisor", "manager", "admin")),
+) -> WalletRead:
     operator = db.get(Operator, operator_id)
     if not operator:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
+    _require_operator_in_scope(db, current_user, operator)
     return build_wallet(db, operator)
 
 
@@ -60,6 +74,7 @@ def create_manual_transaction(
     operator = db.get(Operator, payload.operator_id)
     if not operator:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
+    _require_operator_in_scope(db, current_user, operator)
     # Check operator is active and participating
     dismissed = getattr(operator, 'employment_status', None) == 'dismissed' or                 getattr(operator, 'status', '') == 'dismissed'
     if dismissed or not operator.is_active:
