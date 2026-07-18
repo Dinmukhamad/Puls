@@ -109,7 +109,9 @@ def upgrade() -> None:
     # --- shop_purchases.season_id ------------------------------------------
     # recreate="always": SQLite не умеет ALTER ... ADD CONSTRAINT — batch-режим
     # пересоздаёт таблицу copy-and-move. На PostgreSQL выполняется обычный ALTER.
-    with op.batch_alter_table("shop_purchases", recreate="always") as batch:
+    # Recreate only when Alembic needs it on SQLite. PostgreSQL must alter the
+    # existing table in place because other tables already reference it.
+    with op.batch_alter_table("shop_purchases") as batch:
         batch.add_column(sa.Column("season_id", sa.Integer(), nullable=True))
         batch.create_foreign_key(
             "fk_shop_purchases_season_id_economy_seasons",

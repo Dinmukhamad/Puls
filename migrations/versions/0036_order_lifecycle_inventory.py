@@ -24,7 +24,9 @@ depends_on = None
 def upgrade() -> None:
     # recreate="always": совместимость с SQLite (ALTER ADD CONSTRAINT не
     # поддерживается — batch-режим пересоздаёт таблицу copy-and-move).
-    with op.batch_alter_table("shop_purchases", recreate="always") as batch:
+    # Recreate only on SQLite. PostgreSQL has incoming foreign keys and must
+    # receive ordinary ALTER TABLE statements.
+    with op.batch_alter_table("shop_purchases") as batch:
         batch.add_column(sa.Column("issued_by_user_id", sa.Integer(), nullable=True))
         batch.add_column(sa.Column("expires_at", sa.DateTime(), nullable=True))
         batch.add_column(sa.Column("idempotency_key", sa.String(length=200), nullable=True))
@@ -71,7 +73,7 @@ def downgrade() -> None:
 
     op.drop_index("uq_shop_purchases_idempotency_key", table_name="shop_purchases")
     op.drop_index("ix_shop_purchases_expires_at", table_name="shop_purchases")
-    with op.batch_alter_table("shop_purchases", recreate="always") as batch:
+    with op.batch_alter_table("shop_purchases") as batch:
         batch.drop_constraint("fk_shop_purchases_issued_by_user_id_users", type_="foreignkey")
         batch.drop_column("idempotency_key")
         batch.drop_column("expires_at")
