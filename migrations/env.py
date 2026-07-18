@@ -4,11 +4,16 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
-from app.database.db import Base
+from app.database.db import Base, normalize_database_url
 from app.models import entities  # noqa: F401
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# Keep Alembic on exactly the same normalized URL as the application. Render,
+# Railway and Heroku-style providers may expose ``postgres://`` URLs, which
+# SQLAlchemy 2 no longer accepts. ConfigParser also treats ``%`` in escaped
+# passwords as interpolation syntax, so it must be doubled when stored here.
+database_url = normalize_database_url(get_settings().database_url).replace("%", "%%")
+config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
