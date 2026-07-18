@@ -347,7 +347,7 @@ class TestCreatePayload(BaseModel):
     reward_points: float = Field(default=0, ge=0)
     reward_coins: int = Field(default=0, ge=0)
     reward_min_percent: float = Field(default=70.0, ge=0, le=100)
-    reward_mode: str = Field(default="fixed", pattern="^(fixed|proportional)$")
+    reward_mode: str = Field(default="fixed", pattern="^(fixed|proportional|economy)$")
 
     @field_validator("opens_at", "closes_at")
     @classmethod
@@ -371,7 +371,7 @@ class TestUpdatePayload(BaseModel):
     reward_points: float | None = Field(default=None, ge=0)
     reward_coins: int | None = Field(default=None, ge=0)
     reward_min_percent: float | None = Field(default=None, ge=0, le=100)
-    reward_mode: str | None = Field(default=None, pattern="^(fixed|proportional)$")
+    reward_mode: str | None = Field(default=None, pattern="^(fixed|proportional|economy)$")
 
     @field_validator("opens_at", "closes_at")
     @classmethod

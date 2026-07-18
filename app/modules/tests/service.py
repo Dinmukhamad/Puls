@@ -342,6 +342,7 @@ def _maybe_award_reward(db: Session, attempt: TestAttempt, test: Test, reviewer:
     Начисляет награду максимум один раз за попытку. Режимы:
       fixed         — проходной % достигнут -> начисляется reward_points/reward_coins целиком
       proportional  — награда масштабируется пропорционально набранному % от 100%
+      economy       — тарифные диапазоны 80–89/90–99/100 и бонус улучшения
 
     ВНИМАНИЕ по баллам (reward_points): у оператора в схеме нет накопительного
     «кошелька баллов» — рейтинг строится из PeriodReport (Excel). Поэтому
@@ -357,6 +358,9 @@ def _maybe_award_reward(db: Session, attempt: TestAttempt, test: Test, reviewer:
     # ставилась вообще.
     if attempt.reward_transaction_id is not None or attempt.reward_coins or attempt.reward_points:
         return  # уже обработано — повторное начисление запрещено (ТЗ п.15.4)
+    if test.reward_mode == "economy":
+        if _maybe_award_economy_reward(db, attempt, test, reviewer):
+            return
     if test.reward_type == "none":
         return
     if attempt.score_percent < test.reward_min_percent:
@@ -385,6 +389,93 @@ def _maybe_award_reward(db: Session, attempt: TestAttempt, test: Test, reviewer:
         )
         db.flush()
         attempt.reward_transaction_id = transaction.id
+
+
+def _maybe_award_economy_reward(
+    db: Session,
+    attempt: TestAttempt,
+    test: Test,
+    reviewer: User | None,
+) -> bool:
+    """Тарифы тестов из ТЗ §4.3 через управляемые reward_rules.
+
+    Основная награда выдаётся только один раз на тест, даже если следующая
+    попытка перешла в более высокий диапазон. За первое улучшение отдельная
+    одноразовая выплата score_improved. Возвращает False только когда ни одно
+    правило экономики не настроено — тогда сохраняется legacy-конфигурация
+    конкретного теста.
+    """
+    from sqlalchemy import func
+
+    from app.modules.economy.service import accrue_reward, find_reward_rule, get_active_season
+
+    operator = db.get(Operator, attempt.operator_id)
+    if operator is None:
+        return False
+
+    score = float(attempt.score_percent or 0)
+    if score >= 100:
+        score_code = "score_100"
+    elif score >= 90:
+        score_code = "score_90_99"
+    elif score >= 80:
+        score_code = "score_80_89"
+    else:
+        score_code = None
+
+    season = get_active_season(db)
+    used_engine = any(
+        find_reward_rule(db, "test", code, season) is not None
+        for code in ("score_80_89", "score_90_99", "score_100", "score_improved")
+    )
+    awarded_total = 0
+    transaction_id = None
+    if score_code:
+        primary = accrue_reward(
+            db,
+            operator,
+            source_type="test",
+            source_code=score_code,
+            source_id=attempt.id,
+            score=score,
+            comment=f"Награда за тест: {test.title}",
+            created_by=reviewer,
+            idempotency_key_override=f"test:{test.id}:operator:{operator.id}:primary",
+        )
+        used_engine = primary["reason"] != "no_rule"
+        if primary["awarded"]:
+            awarded_total += primary["amount"]
+            transaction_id = primary["transaction_id"]
+
+    previous_best = db.scalar(
+        select(func.max(TestAttempt.score_percent)).where(
+            TestAttempt.test_id == test.id,
+            TestAttempt.operator_id == operator.id,
+            TestAttempt.id != attempt.id,
+            TestAttempt.status == "finished",
+        )
+    )
+    if previous_best is not None and score > float(previous_best):
+        improvement = accrue_reward(
+            db,
+            operator,
+            source_type="test",
+            source_code="score_improved",
+            source_id=attempt.id,
+            score=score,
+            comment=f"Улучшение результата теста: {test.title}",
+            created_by=reviewer,
+            idempotency_key_override=f"test:{test.id}:operator:{operator.id}:improvement",
+        )
+        used_engine = used_engine or improvement["reason"] != "no_rule"
+        if improvement["awarded"]:
+            awarded_total += improvement["amount"]
+            transaction_id = transaction_id or improvement["transaction_id"]
+
+    if used_engine:
+        attempt.reward_coins = awarded_total
+        attempt.reward_transaction_id = transaction_id
+    return used_engine
 
 
 # ── Сериализация для оператора (БЕЗ is_correct до завершения) ───────
