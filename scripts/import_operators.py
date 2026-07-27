@@ -21,6 +21,7 @@
   - сохраняет одноразовый CSV с доступами и JSON-отчёт в secure_outputs/
     (этот каталог не должен попадать в git — см. .gitignore).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -34,11 +35,9 @@ import string
 import sys
 import zipfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 from xml.etree import ElementTree as ET
-
 
 HIGHER_ROLES = {"admin", "manager", "supervisor"}
 SPECIAL_CHARS = "!@#$%&*?"
@@ -48,7 +47,7 @@ SPECIAL_CHARS = "!@#$%&*?"
 class OperatorRow:
     row_number: int
     full_name: str
-    email: Optional[str]
+    email: str | None
     status_raw: str
     participation_status: str
 
@@ -77,11 +76,7 @@ def _read_shared_strings(zf: zipfile.ZipFile) -> list[str]:
     with stream:
         for _, elem in ET.iterparse(stream, events=("end",)):
             if _local_name(elem.tag) == "si":
-                parts = [
-                    node.text or ""
-                    for node in elem.iter()
-                    if _local_name(node.tag) == "t"
-                ]
+                parts = [node.text or "" for node in elem.iter() if _local_name(node.tag) == "t"]
                 values.append("".join(parts))
                 elem.clear()
     return values
@@ -92,9 +87,7 @@ def _cell_value(cell: ET.Element, shared_strings: list[str]) -> str:
 
     if cell_type == "inlineStr":
         return "".join(
-            node.text or ""
-            for node in cell.iter()
-            if _local_name(node.tag) == "t"
+            node.text or "" for node in cell.iter() if _local_name(node.tag) == "t"
         ).strip()
 
     raw_value = ""
@@ -121,7 +114,8 @@ def read_xlsx_rows(path: Path) -> list[list[str]]:
     with zipfile.ZipFile(path) as zf:
         shared_strings = _read_shared_strings(zf)
         sheet_names = sorted(
-            name for name in zf.namelist()
+            name
+            for name in zf.namelist()
             if name.startswith("xl/worksheets/sheet") and name.endswith(".xml")
         )
         if not sheet_names:
@@ -137,7 +131,9 @@ def read_xlsx_rows(path: Path) -> list[list[str]]:
                 for cell in elem:
                     if _local_name(cell.tag) != "c":
                         continue
-                    values_by_col[_column_index(cell.attrib.get("r", "A"))] = _cell_value(cell, shared_strings)
+                    values_by_col[_column_index(cell.attrib.get("r", "A"))] = _cell_value(
+                        cell, shared_strings
+                    )
 
                 width = max(max(values_by_col.keys(), default=2) + 1, 3)
                 row = [values_by_col.get(i, "").strip() for i in range(width)]
@@ -166,7 +162,7 @@ def _find_header(headers: list[str], *needles: str) -> int:
     raise ValueError(f"Не найдена колонка: {' / '.join(needles)}")
 
 
-def _status_from_raw(value: str) -> tuple[str, Optional[str]]:
+def _status_from_raw(value: str) -> tuple[str, str | None]:
     raw = (value or "").strip().lower().replace("ё", "е")
     if not raw:
         return "participating", "Пустой статус участия: установлен статус 'Участвует'"
@@ -204,26 +200,62 @@ def parse_operator_rows(xlsx_path: Path) -> tuple[list[OperatorRow], list[str], 
         if warning:
             warnings.append(f"Строка {offset}: {warning}")
 
-        rows.append(OperatorRow(
-            row_number=offset,
-            full_name=full_name,
-            email=email or None,
-            status_raw=status_raw,
-            participation_status=participation_status,
-        ))
+        rows.append(
+            OperatorRow(
+                row_number=offset,
+                full_name=full_name,
+                email=email or None,
+                status_raw=status_raw,
+                participation_status=participation_status,
+            )
+        )
 
     return rows, warnings, errors
 
 
 TRANSLIT = {
-    "а": "a", "ә": "a", "б": "b", "в": "v", "г": "g", "ғ": "g",
-    "д": "d", "е": "e", "ё": "e", "ж": "zh", "з": "z", "и": "i",
-    "й": "i", "к": "k", "қ": "k", "л": "l", "м": "m", "н": "n",
-    "ң": "n", "о": "o", "ө": "o", "п": "p", "р": "r", "с": "s",
-    "т": "t", "у": "u", "ұ": "u", "ү": "u", "ф": "f", "х": "kh",
-    "һ": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch",
-    "ы": "y", "і": "i", "э": "e", "ю": "yu", "я": "ya",
-    "ъ": "", "ь": "",
+    "а": "a",
+    "ә": "a",
+    "б": "b",
+    "в": "v",
+    "г": "g",
+    "ғ": "g",
+    "д": "d",
+    "е": "e",
+    "ё": "e",
+    "ж": "zh",
+    "з": "z",
+    "и": "i",
+    "й": "i",
+    "к": "k",
+    "қ": "k",
+    "л": "l",
+    "м": "m",
+    "н": "n",
+    "ң": "n",
+    "о": "o",
+    "ө": "o",
+    "п": "p",
+    "р": "r",
+    "с": "s",
+    "т": "t",
+    "у": "u",
+    "ұ": "u",
+    "ү": "u",
+    "ф": "f",
+    "х": "kh",
+    "һ": "h",
+    "ц": "ts",
+    "ч": "ch",
+    "ш": "sh",
+    "щ": "shch",
+    "ы": "y",
+    "і": "i",
+    "э": "e",
+    "ю": "yu",
+    "я": "ya",
+    "ъ": "",
+    "ь": "",
 }
 
 
@@ -303,7 +335,14 @@ def _write_credentials(path: Path, credentials: list[dict[str, str]]) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(
             file,
-            fieldnames=["full_name", "username", "temporary_password", "email", "group", "participation_status"],
+            fieldnames=[
+                "full_name",
+                "username",
+                "temporary_password",
+                "email",
+                "group",
+                "participation_status",
+            ],
         )
         writer.writeheader()
         writer.writerows(credentials)
@@ -323,36 +362,60 @@ def parse_args() -> argparse.Namespace:
         description="Ручной массовый импорт операторов из xlsx в указанную группу."
     )
     parser.add_argument("--file", required=True, help="Путь к Excel-файлу с операторами")
-    parser.add_argument("--group", required=True, help="Название группы (создаётся при --apply, если не существует)")
-    parser.add_argument("--apply", action="store_true", help="Записать изменения в БД (по умолчанию — dry-run)")
-    parser.add_argument("--actor-user-id", type=int, default=None, help="ID пользователя для записи в audit log")
-    parser.add_argument("--credentials-output", default="", help="Путь для CSV с одноразовыми доступами")
+    parser.add_argument(
+        "--group", required=True, help="Название группы (создаётся при --apply, если не существует)"
+    )
+    parser.add_argument(
+        "--apply", action="store_true", help="Записать изменения в БД (по умолчанию — dry-run)"
+    )
+    parser.add_argument(
+        "--actor-user-id", type=int, default=None, help="ID пользователя для записи в audit log"
+    )
+    parser.add_argument(
+        "--credentials-output", default="", help="Путь для CSV с одноразовыми доступами"
+    )
     parser.add_argument("--report-output", default="", help="Путь для JSON-отчёта об импорте")
-    parser.add_argument("--allow-default-db", action="store_true", help="Разрешить запуск без переменной DATABASE_URL")
+    parser.add_argument(
+        "--allow-default-db",
+        action="store_true",
+        help="Разрешить запуск без переменной DATABASE_URL",
+    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     if not os.getenv("DATABASE_URL") and not args.allow_default_db:
-        print("DATABASE_URL не задан. Для production-импорта укажите Railway DATABASE_URL.", file=sys.stderr)
+        print(
+            "DATABASE_URL не задан. Для production-импорта укажите Railway DATABASE_URL.",
+            file=sys.stderr,
+        )
         return 2
 
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
 
     from sqlalchemy import func, select
+
     from app.core.security import hash_password
     from app.database.db import SessionLocal
     from app.models.entities import AuditLog, Group, Operator, User
 
     xlsx_path = Path(args.file).expanduser().resolve()
     rows, warnings, errors = parse_operator_rows(xlsx_path)
-    now_stamp = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
+    now_stamp = datetime.now(UTC).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
     group_slug = _slug(args.group)
 
-    credentials_path = Path(args.credentials_output) if args.credentials_output else root / "secure_outputs" / f"operator_credentials_{group_slug}_{now_stamp}.csv"
-    report_path = Path(args.report_output) if args.report_output else root / "secure_outputs" / f"operator_import_report_{group_slug}_{now_stamp}.json"
+    credentials_path = (
+        Path(args.credentials_output)
+        if args.credentials_output
+        else root / "secure_outputs" / f"operator_credentials_{group_slug}_{now_stamp}.csv"
+    )
+    report_path = (
+        Path(args.report_output)
+        if args.report_output
+        else root / "secure_outputs" / f"operator_import_report_{group_slug}_{now_stamp}.json"
+    )
 
     created_operators = 0
     updated_operators = 0
@@ -365,9 +428,7 @@ def main() -> int:
     db = SessionLocal()
     try:
         used_usernames = {
-            username
-            for (username,) in db.execute(select(User.username)).all()
-            if username
+            username for (username,) in db.execute(select(User.username)).all() if username
         }
 
         group = db.scalar(select(Group).where(func.lower(Group.name) == args.group.lower()))
@@ -376,20 +437,26 @@ def main() -> int:
             group = Group(name=args.group, status="active")
             db.add(group)
             db.flush()
-            db.add(AuditLog(
-                action="group_created",
-                entity_type="group",
-                entity_id=group.id,
-                details=f"Группа {args.group} создана массовым импортом операторов",
-                performed_by_user_id=args.actor_user_id,
-            ))
+            db.add(
+                AuditLog(
+                    action="group_created",
+                    entity_type="group",
+                    entity_id=group.id,
+                    details=f"Группа {args.group} создана массовым импортом операторов",
+                    performed_by_user_id=args.actor_user_id,
+                )
+            )
 
         for fallback_index, row in enumerate(rows, start=1):
             operator = None
             if row.email:
-                operator = db.scalar(select(Operator).where(func.lower(Operator.email) == row.email.lower()))
+                operator = db.scalar(
+                    select(Operator).where(func.lower(Operator.email) == row.email.lower())
+                )
             if operator is None:
-                operator = db.scalar(select(Operator).where(func.lower(Operator.full_name) == row.full_name.lower()))
+                operator = db.scalar(
+                    select(Operator).where(func.lower(Operator.full_name) == row.full_name.lower())
+                )
 
             status_value, is_active = _status_fields(row.participation_status)
 
@@ -397,14 +464,16 @@ def main() -> int:
                 created_operators += 1
                 username = unique_login(login_base(row, args.group, fallback_index), used_usernames)
                 temp_password = generate_temp_password(username, used_passwords)
-                credentials.append({
-                    "full_name": row.full_name,
-                    "username": username,
-                    "temporary_password": temp_password,
-                    "email": row.email or "",
-                    "group": args.group,
-                    "participation_status": row.participation_status,
-                })
+                credentials.append(
+                    {
+                        "full_name": row.full_name,
+                        "username": username,
+                        "temporary_password": temp_password,
+                        "email": row.email or "",
+                        "group": args.group,
+                        "participation_status": row.participation_status,
+                    }
+                )
 
                 if args.apply:
                     operator = Operator(
@@ -439,13 +508,15 @@ def main() -> int:
                     operator.user_id = user.id
                     created_accounts += 1
 
-                    db.add(AuditLog(
-                        action="operator_bulk_imported",
-                        entity_type="operator",
-                        entity_id=operator.id,
-                        details=f"Оператор {row.full_name} создан массовым импортом в группе {args.group}",
-                        performed_by_user_id=args.actor_user_id,
-                    ))
+                    db.add(
+                        AuditLog(
+                            action="operator_bulk_imported",
+                            entity_type="operator",
+                            entity_id=operator.id,
+                            details=f"Оператор {row.full_name} создан массовым импортом в группе {args.group}",
+                            performed_by_user_id=args.actor_user_id,
+                        )
+                    )
                 else:
                     created_accounts += 1
                 continue
@@ -459,7 +530,7 @@ def main() -> int:
                 operator.status = status_value
                 operator.is_active = is_active
                 operator.position = operator.position or "operator"
-                operator.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                operator.updated_at = datetime.now(UTC).replace(tzinfo=None)
                 if row.email:
                     operator.email = row.email
 
@@ -468,7 +539,9 @@ def main() -> int:
                     user = db.scalar(select(User).where(User.operator_id == operator.id))
 
                 if user is None:
-                    username = unique_login(login_base(row, args.group, fallback_index), used_usernames)
+                    username = unique_login(
+                        login_base(row, args.group, fallback_index), used_usernames
+                    )
                     temp_password = generate_temp_password(username, used_passwords)
                     user = User(
                         full_name=operator.full_name,
@@ -483,14 +556,16 @@ def main() -> int:
                     db.flush()
                     operator.user_id = user.id
                     created_accounts += 1
-                    credentials.append({
-                        "full_name": operator.full_name,
-                        "username": username,
-                        "temporary_password": temp_password,
-                        "email": operator.email or "",
-                        "group": args.group,
-                        "participation_status": operator.participation_status,
-                    })
+                    credentials.append(
+                        {
+                            "full_name": operator.full_name,
+                            "username": username,
+                            "temporary_password": temp_password,
+                            "email": operator.email or "",
+                            "group": args.group,
+                            "participation_status": operator.participation_status,
+                        }
+                    )
                 else:
                     user.full_name = operator.full_name
                     user.operator_id = operator.id
@@ -500,13 +575,15 @@ def main() -> int:
                         user.role = "operator"
                         updated_accounts += 1
 
-                db.add(AuditLog(
-                    action="operator_bulk_import_updated",
-                    entity_type="operator",
-                    entity_id=operator.id,
-                    details=f"Оператор {operator.full_name} обновлён массовым импортом в группе {args.group}",
-                    performed_by_user_id=args.actor_user_id,
-                ))
+                db.add(
+                    AuditLog(
+                        action="operator_bulk_import_updated",
+                        entity_type="operator",
+                        entity_id=operator.id,
+                        details=f"Оператор {operator.full_name} обновлён массовым импортом в группе {args.group}",
+                        performed_by_user_id=args.actor_user_id,
+                    )
+                )
 
         report = {
             "mode": "apply" if args.apply else "dry-run",
@@ -521,7 +598,9 @@ def main() -> int:
             "skipped_rows": skipped_rows,
             "operators_without_email": sum(1 for row in rows if not row.email),
             "participating": sum(1 for row in rows if row.participation_status == "participating"),
-            "not_participating": sum(1 for row in rows if row.participation_status == "not_participating"),
+            "not_participating": sum(
+                1 for row in rows if row.participation_status == "not_participating"
+            ),
             "credentials_file": str(credentials_path) if args.apply and credentials else None,
             "report_file": str(report_path),
             "warnings": warnings,

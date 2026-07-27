@@ -13,6 +13,10 @@ class AchievementRead(BaseModel):
     icon: str
     condition_type: str
     condition_value: float
+    metric: str
+    target: float | None
+    unit: str
+    direction: str
     reward_coins: int
     is_repeatable: bool
     is_active: bool

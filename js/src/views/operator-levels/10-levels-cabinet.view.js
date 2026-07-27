@@ -930,16 +930,21 @@ function showChangeUsernameModal() {
       <label class="form-label">Новый логин</label>
       <input id="cu-new" class="form-input" placeholder="Только латиница, цифры и _">
     </div>
+    <div class="form-group">
+      <label class="form-label">Текущий пароль</label>
+      <input id="cu-password" class="form-input" type="password" autocomplete="current-password">
+    </div>
     <div id="cu-err" class="status-line"></div>
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitChangeUsername()">Сохранить</button>`);
 }
 
 async function submitChangeUsername() {
   const newUsername = document.getElementById('cu-new')?.value?.trim();
+  const currentPassword = document.getElementById('cu-password')?.value || '';
   const err = document.getElementById('cu-err');
-  if (!newUsername) { err.textContent='Введите новый логин'; err.className='status-line status-error'; return; }
+  if (!newUsername || !currentPassword) { err.textContent='Введите новый логин и текущий пароль'; err.className='status-line status-error'; return; }
   try {
-    const data = await api.changeOperatorUsername({new_username: newUsername});
+    const data = await api.changeOperatorUsername({new_username: newUsername, current_password: currentPassword});
     closeModal(); showToast('Логин успешно изменён', 'ok');
     STATE.user.username = newUsername;
     setText('side-user', STATE.user.full_name);

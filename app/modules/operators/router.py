@@ -5,19 +5,20 @@ import random
 import re
 import secrets
 import string
-from datetime import date, datetime
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.core.datetime_utils import business_today
 from app.core.security import (
     get_current_user,
     hash_password,
     require_roles,
     supervisor_scope_group_id,
-    verify_password,
 )
 from app.database.db import get_db
 from app.models.entities import (
@@ -29,6 +30,12 @@ from app.models.entities import (
     User,
     WeeklyResult,
     now_utc,
+)
+from app.modules.auth.credentials import (
+    change_password as change_account_password,
+)
+from app.modules.auth.credentials import (
+    change_username as change_account_username,
 )
 from app.modules.operator_levels.schemas import OperatorLevelSummary
 from app.modules.operator_levels.service import operator_level_badge, operator_level_summary
@@ -124,7 +131,7 @@ def _operator_response(db: Session, op: Operator) -> dict:
     user = _operator_user(db, op)
     # Стаж: если задана start_date — считаем от неё, иначе от created_at
     start = op.start_date or op.created_at.date()
-    tenure_days = max(0, (date.today() - start).days)
+    tenure_days = max(0, (business_today() - start).days)
     return {
         "id": op.id,
         "full_name": op.full_name,
@@ -244,6 +251,7 @@ class ChangePasswordRequest(BaseModel):
 
 class ChangeUsernameRequest(BaseModel):
     new_username: str
+    current_password: str
 
 
 class ResetPasswordResponse(BaseModel):
@@ -839,44 +847,52 @@ def operator_history(
 @router.post("/account/change-password")
 def change_password(
     payload: ChangePasswordRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Оператор меняет свой пароль"""
-    if not verify_password(payload.current_password, current_user.password_hash):
-        raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
-    if payload.new_password != payload.confirm_password:
-        raise HTTPException(status_code=400, detail="Пароли не совпадают")
-    if len(payload.new_password) < 8:
-        raise HTTPException(status_code=400, detail="Пароль должен содержать минимум 8 символов")
-    current_user.password_hash = hash_password(payload.new_password)
-    current_user.must_change_password = False
+    change_account_password(
+        db,
+        current_user,
+        current_password=payload.current_password,
+        new_password=payload.new_password,
+        confirmation=payload.confirm_password,
+    )
     if current_user.operator_id:
         _audit(db, "password_changed", "user", current_user.id,
                f"Оператор {current_user.full_name} изменил пароль", current_user)
     db.commit()
-    return {"ok": True, "message": "Пароль успешно изменён"}
+    settings = get_settings()
+    response.delete_cookie(settings.auth_cookie_name, path="/")
+    response.delete_cookie("pulse_csrf_token", path="/")
+    return {"ok": True, "message": "Пароль изменён. Войдите снова.", "logout": True}
 
 
 @router.post("/account/change-username")
 def change_username(
     payload: ChangeUsernameRequest,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Оператор меняет свой логин"""
-    new_username = payload.new_username.strip()
-    if not new_username:
-        raise HTTPException(status_code=400, detail="Логин не может быть пустым")
-    if not re.match(r'^[a-zA-Z0-9_]+$', new_username):
-        raise HTTPException(status_code=400, detail="Логин может содержать только латинские буквы, цифры и _")
-    existing = db.scalar(select(User).where(User.username == new_username, User.id != current_user.id))
-    if existing:
-        raise HTTPException(status_code=409, detail="Такой логин уже используется. Укажите другой логин.")
-    old_username = current_user.username
-    current_user.username = new_username
+    old_username, new_username = change_account_username(
+        db,
+        current_user,
+        current_password=payload.current_password,
+        new_username=payload.new_username,
+    )
     if current_user.operator_id:
         _audit(db, "username_changed", "user", current_user.id,
                f"Логин изменён: {old_username} → {new_username}", current_user)
     db.commit()
-    return {"ok": True, "message": "Логин успешно изменён", "new_username": new_username}
+    settings = get_settings()
+    response.delete_cookie(settings.auth_cookie_name, path="/")
+    response.delete_cookie("pulse_csrf_token", path="/")
+    return {
+        "ok": True,
+        "message": "Логин изменён. Войдите снова.",
+        "new_username": new_username,
+        "logout": True,
+    }

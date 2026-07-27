@@ -10,12 +10,12 @@ def _set_cookie_header(response) -> str:
     return response.headers.get("set-cookie", "")
 
 
-def test_login_cookie_lasts_30_days(make_client):
+def test_login_cookie_lasts_12_hours(make_client):
     c = make_client()
     r = c.post("/api/auth/login", json=ADMIN_CREDENTIALS)
 
     assert r.status_code == 200, r.text
-    assert f"Max-Age={30 * 24 * 60 * 60}" in _set_cookie_header(r)
+    assert f"Max-Age={12 * 60 * 60}" in _set_cookie_header(r)
     assert f"Max-Age={get_settings().access_token_expire_minutes * 60}" in _set_cookie_header(r)
 
 
@@ -27,7 +27,7 @@ def test_me_extends_auth_cookie(make_client):
     r = c.get("/api/auth/me")
 
     assert r.status_code == 200, r.text
-    assert f"Max-Age={30 * 24 * 60 * 60}" in _set_cookie_header(r)
+    assert f"Max-Age={12 * 60 * 60}" in _set_cookie_header(r)
 
 
 def test_password_change_revokes_session_and_old_token(db_session, make_client):

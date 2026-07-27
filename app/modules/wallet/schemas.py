@@ -28,6 +28,7 @@ class CoinTransactionRead(BaseModel):
     operator_id: int
     amount: int
     type: str
+    category: str = "adjustment"
     comment: str
     created_by_user_id: int | None
     related_purchase_id: int | None

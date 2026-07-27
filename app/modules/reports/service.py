@@ -10,6 +10,7 @@ from __future__ import annotations
 import json as _json
 import logging
 from datetime import date
+from hashlib import sha256
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -36,6 +37,7 @@ from app.modules.reports.schemas import (
     PeriodWarningsOut,
     SavePeriodReportRequest,
 )
+from app.modules.reports.xlsx_validation import validate_xlsx_archive
 from app.modules.work_norms.service import calculate_norm_for_period
 
 MAX_REPORT_FILE_BYTES = 15 * 1024 * 1024
@@ -50,21 +52,148 @@ def process_upload(
     report_bytes: bytes,
     user_id: int,
 ) -> dict:
-    """Сохраняет файлы, посуточно пересчитывает метрики, инвалидирует кеши."""
-    repo.save_uploaded_bytes(db, "monthly", monthly_filename, monthly_bytes, user_id)
-    repo.save_uploaded_bytes(db, "report", report_filename, report_bytes, user_id)
+    """Validate and publish both workbooks in one database transaction."""
+    checksum = sha256(monthly_bytes + b"\0" + report_bytes).hexdigest()
+    current_monthly = repo.uploaded_file(db, "monthly")
+    current_report = repo.uploaded_file(db, "report")
+    if (
+        current_monthly
+        and current_report
+        and sha256(current_monthly.content + b"\0" + current_report.content).hexdigest()
+        == checksum
+    ):
+        return {
+            "ok": True,
+            "idempotent": True,
+            "checksum": checksum,
+            "message": "Эти файлы уже опубликованы.",
+            "daily_metrics": {},
+        }
 
-    # Посуточный разбор — ОДИН раз при загрузке, дальше аналитика строится
-    # из operator_daily_metrics без повторного парсинга Excel (см. ТЗ).
-    daily_stats = _rebuild_daily_metrics(db, monthly_bytes, report_bytes, user_id)
+    try:
+        validate_xlsx_archive(monthly_bytes, "Monthly Report")
+        validate_xlsx_archive(report_bytes, "Report")
+        rows = build_daily_metric_rows(monthly_bytes, report_bytes)
+        daily_stats, values_to_upsert = _prepare_daily_metrics(db, rows)
+        if daily_stats["matched_daily_rows"] == 0:
+            raise HTTPException(
+                status_code=422,
+                detail="В файлах не найдено ни одного оператора из системы",
+            )
 
-    cache_clear_all()  # новые файлы — старые закешированные расчёты аналитики и сохранённые PeriodReport больше не актуальны
+        repo.save_uploaded_bytes(db, "monthly", monthly_filename, monthly_bytes, user_id)
+        repo.save_uploaded_bytes(db, "report", report_filename, report_bytes, user_id)
+        monthly_file = repo.uploaded_file(db, "monthly")
+        report_file = repo.uploaded_file(db, "report")
+        for values in values_to_upsert:
+            values["source_monthly_report_id"] = monthly_file.id if monthly_file else None
+            values["source_report_id"] = report_file.id if report_file else None
+        repo.bulk_upsert_daily_metrics(db, values_to_upsert)
+        daily_stats["invalidated_period_reports"] = repo.delete_all_period_reports(db)
+        db.add(
+            AuditLog(
+                action="period_report_import_published",
+                entity_type="uploaded_report_file",
+                details=(
+                    f"checksum={checksum}; matched={daily_stats['matched_daily_rows']}; "
+                    f"unmatched={daily_stats['unmatched_operators_count']}"
+                ),
+                performed_by_user_id=user_id,
+            )
+        )
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception:
+        db.rollback()
+        logger.exception("Atomic report import failed", extra={"checksum": checksum})
+        raise
+
+    cache_clear_all()
 
     return {
         "ok": True,
+        "idempotent": False,
+        "checksum": checksum,
         "message": "Файлы загружены и сохранены. Выберите период и нажмите «Рассчитать».",
         "daily_metrics": daily_stats,
     }
+
+
+def _prepare_daily_metrics(db: Session, rows) -> tuple[dict, list[dict]]:
+    name_to_ops: dict[str, list] = {}
+    for operator in repo.site_operators(db):
+        if operator.full_name:
+            name_to_ops.setdefault(normalize_name(operator.full_name), []).append(operator)
+    collisions = {
+        key: operators for key, operators in name_to_ops.items() if len(operators) > 1
+    }
+    if collisions:
+        names = ", ".join(
+            sorted(operators[0].full_name for operators in collisions.values())[:10]
+        )
+        raise ValueError(f"В системе найдены совпадающие нормализованные ФИО: {names}")
+    name_to_op = {key: operators[0] for key, operators in name_to_ops.items()}
+
+    matched = 0
+    unmatched_names = set()
+    values_to_upsert: list[dict] = []
+    for row in rows:
+        operator = name_to_op.get(row.name_key)
+        if not operator:
+            unmatched_names.add(row.display_name)
+            continue
+        quality_sum = sum(row.quality_scores)
+        quality_count = len(row.quality_scores)
+        base_hours = max(
+            0.0,
+            row.worked_hours
+            - row.tech_issue_hours
+            - row.training_hours
+            - row.offline_activity_hours,
+        )
+        kvz = round(row.calls_count / base_hours, 2) if base_hours > 0 else 0.0
+        penalty_minutes = round(row.penalty_sum / 50.0, 2) if row.penalty_sum else 0.0
+        values_to_upsert.append(
+            {
+                "operator_id": operator.id,
+                "operator_name": operator.full_name,
+                "group_id": operator.group_id,
+                "metric_date": row.metric_date,
+                "calls_count": row.calls_count,
+                "quality_scores_json": _json.dumps(row.quality_scores),
+                "quality_sum": quality_sum,
+                "quality_count": quality_count,
+                "quality_avg": round(quality_sum / quality_count, 2)
+                if quality_count
+                else 0.0,
+                "kvz": kvz,
+                "efficiency": row.call_time_hours,
+                "worked_hours": row.worked_hours,
+                "tech_issue_hours": row.tech_issue_hours,
+                "training_hours": row.training_hours,
+                "offline_activity_hours": row.offline_activity_hours,
+                "base_hours": base_hours,
+                "penalty_sum": row.penalty_sum,
+                "penalty_minutes": penalty_minutes,
+                "penalty_points": round(penalty_minutes * 5.0, 2),
+                "source_monthly_report_id": None,
+                "source_report_id": None,
+            }
+        )
+        matched += 1
+    return (
+        {
+            "matched_daily_rows": matched,
+            "unmatched_operators_count": len(unmatched_names),
+            "unmatched_operators_sample": sorted(unmatched_names)[:20],
+        },
+        values_to_upsert,
+    )
 
 
 def _rebuild_daily_metrics(
@@ -85,55 +214,7 @@ def _rebuild_daily_metrics(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    site_ops = repo.site_operators(db)
-    name_to_op = {normalize_name(o.full_name): o for o in site_ops if o.full_name}
-
-    monthly_file_row = repo.uploaded_file(db, "monthly")
-    report_file_row = repo.uploaded_file(db, "report")
-    monthly_file_id = monthly_file_row.id if monthly_file_row else None
-    report_file_id = report_file_row.id if report_file_row else None
-
-    matched = 0
-    unmatched_names = set()
-    values_to_upsert: list[dict] = []
-
-    for row in rows:
-        operator = name_to_op.get(row.name_key)
-        if not operator:
-            unmatched_names.add(row.display_name)
-            continue
-
-        quality_sum = sum(row.quality_scores)
-        quality_count = len(row.quality_scores)
-        base_hours = max(0.0, row.worked_hours - row.tech_issue_hours - row.training_hours - row.offline_activity_hours)
-        kvz = round(row.calls_count / base_hours, 2) if base_hours > 0 else 0.0
-        penalty_minutes = round(row.penalty_sum / 50.0, 2) if row.penalty_sum else 0.0
-        penalty_points = round(penalty_minutes * 5.0, 2)
-
-        values_to_upsert.append(dict(
-            operator_id=operator.id,
-            operator_name=operator.full_name,
-            group_id=operator.group_id,
-            metric_date=row.metric_date,
-            calls_count=row.calls_count,
-            quality_scores_json=_json.dumps(row.quality_scores),
-            quality_sum=quality_sum,
-            quality_count=quality_count,
-            quality_avg=round(quality_sum / quality_count, 2) if quality_count else 0.0,
-            kvz=kvz,
-            efficiency=row.call_time_hours,  # сырые часы в звонке за день — % пересчитывается при агрегации диапазона
-            worked_hours=row.worked_hours,
-            tech_issue_hours=row.tech_issue_hours,
-            training_hours=row.training_hours,
-            offline_activity_hours=row.offline_activity_hours,
-            base_hours=base_hours,
-            penalty_sum=row.penalty_sum,
-            penalty_minutes=penalty_minutes,
-            penalty_points=penalty_points,
-            source_monthly_report_id=monthly_file_id,
-            source_report_id=report_file_id,
-        ))
-        matched += 1
+    stats, values_to_upsert = _prepare_daily_metrics(db, rows)
 
     repo.bulk_upsert_daily_metrics(db, values_to_upsert)
 
@@ -143,12 +224,7 @@ def _rebuild_daily_metrics(
 
     db.commit()
 
-    return {
-        "matched_daily_rows": matched,
-        "unmatched_operators_count": len(unmatched_names),
-        "unmatched_operators_sample": sorted(unmatched_names)[:20],
-        "invalidated_period_reports": deleted_reports,
-    }
+    return {**stats, "invalidated_period_reports": deleted_reports}
 
 
 def ensure_daily_metrics_from_saved_files(db: Session) -> bool:

@@ -16,6 +16,7 @@ _TEST_DB = pathlib.Path(__file__).resolve().parent / "puls_test.db"
 
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB}"
 os.environ["APP_ENV"] = "development"
+os.environ["JWT_SECRET_KEY"] = "test-only-secret-key-with-at-least-32-characters"
 os.environ["SEED_ADMIN_PASSWORD"] = "TestAdmin123!"
 os.environ["ENABLE_DEMO_DATA"] = "false"
 os.environ["AUTO_CREATE_TABLES"] = "true"

@@ -26,6 +26,21 @@ from app.models.entities import (
 # rejected(=cancelled) / refunded / expired.
 PENDING_EXPIRE_DAYS = 7    # заявка не обработана ревьюером → автоотмена с возвратом
 READY_PICKUP_DAYS = 14     # приз готов, но не забран → автоистечение с возвратом
+EARNING_TRANSACTION_TYPES = {
+    "achievement_reward",
+    "level_reward",
+    "mission_reward",
+    "period_report",
+    "raffle_reward",
+    "test_reward",
+    "weekly_accrual",
+    "wheel_reward",
+}
+SPENDING_TRANSACTION_TYPES = {
+    "manual_deduction",
+    "manual_subtract",
+    "purchase",
+}
 
 
 def _audit_purchase_status(
@@ -101,6 +116,7 @@ def add_transaction(
     metadata: dict | None = None,
     related_spin_id: int | None = None,
     idempotency_key: str | None = None,
+    category: str | None = None,
 ) -> CoinTransaction:
     if not comment.strip():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Комментарий обязателен")
@@ -115,10 +131,26 @@ def add_transaction(
         if existing is not None:
             return existing
 
+    ledger_category = category
+    if ledger_category is None:
+        if transaction_type == "refund" or "refund" in (source_type or ""):
+            ledger_category = "refund"
+        elif transaction_type in EARNING_TRANSACTION_TYPES and amount > 0:
+            ledger_category = "earning"
+        elif transaction_type in SPENDING_TRANSACTION_TYPES and amount < 0:
+            ledger_category = "spending"
+        else:
+            ledger_category = "adjustment"
+    if ledger_category not in {"earning", "spending", "refund", "adjustment", "expiry"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Неизвестная категория проводки",
+        )
+
     operator.current_balance += amount
-    if amount > 0:
+    if ledger_category == "earning" and amount > 0:
         operator.total_earned += amount
-    elif transaction_type in {"manual_subtract", "manual_deduction", "purchase"}:
+    elif ledger_category == "spending" and amount < 0:
         operator.total_spent += abs(amount)
 
     if operator.current_balance < 0:
@@ -128,6 +160,7 @@ def add_transaction(
         operator_id=operator.id,
         amount=amount,
         type=transaction_type,
+        category=ledger_category,
         comment=comment.strip(),
         created_by_user_id=created_by.id if created_by else None,
         related_purchase_id=purchase.id if purchase else None,

@@ -98,7 +98,7 @@ def test_repair_migration_restores_stamped_economy_schema(tmp_path: Path):
         "expires_at",
         "idempotency_key",
     } <= purchase_columns
-    assert version == "0038_coin_economy_blueprint"
+    assert version == "0040_coin_transaction_categories"
     assert preserved_purchase == (50, "pending")
 
 

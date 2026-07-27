@@ -20,6 +20,7 @@
   DATABASE_URL=postgresql://... python scripts/import_from_excel.py --file Данные_операторов.xlsx
   DATABASE_URL=postgresql://... python scripts/import_from_excel.py --file Данные_операторов.xlsx --apply
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,32 +29,30 @@ import re
 import secrets
 import string
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional
 
 import openpyxl
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 # ── путь к проекту ──────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.core.security import hash_password
-from app.models.entities import Group, Operator, User
-
+from app.core.security import hash_password  # noqa: E402
+from app.models.entities import Group, Operator, User  # noqa: E402
 
 TODAY = date(2026, 7, 1)
 
 # Маппинг супервайзера → группа
 SUPERVISOR_GROUP_MAP = {
-    "Кастек Гаухар":          "Кастек Гаухар",
+    "Кастек Гаухар": "Кастек Гаухар",
     "Пахриддинов Динмухамад": "Пахриддинов Динмухамад",
-    "Элекова Арайлым":        "Элекова Арайлым",
-    "Сабыр Азана":            "Пахриддинов Динмухамад",  # нет отдельной группы
+    "Элекова Арайлым": "Элекова Арайлым",
+    "Сабыр Азана": "Пахриддинов Динмухамад",  # нет отдельной группы
 }
 
 GROUPS_TO_CREATE = ["Кастек Гаухар", "Пахриддинов Динмухамад", "Элекова Арайлым"]
@@ -77,23 +76,61 @@ def _normalize(name: str) -> str:
 def _gen_username(full_name: str, existing_usernames: set[str]) -> str:
     """Генерирует логин из ФИО транслитерацией."""
     TRANSLIT = {
-        'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'yo','ж':'zh',
-        'з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o',
-        'п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts',
-        'ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu',
-        'я':'ya','ғ':'g','қ':'k','ң':'n','ү':'u','ұ':'u','һ':'h','ә':'a',
-        'і':'i','ө':'o',
+        "а": "a",
+        "б": "b",
+        "в": "v",
+        "г": "g",
+        "д": "d",
+        "е": "e",
+        "ё": "yo",
+        "ж": "zh",
+        "з": "z",
+        "и": "i",
+        "й": "y",
+        "к": "k",
+        "л": "l",
+        "м": "m",
+        "н": "n",
+        "о": "o",
+        "п": "p",
+        "р": "r",
+        "с": "s",
+        "т": "t",
+        "у": "u",
+        "ф": "f",
+        "х": "kh",
+        "ц": "ts",
+        "ч": "ch",
+        "ш": "sh",
+        "щ": "sch",
+        "ъ": "",
+        "ы": "y",
+        "ь": "",
+        "э": "e",
+        "ю": "yu",
+        "я": "ya",
+        "ғ": "g",
+        "қ": "k",
+        "ң": "n",
+        "ү": "u",
+        "ұ": "u",
+        "һ": "h",
+        "ә": "a",
+        "і": "i",
+        "ө": "o",
     }
     parts = full_name.strip().split()
     if not parts:
         return "operator_" + secrets.token_hex(4)
     # Фамилия + первая буква имени
-    surname = "".join(TRANSLIT.get(c.lower(), c.lower()) for c in parts[0]
-                      if c.isalpha() or c.isspace())
+    surname = "".join(
+        TRANSLIT.get(c.lower(), c.lower()) for c in parts[0] if c.isalpha() or c.isspace()
+    )
     first_init = ""
     if len(parts) > 1:
-        first_init = "".join(TRANSLIT.get(c.lower(), c.lower())
-                              for c in parts[1][:1] if c.isalpha())
+        first_init = "".join(
+            TRANSLIT.get(c.lower(), c.lower()) for c in parts[1][:1] if c.isalpha()
+        )
     base = re.sub(r"[^a-z0-9]", "_", f"user_{surname}_{first_init}").strip("_")
     base = re.sub(r"_+", "_", base)[:40]
     username = base
@@ -109,9 +146,11 @@ def _gen_password() -> str:
     alphabet = string.ascii_letters + string.digits
     while True:
         pwd = "".join(secrets.choice(alphabet) for _ in range(12))
-        if (any(c.isupper() for c in pwd) and
-                any(c.islower() for c in pwd) and
-                any(c.isdigit() for c in pwd)):
+        if (
+            any(c.isupper() for c in pwd)
+            and any(c.islower() for c in pwd)
+            and any(c.isdigit() for c in pwd)
+        ):
             return pwd[:72]
 
 
@@ -154,14 +193,16 @@ def read_excel(path: str) -> list[ExcelRow]:
 
         email = str(email).strip() if email else ""
 
-        rows.append(ExcelRow(
-            full_name=full_name,
-            rate=rate,
-            start_date=start_date,
-            group_name=group_name,
-            email=email,
-            row_num=i + 1,
-        ))
+        rows.append(
+            ExcelRow(
+                full_name=full_name,
+                rate=rate,
+                start_date=start_date,
+                group_name=group_name,
+                email=email,
+                row_num=i + 1,
+            )
+        )
     return rows
 
 
@@ -173,9 +214,9 @@ def run(excel_path: str, apply: bool) -> None:
 
     # Railway даёт postgres://, SQLAlchemy требует postgresql://
     if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+        db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
     elif db_url.startswith("postgresql://") and "+psycopg" not in db_url:
-        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
     engine = create_engine(db_url, pool_pre_ping=True)
     SessionLocal = sessionmaker(bind=engine)
@@ -187,9 +228,7 @@ def run(excel_path: str, apply: bool) -> None:
     print(f"Режим: {'ЗАПИСЬ В БД' if apply else 'DRY-RUN (только проверка)'}\n")
 
     # ── Шаг 1: Группы ──────────────────────────────────────────────────────
-    existing_groups: dict[str, Group] = {
-        g.name: g for g in db.scalars(select(Group))
-    }
+    existing_groups: dict[str, Group] = {g.name: g for g in db.scalars(select(Group))}
     groups_to_make = [n for n in GROUPS_TO_CREATE if n not in existing_groups]
 
     if groups_to_make:
@@ -209,7 +248,7 @@ def run(excel_path: str, apply: bool) -> None:
     # ── Шаг 2: Операторы ───────────────────────────────────────────────────
     existing_operators = list(db.scalars(select(Operator)))
     op_by_email = {(o.email or "").lower(): o for o in existing_operators if o.email}
-    op_by_name  = {_normalize(o.full_name): o for o in existing_operators}
+    op_by_name = {_normalize(o.full_name): o for o in existing_operators}
 
     existing_users = list(db.scalars(select(User)))
     existing_usernames = {u.username for u in existing_users}
@@ -237,53 +276,56 @@ def run(excel_path: str, apply: bool) -> None:
                 tenure_str = f"{days}д"
 
         # Найти существующего оператора
-        existing_op: Optional[Operator] = (
-            op_by_email.get(row.email.lower()) or
-            op_by_name.get(_normalize(row.full_name))
+        existing_op: Operator | None = op_by_email.get(row.email.lower()) or op_by_name.get(
+            _normalize(row.full_name)
         )
 
         group_obj = existing_groups.get(row.group_name)
-        group_id   = group_obj.id if group_obj else None
+        group_id = group_obj.id if group_obj else None
         group_name = row.group_name
 
         if existing_op:
             action = "ОБНОВЛЕНИЕ"
-            print(f"{row.row_num:>3}  {row.full_name:<35} {row.group_name:<25} {str(row.rate):>6}  {tenure_str:<15}  {action}")
+            print(
+                f"{row.row_num:>3}  {row.full_name:<35} {row.group_name:<25} {str(row.rate):>6}  {tenure_str:<15}  {action}"
+            )
 
             if apply:
-                existing_op.full_name   = row.full_name
-                existing_op.email       = row.email or existing_op.email
-                existing_op.rate        = Decimal(str(row.rate)) if row.rate else existing_op.rate
-                existing_op.start_date  = row.start_date or existing_op.start_date
-                existing_op.group_id    = group_id or existing_op.group_id
-                existing_op.group_name  = group_name
+                existing_op.full_name = row.full_name
+                existing_op.email = row.email or existing_op.email
+                existing_op.rate = Decimal(str(row.rate)) if row.rate else existing_op.rate
+                existing_op.start_date = row.start_date or existing_op.start_date
+                existing_op.group_id = group_id or existing_op.group_id
+                existing_op.group_name = group_name
 
                 # Обновляем связанного пользователя
                 linked_user = user_by_op_id.get(existing_op.id)
                 if linked_user:
                     linked_user.full_name = row.full_name
-                    linked_user.email     = row.email or linked_user.email
-                    linked_user.group_id  = group_id or linked_user.group_id
+                    linked_user.email = row.email or linked_user.email
+                    linked_user.group_id = group_id or linked_user.group_id
 
             updated_ops += 1
 
         else:
             action = "СОЗДАНИЕ"
-            print(f"{row.row_num:>3}  {row.full_name:<35} {row.group_name:<25} {str(row.rate):>6}  {tenure_str:<15}  {action}")
+            print(
+                f"{row.row_num:>3}  {row.full_name:<35} {row.group_name:<25} {str(row.rate):>6}  {tenure_str:<15}  {action}"
+            )
 
             if apply:
                 op = Operator(
-                    full_name            = row.full_name,
-                    email                = row.email or None,
-                    group_id             = group_id,
-                    group_name           = group_name,
-                    rate                 = Decimal(str(row.rate)) if row.rate else None,
-                    start_date           = row.start_date,
-                    participation_status = "participating",
-                    employment_status    = "active",
-                    status               = "active",
-                    is_active            = True,
-                    position             = "operator",
+                    full_name=row.full_name,
+                    email=row.email or None,
+                    group_id=group_id,
+                    group_name=group_name,
+                    rate=Decimal(str(row.rate)) if row.rate else None,
+                    start_date=row.start_date,
+                    participation_status="participating",
+                    employment_status="active",
+                    status="active",
+                    is_active=True,
+                    position="operator",
                 )
                 db.add(op)
                 db.flush()
@@ -294,16 +336,16 @@ def run(excel_path: str, apply: bool) -> None:
                 existing_usernames.add(username)
 
                 user = User(
-                    full_name           = row.full_name,
-                    username            = username,
-                    password_hash       = hash_password(password),
-                    role                = "operator",
-                    operator_id         = op.id,
-                    group_id            = group_id,
-                    email               = row.email or None,
-                    status              = "active",
-                    is_active           = True,
-                    must_change_password= True,
+                    full_name=row.full_name,
+                    username=username,
+                    password_hash=hash_password(password),
+                    role="operator",
+                    operator_id=op.id,
+                    group_id=group_id,
+                    email=row.email or None,
+                    status="active",
+                    is_active=True,
+                    must_change_password=True,
                 )
                 db.add(user)
                 db.flush()

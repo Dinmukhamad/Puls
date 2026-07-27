@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 
+import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -17,6 +20,59 @@ from app.models.entities import Operator, User, UserSession
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+class AccessScopeKind(StrEnum):
+    UNRESTRICTED = "unrestricted"
+    GROUP = "group"
+    DENIED = "denied"
+
+
+@dataclass(frozen=True, slots=True)
+class AccessScope:
+    kind: AccessScopeKind
+    group_id: int | None = None
+
+    @property
+    def is_unrestricted(self) -> bool:
+        return self.kind == AccessScopeKind.UNRESTRICTED
+
+
+def resolve_access_scope(db: Session, user: User) -> AccessScope:
+    """Return an explicit access decision; ``None`` is never used as a decision."""
+    if user.role in {"admin", "manager"}:
+        return AccessScope(AccessScopeKind.UNRESTRICTED)
+    if user.role != "supervisor":
+        return AccessScope(AccessScopeKind.DENIED)
+
+    group_id = user.group_id
+    if group_id is None and user.operator_id:
+        operator = db.get(Operator, user.operator_id)
+        group_id = operator.group_id if operator else None
+    if group_id is None:
+        return AccessScope(AccessScopeKind.DENIED)
+    return AccessScope(AccessScopeKind.GROUP, group_id)
+
+
+def require_group_scope(db: Session, user: User) -> AccessScope:
+    """Resolve administrative scope and reject ambiguous/missing scope."""
+    scope = resolve_access_scope(db, user)
+    if scope.kind == AccessScopeKind.DENIED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ запрещён: для роли не назначена область доступа",
+        )
+    return scope
+
+
+def require_operator_access(db: Session, user: User, operator: Operator) -> None:
+    """Reject access to an operator outside the caller's resolved group."""
+    scope = require_group_scope(db, user)
+    if scope.kind == AccessScopeKind.GROUP and operator.group_id != scope.group_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Оператор находится вне вашей области доступа",
+        )
 
 
 def hash_password(password: str) -> str:
@@ -38,15 +94,8 @@ def supervisor_scope_group_id(db: Session, user: User) -> int | None:
     Используется во всех местах, где supervisor работает с чужими операторами:
     /coins/*, /shop/purchases/*, GET /operators.
     """
-    if user.role != "supervisor":
-        return None
-    if user.group_id:
-        return user.group_id
-    if user.operator_id:
-        operator = db.get(Operator, user.operator_id)
-        if operator:
-            return operator.group_id
-    return None
+    scope = require_group_scope(db, user)
+    return scope.group_id if scope.kind == AccessScopeKind.GROUP else None
 
 
 def create_access_token(subject: dict | str, role: str = "") -> str:
@@ -82,7 +131,7 @@ def get_current_user(
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         user_id = int(payload.get("sub"))
-    except (JWTError, TypeError, ValueError):
+    except (InvalidTokenError, TypeError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный токен") from None
 
     session_id = payload.get("sid")
@@ -99,6 +148,11 @@ def get_current_user(
             or auth_session.status != "active"
             or auth_session.revoked_at is not None
             or (auth_session.expires_at is not None and auth_session.expires_at < now)
+            or (
+                auth_session.last_seen_at is not None
+                and auth_session.last_seen_at
+                < now - timedelta(minutes=settings.session_idle_timeout_minutes)
+            )
         ):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Сессия завершена")
         request.state.session_id = auth_session.session_id

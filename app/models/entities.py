@@ -339,6 +339,32 @@ class Achievement(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, onupdate=now_utc)
 
+    @property
+    def metric(self) -> str:
+        return self.condition_type
+
+    @property
+    def target(self) -> float | None:
+        return self.condition_value if self.condition_value > 0 else None
+
+    @property
+    def unit(self) -> str:
+        return {
+            "quality_threshold": "percent",
+            "test_score": "percent",
+            "no_late_streak": "weeks",
+            "total_coins": "coins",
+            "top_3_week": "place",
+        }.get(self.condition_type, "event")
+
+    @property
+    def direction(self) -> str:
+        if self.condition_type == "top_3_week":
+            return "lte"
+        if self.condition_value > 0:
+            return "gte"
+        return "binary"
+
 
 class OperatorAchievement(Base):
     """Состояние достижения у оператора — одна строка на пару (ТЗ §7.2/7.6:
@@ -388,6 +414,9 @@ class CoinTransaction(Base):
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
     amount: Mapped[int] = mapped_column(Integer)
     type: Mapped[str] = mapped_column(String(40), index=True)
+    category: Mapped[str] = mapped_column(
+        String(32), default="adjustment", index=True
+    )
     comment: Mapped[str] = mapped_column(Text)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     related_purchase_id: Mapped[int | None] = mapped_column(ForeignKey("shop_purchases.id"), nullable=True)
@@ -1022,6 +1051,14 @@ class MissionAttempt(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reward_awarded: Mapped[bool] = mapped_column(Boolean, default=False)
+    reward_amount_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reward_currency_snapshot: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )
+    reward_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("coin_transactions.id"), nullable=True
+    )
+    active_duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     state_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
     mission: Mapped[Mission] = relationship("Mission")

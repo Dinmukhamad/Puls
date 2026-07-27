@@ -5,7 +5,9 @@
   "scripts": {
     "bundle": "node scripts/build-frontend.mjs",
     "split:frontend": "powershell -ExecutionPolicy Bypass -File scripts/build-frontend.ps1 -SplitFromCurrent",
-    "build": "npm run bundle"
+    "build": "npm run bundle",
+    "test": "node --test tests/frontend/*.test.mjs",
+    "audit": "npm audit --audit-level=high"
   },
   "devDependencies": {
     "clean-css-cli": "^5.6.3",

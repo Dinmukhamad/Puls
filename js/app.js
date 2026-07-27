@@ -278,6 +278,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   await tryRestoreSession();
 });
 
+// Every browser-driven route change goes through the same role guard as sidebar
+// navigation. This also prevents a restricted hash from exposing an empty or
+// stale administrative view after Back/Forward navigation.
+window.addEventListener('hashchange', () => {
+  const role = STATE.user?.role;
+  if (!role) return;
+  const requested = parseStoredView(location.hash);
+  const fallback = isAdmin(role) ? 'summary' : 'cabinet';
+  const view = allowedViewsForRole(role).includes(requested.view)
+    ? requested.view
+    : fallback;
+  navigateTo(view, { tab: requested.tab });
+});
+
 async function tryRestoreSession() {
   try {
     const u = await api.me();
@@ -354,6 +368,11 @@ function initNav() {
 // Кеш отрендеренных разделов — не перерисовываем если уже есть актуальный HTML
 const VIEW_CACHE = {};
 const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel', 'sessions', 'tests', 'missions']); // эти разделы всегда рендерим заново
+let _viewAbortController = new AbortController();
+
+function currentViewSignal() {
+  return _viewAbortController.signal;
+}
 
 function invalidateViewCache(view) {
   if (view) delete VIEW_CACHE[view];
@@ -376,6 +395,8 @@ function navigateTo(view, options = {}) {
     options = {};
   }
   STATE.currentView = view;
+  _viewAbortController.abort();
+  _viewAbortController = new AbortController();
   if (view === 'coins') STATE.coinsTab = normalizeCoinTab(options.tab || STATE.coinsTab);
   bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов
   // Save to URL hash so F5 restores the same section
@@ -1770,16 +1791,21 @@ function showChangeUsernameModal() {
       <label class="form-label">Новый логин</label>
       <input id="cu-new" class="form-input" placeholder="Только латиница, цифры и _">
     </div>
+    <div class="form-group">
+      <label class="form-label">Текущий пароль</label>
+      <input id="cu-password" class="form-input" type="password" autocomplete="current-password">
+    </div>
     <div id="cu-err" class="status-line"></div>
     <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitChangeUsername()">Сохранить</button>`);
 }
 
 async function submitChangeUsername() {
   const newUsername = document.getElementById('cu-new')?.value?.trim();
+  const currentPassword = document.getElementById('cu-password')?.value || '';
   const err = document.getElementById('cu-err');
-  if (!newUsername) { err.textContent='Введите новый логин'; err.className='status-line status-error'; return; }
+  if (!newUsername || !currentPassword) { err.textContent='Введите новый логин и текущий пароль'; err.className='status-line status-error'; return; }
   try {
-    const data = await api.changeOperatorUsername({new_username: newUsername});
+    const data = await api.changeOperatorUsername({new_username: newUsername, current_password: currentPassword});
     closeModal(); showToast('Логин успешно изменён', 'ok');
     STATE.user.username = newUsername;
     setText('side-user', STATE.user.full_name);
@@ -2125,7 +2151,7 @@ async function renderCabinetAchievements() {
         ${completed
           ? `<div class="achievement-meta">Получено ×${row.times_awarded}${row.completed_at ? ' · ' + fmtDate(row.completed_at) : ''}</div>`
           : (a.condition_value > 0
-              ? `<div class="achievement-progress-line">${levelNum(row.progress_value)} / ${levelNum(a.condition_value)}</div>`
+              ? `<div class="achievement-progress-line">${levelNum(row.progress_value)} / ${levelNum(a.target ?? a.condition_value)}</div>`
               : '<div class="achievement-progress-line cell-muted">Не выполнено</div>')}
       </div>
     </div>`;
@@ -13092,6 +13118,12 @@ function renderMissionAttempt(el, attempt, feedback = '') {
   const step = attempt.current_step;
   const displayStep = Math.min(step.step_order + 1, step.total_steps);
   const isComplete = attempt.status === 'completed';
+  const displayedReward = isComplete && attempt.reward_received != null
+    ? attempt.reward_received
+    : attempt.reward_coins;
+  const rewardCaption = isComplete
+    ? (attempt.reward_awarded ? 'награда получена' : 'награда была получена ранее')
+    : (attempt.reward_eligible ? 'награда за первое прохождение' : 'награда уже получена');
   el.innerHTML = `<div class="mission-player">
     <header class="mission-player-top">
       <button class="mission-back-btn" type="button" onclick="backToMissionMap()" aria-label="Назад к карте миссий">← <span>К карте</span></button>
@@ -13110,7 +13142,7 @@ function renderMissionAttempt(el, attempt, feedback = '') {
       <aside class="mission-goal-panel">
         <span class="missions-eyebrow">Текущая цель</span><h2>${esc(step.content.goal || 'Выполни действие на телефоне')}</h2>
         <div class="mission-goal-progress"><span>Шаг ${displayStep}</span><b>${attempt.progress_percent}%</b></div>
-        <div class="mission-reward-box"><span class="missions-coin">P</span><div><b>${missionCoinLabel(attempt.reward_coins)}</b><span>${attempt.reward_eligible ? 'награда за первое прохождение' : 'награда уже получена'}</span></div></div>
+        <div class="mission-reward-box"><span class="missions-coin">₡</span><div><b>${missionCoinLabel(displayedReward)}</b><span>${rewardCaption}</span></div></div>
       </aside>
     </main>
     <footer class="mission-player-bottom">

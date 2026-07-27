@@ -16,10 +16,14 @@ class Settings(BaseSettings):
     # JWT
     jwt_secret_key: str = "change-me-in-env"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 43200  # 30 days
+    access_token_expire_minutes: int = 720
+    session_idle_timeout_minutes: int = 30
 
     # CORS
     cors_origins: str = "*"
+    trusted_proxy_ips: str = ""
+    csrf_enforced: bool = False
+    release_id: str = "development"
 
     # Таблицы и seed
     auto_create_tables: bool = True
@@ -60,6 +64,10 @@ class Settings(BaseSettings):
             return ["*"]
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    @property
+    def trusted_proxy_ip_list(self) -> set[str]:
+        return {value.strip() for value in self.trusted_proxy_ips.split(",") if value.strip()}
+
     def check_production_safety(self) -> None:
         """Raise on startup if dangerous defaults are set in production."""
         import os
@@ -97,6 +105,8 @@ class Settings(BaseSettings):
             problems.append("AUTO_CREATE_TABLES must be false in production; use Alembic migrations")
         if self.enable_demo_data:
             problems.append("ENABLE_DEMO_DATA must be false in production")
+        if not self.csrf_enforced:
+            problems.append("CSRF_ENFORCED must be true in production")
 
         if problems:
             raise RuntimeError("FATAL: unsafe production configuration: " + "; ".join(problems))

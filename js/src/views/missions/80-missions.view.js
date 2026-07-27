@@ -155,6 +155,12 @@ function renderMissionAttempt(el, attempt, feedback = '') {
   const step = attempt.current_step;
   const displayStep = Math.min(step.step_order + 1, step.total_steps);
   const isComplete = attempt.status === 'completed';
+  const displayedReward = isComplete && attempt.reward_received != null
+    ? attempt.reward_received
+    : attempt.reward_coins;
+  const rewardCaption = isComplete
+    ? (attempt.reward_awarded ? 'награда получена' : 'награда была получена ранее')
+    : (attempt.reward_eligible ? 'награда за первое прохождение' : 'награда уже получена');
   el.innerHTML = `<div class="mission-player">
     <header class="mission-player-top">
       <button class="mission-back-btn" type="button" onclick="backToMissionMap()" aria-label="Назад к карте миссий">← <span>К карте</span></button>
@@ -173,7 +179,7 @@ function renderMissionAttempt(el, attempt, feedback = '') {
       <aside class="mission-goal-panel">
         <span class="missions-eyebrow">Текущая цель</span><h2>${esc(step.content.goal || 'Выполни действие на телефоне')}</h2>
         <div class="mission-goal-progress"><span>Шаг ${displayStep}</span><b>${attempt.progress_percent}%</b></div>
-        <div class="mission-reward-box"><span class="missions-coin">P</span><div><b>${missionCoinLabel(attempt.reward_coins)}</b><span>${attempt.reward_eligible ? 'награда за первое прохождение' : 'награда уже получена'}</span></div></div>
+        <div class="mission-reward-box"><span class="missions-coin">₡</span><div><b>${missionCoinLabel(displayedReward)}</b><span>${rewardCaption}</span></div></div>
       </aside>
     </main>
     <footer class="mission-player-bottom">

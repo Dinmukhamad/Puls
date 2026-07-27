@@ -40,7 +40,7 @@ def save_uploaded_bytes(db: Session, file_kind: str, filename: str, content: byt
         db.add(UploadedReportFile(
             file_kind=file_kind, filename=filename, content=content, uploaded_by_user_id=user_id,
         ))
-    db.commit()
+    db.flush()
 
 
 def site_operators(db: Session) -> list[Operator]:

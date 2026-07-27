@@ -144,7 +144,7 @@ async function renderCabinetAchievements() {
         ${completed
           ? `<div class="achievement-meta">Получено ×${row.times_awarded}${row.completed_at ? ' · ' + fmtDate(row.completed_at) : ''}</div>`
           : (a.condition_value > 0
-              ? `<div class="achievement-progress-line">${levelNum(row.progress_value)} / ${levelNum(a.condition_value)}</div>`
+              ? `<div class="achievement-progress-line">${levelNum(row.progress_value)} / ${levelNum(a.target ?? a.condition_value)}</div>`
               : '<div class="achievement-progress-line cell-muted">Не выполнено</div>')}
       </div>
     </div>`;

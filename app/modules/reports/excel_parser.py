@@ -13,6 +13,8 @@ from datetime import date
 
 import openpyxl
 
+from app.core.datetime_utils import business_today
+
 # Заголовки-агрегаты, которые нельзя путать с датами
 _AGGREGATE_HEADERS = {
     "итого", "итого часов", "итого баллов", "итог", "итог часов",
@@ -300,7 +302,7 @@ def parse_monthly_report_daily(
             if first_cell == "фио":
                 header = row
                 if year_guess is None:
-                    year_guess = date.today().year
+                    year_guess = business_today().year
                 date_cols: list[tuple[int, date]] = []
                 for col_idx, h in enumerate(header):
                     d = _parse_header_date(h, year_guess)
@@ -387,7 +389,7 @@ def parse_report_file_daily(
     по ВСЕМ датам в файле. Бросает ValueError если обязательный лист отсутствует.
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
-    year = default_year or date.today().year
+    year = default_year or business_today().year
 
     missing = [s for s in REQUIRED_REPORT_SHEETS if s not in wb.sheetnames]
     if missing:

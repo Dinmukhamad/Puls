@@ -37,6 +37,14 @@ def now_local() -> datetime:
     return datetime.now(LOCAL_TZ)
 
 
+def business_today(clock: datetime | None = None) -> date:
+    """Business date in Asia/Almaty; an optional clock keeps tests deterministic."""
+    if clock is None:
+        return now_local().date()
+    aware = clock.replace(tzinfo=UTC) if clock.tzinfo is None else clock
+    return aware.astimezone(LOCAL_TZ).date()
+
+
 def local_day_bounds_utc(target_date: date | None = None) -> tuple[datetime, datetime]:
     """
     Границы локального (Asia/Almaty) дня, переведённые в naive UTC —

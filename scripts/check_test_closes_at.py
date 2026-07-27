@@ -4,9 +4,14 @@
 
 Запуск: python scripts/check_test_closes_at.py
 """
+
 from __future__ import annotations
-import os, sys
+
+import os
+import sys
+from datetime import UTC
 from pathlib import Path
+
 
 def main() -> int:
     if not os.getenv("DATABASE_URL"):
@@ -15,14 +20,16 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
 
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from sqlalchemy import select
+
     from app.database.db import SessionLocal
     from app.models.entities import Test
 
     db = SessionLocal()
     try:
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
         tests = list(db.scalars(select(Test).order_by(Test.id)))
         print(f"Текущее время сервера (UTC): {now}\n")
         for t in tests:
@@ -36,6 +43,7 @@ def main() -> int:
         return 0
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

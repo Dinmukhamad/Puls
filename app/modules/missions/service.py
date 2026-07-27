@@ -529,9 +529,14 @@ def attempt_read(db: Session, attempt: MissionAttempt) -> dict[str, Any]:
         else round(step.step_order / max(1, step_count - 1) * 100)
     )
     reward_message = None
+    reward_received = (
+        attempt.reward_amount_snapshot
+        if attempt.reward_awarded
+        else None
+    )
     if attempt.status == "completed":
         reward_message = (
-            f"Начислено {mission.reward_coins} коинов"
+            f"Начислено {reward_received or 0} ₡"
             if attempt.reward_awarded
             else "Миссия повторно пройдена — награда уже получена"
         )
@@ -558,6 +563,9 @@ def attempt_read(db: Session, attempt: MissionAttempt) -> dict[str, Any]:
         "reward_coins": mission.reward_coins,
         "reward_eligible": reward_eligible,
         "reward_awarded": attempt.reward_awarded,
+        "reward_received": reward_received,
+        "reward_currency": attempt.reward_currency_snapshot or "₡",
+        "active_duration_seconds": attempt.active_duration_seconds,
         "reward_message": reward_message,
         "score": attempt.score,
         "max_score": attempt.max_score,
@@ -661,6 +669,7 @@ def _complete(db: Session, attempt: MissionAttempt) -> tuple[bool, str]:
     attempt.status = "completed"
     attempt.completed_at = completed_at
     attempt.duration_seconds = max(0, int((completed_at - attempt.started_at).total_seconds()))
+    attempt.active_duration_seconds = attempt.duration_seconds
     progress.status = "completed"
     progress.current_step_key = "completion"
     progress.completed_at = completed_at
@@ -688,6 +697,9 @@ def _complete(db: Session, attempt: MissionAttempt) -> tuple[bool, str]:
         progress.reward_claimed_version = attempt.mission_version
         progress.reward_transaction_id = transaction.id
         attempt.reward_awarded = True
+        attempt.reward_amount_snapshot = mission.reward_coins
+        attempt.reward_currency_snapshot = "₡"
+        attempt.reward_transaction_id = transaction.id
         return True, f"Миссия завершена — начислено {mission.reward_coins} коинов"
 
     attempt.reward_awarded = False

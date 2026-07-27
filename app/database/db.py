@@ -11,15 +11,14 @@ class Base(DeclarativeBase):
 def normalize_database_url(url: str) -> str:
     """
     Railway даёт DATABASE_URL в формате postgres:// или postgresql://
-    SQLAlchemy 2.x требует postgresql+psycopg2:// для psycopg2
-    или postgresql+psycopg:// для psycopg3.
+    Production uses the single supported PostgreSQL driver: psycopg 3.
     Нормализуем автоматически.
     """
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
-    # Если нет явного драйвера — добавляем psycopg2 (стабильнее на Railway)
+    # Keep one PostgreSQL driver in every environment.
     if url.startswith("postgresql://") and "+psycopg" not in url:
-        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     return url
 
 

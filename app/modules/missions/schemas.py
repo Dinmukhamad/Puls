@@ -205,6 +205,9 @@ class MissionAttemptRead(BaseModel):
     reward_coins: int
     reward_eligible: bool
     reward_awarded: bool
+    reward_received: int | None = None
+    reward_currency: str = "₡"
+    active_duration_seconds: int | None = None
     reward_message: str | None = None
     score: float | None = None
     max_score: float | None = None

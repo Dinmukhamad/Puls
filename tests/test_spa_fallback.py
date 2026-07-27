@@ -22,7 +22,10 @@ def test_unknown_api_endpoint_returns_json_404(client):
     r = client.get("/api/rating/nominationz")  # опечатка из ТЗ
     assert r.status_code == 404
     assert r.headers["content-type"].startswith("application/json")
-    assert r.json() == {"detail": "API endpoint not found"}
+    body = r.json()
+    assert body["detail"] == "API endpoint not found"
+    assert body["code"] == "http_404"
+    assert body["request_id"]
 
 
 def test_bare_api_root_returns_json_404(client):

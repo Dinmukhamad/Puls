@@ -6,6 +6,7 @@
 Запуск:
     python scripts/diagnose_all_tests.py
 """
+
 from __future__ import annotations
 
 import os
@@ -22,8 +23,9 @@ def main() -> int:
     sys.path.insert(0, str(root))
 
     from sqlalchemy import select
+
     from app.database.db import SessionLocal
-    from app.models.entities import Test, TestQuestion, TestAssignment, TestAttempt, Operator
+    from app.models.entities import Operator, Test, TestAssignment, TestAttempt, TestQuestion
 
     db = SessionLocal()
     try:
@@ -31,17 +33,23 @@ def main() -> int:
         print(f"Всего тестов в системе: {len(tests)}\n")
 
         for t in tests:
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
             print(f"Тест ID={t.id} '{t.title}'  status={t.status}")
-            print(f"  opens_at={t.opens_at}  closes_at={t.closes_at}  time_limit={t.time_limit_minutes}мин")
+            print(
+                f"  opens_at={t.opens_at}  closes_at={t.closes_at}  time_limit={t.time_limit_minutes}мин"
+            )
             print(f"  reward_type={t.reward_type} reward_mode={t.reward_mode}")
 
             questions = list(db.scalars(select(TestQuestion).where(TestQuestion.test_id == t.id)))
             print(f"  Вопросов: {len(questions)}")
             for q in questions:
-                print(f"    Q{q.id}: type={q.question_type} points={q.points} answers={len(q.answers)}")
+                print(
+                    f"    Q{q.id}: type={q.question_type} points={q.points} answers={len(q.answers)}"
+                )
 
-            assignments = list(db.scalars(select(TestAssignment).where(TestAssignment.test_id == t.id)))
+            assignments = list(
+                db.scalars(select(TestAssignment).where(TestAssignment.test_id == t.id))
+            )
             print(f"  Назначений: {len(assignments)}")
             for a in assignments:
                 print(f"    target_type={a.target_type} target_id={a.target_id}")
@@ -50,17 +58,23 @@ def main() -> int:
             print(f"  Попыток всего: {len(attempts)}")
             for at in attempts:
                 op = db.get(Operator, at.operator_id)
-                print(f"    attempt={at.id} operator={op.full_name if op else '???'}(id={at.operator_id}) status={at.status}")
+                print(
+                    f"    attempt={at.id} operator={op.full_name if op else '???'}(id={at.operator_id}) status={at.status}"
+                )
 
         # Проверим конкретно оператора Атагельдиева — какие тесты ему видны
-        print(f"\n{'='*70}\nПроверка видимости для Атагельдиева Акнур (operator_id=21):\n{'='*70}")
+        print(
+            f"\n{'=' * 70}\nПроверка видимости для Атагельдиева Акнур (operator_id=21):\n{'=' * 70}"
+        )
         op21 = db.get(Operator, 21)
         if op21:
             for t in tests:
                 if t.status not in ("open", "finished"):
                     print(f"  Тест {t.id} '{t.title}': SKIP (status={t.status}, не open/finished)")
                     continue
-                assignments = list(db.scalars(select(TestAssignment).where(TestAssignment.test_id == t.id)))
+                assignments = list(
+                    db.scalars(select(TestAssignment).where(TestAssignment.test_id == t.id))
+                )
                 visible = False
                 for a in assignments:
                     if a.target_type == "all":
@@ -69,7 +83,9 @@ def main() -> int:
                         visible = True
                     elif a.target_type == "operator" and op21.id == a.target_id:
                         visible = True
-                print(f"  Тест {t.id} '{t.title}': visible={visible} (assignments={[(a.target_type,a.target_id) for a in assignments]}, operator.group_id={op21.group_id})")
+                print(
+                    f"  Тест {t.id} '{t.title}': visible={visible} (assignments={[(a.target_type, a.target_id) for a in assignments]}, operator.group_id={op21.group_id})"
+                )
 
         return 0
     finally:

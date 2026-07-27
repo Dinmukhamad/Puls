@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date as _date
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import business_today
 from app.core.security import get_current_user, hash_password
 from app.database.db import get_db
 from app.models.entities import AuditLog, Group, Operator, User
@@ -101,7 +101,7 @@ def _tenure_days(operator) -> int | None:
     """Стаж оператора в днях от start_date (или created_at) до сегодня."""
     if not operator:
         return None
-    today = _date.today()
+    today = business_today()
     start = operator.start_date or (operator.created_at.date() if operator.created_at else None)
     if not start:
         return None

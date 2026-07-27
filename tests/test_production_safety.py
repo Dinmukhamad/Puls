@@ -26,6 +26,7 @@ def _prod_settings(**overrides) -> Settings:
         auth_cookie_secure=True,
         auto_create_tables=False,
         enable_demo_data=False,
+        csrf_enforced=True,
     )
     base.update(overrides)
     return Settings(**base)

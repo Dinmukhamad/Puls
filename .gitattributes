@@ -5,3 +5,6 @@
 js/app.js linguist-generated=true
 js/api.js linguist-generated=true
 css/styles.css linguist-generated=true
+
+# Keep Python sources deterministic across Windows development and Linux CI.
+*.py text eol=lf

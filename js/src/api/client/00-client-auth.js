@@ -19,8 +19,14 @@ const api = (() => {
   }
 
   function headers() {
-    // credentials: 'include' handles cookie automatically
-    return { 'Content-Type': 'application/json' };
+    const csrf = document.cookie
+      .split('; ')
+      .find((item) => item.startsWith('pulse_csrf_token='))
+      ?.split('=')[1];
+    return {
+      'Content-Type': 'application/json',
+      ...(csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {}),
+    };
   }
 
   // FastAPI отдаёт 422 как data.detail = [{type, loc, msg, ctx}, ...] (Pydantic).
@@ -78,6 +84,11 @@ const api = (() => {
     // что-то реально не так, и пользователю нужно явное сообщение об ошибке,
     // а не вечный спиннер.
     const controller = new AbortController();
+    const viewSignal = typeof window.currentViewSignal === 'function'
+      ? window.currentViewSignal()
+      : null;
+    const abortForNavigation = () => controller.abort();
+    viewSignal?.addEventListener('abort', abortForNavigation, { once: true });
     const timeoutId = setTimeout(() => controller.abort(), 20000);
     opts.signal = controller.signal;
 
@@ -91,6 +102,7 @@ const api = (() => {
       throw err;
     } finally {
       clearTimeout(timeoutId);
+      viewSignal?.removeEventListener('abort', abortForNavigation);
     }
 
     let data = {};

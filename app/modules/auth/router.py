@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import timedelta
 from uuid import uuid4
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from jose import JWTError, jwt
+from jwt.exceptions import InvalidTokenError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,6 +20,7 @@ from app.core.security import (
 )
 from app.database.db import get_db
 from app.models.entities import AuditLog, User, UserSession
+from app.modules.auth.rate_limit import login_rate_limiter
 from app.modules.auth.schemas import (
     AccountCredentialsUpdate,
     LoginRequest,
@@ -30,9 +32,12 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _client_ip(request: Request) -> str:
+    direct_ip = request.client.host if request.client else ""
+    if direct_ip not in get_settings().trusted_proxy_ip_list:
+        return direct_ip
     forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
     real_ip = (request.headers.get("x-real-ip") or "").strip()
-    return forwarded or real_ip or (request.client.host if request.client else "")
+    return forwarded or real_ip or direct_ip
 
 
 def _device_info(user_agent: str) -> tuple[str, str, str]:
@@ -104,6 +109,16 @@ def _set_auth_cookie(response: Response, user: User, session_id: str) -> None:
     if settings.auth_cookie_domain:
         cookie_options["domain"] = settings.auth_cookie_domain
     response.set_cookie(**cookie_options)
+    csrf_token = uuid4().hex
+    response.set_cookie(
+        key="pulse_csrf_token",
+        value=csrf_token,
+        httponly=False,
+        secure=settings.auth_cookie_secure,
+        samesite=settings.auth_cookie_samesite,
+        max_age=settings.access_token_expire_minutes * 60,
+        path="/",
+    )
 
 
 def _delete_auth_cookie(response: Response) -> None:
@@ -112,6 +127,7 @@ def _delete_auth_cookie(response: Response) -> None:
     if settings.auth_cookie_domain:
         cookie_options["domain"] = settings.auth_cookie_domain
     response.delete_cookie(**cookie_options)
+    response.delete_cookie(key="pulse_csrf_token", path="/")
 
 
 def _revoke_user_sessions(db: Session, user: User, reason: str) -> None:
@@ -136,7 +152,7 @@ def _session_id_from_cookie(request: Request) -> str | None:
         return None
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-    except (JWTError, TypeError, ValueError):
+    except (InvalidTokenError, TypeError, ValueError):
         return None
     sid = payload.get("sid")
     return str(sid) if sid else None
@@ -144,14 +160,24 @@ def _session_id_from_cookie(request: Request) -> str | None:
 
 @router.post("/login")
 def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    client_ip = _client_ip(request)
+    retry_after = login_rate_limiter.retry_after(payload.username, client_ip)
+    if retry_after:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Слишком много попыток входа. Повторите через {retry_after} сек.",
+            headers={"Retry-After": str(retry_after)},
+        )
     user = db.scalar(select(User).where(User.username == payload.username))
     if not user or not verify_password(payload.password, user.password_hash):
+        login_rate_limiter.failure(payload.username, client_ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Неверный логин или пароль")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Аккаунт деактивирован")
 
+    login_rate_limiter.success(payload.username, client_ip)
     session = _create_auth_session(db, request, user)
     _set_auth_cookie(response, user, session.session_id)
     return {"ok": True}
@@ -189,10 +215,8 @@ def me(
     if session is None:
         session = _create_auth_session(db, request, current_user)
     else:
-        settings = get_settings()
         now = now_utc()
         session.last_seen_at = now
-        session.expires_at = now + timedelta(minutes=settings.access_token_expire_minutes)
         db.commit()
     _set_auth_cookie(response, current_user, session.session_id)
     return current_user
@@ -216,6 +240,8 @@ def update_account(
             raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
         if payload.new_password != payload.repeat_password:
             raise HTTPException(status_code=400, detail="Пароли не совпадают")
+        if verify_password(payload.new_password or "", current_user.password_hash):
+            raise HTTPException(status_code=400, detail="Новый пароль не должен совпадать со старым")
         current_user.password_hash = hash_password(payload.new_password or "")
         current_user.must_change_password = False
         _revoke_user_sessions(db, current_user, "password_changed")
@@ -228,8 +254,16 @@ def update_account(
             ))
 
     if wants_username:
+        if not payload.current_password:
+            raise HTTPException(status_code=400, detail="Введите текущий пароль")
+        if not wants_password and not verify_password(
+            payload.current_password, current_user.password_hash
+        ):
+            raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
         old_username = current_user.username
-        username = payload.username
+        from app.modules.auth.credentials import validate_username
+
+        username = validate_username(payload.username or "")
         existing = db.scalar(select(User).where(
             User.username == username, User.id != current_user.id
         ))
@@ -237,6 +271,7 @@ def update_account(
             raise HTTPException(status_code=409,
                                 detail="Такой логин уже используется")
         current_user.username = username
+        _revoke_user_sessions(db, current_user, "username_changed")
         if current_user.operator_id:
             db.add(AuditLog(
                 operator_id=current_user.operator_id,
@@ -247,7 +282,7 @@ def update_account(
 
     db.commit()
     db.refresh(current_user)
-    if wants_password:
+    if wants_password or wants_username:
         _delete_auth_cookie(response)
     return current_user
 
@@ -280,6 +315,7 @@ def change_my_login(
 
     old_login = current_user.username
     current_user.username = new_login
+    _revoke_user_sessions(db, current_user, "username_changed")
     db.add(AuditLog(
         action="login_changed",
         entity_type="user",
@@ -288,6 +324,8 @@ def change_my_login(
         performed_by_user_id=current_user.id,
     ))
     db.commit()
+    if response is not None:
+        _delete_auth_cookie(response)
     return {"ok": True, "message": "Логин успешно изменён", "new_login": new_login}
 
 

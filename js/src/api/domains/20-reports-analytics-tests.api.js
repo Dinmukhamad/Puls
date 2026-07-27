@@ -52,9 +52,14 @@
     return req('GET', '/api/reports/period-report/status');
   }
   async function uploadPeriodReportFiles(formData) {
+    const csrf = document.cookie
+      .split('; ')
+      .find((item) => item.startsWith('pulse_csrf_token='))
+      ?.split('=')[1];
     const res = await fetch(base() + '/api/reports/period-report/upload', {
       method: 'POST',
       credentials: 'include',
+      headers: csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {},
       body: formData, // FormData — нельзя ставить Content-Type вручную, браузер сам выставит boundary
     });
     let data = {};

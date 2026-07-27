@@ -6,6 +6,7 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.datetime_utils import business_today
 from app.models.entities import (
     Operator,
     OperatorLevel,
@@ -208,8 +209,8 @@ def level_badge(level: OperatorLevel | None) -> dict:
 
 
 def _operator_tenure_days(operator: Operator, as_of: date | None) -> int:
-    end = as_of or date.today()
-    created = operator.created_at.date() if operator.created_at else date.today()
+    end = as_of or business_today()
+    created = operator.created_at.date() if operator.created_at else business_today()
     start = operator.start_date or created
     return max(0, (end - start).days)
 
@@ -242,7 +243,7 @@ def operator_level_metrics(
     include_tests: bool = True,
 ) -> tuple[dict, PeriodReport | None]:
     report = _period_report(db, operator.id, period_start, period_end)
-    as_of = period_end or (report.period_end if report else date.today())
+    as_of = period_end or (report.period_end if report else business_today())
     metrics = {
         "tenure_days": _operator_tenure_days(operator, as_of),
         "quality": round(report.quality_avg or 0, 2) if report else 0,

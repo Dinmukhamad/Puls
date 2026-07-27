@@ -7,6 +7,12 @@
 **Backend:** FastAPI + PostgreSQL  
 **Frontend:** HTML / CSS / Vanilla JS (раздаётся FastAPI)
 
+Production использует PostgreSQL с драйвером psycopg 3 и миграции Alembic.
+Инструкции по релизу, проверке ролей, сверке данных и реагированию на
+инциденты находятся в [`docs/runbooks`](docs/runbooks). Для production
+обязательны явный CORS, secure-cookie, `CSRF_ENFORCED=true`,
+`TRUSTED_PROXY_IPS` и уникальный `RELEASE_ID`.
+
 ---
 
 ## Быстрый старт (локально)

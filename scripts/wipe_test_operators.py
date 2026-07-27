@@ -30,6 +30,7 @@ Console (или локально с правильным DATABASE_URL) адми�
 
     python scripts/wipe_test_operators.py --all --apply
 """
+
 from __future__ import annotations
 
 import argparse
@@ -42,10 +43,18 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Полная очистка тестовых операторов и их данных.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--all", action="store_true", help="Удалить ВСЕХ операторов в системе")
-    group.add_argument("--ids", type=str, help="Список ID операторов через запятую, например: 1,2,3")
-    parser.add_argument("--apply", action="store_true", help="Выполнить реальное удаление (по умолчанию — dry-run)")
+    group.add_argument(
+        "--ids", type=str, help="Список ID операторов через запятую, например: 1,2,3"
+    )
+    parser.add_argument(
+        "--apply", action="store_true", help="Выполнить реальное удаление (по умолчанию — dry-run)"
+    )
     parser.add_argument("--confirm", default="", help="Required with --apply: WIPE_TEST_OPERATORS")
-    parser.add_argument("--allow-default-db", action="store_true", help="Разрешить запуск без переменной DATABASE_URL")
+    parser.add_argument(
+        "--allow-default-db",
+        action="store_true",
+        help="Разрешить запуск без переменной DATABASE_URL",
+    )
     return parser.parse_args()
 
 
@@ -60,17 +69,25 @@ def main() -> int:
         return 2
 
     if not os.getenv("DATABASE_URL") and not args.allow_default_db:
-        print("DATABASE_URL не задан. Укажите Railway DATABASE_URL перед запуском.", file=sys.stderr)
+        print(
+            "DATABASE_URL не задан. Укажите Railway DATABASE_URL перед запуском.", file=sys.stderr
+        )
         return 2
 
     root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(root))
 
     from sqlalchemy import text
+
     from app.database.db import SessionLocal
     from app.models.entities import (
-        CoinTransaction, Operator, OperatorDailyMetric, PeriodReport,
-        ShopPurchase, User, WeeklyResult,
+        CoinTransaction,
+        Operator,
+        OperatorDailyMetric,
+        PeriodReport,
+        ShopPurchase,
+        User,
+        WeeklyResult,
     )
 
     db = SessionLocal()
@@ -94,19 +111,37 @@ def main() -> int:
         print("=" * 70)
         print(f"\nБудут удалены {len(operators)} операторов:")
         for op in operators:
-            print(f"  ID={op.id:>4}  {op.full_name:<30}  баланс={op.current_balance}₵  группа={op.group_name}")
+            print(
+                f"  ID={op.id:>4}  {op.full_name:<30}  баланс={op.current_balance}₵  группа={op.group_name}"
+            )
 
         # Подсчёт связанных записей по каждой таблице — для информации
         counts = {}
-        counts["operator_daily_metrics"] = db.query(OperatorDailyMetric).filter(OperatorDailyMetric.operator_id.in_(operator_ids)).count()
-        counts["period_reports"] = db.query(PeriodReport).filter(PeriodReport.operator_id.in_(operator_ids)).count()
-        counts["shop_purchases"] = db.query(ShopPurchase).filter(ShopPurchase.operator_id.in_(operator_ids)).count()
-        counts["coin_transactions"] = db.query(CoinTransaction).filter(CoinTransaction.operator_id.in_(operator_ids)).count()
-        counts["weekly_results"] = db.query(WeeklyResult).filter(WeeklyResult.operator_id.in_(operator_ids)).count()
+        counts["operator_daily_metrics"] = (
+            db.query(OperatorDailyMetric)
+            .filter(OperatorDailyMetric.operator_id.in_(operator_ids))
+            .count()
+        )
+        counts["period_reports"] = (
+            db.query(PeriodReport).filter(PeriodReport.operator_id.in_(operator_ids)).count()
+        )
+        counts["shop_purchases"] = (
+            db.query(ShopPurchase).filter(ShopPurchase.operator_id.in_(operator_ids)).count()
+        )
+        counts["coin_transactions"] = (
+            db.query(CoinTransaction).filter(CoinTransaction.operator_id.in_(operator_ids)).count()
+        )
+        counts["weekly_results"] = (
+            db.query(WeeklyResult).filter(WeeklyResult.operator_id.in_(operator_ids)).count()
+        )
         counts["users"] = db.query(User).filter(User.operator_id.in_(operator_ids)).count()
-        counts["audit_logs (legacy operator_id, будут обезличены)"] = db.execute(
-            text("SELECT COUNT(*) FROM audit_logs WHERE operator_id = ANY(:ids)"), {"ids": operator_ids}
-        ).scalar() or 0
+        counts["audit_logs (legacy operator_id, будут обезличены)"] = (
+            db.execute(
+                text("SELECT COUNT(*) FROM audit_logs WHERE operator_id = ANY(:ids)"),
+                {"ids": operator_ids},
+            ).scalar()
+            or 0
+        )
 
         print("\nСвязанные записи, которые также будут удалены:")
         for table, count in counts.items():
@@ -122,16 +157,28 @@ def main() -> int:
         # coin_transactions.related_purchase_id ссылается на shop_purchases.id,
         # поэтому coin_transactions нужно удалить РАНЬШЕ shop_purchases —
         # иначе PostgreSQL не даёт удалить строку, на которую ещё ссылаются.
-        db.query(OperatorDailyMetric).filter(OperatorDailyMetric.operator_id.in_(operator_ids)).delete(synchronize_session=False)
-        db.query(PeriodReport).filter(PeriodReport.operator_id.in_(operator_ids)).delete(synchronize_session=False)
-        db.query(CoinTransaction).filter(CoinTransaction.operator_id.in_(operator_ids)).delete(synchronize_session=False)
-        db.query(ShopPurchase).filter(ShopPurchase.operator_id.in_(operator_ids)).delete(synchronize_session=False)
-        db.query(WeeklyResult).filter(WeeklyResult.operator_id.in_(operator_ids)).delete(synchronize_session=False)
+        db.query(OperatorDailyMetric).filter(
+            OperatorDailyMetric.operator_id.in_(operator_ids)
+        ).delete(synchronize_session=False)
+        db.query(PeriodReport).filter(PeriodReport.operator_id.in_(operator_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(CoinTransaction).filter(CoinTransaction.operator_id.in_(operator_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(ShopPurchase).filter(ShopPurchase.operator_id.in_(operator_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(WeeklyResult).filter(WeeklyResult.operator_id.in_(operator_ids)).delete(
+            synchronize_session=False
+        )
 
         # audit_logs — обнуляем ссылки (entity_id для нового контракта, operator_id для legacy),
         # саму запись лога не трогаем (история действий администраторов важна сама по себе)
         db.execute(
-            text("UPDATE audit_logs SET entity_id = NULL WHERE entity_type = 'operator' AND entity_id = ANY(:ids)"),
+            text(
+                "UPDATE audit_logs SET entity_id = NULL WHERE entity_type = 'operator' AND entity_id = ANY(:ids)"
+            ),
             {"ids": operator_ids},
         )
         db.execute(
@@ -141,6 +188,7 @@ def main() -> int:
 
         # legacy operator_audit_logs (если таблица существует на старой схеме)
         from sqlalchemy import inspect as sa_inspect
+
         if sa_inspect(db.connection()).has_table("operator_audit_logs"):
             db.execute(
                 text("DELETE FROM operator_audit_logs WHERE operator_id = ANY(:ids)"),
@@ -159,12 +207,17 @@ def main() -> int:
             text("UPDATE operators SET user_id = NULL WHERE id = ANY(:ids)"),
             {"ids": operator_ids},
         )
-        user_ids_to_delete = [row[0] for row in db.execute(
-            text("SELECT id FROM users WHERE operator_id = ANY(:ids)"), {"ids": operator_ids}
-        ).all()]
+        user_ids_to_delete = [
+            row[0]
+            for row in db.execute(
+                text("SELECT id FROM users WHERE operator_id = ANY(:ids)"), {"ids": operator_ids}
+            ).all()
+        ]
         if user_ids_to_delete:
             db.execute(
-                text("UPDATE operators SET created_by_user_id = NULL WHERE created_by_user_id = ANY(:uids)"),
+                text(
+                    "UPDATE operators SET created_by_user_id = NULL WHERE created_by_user_id = ANY(:uids)"
+                ),
                 {"uids": user_ids_to_delete},
             )
 
@@ -173,11 +226,15 @@ def main() -> int:
         # остаётся, важна для истории действий администраторов):
         if user_ids_to_delete:
             db.execute(
-                text("UPDATE audit_logs SET performed_by_user_id = NULL WHERE performed_by_user_id = ANY(:uids)"),
+                text(
+                    "UPDATE audit_logs SET performed_by_user_id = NULL WHERE performed_by_user_id = ANY(:uids)"
+                ),
                 {"uids": user_ids_to_delete},
             )
             db.execute(
-                text("UPDATE uploaded_report_files SET uploaded_by_user_id = NULL WHERE uploaded_by_user_id = ANY(:uids)"),
+                text(
+                    "UPDATE uploaded_report_files SET uploaded_by_user_id = NULL WHERE uploaded_by_user_id = ANY(:uids)"
+                ),
                 {"uids": user_ids_to_delete},
             )
 

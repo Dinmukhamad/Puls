@@ -29,7 +29,9 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -c constraints.txt -r requirements.txt -r requirements-dev.txt
+      - name: Dependency audit
+        run: pip-audit -r requirements.txt
       - name: PostgreSQL migration smoke test
         env:
           DATABASE_URL: postgresql://puls:puls@localhost:5432/puls
@@ -37,11 +39,11 @@ jobs:
           alembic upgrade head
           alembic current
       - name: Ruff
-        run: ruff check app tests
+        run: ruff check app tests scripts
       - name: Compile Python
         run: python -m compileall app scripts tests
       - name: Pytest
-        run: pytest
+        run: pytest --cov=app --cov-report=term-missing --cov-fail-under=69
 
   frontend:
     runs-on: ubuntu-latest
@@ -55,6 +57,10 @@ jobs:
         run: npm ci
       - name: Build frontend
         run: npm run build
+      - name: Frontend tests
+        run: npm test
+      - name: Frontend dependency audit
+        run: npm audit --audit-level=high
       # Бандлы js/app.js, js/api.js, css/styles.css закоммичены (их напрямую
       # отдаёт деплой: Dockerfile/railpack без Node). Этот шаг гарантирует,
       # что они пересобраны из js/src и css/src: если кто-то поменял исходники
