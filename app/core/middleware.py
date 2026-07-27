@@ -9,6 +9,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+CSRF_TOKEN_EXEMPT_PATHS = {"/api/auth/login"}
 
 
 def _origin_from_referer(value: str | None) -> str | None:
@@ -67,7 +68,8 @@ def setup_middlewares(app: FastAPI, settings) -> None:
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; img-src 'self' data: blob:; "
-            "style-src 'self' 'unsafe-inline'; script-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' data: https://fonts.gstatic.com; script-src 'self'; "
             "connect-src 'self'; frame-ancestors 'none'"
         )
         if settings.auth_cookie_secure:
@@ -107,7 +109,10 @@ def setup_middlewares(app: FastAPI, settings) -> None:
                         status_code=403,
                         content={"detail": "Недопустимый источник запроса"},
                     )
-            if settings.csrf_enforced:
+            if (
+                settings.csrf_enforced
+                and request.url.path not in CSRF_TOKEN_EXEMPT_PATHS
+            ):
                 cookie_token = request.cookies.get("pulse_csrf_token")
                 header_token = request.headers.get("x-csrf-token")
                 if not cookie_token or not header_token or cookie_token != header_token:

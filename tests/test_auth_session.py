@@ -19,6 +19,22 @@ def test_login_cookie_lasts_12_hours(make_client):
     assert f"Max-Age={get_settings().access_token_expire_minutes * 60}" in _set_cookie_header(r)
 
 
+def test_login_with_stale_auth_cookie_does_not_require_csrf_token(make_client):
+    settings = get_settings()
+    previous_csrf_enforced = settings.csrf_enforced
+    try:
+        settings.csrf_enforced = True
+        client = make_client()
+        client.cookies.set(settings.auth_cookie_name, "expired-or-invalid-token")
+
+        response = client.post("/api/auth/login", json=ADMIN_CREDENTIALS)
+    finally:
+        settings.csrf_enforced = previous_csrf_enforced
+
+    assert response.status_code == 200, response.text
+    assert client.cookies.get("pulse_csrf_token")
+
+
 def test_me_extends_auth_cookie(make_client):
     c = make_client()
     login = c.post("/api/auth/login", json=ADMIN_CREDENTIALS)
