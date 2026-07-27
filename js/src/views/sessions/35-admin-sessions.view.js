@@ -11,10 +11,16 @@ function sessionsDebounce(fn, delay = 300) {
   };
 }
 
-function sessionStatusBadge(status, expiresAt) {
-  if (status === 'revoked') return '<span class="badge badge-muted">сброшена</span>';
-  if (status === 'expired') return '<span class="badge badge-warning">истекла</span>';
-  return '<span class="badge badge-ok">активна</span>';
+function sessionStatusBadge(state) {
+  const meta = {
+    current: ['Текущая', 'badge-info'],
+    active: ['Активна <15 мин', 'badge-ok'],
+    recent: ['Недавняя', 'badge-warning'],
+    inactive: ['Неактивна', 'badge-muted'],
+    ended: ['Завершена', 'badge-muted'],
+  };
+  const [label, cls] = meta[state] || ['Неактивна', 'badge-muted'];
+  return `<span class="badge ${cls}">${label}</span>`;
 }
 
 function sessionSafeDate(value) {
@@ -87,10 +93,10 @@ function paintAdminSessions(el, data) {
     </div>
 
     <div class="kpi-grid sessions-kpis">
-      <div class="kpi-card kpi-accent"><div class="kpi-label">Активные сессии</div><div class="kpi-value">${stats.active || 0}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Пользователей онлайн</div><div class="kpi-value">${stats.total_users != null ? stats.total_users : '—'}</div></div>
-      <div class="kpi-card kpi-warn"><div class="kpi-label">Истёкшие</div><div class="kpi-value">${stats.expired || 0}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Сброшенные</div><div class="kpi-value">${stats.revoked || 0}</div></div>
+      <div class="kpi-card kpi-accent"><div class="kpi-label">Активны сейчас</div><div class="kpi-value">${stats.active_now || 0}</div></div>
+      <div class="kpi-card"><div class="kpi-label">За 24 часа</div><div class="kpi-value">${stats.last_24h || 0}</div></div>
+      <div class="kpi-card kpi-warn"><div class="kpi-label">Подозрительные</div><div class="kpi-value">${stats.suspicious || 0}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Всего устройств</div><div class="kpi-value">${stats.total_devices || 0}</div></div>
     </div>
 
     <div class="sessions-filterbar">
@@ -128,13 +134,13 @@ function paintAdminSessions(el, data) {
         <table class="data-table sessions-table">
           <thead>
             <tr>
-              <th>Пользователь</th>
-              <th>Устройство</th>
-              <th>IP</th>
-              <th>Вход</th>
-              <th>Активность</th>
-              <th>Статус</th>
-              <th></th>
+              <th scope="col">Пользователь</th>
+              <th scope="col">Устройство / браузер</th>
+              <th scope="col">IP</th>
+              <th scope="col">Вход</th>
+              <th scope="col">Последняя активность</th>
+              <th scope="col">Состояние</th>
+              <th scope="col">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -182,10 +188,10 @@ function sessionRow(s) {
       <td><span class="sessions-ip">${esc(s.ip_address || '—')}</span></td>
       <td>${sessionSafeDate(s.created_at)}</td>
       <td>${sessionSafeDate(s.last_seen_at)}</td>
-      <td>${sessionStatusBadge(s.status, s.expires_at)}</td>
+      <td>${sessionStatusBadge(s.activity_state)}</td>
       <td class="row-actions">
-        <button class="btn-outline btn-sm danger-text" ${canRevoke ? '' : 'disabled'} onclick="revokeUserSession('${esc(s.session_id)}')">Сбросить</button>
-        <button class="btn-ghost btn-sm" onclick="revokeAllUserSessions(${Number(s.user_id) || 0})" ${s.user_id ? '' : 'disabled'}>Все</button>
+        <button class="btn-outline btn-sm danger-text" ${canRevoke ? '' : 'disabled title="Текущую или завершённую сессию нельзя завершить"'} onclick="revokeUserSession('${esc(s.session_id)}')">Завершить сессию</button>
+        <button class="btn-ghost btn-sm" onclick="revokeAllUserSessions(${Number(s.user_id) || 0})" ${s.user_id ? '' : 'disabled'}>Завершить остальные</button>
       </td>
     </tr>`;
 }

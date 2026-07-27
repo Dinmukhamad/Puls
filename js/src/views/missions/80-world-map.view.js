@@ -13,7 +13,7 @@ function learningWorldIllustration(world) {
 function renderLearningWorldMap(el, data) {
   const worlds = data.worlds || [];
   el.innerHTML = `<div class="missions-page learning-world-page">
-    <header class="missions-header world-map-header"><div><span class="missions-eyebrow">Карта обучения</span><h1>Рабочие территории</h1><p>Выбери систему или тему и пройди её практический маршрут.</p></div><div class="world-overall"><b>${data.percent || 0}%</b><span>${data.completed || 0} из ${data.total || 0} миссий</span></div></header>
+    <header class="missions-header world-map-header"><div><span class="missions-eyebrow">Карта обучения</span><h1>Рабочие территории</h1><p>Выбери систему или тему и пройди её практический маршрут.</p></div><div class="world-overall"><b>${data.percent || 0}%</b><span>Выполнено ${data.completed || 0} из ${data.total || 0}</span><small>Получено: ${missionCoinLabel(data.reward_earned)}</small><small>Доступно: ${missionCoinLabel(data.reward_available)}</small></div></header>
     <div class="world-pulse-line" aria-hidden="true"></div>
     <section class="learning-world-grid" aria-label="Территории обучения">
       ${worlds.map((world, index) => learningWorldCard(world, index)).join('')}
@@ -25,11 +25,14 @@ function renderLearningWorldMap(el, data) {
 function learningWorldCard(world, index) {
   const soon = world.availability === 'coming_soon';
   const status = soon ? 'Уроки готовятся' : (world.percent === 100 && world.total_count ? 'Завершено' : 'Доступно');
+  const rewardLabel = world.completed_count === world.total_count && world.total_count
+    ? `Получено: ${missionCoinLabel(world.reward_earned)}`
+    : `Доступно: ${missionCoinLabel(world.reward_available)}`;
   return `<article class="learning-world-card ${soon ? 'is-soon' : ''}" style="--world-accent:${esc(world.accent_color)}" data-world-index="${index}">
     <div class="world-card-visual">${learningWorldIllustration(world)}</div>
     <div class="world-card-copy"><div class="world-card-status"><span>${esc(status)}</span><b>${world.completed_count}/${world.total_count}</b></div><h2>${esc(world.title)}</h2><p>${esc(world.description)}</p>
       <div class="world-card-progress" aria-label="Прогресс ${world.percent}%"><i style="width:${world.percent}%"></i></div>
-      <div class="world-card-meta"><span>${world.total_count ? `${world.total_count} мисс.` : 'Новые уроки'}</span><span>P ${missionCoinLabel(world.coins_available)}</span></div>
+      <div class="world-card-meta"><span>${world.total_count ? `${world.total_count} мисс.` : 'Новые уроки'}</span><span>${rewardLabel}</span></div>
     </div>
     <button type="button" ${soon ? 'disabled' : ''} onclick="openLearningWorld('${esc(world.code)}')">${soon ? 'Скоро' : 'Открыть маршрут'}</button>
   </article>`;

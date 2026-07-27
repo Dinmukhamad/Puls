@@ -288,7 +288,7 @@ window.addEventListener('hashchange', () => {
   const view = allowedViewsForRole(role).includes(requested.view)
     ? requested.view
     : fallback;
-  navigateTo(view, { tab: requested.tab });
+  navigateTo(view, { tab: requested.tab, history: false });
 });
 
 async function tryRestoreSession() {
@@ -346,9 +346,37 @@ function initTheme() {
    NAV
 ══════════════════════════════════════ */
 function initNav() {
+  const sideNav = document.querySelector('.side-nav');
+  if (sideNav && !sideNav.id) sideNav.id = 'primary-navigation';
+  if (sideNav && !document.getElementById('mobile-nav-toggle')) {
+    const mobileToggle = document.createElement('button');
+    mobileToggle.id = 'mobile-nav-toggle';
+    mobileToggle.className = 'mobile-nav-toggle';
+    mobileToggle.type = 'button';
+    mobileToggle.setAttribute('aria-controls', sideNav.id);
+    mobileToggle.setAttribute('aria-expanded', 'false');
+    mobileToggle.setAttribute('aria-label', 'Открыть навигацию');
+    mobileToggle.innerHTML = '<span aria-hidden="true">☰</span><b>Puls.</b>';
+
+    const backdrop = document.createElement('button');
+    backdrop.className = 'mobile-nav-backdrop';
+    backdrop.type = 'button';
+    backdrop.setAttribute('aria-label', 'Закрыть навигацию');
+
+    const setMobileNav = open => {
+      document.body.classList.toggle('mobile-nav-open', open);
+      mobileToggle.setAttribute('aria-expanded', String(open));
+      mobileToggle.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию');
+    };
+    mobileToggle.addEventListener('click', () => setMobileNav(!document.body.classList.contains('mobile-nav-open')));
+    backdrop.addEventListener('click', () => setMobileNav(false));
+    document.body.append(mobileToggle, backdrop);
+  }
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     link.addEventListener('click', e => {
       e.preventDefault();
+      document.body.classList.remove('mobile-nav-open');
+      document.getElementById('mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
       navigateTo(link.dataset.navTarget);
     });
   });
@@ -368,6 +396,7 @@ function initNav() {
 const VIEW_CACHE = {};
 const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel', 'sessions', 'tests', 'missions']); // эти разделы всегда рендерим заново
 let _viewAbortController = new AbortController();
+let _routeInitialized = false;
 
 function currentViewSignal() {
   return _viewAbortController.signal;
@@ -400,7 +429,13 @@ function navigateTo(view, options = {}) {
   bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов
   // Save to URL hash so F5 restores the same section
   const route = view === 'coins' ? `coins?tab=${STATE.coinsTab}` : view;
-  history.replaceState(null, '', view === 'coins' ? `/${route}` : '/#' + route);
+  const routeUrl = view === 'coins' ? `/${route}` : '/#' + route;
+  if (options.history !== false) {
+    const sameRoute = `${location.pathname}${location.hash}` === routeUrl;
+    const method = !_routeInitialized || sameRoute ? 'replaceState' : 'pushState';
+    history[method](null, '', routeUrl);
+  }
+  _routeInitialized = true;
   localStorage.setItem('pulse-last-view', route);
   document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(l => {
@@ -409,19 +444,17 @@ function navigateTo(view, options = {}) {
   });
   const el = document.getElementById(`view-${view}`);
   if (el) el.classList.add('active');
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  document.querySelectorAll('.table-wrap, .an-table-scroll, [data-view-scroll]').forEach(node => {
+    node.scrollTop = 0;
+    node.scrollLeft = 0;
+  });
   renderView(view);
+  focusCurrentViewHeading(view);
 }
 
 function renderView(view) {
   const el = document.getElementById(`view-${view}`);
-
-  // Используем кешированный HTML если доступен (кроме тех разделов что всегда свежие)
-  if (el && VIEW_CACHE[view] && !VIEW_CACHE_SKIP.has(view)) {
-    el.innerHTML = VIEW_CACHE[view];
-    // Перезапускаем интерактивность после восстановления из кеша
-    _reattachViewListeners(view, el);
-    return;
-  }
 
   switch (view) {
     case 'cabinet':  renderCabinet();  break;
@@ -443,6 +476,19 @@ function renderView(view) {
     case 'missions': renderMissions(); break;
     case 'sessions': renderAdminSessions(); break;
   }
+}
+
+function focusCurrentViewHeading(view) {
+  const focusHeading = () => {
+    const host = document.getElementById(`view-${view}`);
+    if (!host?.classList.contains('active')) return;
+    const heading = host.querySelector('h1, .section-title, h2');
+    if (!heading) return;
+    if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+    heading.focus({ preventScroll: true });
+  };
+  requestAnimationFrame(focusHeading);
+  setTimeout(focusHeading, 120);
 }
 
 // После рендера сохраняем HTML в кеш

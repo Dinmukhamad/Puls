@@ -10,7 +10,7 @@ async function exportRatingFromRatingPage() {
   }
 }
 
-async function renderRating() {
+async function renderStaffRating() {
   const el = document.getElementById('view-rating');
   if (!el) return;
   const myNavGen = STATE.navGen; // раздел "Рейтинг" уже активен — фиксируем текущее поколение

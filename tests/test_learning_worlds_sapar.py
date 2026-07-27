@@ -60,6 +60,13 @@ def test_world_map_and_routes(db_session, make_client):
         "crm_requests",
         "self_employment_docs",
     ]
+    assert data["reward_total"] == sum(row["reward_total"] for row in data["worlds"])
+    assert data["reward_earned"] == 0
+    assert data["reward_available"] == sum(row["reward_available"] for row in data["worlds"])
+    assert all(
+        {"reward_total", "reward_earned", "reward_available"} <= row.keys()
+        for row in data["worlds"]
+    )
     yandex = operator_client.get("/api/missions/worlds/yandex_pro").json()
     assert [row["code"] for row in yandex["missions"]] == [
         "login_first_time",
@@ -68,6 +75,7 @@ def test_world_map_and_routes(db_session, make_client):
     smz = operator_client.get("/api/missions/worlds/self_employment_docs").json()
     assert smz["missions"][0]["code"] == "smz_sapar_provider_transfer"
     assert smz["missions"][0]["status"] == "available"
+    assert smz["reward_total"] >= smz["reward_available"] >= 0
 
 
 def test_sapar_happy_path_score_reward_and_idempotency(db_session, make_client):
@@ -87,6 +95,9 @@ def test_sapar_happy_path_score_reward_and_idempotency(db_session, make_client):
         source_type="mission_reward", source_id=completed["id"]
     ).all()
     assert len(rewards) == 1
+    world = operator_client.get("/api/missions/worlds/self_employment_docs").json()
+    assert world["reward_earned"] == 150
+    assert world["reward_available"] == world["reward_total"] - 150
 
 
 def test_sapar_errors_stay_on_step_and_reduce_score(db_session, make_client):

@@ -12,7 +12,11 @@ def test_admin_can_list_sessions(client):
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["stats"]["active"] >= 1
-    assert any(item["username"] == "admin" for item in data["items"])
+    assert data["stats"]["active_now"] >= 1
+    assert data["stats"]["last_24h"] >= 1
+    assert {"suspicious", "total_devices"} <= data["stats"].keys()
+    admin_session = next(item for item in data["items"] if item["username"] == "admin")
+    assert admin_session["activity_state"] in {"current", "active"}
 
 
 def test_stats_include_role_and_device_breakdown(client):

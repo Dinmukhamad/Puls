@@ -779,13 +779,17 @@ function renderCabinet() {
   const el = document.getElementById('view-cabinet');
   if (!el) return;
   if (!(STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor')) {
-    el.innerHTML = `<div class="view-header">
-      <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
-    </div>
-    <div class="panel">
-      <h3>Администратор</h3>
-      <p class="muted">Личный кабинет доступен только аккаунтам, привязанным к оператору.</p>
-    </div>`;
+    el.innerHTML = `
+      ${uiPageHeader({
+        kicker: 'Кабинет',
+        title: 'Рабочая область администратора',
+        description: 'Личный кабинет с показателями и наградами предназначен для операторов. Для управления командой используйте административные разделы.',
+      })}
+      ${uiEmptyState({
+        title: 'Вы вошли как администратор',
+        description: 'Здесь нет личных показателей оператора, поэтому нулевые значения не показываются.',
+        action: '<button class="btn-primary" onclick="navigateTo(\'summary\')">Перейти в сводку</button><button class="btn-outline" onclick="navigateTo(\'operators\')">Пользователи</button>',
+      })}`;
     return;
   }
 

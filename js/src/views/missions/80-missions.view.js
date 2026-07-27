@@ -3,12 +3,7 @@ let _missionDirty = false;
 let _missionActionBusy = false;
 
 function missionCoinLabel(value) {
-  const n = Math.abs(Number(value) || 0);
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${n} коин`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} коина`;
-  return `${n} коинов`;
+  return uiCoin(value);
 }
 
 function missionStatusLabel(status) {
@@ -80,7 +75,7 @@ function renderMissionMap(el, data) {
     <section class="missions-progress-card" aria-label="Общий прогресс миссий">
       <div class="missions-progress-copy"><span>Общий прогресс</span><strong>${data.completed} из ${data.total}</strong><p>миссий завершено</p></div>
       <div class="missions-progress-ring" style="--mission-progress:${Math.max(0, Math.min(100, data.percent || 0)) * 3.6}deg"><b>${data.percent || 0}%</b></div>
-      <div class="missions-earned"><span class="missions-coin">P</span><div><strong>${missionCoinLabel(data.earned_coins)}</strong><span>заработано за миссии</span></div></div>
+      <div class="missions-earned"><span class="missions-coin" aria-hidden="true">₡</span><div><strong>${missionCoinLabel(data.earned_coins)}</strong><span>получено за миссии</span></div></div>
     </section>
     <div class="missions-map-layout">
       <section class="missions-route panel" aria-labelledby="mission-route-title">
@@ -111,15 +106,21 @@ function renderMissionMap(el, data) {
 }
 
 function missionRouteCard(mission) {
-  const disabled = mission.status === 'locked';
+  const disabled = mission.status === 'locked' || mission.status === 'completed';
+  const rewardLabel = mission.reward_claimed
+    ? `Получено: ${missionCoinLabel(mission.reward_coins)}`
+    : mission.status === 'completed'
+      ? `Доступно: ${missionCoinLabel(mission.reward_coins)}`
+      : `Награда: ${missionCoinLabel(mission.reward_coins)}`;
+  const actionLabel = mission.status === 'completed' ? 'Завершена' : mission.action_label;
   return `<article class="mission-card is-${esc(mission.status)}">
     <div class="mission-number"><span>${String(mission.sort_order || 1).padStart(2, '0')}</span><i aria-hidden="true"></i></div>
     <div class="mission-card-main">
       <div class="mission-card-tags"><span class="mission-type">Обучение</span><span class="mission-status">${esc(missionStatusLabel(mission.status))}</span></div>
       <h3>${esc(mission.title)}</h3><p>${esc(mission.description)}</p>
-      <div class="mission-meta"><span>◷ ${mission.estimated_minutes || 5} минут</span><span class="mission-reward">P ${missionCoinLabel(mission.reward_coins)}</span></div>
+      <div class="mission-meta"><span>◷ ${mission.estimated_minutes || 5} минут</span><span class="mission-reward">${rewardLabel}</span></div>
     </div>
-    <button class="btn-primary mission-start-btn" type="button" ${disabled ? 'disabled' : ''} onclick="startMissionFromMap('${esc(mission.code)}')">${esc(mission.action_label)}</button>
+    <button class="btn-primary mission-start-btn" type="button" ${disabled ? 'disabled' : ''} onclick="startMissionFromMap('${esc(mission.code)}')">${esc(actionLabel)}</button>
   </article>`;
 }
 

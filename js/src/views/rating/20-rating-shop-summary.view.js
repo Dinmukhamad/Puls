@@ -171,23 +171,19 @@ async function renderRatingOverviewTab(el) {
     }
 
     function cleanCoins(v, fallback = 'Нет данных') {
-      return isNum(v) ? `${Math.round(Number(v))} ₡` : fallback;
+      return isNum(v) ? uiCoin(v) : fallback;
     }
 
     function cleanDate(dt, fallback = 'Нет данных') {
       if (!dt) return fallback;
-      const date = new Date(dt);
-      if (Number.isNaN(date.getTime())) return fallback;
-      return date.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+      const formatted = uiDate(dt);
+      return formatted === 'Нет данных' ? fallback : formatted;
     }
 
     function cleanDateTime(dt, fallback = 'Нет данных') {
       if (!dt) return fallback;
-      const date = new Date(dt);
-      if (Number.isNaN(date.getTime())) return fallback;
-      return date.toLocaleString('ru-RU', {
-        day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
-      });
+      const formatted = uiDateTime(dt);
+      return formatted === 'Нет данных' ? fallback : formatted;
     }
 
     function metricDecimals(metric) {
@@ -1029,8 +1025,11 @@ function shopOperatorCard(item, balance, state = shopItemState(item, balance)) {
   const category = shopCategory(item);
   const badges = [];
   if (state.requiredLevel) badges.push(`<span>С уровня «${esc(state.requiredLevel.name)}»</span>`);
-  if (item.stock_remaining != null) badges.push(`<span>${state.outOfStock ? 'Нет в наличии' : `Осталось ${item.stock_remaining}`}</span>`);
-  if (item.purchase_limit_per_operator > 0) badges.push(`<span>${item.operator_purchased_count || 0} из ${item.purchase_limit_per_operator} получено</span>`);
+  if (item.stock_remaining != null) badges.push(`<span>${state.outOfStock ? 'Нет в наличии' : `В наличии: ${item.stock_remaining}`}</span>`);
+  if (item.purchase_limit_per_operator > 0) {
+    badges.push(`<span>Получено: ${item.operator_purchased_count || 0}</span>`);
+    badges.push(`<span>Лимит: ${item.purchase_limit_per_operator} на сотрудника</span>`);
+  }
   if (item.ends_at && !state.alreadyEnded) badges.push(`<span>До ${fmtDate(item.ends_at)}</span>`);
   if (state.isSeasonalPrice) badges.push(`<span>Стартовая цена до ${fmtDate(item.season_ends_at)}</span>`);
   if (item.issue_days) badges.push(`<span>Получение: до ${item.issue_days} дн.</span>`);
@@ -1159,8 +1158,11 @@ function shopCard(item, balance, role) {
   const { requiredLevel, notStartedYet, alreadyEnded, outOfStock, canBuy } = state;
 
   const seasonBadges = [];
-  if (item.stock_remaining != null) seasonBadges.push(`<span class="shop-badge ${outOfStock ? 'shop-badge-danger' : ''}">Осталось: ${item.stock_remaining}</span>`);
-  if (item.purchase_limit_per_operator > 0 && role === 'operator') seasonBadges.push(`<span class="shop-badge">Взято: ${item.operator_purchased_count || 0} из ${item.purchase_limit_per_operator}</span>`);
+  if (item.stock_remaining != null) seasonBadges.push(`<span class="shop-badge ${outOfStock ? 'shop-badge-danger' : ''}">В наличии: ${item.stock_remaining}</span>`);
+  if (item.purchase_limit_per_operator > 0 && role === 'operator') {
+    seasonBadges.push(`<span class="shop-badge">Получено: ${item.operator_purchased_count || 0}</span>`);
+    seasonBadges.push(`<span class="shop-badge">Лимит: ${item.purchase_limit_per_operator} на сотрудника</span>`);
+  }
   if (notStartedYet) seasonBadges.push(`<span class="shop-badge shop-badge-info">Скоро: с ${fmtDate(item.starts_at)}</span>`);
   else if (item.ends_at && !alreadyEnded) seasonBadges.push(`<span class="shop-badge shop-badge-info">До ${fmtDate(item.ends_at)}</span>`);
   else if (alreadyEnded) seasonBadges.push(`<span class="shop-badge shop-badge-danger">Завершено</span>`);

@@ -165,6 +165,10 @@ function opRatingTabs() {
 async function renderRating() {
   const el = document.getElementById('view-rating');
   if (!el) return;
+  if (isAdmin(STATE.user?.role)) {
+    await renderStaffRating();
+    return;
+  }
   el.innerHTML = `<div class="op-page op-rating-page"><div class="op-page-head"><div><span>Рейтинг</span><h1>Мои результаты</h1><p>Позиция, динамика и сравнение с командой</p></div><button class="btn-outline btn-sm" data-rating-refresh>Обновить</button></div>${opRatingTabs()}<div id="rating-tab-content" class="op-rating-content"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div></div>`;
   el.querySelector('[data-rating-refresh]')?.addEventListener('click', () => { swrInvalidate('rating'); swrInvalidate('race:'); renderRating(); });
   el.querySelectorAll('[data-op-rating-tab]').forEach(button => button.addEventListener('click', () => {

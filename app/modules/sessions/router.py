@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
@@ -23,11 +25,23 @@ def _session_payload(session: UserSession, current_session_id: str | None) -> di
     status = session.status
     if status == "active" and session.expires_at is not None and session.expires_at < now_utc():
         status = "expired"
+    now = now_utc()
+    if session.session_id == current_session_id:
+        activity_state = "current"
+    elif status in {"revoked", "expired"}:
+        activity_state = "ended"
+    elif session.last_seen_at and session.last_seen_at >= now - timedelta(minutes=15):
+        activity_state = "active"
+    elif session.last_seen_at and session.last_seen_at >= now - timedelta(hours=24):
+        activity_state = "recent"
+    else:
+        activity_state = "inactive"
     return {
         "id": session.id,
         "session_id": session.session_id,
         "is_current": session.session_id == current_session_id,
         "status": status,
+        "activity_state": activity_state,
         "user_id": session.user_id,
         "user_name": user.full_name if user else "",
         "username": user.username if user else "",
@@ -152,11 +166,33 @@ def list_sessions(
     ).all()
     mobile_count = sum(1 for s in active_sessions_for_device if _is_mobile(s))
     pc_count = len(active_sessions_for_device) - mobile_count
+    active_now = sum(
+        1
+        for session in active_sessions_for_device
+        if session.last_seen_at and session.last_seen_at >= now - timedelta(minutes=15)
+    )
+    last_24h = db.scalar(
+        select(func.count()).select_from(UserSession).where(
+            UserSession.last_seen_at >= now - timedelta(hours=24)
+        )
+    ) or 0
+    devices = {
+        (session.user_id, session.device_label, session.browser_label, session.os_label)
+        for session in active_sessions_for_device
+    }
+    active_by_user: dict[int, int] = {}
+    for session in active_sessions_for_device:
+        active_by_user[session.user_id] = active_by_user.get(session.user_id, 0) + 1
+    suspicious = sum(1 for count in active_by_user.values() if count >= 5)
 
     return {
         "items": [_session_payload(s, current_session_id) for s in sessions],
         "stats": {
             "active": active_count,
+            "active_now": active_now,
+            "last_24h": last_24h,
+            "suspicious": suspicious,
+            "total_devices": len(devices),
             "revoked": revoked_count,
             "expired": expired_count,
             "shown": len(sessions),

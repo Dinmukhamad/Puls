@@ -20,15 +20,26 @@ function _loadCabinetData() {
 }
 
 function _metricBarHtml(label, value, target, unit = '') {
-  const v = Number(value) || 0;
-  const t = Number(target) || 0;
+  const hasValue = value !== null && value !== undefined && value !== '';
+  const hasTarget = target !== null && target !== undefined && Number(target) > 0;
+  if (!hasValue) {
+    return `
+      <div class="metric-progress-row">
+        <div class="metric-progress-label">
+          <span>${esc(label)}</span>
+          <b class="cell-muted">Нет данных</b>
+        </div>
+      </div>`;
+  }
+  const v = Number(value);
+  const t = hasTarget ? Number(target) : 0;
   const pct = t > 0 ? Math.min(100, Math.round((v / t) * 100)) : (v > 0 ? 100 : 0);
   const overTarget = t > 0 && v >= t;
   return `
     <div class="metric-progress-row">
       <div class="metric-progress-label">
         <span>${esc(label)}</span>
-        <b>${levelNum(v)}${esc(unit)}${t > 0 ? ` <span class="cell-muted">/ цель ${levelNum(t)}${esc(unit)}</span>` : ''}</b>
+        <b>${levelNum(v)}${esc(unit)}${t > 0 ? ` <span class="cell-muted">/ цель ${levelNum(t)}${esc(unit)}</span>` : ' <span class="cell-muted">· норма не настроена</span>'}</b>
       </div>
       <div class="metric-progress-bar">
         <div class="metric-progress-fill ${overTarget ? 'ok' : ''}" style="width:${pct}%"></div>
@@ -79,7 +90,7 @@ async function renderCabinetWeeklyDetail() {
       <div class="panel">
         <div class="panel-head">
           <h3>Показатели недели</h3>
-          <span class="panel-badge">${esc(wm.period_start)} — ${esc(wm.period_end)}</span>
+          <span class="panel-badge">${uiDate(wm.period_start)} — ${uiDate(wm.period_end)}</span>
         </div>
         ${_metricBarHtml('Выработка часов', wm.hours, wm.hours_target, ' ч')}
         ${_metricBarHtml('Качество', wm.quality, wm.quality_target, '%')}
@@ -145,7 +156,7 @@ async function renderCabinetAchievements() {
           ? `<div class="achievement-meta">Получено ×${row.times_awarded}${row.completed_at ? ' · ' + fmtDate(row.completed_at) : ''}</div>`
           : (a.condition_value > 0
               ? `<div class="achievement-progress-line">${levelNum(row.progress_value)} / ${levelNum(a.target ?? a.condition_value)}</div>`
-              : '<div class="achievement-progress-line cell-muted">Не выполнено</div>')}
+              : '<div class="achievement-progress-line cell-muted">Настраивается</div>')}
       </div>
     </div>`;
   };

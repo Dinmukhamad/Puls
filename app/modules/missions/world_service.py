@@ -11,8 +11,10 @@ from sqlalchemy.orm import Session
 
 from app.core.datetime_utils import now_utc
 from app.models.entities import (
+    CoinTransaction,
     LearningWorld,
     Mission,
+    MissionAttempt,
     MissionSetting,
     Operator,
     OperatorMissionProgress,
@@ -101,6 +103,19 @@ def _world_payload(db: Session, operator: Operator, world: LearningWorld, *, inc
             }
         )
     total = len(missions)
+    mission_ids = [mission.id for mission in missions]
+    reward_total = sum(mission.reward_coins for mission in missions)
+    attempt_ids = select(MissionAttempt.id).where(
+        MissionAttempt.operator_id == operator.id,
+        MissionAttempt.mission_id.in_(mission_ids or [-1]),
+    )
+    reward_earned = db.scalar(
+        select(func.coalesce(func.sum(CoinTransaction.amount), 0)).where(
+            CoinTransaction.operator_id == operator.id,
+            CoinTransaction.source_type == "mission_reward",
+            CoinTransaction.source_id.in_(attempt_ids),
+        )
+    ) or 0
     availability = world.availability
     if total == 0 and availability == "available":
         availability = "coming_soon"
@@ -118,6 +133,9 @@ def _world_payload(db: Session, operator: Operator, world: LearningWorld, *, inc
         "total_count": total,
         "percent": round(completed / total * 100) if total else 0,
         "coins_available": coins_available,
+        "reward_total": int(reward_total),
+        "reward_earned": int(reward_earned),
+        "reward_available": int(coins_available),
         **({"missions": cards} if include_missions else {}),
     }
 
@@ -134,6 +152,9 @@ def worlds_map(db: Session, operator: Operator) -> dict[str, Any]:
         "completed": sum(item["completed_count"] for item in items),
         "total": sum(item["total_count"] for item in items),
         "percent": round(sum(item["completed_count"] for item in items) / max(1, sum(item["total_count"] for item in items)) * 100),
+        "reward_total": sum(item["reward_total"] for item in items),
+        "reward_earned": sum(item["reward_earned"] for item in items),
+        "reward_available": sum(item["reward_available"] for item in items),
     }
 
 

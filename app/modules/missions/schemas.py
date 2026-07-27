@@ -49,6 +49,9 @@ class LearningWorldRead(BaseModel):
     total_count: int
     percent: int
     coins_available: int
+    reward_total: int
+    reward_earned: int
+    reward_available: int
 
 
 class LearningWorldMapRead(BaseModel):
@@ -56,6 +59,9 @@ class LearningWorldMapRead(BaseModel):
     completed: int
     total: int
     percent: int
+    reward_total: int
+    reward_earned: int
+    reward_available: int
 
 
 class LearningWorldRouteRead(LearningWorldRead):

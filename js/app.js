@@ -289,7 +289,7 @@ window.addEventListener('hashchange', () => {
   const view = allowedViewsForRole(role).includes(requested.view)
     ? requested.view
     : fallback;
-  navigateTo(view, { tab: requested.tab });
+  navigateTo(view, { tab: requested.tab, history: false });
 });
 
 async function tryRestoreSession() {
@@ -347,9 +347,37 @@ function initTheme() {
    NAV
 ══════════════════════════════════════ */
 function initNav() {
+  const sideNav = document.querySelector('.side-nav');
+  if (sideNav && !sideNav.id) sideNav.id = 'primary-navigation';
+  if (sideNav && !document.getElementById('mobile-nav-toggle')) {
+    const mobileToggle = document.createElement('button');
+    mobileToggle.id = 'mobile-nav-toggle';
+    mobileToggle.className = 'mobile-nav-toggle';
+    mobileToggle.type = 'button';
+    mobileToggle.setAttribute('aria-controls', sideNav.id);
+    mobileToggle.setAttribute('aria-expanded', 'false');
+    mobileToggle.setAttribute('aria-label', 'Открыть навигацию');
+    mobileToggle.innerHTML = '<span aria-hidden="true">☰</span><b>Puls.</b>';
+
+    const backdrop = document.createElement('button');
+    backdrop.className = 'mobile-nav-backdrop';
+    backdrop.type = 'button';
+    backdrop.setAttribute('aria-label', 'Закрыть навигацию');
+
+    const setMobileNav = open => {
+      document.body.classList.toggle('mobile-nav-open', open);
+      mobileToggle.setAttribute('aria-expanded', String(open));
+      mobileToggle.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию');
+    };
+    mobileToggle.addEventListener('click', () => setMobileNav(!document.body.classList.contains('mobile-nav-open')));
+    backdrop.addEventListener('click', () => setMobileNav(false));
+    document.body.append(mobileToggle, backdrop);
+  }
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     link.addEventListener('click', e => {
       e.preventDefault();
+      document.body.classList.remove('mobile-nav-open');
+      document.getElementById('mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
       navigateTo(link.dataset.navTarget);
     });
   });
@@ -369,6 +397,7 @@ function initNav() {
 const VIEW_CACHE = {};
 const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel', 'sessions', 'tests', 'missions']); // эти разделы всегда рендерим заново
 let _viewAbortController = new AbortController();
+let _routeInitialized = false;
 
 function currentViewSignal() {
   return _viewAbortController.signal;
@@ -401,7 +430,13 @@ function navigateTo(view, options = {}) {
   bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов
   // Save to URL hash so F5 restores the same section
   const route = view === 'coins' ? `coins?tab=${STATE.coinsTab}` : view;
-  history.replaceState(null, '', view === 'coins' ? `/${route}` : '/#' + route);
+  const routeUrl = view === 'coins' ? `/${route}` : '/#' + route;
+  if (options.history !== false) {
+    const sameRoute = `${location.pathname}${location.hash}` === routeUrl;
+    const method = !_routeInitialized || sameRoute ? 'replaceState' : 'pushState';
+    history[method](null, '', routeUrl);
+  }
+  _routeInitialized = true;
   localStorage.setItem('pulse-last-view', route);
   document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(l => {
@@ -410,19 +445,17 @@ function navigateTo(view, options = {}) {
   });
   const el = document.getElementById(`view-${view}`);
   if (el) el.classList.add('active');
+  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  document.querySelectorAll('.table-wrap, .an-table-scroll, [data-view-scroll]').forEach(node => {
+    node.scrollTop = 0;
+    node.scrollLeft = 0;
+  });
   renderView(view);
+  focusCurrentViewHeading(view);
 }
 
 function renderView(view) {
   const el = document.getElementById(`view-${view}`);
-
-  // Используем кешированный HTML если доступен (кроме тех разделов что всегда свежие)
-  if (el && VIEW_CACHE[view] && !VIEW_CACHE_SKIP.has(view)) {
-    el.innerHTML = VIEW_CACHE[view];
-    // Перезапускаем интерактивность после восстановления из кеша
-    _reattachViewListeners(view, el);
-    return;
-  }
 
   switch (view) {
     case 'cabinet':  renderCabinet();  break;
@@ -444,6 +477,19 @@ function renderView(view) {
     case 'missions': renderMissions(); break;
     case 'sessions': renderAdminSessions(); break;
   }
+}
+
+function focusCurrentViewHeading(view) {
+  const focusHeading = () => {
+    const host = document.getElementById(`view-${view}`);
+    if (!host?.classList.contains('active')) return;
+    const heading = host.querySelector('h1, .section-title, h2');
+    if (!heading) return;
+    if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+    heading.focus({ preventScroll: true });
+  };
+  requestAnimationFrame(focusHeading);
+  setTimeout(focusHeading, 120);
 }
 
 // После рендера сохраняем HTML в кеш
@@ -858,6 +904,139 @@ async function _loadNotificationsIntoModal() {
       if (target) { closeModal(); navigateTo(target); }
     });
   });
+}
+/* Shared UI contracts. Keep screen-specific views free from raw enums and ad-hoc formats. */
+const UI_TIME_ZONE = 'Asia/Almaty';
+
+const UI_STATUS_META = Object.freeze({
+  active: ['Активен', 'success'],
+  inactive: ['Неактивен', 'neutral'],
+  blocked: ['Заблокирован', 'danger'],
+  dismissed: ['Уволен', 'neutral'],
+  available: ['Доступна', 'success'],
+  coming_soon: ['Скоро', 'neutral'],
+  upcoming: ['Скоро', 'neutral'],
+  in_progress: ['В процессе', 'info'],
+  completed: ['Завершена', 'success'],
+  finished: ['Завершён', 'success'],
+  cancelled: ['Отменена', 'neutral'],
+  pending: ['На рассмотрении', 'warning'],
+  new: ['Новая', 'info'],
+  approved: ['Одобрена', 'success'],
+  processing: ['Выполняется', 'info'],
+  fulfilled: ['Получена', 'success'],
+  issued: ['Получена', 'success'],
+  rejected: ['Отклонена', 'danger'],
+  refunded: ['Возврат', 'neutral'],
+  draft: ['Черновик', 'neutral'],
+  published: ['Опубликовано', 'success'],
+  archived: ['В архиве', 'neutral'],
+});
+
+function uiNumber(value, maximumFractionDigits = 1) {
+  if (value === null || value === undefined || value === '') return 'Нет данных';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 'Нет данных';
+  return number.toLocaleString('ru-KZ', { maximumFractionDigits });
+}
+
+function uiDate(value) {
+  if (!value) return 'Нет данных';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Нет данных';
+  return new Intl.DateTimeFormat('ru-KZ', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: UI_TIME_ZONE,
+  }).format(date);
+}
+
+function uiDateTime(value) {
+  if (!value) return 'Нет данных';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Нет данных';
+  return new Intl.DateTimeFormat('ru-KZ', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: UI_TIME_ZONE,
+  }).format(date).replace(',', '');
+}
+
+function uiCoin(value, options = {}) {
+  if (value === null || value === undefined || value === '') return 'Нет данных';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 'Нет данных';
+  const formatted = uiNumber(number, options.maximumFractionDigits ?? 0);
+  if (options.sign && number > 0) return `+${formatted} коинов`;
+  return `${formatted} ${pluralize(Math.abs(number), 'коин', 'коина', 'коинов')}`;
+}
+
+function uiStatusMeta(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return UI_STATUS_META[key] || ['Статус не определён', 'neutral'];
+}
+
+function uiStatusLabel(value) {
+  return uiStatusMeta(value)[0];
+}
+
+function uiStatusBadge(value) {
+  const [label, tone] = uiStatusMeta(value);
+  return `<span class="ui-status ui-status--${tone}">${esc(label)}</span>`;
+}
+
+function uiPageHeader({ eyebrow = '', title, description = '', meta = '', actions = '' }) {
+  return `<header class="ui-page-header">
+    <div class="ui-page-header__copy">
+      ${eyebrow ? `<span class="ui-page-header__eyebrow">${esc(eyebrow)}</span>` : ''}
+      <h1 tabindex="-1">${esc(title)}</h1>
+      ${description ? `<p>${esc(description)}</p>` : ''}
+    </div>
+    ${meta || actions ? `<div class="ui-page-header__side">${meta}${actions ? `<div class="ui-page-header__actions">${actions}</div>` : ''}</div>` : ''}
+  </header>`;
+}
+
+function uiEmptyState(title, description = '', action = '') {
+  return `<div class="ui-empty-state" role="status">
+    <strong>${esc(title)}</strong>
+    ${description ? `<p>${esc(description)}</p>` : ''}
+    ${action}
+  </div>`;
+}
+
+function uiSetBusy(button, busy, label = 'Сохраняем…') {
+  if (!button) return;
+  if (busy) {
+    button.dataset.idleLabel = button.textContent;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.innerHTML = `<span class="ui-button-spinner" aria-hidden="true"></span>${esc(label)}`;
+  } else {
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    button.textContent = button.dataset.idleLabel || button.textContent;
+  }
+}
+
+function uiSyncQuery(values, { replace = true } = {}) {
+  const url = new URL(location.href);
+  Object.entries(values).forEach(([key, value]) => {
+    if (value === '' || value === null || value === undefined) url.searchParams.delete(key);
+    else url.searchParams.set(key, value);
+  });
+  history[replace ? 'replaceState' : 'pushState'](null, '', url);
+}
+
+function uiReadQuery(defaults = {}) {
+  const params = new URLSearchParams(location.search);
+  return Object.fromEntries(
+    Object.entries(defaults).map(([key, fallback]) => [key, params.get(key) ?? fallback]),
+  );
 }
 async function renderOperatorLevelsSettings() {
   const el = document.getElementById('view-operator-levels');
@@ -1640,13 +1819,17 @@ function renderCabinet() {
   const el = document.getElementById('view-cabinet');
   if (!el) return;
   if (!(STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor')) {
-    el.innerHTML = `<div class="view-header">
-      <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
-    </div>
-    <div class="panel">
-      <h3>Администратор</h3>
-      <p class="muted">Личный кабинет доступен только аккаунтам, привязанным к оператору.</p>
-    </div>`;
+    el.innerHTML = `
+      ${uiPageHeader({
+        kicker: 'Кабинет',
+        title: 'Рабочая область администратора',
+        description: 'Личный кабинет с показателями и наградами предназначен для операторов. Для управления командой используйте административные разделы.',
+      })}
+      ${uiEmptyState({
+        title: 'Вы вошли как администратор',
+        description: 'Здесь нет личных показателей оператора, поэтому нулевые значения не показываются.',
+        action: '<button class="btn-primary" onclick="navigateTo(\'summary\')">Перейти в сводку</button><button class="btn-outline" onclick="navigateTo(\'operators\')">Пользователи</button>',
+      })}`;
     return;
   }
 
@@ -2027,15 +2210,26 @@ function _loadCabinetData() {
 }
 
 function _metricBarHtml(label, value, target, unit = '') {
-  const v = Number(value) || 0;
-  const t = Number(target) || 0;
+  const hasValue = value !== null && value !== undefined && value !== '';
+  const hasTarget = target !== null && target !== undefined && Number(target) > 0;
+  if (!hasValue) {
+    return `
+      <div class="metric-progress-row">
+        <div class="metric-progress-label">
+          <span>${esc(label)}</span>
+          <b class="cell-muted">Нет данных</b>
+        </div>
+      </div>`;
+  }
+  const v = Number(value);
+  const t = hasTarget ? Number(target) : 0;
   const pct = t > 0 ? Math.min(100, Math.round((v / t) * 100)) : (v > 0 ? 100 : 0);
   const overTarget = t > 0 && v >= t;
   return `
     <div class="metric-progress-row">
       <div class="metric-progress-label">
         <span>${esc(label)}</span>
-        <b>${levelNum(v)}${esc(unit)}${t > 0 ? ` <span class="cell-muted">/ цель ${levelNum(t)}${esc(unit)}</span>` : ''}</b>
+        <b>${levelNum(v)}${esc(unit)}${t > 0 ? ` <span class="cell-muted">/ цель ${levelNum(t)}${esc(unit)}</span>` : ' <span class="cell-muted">· норма не настроена</span>'}</b>
       </div>
       <div class="metric-progress-bar">
         <div class="metric-progress-fill ${overTarget ? 'ok' : ''}" style="width:${pct}%"></div>
@@ -2086,7 +2280,7 @@ async function renderCabinetWeeklyDetail() {
       <div class="panel">
         <div class="panel-head">
           <h3>Показатели недели</h3>
-          <span class="panel-badge">${esc(wm.period_start)} — ${esc(wm.period_end)}</span>
+          <span class="panel-badge">${uiDate(wm.period_start)} — ${uiDate(wm.period_end)}</span>
         </div>
         ${_metricBarHtml('Выработка часов', wm.hours, wm.hours_target, ' ч')}
         ${_metricBarHtml('Качество', wm.quality, wm.quality_target, '%')}
@@ -2152,7 +2346,7 @@ async function renderCabinetAchievements() {
           ? `<div class="achievement-meta">Получено ×${row.times_awarded}${row.completed_at ? ' · ' + fmtDate(row.completed_at) : ''}</div>`
           : (a.condition_value > 0
               ? `<div class="achievement-progress-line">${levelNum(row.progress_value)} / ${levelNum(a.target ?? a.condition_value)}</div>`
-              : '<div class="achievement-progress-line cell-muted">Не выполнено</div>')}
+              : '<div class="achievement-progress-line cell-muted">Настраивается</div>')}
       </div>
     </div>`;
   };
@@ -2343,23 +2537,19 @@ async function renderRatingOverviewTab(el) {
     }
 
     function cleanCoins(v, fallback = 'Нет данных') {
-      return isNum(v) ? `${Math.round(Number(v))} ₡` : fallback;
+      return isNum(v) ? uiCoin(v) : fallback;
     }
 
     function cleanDate(dt, fallback = 'Нет данных') {
       if (!dt) return fallback;
-      const date = new Date(dt);
-      if (Number.isNaN(date.getTime())) return fallback;
-      return date.toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+      const formatted = uiDate(dt);
+      return formatted === 'Нет данных' ? fallback : formatted;
     }
 
     function cleanDateTime(dt, fallback = 'Нет данных') {
       if (!dt) return fallback;
-      const date = new Date(dt);
-      if (Number.isNaN(date.getTime())) return fallback;
-      return date.toLocaleString('ru-RU', {
-        day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
-      });
+      const formatted = uiDateTime(dt);
+      return formatted === 'Нет данных' ? fallback : formatted;
     }
 
     function metricDecimals(metric) {
@@ -3201,8 +3391,11 @@ function shopOperatorCard(item, balance, state = shopItemState(item, balance)) {
   const category = shopCategory(item);
   const badges = [];
   if (state.requiredLevel) badges.push(`<span>С уровня «${esc(state.requiredLevel.name)}»</span>`);
-  if (item.stock_remaining != null) badges.push(`<span>${state.outOfStock ? 'Нет в наличии' : `Осталось ${item.stock_remaining}`}</span>`);
-  if (item.purchase_limit_per_operator > 0) badges.push(`<span>${item.operator_purchased_count || 0} из ${item.purchase_limit_per_operator} получено</span>`);
+  if (item.stock_remaining != null) badges.push(`<span>${state.outOfStock ? 'Нет в наличии' : `В наличии: ${item.stock_remaining}`}</span>`);
+  if (item.purchase_limit_per_operator > 0) {
+    badges.push(`<span>Получено: ${item.operator_purchased_count || 0}</span>`);
+    badges.push(`<span>Лимит: ${item.purchase_limit_per_operator} на сотрудника</span>`);
+  }
   if (item.ends_at && !state.alreadyEnded) badges.push(`<span>До ${fmtDate(item.ends_at)}</span>`);
   if (state.isSeasonalPrice) badges.push(`<span>Стартовая цена до ${fmtDate(item.season_ends_at)}</span>`);
   if (item.issue_days) badges.push(`<span>Получение: до ${item.issue_days} дн.</span>`);
@@ -3331,8 +3524,11 @@ function shopCard(item, balance, role) {
   const { requiredLevel, notStartedYet, alreadyEnded, outOfStock, canBuy } = state;
 
   const seasonBadges = [];
-  if (item.stock_remaining != null) seasonBadges.push(`<span class="shop-badge ${outOfStock ? 'shop-badge-danger' : ''}">Осталось: ${item.stock_remaining}</span>`);
-  if (item.purchase_limit_per_operator > 0 && role === 'operator') seasonBadges.push(`<span class="shop-badge">Взято: ${item.operator_purchased_count || 0} из ${item.purchase_limit_per_operator}</span>`);
+  if (item.stock_remaining != null) seasonBadges.push(`<span class="shop-badge ${outOfStock ? 'shop-badge-danger' : ''}">В наличии: ${item.stock_remaining}</span>`);
+  if (item.purchase_limit_per_operator > 0 && role === 'operator') {
+    seasonBadges.push(`<span class="shop-badge">Получено: ${item.operator_purchased_count || 0}</span>`);
+    seasonBadges.push(`<span class="shop-badge">Лимит: ${item.purchase_limit_per_operator} на сотрудника</span>`);
+  }
   if (notStartedYet) seasonBadges.push(`<span class="shop-badge shop-badge-info">Скоро: с ${fmtDate(item.starts_at)}</span>`);
   else if (item.ends_at && !alreadyEnded) seasonBadges.push(`<span class="shop-badge shop-badge-info">До ${fmtDate(item.ends_at)}</span>`);
   else if (alreadyEnded) seasonBadges.push(`<span class="shop-badge shop-badge-danger">Завершено</span>`);
@@ -3847,6 +4043,20 @@ function renderUsersPage() {
   let filterStatus = savedFilters.status || '';
   let filterLevel = savedFilters.level || '';
   let activeTab = savedFilters.tab || 'all';
+  const queryFilters = uiReadQuery({
+    user_search: searchVal,
+    user_group: filterGroup,
+    user_role: filterRole,
+    user_status: filterStatus,
+    user_level: filterLevel,
+    user_tab: activeTab,
+  });
+  searchVal = queryFilters.user_search;
+  filterGroup = queryFilters.user_group;
+  filterRole = queryFilters.user_role;
+  filterStatus = queryFilters.user_status;
+  filterLevel = queryFilters.user_level;
+  activeTab = queryFilters.user_tab;
 
   const groups = [...new Set(ops.map(o => o.group_name).filter(Boolean))].sort();
   const levels = STATE.operatorLevels.length
@@ -3886,7 +4096,36 @@ function renderUsersPage() {
   }
 
   function operatorActions(o) {
-    return `<button class="user-open-button" onclick="showUserManagementModal(${o.id})">Открыть</button>`;
+    return `<button class="user-open-button" type="button"
+      aria-label="Действия пользователя ${esc(o.full_name)}"
+      title="Открыть профиль и действия"
+      onclick="event.stopPropagation();showUserManagementModal(${o.id})">⋯</button>`;
+  }
+
+  function syncUsersUrl() {
+    uiSyncQuery({
+      user_search: searchVal,
+      user_group: filterGroup,
+      user_role: filterRole,
+      user_status: filterStatus,
+      user_level: filterLevel,
+      user_tab: activeTab === 'all' ? '' : activeTab,
+    });
+  }
+
+  function appliedFiltersHtml() {
+    const chips = [
+      searchVal && ['search', `Поиск: ${searchVal}`],
+      filterRole && ['role', `Роль: ${roleLabel(filterRole)}`],
+      filterGroup && ['group', `Группа: ${filterGroup}`],
+      filterStatus && ['status', `Статус: ${uiStatusLabel(filterStatus)}`],
+      filterLevel && ['level', `Уровень: ${levels.find(item => item.code === filterLevel)?.name || filterLevel}`],
+    ].filter(Boolean);
+    if (!chips.length) return '';
+    return `<div class="ui-filter-chips" aria-label="Применённые фильтры">
+      ${chips.map(([key, label]) => `<button type="button" class="ui-filter-chip" data-clear-user-filter="${key}" title="Удалить фильтр">${esc(label)} <span aria-hidden="true">×</span></button>`).join('')}
+      <button type="button" class="btn-link" data-clear-user-filter="all">Сбросить всё</button>
+    </div>`;
   }
 
   function renderTable() {
@@ -3895,33 +4134,33 @@ function renderUsersPage() {
       <div class="table-wrap">
         <table class="data-table users-table-compact">
           <thead><tr>
-            <th>Сотрудник</th>
-            <th>Роль</th>
-            <th>Группа</th>
-            <th class="tc">Ставка</th>
-            <th class="tc">Уровень</th>
-            <th class="tc">Стаж</th>
-            <th class="tc">Статус</th>
-            <th class="tc">Действия</th>
+            <th scope="col" data-sticky="start">Пользователь</th>
+            <th scope="col">Роль</th>
+            <th scope="col">Группа</th>
+            <th scope="col" class="tc">Ставка</th>
+            <th scope="col" class="tc">Уровень</th>
+            <th scope="col" class="tc">Стаж</th>
+            <th scope="col" class="tc">Статус</th>
+            <th scope="col" class="tc" data-sticky="end">Действия</th>
           </tr></thead>
           <tbody>
             ${list.length ? list.map(o => {
               const dismissed = isDismissed(o);
               const isOp = o.role === 'operator';
-              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}">
-                <td class="name-cell">
-                  <div class="user-cell-name">${esc(o.full_name)}</div>
+              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}" data-user-row="${o.id}" tabindex="0" aria-label="Открыть профиль ${esc(o.full_name)}">
+                <td class="name-cell" data-label="Пользователь" data-sticky="start">
+                  <div class="user-cell-name" title="${esc(o.full_name)}">${esc(o.full_name)}</div>
                   ${o.email ? `<div class="user-cell-sub">${esc(o.email)}</div>` : ''}
                 </td>
-                <td>
+                <td data-label="Роль">
                   ${roleBadge(o.role)}
                 </td>
-                <td><span class="user-table-value">${o.group_name ? esc(o.group_name) : '—'}</span></td>
-                <td class="tc">${isOp ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">—</span>'}</td>
-                <td class="tc">${isOp ? levelBadgeHtml(o.level) : '<span class="cell-muted">—</span>'}</td>
-                <td class="tc">${isOp && o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">—</span>'}</td>
-                <td class="tc">${userStatusBadge(o.status)}</td>
-                <td class="tc">${operatorActions(o)}</td>
+                <td data-label="Группа"><span class="user-table-value" title="${esc(o.group_name || 'Не назначена')}">${o.group_name ? esc(o.group_name) : 'Не назначена'}</span></td>
+                <td class="tc" data-label="Ставка">${isOp ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">Не применяется</span>'}</td>
+                <td class="tc" data-label="Уровень">${isOp ? levelBadgeHtml(o.level) : '<span class="cell-muted">Не применяется</span>'}</td>
+                <td class="tc" data-label="Стаж">${isOp && o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">Нет данных</span>'}</td>
+                <td class="tc" data-label="Статус">${userStatusBadge(o.status)}</td>
+                <td class="tc" data-label="Действия" data-sticky="end">${operatorActions(o)}</td>
               </tr>`;
             }).join('') : '<tr><td colspan="8" class="empty-line">Нет пользователей</td></tr>'}
           </tbody>
@@ -3947,42 +4186,53 @@ function renderUsersPage() {
   }
 
   el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">Пользователи</div><h2 class="section-title">Пользователи</h2></div>
-      <div class="header-right">
-        <button class="btn-outline btn-sm" onclick="reloadData()">Обновить</button>
+    ${uiPageHeader({
+      eyebrow: 'Управление',
+      title: 'Пользователи',
+      description: `${ops.length} ${pluralize(ops.length, 'учётная запись', 'учётные записи', 'учётных записей')}`,
+      actions: `<button class="btn-outline btn-sm ui-icon-button" onclick="reloadData()" aria-label="Обновить пользователей" title="Обновить">↻</button>
         ${['manager','admin'].includes(STATE.user?.role) ? `
           <button class="btn-outline btn-sm" onclick="showWorkNormsModal()">Нормы часов</button>
           <button class="btn-primary btn-sm" onclick="showAddOperatorModal()">+ Новый пользователь</button>
-        ` : ''}
-      </div>
-    </div>
+        ` : ''}`,
+    })}
 
     <div class="ops-tab-bar" id="ops-tab-bar">${renderTabsAndFilters()}</div>
 
-    <div class="ops-filters-row">
-      <input id="ops-search" class="form-input" placeholder="ФИО, логин или email…" style="width:260px" value="${esc(searchVal)}">
-      <select id="ops-role" class="form-select" style="width:170px">
+    <div class="ops-filters-row ui-filter-bar">
+      <label class="sr-only" for="ops-search">Поиск пользователей</label>
+      <input id="ops-search" class="form-input" placeholder="ФИО, логин или email…" value="${esc(searchVal)}">
+      <details class="ui-more-filters">
+        <summary class="btn-outline btn-sm">Ещё фильтры</summary>
+        <div class="ui-more-filters__panel">
+      <label class="sr-only" for="ops-role">Роль</label>
+      <select id="ops-role" class="form-select">
         <option value="">Все роли</option>
         ${allowedRoles.map(r => `<option value="${r}" ${filterRole===r?'selected':''}>${roleLabel(r)}</option>`).join('')}
       </select>
-      <select id="ops-group" class="form-select" style="width:180px">
+      <label class="sr-only" for="ops-group">Группа</label>
+      <select id="ops-group" class="form-select">
         <option value="">Все группы</option>
         ${groups.map(g => `<option value="${esc(g)}" ${filterGroup===g?'selected':''}>${esc(g)}</option>`).join('')}
       </select>
-      <select id="ops-status" class="form-select" style="width:170px">
+      <label class="sr-only" for="ops-status">Статус</label>
+      <select id="ops-status" class="form-select">
         <option value="">Все статусы</option>
         <option value="active" ${filterStatus==='active'?'selected':''}>Активен</option>
         <option value="inactive" ${filterStatus==='inactive'?'selected':''}>Неактивен</option>
         <option value="blocked" ${filterStatus==='blocked'?'selected':''}>Заблокирован</option>
         <option value="dismissed" ${filterStatus==='dismissed'?'selected':''}>Уволен</option>
       </select>
-      <select id="ops-level" class="form-select" style="width:170px">
+      <label class="sr-only" for="ops-level">Уровень</label>
+      <select id="ops-level" class="form-select">
         <option value="">Все уровни</option>
         ${levels.map(l => `<option value="${esc(l.code)}" ${filterLevel===l.code?'selected':''}>${esc(l.name)}</option>`).join('')}
       </select>
-      <span class="ops-count-info">Показано: <b>${filteredOps().length}</b> из ${ops.length}</span>
+        </div>
+      </details>
+      <span class="ops-count-info" aria-live="polite">Показано: <b>${filteredOps().length}</b> из ${ops.length}</span>
     </div>
+    <div id="ops-filter-chips">${appliedFiltersHtml()}</div>
 
     <div id="ops-table-wrap">${renderTable()}</div>`;
 
@@ -3991,6 +4241,7 @@ function renderUsersPage() {
       btn.addEventListener('click', () => {
         activeTab = btn.dataset.tab;
         savedFilters.tab = activeTab;
+        syncUsersUrl();
         el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
         el.querySelector('#ops-table-wrap').innerHTML = renderTable();
         el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
@@ -4000,6 +4251,7 @@ function renderUsersPage() {
     el.querySelector('#ops-search')?.addEventListener('input', e => {
       searchVal = e.target.value;
       savedFilters.search = searchVal;
+      syncUsersUrl();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
@@ -4007,6 +4259,7 @@ function renderUsersPage() {
     el.querySelector('#ops-group')?.addEventListener('change', e => {
       filterGroup = e.target.value;
       savedFilters.group = filterGroup;
+      syncUsersUrl();
       el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
@@ -4015,6 +4268,7 @@ function renderUsersPage() {
     el.querySelector('#ops-role')?.addEventListener('change', e => {
       filterRole = e.target.value;
       savedFilters.role = filterRole;
+      syncUsersUrl();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
@@ -4022,6 +4276,7 @@ function renderUsersPage() {
     el.querySelector('#ops-status')?.addEventListener('change', e => {
       filterStatus = e.target.value;
       savedFilters.status = filterStatus;
+      syncUsersUrl();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
@@ -4029,14 +4284,44 @@ function renderUsersPage() {
     el.querySelector('#ops-level')?.addEventListener('change', e => {
       filterLevel = e.target.value;
       savedFilters.level = filterLevel;
+      syncUsersUrl();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
       bindOpsActions();
     });
     bindOpsActions();
+    el.querySelector('#ops-filter-chips').innerHTML = appliedFiltersHtml();
+    el.querySelectorAll('[data-clear-user-filter]').forEach(button => {
+      button.addEventListener('click', () => {
+        const key = button.dataset.clearUserFilter;
+        if (key === 'all' || key === 'search') searchVal = '';
+        if (key === 'all' || key === 'role') filterRole = '';
+        if (key === 'all' || key === 'group') filterGroup = '';
+        if (key === 'all' || key === 'status') filterStatus = '';
+        if (key === 'all' || key === 'level') filterLevel = '';
+        Object.assign(savedFilters, {
+          search: searchVal, role: filterRole, group: filterGroup,
+          status: filterStatus, level: filterLevel,
+        });
+        syncUsersUrl();
+        renderUsersPage();
+      });
+    });
   }
   rebindOps();
   function bindOpsActions() {
+    el.querySelectorAll('[data-user-row]').forEach(row => {
+      const open = () => showUserManagementModal(Number(row.dataset.userRow));
+      row.addEventListener('click', event => {
+        if (!event.target.closest('button, a, input, select')) open();
+      });
+      row.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          open();
+        }
+      });
+    });
     el.querySelectorAll('.quick-charge-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         navigateTo('manual');
@@ -6506,18 +6791,16 @@ function esc(s) {
 }
 function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
 function fmtDate(dt) {
-  if (!dt) return '';
-  return new Date(dt).toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' });
+  return dt ? uiDate(dt) : '';
 }
 function fmtDateTime(dt) {
-  if (!dt) return '';
-  return new Date(dt).toLocaleString('ru-RU', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  return dt ? uiDateTime(dt) : '';
 }
 function roleLabel(r) {
   return { operator:'Оператор', supervisor:'Супервайзер', manager:'Руководитель', admin:'Администратор' }[r] || r || '';
 }
 function statusLabel(s) {
-  return { pending:'Новая', new:'Новая', approved:'Одобрена', rejected:'Отклонена', completed:'Выполнена', cancelled:'Отменена' }[s] || s;
+  return uiStatusLabel(s);
 }
 function isAdmin(role) { return ['supervisor','manager','admin'].includes(role); }
 function canManageGroups(role = STATE.user?.role) { return ['manager','admin'].includes(role); }
@@ -7165,10 +7448,16 @@ function sessionsDebounce(fn, delay = 300) {
   };
 }
 
-function sessionStatusBadge(status, expiresAt) {
-  if (status === 'revoked') return '<span class="badge badge-muted">сброшена</span>';
-  if (status === 'expired') return '<span class="badge badge-warning">истекла</span>';
-  return '<span class="badge badge-ok">активна</span>';
+function sessionStatusBadge(state) {
+  const meta = {
+    current: ['Текущая', 'badge-info'],
+    active: ['Активна <15 мин', 'badge-ok'],
+    recent: ['Недавняя', 'badge-warning'],
+    inactive: ['Неактивна', 'badge-muted'],
+    ended: ['Завершена', 'badge-muted'],
+  };
+  const [label, cls] = meta[state] || ['Неактивна', 'badge-muted'];
+  return `<span class="badge ${cls}">${label}</span>`;
 }
 
 function sessionSafeDate(value) {
@@ -7241,10 +7530,10 @@ function paintAdminSessions(el, data) {
     </div>
 
     <div class="kpi-grid sessions-kpis">
-      <div class="kpi-card kpi-accent"><div class="kpi-label">Активные сессии</div><div class="kpi-value">${stats.active || 0}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Пользователей онлайн</div><div class="kpi-value">${stats.total_users != null ? stats.total_users : '—'}</div></div>
-      <div class="kpi-card kpi-warn"><div class="kpi-label">Истёкшие</div><div class="kpi-value">${stats.expired || 0}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Сброшенные</div><div class="kpi-value">${stats.revoked || 0}</div></div>
+      <div class="kpi-card kpi-accent"><div class="kpi-label">Активны сейчас</div><div class="kpi-value">${stats.active_now || 0}</div></div>
+      <div class="kpi-card"><div class="kpi-label">За 24 часа</div><div class="kpi-value">${stats.last_24h || 0}</div></div>
+      <div class="kpi-card kpi-warn"><div class="kpi-label">Подозрительные</div><div class="kpi-value">${stats.suspicious || 0}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Всего устройств</div><div class="kpi-value">${stats.total_devices || 0}</div></div>
     </div>
 
     <div class="sessions-filterbar">
@@ -7282,13 +7571,13 @@ function paintAdminSessions(el, data) {
         <table class="data-table sessions-table">
           <thead>
             <tr>
-              <th>Пользователь</th>
-              <th>Устройство</th>
-              <th>IP</th>
-              <th>Вход</th>
-              <th>Активность</th>
-              <th>Статус</th>
-              <th></th>
+              <th scope="col">Пользователь</th>
+              <th scope="col">Устройство / браузер</th>
+              <th scope="col">IP</th>
+              <th scope="col">Вход</th>
+              <th scope="col">Последняя активность</th>
+              <th scope="col">Состояние</th>
+              <th scope="col">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -7336,10 +7625,10 @@ function sessionRow(s) {
       <td><span class="sessions-ip">${esc(s.ip_address || '—')}</span></td>
       <td>${sessionSafeDate(s.created_at)}</td>
       <td>${sessionSafeDate(s.last_seen_at)}</td>
-      <td>${sessionStatusBadge(s.status, s.expires_at)}</td>
+      <td>${sessionStatusBadge(s.activity_state)}</td>
       <td class="row-actions">
-        <button class="btn-outline btn-sm danger-text" ${canRevoke ? '' : 'disabled'} onclick="revokeUserSession('${esc(s.session_id)}')">Сбросить</button>
-        <button class="btn-ghost btn-sm" onclick="revokeAllUserSessions(${Number(s.user_id) || 0})" ${s.user_id ? '' : 'disabled'}>Все</button>
+        <button class="btn-outline btn-sm danger-text" ${canRevoke ? '' : 'disabled title="Текущую или завершённую сессию нельзя завершить"'} onclick="revokeUserSession('${esc(s.session_id)}')">Завершить сессию</button>
+        <button class="btn-ghost btn-sm" onclick="revokeAllUserSessions(${Number(s.user_id) || 0})" ${s.user_id ? '' : 'disabled'}>Завершить остальные</button>
       </td>
     </tr>`;
 }
@@ -9729,7 +10018,7 @@ async function exportRatingFromRatingPage() {
   }
 }
 
-async function renderRating() {
+async function renderStaffRating() {
   const el = document.getElementById('view-rating');
   if (!el) return;
   const myNavGen = STATE.navGen; // раздел "Рейтинг" уже активен — фиксируем текущее поколение
@@ -12966,12 +13255,7 @@ let _missionDirty = false;
 let _missionActionBusy = false;
 
 function missionCoinLabel(value) {
-  const n = Math.abs(Number(value) || 0);
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return `${n} коин`;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${n} коина`;
-  return `${n} коинов`;
+  return uiCoin(value);
 }
 
 function missionStatusLabel(status) {
@@ -13043,7 +13327,7 @@ function renderMissionMap(el, data) {
     <section class="missions-progress-card" aria-label="Общий прогресс миссий">
       <div class="missions-progress-copy"><span>Общий прогресс</span><strong>${data.completed} из ${data.total}</strong><p>миссий завершено</p></div>
       <div class="missions-progress-ring" style="--mission-progress:${Math.max(0, Math.min(100, data.percent || 0)) * 3.6}deg"><b>${data.percent || 0}%</b></div>
-      <div class="missions-earned"><span class="missions-coin">P</span><div><strong>${missionCoinLabel(data.earned_coins)}</strong><span>заработано за миссии</span></div></div>
+      <div class="missions-earned"><span class="missions-coin" aria-hidden="true">₡</span><div><strong>${missionCoinLabel(data.earned_coins)}</strong><span>получено за миссии</span></div></div>
     </section>
     <div class="missions-map-layout">
       <section class="missions-route panel" aria-labelledby="mission-route-title">
@@ -13074,15 +13358,21 @@ function renderMissionMap(el, data) {
 }
 
 function missionRouteCard(mission) {
-  const disabled = mission.status === 'locked';
+  const disabled = mission.status === 'locked' || mission.status === 'completed';
+  const rewardLabel = mission.reward_claimed
+    ? `Получено: ${missionCoinLabel(mission.reward_coins)}`
+    : mission.status === 'completed'
+      ? `Доступно: ${missionCoinLabel(mission.reward_coins)}`
+      : `Награда: ${missionCoinLabel(mission.reward_coins)}`;
+  const actionLabel = mission.status === 'completed' ? 'Завершена' : mission.action_label;
   return `<article class="mission-card is-${esc(mission.status)}">
     <div class="mission-number"><span>${String(mission.sort_order || 1).padStart(2, '0')}</span><i aria-hidden="true"></i></div>
     <div class="mission-card-main">
       <div class="mission-card-tags"><span class="mission-type">Обучение</span><span class="mission-status">${esc(missionStatusLabel(mission.status))}</span></div>
       <h3>${esc(mission.title)}</h3><p>${esc(mission.description)}</p>
-      <div class="mission-meta"><span>◷ ${mission.estimated_minutes || 5} минут</span><span class="mission-reward">P ${missionCoinLabel(mission.reward_coins)}</span></div>
+      <div class="mission-meta"><span>◷ ${mission.estimated_minutes || 5} минут</span><span class="mission-reward">${rewardLabel}</span></div>
     </div>
-    <button class="btn-primary mission-start-btn" type="button" ${disabled ? 'disabled' : ''} onclick="startMissionFromMap('${esc(mission.code)}')">${esc(mission.action_label)}</button>
+    <button class="btn-primary mission-start-btn" type="button" ${disabled ? 'disabled' : ''} onclick="startMissionFromMap('${esc(mission.code)}')">${esc(actionLabel)}</button>
   </article>`;
 }
 
@@ -13470,7 +13760,7 @@ function learningWorldIllustration(world) {
 function renderLearningWorldMap(el, data) {
   const worlds = data.worlds || [];
   el.innerHTML = `<div class="missions-page learning-world-page">
-    <header class="missions-header world-map-header"><div><span class="missions-eyebrow">Карта обучения</span><h1>Рабочие территории</h1><p>Выбери систему или тему и пройди её практический маршрут.</p></div><div class="world-overall"><b>${data.percent || 0}%</b><span>${data.completed || 0} из ${data.total || 0} миссий</span></div></header>
+    <header class="missions-header world-map-header"><div><span class="missions-eyebrow">Карта обучения</span><h1>Рабочие территории</h1><p>Выбери систему или тему и пройди её практический маршрут.</p></div><div class="world-overall"><b>${data.percent || 0}%</b><span>Выполнено ${data.completed || 0} из ${data.total || 0}</span><small>Получено: ${missionCoinLabel(data.reward_earned)}</small><small>Доступно: ${missionCoinLabel(data.reward_available)}</small></div></header>
     <div class="world-pulse-line" aria-hidden="true"></div>
     <section class="learning-world-grid" aria-label="Территории обучения">
       ${worlds.map((world, index) => learningWorldCard(world, index)).join('')}
@@ -13482,11 +13772,14 @@ function renderLearningWorldMap(el, data) {
 function learningWorldCard(world, index) {
   const soon = world.availability === 'coming_soon';
   const status = soon ? 'Уроки готовятся' : (world.percent === 100 && world.total_count ? 'Завершено' : 'Доступно');
+  const rewardLabel = world.completed_count === world.total_count && world.total_count
+    ? `Получено: ${missionCoinLabel(world.reward_earned)}`
+    : `Доступно: ${missionCoinLabel(world.reward_available)}`;
   return `<article class="learning-world-card ${soon ? 'is-soon' : ''}" style="--world-accent:${esc(world.accent_color)}" data-world-index="${index}">
     <div class="world-card-visual">${learningWorldIllustration(world)}</div>
     <div class="world-card-copy"><div class="world-card-status"><span>${esc(status)}</span><b>${world.completed_count}/${world.total_count}</b></div><h2>${esc(world.title)}</h2><p>${esc(world.description)}</p>
       <div class="world-card-progress" aria-label="Прогресс ${world.percent}%"><i style="width:${world.percent}%"></i></div>
-      <div class="world-card-meta"><span>${world.total_count ? `${world.total_count} мисс.` : 'Новые уроки'}</span><span>P ${missionCoinLabel(world.coins_available)}</span></div>
+      <div class="world-card-meta"><span>${world.total_count ? `${world.total_count} мисс.` : 'Новые уроки'}</span><span>${rewardLabel}</span></div>
     </div>
     <button type="button" ${soon ? 'disabled' : ''} onclick="openLearningWorld('${esc(world.code)}')">${soon ? 'Скоро' : 'Открыть маршрут'}</button>
   </article>`;
@@ -13626,7 +13919,7 @@ function closeMissionPreviewDialog() {
 function renderLearningWorldRoute(el, world) {
   const missions = world.missions || [];
   el.innerHTML = `<div class="missions-page world-route-page" style="--world-accent:${esc(world.accent_color)}">
-    <header class="world-route-header"><button type="button" class="mission-back-btn" onclick="backToLearningWorlds()">← <span>Все территории</span></button><div class="world-route-title"><div>${learningWorldIllustration(world)}</div><span class="missions-eyebrow">Территория</span><h1>${esc(world.title)}</h1><p>${esc(world.description)}</p></div><div class="world-route-summary"><b>${world.percent}%</b><span>${world.completed_count} из ${world.total_count}</span><small>P ${missionCoinLabel(world.coins_available)} доступно</small></div></header>
+    <header class="world-route-header"><button type="button" class="mission-back-btn" onclick="backToLearningWorlds()">← <span>Все территории</span></button><div class="world-route-title"><div>${learningWorldIllustration(world)}</div><span class="missions-eyebrow">Территория</span><h1>${esc(world.title)}</h1><p>${esc(world.description)}</p></div><div class="world-route-summary"><b>${world.percent}%</b><span>${world.completed_count} из ${world.total_count}</span><small>Получено: ${missionCoinLabel(world.reward_earned)}</small><small>Доступно: ${missionCoinLabel(world.reward_available)}</small></div></header>
     <section class="world-mission-route panel" aria-label="Маршрут миссий">
       <div class="world-route-track" aria-hidden="true"></div>
       ${missions.length ? missions.map((mission, index) => `<div class="world-route-node ${index % 2 ? 'is-right' : ''}">${missionRouteCard(mission)}</div>`).join('') : '<div class="missions-empty">Уроки этой территории готовятся.</div>'}
@@ -13987,6 +14280,10 @@ function opRatingTabs() {
 async function renderRating() {
   const el = document.getElementById('view-rating');
   if (!el) return;
+  if (isAdmin(STATE.user?.role)) {
+    await renderStaffRating();
+    return;
+  }
   el.innerHTML = `<div class="op-page op-rating-page"><div class="op-page-head"><div><span>Рейтинг</span><h1>Мои результаты</h1><p>Позиция, динамика и сравнение с командой</p></div><button class="btn-outline btn-sm" data-rating-refresh>Обновить</button></div>${opRatingTabs()}<div id="rating-tab-content" class="op-rating-content"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div></div>`;
   el.querySelector('[data-rating-refresh]')?.addEventListener('click', () => { swrInvalidate('rating'); swrInvalidate('race:'); renderRating(); });
   el.querySelectorAll('[data-op-rating-tab]').forEach(button => button.addEventListener('click', () => {
