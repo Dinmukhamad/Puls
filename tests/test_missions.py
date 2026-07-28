@@ -301,3 +301,128 @@ def test_start_requires_idempotency_key(db_session, make_client):
     client, _operator, _user = _operator_client(db_session, make_client)
     response = client.post("/api/missions/login_first_time/start")
     assert response.status_code == 422
+
+
+def test_completed_mission_replays_without_progress_reset_or_second_reward(
+    db_session, make_client
+):
+    """Регрессия под именованный сценарий ТЗ (оператор atageldieva_aknur_co, п.16).
+
+    Оператор, уже завершивший миссию, проходит её повторно:
+    - статус completed сохраняется (никогда не откатывается в available);
+    - историческая (первая) попытка остаётся неизменной;
+    - attempt_number растёт, создаётся новая попытка;
+    - повторное прохождение не начисляет коины;
+    - баланс, число транзакций награды и число MissionRewardGrant не меняются;
+    - лучший результат не уменьшается.
+    Реальный прод-оператор не используется — сценарий воспроизводится на
+    изолированном тестовом операторе, прогресс никому не сбрасывается.
+    """
+    client, operator, _user = _operator_client(db_session, make_client)
+    starting_balance = operator.current_balance
+
+    first = _complete(client, _start(client, "named-scenario-first-0001"))
+    assert first["reward_awarded"] is True
+
+    db_session.expire_all()
+    first_attempt = db_session.get(m.MissionAttempt, first["id"])
+    mission_id = first_attempt.mission_id
+    original_status = first_attempt.status
+    original_reward_awarded = first_attempt.reward_awarded
+    original_reward_tx = first_attempt.reward_transaction_id
+    progress = db_session.query(m.OperatorMissionProgress).filter_by(
+        operator_id=operator.id, mission_id=mission_id
+    ).one()
+    assert progress.status == "completed"
+    best_before = progress.best_score
+
+    replay = _start(client, "named-scenario-replay-0001")
+    assert replay["id"] != first["id"]
+    assert replay["attempt_number"] == first["attempt_number"] + 1
+    assert replay["reward_eligible"] is False
+    replay_done = _complete(client, replay)
+    assert replay_done["reward_awarded"] is False
+    assert "награда уже получена" in replay_done["reward_message"]
+
+    db_session.expire_all()
+    # Историческая попытка неизменна.
+    unchanged = db_session.get(m.MissionAttempt, first["id"])
+    assert unchanged.status == original_status == "completed"
+    assert unchanged.reward_awarded == original_reward_awarded is True
+    assert unchanged.reward_transaction_id == original_reward_tx
+    # Прогресс не сброшен, best_score не уменьшился.
+    progress = db_session.query(m.OperatorMissionProgress).filter_by(
+        operator_id=operator.id, mission_id=mission_id
+    ).one()
+    assert progress.status == "completed"
+    assert (progress.best_score or 0) >= (best_before or 0)
+    # Экономика: одна награда, один grant, баланс не изменился повторно.
+    assert db_session.query(m.CoinTransaction).filter_by(
+        operator_id=operator.id, source_type="mission_reward"
+    ).count() == 1
+    assert db_session.query(m.MissionRewardGrant).filter_by(
+        operator_id=operator.id
+    ).count() == 1
+    assert db_session.get(m.Operator, operator.id).current_balance == starting_balance + 100
+
+
+def test_reward_is_granted_once_under_concurrent_completion(db_session, make_client):
+    """Регрессия под сценарий ТЗ п.5 (две вкладки не создают две награды).
+
+    Инвариант «награда один раз на operator_id+mission_id+mission_version»
+    защищён двумя уровнями, и тест проверяет оба:
+    1. Уникальное ограничение БД uq_mission_reward_grant_once не даёт вставить
+       второй grant — параллельная вкладка, чья транзакция флашится второй,
+       гарантированно откатывается на уровне БД.
+    2. Сервис завершения корректно трактует уже существующий grant как
+       «награда получена» и не создаёт вторую транзакцию/начисление.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    client, operator, _user = _operator_client(db_session, make_client)
+    starting_balance = operator.current_balance
+
+    first = _complete(client, _start(client, "concurrent-first-0001"))
+    assert first["reward_awarded"] is True
+
+    db_session.expire_all()
+    attempt = db_session.get(m.MissionAttempt, first["id"])
+    mission_id = attempt.mission_id
+    mission_version = attempt.mission_version
+
+    # (1) Уровень БД: дубликат grant для того же ключа отклоняется.
+    duplicate = m.MissionRewardGrant(
+        operator_id=operator.id,
+        mission_id=mission_id,
+        mission_version=mission_version,
+        attempt_id=first["id"],
+        amount=100,
+        currency="₡",
+    )
+    db_session.add(duplicate)
+    try:
+        db_session.flush()
+        raised = False
+    except IntegrityError:
+        raised = True
+    finally:
+        db_session.rollback()
+    assert raised, "уникальное ограничение uq_mission_reward_grant_once должно сработать"
+
+    # (2) Уровень сервиса: вторая вкладка (replay), даже если ошибочно считает
+    # себя eligible, не приводит к повторному начислению.
+    replay = _start(client, "concurrent-second-tab-0001")
+    stored_replay = db_session.get(m.MissionAttempt, replay["id"])
+    stored_replay.reward_eligible = True  # эмулируем гонку: старт до появления grant
+    db_session.commit()
+    replay_done = _complete(client, replay)
+    assert replay_done["reward_awarded"] is False
+
+    db_session.expire_all()
+    assert db_session.query(m.CoinTransaction).filter_by(
+        operator_id=operator.id, source_type="mission_reward"
+    ).count() == 1
+    assert db_session.query(m.MissionRewardGrant).filter_by(
+        operator_id=operator.id
+    ).count() == 1
+    assert db_session.get(m.Operator, operator.id).current_balance == starting_balance + 100
