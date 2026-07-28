@@ -4,19 +4,23 @@ import hashlib
 import hmac
 import re
 import secrets
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from statistics import median
 from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.datetime_utils import now_local, now_utc
 from app.models.entities import (
     CoinTransaction,
     Mission,
     MissionAttempt,
     MissionEvent,
+    MissionRewardGrant,
     MissionStep,
     Operator,
     OperatorLevel,
@@ -42,6 +46,13 @@ CAR_ASSETS = {
     "rear_seats": "car-rear-seats-v1",
     "trunk": "car-trunk-v1",
 }
+
+
+def _mission_error(status_code: int, code: str, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"code": code, "message": message},
+    )
 
 RU_MONTHS = (
     "январь",
@@ -97,13 +108,46 @@ def _mission_or_404(db: Session, code: str, *, active_only: bool = True) -> Miss
     return mission
 
 
-def _progress(db: Session, operator_id: int, mission_id: int) -> OperatorMissionProgress | None:
-    return db.scalar(
-        select(OperatorMissionProgress).where(
+def _progress(
+    db: Session,
+    operator_id: int,
+    mission_id: int,
+    *,
+    for_update: bool = False,
+) -> OperatorMissionProgress | None:
+    query = select(OperatorMissionProgress).where(
             OperatorMissionProgress.operator_id == operator_id,
             OperatorMissionProgress.mission_id == mission_id,
         )
+    if for_update:
+        query = query.with_for_update()
+    return db.scalar(query)
+
+
+def _reward_grant(
+    db: Session,
+    operator_id: int,
+    mission_id: int,
+    mission_version: int,
+) -> MissionRewardGrant | None:
+    return db.scalar(
+        select(MissionRewardGrant).where(
+            MissionRewardGrant.operator_id == operator_id,
+            MissionRewardGrant.mission_id == mission_id,
+            MissionRewardGrant.mission_version == mission_version,
+        )
     )
+
+
+def _touch_activity(attempt: MissionAttempt, *, moment: datetime | None = None) -> None:
+    current = moment or now_utc()
+    previous = attempt.last_activity_at or attempt.started_at
+    elapsed = max(0, int((current - previous).total_seconds()))
+    attempt.active_duration_seconds = (attempt.active_duration_seconds or 0) + min(
+        elapsed,
+        15 * 60,
+    )
+    attempt.last_activity_at = current
 
 
 def _is_unlocked(db: Session, operator_id: int, mission: Mission) -> bool:
@@ -135,6 +179,15 @@ def mission_map(db: Session, operator: Operator) -> dict[str, Any]:
         )
     ).all()
     progress_by_mission = {row.mission_id: row for row in progress_rows}
+    attempts = db.scalars(
+        select(MissionAttempt).where(
+            MissionAttempt.operator_id == operator.id,
+            MissionAttempt.mission_id.in_([mission.id for mission in missions] or [-1]),
+        ).order_by(MissionAttempt.id)
+    ).all()
+    attempts_by_mission: dict[int, list[MissionAttempt]] = {}
+    for attempt in attempts:
+        attempts_by_mission.setdefault(attempt.mission_id, []).append(attempt)
 
     cards: list[dict[str, Any]] = []
     completed = 0
@@ -149,9 +202,25 @@ def mission_map(db: Session, operator: Operator) -> dict[str, Any]:
         action_labels = {
             "available": "Начать",
             "in_progress": "Продолжить",
-            "completed": "Пройти ещё раз",
+            "completed": "Пройти повторно",
             "locked": "Недоступно",
         }
+        mission_attempts = attempts_by_mission.get(mission.id, [])
+        active_attempt = next(
+            (attempt for attempt in reversed(mission_attempts) if attempt.status == "in_progress"),
+            None,
+        )
+        completed_attempts_count = sum(
+            attempt.status == "completed" for attempt in mission_attempts
+        )
+        can_replay = bool(
+            unlocked
+            and card_status == "completed"
+            and active_attempt is None
+            and get_settings().missions_replay_enabled
+        )
+        can_start = bool(unlocked and card_status == "available")
+        reward_claimed = progress.reward_claimed if progress else False
         cards.append(
             {
                 "code": mission.code,
@@ -163,9 +232,23 @@ def mission_map(db: Session, operator: Operator) -> dict[str, Any]:
                 "estimated_minutes": mission.estimated_minutes,
                 "version": mission.version,
                 "status": card_status,
+                "can_start": can_start,
+                "can_replay": can_replay,
+                "active_attempt_id": active_attempt.id if active_attempt else None,
                 "current_step_key": progress.current_step_key if progress else None,
                 "attempts_count": progress.attempts_count if progress else 0,
-                "reward_claimed": progress.reward_claimed if progress else False,
+                "completed_attempts_count": completed_attempts_count,
+                "reward_claimed": reward_claimed,
+                "reward_eligible": bool(unlocked and not reward_claimed),
+                "reward_state": (
+                    "claimed"
+                    if reward_claimed
+                    else "eligible"
+                    if unlocked
+                    else "not_available"
+                ),
+                "best_score": progress.best_score if progress else None,
+                "completed_at": progress.completed_at if progress else None,
                 "action_label": action_labels[card_status],
             }
         )
@@ -247,6 +330,27 @@ def _new_attempt(
     idempotency_key: str,
 ) -> MissionAttempt:
     seed = secrets.token_urlsafe(32)
+    previous_completed = db.scalar(
+        select(MissionAttempt)
+        .where(
+            MissionAttempt.operator_id == operator.id,
+            MissionAttempt.mission_id == mission.id,
+            MissionAttempt.status == "completed",
+        )
+        .order_by(MissionAttempt.attempt_number.desc())
+    )
+    attempt_number = (
+        db.scalar(
+            select(func.max(MissionAttempt.attempt_number)).where(
+                MissionAttempt.operator_id == operator.id,
+                MissionAttempt.mission_id == mission.id,
+            )
+        )
+        or 0
+    ) + 1
+    reward_eligible = (
+        _reward_grant(db, operator.id, mission.id, mission.version) is None
+    )
     first_step = db.scalar(
         select(MissionStep)
         .where(
@@ -332,25 +436,32 @@ def _new_attempt(
             "docs_returned": False,
             "save_state": "not_saved",
         }
+    started_at = now_utc()
     attempt = MissionAttempt(
         operator_id=operator.id,
         mission_id=mission.id,
         mission_version=mission.version,
-        attempt_number=progress.attempts_count + 1,
+        attempt_number=attempt_number,
         idempotency_key=idempotency_key,
-        mode=mission.mission_type,
+        mode="replay" if previous_completed else mission.mission_type,
         status="in_progress",
         current_step_key=first_step.step_key,
         demo_code_seed=seed,
         demo_code_hash=_code_hash(_demo_code(seed)),
+        reward_eligible=reward_eligible,
+        active_duration_seconds=0,
+        last_activity_at=started_at,
+        best_score_snapshot=progress.best_score,
+        replay_of_attempt_id=previous_completed.id if previous_completed else None,
+        started_at=started_at,
         state_json=initial_state,
     )
     db.add(attempt)
     progress.status = "in_progress"
     progress.current_step_key = first_step.step_key
-    progress.attempts_count += 1
-    progress.started_at = now_utc()
-    progress.updated_at = now_utc()
+    progress.attempts_count = attempt_number
+    progress.started_at = started_at
+    progress.updated_at = started_at
     db.flush()
     _record_event(db, attempt, "started", action_key="start", is_correct=True)
     return attempt
@@ -364,7 +475,11 @@ def start_or_resume(
 ) -> MissionAttempt:
     mission = _mission_or_404(db, code)
     if not _is_unlocked(db, operator.id, mission):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Миссия пока недоступна")
+        raise _mission_error(
+            status.HTTP_409_CONFLICT,
+            "MISSION_LOCKED",
+            "Сначала завершите предыдущий урок.",
+        )
 
     idempotent_attempt = db.scalar(
         select(MissionAttempt).where(MissionAttempt.idempotency_key == idempotency_key)
@@ -387,13 +502,20 @@ def start_or_resume(
         .order_by(MissionAttempt.id.desc())
     )
     if active_attempt is not None:
+        _touch_activity(active_attempt)
         return active_attempt
 
-    progress = _progress(db, operator.id, mission.id)
+    progress = _progress(db, operator.id, mission.id, for_update=True)
     if progress is None:
         progress = OperatorMissionProgress(operator_id=operator.id, mission_id=mission.id)
         db.add(progress)
         db.flush()
+    elif progress.status == "completed" and not get_settings().missions_replay_enabled:
+        raise _mission_error(
+            status.HTTP_409_CONFLICT,
+            "MISSION_REPLAY_DISABLED",
+            "Повторное прохождение временно недоступно.",
+        )
     return _new_attempt(db, operator, mission, progress, idempotency_key)
 
 
@@ -518,11 +640,7 @@ def attempt_read(db: Session, attempt: MissionAttempt) -> dict[str, Any]:
         )
     ) or 1
     progress = _progress(db, attempt.operator_id, attempt.mission_id)
-    reward_eligible = not (
-        progress
-        and progress.reward_claimed
-        and progress.reward_claimed_version == attempt.mission_version
-    )
+    reward_eligible = bool(attempt.reward_eligible)
     progress_percent = (
         100
         if attempt.status == "completed"
@@ -544,6 +662,7 @@ def attempt_read(db: Session, attempt: MissionAttempt) -> dict[str, Any]:
         "id": attempt.id,
         "mission_code": mission.code,
         "mission_title": mission.title,
+        "display_number": mission.world_sort_order or mission.sort_order or 1,
         "mission_version": attempt.mission_version,
         "attempt_number": attempt.attempt_number,
         "status": attempt.status,
@@ -570,6 +689,16 @@ def attempt_read(db: Session, attempt: MissionAttempt) -> dict[str, Any]:
         "score": attempt.score,
         "max_score": attempt.max_score,
         "best_score": progress.best_score if progress else None,
+        "best_score_snapshot": attempt.best_score_snapshot,
+        "is_new_best": bool(
+            attempt.status == "completed"
+            and attempt.score is not None
+            and (
+                attempt.best_score_snapshot is None
+                or attempt.score > attempt.best_score_snapshot
+            )
+        ),
+        "replay_of_attempt_id": attempt.replay_of_attempt_id,
         "state": attempt.state_json or {},
         "license_identity": {
             "full_name": operator.full_name if operator and operator.full_name else "Учебный водитель",
@@ -666,22 +795,55 @@ def _complete(db: Session, attempt: MissionAttempt) -> tuple[bool, str]:
         return False, f"Набрано {int(attempt.score or 0)} из 100. Разбери ошибки и попробуй ещё раз."
 
     completed_at = now_utc()
+    _touch_activity(attempt, moment=completed_at)
     attempt.status = "completed"
     attempt.completed_at = completed_at
     attempt.duration_seconds = max(0, int((completed_at - attempt.started_at).total_seconds()))
-    attempt.active_duration_seconds = attempt.duration_seconds
+    attempt.duration_anomalous = attempt.duration_seconds > 4 * 60 * 60
     progress.status = "completed"
     progress.current_step_key = "completion"
     progress.completed_at = completed_at
     progress.updated_at = completed_at
+    if attempt.score is not None:
+        progress.best_score = max(progress.best_score or 0, attempt.score)
 
-    eligible = not (
-        progress.reward_claimed and progress.reward_claimed_version == attempt.mission_version
+    eligible = bool(
+        attempt.reward_eligible
+        and _reward_grant(
+            db,
+            attempt.operator_id,
+            attempt.mission_id,
+            attempt.mission_version,
+        )
+        is None
     )
     if eligible and mission.reward_coins > 0:
         operator = db.get(Operator, attempt.operator_id)
         if operator is None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Оператор не найден")
+        grant = MissionRewardGrant(
+            operator_id=attempt.operator_id,
+            mission_id=attempt.mission_id,
+            mission_version=attempt.mission_version,
+            attempt_id=attempt.id,
+            amount=mission.reward_coins,
+            currency="₡",
+            created_at=completed_at,
+        )
+        try:
+            with db.begin_nested():
+                db.add(grant)
+                db.flush()
+        except IntegrityError:
+            grant = _reward_grant(
+                db,
+                attempt.operator_id,
+                attempt.mission_id,
+                attempt.mission_version,
+            )
+            eligible = False
+
+    if eligible and mission.reward_coins > 0:
         transaction = add_transaction(
             db,
             operator,
@@ -700,9 +862,11 @@ def _complete(db: Session, attempt: MissionAttempt) -> tuple[bool, str]:
         attempt.reward_amount_snapshot = mission.reward_coins
         attempt.reward_currency_snapshot = "₡"
         attempt.reward_transaction_id = transaction.id
+        grant.transaction_id = transaction.id
         return True, f"Миссия завершена — начислено {mission.reward_coins} коинов"
 
     attempt.reward_awarded = False
+    attempt.reward_eligible = False
     return True, "Миссия повторно пройдена — награда уже получена"
 
 
@@ -1291,8 +1455,13 @@ def apply_action(
             "Эта попытка уже завершена",
         )
     if attempt.status != "in_progress":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Попытка не активна")
+        raise _mission_error(
+            status.HTTP_409_CONFLICT,
+            "STALE_STEP",
+            "Шаг уже изменился. Мы обновили миссию.",
+        )
 
+    _touch_activity(attempt)
     step = _step_for_attempt(db, attempt)
     mission = db.get(Mission, attempt.mission_id)
     if mission and mission.code == PHOTO_MISSION_CODE:
@@ -1391,14 +1560,43 @@ def apply_action(
     return True, "Шаг сохранён"
 
 
-def use_hint(db: Session, attempt: MissionAttempt) -> str:
+def use_hint(
+    db: Session,
+    attempt: MissionAttempt,
+    idempotency_key: str,
+) -> str:
+    existing = db.scalar(
+        select(MissionEvent).where(MissionEvent.idempotency_key == idempotency_key)
+    )
+    if existing is not None:
+        if existing.attempt_id != attempt.id or existing.event_type != "hint":
+            raise _mission_error(
+                status.HTTP_409_CONFLICT,
+                "STALE_STEP",
+                "Шаг уже изменился. Мы обновили миссию.",
+            )
+        return str((existing.payload_json or {}).get("hint") or "")
     if attempt.status != "in_progress":
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Попытка не активна")
+        raise _mission_error(
+            status.HTTP_409_CONFLICT,
+            "STALE_STEP",
+            "Шаг уже изменился. Мы обновили миссию.",
+        )
+    _touch_activity(attempt)
     step = _step_for_attempt(db, attempt)
     attempt.hints_used += 1
-    _record_event(db, attempt, "hint", action_key="hint", is_correct=None)
+    hint = step.hint_text or "Следуй подсвеченному элементу на учебном экране."
+    _record_event(
+        db,
+        attempt,
+        "hint",
+        action_key="hint",
+        is_correct=None,
+        payload={"hint": hint},
+        idempotency_key=idempotency_key,
+    )
     db.flush()
-    return step.hint_text or "Следуй подсвеченному элементу на учебном экране."
+    return hint
 
 
 def restart_attempt(
@@ -1413,15 +1611,62 @@ def restart_attempt(
         if existing.operator_id != attempt.operator_id or existing.mission_id != attempt.mission_id:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ключ перезапуска уже использован")
         return existing
+    if attempt.status == "completed" and not get_settings().missions_replay_enabled:
+        raise _mission_error(
+            status.HTTP_409_CONFLICT,
+            "MISSION_REPLAY_DISABLED",
+            "Повторное прохождение временно недоступно.",
+        )
     if attempt.status == "in_progress":
+        _touch_activity(attempt)
         attempt.status = "cancelled"
+        attempt.close_reason = "user_restart"
         _record_event(db, attempt, "restarted", action_key="restart", is_correct=True)
     mission = db.get(Mission, attempt.mission_id)
     progress = _progress(db, attempt.operator_id, attempt.mission_id)
     operator = db.get(Operator, attempt.operator_id)
     if mission is None or progress is None or operator is None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Миссию нельзя перезапустить")
+    if not mission.is_active or not _is_unlocked(db, attempt.operator_id, mission):
+        raise _mission_error(
+            status.HTTP_409_CONFLICT,
+            "MISSION_LOCKED",
+            "Сначала завершите предыдущий урок.",
+        )
     return _new_attempt(db, operator, mission, progress, idempotency_key)
+
+
+def close_stale_attempts(db: Session, stale_hours: int) -> int:
+    cutoff = now_utc() - timedelta(hours=max(1, stale_hours))
+    stale = db.scalars(
+        select(MissionAttempt).where(
+            MissionAttempt.status == "in_progress",
+            func.coalesce(
+                MissionAttempt.last_activity_at,
+                MissionAttempt.started_at,
+            )
+            < cutoff,
+        )
+    ).all()
+    for attempt in stale:
+        attempt.status = "cancelled"
+        attempt.close_reason = "stale_cleanup"
+        attempt.duration_anomalous = bool(
+            attempt.duration_seconds and attempt.duration_seconds > 4 * 60 * 60
+        )
+        progress = _progress(db, attempt.operator_id, attempt.mission_id)
+        if progress and progress.status == "in_progress":
+            completed_exists = db.scalar(
+                select(MissionAttempt.id).where(
+                    MissionAttempt.operator_id == attempt.operator_id,
+                    MissionAttempt.mission_id == attempt.mission_id,
+                    MissionAttempt.status == "completed",
+                )
+            )
+            progress.status = "completed" if completed_exists else "available"
+            progress.current_step_key = "completion" if completed_exists else None
+            progress.updated_at = now_utc()
+    return len(stale)
 
 
 def admin_stats(db: Session, mission_code: str | None = None) -> dict[str, Any]:
@@ -1441,7 +1686,11 @@ def admin_stats(db: Session, mission_code: str | None = None) -> dict[str, Any]:
         for operator_id in started_ops
         if sum(1 for attempt in attempts if attempt.operator_id == operator_id) > 1
     }
-    durations = [attempt.duration_seconds for attempt in completed_attempts if attempt.duration_seconds is not None]
+    durations = [
+        attempt.active_duration_seconds
+        for attempt in completed_attempts
+        if attempt.active_duration_seconds is not None and not attempt.duration_anomalous
+    ]
     drop_off: dict[str, int] = {}
     for attempt in attempts:
         if attempt.status == "in_progress":
@@ -1475,6 +1724,10 @@ def admin_stats(db: Session, mission_code: str | None = None) -> dict[str, Any]:
         "completed_operators": len(completed_ops),
         "conversion_percent": round(len(completed_ops) / len(started_ops) * 100, 1) if started_ops else 0,
         "average_duration_seconds": round(sum(durations) / len(durations), 1) if durations else 0,
+        "median_active_duration_seconds": round(median(durations), 1) if durations else 0,
+        "anomalous_duration_count": sum(
+            bool(attempt.duration_anomalous) for attempt in completed_attempts
+        ),
         "repeat_operators": len(repeated_ops),
         "awarded_coins": awarded,
         "drop_off_by_step": drop_off,
@@ -1532,6 +1785,8 @@ def admin_attempts(
                 "started_at": attempt.started_at,
                 "completed_at": attempt.completed_at,
                 "duration_seconds": attempt.duration_seconds,
+                "active_duration_seconds": attempt.active_duration_seconds,
+                "duration_anomalous": attempt.duration_anomalous,
             }
             for attempt, mission, operator in rows
         ],

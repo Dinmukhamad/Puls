@@ -61,7 +61,7 @@ function toggleSaparOutcomes() {
 
 function scheduleSaparProcessing(attempt) {
   if (attempt.mission_code !== 'smz_sapar_provider_transfer' || attempt.current_step.screen_key !== 'sapar_processing') return;
-  window.setTimeout(() => {
+  missionViewController.timeout(() => {
     if (_missionAttempt?.id === attempt.id && _missionAttempt?.current_step?.screen_key === 'sapar_processing') missionAction('finish_processing');
   }, 1200);
 }

@@ -9,6 +9,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.datetime_utils import now_utc
 from app.models.entities import (
     CoinTransaction,
@@ -74,12 +75,28 @@ def _world_payload(db: Session, operator: Operator, world: LearningWorld, *, inc
         )
     ).all()
     progress_by_mission = {row.mission_id: row for row in progress_rows}
+    attempts = db.scalars(
+        select(MissionAttempt).where(
+            MissionAttempt.operator_id == operator.id,
+            MissionAttempt.mission_id.in_([row.id for row in missions] or [-1]),
+        ).order_by(MissionAttempt.id)
+    ).all()
+    attempts_by_mission: dict[int, list[MissionAttempt]] = {}
+    for attempt in attempts:
+        attempts_by_mission.setdefault(attempt.mission_id, []).append(attempt)
     cards = []
     completed = 0
     coins_available = 0
     for mission in missions:
         progress = progress_by_mission.get(mission.id)
         mission_status = _mission_status(progress, _is_unlocked(db, operator.id, mission))
+        mission_attempts = attempts_by_mission.get(mission.id, [])
+        active_attempt = next(
+            (attempt for attempt in reversed(mission_attempts) if attempt.status == "in_progress"),
+            None,
+        )
+        unlocked = mission_status != "locked"
+        reward_claimed = progress.reward_claimed if progress else False
         completed += int(mission_status == "completed")
         if not progress or not progress.reward_claimed:
             coins_available += mission.reward_coins
@@ -94,12 +111,30 @@ def _world_payload(db: Session, operator: Operator, world: LearningWorld, *, inc
                 "estimated_minutes": mission.estimated_minutes,
                 "version": mission.version,
                 "status": mission_status,
+                "can_start": mission_status == "available",
+                "can_replay": bool(
+                    mission_status == "completed"
+                    and active_attempt is None
+                    and get_settings().missions_replay_enabled
+                ),
+                "active_attempt_id": active_attempt.id if active_attempt else None,
                 "current_step_key": progress.current_step_key if progress else None,
                 "attempts_count": progress.attempts_count if progress else 0,
-                "reward_claimed": progress.reward_claimed if progress else False,
+                "completed_attempts_count": sum(
+                    attempt.status == "completed" for attempt in mission_attempts
+                ),
+                "reward_claimed": reward_claimed,
+                "reward_eligible": bool(unlocked and not reward_claimed),
+                "reward_state": (
+                    "claimed"
+                    if reward_claimed
+                    else "eligible"
+                    if unlocked
+                    else "not_available"
+                ),
                 "best_score": progress.best_score if progress else None,
                 "completed_at": progress.completed_at if progress else None,
-                "action_label": {"completed": "Пройти ещё раз", "in_progress": "Продолжить", "locked": "Недоступно"}.get(mission_status, "Начать"),
+                "action_label": {"completed": "Пройти повторно", "in_progress": "Продолжить", "locked": "Недоступно"}.get(mission_status, "Начать"),
             }
         )
     total = len(missions)

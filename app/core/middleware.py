@@ -69,7 +69,11 @@ def setup_middlewares(app: FastAPI, settings) -> None:
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; img-src 'self' data: blob:; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "font-src 'self' data: https://fonts.gstatic.com; script-src 'self'; "
+            # The current UI uses escaped inline event handlers for its local
+            # controls. Keep external scripts restricted to self while allowing
+            # those handlers until the event-delegation migration is complete.
+            "font-src 'self' data: https://fonts.gstatic.com; "
+            "script-src 'self' 'unsafe-inline'; "
             "connect-src 'self'; frame-ancestors 'none'"
         )
         if settings.auth_cookie_secure:

@@ -108,6 +108,6 @@ function trapMissionPreviewFocus(event) {
 
 function closeMissionPreviewDialog() {
   document.querySelector('.mission-preview-backdrop')?.remove();
-  _photoDialogReturnFocus?.focus?.();
+  if (_photoDialogReturnFocus?.isConnected) _photoDialogReturnFocus.focus();
   _photoDialogReturnFocus = null;
 }

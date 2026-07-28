@@ -34,7 +34,8 @@ def test_mission_map_recovers_from_stale_navigation_and_supports_replay():
 
     assert "resetMissionNavigation" in mission_source
     assert "sessionStorage.removeItem('puls-mission-world')" in mission_source
-    assert "const disabled = mission.status === 'locked';" in mission_source
+    assert "const disabled = mission.status === 'locked'" in mission_source
+    assert "mission.can_replay" in mission_source
     assert "Пройти ещё раз" in mission_source
     assert "await api.getMissions()" in mission_source
     assert world_source.index("await api.getMissionWorld(code)") < world_source.index(

@@ -64,6 +64,9 @@ const api = (() => {
       const formatted = detail.map(_formatValidationError).filter(Boolean).join('; ');
       return formatted || `Ошибка ${status}`;
     }
+    if (detail && typeof detail === 'object') {
+      return detail.message || `Ошибка ${status}`;
+    }
     if (typeof detail === 'string') return detail;
     return `Ошибка ${status}`;
   }
@@ -104,7 +107,6 @@ const api = (() => {
       clearTimeout(timeoutId);
       viewSignal?.removeEventListener('abort', abortForNavigation);
     }
-
     let data = {};
     try { data = await res.json(); } catch {}
     if (!res.ok) {
@@ -113,6 +115,7 @@ const api = (() => {
       error.status = res.status;
       error.path = path;
       error.detail = data.detail; // необработанное значение — на случай, если кому-то нужен доступ к исходным данным
+      error.code = data.detail?.code || data.error?.code || null;
       if (res.status === 401 && path !== '/api/auth/me') {
         setTimeout(() => {
           if (typeof window !== 'undefined' && typeof window.handleAuthExpired === 'function') {

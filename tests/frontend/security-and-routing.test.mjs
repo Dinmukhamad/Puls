@@ -71,6 +71,14 @@ test('mission completion renders the immutable received reward', () => {
   assert.match(missions, /attempt\.reward_received/);
 });
 
+test('mission replay is confirmed, idempotent, and cleans completed session state', () => {
+  assert.match(missions, /Пройти миссию повторно\?/);
+  assert.match(missions, /missionLogicalKey/);
+  assert.match(missions, /sessionStorage\.removeItem\('puls-mission-attempt'\)/);
+  assert.match(missions, /missionViewController/);
+  assert.match(missions, /MISSION_ERROR_MESSAGES/);
+});
+
 test('shared presentation contract localizes dates, coins, and statuses', () => {
   assert.match(uiSystem, /Asia\/Almaty/);
   assert.match(uiSystem, /ru-KZ/);

@@ -2872,6 +2872,7 @@ async function submitForcedPasswordChange() {
 }
 
 async function logoutAndReload() {
+  if (typeof missionViewController !== 'undefined') missionViewController.dispose();
   try { await api.logout(); } catch(e) { /* игнорируем ошибку — удаляем куку на клиенте */ }
   // Запасное удаление куки на клиенте (на случай если сервер вернул 403)
   document.cookie.split(';').forEach(c => {

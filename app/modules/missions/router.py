@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
+from time import perf_counter
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -34,6 +36,29 @@ from app.modules.wallet.service import operator_for_user_or_403
 
 router = APIRouter(prefix="/missions", tags=["missions"])
 admin_router = APIRouter(prefix="/admin/missions", tags=["admin-missions"])
+logger = logging.getLogger(__name__)
+
+
+def _log_attempt_action(
+    attempt,
+    action: str,
+    started: float,
+    *,
+    error_code: str | None = None,
+) -> None:
+    logger.info(
+        "mission_action",
+        extra={
+            "operator_id": attempt.operator_id,
+            "mission_code": attempt.mission.code if attempt.mission else None,
+            "version": attempt.mission_version,
+            "attempt_id": attempt.id,
+            "attempt_number": attempt.attempt_number,
+            "action": action,
+            "error_code": error_code,
+            "latency_ms": round((perf_counter() - started) * 1000, 1),
+        },
+    )
 
 
 def _active_operator(db: Session, user: User) -> Operator:
@@ -91,9 +116,11 @@ def start_mission(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    started = perf_counter()
     attempt = service.start_or_resume(db, _active_operator(db, user), code, idempotency_key)
     db.commit()
     db.refresh(attempt)
+    _log_attempt_action(attempt, "start_or_resume", started)
     return service.attempt_read(db, attempt)
 
 
@@ -112,8 +139,7 @@ def get_attempt(
 def submit_action(
     attempt_id: int,
     payload: MissionActionRequest,
-    idempotency_key: str | None = Header(
-        default=None,
+    idempotency_key: str = Header(
         alias="Idempotency-Key",
         min_length=8,
         max_length=120,
@@ -121,6 +147,7 @@ def submit_action(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    started = perf_counter()
     operator = _active_operator(db, user)
     attempt = service.attempt_for_operator(db, attempt_id, operator.id)
     accepted, feedback = service.apply_action(
@@ -132,6 +159,12 @@ def submit_action(
     )
     db.commit()
     db.refresh(attempt)
+    _log_attempt_action(
+        attempt,
+        payload.action_key,
+        started,
+        error_code=None if accepted else "INVALID_ACTION",
+    )
     return {
         "attempt": service.attempt_read(db, attempt),
         "accepted": accepted,
@@ -142,14 +175,21 @@ def submit_action(
 @router.post("/attempts/{attempt_id}/hint", response_model=MissionHintRead)
 def request_hint(
     attempt_id: int,
+    idempotency_key: str = Header(
+        alias="Idempotency-Key",
+        min_length=8,
+        max_length=120,
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    started = perf_counter()
     operator = _active_operator(db, user)
     attempt = service.attempt_for_operator(db, attempt_id, operator.id)
-    hint = service.use_hint(db, attempt)
+    hint = service.use_hint(db, attempt, idempotency_key)
     db.commit()
     db.refresh(attempt)
+    _log_attempt_action(attempt, "hint", started)
     return {"hint": hint, "attempt": service.attempt_read(db, attempt)}
 
 
@@ -164,11 +204,13 @@ def restart_mission(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    started = perf_counter()
     operator = _active_operator(db, user)
     attempt = service.attempt_for_operator(db, attempt_id, operator.id)
     restarted = service.restart_attempt(db, attempt, idempotency_key)
     db.commit()
     db.refresh(restarted)
+    _log_attempt_action(restarted, "restart", started)
     return service.attempt_read(db, restarted)
 
 

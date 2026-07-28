@@ -423,6 +423,13 @@ function navigateTo(view, options = {}) {
     view = isAdmin(role) ? 'summary' : 'cabinet';
     options = {};
   }
+  if (
+    STATE.currentView === 'missions'
+    && view !== 'missions'
+    && typeof missionViewController !== 'undefined'
+  ) {
+    missionViewController.dispose();
+  }
   STATE.currentView = view;
   _viewAbortController.abort();
   _viewAbortController = new AbortController();
@@ -972,6 +979,7 @@ function uiCoin(value, options = {}) {
   const number = Number(value);
   if (!Number.isFinite(number)) return 'Нет данных';
   const formatted = uiNumber(number, options.maximumFractionDigits ?? 0);
+  if (options.symbol) return `${formatted} ₡`;
   if (options.sign && number > 0) return `+${formatted} коинов`;
   return `${formatted} ${pluralize(Math.abs(number), 'коин', 'коина', 'коинов')}`;
 }
@@ -6952,6 +6960,7 @@ async function submitForcedPasswordChange() {
 }
 
 async function logoutAndReload() {
+  if (typeof missionViewController !== 'undefined') missionViewController.dispose();
   try { await api.logout(); } catch(e) { /* игнорируем ошибку — удаляем куку на клиенте */ }
   // Запасное удаление куки на клиенте (на случай если сервер вернул 403)
   document.cookie.split(';').forEach(c => {
@@ -13385,9 +13394,95 @@ window.submitCreateRaffle = submitCreateRaffle;
 let _missionAttempt = null;
 let _missionDirty = false;
 let _missionActionBusy = false;
+const _missionPendingKeys = new Map();
+
+const missionViewController = {
+  timers: new Set(),
+  signal: null,
+  abortHandler: null,
+  connect(signal) {
+    if (this.signal && this.abortHandler) {
+      this.signal.removeEventListener('abort', this.abortHandler);
+    }
+    this.signal = signal;
+    this.abortHandler = () => this.dispose();
+    signal?.addEventListener('abort', this.abortHandler, { once: true });
+  },
+  timeout(callback, delay) {
+    const id = window.setTimeout(() => {
+      this.timers.delete(id);
+      callback();
+    }, delay);
+    this.timers.add(id);
+    return id;
+  },
+  dispose() {
+    this.timers.forEach(id => window.clearTimeout(id));
+    this.timers.clear();
+    document.querySelectorAll('.mission-preview-backdrop').forEach(node => node.remove());
+    if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
+    if (document.querySelector('.ui-confirm-dialog') && typeof closeModal === 'function') {
+      closeModal();
+    }
+    _missionActionBusy = false;
+  },
+};
+
+const MISSION_ERROR_MESSAGES = {
+  AUTH_REQUIRED: 'Сессия завершена. Войдите снова.',
+  MISSION_FORBIDDEN: 'Эта миссия недоступна для вашего профиля.',
+  MISSION_NOT_FOUND: 'Миссия больше недоступна. Вернитесь к карте.',
+  MISSION_LOCKED: 'Сначала завершите предыдущий урок.',
+  MISSION_REPLAY_DISABLED: 'Повторное прохождение временно недоступно.',
+  STALE_STEP: 'Шаг уже изменился. Мы обновили миссию.',
+  REWARD_ALREADY_GRANTED: 'Награда за эту версию уже получена.',
+  INVALID_ACTION: 'Проверьте действие и попробуйте ещё раз.',
+  MISSION_TEMPORARY_ERROR: 'Не удалось сохранить действие. Повторите попытку.',
+};
+
+function missionUserMessage(error) {
+  if (error?.code && MISSION_ERROR_MESSAGES[error.code]) {
+    return MISSION_ERROR_MESSAGES[error.code];
+  }
+  if (error?.status === 401) return MISSION_ERROR_MESSAGES.AUTH_REQUIRED;
+  if (error?.status === 403) return MISSION_ERROR_MESSAGES.MISSION_FORBIDDEN;
+  if (error?.status === 404) return MISSION_ERROR_MESSAGES.MISSION_NOT_FOUND;
+  if (error?.status === 422) return MISSION_ERROR_MESSAGES.INVALID_ACTION;
+  return MISSION_ERROR_MESSAGES.MISSION_TEMPORARY_ERROR;
+}
+
+function missionLogicalKey(kind, identity) {
+  const logical = `${kind}:${identity}`;
+  if (!_missionPendingKeys.has(logical)) {
+    const random = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    _missionPendingKeys.set(logical, `${kind}-${random}`);
+  }
+  return { logical, key: _missionPendingKeys.get(logical) };
+}
+
+function finishMissionLogicalKey(logical, error = null) {
+  if (!error || (error.status && error.status < 500)) {
+    _missionPendingKeys.delete(logical);
+  }
+}
+
+function setMissionBusy(busy) {
+  _missionActionBusy = busy;
+  const player = document.querySelector('.mission-player');
+  player?.setAttribute('aria-busy', String(busy));
+  player?.querySelectorAll('button').forEach(button => {
+    if (busy) {
+      button.dataset.missionWasDisabled = String(button.disabled);
+      button.disabled = true;
+    } else if (button.dataset.missionWasDisabled === 'false') {
+      button.disabled = false;
+      delete button.dataset.missionWasDisabled;
+    }
+  });
+}
 
 function missionCoinLabel(value) {
-  return uiCoin(value);
+  return uiCoin(value, { symbol: true });
 }
 
 function missionStatusLabel(status) {
@@ -13410,10 +13505,29 @@ function resetMissionNavigation() {
   sessionStorage.removeItem('puls-mission-world');
 }
 
+const MISSION_MAP_CACHE_KEY = 'puls-mission-worlds-cache';
+
+function invalidateMissionMapCache() {
+  sessionStorage.removeItem(MISSION_MAP_CACHE_KEY);
+}
+
 async function loadMissionMap(el) {
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(MISSION_MAP_CACHE_KEY) || 'null');
+    if (cached?.savedAt && Date.now() - cached.savedAt < 15000 && cached.data) {
+      renderLearningWorldMap(el, cached.data);
+      return;
+    }
+  } catch (_) {
+    sessionStorage.removeItem(MISSION_MAP_CACHE_KEY);
+  }
   try {
     const data = await api.getMissionWorlds();
     if ((data.worlds || []).length) {
+      sessionStorage.setItem(
+        MISSION_MAP_CACHE_KEY,
+        JSON.stringify({ savedAt: Date.now(), data }),
+      );
       renderLearningWorldMap(el, data);
       return;
     }
@@ -13434,6 +13548,10 @@ async function loadMissionMap(el) {
 async function renderMissions() {
   const el = document.getElementById('view-missions');
   if (!el) return;
+  missionViewController.dispose();
+  missionViewController.connect(
+    typeof currentViewSignal === 'function' ? currentViewSignal() : null,
+  );
   missionLoading(el);
   if (isAdmin(STATE.user?.role || 'operator')) {
     await renderMissionsAdmin(el);
@@ -13444,8 +13562,12 @@ async function renderMissions() {
   if (rememberedAttempt) {
     try {
       _missionAttempt = await api.getMissionAttempt(rememberedAttempt);
-      renderMissionAttempt(el, _missionAttempt);
-      return;
+      if (_missionAttempt.status === 'in_progress') {
+        renderMissionAttempt(el, _missionAttempt);
+        return;
+      }
+      sessionStorage.removeItem('puls-mission-attempt');
+      _missionAttempt = null;
     } catch (error) {
       sessionStorage.removeItem('puls-mission-attempt');
       if (![403, 404, 409].includes(error?.status)) {
@@ -13478,7 +13600,7 @@ function renderMissionError(el, error) {
   el.innerHTML = `<section class="missions-error panel">
     <span class="missions-error-icon" aria-hidden="true">!</span>
     <h2>Не удалось открыть миссии</h2>
-    <p>${esc(error?.message || 'Попробуйте загрузить раздел ещё раз.')}</p>
+    <p role="alert" aria-live="assertive">${esc(missionUserMessage(error))}</p>
     <div class="missions-error-actions">
       <button class="btn-primary" type="button" onclick="renderMissions()">Повторить</button>
       <button class="btn-outline" type="button" onclick="resetMissionNavigation(); renderMissions()">Вернуться к карте</button>
@@ -13496,7 +13618,7 @@ function renderMissionMap(el, data) {
     <section class="missions-progress-card" aria-label="Общий прогресс миссий">
       <div class="missions-progress-copy"><span>Общий прогресс</span><strong>${data.completed} из ${data.total}</strong><p>миссий завершено</p></div>
       <div class="missions-progress-ring" style="--mission-progress:${Math.max(0, Math.min(100, data.percent || 0)) * 3.6}deg"><b>${data.percent || 0}%</b></div>
-      <div class="missions-earned"><span class="missions-coin" aria-hidden="true">₡</span><div><strong>${missionCoinLabel(data.earned_coins)}</strong><span>получено за миссии</span></div></div>
+      <div class="missions-earned"><div><strong>${missionCoinLabel(data.earned_coins)}</strong><span>получено за миссии</span></div></div>
     </section>
     <div class="missions-map-layout">
       <section class="missions-route panel" aria-labelledby="mission-route-title">
@@ -13527,35 +13649,58 @@ function renderMissionMap(el, data) {
 }
 
 function missionRouteCard(mission) {
-  const disabled = mission.status === 'locked';
-  const rewardLabel = mission.reward_claimed
+  const continuing = mission.status === 'in_progress' && mission.active_attempt_id;
+  const replay = mission.status === 'completed';
+  const disabled = mission.status === 'locked'
+    || (!continuing && !mission.can_start && !mission.can_replay);
+  const rewardLabel = mission.reward_state === 'claimed' || mission.reward_claimed
     ? `Получено: ${missionCoinLabel(mission.reward_coins)}`
-    : mission.status === 'completed'
-      ? `Доступно: ${missionCoinLabel(mission.reward_coins)}`
+    : mission.reward_state === 'not_available' || replay
+      ? 'Награда не начисляется повторно'
       : `Награда: ${missionCoinLabel(mission.reward_coins)}`;
-  const actionLabel = mission.action_label || (mission.status === 'completed' ? 'Пройти ещё раз' : 'Начать');
+  const actionLabel = mission.action_label || (replay ? 'Пройти повторно' : 'Начать');
+  const completionMeta = replay
+    ? `<span>✓ Лучший балл: ${mission.best_score == null ? '—' : Math.round(mission.best_score)}</span>${mission.completed_at ? `<span>${esc(fmtDate(mission.completed_at))}</span>` : ''}`
+    : '';
   return `<article class="mission-card is-${esc(mission.status)}">
     <div class="mission-number"><span>${String(mission.sort_order || 1).padStart(2, '0')}</span><i aria-hidden="true"></i></div>
     <div class="mission-card-main">
       <div class="mission-card-tags"><span class="mission-type">Обучение</span><span class="mission-status">${esc(missionStatusLabel(mission.status))}</span></div>
       <h3>${esc(mission.title)}</h3><p>${esc(mission.description)}</p>
-      <div class="mission-meta"><span>◷ ${mission.estimated_minutes || 5} минут</span><span class="mission-reward">${rewardLabel}</span></div>
+      <div class="mission-meta"><span>◷ ${mission.estimated_minutes || 5} минут</span>${completionMeta}<span class="mission-reward">${rewardLabel}</span></div>
     </div>
-    <button class="btn-primary mission-start-btn" type="button" ${disabled ? 'disabled' : ''} onclick="startMissionFromMap('${esc(mission.code)}')">${esc(actionLabel)}</button>
+    <button class="btn-primary mission-start-btn" type="button" ${disabled ? 'disabled' : ''} onclick="startMissionFromMap('${esc(mission.code)}','${replay ? 'replay' : 'start'}')">${esc(actionLabel)}</button>
   </article>`;
 }
 
-async function startMissionFromMap(code) {
+async function startMissionFromMap(code, mode = 'start') {
+  if (_missionActionBusy) return;
+  if (mode === 'replay') {
+    const confirmed = await uiConfirmAction({
+      title: 'Пройти миссию повторно?',
+      description: 'Награда за первое прохождение уже получена. Повторное прохождение не начислит коины, но позволит улучшить лучший результат. Начать заново?',
+      confirmLabel: 'Начать',
+      danger: false,
+    });
+    if (!confirmed) return;
+  }
   const button = document.querySelector(`.mission-card button[onclick*="${code}"]`);
-  if (button) button.disabled = true;
+  const pending = missionLogicalKey('mission-start', `${code}:${mode}`);
+  setMissionBusy(true);
+  if (button) button.setAttribute('aria-busy', 'true');
   try {
-    _missionAttempt = await api.startMission(code);
+    _missionAttempt = await api.startMission(code, pending.key);
+    _missionPendingKeys.delete(pending.logical);
+    invalidateMissionMapCache();
     sessionStorage.setItem('puls-mission-attempt', String(_missionAttempt.id));
     _missionDirty = false;
     renderMissionAttempt(document.getElementById('view-missions'), _missionAttempt);
   } catch (error) {
-    showToast(error.message, 'error');
-    if (button) button.disabled = false;
+    finishMissionLogicalKey(pending.logical, error);
+    showToast(missionUserMessage(error), 'error');
+  } finally {
+    setMissionBusy(false);
+    if (button) button.removeAttribute('aria-busy');
   }
 }
 
@@ -13577,8 +13722,8 @@ function renderMissionAttempt(el, attempt, feedback = '') {
   const step = attempt.current_step;
   const displayStep = Math.min(step.step_order + 1, step.total_steps);
   const isComplete = attempt.status === 'completed';
-  const displayedReward = isComplete && attempt.reward_received != null
-    ? attempt.reward_received
+  const displayedReward = isComplete
+    ? (attempt.reward_received || 0)
     : attempt.reward_coins;
   const rewardCaption = isComplete
     ? (attempt.reward_awarded ? 'награда получена' : 'награда была получена ранее')
@@ -13586,9 +13731,9 @@ function renderMissionAttempt(el, attempt, feedback = '') {
   el.innerHTML = `<div class="mission-player">
     <header class="mission-player-top">
       <button class="mission-back-btn" type="button" onclick="backToMissionMap()" aria-label="Назад к карте миссий">← <span>К карте</span></button>
-      <div class="mission-player-title"><span>Миссия ${attempt.mission_code === 'photo_control_basics' || attempt.mission_code === 'smz_sign_previous_month_acts' ? 2 : 1}</span><strong>${esc(attempt.mission_title)}</strong></div>
+      <div class="mission-player-title"><span>Миссия ${attempt.display_number || 1}</span><strong>${esc(attempt.mission_title)}</strong></div>
       <div class="mission-step-progress" aria-label="Прогресс: ${attempt.progress_percent}%"><div><i style="width:${attempt.progress_percent}%"></i></div><span>${displayStep} из ${step.total_steps}</span></div>
-      <button class="btn-outline mission-restart-btn" type="button" onclick="restartCurrentMission()" ${isComplete ? 'hidden' : ''}>Начать заново</button>
+      <button class="btn-outline mission-restart-btn" type="button" onclick="restartCurrentMission()">${isComplete ? 'Пройти ещё раз' : 'Начать заново'}</button>
     </header>
     <main class="mission-scene">
       <section class="pulsar-panel">
@@ -13601,7 +13746,7 @@ function renderMissionAttempt(el, attempt, feedback = '') {
       <aside class="mission-goal-panel">
         <span class="missions-eyebrow">Текущая цель</span><h2>${esc(step.content.goal || 'Выполни действие на телефоне')}</h2>
         <div class="mission-goal-progress"><span>Шаг ${displayStep}</span><b>${attempt.progress_percent}%</b></div>
-        <div class="mission-reward-box"><span class="missions-coin">₡</span><div><b>${missionCoinLabel(displayedReward)}</b><span>${rewardCaption}</span></div></div>
+        <div class="mission-reward-box"><div><b>${missionCoinLabel(displayedReward)}</b><span>${rewardCaption}</span></div></div>
       </aside>
     </main>
     <footer class="mission-player-bottom">
@@ -13610,7 +13755,15 @@ function renderMissionAttempt(el, attempt, feedback = '') {
       <span class="mission-errors">Ошибки: ${attempt.errors_count} · Подсказки: ${attempt.hints_used}</span>
     </footer>
   </div>`;
-  requestAnimationFrame(() => el.querySelector('.mission-phone button:not([disabled]), .mission-phone input')?.focus());
+  requestAnimationFrame(() => {
+    const target = el.querySelector(
+      '.mission-phone [data-autofocus], .mission-phone .is-target:not([disabled]), .mission-phone button:not([disabled]):not(.phone-back-arrow), .mission-phone input:not([disabled])',
+    );
+    if (target) {
+      target.dataset.autofocus = '';
+      target.focus();
+    }
+  });
   scheduleSaparProcessing(attempt);
 }
 
@@ -13627,7 +13780,14 @@ function renderMissionPhone(attempt) {
 function renderMissionPhoneScreen(attempt) {
   const step = attempt.current_step;
   if (attempt.status === 'completed') {
-    return `<div class="phone-complete"><div class="phone-complete-pulse">✓</div><span>Миссия завершена</span><h2>Отличная работа!</h2><p>${esc(attempt.reward_message || 'Результат сохранён')}</p><button type="button" onclick="backToMissionMap(true)">Вернуться к карте</button></div>`;
+    const currentScore = attempt.score == null ? '—' : Math.round(attempt.score);
+    const bestScore = attempt.best_score == null ? currentScore : Math.round(attempt.best_score);
+    return `<div class="phone-complete"><div class="phone-complete-pulse">✓</div><span>Миссия завершена</span><h2>Отличная работа!</h2>
+      ${attempt.is_new_best ? '<strong class="mission-new-best">Новый лучший результат</strong>' : ''}
+      <div class="mission-result-scores"><span>Текущий балл <b>${currentScore}</b></span><span>Лучший балл <b>${bestScore}</b></span></div>
+      <p>${esc(attempt.reward_message || 'Результат сохранён')}</p>
+      <div class="mission-result-actions"><button type="button" onclick="restartCurrentMission()">Пройти ещё раз</button><button type="button" class="btn-outline" onclick="backToMissionMap(true)">Вернуться к карте</button></div>
+    </div>`;
   }
   if (attempt.mission_code === 'smz_sign_previous_month_acts') return renderSmzDocumentSigningScreen(attempt);
   if (attempt.mission_code === 'smz_sapar_provider_transfer') return renderSaparMissionScreen(attempt);
@@ -13675,13 +13835,28 @@ function setMissionAutosave(text, state = '') {
 
 async function missionAction(actionKey, payload = {}) {
   if (!_missionAttempt || _missionActionBusy) return;
-  _missionActionBusy = true;
+  const pending = missionLogicalKey(
+    'mission-action',
+    `${_missionAttempt.id}:${actionKey}:${JSON.stringify(payload)}`,
+  );
+  setMissionBusy(true);
   setMissionAutosave('Сохраняем…', 'is-saving');
   try {
-    const result = await api.submitMissionAction(_missionAttempt.id, actionKey, payload);
+    const result = await api.submitMissionAction(
+      _missionAttempt.id,
+      actionKey,
+      payload,
+      pending.key,
+    );
+    _missionPendingKeys.delete(pending.logical);
     _missionAttempt = result.attempt;
     _missionDirty = false;
-    if (_missionAttempt.status === 'completed') sessionStorage.setItem('puls-mission-attempt', String(_missionAttempt.id));
+    if (_missionAttempt.status === 'completed') {
+      invalidateMissionMapCache();
+      sessionStorage.removeItem('puls-mission-attempt');
+    } else {
+      sessionStorage.setItem('puls-mission-attempt', String(_missionAttempt.id));
+    }
     renderMissionAttempt(
       document.getElementById('view-missions'),
       _missionAttempt,
@@ -13689,10 +13864,11 @@ async function missionAction(actionKey, payload = {}) {
     );
     if (!result.accepted) showToast(result.feedback, 'error');
   } catch (error) {
+    finishMissionLogicalKey(pending.logical, error);
     setMissionAutosave('Не сохранено — повтори', 'is-error');
-    showToast(error.message || 'Действие не сохранено', 'error');
+    showToast(missionUserMessage(error), 'error');
   } finally {
-    _missionActionBusy = false;
+    setMissionBusy(false);
   }
 }
 
@@ -13782,8 +13958,14 @@ function submitMissionCode() {
 
 async function showMissionHint() {
   if (!_missionAttempt || _missionActionBusy) return;
+  const pending = missionLogicalKey(
+    'mission-hint',
+    `${_missionAttempt.id}:${_missionAttempt.current_step.step_key}`,
+  );
+  setMissionBusy(true);
   try {
-    const data = await api.requestMissionHint(_missionAttempt.id);
+    const data = await api.requestMissionHint(_missionAttempt.id, pending.key);
+    _missionPendingKeys.delete(pending.logical);
     _missionAttempt = data.attempt;
     const speech = document.getElementById('pulsar-message');
     if (speech) speech.textContent = data.hint;
@@ -13791,21 +13973,45 @@ async function showMissionHint() {
     if (counter) counter.textContent = `Ошибки: ${_missionAttempt.errors_count} · Подсказки: ${_missionAttempt.hints_used}`;
     showToast(data.hint, 'ok');
   } catch (error) {
-    showToast(error.message, 'error');
+    finishMissionLogicalKey(pending.logical, error);
+    showToast(missionUserMessage(error), 'error');
+  } finally {
+    setMissionBusy(false);
   }
 }
 
 async function restartCurrentMission() {
-  if (!_missionAttempt || !confirm('Начать миссию заново? Текущая попытка будет закрыта, а подтверждённые данные останутся в истории.')) return;
+  if (!_missionAttempt || _missionActionBusy) return;
+  const replay = _missionAttempt.status === 'completed';
+  const confirmed = await uiConfirmAction({
+    title: replay ? 'Пройти миссию повторно?' : 'Начать миссию заново?',
+    description: replay
+      ? 'Награда за первое прохождение уже получена. Повторное прохождение не начислит коины, но позволит улучшить лучший результат. Начать заново?'
+      : 'Текущая попытка будет закрыта, а подтверждённые данные останутся в истории.',
+    confirmLabel: 'Начать',
+    danger: false,
+  });
+  if (!confirmed) return;
+  const pending = missionLogicalKey(
+    'mission-restart',
+    `${_missionAttempt.id}:${replay ? 'replay' : 'restart'}`,
+  );
   try {
+    missionViewController.dispose();
+    setMissionBusy(true);
     missionLoading(document.getElementById('view-missions'), 'Перезапускаем миссию');
-    _missionAttempt = await api.restartMission(_missionAttempt.id);
+    _missionAttempt = await api.restartMission(_missionAttempt.id, pending.key);
+    invalidateMissionMapCache();
+    _missionPendingKeys.delete(pending.logical);
     sessionStorage.setItem('puls-mission-attempt', String(_missionAttempt.id));
     _missionDirty = false;
     renderMissionAttempt(document.getElementById('view-missions'), _missionAttempt);
   } catch (error) {
-    showToast(error.message, 'error');
+    finishMissionLogicalKey(pending.logical, error);
+    showToast(missionUserMessage(error), 'error');
     renderMissionAttempt(document.getElementById('view-missions'), _missionAttempt);
+  } finally {
+    setMissionBusy(false);
   }
 }
 
@@ -13814,6 +14020,7 @@ function backToMissionMap(force = false) {
   sessionStorage.removeItem('puls-mission-attempt');
   _missionAttempt = null;
   _missionDirty = false;
+  missionViewController.dispose();
   renderMissions();
 }
 
@@ -13861,7 +14068,7 @@ async function renderMissionsAdmin(el) {
       </section>
       <div class="mission-admin-grid">
         <section class="panel mission-admin-table"><div class="missions-section-head"><div><span>История</span><h2>Попытки операторов</h2></div><b>${attempts.total}</b></div>
-          <div class="table-wrap"><table><thead><tr><th>Оператор</th><th>Миссия</th><th>Статус</th><th>Шаг</th><th>Попытка</th><th>Время</th></tr></thead><tbody>${(attempts.items || []).map(row => `<tr><td><strong>${esc(row.operator_name)}</strong></td><td>${esc(row.mission_title)}</td><td><span class="mission-table-status is-${esc(row.status)}">${esc(missionStatusLabel(row.status))}</span></td><td>${esc(row.current_step_key)}</td><td>№${row.attempt_number}</td><td>${row.duration_seconds == null ? '—' : `${Math.max(1, Math.round(row.duration_seconds / 60))} мин`}</td></tr>`).join('') || '<tr><td colspan="6" class="missions-empty">Попыток пока нет</td></tr>'}</tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>Оператор</th><th>Миссия</th><th>Статус</th><th>Шаг</th><th>Попытка</th><th>Активное время</th></tr></thead><tbody>${(attempts.items || []).map(row => `<tr><td><strong>${esc(row.operator_name)}</strong></td><td>${esc(row.mission_title)}</td><td><span class="mission-table-status is-${esc(row.status)}">${esc(missionStatusLabel(row.status))}</span></td><td>${esc(row.current_step_key)}</td><td>№${row.attempt_number}</td><td>${row.duration_anomalous ? 'Аномалия' : row.active_duration_seconds == null ? '—' : `${Math.max(1, Math.round(row.active_duration_seconds / 60))} мин`}</td></tr>`).join('') || '<tr><td colspan="6" class="missions-empty">Попыток пока нет</td></tr>'}</tbody></table></div>
         </section>
         <aside class="panel mission-dropoff"><div class="missions-section-head"><div><span>Прогресс</span><h2>Точки остановки</h2></div></div>${dropOff.length ? dropOff.map(([step, count]) => `<div><span>${esc(step)}</span><b>${count}</b></div>`).join('') : '<p class="missions-empty">Незавершённых попыток нет</p>'}<div class="mission-repeat"><span>Повторные прохождения</span><strong>${stats.repeat_operators}</strong></div></aside>
       </div>
@@ -14084,7 +14291,7 @@ function trapMissionPreviewFocus(event) {
 
 function closeMissionPreviewDialog() {
   document.querySelector('.mission-preview-backdrop')?.remove();
-  _photoDialogReturnFocus?.focus?.();
+  if (_photoDialogReturnFocus?.isConnected) _photoDialogReturnFocus.focus();
   _photoDialogReturnFocus = null;
 }
 function renderLearningWorldRoute(el, world) {
@@ -14161,7 +14368,7 @@ function toggleSaparOutcomes() {
 
 function scheduleSaparProcessing(attempt) {
   if (attempt.mission_code !== 'smz_sapar_provider_transfer' || attempt.current_step.screen_key !== 'sapar_processing') return;
-  window.setTimeout(() => {
+  missionViewController.timeout(() => {
     if (_missionAttempt?.id === attempt.id && _missionAttempt?.current_step?.screen_key === 'sapar_processing') missionAction('finish_processing');
   }, 1200);
 }

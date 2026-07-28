@@ -422,6 +422,13 @@ function navigateTo(view, options = {}) {
     view = isAdmin(role) ? 'summary' : 'cabinet';
     options = {};
   }
+  if (
+    STATE.currentView === 'missions'
+    && view !== 'missions'
+    && typeof missionViewController !== 'undefined'
+  ) {
+    missionViewController.dispose();
+  }
   STATE.currentView = view;
   _viewAbortController.abort();
   _viewAbortController = new AbortController();

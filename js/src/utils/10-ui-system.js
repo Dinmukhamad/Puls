@@ -65,6 +65,7 @@ function uiCoin(value, options = {}) {
   const number = Number(value);
   if (!Number.isFinite(number)) return 'Нет данных';
   const formatted = uiNumber(number, options.maximumFractionDigits ?? 0);
+  if (options.symbol) return `${formatted} ₡`;
   if (options.sign && number > 0) return `+${formatted} коинов`;
   return `${formatted} ${pluralize(Math.abs(number), 'коин', 'коина', 'коинов')}`;
 }

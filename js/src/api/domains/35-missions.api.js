@@ -28,8 +28,13 @@
       { 'Idempotency-Key': key || missionIdempotencyKey('mission-action') },
     );
   }
-  function requestMissionHint(attemptId) {
-    return api._req('POST', `/api/missions/attempts/${attemptId}/hint`);
+  function requestMissionHint(attemptId, key) {
+    return api._req(
+      'POST',
+      `/api/missions/attempts/${attemptId}/hint`,
+      undefined,
+      { 'Idempotency-Key': key || missionIdempotencyKey('mission-hint') },
+    );
   }
   function restartMission(attemptId, key) {
     return api._req(

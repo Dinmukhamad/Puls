@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import re
+from datetime import timedelta
 
+from app.core.datetime_utils import now_utc
 from app.models import entities as m
+from app.modules.missions.service import close_stale_attempts
 from tests.conftest import make_operator_user
 
 
@@ -27,8 +30,11 @@ def _start(client, key: str = "mission-test-start-0001") -> dict:
 
 
 def _action(client, attempt_id: int, action_key: str, payload: dict | None = None) -> dict:
+    counter = getattr(_action, "counter", 0) + 1
+    _action.counter = counter
     response = client.post(
         f"/api/missions/attempts/{attempt_id}/actions",
+        headers={"Idempotency-Key": f"mission-action-{attempt_id}-{counter}"},
         json={"action_key": action_key, "payload": payload or {}},
     )
     assert response.status_code == 200, response.text
@@ -74,6 +80,9 @@ def test_mission_map_start_resume_and_refresh(db_session, make_client):
     assert data["total"] == 4
     assert data["missions"][0]["code"] == "login_first_time"
     assert data["missions"][0]["action_label"] == "Начать"
+    assert data["missions"][0]["can_start"] is True
+    assert data["missions"][0]["can_replay"] is False
+    assert data["missions"][0]["active_attempt_id"] is None
     assert data["missions"][1]["code"] == "photo_control_basics"
     assert data["missions"][1]["status"] == "locked"
     assert data["missions"][2]["code"] == "smz_sapar_provider_transfer"
@@ -149,6 +158,7 @@ def test_foreign_attempt_is_not_accessible(db_session, make_client):
     assert response.status_code == 404
     action = stranger.post(
         f"/api/missions/attempts/{attempt['id']}/actions",
+        headers={"Idempotency-Key": "mission-foreign-action-0001"},
         json={"action_key": "begin", "payload": {}},
     )
     assert action.status_code == 404
@@ -172,9 +182,17 @@ def test_completion_reward_is_idempotent_and_replay_has_no_reward(db_session, ma
     ).all()
     assert len(rewards) == 1
     assert rewards[0].source_id == first["id"]
+    grants = db_session.query(m.MissionRewardGrant).filter_by(
+        operator_id=operator.id,
+    ).all()
+    assert len(grants) == 1
+    assert grants[0].attempt_id == first["id"]
 
     replay = _start(client, "mission-replay-start-0001")
     assert replay["id"] != first["id"]
+    assert replay["attempt_number"] == first["attempt_number"] + 1
+    assert replay["reward_eligible"] is False
+    assert replay["replay_of_attempt_id"] == first["id"]
     replay_result = _complete(client, replay)
     assert replay_result["reward_awarded"] is False
     assert "награда уже получена" in replay_result["reward_message"]
@@ -184,6 +202,60 @@ def test_completion_reward_is_idempotent_and_replay_has_no_reward(db_session, ma
         operator_id=operator.id,
         source_type="mission_reward",
     ).count() == 1
+    assert db_session.query(m.MissionRewardGrant).filter_by(
+        operator_id=operator.id,
+    ).count() == 1
+
+    card = next(
+        row
+        for row in client.get("/api/missions").json()["missions"]
+        if row["code"] == "login_first_time"
+    )
+    assert card["status"] == "completed"
+    assert card["can_replay"] is True
+    assert card["completed_attempts_count"] == 2
+    assert card["reward_state"] == "claimed"
+
+
+def test_hint_is_idempotent_and_active_time_caps_idle_gap(db_session, make_client):
+    client, _operator, _user = _operator_client(db_session, make_client)
+    attempt = _start(client, "mission-hint-idempotent-start")
+    stored = db_session.get(m.MissionAttempt, attempt["id"])
+    stored.last_activity_at = now_utc() - timedelta(hours=2)
+    db_session.commit()
+
+    headers = {"Idempotency-Key": "mission-hint-same-logical-key"}
+    first = client.post(
+        f"/api/missions/attempts/{attempt['id']}/hint",
+        headers=headers,
+    )
+    second = client.post(
+        f"/api/missions/attempts/{attempt['id']}/hint",
+        headers=headers,
+    )
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    assert first.json()["attempt"]["hints_used"] == 1
+    assert second.json()["attempt"]["hints_used"] == 1
+    assert first.json()["hint"] == second.json()["hint"]
+    assert 899 <= first.json()["attempt"]["active_duration_seconds"] <= 901
+
+
+def test_stale_attempt_cleanup_preserves_history(db_session, make_client):
+    client, _operator, _user = _operator_client(db_session, make_client)
+    attempt = _start(client, "mission-stale-cleanup-start")
+    stored = db_session.get(m.MissionAttempt, attempt["id"])
+    stored.last_activity_at = now_utc() - timedelta(hours=25)
+    db_session.commit()
+
+    assert close_stale_attempts(db_session, 24) == 1
+    db_session.commit()
+    db_session.refresh(stored)
+
+    assert stored.status == "cancelled"
+    assert stored.close_reason == "stale_cleanup"
+    assert db_session.get(m.MissionAttempt, attempt["id"]) is not None
 
 
 def test_wallet_failure_rolls_back_completion(db_session, make_client, monkeypatch):
@@ -197,6 +269,7 @@ def test_wallet_failure_rolls_back_completion(db_session, make_client, monkeypat
     monkeypatch.setattr("app.modules.missions.service.add_transaction", fail_transaction)
     response = client.post(
         f"/api/missions/attempts/{attempt['id']}/actions",
+        headers={"Idempotency-Key": "mission-wallet-failure-complete"},
         json={"action_key": "complete", "payload": {}},
     )
     assert response.status_code == 500

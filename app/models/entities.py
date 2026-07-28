@@ -1051,6 +1051,7 @@ class MissionAttempt(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reward_awarded: Mapped[bool] = mapped_column(Boolean, default=False)
+    reward_eligible: Mapped[bool] = mapped_column(Boolean, default=True)
     reward_amount_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reward_currency_snapshot: Mapped[str | None] = mapped_column(
         String(16), nullable=True
@@ -1059,6 +1060,13 @@ class MissionAttempt(Base):
         ForeignKey("coin_transactions.id"), nullable=True
     )
     active_duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_activity_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    best_score_snapshot: Mapped[float | None] = mapped_column(Float, nullable=True)
+    replay_of_attempt_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mission_attempts.id"), nullable=True
+    )
+    close_reason: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    duration_anomalous: Mapped[bool] = mapped_column(Boolean, default=False)
     state_json: Mapped[dict] = mapped_column(JSON, default=dict)
 
     mission: Mapped[Mission] = relationship("Mission")
@@ -1068,6 +1076,32 @@ class MissionAttempt(Base):
         cascade="all, delete-orphan",
         order_by="MissionEvent.created_at",
     )
+
+
+class MissionRewardGrant(Base):
+    __tablename__ = "mission_reward_grants"
+    __table_args__ = (
+        UniqueConstraint(
+            "operator_id",
+            "mission_id",
+            "mission_version",
+            name="uq_mission_reward_grant_once",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
+    mission_id: Mapped[int] = mapped_column(ForeignKey("missions.id"), index=True)
+    mission_version: Mapped[int] = mapped_column(Integer)
+    attempt_id: Mapped[int] = mapped_column(
+        ForeignKey("mission_attempts.id"), unique=True
+    )
+    amount: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(16), default="₡")
+    transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("coin_transactions.id"), nullable=True, unique=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now_utc, index=True)
 
 
 class MissionEvent(Base):

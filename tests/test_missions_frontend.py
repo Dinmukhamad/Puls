@@ -31,6 +31,13 @@ def test_missions_frontend_has_required_safe_interactions():
     assert "completed_targets" in view
     assert "Idempotency-Key" in api
     assert "listMissionAttempts" in api
+    assert "missionViewController" in view
+    assert "MISSION_ERROR_MESSAGES" in view
+    assert "missionLogicalKey" in view
+    assert "Пройти миссию повторно?" in view
+    assert "sessionStorage.removeItem('puls-mission-attempt')" in view
+    assert "data-autofocus" in view
+    assert "mission-hint" in api
 
 
 def test_missions_styles_cover_themes_breakpoints_and_reduced_motion():

@@ -19,9 +19,15 @@ class MissionCardRead(BaseModel):
     estimated_minutes: int
     version: int
     status: MissionStatus
+    can_start: bool = False
+    can_replay: bool = False
+    active_attempt_id: int | None = None
     current_step_key: str | None = None
     attempts_count: int = 0
+    completed_attempts_count: int = 0
     reward_claimed: bool = False
+    reward_eligible: bool = False
+    reward_state: str = "not_available"
     best_score: float | None = None
     completed_at: datetime | None = None
     action_label: str
@@ -203,6 +209,7 @@ class MissionAttemptRead(BaseModel):
     id: int
     mission_code: str
     mission_title: str
+    display_number: int
     mission_version: int
     attempt_number: int
     status: AttemptStatus
@@ -218,6 +225,9 @@ class MissionAttemptRead(BaseModel):
     score: float | None = None
     max_score: float | None = None
     best_score: float | None = None
+    best_score_snapshot: float | None = None
+    is_new_best: bool = False
+    replay_of_attempt_id: int | None = None
     state: dict[str, Any] = Field(default_factory=dict)
     license_identity: dict[str, str] = Field(default_factory=dict)
     errors_count: int
@@ -261,6 +271,8 @@ class MissionStatsRead(BaseModel):
     completed_operators: int
     conversion_percent: float
     average_duration_seconds: float
+    median_active_duration_seconds: float = 0
+    anomalous_duration_count: int = 0
     repeat_operators: int
     awarded_coins: int
     drop_off_by_step: dict[str, int]
@@ -285,6 +297,8 @@ class MissionAttemptAdminRead(BaseModel):
     started_at: datetime
     completed_at: datetime | None
     duration_seconds: int | None
+    active_duration_seconds: int | None = None
+    duration_anomalous: bool = False
 
 
 class MissionAttemptAdminList(BaseModel):

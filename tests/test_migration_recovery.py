@@ -98,7 +98,7 @@ def test_repair_migration_restores_stamped_economy_schema(tmp_path: Path):
         "expires_at",
         "idempotency_key",
     } <= purchase_columns
-    assert version == "0041_repair_operator_account_links"
+    assert version == "0042_mission_replay_audit"
     assert preserved_purchase == (50, "pending")
 
 
@@ -198,3 +198,60 @@ def test_operator_account_link_repair_is_reciprocal(tmp_path: Path):
 
     assert users == [(1, 10), (2, 20)]
     assert operators == [(10, 1), (20, 2)]
+
+
+def test_mission_replay_migration_backfills_reward_grant(tmp_path: Path):
+    database_path = tmp_path / "mission-replay.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE operators (id INTEGER PRIMARY KEY);
+            CREATE TABLE missions (id INTEGER PRIMARY KEY);
+            CREATE TABLE coin_transactions (id INTEGER PRIMARY KEY);
+            CREATE TABLE mission_attempts (
+                id INTEGER PRIMARY KEY,
+                operator_id INTEGER NOT NULL,
+                mission_id INTEGER NOT NULL,
+                mission_version INTEGER NOT NULL,
+                started_at TIMESTAMP NOT NULL,
+                completed_at TIMESTAMP,
+                duration_seconds INTEGER,
+                active_duration_seconds INTEGER,
+                reward_awarded BOOLEAN NOT NULL,
+                reward_amount_snapshot INTEGER,
+                reward_transaction_id INTEGER
+            );
+            CREATE TABLE alembic_version (
+                version_num VARCHAR(64) NOT NULL PRIMARY KEY
+            );
+            INSERT INTO alembic_version (version_num)
+            VALUES ('0041_repair_operator_account_links');
+            INSERT INTO operators (id) VALUES (1);
+            INSERT INTO missions (id) VALUES (5);
+            INSERT INTO coin_transactions (id) VALUES (9);
+            INSERT INTO mission_attempts (
+                id, operator_id, mission_id, mission_version, started_at,
+                completed_at, duration_seconds, active_duration_seconds,
+                reward_awarded, reward_amount_snapshot, reward_transaction_id
+            ) VALUES (
+                10, 1, 5, 2, '2026-07-28 08:00:00',
+                '2026-07-28 14:00:00', 21600, 21600, 1, 100, 9
+            );
+            """
+        )
+        connection.commit()
+
+    _alembic(database_path, "upgrade", "head")
+
+    with sqlite3.connect(database_path) as connection:
+        grant = connection.execute(
+            "SELECT operator_id, mission_id, mission_version, attempt_id, amount, "
+            "currency, transaction_id FROM mission_reward_grants"
+        ).fetchone()
+        attempt = connection.execute(
+            "SELECT reward_eligible, active_duration_seconds, duration_anomalous "
+            "FROM mission_attempts WHERE id = 10"
+        ).fetchone()
+
+    assert grant == (1, 5, 2, 10, 100, "₡", 9)
+    assert attempt == (1, 900, 1)

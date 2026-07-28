@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     trusted_proxy_ips: str = ""
     csrf_enforced: bool = False
     release_id: str = "development"
+    missions_replay_enabled: bool = True
+    mission_attempt_stale_hours: int = 24
 
     # Таблицы и seed
     auto_create_tables: bool = True

@@ -44,6 +44,20 @@ def run_startup_tasks() -> None:
     except Exception as exc:
         logger.error("[startup] Schema maintenance failed (non-fatal): %s", exc)
 
+    try:
+        from app.modules.missions.service import close_stale_attempts
+
+        db = SessionLocal()
+        try:
+            closed = close_stale_attempts(db, settings.mission_attempt_stale_hours)
+            db.commit()
+            if closed:
+                logger.info("[startup] Closed %s stale mission attempts", closed)
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.error("[startup] Mission stale-attempt cleanup failed (non-fatal): %s", exc)
+
     if settings.auto_seed:
         logger.info("[startup] Running seed...")
         try:
