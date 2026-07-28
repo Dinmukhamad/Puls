@@ -19,6 +19,34 @@ function missionLoading(el, text = 'Загружаем миссии') {
   el.innerHTML = `<div class="missions-loading" role="status"><div class="loading-spinner"></div><strong>${esc(text)}</strong></div>`;
 }
 
+function resetMissionNavigation() {
+  _missionAttempt = null;
+  _missionWorldCode = '';
+  sessionStorage.removeItem('puls-mission-attempt');
+  sessionStorage.removeItem('puls-mission-world');
+}
+
+async function loadMissionMap(el) {
+  try {
+    const data = await api.getMissionWorlds();
+    if ((data.worlds || []).length) {
+      renderLearningWorldMap(el, data);
+      return;
+    }
+  } catch (worldError) {
+    try {
+      const legacyMap = await api.getMissions();
+      renderMissionMap(el, legacyMap);
+      return;
+    } catch (_) {
+      throw worldError;
+    }
+  }
+
+  const legacyMap = await api.getMissions();
+  renderMissionMap(el, legacyMap);
+}
+
 async function renderMissions() {
   const el = document.getElementById('view-missions');
   if (!el) return;
@@ -36,7 +64,7 @@ async function renderMissions() {
       return;
     } catch (error) {
       sessionStorage.removeItem('puls-mission-attempt');
-      if (error?.status !== 404 && error?.status !== 409) {
+      if (![403, 404, 409].includes(error?.status)) {
         renderMissionError(el, error);
         return;
       }
@@ -45,11 +73,17 @@ async function renderMissions() {
 
   try {
     if (_missionWorldCode) {
-      const world = await api.getMissionWorld(_missionWorldCode);
-      renderLearningWorldRoute(el, world);
+      try {
+        const world = await api.getMissionWorld(_missionWorldCode);
+        renderLearningWorldRoute(el, world);
+      } catch (error) {
+        if (![403, 404, 409].includes(error?.status)) throw error;
+        _missionWorldCode = '';
+        sessionStorage.removeItem('puls-mission-world');
+        await loadMissionMap(el);
+      }
     } else {
-      const data = await api.getMissionWorlds();
-      renderLearningWorldMap(el, data);
+      await loadMissionMap(el);
     }
   } catch (error) {
     renderMissionError(el, error);
@@ -61,7 +95,10 @@ function renderMissionError(el, error) {
     <span class="missions-error-icon" aria-hidden="true">!</span>
     <h2>Не удалось открыть миссии</h2>
     <p>${esc(error?.message || 'Попробуйте загрузить раздел ещё раз.')}</p>
-    <button class="btn-primary" type="button" onclick="renderMissions()">Повторить</button>
+    <div class="missions-error-actions">
+      <button class="btn-primary" type="button" onclick="renderMissions()">Повторить</button>
+      <button class="btn-outline" type="button" onclick="resetMissionNavigation(); renderMissions()">Вернуться к карте</button>
+    </div>
   </section>`;
 }
 
@@ -106,13 +143,13 @@ function renderMissionMap(el, data) {
 }
 
 function missionRouteCard(mission) {
-  const disabled = mission.status === 'locked' || mission.status === 'completed';
+  const disabled = mission.status === 'locked';
   const rewardLabel = mission.reward_claimed
     ? `Получено: ${missionCoinLabel(mission.reward_coins)}`
     : mission.status === 'completed'
       ? `Доступно: ${missionCoinLabel(mission.reward_coins)}`
       : `Награда: ${missionCoinLabel(mission.reward_coins)}`;
-  const actionLabel = mission.status === 'completed' ? 'Завершена' : mission.action_label;
+  const actionLabel = mission.action_label || (mission.status === 'completed' ? 'Пройти ещё раз' : 'Начать');
   return `<article class="mission-card is-${esc(mission.status)}">
     <div class="mission-number"><span>${String(mission.sort_order || 1).padStart(2, '0')}</span><i aria-hidden="true"></i></div>
     <div class="mission-card-main">

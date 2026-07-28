@@ -40,13 +40,15 @@ function learningWorldCard(world, index) {
 
 async function openLearningWorld(code) {
   const el = document.getElementById('view-missions');
-  _missionWorldCode = code;
-  sessionStorage.setItem('puls-mission-world', code);
   missionLoading(el, 'Открываем территорию');
   try {
     const world = await api.getMissionWorld(code);
+    _missionWorldCode = code;
+    sessionStorage.setItem('puls-mission-world', code);
     renderLearningWorldRoute(el, world);
   } catch (error) {
+    _missionWorldCode = '';
+    sessionStorage.removeItem('puls-mission-world');
     renderMissionError(el, error);
   }
 }

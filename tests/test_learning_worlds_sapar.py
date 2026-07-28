@@ -78,6 +78,39 @@ def test_world_map_and_routes(db_session, make_client):
     assert smz["reward_total"] >= smz["reward_available"] >= 0
 
 
+def test_world_map_supports_legacy_one_way_operator_link(db_session, make_client):
+    operator_client, operator, user = _operator_client(db_session, make_client)
+    user.operator_id = None
+    operator.user_id = user.id
+    db_session.commit()
+
+    response = operator_client.get("/api/missions/worlds")
+
+    assert response.status_code == 200, response.text
+    assert response.json()["worlds"]
+
+
+def test_world_map_uses_employment_status_as_activity_source(db_session, make_client):
+    operator_client, operator, _user = _operator_client(db_session, make_client)
+    operator.is_active = False
+    operator.employment_status = "active"
+    db_session.commit()
+
+    response = operator_client.get("/api/missions/worlds")
+
+    assert response.status_code == 200, response.text
+
+
+def test_world_map_remains_blocked_for_dismissed_operator(db_session, make_client):
+    operator_client, operator, _user = _operator_client(db_session, make_client)
+    operator.employment_status = "dismissed"
+    db_session.commit()
+
+    response = operator_client.get("/api/missions/worlds")
+
+    assert response.status_code == 403
+
+
 def test_sapar_happy_path_score_reward_and_idempotency(db_session, make_client):
     operator_client, operator, _user = _operator_client(db_session, make_client)
     before = operator.current_balance

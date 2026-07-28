@@ -98,7 +98,7 @@ def test_repair_migration_restores_stamped_economy_schema(tmp_path: Path):
         "expires_at",
         "idempotency_key",
     } <= purchase_columns
-    assert version == "0040_coin_transaction_categories"
+    assert version == "0041_repair_operator_account_links"
     assert preserved_purchase == (50, "pending")
 
 
@@ -160,3 +160,41 @@ def test_coin_economy_migration_preserves_balance_with_opening_ledger(tmp_path: 
         (150, "opening_balance", "opening_balance", "opening_balance:operator:7"),
     ]
     assert sum(row[0] for row in rows) == balance
+
+
+def test_operator_account_link_repair_is_reciprocal(tmp_path: Path):
+    database_path = tmp_path / "operator-links.db"
+    with sqlite3.connect(database_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY,
+                operator_id INTEGER
+            );
+            CREATE TABLE operators (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER
+            );
+            CREATE TABLE alembic_version (
+                version_num VARCHAR(64) NOT NULL PRIMARY KEY
+            );
+            INSERT INTO alembic_version (version_num)
+            VALUES ('0040_coin_transaction_categories');
+            INSERT INTO users (id, operator_id) VALUES (1, NULL), (2, 20);
+            INSERT INTO operators (id, user_id) VALUES (10, 1), (20, NULL);
+            """
+        )
+        connection.commit()
+
+    _alembic(database_path, "upgrade", "head")
+
+    with sqlite3.connect(database_path) as connection:
+        users = connection.execute(
+            "SELECT id, operator_id FROM users ORDER BY id"
+        ).fetchall()
+        operators = connection.execute(
+            "SELECT id, user_id FROM operators ORDER BY id"
+        ).fetchall()
+
+    assert users == [(1, 10), (2, 20)]
+    assert operators == [(10, 1), (20, 2)]

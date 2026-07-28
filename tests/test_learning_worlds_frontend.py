@@ -22,3 +22,21 @@ def test_sapar_simulator_has_no_external_links_or_real_inputs():
     assert 'type="file"' not in source
     assert "confirm_consent" in source
     assert "provider_code" in source
+
+
+def test_mission_map_recovers_from_stale_navigation_and_supports_replay():
+    mission_source = (
+        ROOT / "js" / "src" / "views" / "missions" / "80-missions.view.js"
+    ).read_text(encoding="utf-8")
+    world_source = (
+        ROOT / "js" / "src" / "views" / "missions" / "80-world-map.view.js"
+    ).read_text(encoding="utf-8")
+
+    assert "resetMissionNavigation" in mission_source
+    assert "sessionStorage.removeItem('puls-mission-world')" in mission_source
+    assert "const disabled = mission.status === 'locked';" in mission_source
+    assert "Пройти ещё раз" in mission_source
+    assert "await api.getMissions()" in mission_source
+    assert world_source.index("await api.getMissionWorld(code)") < world_source.index(
+        "sessionStorage.setItem('puls-mission-world', code)"
+    )

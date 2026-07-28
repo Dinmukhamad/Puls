@@ -721,9 +721,14 @@ def expire_stale_purchases(
 
 
 def operator_for_user_or_403(db: Session, user: User) -> Operator:
-    if user.operator_id is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Пользователь не привязан к оператору")
-    operator = db.get(Operator, user.operator_id)
-    if not operator:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Оператор не найден")
+    operator = db.get(Operator, user.operator_id) if user.operator_id is not None else None
+    if operator is None:
+        operator = db.scalar(
+            select(Operator).where(Operator.user_id == user.id).order_by(Operator.id)
+        )
+    if operator is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Пользователь не привязан к оператору",
+        )
     return operator

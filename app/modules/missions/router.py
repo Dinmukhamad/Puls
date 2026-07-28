@@ -38,7 +38,7 @@ admin_router = APIRouter(prefix="/admin/missions", tags=["admin-missions"])
 
 def _active_operator(db: Session, user: User) -> Operator:
     operator = operator_for_user_or_403(db, user)
-    if not operator.is_active or operator.employment_status == "dismissed":
+    if operator.employment_status == "dismissed":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Миссии доступны только активным операторам",
