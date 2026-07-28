@@ -198,7 +198,12 @@ function sessionRow(s) {
 
 async function revokeUserSession(sessionId) {
   if (!sessionId) return;
-  if (!confirm('Сбросить эту сессию? Пользователь выйдет из аккаунта на этом устройстве.')) return;
+  const confirmed = await uiConfirmAction({
+    title: 'Завершить сессию?',
+    description: 'Пользователь сразу выйдет из аккаунта на этом устройстве.',
+    confirmLabel: 'Завершить сессию',
+  });
+  if (!confirmed) return;
   try {
     await api.revokeSession(sessionId);
     swrInvalidate('sessions:list:');
@@ -211,7 +216,12 @@ async function revokeUserSession(sessionId) {
 
 async function revokeAllUserSessions(userId) {
   if (!userId) return;
-  if (!confirm('Сбросить все активные сессии этого пользователя?')) return;
+  const confirmed = await uiConfirmAction({
+    title: 'Завершить остальные сессии?',
+    description: 'Пользователь выйдет из аккаунта на всех устройствах, кроме текущего сеанса администратора.',
+    confirmLabel: 'Завершить сессии',
+  });
+  if (!confirmed) return;
   try {
     const result = await api.revokeUserSessions(userId, true);
     swrInvalidate('sessions:list:');

@@ -140,7 +140,12 @@ function _renderWeeklyAccrualPreview() {
 async function runWeeklyAccrualApply() {
   const { start, end } = _readAccrualPeriodInputs();
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
-  if (!confirm(`Вы уверены, что хотите начислить коины за период ${start} — ${end}? Действие необратимо (повторный запуск не задвоит начисление, но и не отменит его).`)) return;
+  const confirmed = await uiConfirmAction({
+    title: 'Начислить коины за период?',
+    description: `Период: ${start} — ${end}. Действие необратимо; повторный запуск не задвоит начисление, но не отменит его.`,
+    confirmLabel: 'Начислить',
+  });
+  if (!confirmed) return;
 
   try {
     const run = await api.applyWeeklyAccrual({ period_start: start, period_end: end, mode: 'manual' });

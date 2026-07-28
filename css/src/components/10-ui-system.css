@@ -144,6 +144,24 @@
   border-radius: var(--radius-lg);
 }
 .ui-empty-state p { max-width: 520px; margin: var(--space-2) 0 var(--space-4); color: var(--text-secondary); }
+
+.ui-confirm-dialog {
+  display: grid;
+  gap: 16px;
+}
+
+.ui-confirm-dialog p {
+  color: var(--text-secondary, var(--tx2));
+  line-height: 1.6;
+  margin: 0;
+}
+
+.ui-confirm-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
 .ui-button-spinner {
   width: 14px;
   height: 14px;

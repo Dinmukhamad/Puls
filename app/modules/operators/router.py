@@ -652,20 +652,13 @@ def restore_operator(
 def delete_operator(
     operator_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_roles("admin")),
 ) -> dict:
     """
     Полное удаление оператора из БД — только для admin.
     Каскадно удаляет всю историю (PeriodReport, DailyMetrics, уровни и т.д.).
     """
     from sqlalchemy import text
-
-    # Только admin
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=403,
-            detail="Удаление оператора доступно только администратору",
-        )
 
     op = db.get(Operator, operator_id)
     if not op:

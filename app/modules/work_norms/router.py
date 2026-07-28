@@ -162,7 +162,7 @@ def api_update_norm(
 def api_deactivate_norm(
     norm_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("manager", "admin")),
+    _: User = Depends(require_roles("admin")),
 ) -> dict:
     norm = get_norm(db, norm_id)
     if not norm:

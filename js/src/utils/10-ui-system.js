@@ -116,6 +116,45 @@ function uiSetBusy(button, busy, label = 'Сохраняем…') {
   }
 }
 
+let UI_CONFIRM_RESOLVER = null;
+
+function uiResolveConfirm(confirmed) {
+  const resolver = UI_CONFIRM_RESOLVER;
+  UI_CONFIRM_RESOLVER = null;
+  closeModal();
+  if (resolver) resolver(Boolean(confirmed));
+}
+
+function uiCancelPendingConfirm() {
+  const resolver = UI_CONFIRM_RESOLVER;
+  UI_CONFIRM_RESOLVER = null;
+  if (resolver) resolver(false);
+}
+
+function uiConfirmAction({
+  title = 'Подтвердите действие',
+  description = 'Вы уверены, что хотите продолжить?',
+  confirmLabel = 'Подтвердить',
+  danger = true,
+} = {}) {
+  if (typeof showModal !== 'function') {
+    return Promise.resolve(window.confirm(`${title}\n\n${description}`));
+  }
+  uiCancelPendingConfirm();
+  return new Promise(resolve => {
+    UI_CONFIRM_RESOLVER = resolve;
+    showModal(`
+      <div class="ui-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="ui-confirm-title">
+        <h3 class="modal-title" id="ui-confirm-title">${esc(title)}</h3>
+        <p>${esc(description)}</p>
+        <div class="ui-confirm-dialog__actions">
+          <button class="btn-outline" type="button" onclick="uiResolveConfirm(false)">Отмена</button>
+          <button class="${danger ? 'btn-danger' : 'btn-primary'}" type="button" onclick="uiResolveConfirm(true)">${esc(confirmLabel)}</button>
+        </div>
+      </div>`);
+  });
+}
+
 function uiSyncQuery(values, { replace = true } = {}) {
   const url = new URL(location.href);
   Object.entries(values).forEach(([key, value]) => {

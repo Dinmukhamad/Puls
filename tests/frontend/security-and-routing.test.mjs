@@ -30,6 +30,18 @@ const shop = await readFile(
   new URL('../../js/src/views/rating/20-rating-shop-summary.view.js', import.meta.url),
   'utf8',
 );
+const users = await readFile(
+  new URL('../../js/src/views/coins/30-admin-coins-groups-operators.view.js', import.meta.url),
+  'utf8',
+);
+const levels = await readFile(
+  new URL('../../js/src/views/operator-levels/10-levels-cabinet.view.js', import.meta.url),
+  'utf8',
+);
+const testsView = await readFile(
+  new URL('../../js/src/views/wheel/60-wheel-tests.view.js', import.meta.url),
+  'utf8',
+);
 
 test('every hash navigation is checked against the role registry', () => {
   assert.match(core, /addEventListener\('hashchange'/);
@@ -75,4 +87,17 @@ test('shop separates received quantity from the per-person limit', () => {
   assert.match(shop, /Получено:/);
   assert.match(shop, /Лимит:/);
   assert.doesNotMatch(shop, /Осталось:/);
+});
+
+test('destructive controls are admin-only and require confirmation', () => {
+  assert.match(uiSystem, /function uiConfirmAction/);
+  assert.match(uiSystem, /uiResolveConfirm\(false\)/);
+  assert.match(users, /STATE\.user\?\.role === 'admin'/);
+  assert.match(users, /Удалять группы может только администратор/);
+  assert.match(users, /Удалять операторов может только администратор/);
+  assert.match(levels, /const canDeleteLevels = STATE\.user\?\.role === 'admin'/);
+  assert.match(levels, /await uiConfirmAction/);
+  assert.match(testsView, /const canDelete = STATE\.user\?\.role === 'admin'/);
+  assert.match(testsView, /Удалить вопрос\?/);
+  assert.match(testsView, /Удалить вариант ответа\?/);
 });

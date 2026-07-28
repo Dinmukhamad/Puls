@@ -159,14 +159,24 @@ async function renderRafflesAdmin(el) {
 
   el.querySelectorAll('[data-draw-raffle]').forEach(btn => {
     btn.onclick = async () => {
-      if (!confirm('Запустить тираж сейчас? Победители определятся окончательно.')) return;
+      const confirmed = await uiConfirmAction({
+        title: 'Запустить тираж сейчас?',
+        description: 'Победители будут определены окончательно. Отменить результат после запуска нельзя.',
+        confirmLabel: 'Запустить тираж',
+      });
+      if (!confirmed) return;
       try { await api.drawRaffle(parseInt(btn.dataset.drawRaffle, 10)); swrInvalidate('raffles:'); showToast('Розыгрыш проведён', 'ok'); renderRaffles(); }
       catch (e) { showToast(e.message, 'error'); }
     };
   });
   el.querySelectorAll('[data-cancel-raffle]').forEach(btn => {
     btn.onclick = async () => {
-      if (!confirm('Отменить розыгрыш? Вложенные билеты вернутся участникам.')) return;
+      const confirmed = await uiConfirmAction({
+        title: 'Отменить розыгрыш?',
+        description: 'Розыгрыш будет закрыт, а вложенные билеты вернутся участникам.',
+        confirmLabel: 'Отменить розыгрыш',
+      });
+      if (!confirmed) return;
       try { await api.cancelRaffle(parseInt(btn.dataset.cancelRaffle, 10)); swrInvalidate('raffles:'); showToast('Розыгрыш отменён', 'ok'); renderRaffles(); }
       catch (e) { showToast(e.message, 'error'); }
     };

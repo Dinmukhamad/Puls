@@ -139,10 +139,15 @@ def update_level(
     level_id: int,
     payload: OperatorLevelUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("manager", "admin")),
+    current_user: User = Depends(require_roles("manager", "admin")),
 ) -> OperatorLevel:
     level = _level_or_404(db, level_id)
     data = payload.model_dump(exclude_unset=True)
+    if "is_active" in data and data["is_active"] != level.is_active and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Включать и отключать уровни может только администратор",
+        )
     if "code" in data:
         code = (data["code"] or "").strip()
         if not code:
@@ -164,7 +169,7 @@ def update_level(
 def disable_level(
     level_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("manager", "admin")),
+    _: User = Depends(require_roles("admin")),
 ) -> dict:
     level = _level_or_404(db, level_id)
     level.is_active = False
@@ -208,7 +213,7 @@ def update_rule(
 def delete_rule(
     rule_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("manager", "admin")),
+    _: User = Depends(require_roles("admin")),
 ) -> dict:
     rule = _rule_or_404(db, rule_id)
     db.delete(rule)
@@ -230,7 +235,7 @@ def update_rule_alias(
 def delete_rule_alias(
     rule_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("manager", "admin")),
+    current_user: User = Depends(require_roles("admin")),
 ) -> dict:
     return delete_rule(rule_id, db, current_user)
 

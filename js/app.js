@@ -1023,6 +1023,45 @@ function uiSetBusy(button, busy, label = 'Сохраняем…') {
   }
 }
 
+let UI_CONFIRM_RESOLVER = null;
+
+function uiResolveConfirm(confirmed) {
+  const resolver = UI_CONFIRM_RESOLVER;
+  UI_CONFIRM_RESOLVER = null;
+  closeModal();
+  if (resolver) resolver(Boolean(confirmed));
+}
+
+function uiCancelPendingConfirm() {
+  const resolver = UI_CONFIRM_RESOLVER;
+  UI_CONFIRM_RESOLVER = null;
+  if (resolver) resolver(false);
+}
+
+function uiConfirmAction({
+  title = 'Подтвердите действие',
+  description = 'Вы уверены, что хотите продолжить?',
+  confirmLabel = 'Подтвердить',
+  danger = true,
+} = {}) {
+  if (typeof showModal !== 'function') {
+    return Promise.resolve(window.confirm(`${title}\n\n${description}`));
+  }
+  uiCancelPendingConfirm();
+  return new Promise(resolve => {
+    UI_CONFIRM_RESOLVER = resolve;
+    showModal(`
+      <div class="ui-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="ui-confirm-title">
+        <h3 class="modal-title" id="ui-confirm-title">${esc(title)}</h3>
+        <p>${esc(description)}</p>
+        <div class="ui-confirm-dialog__actions">
+          <button class="btn-outline" type="button" onclick="uiResolveConfirm(false)">Отмена</button>
+          <button class="${danger ? 'btn-danger' : 'btn-primary'}" type="button" onclick="uiResolveConfirm(true)">${esc(confirmLabel)}</button>
+        </div>
+      </div>`);
+  });
+}
+
 function uiSyncQuery(values, { replace = true } = {}) {
   const url = new URL(location.href);
   Object.entries(values).forEach(([key, value]) => {
@@ -1096,6 +1135,7 @@ async function renderLevelsTabContent(el) {
     }
   }
   STATE.operatorLevels = levels;
+  const canDeleteLevels = STATE.user?.role === 'admin';
   const rewardsData = await withTimeout(swrFetch('levels:rewards', () => api.listOperatorLevelRewards(), null, SWR_FAST_TTL_MS), 10000)
     .catch(() => ({ items: [] }));
   const rewardRows = Array.isArray(rewardsData) ? rewardsData : (rewardsData.items || []);
@@ -1153,7 +1193,7 @@ async function renderLevelsTabContent(el) {
           <div class="level-card-controls">
             <span class="status-pill ${level.is_active ? 'ok' : 'muted'}">${level.is_active ? 'Участвует в расчёте' : 'Отключён'}</span>
             <button class="btn-outline btn-sm" onclick="editOperatorLevelUi(${level.id})">Редактировать</button>
-            <button class="btn-outline btn-sm ${level.is_active ? 'danger' : ''}" onclick="toggleOperatorLevelUi(${level.id}, ${!level.is_active})">${level.is_active ? 'Отключить' : 'Включить'}</button>
+            ${canDeleteLevels ? `<button class="btn-outline btn-sm ${level.is_active ? 'danger' : ''}" onclick="toggleOperatorLevelUi(${level.id}, ${!level.is_active})">${level.is_active ? 'Отключить' : 'Включить'}</button>` : ''}
           </div>
         </header>
         <div class="level-card-body">
@@ -1163,7 +1203,7 @@ async function renderLevelsTabContent(el) {
               ${(level.rules || []).length ? level.rules.map(rule => `<div class="level-condition-row">
                 <span class="level-condition-check">✓</span>
                 <div><strong>${esc(rule.metric_label || ruleText(rule).split(':')[0])}</strong><span>${esc(ruleText(rule))}</span></div>
-                <button type="button" onclick="deleteOperatorLevelRuleUi(${rule.id})" aria-label="Удалить условие" title="Удалить условие">×</button>
+                ${canDeleteLevels ? `<button type="button" onclick="deleteOperatorLevelRuleUi(${rule.id})" aria-label="Удалить условие" title="Удалить условие">×</button>` : ''}
               </div>`).join('') : '<div class="level-condition-empty">Условия пока не настроены. Без условий уровень доступен всем операторам.</div>'}
             </div>
           </section>
@@ -1366,7 +1406,13 @@ async function submitOperatorLevelRuleForm(levelId) {
 }
 
 async function deleteOperatorLevelRuleUi(ruleId) {
-  if (!confirm('Удалить показатель уровня?')) return;
+  if (STATE.user?.role !== 'admin') return showToast('Удалять условия может только администратор', 'error');
+  const confirmed = await uiConfirmAction({
+    title: 'Удалить условие уровня?',
+    description: 'Условие перестанет учитываться при расчёте уровня. Это действие нельзя отменить.',
+    confirmLabel: 'Удалить',
+  });
+  if (!confirmed) return;
   try {
     await api.deleteOperatorLevelRule(ruleId);
     swrInvalidate('levels:');
@@ -1375,7 +1421,13 @@ async function deleteOperatorLevelRuleUi(ruleId) {
 }
 
 async function disableOperatorLevelUi(levelId) {
-  if (!confirm('Отключить уровень?')) return;
+  if (STATE.user?.role !== 'admin') return showToast('Отключать уровни может только администратор', 'error');
+  const confirmed = await uiConfirmAction({
+    title: 'Отключить уровень?',
+    description: 'Уровень перестанет назначаться операторам. Вы уверены, что хотите продолжить?',
+    confirmLabel: 'Отключить',
+  });
+  if (!confirmed) return;
   try {
     await api.deleteOperatorLevel(levelId);
     swrInvalidate('levels:');
@@ -1384,8 +1436,17 @@ async function disableOperatorLevelUi(levelId) {
 }
 
 async function toggleOperatorLevelUi(levelId, isActive) {
+  if (STATE.user?.role !== 'admin') return showToast('Включать и отключать уровни может только администратор', 'error');
   const verb = isActive ? 'включить' : 'отключить';
-  if (!confirm(`${verb.charAt(0).toUpperCase() + verb.slice(1)} уровень?`)) return;
+  const confirmed = await uiConfirmAction({
+    title: `${verb.charAt(0).toUpperCase() + verb.slice(1)} уровень?`,
+    description: isActive
+      ? 'Уровень снова будет участвовать в автоматическом расчёте.'
+      : 'Уровень перестанет назначаться операторам. Текущая история сохранится.',
+    confirmLabel: isActive ? 'Включить' : 'Отключить',
+    danger: !isActive,
+  });
+  if (!confirmed) return;
   try {
     await api.updateOperatorLevel(levelId, { is_active: isActive });
     swrInvalidate('levels:');
@@ -5392,7 +5453,9 @@ async function renderGroups() {
                   <button class="btn-outline btn-sm" onclick="toggleGroupStatus(${g.id}, '${g.status === 'active' ? 'inactive' : 'active'}')">
                     ${g.status === 'active' ? 'Отключить' : 'Включить'}
                   </button>
-                  <button class="btn-outline btn-sm danger-text" onclick="confirmDeleteGroup(${g.id})">Удалить</button>
+                  ${STATE.user?.role === 'admin'
+                    ? `<button class="btn-outline btn-sm danger-text" onclick="confirmDeleteGroup(${g.id})">Удалить</button>`
+                    : ''}
                 </td>
               </tr>`).join('') : '<tr><td colspan="4" class="empty-line">Группы не созданы</td></tr>'}
           </tbody>
@@ -5519,6 +5582,7 @@ async function applyGroupStatus(id, nextStatus) {
 }
 
 function confirmDeleteGroup(id) {
+  if (STATE.user?.role !== 'admin') return showToast('Удалять группы может только администратор', 'error');
   const group = STATE.groups.find(g => g.id === id);
   if (!group) return showToast('Группа не найдена', 'error');
   showModal(`
@@ -5736,6 +5800,7 @@ async function submitRestoreOperator(id) {
 }
 
 function confirmDeleteOperator(operatorId) {
+  if (STATE.user?.role !== 'admin') return showToast('Удалять операторов может только администратор', 'error');
   // operatorId — это operators.id
   const op = STATE.users.find(u => u.operator_id === operatorId);
   const name = op ? op.full_name : `Оператор #${operatorId}`;
@@ -5846,6 +5911,7 @@ function closeModal(force = false) {
   const o = document.getElementById('modal-overlay');
   if (o?.dataset.force === 'true' && !force) return;
   if (o) o.style.display = 'none';
+  if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
 }
 
 
@@ -5933,6 +5999,7 @@ async function showWorkNormsModal() {
 
 function renderWorkNormsModal(norms) {
   const canEdit = ['manager','admin'].includes(STATE.user?.role);
+  const canDelete = STATE.user?.role === 'admin';
 
   // Группируем по год/месяц
   const byMonth = {};
@@ -5955,7 +6022,7 @@ function renderWorkNormsModal(norms) {
         <td>
           ${canEdit && n.is_active ? `
             <button class="btn-icon btn-ghost" onclick="showEditNormModal(${n.id}, ${n.monthly_norm_hours})" title="Изменить">✎</button>
-            <button class="btn-icon btn-ghost danger" onclick="deleteNorm(${n.id})" title="Отключить">✕</button>
+            ${canDelete ? `<button class="btn-icon btn-ghost danger" onclick="deleteNorm(${n.id})" title="Отключить">✕</button>` : ''}
           ` : ''}
         </td>
       </tr>`).join('');
@@ -6043,7 +6110,13 @@ async function showEditNormModal(normId, currentHours) {
 }
 
 async function deleteNorm(normId) {
-  if (!confirm('Отключить норму?')) return;
+  if (STATE.user?.role !== 'admin') return showToast('Отключать нормы может только администратор', 'error');
+  const confirmed = await uiConfirmAction({
+    title: 'Отключить норму часов?',
+    description: 'Норма перестанет использоваться в новых расчётах. Вы уверены, что хотите продолжить?',
+    confirmLabel: 'Отключить',
+  });
+  if (!confirmed) return;
   try {
     await api._req('DELETE', `/api/work-norms/${normId}`);
     showToast('Норма отключена', 'ok');
@@ -6271,7 +6344,12 @@ async function submitAddOperator() {
 
 async function deactivateUserUi(userId) {
   const user = STATE.users.find(u => u.id === userId);
-  if (!confirm(`Деактивировать пользователя ${user?.full_name || ''}?`)) return;
+  const confirmed = await uiConfirmAction({
+    title: 'Деактивировать пользователя?',
+    description: `${user?.full_name || 'Пользователь'} потеряет доступ к системе до повторной активации.`,
+    confirmLabel: 'Деактивировать',
+  });
+  if (!confirmed) return;
   try {
     await api.deactivateUser(userId);
     showToast('Пользователь деактивирован', 'ok');
@@ -6431,6 +6509,10 @@ async function showUserManagementModal(userId) {
           ${user.status === 'active' ? `<div class="user-manage-danger-zone">
             <div><strong>Отключение аккаунта</strong><span>Пользователь потеряет доступ до повторной активации.</span></div>
             <button class="btn-outline" type="button" onclick="closeModal();deactivateUserUi(${user.id})">Деактивировать</button>
+          </div>` : ''}
+          ${STATE.user?.role === 'admin' && isOperator ? `<div class="user-manage-danger-zone">
+            <div><strong>Удаление оператора</strong><span>Профиль, история расчётов, коины и учётная запись будут удалены без возможности восстановления.</span></div>
+            <button class="btn-danger" type="button" onclick="confirmDeleteOperator(${user.operator_id})">Удалить оператора</button>
           </div>` : ''}
         </section>
       </div>
@@ -7247,7 +7329,12 @@ function _renderWeeklyAccrualPreview() {
 async function runWeeklyAccrualApply() {
   const { start, end } = _readAccrualPeriodInputs();
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
-  if (!confirm(`Вы уверены, что хотите начислить коины за период ${start} — ${end}? Действие необратимо (повторный запуск не задвоит начисление, но и не отменит его).`)) return;
+  const confirmed = await uiConfirmAction({
+    title: 'Начислить коины за период?',
+    description: `Период: ${start} — ${end}. Действие необратимо; повторный запуск не задвоит начисление, но не отменит его.`,
+    confirmLabel: 'Начислить',
+  });
+  if (!confirmed) return;
 
   try {
     const run = await api.applyWeeklyAccrual({ period_start: start, period_end: end, mode: 'manual' });
@@ -7635,7 +7722,12 @@ function sessionRow(s) {
 
 async function revokeUserSession(sessionId) {
   if (!sessionId) return;
-  if (!confirm('Сбросить эту сессию? Пользователь выйдет из аккаунта на этом устройстве.')) return;
+  const confirmed = await uiConfirmAction({
+    title: 'Завершить сессию?',
+    description: 'Пользователь сразу выйдет из аккаунта на этом устройстве.',
+    confirmLabel: 'Завершить сессию',
+  });
+  if (!confirmed) return;
   try {
     await api.revokeSession(sessionId);
     swrInvalidate('sessions:list:');
@@ -7648,7 +7740,12 @@ async function revokeUserSession(sessionId) {
 
 async function revokeAllUserSessions(userId) {
   if (!userId) return;
-  if (!confirm('Сбросить все активные сессии этого пользователя?')) return;
+  const confirmed = await uiConfirmAction({
+    title: 'Завершить остальные сессии?',
+    description: 'Пользователь выйдет из аккаунта на всех устройствах, кроме текущего сеанса администратора.',
+    confirmLabel: 'Завершить сессии',
+  });
+  if (!confirmed) return;
   try {
     const result = await api.revokeUserSessions(userId, true);
     swrInvalidate('sessions:list:');
@@ -11256,6 +11353,14 @@ async function renderWheelPrizesTab(body) {
   async function bulkSetActive(isActive) {
     const ids = [..._wheelSelectedPrizeIds];
     if (!ids.length) return;
+    if (!isActive) {
+      const confirmed = await uiConfirmAction({
+        title: 'Отключить выбранные секторы?',
+        description: `${ids.length} ${pluralize(ids.length, 'сектор', 'сектора', 'секторов')} перестанут участвовать в Колесе WOW.`,
+        confirmLabel: 'Отключить',
+      });
+      if (!confirmed) return;
+    }
     const results = await Promise.allSettled(ids.map(id => api.updateWheelPrize(id, { is_active: isActive })));
     const failed = results.filter(r => r.status === 'rejected').length;
     swrInvalidate('wheel:admin:prizes');
@@ -12710,6 +12815,7 @@ function updateTestRewardFields(el) {
 }
 
 function questionEditorHtml(q, index, isOpen) {
+  const canDelete = STATE.user?.role === 'admin';
   return `<div class="test-question-editor" data-q-index="${index}">
     <div class="test-question-number">${String(index + 1).padStart(2, '0')}</div>
     <div class="test-question-content">
@@ -12720,14 +12826,14 @@ function questionEditorHtml(q, index, isOpen) {
         <option value="multiple_choice" ${q.question_type==='multiple_choice'?'selected':''}>Несколько ответов</option>
         </select></div>
         <div class="form-group test-question-points"><label class="form-label">Баллы</label><input class="form-input" type="number" min="0" value="${q.points}" data-q-field="points" ${isOpen?'disabled':''}></div>
-        ${!isOpen?`<button class="test-icon-button test-question-delete" data-q-delete title="Удалить вопрос" aria-label="Удалить вопрос">×</button>`:''}
+        ${!isOpen && canDelete ? `<button class="test-icon-button test-question-delete" data-q-delete title="Удалить вопрос" aria-label="Удалить вопрос">×</button>` : ''}
       </div>
       <div class="test-answer-label">Варианты ответа <span>Отметьте правильный</span></div>
       <div class="test-answer-options">
         ${q.answers.map((a,ai) => `<div class="test-answer-option-row" data-a-index="${ai}">
           <label class="test-correct-control" title="Правильный ответ"><input type="${q.question_type==='multiple_choice'?'checkbox':'radio'}" name="correct-${index}" data-a-field="is_correct" ${a.is_correct?'checked':''} ${isOpen?'disabled':''}><i></i></label>
           <input class="form-input" placeholder="Вариант ${ai + 1}" value="${esc(a.answer_text)}" data-a-field="answer_text" ${isOpen?'disabled':''}>
-          ${!isOpen&&q.answers.length>2?`<button class="test-icon-button" data-a-delete title="Удалить вариант" aria-label="Удалить вариант">×</button>`:''}
+          ${!isOpen && canDelete && q.answers.length > 2 ? `<button class="test-icon-button" data-a-delete title="Удалить вариант" aria-label="Удалить вариант">×</button>` : ''}
         </div>`).join('')}
       </div>
       ${!isOpen && q.answers.length < 10 ? `<button class="btn-outline btn-sm test-add-answer" data-q-add-answer>Добавить вариант</button>` : ''}
@@ -12748,7 +12854,13 @@ function bindQuestionEditorEvents(el, isOpen) {
         }
       });
     });
-    qDiv.querySelector('[data-q-delete]')?.addEventListener('click', () => {
+    qDiv.querySelector('[data-q-delete]')?.addEventListener('click', async () => {
+      const confirmed = await uiConfirmAction({
+        title: 'Удалить вопрос?',
+        description: 'Вопрос и все варианты ответа будут удалены после сохранения теста.',
+        confirmLabel: 'Удалить',
+      });
+      if (!confirmed) return;
       captureTestBuilderForm(el);
       const removed = s.questions[qi];
       if (removed?.id) s.deletedQuestionIds.push(removed.id);
@@ -12771,7 +12883,17 @@ function bindQuestionEditorEvents(el, isOpen) {
           }
         });
       });
-      aDiv.querySelector('[data-a-delete]')?.addEventListener('click', () => { captureTestBuilderForm(el); s.questions[qi].answers.splice(ai,1); renderTestBuilderScreen(); });
+      aDiv.querySelector('[data-a-delete]')?.addEventListener('click', async () => {
+        const confirmed = await uiConfirmAction({
+          title: 'Удалить вариант ответа?',
+          description: 'Вариант ответа будет удалён из вопроса.',
+          confirmLabel: 'Удалить',
+        });
+        if (!confirmed) return;
+        captureTestBuilderForm(el);
+        s.questions[qi].answers.splice(ai, 1);
+        renderTestBuilderScreen();
+      });
     });
   });
 }
@@ -13164,14 +13286,24 @@ async function renderRafflesAdmin(el) {
 
   el.querySelectorAll('[data-draw-raffle]').forEach(btn => {
     btn.onclick = async () => {
-      if (!confirm('Запустить тираж сейчас? Победители определятся окончательно.')) return;
+      const confirmed = await uiConfirmAction({
+        title: 'Запустить тираж сейчас?',
+        description: 'Победители будут определены окончательно. Отменить результат после запуска нельзя.',
+        confirmLabel: 'Запустить тираж',
+      });
+      if (!confirmed) return;
       try { await api.drawRaffle(parseInt(btn.dataset.drawRaffle, 10)); swrInvalidate('raffles:'); showToast('Розыгрыш проведён', 'ok'); renderRaffles(); }
       catch (e) { showToast(e.message, 'error'); }
     };
   });
   el.querySelectorAll('[data-cancel-raffle]').forEach(btn => {
     btn.onclick = async () => {
-      if (!confirm('Отменить розыгрыш? Вложенные билеты вернутся участникам.')) return;
+      const confirmed = await uiConfirmAction({
+        title: 'Отменить розыгрыш?',
+        description: 'Розыгрыш будет закрыт, а вложенные билеты вернутся участникам.',
+        confirmLabel: 'Отменить розыгрыш',
+      });
+      if (!confirmed) return;
       try { await api.cancelRaffle(parseInt(btn.dataset.cancelRaffle, 10)); swrInvalidate('raffles:'); showToast('Розыгрыш отменён', 'ok'); renderRaffles(); }
       catch (e) { showToast(e.message, 'error'); }
     };

@@ -1373,7 +1373,9 @@ async function renderGroups() {
                   <button class="btn-outline btn-sm" onclick="toggleGroupStatus(${g.id}, '${g.status === 'active' ? 'inactive' : 'active'}')">
                     ${g.status === 'active' ? 'Отключить' : 'Включить'}
                   </button>
-                  <button class="btn-outline btn-sm danger-text" onclick="confirmDeleteGroup(${g.id})">Удалить</button>
+                  ${STATE.user?.role === 'admin'
+                    ? `<button class="btn-outline btn-sm danger-text" onclick="confirmDeleteGroup(${g.id})">Удалить</button>`
+                    : ''}
                 </td>
               </tr>`).join('') : '<tr><td colspan="4" class="empty-line">Группы не созданы</td></tr>'}
           </tbody>
@@ -1500,6 +1502,7 @@ async function applyGroupStatus(id, nextStatus) {
 }
 
 function confirmDeleteGroup(id) {
+  if (STATE.user?.role !== 'admin') return showToast('Удалять группы может только администратор', 'error');
   const group = STATE.groups.find(g => g.id === id);
   if (!group) return showToast('Группа не найдена', 'error');
   showModal(`
@@ -1717,6 +1720,7 @@ async function submitRestoreOperator(id) {
 }
 
 function confirmDeleteOperator(operatorId) {
+  if (STATE.user?.role !== 'admin') return showToast('Удалять операторов может только администратор', 'error');
   // operatorId — это operators.id
   const op = STATE.users.find(u => u.operator_id === operatorId);
   const name = op ? op.full_name : `Оператор #${operatorId}`;
@@ -1827,6 +1831,7 @@ function closeModal(force = false) {
   const o = document.getElementById('modal-overlay');
   if (o?.dataset.force === 'true' && !force) return;
   if (o) o.style.display = 'none';
+  if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
 }
 
 
@@ -1914,6 +1919,7 @@ async function showWorkNormsModal() {
 
 function renderWorkNormsModal(norms) {
   const canEdit = ['manager','admin'].includes(STATE.user?.role);
+  const canDelete = STATE.user?.role === 'admin';
 
   // Группируем по год/месяц
   const byMonth = {};
@@ -1936,7 +1942,7 @@ function renderWorkNormsModal(norms) {
         <td>
           ${canEdit && n.is_active ? `
             <button class="btn-icon btn-ghost" onclick="showEditNormModal(${n.id}, ${n.monthly_norm_hours})" title="Изменить">✎</button>
-            <button class="btn-icon btn-ghost danger" onclick="deleteNorm(${n.id})" title="Отключить">✕</button>
+            ${canDelete ? `<button class="btn-icon btn-ghost danger" onclick="deleteNorm(${n.id})" title="Отключить">✕</button>` : ''}
           ` : ''}
         </td>
       </tr>`).join('');
@@ -2024,7 +2030,13 @@ async function showEditNormModal(normId, currentHours) {
 }
 
 async function deleteNorm(normId) {
-  if (!confirm('Отключить норму?')) return;
+  if (STATE.user?.role !== 'admin') return showToast('Отключать нормы может только администратор', 'error');
+  const confirmed = await uiConfirmAction({
+    title: 'Отключить норму часов?',
+    description: 'Норма перестанет использоваться в новых расчётах. Вы уверены, что хотите продолжить?',
+    confirmLabel: 'Отключить',
+  });
+  if (!confirmed) return;
   try {
     await api._req('DELETE', `/api/work-norms/${normId}`);
     showToast('Норма отключена', 'ok');
@@ -2252,7 +2264,12 @@ async function submitAddOperator() {
 
 async function deactivateUserUi(userId) {
   const user = STATE.users.find(u => u.id === userId);
-  if (!confirm(`Деактивировать пользователя ${user?.full_name || ''}?`)) return;
+  const confirmed = await uiConfirmAction({
+    title: 'Деактивировать пользователя?',
+    description: `${user?.full_name || 'Пользователь'} потеряет доступ к системе до повторной активации.`,
+    confirmLabel: 'Деактивировать',
+  });
+  if (!confirmed) return;
   try {
     await api.deactivateUser(userId);
     showToast('Пользователь деактивирован', 'ok');
@@ -2412,6 +2429,10 @@ async function showUserManagementModal(userId) {
           ${user.status === 'active' ? `<div class="user-manage-danger-zone">
             <div><strong>Отключение аккаунта</strong><span>Пользователь потеряет доступ до повторной активации.</span></div>
             <button class="btn-outline" type="button" onclick="closeModal();deactivateUserUi(${user.id})">Деактивировать</button>
+          </div>` : ''}
+          ${STATE.user?.role === 'admin' && isOperator ? `<div class="user-manage-danger-zone">
+            <div><strong>Удаление оператора</strong><span>Профиль, история расчётов, коины и учётная запись будут удалены без возможности восстановления.</span></div>
+            <button class="btn-danger" type="button" onclick="confirmDeleteOperator(${user.operator_id})">Удалить оператора</button>
           </div>` : ''}
         </section>
       </div>

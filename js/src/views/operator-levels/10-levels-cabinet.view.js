@@ -56,6 +56,7 @@ async function renderLevelsTabContent(el) {
     }
   }
   STATE.operatorLevels = levels;
+  const canDeleteLevels = STATE.user?.role === 'admin';
   const rewardsData = await withTimeout(swrFetch('levels:rewards', () => api.listOperatorLevelRewards(), null, SWR_FAST_TTL_MS), 10000)
     .catch(() => ({ items: [] }));
   const rewardRows = Array.isArray(rewardsData) ? rewardsData : (rewardsData.items || []);
@@ -113,7 +114,7 @@ async function renderLevelsTabContent(el) {
           <div class="level-card-controls">
             <span class="status-pill ${level.is_active ? 'ok' : 'muted'}">${level.is_active ? 'Участвует в расчёте' : 'Отключён'}</span>
             <button class="btn-outline btn-sm" onclick="editOperatorLevelUi(${level.id})">Редактировать</button>
-            <button class="btn-outline btn-sm ${level.is_active ? 'danger' : ''}" onclick="toggleOperatorLevelUi(${level.id}, ${!level.is_active})">${level.is_active ? 'Отключить' : 'Включить'}</button>
+            ${canDeleteLevels ? `<button class="btn-outline btn-sm ${level.is_active ? 'danger' : ''}" onclick="toggleOperatorLevelUi(${level.id}, ${!level.is_active})">${level.is_active ? 'Отключить' : 'Включить'}</button>` : ''}
           </div>
         </header>
         <div class="level-card-body">
@@ -123,7 +124,7 @@ async function renderLevelsTabContent(el) {
               ${(level.rules || []).length ? level.rules.map(rule => `<div class="level-condition-row">
                 <span class="level-condition-check">✓</span>
                 <div><strong>${esc(rule.metric_label || ruleText(rule).split(':')[0])}</strong><span>${esc(ruleText(rule))}</span></div>
-                <button type="button" onclick="deleteOperatorLevelRuleUi(${rule.id})" aria-label="Удалить условие" title="Удалить условие">×</button>
+                ${canDeleteLevels ? `<button type="button" onclick="deleteOperatorLevelRuleUi(${rule.id})" aria-label="Удалить условие" title="Удалить условие">×</button>` : ''}
               </div>`).join('') : '<div class="level-condition-empty">Условия пока не настроены. Без условий уровень доступен всем операторам.</div>'}
             </div>
           </section>
@@ -326,7 +327,13 @@ async function submitOperatorLevelRuleForm(levelId) {
 }
 
 async function deleteOperatorLevelRuleUi(ruleId) {
-  if (!confirm('Удалить показатель уровня?')) return;
+  if (STATE.user?.role !== 'admin') return showToast('Удалять условия может только администратор', 'error');
+  const confirmed = await uiConfirmAction({
+    title: 'Удалить условие уровня?',
+    description: 'Условие перестанет учитываться при расчёте уровня. Это действие нельзя отменить.',
+    confirmLabel: 'Удалить',
+  });
+  if (!confirmed) return;
   try {
     await api.deleteOperatorLevelRule(ruleId);
     swrInvalidate('levels:');
@@ -335,7 +342,13 @@ async function deleteOperatorLevelRuleUi(ruleId) {
 }
 
 async function disableOperatorLevelUi(levelId) {
-  if (!confirm('Отключить уровень?')) return;
+  if (STATE.user?.role !== 'admin') return showToast('Отключать уровни может только администратор', 'error');
+  const confirmed = await uiConfirmAction({
+    title: 'Отключить уровень?',
+    description: 'Уровень перестанет назначаться операторам. Вы уверены, что хотите продолжить?',
+    confirmLabel: 'Отключить',
+  });
+  if (!confirmed) return;
   try {
     await api.deleteOperatorLevel(levelId);
     swrInvalidate('levels:');
@@ -344,8 +357,17 @@ async function disableOperatorLevelUi(levelId) {
 }
 
 async function toggleOperatorLevelUi(levelId, isActive) {
+  if (STATE.user?.role !== 'admin') return showToast('Включать и отключать уровни может только администратор', 'error');
   const verb = isActive ? 'включить' : 'отключить';
-  if (!confirm(`${verb.charAt(0).toUpperCase() + verb.slice(1)} уровень?`)) return;
+  const confirmed = await uiConfirmAction({
+    title: `${verb.charAt(0).toUpperCase() + verb.slice(1)} уровень?`,
+    description: isActive
+      ? 'Уровень снова будет участвовать в автоматическом расчёте.'
+      : 'Уровень перестанет назначаться операторам. Текущая история сохранится.',
+    confirmLabel: isActive ? 'Включить' : 'Отключить',
+    danger: !isActive,
+  });
+  if (!confirmed) return;
   try {
     await api.updateOperatorLevel(levelId, { is_active: isActive });
     swrInvalidate('levels:');

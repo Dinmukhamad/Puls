@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_roles
 from app.database.db import get_db
 from app.models.entities import (
     Operator,
@@ -601,7 +601,11 @@ def update_question(question_id: int, payload: QuestionPayload, db: Session = De
 
 
 @admin_router.delete("/questions/{question_id}")
-def delete_question(question_id: int, db: Session = Depends(get_db), _: User = Depends(_require_staff)) -> dict:
+def delete_question(
+    question_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("admin")),
+) -> dict:
     question = db.get(TestQuestion, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Вопрос не найден")

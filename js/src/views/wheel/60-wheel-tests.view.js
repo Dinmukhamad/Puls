@@ -794,6 +794,14 @@ async function renderWheelPrizesTab(body) {
   async function bulkSetActive(isActive) {
     const ids = [..._wheelSelectedPrizeIds];
     if (!ids.length) return;
+    if (!isActive) {
+      const confirmed = await uiConfirmAction({
+        title: 'Отключить выбранные секторы?',
+        description: `${ids.length} ${pluralize(ids.length, 'сектор', 'сектора', 'секторов')} перестанут участвовать в Колесе WOW.`,
+        confirmLabel: 'Отключить',
+      });
+      if (!confirmed) return;
+    }
     const results = await Promise.allSettled(ids.map(id => api.updateWheelPrize(id, { is_active: isActive })));
     const failed = results.filter(r => r.status === 'rejected').length;
     swrInvalidate('wheel:admin:prizes');
@@ -2248,6 +2256,7 @@ function updateTestRewardFields(el) {
 }
 
 function questionEditorHtml(q, index, isOpen) {
+  const canDelete = STATE.user?.role === 'admin';
   return `<div class="test-question-editor" data-q-index="${index}">
     <div class="test-question-number">${String(index + 1).padStart(2, '0')}</div>
     <div class="test-question-content">
@@ -2258,14 +2267,14 @@ function questionEditorHtml(q, index, isOpen) {
         <option value="multiple_choice" ${q.question_type==='multiple_choice'?'selected':''}>Несколько ответов</option>
         </select></div>
         <div class="form-group test-question-points"><label class="form-label">Баллы</label><input class="form-input" type="number" min="0" value="${q.points}" data-q-field="points" ${isOpen?'disabled':''}></div>
-        ${!isOpen?`<button class="test-icon-button test-question-delete" data-q-delete title="Удалить вопрос" aria-label="Удалить вопрос">×</button>`:''}
+        ${!isOpen && canDelete ? `<button class="test-icon-button test-question-delete" data-q-delete title="Удалить вопрос" aria-label="Удалить вопрос">×</button>` : ''}
       </div>
       <div class="test-answer-label">Варианты ответа <span>Отметьте правильный</span></div>
       <div class="test-answer-options">
         ${q.answers.map((a,ai) => `<div class="test-answer-option-row" data-a-index="${ai}">
           <label class="test-correct-control" title="Правильный ответ"><input type="${q.question_type==='multiple_choice'?'checkbox':'radio'}" name="correct-${index}" data-a-field="is_correct" ${a.is_correct?'checked':''} ${isOpen?'disabled':''}><i></i></label>
           <input class="form-input" placeholder="Вариант ${ai + 1}" value="${esc(a.answer_text)}" data-a-field="answer_text" ${isOpen?'disabled':''}>
-          ${!isOpen&&q.answers.length>2?`<button class="test-icon-button" data-a-delete title="Удалить вариант" aria-label="Удалить вариант">×</button>`:''}
+          ${!isOpen && canDelete && q.answers.length > 2 ? `<button class="test-icon-button" data-a-delete title="Удалить вариант" aria-label="Удалить вариант">×</button>` : ''}
         </div>`).join('')}
       </div>
       ${!isOpen && q.answers.length < 10 ? `<button class="btn-outline btn-sm test-add-answer" data-q-add-answer>Добавить вариант</button>` : ''}
@@ -2286,7 +2295,13 @@ function bindQuestionEditorEvents(el, isOpen) {
         }
       });
     });
-    qDiv.querySelector('[data-q-delete]')?.addEventListener('click', () => {
+    qDiv.querySelector('[data-q-delete]')?.addEventListener('click', async () => {
+      const confirmed = await uiConfirmAction({
+        title: 'Удалить вопрос?',
+        description: 'Вопрос и все варианты ответа будут удалены после сохранения теста.',
+        confirmLabel: 'Удалить',
+      });
+      if (!confirmed) return;
       captureTestBuilderForm(el);
       const removed = s.questions[qi];
       if (removed?.id) s.deletedQuestionIds.push(removed.id);
@@ -2309,7 +2324,17 @@ function bindQuestionEditorEvents(el, isOpen) {
           }
         });
       });
-      aDiv.querySelector('[data-a-delete]')?.addEventListener('click', () => { captureTestBuilderForm(el); s.questions[qi].answers.splice(ai,1); renderTestBuilderScreen(); });
+      aDiv.querySelector('[data-a-delete]')?.addEventListener('click', async () => {
+        const confirmed = await uiConfirmAction({
+          title: 'Удалить вариант ответа?',
+          description: 'Вариант ответа будет удалён из вопроса.',
+          confirmLabel: 'Удалить',
+        });
+        if (!confirmed) return;
+        captureTestBuilderForm(el);
+        s.questions[qi].answers.splice(ai, 1);
+        renderTestBuilderScreen();
+      });
     });
   });
 }

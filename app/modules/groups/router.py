@@ -195,7 +195,7 @@ def enable_group(
 def delete_group(
     group_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("manager", "admin")),
+    current_user: User = Depends(require_roles("admin")),
 ) -> dict:
     group = db.get(Group, group_id)
     if not group:
