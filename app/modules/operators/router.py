@@ -771,11 +771,12 @@ def delete_operator(
             text(
                 "INSERT INTO audit_logs "
                 "(action, entity_type, entity_id, details, performed_by_user_id, created_at) "
-                "VALUES ('operator_deleted', 'operator', NULL, :details, :uid, NOW())"
+                "VALUES ('operator_deleted', 'operator', NULL, :details, :uid, :created_at)"
             ),
             {
                 "details": f"Администратор удалил оператора: {op_name} (ID {oid}) со всей историей",
                 "uid": current_user.id,
+                "created_at": now_utc(),
             },
         )
 

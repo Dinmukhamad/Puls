@@ -2,9 +2,22 @@ from __future__ import annotations
 
 from tests.conftest import make_operator
 
-# Примечание: happy-path (оператор без истории удаляется, 200) не тестируется
-# на SQLite, потому что сам эндпоинт пишет audit-запись через Postgres-only NOW().
-# Этот путь проверяется на реальном PostgreSQL в рамках ручной верификации.
+# Примечание: happy-path (оператор без истории удаляется, 200) теперь
+# переносим на SQLite — audit-запись пишется через bound-параметр, а не NOW().
+
+
+def test_delete_operator_without_history_succeeds(db_session, client):
+    """Оператора без истории можно удалить полностью (200, happy-path)."""
+    from app.models import entities as m
+
+    op = make_operator(db_session)
+    op_id = op.id
+
+    response = client.delete(f"/api/operators/{op_id}")
+    assert response.status_code == 200, response.text
+
+    db_session.expire_all()
+    assert db_session.get(m.Operator, op_id) is None
 
 
 def test_delete_operator_with_history_returns_409_and_keeps_data(db_session, client):
