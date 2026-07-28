@@ -1,7 +1,7 @@
 """Add replay audit fields and reward-once grants.
 
 Revision ID: 0042_mission_replay_audit
-Revises: 0041_repair_operator_account_links
+Revises: 0041_repair_operator_links
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0042_mission_replay_audit"
-down_revision = "0041_repair_operator_account_links"
+down_revision = "0041_repair_operator_links"
 branch_labels = None
 depends_on = None
 

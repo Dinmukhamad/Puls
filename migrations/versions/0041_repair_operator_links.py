@@ -1,6 +1,6 @@
 """Repair reciprocal links between users and operators.
 
-Revision ID: 0041_repair_operator_account_links
+Revision ID: 0041_repair_operator_links
 Revises: 0040_coin_transaction_categories
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 from alembic import op
 from sqlalchemy import inspect
 
-revision = "0041_repair_operator_account_links"
+revision = "0041_repair_operator_links"
 down_revision = "0040_coin_transaction_categories"
 branch_labels = None
 depends_on = None

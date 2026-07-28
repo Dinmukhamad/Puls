@@ -225,7 +225,7 @@ def test_mission_replay_migration_backfills_reward_grant(tmp_path: Path):
                 version_num VARCHAR(64) NOT NULL PRIMARY KEY
             );
             INSERT INTO alembic_version (version_num)
-            VALUES ('0041_repair_operator_account_links');
+            VALUES ('0041_repair_operator_links');
             INSERT INTO operators (id) VALUES (1);
             INSERT INTO missions (id) VALUES (5);
             INSERT INTO coin_transactions (id) VALUES (9);
@@ -255,3 +255,24 @@ def test_mission_replay_migration_backfills_reward_grant(tmp_path: Path):
 
     assert grant == (1, 5, 2, 10, 100, "₡", 9)
     assert attempt == (1, 900, 1)
+
+
+def test_all_revision_ids_fit_postgres_version_column():
+    """Регрессия: id ревизии не должен превышать 32 символа.
+
+    Alembic создаёт alembic_version.version_num как VARCHAR(32). На SQLite длина
+    не проверяется, поэтому слишком длинный id проходит тесты, но падает на
+    проде (PostgreSQL) с StringDataRightTruncation при UPDATE alembic_version.
+    Так уже случилось с '0041_repair_operator_account_links' (34 символа) —
+    деплой прерывался на миграциях. Держим все id в пределах 32.
+    """
+    import re
+
+    versions_dir = PROJECT_ROOT / "migrations" / "versions"
+    pattern = re.compile(r'^revision\s*=\s*"([^"]+)"', re.MULTILINE)
+    too_long = {}
+    for path in versions_dir.glob("*.py"):
+        match = pattern.search(path.read_text(encoding="utf-8"))
+        if match and len(match.group(1)) > 32:
+            too_long[path.name] = (match.group(1), len(match.group(1)))
+    assert not too_long, f"revision id длиннее 32 символов: {too_long}"
