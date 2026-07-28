@@ -143,16 +143,19 @@ def get_current_user(
             )
         )
         now = now_utc()
+        idle_limit_minutes = settings.session_idle_timeout_minutes
+        idle_expired = (
+            idle_limit_minutes > 0
+            and auth_session is not None
+            and auth_session.last_seen_at is not None
+            and auth_session.last_seen_at < now - timedelta(minutes=idle_limit_minutes)
+        )
         if (
             not auth_session
             or auth_session.status != "active"
             or auth_session.revoked_at is not None
             or (auth_session.expires_at is not None and auth_session.expires_at < now)
-            or (
-                auth_session.last_seen_at is not None
-                and auth_session.last_seen_at
-                < now - timedelta(minutes=settings.session_idle_timeout_minutes)
-            )
+            or idle_expired
         ):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Сессия завершена")
         request.state.session_id = auth_session.session_id
