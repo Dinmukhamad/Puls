@@ -9,7 +9,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -648,6 +649,35 @@ def restore_operator(
     return _operator_response(db, op)
 
 
+def _operator_history_tables(db: Session, operator_id: int) -> list[str]:
+    """Таблицы (кроме users), в которых у оператора есть связанные записи.
+
+    Список ссылающихся таблиц берётся динамически из метаданных моделей, а не
+    хардкодом, — он не рассыхается при добавлении новых таблиц и покрывает все
+    внешние ключи на operators.id (миссии, начисления, колесо, розыгрыши и т.д.).
+    Имена таблиц/колонок берутся из доверенных метаданных, не из ввода.
+    """
+    from app.database.db import Base
+
+    found: list[str] = []
+    for table in Base.metadata.tables.values():
+        if table.name == "users":
+            continue
+        for column in table.columns:
+            if any(
+                fk.column.table.name == "operators" and fk.column.name == "id"
+                for fk in column.foreign_keys
+            ):
+                exists = db.execute(
+                    text(f"SELECT 1 FROM {table.name} WHERE {column.name} = :oid LIMIT 1"),
+                    {"oid": operator_id},
+                ).first()
+                if exists:
+                    found.append(table.name)
+                break
+    return found
+
+
 @router.delete("/{operator_id}")
 def delete_operator(
     operator_id: int,
@@ -655,14 +685,26 @@ def delete_operator(
     current_user: User = Depends(require_roles("admin")),
 ) -> dict:
     """
-    Полное удаление оператора из БД — только для admin.
-    Каскадно удаляет всю историю (PeriodReport, DailyMetrics, уровни и т.д.).
-    """
-    from sqlalchemy import text
+    Удаление оператора из БД — только для admin.
 
+    Полное удаление доступно только для оператора без истории. Если у оператора
+    есть история (миссии, начисления, результаты и т.п.), удаление отклоняется с
+    понятным 409 — историю не теряем, для отключения используется «Уволить».
+    """
     op = db.get(Operator, operator_id)
     if not op:
         raise HTTPException(status_code=404, detail="Оператор не найден")
+
+    history = _operator_history_tables(db, operator_id)
+    if history:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "У оператора есть история (миссии, начисления, результаты). "
+                "Полное удаление недоступно, чтобы не потерять данные. "
+                "Используйте «Уволить»: учётная запись будет отключена, а история сохранена."
+            ),
+        )
 
     op_name = op.full_name
     op_id   = op.id
@@ -739,8 +781,19 @@ def delete_operator(
 
         db.commit()
         rating_cache_invalidate()  # оператор исчез из рейтинга
-        return {"ok": True, "message": f"Оператор «{op_name}» удалён вместе с историей"}
+        return {"ok": True, "message": f"Оператор «{op_name}» удалён"}
 
+    except IntegrityError:
+        # Подстраховка: на оператора всё ещё ссылаются данные — не роняем 500,
+        # возвращаем понятный 409 и предлагаем «Уволить» вместо удаления.
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "У оператора есть связанные данные. Полное удаление недоступно — "
+                "используйте «Уволить», чтобы сохранить историю."
+            ),
+        ) from None
     except Exception:
         db.rollback()
         logger.exception("Не удалось удалить оператора id=%s", operator_id)
