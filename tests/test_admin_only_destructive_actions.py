@@ -45,3 +45,45 @@ def test_administrator_can_delete_empty_group(client):
 
     assert deleted.status_code == 200, deleted.text
     assert deleted.json() == {"ok": True}
+
+
+def test_delete_group_with_history_returns_409_not_500(db_session, client):
+    """Удаление группы, на которую ссылаются данные (учётки/метрики), должно
+    давать понятный 409, а не 500.
+
+    На проде (PostgreSQL) внешние ключи (users.group_id и т.п.) отклоняют
+    DELETE, и раньше это исключение не перехватывалось → 500. SQLite по
+    умолчанию FK не проверяет, поэтому включаем их принудительно, чтобы
+    воспроизвести поведение Postgres. История при этом не удаляется.
+    """
+    from sqlalchemy import event
+
+    from app.database.db import engine
+    from app.models.entities import Group, User
+
+    created = client.post(
+        "/api/groups", json={"name": "История-группа", "status": "active"}
+    )
+    assert created.status_code == 200, created.text
+    group_id = created.json()["id"]
+    # зависимость, которую проверка операторов не ловит (не оператор, а учётка)
+    user, _pwd = _make_role_user(db_session, role="supervisor", group_id=group_id)
+
+    def _fk_on(dbapi_conn, _rec):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    event.listen(engine, "connect", _fk_on)
+    engine.dispose()
+    try:
+        response = client.delete(f"/api/groups/{group_id}")
+    finally:
+        event.remove(engine, "connect", _fk_on)
+        engine.dispose()
+
+    assert response.status_code == 409, response.text
+    assert "историческ" in response.json()["detail"].lower()
+    db_session.expire_all()
+    assert db_session.get(Group, group_id) is not None
+    assert db_session.get(User, user.id) is not None

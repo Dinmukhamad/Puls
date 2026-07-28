@@ -209,8 +209,23 @@ def delete_group(
         )
 
     from sqlalchemy import text
+    from sqlalchemy.exc import IntegrityError
+
     _audit_group(db, "group_deleted", group, f"Удалена группа {group.name}", current_user)
-    db.flush()
-    db.execute(text("DELETE FROM groups WHERE id = :gid"), {"gid": group_id})
-    db.commit()
+    try:
+        db.flush()
+        db.execute(text("DELETE FROM groups WHERE id = :gid"), {"gid": group_id})
+        db.commit()
+    except IntegrityError:
+        # На группу ссылаются исторические данные или учётные записи
+        # (users.group_id, operator_daily_metrics.group_id и т.п.). Не удаляем
+        # историю — возвращаем понятную ошибку вместо необработанного 500.
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Группу нельзя удалить: с ней связаны исторические данные или "
+                "учётные записи. Отключите группу вместо удаления."
+            ),
+        ) from None
     return {"ok": True}
