@@ -212,7 +212,7 @@ async function renderWheelOperatorView(el) {
           <div class="wheel-stage">
             <div class="wheel-pointer wheel-pointer-v2" aria-hidden="true"></div>
             <div class="wheel-rotor" id="wheel-rotor">${buildWheelSvg(items)}</div>
-            <div class="wheel-hub"><span>Puls</span><b>WOW</b></div>
+            <button class="wheel-hub wheel-hub-btn" id="wheel-spin-btn" ${canSpin ? '' : 'disabled'} aria-label="${canSpin ? 'Крутить колесо' : 'Нет доступных билетов'}"><b>${canSpin ? 'Крутить' : 'Нет билета'}</b><span>PULS WOW</span></button>
           </div>
           <div class="wheel-v2-action">
             <div class="wheel-v2-ticket-summary">
@@ -220,10 +220,7 @@ async function renderWheelOperatorView(el) {
               <strong>${tickets}</strong>
               <small>${safeNextTicketReason ? `Билет получен: ${esc(safeNextTicketReason)}` : esc(safeCannotReason)}</small>
             </div>
-            <button class="btn-primary wheel-spin-btn" id="wheel-spin-btn" ${canSpin ? '' : 'disabled'}>
-              ${canSpin ? 'Использовать билет' : 'Нет доступных билетов'}
-            </button>
-            ${!canSpin ? wheelTicketGuide() : '<p class="wheel-v2-action-note">После нажатия колесо остановится на одном из указанных призов.</p>'}
+            ${!canSpin ? wheelTicketGuide() : '<p class="wheel-v2-action-note">Нажмите «Крутить» в центре колеса — оно остановится на одном из призов.</p>'}
           </div>
         </div>
       </section>
@@ -244,7 +241,6 @@ async function renderWheelOperatorView(el) {
   STATE.wheel = { items, rotation: 0, spinning: false };
 
   const btn = document.getElementById('wheel-spin-btn');
-  if (btn) btn.textContent = canSpin ? 'Использовать билет' : 'Нет доступных билетов';
   if (btn && canSpin) btn.onclick = () => doWheelSpin(el);
 }
 
@@ -274,6 +270,23 @@ function wheelTextColor(hex) {
   return L > 0.62 ? '#1E293B' : '#FFFFFF';
 }
 
+// Гармоничная «коническая» палитра Puls: цвет сектора зависит от его позиции по
+// кругу, поэтому колесо читается как плавный круговой градиент при любом числе
+// призов (2–20). Работает без привязки к количеству секторов.
+const WHEEL_CONIC_PALETTE = ['#7C5CFC', '#6366F1', '#38BDF8', '#2DD4BF', '#34D399', '#FBBF24', '#FB923C', '#F472B6'];
+function wheelLerpHex(a, b, t) {
+  const A = wheelHexRgb(a), B = wheelHexRgb(b);
+  const m = (x, y) => Math.round(x + (y - x) * t);
+  const hh = (v) => v.toString(16).padStart(2, '0');
+  return `#${hh(m(A.r, B.r))}${hh(m(A.g, B.g))}${hh(m(A.b, B.b))}`;
+}
+function wheelConicColor(t) {
+  const P = WHEEL_CONIC_PALETTE;
+  const p = (((t % 1) + 1) % 1) * P.length;
+  const k = Math.floor(p);
+  return wheelLerpHex(P[k % P.length], P[(k + 1) % P.length], p - k);
+}
+
 // Строит спокойное плоское колесо Puls с понятными двухстрочными названиями.
 function buildWheelSvg(items) {
   const n = items.length;
@@ -285,27 +298,48 @@ function buildWheelSvg(items) {
   let paths = '';
   let labels = '';
 
+  const goldMid = '#E5B446';
   for (let i = 0; i < n; i++) {
-    const base = items[i].color || WHEEL_FALLBACK_COLORS[i % WHEEL_FALLBACK_COLORS.length];
+    const base = items[i].color || wheelConicColor((i + 0.5) / n);
     const a0 = i * seg, a1 = (i + 1) * seg;
     const p0 = wheelPoint(cx, cy, rSeg, a0);
     const p1 = wheelPoint(cx, cy, rSeg, a1);
     const large = seg > 180 ? 1 : 0;
-    defs += `<linearGradient id="wheelSeg${i}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${wheelShade(base, 0.23)}"/><stop offset="100%" stop-color="${base}"/></linearGradient>`;
-    paths += `<path d="M${cx},${cy} L${p0.x.toFixed(2)},${p0.y.toFixed(2)} A${rSeg},${rSeg} 0 ${large} 1 ${p1.x.toFixed(2)},${p1.y.toFixed(2)} Z" fill="url(#wheelSeg${i})" stroke="rgba(255,255,255,.92)" stroke-width="2" stroke-linejoin="round"/>`;
+    paths += `<path d="M${cx},${cy} L${p0.x.toFixed(2)},${p0.y.toFixed(2)} A${rSeg},${rSeg} 0 ${large} 1 ${p1.x.toFixed(2)},${p1.y.toFixed(2)} Z" fill="${base}" stroke="rgba(255,255,255,.95)" stroke-width="2" stroke-linejoin="round"/>`;
     const mid = a0 + seg / 2;
-    const lp = wheelPoint(cx, cy, rSeg * 0.67, mid);
+    const twoLines = n <= 12;
+    const fs1 = n <= 8 ? 15 : n <= 12 ? 12.5 : n <= 16 ? 10.5 : 9.5;
+    const lp = wheelPoint(cx, cy, rSeg * (twoLines ? 0.66 : 0.72), mid);
     const ui = wheelPrizePresentation(items[i]);
-    labels += `<text x="${lp.x.toFixed(1)}" y="${(lp.y - 6).toFixed(1)}" text-anchor="middle" font-size="15" font-weight="800" fill="${wheelTextColor(base)}"><tspan x="${lp.x.toFixed(1)}">${esc(ui.line1)}</tspan><tspan x="${lp.x.toFixed(1)}" dy="16" font-size="9.5" font-weight="700">${esc(ui.line2)}</tspan></text>`;
+    const fill = wheelTextColor(base);
+    const halo = 'style="paint-order:stroke;stroke:rgba(30,20,60,.28);stroke-width:2.5px"';
+    if (twoLines) {
+      labels += `<text x="${lp.x.toFixed(1)}" y="${(lp.y - 5).toFixed(1)}" text-anchor="middle" font-size="${fs1}" font-weight="800" fill="${fill}" ${halo}><tspan x="${lp.x.toFixed(1)}">${esc(ui.line1)}</tspan><tspan x="${lp.x.toFixed(1)}" dy="${(fs1 + 1).toFixed(0)}" font-size="${(fs1 * 0.66).toFixed(1)}" font-weight="700">${esc(ui.line2)}</tspan></text>`;
+    } else {
+      labels += `<text x="${lp.x.toFixed(1)}" y="${(lp.y + fs1 * 0.35).toFixed(1)}" text-anchor="middle" font-size="${fs1}" font-weight="800" fill="${fill}" ${halo}>${esc(ui.line1)}</text>`;
+    }
   }
+
+  // Золотой обод с мягкими огоньками — не зависит от числа секторов.
+  let bulbs = '';
+  for (let b = 0; b < 16; b++) {
+    const bp = wheelPoint(cx, cy, (rSeg + 3 + rOuter) / 2, b * 22.5 + 11.25);
+    bulbs += `<circle cx="${bp.x.toFixed(1)}" cy="${bp.y.toFixed(1)}" r="2.6" fill="#FFFDF4" stroke="#B9861F" stroke-width="1"/>`;
+  }
+
+  defs = `<linearGradient id="wheelGoldRim" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#F8D877"/><stop offset="50%" stop-color="${goldMid}"/><stop offset="100%" stop-color="#C9962B"/></linearGradient>`;
 
   return `<svg viewBox="0 0 320 320" class="wheel-svg" xmlns="http://www.w3.org/2000/svg">
     <defs>
       ${defs}
     </defs>
-    <circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="#E2E8F0"/>
+    <circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="url(#wheelGoldRim)"/>
+    <circle cx="${cx}" cy="${cy}" r="${rOuter}" fill="none" stroke="#B9861F" stroke-width="1.5"/>
     <circle cx="${cx}" cy="${cy}" r="${rSeg + 3}" fill="#FFFFFF"/>
     ${paths}
+    <circle cx="${cx}" cy="${cy}" r="${rSeg}" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+    <circle cx="${cx}" cy="${cy}" r="${rSeg + 1}" fill="none" stroke="${goldMid}" stroke-width="1.5"/>
+    ${bulbs}
     ${labels}
   </svg>`;
 }
@@ -346,7 +380,7 @@ async function doWheelSpin(el) {
     swrInvalidate('wheel:');
   } catch (err) {
     w.spinning = false;
-    if (btn) { btn.disabled = false; btn.textContent = 'Использовать билет'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Крутить'; }
     showToast(err.message || 'Не удалось прокрутить колесо', 'error');
     return;
   }
@@ -419,7 +453,7 @@ async function refreshWheelSidebar(el) {
       && (!status.max_spins_per_week || status.spins_used_this_week < status.max_spins_per_week);
     if (btn) {
       btn.disabled = !canSpin;
-      btn.textContent = canSpin ? 'Использовать билет' : (tickets > 0 ? 'Лимит на сегодня исчерпан' : 'Нет доступных билетов');
+      btn.textContent = canSpin ? 'Крутить' : (tickets > 0 ? 'Лимит' : 'Нет билета');
       if (canSpin) btn.onclick = () => doWheelSpin(el);
     }
     const ticketCount = document.getElementById('wheel-ticket-count-value');
