@@ -74,6 +74,35 @@ def daily_metrics_in_range(db: Session, start_date: date, end_date: date) -> lis
     )
 
 
+def scoped_daily_metrics(
+    db: Session,
+    start_date: date,
+    end_date: date,
+    *,
+    group_id: int | None = None,
+    operator_id: int | None = None,
+    participation_status: str | None = None,
+) -> list[OperatorDailyMetric]:
+    """Посуточные метрики за диапазон с единым scope (ТЗ §10.1): группа,
+    оператор и статус участия. Область берётся по текущему Operator, а не по
+    снимку group_id в метрике — как и остальные эндпоинты аналитики.
+    Ни при каких условиях не читает Excel.
+    """
+    query = select(OperatorDailyMetric).where(
+        OperatorDailyMetric.metric_date >= start_date,
+        OperatorDailyMetric.metric_date <= end_date,
+    )
+    if operator_id is not None:
+        query = query.where(OperatorDailyMetric.operator_id == operator_id)
+    if group_id is not None or participation_status:
+        query = query.join(Operator, Operator.id == OperatorDailyMetric.operator_id)
+        if group_id is not None:
+            query = query.where(Operator.group_id == group_id)
+        if participation_status:
+            query = query.where(Operator.participation_status == participation_status)
+    return list(db.scalars(query))
+
+
 def covered_dates_in_range(db: Session, start_date: date, end_date: date) -> set:
     return set(
         db.scalars(

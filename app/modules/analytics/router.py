@@ -65,11 +65,27 @@ def get_summary(
 def get_daily_dynamics(
     start_date: date,
     end_date: date,
-    metric: str = Query("calls", pattern="^(calls|kvz|operators)$"),
+    metric: str = Query("calls", pattern="^(calls|kvz|operators|quality|efficiency|penalty)$"),
     group_id: int | None = Depends(_analytics_group_scope),
+    operator_id: int | None = Query(None),
+    participation_status: str | None = Query(None),
     db: Session = Depends(get_db),
 ) -> dict:
-    return service.daily_dynamics(db, start_date, end_date, metric, group_id)
+    return service.daily_dynamics(
+        db, start_date, end_date, metric, group_id, operator_id, participation_status
+    )
+
+
+@router.get("/daily-grid")
+def get_daily_grid(
+    week_start: date,
+    metric: str = Query("quality", pattern="^(quality|calls|kvz|efficiency|penalty)$"),
+    group_id: int | None = Depends(_analytics_group_scope),
+    operator_id: int | None = Query(None),
+    participation_status: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> dict:
+    return service.daily_grid(db, week_start, metric, group_id, operator_id, participation_status)
 
 
 @router.get("/operators")

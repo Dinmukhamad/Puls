@@ -11,15 +11,14 @@ from datetime import date, timedelta
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.models.entities import Group, Operator
 from app.modules.analytics import calculators as calc
 from app.modules.analytics import repository as repo
 from app.modules.analytics.cache import cache_get, cache_key, cache_set
 from app.modules.analytics.calculators import (
     OperatorAnalyticsRow,
     classify_risk,
-    compute_daily_dynamics,
     compute_groups_comparison,
-    compute_heatmap,
     compute_kpi_summary,
     compute_load_vs_efficiency,
     compute_management_dashboard,
@@ -33,6 +32,7 @@ from app.modules.analytics.calculators import (
     compute_top_and_attention,
     filter_rows,
 )
+from app.modules.analytics.metrics_meta import metric_definition
 from app.modules.reports.excel_parser import normalize_name
 from app.modules.reports.period_calculator import OperatorPeriodMetrics, aggregate_daily_rows
 from app.modules.work_norms.service import calculate_norm_for_period
@@ -380,22 +380,142 @@ def summary(db, start_date, end_date, group_id, operator_query, participation_st
     return result
 
 
-def daily_dynamics(db, start_date, end_date, metric, group_id) -> dict:
-    report_row = repo.uploaded_report_file(db, "report")
-    if not report_row:
-        raise HTTPException(status_code=400, detail="Сначала загрузите файл Report")
+def _aggregate_by_day(rows) -> dict:
+    """metric_date -> [calls, quality_sum, quality_count, base_hours, efficiency,
+    penalty_minutes, {operator_ids с данными}]. Единые формулы §10.2."""
+    per: dict = {}
+    for r in rows:
+        d = per.setdefault(r.metric_date, [0.0, 0.0, 0, 0.0, 0.0, 0.0, set()])
+        d[0] += r.calls_count or 0
+        d[1] += r.quality_sum or 0
+        d[2] += int(r.quality_count or 0)
+        d[3] += r.base_hours or 0
+        d[4] += r.efficiency or 0
+        d[5] += r.penalty_minutes or 0
+        if (r.worked_hours or 0) > 0 or (r.calls_count or 0) > 0:
+            d[6].add(r.operator_id)
+    return per
 
-    site_ops = repo.site_operators(db)
+
+def _metric_value_for_day(agg, metric: str):
+    calls, qsum, qcount, base, eff, pen, ops = agg
+    if metric == "calls":
+        return round(calls, 2)
+    if metric == "kvz":
+        return round(calls / base, 2) if base > 0 else None
+    if metric == "quality":
+        return round(qsum / qcount, 2) if qcount > 0 else None
+    if metric == "efficiency":
+        return round(eff / base * 100, 2) if base > 0 else None
+    if metric == "penalty":
+        return round(pen, 2)
+    if metric == "operators":
+        return len(ops)
+    return None
+
+
+def _scope_info(db, group_id, operator_id) -> dict:
+    if operator_id is not None:
+        op = db.get(Operator, operator_id)
+        return {"kind": "operator", "operator_id": operator_id, "group_id": group_id,
+                "label": op.full_name if op else f"Оператор {operator_id}"}
     if group_id is not None:
-        site_ops = [o for o in site_ops if o.group_id == group_id]
-    site_keys = {normalize_name(o.full_name) for o in site_ops if o.full_name}
+        grp = db.get(Group, group_id)
+        return {"kind": "group", "group_id": group_id, "operator_id": None,
+                "label": grp.name if grp else f"Группа {group_id}"}
+    return {"kind": "team", "group_id": None, "operator_id": None, "label": "Вся команда"}
 
-    days = (end_date - start_date).days
-    if days > 31:
-        raise HTTPException(status_code=400, detail="Период для динамики по дням ограничен 31 днём")
 
-    dynamics = compute_daily_dynamics(report_row.content, start_date, end_date, site_keys, metric)
-    return {"metric": metric, "items": dynamics}
+def _empty_reason(db, has_rows: bool) -> str | None:
+    if has_rows:
+        return None
+    return "no_data_in_selected_period" if repo.available_data_date_range(db) else "no_reports_uploaded"
+
+
+def _period_metric_average(values) -> float | None:
+    vals = [v for v in values if v is not None]
+    return round(sum(vals) / len(vals), 2) if vals else None
+
+
+def _previous_period_summary(db, start_date, end_date, metric, group_id, operator_id,
+                             participation_status, current_values) -> dict:
+    length = (end_date - start_date).days + 1
+    prev_end = start_date - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=length - 1)
+    prev_rows = repo.scoped_daily_metrics(
+        db, prev_start, prev_end, group_id=group_id,
+        operator_id=operator_id, participation_status=participation_status,
+    )
+    prev_values = [_metric_value_for_day(a, metric) for a in _aggregate_by_day(prev_rows).values()]
+    prev_avg = _period_metric_average(prev_values)
+    cur_avg = _period_metric_average(current_values)
+    change = round(cur_avg - prev_avg, 2) if (cur_avg is not None and prev_avg is not None) else None
+    return {"start": str(prev_start), "end": str(prev_end),
+            "average": prev_avg, "change": change}
+
+
+def daily_dynamics(db, start_date, end_date, metric, group_id,
+                   operator_id=None, participation_status=None) -> dict:
+    """Посуточная динамика из operator_daily_metrics (ТЗ §8, §10.1).
+
+    Excel не парсится. Один и тот же scope для всех метрик. Дни без данных —
+    разрыв (value=None, has_data=False), а не 0. Пустой результат — 200 с
+    empty_reason, а не 400/500.
+    """
+    if (end_date - start_date).days > 92:
+        raise HTTPException(status_code=400, detail="Период для динамики по дням ограничен 92 днями")
+
+    rows = repo.scoped_daily_metrics(
+        db, start_date, end_date, group_id=group_id,
+        operator_id=operator_id, participation_status=participation_status,
+    )
+    per = _aggregate_by_day(rows)
+
+    items, covered, missing, day_values = [], [], [], []
+    cur = start_date
+    while cur <= end_date:
+        agg = per.get(cur)
+        if agg is None:
+            items.append({"date": str(cur), "value": None, "calls": None, "kvz": None,
+                          "quality": None, "efficiency": None, "penalty": None,
+                          "operators_on_line": None, "has_data": False})
+            missing.append(str(cur))
+        else:
+            value = _metric_value_for_day(agg, metric)
+            items.append({
+                "date": str(cur),
+                "value": value,
+                "calls": _metric_value_for_day(agg, "calls"),
+                "kvz": _metric_value_for_day(agg, "kvz"),
+                "quality": _metric_value_for_day(agg, "quality"),
+                "efficiency": _metric_value_for_day(agg, "efficiency"),
+                "penalty": _metric_value_for_day(agg, "penalty"),
+                "operators_on_line": _metric_value_for_day(agg, "operators"),
+                "has_data": True,
+            })
+            covered.append(str(cur))
+            if value is not None:
+                day_values.append(value)
+        cur += timedelta(days=1)
+
+    operators_with_data = len({
+        r.operator_id for r in rows if (r.worked_hours or 0) > 0 or (r.calls_count or 0) > 0
+    })
+    return {
+        "metric": metric,
+        "metric_definition": metric_definition(metric),
+        "scope": _scope_info(db, group_id, operator_id),
+        "items": items,
+        "covered_dates": covered,
+        "missing_dates": missing,
+        "operators_with_data": operators_with_data,
+        "previous_period": _previous_period_summary(
+            db, start_date, end_date, metric, group_id, operator_id,
+            participation_status, day_values,
+        ),
+        "data_source": "operator_daily_metrics",
+        "empty_reason": _empty_reason(db, bool(rows)),
+    }
 
 
 def operators_table(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data) -> dict:
@@ -495,25 +615,108 @@ def points_analysis(db, start_date, end_date, group_id, operator_query, particip
     return analysis
 
 
+def _grid_cell(r, metric: str):
+    """Значение и (для качества) число оценок ячейки сетки за один день."""
+    if metric == "quality":
+        value = round(r.quality_sum / r.quality_count, 2) if r.quality_count else None
+        return value, int(r.quality_count or 0)
+    if metric == "calls":
+        return round(r.calls_count or 0, 2), int(r.calls_count or 0)
+    if metric == "kvz":
+        return (round(r.calls_count / r.base_hours, 2) if r.base_hours else None), None
+    if metric == "efficiency":
+        return (round(r.efficiency / r.base_hours * 100, 2) if r.base_hours else None), None
+    if metric == "penalty":
+        return round(r.penalty_minutes or 0, 2), None
+    return None, None
+
+
 def heatmap(db, start_date, end_date, metric, group_id) -> dict:
-    monthly_row = repo.uploaded_report_file(db, "monthly")
-    report_row = repo.uploaded_report_file(db, "report")
-    if not report_row:
-        raise HTTPException(status_code=400, detail="Сначала загрузите файлы")
+    """Сетка «оператор × день» из operator_daily_metrics (ТЗ §10.1).
 
-    days = (end_date - start_date).days
-    if days > 31:
-        raise HTTPException(status_code=400, detail="Heatmap ограничена периодом 31 день")
+    Excel не парсится. Совместимый со старым фронтом формат
+    ({dates, operators:[{full_name, values}], metric}); дни без данных — None.
+    Новый контракт — в daily_grid().
+    """
+    if (end_date - start_date).days > 31:
+        raise HTTPException(status_code=400, detail="Сетка ограничена периодом 31 день")
 
-    site_ops = repo.site_operators(db)
-    if group_id is not None:
-        site_ops = [o for o in site_ops if o.group_id == group_id]
-    site_keys = {normalize_name(o.full_name): o.full_name for o in site_ops if o.full_name}
+    rows = repo.scoped_daily_metrics(db, start_date, end_date, group_id=group_id)
+    dates, cur = [], start_date
+    while cur <= end_date:
+        dates.append(str(cur))
+        cur += timedelta(days=1)
 
-    return compute_heatmap(
-        monthly_row.content if monthly_row else None, report_row.content,
-        start_date, end_date, site_keys, metric,
+    by_op: dict = {}
+    names: dict = {}
+    for r in rows:
+        by_op.setdefault(r.operator_id, {})[str(r.metric_date)] = r
+        names[r.operator_id] = r.operator_name
+    live = repo.operators_by_ids(db, list(by_op.keys())) if by_op else {}
+
+    operators_out = []
+    for op_id, day_map in by_op.items():
+        op = live.get(op_id)
+        values = {d: (_grid_cell(day_map[d], metric)[0] if d in day_map else None) for d in dates}
+        operators_out.append({"full_name": op.full_name if op else names.get(op_id, ""), "values": values})
+    operators_out.sort(key=lambda o: o["full_name"])
+    return {"dates": dates, "operators": operators_out, "metric": metric}
+
+
+def daily_grid(db, week_start, metric, group_id, operator_id=None, participation_status=None) -> dict:
+    """Недельная сетка оценок «оператор × день» из БД (ТЗ §7.3, §10.3).
+
+    Не более 7 дней, недельная пагинация вместо горизонтального скролла.
+    Ячейка: значение + число оценок; дни без данных пропущены (разрыв).
+    """
+    week_end = week_start + timedelta(days=6)
+    dates = [week_start + timedelta(days=i) for i in range(7)]
+    rows = repo.scoped_daily_metrics(
+        db, week_start, week_end, group_id=group_id,
+        operator_id=operator_id, participation_status=participation_status,
     )
+
+    by_op: dict = {}
+    names: dict = {}
+    groups: dict = {}
+    for r in rows:
+        by_op.setdefault(r.operator_id, {})[str(r.metric_date)] = r
+        names[r.operator_id] = r.operator_name
+        groups[r.operator_id] = r.group_id
+    live = repo.operators_by_ids(db, list(by_op.keys())) if by_op else {}
+
+    operators = []
+    for op_id, day_map in by_op.items():
+        op = live.get(op_id)
+        values = {}
+        for d in dates:
+            ds = str(d)
+            r = day_map.get(ds)
+            if r is None:
+                continue  # разрыв, а не 0
+            value, count = _grid_cell(r, metric)
+            values[ds] = {"value": value, "count": count}
+        operators.append({
+            "operator_id": op_id,
+            "full_name": op.full_name if op else names.get(op_id, ""),
+            "group_id": op.group_id if op else groups.get(op_id),
+            "values": values,
+        })
+    operators.sort(key=lambda o: o["full_name"])
+
+    meta = metric_definition(metric)
+    return {
+        "metric": metric,
+        "metric_definition": meta,
+        "scope": _scope_info(db, group_id, operator_id),
+        "week_start": str(week_start),
+        "dates": [str(d) for d in dates],
+        "operators": operators,
+        "legend": {"critical": meta["critical_threshold"], "target": meta["target"],
+                   "direction": meta["direction"]},
+        "data_source": "operator_daily_metrics",
+        "empty_reason": _empty_reason(db, bool(rows)),
+    }
 
 
 def risk_pyramid(db, start_date, end_date, group_id) -> dict:
