@@ -33,7 +33,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 def _client_ip(request: Request) -> str:
     direct_ip = request.client.host if request.client else ""
-    if direct_ip not in get_settings().trusted_proxy_ip_list:
+    settings = get_settings()
+    # Доверяем заголовкам прокси, если явно включено (PaaS) или источник — из
+    # списка доверенных прокси. Иначе берём прямой IP, чтобы X-Forwarded-For
+    # нельзя было подделать напрямую.
+    if not (settings.trust_forwarded_for or direct_ip in settings.trusted_proxy_ip_list):
         return direct_ip
     forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
     real_ip = (request.headers.get("x-real-ip") or "").strip()
@@ -238,6 +242,8 @@ def update_account(
             raise HTTPException(status_code=400, detail="Введите текущий пароль")
         if not verify_password(payload.current_password, current_user.password_hash):
             raise HTTPException(status_code=400, detail="Текущий пароль указан неверно")
+        if len(payload.new_password or "") < 8:
+            raise HTTPException(status_code=400, detail="Новый пароль должен содержать минимум 8 символов")
         if payload.new_password != payload.repeat_password:
             raise HTTPException(status_code=400, detail="Пароли не совпадают")
         if verify_password(payload.new_password or "", current_user.password_hash):

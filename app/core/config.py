@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "*"
     trusted_proxy_ips: str = ""
+    # Доверять X-Forwarded-For безусловно (для PaaS вроде Render/Heroku/Railway,
+    # где приложение всегда за платформенным прокси, а его IP не фиксирован).
+    # По умолчанию выключено: без прокси доверять заголовку нельзя (спуфинг).
+    trust_forwarded_for: bool = False
     csrf_enforced: bool = False
     release_id: str = "development"
     missions_replay_enabled: bool = True
