@@ -8321,27 +8321,30 @@ function renderOpsTable(items, sortKey, sortDir) {
 function renderGroupsComparisonBlock(groupsCmp) {
   const items = groupsCmp.items || [];
   if (!items.length) return `<div class="an-card"><div class="an-card-head">Сравнение групп</div><div class="empty-line">Нет данных</div></div>`;
-  const maxPts = Math.max(...items.map(g => g.final_points_sum || 0), 1);
+  const maxAvg = Math.max(...items.map(g => g.avg_final_points || 0), 1);
+  const hasSmall = items.some(g => g.ranking_reliable === false);
   return `<div class="an-card">
-    <div class="an-card-head">Сравнение групп</div>
-    <div class="an-bar-chart" style="margin-bottom:16px">
+    <div class="an-card-head-row"><span>Сравнение групп</span><small style="color:var(--text-muted);font-weight:500">Ранжирование по среднему баллу на оператора</small></div>
+    <div class="an-bar-chart" style="margin:12px 0 16px">
       ${items.map(g => `
         <div class="an-bar-row">
-          <div class="an-bar-date" style="width:120px">${esc(g.group_name)}</div>
-          <div class="an-bar-track"><div class="an-bar-fill" style="width:${Math.round((g.final_points_sum/maxPts)*100)}%"></div></div>
-          <div class="an-bar-val">${fmtA(g.final_points_sum,0)}</div>
+          <div class="an-bar-date" style="width:140px">${esc(g.group_name)}${g.ranking_reliable === false ? ' <span title="Мало операторов — оценка менее надёжна" style="color:var(--text-muted)">*</span>' : ''}</div>
+          <div class="an-bar-track"><div class="an-bar-fill" style="width:${Math.round((g.avg_final_points/maxAvg)*100)}%"></div></div>
+          <div class="an-bar-val">${fmtA(g.avg_final_points,1)}</div>
         </div>`).join('')}
     </div>
     <div class="table-wrap"><table class="data-table">
       <thead><tr>
-        <th>Группа</th><th class="num">Операторов</th><th class="num">Звонки</th>
+        <th>Группа</th><th class="num">Операторов</th><th class="num">Средний балл</th><th class="num">Сумма баллов</th><th class="num">Звонки</th>
         <th class="num">Качество</th><th class="num">КВЗ</th><th class="num">Эфф.%</th>
         <th class="num">Штраф мин</th><th class="num">Без оценок</th><th class="num">В риске</th>
       </tr></thead>
       <tbody>
         ${items.map(g => `<tr>
-          <td class="name-cell">${esc(g.group_name)}</td>
+          <td class="name-cell">${esc(g.group_name)}${g.ranking_reliable === false ? ' <span title="Мало операторов — оценка менее надёжна" style="color:var(--text-muted)">*</span>' : ''}</td>
           <td class="num">${g.operators_count}</td>
+          <td class="num"><strong>${fmtA(g.avg_final_points,1)}</strong></td>
+          <td class="num" style="color:var(--text-secondary)">${fmtA(g.final_points_sum,0)}</td>
           <td class="num">${fmtA(g.total_calls,0)}</td>
           <td class="num">${fmtA(g.avg_quality)}</td>
           <td class="num">${fmtA(g.avg_kvz)}</td>
@@ -8352,6 +8355,7 @@ function renderGroupsComparisonBlock(groupsCmp) {
         </tr>`).join('')}
       </tbody>
     </table></div>
+    ${hasSmall ? '<p class="an-groups-footnote" style="margin:10px 0 0;font-size:12px;color:var(--text-muted)">* В группе мало операторов — среднее менее устойчиво, сравнивайте с осторожностью.</p>' : ''}
   </div>`;
 }
 
@@ -9613,15 +9617,16 @@ function renderGroupsMetricChartBlock(items) {
     <div class="an-card-head-row">
       <span>Сравнение групп по показателю</span>
       <div class="metric-tabs" id="an-groups-metric-tabs">
-        <button class="metric-tab active" data-metric="final_points_sum">Баллы</button>
+        <button class="metric-tab active" data-metric="avg_final_points">Средний балл</button>
         <button class="metric-tab" data-metric="avg_quality">Качество</button>
         <button class="metric-tab" data-metric="avg_kvz">КВЗ</button>
         <button class="metric-tab" data-metric="avg_efficiency">Эфф.</button>
         <button class="metric-tab" data-metric="penalty_minutes">Штрафы</button>
         <button class="metric-tab" data-metric="total_calls">Звонки</button>
+        <button class="metric-tab" data-metric="final_points_sum">Сумма баллов</button>
       </div>
     </div>
-    <div id="an-groups-metric-chart">${renderGroupsMetricChart(items, 'final_points_sum')}</div>
+    <div id="an-groups-metric-chart">${renderGroupsMetricChart(items, 'avg_final_points')}</div>
   </div>`;
 }
 

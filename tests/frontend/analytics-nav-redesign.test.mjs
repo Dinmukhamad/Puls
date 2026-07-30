@@ -73,3 +73,14 @@ test('URL state still round-trips tab/period/scope for reload restore (AC-21)', 
   assert.match(view, /function setAnalyticsUrl/);
   assert.match(view, /qs\.set\('tab', params\.tab\)/);
 });
+
+test('groups are ranked by average points, not sum (ТЗ §5)', () => {
+  // основной график и таблица используют avg_final_points по умолчанию
+  assert.match(view, /renderGroupsMetricChart\(items, 'avg_final_points'\)/);
+  assert.match(view, /data-metric="avg_final_points">Средний балл/);
+  assert.match(view, /Ранжирование по среднему баллу на оператора/);
+  // сумма осталась доступной как вторичная опция, но это не дефолт
+  assert.match(view, /data-metric="final_points_sum">Сумма баллов/);
+  // столбчатый график сравнения групп больше не строится по сумме
+  assert.doesNotMatch(view, /\(g\.final_points_sum\/maxPts\)/);
+});

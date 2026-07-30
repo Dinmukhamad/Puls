@@ -255,11 +255,16 @@ def compute_groups_comparison(rows: list[OperatorAnalyticsRow]) -> list[dict]:
             "avg_efficiency": round(total_call_time / total_base_hours * 100, 2) if total_base_hours > 0 else None,
             "penalty_minutes": round(total_penalty / 50, 2) if total_penalty else 0.0,
             "final_points_sum": round(sum(m.final_points for m in metrics), 2),
+            "avg_final_points": round(sum(m.final_points for m in metrics) / len(group_rows), 2),
+            "ranking_reliable": len(group_rows) >= 3,
             "operators_no_quality": no_quality_count,
             "operators_in_risk": risk_count,
         })
 
-    out.sort(key=lambda g: g["final_points_sum"], reverse=True)
+    # Честное ранжирование (ТЗ §5): по среднему баллу на оператора, а не по
+    # сумме — иначе крупные группы всегда «выигрывают» за счёт размера.
+    # При равном среднем выше идёт более многочисленная (надёжнее выборка).
+    out.sort(key=lambda g: (g["avg_final_points"], g["operators_count"]), reverse=True)
     return out
 
 
