@@ -1112,6 +1112,7 @@ let _analyticsState = {
   coverageWithData: null,
   coverageTotal: null,
   lastUpdatedAt: null,
+  qualityGridWeekStart: null,
 };
 
 function analyticsApiUrl(path, params) {
@@ -1256,6 +1257,19 @@ function renderAnalyticsContextBar() {
     <span class="an-context-line">Показаны результаты: ${esc(analyticsScopeLabel())} · ${esc(analyticsPeriodLabel(_analyticsState.startDate, _analyticsState.endDate))} · <span id="an-context-coverage">${esc(analyticsCoverageLabel())}</span> · <span id="an-context-updated">${esc(analyticsUpdatedLabel())}</span></span>
     ${note ? `<span class="an-context-note">${esc(note)}</span>` : ''}
   </div>`;
+}
+
+function mondayOfWeekISO(iso) {
+  const d = new Date((iso || new Date().toISOString().slice(0, 10)) + 'T00:00:00');
+  const dow = (d.getDay() + 6) % 7; // 0 = понедельник
+  d.setDate(d.getDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+
+function addDaysISO(iso, n) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 function refreshAnalyticsContextBar(el) {
@@ -1412,6 +1426,7 @@ async function renderAnalytics() {
 
   el.querySelector('#an-apply-btn').addEventListener('click', () => {
     syncStateFromFilters();
+    _analyticsState.qualityGridWeekStart = null; // пересчитать неделю сетки под новый период
     updateUrl();
     refreshAnalyticsContextBar(el);
     refreshAnalyticsCoverage(el);
@@ -1905,21 +1920,95 @@ async function loadMatrixTab(content) {
   }
 }
 
-/* ── Вкладка: Качество ──────────────────────────────────────────*/
+/* ── Вкладка: Контроль качества ────────────────────────────────*/
 async function loadQualityTab(content) {
-  // Получаем coverage и penalties одним запросом, heatmap — параллельно
-  const [combined, hm] = await Promise.all([
-    analyticsFetch('quality-combined', analyticsBaseParams()),
-    analyticsFetch('heatmap', { ...analyticsBaseParams(), metric: 'quality' }).catch(() => null),
-  ]);
-
+  const combined = await analyticsFetch('quality-combined', analyticsBaseParams());
   const coverage = combined.coverage || {};
+  if (!_analyticsState.qualityGridWeekStart) {
+    _analyticsState.qualityGridWeekStart = mondayOfWeekISO(_analyticsState.endDate || _analyticsState.startDate);
+  }
+
   content.innerHTML =
     renderQualityCoverageBlock(coverage) +
     `<div class="an-card">
-      <div class="an-card-head">Оценки операторов по дням</div>
-      <div id="an-quality-heatmap">${hm ? renderHeatmapTable(hm, 'quality') : '<div class="empty-line">Нет данных для сетки оценок</div>'}</div>
+      <div class="an-card-head-row">
+        <span>Оценки операторов по дням</span>
+        <div class="an-week-nav" id="an-quality-week-nav">
+          <button type="button" class="btn-outline btn-sm" data-week="prev" aria-label="Предыдущая неделя">←</button>
+          <span class="an-week-label" id="an-quality-week-label"></span>
+          <button type="button" class="btn-outline btn-sm" data-week="next" aria-label="Следующая неделя">→</button>
+        </div>
+      </div>
+      <div id="an-quality-grid"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
     </div>`;
+
+  await loadQualityGridWeek(content);
+
+  content.querySelectorAll('#an-quality-week-nav [data-week]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _analyticsState.qualityGridWeekStart = addDaysISO(
+        _analyticsState.qualityGridWeekStart, btn.dataset.week === 'prev' ? -7 : 7,
+      );
+      loadQualityGridWeek(content);
+    });
+  });
+}
+
+async function loadQualityGridWeek(content) {
+  const label = content.querySelector('#an-quality-week-label');
+  const box = content.querySelector('#an-quality-grid');
+  const ws = _analyticsState.qualityGridWeekStart;
+  if (label) label.textContent = analyticsPeriodLabel(ws, addDaysISO(ws, 6));
+  if (box) box.innerHTML = '<div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div>';
+  const params = { week_start: ws, metric: 'quality' };
+  if (_analyticsState.groupId) params.group_id = _analyticsState.groupId;
+  if (_analyticsState.participationStatus !== 'all') params.participation_status = _analyticsState.participationStatus;
+  try {
+    const grid = await analyticsFetch('daily-grid', params);
+    if (box) box.innerHTML = renderDailyGridBlock(grid);
+  } catch (e) {
+    if (box) box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+  }
+}
+
+const AN_GRID_DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+function renderDailyGridBlock(grid) {
+  const dates = grid.dates || [];
+  const operators = grid.operators || [];
+  if (!operators.length) {
+    const reason = grid.empty_reason === 'no_reports_uploaded'
+      ? 'Отчёты ещё не загружены — сетка появится после расчёта периода.'
+      : 'За эту неделю нет оценок. Переключите неделю стрелками.';
+    return `<div class="empty-line">${esc(reason)}</div>`;
+  }
+  const legend = grid.legend || {};
+  const target = legend.target;
+  const critical = legend.critical;
+  function cellColor(v) {
+    if (v == null) return 'transparent';
+    if (target != null && v >= target) return 'var(--success-soft)';
+    if (critical != null && v < critical) return 'var(--danger-soft)';
+    return 'var(--warning-soft)';
+  }
+  return `<div class="an-heatmap-wrap"><table class="an-heatmap-table an-daily-grid">
+    <thead><tr><th class="an-heatmap-name-col">Оператор</th>
+      ${dates.map((d, i) => `<th>${AN_GRID_DOW[i]}<small>${esc(d.slice(8))}</small></th>`).join('')}
+    </tr></thead>
+    <tbody>
+      ${operators.map(op => `<tr>
+        <td class="an-heatmap-name-col name-cell">${esc(op.full_name)}</td>
+        ${dates.map(d => {
+          const cell = op.values[d];
+          if (!cell || cell.value == null) {
+            return `<td class="an-heatmap-cell" title="${esc(op.full_name)} ${d}: нет оценок">—</td>`;
+          }
+          return `<td class="an-heatmap-cell" style="background:${cellColor(cell.value)}" title="${esc(op.full_name)} ${d}: ${Math.round(cell.value)}% по ${cell.count} оцен.">${Math.round(cell.value)}<sup>${cell.count}</sup></td>`;
+        }).join('')}
+      </tr>`).join('')}
+    </tbody>
+  </table></div>
+  <p class="an-grid-legend" style="margin:8px 0 0;font-size:12px;color:var(--text-muted)">Число — средняя оценка за день, надстрочное — сколько звонков оценено. Пусто — оценок не было (не считается за ноль).</p>`;
 }
 
 /* ── Вкладка: Динамика ────────────────────────────────────────*/

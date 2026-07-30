@@ -84,3 +84,23 @@ test('groups are ranked by average points, not sum (ТЗ §5)', () => {
   // столбчатый график сравнения групп больше не строится по сумме
   assert.doesNotMatch(view, /\(g\.final_points_sum\/maxPts\)/);
 });
+
+test('quality tab uses DB-backed daily-grid with weekly pagination (ТЗ §7.3, AC-13/14)', () => {
+  // сетка берёт /daily-grid, а не legacy heatmap
+  assert.match(view, /analyticsFetch\('daily-grid', params\)/);
+  const qualityBody = view.slice(
+    view.indexOf('async function loadQualityTab'),
+    view.indexOf('async function loadQualityGridWeek'),
+  );
+  assert.ok(qualityBody.length > 0, 'loadQualityTab должна существовать');
+  assert.doesNotMatch(qualityBody, /analyticsFetch\('heatmap'/);
+  // недельная навигация вместо горизонтального скролла
+  assert.match(view, /an-quality-week-nav/);
+  assert.match(view, /data-week="prev"/);
+  assert.match(view, /addDaysISO\(\s*\n?\s*_analyticsState\.qualityGridWeekStart/);
+  // ячейка показывает значение и число оценок (count)
+  assert.match(view, /renderDailyGridBlock/);
+  assert.match(view, /<sup>\$\{cell\.count\}<\/sup>/);
+  // пустая неделя объясняется, а не рисуется нулями (AC-18)
+  assert.match(view, /empty_reason === 'no_reports_uploaded'/);
+});

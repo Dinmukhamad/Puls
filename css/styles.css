@@ -8914,6 +8914,40 @@ html[data-theme="dark"] #view-analytics .an-filters-card { background: var(--car
   #view-analytics .an-nav-mobile-wrap { display: block; }
   #view-analytics .an-context-bar { font-size: 12px; padding: 8px 10px; }
 }
+
+/* ── Недельная сетка оценок (ТЗ §7.3): навигация по неделям, число оценок ── */
+#view-analytics .an-week-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+#view-analytics .an-week-nav .btn-sm {
+  min-width: 34px;
+  padding: 4px 10px;
+}
+#view-analytics .an-week-label {
+  min-width: 150px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+#view-analytics .an-daily-grid th small {
+  display: block;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+#view-analytics .an-daily-grid .an-heatmap-cell sup {
+  font-size: 9px;
+  opacity: .65;
+  margin-left: 1px;
+}
+
+@media (max-width: 767px) {
+  #view-analytics .an-card-head-row { flex-wrap: wrap; gap: 8px; }
+  #view-analytics .an-week-label { min-width: 0; flex: 1; }
+}
 /* source: 99-coins-admin-redesign.css */
 /* Coins admin: one compact workspace for daily operations. */
 #view-coins.app-view.active > * {
