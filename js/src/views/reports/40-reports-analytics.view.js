@@ -881,10 +881,10 @@ function renderHeatmapTable(data, metric) {
 /* ── Block: Risk pyramid ─────────────────────────────────────────*/
 function renderRiskPyramidBlock(riskPyramid) {
   const statuses = [
-    { key: 'stable', label: 'Стабильные', icon: '🟢' },
-    { key: 'watch', label: 'Нужен контроль', icon: '🟡' },
-    { key: 'critical', label: 'Критично', icon: '🔴' },
-    { key: 'no_data', label: 'Нет данных', icon: '⚪' },
+    { key: 'stable', label: riskStatusLabel('stable'), icon: '🟢' },
+    { key: 'watch', label: riskStatusLabel('watch'), icon: '🟡' },
+    { key: 'critical', label: riskStatusLabel('critical'), icon: '🔴' },
+    { key: 'no_data', label: riskStatusLabel('no_data'), icon: '⚪' },
   ];
   return `<div class="an-card">
     <div class="an-card-head">Пирамида риска операторов</div>
@@ -1058,16 +1058,16 @@ async function prefetchAnalyticsInBackground() {
 }
 
 const ANALYTICS_TABS = [
-  { key: 'overview',   label: 'Команда' },
-  { key: 'operators',  label: 'Операторы' },
-  { key: 'groups',     label: 'Группы' },
-  { key: 'matrix',     label: 'Матрицы' },
-  { key: 'quality',    label: 'Качество' },
-  { key: 'dynamics',   label: 'Динамика' },
-  { key: 'penalties',  label: 'Штрафы' },
-  { key: 'risks',      label: 'Риски' },
-  { key: 'points',     label: 'Баллы' },
-  { key: 'export',     label: 'Экспорт' },
+  { key: 'overview',   label: 'Сводка',            group: 'primary' },
+  { key: 'operators',  label: 'Операторы',         group: 'primary' },
+  { key: 'groups',     label: 'Группы',            group: 'primary' },
+  { key: 'quality',    label: 'Контроль качества', group: 'primary' },
+  { key: 'dynamics',   label: 'По дням',           group: 'primary' },
+  { key: 'risks',      label: 'Риски',             group: 'primary' },
+  { key: 'matrix',     label: 'Связь показателей', group: 'more' },
+  { key: 'penalties',  label: 'Штрафы',            group: 'more' },
+  { key: 'points',     label: 'Расчёт баллов',     group: 'more' },
+  { key: 'export',     label: 'Выгрузка',          group: 'more' },
 ];
 
 function getAnalyticsParams() {
@@ -1105,6 +1105,9 @@ let _analyticsState = {
   onlyWithData: false,
   groups: [],
   availablePeriods: [],
+  coverageWithData: null,
+  coverageTotal: null,
+  lastUpdatedAt: null,
 };
 
 function analyticsApiUrl(path, params) {
@@ -1167,19 +1170,121 @@ function fmtA(v, decimals = 2, suffix = '') {
   return Number(v).toFixed(decimals) + suffix;
 }
 
+// Единая канонизация статусов по всей аналитике (ТЗ §1.3, AC-02): раньше
+// «В норме/Наблюдать/Критично/Нет данных» дублировались с разными формулировками
+// в разных блоках (местами даже «Стабильные»/«Нужен контроль»). Теперь один
+// источник правды — риск (стабильно/наблюдать/критично) не путается с
+// отсутствием данных (AC-18).
+const RISK_STATUS_LABELS = {
+  stable: 'Цель выполнена',
+  watch: 'Есть отклонение',
+  critical: 'Нужно вмешательство',
+  no_data: 'Недостаточно данных',
+};
+function riskStatusLabel(status) {
+  return RISK_STATUS_LABELS[status] || RISK_STATUS_LABELS.no_data;
+}
+
+/* ── Единый контекст-бар над всеми вкладками (ТЗ §2) ───────────────── */
+
+const RU_MONTHS_GENITIVE = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
+];
+
+function analyticsPeriodLabel(startISO, endISO) {
+  if (!startISO || !endISO) return '—';
+  const [sy, sm, sd] = startISO.split('-').map(Number);
+  const [ey, em, ed] = endISO.split('-').map(Number);
+  if (sy === ey && sm === em) {
+    return `${sd}–${ed} ${RU_MONTHS_GENITIVE[em - 1]} ${ey}`;
+  }
+  if (sy === ey) {
+    return `${sd} ${RU_MONTHS_GENITIVE[sm - 1]} – ${ed} ${RU_MONTHS_GENITIVE[em - 1]} ${ey}`;
+  }
+  return `${sd} ${RU_MONTHS_GENITIVE[sm - 1]} ${sy} – ${ed} ${RU_MONTHS_GENITIVE[em - 1]} ${ey}`;
+}
+
+function analyticsScopeLabel() {
+  const s = _analyticsState;
+  const parts = [];
+  if (s.groupId) {
+    const group = s.groups.find(g => String(g.id) === String(s.groupId));
+    parts.push(group ? `группа «${group.name}»` : 'выбранная группа');
+  } else {
+    parts.push('вся команда');
+  }
+  if (s.operatorQuery) parts.push(`поиск «${s.operatorQuery}»`);
+  if (s.participationStatus === 'participating') parts.push('только участвующие');
+  if (s.participationStatus === 'not_participating') parts.push('не участвующие');
+  if (s.onlyWithData) parts.push('только с данными');
+  return parts.join(', ');
+}
+
+function analyticsCoverageLabel() {
+  const s = _analyticsState;
+  if (s.coverageTotal == null) return 'охват уточняется…';
+  if (!s.coverageTotal) return 'нет операторов в области';
+  return `${s.coverageWithData} из ${s.coverageTotal} операторов имеют данные`;
+}
+
+function analyticsUpdatedLabel() {
+  const t = _analyticsState.lastUpdatedAt;
+  if (!t) return 'обновляется…';
+  const hh = String(t.getHours()).padStart(2, '0');
+  const mm = String(t.getMinutes()).padStart(2, '0');
+  return `обновлено ${hh}:${mm}`;
+}
+
+function analyticsAvailabilityNote() {
+  const periods = _analyticsState.availablePeriods;
+  const s = _analyticsState;
+  if (!periods.length || !s.startDate || !s.endDate) return '';
+  const minStart = periods.reduce((min, p) => p.start_date < min ? p.start_date : min, periods[0].start_date);
+  const maxEnd = periods.reduce((max, p) => p.end_date > max ? p.end_date : max, periods[0].end_date);
+  if (s.startDate >= minStart && s.endDate <= maxEnd) return '';
+  return `Данные доступны с ${analyticsPeriodLabel(minStart, minStart).split(' ').slice(0,2).join(' ')} ${minStart.slice(0,4)} по ${analyticsPeriodLabel(maxEnd, maxEnd).split(' ').slice(0,2).join(' ')} ${maxEnd.slice(0,4)}.`;
+}
+
+function renderAnalyticsContextBar() {
+  const note = analyticsAvailabilityNote();
+  return `<div class="an-context-bar" id="an-context-bar" role="status">
+    <span class="an-context-line">Показаны результаты: ${esc(analyticsScopeLabel())} · ${esc(analyticsPeriodLabel(_analyticsState.startDate, _analyticsState.endDate))} · <span id="an-context-coverage">${esc(analyticsCoverageLabel())}</span> · <span id="an-context-updated">${esc(analyticsUpdatedLabel())}</span></span>
+    ${note ? `<span class="an-context-note">${esc(note)}</span>` : ''}
+  </div>`;
+}
+
+function refreshAnalyticsContextBar(el) {
+  const cov = el.querySelector('#an-context-coverage');
+  const upd = el.querySelector('#an-context-updated');
+  if (cov) cov.textContent = analyticsCoverageLabel();
+  if (upd) upd.textContent = analyticsUpdatedLabel();
+}
+
+async function refreshAnalyticsCoverage(el) {
+  try {
+    const dashboard = await analyticsFetch('management-dashboard', analyticsOpParams());
+    const health = dashboard.team_health || {};
+    _analyticsState.coverageWithData = health.operators_with_data ?? 0;
+    _analyticsState.coverageTotal = health.operators_count ?? 0;
+    _analyticsState.lastUpdatedAt = new Date();
+    refreshAnalyticsContextBar(el);
+  } catch { /* контекст-бар остаётся с прежними числами до следующей попытки */ }
+}
+
 function qualityColor(band) {
   return { green: 'var(--success)', yellow: '#D97706', orange: '#EA580C', red: 'var(--danger)' }[band] || 'var(--text-muted)';
 }
 
 function riskBadge(status) {
-  const map = {
-    stable: { label: 'Стабильно', color: 'var(--success)', bg: 'var(--success-soft)' },
-    watch: { label: 'Контроль', color: 'var(--warning)', bg: 'var(--warning-soft)' },
-    critical: { label: 'Критично', color: 'var(--danger)', bg: 'var(--danger-soft)' },
-    no_data: { label: 'Нет данных', color: 'var(--text-muted)', bg: 'var(--bg-muted)' },
+  const colors = {
+    stable: { color: 'var(--success)', bg: 'var(--success-soft)' },
+    watch: { color: 'var(--warning)', bg: 'var(--warning-soft)' },
+    critical: { color: 'var(--danger)', bg: 'var(--danger-soft)' },
+    no_data: { color: 'var(--text-muted)', bg: 'var(--bg-muted)' },
   };
-  const r = map[status] || map.no_data;
-  return `<span class="risk-badge" style="color:${r.color};background:${r.bg}">${r.label}</span>`;
+  const c = colors[status] || colors.no_data;
+  return `<span class="risk-badge" style="color:${c.color};background:${c.bg}">${riskStatusLabel(status)}</span>`;
 }
 
 async function renderAnalytics() {
@@ -1205,6 +1310,7 @@ async function renderAnalytics() {
     <div class="view-header">
       <div><div class="section-kicker">Аналитика</div><h2 class="section-title">Пульс команды</h2><p class="section-subtitle">Риски, отклонения и приоритеты руководителя за выбранный период.</p></div>
     </div>
+    ${renderAnalyticsContextBar()}
     <div class="an-filters-card">
       <div class="an-filters-row">
         <div class="form-group">
@@ -1241,9 +1347,26 @@ async function renderAnalytics() {
       <div id="an-availability-warning"></div>
     </div>
 
-    <div class="analytics-tabs" id="an-tabs">
-      ${ANALYTICS_TABS.map(t => `<button class="analytics-tab ${t.key===_analyticsState.tab?'active':''}" data-tab="${t.key}">${esc(t.label)}</button>`).join('')}
-    </div>
+    <nav class="an-nav" id="an-tabs" aria-label="Аналитика — разделы">
+      <div class="an-nav-primary">
+        ${ANALYTICS_TABS.filter(t => t.group === 'primary').map(t => `<button type="button" class="an-nav-tab ${t.key===_analyticsState.tab?'active':''}" data-tab="${t.key}">${esc(t.label)}</button>`).join('')}
+        <div class="an-nav-more-wrap">
+          <button type="button" class="an-nav-tab an-nav-more-btn ${ANALYTICS_TABS.some(t=>t.group==='more'&&t.key===_analyticsState.tab)?'active':''}" id="an-nav-more-btn" aria-haspopup="true" aria-expanded="false">
+            <span class="an-nav-more-label">${(() => { const cur = ANALYTICS_TABS.find(t => t.group === 'more' && t.key === _analyticsState.tab); return cur ? `Ещё: ${esc(cur.label)}` : 'Ещё'; })()}</span>
+            <svg width="10" height="6" viewBox="0 0 10 6" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <div class="an-nav-more-menu" id="an-nav-more-menu" role="menu" hidden>
+            ${ANALYTICS_TABS.filter(t => t.group === 'more').map(t => `<button type="button" role="menuitem" class="an-nav-more-item ${t.key===_analyticsState.tab?'active':''}" data-tab="${t.key}">${esc(t.label)}</button>`).join('')}
+          </div>
+        </div>
+      </div>
+      <label class="an-nav-mobile-wrap">
+        <span class="sr-only">Раздел аналитики</span>
+        <select class="an-nav-mobile-select" id="an-nav-mobile-select" aria-label="Раздел аналитики">
+          ${ANALYTICS_TABS.map(t => `<option value="${t.key}" ${t.key===_analyticsState.tab?'selected':''}>${esc(t.label)}</option>`).join('')}
+        </select>
+      </label>
+    </nav>
 
     <div id="an-tab-content" class="analytics-tab-content">
       <div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>
@@ -1286,39 +1409,86 @@ async function renderAnalytics() {
   el.querySelector('#an-apply-btn').addEventListener('click', () => {
     syncStateFromFilters();
     updateUrl();
+    refreshAnalyticsContextBar(el);
+    refreshAnalyticsCoverage(el);
     loadAnalyticsTab(_analyticsState.tab);
   });
 
-  // Tab click handling + prefetch on hover
-  el.querySelectorAll('.analytics-tab').forEach(btn => {
-    // Prefetch при наведении — данные загружаются в кеш до клика
-    btn.addEventListener('mouseenter', () => {
-      const tab = btn.dataset.tab;
-      if (tab === _analyticsState.tab) return;
-      const base = analyticsBaseParams();
-      const full = analyticsOpParams();
-      switch(tab) {
-        case 'overview':   analyticsFetch('management-dashboard', full).catch(() => {}); break;
-        case 'operators':  analyticsFetch('operators-combined', full).catch(() => {}); break;
-        case 'groups':     analyticsFetch('groups-comparison', base).catch(() => {}); break;
-        case 'matrix':     analyticsFetch('matrix-combined', base).catch(() => {}); break;
-        case 'quality':    analyticsFetch('quality-combined', base).catch(() => {}); break;
-        case 'penalties':  analyticsFetch('penalties', base).catch(() => {}); break;
-        case 'risks':      analyticsFetch('risk-pyramid', base).catch(() => {}); break;
-        case 'points':     analyticsFetch('points', full).catch(() => {}); break;
-      }
-    }, { passive: true });
-    btn.addEventListener('click', () => {
-      el.querySelectorAll('.analytics-tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      _analyticsState.tab = btn.dataset.tab;
-      updateUrl();
-      loadAnalyticsTab(_analyticsState.tab);
-    });
+  /* ── Навигация: 6 основных вкладок + «Ещё» (desktop), один select (mobile).
+     ТЗ §1.2 — горизонтальный скролл вкладок убран; на мобильном один выпадающий
+     список «Раздел аналитики». data-tab + id="an-tabs" сохранены для обратной
+     совместимости с data-an-open-tab (клик по причине в Сводке открывает вкладку). */
+  function prefetchTab(tab) {
+    if (tab === _analyticsState.tab) return;
+    const base = analyticsBaseParams();
+    const full = analyticsOpParams();
+    switch (tab) {
+      case 'overview':   analyticsFetch('management-dashboard', full).catch(() => {}); break;
+      case 'operators':  analyticsFetch('operators-combined', full).catch(() => {}); break;
+      case 'groups':     analyticsFetch('groups-comparison', base).catch(() => {}); break;
+      case 'matrix':     analyticsFetch('matrix-combined', base).catch(() => {}); break;
+      case 'quality':    analyticsFetch('quality-combined', base).catch(() => {}); break;
+      case 'penalties':  analyticsFetch('penalties', base).catch(() => {}); break;
+      case 'risks':      analyticsFetch('risk-pyramid', base).catch(() => {}); break;
+      case 'points':     analyticsFetch('points', full).catch(() => {}); break;
+    }
+  }
+
+  const moreMenu = el.querySelector('#an-nav-more-menu');
+  const moreBtn = el.querySelector('#an-nav-more-btn');
+  function closeMoreMenu() {
+    if (!moreMenu || moreMenu.hidden) return;
+    moreMenu.hidden = true;
+    moreBtn.setAttribute('aria-expanded', 'false');
+  }
+  function openMoreMenu() {
+    moreMenu.hidden = false;
+    moreBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function switchAnalyticsTab(tab) {
+    if (!ANALYTICS_TABS.some(t => t.key === tab)) return;
+    _analyticsState.tab = tab;
+    el.querySelectorAll('#an-tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    const moreActive = ANALYTICS_TABS.some(t => t.group === 'more' && t.key === tab);
+    if (moreBtn) {
+      moreBtn.classList.toggle('active', moreActive);
+      const curMore = ANALYTICS_TABS.find(t => t.group === 'more' && t.key === tab);
+      const label = moreBtn.querySelector('.an-nav-more-label');
+      if (label) label.textContent = curMore ? `Ещё: ${curMore.label}` : 'Ещё';
+    }
+    const select = el.querySelector('#an-nav-mobile-select');
+    if (select) select.value = tab;
+    closeMoreMenu();
+    updateUrl();
+    loadAnalyticsTab(tab);
+  }
+
+  el.querySelectorAll('#an-tabs [data-tab]').forEach(btn => {
+    btn.addEventListener('mouseenter', () => prefetchTab(btn.dataset.tab), { passive: true });
+    btn.addEventListener('click', () => switchAnalyticsTab(btn.dataset.tab));
   });
+
+  if (moreBtn && moreMenu) {
+    moreBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (moreMenu.hidden) openMoreMenu(); else closeMoreMenu();
+    });
+    document.addEventListener('click', (e) => {
+      if (!moreMenu.hidden && !moreMenu.contains(e.target) && e.target !== moreBtn) closeMoreMenu();
+    });
+    moreMenu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMoreMenu(); moreBtn.focus(); } });
+    moreBtn.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMoreMenu(); });
+  }
+
+  const mobileSelect = el.querySelector('#an-nav-mobile-select');
+  if (mobileSelect) {
+    mobileSelect.addEventListener('change', () => switchAnalyticsTab(mobileSelect.value));
+  }
 
   updateUrl();
   if (isNavStale(myNavGen)) return;
+  refreshAnalyticsCoverage(el); // фоново — не блокирует первую отрисовку вкладки
   await loadAnalyticsTab(_analyticsState.tab);
 }
 
@@ -1421,7 +1591,7 @@ async function loadOverviewTab(content) {
 }
 
 function analyticsStatusLabel(status) {
-  return ({ stable: 'В норме', watch: 'Наблюдать', critical: 'Критично', no_data: 'Нет данных' })[status] || 'Нет данных';
+  return riskStatusLabel(status);
 }
 
 function analyticsMetricValue(value, unit) {
@@ -1447,7 +1617,7 @@ function renderManagementDashboard(data, dynamics) {
         <div><strong>${health.score || 0}</strong><span>из 100</span></div>
       </div>
       <div class="an-exec-hero-copy">
-        <span class="an-exec-eyebrow">Здоровье команды</span>
+        <span class="an-exec-eyebrow">Индекс выполнения целей</span>
         <h3>${analyticsStatusLabel(health.status)}</h3>
         <p>${health.attention_count ? `${health.attention_count} оператор(ов) требуют внимания, из них критично: ${health.critical_count || 0}.` : 'Все операторы с данными находятся в целевой зоне.'}</p>
       </div>
@@ -1478,7 +1648,7 @@ function renderManagementDashboard(data, dynamics) {
           ${['stable','watch','critical','no_data'].map(key => `<i class="an-risk-strip-${key}" style="width:${((risks[key] || 0) / totalRisk) * 100}%"></i>`).join('')}
         </div>
         <div class="an-risk-legend-v2">
-          ${[['stable','В норме'],['watch','Наблюдать'],['critical','Критично'],['no_data','Нет данных']].map(([key,label]) => `<button type="button" data-an-open-tab="risks" class="an-risk-legend-item an-status-${key}"><i></i><span>${label}</span><strong>${risks[key] || 0}</strong></button>`).join('')}
+          ${['stable','watch','critical','no_data'].map(key => `<button type="button" data-an-open-tab="risks" class="an-risk-legend-item an-status-${key}"><i></i><span>${riskStatusLabel(key)}</span><strong>${risks[key] || 0}</strong></button>`).join('')}
         </div>
       </section>
       <section class="an-exec-section">
@@ -1742,8 +1912,8 @@ async function loadQualityTab(content) {
   content.innerHTML =
     renderQualityCoverageBlock(coverage) +
     `<div class="an-card">
-      <div class="an-card-head">Heatmap качества по дням</div>
-      <div id="an-quality-heatmap">${hm ? renderHeatmapTable(hm, 'quality') : '<div class="empty-line">Нет данных для heatmap</div>'}</div>
+      <div class="an-card-head">Оценки операторов по дням</div>
+      <div id="an-quality-heatmap">${hm ? renderHeatmapTable(hm, 'quality') : '<div class="empty-line">Нет данных для сетки оценок</div>'}</div>
     </div>`;
 }
 
@@ -1852,7 +2022,7 @@ async function loadRisksTab(content) {
 function renderRiskOperatorsTableBlock(items) {
   function reasons(o) {
     const r = [];
-    if (o.risk_status === 'no_data') return 'Нет данных';
+    if (o.risk_status === 'no_data') return riskStatusLabel('no_data');
     if (o.quality_avg != null && o.quality_avg < 80) r.push(`качество ${o.quality_avg}`);
     if (o.kvz != null && o.kvz < 8) r.push(`КВЗ ${o.kvz}`);
     if (o.efficiency_percent != null && o.efficiency_percent < 45) r.push(`эфф. ${o.efficiency_percent}%`);
@@ -1889,7 +2059,7 @@ function renderRiskByGroupsBlock(riskPyramid, items) {
   return `<div class="an-card">
     <div class="an-card-head">Риски по группам</div>
     ${rows.length ? `<div class="table-wrap"><table class="data-table">
-      <thead><tr><th>Группа</th><th class="num">Стабильные</th><th class="num">Нужен контроль</th><th class="num">Критично</th><th class="num">Нет данных</th></tr></thead>
+      <thead><tr><th>Группа</th><th class="num">${riskStatusLabel('stable')}</th><th class="num">${riskStatusLabel('watch')}</th><th class="num">${riskStatusLabel('critical')}</th><th class="num">${riskStatusLabel('no_data')}</th></tr></thead>
       <tbody>${rows.map(([g,c]) => `<tr>
         <td class="name-cell">${esc(g)}</td>
         <td class="num" style="color:var(--success)">${c.stable||0}</td>
@@ -2017,7 +2187,7 @@ function resultStatusBadge(status) {
     good:      { label: 'Хороший результат',  color: 'var(--info)',    bg: 'var(--info-soft)' },
     average:   { label: 'Средний результат',  color: 'var(--warning)', bg: 'var(--warning-soft)' },
     low:       { label: 'Низкий результат',   color: 'var(--danger)',  bg: 'var(--danger-soft)' },
-    no_data:   { label: 'Нет данных',         color: 'var(--text-muted)', bg: 'var(--bg-muted)' },
+    no_data:   { label: riskStatusLabel('no_data'),   color: 'var(--text-muted)', bg: 'var(--bg-muted)' },
   };
   const r = map[status] || map.no_data;
   return `<span class="risk-badge" style="color:${r.color};background:${r.bg}">${r.label}</span>`;

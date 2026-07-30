@@ -583,6 +583,7 @@ def compute_management_dashboard(rows: list[OperatorAnalyticsRow]) -> dict:
             "score": team_health,
             "status": team_status,
             "operators_count": total,
+            "operators_with_data": len(included),
             "attention_count": attention_count,
             "critical_count": status_counts["critical"],
             "data_coverage_percent": round(len(included) / total * 100) if total else 0,

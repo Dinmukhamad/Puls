@@ -76,6 +76,9 @@ def test_management_dashboard_surfaces_missing_data_and_group_coverage():
     assert group["coverage_percent"] == 50
     assert dashboard["team_health"]["data_coverage_percent"] == 50
     assert dashboard["team_health"]["quality_coverage_percent"] == 50
+    # Context bar (ТЗ §2): готовый X из Y, без пересчёта на фронте.
+    assert dashboard["team_health"]["operators_with_data"] == 1
+    assert dashboard["team_health"]["operators_count"] == 2
 
 
 def test_management_dashboard_orders_weak_groups_and_period_leaders():
