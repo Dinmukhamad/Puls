@@ -8948,6 +8948,43 @@ html[data-theme="dark"] #view-analytics .an-filters-card { background: var(--car
   #view-analytics .an-card-head-row { flex-wrap: wrap; gap: 8px; }
   #view-analytics .an-week-label { min-width: 0; flex: 1; }
 }
+
+/* ── Пояснение к вкладке «на пальцах» (короткое, понятное) ──────── */
+#view-analytics .an-tab-hint {
+  margin: 2px 0 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ── Компактная таблица операторов без горизонтального скролла (ТЗ §4) ── */
+#view-analytics .an-ops-table { width: 100%; table-layout: auto; }
+#view-analytics .an-ops-table .an-col-rank { width: 34px; color: var(--text-muted); }
+#view-analytics .an-ops-table .an-ops-group {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+#view-analytics .an-ops-row { cursor: pointer; }
+#view-analytics .an-ops-row:hover { background: var(--bg-muted); }
+#view-analytics .an-ops-row-open { background: var(--accent-primary-soft, var(--bg-muted)); }
+#view-analytics .an-ops-detail-row > td { background: var(--bg-muted); padding: 0; }
+#view-analytics .an-ops-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 18px;
+  padding: 12px 16px;
+}
+#view-analytics .an-ops-detail-grid > div { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+#view-analytics .an-ops-detail-grid span { color: var(--text-muted); }
+#view-analytics .an-ops-detail-grid b { color: var(--text-primary); }
+
+/* Узкие экраны: прячем второстепенные столбцы — всё есть в раскрывашке. */
+@media (max-width: 560px) {
+  #view-analytics .an-ops-table .an-col-kvz,
+  #view-analytics .an-ops-table .an-col-pen { display: none; }
+}
 /* source: 99-coins-admin-redesign.css */
 /* Coins admin: one compact workspace for daily operations. */
 #view-coins.app-view.active > * {

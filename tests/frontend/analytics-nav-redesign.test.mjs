@@ -104,3 +104,22 @@ test('quality tab uses DB-backed daily-grid with weekly pagination (ТЗ §7.3, 
   // пустая неделя объясняется, а не рисуется нулями (AC-18)
   assert.match(view, /empty_reason === 'no_reports_uploaded'/);
 });
+
+test('operators table is compact with expandable detail — no 16-column scroll (ТЗ §4)', () => {
+  const body = view.slice(
+    view.indexOf('function renderOpsTable'),
+    view.indexOf('/* ── Block: Groups comparison'),
+  );
+  // компактный набор ключевых столбцов
+  assert.match(body, /data-sort="final_points">Итог/);
+  assert.match(body, />Качество\$\{sortAttr/);
+  assert.match(body, />Риск</);
+  // раскрывающаяся строка деталей вместо десятка столбцов
+  assert.match(body, /an-ops-detail-row/);
+  assert.match(body, /detailCell\(o\)/);
+  // прежние «тяжёлые» столбцы ушли в детали (нет отдельного заголовка Норма/Выполн./Перераб.)
+  assert.doesNotMatch(body, /data-sort="individual_norm_hours"/);
+  assert.doesNotMatch(body, /data-sort="norm_completion_percent"/);
+  // пояснение «на пальцах» присутствует
+  assert.match(view, /Каждая строка — один оператор за выбранный период/);
+});
