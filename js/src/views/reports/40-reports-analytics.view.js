@@ -474,13 +474,16 @@ function renderDynChart(items, metric) {
 /* ── Block: Operators table ────────────────────────────────────*/
 function renderOperatorsTableBlock(opsTable) {
   const items = opsTable.items || [];
+  const totalPages = Math.max(1, Math.ceil((opsTable.total || items.length) / (opsTable.page_size || 100)));
   return `<div class="an-card">
     <div class="an-card-head-row">
       <span>Операторы за период</span>
-      <button class="btn-outline btn-sm" id="an-export-ops-btn">Экспорт CSV</button>
+      <span class="an-table-count">Найдено: ${opsTable.total ?? items.length}</span>
+      <button class="btn-outline btn-sm" id="an-export-ops-btn">Экспорт Excel</button>
     </div>
     <p class="an-tab-hint">Каждая строка — один оператор за выбранный период. «Итог» — общий балл (по нему сортировка), красным — кто в зоне риска. Нажмите на строку, чтобы раскрыть детали (звонки, часы, норма, эффективность).</p>
-    <div id="an-ops-table-wrap">${renderOpsTable(items, 'final_points', 'desc')}</div>
+    <div id="an-ops-table-wrap">${renderOpsTable(items, opsTable.sort_by || 'final_points', opsTable.sort_order || 'desc')}</div>
+    ${totalPages > 1 ? `<div class="an-pagination"><button class="btn-outline btn-sm" data-an-page="prev" ${opsTable.page <= 1 ? 'disabled' : ''}>Назад</button><span>Страница ${opsTable.page} из ${totalPages}</span><button class="btn-outline btn-sm" data-an-page="next" ${opsTable.page >= totalPages ? 'disabled' : ''}>Далее</button></div>` : ''}
   </div>`;
 }
 
@@ -1114,6 +1117,9 @@ let _analyticsState = {
   coverageTotal: null,
   lastUpdatedAt: null,
   qualityGridWeekStart: null,
+  operatorPage: 1,
+  operatorSort: 'final_points',
+  operatorSortOrder: 'desc',
 };
 
 function analyticsApiUrl(path, params) {
@@ -1312,13 +1318,13 @@ async function renderAnalytics() {
   const myNavGen = STATE.navGen;
 
   const urlParams = getAnalyticsParams();
+  _analyticsState.tab = ANALYTICS_TABS.some(item => item.key === urlParams.tab) ? urlParams.tab : 'overview';
 
   if (!_analyticsState.startDate) {
     const initialPeriod = await resolveInitialAnalyticsPeriod(urlParams);
     if (isNavStale(myNavGen)) return;
     _analyticsState.startDate = initialPeriod.start;
     _analyticsState.endDate = initialPeriod.end;
-    _analyticsState.tab = urlParams.tab;
     _analyticsState.groupId = urlParams.group;
     _analyticsState.operatorQuery = urlParams.operator;
     _analyticsState.participationStatus = urlParams.participation;
@@ -1331,6 +1337,9 @@ async function renderAnalytics() {
     </div>
     ${renderAnalyticsContextBar()}
     <div class="an-filters-card">
+      <div class="an-quick-periods" aria-label="Быстрый выбор периода">
+        <button type="button" data-an-period="day">День</button><button type="button" data-an-period="week">Неделя</button><button type="button" data-an-period="month">Месяц</button><span>или укажите диапазон вручную</span>
+      </div>
       <div class="an-filters-row">
         <div class="form-group">
           <label class="form-label">Период с</label>
@@ -1360,6 +1369,7 @@ async function renderAnalytics() {
           <input type="checkbox" id="an-only-data" ${_analyticsState.onlyWithData ? 'checked' : ''}>
           Только с данными
         </label>
+        <button class="btn-outline" id="an-reset-btn">Сбросить</button>
         <button class="btn-primary" id="an-apply-btn">Применить</button>
       </div>
       ${_analyticsState.availablePeriods.length ? `<div class="an-period-availability">Доступные данные: ${esc(_analyticsState.availablePeriods[0].label)}</div>` : ''}
@@ -1427,12 +1437,29 @@ async function renderAnalytics() {
 
   el.querySelector('#an-apply-btn').addEventListener('click', () => {
     syncStateFromFilters();
+    _analyticsState.operatorPage = 1;
+    if (!_analyticsState.startDate || !_analyticsState.endDate || _analyticsState.startDate > _analyticsState.endDate) {
+      el.querySelector('#an-availability-warning').innerHTML = '<div class="an-availability-note an-availability-note-error">Проверьте выбранный диапазон дат.</div>';
+      return;
+    }
     _analyticsState.qualityGridWeekStart = null; // пересчитать неделю сетки под новый период
     updateUrl();
     refreshAnalyticsContextBar(el);
     refreshAnalyticsCoverage(el);
     loadAnalyticsTab(_analyticsState.tab);
   });
+
+  el.querySelector('#an-reset-btn').addEventListener('click', async () => {
+    const initial = await resolveInitialAnalyticsPeriod({});
+    Object.assign(_analyticsState, { startDate: initial.start, endDate: initial.end, groupId: '', operatorQuery: '', participationStatus: 'all', onlyWithData: false, operatorPage: 1 });
+    renderAnalytics();
+  });
+  el.querySelectorAll('[data-an-period]').forEach(button => button.addEventListener('click', () => {
+    const end = new Date(); const start = new Date(end);
+    start.setDate(end.getDate() - (button.dataset.anPeriod === 'day' ? 0 : button.dataset.anPeriod === 'month' ? 29 : 6));
+    el.querySelector('#an-start').value = start.toISOString().slice(0, 10);
+    el.querySelector('#an-end').value = end.toISOString().slice(0, 10);
+  }));
 
   /* ── Навигация: 6 основных вкладок + «Ещё» (desktop), один select (mobile).
      ТЗ §1.2 — горизонтальный скролл вкладок убран; на мобильном один выпадающий
@@ -1744,17 +1771,29 @@ function renderAnalyticsEmptyState() {
 /* ── Вкладка: Операторы (таблица эффективности + зона внимания) ─*/
 async function loadOperatorsTab(content) {
   // Один комбинированный запрос вместо 2
-  const combined = await analyticsFetch('operators-combined', analyticsOpParams());
-  const opsTable = { items: combined.items || [] };
+  const combined = await analyticsFetch('operators-combined', {
+    ...analyticsOpParams(), page: _analyticsState.operatorPage, page_size: 100,
+    sort_by: _analyticsState.operatorSort, sort_order: _analyticsState.operatorSortOrder,
+  });
+  const opsTable = combined;
   const topAttn = combined.top_and_attention || {};
 
   content.innerHTML =
     renderOperatorsTableBlock(opsTable) +
     renderAttentionZoneTableBlock(topAttn.attention_zone || []);
 
-  bindOpsTableSort(opsTable.items || []);
+  bindOpsTableSort();
 
-  content.querySelector('#an-export-ops-btn')?.addEventListener('click', () => exportOperatorsCsv(opsTable.items || []));
+  content.querySelectorAll('[data-an-page]').forEach(button => button.addEventListener('click', () => {
+    _analyticsState.operatorPage += button.dataset.anPage === 'next' ? 1 : -1;
+    loadAnalyticsTab('operators');
+  }));
+
+  content.querySelector('#an-export-ops-btn')?.addEventListener('click', downloadAnalyticsWorkbook);
+}
+
+function downloadAnalyticsWorkbook() {
+  window.location.href = api._base() + '/api/analytics/export.xlsx?' + new URLSearchParams(analyticsOpParams()).toString();
 }
 
 function renderAttentionZoneTableBlock(items) {
@@ -1782,19 +1821,19 @@ function renderAttentionZoneTableBlock(items) {
   </div>`;
 }
 
-function bindOpsTableSort(items) {
+function bindOpsTableSort() {
   const wrap = document.getElementById('an-ops-table-wrap');
   if (!wrap) return;
-  let curSortKey = 'final_points', curSortDir = 'desc';
   // Делегирование на постоянном контейнере: переживает пересортировку (innerHTML
   // меняется, но сам wrap — нет), поэтому и сортировка, и раскрытие строк работают.
   wrap.addEventListener('click', (e) => {
     const th = e.target.closest('.sortable');
     if (th && wrap.contains(th)) {
       const key = th.dataset.sort;
-      if (curSortKey === key) curSortDir = curSortDir === 'desc' ? 'asc' : 'desc';
-      else { curSortKey = key; curSortDir = 'desc'; }
-      wrap.innerHTML = renderOpsTable(items, curSortKey, curSortDir);
+      if (_analyticsState.operatorSort === key) _analyticsState.operatorSortOrder = _analyticsState.operatorSortOrder === 'desc' ? 'asc' : 'desc';
+      else { _analyticsState.operatorSort = key; _analyticsState.operatorSortOrder = 'desc'; }
+      _analyticsState.operatorPage = 1;
+      loadAnalyticsTab('operators');
       return;
     }
     const row = e.target.closest('.an-ops-row');
@@ -2558,6 +2597,7 @@ async function loadExportTab(content) {
   content.innerHTML = `<div class="an-card">
     <div class="an-card-head">Экспорт отчётов</div>
     <div class="an-export-grid">
+      <button class="btn-primary an-export-xlsx-btn">Скачать Excel по текущим фильтрам</button>
       <button class="btn-outline an-export-btn" data-export="operators">Таблица операторов</button>
       <button class="btn-outline an-export-btn" data-export="groups">Сравнение групп</button>
       <button class="btn-outline an-export-btn" data-export="penalties">Штрафы</button>
@@ -2567,6 +2607,8 @@ async function loadExportTab(content) {
     </div>
     <p style="font-size:12px;color:var(--text-muted);margin-top:14px">Экспорт учитывает выбранные фильтры периода, группы и оператора.</p>
   </div>`;
+
+  content.querySelector('.an-export-xlsx-btn')?.addEventListener('click', downloadAnalyticsWorkbook);
 
   content.querySelectorAll('.an-export-btn').forEach(btn => {
     btn.addEventListener('click', async () => {

@@ -12,6 +12,16 @@
   box-shadow: none;
 }
 
+#view-analytics .an-filters-row { display: grid; grid-template-columns: 140px 140px minmax(150px, 1fr) minmax(180px, 1.2fr) 150px auto auto auto; gap: 9px; }
+#view-analytics .an-filters-row .form-group { min-width: 0; }
+.an-quick-periods { display: flex; align-items: center; gap: 4px; margin-bottom: 9px; }
+.an-quick-periods button { padding: 5px 9px; border: 1px solid var(--border-default); border-radius: 5px; background: var(--card-bg); color: var(--text-secondary); font-size: 9.5px; font-weight: 700; cursor: pointer; }
+.an-quick-periods button:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+.an-quick-periods span { margin-left: 5px; color: var(--text-muted); font-size: 9px; }
+.an-table-count { margin-left: auto; color: var(--text-muted); font-size: 10px; font-weight: 600; }
+.an-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding-top: 12px; }
+.an-pagination span { color: var(--text-secondary); font-size: 10px; }
+
 #view-analytics .analytics-tabs {
   width: fit-content;
   max-width: 100%;
@@ -237,6 +247,7 @@ html[data-theme="dark"] #view-analytics .analytics-tabs,
 html[data-theme="dark"] #view-analytics .an-filters-card { background: var(--card-bg); }
 
 @media (max-width: 1180px) {
+  #view-analytics .an-filters-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .an-exec-hero { grid-template-columns: auto 1fr; }
   .an-exec-hero-stats { grid-column: 1 / -1; border-top: 1px solid var(--border-default); border-left: 0; }
   .an-exec-grid-operators { grid-template-columns: 1fr; }
@@ -254,6 +265,11 @@ html[data-theme="dark"] #view-analytics .an-filters-card { background: var(--car
 }
 
 @media (max-width: 640px) {
+  #view-analytics .an-filters-row { grid-template-columns: 1fr 1fr; }
+  #view-analytics .an-filters-row .form-group:nth-child(n+3),
+  #view-analytics .an-checkbox-label { grid-column: 1 / -1; }
+  .an-quick-periods { overflow-x: auto; }
+  .an-quick-periods span { display: none; }
   #view-analytics .analytics-tabs { width: 100%; margin-left: 0; border-right: 0; border-left: 0; border-radius: 0; }
   #view-analytics .analytics-tab { padding: 0 10px; }
   .an-exec-hero { grid-template-columns: 1fr; padding: 17px; }

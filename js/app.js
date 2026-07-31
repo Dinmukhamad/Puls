@@ -18,6 +18,7 @@ const SWR_STATIC_TTL_MS  = 600_000; // 10 минут — статичные (у�
 const SWR_USER_TTL_MS    = 300_000; // 5 минут — пользователи
 const SWR_FAST_TTL_MS    = 45_000;  // короткий кеш для разделов, которые должны открываться сразу
 const SWR_VERSION = 'redesign-v2-2'; // при смене версии весь кеш сбрасывается
+const SWR_IN_FLIGHT = new Map();
 (function() {
   const stored = sessionStorage.getItem('puls-swr-version');
   if (stored !== SWR_VERSION) {
@@ -65,19 +66,28 @@ async function swrFetch(key, fetcher, onUpdate, ttlMs = SWR_DEFAULT_TTL_MS) {
     // Есть кеш — отдаём его сразу, а свежие данные подгружаем в фоне
     const age = Date.now() - cached.ts;
     if (age > ttlMs) {
-      fetcher().then(fresh => {
+      const refresh = SWR_IN_FLIGHT.get(key) || Promise.resolve().then(fetcher);
+      SWR_IN_FLIGHT.set(key, refresh);
+      refresh.then(fresh => {
         const changed = JSON.stringify(fresh) !== JSON.stringify(cached.data);
         swrWriteRaw(key, { data: fresh, ts: Date.now() });
         if (changed && onUpdate) onUpdate(fresh);
-      }).catch(() => { /* фоновое обновление не удалось — старые данные остаются видимыми, это нормально */ });
+      }).catch(() => { /* старые данные остаются видимыми */ })
+        .finally(() => { if (SWR_IN_FLIGHT.get(key) === refresh) SWR_IN_FLIGHT.delete(key); });
     }
     return cached.data;
   }
 
   // Кеша нет вообще — обычный fetch, без фонового режима
-  const fresh = await fetcher();
-  swrWriteRaw(key, { data: fresh, ts: Date.now() });
-  return fresh;
+  const pending = SWR_IN_FLIGHT.get(key) || Promise.resolve().then(fetcher);
+  SWR_IN_FLIGHT.set(key, pending);
+  try {
+    const fresh = await pending;
+    swrWriteRaw(key, { data: fresh, ts: Date.now() });
+    return fresh;
+  } finally {
+    if (SWR_IN_FLIGHT.get(key) === pending) SWR_IN_FLIGHT.delete(key);
+  }
 }
 
 /** Принудительно стирает один ключ или все ключи кеша (например после сохранения расчёта периода) */
@@ -814,6 +824,7 @@ function renderSidebar(role) {
 /* ══════════════════════════════════════
    VIEW: УРОВНИ ОПЕРАТОРОВ
 ══════════════════════════════════════ */
+
 /* ══════════════════════════════════════
    УВЕДОМЛЕНИЯ (ТЗ P2) — колокольчик в сайдбаре, модалка со списком
 ══════════════════════════════════════ */
@@ -912,6 +923,7 @@ async function _loadNotificationsIntoModal() {
     });
   });
 }
+
 /* Shared UI contracts. Keep screen-specific views free from raw enums and ad-hoc formats. */
 const UI_TIME_ZONE = 'Asia/Almaty';
 
@@ -1085,6 +1097,7 @@ function uiReadQuery(defaults = {}) {
     Object.entries(defaults).map(([key, fallback]) => [key, params.get(key) ?? fallback]),
   );
 }
+
 async function renderOperatorLevelsSettings() {
   const el = document.getElementById('view-operator-levels');
   if (!el) return;
@@ -2067,6 +2080,7 @@ async function submitChangeUsername() {
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
 ══════════════════════════════════════ */
+
 /* ══════════════════════════════════════
    УРОВНИ: вкладка «Достижения» (ТЗ §7) — каталог, включение/выключение, ручная выдача
 ══════════════════════════════════════ */
@@ -2257,6 +2271,7 @@ async function submitGrantAchievement(achievementId) {
     if (errEl) errEl.textContent = e.message;
   }
 }
+
 /* ══════════════════════════════════════
    КАБИНЕТ: показатели недели, прозрачный расчёт коинов, достижения (ТЗ §5, §7)
    Один общий фетч /api/cabinet/me — данные шарятся между обоими блоками.
@@ -2433,6 +2448,77 @@ async function renderCabinetAchievements() {
       </div>
     </div>`;
 }
+
+/* Управленческая «Сводка»: компактный экран, не дублирующий подробные вкладки Analytics. */
+let _summaryManagement = { start: '', end: '', group: '', preset: 'week', ready: false };
+
+function summaryPresetDates(preset) {
+  const end = new Date(); const start = new Date(end);
+  start.setDate(end.getDate() - (preset === 'day' ? 0 : preset === 'month' ? 29 : 6));
+  return { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+}
+
+function summaryDelta(value, lowerIsBetter = false) {
+  if (value == null) return '<span class="summary-delta is-neutral">Нет сравнения</span>';
+  const improved = lowerIsBetter ? value < 0 : value > 0;
+  return `<span class="summary-delta ${improved ? 'is-positive' : value === 0 ? 'is-neutral' : 'is-negative'}">${value > 0 ? '+' : ''}${fmtA(value, 1)} к прошлому периоду</span>`;
+}
+
+async function renderManagementSummary() {
+  const el = document.getElementById('view-summary');
+  if (!el) return;
+  const navGeneration = STATE.navGen;
+  if (!_summaryManagement.ready) Object.assign(_summaryManagement, summaryPresetDates('week'), { ready: true });
+  const state = _summaryManagement;
+  el.innerHTML = `
+    <div class="view-header summary-management-header"><div><div class="section-kicker">Сводка</div><h2 class="section-title">Управленческий дашборд</h2><p class="section-subtitle">Состояние команды, изменения и точки внимания.</p></div><div class="summary-updated" id="summary-updated">Обновляем данные…</div></div>
+    <section class="summary-filter-panel" aria-label="Фильтры сводки">
+      <div class="summary-period-switch">${[['day','День'],['week','Неделя'],['month','Месяц'],['custom','Диапазон']].map(([key,label]) => `<button type="button" data-summary-preset="${key}" class="${state.preset === key ? 'active' : ''}">${label}</button>`).join('')}</div>
+      <label><span>С</span><input id="summary-start" type="date" class="form-input" value="${state.start}"></label>
+      <label><span>По</span><input id="summary-end" type="date" class="form-input" value="${state.end}"></label>
+      <label><span>Группа</span><select id="summary-group" class="form-select"><option value="">Все группы</option></select></label>
+      <button class="btn-outline btn-sm" id="summary-reset">Сбросить</button><button class="btn-outline btn-sm" id="summary-export">Excel</button><button class="btn-primary btn-sm" id="summary-refresh">Обновить</button>
+    </section><div id="summary-warning"></div><div id="summary-management-content"><div class="summary-skeleton-grid">${'<i></i>'.repeat(4)}</div></div>`;
+  const groupSelect = el.querySelector('#summary-group');
+  try {
+    const groups = await analyticsFetch('groups-list', {});
+    if (isNavStale(navGeneration)) return;
+    groupSelect.innerHTML += (groups.items || []).map(group => `<option value="${group.id}" ${String(group.id) === state.group ? 'selected' : ''}>${esc(group.name)}</option>`).join('');
+  } catch { /* необязательный фильтр */ }
+
+  function readFilters() {
+    state.start = el.querySelector('#summary-start').value; state.end = el.querySelector('#summary-end').value;
+    state.group = groupSelect.value; state.preset = 'custom';
+  }
+
+  async function load() {
+    const content = el.querySelector('#summary-management-content'); const warning = el.querySelector('#summary-warning'); const button = el.querySelector('#summary-refresh');
+    if (!state.start || !state.end || state.start > state.end) { warning.innerHTML = '<div class="an-availability-note an-availability-note-error">Проверьте выбранный диапазон дат.</div>'; return; }
+    button.disabled = true; button.textContent = 'Обновляем…';
+    try {
+      const params = { start_date: state.start, end_date: state.end }; if (state.group) params.group_id = state.group;
+      const data = await analyticsFetch('management-dashboard', params);
+      if (isNavStale(navGeneration)) return;
+      const health = data.team_health || {}; const metrics = data.metric_cards || []; const groups = data.groups || []; const priorities = data.priority_operators || [];
+      warning.innerHTML = data.data_availability_warning ? `<div class="an-availability-note">${esc(data.data_availability_warning)}</div>` : '';
+      el.querySelector('#summary-updated').textContent = `Обновлено: ${new Date().toLocaleString('ru-RU')}`;
+      content.innerHTML = `<section class="summary-health-strip an-status-${esc(health.status || 'no_data')}"><div><span>Состояние команды</span><strong>${health.score || 0}<small>/100 · ${analyticsStatusLabel(health.status)}</small></strong></div><p>${health.attention_count ? `${health.attention_count} оператор(ов) требуют внимания, критично — ${health.critical_count || 0}.` : 'Отклонений по доступным данным не обнаружено.'}</p><div class="summary-coverage"><b>${health.operators_with_data || 0}</b><span>учтено</span><b>${Math.max(0, (health.operators_count || 0) - (health.operators_with_data || 0))}</b><span>без данных</span></div></section>
+        <section class="summary-management-kpis">${metrics.map(metric => `<article class="summary-management-kpi an-status-${esc(metric.status)}" title="${esc(metric.definition || '')}"><div><span>${esc(metric.label)}</span><b>${analyticsStatusLabel(metric.status)}</b></div><strong>${analyticsMetricValue(metric.value, metric.unit)}</strong><small>Цель: ${analyticsMetricValue(metric.target, metric.unit)} · выборка: ${metric.operators_with_data || 0}</small>${summaryDelta(metric.change, metric.key === 'penalty')}</article>`).join('')}</section>
+        <section class="summary-management-grid"><article class="an-exec-section"><div class="an-exec-section-head"><div><span>Группы</span><small>Сначала группы с риском</small></div><button onclick="navigateTo('analytics',{tab:'groups'})">Подробнее</button></div><div class="an-group-health-list">${groups.slice(0,5).map(group => `<div class="an-group-health-row an-status-${esc(group.status)}"><div class="an-group-health-name"><i></i><div><strong>${esc(group.group_name)}</strong><small>${group.operators_count} оператор(ов), данные ${group.coverage_percent}%</small></div></div><div class="an-group-health-meter"><span><i style="width:${group.health_score}%"></i></span><b>${group.health_score}/100</b></div><div class="an-group-health-risk"><strong>${group.operators_in_risk}</strong><span>требуют внимания</span></div></div>`).join('') || '<div class="empty-line">Нет данных по группам</div>'}</div></article>
+        <article class="an-exec-section"><div class="an-exec-section-head"><div><span>Требуют внимания</span><small>Главные приоритеты периода</small></div><button onclick="navigateTo('analytics',{tab:'operators'})">Все операторы</button></div><div class="summary-attention-compact">${priorities.slice(0,5).map(item => `<div><span class="summary-v2-status ${item.status === 'critical' ? 'is-danger' : 'is-warning'}"></span><span><strong title="${esc(item.full_name)}">${esc(item.full_name)}</strong><small>${esc(item.recommendation)}</small></span><b>${item.health_score}</b></div>`).join('') || '<div class="empty-line">Все доступные показатели в норме</div>'}</div></article></section>`;
+    } catch {
+      content.innerHTML = '<div class="an-exec-section an-error-state"><strong>Не удалось загрузить сводку</strong><p>Проверьте период и повторите попытку.</p><button class="btn-outline btn-sm" id="summary-retry">Повторить</button></div>';
+      content.querySelector('#summary-retry')?.addEventListener('click', load);
+    } finally { button.disabled = false; button.textContent = 'Обновить'; }
+  }
+
+  el.querySelectorAll('[data-summary-preset]').forEach(button => button.addEventListener('click', () => { state.preset = button.dataset.summaryPreset; if (state.preset !== 'custom') Object.assign(state, summaryPresetDates(state.preset)); renderManagementSummary(); }));
+  el.querySelector('#summary-refresh').addEventListener('click', () => { readFilters(); load(); });
+  el.querySelector('#summary-reset').addEventListener('click', () => { Object.assign(state, summaryPresetDates('week'), { group: '', preset: 'week' }); renderManagementSummary(); });
+  el.querySelector('#summary-export').addEventListener('click', () => { readFilters(); const params = new URLSearchParams({ start_date: state.start, end_date: state.end }); if (state.group) params.set('group_id', state.group); window.location.href = api._base() + '/api/analytics/export.xlsx?' + params; });
+  await load();
+}
+
 async function renderRatingOverviewTab(el) {
   const role  = STATE.user?.role || 'operator';
   const isOp  = role === 'operator';
@@ -3619,6 +3705,8 @@ function shopCard(item, balance, role) {
    VIEW: СВОДКА (SUMMARY)
 ══════════════════════════════════════ */
 function renderSummary() {
+  return renderManagementSummary();
+  /* Старый вариант оставлен ниже как совместимый fallback для старых сборок. */
   const el = document.getElementById('view-summary');
   if (!el) return;
   const d = STATE.dashboard;
@@ -3773,6 +3861,7 @@ function renderSummary() {
 /* ══════════════════════════════════════
    VIEW: ОПЕРАТОРЫ (ADMIN)
 ══════════════════════════════════════ */
+
 /* ══════════════════════════════════════
    СВОДКА: детальная сводка по неделе с фильтрами (ТЗ §9)
 ══════════════════════════════════════ */
@@ -3971,6 +4060,7 @@ function exportAdminSummary() {
   if (f.group_id) params.group_id = f.group_id;
   window.open(api.exportUrl('/api/exports/rating', params), '_blank');
 }
+
 /* ══════════════════════════════════════
    СВОДКА: быстрые действия по строке оператора (ТЗ §9.5)
    Начислить / Списать / Открыть кабинет / Открыть историю / Открыть заявки
@@ -4086,6 +4176,7 @@ async function openOperatorCabinetModal(operatorId, operatorName) {
       <button class="btn-primary" onclick="closeModal(); openHistoryForOperator(${operatorId}, '${esc(operatorName).replace(/'/g, '&#39;')}')">Вся история →</button>
     </div>`;
 }
+
 function renderAdminOperators() {
   return renderUsersPage();
 }
@@ -7196,6 +7287,7 @@ window.manualOperatorLevelUi = manualOperatorLevelUi;
 /* ══════════════════════════════════════
    VIEW: РАСЧЁТ ЗА ПЕРИОД
 ══════════════════════════════════════ */
+
 /* ══════════════════════════════════════
    КОИНЫ: Еженедельный расчёт (ТЗ §3) — preview / apply / история запусков
 ══════════════════════════════════════ */
@@ -7399,6 +7491,7 @@ function exportWeeklyAccrualPeriod(format = 'csv') {
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
   window.open(api.exportUrl('/api/exports/weekly-results', { period_start: start, period_end: end, format }), '_blank');
 }
+
 /* ══════════════════════════════════════
    КОИНЫ: Настройки начислений (ТЗ §4) — GET/PUT /api/settings/coin-rules
 ══════════════════════════════════════ */
@@ -7531,6 +7624,7 @@ async function saveCoinRulesSettings() {
   const body = document.getElementById('coins-tab-body');
   if (body) renderCoinRulesSettingsTab(body);
 }
+
 let _sessionFilterStatus = 'active';
 let _sessionFilterQuery = '';
 let _sessionFilterRole = 'all';
@@ -7767,6 +7861,7 @@ async function revokeAllUserSessions(userId) {
 
 window.revokeUserSession = revokeUserSession;
 window.revokeAllUserSessions = revokeAllUserSessions;
+
 function renderPeriodReport() {
   const el = document.getElementById('view-period-report');
   if (!el) return;
@@ -8243,13 +8338,16 @@ function renderDynChart(items, metric) {
 /* ── Block: Operators table ────────────────────────────────────*/
 function renderOperatorsTableBlock(opsTable) {
   const items = opsTable.items || [];
+  const totalPages = Math.max(1, Math.ceil((opsTable.total || items.length) / (opsTable.page_size || 100)));
   return `<div class="an-card">
     <div class="an-card-head-row">
       <span>Операторы за период</span>
-      <button class="btn-outline btn-sm" id="an-export-ops-btn">Экспорт CSV</button>
+      <span class="an-table-count">Найдено: ${opsTable.total ?? items.length}</span>
+      <button class="btn-outline btn-sm" id="an-export-ops-btn">Экспорт Excel</button>
     </div>
     <p class="an-tab-hint">Каждая строка — один оператор за выбранный период. «Итог» — общий балл (по нему сортировка), красным — кто в зоне риска. Нажмите на строку, чтобы раскрыть детали (звонки, часы, норма, эффективность).</p>
-    <div id="an-ops-table-wrap">${renderOpsTable(items, 'final_points', 'desc')}</div>
+    <div id="an-ops-table-wrap">${renderOpsTable(items, opsTable.sort_by || 'final_points', opsTable.sort_order || 'desc')}</div>
+    ${totalPages > 1 ? `<div class="an-pagination"><button class="btn-outline btn-sm" data-an-page="prev" ${opsTable.page <= 1 ? 'disabled' : ''}>Назад</button><span>Страница ${opsTable.page} из ${totalPages}</span><button class="btn-outline btn-sm" data-an-page="next" ${opsTable.page >= totalPages ? 'disabled' : ''}>Далее</button></div>` : ''}
   </div>`;
 }
 
@@ -8883,6 +8981,9 @@ let _analyticsState = {
   coverageTotal: null,
   lastUpdatedAt: null,
   qualityGridWeekStart: null,
+  operatorPage: 1,
+  operatorSort: 'final_points',
+  operatorSortOrder: 'desc',
 };
 
 function analyticsApiUrl(path, params) {
@@ -9081,13 +9182,13 @@ async function renderAnalytics() {
   const myNavGen = STATE.navGen;
 
   const urlParams = getAnalyticsParams();
+  _analyticsState.tab = ANALYTICS_TABS.some(item => item.key === urlParams.tab) ? urlParams.tab : 'overview';
 
   if (!_analyticsState.startDate) {
     const initialPeriod = await resolveInitialAnalyticsPeriod(urlParams);
     if (isNavStale(myNavGen)) return;
     _analyticsState.startDate = initialPeriod.start;
     _analyticsState.endDate = initialPeriod.end;
-    _analyticsState.tab = urlParams.tab;
     _analyticsState.groupId = urlParams.group;
     _analyticsState.operatorQuery = urlParams.operator;
     _analyticsState.participationStatus = urlParams.participation;
@@ -9100,6 +9201,9 @@ async function renderAnalytics() {
     </div>
     ${renderAnalyticsContextBar()}
     <div class="an-filters-card">
+      <div class="an-quick-periods" aria-label="Быстрый выбор периода">
+        <button type="button" data-an-period="day">День</button><button type="button" data-an-period="week">Неделя</button><button type="button" data-an-period="month">Месяц</button><span>или укажите диапазон вручную</span>
+      </div>
       <div class="an-filters-row">
         <div class="form-group">
           <label class="form-label">Период с</label>
@@ -9129,6 +9233,7 @@ async function renderAnalytics() {
           <input type="checkbox" id="an-only-data" ${_analyticsState.onlyWithData ? 'checked' : ''}>
           Только с данными
         </label>
+        <button class="btn-outline" id="an-reset-btn">Сбросить</button>
         <button class="btn-primary" id="an-apply-btn">Применить</button>
       </div>
       ${_analyticsState.availablePeriods.length ? `<div class="an-period-availability">Доступные данные: ${esc(_analyticsState.availablePeriods[0].label)}</div>` : ''}
@@ -9196,12 +9301,29 @@ async function renderAnalytics() {
 
   el.querySelector('#an-apply-btn').addEventListener('click', () => {
     syncStateFromFilters();
+    _analyticsState.operatorPage = 1;
+    if (!_analyticsState.startDate || !_analyticsState.endDate || _analyticsState.startDate > _analyticsState.endDate) {
+      el.querySelector('#an-availability-warning').innerHTML = '<div class="an-availability-note an-availability-note-error">Проверьте выбранный диапазон дат.</div>';
+      return;
+    }
     _analyticsState.qualityGridWeekStart = null; // пересчитать неделю сетки под новый период
     updateUrl();
     refreshAnalyticsContextBar(el);
     refreshAnalyticsCoverage(el);
     loadAnalyticsTab(_analyticsState.tab);
   });
+
+  el.querySelector('#an-reset-btn').addEventListener('click', async () => {
+    const initial = await resolveInitialAnalyticsPeriod({});
+    Object.assign(_analyticsState, { startDate: initial.start, endDate: initial.end, groupId: '', operatorQuery: '', participationStatus: 'all', onlyWithData: false, operatorPage: 1 });
+    renderAnalytics();
+  });
+  el.querySelectorAll('[data-an-period]').forEach(button => button.addEventListener('click', () => {
+    const end = new Date(); const start = new Date(end);
+    start.setDate(end.getDate() - (button.dataset.anPeriod === 'day' ? 0 : button.dataset.anPeriod === 'month' ? 29 : 6));
+    el.querySelector('#an-start').value = start.toISOString().slice(0, 10);
+    el.querySelector('#an-end').value = end.toISOString().slice(0, 10);
+  }));
 
   /* ── Навигация: 6 основных вкладок + «Ещё» (desktop), один select (mobile).
      ТЗ §1.2 — горизонтальный скролл вкладок убран; на мобильном один выпадающий
@@ -9513,17 +9635,29 @@ function renderAnalyticsEmptyState() {
 /* ── Вкладка: Операторы (таблица эффективности + зона внимания) ─*/
 async function loadOperatorsTab(content) {
   // Один комбинированный запрос вместо 2
-  const combined = await analyticsFetch('operators-combined', analyticsOpParams());
-  const opsTable = { items: combined.items || [] };
+  const combined = await analyticsFetch('operators-combined', {
+    ...analyticsOpParams(), page: _analyticsState.operatorPage, page_size: 100,
+    sort_by: _analyticsState.operatorSort, sort_order: _analyticsState.operatorSortOrder,
+  });
+  const opsTable = combined;
   const topAttn = combined.top_and_attention || {};
 
   content.innerHTML =
     renderOperatorsTableBlock(opsTable) +
     renderAttentionZoneTableBlock(topAttn.attention_zone || []);
 
-  bindOpsTableSort(opsTable.items || []);
+  bindOpsTableSort();
 
-  content.querySelector('#an-export-ops-btn')?.addEventListener('click', () => exportOperatorsCsv(opsTable.items || []));
+  content.querySelectorAll('[data-an-page]').forEach(button => button.addEventListener('click', () => {
+    _analyticsState.operatorPage += button.dataset.anPage === 'next' ? 1 : -1;
+    loadAnalyticsTab('operators');
+  }));
+
+  content.querySelector('#an-export-ops-btn')?.addEventListener('click', downloadAnalyticsWorkbook);
+}
+
+function downloadAnalyticsWorkbook() {
+  window.location.href = api._base() + '/api/analytics/export.xlsx?' + new URLSearchParams(analyticsOpParams()).toString();
 }
 
 function renderAttentionZoneTableBlock(items) {
@@ -9551,19 +9685,19 @@ function renderAttentionZoneTableBlock(items) {
   </div>`;
 }
 
-function bindOpsTableSort(items) {
+function bindOpsTableSort() {
   const wrap = document.getElementById('an-ops-table-wrap');
   if (!wrap) return;
-  let curSortKey = 'final_points', curSortDir = 'desc';
   // Делегирование на постоянном контейнере: переживает пересортировку (innerHTML
   // меняется, но сам wrap — нет), поэтому и сортировка, и раскрытие строк работают.
   wrap.addEventListener('click', (e) => {
     const th = e.target.closest('.sortable');
     if (th && wrap.contains(th)) {
       const key = th.dataset.sort;
-      if (curSortKey === key) curSortDir = curSortDir === 'desc' ? 'asc' : 'desc';
-      else { curSortKey = key; curSortDir = 'desc'; }
-      wrap.innerHTML = renderOpsTable(items, curSortKey, curSortDir);
+      if (_analyticsState.operatorSort === key) _analyticsState.operatorSortOrder = _analyticsState.operatorSortOrder === 'desc' ? 'asc' : 'desc';
+      else { _analyticsState.operatorSort = key; _analyticsState.operatorSortOrder = 'desc'; }
+      _analyticsState.operatorPage = 1;
+      loadAnalyticsTab('operators');
       return;
     }
     const row = e.target.closest('.an-ops-row');
@@ -10327,6 +10461,7 @@ async function loadExportTab(content) {
   content.innerHTML = `<div class="an-card">
     <div class="an-card-head">Экспорт отчётов</div>
     <div class="an-export-grid">
+      <button class="btn-primary an-export-xlsx-btn">Скачать Excel по текущим фильтрам</button>
       <button class="btn-outline an-export-btn" data-export="operators">Таблица операторов</button>
       <button class="btn-outline an-export-btn" data-export="groups">Сравнение групп</button>
       <button class="btn-outline an-export-btn" data-export="penalties">Штрафы</button>
@@ -10336,6 +10471,8 @@ async function loadExportTab(content) {
     </div>
     <p style="font-size:12px;color:var(--text-muted);margin-top:14px">Экспорт учитывает выбранные фильтры периода, группы и оператора.</p>
   </div>`;
+
+  content.querySelector('.an-export-xlsx-btn')?.addEventListener('click', downloadAnalyticsWorkbook);
 
   content.querySelectorAll('.an-export-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -10395,6 +10532,7 @@ const RATING_TABS = [
   { key: 'groups',   label: 'Сравнение групп' },
   { key: 'progress', label: 'Мой прогресс' },
 ];
+
 let _ratingActiveTab = 'overview';
 
 async function exportRatingFromRatingPage() {
@@ -10849,6 +10987,7 @@ const WHEEL_PRIZE_ICON = {
 const WHEEL_FAST_MS = 900;
 const WHEEL_TTL_MS = 45_000;
 const WHEEL_STATIC_TTL_MS = 5 * 60_000;
+
 function wheelCachedFetch(key, fetcher, fallback, onFresh, ttlMs = WHEEL_TTL_MS) {
   const cached = swrReadRaw(key);
   const saveFresh = (fresh, previous) => {
@@ -13451,6 +13590,7 @@ async function loadTestAnalyticsBlock(testId) {
     body.innerHTML = `<div class="status-line status-error">${esc(e.message)}</div>`;
   }
 }
+
 /* ══════════════════════════════════════
    РОЗЫГРЫШИ (ТЗ P2)
    Билеты — только из Колеса WOW. Оператор вкладывает билеты в розыгрыш,
@@ -13708,6 +13848,7 @@ window.renderRaffles = renderRaffles;
 window.submitEnterRaffle = submitEnterRaffle;
 window.openCreateRaffleModal = openCreateRaffleModal;
 window.submitCreateRaffle = submitCreateRaffle;
+
 let _missionAttempt = null;
 let _missionDirty = false;
 let _missionActionBusy = false;
@@ -14438,6 +14579,7 @@ async function saveMissionProviderWindow(missionId) {
     showToast(error.message, 'error');
   }
 }
+
 let _missionWorldCode = sessionStorage.getItem('puls-mission-world') || '';
 
 function learningWorldIllustration(world) {
@@ -14498,6 +14640,7 @@ function backToLearningWorlds() {
   sessionStorage.removeItem('puls-mission-world');
   renderMissions();
 }
+
 let _photoDialogReturnFocus = null;
 
 function photoRequirements(attempt) {
@@ -14611,6 +14754,7 @@ function closeMissionPreviewDialog() {
   if (_photoDialogReturnFocus?.isConnected) _photoDialogReturnFocus.focus();
   _photoDialogReturnFocus = null;
 }
+
 function renderLearningWorldRoute(el, world) {
   const missions = world.missions || [];
   el.innerHTML = `<div class="missions-page world-route-page" style="--world-accent:${esc(world.accent_color)}">
@@ -14622,6 +14766,7 @@ function renderLearningWorldRoute(el, world) {
     </section>
   </div>`;
 }
+
 function saparRow(icon, title, action = '', accent = false, subtitle = '') {
   const attrs = action ? `onclick="${action}"` : 'disabled';
   return `<button type="button" class="sapar-list-row ${accent ? 'is-target' : ''}" ${attrs}><i>${icon}</i><span><b>${esc(title)}</b>${subtitle ? `<small>${esc(subtitle)}</small>` : ''}</span><em>›</em></button>`;
@@ -14689,6 +14834,7 @@ function scheduleSaparProcessing(attempt) {
     if (_missionAttempt?.id === attempt.id && _missionAttempt?.current_step?.screen_key === 'sapar_processing') missionAction('finish_processing');
   }, 1200);
 }
+
 function smzPurposeForScreen(screen) {
   return screen.includes('documents') ? 'documents' : 'auth';
 }
@@ -14808,6 +14954,7 @@ function openTrainingAvr(number) {
   screen.insertAdjacentHTML('beforeend', `<div class="smz-pdf-preview" role="dialog" aria-modal="true" aria-label="Предпросмотр учебного АВР"><div><button type="button" onclick="this.closest('.smz-pdf-preview').remove()" aria-label="Закрыть">×</button><span>УЧЕБНЫЙ ДОКУМЕНТ</span><h3>АВР ${number}</h3><p>Без персональных данных, реальной подписи и юридической силы.</p></div></div>`);
   screen.querySelector('.smz-pdf-preview button')?.focus();
 }
+
 /* Operator workspace v3: one visual system for cabinet and rating. */
 
 const OP_COIN = '₡';
@@ -15130,6 +15277,7 @@ function opProgressInfographic(pointItems, coinItems, rankItems) {
 
 window.renderCabinet = renderCabinet;
 window.renderRating = renderRating;
+
 /* Operator rating v4: a focused competition dashboard without data tables. */
 
 const rcManagementRating = window.renderRating;
@@ -15415,3 +15563,4 @@ async function rcRatingEntry() {
 }
 
 window.renderRating = rcRatingEntry;
+

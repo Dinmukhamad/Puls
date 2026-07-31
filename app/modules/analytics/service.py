@@ -6,9 +6,11 @@ calculators (compute_*), управляет TTL-кешем, формирует �
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from io import BytesIO
 
 from fastapi import HTTPException
+from openpyxl import Workbook
 from sqlalchemy.orm import Session
 
 from app.models.entities import Group, Operator
@@ -553,17 +555,40 @@ def daily_dynamics(db, start_date, end_date, metric, group_id,
     }
 
 
-def operators_table(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data) -> dict:
+def operators_table(
+    db, start_date, end_date, group_id, operator_query, participation_status, only_with_data,
+    page=1, page_size=100, sort_by="final_points", sort_order="desc",
+) -> dict:
     _validate_range(start_date, end_date)
     key = cache_key("operators", start_date=start_date, end_date=end_date, group_id=group_id,
                     operator_query=operator_query, participation_status=participation_status,
-                    only_with_data=only_with_data)
+                    only_with_data=only_with_data, page=page, page_size=page_size,
+                    sort_by=sort_by, sort_order=sort_order)
     cached = cache_get(key)
     if cached is not None:
         return cached
     rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data)
-    out = [_operator_row_payload(r, include_operator_id=False) for r in rows]
-    return {"items": out}
+    allowed = {"full_name", "group_name", "calls_total", "total_hours", "kvz", "quality_avg",
+               "efficiency_percent", "penalty_minutes", "final_points"}
+    actual_sort = sort_by if sort_by in allowed else "final_points"
+    out = [_operator_row_payload(r, include_operator_id=True) for r in rows]
+    out.sort(
+        key=lambda item: (
+            item.get(actual_sort) is None,
+            item.get(actual_sort).casefold() if isinstance(item.get(actual_sort), str) else item.get(actual_sort),
+            item.get("full_name", "").casefold(),
+        ),
+        reverse=sort_order == "desc",
+    )
+    total = len(out)
+    offset = (page - 1) * page_size
+    result = {
+        "items": out[offset:offset + page_size], "total": total, "page": page,
+        "page_size": page_size, "sort_by": actual_sort, "sort_order": sort_order,
+        "empty_reason": None if total else "no_matching_operators",
+    }
+    cache_set(key, result)
+    return result
 
 
 def groups_comparison(db, start_date, end_date, group_id=None) -> dict:
@@ -825,6 +850,7 @@ def overview(db, start_date, end_date, group_id, operator_query, participation_s
 
 
 def management_dashboard(db, start_date, end_date, group_id, operator_query, participation_status) -> dict:
+    _validate_range(start_date, end_date)
     key = cache_key("management-dashboard", start_date=start_date, end_date=end_date,
                     group_id=group_id, operator_query=operator_query,
                     participation_status=participation_status)
@@ -834,25 +860,71 @@ def management_dashboard(db, start_date, end_date, group_id, operator_query, par
 
     rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
     result = compute_management_dashboard(rows)
+    duration = (end_date - start_date).days
+    prev_end = start_date - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=duration)
+    previous = None
+    try:
+        previous_rows = get_rows(db, prev_start, prev_end, group_id, operator_query, participation_status)
+        previous = compute_management_dashboard(previous_rows)
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+    previous_cards = {item["key"]: item for item in (previous or {}).get("metric_cards", [])}
+    for card in result.get("metric_cards", []):
+        old_value = previous_cards.get(card["key"], {}).get("value")
+        card["previous_value"] = old_value
+        card["change"] = (
+            round(card["value"] - old_value, 2)
+            if card.get("value") is not None and old_value is not None else None
+        )
+        card["definition"] = metric_definition(card["key"])["definition"]
     result["period"] = {"start": str(start_date), "end": str(end_date)}
+    result["previous_period"] = {"start": str(prev_start), "end": str(prev_end)}
+    result["previous_team_health"] = (previous or {}).get("team_health")
+    result["metric_definitions"] = {
+        key: metric_definition(key) for key in ("quality", "kvz", "efficiency", "penalty")
+    }
     result["data_availability_warning"] = data_availability_warning(db, start_date, end_date)
     cache_set(key, result, ttl_seconds=300)
     return result
 
 
-def operators_combined(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data) -> dict:
+def operators_combined(
+    db, start_date, end_date, group_id, operator_query, participation_status, only_with_data,
+    page=1, page_size=100, sort_by="final_points", sort_order="desc",
+) -> dict:
     key = cache_key("operators-combined", start_date=start_date, end_date=end_date,
                     group_id=group_id, operator_query=operator_query,
-                    participation_status=participation_status, only_with_data=only_with_data)
+                    participation_status=participation_status, only_with_data=only_with_data,
+                    page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order)
     cached = cache_get(key)
     if cached is not None:
         return cached
 
     rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data)
+    allowed = {"full_name", "group_name", "calls_total", "total_hours", "kvz", "quality_avg",
+               "efficiency_percent", "penalty_minutes", "final_points"}
+    actual_sort = sort_by if sort_by in allowed else "final_points"
     ops_out = [_operator_row_payload(r, include_operator_id=True) for r in rows]
+    ops_out.sort(
+        key=lambda item: (
+            item.get(actual_sort) is None,
+            item.get(actual_sort).casefold() if isinstance(item.get(actual_sort), str) else item.get(actual_sort),
+            item.get("full_name", "").casefold(),
+        ),
+        reverse=sort_order == "desc",
+    )
     top_attn = compute_top_and_attention(rows)
 
-    result = {"items": ops_out, "top_and_attention": top_attn}
+    total = len(ops_out)
+    offset = (page - 1) * page_size
+    result = {
+        "items": ops_out[offset:offset + page_size], "top_and_attention": top_attn,
+        "total": total, "page": page, "page_size": page_size,
+        "sort_by": actual_sort, "sort_order": sort_order,
+        "empty_reason": None if total else "no_matching_operators",
+    }
     cache_set(key, result, ttl_seconds=300)
     return result
 
@@ -892,3 +964,40 @@ def quality_combined(db, start_date, end_date, group_id) -> dict:
 def groups_list(db, group_id=None) -> dict:
     groups = repo.active_groups(db, group_id)
     return {"items": [{"id": g.id, "name": g.name} for g in groups]}
+
+
+def export_workbook(
+    db: Session, start_date: date, end_date: date, group_id: int | None,
+    operator_query: str | None, participation_status: str | None, only_with_data: bool,
+) -> bytes:
+    """Формирует XLSX из тех же серверных строк и фильтров, что использует UI."""
+    _validate_range(start_date, end_date)
+    rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data)
+    payload = [_operator_row_payload(row, include_operator_id=False) for row in rows]
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Аналитика"
+    sheet.append(["Аналитика Puls"])
+    sheet.append(["Дата формирования", datetime.now().strftime("%d.%m.%Y %H:%M")])
+    sheet.append(["Период", f"{start_date:%d.%m.%Y} — {end_date:%d.%m.%Y}"])
+    sheet.append(["Группа", str(group_id) if group_id is not None else "Все доступные"])
+    sheet.append(["Оператор", operator_query or "Все"])
+    sheet.append(["Статус участия", participation_status or "Все"])
+    sheet.append([])
+    sheet.append([
+        "Оператор", "Группа", "Звонки", "Часы", "База часов", "КВЗ", "Качество",
+        "Оценённых звонков", "Эффективность, %", "Штрафы, мин", "Итоговый балл", "Статус риска",
+    ])
+    for row in payload:
+        sheet.append([
+            row["full_name"], row["group_name"], row["calls_total"], row["total_hours"],
+            row["base_hours"], row["kvz"], row["quality_avg"], row["quality_calls_count"],
+            row["efficiency_percent"], row["penalty_minutes"], row["final_points"], row["risk_status"],
+        ])
+    sheet.freeze_panes = "A9"
+    sheet.auto_filter.ref = f"A8:L{max(8, sheet.max_row)}"
+    for column, width in zip("ABCDEFGHIJKL", [34, 24, 12, 12, 14, 10, 13, 18, 18, 16, 17, 16], strict=True):
+        sheet.column_dimensions[column].width = width
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()

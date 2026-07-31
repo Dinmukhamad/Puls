@@ -1184,6 +1184,8 @@ function shopCard(item, balance, role) {
    VIEW: СВОДКА (SUMMARY)
 ══════════════════════════════════════ */
 function renderSummary() {
+  return renderManagementSummary();
+  /* Старый вариант оставлен ниже как совместимый fallback для старых сборок. */
   const el = document.getElementById('view-summary');
   if (!el) return;
   const d = STATE.dashboard;

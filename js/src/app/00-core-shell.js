@@ -17,6 +17,7 @@ const SWR_STATIC_TTL_MS  = 600_000; // 10 минут — статичные (у�
 const SWR_USER_TTL_MS    = 300_000; // 5 минут — пользователи
 const SWR_FAST_TTL_MS    = 45_000;  // короткий кеш для разделов, которые должны открываться сразу
 const SWR_VERSION = 'redesign-v2-2'; // при смене версии весь кеш сбрасывается
+const SWR_IN_FLIGHT = new Map();
 (function() {
   const stored = sessionStorage.getItem('puls-swr-version');
   if (stored !== SWR_VERSION) {
@@ -64,19 +65,28 @@ async function swrFetch(key, fetcher, onUpdate, ttlMs = SWR_DEFAULT_TTL_MS) {
     // Есть кеш — отдаём его сразу, а свежие данные подгружаем в фоне
     const age = Date.now() - cached.ts;
     if (age > ttlMs) {
-      fetcher().then(fresh => {
+      const refresh = SWR_IN_FLIGHT.get(key) || Promise.resolve().then(fetcher);
+      SWR_IN_FLIGHT.set(key, refresh);
+      refresh.then(fresh => {
         const changed = JSON.stringify(fresh) !== JSON.stringify(cached.data);
         swrWriteRaw(key, { data: fresh, ts: Date.now() });
         if (changed && onUpdate) onUpdate(fresh);
-      }).catch(() => { /* фоновое обновление не удалось — старые данные остаются видимыми, это нормально */ });
+      }).catch(() => { /* старые данные остаются видимыми */ })
+        .finally(() => { if (SWR_IN_FLIGHT.get(key) === refresh) SWR_IN_FLIGHT.delete(key); });
     }
     return cached.data;
   }
 
   // Кеша нет вообще — обычный fetch, без фонового режима
-  const fresh = await fetcher();
-  swrWriteRaw(key, { data: fresh, ts: Date.now() });
-  return fresh;
+  const pending = SWR_IN_FLIGHT.get(key) || Promise.resolve().then(fetcher);
+  SWR_IN_FLIGHT.set(key, pending);
+  try {
+    const fresh = await pending;
+    swrWriteRaw(key, { data: fresh, ts: Date.now() });
+    return fresh;
+  } finally {
+    if (SWR_IN_FLIGHT.get(key) === pending) SWR_IN_FLIGHT.delete(key);
+  }
 }
 
 /** Принудительно стирает один ключ или все ключи кеша (например после сохранения расчёта периода) */

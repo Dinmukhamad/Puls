@@ -7,8 +7,10 @@ SQL — repository.py, кеш — cache.py.
 from __future__ import annotations
 
 from datetime import date
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.security import get_current_user, supervisor_scope_group_id
@@ -96,10 +98,15 @@ def get_operators_table(
     operator_query: str | None = Query(None),
     participation_status: str | None = Query(None),
     only_with_data: bool = Query(False),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=200),
+    sort_by: str = Query("final_points"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ) -> dict:
     return service.operators_table(
-        db, start_date, end_date, group_id, operator_query, participation_status, only_with_data
+        db, start_date, end_date, group_id, operator_query, participation_status, only_with_data,
+        page, page_size, sort_by, sort_order,
     )
 
 
@@ -254,10 +261,15 @@ def get_operators_combined(
     operator_query: str | None = Query(None),
     participation_status: str | None = Query(None),
     only_with_data: bool = Query(False),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=200),
+    sort_by: str = Query("final_points"),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
 ) -> dict:
     return service.operators_combined(
-        db, start_date, end_date, group_id, operator_query, participation_status, only_with_data
+        db, start_date, end_date, group_id, operator_query, participation_status, only_with_data,
+        page, page_size, sort_by, sort_order,
     )
 
 
@@ -287,3 +299,24 @@ def get_groups_list(
     group_id: int | None = Depends(_analytics_group_scope),
 ) -> dict:
     return service.groups_list(db, group_id)
+
+
+@router.get("/export.xlsx")
+def export_analytics_xlsx(
+    start_date: date,
+    end_date: date,
+    group_id: int | None = Depends(_analytics_group_scope),
+    operator_query: str | None = Query(None),
+    participation_status: str | None = Query(None),
+    only_with_data: bool = Query(False),
+    db: Session = Depends(get_db),
+) -> StreamingResponse:
+    content = service.export_workbook(
+        db, start_date, end_date, group_id, operator_query, participation_status, only_with_data
+    )
+    filename = f"puls-analytics-{start_date}-{end_date}.xlsx"
+    return StreamingResponse(
+        BytesIO(content),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
