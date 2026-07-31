@@ -362,18 +362,54 @@ def available_periods(db: Session, group_id: int | None = None) -> dict:
     }
 
 
+MAX_ANALYTICS_RANGE_DAYS = 366
+
+
+def _validate_range(start_date, end_date, max_days: int = MAX_ANALYTICS_RANGE_DAYS) -> None:
+    """Общая валидация диапазона (ТЗ: запрещать некорректные диапазоны, без traceback)."""
+    if end_date < start_date:
+        raise HTTPException(status_code=400, detail="Дата начала не может быть позже даты окончания")
+    if (end_date - start_date).days > max_days:
+        raise HTTPException(status_code=400, detail=f"Слишком большой период — максимум {max_days} дней")
+
+
 def summary(db, start_date, end_date, group_id, operator_query, participation_status) -> dict:
+    _validate_range(start_date, end_date)
     key = cache_key("summary", start_date=start_date, end_date=end_date, group_id=group_id,
                     operator_query=operator_query, participation_status=participation_status)
     cached = cache_get(key)
     if cached is not None:
         return cached
-    rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
+    # ТЗ: отсутствие данных — не 404 на весь дашборд, а объяснимое пустое
+    # состояние с empty_reason (UI покажет нормальную заглушку).
+    try:
+        rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
+        no_reports = False
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+        rows = []
+        no_reports = True
     kpi = compute_kpi_summary(rows)
-    availability_warning = data_availability_warning(db, start_date, end_date)
+    availability_warning = (
+        "Нет загруженных данных. Загрузите Monthly Report и Report в разделе «Расчёт периода»."
+        if no_reports else data_availability_warning(db, start_date, end_date)
+    )
+    operators_total = len(rows)
+    operators_with_data = kpi.get("operators_count", 0)
+    empty_reason = "no_reports_uploaded" if no_reports else (None if operators_with_data else _empty_reason(db, False))
     result = {
         "period": {"start": str(start_date), "end": str(end_date)},
         "kpi": kpi,
+        # Покрытие данных для KPI-карточек и единого контекста (ТЗ Дашборд/§2).
+        "coverage": {
+            "operators_total": operators_total,
+            "operators_with_data": operators_with_data,
+            "operators_without_quality": kpi.get("operators_no_quality", 0),
+            "data_coverage_percent": round(operators_with_data / operators_total * 100) if operators_total else 0,
+        },
+        # Пустой результат — не ноль и не ошибка, а объяснимое состояние (ТЗ).
+        "empty_reason": empty_reason,
         "data_availability_warning": availability_warning,
     }
     cache_set(key, result)
@@ -462,8 +498,7 @@ def daily_dynamics(db, start_date, end_date, metric, group_id,
     разрыв (value=None, has_data=False), а не 0. Пустой результат — 200 с
     empty_reason, а не 400/500.
     """
-    if (end_date - start_date).days > 92:
-        raise HTTPException(status_code=400, detail="Период для динамики по дням ограничен 92 днями")
+    _validate_range(start_date, end_date, 92)
 
     rows = repo.scoped_daily_metrics(
         db, start_date, end_date, group_id=group_id,
@@ -519,6 +554,7 @@ def daily_dynamics(db, start_date, end_date, metric, group_id,
 
 
 def operators_table(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data) -> dict:
+    _validate_range(start_date, end_date)
     key = cache_key("operators", start_date=start_date, end_date=end_date, group_id=group_id,
                     operator_query=operator_query, participation_status=participation_status,
                     only_with_data=only_with_data)
@@ -638,8 +674,7 @@ def heatmap(db, start_date, end_date, metric, group_id) -> dict:
     ({dates, operators:[{full_name, values}], metric}); дни без данных — None.
     Новый контракт — в daily_grid().
     """
-    if (end_date - start_date).days > 31:
-        raise HTTPException(status_code=400, detail="Сетка ограничена периодом 31 день")
+    _validate_range(start_date, end_date, 31)
 
     rows = repo.scoped_daily_metrics(db, start_date, end_date, group_id=group_id)
     dates, cur = [], start_date
