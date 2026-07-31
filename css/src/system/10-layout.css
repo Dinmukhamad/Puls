@@ -1,0 +1,139 @@
+/* Final design system: shell, page hierarchy and responsive grids. */
+
+.container {
+  width: min(100%, calc(var(--content-max) + var(--content-pad) * 2));
+  max-width: none;
+  min-width: 0;
+  margin: 0 auto;
+  padding: var(--space-8) var(--content-pad) calc(var(--space-10) + env(safe-area-inset-bottom));
+}
+
+#app-shell,
+.app-view,
+.app-view > * {
+  min-width: 0;
+}
+
+.app-view {
+  display: none;
+}
+
+.app-view.active {
+  display: block;
+  animation: system-view-in var(--duration-default) var(--ease-standard) both;
+}
+
+.app-view.active > * {
+  width: 100%;
+  max-width: var(--content-max);
+}
+
+@keyframes system-view-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.view-header,
+.page-header,
+.ui-page-header,
+.missions-header,
+.tests-page-head,
+.coins-page-head,
+.shop-v2-header,
+.operator-cabinet-v2__header {
+  display: flex;
+  min-width: 0;
+  margin: 0 0 var(--space-6);
+  padding: 0 0 var(--space-5);
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5);
+  border-bottom: 1px solid var(--separator);
+}
+
+.view-header > div:first-child,
+.page-header > div:first-child,
+.ui-page-header__copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.view-header p,
+.page-header p,
+.ui-page-header p,
+.page-subtitle {
+  max-width: 72ch;
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-callout);
+}
+
+.section-kicker,
+.page-eyebrow,
+.ui-page-header__eyebrow,
+.missions-eyebrow {
+  display: block;
+  margin: 0 0 var(--space-1);
+  color: var(--accent-primary);
+  font-size: var(--font-size-caption);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.header-right,
+.page-actions,
+.ui-page-header__side,
+.ui-page-header__actions,
+.toolbar-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.panel-grid,
+.card-grid,
+.kpi-grid,
+.summary-kpi-grid,
+.an-kpi-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--space-4);
+}
+
+.content-grid-2,
+.summary-grid-2,
+.cabinet-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+
+.panel,
+.card,
+.an-card,
+.pr-card,
+.rating-card,
+.manual-card,
+.level-settings-card,
+.wheel-admin-panel,
+.sessions-card {
+  min-width: 0;
+}
+
+body.side-nav-collapsed {
+  padding-left: var(--sidebar-w-compact);
+}
+
+@media (min-width: 1600px) {
+  #view-analytics > *,
+  #view-period-report > *,
+  #view-sessions > * {
+    max-width: 1680px;
+  }
+}

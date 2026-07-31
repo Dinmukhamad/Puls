@@ -240,12 +240,14 @@ function parseStoredView(value) {
 }
 
 function allowedViewsForRole(role) {
-  if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests', 'missions'];
+  if (!isAdmin(role)) return ['cabinet', 'rating', 'missions', 'tests', 'shop', 'wheel', 'raffles'];
 
-  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'tests', 'missions', 'period-report', 'analytics'];
+  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'raffles', 'tests', 'missions', 'period-report', 'analytics'];
+  views.push('rating');
+  if (role === 'supervisor') views.push('cabinet');
   if (role === 'manager' || role === 'admin') views.push('operator-levels');
   if (canManageGroups(role)) views.push('groups');
-  if (role === 'admin') views.push('sessions', 'cabinet', 'rating');
+  if (role === 'admin') views.push('sessions', 'cabinet');
   return views;
 }
 
@@ -290,6 +292,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Every browser-driven route change goes through the same role guard as sidebar
 // navigation. This also prevents a restricted hash from exposing an empty or
 // stale administrative view after Back/Forward navigation.
+let _browserRouteSyncQueued = false;
+
+function queueBrowserRouteSync(requestedRoute = null) {
+  if (_browserRouteSyncQueued) return;
+  _browserRouteSyncQueued = true;
+  queueMicrotask(() => {
+    _browserRouteSyncQueued = false;
+    const role = STATE.user?.role;
+    if (!role) return;
+    const path = location.pathname.replace(/^\/+|\/+$/g, '');
+    const requested = requestedRoute || (path === 'coins'
+      ? { view: 'coins', tab: normalizeCoinTab(new URLSearchParams(location.search).get('tab')) }
+      : parseStoredView(location.hash));
+    const fallback = isAdmin(role) ? 'summary' : 'cabinet';
+    const view = allowedViewsForRole(role).includes(requested.view) ? requested.view : fallback;
+    navigateTo(view, { tab: requested.tab, history: false });
+  });
+}
+
 window.addEventListener('hashchange', () => {
   const role = STATE.user?.role;
   if (!role) return;
@@ -298,7 +319,11 @@ window.addEventListener('hashchange', () => {
   const view = allowedViewsForRole(role).includes(requested.view)
     ? requested.view
     : fallback;
-  navigateTo(view, { tab: requested.tab, history: false });
+  queueBrowserRouteSync({ view, tab: requested.tab });
+});
+
+window.addEventListener('popstate', () => {
+  queueBrowserRouteSync();
 });
 
 async function tryRestoreSession() {
@@ -317,11 +342,14 @@ async function tryRestoreSession() {
       showAuth();
     } else {
       const shell = document.getElementById('app-shell');
-      if (shell) shell.innerHTML = `
-        <div class="loading-state" style="gap:20px">
-          <p style="color:var(--danger)">Ошибка подключения: ${esc(err.message)}</p>
-          <button class="btn-primary" onclick="tryRestoreSession()">Повторить</button>
-        </div>`;
+      if (shell) {
+        shell.innerHTML = uiErrorState(
+          'Не удалось подключиться',
+          uiErrorMessage(err, 'Проверьте соединение и повторите попытку.'),
+          '<button class="btn-primary" id="restore-session-retry" type="button">Повторить</button>',
+        );
+        shell.querySelector('#restore-session-retry')?.addEventListener('click', tryRestoreSession, { once: true });
+      }
     }
   }
 }
@@ -342,14 +370,34 @@ function normalizeUser(u) {
    THEME
 ══════════════════════════════════════ */
 function initTheme() {
-  const saved = localStorage.getItem('pulse-theme') || 'light';
-  document.documentElement.setAttribute('data-theme', saved);
-  document.getElementById('theme-toggle')?.addEventListener('click', () => {
-    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const next = dark ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('pulse-theme', next);
+  const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+  const saved = localStorage.getItem('pulse-theme');
+  const initial = saved === 'dark' || saved === 'light'
+    ? saved
+    : (media?.matches ? 'dark' : 'light');
+  applyTheme(initial, saved ? 'manual' : 'system');
+  document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
+  media?.addEventListener?.('change', event => {
+    if (!localStorage.getItem('pulse-theme')) applyTheme(event.matches ? 'dark' : 'light', 'system');
   });
+}
+
+function applyTheme(theme, source = 'manual') {
+  const value = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', value);
+  document.documentElement.dataset.themeSource = source;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = value === 'dark' ? '#000000' : '#F2F2F7';
+  document.querySelectorAll('[data-theme-label]').forEach(node => {
+    node.textContent = value === 'dark' ? 'Тёмная тема' : 'Светлая тема';
+  });
+}
+
+function toggleTheme() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const next = dark ? 'light' : 'dark';
+  localStorage.setItem('pulse-theme', next);
+  applyTheme(next, 'manual');
 }
 
 /* ══════════════════════════════════════
@@ -358,35 +406,9 @@ function initTheme() {
 function initNav() {
   const sideNav = document.querySelector('.side-nav');
   if (sideNav && !sideNav.id) sideNav.id = 'primary-navigation';
-  if (sideNav && !document.getElementById('mobile-nav-toggle')) {
-    const mobileToggle = document.createElement('button');
-    mobileToggle.id = 'mobile-nav-toggle';
-    mobileToggle.className = 'mobile-nav-toggle';
-    mobileToggle.type = 'button';
-    mobileToggle.setAttribute('aria-controls', sideNav.id);
-    mobileToggle.setAttribute('aria-expanded', 'false');
-    mobileToggle.setAttribute('aria-label', 'Открыть навигацию');
-    mobileToggle.innerHTML = '<span aria-hidden="true">☰</span><b>Puls.</b>';
-
-    const backdrop = document.createElement('button');
-    backdrop.className = 'mobile-nav-backdrop';
-    backdrop.type = 'button';
-    backdrop.setAttribute('aria-label', 'Закрыть навигацию');
-
-    const setMobileNav = open => {
-      document.body.classList.toggle('mobile-nav-open', open);
-      mobileToggle.setAttribute('aria-expanded', String(open));
-      mobileToggle.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию');
-    };
-    mobileToggle.addEventListener('click', () => setMobileNav(!document.body.classList.contains('mobile-nav-open')));
-    backdrop.addEventListener('click', () => setMobileNav(false));
-    document.body.append(mobileToggle, backdrop);
-  }
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     link.addEventListener('click', e => {
       e.preventDefault();
-      document.body.classList.remove('mobile-nav-open');
-      document.getElementById('mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
       navigateTo(link.dataset.navTarget);
     });
   });
@@ -400,11 +422,130 @@ function initNav() {
       document.body.classList.add('side-nav-collapsed');
     }
   }
+
+  document.getElementById('side-bell-btn')?.addEventListener('click', () => showNotificationsModal());
+  document.getElementById('side-settings-btn')?.addEventListener('click', () => showAccountSettingsModal());
+  document.getElementById('mobile-more-close')?.addEventListener('click', () => setMobileMoreOpen(false));
+  document.getElementById('mobile-more-backdrop')?.addEventListener('click', () => setMobileMoreOpen(false));
+  document.getElementById('mobile-tab-bar')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-mobile-nav-target], [data-mobile-more]');
+    if (!button) return;
+    if (button.hasAttribute('data-mobile-more')) setMobileMoreOpen(true, button);
+    else navigateTo(button.dataset.mobileNavTarget);
+  });
+  document.getElementById('mobile-more-sheet')?.addEventListener('click', event => {
+    const nav = event.target.closest('[data-mobile-nav-target]');
+    const action = event.target.closest('[data-mobile-account-action]');
+    if (nav) {
+      setMobileMoreOpen(false);
+      navigateTo(nav.dataset.mobileNavTarget);
+    } else if (action?.dataset.mobileAccountAction === 'theme') {
+      toggleTheme();
+    } else if (action?.dataset.mobileAccountAction === 'settings') {
+      setMobileMoreOpen(false);
+      showAccountSettingsModal();
+    } else if (action?.dataset.mobileAccountAction === 'notifications') {
+      setMobileMoreOpen(false);
+      showNotificationsModal();
+    } else if (action?.dataset.mobileAccountAction === 'logout') {
+      setMobileMoreOpen(false);
+      logoutAndReload();
+    }
+  });
 }
 
-// Кеш отрендеренных разделов — не перерисовываем если уже есть актуальный HTML
+let _mobileMoreTrigger = null;
+
+function mobilePrimaryViews(role) {
+  return isAdmin(role)
+    ? ['summary', 'operators', 'analytics', 'coins']
+    : ['cabinet', 'rating', 'missions', 'shop'];
+}
+
+function navButtonContent(view) {
+  const source = document.querySelector(`.side-nav-link[data-nav-target="${view}"]`);
+  const label = source?.querySelector('span')?.textContent?.trim() || view;
+  const icon = source?.querySelector('svg')?.outerHTML || '';
+  return { label, icon };
+}
+
+function buildMobileNavigation(role) {
+  const bar = document.getElementById('mobile-tab-bar');
+  const moreLinks = document.getElementById('mobile-more-links');
+  const account = document.getElementById('mobile-more-account');
+  if (!bar || !moreLinks || !account) return;
+  const allowed = allowedViewsForRole(role);
+  const primary = mobilePrimaryViews(role).filter(view => allowed.includes(view)).slice(0, 4);
+  const secondary = allowed.filter(view => !primary.includes(view));
+  bar.innerHTML = primary.map(view => {
+    const { label, icon } = navButtonContent(view);
+    return `<button type="button" data-mobile-nav-target="${view}" aria-label="${esc(label)}">${icon}<span>${esc(label)}</span></button>`;
+  }).join('') + `<button type="button" data-mobile-more aria-haspopup="dialog" aria-controls="mobile-more-sheet">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>Ещё</span>
+  </button>`;
+  moreLinks.innerHTML = secondary.map(view => {
+    const { label, icon } = navButtonContent(view);
+    return `<button type="button" data-mobile-nav-target="${view}">${icon}<span>${esc(label)}</span><svg class="mobile-more-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>`;
+  }).join('');
+  account.innerHTML = `
+    <div class="mobile-account-summary"><span class="side-user-avatar">${esc(userInitials())}</span><div><strong>${esc(STATE.user?.full_name || STATE.user?.username || 'Профиль')}</strong><small>${esc(roleLabel(role))}</small></div></div>
+    <button type="button" data-mobile-account-action="notifications"><span>Уведомления</span><small>Новые события и награды</small></button>
+    <button type="button" data-mobile-account-action="settings"><span>Профиль и настройки</span><small>Пароль, данные аккаунта и тема</small></button>
+    <button type="button" data-mobile-account-action="theme"><span data-theme-label>${document.documentElement.dataset.theme === 'dark' ? 'Тёмная тема' : 'Светлая тема'}</span><small>Изменить оформление</small></button>
+    <button type="button" class="is-destructive" data-mobile-account-action="logout"><span>Выйти</span><small>Завершить текущую сессию</small></button>`;
+  bar.hidden = false;
+  syncMobileNavigation(STATE.currentView);
+}
+
+function userInitials() {
+  return String(STATE.user?.full_name || STATE.user?.username || '?')
+    .trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?';
+}
+
+function syncMobileNavigation(view) {
+  const bar = document.getElementById('mobile-tab-bar');
+  if (!bar) return;
+  let directMatch = false;
+  bar.querySelectorAll('[data-mobile-nav-target]').forEach(button => {
+    const active = button.dataset.mobileNavTarget === view;
+    directMatch ||= active;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  bar.querySelector('[data-mobile-more]')?.classList.toggle('active', !directMatch);
+  document.querySelectorAll('#mobile-more-links [data-mobile-nav-target]').forEach(button => {
+    const active = button.dataset.mobileNavTarget === view;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+}
+
+function setMobileMoreOpen(open, trigger = null) {
+  const sheet = document.getElementById('mobile-more-sheet');
+  const backdrop = document.getElementById('mobile-more-backdrop');
+  if (!sheet || !backdrop) return;
+  if (open) {
+    _mobileMoreTrigger = trigger || document.activeElement;
+    sheet.hidden = false;
+    backdrop.hidden = false;
+    document.body.classList.add('mobile-more-open');
+    document.getElementById('mobile-more-close')?.focus();
+  } else {
+    document.body.classList.remove('mobile-more-open');
+    sheet.hidden = true;
+    backdrop.hidden = true;
+    _mobileMoreTrigger?.focus?.();
+    _mobileMoreTrigger = null;
+  }
+}
+
+// Уже открытые разделы остаются в DOM. Повторная навигация только показывает
+// сохранённое представление; invalidateViewCache помечает его для перерендера.
 const VIEW_CACHE = {};
-const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel', 'sessions', 'tests', 'missions']); // эти разделы всегда рендерим заново
+const VIEW_RENDERED = new Set();
+const VIEW_RENDER_KEYS = new Map();
 let _viewAbortController = new AbortController();
 let _routeInitialized = false;
 
@@ -413,8 +554,15 @@ function currentViewSignal() {
 }
 
 function invalidateViewCache(view) {
-  if (view) delete VIEW_CACHE[view];
-  else Object.keys(VIEW_CACHE).forEach(k => delete VIEW_CACHE[k]);
+  if (view) {
+    delete VIEW_CACHE[view];
+    VIEW_RENDERED.delete(view);
+    VIEW_RENDER_KEYS.delete(view);
+  } else {
+    Object.keys(VIEW_CACHE).forEach(k => delete VIEW_CACHE[k]);
+    VIEW_RENDERED.clear();
+    VIEW_RENDER_KEYS.clear();
+  }
 }
 
 // Вызывается после обновления данных — сбрасываем кеш затронутых разделов
@@ -443,9 +591,16 @@ function navigateTo(view, options = {}) {
   _viewAbortController.abort();
   _viewAbortController = new AbortController();
   if (view === 'coins') STATE.coinsTab = normalizeCoinTab(options.tab || STATE.coinsTab);
+  const analyticsTab = view === 'analytics'
+    ? (options.tab || (typeof _analyticsState !== 'undefined' ? _analyticsState.tab : '') || 'overview')
+    : '';
+  const renderKey = view === 'coins'
+    ? `${view}:${STATE.coinsTab}`
+    : (view === 'analytics' ? `${view}:${analyticsTab}` : view);
   bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов
   // Save to URL hash so F5 restores the same section
-  const route = view === 'coins' ? `coins?tab=${STATE.coinsTab}` : view;
+  let route = view === 'coins' ? `coins?tab=${STATE.coinsTab}` : view;
+  if (view === 'analytics' && options.tab) route = `analytics?tab=${encodeURIComponent(options.tab)}`;
   const routeUrl = view === 'coins' ? `/${route}` : '/#' + route;
   if (options.history !== false) {
     const sameRoute = `${location.pathname}${location.hash}` === routeUrl;
@@ -458,7 +613,10 @@ function navigateTo(view, options = {}) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(l => {
     const target = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
     l.classList.toggle('active', target === view);
+    if (target === view) l.setAttribute('aria-current', 'page');
+    else l.removeAttribute('aria-current');
   });
+  syncMobileNavigation(view);
   const el = document.getElementById(`view-${view}`);
   if (el) el.classList.add('active');
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -466,12 +624,19 @@ function navigateTo(view, options = {}) {
     node.scrollTop = 0;
     node.scrollLeft = 0;
   });
-  renderView(view);
+  renderView(view, renderKey);
   focusCurrentViewHeading(view);
 }
 
-function renderView(view) {
+function renderView(view, renderKey = view) {
   const el = document.getElementById(`view-${view}`);
+  if (!el) return;
+  if (VIEW_RENDERED.has(view) && VIEW_RENDER_KEYS.get(view) === renderKey && el.childElementCount) {
+    _reattachViewListeners(view, el);
+    return;
+  }
+  VIEW_RENDERED.add(view);
+  VIEW_RENDER_KEYS.set(view, renderKey);
 
   switch (view) {
     case 'cabinet':  renderCabinet();  break;
@@ -510,9 +675,11 @@ function focusCurrentViewHeading(view) {
 
 // После рендера сохраняем HTML в кеш
 function _cacheViewHtml(view) {
-  if (VIEW_CACHE_SKIP.has(view)) return;
   const el = document.getElementById(`view-${view}`);
-  if (el) VIEW_CACHE[view] = el.innerHTML;
+  if (el) {
+    VIEW_CACHE[view] = { renderedAt: Date.now() };
+    VIEW_RENDERED.add(view);
+  }
 }
 
 // Восстановление слушателей после кеша — для разделов с динамикой
@@ -533,10 +700,13 @@ function _reattachViewListeners(view, el) {
 function showAuth() {
   document.getElementById('auth-overlay')?.removeAttribute('hidden');
   document.body.classList.add('operator-login-required');
+  document.getElementById('mobile-tab-bar')?.setAttribute('hidden', '');
+  requestAnimationFrame(() => document.getElementById('auth-username')?.focus());
 }
 function hideAuth() {
   document.getElementById('auth-overlay')?.setAttribute('hidden', '');
   document.body.classList.remove('operator-login-required');
+  if (STATE.user) document.getElementById('mobile-tab-bar')?.removeAttribute('hidden');
 }
 
 let _authExpiredHandled = false;
@@ -551,8 +721,12 @@ function clearSessionUiState() {
       .filter(k => k.startsWith(SWR_PREFIX))
       .forEach(k => sessionStorage.removeItem(k));
   } catch(e) { /* ignore */ }
-  document.body.classList.remove('role-admin', 'role-manager', 'role-operator');
+  document.body.classList.remove('role-admin', 'role-manager', 'role-supervisor', 'role-operator', 'mobile-more-open');
   document.body.classList.add('role-pending');
+  document.getElementById('mobile-tab-bar')?.setAttribute('hidden', '');
+  const shell = document.getElementById('app-shell');
+  if (shell) shell.innerHTML = '';
+  setMobileMoreOpen(false);
 }
 
 function handleAuthExpired(err) {
@@ -569,13 +743,19 @@ function handleAuthExpired(err) {
 }
 window.handleAuthExpired = handleAuthExpired;
 
-document.addEventListener('click', async e => {
-  if (e.target.id === 'auth-login-btn') {
+async function submitLogin() {
+    const button = document.getElementById('auth-login-btn');
     const username = document.getElementById('auth-username')?.value?.trim();
     const password = document.getElementById('auth-password')?.value;
     const errEl = document.getElementById('auth-error');
-    if (!username || !password) { if (errEl) errEl.textContent = 'Введите логин и пароль'; return; }
-    e.target.disabled = true; e.target.textContent = 'Вход…';
+    if (!username || !password) {
+      if (errEl) errEl.textContent = 'Введите логин и пароль';
+      document.getElementById(!username ? 'auth-username' : 'auth-password')?.focus();
+      return;
+    }
+    if (!button || button.disabled) return;
+    uiSetBusy(button, true, 'Входим…');
+    if (errEl) errEl.textContent = '';
     try {
       await api.login(username, password);
       STATE.user = normalizeUser(await api.me());
@@ -584,11 +764,53 @@ document.addEventListener('click', async e => {
       await bootApp();
     } catch (err) {
       if (errEl) errEl.textContent = err.message;
-      e.target.disabled = false; e.target.textContent = 'Войти';
+      document.getElementById('auth-password')?.focus();
+    } finally {
+      uiSetBusy(button, false);
     }
+}
+
+document.addEventListener('submit', async event => {
+  if (event.target.id !== 'auth-form') return;
+  event.preventDefault();
+  await submitLogin();
+});
+
+document.addEventListener('click', e => {
+  const passwordToggle = e.target.closest('#auth-password-toggle');
+  if (passwordToggle) {
+    const input = document.getElementById('auth-password');
+    if (!input) return;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    passwordToggle.setAttribute('aria-pressed', String(show));
+    passwordToggle.setAttribute('aria-label', show ? 'Скрыть пароль' : 'Показать пароль');
+    input.focus();
   }
-  if (e.target.id === 'auth-logout-btn') {
+  if (e.target.closest('#auth-logout-btn')) {
     logoutAndReload();
+  }
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.body.classList.contains('mobile-more-open')) {
+    event.preventDefault();
+    setMobileMoreOpen(false);
+    return;
+  }
+  if (event.key === 'Tab' && document.body.classList.contains('mobile-more-open')) {
+    const sheet = document.getElementById('mobile-more-sheet');
+    const focusable = Array.from(sheet?.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])') || []);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 });
 
@@ -601,9 +823,12 @@ async function bootApp() {
   // на F5 до подтверждения роли) и ставим точный класс роли для CSS (ширина сайдбара и т.п.)
   document.body.classList.remove('role-pending');
   document.body.classList.toggle('role-admin', isAdmin(role));
+  document.body.classList.toggle('role-manager', role === 'manager');
+  document.body.classList.toggle('role-supervisor', role === 'supervisor');
   document.body.classList.toggle('role-operator', !isAdmin(role));
   buildViews(role);
   renderSidebar(role);
+  buildMobileNavigation(role);
   setText('side-user', STATE.user?.full_name || STATE.user?.username || '');
   setText('side-role', roleLabel(role));
   setText('side-level', '—');
@@ -611,8 +836,7 @@ async function bootApp() {
   (function() {
     var av = document.getElementById('side-user-avatar');
     if (!av) return;
-    var name = (STATE.user?.full_name || STATE.user?.username || '?').trim();
-    av.textContent = name.split(' ').filter(Boolean).slice(0,2).map(function(w){return w[0];}).join('').toUpperCase() || '?';
+    av.textContent = userInitials();
   })();
 
   if (STATE.user?.must_change_password) {
@@ -818,6 +1042,7 @@ function renderSidebar(role) {
     const t = link.dataset.navTarget;
     link.style.display = allowedViews.has(t) ? '' : 'none';
   });
+  buildMobileNavigation(role);
 }
 
 /* ══════════════════════════════════════

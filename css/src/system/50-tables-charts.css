@@ -1,0 +1,201 @@
+/* Final design system: dense data tables, mobile records and chart containers. */
+
+.table-wrap,
+.data-table-wrap,
+.an-table-scroll,
+.sessions-table-wrap,
+.users-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior-inline: contain;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  scrollbar-gutter: stable;
+}
+
+.data-table,
+.ui-data-table,
+.sessions-table,
+.users-table,
+.groups-table {
+  width: 100%;
+  min-width: 720px;
+  color: var(--text-primary);
+  font-size: var(--font-size-callout);
+  background: var(--bg-surface);
+  border: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: auto;
+}
+
+:where(.data-table, .ui-data-table, .sessions-table, .users-table, .groups-table) thead th {
+  position: sticky;
+  z-index: var(--z-sticky);
+  top: 0;
+  min-width: 84px;
+  height: 44px;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  text-align: left;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  background: var(--table-header-bg);
+  border-bottom: 1px solid var(--separator);
+  box-shadow: 0 1px 0 var(--separator);
+}
+
+:where(.data-table, .ui-data-table, .sessions-table, .users-table, .groups-table) td {
+  min-width: 0;
+  min-height: 52px;
+  padding: var(--space-3);
+  vertical-align: middle;
+  color: var(--text-primary);
+  line-height: 1.35;
+  border-bottom: 1px solid var(--border-soft);
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+:where(.data-table, .ui-data-table, .sessions-table, .users-table, .groups-table) tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+:where(.data-table, .ui-data-table, .sessions-table, .users-table, .groups-table) tbody tr:hover td {
+  background: var(--bg-surface-secondary);
+}
+
+.name-cell,
+.user-cell-name,
+.operator-name,
+td[data-label="Сотрудник"],
+td[data-label="Оператор"] {
+  min-width: 190px;
+  max-width: 320px;
+  overflow: hidden;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.num,
+th.num,
+td.num,
+[data-align="number"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.row-actions {
+  display: flex;
+  min-width: max-content;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.table-count,
+.table-meta {
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-container,
+.an-chart-card,
+.an-card:has(svg),
+.race-chart-wrap {
+  min-width: 0;
+  padding: var(--space-4);
+  overflow: hidden;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+}
+
+.chart-container svg,
+.an-chart-card svg,
+.race-chart-wrap svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.chart-legend,
+.an-legend {
+  display: flex;
+  margin-top: var(--space-3);
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  color: var(--text-secondary);
+  font-size: var(--font-size-caption);
+}
+
+@media (max-width: 767px) {
+  .table-wrap,
+  .data-table-wrap,
+  .an-table-scroll,
+  .sessions-table-wrap,
+  .users-table-wrap {
+    border-radius: var(--radius-lg);
+  }
+
+  table[data-mobile-cards="true"],
+  table.mobile-card-table {
+    min-width: 0;
+    background: transparent;
+  }
+
+  table[data-mobile-cards="true"] thead,
+  table.mobile-card-table thead {
+    display: none;
+  }
+
+  table[data-mobile-cards="true"] tbody,
+  table[data-mobile-cards="true"] tr,
+  table[data-mobile-cards="true"] td,
+  table.mobile-card-table tbody,
+  table.mobile-card-table tr,
+  table.mobile-card-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    white-space: normal;
+  }
+
+  table[data-mobile-cards="true"] tr,
+  table.mobile-card-table tr {
+    padding: var(--space-3);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--separator);
+  }
+
+  table[data-mobile-cards="true"] td,
+  table.mobile-card-table td {
+    display: grid;
+    min-height: 36px;
+    padding: 5px 0;
+    grid-template-columns: minmax(96px, 0.8fr) minmax(0, 1.2fr);
+    gap: var(--space-3);
+    border: 0;
+  }
+
+  table[data-mobile-cards="true"] td::before,
+  table.mobile-card-table td::before {
+    content: attr(data-label);
+    color: var(--text-secondary);
+    font-size: var(--font-size-caption);
+  }
+}

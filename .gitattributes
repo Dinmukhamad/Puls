@@ -1,10 +1,14 @@
-# Собранные фронтенд-бандлы — генерируются scripts/build-frontend.mjs из js/src и css/src.
+# Source-бандлы генерируются scripts/build-frontend.mjs, production .min-бандлы —
+# scripts/minify-frontend.mjs.
 # Правки вносить только в исходники, затем `npm run build`.
 # linguist-generated=true: GitHub сворачивает эти файлы в диффах PR
 # и не учитывает их в статистике языков репозитория.
 js/app.js linguist-generated=true
 js/api.js linguist-generated=true
 css/styles.css linguist-generated=true
+js/app.min.js text eol=lf linguist-generated=true
+js/api.min.js text eol=lf linguist-generated=true
+css/styles.min.css text eol=lf linguist-generated=true
 
 # Keep Python sources deterministic across Windows development and Linux CI.
 *.py text eol=lf

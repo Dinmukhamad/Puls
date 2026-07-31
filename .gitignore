@@ -53,6 +53,10 @@ desktop.ini
 .pytest_cache/
 .ruff_cache/
 
-# Generated minified frontend artifacts are not committed.
+# The three production bundles are deterministic and committed. Keep unrelated
+# ad-hoc minified files ignored.
 *.min.js
 *.min.css
+!js/api.min.js
+!js/app.min.js
+!css/styles.min.css

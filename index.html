@@ -4,15 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Puls — рейтинг операторов</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/tokens.css?v=corporate-trust-v2">
-  <link rel="stylesheet" href="css/styles.css?v=learning-worlds-sapar-v1">
-  <script src="js/theme-init.js?v=csrf-login-fix-v1"></script>
-  <script src="js/api.js?v=learning-worlds-sapar-v1" defer></script>
+  <meta name="theme-color" content="#F2F2F7">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/tokens.css?v=ios-system-v1">
+  <link rel="stylesheet" href="css/styles.min.css?v=ios-system-v1">
+  <script src="js/theme-init.js?v=ios-system-v1"></script>
+  <script src="js/api.min.js?v=ios-system-v1" defer></script>
 </head>
 <body class="role-pending">
+
+<a class="skip-link" href="#app-shell">Перейти к содержимому</a>
 
 <!-- AUTH -->
 <div id="auth-overlay" class="auth-overlay" hidden>
@@ -37,21 +38,26 @@
       <div class="auth-decorlines"><span></span><span></span><span></span></div>
     </div>
     <div class="auth-card">
-      <div class="auth-form">
+      <form class="auth-form" id="auth-form" novalidate>
         <div class="auth-kicker">Добро пожаловать</div>
         <h2>Вход в Puls</h2>
         <p>Введите логин и пароль для входа в систему.</p>
         <div class="form-group">
           <label class="form-label" for="auth-username">Логин</label>
-          <input id="auth-username" class="form-input" type="text" placeholder="Ваш логин" autocomplete="username">
+          <input id="auth-username" class="form-input" name="username" type="text" placeholder="Ваш логин" autocomplete="username" required aria-describedby="auth-error">
         </div>
         <div class="form-group">
           <label class="form-label" for="auth-password">Пароль</label>
-          <input id="auth-password" class="form-input" type="password" placeholder="Пароль" autocomplete="current-password">
+          <div class="password-field">
+            <input id="auth-password" class="form-input" name="password" type="password" placeholder="Пароль" autocomplete="current-password" required aria-describedby="auth-error">
+            <button class="password-toggle" id="auth-password-toggle" type="button" aria-label="Показать пароль" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
         </div>
-        <div id="auth-error" class="auth-error"></div>
-        <button id="auth-login-btn" class="btn-primary" style="width:100%;height:44px;font-size:14px;margin-top:4px">Войти</button>
-      </div>
+        <div id="auth-error" class="auth-error" role="alert" aria-live="polite"></div>
+        <button id="auth-login-btn" class="btn-primary auth-submit" type="submit">Войти</button>
+      </form>
     </div>
   </div>
 </div>
@@ -59,8 +65,8 @@
 <!-- SIDE NAV -->
 <nav class="side-nav" aria-label="Навигация">
   <div class="side-nav-header">
-    <a class="side-nav-logo" href="#" onclick="navigateTo('summary');return false;">
-      <div class="side-nav-mark" style="color:#38BDF8">
+    <a class="side-nav-logo" href="#summary" data-nav-target="summary" aria-label="Puls — сводка">
+      <div class="side-nav-mark">
         <svg viewBox="0 0 36 36" fill="none">
           <polyline points="2,18 8,18 12,8 16,28 20,12 24,24 28,18 34,18"
             stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -75,6 +81,7 @@
 
   <div class="side-nav-group">
     <!-- Admin -->
+    <div class="side-nav-section-label" data-nav-audience="staff">Управление</div>
     <a class="side-nav-link" href="#" data-nav-target="summary" title="Сводка">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span>Сводка</span>
@@ -113,6 +120,7 @@
 
   <div class="side-nav-group">
     <!-- Shared -->
+    <div class="side-nav-section-label">Моя работа</div>
     <a class="side-nav-link" href="#" data-nav-target="cabinet" title="Мой кабинет">
       <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <span>Кабинет</span>
@@ -145,26 +153,26 @@
 
   <div class="side-nav-meta">
     <div class="side-user-row">
-      <div style="display:flex;align-items:center;gap:8px;min-width:0">
+      <div class="side-user-identity">
         <div id="side-user-avatar" class="side-user-avatar">?</div>
-        <div class="side-user-info" style="min-width:0">
+        <div class="side-user-info">
           <span id="side-user">—</span>
           <span id="side-role">—</span>
           <span id="side-level">—</span>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-        <button class="side-bell-btn" id="side-bell-btn" onclick="showNotificationsModal()" title="Уведомления" aria-label="Уведомления">
+      <div class="side-user-actions">
+        <button class="side-bell-btn" id="side-bell-btn" type="button" title="Уведомления" aria-label="Уведомления">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           <span id="side-bell-badge" class="side-bell-badge" hidden>0</span>
         </button>
-        <button class="side-gear-btn" onclick="showAccountSettingsModal()" title="Настройки аккаунта" aria-label="Настройки аккаунта">
+        <button class="side-gear-btn" id="side-settings-btn" type="button" title="Настройки аккаунта" aria-label="Настройки аккаунта">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
       </div>
     </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
-      <button id="auth-logout-btn" class="btn-link" style="font-size:11px;color:rgba(255,255,255,.3)">Выйти</button>
+    <div class="side-nav-footer-actions">
+      <button id="auth-logout-btn" class="btn-link" type="button">Выйти</button>
       <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Сменить тему">
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
           <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>
@@ -181,6 +189,21 @@
   </div>
 </nav>
 
+<!-- MOBILE TAB BAR -->
+<nav class="mobile-tab-bar" id="mobile-tab-bar" aria-label="Основная навигация" hidden></nav>
+<div class="mobile-more-backdrop" id="mobile-more-backdrop" hidden></div>
+<section class="mobile-more-sheet" id="mobile-more-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title" hidden>
+  <div class="mobile-sheet-handle" aria-hidden="true"></div>
+  <header class="mobile-more-header">
+    <h2 id="mobile-more-title">Ещё</h2>
+    <button class="icon-button" id="mobile-more-close" type="button" aria-label="Закрыть меню">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+    </button>
+  </header>
+  <div class="mobile-more-links" id="mobile-more-links"></div>
+  <div class="mobile-more-account" id="mobile-more-account"></div>
+</section>
+
 <!-- MAIN -->
 <main class="container">
   <div id="app-shell">
@@ -192,6 +215,6 @@
 </main>
 
 <!-- SCRIPTS -->
-<script src="js/app.js?v=smz-document-signing-v1" defer></script>
+<script src="js/app.min.js?v=ios-system-v1" defer></script>
 </body>
 </html>

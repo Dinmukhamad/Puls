@@ -7,16 +7,15 @@ function _cabinetIsOperatorLike() {
   return STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor';
 }
 
-// Общий загрузчик: гарантирует ровно один запрос, даже если оба блока
-// (показатели недели и достижения) рендерятся почти одновременно.
+let _cabinetWeeklyRenderVersion = 0;
+let _cabinetAchievementsRenderVersion = 0;
+
+// Все секции используют единый session-scoped snapshot loader. Это исключает
+// параллельные запросы и не позволяет завершившемуся запросу прошлой сессии
+// перезаписать кабинет нового пользователя.
 function _loadCabinetData() {
-  if (STATE.cabinetData) return Promise.resolve(STATE.cabinetData);
-  if (!STATE._cabinetDataPromise) {
-    STATE._cabinetDataPromise = api.getMyCabinet()
-      .then(data => { STATE.cabinetData = data; return data; })
-      .finally(() => { STATE._cabinetDataPromise = null; });
-  }
-  return STATE._cabinetDataPromise;
+  const snapshot = cabinetSnapshotForCurrentUser();
+  return snapshot ? Promise.resolve(snapshot) : loadCabinetSnapshot(false);
 }
 
 function _metricBarHtml(label, value, target, unit = '') {
@@ -31,7 +30,8 @@ function _metricBarHtml(label, value, target, unit = '') {
         </div>
       </div>`;
   }
-  const v = Number(value);
+  const rawValue = Number(value);
+  const v = Number.isFinite(rawValue) ? rawValue : 0;
   const t = hasTarget ? Number(target) : 0;
   const pct = t > 0 ? Math.min(100, Math.round((v / t) * 100)) : (v > 0 ? 100 : 0);
   const overTarget = t > 0 && v >= t;
@@ -41,7 +41,7 @@ function _metricBarHtml(label, value, target, unit = '') {
         <span>${esc(label)}</span>
         <b>${levelNum(v)}${esc(unit)}${t > 0 ? ` <span class="cell-muted">/ цель ${levelNum(t)}${esc(unit)}</span>` : ' <span class="cell-muted">· норма не настроена</span>'}</b>
       </div>
-      <div class="metric-progress-bar">
+      <div class="metric-progress-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${t > 0 ? t : 100}" aria-valuenow="${t > 0 ? Math.min(v, t) : Math.min(v, 100)}">
         <div class="metric-progress-fill ${overTarget ? 'ok' : ''}" style="width:${pct}%"></div>
       </div>
     </div>`;
@@ -59,14 +59,23 @@ function _antiMetricHtml(label, value) {
 async function renderCabinetWeeklyDetail() {
   const host = document.getElementById('cabinet-weekly-detail');
   if (!host || !_cabinetIsOperatorLike()) { if (host) host.innerHTML = ''; return; }
+  const renderVersion = ++_cabinetWeeklyRenderVersion;
+  host.setAttribute('aria-busy', 'true');
 
   let data;
   try {
     data = await _loadCabinetData();
-  } catch {
-    host.innerHTML = '';
+  } catch (error) {
+    if (renderVersion !== _cabinetWeeklyRenderVersion || document.getElementById('cabinet-weekly-detail') !== host) return;
+    host.removeAttribute('aria-busy');
+    const message = typeof uiErrorMessage === 'function'
+      ? uiErrorMessage(error, 'Не удалось загрузить показатели недели')
+      : 'Не удалось загрузить показатели недели';
+    host.innerHTML = `<div class="panel empty-state" role="alert"><p>${esc(message)}</p><button class="btn-outline btn-sm" type="button" onclick="renderCabinetWeeklyDetail()">Повторить</button></div>`;
     return;
   }
+  if (renderVersion !== _cabinetWeeklyRenderVersion || document.getElementById('cabinet-weekly-detail') !== host) return;
+  host.removeAttribute('aria-busy');
   const wm = data.week_metrics;
   const cc = data.coin_calculation;
   if (!wm && !cc) {
@@ -119,7 +128,7 @@ async function renderCabinetWeeklyDetail() {
         <div class="coin-calc-row">
           <span>Базовые коины</span><b>${cc.base_coins} ₡</b>
         </div>
-        ${cc.bonuses.map(b => `
+        ${(Array.isArray(cc.bonuses) ? cc.bonuses : []).map(b => `
           <div class="coin-calc-row coin-calc-bonus">
             <span>+ ${esc(bonusLabels[b.type] || b.label)}</span><b>+${b.coins} ₡</b>
           </div>`).join('')}
@@ -134,31 +143,45 @@ async function renderCabinetWeeklyDetail() {
 async function renderCabinetAchievements() {
   const host = document.getElementById('cabinet-achievements');
   if (!host || !_cabinetIsOperatorLike()) { if (host) host.innerHTML = ''; return; }
+  const renderVersion = ++_cabinetAchievementsRenderVersion;
+  host.setAttribute('aria-busy', 'true');
 
   let data;
   try {
     data = await _loadCabinetData();
-  } catch {
-    host.innerHTML = '';
+  } catch (error) {
+    if (renderVersion !== _cabinetAchievementsRenderVersion || document.getElementById('cabinet-achievements') !== host) return;
+    host.removeAttribute('aria-busy');
+    const message = typeof uiErrorMessage === 'function'
+      ? uiErrorMessage(error, 'Не удалось загрузить достижения')
+      : 'Не удалось загрузить достижения';
+    host.innerHTML = `<div class="panel empty-state" role="alert"><p>${esc(message)}</p><button class="btn-outline btn-sm" type="button" onclick="renderCabinetAchievements()">Повторить</button></div>`;
     return;
   }
-  const ach = data.achievements || { completed: [], in_progress: [] };
+  if (renderVersion !== _cabinetAchievementsRenderVersion || document.getElementById('cabinet-achievements') !== host) return;
+  host.removeAttribute('aria-busy');
+  const source = data.achievements || {};
+  const ach = {
+    completed: Array.isArray(source.completed) ? source.completed : [],
+    in_progress: Array.isArray(source.in_progress) ? source.in_progress : [],
+  };
 
   const badgeHtml = (row, completed) => {
     const a = row.achievement || row;
+    const target = Number(a.target ?? a.condition_value ?? 0);
     return `
-    <div class="achievement-badge ${completed ? 'unlocked' : 'locked'}" title="${esc(a.description)}">
+    <article class="achievement-badge ${completed ? 'unlocked' : 'locked'}" aria-label="${esc(a.title || 'Достижение')}: ${completed ? 'получено' : 'в процессе'}">
       <div class="achievement-icon">${achievementVisualIcon(a, 'achievement-card-icon')}</div>
       <div class="achievement-info">
         <div class="achievement-title">${esc(a.title)}</div>
         <div class="achievement-desc">${esc(a.description)}</div>
         ${completed
-          ? `<div class="achievement-meta">Получено ×${row.times_awarded}${row.completed_at ? ' · ' + fmtDate(row.completed_at) : ''}</div>`
-          : (a.condition_value > 0
-              ? `<div class="achievement-progress-line">${levelNum(row.progress_value)} / ${levelNum(a.target ?? a.condition_value)}</div>`
+          ? `<div class="achievement-meta">Получено ×${row.times_awarded ?? 1}${row.completed_at ? ' · ' + fmtDate(row.completed_at) : ''}</div>`
+          : (target > 0
+              ? `<div class="achievement-progress-line" role="progressbar" aria-label="Прогресс: ${esc(a.title || 'достижение')}" aria-valuemin="0" aria-valuemax="${target}" aria-valuenow="${Math.min(target, Math.max(0, Number(row.progress_value) || 0))}">${levelNum(row.progress_value)} / ${levelNum(target)}</div>`
               : '<div class="achievement-progress-line cell-muted">Настраивается</div>')}
       </div>
-    </div>`;
+    </article>`;
   };
 
   host.innerHTML = `

@@ -506,7 +506,7 @@ async function renderWheelStaffView(el) {
     await renderWheelCampaignTab(body);
   } else if (_wheelStaffTab === 'prizes') {
     await renderWheelPrizesTab(body);
-  } else if (_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history' || _wheelStaffTab === 'stats') {
+  } else if (_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history') {
     _wheelStaffTab = 'operations';
     await renderWheelOperationsTab(body);
   } else if (_wheelStaffTab === 'issue') {

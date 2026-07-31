@@ -1,7 +1,3 @@
-param(
-    [switch]$SplitFromCurrent
-)
-
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $Utf8 = [System.Text.UTF8Encoding]::new($false)
@@ -12,17 +8,8 @@ function Ensure-Dir($Path) {
     }
 }
 
-function Read-Lines($Path) {
-    [System.IO.File]::ReadAllLines($Path)
-}
-
 function Write-Text($Path, $Text) {
     [System.IO.File]::WriteAllText($Path, $Text, $Utf8)
-}
-
-function Write-LinesRange($SourceLines, $Start, $End, $Path) {
-    $slice = $SourceLines[($Start - 1)..($End - 1)]
-    Write-Text $Path (($slice -join "`n") + "`n")
 }
 
 function Join-Files($Files, $OutPath, $Banner, [switch]$IncludeSourceComments) {
@@ -54,6 +41,7 @@ Ensure-Dir (Join-Path $CssSrc "base")
 Ensure-Dir (Join-Path $CssSrc "layout")
 Ensure-Dir (Join-Path $CssSrc "components")
 Ensure-Dir (Join-Path $CssSrc "views")
+Ensure-Dir (Join-Path $CssSrc "system")
 
 function Get-OrderedFiles($Groups, $Filter) {
     $result = @()
@@ -63,30 +51,6 @@ function Get-OrderedFiles($Groups, $Filter) {
         }
     }
     return $result
-}
-
-if ($SplitFromCurrent) {
-    $appLines = Read-Lines (Join-Path $Root "js\app.js")
-    Write-LinesRange $appLines 1    630  (Join-Path $AppSrc "00-core-shell.js")
-    Write-LinesRange $appLines 631  1279 (Join-Path $JsSrc "views\operator-levels\10-levels-cabinet.view.js")
-    Write-LinesRange $appLines 1280 2271 (Join-Path $JsSrc "views\rating\20-rating-shop-summary.view.js")
-    Write-LinesRange $appLines 2272 4652 (Join-Path $JsSrc "views\coins\30-admin-coins-groups-operators.view.js")
-    Write-LinesRange $appLines 4653 6889 (Join-Path $JsSrc "views\reports\40-reports-analytics.view.js")
-    Write-LinesRange $appLines 6890 7331 (Join-Path $JsSrc "views\rating\50-rating-tabs.view.js")
-    Write-LinesRange $appLines 7332 $appLines.Length (Join-Path $JsSrc "views\wheel\60-wheel-tests.view.js")
-
-    $apiLines = Read-Lines (Join-Path $Root "js\api.js")
-    Write-LinesRange $apiLines 1   64  (Join-Path $ApiSrc "client\00-client-auth.js")
-    Write-LinesRange $apiLines 65  154 (Join-Path $ApiSrc "domains\10-main-domains.api.js")
-    Write-LinesRange $apiLines 155 242 (Join-Path $ApiSrc "domains\20-reports-analytics-tests.api.js")
-    Write-LinesRange $apiLines 243 $apiLines.Length (Join-Path $ApiSrc "domains\30-levels-wheel-export.api.js")
-
-    $cssLines = Read-Lines (Join-Path $Root "css\styles.css")
-    Write-LinesRange $cssLines 1    1129 (Join-Path $CssSrc "base\00-base-layout.css")
-    Write-LinesRange $cssLines 1130 1464 (Join-Path $CssSrc "views\10-manual-account.css")
-    Write-LinesRange $cssLines 1465 2242 (Join-Path $CssSrc "views\20-rating-shop-dashboard.css")
-    Write-LinesRange $cssLines 2243 3388 (Join-Path $CssSrc "views\30-analytics-rating-responsive.css")
-    Write-LinesRange $cssLines 3389 $cssLines.Length (Join-Path $CssSrc "views\40-coins-tests-wheel-overrides.css")
 }
 
 $appFiles = Get-OrderedFiles @(
@@ -104,7 +68,8 @@ $cssFiles = Get-OrderedFiles @(
     (Join-Path $CssSrc "base"),
     (Join-Path $CssSrc "layout"),
     (Join-Path $CssSrc "components"),
-    (Join-Path $CssSrc "views")
+    (Join-Path $CssSrc "views"),
+    (Join-Path $CssSrc "system")
 ) "*.css"
 
 Join-Files $apiFiles (Join-Path $Root "js\api.js") "/* Generated from js/src/api source files. Run npm run build after editing. */"

@@ -241,12 +241,14 @@ function parseStoredView(value) {
 }
 
 function allowedViewsForRole(role) {
-  if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests', 'missions'];
+  if (!isAdmin(role)) return ['cabinet', 'rating', 'missions', 'tests', 'shop', 'wheel', 'raffles'];
 
-  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'tests', 'missions', 'period-report', 'analytics'];
+  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'raffles', 'tests', 'missions', 'period-report', 'analytics'];
+  views.push('rating');
+  if (role === 'supervisor') views.push('cabinet');
   if (role === 'manager' || role === 'admin') views.push('operator-levels');
   if (canManageGroups(role)) views.push('groups');
-  if (role === 'admin') views.push('sessions', 'cabinet', 'rating');
+  if (role === 'admin') views.push('sessions', 'cabinet');
   return views;
 }
 
@@ -291,6 +293,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Every browser-driven route change goes through the same role guard as sidebar
 // navigation. This also prevents a restricted hash from exposing an empty or
 // stale administrative view after Back/Forward navigation.
+let _browserRouteSyncQueued = false;
+
+function queueBrowserRouteSync(requestedRoute = null) {
+  if (_browserRouteSyncQueued) return;
+  _browserRouteSyncQueued = true;
+  queueMicrotask(() => {
+    _browserRouteSyncQueued = false;
+    const role = STATE.user?.role;
+    if (!role) return;
+    const path = location.pathname.replace(/^\/+|\/+$/g, '');
+    const requested = requestedRoute || (path === 'coins'
+      ? { view: 'coins', tab: normalizeCoinTab(new URLSearchParams(location.search).get('tab')) }
+      : parseStoredView(location.hash));
+    const fallback = isAdmin(role) ? 'summary' : 'cabinet';
+    const view = allowedViewsForRole(role).includes(requested.view) ? requested.view : fallback;
+    navigateTo(view, { tab: requested.tab, history: false });
+  });
+}
+
 window.addEventListener('hashchange', () => {
   const role = STATE.user?.role;
   if (!role) return;
@@ -299,7 +320,11 @@ window.addEventListener('hashchange', () => {
   const view = allowedViewsForRole(role).includes(requested.view)
     ? requested.view
     : fallback;
-  navigateTo(view, { tab: requested.tab, history: false });
+  queueBrowserRouteSync({ view, tab: requested.tab });
+});
+
+window.addEventListener('popstate', () => {
+  queueBrowserRouteSync();
 });
 
 async function tryRestoreSession() {
@@ -318,11 +343,14 @@ async function tryRestoreSession() {
       showAuth();
     } else {
       const shell = document.getElementById('app-shell');
-      if (shell) shell.innerHTML = `
-        <div class="loading-state" style="gap:20px">
-          <p style="color:var(--danger)">Ошибка подключения: ${esc(err.message)}</p>
-          <button class="btn-primary" onclick="tryRestoreSession()">Повторить</button>
-        </div>`;
+      if (shell) {
+        shell.innerHTML = uiErrorState(
+          'Не удалось подключиться',
+          uiErrorMessage(err, 'Проверьте соединение и повторите попытку.'),
+          '<button class="btn-primary" id="restore-session-retry" type="button">Повторить</button>',
+        );
+        shell.querySelector('#restore-session-retry')?.addEventListener('click', tryRestoreSession, { once: true });
+      }
     }
   }
 }
@@ -343,14 +371,34 @@ function normalizeUser(u) {
    THEME
 ══════════════════════════════════════ */
 function initTheme() {
-  const saved = localStorage.getItem('pulse-theme') || 'light';
-  document.documentElement.setAttribute('data-theme', saved);
-  document.getElementById('theme-toggle')?.addEventListener('click', () => {
-    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const next = dark ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('pulse-theme', next);
+  const media = window.matchMedia?.('(prefers-color-scheme: dark)');
+  const saved = localStorage.getItem('pulse-theme');
+  const initial = saved === 'dark' || saved === 'light'
+    ? saved
+    : (media?.matches ? 'dark' : 'light');
+  applyTheme(initial, saved ? 'manual' : 'system');
+  document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
+  media?.addEventListener?.('change', event => {
+    if (!localStorage.getItem('pulse-theme')) applyTheme(event.matches ? 'dark' : 'light', 'system');
   });
+}
+
+function applyTheme(theme, source = 'manual') {
+  const value = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', value);
+  document.documentElement.dataset.themeSource = source;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = value === 'dark' ? '#000000' : '#F2F2F7';
+  document.querySelectorAll('[data-theme-label]').forEach(node => {
+    node.textContent = value === 'dark' ? 'Тёмная тема' : 'Светлая тема';
+  });
+}
+
+function toggleTheme() {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const next = dark ? 'light' : 'dark';
+  localStorage.setItem('pulse-theme', next);
+  applyTheme(next, 'manual');
 }
 
 /* ══════════════════════════════════════
@@ -359,35 +407,9 @@ function initTheme() {
 function initNav() {
   const sideNav = document.querySelector('.side-nav');
   if (sideNav && !sideNav.id) sideNav.id = 'primary-navigation';
-  if (sideNav && !document.getElementById('mobile-nav-toggle')) {
-    const mobileToggle = document.createElement('button');
-    mobileToggle.id = 'mobile-nav-toggle';
-    mobileToggle.className = 'mobile-nav-toggle';
-    mobileToggle.type = 'button';
-    mobileToggle.setAttribute('aria-controls', sideNav.id);
-    mobileToggle.setAttribute('aria-expanded', 'false');
-    mobileToggle.setAttribute('aria-label', 'Открыть навигацию');
-    mobileToggle.innerHTML = '<span aria-hidden="true">☰</span><b>Puls.</b>';
-
-    const backdrop = document.createElement('button');
-    backdrop.className = 'mobile-nav-backdrop';
-    backdrop.type = 'button';
-    backdrop.setAttribute('aria-label', 'Закрыть навигацию');
-
-    const setMobileNav = open => {
-      document.body.classList.toggle('mobile-nav-open', open);
-      mobileToggle.setAttribute('aria-expanded', String(open));
-      mobileToggle.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию');
-    };
-    mobileToggle.addEventListener('click', () => setMobileNav(!document.body.classList.contains('mobile-nav-open')));
-    backdrop.addEventListener('click', () => setMobileNav(false));
-    document.body.append(mobileToggle, backdrop);
-  }
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     link.addEventListener('click', e => {
       e.preventDefault();
-      document.body.classList.remove('mobile-nav-open');
-      document.getElementById('mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
       navigateTo(link.dataset.navTarget);
     });
   });
@@ -401,11 +423,130 @@ function initNav() {
       document.body.classList.add('side-nav-collapsed');
     }
   }
+
+  document.getElementById('side-bell-btn')?.addEventListener('click', () => showNotificationsModal());
+  document.getElementById('side-settings-btn')?.addEventListener('click', () => showAccountSettingsModal());
+  document.getElementById('mobile-more-close')?.addEventListener('click', () => setMobileMoreOpen(false));
+  document.getElementById('mobile-more-backdrop')?.addEventListener('click', () => setMobileMoreOpen(false));
+  document.getElementById('mobile-tab-bar')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-mobile-nav-target], [data-mobile-more]');
+    if (!button) return;
+    if (button.hasAttribute('data-mobile-more')) setMobileMoreOpen(true, button);
+    else navigateTo(button.dataset.mobileNavTarget);
+  });
+  document.getElementById('mobile-more-sheet')?.addEventListener('click', event => {
+    const nav = event.target.closest('[data-mobile-nav-target]');
+    const action = event.target.closest('[data-mobile-account-action]');
+    if (nav) {
+      setMobileMoreOpen(false);
+      navigateTo(nav.dataset.mobileNavTarget);
+    } else if (action?.dataset.mobileAccountAction === 'theme') {
+      toggleTheme();
+    } else if (action?.dataset.mobileAccountAction === 'settings') {
+      setMobileMoreOpen(false);
+      showAccountSettingsModal();
+    } else if (action?.dataset.mobileAccountAction === 'notifications') {
+      setMobileMoreOpen(false);
+      showNotificationsModal();
+    } else if (action?.dataset.mobileAccountAction === 'logout') {
+      setMobileMoreOpen(false);
+      logoutAndReload();
+    }
+  });
 }
 
-// Кеш отрендеренных разделов — не перерисовываем если уже есть актуальный HTML
+let _mobileMoreTrigger = null;
+
+function mobilePrimaryViews(role) {
+  return isAdmin(role)
+    ? ['summary', 'operators', 'analytics', 'coins']
+    : ['cabinet', 'rating', 'missions', 'shop'];
+}
+
+function navButtonContent(view) {
+  const source = document.querySelector(`.side-nav-link[data-nav-target="${view}"]`);
+  const label = source?.querySelector('span')?.textContent?.trim() || view;
+  const icon = source?.querySelector('svg')?.outerHTML || '';
+  return { label, icon };
+}
+
+function buildMobileNavigation(role) {
+  const bar = document.getElementById('mobile-tab-bar');
+  const moreLinks = document.getElementById('mobile-more-links');
+  const account = document.getElementById('mobile-more-account');
+  if (!bar || !moreLinks || !account) return;
+  const allowed = allowedViewsForRole(role);
+  const primary = mobilePrimaryViews(role).filter(view => allowed.includes(view)).slice(0, 4);
+  const secondary = allowed.filter(view => !primary.includes(view));
+  bar.innerHTML = primary.map(view => {
+    const { label, icon } = navButtonContent(view);
+    return `<button type="button" data-mobile-nav-target="${view}" aria-label="${esc(label)}">${icon}<span>${esc(label)}</span></button>`;
+  }).join('') + `<button type="button" data-mobile-more aria-haspopup="dialog" aria-controls="mobile-more-sheet">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg><span>Ещё</span>
+  </button>`;
+  moreLinks.innerHTML = secondary.map(view => {
+    const { label, icon } = navButtonContent(view);
+    return `<button type="button" data-mobile-nav-target="${view}">${icon}<span>${esc(label)}</span><svg class="mobile-more-chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>`;
+  }).join('');
+  account.innerHTML = `
+    <div class="mobile-account-summary"><span class="side-user-avatar">${esc(userInitials())}</span><div><strong>${esc(STATE.user?.full_name || STATE.user?.username || 'Профиль')}</strong><small>${esc(roleLabel(role))}</small></div></div>
+    <button type="button" data-mobile-account-action="notifications"><span>Уведомления</span><small>Новые события и награды</small></button>
+    <button type="button" data-mobile-account-action="settings"><span>Профиль и настройки</span><small>Пароль, данные аккаунта и тема</small></button>
+    <button type="button" data-mobile-account-action="theme"><span data-theme-label>${document.documentElement.dataset.theme === 'dark' ? 'Тёмная тема' : 'Светлая тема'}</span><small>Изменить оформление</small></button>
+    <button type="button" class="is-destructive" data-mobile-account-action="logout"><span>Выйти</span><small>Завершить текущую сессию</small></button>`;
+  bar.hidden = false;
+  syncMobileNavigation(STATE.currentView);
+}
+
+function userInitials() {
+  return String(STATE.user?.full_name || STATE.user?.username || '?')
+    .trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?';
+}
+
+function syncMobileNavigation(view) {
+  const bar = document.getElementById('mobile-tab-bar');
+  if (!bar) return;
+  let directMatch = false;
+  bar.querySelectorAll('[data-mobile-nav-target]').forEach(button => {
+    const active = button.dataset.mobileNavTarget === view;
+    directMatch ||= active;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  bar.querySelector('[data-mobile-more]')?.classList.toggle('active', !directMatch);
+  document.querySelectorAll('#mobile-more-links [data-mobile-nav-target]').forEach(button => {
+    const active = button.dataset.mobileNavTarget === view;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+}
+
+function setMobileMoreOpen(open, trigger = null) {
+  const sheet = document.getElementById('mobile-more-sheet');
+  const backdrop = document.getElementById('mobile-more-backdrop');
+  if (!sheet || !backdrop) return;
+  if (open) {
+    _mobileMoreTrigger = trigger || document.activeElement;
+    sheet.hidden = false;
+    backdrop.hidden = false;
+    document.body.classList.add('mobile-more-open');
+    document.getElementById('mobile-more-close')?.focus();
+  } else {
+    document.body.classList.remove('mobile-more-open');
+    sheet.hidden = true;
+    backdrop.hidden = true;
+    _mobileMoreTrigger?.focus?.();
+    _mobileMoreTrigger = null;
+  }
+}
+
+// Уже открытые разделы остаются в DOM. Повторная навигация только показывает
+// сохранённое представление; invalidateViewCache помечает его для перерендера.
 const VIEW_CACHE = {};
-const VIEW_CACHE_SKIP = new Set(['analytics', 'period-report', 'wheel', 'sessions', 'tests', 'missions']); // эти разделы всегда рендерим заново
+const VIEW_RENDERED = new Set();
+const VIEW_RENDER_KEYS = new Map();
 let _viewAbortController = new AbortController();
 let _routeInitialized = false;
 
@@ -414,8 +555,15 @@ function currentViewSignal() {
 }
 
 function invalidateViewCache(view) {
-  if (view) delete VIEW_CACHE[view];
-  else Object.keys(VIEW_CACHE).forEach(k => delete VIEW_CACHE[k]);
+  if (view) {
+    delete VIEW_CACHE[view];
+    VIEW_RENDERED.delete(view);
+    VIEW_RENDER_KEYS.delete(view);
+  } else {
+    Object.keys(VIEW_CACHE).forEach(k => delete VIEW_CACHE[k]);
+    VIEW_RENDERED.clear();
+    VIEW_RENDER_KEYS.clear();
+  }
 }
 
 // Вызывается после обновления данных — сбрасываем кеш затронутых разделов
@@ -444,9 +592,16 @@ function navigateTo(view, options = {}) {
   _viewAbortController.abort();
   _viewAbortController = new AbortController();
   if (view === 'coins') STATE.coinsTab = normalizeCoinTab(options.tab || STATE.coinsTab);
+  const analyticsTab = view === 'analytics'
+    ? (options.tab || (typeof _analyticsState !== 'undefined' ? _analyticsState.tab : '') || 'overview')
+    : '';
+  const renderKey = view === 'coins'
+    ? `${view}:${STATE.coinsTab}`
+    : (view === 'analytics' ? `${view}:${analyticsTab}` : view);
   bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов
   // Save to URL hash so F5 restores the same section
-  const route = view === 'coins' ? `coins?tab=${STATE.coinsTab}` : view;
+  let route = view === 'coins' ? `coins?tab=${STATE.coinsTab}` : view;
+  if (view === 'analytics' && options.tab) route = `analytics?tab=${encodeURIComponent(options.tab)}`;
   const routeUrl = view === 'coins' ? `/${route}` : '/#' + route;
   if (options.history !== false) {
     const sameRoute = `${location.pathname}${location.hash}` === routeUrl;
@@ -459,7 +614,10 @@ function navigateTo(view, options = {}) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(l => {
     const target = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
     l.classList.toggle('active', target === view);
+    if (target === view) l.setAttribute('aria-current', 'page');
+    else l.removeAttribute('aria-current');
   });
+  syncMobileNavigation(view);
   const el = document.getElementById(`view-${view}`);
   if (el) el.classList.add('active');
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -467,12 +625,19 @@ function navigateTo(view, options = {}) {
     node.scrollTop = 0;
     node.scrollLeft = 0;
   });
-  renderView(view);
+  renderView(view, renderKey);
   focusCurrentViewHeading(view);
 }
 
-function renderView(view) {
+function renderView(view, renderKey = view) {
   const el = document.getElementById(`view-${view}`);
+  if (!el) return;
+  if (VIEW_RENDERED.has(view) && VIEW_RENDER_KEYS.get(view) === renderKey && el.childElementCount) {
+    _reattachViewListeners(view, el);
+    return;
+  }
+  VIEW_RENDERED.add(view);
+  VIEW_RENDER_KEYS.set(view, renderKey);
 
   switch (view) {
     case 'cabinet':  renderCabinet();  break;
@@ -511,9 +676,11 @@ function focusCurrentViewHeading(view) {
 
 // После рендера сохраняем HTML в кеш
 function _cacheViewHtml(view) {
-  if (VIEW_CACHE_SKIP.has(view)) return;
   const el = document.getElementById(`view-${view}`);
-  if (el) VIEW_CACHE[view] = el.innerHTML;
+  if (el) {
+    VIEW_CACHE[view] = { renderedAt: Date.now() };
+    VIEW_RENDERED.add(view);
+  }
 }
 
 // Восстановление слушателей после кеша — для разделов с динамикой
@@ -534,10 +701,13 @@ function _reattachViewListeners(view, el) {
 function showAuth() {
   document.getElementById('auth-overlay')?.removeAttribute('hidden');
   document.body.classList.add('operator-login-required');
+  document.getElementById('mobile-tab-bar')?.setAttribute('hidden', '');
+  requestAnimationFrame(() => document.getElementById('auth-username')?.focus());
 }
 function hideAuth() {
   document.getElementById('auth-overlay')?.setAttribute('hidden', '');
   document.body.classList.remove('operator-login-required');
+  if (STATE.user) document.getElementById('mobile-tab-bar')?.removeAttribute('hidden');
 }
 
 let _authExpiredHandled = false;
@@ -552,8 +722,12 @@ function clearSessionUiState() {
       .filter(k => k.startsWith(SWR_PREFIX))
       .forEach(k => sessionStorage.removeItem(k));
   } catch(e) { /* ignore */ }
-  document.body.classList.remove('role-admin', 'role-manager', 'role-operator');
+  document.body.classList.remove('role-admin', 'role-manager', 'role-supervisor', 'role-operator', 'mobile-more-open');
   document.body.classList.add('role-pending');
+  document.getElementById('mobile-tab-bar')?.setAttribute('hidden', '');
+  const shell = document.getElementById('app-shell');
+  if (shell) shell.innerHTML = '';
+  setMobileMoreOpen(false);
 }
 
 function handleAuthExpired(err) {
@@ -570,13 +744,19 @@ function handleAuthExpired(err) {
 }
 window.handleAuthExpired = handleAuthExpired;
 
-document.addEventListener('click', async e => {
-  if (e.target.id === 'auth-login-btn') {
+async function submitLogin() {
+    const button = document.getElementById('auth-login-btn');
     const username = document.getElementById('auth-username')?.value?.trim();
     const password = document.getElementById('auth-password')?.value;
     const errEl = document.getElementById('auth-error');
-    if (!username || !password) { if (errEl) errEl.textContent = 'Введите логин и пароль'; return; }
-    e.target.disabled = true; e.target.textContent = 'Вход…';
+    if (!username || !password) {
+      if (errEl) errEl.textContent = 'Введите логин и пароль';
+      document.getElementById(!username ? 'auth-username' : 'auth-password')?.focus();
+      return;
+    }
+    if (!button || button.disabled) return;
+    uiSetBusy(button, true, 'Входим…');
+    if (errEl) errEl.textContent = '';
     try {
       await api.login(username, password);
       STATE.user = normalizeUser(await api.me());
@@ -585,11 +765,53 @@ document.addEventListener('click', async e => {
       await bootApp();
     } catch (err) {
       if (errEl) errEl.textContent = err.message;
-      e.target.disabled = false; e.target.textContent = 'Войти';
+      document.getElementById('auth-password')?.focus();
+    } finally {
+      uiSetBusy(button, false);
     }
+}
+
+document.addEventListener('submit', async event => {
+  if (event.target.id !== 'auth-form') return;
+  event.preventDefault();
+  await submitLogin();
+});
+
+document.addEventListener('click', e => {
+  const passwordToggle = e.target.closest('#auth-password-toggle');
+  if (passwordToggle) {
+    const input = document.getElementById('auth-password');
+    if (!input) return;
+    const show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    passwordToggle.setAttribute('aria-pressed', String(show));
+    passwordToggle.setAttribute('aria-label', show ? 'Скрыть пароль' : 'Показать пароль');
+    input.focus();
   }
-  if (e.target.id === 'auth-logout-btn') {
+  if (e.target.closest('#auth-logout-btn')) {
     logoutAndReload();
+  }
+});
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && document.body.classList.contains('mobile-more-open')) {
+    event.preventDefault();
+    setMobileMoreOpen(false);
+    return;
+  }
+  if (event.key === 'Tab' && document.body.classList.contains('mobile-more-open')) {
+    const sheet = document.getElementById('mobile-more-sheet');
+    const focusable = Array.from(sheet?.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])') || []);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 });
 
@@ -602,9 +824,12 @@ async function bootApp() {
   // на F5 до подтверждения роли) и ставим точный класс роли для CSS (ширина сайдбара и т.п.)
   document.body.classList.remove('role-pending');
   document.body.classList.toggle('role-admin', isAdmin(role));
+  document.body.classList.toggle('role-manager', role === 'manager');
+  document.body.classList.toggle('role-supervisor', role === 'supervisor');
   document.body.classList.toggle('role-operator', !isAdmin(role));
   buildViews(role);
   renderSidebar(role);
+  buildMobileNavigation(role);
   setText('side-user', STATE.user?.full_name || STATE.user?.username || '');
   setText('side-role', roleLabel(role));
   setText('side-level', '—');
@@ -612,8 +837,7 @@ async function bootApp() {
   (function() {
     var av = document.getElementById('side-user-avatar');
     if (!av) return;
-    var name = (STATE.user?.full_name || STATE.user?.username || '?').trim();
-    av.textContent = name.split(' ').filter(Boolean).slice(0,2).map(function(w){return w[0];}).join('').toUpperCase() || '?';
+    av.textContent = userInitials();
   })();
 
   if (STATE.user?.must_change_password) {
@@ -819,12 +1043,12 @@ function renderSidebar(role) {
     const t = link.dataset.navTarget;
     link.style.display = allowedViews.has(t) ? '' : 'none';
   });
+  buildMobileNavigation(role);
 }
 
 /* ══════════════════════════════════════
    VIEW: УРОВНИ ОПЕРАТОРОВ
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    УВЕДОМЛЕНИЯ (ТЗ P2) — колокольчик в сайдбаре, модалка со списком
 ══════════════════════════════════════ */
@@ -923,7 +1147,6 @@ async function _loadNotificationsIntoModal() {
     });
   });
 }
-
 /* Shared UI contracts. Keep screen-specific views free from raw enums and ad-hoc formats. */
 const UI_TIME_ZONE = 'Asia/Almaty';
 
@@ -931,14 +1154,23 @@ const UI_STATUS_META = Object.freeze({
   active: ['Активен', 'success'],
   inactive: ['Неактивен', 'neutral'],
   blocked: ['Заблокирован', 'danger'],
+  locked: ['Заблокирована', 'neutral'],
   dismissed: ['Уволен', 'neutral'],
   available: ['Доступна', 'success'],
+  unavailable: ['Недоступна', 'neutral'],
+  not_available: ['Недоступна', 'neutral'],
   coming_soon: ['Скоро', 'neutral'],
   upcoming: ['Скоро', 'neutral'],
   in_progress: ['В процессе', 'info'],
   completed: ['Завершена', 'success'],
   finished: ['Завершён', 'success'],
+  drawn: ['Разыгран', 'success'],
+  failed: ['Не пройден', 'danger'],
+  passed: ['Пройден', 'success'],
   cancelled: ['Отменена', 'neutral'],
+  canceled: ['Отменена', 'neutral'],
+  expired: ['Истекла', 'neutral'],
+  used: ['Использована', 'neutral'],
   pending: ['На рассмотрении', 'warning'],
   new: ['Новая', 'info'],
   approved: ['Одобрена', 'success'],
@@ -950,6 +1182,9 @@ const UI_STATUS_META = Object.freeze({
   draft: ['Черновик', 'neutral'],
   published: ['Опубликовано', 'success'],
   archived: ['В архиве', 'neutral'],
+  paused: ['Приостановлена', 'warning'],
+  scheduled: ['Запланирована', 'info'],
+  partially_available: ['Доступна частично', 'warning'],
 });
 
 function uiNumber(value, maximumFractionDigits = 1) {
@@ -1005,6 +1240,13 @@ function uiStatusLabel(value) {
   return uiStatusMeta(value)[0];
 }
 
+function uiErrorMessage(error, fallback = 'Не удалось выполнить действие') {
+  const raw = String(error?.message || error?.detail || '').trim();
+  if (!raw) return fallback;
+  if (/traceback|exception|sqlalchemy|psycopg|internal server error|<!doctype|\{\s*"/i.test(raw)) return fallback;
+  return raw.length > 240 ? `${raw.slice(0, 237)}…` : raw;
+}
+
 function uiStatusBadge(value) {
   const [label, tone] = uiStatusMeta(value);
   return `<span class="ui-status ui-status--${tone}">${esc(label)}</span>`;
@@ -1019,6 +1261,49 @@ function uiPageHeader({ eyebrow = '', title, description = '', meta = '', action
     </div>
     ${meta || actions ? `<div class="ui-page-header__side">${meta}${actions ? `<div class="ui-page-header__actions">${actions}</div>` : ''}</div>` : ''}
   </header>`;
+}
+
+function uiButton({ label, variant = 'secondary', type = 'button', id = '', attributes = '', icon = '' }) {
+  const allowed = ['primary', 'secondary', 'tertiary', 'destructive', 'icon'];
+  const kind = allowed.includes(variant) ? variant : 'secondary';
+  const className = kind === 'destructive' ? 'btn-danger' : kind === 'tertiary' ? 'btn-ghost' : kind === 'icon' ? 'icon-button' : `btn-${kind}`;
+  return `<button${id ? ` id="${esc(id)}"` : ''} class="${className}" type="${type === 'submit' ? 'submit' : 'button'}" ${attributes}>${icon}${label ? `<span>${esc(label)}</span>` : ''}</button>`;
+}
+
+function uiKpiCard({ label, value, detail = '', trend = '', tone = 'neutral' }) {
+  return `<article class="ui-kpi-card ui-kpi-card--${esc(tone)}">
+    <span class="ui-kpi-card__label">${esc(label)}</span>
+    <strong class="ui-kpi-card__value">${esc(value)}</strong>
+    ${detail || trend ? `<div class="ui-kpi-card__footer">${detail ? `<span>${esc(detail)}</span>` : ''}${trend ? `<b>${esc(trend)}</b>` : ''}</div>` : ''}
+  </article>`;
+}
+
+function uiProgressBar(value, { label = 'Прогресс', max = 100 } = {}) {
+  const safeMax = Math.max(1, Number(max) || 100);
+  const safeValue = Math.min(safeMax, Math.max(0, Number(value) || 0));
+  const percent = Math.round((safeValue / safeMax) * 100);
+  return `<div class="ui-progress" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${safeMax}" aria-valuenow="${safeValue}"><span style="--ui-progress:${percent}%"></span><small>${percent}%</small></div>`;
+}
+
+function uiSkeleton({ rows = 3, label = 'Загрузка данных' } = {}) {
+  return `<div class="ui-skeleton" role="status" aria-label="${esc(label)}">${Array.from({ length: Math.max(1, rows) }, (_, index) => `<span style="--skeleton-width:${92 - (index % 3) * 13}%"></span>`).join('')}<span class="sr-only">${esc(label)}</span></div>`;
+}
+
+function uiErrorState(title, description = '', retryAction = '') {
+  return `<div class="ui-state ui-state--error" role="alert"><span class="ui-state__icon" aria-hidden="true">!</span><strong>${esc(title)}</strong>${description ? `<p>${esc(description)}</p>` : ''}${retryAction}</div>`;
+}
+
+function uiAvatar(name, { size = 'md', image = '' } = {}) {
+  const initials = String(name || '?').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?';
+  return image
+    ? `<span class="ui-avatar ui-avatar--${esc(size)}"><img src="${esc(image)}" alt=""></span>`
+    : `<span class="ui-avatar ui-avatar--${esc(size)}" aria-hidden="true">${esc(initials)}</span>`;
+}
+
+function uiPagination({ page = 1, totalPages = 1, idPrefix = 'page' } = {}) {
+  const current = Math.max(1, Number(page) || 1);
+  const total = Math.max(1, Number(totalPages) || 1);
+  return `<nav class="ui-pagination" aria-label="Страницы"><button class="btn-secondary" type="button" data-${esc(idPrefix)}="prev" ${current <= 1 ? 'disabled' : ''}>Назад</button><span>Страница ${current} из ${total}</span><button class="btn-secondary" type="button" data-${esc(idPrefix)}="next" ${current >= total ? 'disabled' : ''}>Далее</button></nav>`;
 }
 
 function uiEmptyState(title, description = '', action = '') {
@@ -1065,7 +1350,8 @@ function uiConfirmAction({
   danger = true,
 } = {}) {
   if (typeof showModal !== 'function') {
-    return Promise.resolve(window.confirm(`${title}\n\n${description}`));
+    console.error('Puls modal system is unavailable; destructive action was cancelled.');
+    return Promise.resolve(false);
   }
   uiCancelPendingConfirm();
   return new Promise(resolve => {
@@ -1098,6 +1384,78 @@ function uiReadQuery(defaults = {}) {
   );
 }
 
+function uiEnhanceTable(table) {
+  if (!table) return;
+  const headers = Array.from(table.querySelectorAll('thead th')).map(cell => cell.textContent.trim());
+  if (!headers.length) return;
+  table.dataset.uiEnhanced = 'true';
+  const complex = table.matches('.an-heatmap, .an-quality-grid, [data-keep-table]')
+    || table.closest('.an-heatmap, .an-quality-grid, [data-keep-table]');
+  if (!complex) table.dataset.mobileCards = 'true';
+  table.querySelectorAll('tbody tr').forEach(row => {
+    Array.from(row.children).forEach((cell, index) => {
+      if (!cell.hasAttribute('data-label') && Number(cell.getAttribute('colspan') || 1) === 1) {
+        cell.setAttribute('data-label', headers[index] || '');
+      }
+    });
+  });
+  const wrapper = table.closest('.table-wrap, .data-table-wrap, .an-table-scroll, .sessions-table-wrap, .users-table-wrap');
+  if (wrapper && !wrapper.hasAttribute('tabindex')) {
+    wrapper.tabIndex = 0;
+    wrapper.setAttribute('role', 'region');
+    const heading = wrapper.closest('section, article, .panel, .card')?.querySelector('h2, h3, .panel-title');
+    wrapper.setAttribute('aria-label', heading?.textContent?.trim() || 'Таблица данных');
+  }
+}
+
+function uiEnhanceRenderedContent(root = document) {
+  const scope = root.nodeType === Node.ELEMENT_NODE || root.nodeType === Node.DOCUMENT_NODE ? root : document;
+  const query = selector => [
+    ...(scope.matches?.(selector) ? [scope] : []),
+    ...scope.querySelectorAll(selector),
+  ];
+  const containingTable = scope.closest?.('table');
+  if (containingTable) uiEnhanceTable(containingTable);
+  query('table').forEach(uiEnhanceTable);
+  query('button').forEach(button => {
+    if (button.hasAttribute('aria-label') || button.textContent.trim()) return;
+    button.setAttribute('aria-label', button.getAttribute('title') || 'Действие');
+  });
+  query('svg').forEach(svg => {
+    if (svg.closest('button, a') || svg.hasAttribute('aria-label') || svg.getAttribute('aria-hidden') === 'true') return;
+    const container = svg.closest('.chart-container, .an-card, .race-chart-wrap');
+    if (!container) return;
+    const title = container.querySelector('h2, h3, .an-card-head')?.textContent?.trim() || 'График показателей';
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', title);
+  });
+  query('img:not([alt])').forEach(image => image.setAttribute('alt', ''));
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  uiEnhanceRenderedContent(document);
+  // Observe the shell and lazily-created overlays/toasts with one batched
+  // observer. Attribute changes made by the enhancer are intentionally not
+  // observed, so this cannot recurse.
+  const root = document.body;
+  let queued = false;
+  const pendingRoots = new Set();
+  const observer = new MutationObserver(mutations => {
+    mutations.forEach(mutation => mutation.addedNodes.forEach(node => {
+      if (node.nodeType === Node.ELEMENT_NODE) pendingRoots.add(node);
+    }));
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      pendingRoots.forEach(node => uiEnhanceRenderedContent(node));
+      pendingRoots.clear();
+    });
+  });
+  observer.observe(root, { childList: true, subtree: true });
+});
+let _operatorLevelsTabRenderVersion = 0;
+
 async function renderOperatorLevelsSettings() {
   const el = document.getElementById('view-operator-levels');
   if (!el) return;
@@ -1115,23 +1473,37 @@ async function renderOperatorLevelsSettings() {
         <p>Настройте путь роста, требования к каждому этапу и награды за повышение.</p>
       </div>
       <div class="header-right level-header-actions" ${tab === 'levels' ? '' : 'hidden'}>
-        <button class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi()">Пересчитать уровни</button>
-        <button class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">+ Добавить уровень</button>
+        <button type="button" class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi(this)">Пересчитать уровни</button>
+        <button type="button" class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">+ Добавить уровень</button>
       </div>
     </div>
     <div class="levels-page-tabs" role="tablist" aria-label="Разделы развития операторов">
-      <button class="levels-page-tab ${tab === 'levels' ? 'is-active' : ''}" data-op-levels-tab="levels" role="tab" aria-selected="${tab === 'levels'}">
+      <button id="op-levels-tab-levels" class="levels-page-tab ${tab === 'levels' ? 'is-active' : ''}" data-op-levels-tab="levels" role="tab" aria-controls="op-levels-tab-body" aria-selected="${tab === 'levels'}" tabindex="${tab === 'levels' ? '0' : '-1'}">
         <span>Уровни</span><small>Этапы роста и условия</small>
       </button>
-      <button class="levels-page-tab ${tab === 'achievements' ? 'is-active' : ''}" data-op-levels-tab="achievements" role="tab" aria-selected="${tab === 'achievements'}">
+      <button id="op-levels-tab-achievements" class="levels-page-tab ${tab === 'achievements' ? 'is-active' : ''}" data-op-levels-tab="achievements" role="tab" aria-controls="op-levels-tab-body" aria-selected="${tab === 'achievements'}" tabindex="${tab === 'achievements' ? '0' : '-1'}">
         <span>Достижения</span><small>Награды за отдельные результаты</small>
       </button>
     </div>
-    <div id="op-levels-tab-body"></div>`;
-  el.querySelectorAll('[data-op-levels-tab]').forEach(btn => {
+    <div id="op-levels-tab-body" role="tabpanel" tabindex="0" aria-labelledby="op-levels-tab-${tab}"></div>`;
+  const tabButtons = [...el.querySelectorAll('[data-op-levels-tab]')];
+  tabButtons.forEach((btn, index) => {
     btn.addEventListener('click', () => {
+      if (STATE.opLevelsTab === btn.dataset.opLevelsTab) return;
       STATE.opLevelsTab = btn.dataset.opLevelsTab;
       renderOperatorLevelsSettings();
+    });
+    btn.addEventListener('keydown', event => {
+      let nextIndex = null;
+      if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabButtons.length;
+      if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabButtons.length) % tabButtons.length;
+      if (event.key === 'Home') nextIndex = 0;
+      if (event.key === 'End') nextIndex = tabButtons.length - 1;
+      if (nextIndex === null) return;
+      event.preventDefault();
+      const nextButton = tabButtons[nextIndex];
+      nextButton.click();
+      requestAnimationFrame(() => document.getElementById(`op-levels-tab-${nextButton.dataset.opLevelsTab}`)?.focus());
     });
   });
   const bodyEl = el.querySelector('#op-levels-tab-body');
@@ -1141,7 +1513,9 @@ async function renderOperatorLevelsSettings() {
 
 async function renderLevelsTabContent(el) {
   if (!el) return;
-  el.innerHTML = '<div class="panel level-settings-shell"><div class="empty-state"><p>Загрузка уровней…</p></div></div>';
+  const renderVersion = ++_operatorLevelsTabRenderVersion;
+  el.setAttribute('aria-busy', 'true');
+  el.innerHTML = '<div class="panel level-settings-shell"><div class="loading-state" role="status"><div class="loading-spinner"></div><p>Загрузка уровней…</p></div></div>';
 
   let levels = [];
   try {
@@ -1150,15 +1524,23 @@ async function renderLevelsTabContent(el) {
     try {
       levels = await withTimeout(swrFetch('levels:list', () => api.listOperatorLevels(), null, SWR_STATIC_TTL_MS), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
     } catch (publicErr) {
-      el.innerHTML = `<div class="status-line status-error">${esc(publicErr.message || adminErr.message || 'Не удалось загрузить уровни')}</div>
+      if (renderVersion !== _operatorLevelsTabRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
+      el.removeAttribute('aria-busy');
+      const message = typeof uiErrorMessage === 'function'
+        ? uiErrorMessage(publicErr || adminErr, 'Не удалось загрузить уровни')
+        : 'Не удалось загрузить уровни';
+      el.innerHTML = `<div class="status-line status-error" role="alert">${esc(message)}</div>
         <button class="btn-outline btn-sm" onclick="renderOperatorLevelsSettings()">Попробовать снова</button>`;
       return;
     }
   }
+  if (renderVersion !== _operatorLevelsTabRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
   STATE.operatorLevels = levels;
   const canDeleteLevels = STATE.user?.role === 'admin';
   const rewardsData = await withTimeout(swrFetch('levels:rewards', () => api.listOperatorLevelRewards(), null, SWR_FAST_TTL_MS), 10000)
     .catch(() => ({ items: [] }));
+  if (renderVersion !== _operatorLevelsTabRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
+  el.removeAttribute('aria-busy');
   const rewardRows = Array.isArray(rewardsData) ? rewardsData : (rewardsData.items || []);
 
   function ruleText(rule) {
@@ -1272,22 +1654,30 @@ async function renderLevelsTabContent(el) {
   </div>`;
 }
 
-async function recalculateOperatorLevelsUi() {
+async function recalculateOperatorLevelsUi(button) {
+  if (STATE._operatorLevelsRecalculating || button?.disabled) return;
+  STATE._operatorLevelsRecalculating = true;
+  if (button) uiSetBusy(button, true, 'Пересчитываем…');
   try {
     const res = await api.recalculateOperatorLevels({ mode: 'all' });
     swrInvalidate('levels:');
     showToast(`Пересчитано: ${res.processed}, изменено: ${res.updated}`, 'ok');
     swrInvalidate('rating:list');
     await reloadData();
-  } catch(e) { showToast(e.message, 'error'); }
+  } catch(e) {
+    showToast(typeof uiErrorMessage === 'function' ? uiErrorMessage(e, 'Не удалось пересчитать уровни') : 'Не удалось пересчитать уровни', 'error');
+  } finally {
+    STATE._operatorLevelsRecalculating = false;
+    if (button?.isConnected) uiSetBusy(button, false);
+  }
 }
 
-async function showCreateOperatorLevelPrompt() {
+function showCreateOperatorLevelPrompt() {
   showOperatorLevelForm();
 }
 
-async function editOperatorLevelUi(levelId) {
-  const level = STATE.operatorLevels.find(l => l.id === levelId);
+function editOperatorLevelUi(levelId) {
+  const level = (STATE.operatorLevels || []).find(l => l.id === levelId);
   if (!level) return;
   showOperatorLevelForm(level);
 }
@@ -1298,37 +1688,39 @@ function showOperatorLevelForm(level = null) {
     <h3 class="modal-title">${isEdit ? 'Изменить уровень' : 'Добавить уровень'}</h3>
     <div class="form-grid-2">
       <div class="form-group">
-        <label class="form-label">Название</label>
-        <input id="lvl-name" class="form-input" value="${esc(level?.name || '')}" placeholder="Например: Профи">
+        <label class="form-label" for="lvl-name">Название</label>
+        <input id="lvl-name" class="form-input" value="${esc(level?.name || '')}" maxlength="100" required aria-describedby="lvl-form-error" placeholder="Например: Профи">
       </div>
       <div class="form-group">
-        <label class="form-label">Код</label>
-        <input id="lvl-code" class="form-input" value="${esc(level?.code || '')}" ${isEdit ? 'disabled' : ''} placeholder="pro">
+        <label class="form-label" for="lvl-code">Код</label>
+        <input id="lvl-code" class="form-input" value="${esc(level?.code || '')}" ${isEdit ? 'disabled' : 'required'} maxlength="50" pattern="[a-z0-9_-]+" aria-describedby="lvl-code-hint lvl-form-error" placeholder="pro">
+        <div id="lvl-code-hint" class="form-hint">Латинские буквы, цифры, дефис и подчёркивание.</div>
       </div>
     </div>
     <div class="form-grid-2">
       <div class="form-group">
-        <label class="form-label">Цвет бейджа</label>
-        <input id="lvl-color" class="form-input" value="${esc(level?.color || '#64748B')}" placeholder="#64748B">
+        <label class="form-label" for="lvl-color">Цвет бейджа</label>
+        <input id="lvl-color" class="form-input" value="${esc(level?.color || '#64748B')}" pattern="#[0-9A-Fa-f]{6}" aria-describedby="lvl-color-hint lvl-form-error" placeholder="#64748B">
+        <div id="lvl-color-hint" class="form-hint">HEX-цвет в формате #64748B.</div>
       </div>
       <div class="form-group">
-        <label class="form-label">Награда за повышение</label>
-        <input id="lvl-reward-coins" class="form-input" type="number" min="0" value="${esc(level?.reward_coins ?? 0)}">
-        <div class="form-hint">Количество коинов, которое оператор получит один раз при первом переходе.</div>
+        <label class="form-label" for="lvl-reward-coins">Награда за повышение</label>
+        <input id="lvl-reward-coins" class="form-input" type="number" min="0" step="1" value="${esc(level?.reward_coins ?? 0)}" aria-describedby="lvl-reward-hint lvl-form-error">
+        <div id="lvl-reward-hint" class="form-hint">Количество коинов, которое оператор получит один раз при первом переходе.</div>
       </div>
     </div>
     <input id="lvl-order" type="hidden" value="${esc(level?.sort_order ?? ((STATE.operatorLevels.length + 1) * 10))}">
     <input id="lvl-min-xp" type="hidden" value="${esc(level?.min_total_xp ?? 0)}">
     <div class="form-group">
-      <label class="form-label">Описание</label>
-      <textarea id="lvl-description" class="form-input" rows="3" placeholder="Короткое описание уровня">${esc(level?.description || '')}</textarea>
+      <label class="form-label" for="lvl-description">Описание</label>
+      <textarea id="lvl-description" class="form-input" rows="3" maxlength="500" placeholder="Короткое описание уровня">${esc(level?.description || '')}</textarea>
     </div>
-    <div id="lvl-form-error" class="status-line"></div>
-    <button class="btn-primary" style="width:100%;margin-top:8px" onclick="submitOperatorLevelForm(${isEdit ? level.id : 'null'})">${isEdit ? 'Сохранить' : 'Создать'}</button>
+    <div id="lvl-form-error" class="status-line" role="alert" aria-live="polite"></div>
+    <button type="button" class="btn-primary" style="width:100%;margin-top:8px" onclick="submitOperatorLevelForm(${isEdit ? level.id : 'null'}, this)">${isEdit ? 'Сохранить' : 'Создать'}</button>
   `);
 }
 
-async function submitOperatorLevelForm(levelId) {
+async function submitOperatorLevelForm(levelId, button) {
   const err = document.getElementById('lvl-form-error');
   const name = document.getElementById('lvl-name')?.value.trim();
   const code = document.getElementById('lvl-code')?.value.trim();
@@ -1339,8 +1731,26 @@ async function submitOperatorLevelForm(levelId) {
   const reward_coins = Number(document.getElementById('lvl-reward-coins')?.value || 0);
   if (!name || (!levelId && !code)) {
     if (err) { err.textContent = 'Заполните название и код'; err.className = 'status-line status-error'; }
+    document.getElementById(!name ? 'lvl-name' : 'lvl-code')?.focus();
     return;
   }
+  if (!levelId && !/^[a-z0-9_-]+$/.test(code)) {
+    if (err) { err.textContent = 'Код может содержать только латинские буквы, цифры, дефис и подчёркивание'; err.className = 'status-line status-error'; }
+    document.getElementById('lvl-code')?.focus();
+    return;
+  }
+  if (!/^#[0-9a-f]{6}$/i.test(color)) {
+    if (err) { err.textContent = 'Укажите цвет в формате #64748B'; err.className = 'status-line status-error'; }
+    document.getElementById('lvl-color')?.focus();
+    return;
+  }
+  if (!Number.isInteger(reward_coins) || reward_coins < 0) {
+    if (err) { err.textContent = 'Награда должна быть целым неотрицательным числом'; err.className = 'status-line status-error'; }
+    document.getElementById('lvl-reward-coins')?.focus();
+    return;
+  }
+  if (button?.disabled) return;
+  if (button) uiSetBusy(button, true);
   try {
     const payload = { name, color, description, sort_order, min_total_xp, reward_coins, reward_once: true };
     if (levelId) await api.updateOperatorLevel(levelId, payload);
@@ -1348,17 +1758,25 @@ async function submitOperatorLevelForm(levelId) {
     swrInvalidate('levels:');
     closeModal();
     await renderOperatorLevelsSettings();
-  } catch(e) { showToast(e.message, 'error'); }
+  } catch(e) {
+    if (err) {
+      err.textContent = typeof uiErrorMessage === 'function'
+        ? uiErrorMessage(e, 'Не удалось сохранить уровень')
+        : 'Не удалось сохранить уровень';
+      err.className = 'status-line status-error';
+    }
+    if (button?.isConnected) uiSetBusy(button, false);
+  }
 }
 
-async function addOperatorLevelRuleUi(levelId) {
-  const level = STATE.operatorLevels.find(l => l.id === levelId);
+function addOperatorLevelRuleUi(levelId) {
+  const level = (STATE.operatorLevels || []).find(l => l.id === levelId);
   showModal(`
     <h3 class="modal-title">Добавить показатель</h3>
     <div class="status-line" style="padding:0;color:var(--text-secondary)">Уровень: <b>${esc(level?.name || '')}</b></div>
     <div class="form-grid-2">
       <div class="form-group">
-        <label class="form-label">Показатель</label>
+        <label class="form-label" for="rule-metric">Показатель</label>
         <select id="rule-metric" class="form-select">
           <option value="tenure_days">Стаж</option>
           <option value="quality">Качество</option>
@@ -1371,8 +1789,8 @@ async function addOperatorLevelRuleUi(levelId) {
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Условие</label>
-        <select id="rule-operator" class="form-select">
+        <label class="form-label" for="rule-operator">Условие</label>
+        <select id="rule-operator" class="form-select" onchange="syncOperatorLevelRuleFields()">
           <option value="gte">Больше или равно</option>
           <option value="lte">Меньше или равно</option>
           <option value="eq">Равно</option>
@@ -1382,20 +1800,29 @@ async function addOperatorLevelRuleUi(levelId) {
     </div>
     <div class="form-grid-2">
       <div class="form-group">
-        <label class="form-label">Минимум / значение</label>
-        <input id="rule-min" class="form-input" type="number" step="0.01" value="0">
+        <label class="form-label" for="rule-min">Минимум / значение</label>
+        <input id="rule-min" class="form-input" type="number" step="0.01" value="0" aria-describedby="rule-form-error">
       </div>
       <div class="form-group">
-        <label class="form-label">Максимум</label>
-        <input id="rule-max" class="form-input" type="number" step="0.01" placeholder="Для lte / between">
+        <label class="form-label" for="rule-max">Максимум</label>
+        <input id="rule-max" class="form-input" type="number" step="0.01" aria-describedby="rule-form-error" placeholder="Для lte / between">
       </div>
     </div>
-    <div id="rule-form-error" class="status-line"></div>
-    <button class="btn-primary" style="width:100%;margin-top:8px" onclick="submitOperatorLevelRuleForm(${levelId})">Добавить</button>
+    <div id="rule-form-error" class="status-line" role="alert" aria-live="polite"></div>
+    <button type="button" class="btn-primary" style="width:100%;margin-top:8px" onclick="submitOperatorLevelRuleForm(${levelId}, this)">Добавить</button>
   `);
+  syncOperatorLevelRuleFields();
 }
 
-async function submitOperatorLevelRuleForm(levelId) {
+function syncOperatorLevelRuleFields() {
+  const operator = document.getElementById('rule-operator')?.value || 'gte';
+  const minInput = document.getElementById('rule-min');
+  const maxInput = document.getElementById('rule-max');
+  if (minInput) minInput.disabled = operator === 'lte';
+  if (maxInput) maxInput.disabled = operator === 'gte' || operator === 'eq';
+}
+
+async function submitOperatorLevelRuleForm(levelId, button) {
   const metric_code = document.getElementById('rule-metric')?.value;
   const operator = document.getElementById('rule-operator')?.value;
   const value_min_raw = document.getElementById('rule-min')?.value;
@@ -1408,22 +1835,41 @@ async function submitOperatorLevelRuleForm(levelId) {
     is_required: true,
   };
   if (operator === 'lte') payload.value_min = null;
-  if ((operator === 'gte' || operator === 'eq') && payload.value_min === null) {
+  if ((operator === 'gte' || operator === 'eq' || operator === 'between') && (payload.value_min === null || !Number.isFinite(payload.value_min))) {
     const err = document.getElementById('rule-form-error');
     if (err) { err.textContent = 'Укажите значение'; err.className = 'status-line status-error'; }
+    document.getElementById('rule-min')?.focus();
     return;
   }
-  if ((operator === 'lte' || operator === 'between') && payload.value_max === null) {
+  if ((operator === 'lte' || operator === 'between') && (payload.value_max === null || !Number.isFinite(payload.value_max))) {
     const err = document.getElementById('rule-form-error');
     if (err) { err.textContent = 'Укажите максимум'; err.className = 'status-line status-error'; }
+    document.getElementById('rule-max')?.focus();
     return;
   }
+  if (operator === 'between' && payload.value_min > payload.value_max) {
+    const err = document.getElementById('rule-form-error');
+    if (err) { err.textContent = 'Минимум не может быть больше максимума'; err.className = 'status-line status-error'; }
+    document.getElementById('rule-min')?.focus();
+    return;
+  }
+  if (button?.disabled) return;
+  if (button) uiSetBusy(button, true, 'Добавляем…');
   try {
     await api.addOperatorLevelRule(levelId, payload);
     swrInvalidate('levels:');
     closeModal();
     await renderOperatorLevelsSettings();
-  } catch(e) { showToast(e.message, 'error'); }
+  } catch(e) {
+    const err = document.getElementById('rule-form-error');
+    if (err) {
+      err.textContent = typeof uiErrorMessage === 'function'
+        ? uiErrorMessage(e, 'Не удалось добавить условие')
+        : 'Не удалось добавить условие';
+      err.className = 'status-line status-error';
+    }
+    if (button?.isConnected) uiSetBusy(button, false);
+  }
 }
 
 async function deleteOperatorLevelRuleUi(ruleId) {
@@ -1476,277 +1922,98 @@ async function toggleOperatorLevelUi(levelId, isActive) {
 }
 
 async function manualOperatorLevelUi(operatorId) {
-  const op = STATE.adminOperators.find(o => o.id === operatorId);
-  const levels = STATE.operatorLevels.length ? STATE.operatorLevels : await api.listOperatorLevels().catch(() => []);
+  const op = (STATE.adminOperators || []).find(o => o.id === operatorId);
+  const levels = STATE.operatorLevels?.length ? STATE.operatorLevels : await api.listOperatorLevels().catch(() => []);
   const activeLevels = levels.filter(l => l.is_active);
   if (!activeLevels.length) { showToast('Нет активных уровней', 'error'); return; }
-  const options = activeLevels.map(l => `${l.id}: ${l.name}`).join('\n');
-  const raw = prompt(`Выберите уровень для ${op?.full_name || 'оператора'}:\n${options}`);
-  if (!raw) return;
-  const levelId = Number(String(raw).split(':')[0].trim());
-  if (!levelId) { showToast('Некорректный уровень', 'error'); return; }
-  const reason = prompt('Причина ручной смены уровня');
-  if (!reason || !reason.trim()) { showToast('Причина обязательна', 'error'); return; }
-  const comment = prompt('Комментарий', '') || '';
+  showModal(`
+    <h3 class="modal-title">Изменить уровень оператора</h3>
+    <p class="form-hint">Оператор: <b>${esc(op?.full_name || 'Оператор')}</b></p>
+    <div class="form-group">
+      <label class="form-label" for="manual-level-id">Новый уровень</label>
+      <select id="manual-level-id" class="form-select" required aria-describedby="manual-level-error">
+        ${activeLevels.map(level => `<option value="${level.id}">${esc(level.name)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="manual-level-reason">Причина изменения</label>
+      <input id="manual-level-reason" class="form-input" maxlength="300" required aria-describedby="manual-level-error" placeholder="Например: решение руководителя">
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="manual-level-comment">Комментарий <span class="optional">(необязательно)</span></label>
+      <textarea id="manual-level-comment" class="form-input" rows="3" maxlength="1000"></textarea>
+    </div>
+    <div id="manual-level-error" class="status-line" role="alert" aria-live="polite"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn-outline" onclick="closeModal()">Отмена</button>
+      <button type="button" class="btn-primary" onclick="submitManualOperatorLevelUi(${operatorId}, this)">Изменить уровень</button>
+    </div>`);
+}
+
+async function submitManualOperatorLevelUi(operatorId, button) {
+  const levelId = Number(document.getElementById('manual-level-id')?.value);
+  const reasonInput = document.getElementById('manual-level-reason');
+  const reason = reasonInput?.value.trim() || '';
+  const comment = document.getElementById('manual-level-comment')?.value.trim() || '';
+  const error = document.getElementById('manual-level-error');
+  if (!levelId || !reason) {
+    if (error) error.textContent = !levelId ? 'Выберите уровень' : 'Укажите причину изменения';
+    (!levelId ? document.getElementById('manual-level-id') : reasonInput)?.focus();
+    return;
+  }
+  if (button?.disabled) return;
+  if (button) uiSetBusy(button, true, 'Изменяем…');
   try {
     await api.manualOperatorLevel(operatorId, { level_id: levelId, reason, comment });
     swrInvalidate('levels:');
     showToast('Уровень изменён', 'ok');
     swrInvalidate('rating:list');
+    closeModal();
     await reloadData();
-  } catch(e) { showToast(e.message, 'error'); }
-}
-
-/* ══════════════════════════════════════
-   VIEW: КАБИНЕТ ОПЕРАТОРА
-══════════════════════════════════════ */
-function renderCabinet() {
-  const el = document.getElementById('view-cabinet');
-  if (!el) return;
-  if (!(STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor')) {
-    el.innerHTML = `<div class="view-header">
-      <div>
-        <div class="section-kicker">Кабинет</div>
-        <h2 class="section-title">Мой кабинет</h2>
-      </div>
-    </div>
-    <div class="panel">
-      <h3>Администратор</h3>
-      <p class="muted">Личный кошелёк доступен только аккаунтам, привязанным к оператору.</p>
-    </div>`;
-    return;
-  }
-  const w = STATE.wallet;
-  if (!w) {
-    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div></div>
-      <div class="empty-state"><p>Данные загружаются…</p></div>`;
-    const _cabinetGen = STATE.navGen;
-    swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS).then(data => {
-      STATE.wallet = data;
-      if (!isNavStale(_cabinetGen)) renderCabinet();
-    }).catch(() => {});
-    return;
-  }
-
-  const myRow = STATE.rating.find(r => r.operator_id === w.operator_id);
-  const hasRank = myRow?.rank_position != null && Number(myRow.rank_position) > 0;
-  const rank = hasRank ? Number(myRow.rank_position) : null;
-  const total = STATE.rating.length || '—';
-  const delta = myRow?.rank_delta;
-  const levelInfo = STATE.myLevel;
-  // Стаж: берём из metrics (API /me/level) или из STATE.myOperator
-  const tenureDays = levelInfo?.metrics?.tenure_days ?? STATE.myOperator?.tenure_days ?? null;
-  const tenureStr = tenureDays != null ? formatTenureDays(tenureDays) : '—';
-  const levelCard = levelInfo ? `
-    <div class="panel level-card">
-      <div class="panel-head">
-        <h3>Мой уровень</h3>
-        ${levelBadgeHtml(levelInfo.level, 'level-badge-lg')}
-      </div>
-      <div class="level-tenure-row">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>Стаж: <b>${esc(tenureStr)}</b></span>
-      </div>
-      ${levelInfo.next_level ? `
-        <div class="level-next">До следующего уровня: ${levelBadgeHtml(levelInfo.next_level)}</div>
-        <div class="level-gap-list">
-          ${(levelInfo.gaps || []).map(g => `
-            <div class="level-gap-row ${g.ok ? 'ok' : 'miss'}">
-              <span>${esc(g.label)}</span>
-              <b>${metricValueHtml(g)}</b>
-              <em>${g.ok ? 'готово' : levelRequirementHtml(g)}</em>
-            </div>`).join('')}
-        </div>` : `
-        <div class="empty-line">Вы достигли максимального уровня.</div>`}
-      ${levelInfo.is_manual ? `<div class="status-line">Ручной уровень: ${esc(levelInfo.manual_reason || '')}</div>` : ''}
-    </div>` : '';
-
-  el.innerHTML = `
-    <div class="view-header">
-      <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
-      <button class="btn-outline btn-sm" onclick="reloadCabinet()">Обновить</button>
-    </div>
-
-    <div class="kpi-grid">
-      <div class="kpi-card kpi-accent">
-        <div class="kpi-label">Баланс коинов</div>
-        <div class="kpi-value">${w.current_balance} <span class="kpi-unit">₡</span></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Всего заработано</div>
-        <div class="kpi-value">${w.total_earned} <span class="kpi-unit">₡</span></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Потрачено</div>
-        <div class="kpi-value">${w.total_spent} <span class="kpi-unit">₡</span></div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Место в рейтинге</div>
-        <div class="kpi-value">${rank ? `${rank} <span class="kpi-unit">из ${total}</span>` : '<span class="kpi-unit">Пока не рассчитано</span>'}
-          ${delta != null ? `<span class="rank-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${delta > 0 ? '↑'+delta : delta < 0 ? '↓'+Math.abs(delta) : 'без изм.'}</span>` : ''}
-        </div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Стаж в компании</div>
-        <div class="kpi-value" style="font-size:clamp(14px,2vw,18px)">${esc(tenureStr)}</div>
-      </div>
-    </div>
-
-    ${levelCard}
-
-    <div class="cabinet-wow-grid">
-      <div id="cabinet-wheel-card"></div>
-      <div id="cabinet-wheel-winners"></div>
-    </div>
-
-    <div id="cabinet-weekly-detail"></div>
-
-    <div id="cabinet-achievements"></div>
-
-    <div class="cabinet-bottom-grid">
-      <div class="panel">
-        <div class="panel-head"><h3>История начислений</h3><span class="panel-badge">${w.transactions.length} записей</span></div>
-        <div class="tx-list">
-          ${w.transactions.length ? w.transactions.map(t => `
-            <div class="tx-row ${t.amount >= 0 ? 'tx-plus' : 'tx-minus'}">
-              <div class="tx-info">
-                <span class="tx-comment">${esc(t.comment)}</span>
-                <span class="tx-date">${fmtDate(t.created_at)}</span>
-              </div>
-              <div class="tx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</div>
-            </div>`).join('') : '<div class="empty-line">Операций пока нет</div>'}
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h3>Топ-5 недели</h3></div>
-        ${miniRating(5, myRow?.operator_id)}
-        <div class="panel-footer">
-          <button class="btn-link" onclick="navigateTo('rating')">Полный рейтинг →</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="shop-banner">
-      <div>
-        <div class="shop-banner-title">Магазин бонусов</div>
-        <div class="shop-banner-sub">У вас ${w.current_balance} ₡ — потратьте на бонус</div>
-      </div>
-      <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
-    </div>`;
-
-  renderCabinetWheelCard();
-  renderWheelWinnersToday();
-  renderCabinetWeeklyDetail();
-  renderCabinetAchievements();
-}
-
-// Блок «Победитель Wheel of WOW сегодня» на главной (ТЗ п.10). Грузится
-// асинхронно; если сегодня никто не крутил — блок скрыт.
-async function renderWheelWinnersToday() {
-  const host = document.getElementById('cabinet-wheel-winners');
-  if (!host) return;
-  let data;
-  try {
-    data = await api.getWheelWinnersToday();
-  } catch {
-    host.innerHTML = '';
-    return;
-  }
-  const items = data && data.items ? data.items : [];
-  if (!items.length || !data.top) { host.innerHTML = ''; return; }
-
-  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₡` : esc(w.prize);
-  const top = data.top;
-  const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
-
-  host.innerHTML = `
-    <div class="panel wheel-winner-card">
-      <div class="wheel-winner-head">
-        <span class="wheel-winner-kicker">🎡 Победитель Wheel of WOW сегодня</span>
-        <span class="wheel-winner-badge">Крупнейший приз дня</span>
-      </div>
-      <div class="wheel-winner-hero">
-        <div class="wheel-winner-avatar">${esc((top.operator_name || '?').trim().charAt(0))}</div>
-        <div class="wheel-winner-main">
-          <div class="wheel-winner-name">${esc(top.operator_name)}</div>
-          ${top.reason ? `<div class="wheel-winner-reason">Причина допуска: ${esc(top.reason)}</div>` : ''}
-        </div>
-        <div class="wheel-winner-prize">${prizeText(top)}</div>
-      </div>
-      ${rest.length ? `<div class="wheel-winner-list">
-        <div class="wheel-winner-list-title">Сегодня крутили колесо:</div>
-        ${rest.slice(0, 6).map(w => `<div class="wheel-winner-row">
-          <span class="wheel-winner-row-icon">${WHEEL_PRIZE_ICON[w.prize_type] || '★'}</span>
-          <span class="wheel-winner-row-name">${esc(w.operator_name)}</span>
-          <span class="wheel-winner-row-prize">${prizeText(w)}</span>
-        </div>`).join('')}
-      </div>` : ''}
-    </div>`;
-}
-
-// Карточка «Колесо WOW» на главной панели оператора (ТЗ п.2). Грузится
-// асинхронно, чтобы не задерживать рендер кабинета; ошибки скрывают карточку.
-async function renderCabinetWheelCard() {
-  const host = document.getElementById('cabinet-wheel-card');
-  if (!host) return;
-  let status;
-  try {
-    status = await api.getWheelStatus();
-  } catch {
-    host.innerHTML = '';
-    return;
-  }
-  if (!status || !status.campaign) { host.innerHTML = ''; return; }
-
-  const tickets = status.available_tickets || 0;
-  const canSpin = status.can_spin;
-  const reason = status.next_ticket_reason;
-  const lp = status.last_prize;
-
-  if (tickets > 0) {
-    host.innerHTML = `
-      <div class="panel wheel-cabinet-card wheel-cabinet-have">
-        <div class="wheel-cabinet-main">
-          <div class="wheel-cabinet-kicker">🎡 Колесо WOW</div>
-          <div class="wheel-cabinet-title">Доступно вращений: <b>${tickets}</b></div>
-          ${reason ? `<div class="wheel-cabinet-sub">Получено за: ${esc(reason)}</div>` : ''}
-          ${!canSpin && status.reason_if_cannot_spin ? `<div class="wheel-cabinet-sub muted">${esc(status.reason_if_cannot_spin)}</div>` : ''}
-        </div>
-        <button class="btn-primary" onclick="navigateTo('wheel')">Крутить колесо</button>
-      </div>`;
-  } else {
-    host.innerHTML = `
-      <div class="panel wheel-cabinet-card wheel-cabinet-none">
-        <div class="wheel-cabinet-main">
-          <div class="wheel-cabinet-kicker">🎡 Колесо WOW</div>
-          <div class="wheel-cabinet-title">Сегодня вращений нет</div>
-          <div class="wheel-cabinet-sub muted">Чтобы получить попытку: пройди тест дня на 80%+, закрой день без опозданий, держи качество 90+.</div>
-          ${lp ? `<div class="wheel-cabinet-sub">Последний приз: ${esc(lp.title)}</div>` : ''}
-        </div>
-        <button class="btn-outline" onclick="navigateTo('wheel')">Открыть колесо</button>
-      </div>`;
+  } catch(e) {
+    if (error) {
+      error.textContent = typeof uiErrorMessage === 'function'
+        ? uiErrorMessage(e, 'Не удалось изменить уровень')
+        : 'Не удалось изменить уровень';
+    }
+    if (button?.isConnected) uiSetBusy(button, false);
   }
 }
 
-async function reloadCabinet() {
-  STATE.wallet = await swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS).catch(() => STATE.wallet);
-  STATE.myLevel = await api.myLevel().catch(() => STATE.myLevel);
-  STATE.myOperator = await api.myOperator().catch(() => STATE.myOperator);
-  setText('side-level', STATE.myLevel?.level?.name || '—');
-  const ratingResp = await api.getRating().catch(() => ({ items: STATE.rating }));
-  STATE.rating = Array.isArray(ratingResp) ? ratingResp : (ratingResp.items || []);
-  STATE.cabinetData = null;
-  renderCabinet();
+/* Cabinet data helpers live here; the single visual renderer is the v3
+   implementation in rating/99-operator-cabinet-rating-redesign.view.js. */
+
+function cabinetSessionKey() {
+  const user = STATE.user;
+  if (!user) return '';
+  return [user.id ?? '', user.operator_id ?? '', user.username ?? '', user.role ?? ''].join(':');
 }
 
-function cabinetFormatCoin(value) {
-  return `${levelNum(value || 0, 0)} <span class="kpi-unit">₡</span>`;
+function cabinetSnapshotForCurrentUser() {
+  const ownerKey = cabinetSessionKey();
+  if (!ownerKey) {
+    STATE.cabinetSnapshot = null;
+    STATE.cabinetData = null;
+    return null;
+  }
+  if (STATE._cabinetSnapshotOwner && STATE._cabinetSnapshotOwner !== ownerKey) {
+    swrInvalidate('cabinet:me');
+    STATE.cabinetSnapshot = null;
+    STATE.cabinetData = null;
+    STATE.cabinetError = null;
+    STATE.cabinetFetchedAt = null;
+    STATE._cabinetSnapshotOwner = ownerKey;
+    return null;
+  }
+  if (!STATE._cabinetSnapshotOwner) STATE._cabinetSnapshotOwner = ownerKey;
+  return STATE.cabinetSnapshot;
 }
 
-function syncCabinetSnapshot(snapshot) {
-  if (!snapshot) return;
+function syncCabinetSnapshot(snapshot, ownerKey = cabinetSessionKey()) {
+  if (!snapshot || !ownerKey || ownerKey !== cabinetSessionKey()) return false;
   const wallet = snapshot.wallet || {};
   const transactions = snapshot.recent_transactions || [];
+  STATE._cabinetSnapshotOwner = ownerKey;
   STATE.cabinetSnapshot = snapshot;
   STATE.cabinetData = snapshot;
   STATE.cabinetFetchedAt = snapshot.generated_at || new Date().toISOString();
@@ -1761,32 +2028,54 @@ function syncCabinetSnapshot(snapshot) {
   };
   STATE.rating = snapshot.top_week || STATE.rating || [];
   if (snapshot.level?.level) setText('side-level', snapshot.level.level.name || '—');
+  return true;
 }
 
 async function loadCabinetSnapshot(force = false) {
-  if (force) {
+  const ownerKey = cabinetSessionKey();
+  if (!ownerKey) throw new Error('Сессия завершена. Войдите снова.');
+
+  const ownerChanged = STATE._cabinetSnapshotOwner && STATE._cabinetSnapshotOwner !== ownerKey;
+  if (force || ownerChanged) {
     swrInvalidate('cabinet:me');
     STATE.cabinetSnapshot = null;
     STATE.cabinetData = null;
+    STATE.cabinetError = null;
   }
-  if (STATE.cabinetSnapshot && !force) return STATE.cabinetSnapshot;
-  if (!STATE._cabinetSnapshotPromise) {
-    STATE._cabinetSnapshotPromise = withTimeout(
-      swrFetch('cabinet:me', () => (api.getMyCabinetV2 ? api.getMyCabinetV2() : api.getMyCabinet()), null, SWR_FAST_TTL_MS),
-      12000,
-      'Кабинет не загрузился: сервер не ответил за 12 секунд'
-    ).then(data => {
-      syncCabinetSnapshot(data);
+  if (cabinetSnapshotForCurrentUser() && !force) return STATE.cabinetSnapshot;
+  if (STATE._cabinetSnapshotPromise && STATE._cabinetSnapshotPromiseOwner === ownerKey && !force) {
+    return STATE._cabinetSnapshotPromise;
+  }
+
+  const requestVersion = Number(STATE._cabinetRequestVersion || 0) + 1;
+  STATE._cabinetRequestVersion = requestVersion;
+  STATE._cabinetSnapshotOwner = ownerKey;
+  STATE._cabinetSnapshotPromiseOwner = ownerKey;
+  const request = withTimeout(
+    swrFetch('cabinet:me', () => (api.getMyCabinetV2 ? api.getMyCabinetV2() : api.getMyCabinet()), null, SWR_FAST_TTL_MS),
+    12000,
+    'Кабинет не загрузился: сервер не ответил за 12 секунд'
+  ).then(data => {
+    if (STATE._cabinetRequestVersion === requestVersion && cabinetSessionKey() === ownerKey) {
+      syncCabinetSnapshot(data, ownerKey);
       STATE.cabinetError = null;
-      return data;
-    }).catch(err => {
-      STATE.cabinetError = err.message || 'Не удалось загрузить кабинет';
-      throw err;
-    }).finally(() => {
+    }
+    return data;
+  }).catch(err => {
+    if (STATE._cabinetRequestVersion === requestVersion && cabinetSessionKey() === ownerKey) {
+      STATE.cabinetError = typeof uiErrorMessage === 'function'
+        ? uiErrorMessage(err, 'Не удалось загрузить кабинет')
+        : 'Не удалось загрузить кабинет';
+    }
+    throw err;
+  }).finally(() => {
+    if (STATE._cabinetSnapshotPromise === request) {
       STATE._cabinetSnapshotPromise = null;
-    });
-  }
-  return STATE._cabinetSnapshotPromise;
+      STATE._cabinetSnapshotPromiseOwner = null;
+    }
+  });
+  STATE._cabinetSnapshotPromise = request;
+  return request;
 }
 
 function cabinetLoadingHtml() {
@@ -1801,214 +2090,31 @@ function cabinetLoadingHtml() {
     </div>`;
 }
 
-function cabinetLevelCard(levelInfo) {
-  if (!levelInfo) return '';
-  const tenureDays = levelInfo.metrics?.tenure_days ?? STATE.myOperator?.tenure_days ?? null;
-  const tenureStr = tenureDays != null ? formatTenureDays(tenureDays) : '—';
-  return `
-    <div class="panel level-card">
-      <div class="panel-head">
-        <h3>Мой уровень</h3>
-        ${levelBadgeHtml(levelInfo.level, 'level-badge-lg')}
-      </div>
-      <div class="level-tenure-row">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>Стаж: <b>${esc(tenureStr)}</b></span>
-      </div>
-      ${levelInfo.next_level ? `
-        <div class="level-next">До следующего уровня: ${levelBadgeHtml(levelInfo.next_level)}</div>
-        <div class="level-gap-list">
-          ${(levelInfo.gaps || []).map(g => `
-            <div class="level-gap-row ${g.ok ? 'ok' : 'miss'}">
-              <span>${esc(g.label)}</span>
-              <b>${metricValueHtml(g)}</b>
-              <em>${g.ok ? 'готово' : levelRequirementHtml(g)}</em>
-            </div>`).join('')}
-        </div>` : '<div class="empty-line">Вы достигли максимального уровня.</div>'}
-      ${levelInfo.is_manual ? `<div class="status-line">Ручной уровень: ${esc(levelInfo.manual_reason || '')}</div>` : ''}
-    </div>`;
-}
-
-function cabinetWheelCard(status) {
-  if (!status || !status.campaign) return '';
-  const tickets = Number(status.available_tickets || 0);
-  const lp = status.last_prize;
-  return `
-    <div class="panel wheel-cabinet-card ${tickets > 0 ? 'wheel-cabinet-have' : 'wheel-cabinet-none'}">
-      <div class="wheel-cabinet-main">
-        <div class="wheel-cabinet-kicker">Колесо WOW</div>
-        <div class="wheel-cabinet-title">${tickets > 0 ? `Доступно вращений: <b>${tickets}</b>` : 'Сегодня вращений нет'}</div>
-        <div class="wheel-cabinet-sub ${tickets > 0 ? '' : 'muted'}">${esc(status.message || status.reason_if_cannot_spin || 'Пока нет доступных билетов')}</div>
-        ${lp ? `<div class="wheel-cabinet-sub">Последний приз: ${esc(lp.title || lp.value || '')}</div>` : ''}
-      </div>
-      <button class="${tickets > 0 ? 'btn-primary' : 'btn-outline'}" onclick="navigateTo('wheel')">${tickets > 0 ? 'Крутить колесо' : 'Открыть колесо'}</button>
-    </div>`;
-}
-
-function cabinetWinnersCard(data) {
-  const items = data?.items || [];
-  const top = data?.top;
-  if (!items.length || !top) return '';
-  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₡` : esc(w.prize || '—');
-  const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
-  return `
-    <div class="panel wheel-winner-card">
-      <div class="wheel-winner-head">
-        <span class="wheel-winner-kicker">Победитель Wheel of WOW сегодня</span>
-        <span class="wheel-winner-badge">Крупнейший приз дня</span>
-      </div>
-      <div class="wheel-winner-hero">
-        <div class="wheel-winner-avatar">${esc((top.operator_name || '?').trim().charAt(0))}</div>
-        <div class="wheel-winner-main">
-          <div class="wheel-winner-name">${esc(top.operator_name)}</div>
-          ${top.reason ? `<div class="wheel-winner-reason">Причина допуска: ${esc(top.reason)}</div>` : ''}
-        </div>
-        <div class="wheel-winner-prize">${prizeText(top)}</div>
-      </div>
-      ${rest.length ? `<div class="wheel-winner-list">
-        ${rest.slice(0, 5).map(w => `<div class="wheel-winner-row">
-          <span class="wheel-winner-row-icon">${WHEEL_PRIZE_ICON[w.prize_type] || '★'}</span>
-          <span class="wheel-winner-row-name">${esc(w.operator_name)}</span>
-          <span class="wheel-winner-row-prize">${prizeText(w)}</span>
-        </div>`).join('')}
-      </div>` : ''}
-    </div>`;
-}
-
-function cabinetTransactionsHtml(items) {
-  return items.length ? items.map(t => `
-    <div class="tx-row ${Number(t.amount || 0) >= 0 ? 'tx-plus' : 'tx-minus'}">
-      <div class="tx-info">
-        <span class="tx-comment">${esc(t.comment || t.type || 'Операция')}</span>
-        <span class="tx-date">${fmtDate(t.created_at || t.date)}</span>
-      </div>
-      <div class="tx-amount">${Number(t.amount || 0) >= 0 ? '+' : ''}${levelNum(t.amount || 0, 0)} ₡</div>
-    </div>`).join('') : '<div class="empty-line">Операций пока нет</div>';
-}
-
-function cabinetTopWeekHtml(rows, currentId) {
-  return rows.length ? `<div class="mini-rating">
-    ${rows.map((r, idx) => `<div class="mini-row ${r.operator_id === currentId ? 'current' : ''}">
-      <span class="mini-rank">${r.rank_position || idx + 1}</span>
-      <span class="mini-name">${esc(r.operator_name || r.full_name || '—')} ${r.level ? levelBadgeHtml(r.level) : ''}</span>
-      <b>${levelNum(r.coins_earned || r.total_balance || 0, 0)} ₡</b>
-      <em>${levelNum(r.contest_points || r.final_score || 0)}</em>
-    </div>`).join('')}
-  </div>` : '<div class="empty-line">Рейтинг пока не рассчитан</div>';
-}
-
-function renderCabinet() {
-  const el = document.getElementById('view-cabinet');
-  if (!el) return;
-  if (!(STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor')) {
-    el.innerHTML = `
-      ${uiPageHeader({
-        kicker: 'Кабинет',
-        title: 'Рабочая область администратора',
-        description: 'Личный кабинет с показателями и наградами предназначен для операторов. Для управления командой используйте административные разделы.',
-      })}
-      ${uiEmptyState({
-        title: 'Вы вошли как администратор',
-        description: 'Здесь нет личных показателей оператора, поэтому нулевые значения не показываются.',
-        action: '<button class="btn-primary" onclick="navigateTo(\'summary\')">Перейти в сводку</button><button class="btn-outline" onclick="navigateTo(\'operators\')">Пользователи</button>',
-      })}`;
-    return;
-  }
-
-  const snapshot = STATE.cabinetSnapshot;
-  if (!snapshot) {
-    el.innerHTML = cabinetLoadingHtml();
-    const cabinetGen = STATE.navGen;
-    loadCabinetSnapshot(false).then(() => {
-      if (!isNavStale(cabinetGen)) renderCabinet();
-    }).catch(() => {
-      if (!isNavStale(cabinetGen)) renderCabinet();
-    });
-    if (STATE.cabinetError) {
-      el.innerHTML = `<div class="view-header">
-        <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
-        <button class="btn-outline btn-sm" onclick="reloadCabinet()">Повторить</button>
-      </div><div class="panel empty-state"><p>${esc(STATE.cabinetError)}</p></div>`;
-    }
-    return;
-  }
-
-  syncCabinetSnapshot(snapshot);
-  const wallet = snapshot.wallet || {};
-  const rating = snapshot.rating || {};
-  const levelInfo = snapshot.level;
-  const tenureDays = levelInfo?.metrics?.tenure_days ?? STATE.myOperator?.tenure_days ?? null;
-  const tenureStr = tenureDays != null ? formatTenureDays(tenureDays) : '—';
-  const rank = rating.place;
-  const total = rating.total_participants || '—';
-  const delta = rating.delta;
-  const transactions = snapshot.recent_transactions || [];
-  const topWeek = snapshot.top_week || [];
-  const generatedAt = STATE.cabinetFetchedAt ? fmtDate(STATE.cabinetFetchedAt) : '';
-
-  el.innerHTML = `
-    <div class="view-header cabinet-v2-header">
-      <div>
-        <div class="section-kicker">Кабинет</div>
-        <h2 class="section-title">Мой кабинет</h2>
-        ${generatedAt ? `<div class="cabinet-snapshot-note">Обновлено: ${esc(generatedAt)}</div>` : ''}
-      </div>
-      <button class="btn-outline btn-sm" onclick="reloadCabinet()" ${STATE.cabinetLoading ? 'disabled' : ''}>${STATE.cabinetLoading ? 'Обновляем...' : 'Обновить'}</button>
-    </div>
-
-    <div class="kpi-grid cabinet-kpi-grid">
-      <div class="kpi-card kpi-accent"><div class="kpi-label">Баланс коинов</div><div class="kpi-value">${cabinetFormatCoin(wallet.balance)}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Всего заработано</div><div class="kpi-value">${cabinetFormatCoin(wallet.total_earned)}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Потрачено</div><div class="kpi-value">${cabinetFormatCoin(wallet.total_spent)}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Место в рейтинге</div><div class="kpi-value">${rank ? `${rank} <span class="kpi-unit">из ${total}</span>` : '<span class="kpi-unit">Пока не рассчитано</span>'}${delta != null ? `<span class="rank-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${delta > 0 ? '↑'+delta : delta < 0 ? '↓'+Math.abs(delta) : 'без изм.'}</span>` : ''}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Стаж в компании</div><div class="kpi-value cabinet-tenure-value">${esc(tenureStr)}</div></div>
-    </div>
-
-    ${cabinetLevelCard(levelInfo)}
-
-    <div class="cabinet-wow-grid">
-      <div id="cabinet-wheel-card">${cabinetWheelCard(snapshot.wheel)}</div>
-      <div id="cabinet-wheel-winners">${cabinetWinnersCard(snapshot.winners_today)}</div>
-    </div>
-
-    <div id="cabinet-weekly-detail"></div>
-    <div id="cabinet-achievements"></div>
-
-    <div class="cabinet-bottom-grid">
-      <div class="panel">
-        <div class="panel-head"><h3>История начислений</h3><span class="panel-badge">${transactions.length} записей</span></div>
-        <div class="tx-list">${cabinetTransactionsHtml(transactions)}</div>
-      </div>
-      <div class="panel">
-        <div class="panel-head"><h3>Топ-5 недели</h3></div>
-        ${cabinetTopWeekHtml(topWeek, snapshot.operator?.id)}
-        <div class="panel-footer"><button class="btn-link" onclick="navigateTo('rating')">Полный рейтинг →</button></div>
-      </div>
-    </div>
-
-    <div class="shop-banner">
-      <div>
-        <div class="shop-banner-title">Магазин бонусов</div>
-        <div class="shop-banner-sub">У вас ${levelNum(wallet.balance || 0, 0)} ₡ — можно обменять коины на доступные бонусы.</div>
-      </div>
-      <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
-    </div>`;
-
-  renderCabinetWeeklyDetail();
-  renderCabinetAchievements();
-}
-
 async function reloadCabinet() {
+  const ownerKey = cabinetSessionKey();
+  if (!ownerKey || (STATE.cabinetLoading && STATE._cabinetLoadingOwner === ownerKey)) return;
+  const navToken = STATE.navGen;
+  STATE._cabinetLoadingOwner = ownerKey;
   STATE.cabinetLoading = true;
-  renderCabinet();
+  if (STATE.currentView === 'cabinet') renderCabinet();
   try {
     await loadCabinetSnapshot(true);
-    showToast('Кабинет обновлён', 'ok');
+    if (cabinetSessionKey() === ownerKey) showToast('Кабинет обновлён', 'ok');
   } catch(e) {
-    showToast(e.message || 'Не удалось обновить кабинет', 'error');
+    if (cabinetSessionKey() === ownerKey) {
+      const message = typeof uiErrorMessage === 'function'
+        ? uiErrorMessage(e, 'Не удалось обновить кабинет')
+        : 'Не удалось обновить кабинет';
+      showToast(message, 'error');
+    }
   } finally {
-    STATE.cabinetLoading = false;
-    renderCabinet();
+    if (STATE._cabinetLoadingOwner === ownerKey) {
+      STATE.cabinetLoading = false;
+      STATE._cabinetLoadingOwner = null;
+    }
+    if (cabinetSessionKey() === ownerKey && STATE.currentView === 'cabinet' && !isNavStale(navToken)) {
+      renderCabinet();
+    }
   }
 }
 
@@ -2016,71 +2122,102 @@ function showChangePasswordModal() {
   showModal(`
     <h3 class="modal-title">Сменить пароль</h3>
     <div class="form-group">
-      <label class="form-label">Текущий пароль</label>
-      <input id="cp-current" class="form-input" type="password" placeholder="Введите текущий пароль">
+      <label class="form-label" for="cp-current">Текущий пароль</label>
+      <input id="cp-current" class="form-input" type="password" autocomplete="current-password" required aria-describedby="cp-err" placeholder="Введите текущий пароль">
     </div>
     <div class="form-group">
-      <label class="form-label">Новый пароль</label>
-      <input id="cp-new" class="form-input" type="password" placeholder="Минимум 8 символов">
+      <label class="form-label" for="cp-new">Новый пароль</label>
+      <input id="cp-new" class="form-input" type="password" autocomplete="new-password" minlength="8" required aria-describedby="cp-err" placeholder="Минимум 8 символов">
     </div>
     <div class="form-group">
-      <label class="form-label">Повтор нового пароля</label>
-      <input id="cp-confirm" class="form-input" type="password" placeholder="Повторите пароль">
+      <label class="form-label" for="cp-confirm">Повтор нового пароля</label>
+      <input id="cp-confirm" class="form-input" type="password" autocomplete="new-password" minlength="8" required aria-describedby="cp-err" placeholder="Повторите пароль">
     </div>
-    <div id="cp-err" class="status-line"></div>
-    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitLegacyChangePassword()">Сохранить</button>`);
+    <div id="cp-err" class="status-line" role="alert" aria-live="polite"></div>
+    <button type="button" class="btn-primary" style="width:100%;margin-top:4px" onclick="submitLegacyChangePassword(this)">Сохранить</button>`);
 }
 
-async function submitLegacyChangePassword() {
+async function submitLegacyChangePassword(button) {
   const current = document.getElementById('cp-current')?.value;
   const newPwd  = document.getElementById('cp-new')?.value;
   const confirm = document.getElementById('cp-confirm')?.value;
   const err     = document.getElementById('cp-err');
-  if (!current || !newPwd || !confirm) { err.textContent='Заполните все поля'; err.className='status-line status-error'; return; }
-  if (newPwd.length < 8) { err.textContent='Пароль должен содержать минимум 8 символов'; err.className='status-line status-error'; return; }
-  if (newPwd !== confirm) { err.textContent='Пароли не совпадают'; err.className='status-line status-error'; return; }
+  if (!current || !newPwd || !confirm) {
+    if (err) { err.textContent='Заполните все поля'; err.className='status-line status-error'; }
+    document.getElementById(!current ? 'cp-current' : !newPwd ? 'cp-new' : 'cp-confirm')?.focus();
+    return;
+  }
+  if (newPwd.length < 8) { if (err) { err.textContent='Пароль должен содержать минимум 8 символов'; err.className='status-line status-error'; } document.getElementById('cp-new')?.focus(); return; }
+  if (newPwd !== confirm) { if (err) { err.textContent='Пароли не совпадают'; err.className='status-line status-error'; } document.getElementById('cp-confirm')?.focus(); return; }
+  if (button?.disabled) return;
+  if (button) uiSetBusy(button, true);
   try {
     await api.changeOperatorPassword({current_password:current, new_password:newPwd, confirm_password:confirm});
-    closeModal(); showToast('Пароль успешно изменён', 'ok');
-  } catch(e) { err.textContent=e.message; err.className='status-line status-error'; }
+    closeModal();
+    showToast('Пароль изменён. Войдите снова.', 'ok');
+    setTimeout(() => logoutAndReload(), 700);
+  } catch(e) {
+    if (err) {
+      err.textContent = typeof uiErrorMessage === 'function' ? uiErrorMessage(e, 'Не удалось изменить пароль') : 'Не удалось изменить пароль';
+      err.className='status-line status-error';
+    }
+    if (button?.isConnected) uiSetBusy(button, false);
+  }
 }
 
 function showChangeUsernameModal() {
   showModal(`
     <h3 class="modal-title">Сменить логин</h3>
     <div class="form-group">
-      <label class="form-label">Текущий логин</label>
-      <input class="form-input" value="${esc(STATE.user?.username||'')}" disabled style="opacity:.5">
+      <label class="form-label" for="cu-current">Текущий логин</label>
+      <input id="cu-current" class="form-input" value="${esc(STATE.user?.username||'')}" disabled>
     </div>
     <div class="form-group">
-      <label class="form-label">Новый логин</label>
-      <input id="cu-new" class="form-input" placeholder="Только латиница, цифры и _">
+      <label class="form-label" for="cu-new">Новый логин</label>
+      <input id="cu-new" class="form-input" minlength="3" maxlength="120" pattern="[A-Za-z0-9._]+" autocomplete="username" required aria-describedby="cu-login-hint cu-err" placeholder="Только латиница, цифры, точка и _">
+      <div id="cu-login-hint" class="form-hint">От 3 до 120 символов: латиница, цифры, точка и подчёркивание.</div>
     </div>
     <div class="form-group">
-      <label class="form-label">Текущий пароль</label>
-      <input id="cu-password" class="form-input" type="password" autocomplete="current-password">
+      <label class="form-label" for="cu-password">Текущий пароль</label>
+      <input id="cu-password" class="form-input" type="password" autocomplete="current-password" required aria-describedby="cu-err">
     </div>
-    <div id="cu-err" class="status-line"></div>
-    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitChangeUsername()">Сохранить</button>`);
+    <div id="cu-err" class="status-line" role="alert" aria-live="polite"></div>
+    <button type="button" class="btn-primary" style="width:100%;margin-top:4px" onclick="submitChangeUsername(this)">Сохранить</button>`);
 }
 
-async function submitChangeUsername() {
+async function submitChangeUsername(button) {
   const newUsername = document.getElementById('cu-new')?.value?.trim();
   const currentPassword = document.getElementById('cu-password')?.value || '';
   const err = document.getElementById('cu-err');
-  if (!newUsername || !currentPassword) { err.textContent='Введите новый логин и текущий пароль'; err.className='status-line status-error'; return; }
+  if (!newUsername || !currentPassword) {
+    if (err) { err.textContent='Введите новый логин и текущий пароль'; err.className='status-line status-error'; }
+    document.getElementById(!newUsername ? 'cu-new' : 'cu-password')?.focus();
+    return;
+  }
+  if (!/^[A-Za-z0-9._]{3,120}$/.test(newUsername)) {
+    if (err) { err.textContent='Логин: 3–120 символов, только латиница, цифры, точка и _'; err.className='status-line status-error'; }
+    document.getElementById('cu-new')?.focus();
+    return;
+  }
+  if (button?.disabled) return;
+  if (button) uiSetBusy(button, true);
   try {
-    const data = await api.changeOperatorUsername({new_username: newUsername, current_password: currentPassword});
-    closeModal(); showToast('Логин успешно изменён', 'ok');
-    STATE.user.username = newUsername;
-    setText('side-user', STATE.user.full_name);
-  } catch(e) { err.textContent=e.message; err.className='status-line status-error'; }
+    await api.changeOperatorUsername({new_username: newUsername, current_password: currentPassword});
+    closeModal();
+    showToast('Логин изменён. Войдите снова.', 'ok');
+    setTimeout(() => logoutAndReload(), 700);
+  } catch(e) {
+    if (err) {
+      err.textContent = typeof uiErrorMessage === 'function' ? uiErrorMessage(e, 'Не удалось изменить логин') : 'Не удалось изменить логин';
+      err.className='status-line status-error';
+    }
+    if (button?.isConnected) uiSetBusy(button, false);
+  }
 }
 
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    УРОВНИ: вкладка «Достижения» (ТЗ §7) — каталог, включение/выключение, ручная выдача
 ══════════════════════════════════════ */
@@ -2107,22 +2244,41 @@ function achievementVisualIcon(achievement, extraClass = '') {
   return `<svg class="achievement-system-icon ${extraClass}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[key] || '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>'}</svg>`;
 }
 
+let _achievementsAdminRenderVersion = 0;
+
 async function renderAchievementsAdminTab(el) {
   if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка достижений…</p></div>';
+  const renderVersion = ++_achievementsAdminRenderVersion;
+  const canManageCatalog = STATE.user?.role === 'admin';
+  el.setAttribute('aria-busy', 'true');
+  el.innerHTML = '<div class="loading-state" role="status"><div class="loading-spinner"></div><p>Загрузка достижений…</p></div>';
 
   let achievements;
   try {
     achievements = await swrFetch('achievements:list', () => api.listAchievements(), null, SWR_STATIC_TTL_MS);
   } catch (e) {
-    el.innerHTML = `<div class="empty-line">Ошибка загрузки: ${esc(e.message)}</div>`;
+    if (renderVersion !== _achievementsAdminRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
+    el.removeAttribute('aria-busy');
+    const message = typeof uiErrorMessage === 'function'
+      ? uiErrorMessage(e, 'Не удалось загрузить достижения')
+      : 'Не удалось загрузить достижения';
+    el.innerHTML = `<div class="empty-line" role="alert">${esc(message)}</div>`;
     return;
   }
+  if (renderVersion !== _achievementsAdminRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
+  achievements = Array.isArray(achievements) ? achievements : (achievements?.items || []);
   STATE._achievementsCatalog = achievements;
 
-  if (!STATE.adminOperators.length) {
-    try { STATE.adminOperators = await swrFetch('dashboard:operators', () => api.getDashboardOperators(), null, SWR_USER_TTL_MS); } catch { /* форма выдачи покажет пустой список */ }
+  if (!Array.isArray(STATE.adminOperators) || !STATE.adminOperators.length) {
+    try {
+      const operators = await swrFetch('dashboard:operators', () => api.getDashboardOperators(), null, SWR_USER_TTL_MS);
+      if (renderVersion === _achievementsAdminRenderVersion) {
+        STATE.adminOperators = Array.isArray(operators) ? operators : (operators?.items || []);
+      }
+    } catch { /* форма выдачи покажет пустой список */ }
   }
+  if (renderVersion !== _achievementsAdminRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
+  el.removeAttribute('aria-busy');
 
   const conditionLabel = (a) => {
     const v = levelNum(a.condition_value);
@@ -2142,7 +2298,7 @@ async function renderAchievementsAdminTab(el) {
     <div class="achievements-catalog-head">
       <div>
         <div class="an-card-head">Каталог достижений</div>
-        <p>Управляйте условиями, наградами и доступностью достижений для операторов.</p>
+        <p>${canManageCatalog ? 'Управляйте условиями, наградами и доступностью достижений для операторов.' : 'Просматривайте каталог и выдавайте достижения операторам вручную. Настройки каталога доступны администратору.'}</p>
       </div>
       <span class="panel-badge">${achievements.length}</span>
     </div>
@@ -2174,27 +2330,45 @@ async function renderAchievementsAdminTab(el) {
               <strong>Коины за выполнение</strong>
             </div>
             <div class="achievement-admin-reward-control">
-              <input type="number" class="form-input" id="ach-reward-${a.id}" value="${a.reward_coins}" min="0" step="1" aria-label="Награда за достижение">
+              <input type="number" class="form-input" id="ach-reward-${a.id}" value="${a.reward_coins}" min="0" step="1" aria-label="Награда за достижение ${esc(a.title)}" ${canManageCatalog ? '' : 'disabled'}>
               <span class="achievement-coin-unit">₡</span>
-              <button class="btn-outline btn-sm" onclick="saveAchievementReward(${a.id}, this)">Сохранить</button>
+              ${canManageCatalog ? `<button type="button" class="btn-outline btn-sm" onclick="saveAchievementReward(${a.id}, this)">Сохранить</button>` : ''}
             </div>
           </div>
 
           <footer class="achievement-admin-footer">
-            <label class="achievement-admin-toggle-row">
+            ${canManageCatalog ? `<label class="achievement-admin-toggle-row">
               <span class="toggle-switch">
-                <input type="checkbox" ${a.is_active ? 'checked' : ''} onchange="toggleAchievementActive(${a.id}, this.checked, this)">
+                <input type="checkbox" ${a.is_active ? 'checked' : ''} aria-label="Доступность достижения ${esc(a.title)}" onchange="toggleAchievementActive(${a.id}, this.checked, this)">
                 <span class="toggle-slider"></span>
               </span>
               <span>Доступно операторам</span>
-            </label>
-            <button class="btn-outline btn-sm" onclick="openGrantAchievementForm(${a.id})">Выдать вручную</button>
+            </label>` : '<span class="cell-muted">Настройки доступны администратору</span>'}
+            <button type="button" class="btn-outline btn-sm" onclick="openGrantAchievementForm(${a.id})">Выдать вручную</button>
           </footer>
         </article>`).join('')}
     </div>`;
 }
 
 async function toggleAchievementActive(id, isActive, input) {
+  if (STATE.user?.role !== 'admin') {
+    if (input) input.checked = !isActive;
+    showToast('Настройки достижений доступны только администратору', 'error');
+    return;
+  }
+  if (!isActive) {
+    const confirmed = await uiConfirmAction({
+      title: 'Отключить достижение?',
+      description: 'Операторы больше не смогут получать это достижение автоматически. Уже выданные достижения сохранятся.',
+      confirmLabel: 'Отключить',
+      danger: true,
+    });
+    if (!confirmed) {
+      if (input) input.checked = true;
+      return;
+    }
+  }
+  if (input) input.disabled = true;
   try {
     await api.updateAchievement(id, { is_active: isActive });
     swrInvalidate('achievements:');
@@ -2209,13 +2383,17 @@ async function toggleAchievementActive(id, isActive, input) {
       state.classList.toggle('is-active', isActive);
     }
   } catch (e) {
+    if (input) input.checked = !isActive;
     showToast(e.message, 'error');
     const body = document.getElementById('op-levels-tab-body');
     if (body) renderAchievementsAdminTab(body);
+  } finally {
+    if (input?.isConnected) input.disabled = false;
   }
 }
 
 async function saveAchievementReward(id, button) {
+  if (STATE.user?.role !== 'admin') return showToast('Настройки достижений доступны только администратору', 'error');
   const val = Number(document.getElementById(`ach-reward-${id}`)?.value);
   if (!Number.isFinite(val) || val < 0) return showToast('Укажите корректную награду', 'error');
   const original = button?.textContent;
@@ -2238,28 +2416,35 @@ function openGrantAchievementForm(achievementId) {
   showModal(`
     <h3 class="modal-title">Выдать «${esc(a?.title || '')}» вручную</h3>
     <div class="form-group">
-      <label class="form-label">Оператор</label>
-      <select id="grant-ach-operator" class="form-input">
+      <label class="form-label" for="grant-ach-operator">Оператор</label>
+      <select id="grant-ach-operator" class="form-input" required aria-describedby="grant-ach-err">
         <option value="">Выберите оператора…</option>
         ${ops.map(o => `<option value="${o.id}">${esc(o.full_name)}${o.group_name ? ' — ' + esc(o.group_name) : ''}</option>`).join('')}
       </select>
+      ${ops.length ? '' : '<div class="form-hint">В доступной области нет операторов.</div>'}
     </div>
     <div class="form-group">
-      <label class="form-label">Комментарий <span class="optional">(необязательно)</span></label>
+      <label class="form-label" for="grant-ach-comment">Комментарий <span class="optional">(необязательно)</span></label>
       <input id="grant-ach-comment" class="form-input" type="text" placeholder="Например: помог новому сотруднику освоиться">
     </div>
-    <div id="grant-ach-err" class="status-line"></div>
+    <div id="grant-ach-err" class="status-line" role="alert" aria-live="polite"></div>
     <div class="modal-actions">
-      <button class="btn-outline" onclick="closeModal()">Отмена</button>
-      <button class="btn-primary" onclick="submitGrantAchievement(${achievementId})">Выдать достижение</button>
+      <button type="button" class="btn-outline" onclick="closeModal()">Отмена</button>
+      <button type="button" class="btn-primary" onclick="submitGrantAchievement(${achievementId}, this)" ${ops.length ? '' : 'disabled'}>Выдать достижение</button>
     </div>`);
 }
 
-async function submitGrantAchievement(achievementId) {
+async function submitGrantAchievement(achievementId, button) {
   const operatorId = Number(document.getElementById('grant-ach-operator')?.value);
   const comment = document.getElementById('grant-ach-comment')?.value || '';
   const errEl = document.getElementById('grant-ach-err');
-  if (!operatorId) { if (errEl) errEl.textContent = 'Выберите оператора'; return; }
+  if (!operatorId) {
+    if (errEl) errEl.textContent = 'Выберите оператора';
+    document.getElementById('grant-ach-operator')?.focus();
+    return;
+  }
+  if (button?.disabled) return;
+  if (button) uiSetBusy(button, true, 'Выдаём…');
   try {
     await api.grantAchievement(achievementId, { operator_id: operatorId, comment });
     swrInvalidate('achievements:');
@@ -2268,10 +2453,14 @@ async function submitGrantAchievement(achievementId) {
     showToast('Достижение выдано', 'ok');
     closeModal();
   } catch (e) {
-    if (errEl) errEl.textContent = e.message;
+    if (errEl) {
+      errEl.textContent = typeof uiErrorMessage === 'function'
+        ? uiErrorMessage(e, 'Не удалось выдать достижение')
+        : 'Не удалось выдать достижение';
+    }
+    if (button?.isConnected) uiSetBusy(button, false);
   }
 }
-
 /* ══════════════════════════════════════
    КАБИНЕТ: показатели недели, прозрачный расчёт коинов, достижения (ТЗ §5, §7)
    Один общий фетч /api/cabinet/me — данные шарятся между обоими блоками.
@@ -2281,16 +2470,15 @@ function _cabinetIsOperatorLike() {
   return STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor';
 }
 
-// Общий загрузчик: гарантирует ровно один запрос, даже если оба блока
-// (показатели недели и достижения) рендерятся почти одновременно.
+let _cabinetWeeklyRenderVersion = 0;
+let _cabinetAchievementsRenderVersion = 0;
+
+// Все секции используют единый session-scoped snapshot loader. Это исключает
+// параллельные запросы и не позволяет завершившемуся запросу прошлой сессии
+// перезаписать кабинет нового пользователя.
 function _loadCabinetData() {
-  if (STATE.cabinetData) return Promise.resolve(STATE.cabinetData);
-  if (!STATE._cabinetDataPromise) {
-    STATE._cabinetDataPromise = api.getMyCabinet()
-      .then(data => { STATE.cabinetData = data; return data; })
-      .finally(() => { STATE._cabinetDataPromise = null; });
-  }
-  return STATE._cabinetDataPromise;
+  const snapshot = cabinetSnapshotForCurrentUser();
+  return snapshot ? Promise.resolve(snapshot) : loadCabinetSnapshot(false);
 }
 
 function _metricBarHtml(label, value, target, unit = '') {
@@ -2305,7 +2493,8 @@ function _metricBarHtml(label, value, target, unit = '') {
         </div>
       </div>`;
   }
-  const v = Number(value);
+  const rawValue = Number(value);
+  const v = Number.isFinite(rawValue) ? rawValue : 0;
   const t = hasTarget ? Number(target) : 0;
   const pct = t > 0 ? Math.min(100, Math.round((v / t) * 100)) : (v > 0 ? 100 : 0);
   const overTarget = t > 0 && v >= t;
@@ -2315,7 +2504,7 @@ function _metricBarHtml(label, value, target, unit = '') {
         <span>${esc(label)}</span>
         <b>${levelNum(v)}${esc(unit)}${t > 0 ? ` <span class="cell-muted">/ цель ${levelNum(t)}${esc(unit)}</span>` : ' <span class="cell-muted">· норма не настроена</span>'}</b>
       </div>
-      <div class="metric-progress-bar">
+      <div class="metric-progress-bar" role="progressbar" aria-label="${esc(label)}" aria-valuemin="0" aria-valuemax="${t > 0 ? t : 100}" aria-valuenow="${t > 0 ? Math.min(v, t) : Math.min(v, 100)}">
         <div class="metric-progress-fill ${overTarget ? 'ok' : ''}" style="width:${pct}%"></div>
       </div>
     </div>`;
@@ -2333,14 +2522,23 @@ function _antiMetricHtml(label, value) {
 async function renderCabinetWeeklyDetail() {
   const host = document.getElementById('cabinet-weekly-detail');
   if (!host || !_cabinetIsOperatorLike()) { if (host) host.innerHTML = ''; return; }
+  const renderVersion = ++_cabinetWeeklyRenderVersion;
+  host.setAttribute('aria-busy', 'true');
 
   let data;
   try {
     data = await _loadCabinetData();
-  } catch {
-    host.innerHTML = '';
+  } catch (error) {
+    if (renderVersion !== _cabinetWeeklyRenderVersion || document.getElementById('cabinet-weekly-detail') !== host) return;
+    host.removeAttribute('aria-busy');
+    const message = typeof uiErrorMessage === 'function'
+      ? uiErrorMessage(error, 'Не удалось загрузить показатели недели')
+      : 'Не удалось загрузить показатели недели';
+    host.innerHTML = `<div class="panel empty-state" role="alert"><p>${esc(message)}</p><button class="btn-outline btn-sm" type="button" onclick="renderCabinetWeeklyDetail()">Повторить</button></div>`;
     return;
   }
+  if (renderVersion !== _cabinetWeeklyRenderVersion || document.getElementById('cabinet-weekly-detail') !== host) return;
+  host.removeAttribute('aria-busy');
   const wm = data.week_metrics;
   const cc = data.coin_calculation;
   if (!wm && !cc) {
@@ -2393,7 +2591,7 @@ async function renderCabinetWeeklyDetail() {
         <div class="coin-calc-row">
           <span>Базовые коины</span><b>${cc.base_coins} ₡</b>
         </div>
-        ${cc.bonuses.map(b => `
+        ${(Array.isArray(cc.bonuses) ? cc.bonuses : []).map(b => `
           <div class="coin-calc-row coin-calc-bonus">
             <span>+ ${esc(bonusLabels[b.type] || b.label)}</span><b>+${b.coins} ₡</b>
           </div>`).join('')}
@@ -2408,31 +2606,45 @@ async function renderCabinetWeeklyDetail() {
 async function renderCabinetAchievements() {
   const host = document.getElementById('cabinet-achievements');
   if (!host || !_cabinetIsOperatorLike()) { if (host) host.innerHTML = ''; return; }
+  const renderVersion = ++_cabinetAchievementsRenderVersion;
+  host.setAttribute('aria-busy', 'true');
 
   let data;
   try {
     data = await _loadCabinetData();
-  } catch {
-    host.innerHTML = '';
+  } catch (error) {
+    if (renderVersion !== _cabinetAchievementsRenderVersion || document.getElementById('cabinet-achievements') !== host) return;
+    host.removeAttribute('aria-busy');
+    const message = typeof uiErrorMessage === 'function'
+      ? uiErrorMessage(error, 'Не удалось загрузить достижения')
+      : 'Не удалось загрузить достижения';
+    host.innerHTML = `<div class="panel empty-state" role="alert"><p>${esc(message)}</p><button class="btn-outline btn-sm" type="button" onclick="renderCabinetAchievements()">Повторить</button></div>`;
     return;
   }
-  const ach = data.achievements || { completed: [], in_progress: [] };
+  if (renderVersion !== _cabinetAchievementsRenderVersion || document.getElementById('cabinet-achievements') !== host) return;
+  host.removeAttribute('aria-busy');
+  const source = data.achievements || {};
+  const ach = {
+    completed: Array.isArray(source.completed) ? source.completed : [],
+    in_progress: Array.isArray(source.in_progress) ? source.in_progress : [],
+  };
 
   const badgeHtml = (row, completed) => {
     const a = row.achievement || row;
+    const target = Number(a.target ?? a.condition_value ?? 0);
     return `
-    <div class="achievement-badge ${completed ? 'unlocked' : 'locked'}" title="${esc(a.description)}">
+    <article class="achievement-badge ${completed ? 'unlocked' : 'locked'}" aria-label="${esc(a.title || 'Достижение')}: ${completed ? 'получено' : 'в процессе'}">
       <div class="achievement-icon">${achievementVisualIcon(a, 'achievement-card-icon')}</div>
       <div class="achievement-info">
         <div class="achievement-title">${esc(a.title)}</div>
         <div class="achievement-desc">${esc(a.description)}</div>
         ${completed
-          ? `<div class="achievement-meta">Получено ×${row.times_awarded}${row.completed_at ? ' · ' + fmtDate(row.completed_at) : ''}</div>`
-          : (a.condition_value > 0
-              ? `<div class="achievement-progress-line">${levelNum(row.progress_value)} / ${levelNum(a.target ?? a.condition_value)}</div>`
+          ? `<div class="achievement-meta">Получено ×${row.times_awarded ?? 1}${row.completed_at ? ' · ' + fmtDate(row.completed_at) : ''}</div>`
+          : (target > 0
+              ? `<div class="achievement-progress-line" role="progressbar" aria-label="Прогресс: ${esc(a.title || 'достижение')}" aria-valuemin="0" aria-valuemax="${target}" aria-valuenow="${Math.min(target, Math.max(0, Number(row.progress_value) || 0))}">${levelNum(row.progress_value)} / ${levelNum(target)}</div>`
               : '<div class="achievement-progress-line cell-muted">Настраивается</div>')}
       </div>
-    </div>`;
+    </article>`;
   };
 
   host.innerHTML = `
@@ -2448,7 +2660,6 @@ async function renderCabinetAchievements() {
       </div>
     </div>`;
 }
-
 /* Управленческая «Сводка»: компактный экран, не дублирующий подробные вкладки Analytics. */
 let _summaryManagement = { start: '', end: '', group: '', preset: 'week', ready: false };
 
@@ -2518,7 +2729,6 @@ async function renderManagementSummary() {
   el.querySelector('#summary-export').addEventListener('click', () => { readFilters(); const params = new URLSearchParams({ start_date: state.start, end_date: state.end }); if (state.group) params.set('group_id', state.group); window.location.href = api._base() + '/api/analytics/export.xlsx?' + params; });
   await load();
 }
-
 async function renderRatingOverviewTab(el) {
   const role  = STATE.user?.role || 'operator';
   const isOp  = role === 'operator';
@@ -3861,7 +4071,6 @@ function renderSummary() {
 /* ══════════════════════════════════════
    VIEW: ОПЕРАТОРЫ (ADMIN)
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    СВОДКА: детальная сводка по неделе с фильтрами (ТЗ §9)
 ══════════════════════════════════════ */
@@ -4060,7 +4269,6 @@ function exportAdminSummary() {
   if (f.group_id) params.group_id = f.group_id;
   window.open(api.exportUrl('/api/exports/rating', params), '_blank');
 }
-
 /* ══════════════════════════════════════
    СВОДКА: быстрые действия по строке оператора (ТЗ §9.5)
    Начислить / Списать / Открыть кабинет / Открыть историю / Открыть заявки
@@ -4176,7 +4384,6 @@ async function openOperatorCabinetModal(operatorId, operatorName) {
       <button class="btn-primary" onclick="closeModal(); openHistoryForOperator(${operatorId}, '${esc(operatorName).replace(/'/g, '&#39;')}')">Вся история →</button>
     </div>`;
 }
-
 function renderAdminOperators() {
   return renderUsersPage();
 }
@@ -4225,6 +4432,7 @@ function renderUsersPage() {
   const allowedRoles = STATE.user?.role === 'admin'
     ? ['operator','supervisor','manager','admin']
     : ['operator','supervisor'];
+  const mayManageUsers = canManageOperators();
 
   function isDismissed(o) {
     return o.status === 'dismissed' || o.status === 'inactive' || o.status === 'blocked';
@@ -4256,6 +4464,7 @@ function renderUsersPage() {
   }
 
   function operatorActions(o) {
+    if (!mayManageUsers) return '<span class="cell-muted">—</span>';
     return `<button class="user-open-button" type="button"
       aria-label="Действия пользователя ${esc(o.full_name)}"
       title="Открыть профиль и действия"
@@ -4307,7 +4516,10 @@ function renderUsersPage() {
             ${list.length ? list.map(o => {
               const dismissed = isDismissed(o);
               const isOp = o.role === 'operator';
-              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}" data-user-row="${o.id}" tabindex="0" aria-label="Открыть профиль ${esc(o.full_name)}">
+              const rowAttrs = mayManageUsers
+                ? `data-user-row="${o.id}" tabindex="0" aria-label="Открыть профиль ${esc(o.full_name)}"`
+                : '';
+              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}" ${rowAttrs}>
                 <td class="name-cell" data-label="Пользователь" data-sticky="start">
                   <div class="user-cell-name" title="${esc(o.full_name)}">${esc(o.full_name)}</div>
                   ${o.email ? `<div class="user-cell-sub">${esc(o.email)}</div>` : ''}
@@ -4351,10 +4563,8 @@ function renderUsersPage() {
       title: 'Пользователи',
       description: `${ops.length} ${pluralize(ops.length, 'учётная запись', 'учётные записи', 'учётных записей')}`,
       actions: `<button class="btn-outline btn-sm ui-icon-button" onclick="reloadData()" aria-label="Обновить пользователей" title="Обновить">↻</button>
-        ${['manager','admin'].includes(STATE.user?.role) ? `
-          <button class="btn-outline btn-sm" onclick="showWorkNormsModal()">Нормы часов</button>
-          <button class="btn-primary btn-sm" onclick="showAddOperatorModal()">+ Новый пользователь</button>
-        ` : ''}`,
+        ${['manager','admin'].includes(STATE.user?.role) ? '<button class="btn-outline btn-sm" onclick="showWorkNormsModal()">Нормы часов</button>' : ''}
+        ${mayManageUsers ? '<button class="btn-primary btn-sm" onclick="showAddOperatorModal()">+ Новый пользователь</button>' : ''}`,
     })}
 
     <div class="ops-tab-bar" id="ops-tab-bar">${renderTabsAndFilters()}</div>
@@ -4396,108 +4606,93 @@ function renderUsersPage() {
 
     <div id="ops-table-wrap">${renderTable()}</div>`;
 
-  function rebindOps() {
-    el.querySelectorAll('.ops-tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        activeTab = btn.dataset.tab;
-        savedFilters.tab = activeTab;
-        syncUsersUrl();
-        el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
-        el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-        el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-        rebindOps();
-      });
-    });
-    el.querySelector('#ops-search')?.addEventListener('input', e => {
-      searchVal = e.target.value;
-      savedFilters.search = searchVal;
-      syncUsersUrl();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      bindOpsActions();
-    });
-    el.querySelector('#ops-group')?.addEventListener('change', e => {
-      filterGroup = e.target.value;
-      savedFilters.group = filterGroup;
-      syncUsersUrl();
-      el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      rebindOps();
-    });
-    el.querySelector('#ops-role')?.addEventListener('change', e => {
-      filterRole = e.target.value;
-      savedFilters.role = filterRole;
-      syncUsersUrl();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      bindOpsActions();
-    });
-    el.querySelector('#ops-status')?.addEventListener('change', e => {
-      filterStatus = e.target.value;
-      savedFilters.status = filterStatus;
-      syncUsersUrl();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      bindOpsActions();
-    });
-    el.querySelector('#ops-level')?.addEventListener('change', e => {
-      filterLevel = e.target.value;
-      savedFilters.level = filterLevel;
-      syncUsersUrl();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      bindOpsActions();
-    });
-    bindOpsActions();
+  function refreshUsersTable({ tabs = false } = {}) {
+    if (tabs) el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
+    el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+    el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
     el.querySelector('#ops-filter-chips').innerHTML = appliedFiltersHtml();
-    el.querySelectorAll('[data-clear-user-filter]').forEach(button => {
-      button.addEventListener('click', () => {
-        const key = button.dataset.clearUserFilter;
-        if (key === 'all' || key === 'search') searchVal = '';
-        if (key === 'all' || key === 'role') filterRole = '';
-        if (key === 'all' || key === 'group') filterGroup = '';
-        if (key === 'all' || key === 'status') filterStatus = '';
-        if (key === 'all' || key === 'level') filterLevel = '';
-        Object.assign(savedFilters, {
-          search: searchVal, role: filterRole, group: filterGroup,
-          status: filterStatus, level: filterLevel,
-        });
-        syncUsersUrl();
-        renderUsersPage();
-      });
-    });
   }
-  rebindOps();
-  function bindOpsActions() {
-    el.querySelectorAll('[data-user-row]').forEach(row => {
-      const open = () => showUserManagementModal(Number(row.dataset.userRow));
-      row.addEventListener('click', event => {
-        if (!event.target.closest('button, a, input, select')) open();
-      });
-      row.addEventListener('keydown', event => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          open();
-        }
-      });
+
+  el.querySelector('#ops-search')?.addEventListener('input', event => {
+    searchVal = event.target.value;
+    savedFilters.search = searchVal;
+    syncUsersUrl();
+    refreshUsersTable();
+  });
+  [
+    ['#ops-group', 'group'],
+    ['#ops-role', 'role'],
+    ['#ops-status', 'status'],
+    ['#ops-level', 'level'],
+  ].forEach(([selector, key]) => {
+    el.querySelector(selector)?.addEventListener('change', event => {
+      const value = event.target.value;
+      if (key === 'group') filterGroup = value;
+      if (key === 'role') filterRole = value;
+      if (key === 'status') filterStatus = value;
+      if (key === 'level') filterLevel = value;
+      savedFilters[key] = value;
+      syncUsersUrl();
+      refreshUsersTable();
     });
-    el.querySelectorAll('.quick-charge-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        navigateTo('manual');
-        const op = STATE.adminOperators.find(item => String(item.id) === String(btn.dataset.id));
-        const hidden = document.getElementById('manual-op-id');
-        const display = document.getElementById('op-selected-display');
-        const name = document.getElementById('op-selected-name');
-        if (op && hidden && display && name) {
-          hidden.value = op.id;
-          name.textContent = op.full_name;
-          display.classList.add('visible');
-        }
+  });
+
+  // The view root survives partial table renders, so one delegated handler is
+  // enough. Assigning the property also replaces a handler from a full rerender.
+  el.onclick = event => {
+    const tab = event.target.closest('.ops-tab');
+    if (tab && el.contains(tab)) {
+      activeTab = tab.dataset.tab;
+      savedFilters.tab = activeTab;
+      syncUsersUrl();
+      refreshUsersTable({ tabs: true });
+      return;
+    }
+
+    const clear = event.target.closest('[data-clear-user-filter]');
+    if (clear && el.contains(clear)) {
+      const key = clear.dataset.clearUserFilter;
+      if (key === 'all' || key === 'search') searchVal = '';
+      if (key === 'all' || key === 'role') filterRole = '';
+      if (key === 'all' || key === 'group') filterGroup = '';
+      if (key === 'all' || key === 'status') filterStatus = '';
+      if (key === 'all' || key === 'level') filterLevel = '';
+      Object.assign(savedFilters, {
+        search: searchVal, role: filterRole, group: filterGroup,
+        status: filterStatus, level: filterLevel,
       });
-    });
-  }
-  bindOpsActions();
+      syncUsersUrl();
+      renderUsersPage();
+      return;
+    }
+
+    const quickCharge = event.target.closest('.quick-charge-btn');
+    if (quickCharge && el.contains(quickCharge)) {
+      navigateTo('manual');
+      const op = STATE.adminOperators.find(item => String(item.id) === String(quickCharge.dataset.id));
+      const hidden = document.getElementById('manual-op-id');
+      const display = document.getElementById('op-selected-display');
+      const name = document.getElementById('op-selected-name');
+      if (op && hidden && display && name) {
+        hidden.value = op.id;
+        name.textContent = op.full_name;
+        display.classList.add('visible');
+      }
+      return;
+    }
+
+    const row = event.target.closest('[data-user-row]');
+    if (row && el.contains(row) && !event.target.closest('button, a, input, select')) {
+      showUserManagementModal(Number(row.dataset.userRow));
+    }
+  };
+  el.onkeydown = event => {
+    const row = event.target.closest('[data-user-row]');
+    if (row && event.target === row && (event.key === 'Enter' || event.key === ' ')) {
+      event.preventDefault();
+      showUserManagementModal(Number(row.dataset.userRow));
+    }
+  };
 }
 
 /* ══════════════════════════════════════
@@ -5991,6 +6186,14 @@ async function showOperatorHistoryModal(id) {
 /* ══════════════════════════════════════
    MODALS
 ══════════════════════════════════════ */
+let _modalReturnFocus = null;
+
+function modalFocusableElements(container) {
+  return Array.from(container?.querySelectorAll(
+    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  ) || []).filter(node => !node.hidden && node.getClientRects().length > 0);
+}
+
 function showModal(html, options = {}) {
   let overlay = document.getElementById('modal-overlay');
   if (!overlay) {
@@ -5999,18 +6202,64 @@ function showModal(html, options = {}) {
     overlay.className = 'modal-overlay';
     document.body.appendChild(overlay);
   }
+  _modalReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const forced = Boolean(options.force);
   overlay.dataset.force = forced ? 'true' : 'false';
   const extraClass = options.className ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '') : '';
-  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
+  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}" role="dialog" aria-modal="true">${html}${forced ? '' : `<button class="modal-close" type="button" data-modal-close aria-label="Закрыть окно"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>`}</div>`;
   overlay.style.display = 'flex';
-  overlay.onclick = e => { if (e.target === overlay && !forced) closeModal(); };
+  document.body.classList.add('modal-open');
+  overlay.onclick = e => {
+    if ((e.target === overlay || e.target.closest('[data-modal-close]')) && !forced) closeModal();
+  };
+  overlay.onkeydown = event => {
+    if (event.key === 'Escape' && !forced) {
+      event.preventDefault();
+      closeModal();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const modal = overlay.querySelector('.modal');
+    const focusable = modalFocusableElements(modal);
+    if (!focusable.length) {
+      event.preventDefault();
+      modal?.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  requestAnimationFrame(() => {
+    const modal = overlay.querySelector('.modal');
+    const title = modal?.querySelector('.modal-title, h1, h2, h3');
+    if (title && !title.id) title.id = `modal-title-${Date.now()}`;
+    if (title?.id) modal?.setAttribute('aria-labelledby', title.id);
+    const focusable = modalFocusableElements(modal);
+    (focusable[0] || modal)?.focus?.({ preventScroll: true });
+    if (modal && !focusable.length) modal.tabIndex = -1;
+  });
 }
 function closeModal(force = false) {
   const o = document.getElementById('modal-overlay');
   if (o?.dataset.force === 'true' && !force) return;
-  if (o) o.style.display = 'none';
+  if (o) {
+    o.style.display = 'none';
+    o.innerHTML = '';
+    o.onclick = null;
+    o.onkeydown = null;
+  }
+  document.body.classList.remove('modal-open');
   if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
+  const returnTarget = _modalReturnFocus;
+  _modalReturnFocus = null;
+  returnTarget?.focus?.({ preventScroll: true });
 }
 
 
@@ -6236,6 +6485,7 @@ function updateModal(html) {
 }
 
 async function showAddOperatorModal() {
+  if (!canManageOperators()) return showToast('Недостаточно прав для создания пользователей', 'error');
   let groups = [];
   let groupsError = '';
   try {
@@ -6365,6 +6615,7 @@ async function showAddOperatorModal() {
 }
 
 async function submitAddOperator() {
+  if (!canManageOperators()) return showToast('Недостаточно прав для создания пользователей', 'error');
   const name     = document.getElementById('new-op-name')?.value?.trim();
   const login    = document.getElementById('new-user-login')?.value?.trim();
   const groupId  = document.getElementById('new-op-group-id')?.value;
@@ -6442,6 +6693,7 @@ async function submitAddOperator() {
 }
 
 async function deactivateUserUi(userId) {
+  if (!canManageOperators()) return showToast('Недостаточно прав для изменения пользователей', 'error');
   const user = STATE.users.find(u => u.id === userId);
   const confirmed = await uiConfirmAction({
     title: 'Деактивировать пользователя?',
@@ -6477,6 +6729,7 @@ function setUserManagementTab(tab) {
 }
 
 async function showUserManagementModal(userId) {
+  if (!canManageOperators()) return showToast('Недостаточно прав для изменения пользователей', 'error');
   const user = STATE.users.find(item => item.id === userId);
   if (!user) return showToast('Пользователь не найден', 'error');
 
@@ -6626,6 +6879,7 @@ async function showUserManagementModal(userId) {
 }
 
 async function submitUserManagement(userId) {
+  if (!canManageOperators()) return showToast('Недостаточно прав для изменения пользователей', 'error');
   const user = STATE.users.find(item => item.id === userId);
   const error = document.getElementById('manage-user-error');
   const button = document.getElementById('manage-user-save');
@@ -6698,6 +6952,7 @@ async function submitUserManagement(userId) {
 }
 
 function showUserResetPasswordModal(userId) {
+  if (!canManageOperators()) return showToast('Недостаточно прав для сброса пароля', 'error');
   const user = STATE.users.find(u => u.id === userId);
   showModal(`
     <h3 class="modal-title">Сбросить пароль</h3>
@@ -6712,6 +6967,7 @@ function showUserResetPasswordModal(userId) {
 }
 
 async function submitUserResetPassword(userId) {
+  if (!canManageOperators()) return showToast('Недостаточно прав для сброса пароля', 'error');
   const password = document.getElementById('reset-user-password')?.value || '';
   const err = document.getElementById('reset-user-password-error');
   if (password.length < 8 || !/[A-Za-zА-Яа-я]/.test(password) || !/\d/.test(password)) {
@@ -6938,10 +7194,10 @@ function exportHistoryCSV() {
     fmtDate(t.created_at), t.operator_name, t.group_name, t.type,
     t.amount, t.comment, t.created_by_name||'Система',
   ]);
-  downloadCSV([header, ...rows], 'pulse_history');
+  downloadCoinHistoryCsv([header, ...rows], 'pulse_history');
 }
 
-function downloadCSV(rows, name) {
+function downloadCoinHistoryCsv(rows, name) {
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
@@ -7060,14 +7316,22 @@ async function logoutAndReload() {
   });
   // Очищаем sessionStorage (SWR-кеш)
   sessionStorage.clear();
-  STATE.user = null;
+  localStorage.removeItem('pulse-last-view');
+  document.querySelectorAll('input[type="password"]').forEach(input => { input.value = ''; });
+  clearSessionUiState();
+  history.replaceState(null, '', '/');
   location.reload();
 }
 
 function showAccountSettingsModal() {
   const u = STATE.user;
   if (!u) return;
-  const roleLabel = { operator:'Оператор', supervisor:'Супервайзер', manager:'Руководитель', admin:'Администратор' }[u.role] || u.role;
+  const accountRoleLabel = { operator:'Оператор', supervisor:'Супервайзер', manager:'Руководитель', admin:'Администратор' }[u.role] || u.role;
+  const groupName = STATE.myOperator?.group_name
+    || STATE.myOperator?.group?.name
+    || STATE.users.find(item => item.id === u.id)?.group_name
+    || 'Не назначена';
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
 
   showModal(`
     <div class="acc-modal">
@@ -7077,8 +7341,22 @@ function showAccountSettingsModal() {
         <div class="acc-avatar">${esc((u.full_name||'?')[0].toUpperCase())}</div>
         <div>
           <div class="acc-name">${esc(u.full_name || '—')}</div>
-          <div class="acc-role">${esc(roleLabel)}</div>
-          <div class="acc-login">Логин: <b>${esc(u.username || '—')}</b></div>
+          <div class="acc-role">${esc(accountRoleLabel)}</div>
+        </div>
+      </div>
+
+      <dl class="account-profile-details">
+        <div><dt>ФИО</dt><dd>${esc(u.full_name || 'Не указано')}</dd></div>
+        <div><dt>Роль</dt><dd>${esc(accountRoleLabel)}</dd></div>
+        <div><dt>Группа</dt><dd>${esc(groupName)}</dd></div>
+        <div><dt>Логин</dt><dd>${esc(u.username || 'Не указан')}</dd></div>
+      </dl>
+
+      <div class="acc-section account-theme-section">
+        <div class="acc-section-title">Оформление</div>
+        <div class="segmented-control" role="group" aria-label="Тема оформления">
+          <button type="button" data-account-theme="light" class="${currentTheme === 'light' ? 'active' : ''}">Светлая</button>
+          <button type="button" data-account-theme="dark" class="${currentTheme === 'dark' ? 'active' : ''}">Тёмная</button>
         </div>
       </div>
 
@@ -7088,14 +7366,14 @@ function showAccountSettingsModal() {
       <div class="acc-section">
         <div class="acc-section-title">Изменить логин</div>
         <div class="form-group">
-          <label class="form-label">Новый логин</label>
+          <label class="form-label" for="acc-new-login">Новый логин</label>
           <input id="acc-new-login" class="form-input" type="text"
             placeholder="Только буквы, цифры, точка, _"
             value="${esc(u.username || '')}">
           <div id="acc-login-hint" class="acc-field-hint"></div>
         </div>
         <div class="form-group">
-          <label class="form-label">Текущий пароль</label>
+          <label class="form-label" for="acc-login-pwd">Текущий пароль</label>
           <input id="acc-login-pwd" class="form-input" type="password" placeholder="Подтвердите текущий пароль">
           <div id="acc-login-err" class="acc-field-err"></div>
         </div>
@@ -7108,23 +7386,39 @@ function showAccountSettingsModal() {
       <div class="acc-section">
         <div class="acc-section-title">Изменить пароль</div>
         <div class="form-group">
-          <label class="form-label">Текущий пароль</label>
+          <label class="form-label" for="acc-cur-pwd">Текущий пароль</label>
           <input id="acc-cur-pwd" class="form-input" type="password" placeholder="Текущий пароль">
         </div>
         <div class="form-group">
-          <label class="form-label">Новый пароль</label>
+          <label class="form-label" for="acc-new-pwd">Новый пароль</label>
           <input id="acc-new-pwd" class="form-input" type="password" placeholder="Минимум 8 символов">
           <div id="acc-pwd-hint" class="acc-field-hint"></div>
         </div>
         <div class="form-group">
-          <label class="form-label">Повторите новый пароль</label>
+          <label class="form-label" for="acc-confirm-pwd">Повторите новый пароль</label>
           <input id="acc-confirm-pwd" class="form-input" type="password" placeholder="Повторите пароль">
           <div id="acc-pwd-err" class="acc-field-err"></div>
         </div>
         <button class="acc-btn" id="acc-save-pwd-btn" onclick="submitChangePassword()">Сохранить пароль</button>
       </div>
+
+      <div class="acc-divider"></div>
+      <button class="btn-outline account-logout-action" type="button" data-account-logout>Выйти из аккаунта</button>
     </div>
   `);
+
+  document.querySelectorAll('[data-account-theme]').forEach(button => {
+    button.addEventListener('click', () => {
+      const theme = button.dataset.accountTheme;
+      localStorage.setItem('pulse-theme', theme);
+      applyTheme(theme, 'manual');
+      document.querySelectorAll('[data-account-theme]').forEach(item => item.classList.toggle('active', item === button));
+    });
+  });
+  document.querySelector('[data-account-logout]')?.addEventListener('click', () => {
+    closeModal();
+    logoutAndReload();
+  });
 
   // Live validation for login
   document.getElementById('acc-new-login')?.addEventListener('input', function() {
@@ -7287,7 +7581,6 @@ window.manualOperatorLevelUi = manualOperatorLevelUi;
 /* ══════════════════════════════════════
    VIEW: РАСЧЁТ ЗА ПЕРИОД
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    КОИНЫ: Еженедельный расчёт (ТЗ §3) — preview / apply / история запусков
 ══════════════════════════════════════ */
@@ -7491,7 +7784,6 @@ function exportWeeklyAccrualPeriod(format = 'csv') {
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
   window.open(api.exportUrl('/api/exports/weekly-results', { period_start: start, period_end: end, format }), '_blank');
 }
-
 /* ══════════════════════════════════════
    КОИНЫ: Настройки начислений (ТЗ §4) — GET/PUT /api/settings/coin-rules
 ══════════════════════════════════════ */
@@ -7624,7 +7916,6 @@ async function saveCoinRulesSettings() {
   const body = document.getElementById('coins-tab-body');
   if (body) renderCoinRulesSettingsTab(body);
 }
-
 let _sessionFilterStatus = 'active';
 let _sessionFilterQuery = '';
 let _sessionFilterRole = 'all';
@@ -7861,7 +8152,6 @@ async function revokeAllUserSessions(userId) {
 
 window.revokeUserSession = revokeUserSession;
 window.revokeAllUserSessions = revokeAllUserSessions;
-
 function renderPeriodReport() {
   const el = document.getElementById('view-period-report');
   if (!el) return;
@@ -8889,10 +9179,9 @@ async function prefetchAnalyticsInBackground() {
       endDate   = latest.end_date;
     } else {
       // Нет готовых расчётов — берём текущий месяц
-      const now = new Date();
-      const y = now.getFullYear(), m = now.getMonth();
-      startDate = new Date(y, m, 1).toISOString().slice(0, 10);
-      endDate   = now.toISOString().slice(0, 10);
+      const today = analyticsLocalDateISO();
+      startDate = `${today.slice(0, 8)}01`;
+      endDate   = today;
     }
   } catch {
     return; // Не удалось получить периоды — тихо выходим
@@ -8985,6 +9274,39 @@ let _analyticsState = {
   operatorSort: 'final_points',
   operatorSortOrder: 'desc',
 };
+let _analyticsRenderGen = 0;
+let _analyticsCoverageGen = 0;
+let _analyticsAvailabilityGen = 0;
+let _analyticsQualityWeekGen = 0;
+let _analyticsOutsideClickHandler = null;
+
+function analyticsLocalDateISO(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: UI_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function analyticsRenderIsStale(navGen, renderGen) {
+  return isNavStale(navGen) || renderGen !== _analyticsRenderGen;
+}
+
+function analyticsLoadIsCurrent(content, navGen, tabGen) {
+  return !isNavStale(navGen)
+    && !isAnalyticsTabStale(tabGen)
+    && content?.isConnected
+    && document.getElementById('an-tab-content') === content;
+}
+
+function clearAnalyticsOutsideClickHandler() {
+  if (!_analyticsOutsideClickHandler) return;
+  document.removeEventListener('click', _analyticsOutsideClickHandler);
+  _analyticsOutsideClickHandler = null;
+}
 
 function analyticsApiUrl(path, params) {
   const qs = new URLSearchParams(params).toString();
@@ -9035,10 +9357,8 @@ async function resolveInitialAnalyticsPeriod(urlParams) {
   if (periods.length) return { start: periods[0].start_date, end: periods[0].end_date };
   if (requestedStart && requestedEnd) return { start: requestedStart, end: requestedEnd };
 
-  const today = new Date();
-  const weekAgo = new Date(today);
-  weekAgo.setDate(today.getDate() - 6);
-  return { start: weekAgo.toISOString().slice(0, 10), end: today.toISOString().slice(0, 10) };
+  const today = analyticsLocalDateISO();
+  return { start: addDaysISO(today, -6), end: today };
 }
 
 function fmtA(v, decimals = 2, suffix = '') {
@@ -9131,15 +9451,15 @@ function renderAnalyticsContextBar() {
 }
 
 function mondayOfWeekISO(iso) {
-  const d = new Date((iso || new Date().toISOString().slice(0, 10)) + 'T00:00:00');
-  const dow = (d.getDay() + 6) % 7; // 0 = понедельник
-  d.setDate(d.getDate() - dow);
+  const d = new Date((iso || analyticsLocalDateISO()) + 'T00:00:00Z');
+  const dow = (d.getUTCDay() + 6) % 7; // 0 = понедельник
+  d.setUTCDate(d.getUTCDate() - dow);
   return d.toISOString().slice(0, 10);
 }
 
 function addDaysISO(iso, n) {
-  const d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + n);
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
@@ -9151,8 +9471,10 @@ function refreshAnalyticsContextBar(el) {
 }
 
 async function refreshAnalyticsCoverage(el) {
+  const requestGen = ++_analyticsCoverageGen;
   try {
     const dashboard = await analyticsFetch('management-dashboard', analyticsOpParams());
+    if (requestGen !== _analyticsCoverageGen || STATE.currentView !== 'analytics' || !el?.isConnected) return;
     const health = dashboard.team_health || {};
     _analyticsState.coverageWithData = health.operators_with_data ?? 0;
     _analyticsState.coverageTotal = health.operators_count ?? 0;
@@ -9180,13 +9502,15 @@ async function renderAnalytics() {
   const el = document.getElementById('view-analytics');
   if (!el) return;
   const myNavGen = STATE.navGen;
+  const myRenderGen = ++_analyticsRenderGen;
+  clearAnalyticsOutsideClickHandler();
 
   const urlParams = getAnalyticsParams();
   _analyticsState.tab = ANALYTICS_TABS.some(item => item.key === urlParams.tab) ? urlParams.tab : 'overview';
 
   if (!_analyticsState.startDate) {
     const initialPeriod = await resolveInitialAnalyticsPeriod(urlParams);
-    if (isNavStale(myNavGen)) return;
+    if (analyticsRenderIsStale(myNavGen, myRenderGen)) return;
     _analyticsState.startDate = initialPeriod.start;
     _analyticsState.endDate = initialPeriod.end;
     _analyticsState.groupId = urlParams.group;
@@ -9268,13 +9592,13 @@ async function renderAnalytics() {
 
   try {
     const gdata = await analyticsFetch('groups-list', {});
-    if (isNavStale(myNavGen)) return; // ушли с "Аналитики" пока ждали список групп
+    if (analyticsRenderIsStale(myNavGen, myRenderGen)) return; // ушли с "Аналитики" пока ждали список групп
     _analyticsState.groups = gdata.items || [];
     const sel = el.querySelector('#an-group');
     sel.innerHTML = '<option value="">Все группы</option>' +
       _analyticsState.groups.map(g => `<option value="${g.id}" ${String(g.id)===_analyticsState.groupId?'selected':''}>${esc(g.name)}</option>`).join('');
   } catch(e) { /* groups list optional */ }
-  if (isNavStale(myNavGen)) return;
+  if (analyticsRenderIsStale(myNavGen, myRenderGen)) return;
 
   el.querySelector('#an-participation').value = _analyticsState.participationStatus;
 
@@ -9315,14 +9639,15 @@ async function renderAnalytics() {
 
   el.querySelector('#an-reset-btn').addEventListener('click', async () => {
     const initial = await resolveInitialAnalyticsPeriod({});
+    if (analyticsRenderIsStale(myNavGen, myRenderGen)) return;
     Object.assign(_analyticsState, { startDate: initial.start, endDate: initial.end, groupId: '', operatorQuery: '', participationStatus: 'all', onlyWithData: false, operatorPage: 1 });
     renderAnalytics();
   });
   el.querySelectorAll('[data-an-period]').forEach(button => button.addEventListener('click', () => {
-    const end = new Date(); const start = new Date(end);
-    start.setDate(end.getDate() - (button.dataset.anPeriod === 'day' ? 0 : button.dataset.anPeriod === 'month' ? 29 : 6));
-    el.querySelector('#an-start').value = start.toISOString().slice(0, 10);
-    el.querySelector('#an-end').value = end.toISOString().slice(0, 10);
+    const end = analyticsLocalDateISO();
+    const daysBack = button.dataset.anPeriod === 'day' ? 0 : button.dataset.anPeriod === 'month' ? 29 : 6;
+    el.querySelector('#an-start').value = addDaysISO(end, -daysBack);
+    el.querySelector('#an-end').value = end;
   }));
 
   /* ── Навигация: 6 основных вкладок + «Ещё» (desktop), один select (mobile).
@@ -9385,9 +9710,15 @@ async function renderAnalytics() {
       e.stopPropagation();
       if (moreMenu.hidden) openMoreMenu(); else closeMoreMenu();
     });
-    document.addEventListener('click', (e) => {
+    const outsideClickHandler = (e) => {
       if (!moreMenu.hidden && !moreMenu.contains(e.target) && e.target !== moreBtn) closeMoreMenu();
-    });
+    };
+    _analyticsOutsideClickHandler = outsideClickHandler;
+    document.addEventListener('click', outsideClickHandler);
+    const viewSignal = currentViewSignal();
+    viewSignal?.addEventListener('abort', () => {
+      if (_analyticsOutsideClickHandler === outsideClickHandler) clearAnalyticsOutsideClickHandler();
+    }, { once: true });
     moreMenu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMoreMenu(); moreBtn.focus(); } });
     moreBtn.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMoreMenu(); });
   }
@@ -9398,7 +9729,7 @@ async function renderAnalytics() {
   }
 
   updateUrl();
-  if (isNavStale(myNavGen)) return;
+  if (analyticsRenderIsStale(myNavGen, myRenderGen)) return;
   refreshAnalyticsCoverage(el); // фоново — не блокирует первую отрисовку вкладки
   await loadAnalyticsTab(_analyticsState.tab);
 }
@@ -9427,13 +9758,16 @@ function analyticsOpParams() {
 async function refreshAvailabilityWarning() {
   const box = document.getElementById('an-availability-warning');
   if (!box) return;
+  const requestGen = ++_analyticsAvailabilityGen;
   try {
     const summary = await analyticsFetch('summary', analyticsOpParams());
+    if (requestGen !== _analyticsAvailabilityGen || !box.isConnected) return;
     const msg = summary.data_availability_warning;
     box.innerHTML = msg
       ? `<div class="an-availability-note">${esc(msg)}</div>`
       : '';
   } catch(e) {
+    if (requestGen !== _analyticsAvailabilityGen || !box.isConnected) return;
     // Если /summary вернул 404 (совсем нет данных) — analyticsFetch бросит
     // ошибку с тем же текстом, что и data_availability_warning на backend.
     box.innerHTML = `<div class="an-availability-note an-availability-note-error">${esc(e.message)}</div>`;
@@ -9459,17 +9793,20 @@ async function loadAnalyticsTab(tab) {
 
   try {
     switch (tab) {
-      case 'overview':  await loadOverviewTab(content); break;
-      case 'operators': await loadOperatorsTab(content); break;
-      case 'groups':    await loadGroupsTab(content); break;
-      case 'matrix':    await loadMatrixTab(content); break;
-      case 'quality':   await loadQualityTab(content); break;
-      case 'dynamics':  await loadDynamicsTab(content); break;
-      case 'penalties': await loadPenaltiesTab(content); break;
-      case 'risks':     await loadRisksTab(content); break;
-      case 'points':    await loadPointsTab(content); break;
-      case 'export':    await loadExportTab(content); break;
-      default: content.innerHTML = '<div class="empty-line">Вкладка не найдена</div>';
+      case 'overview':  await loadOverviewTab(content, myNavGen, myTabGen); break;
+      case 'operators': await loadOperatorsTab(content, myNavGen, myTabGen); break;
+      case 'groups':    await loadGroupsTab(content, myNavGen, myTabGen); break;
+      case 'matrix':    await loadMatrixTab(content, myNavGen, myTabGen); break;
+      case 'quality':   await loadQualityTab(content, myNavGen, myTabGen); break;
+      case 'dynamics':  await loadDynamicsTab(content, myNavGen, myTabGen); break;
+      case 'penalties': await loadPenaltiesTab(content, myNavGen, myTabGen); break;
+      case 'risks':     await loadRisksTab(content, myNavGen, myTabGen); break;
+      case 'points':    await loadPointsTab(content, myNavGen, myTabGen); break;
+      case 'export':    await loadExportTab(content, myNavGen, myTabGen); break;
+      default:
+        if (analyticsLoadIsCurrent(content, myNavGen, myTabGen)) {
+          content.innerHTML = '<div class="empty-line">Вкладка не найдена</div>';
+        }
     }
   } catch(e) {
     clearTimeout(spinnerTimer);
@@ -9478,17 +9815,16 @@ async function loadAnalyticsTab(tab) {
     return;
   }
   clearTimeout(spinnerTimer);
-  if (isNavStale(myNavGen) || isAnalyticsTabStale(myTabGen)) {
-    content.innerHTML = '';
-  }
+  // An obsolete request must never clear content already rendered by a newer tab.
 }
 
 /* ── Вкладка: Обзор ──────────────────────────────────────────*/
-async function loadOverviewTab(content) {
+async function loadOverviewTab(content, navGen, tabGen) {
   const [dashboard, dynamics] = await Promise.all([
     analyticsFetch('management-dashboard', analyticsOpParams()),
     analyticsFetch('daily-dynamics', { ...analyticsBaseParams(), metric: 'calls' }).catch(() => ({ items: [] })),
   ]);
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
 
   const warnBox = document.getElementById('an-availability-warning');
   if (warnBox && dashboard.data_availability_warning) {
@@ -9633,12 +9969,13 @@ function renderAnalyticsEmptyState() {
 }
 
 /* ── Вкладка: Операторы (таблица эффективности + зона внимания) ─*/
-async function loadOperatorsTab(content) {
+async function loadOperatorsTab(content, navGen, tabGen) {
   // Один комбинированный запрос вместо 2
   const combined = await analyticsFetch('operators-combined', {
     ...analyticsOpParams(), page: _analyticsState.operatorPage, page_size: 100,
     sort_by: _analyticsState.operatorSort, sort_order: _analyticsState.operatorSortOrder,
   });
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   const opsTable = combined;
   const topAttn = combined.top_and_attention || {};
 
@@ -9736,10 +10073,10 @@ function exportOperatorsCsv(items) {
       o.efficiency_percent??'', o.penalty_minutes??'', o.final_points??'', o.risk_status??'');
     rows.push(row.join(';'));
   });
-  downloadCsv(rows, 'аналитика_операторы.csv');
+  downloadAnalyticsCsvFile(rows, 'аналитика_операторы.csv');
 }
 
-function downloadCsv(rows, filename) {
+function downloadAnalyticsCsvFile(rows, filename) {
   const blob = new Blob(['\ufeff'+rows.join('\n')], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
@@ -9747,8 +10084,9 @@ function downloadCsv(rows, filename) {
 }
 
 /* ── Вкладка: Группы ──────────────────────────────────────────*/
-async function loadGroupsTab(content) {
+async function loadGroupsTab(content, navGen, tabGen) {
   const groupsCmp = await analyticsFetch('groups-comparison', analyticsBaseParams());
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   const items = groupsCmp.items || [];
 
   const bestQuality = items.length ? [...items].sort((a,b)=>(b.avg_quality??-1)-(a.avg_quality??-1))[0] : null;
@@ -9822,7 +10160,8 @@ function bindGroupsMetricTabs(items) {
 }
 
 /* ── Вкладка: Матрицы ──────────────────────────────────────────*/
-async function loadMatrixTab(content) {
+async function loadMatrixTab(content, navGen, tabGen) {
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   content.innerHTML =
     renderQualityKvzMatrixBlock() +
     `<div class="an-card"><div class="an-card-head">Нагрузка и эффективность</div>
@@ -9832,9 +10171,11 @@ async function loadMatrixTab(content) {
   // Один запрос вместо 2 — получаем все матрицы сразу
   try {
     const d = await analyticsFetch('matrix-combined', analyticsBaseParams());
+    if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
     drawScatter('an-qk-matrix', d.quality_kvz || [], 'kvz', 'quality_avg', 'КВЗ', 'Качество', d.thresholds?.kvz, d.thresholds?.quality);
     drawScatter('an-load-eff-matrix', d.load_efficiency || [], 'calls_total', 'efficiency_percent', 'Звонки', 'Эффективность %');
   } catch(e) {
+    if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
     const c = document.getElementById('an-qk-matrix');
     if (c) c.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
     const c2 = document.getElementById('an-load-eff-matrix');
@@ -9843,8 +10184,9 @@ async function loadMatrixTab(content) {
 }
 
 /* ── Вкладка: Контроль качества ────────────────────────────────*/
-async function loadQualityTab(content) {
+async function loadQualityTab(content, navGen, tabGen) {
   const combined = await analyticsFetch('quality-combined', analyticsBaseParams());
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   const coverage = combined.coverage || {};
   if (!_analyticsState.qualityGridWeekStart) {
     _analyticsState.qualityGridWeekStart = mondayOfWeekISO(_analyticsState.endDate || _analyticsState.startDate);
@@ -9864,19 +10206,21 @@ async function loadQualityTab(content) {
       <div id="an-quality-grid"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
     </div>`;
 
-  await loadQualityGridWeek(content);
+  await loadQualityGridWeek(content, navGen, tabGen);
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
 
   content.querySelectorAll('#an-quality-week-nav [data-week]').forEach(btn => {
     btn.addEventListener('click', () => {
       _analyticsState.qualityGridWeekStart = addDaysISO(
         _analyticsState.qualityGridWeekStart, btn.dataset.week === 'prev' ? -7 : 7,
       );
-      loadQualityGridWeek(content);
+      loadQualityGridWeek(content, navGen, tabGen);
     });
   });
 }
 
-async function loadQualityGridWeek(content) {
+async function loadQualityGridWeek(content, navGen, tabGen) {
+  const requestGen = ++_analyticsQualityWeekGen;
   const label = content.querySelector('#an-quality-week-label');
   const box = content.querySelector('#an-quality-grid');
   const ws = _analyticsState.qualityGridWeekStart;
@@ -9887,8 +10231,14 @@ async function loadQualityGridWeek(content) {
   if (_analyticsState.participationStatus !== 'all') params.participation_status = _analyticsState.participationStatus;
   try {
     const grid = await analyticsFetch('daily-grid', params);
+    if (requestGen !== _analyticsQualityWeekGen
+      || ws !== _analyticsState.qualityGridWeekStart
+      || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
     if (box) box.innerHTML = renderDailyGridBlock(grid);
   } catch (e) {
+    if (requestGen !== _analyticsQualityWeekGen
+      || ws !== _analyticsState.qualityGridWeekStart
+      || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
     if (box) box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
   }
 }
@@ -9934,7 +10284,8 @@ function renderDailyGridBlock(grid) {
 }
 
 /* ── Вкладка: Динамика ────────────────────────────────────────*/
-async function loadDynamicsTab(content) {
+async function loadDynamicsTab(content, navGen, tabGen) {
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   content.innerHTML = `
     <div class="an-card">
       <div class="an-card-head-row">
@@ -9962,62 +10313,75 @@ async function loadDynamicsTab(content) {
     </div>`;
 
   const base = analyticsBaseParams();
+  let dynamicsRequestGen = 0;
+  let heatmapRequestGen = 0;
 
   async function loadDyn(metric) {
-    const box = document.getElementById('an-dyn-chart2');
+    const requestGen = ++dynamicsRequestGen;
+    const box = content.querySelector('#an-dyn-chart2');
     try {
       const d = await analyticsFetch('daily-dynamics', { ...base, metric });
+      if (requestGen !== dynamicsRequestGen || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
       box.innerHTML = renderDynChart(d.items || [], metric);
-    } catch(e) { box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`; }
+    } catch(e) {
+      if (requestGen !== dynamicsRequestGen || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
+      box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+    }
   }
-  document.querySelectorAll('#an-dyn-tabs2 .metric-tab').forEach(btn => {
+  content.querySelectorAll('#an-dyn-tabs2 .metric-tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('#an-dyn-tabs2 .metric-tab').forEach(b=>b.classList.remove('active'));
+      content.querySelectorAll('#an-dyn-tabs2 .metric-tab').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       loadDyn(btn.dataset.metric);
     });
   });
-  loadDyn('calls');
 
   async function loadHm(metric) {
-    const box = document.getElementById('an-heatmap-body2');
+    const requestGen = ++heatmapRequestGen;
+    const box = content.querySelector('#an-heatmap-body2');
     try {
       const d = await analyticsFetch('heatmap', { ...base, metric });
+      if (requestGen !== heatmapRequestGen || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
       box.innerHTML = renderHeatmapTable(d, metric);
-    } catch(e) { box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`; }
+    } catch(e) {
+      if (requestGen !== heatmapRequestGen || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
+      box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+    }
   }
-  document.querySelectorAll('#an-heatmap-tabs2 .metric-tab').forEach(btn => {
+  content.querySelectorAll('#an-heatmap-tabs2 .metric-tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('#an-heatmap-tabs2 .metric-tab').forEach(b=>b.classList.remove('active'));
+      content.querySelectorAll('#an-heatmap-tabs2 .metric-tab').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       loadHm(btn.dataset.metric);
     });
   });
-  loadHm('quality');
+  await Promise.all([loadDyn('calls'), loadHm('quality')]);
 }
 
 /* ── Вкладка: Штрафы ──────────────────────────────────────────*/
-async function loadPenaltiesTab(content) {
+async function loadPenaltiesTab(content, navGen, tabGen) {
   const penalties = await analyticsFetch('penalties', analyticsBaseParams());
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   content.innerHTML = renderPenaltiesBlock(penalties);
 }
 
 /* ── Вкладка: Риски ───────────────────────────────────────────*/
-async function loadRisksTab(content) {
+async function loadRisksTab(content, navGen, tabGen) {
   const [riskPyramid, opsTable] = await Promise.all([
     analyticsFetch('risk-pyramid', analyticsBaseParams()),
     analyticsFetch('operators', analyticsOpParams()),
   ]);
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
 
   content.innerHTML =
     renderRiskPyramidBlock(riskPyramid) +
     renderRiskOperatorsTableBlock(opsTable.items || []) +
     renderRiskByGroupsBlock(riskPyramid, opsTable.items || []);
 
-  document.querySelectorAll('.an-risk-cell').forEach(cell => {
+  content.querySelectorAll('.an-risk-cell').forEach(cell => {
     cell.addEventListener('click', () => {
       const status = cell.dataset.riskStatus;
-      const detail = document.getElementById('an-risk-detail');
+      const detail = content.querySelector('#an-risk-detail');
       const bucket = riskPyramid[status];
       if (!detail) return;
       if (!bucket || !bucket.operators.length) { detail.innerHTML = '<div class="empty-line">Операторов в этой категории нет</div>'; return; }
@@ -10093,15 +10457,20 @@ function renderRiskByGroupsBlock(riskPyramid, items) {
 let _pointsViewMode = 'top10'; // top10 | all | growth | table
 let _pointsData = null;
 
-async function loadPointsTab(content) {
+async function loadPointsTab(content, navGen, tabGen) {
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем баллы…</p></div>';
 
+  let pointsData;
   try {
-    _pointsData = await analyticsFetch('points', analyticsOpParams());
+    pointsData = await analyticsFetch('points', analyticsOpParams());
   } catch(e) {
+    if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
     content.innerHTML = `<div class="an-card"><div class="status-line status-error">${esc(e.message)}</div></div>`;
     return;
   }
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
+  _pointsData = pointsData;
 
   const d = _pointsData;
   if (!d.operators || !d.operators.length) {
@@ -10243,7 +10612,7 @@ function exportPointsCsv(operators) {
     o.total_hours, o.delta_total_hours??'', o.efficiency??'', o.delta_efficiency??'',
     o.penalty_points, o.delta_penalty_points??'', o.status
   ].join(';')));
-  downloadCsv(rows, 'аналитика_баллы.csv');
+  downloadAnalyticsCsvFile(rows, 'аналитика_баллы.csv');
 }
 
 /* Топ-10 bar chart */
@@ -10457,7 +10826,8 @@ function openOperatorPointsDrawer(o) {
 
 
 /* ── Вкладка: Экспорт ─────────────────────────────────────────*/
-async function loadExportTab(content) {
+async function loadExportTab(content, navGen, tabGen) {
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   content.innerHTML = `<div class="an-card">
     <div class="an-card-head">Экспорт отчётов</div>
     <div class="an-export-grid">
@@ -10497,27 +10867,27 @@ async function exportAnalyticsCsv(kind) {
     const d = await analyticsFetch('groups-comparison', base);
     const rows = ['Группа;Операторов;Звонки;Качество;КВЗ;Эфф.%;Штраф мин;Итог баллов'];
     (d.items||[]).forEach(g => rows.push([g.group_name,g.operators_count,g.total_calls,g.avg_quality??'',g.avg_kvz??'',g.avg_efficiency??'',g.penalty_minutes,g.final_points_sum].join(';')));
-    downloadCsv(rows, 'аналитика_группы.csv');
+    downloadAnalyticsCsvFile(rows, 'аналитика_группы.csv');
   } else if (kind === 'penalties') {
     const d = await analyticsFetch('penalties', base);
     const rows = ['Оператор;Группа;Сумма;Минуты;Потеря баллов'];
     (d.operators||[]).forEach(o => rows.push([o.full_name,o.group_name||'',o.penalty_sum,o.penalty_minutes,o.penalty_points].join(';')));
-    downloadCsv(rows, 'аналитика_штрафы.csv');
+    downloadAnalyticsCsvFile(rows, 'аналитика_штрафы.csv');
   } else if (kind === 'attention') {
     const d = await analyticsFetch('top-and-attention', base);
     const rows = ['Оператор;Группа;Причина'];
     (d.attention_zone||[]).forEach(a => rows.push([a.full_name,a.group_name||'',a.reason].join(';')));
-    downloadCsv(rows, 'аналитика_зона_внимания.csv');
+    downloadAnalyticsCsvFile(rows, 'аналитика_зона_внимания.csv');
   } else if (kind === 'risks') {
     const d = await analyticsFetch('operators', opParams);
     const rows = ['Оператор;Группа;Статус риска;Качество;КВЗ;Эфф.%;Штраф мин'];
     (d.items||[]).forEach(o => rows.push([o.full_name,o.group_name||'',o.risk_status,o.quality_avg??'',o.kvz??'',o.efficiency_percent??'',o.penalty_minutes].join(';')));
-    downloadCsv(rows, 'аналитика_риски.csv');
+    downloadAnalyticsCsvFile(rows, 'аналитика_риски.csv');
   } else if (kind === 'quality_coverage') {
     const d = await analyticsFetch('quality-coverage', base);
     const rows = ['Группа;Операторов;Оцен.звонков;Среднее/опер;Без оценок;Ср.качество'];
     (d.by_group||[]).forEach(g => rows.push([g.group_name,g.operators_count,g.evaluated_calls,g.avg_evaluations_per_operator,g.operators_without_quality,g.avg_quality??''].join(';')));
-    downloadCsv(rows, 'аналитика_качество_прослушки.csv');
+    downloadAnalyticsCsvFile(rows, 'аналитика_качество_прослушки.csv');
   }
 }
 
@@ -10532,7 +10902,6 @@ const RATING_TABS = [
   { key: 'groups',   label: 'Сравнение групп' },
   { key: 'progress', label: 'Мой прогресс' },
 ];
-
 let _ratingActiveTab = 'overview';
 
 async function exportRatingFromRatingPage() {
@@ -10569,15 +10938,15 @@ async function renderStaffRating() {
       el.querySelectorAll('.analytics-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       _ratingActiveTab = btn.dataset.tab;
-      loadRatingTab(_ratingActiveTab);
+      loadStaffRatingTab(_ratingActiveTab);
     });
   });
 
   if (isNavStale(myNavGen)) return; // пользователь уже ушёл с "Рейтинга" — дальше не рисуем
-  await loadRatingTab(_ratingActiveTab);
+  await loadStaffRatingTab(_ratingActiveTab);
 }
 
-async function loadRatingTab(tab) {
+async function loadStaffRatingTab(tab) {
   const content = document.getElementById('rating-tab-content');
   if (!content) return;
   const myNavGen = STATE.navGen;
@@ -10987,7 +11356,6 @@ const WHEEL_PRIZE_ICON = {
 const WHEEL_FAST_MS = 900;
 const WHEEL_TTL_MS = 45_000;
 const WHEEL_STATIC_TTL_MS = 5 * 60_000;
-
 function wheelCachedFetch(key, fetcher, fallback, onFresh, ttlMs = WHEEL_TTL_MS) {
   const cached = swrReadRaw(key);
   const saveFresh = (fresh, previous) => {
@@ -11496,7 +11864,7 @@ async function renderWheelStaffView(el) {
     await renderWheelCampaignTab(body);
   } else if (_wheelStaffTab === 'prizes') {
     await renderWheelPrizesTab(body);
-  } else if (_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history' || _wheelStaffTab === 'stats') {
+  } else if (_wheelStaffTab === 'operations' || _wheelStaffTab === 'tickets' || _wheelStaffTab === 'history') {
     _wheelStaffTab = 'operations';
     await renderWheelOperationsTab(body);
   } else if (_wheelStaffTab === 'issue') {
@@ -13590,7 +13958,6 @@ async function loadTestAnalyticsBlock(testId) {
     body.innerHTML = `<div class="status-line status-error">${esc(e.message)}</div>`;
   }
 }
-
 /* ══════════════════════════════════════
    РОЗЫГРЫШИ (ТЗ P2)
    Билеты — только из Колеса WOW. Оператор вкладывает билеты в розыгрыш,
@@ -13848,7 +14215,6 @@ window.renderRaffles = renderRaffles;
 window.submitEnterRaffle = submitEnterRaffle;
 window.openCreateRaffleModal = openCreateRaffleModal;
 window.submitCreateRaffle = submitCreateRaffle;
-
 let _missionAttempt = null;
 let _missionDirty = false;
 let _missionActionBusy = false;
@@ -14473,8 +14839,16 @@ async function restartCurrentMission() {
   }
 }
 
-function backToMissionMap(force = false) {
-  if (!force && _missionDirty && !confirm('Введённое, но ещё не подтверждённое действие не сохранится. Вернуться к карте?')) return;
+async function backToMissionMap(force = false) {
+  if (!force && _missionDirty) {
+    const confirmed = await uiConfirmAction({
+      title: 'Вернуться к карте?',
+      description: 'Введённое, но ещё не подтверждённое действие не сохранится.',
+      confirmLabel: 'Вернуться к карте',
+      danger: false,
+    });
+    if (!confirmed) return;
+  }
   sessionStorage.removeItem('puls-mission-attempt');
   _missionAttempt = null;
   _missionDirty = false;
@@ -14579,7 +14953,6 @@ async function saveMissionProviderWindow(missionId) {
     showToast(error.message, 'error');
   }
 }
-
 let _missionWorldCode = sessionStorage.getItem('puls-mission-world') || '';
 
 function learningWorldIllustration(world) {
@@ -14640,7 +15013,6 @@ function backToLearningWorlds() {
   sessionStorage.removeItem('puls-mission-world');
   renderMissions();
 }
-
 let _photoDialogReturnFocus = null;
 
 function photoRequirements(attempt) {
@@ -14754,7 +15126,6 @@ function closeMissionPreviewDialog() {
   if (_photoDialogReturnFocus?.isConnected) _photoDialogReturnFocus.focus();
   _photoDialogReturnFocus = null;
 }
-
 function renderLearningWorldRoute(el, world) {
   const missions = world.missions || [];
   el.innerHTML = `<div class="missions-page world-route-page" style="--world-accent:${esc(world.accent_color)}">
@@ -14766,7 +15137,6 @@ function renderLearningWorldRoute(el, world) {
     </section>
   </div>`;
 }
-
 function saparRow(icon, title, action = '', accent = false, subtitle = '') {
   const attrs = action ? `onclick="${action}"` : 'disabled';
   return `<button type="button" class="sapar-list-row ${accent ? 'is-target' : ''}" ${attrs}><i>${icon}</i><span><b>${esc(title)}</b>${subtitle ? `<small>${esc(subtitle)}</small>` : ''}</span><em>›</em></button>`;
@@ -14834,7 +15204,6 @@ function scheduleSaparProcessing(attempt) {
     if (_missionAttempt?.id === attempt.id && _missionAttempt?.current_step?.screen_key === 'sapar_processing') missionAction('finish_processing');
   }, 1200);
 }
-
 function smzPurposeForScreen(screen) {
   return screen.includes('documents') ? 'documents' : 'auth';
 }
@@ -14954,7 +15323,6 @@ function openTrainingAvr(number) {
   screen.insertAdjacentHTML('beforeend', `<div class="smz-pdf-preview" role="dialog" aria-modal="true" aria-label="Предпросмотр учебного АВР"><div><button type="button" onclick="this.closest('.smz-pdf-preview').remove()" aria-label="Закрыть">×</button><span>УЧЕБНЫЙ ДОКУМЕНТ</span><h3>АВР ${number}</h3><p>Без персональных данных, реальной подписи и юридической силы.</p></div></div>`);
   screen.querySelector('.smz-pdf-preview button')?.focus();
 }
-
 /* Operator workspace v3: one visual system for cabinet and rating. */
 
 const OP_COIN = '₡';
@@ -15073,7 +15441,16 @@ function renderCabinet() {
     el.innerHTML = `<div class="op-page">${opEmpty('Личный кабинет недоступен', 'Он предназначен для аккаунтов, связанных с оператором.')}</div>`;
     return;
   }
-  const snapshot = STATE.cabinetSnapshot;
+  const snapshot = cabinetSnapshotForCurrentUser();
+  if (!snapshot && STATE.cabinetError) {
+    const busy = Boolean(STATE.cabinetLoading);
+    el.innerHTML = `<div class="op-page">
+      <div class="op-page-head"><div><span>Кабинет</span><h1>Мой рабочий день</h1></div></div>
+      ${opEmpty('Не удалось загрузить кабинет', STATE.cabinetError)}
+      <button class="btn-primary btn-sm" type="button" onclick="reloadCabinet()" ${busy ? 'disabled aria-busy="true"' : ''}>${busy ? 'Повторяем…' : 'Попробовать снова'}</button>
+    </div>`;
+    return;
+  }
   if (!snapshot) {
     el.innerHTML = `<div class="op-page"><div class="op-page-head"><div><span>Кабинет</span><h1>Мой рабочий день</h1></div></div>${cabinetLoadingHtml()}</div>`;
     const nav = STATE.navGen;
@@ -15087,7 +15464,7 @@ function renderCabinet() {
   const tenure = formatTenureDays(level.metrics?.tenure_days || 0);
   const completed = snapshot.achievements?.completed?.length || 0;
   el.innerHTML = `<div class="op-page op-cabinet-page">
-    <div class="op-page-head"><div><span>Кабинет оператора</span><h1>Мой рабочий день</h1><p>Главные результаты, цели и награды в одном месте</p></div><button class="btn-outline btn-sm" onclick="reloadCabinet()">Обновить</button></div>
+    <div class="op-page-head"><div><span>Кабинет оператора</span><h1>Мой рабочий день</h1><p>Главные результаты, цели и награды в одном месте</p></div><button class="btn-outline btn-sm" type="button" onclick="reloadCabinet()" ${STATE.cabinetLoading ? 'disabled aria-busy="true"' : ''}>${STATE.cabinetLoading ? 'Обновляем…' : 'Обновить'}</button></div>
     <div class="op-kpi-grid">
       <article class="op-kpi is-primary"><span>Баланс</span><strong>${opCoin(wallet.balance)}</strong><small>доступно для покупок</small></article>
       <article class="op-kpi"><span>За неделю</span><strong>${opCoin(wallet.earned_this_week)}</strong><small>заработано коинов</small></article>
@@ -15131,12 +15508,12 @@ async function renderRating() {
   el.querySelectorAll('[data-op-rating-tab]').forEach(button => button.addEventListener('click', () => {
     _ratingActiveTab = button.dataset.opRatingTab;
     el.querySelectorAll('[data-op-rating-tab]').forEach(item => item.classList.toggle('active', item === button));
-    loadRatingTab(_ratingActiveTab);
+    loadOperatorRatingTab(_ratingActiveTab);
   }));
-  await loadRatingTab(_ratingActiveTab);
+  await loadOperatorRatingTab(_ratingActiveTab);
 }
 
-async function loadRatingTab(tab) {
+async function loadOperatorRatingTab(tab) {
   const host = document.getElementById('rating-tab-content');
   if (!host) return;
   const nav = STATE.navGen;
@@ -15277,7 +15654,6 @@ function opProgressInfographic(pointItems, coinItems, rankItems) {
 
 window.renderCabinet = renderCabinet;
 window.renderRating = renderRating;
-
 /* Operator rating v4: a focused competition dashboard without data tables. */
 
 const rcManagementRating = window.renderRating;
@@ -15563,4 +15939,3 @@ async function rcRatingEntry() {
 }
 
 window.renderRating = rcRatingEntry;
-

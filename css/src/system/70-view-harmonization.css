@@ -1,0 +1,276 @@
+/* --------------------------------------------------------------------------
+   Routed view harmonization
+
+   This layer is intentionally view-agnostic: every routed screen gets the
+   same width, header, grid and text contracts without duplicating rules per
+   page. View-specific artwork and business-state styling stay in /views.
+   -------------------------------------------------------------------------- */
+
+#app-shell,
+#app-shell > .app-view {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+#app-shell > .app-view {
+  --view-content-max: var(--content-max);
+  --view-kpi-columns: 4;
+  --view-split-columns: 2;
+  --view-card-columns: 3;
+}
+
+#app-shell > :is(
+    #view-operators,
+    #view-operator-levels,
+    #view-coins,
+    #view-groups,
+    #view-analytics,
+    #view-period-report,
+    #view-sessions
+  ) {
+  --view-content-max: 1680px;
+}
+
+#app-shell > .app-view.active {
+  padding: 0;
+  overflow-x: clip;
+}
+
+#app-shell > .app-view.active > * {
+  width: 100%;
+  max-width: var(--view-content-max);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+#app-shell > .app-view :where(
+    .view-content,
+    .rating-page,
+    .levels-page,
+    .coins-page,
+    .op-page,
+    .missions-page,
+    .mission-player,
+    .tests-page,
+    .test-runner,
+    .shop-v2-shell,
+    .wheel-v2-shell,
+    .summary-v2-shell,
+    .summary-management-shell
+  ) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+#app-shell > .app-view :where(section, article, form, fieldset, header, main),
+#app-shell > .app-view :where([class*="-grid"]) > * {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Page headings share one alignment and wrapping contract. */
+#app-shell > .app-view :where(
+    .view-header,
+    .page-header,
+    .ui-page-header,
+    .levels-page-head,
+    .coins-page-head,
+    .summary-v2-header,
+    .summary-management-header,
+    .op-page-head,
+    .missions-header,
+    .world-route-header,
+    .tests-page-head,
+    .test-runner-head,
+    .shop-v2-header,
+    .wheel-v2-header
+  ) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+#app-shell > .app-view :where(
+    .view-header,
+    .page-header,
+    .ui-page-header,
+    .levels-page-head,
+    .coins-page-head,
+    .summary-v2-header,
+    .summary-management-header,
+    .op-page-head,
+    .missions-header,
+    .tests-page-head,
+    .shop-v2-header,
+    .wheel-v2-header
+  ) > :first-child {
+  flex: 1 1 28rem;
+  min-width: 0;
+}
+
+#app-shell > .app-view :where(
+    .view-actions,
+    .page-actions,
+    .ui-page-header__actions,
+    .levels-page-actions,
+    .coins-page-actions,
+    .summary-v2-actions,
+    .summary-management-actions,
+    .op-page-actions,
+    .missions-header-actions,
+    .tests-page-actions,
+    .shop-v2-actions,
+    .wheel-v2-actions
+  ) {
+  max-width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+#app-shell > .app-view :where(
+    h1,
+    h2,
+    h3,
+    .section-title,
+    .card-title,
+    .panel-title
+  ) {
+  word-break: normal;
+  overflow-wrap: break-word;
+  hyphens: none;
+}
+
+/* Grid density is controlled by three variables in the responsive layer. */
+#app-shell > .app-view :where(
+    .kpi-grid,
+    .summary-v2-kpis,
+    .levels-overview-grid,
+    .coins-kpi-grid,
+    .coins-summary-grid,
+    .an-kpi-grid,
+    .cabinet-kpi-grid,
+    .op-kpi-grid,
+    .mission-admin-stats,
+    .manual-stats-grid,
+    .metric-anti-grid
+  ) {
+  display: grid;
+  grid-template-columns: repeat(var(--view-kpi-columns), minmax(0, 1fr));
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+#app-shell > .app-view :where(
+    .summary-main-grid,
+    .summary-management-grid,
+    .summary-v2-layout,
+    .summary-v2-layout-leaders,
+    .an-top-grid,
+    .an-grid-2,
+    .an-exec-grid,
+    .an-risk-grid,
+    .cabinet-wow-grid,
+    .cabinet-week-grid,
+    .cabinet-bottom-grid,
+    .rating-top-grid,
+    .rating-mid-grid,
+    .op-dashboard-grid,
+    .mission-admin-grid,
+    .achievements-admin-grid,
+    .two-col-grid
+  ) {
+  display: grid;
+  grid-template-columns: repeat(var(--view-split-columns), minmax(0, 1fr));
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+#app-shell > .app-view :where(
+    .groups-grid,
+    .shop-grid,
+    .shop-v2-grid,
+    .learning-world-grid,
+    .test-card-grid,
+    .wheel-campaign-grid,
+    .wheel-rule-grid,
+    .raffle-grid,
+    .achievements-grid,
+    .nom-grid-v2
+  ) {
+  display: grid;
+  grid-template-columns: repeat(var(--view-card-columns), minmax(0, 1fr));
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Controls may scroll locally, but never widen the page. */
+#app-shell > .app-view :where(
+    .tabs,
+    .view-tabs,
+    .ui-tabs,
+    .segmented-control,
+    .levels-tabs,
+    .coins-tabs,
+    .missions-tabs,
+    .shop-v2-tabs
+  ) {
+  max-width: 100%;
+  min-width: 0;
+  overscroll-behavior-inline: contain;
+}
+
+#app-shell > .app-view :where(
+    .table-wrap,
+    .ui-table-wrap,
+    .data-table-wrap,
+    .responsive-table,
+    .analytics-table-wrap,
+    .levels-table-wrap,
+    .coins-table-wrap,
+    .sessions-table-wrap,
+    .operator-table-wrap
+  ) {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+#app-shell > .app-view :where(canvas, svg, img, video) {
+  max-width: 100%;
+}
+
+/* Full names stay readable: one clean line on data-dense desktop views. */
+#app-shell > .app-view :where(
+    .name-cell,
+    .user-cell-name,
+    .operator-name,
+    .acc-name,
+    .manual-tx-name,
+    .summary-v2-leader-name,
+    .an-top-name,
+    .an-breakdown-name,
+    .an-growth-name,
+    .an-pc-name,
+    .an-points-name-main,
+    .level-card-name,
+    .op-level-name,
+    .pod-name,
+    .wheel-winner-name,
+    .wheel-winner-row-name
+  ) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
+}

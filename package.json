@@ -1,16 +1,17 @@
 {
   "name": "puls-frontend-build",
   "private": true,
-  "description": "Frontend bundle assembly for Puls. The app serves source bundles directly without committed .min artifacts.",
+  "description": "Deterministic source and production-minified frontend bundles for Puls.",
   "scripts": {
     "bundle": "node scripts/build-frontend.mjs",
-    "split:frontend": "powershell -ExecutionPolicy Bypass -File scripts/build-frontend.ps1 -SplitFromCurrent",
-    "build": "npm run bundle",
+    "minify": "node scripts/minify-frontend.mjs",
+    "build": "npm run bundle && npm run minify",
+    "check:minified": "node scripts/minify-frontend.mjs --check",
     "test": "node --test tests/frontend/*.test.mjs",
     "audit": "npm audit --audit-level=high"
   },
   "devDependencies": {
-    "clean-css-cli": "^5.6.3",
+    "clean-css": "^5.3.3",
     "terser": "^5.36.0"
   }
 }

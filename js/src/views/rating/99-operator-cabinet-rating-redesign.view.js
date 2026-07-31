@@ -116,7 +116,16 @@ function renderCabinet() {
     el.innerHTML = `<div class="op-page">${opEmpty('Личный кабинет недоступен', 'Он предназначен для аккаунтов, связанных с оператором.')}</div>`;
     return;
   }
-  const snapshot = STATE.cabinetSnapshot;
+  const snapshot = cabinetSnapshotForCurrentUser();
+  if (!snapshot && STATE.cabinetError) {
+    const busy = Boolean(STATE.cabinetLoading);
+    el.innerHTML = `<div class="op-page">
+      <div class="op-page-head"><div><span>Кабинет</span><h1>Мой рабочий день</h1></div></div>
+      ${opEmpty('Не удалось загрузить кабинет', STATE.cabinetError)}
+      <button class="btn-primary btn-sm" type="button" onclick="reloadCabinet()" ${busy ? 'disabled aria-busy="true"' : ''}>${busy ? 'Повторяем…' : 'Попробовать снова'}</button>
+    </div>`;
+    return;
+  }
   if (!snapshot) {
     el.innerHTML = `<div class="op-page"><div class="op-page-head"><div><span>Кабинет</span><h1>Мой рабочий день</h1></div></div>${cabinetLoadingHtml()}</div>`;
     const nav = STATE.navGen;
@@ -130,7 +139,7 @@ function renderCabinet() {
   const tenure = formatTenureDays(level.metrics?.tenure_days || 0);
   const completed = snapshot.achievements?.completed?.length || 0;
   el.innerHTML = `<div class="op-page op-cabinet-page">
-    <div class="op-page-head"><div><span>Кабинет оператора</span><h1>Мой рабочий день</h1><p>Главные результаты, цели и награды в одном месте</p></div><button class="btn-outline btn-sm" onclick="reloadCabinet()">Обновить</button></div>
+    <div class="op-page-head"><div><span>Кабинет оператора</span><h1>Мой рабочий день</h1><p>Главные результаты, цели и награды в одном месте</p></div><button class="btn-outline btn-sm" type="button" onclick="reloadCabinet()" ${STATE.cabinetLoading ? 'disabled aria-busy="true"' : ''}>${STATE.cabinetLoading ? 'Обновляем…' : 'Обновить'}</button></div>
     <div class="op-kpi-grid">
       <article class="op-kpi is-primary"><span>Баланс</span><strong>${opCoin(wallet.balance)}</strong><small>доступно для покупок</small></article>
       <article class="op-kpi"><span>За неделю</span><strong>${opCoin(wallet.earned_this_week)}</strong><small>заработано коинов</small></article>
@@ -174,12 +183,12 @@ async function renderRating() {
   el.querySelectorAll('[data-op-rating-tab]').forEach(button => button.addEventListener('click', () => {
     _ratingActiveTab = button.dataset.opRatingTab;
     el.querySelectorAll('[data-op-rating-tab]').forEach(item => item.classList.toggle('active', item === button));
-    loadRatingTab(_ratingActiveTab);
+    loadOperatorRatingTab(_ratingActiveTab);
   }));
-  await loadRatingTab(_ratingActiveTab);
+  await loadOperatorRatingTab(_ratingActiveTab);
 }
 
-async function loadRatingTab(tab) {
+async function loadOperatorRatingTab(tab) {
   const host = document.getElementById('rating-tab-content');
   if (!host) return;
   const nav = STATE.navGen;

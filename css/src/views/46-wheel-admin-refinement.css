@@ -1,0 +1,269 @@
+/* Wheel admin UX refinement: compact navigation and structured editors */
+#view-wheel .wheel-tabs {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto 16px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  overflow-x: auto;
+  border-radius: 8px;
+}
+
+#view-wheel .wheel-tabs .filter-tab {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 92px;
+  min-height: 34px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+#view-wheel .wheel-prize-groups {
+  gap: 24px;
+}
+
+#view-wheel .wheel-prize-group-title {
+  min-height: auto;
+  margin-bottom: 10px;
+  padding: 0 0 9px;
+  align-items: center;
+}
+
+#view-wheel .wheel-prize-group-name {
+  display: block;
+  color: var(--tx);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+#view-wheel .wheel-prize-group-name::before {
+  display: none;
+}
+
+#view-wheel .wheel-prize-group-title small {
+  display: block;
+  margin-top: 2px;
+}
+
+#view-wheel .wheel-prize-group-meta {
+  min-height: 24px;
+  padding: 3px 9px;
+  background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+#view-wheel .wheel-prize-card-grid {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+#view-wheel .wheel-prize-card {
+  padding: 14px 16px 16px;
+  border-left-width: 3px;
+  box-shadow: none;
+}
+
+#view-wheel .wheel-prize-card-head {
+  min-height: 26px;
+  margin-bottom: 10px;
+}
+
+#view-wheel .wheel-prize-card-summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+#view-wheel .wheel-prize-identity {
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+#view-wheel .wheel-prize-color {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+#view-wheel .wheel-prize-identity input[type="color"] {
+  width: 52px;
+  height: 40px;
+}
+
+#view-wheel .wheel-prize-card .form-input {
+  min-height: 40px;
+}
+
+#view-wheel .wheel-prize-config {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.2fr) minmax(150px, .65fr) minmax(260px, 1.15fr);
+  gap: 0;
+  margin-top: 12px;
+  overflow: hidden;
+  background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+}
+
+#view-wheel .wheel-prize-config-block {
+  min-width: 0;
+  padding: 12px;
+  border-right: 1px solid var(--border-soft);
+}
+
+#view-wheel .wheel-prize-config-block:last-child {
+  border-right: 0;
+}
+
+#view-wheel .wheel-prize-config-title {
+  min-height: 35px;
+  margin-bottom: 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#view-wheel .wheel-prize-config-title strong {
+  color: var(--tx);
+  font-size: 12px;
+}
+
+#view-wheel .wheel-prize-config-title span {
+  color: var(--tx3);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+#view-wheel .wheel-prize-config-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+#view-wheel .wheel-prize-reward-fields {
+  grid-template-columns: minmax(140px, 1fr) 90px;
+}
+
+#view-wheel .wheel-prize-card-foot {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+#view-wheel .wheel-prize-card-foot .wp-save {
+  min-width: 156px;
+}
+
+#view-wheel .wheel-issue-panel {
+  max-width: 960px;
+  margin-inline: auto;
+}
+
+#view-wheel .wheel-issue-recipient {
+  position: relative;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+#view-wheel .wheel-issue-recipient .form-input {
+  min-height: 42px;
+}
+
+#view-wheel .wheel-issue-grid {
+  grid-template-columns: 150px minmax(280px, 1fr) 140px auto;
+  gap: 12px;
+  align-items: end;
+}
+
+#view-wheel .wheel-issue-grid .form-group {
+  min-width: 0;
+}
+
+#view-wheel .wheel-issue-grid .form-label {
+  min-height: 17px;
+  display: flex;
+  align-items: flex-end;
+}
+
+#view-wheel .wheel-issue-grid .form-input,
+#view-wheel .wheel-issue-actions .btn-primary {
+  min-height: 40px;
+  height: 40px;
+}
+
+#view-wheel .wheel-issue-actions {
+  padding: 0;
+}
+
+#view-wheel .wheel-issue-actions .btn-primary {
+  min-width: 150px;
+  white-space: nowrap;
+}
+
+html[data-theme="dark"] #view-wheel .wheel-prize-config,
+html[data-theme="dark"] #view-wheel .wheel-prize-group-meta {
+  background: var(--surface-2);
+}
+
+@media (max-width: 1080px) {
+  #view-wheel .wheel-prize-config {
+    grid-template-columns: 1fr 1fr;
+  }
+  #view-wheel .wheel-prize-config-block:nth-child(2) {
+    border-right: 0;
+  }
+  #view-wheel .wheel-prize-config-block:last-child {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border-soft);
+  }
+  #view-wheel .wheel-issue-grid {
+    grid-template-columns: 130px minmax(220px, 1fr) 130px;
+  }
+  #view-wheel .wheel-issue-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  #view-wheel .wheel-tabs {
+    justify-content: flex-start;
+  }
+  #view-wheel .wheel-tabs .filter-tab {
+    min-width: max-content;
+  }
+  #view-wheel .wheel-prize-config,
+  #view-wheel .wheel-issue-grid {
+    grid-template-columns: 1fr;
+  }
+  #view-wheel .wheel-prize-config-block,
+  #view-wheel .wheel-prize-config-block:nth-child(2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  #view-wheel .wheel-prize-config-block:last-child {
+    grid-column: auto;
+    border-top: 0;
+    border-bottom: 0;
+  }
+  #view-wheel .wheel-prize-card-foot {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  #view-wheel .wheel-prize-card-foot .wp-save,
+  #view-wheel .wheel-issue-actions .btn-primary {
+    width: 100%;
+  }
+  #view-wheel .wheel-issue-actions {
+    grid-column: auto;
+  }
+}

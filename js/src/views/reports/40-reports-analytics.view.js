@@ -1025,10 +1025,9 @@ async function prefetchAnalyticsInBackground() {
       endDate   = latest.end_date;
     } else {
       // Нет готовых расчётов — берём текущий месяц
-      const now = new Date();
-      const y = now.getFullYear(), m = now.getMonth();
-      startDate = new Date(y, m, 1).toISOString().slice(0, 10);
-      endDate   = now.toISOString().slice(0, 10);
+      const today = analyticsLocalDateISO();
+      startDate = `${today.slice(0, 8)}01`;
+      endDate   = today;
     }
   } catch {
     return; // Не удалось получить периоды — тихо выходим
@@ -1121,6 +1120,39 @@ let _analyticsState = {
   operatorSort: 'final_points',
   operatorSortOrder: 'desc',
 };
+let _analyticsRenderGen = 0;
+let _analyticsCoverageGen = 0;
+let _analyticsAvailabilityGen = 0;
+let _analyticsQualityWeekGen = 0;
+let _analyticsOutsideClickHandler = null;
+
+function analyticsLocalDateISO(value = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: UI_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function analyticsRenderIsStale(navGen, renderGen) {
+  return isNavStale(navGen) || renderGen !== _analyticsRenderGen;
+}
+
+function analyticsLoadIsCurrent(content, navGen, tabGen) {
+  return !isNavStale(navGen)
+    && !isAnalyticsTabStale(tabGen)
+    && content?.isConnected
+    && document.getElementById('an-tab-content') === content;
+}
+
+function clearAnalyticsOutsideClickHandler() {
+  if (!_analyticsOutsideClickHandler) return;
+  document.removeEventListener('click', _analyticsOutsideClickHandler);
+  _analyticsOutsideClickHandler = null;
+}
 
 function analyticsApiUrl(path, params) {
   const qs = new URLSearchParams(params).toString();
@@ -1171,10 +1203,8 @@ async function resolveInitialAnalyticsPeriod(urlParams) {
   if (periods.length) return { start: periods[0].start_date, end: periods[0].end_date };
   if (requestedStart && requestedEnd) return { start: requestedStart, end: requestedEnd };
 
-  const today = new Date();
-  const weekAgo = new Date(today);
-  weekAgo.setDate(today.getDate() - 6);
-  return { start: weekAgo.toISOString().slice(0, 10), end: today.toISOString().slice(0, 10) };
+  const today = analyticsLocalDateISO();
+  return { start: addDaysISO(today, -6), end: today };
 }
 
 function fmtA(v, decimals = 2, suffix = '') {
@@ -1267,15 +1297,15 @@ function renderAnalyticsContextBar() {
 }
 
 function mondayOfWeekISO(iso) {
-  const d = new Date((iso || new Date().toISOString().slice(0, 10)) + 'T00:00:00');
-  const dow = (d.getDay() + 6) % 7; // 0 = понедельник
-  d.setDate(d.getDate() - dow);
+  const d = new Date((iso || analyticsLocalDateISO()) + 'T00:00:00Z');
+  const dow = (d.getUTCDay() + 6) % 7; // 0 = понедельник
+  d.setUTCDate(d.getUTCDate() - dow);
   return d.toISOString().slice(0, 10);
 }
 
 function addDaysISO(iso, n) {
-  const d = new Date(iso + 'T00:00:00');
-  d.setDate(d.getDate() + n);
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
@@ -1287,8 +1317,10 @@ function refreshAnalyticsContextBar(el) {
 }
 
 async function refreshAnalyticsCoverage(el) {
+  const requestGen = ++_analyticsCoverageGen;
   try {
     const dashboard = await analyticsFetch('management-dashboard', analyticsOpParams());
+    if (requestGen !== _analyticsCoverageGen || STATE.currentView !== 'analytics' || !el?.isConnected) return;
     const health = dashboard.team_health || {};
     _analyticsState.coverageWithData = health.operators_with_data ?? 0;
     _analyticsState.coverageTotal = health.operators_count ?? 0;
@@ -1316,13 +1348,15 @@ async function renderAnalytics() {
   const el = document.getElementById('view-analytics');
   if (!el) return;
   const myNavGen = STATE.navGen;
+  const myRenderGen = ++_analyticsRenderGen;
+  clearAnalyticsOutsideClickHandler();
 
   const urlParams = getAnalyticsParams();
   _analyticsState.tab = ANALYTICS_TABS.some(item => item.key === urlParams.tab) ? urlParams.tab : 'overview';
 
   if (!_analyticsState.startDate) {
     const initialPeriod = await resolveInitialAnalyticsPeriod(urlParams);
-    if (isNavStale(myNavGen)) return;
+    if (analyticsRenderIsStale(myNavGen, myRenderGen)) return;
     _analyticsState.startDate = initialPeriod.start;
     _analyticsState.endDate = initialPeriod.end;
     _analyticsState.groupId = urlParams.group;
@@ -1404,13 +1438,13 @@ async function renderAnalytics() {
 
   try {
     const gdata = await analyticsFetch('groups-list', {});
-    if (isNavStale(myNavGen)) return; // ушли с "Аналитики" пока ждали список групп
+    if (analyticsRenderIsStale(myNavGen, myRenderGen)) return; // ушли с "Аналитики" пока ждали список групп
     _analyticsState.groups = gdata.items || [];
     const sel = el.querySelector('#an-group');
     sel.innerHTML = '<option value="">Все группы</option>' +
       _analyticsState.groups.map(g => `<option value="${g.id}" ${String(g.id)===_analyticsState.groupId?'selected':''}>${esc(g.name)}</option>`).join('');
   } catch(e) { /* groups list optional */ }
-  if (isNavStale(myNavGen)) return;
+  if (analyticsRenderIsStale(myNavGen, myRenderGen)) return;
 
   el.querySelector('#an-participation').value = _analyticsState.participationStatus;
 
@@ -1451,14 +1485,15 @@ async function renderAnalytics() {
 
   el.querySelector('#an-reset-btn').addEventListener('click', async () => {
     const initial = await resolveInitialAnalyticsPeriod({});
+    if (analyticsRenderIsStale(myNavGen, myRenderGen)) return;
     Object.assign(_analyticsState, { startDate: initial.start, endDate: initial.end, groupId: '', operatorQuery: '', participationStatus: 'all', onlyWithData: false, operatorPage: 1 });
     renderAnalytics();
   });
   el.querySelectorAll('[data-an-period]').forEach(button => button.addEventListener('click', () => {
-    const end = new Date(); const start = new Date(end);
-    start.setDate(end.getDate() - (button.dataset.anPeriod === 'day' ? 0 : button.dataset.anPeriod === 'month' ? 29 : 6));
-    el.querySelector('#an-start').value = start.toISOString().slice(0, 10);
-    el.querySelector('#an-end').value = end.toISOString().slice(0, 10);
+    const end = analyticsLocalDateISO();
+    const daysBack = button.dataset.anPeriod === 'day' ? 0 : button.dataset.anPeriod === 'month' ? 29 : 6;
+    el.querySelector('#an-start').value = addDaysISO(end, -daysBack);
+    el.querySelector('#an-end').value = end;
   }));
 
   /* ── Навигация: 6 основных вкладок + «Ещё» (desktop), один select (mobile).
@@ -1521,9 +1556,15 @@ async function renderAnalytics() {
       e.stopPropagation();
       if (moreMenu.hidden) openMoreMenu(); else closeMoreMenu();
     });
-    document.addEventListener('click', (e) => {
+    const outsideClickHandler = (e) => {
       if (!moreMenu.hidden && !moreMenu.contains(e.target) && e.target !== moreBtn) closeMoreMenu();
-    });
+    };
+    _analyticsOutsideClickHandler = outsideClickHandler;
+    document.addEventListener('click', outsideClickHandler);
+    const viewSignal = currentViewSignal();
+    viewSignal?.addEventListener('abort', () => {
+      if (_analyticsOutsideClickHandler === outsideClickHandler) clearAnalyticsOutsideClickHandler();
+    }, { once: true });
     moreMenu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMoreMenu(); moreBtn.focus(); } });
     moreBtn.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMoreMenu(); });
   }
@@ -1534,7 +1575,7 @@ async function renderAnalytics() {
   }
 
   updateUrl();
-  if (isNavStale(myNavGen)) return;
+  if (analyticsRenderIsStale(myNavGen, myRenderGen)) return;
   refreshAnalyticsCoverage(el); // фоново — не блокирует первую отрисовку вкладки
   await loadAnalyticsTab(_analyticsState.tab);
 }
@@ -1563,13 +1604,16 @@ function analyticsOpParams() {
 async function refreshAvailabilityWarning() {
   const box = document.getElementById('an-availability-warning');
   if (!box) return;
+  const requestGen = ++_analyticsAvailabilityGen;
   try {
     const summary = await analyticsFetch('summary', analyticsOpParams());
+    if (requestGen !== _analyticsAvailabilityGen || !box.isConnected) return;
     const msg = summary.data_availability_warning;
     box.innerHTML = msg
       ? `<div class="an-availability-note">${esc(msg)}</div>`
       : '';
   } catch(e) {
+    if (requestGen !== _analyticsAvailabilityGen || !box.isConnected) return;
     // Если /summary вернул 404 (совсем нет данных) — analyticsFetch бросит
     // ошибку с тем же текстом, что и data_availability_warning на backend.
     box.innerHTML = `<div class="an-availability-note an-availability-note-error">${esc(e.message)}</div>`;
@@ -1595,17 +1639,20 @@ async function loadAnalyticsTab(tab) {
 
   try {
     switch (tab) {
-      case 'overview':  await loadOverviewTab(content); break;
-      case 'operators': await loadOperatorsTab(content); break;
-      case 'groups':    await loadGroupsTab(content); break;
-      case 'matrix':    await loadMatrixTab(content); break;
-      case 'quality':   await loadQualityTab(content); break;
-      case 'dynamics':  await loadDynamicsTab(content); break;
-      case 'penalties': await loadPenaltiesTab(content); break;
-      case 'risks':     await loadRisksTab(content); break;
-      case 'points':    await loadPointsTab(content); break;
-      case 'export':    await loadExportTab(content); break;
-      default: content.innerHTML = '<div class="empty-line">Вкладка не найдена</div>';
+      case 'overview':  await loadOverviewTab(content, myNavGen, myTabGen); break;
+      case 'operators': await loadOperatorsTab(content, myNavGen, myTabGen); break;
+      case 'groups':    await loadGroupsTab(content, myNavGen, myTabGen); break;
+      case 'matrix':    await loadMatrixTab(content, myNavGen, myTabGen); break;
+      case 'quality':   await loadQualityTab(content, myNavGen, myTabGen); break;
+      case 'dynamics':  await loadDynamicsTab(content, myNavGen, myTabGen); break;
+      case 'penalties': await loadPenaltiesTab(content, myNavGen, myTabGen); break;
+      case 'risks':     await loadRisksTab(content, myNavGen, myTabGen); break;
+      case 'points':    await loadPointsTab(content, myNavGen, myTabGen); break;
+      case 'export':    await loadExportTab(content, myNavGen, myTabGen); break;
+      default:
+        if (analyticsLoadIsCurrent(content, myNavGen, myTabGen)) {
+          content.innerHTML = '<div class="empty-line">Вкладка не найдена</div>';
+        }
     }
   } catch(e) {
     clearTimeout(spinnerTimer);
@@ -1614,17 +1661,16 @@ async function loadAnalyticsTab(tab) {
     return;
   }
   clearTimeout(spinnerTimer);
-  if (isNavStale(myNavGen) || isAnalyticsTabStale(myTabGen)) {
-    content.innerHTML = '';
-  }
+  // An obsolete request must never clear content already rendered by a newer tab.
 }
 
 /* ── Вкладка: Обзор ──────────────────────────────────────────*/
-async function loadOverviewTab(content) {
+async function loadOverviewTab(content, navGen, tabGen) {
   const [dashboard, dynamics] = await Promise.all([
     analyticsFetch('management-dashboard', analyticsOpParams()),
     analyticsFetch('daily-dynamics', { ...analyticsBaseParams(), metric: 'calls' }).catch(() => ({ items: [] })),
   ]);
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
 
   const warnBox = document.getElementById('an-availability-warning');
   if (warnBox && dashboard.data_availability_warning) {
@@ -1769,12 +1815,13 @@ function renderAnalyticsEmptyState() {
 }
 
 /* ── Вкладка: Операторы (таблица эффективности + зона внимания) ─*/
-async function loadOperatorsTab(content) {
+async function loadOperatorsTab(content, navGen, tabGen) {
   // Один комбинированный запрос вместо 2
   const combined = await analyticsFetch('operators-combined', {
     ...analyticsOpParams(), page: _analyticsState.operatorPage, page_size: 100,
     sort_by: _analyticsState.operatorSort, sort_order: _analyticsState.operatorSortOrder,
   });
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   const opsTable = combined;
   const topAttn = combined.top_and_attention || {};
 
@@ -1872,10 +1919,10 @@ function exportOperatorsCsv(items) {
       o.efficiency_percent??'', o.penalty_minutes??'', o.final_points??'', o.risk_status??'');
     rows.push(row.join(';'));
   });
-  downloadCsv(rows, 'аналитика_операторы.csv');
+  downloadAnalyticsCsvFile(rows, 'аналитика_операторы.csv');
 }
 
-function downloadCsv(rows, filename) {
+function downloadAnalyticsCsvFile(rows, filename) {
   const blob = new Blob(['\ufeff'+rows.join('\n')], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download=filename; a.click();
@@ -1883,8 +1930,9 @@ function downloadCsv(rows, filename) {
 }
 
 /* ── Вкладка: Группы ──────────────────────────────────────────*/
-async function loadGroupsTab(content) {
+async function loadGroupsTab(content, navGen, tabGen) {
   const groupsCmp = await analyticsFetch('groups-comparison', analyticsBaseParams());
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   const items = groupsCmp.items || [];
 
   const bestQuality = items.length ? [...items].sort((a,b)=>(b.avg_quality??-1)-(a.avg_quality??-1))[0] : null;
@@ -1958,7 +2006,8 @@ function bindGroupsMetricTabs(items) {
 }
 
 /* ── Вкладка: Матрицы ──────────────────────────────────────────*/
-async function loadMatrixTab(content) {
+async function loadMatrixTab(content, navGen, tabGen) {
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   content.innerHTML =
     renderQualityKvzMatrixBlock() +
     `<div class="an-card"><div class="an-card-head">Нагрузка и эффективность</div>
@@ -1968,9 +2017,11 @@ async function loadMatrixTab(content) {
   // Один запрос вместо 2 — получаем все матрицы сразу
   try {
     const d = await analyticsFetch('matrix-combined', analyticsBaseParams());
+    if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
     drawScatter('an-qk-matrix', d.quality_kvz || [], 'kvz', 'quality_avg', 'КВЗ', 'Качество', d.thresholds?.kvz, d.thresholds?.quality);
     drawScatter('an-load-eff-matrix', d.load_efficiency || [], 'calls_total', 'efficiency_percent', 'Звонки', 'Эффективность %');
   } catch(e) {
+    if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
     const c = document.getElementById('an-qk-matrix');
     if (c) c.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
     const c2 = document.getElementById('an-load-eff-matrix');
@@ -1979,8 +2030,9 @@ async function loadMatrixTab(content) {
 }
 
 /* ── Вкладка: Контроль качества ────────────────────────────────*/
-async function loadQualityTab(content) {
+async function loadQualityTab(content, navGen, tabGen) {
   const combined = await analyticsFetch('quality-combined', analyticsBaseParams());
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   const coverage = combined.coverage || {};
   if (!_analyticsState.qualityGridWeekStart) {
     _analyticsState.qualityGridWeekStart = mondayOfWeekISO(_analyticsState.endDate || _analyticsState.startDate);
@@ -2000,19 +2052,21 @@ async function loadQualityTab(content) {
       <div id="an-quality-grid"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
     </div>`;
 
-  await loadQualityGridWeek(content);
+  await loadQualityGridWeek(content, navGen, tabGen);
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
 
   content.querySelectorAll('#an-quality-week-nav [data-week]').forEach(btn => {
     btn.addEventListener('click', () => {
       _analyticsState.qualityGridWeekStart = addDaysISO(
         _analyticsState.qualityGridWeekStart, btn.dataset.week === 'prev' ? -7 : 7,
       );
-      loadQualityGridWeek(content);
+      loadQualityGridWeek(content, navGen, tabGen);
     });
   });
 }
 
-async function loadQualityGridWeek(content) {
+async function loadQualityGridWeek(content, navGen, tabGen) {
+  const requestGen = ++_analyticsQualityWeekGen;
   const label = content.querySelector('#an-quality-week-label');
   const box = content.querySelector('#an-quality-grid');
   const ws = _analyticsState.qualityGridWeekStart;
@@ -2023,8 +2077,14 @@ async function loadQualityGridWeek(content) {
   if (_analyticsState.participationStatus !== 'all') params.participation_status = _analyticsState.participationStatus;
   try {
     const grid = await analyticsFetch('daily-grid', params);
+    if (requestGen !== _analyticsQualityWeekGen
+      || ws !== _analyticsState.qualityGridWeekStart
+      || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
     if (box) box.innerHTML = renderDailyGridBlock(grid);
   } catch (e) {
+    if (requestGen !== _analyticsQualityWeekGen
+      || ws !== _analyticsState.qualityGridWeekStart
+      || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
     if (box) box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
   }
 }
@@ -2070,7 +2130,8 @@ function renderDailyGridBlock(grid) {
 }
 
 /* ── Вкладка: Динамика ────────────────────────────────────────*/
-async function loadDynamicsTab(content) {
+async function loadDynamicsTab(content, navGen, tabGen) {
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   content.innerHTML = `
     <div class="an-card">
       <div class="an-card-head-row">
@@ -2098,62 +2159,75 @@ async function loadDynamicsTab(content) {
     </div>`;
 
   const base = analyticsBaseParams();
+  let dynamicsRequestGen = 0;
+  let heatmapRequestGen = 0;
 
   async function loadDyn(metric) {
-    const box = document.getElementById('an-dyn-chart2');
+    const requestGen = ++dynamicsRequestGen;
+    const box = content.querySelector('#an-dyn-chart2');
     try {
       const d = await analyticsFetch('daily-dynamics', { ...base, metric });
+      if (requestGen !== dynamicsRequestGen || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
       box.innerHTML = renderDynChart(d.items || [], metric);
-    } catch(e) { box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`; }
+    } catch(e) {
+      if (requestGen !== dynamicsRequestGen || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
+      box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+    }
   }
-  document.querySelectorAll('#an-dyn-tabs2 .metric-tab').forEach(btn => {
+  content.querySelectorAll('#an-dyn-tabs2 .metric-tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('#an-dyn-tabs2 .metric-tab').forEach(b=>b.classList.remove('active'));
+      content.querySelectorAll('#an-dyn-tabs2 .metric-tab').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       loadDyn(btn.dataset.metric);
     });
   });
-  loadDyn('calls');
 
   async function loadHm(metric) {
-    const box = document.getElementById('an-heatmap-body2');
+    const requestGen = ++heatmapRequestGen;
+    const box = content.querySelector('#an-heatmap-body2');
     try {
       const d = await analyticsFetch('heatmap', { ...base, metric });
+      if (requestGen !== heatmapRequestGen || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
       box.innerHTML = renderHeatmapTable(d, metric);
-    } catch(e) { box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`; }
+    } catch(e) {
+      if (requestGen !== heatmapRequestGen || !analyticsLoadIsCurrent(content, navGen, tabGen)) return;
+      box.innerHTML = `<div class="empty-line">${esc(e.message)}</div>`;
+    }
   }
-  document.querySelectorAll('#an-heatmap-tabs2 .metric-tab').forEach(btn => {
+  content.querySelectorAll('#an-heatmap-tabs2 .metric-tab').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('#an-heatmap-tabs2 .metric-tab').forEach(b=>b.classList.remove('active'));
+      content.querySelectorAll('#an-heatmap-tabs2 .metric-tab').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       loadHm(btn.dataset.metric);
     });
   });
-  loadHm('quality');
+  await Promise.all([loadDyn('calls'), loadHm('quality')]);
 }
 
 /* ── Вкладка: Штрафы ──────────────────────────────────────────*/
-async function loadPenaltiesTab(content) {
+async function loadPenaltiesTab(content, navGen, tabGen) {
   const penalties = await analyticsFetch('penalties', analyticsBaseParams());
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   content.innerHTML = renderPenaltiesBlock(penalties);
 }
 
 /* ── Вкладка: Риски ───────────────────────────────────────────*/
-async function loadRisksTab(content) {
+async function loadRisksTab(content, navGen, tabGen) {
   const [riskPyramid, opsTable] = await Promise.all([
     analyticsFetch('risk-pyramid', analyticsBaseParams()),
     analyticsFetch('operators', analyticsOpParams()),
   ]);
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
 
   content.innerHTML =
     renderRiskPyramidBlock(riskPyramid) +
     renderRiskOperatorsTableBlock(opsTable.items || []) +
     renderRiskByGroupsBlock(riskPyramid, opsTable.items || []);
 
-  document.querySelectorAll('.an-risk-cell').forEach(cell => {
+  content.querySelectorAll('.an-risk-cell').forEach(cell => {
     cell.addEventListener('click', () => {
       const status = cell.dataset.riskStatus;
-      const detail = document.getElementById('an-risk-detail');
+      const detail = content.querySelector('#an-risk-detail');
       const bucket = riskPyramid[status];
       if (!detail) return;
       if (!bucket || !bucket.operators.length) { detail.innerHTML = '<div class="empty-line">Операторов в этой категории нет</div>'; return; }
@@ -2229,15 +2303,20 @@ function renderRiskByGroupsBlock(riskPyramid, items) {
 let _pointsViewMode = 'top10'; // top10 | all | growth | table
 let _pointsData = null;
 
-async function loadPointsTab(content) {
+async function loadPointsTab(content, navGen, tabGen) {
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем баллы…</p></div>';
 
+  let pointsData;
   try {
-    _pointsData = await analyticsFetch('points', analyticsOpParams());
+    pointsData = await analyticsFetch('points', analyticsOpParams());
   } catch(e) {
+    if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
     content.innerHTML = `<div class="an-card"><div class="status-line status-error">${esc(e.message)}</div></div>`;
     return;
   }
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
+  _pointsData = pointsData;
 
   const d = _pointsData;
   if (!d.operators || !d.operators.length) {
@@ -2379,7 +2458,7 @@ function exportPointsCsv(operators) {
     o.total_hours, o.delta_total_hours??'', o.efficiency??'', o.delta_efficiency??'',
     o.penalty_points, o.delta_penalty_points??'', o.status
   ].join(';')));
-  downloadCsv(rows, 'аналитика_баллы.csv');
+  downloadAnalyticsCsvFile(rows, 'аналитика_баллы.csv');
 }
 
 /* Топ-10 bar chart */
@@ -2593,7 +2672,8 @@ function openOperatorPointsDrawer(o) {
 
 
 /* ── Вкладка: Экспорт ─────────────────────────────────────────*/
-async function loadExportTab(content) {
+async function loadExportTab(content, navGen, tabGen) {
+  if (!analyticsLoadIsCurrent(content, navGen, tabGen)) return;
   content.innerHTML = `<div class="an-card">
     <div class="an-card-head">Экспорт отчётов</div>
     <div class="an-export-grid">
@@ -2633,27 +2713,27 @@ async function exportAnalyticsCsv(kind) {
     const d = await analyticsFetch('groups-comparison', base);
     const rows = ['Группа;Операторов;Звонки;Качество;КВЗ;Эфф.%;Штраф мин;Итог баллов'];
     (d.items||[]).forEach(g => rows.push([g.group_name,g.operators_count,g.total_calls,g.avg_quality??'',g.avg_kvz??'',g.avg_efficiency??'',g.penalty_minutes,g.final_points_sum].join(';')));
-    downloadCsv(rows, 'аналитика_группы.csv');
+    downloadAnalyticsCsvFile(rows, 'аналитика_группы.csv');
   } else if (kind === 'penalties') {
     const d = await analyticsFetch('penalties', base);
     const rows = ['Оператор;Группа;Сумма;Минуты;Потеря баллов'];
     (d.operators||[]).forEach(o => rows.push([o.full_name,o.group_name||'',o.penalty_sum,o.penalty_minutes,o.penalty_points].join(';')));
-    downloadCsv(rows, 'аналитика_штрафы.csv');
+    downloadAnalyticsCsvFile(rows, 'аналитика_штрафы.csv');
   } else if (kind === 'attention') {
     const d = await analyticsFetch('top-and-attention', base);
     const rows = ['Оператор;Группа;Причина'];
     (d.attention_zone||[]).forEach(a => rows.push([a.full_name,a.group_name||'',a.reason].join(';')));
-    downloadCsv(rows, 'аналитика_зона_внимания.csv');
+    downloadAnalyticsCsvFile(rows, 'аналитика_зона_внимания.csv');
   } else if (kind === 'risks') {
     const d = await analyticsFetch('operators', opParams);
     const rows = ['Оператор;Группа;Статус риска;Качество;КВЗ;Эфф.%;Штраф мин'];
     (d.items||[]).forEach(o => rows.push([o.full_name,o.group_name||'',o.risk_status,o.quality_avg??'',o.kvz??'',o.efficiency_percent??'',o.penalty_minutes].join(';')));
-    downloadCsv(rows, 'аналитика_риски.csv');
+    downloadAnalyticsCsvFile(rows, 'аналитика_риски.csv');
   } else if (kind === 'quality_coverage') {
     const d = await analyticsFetch('quality-coverage', base);
     const rows = ['Группа;Операторов;Оцен.звонков;Среднее/опер;Без оценок;Ср.качество'];
     (d.by_group||[]).forEach(g => rows.push([g.group_name,g.operators_count,g.evaluated_calls,g.avg_evaluations_per_operator,g.operators_without_quality,g.avg_quality??''].join(';')));
-    downloadCsv(rows, 'аналитика_качество_прослушки.csv');
+    downloadAnalyticsCsvFile(rows, 'аналитика_качество_прослушки.csv');
   }
 }
 
