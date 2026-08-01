@@ -3,6 +3,7 @@
    Design System v2.0
    ============================================================ */
 
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 /* ═══════════════════════════════════════════════════
    ВАРИАНТ Б — Светлый бежево-белый
@@ -23,7 +24,7 @@ html { scroll-behavior: smooth; background: var(--bg-page); }
 html[data-theme="light"] { background: var(--bg-page); }
 
 body {
-  font-family: var(--font-main);
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.55;
   color: var(--text-primary);
@@ -76,7 +77,7 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
   width: 36px; height: 36px;
 }
 .side-nav-brand {
-  font-family: var(--font-brand);
+  font-family: 'Syne', sans-serif;
   font-size: 22px; font-weight: 800;
   color: #F8FAFC; letter-spacing: -.03em;
   white-space: nowrap;
@@ -258,14 +259,14 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   width: 44px; height: 44px;
 }
 .auth-visual-name {
-  font-family: var(--font-brand);
+  font-family: 'Syne', sans-serif;
   font-size: 28px; font-weight: 800;
   color: #F8FAFC; letter-spacing: -.03em;
 }
 .auth-visual-name em { color: var(--accent); font-style: normal; }
 
 .auth-visual h1 {
-  font-family: var(--font-brand);
+  font-family: 'Syne', sans-serif;
   font-size: clamp(32px, 4.5vw, 56px);
   font-weight: 800; letter-spacing: -.03em;
   line-height: 1.02; color: #fff;
@@ -301,7 +302,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   text-transform: uppercase; color: var(--accent);
 }
 .auth-form h2 {
-  font-family: var(--font-brand);
+  font-family: 'Syne', sans-serif;
   font-size: 28px; font-weight: 800;
   letter-spacing: -.03em; color: var(--tx); margin: 0;
 }
@@ -320,7 +321,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   height: 42px; padding: 0 14px;
   border: 1px solid var(--border); border-radius: var(--r-sm);
   background: var(--surface); color: var(--tx);
-  font: 500 14px var(--font-main);
+  font: 500 14px 'Inter', sans-serif;
   transition: border-color var(--t), box-shadow var(--t);
 }
 .form-input:focus {
@@ -332,7 +333,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   height: 42px; padding: 0 14px;
   border: 1px solid var(--border); border-radius: var(--r-sm);
   background: var(--surface); color: var(--tx);
-  font: 500 14px var(--font-main); cursor: pointer;
+  font: 500 14px 'Inter', sans-serif; cursor: pointer;
 }
 .form-select:focus { outline: none; border-color: var(--accent); }
 
@@ -343,7 +344,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 10px 20px; border: none; border-radius: 10px;
   background: var(--accent); color: #fff;
-  font: 600 13px var(--font-main);
+  font: 600 13px 'Inter', sans-serif;
   cursor: pointer; transition: background var(--t), box-shadow var(--t), transform .1s;
   white-space: nowrap;
 }
@@ -355,7 +356,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 9px 16px; border: 1px solid var(--border); border-radius: 10px;
   background: transparent; color: var(--tx2);
-  font: 500 13px var(--font-main);
+  font: 500 13px 'Inter', sans-serif;
   cursor: pointer; transition: border-color var(--t), color var(--t), background var(--t);
   white-space: nowrap;
 }
@@ -365,7 +366,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: inline-flex; align-items: center; justify-content: center;
   padding: 8px 14px; border: none; border-radius: 10px;
   background: var(--surface-2); color: var(--tx2);
-  font: 500 12px var(--font-main); cursor: pointer;
+  font: 500 12px 'Inter', sans-serif; cursor: pointer;
   transition: background var(--t), color var(--t);
 }
 .btn-ghost:hover { background: var(--surface-3); color: var(--tx); }
@@ -375,7 +376,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .btn-icon {
   width: 34px; height: 34px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  font: 800 15px var(--font-main);
+  font: 800 15px 'Inter', sans-serif;
   line-height: 1; flex: 0 0 auto;
 }
 .operator-add-btn { font-size: 20px; }
@@ -391,7 +392,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
 .btn-link {
   background: none; border: none; padding: 0;
-  color: var(--accent); font: 500 13px var(--font-main);
+  color: var(--accent); font: 500 13px 'Inter', sans-serif;
   cursor: pointer;
 }
 .btn-link:hover { text-decoration: underline; }
@@ -400,7 +401,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 16px; border: none; border-radius: 10px;
   background: #16A34A; color: #ffffff;
-  font: 600 13px var(--font-main); cursor: pointer;
+  font: 600 13px 'Inter', sans-serif; cursor: pointer;
   transition: background var(--transition-fast);
 }
 .btn-ok:hover { background: #15803D; }
@@ -409,7 +410,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 16px; border: none; border-radius: 10px;
   background: #DC2626; color: #ffffff;
-  font: 600 13px var(--font-main); cursor: pointer;
+  font: 600 13px 'Inter', sans-serif; cursor: pointer;
   transition: background var(--transition-fast);
 }
 .btn-danger:hover { background: #B91C1C; }
@@ -454,7 +455,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   margin-bottom: 6px;
 }
 .section-title {
-  font-family: var(--font-brand);
+  font-family: 'Syne', sans-serif;
   font-size: clamp(22px, 2.8vw, 32px);
   font-weight: 800; letter-spacing: -.03em;
   color: var(--tx); line-height: 1.1;
@@ -492,7 +493,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   text-transform: uppercase; color: var(--tx3); margin-bottom: 10px;
 }
 .kpi-value {
-  font-family: var(--font-main);
+  font-family: 'Inter', sans-serif;
   font-size: 20px; font-weight: 600;
   letter-spacing: 0; line-height: 1.2; color: var(--tx);
 }
@@ -523,7 +524,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   border-bottom: 1px solid var(--border);
 }
 .panel-head h3 {
-  font-family: var(--font-main);
+  font-family: 'Inter', sans-serif;
   font-size: 15px; font-weight: 600;
   letter-spacing: 0; color: var(--tx); margin: 0;
 }
@@ -557,7 +558,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tx-date { font-size: 11px; color: var(--tx3); margin-top: 2px; }
-.tx-amount { font-size: 14px; font-weight: 700; white-space: nowrap; flex-shrink: 0; font-family: var(--font-main); }
+.tx-amount { font-size: 14px; font-weight: 700; white-space: nowrap; flex-shrink: 0; font-family: 'Inter', sans-serif; }
 .tx-plus  .tx-amount { color: var(--ok); }
 .tx-minus .tx-amount { color: var(--danger); }
 
@@ -587,7 +588,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .podium-card.podium-me { outline: 2px solid var(--accent); outline-offset: 2px; }
 .podium-rank { font-size: 28px; margin-bottom: 10px; }
 .podium-name {
-  font-family: var(--font-main);
+  font-family: 'Inter', sans-serif;
   font-size: 14px; font-weight: 600; color: var(--tx); margin-bottom: 4px;
   letter-spacing: 0;
 }
@@ -596,7 +597,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   color: var(--tx3); margin-bottom: 10px;
 }
 .podium-coins {
-  font-family: var(--font-main);
+  font-family: 'Inter', sans-serif;
   font-size: 15px; font-weight: 600; color: var(--accent); letter-spacing: 0;
 }
 .podium-balance, .podium-score { font-size: 11px; color: var(--tx3); margin-top: 4px; }
@@ -626,7 +627,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   background: var(--accent);
 }
 .shop-card-title {
-  font-family: var(--font-main);
+  font-family: 'Inter', sans-serif;
   font-size: 14px; font-weight: 600; color: var(--tx); letter-spacing: 0;
 }
 .shop-card-desc { font-size: 12px; color: var(--tx2); line-height: 1.55; flex: 1; }
@@ -640,7 +641,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .shop-badge-danger { background: var(--danger-soft); color: var(--danger); }
 .shop-badge-info { background: var(--accent-soft); color: var(--accent); }
 .shop-card-price {
-  font-family: var(--font-main);
+  font-family: 'Inter', sans-serif;
   font-size: 18px; font-weight: 600; color: var(--accent); letter-spacing: 0;
 }
 .price-unit { font-size: 13px; font-weight: 500; color: var(--tx3); letter-spacing: 0; }
@@ -652,7 +653,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   border: 1px solid rgba(2,132,199,.2); border-radius: var(--r-lg);
 }
 .shop-banner-title {
-  font-family: var(--font-main);
+  font-family: 'Inter', sans-serif;
   font-size: 15px; font-weight: 600; color: var(--tx); letter-spacing: 0;
 }
 .shop-banner-sub { font-size: 13px; color: var(--tx2); margin-top: 3px; }
@@ -663,7 +664,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   background: var(--accent-soft); border: 1px solid rgba(2,132,199,.2);
   border-radius: 999px; font-size: 13px; color: var(--tx);
 }
-.balance-chip b { color: var(--accent); font-family: var(--font-main); font-weight: 600; }
+.balance-chip b { color: var(--accent); font-family: 'Inter', sans-serif; font-weight: 600; }
 
 /* ══════════════════════════════════════════════════════════════
    TABLES
@@ -718,10 +719,10 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 6px;
   background: var(--surface-3); color: var(--tx3);
-  font-size: 12px; font-weight: 600; font-family: var(--font-main);
+  font-size: 12px; font-weight: 600; font-family: 'Inter', sans-serif;
 }
 .rank-badge.rank-top { background: var(--accent-soft); color: var(--accent); }
-.accent-text { color: var(--accent-primary); font-family: var(--font-main); font-weight: 600; }
+.accent-text { color: var(--accent-primary); font-family: 'Inter', sans-serif; font-weight: 600; }
 .me-badge {
   display: inline-block; font-size: 10px; font-weight: 700;
   padding: 1px 6px; border-radius: 4px;
@@ -744,10 +745,10 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .mini-rating-row.mini-me { background: var(--accent-soft); }
 .mini-rank {
   font-size: 12px; font-weight: 800; color: var(--tx3);
-  min-width: 22px; font-family: var(--font-main);
+  min-width: 22px; font-family: 'Inter', sans-serif;
 }
 .mini-name { flex: 1; font-size: 13px; color: var(--tx); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mini-coins { font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; font-family: var(--font-main); }
+.mini-coins { font-size: 13px; font-weight: 600; color: var(--accent); white-space: nowrap; font-family: 'Inter', sans-serif; }
 
 /* ══════════════════════════════════════════════════════════════
    REQUESTS
@@ -760,7 +761,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .filter-tab {
   padding: 6px 14px; border-radius: 7px; border: none;
   background: transparent; color: var(--tx3);
-  font: 600 12px var(--font-main); cursor: pointer;
+  font: 600 12px 'Inter', sans-serif; cursor: pointer;
   display: flex; align-items: center; gap: 6px;
   transition: background var(--t), color var(--t);
 }
@@ -784,7 +785,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .request-card.status-rejected { border-left: 3px solid var(--danger); }
 
 .request-title {
-  font-family: var(--font-main);
+  font-family: 'Inter', sans-serif;
   font-size: 14px; font-weight: 600;
   color: var(--tx); margin-bottom: 5px; letter-spacing: 0;
 }
@@ -836,7 +837,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   height: 2px; background: var(--accent); border-radius: 0 0 2px 2px;
 }
 .modal-title {
-  font-family: var(--font-main);
+  font-family: 'Inter', sans-serif;
   font-size: 18px; font-weight: 700;
   color: var(--tx); margin: 0; letter-spacing: 0;
 }
@@ -909,7 +910,7 @@ body.must-change-password .side-nav-link[data-nav-target] {
 }
 .toast {
   padding: 10px 20px; border-radius: var(--r-md);
-  font: 600 13px var(--font-main);
+  font: 600 13px 'Inter', sans-serif;
   box-shadow: var(--shadow-lg);
   opacity: 0; transform: translateY(10px);
   transition: opacity .22s ease, transform .22s ease;
@@ -1087,7 +1088,7 @@ body.must-change-password .side-nav-link[data-nav-target] {
   padding: 8px 16px;
   border: none;
   background: none;
-  font: 500 13px var(--font-main);
+  font: 500 13px 'Inter', sans-serif;
   color: var(--tx3);
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -1113,7 +1114,7 @@ body.must-change-password .side-nav-link[data-nav-target] {
   height: 20px;
   padding: 0 6px;
   border-radius: 20px;
-  font: 600 11px var(--font-main);
+  font: 600 11px 'Inter', sans-serif;
   background: var(--surface-3);
   color: var(--tx3);
   transition: background var(--t), color var(--t);

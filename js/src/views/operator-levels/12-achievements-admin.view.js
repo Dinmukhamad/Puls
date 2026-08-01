@@ -24,41 +24,22 @@ function achievementVisualIcon(achievement, extraClass = '') {
   return `<svg class="achievement-system-icon ${extraClass}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[key] || '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>'}</svg>`;
 }
 
-let _achievementsAdminRenderVersion = 0;
-
 async function renderAchievementsAdminTab(el) {
   if (!el) return;
-  const renderVersion = ++_achievementsAdminRenderVersion;
-  const canManageCatalog = STATE.user?.role === 'admin';
-  el.setAttribute('aria-busy', 'true');
-  el.innerHTML = '<div class="loading-state" role="status"><div class="loading-spinner"></div><p>Загрузка достижений…</p></div>';
+  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка достижений…</p></div>';
 
   let achievements;
   try {
     achievements = await swrFetch('achievements:list', () => api.listAchievements(), null, SWR_STATIC_TTL_MS);
   } catch (e) {
-    if (renderVersion !== _achievementsAdminRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
-    el.removeAttribute('aria-busy');
-    const message = typeof uiErrorMessage === 'function'
-      ? uiErrorMessage(e, 'Не удалось загрузить достижения')
-      : 'Не удалось загрузить достижения';
-    el.innerHTML = `<div class="empty-line" role="alert">${esc(message)}</div>`;
+    el.innerHTML = `<div class="empty-line">Ошибка загрузки: ${esc(e.message)}</div>`;
     return;
   }
-  if (renderVersion !== _achievementsAdminRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
-  achievements = Array.isArray(achievements) ? achievements : (achievements?.items || []);
   STATE._achievementsCatalog = achievements;
 
-  if (!Array.isArray(STATE.adminOperators) || !STATE.adminOperators.length) {
-    try {
-      const operators = await swrFetch('dashboard:operators', () => api.getDashboardOperators(), null, SWR_USER_TTL_MS);
-      if (renderVersion === _achievementsAdminRenderVersion) {
-        STATE.adminOperators = Array.isArray(operators) ? operators : (operators?.items || []);
-      }
-    } catch { /* форма выдачи покажет пустой список */ }
+  if (!STATE.adminOperators.length) {
+    try { STATE.adminOperators = await swrFetch('dashboard:operators', () => api.getDashboardOperators(), null, SWR_USER_TTL_MS); } catch { /* форма выдачи покажет пустой список */ }
   }
-  if (renderVersion !== _achievementsAdminRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
-  el.removeAttribute('aria-busy');
 
   const conditionLabel = (a) => {
     const v = levelNum(a.condition_value);
@@ -78,7 +59,7 @@ async function renderAchievementsAdminTab(el) {
     <div class="achievements-catalog-head">
       <div>
         <div class="an-card-head">Каталог достижений</div>
-        <p>${canManageCatalog ? 'Управляйте условиями, наградами и доступностью достижений для операторов.' : 'Просматривайте каталог и выдавайте достижения операторам вручную. Настройки каталога доступны администратору.'}</p>
+        <p>Управляйте условиями, наградами и доступностью достижений для операторов.</p>
       </div>
       <span class="panel-badge">${achievements.length}</span>
     </div>
@@ -110,45 +91,27 @@ async function renderAchievementsAdminTab(el) {
               <strong>Коины за выполнение</strong>
             </div>
             <div class="achievement-admin-reward-control">
-              <input type="number" class="form-input" id="ach-reward-${a.id}" value="${a.reward_coins}" min="0" step="1" aria-label="Награда за достижение ${esc(a.title)}" ${canManageCatalog ? '' : 'disabled'}>
+              <input type="number" class="form-input" id="ach-reward-${a.id}" value="${a.reward_coins}" min="0" step="1" aria-label="Награда за достижение">
               <span class="achievement-coin-unit">₡</span>
-              ${canManageCatalog ? `<button type="button" class="btn-outline btn-sm" onclick="saveAchievementReward(${a.id}, this)">Сохранить</button>` : ''}
+              <button class="btn-outline btn-sm" onclick="saveAchievementReward(${a.id}, this)">Сохранить</button>
             </div>
           </div>
 
           <footer class="achievement-admin-footer">
-            ${canManageCatalog ? `<label class="achievement-admin-toggle-row">
+            <label class="achievement-admin-toggle-row">
               <span class="toggle-switch">
-                <input type="checkbox" ${a.is_active ? 'checked' : ''} aria-label="Доступность достижения ${esc(a.title)}" onchange="toggleAchievementActive(${a.id}, this.checked, this)">
+                <input type="checkbox" ${a.is_active ? 'checked' : ''} onchange="toggleAchievementActive(${a.id}, this.checked, this)">
                 <span class="toggle-slider"></span>
               </span>
               <span>Доступно операторам</span>
-            </label>` : '<span class="cell-muted">Настройки доступны администратору</span>'}
-            <button type="button" class="btn-outline btn-sm" onclick="openGrantAchievementForm(${a.id})">Выдать вручную</button>
+            </label>
+            <button class="btn-outline btn-sm" onclick="openGrantAchievementForm(${a.id})">Выдать вручную</button>
           </footer>
         </article>`).join('')}
     </div>`;
 }
 
 async function toggleAchievementActive(id, isActive, input) {
-  if (STATE.user?.role !== 'admin') {
-    if (input) input.checked = !isActive;
-    showToast('Настройки достижений доступны только администратору', 'error');
-    return;
-  }
-  if (!isActive) {
-    const confirmed = await uiConfirmAction({
-      title: 'Отключить достижение?',
-      description: 'Операторы больше не смогут получать это достижение автоматически. Уже выданные достижения сохранятся.',
-      confirmLabel: 'Отключить',
-      danger: true,
-    });
-    if (!confirmed) {
-      if (input) input.checked = true;
-      return;
-    }
-  }
-  if (input) input.disabled = true;
   try {
     await api.updateAchievement(id, { is_active: isActive });
     swrInvalidate('achievements:');
@@ -163,17 +126,13 @@ async function toggleAchievementActive(id, isActive, input) {
       state.classList.toggle('is-active', isActive);
     }
   } catch (e) {
-    if (input) input.checked = !isActive;
     showToast(e.message, 'error');
     const body = document.getElementById('op-levels-tab-body');
     if (body) renderAchievementsAdminTab(body);
-  } finally {
-    if (input?.isConnected) input.disabled = false;
   }
 }
 
 async function saveAchievementReward(id, button) {
-  if (STATE.user?.role !== 'admin') return showToast('Настройки достижений доступны только администратору', 'error');
   const val = Number(document.getElementById(`ach-reward-${id}`)?.value);
   if (!Number.isFinite(val) || val < 0) return showToast('Укажите корректную награду', 'error');
   const original = button?.textContent;
@@ -196,35 +155,28 @@ function openGrantAchievementForm(achievementId) {
   showModal(`
     <h3 class="modal-title">Выдать «${esc(a?.title || '')}» вручную</h3>
     <div class="form-group">
-      <label class="form-label" for="grant-ach-operator">Оператор</label>
-      <select id="grant-ach-operator" class="form-input" required aria-describedby="grant-ach-err">
+      <label class="form-label">Оператор</label>
+      <select id="grant-ach-operator" class="form-input">
         <option value="">Выберите оператора…</option>
         ${ops.map(o => `<option value="${o.id}">${esc(o.full_name)}${o.group_name ? ' — ' + esc(o.group_name) : ''}</option>`).join('')}
       </select>
-      ${ops.length ? '' : '<div class="form-hint">В доступной области нет операторов.</div>'}
     </div>
     <div class="form-group">
-      <label class="form-label" for="grant-ach-comment">Комментарий <span class="optional">(необязательно)</span></label>
+      <label class="form-label">Комментарий <span class="optional">(необязательно)</span></label>
       <input id="grant-ach-comment" class="form-input" type="text" placeholder="Например: помог новому сотруднику освоиться">
     </div>
-    <div id="grant-ach-err" class="status-line" role="alert" aria-live="polite"></div>
+    <div id="grant-ach-err" class="status-line"></div>
     <div class="modal-actions">
-      <button type="button" class="btn-outline" onclick="closeModal()">Отмена</button>
-      <button type="button" class="btn-primary" onclick="submitGrantAchievement(${achievementId}, this)" ${ops.length ? '' : 'disabled'}>Выдать достижение</button>
+      <button class="btn-outline" onclick="closeModal()">Отмена</button>
+      <button class="btn-primary" onclick="submitGrantAchievement(${achievementId})">Выдать достижение</button>
     </div>`);
 }
 
-async function submitGrantAchievement(achievementId, button) {
+async function submitGrantAchievement(achievementId) {
   const operatorId = Number(document.getElementById('grant-ach-operator')?.value);
   const comment = document.getElementById('grant-ach-comment')?.value || '';
   const errEl = document.getElementById('grant-ach-err');
-  if (!operatorId) {
-    if (errEl) errEl.textContent = 'Выберите оператора';
-    document.getElementById('grant-ach-operator')?.focus();
-    return;
-  }
-  if (button?.disabled) return;
-  if (button) uiSetBusy(button, true, 'Выдаём…');
+  if (!operatorId) { if (errEl) errEl.textContent = 'Выберите оператора'; return; }
   try {
     await api.grantAchievement(achievementId, { operator_id: operatorId, comment });
     swrInvalidate('achievements:');
@@ -233,11 +185,6 @@ async function submitGrantAchievement(achievementId, button) {
     showToast('Достижение выдано', 'ok');
     closeModal();
   } catch (e) {
-    if (errEl) {
-      errEl.textContent = typeof uiErrorMessage === 'function'
-        ? uiErrorMessage(e, 'Не удалось выдать достижение')
-        : 'Не удалось выдать достижение';
-    }
-    if (button?.isConnected) uiSetBusy(button, false);
+    if (errEl) errEl.textContent = e.message;
   }
 }

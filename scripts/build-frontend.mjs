@@ -2,9 +2,8 @@
 /*
  * Кросс-платформенный сборщик фронтенда (замена build-frontend.ps1).
  * Склеивает исходники из js/src и css/src в единые js/app.js, js/api.js,
- * css/styles.css. Production-минификация выполняется следующим шагом
- * `npm run minify` и создаёт js/api.min.js, js/app.min.js, css/styles.min.css.
- * Работает на Linux/macOS/Windows/Railway/CI.
+ * css/styles.css. Реальная минификация выполняется дальше terser/cleancss
+ * (npm run minify:js / minify:css). Работает на Linux/macOS/Windows/Railway/CI.
  *
  * Порядок склейки — по имени файла (числовые префиксы 00-, 10-, ...).
  */
@@ -74,7 +73,6 @@ const cssFiles = orderedFiles(
     ["css", "src", "layout"],
     ["css", "src", "components"],
     ["css", "src", "views"],
-    ["css", "src", "system"],
   ],
   ".css",
 );

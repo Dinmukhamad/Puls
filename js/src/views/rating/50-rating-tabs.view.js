@@ -34,15 +34,15 @@ async function renderStaffRating() {
       el.querySelectorAll('.analytics-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       _ratingActiveTab = btn.dataset.tab;
-      loadStaffRatingTab(_ratingActiveTab);
+      loadRatingTab(_ratingActiveTab);
     });
   });
 
   if (isNavStale(myNavGen)) return; // пользователь уже ушёл с "Рейтинга" — дальше не рисуем
-  await loadStaffRatingTab(_ratingActiveTab);
+  await loadRatingTab(_ratingActiveTab);
 }
 
-async function loadStaffRatingTab(tab) {
+async function loadRatingTab(tab) {
   const content = document.getElementById('rating-tab-content');
   if (!content) return;
   const myNavGen = STATE.navGen;

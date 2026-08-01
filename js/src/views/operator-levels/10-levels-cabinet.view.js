@@ -1,5 +1,3 @@
-let _operatorLevelsTabRenderVersion = 0;
-
 async function renderOperatorLevelsSettings() {
   const el = document.getElementById('view-operator-levels');
   if (!el) return;
@@ -17,37 +15,23 @@ async function renderOperatorLevelsSettings() {
         <p>Настройте путь роста, требования к каждому этапу и награды за повышение.</p>
       </div>
       <div class="header-right level-header-actions" ${tab === 'levels' ? '' : 'hidden'}>
-        <button type="button" class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi(this)">Пересчитать уровни</button>
-        <button type="button" class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">+ Добавить уровень</button>
+        <button class="btn-outline btn-sm" onclick="recalculateOperatorLevelsUi()">Пересчитать уровни</button>
+        <button class="btn-primary btn-sm" onclick="showCreateOperatorLevelPrompt()">+ Добавить уровень</button>
       </div>
     </div>
     <div class="levels-page-tabs" role="tablist" aria-label="Разделы развития операторов">
-      <button id="op-levels-tab-levels" class="levels-page-tab ${tab === 'levels' ? 'is-active' : ''}" data-op-levels-tab="levels" role="tab" aria-controls="op-levels-tab-body" aria-selected="${tab === 'levels'}" tabindex="${tab === 'levels' ? '0' : '-1'}">
+      <button class="levels-page-tab ${tab === 'levels' ? 'is-active' : ''}" data-op-levels-tab="levels" role="tab" aria-selected="${tab === 'levels'}">
         <span>Уровни</span><small>Этапы роста и условия</small>
       </button>
-      <button id="op-levels-tab-achievements" class="levels-page-tab ${tab === 'achievements' ? 'is-active' : ''}" data-op-levels-tab="achievements" role="tab" aria-controls="op-levels-tab-body" aria-selected="${tab === 'achievements'}" tabindex="${tab === 'achievements' ? '0' : '-1'}">
+      <button class="levels-page-tab ${tab === 'achievements' ? 'is-active' : ''}" data-op-levels-tab="achievements" role="tab" aria-selected="${tab === 'achievements'}">
         <span>Достижения</span><small>Награды за отдельные результаты</small>
       </button>
     </div>
-    <div id="op-levels-tab-body" role="tabpanel" tabindex="0" aria-labelledby="op-levels-tab-${tab}"></div>`;
-  const tabButtons = [...el.querySelectorAll('[data-op-levels-tab]')];
-  tabButtons.forEach((btn, index) => {
+    <div id="op-levels-tab-body"></div>`;
+  el.querySelectorAll('[data-op-levels-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
-      if (STATE.opLevelsTab === btn.dataset.opLevelsTab) return;
       STATE.opLevelsTab = btn.dataset.opLevelsTab;
       renderOperatorLevelsSettings();
-    });
-    btn.addEventListener('keydown', event => {
-      let nextIndex = null;
-      if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabButtons.length;
-      if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabButtons.length) % tabButtons.length;
-      if (event.key === 'Home') nextIndex = 0;
-      if (event.key === 'End') nextIndex = tabButtons.length - 1;
-      if (nextIndex === null) return;
-      event.preventDefault();
-      const nextButton = tabButtons[nextIndex];
-      nextButton.click();
-      requestAnimationFrame(() => document.getElementById(`op-levels-tab-${nextButton.dataset.opLevelsTab}`)?.focus());
     });
   });
   const bodyEl = el.querySelector('#op-levels-tab-body');
@@ -57,9 +41,7 @@ async function renderOperatorLevelsSettings() {
 
 async function renderLevelsTabContent(el) {
   if (!el) return;
-  const renderVersion = ++_operatorLevelsTabRenderVersion;
-  el.setAttribute('aria-busy', 'true');
-  el.innerHTML = '<div class="panel level-settings-shell"><div class="loading-state" role="status"><div class="loading-spinner"></div><p>Загрузка уровней…</p></div></div>';
+  el.innerHTML = '<div class="panel level-settings-shell"><div class="empty-state"><p>Загрузка уровней…</p></div></div>';
 
   let levels = [];
   try {
@@ -68,23 +50,15 @@ async function renderLevelsTabContent(el) {
     try {
       levels = await withTimeout(swrFetch('levels:list', () => api.listOperatorLevels(), null, SWR_STATIC_TTL_MS), 15000, 'Уровни не загрузились: сервер не ответил за 15 секунд');
     } catch (publicErr) {
-      if (renderVersion !== _operatorLevelsTabRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
-      el.removeAttribute('aria-busy');
-      const message = typeof uiErrorMessage === 'function'
-        ? uiErrorMessage(publicErr || adminErr, 'Не удалось загрузить уровни')
-        : 'Не удалось загрузить уровни';
-      el.innerHTML = `<div class="status-line status-error" role="alert">${esc(message)}</div>
+      el.innerHTML = `<div class="status-line status-error">${esc(publicErr.message || adminErr.message || 'Не удалось загрузить уровни')}</div>
         <button class="btn-outline btn-sm" onclick="renderOperatorLevelsSettings()">Попробовать снова</button>`;
       return;
     }
   }
-  if (renderVersion !== _operatorLevelsTabRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
   STATE.operatorLevels = levels;
   const canDeleteLevels = STATE.user?.role === 'admin';
   const rewardsData = await withTimeout(swrFetch('levels:rewards', () => api.listOperatorLevelRewards(), null, SWR_FAST_TTL_MS), 10000)
     .catch(() => ({ items: [] }));
-  if (renderVersion !== _operatorLevelsTabRenderVersion || document.getElementById('op-levels-tab-body') !== el) return;
-  el.removeAttribute('aria-busy');
   const rewardRows = Array.isArray(rewardsData) ? rewardsData : (rewardsData.items || []);
 
   function ruleText(rule) {
@@ -198,30 +172,22 @@ async function renderLevelsTabContent(el) {
   </div>`;
 }
 
-async function recalculateOperatorLevelsUi(button) {
-  if (STATE._operatorLevelsRecalculating || button?.disabled) return;
-  STATE._operatorLevelsRecalculating = true;
-  if (button) uiSetBusy(button, true, 'Пересчитываем…');
+async function recalculateOperatorLevelsUi() {
   try {
     const res = await api.recalculateOperatorLevels({ mode: 'all' });
     swrInvalidate('levels:');
     showToast(`Пересчитано: ${res.processed}, изменено: ${res.updated}`, 'ok');
     swrInvalidate('rating:list');
     await reloadData();
-  } catch(e) {
-    showToast(typeof uiErrorMessage === 'function' ? uiErrorMessage(e, 'Не удалось пересчитать уровни') : 'Не удалось пересчитать уровни', 'error');
-  } finally {
-    STATE._operatorLevelsRecalculating = false;
-    if (button?.isConnected) uiSetBusy(button, false);
-  }
+  } catch(e) { showToast(e.message, 'error'); }
 }
 
-function showCreateOperatorLevelPrompt() {
+async function showCreateOperatorLevelPrompt() {
   showOperatorLevelForm();
 }
 
-function editOperatorLevelUi(levelId) {
-  const level = (STATE.operatorLevels || []).find(l => l.id === levelId);
+async function editOperatorLevelUi(levelId) {
+  const level = STATE.operatorLevels.find(l => l.id === levelId);
   if (!level) return;
   showOperatorLevelForm(level);
 }
@@ -232,39 +198,37 @@ function showOperatorLevelForm(level = null) {
     <h3 class="modal-title">${isEdit ? 'Изменить уровень' : 'Добавить уровень'}</h3>
     <div class="form-grid-2">
       <div class="form-group">
-        <label class="form-label" for="lvl-name">Название</label>
-        <input id="lvl-name" class="form-input" value="${esc(level?.name || '')}" maxlength="100" required aria-describedby="lvl-form-error" placeholder="Например: Профи">
+        <label class="form-label">Название</label>
+        <input id="lvl-name" class="form-input" value="${esc(level?.name || '')}" placeholder="Например: Профи">
       </div>
       <div class="form-group">
-        <label class="form-label" for="lvl-code">Код</label>
-        <input id="lvl-code" class="form-input" value="${esc(level?.code || '')}" ${isEdit ? 'disabled' : 'required'} maxlength="50" pattern="[a-z0-9_-]+" aria-describedby="lvl-code-hint lvl-form-error" placeholder="pro">
-        <div id="lvl-code-hint" class="form-hint">Латинские буквы, цифры, дефис и подчёркивание.</div>
+        <label class="form-label">Код</label>
+        <input id="lvl-code" class="form-input" value="${esc(level?.code || '')}" ${isEdit ? 'disabled' : ''} placeholder="pro">
       </div>
     </div>
     <div class="form-grid-2">
       <div class="form-group">
-        <label class="form-label" for="lvl-color">Цвет бейджа</label>
-        <input id="lvl-color" class="form-input" value="${esc(level?.color || '#64748B')}" pattern="#[0-9A-Fa-f]{6}" aria-describedby="lvl-color-hint lvl-form-error" placeholder="#64748B">
-        <div id="lvl-color-hint" class="form-hint">HEX-цвет в формате #64748B.</div>
+        <label class="form-label">Цвет бейджа</label>
+        <input id="lvl-color" class="form-input" value="${esc(level?.color || '#64748B')}" placeholder="#64748B">
       </div>
       <div class="form-group">
-        <label class="form-label" for="lvl-reward-coins">Награда за повышение</label>
-        <input id="lvl-reward-coins" class="form-input" type="number" min="0" step="1" value="${esc(level?.reward_coins ?? 0)}" aria-describedby="lvl-reward-hint lvl-form-error">
-        <div id="lvl-reward-hint" class="form-hint">Количество коинов, которое оператор получит один раз при первом переходе.</div>
+        <label class="form-label">Награда за повышение</label>
+        <input id="lvl-reward-coins" class="form-input" type="number" min="0" value="${esc(level?.reward_coins ?? 0)}">
+        <div class="form-hint">Количество коинов, которое оператор получит один раз при первом переходе.</div>
       </div>
     </div>
     <input id="lvl-order" type="hidden" value="${esc(level?.sort_order ?? ((STATE.operatorLevels.length + 1) * 10))}">
     <input id="lvl-min-xp" type="hidden" value="${esc(level?.min_total_xp ?? 0)}">
     <div class="form-group">
-      <label class="form-label" for="lvl-description">Описание</label>
-      <textarea id="lvl-description" class="form-input" rows="3" maxlength="500" placeholder="Короткое описание уровня">${esc(level?.description || '')}</textarea>
+      <label class="form-label">Описание</label>
+      <textarea id="lvl-description" class="form-input" rows="3" placeholder="Короткое описание уровня">${esc(level?.description || '')}</textarea>
     </div>
-    <div id="lvl-form-error" class="status-line" role="alert" aria-live="polite"></div>
-    <button type="button" class="btn-primary" style="width:100%;margin-top:8px" onclick="submitOperatorLevelForm(${isEdit ? level.id : 'null'}, this)">${isEdit ? 'Сохранить' : 'Создать'}</button>
+    <div id="lvl-form-error" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:8px" onclick="submitOperatorLevelForm(${isEdit ? level.id : 'null'})">${isEdit ? 'Сохранить' : 'Создать'}</button>
   `);
 }
 
-async function submitOperatorLevelForm(levelId, button) {
+async function submitOperatorLevelForm(levelId) {
   const err = document.getElementById('lvl-form-error');
   const name = document.getElementById('lvl-name')?.value.trim();
   const code = document.getElementById('lvl-code')?.value.trim();
@@ -275,26 +239,8 @@ async function submitOperatorLevelForm(levelId, button) {
   const reward_coins = Number(document.getElementById('lvl-reward-coins')?.value || 0);
   if (!name || (!levelId && !code)) {
     if (err) { err.textContent = 'Заполните название и код'; err.className = 'status-line status-error'; }
-    document.getElementById(!name ? 'lvl-name' : 'lvl-code')?.focus();
     return;
   }
-  if (!levelId && !/^[a-z0-9_-]+$/.test(code)) {
-    if (err) { err.textContent = 'Код может содержать только латинские буквы, цифры, дефис и подчёркивание'; err.className = 'status-line status-error'; }
-    document.getElementById('lvl-code')?.focus();
-    return;
-  }
-  if (!/^#[0-9a-f]{6}$/i.test(color)) {
-    if (err) { err.textContent = 'Укажите цвет в формате #64748B'; err.className = 'status-line status-error'; }
-    document.getElementById('lvl-color')?.focus();
-    return;
-  }
-  if (!Number.isInteger(reward_coins) || reward_coins < 0) {
-    if (err) { err.textContent = 'Награда должна быть целым неотрицательным числом'; err.className = 'status-line status-error'; }
-    document.getElementById('lvl-reward-coins')?.focus();
-    return;
-  }
-  if (button?.disabled) return;
-  if (button) uiSetBusy(button, true);
   try {
     const payload = { name, color, description, sort_order, min_total_xp, reward_coins, reward_once: true };
     if (levelId) await api.updateOperatorLevel(levelId, payload);
@@ -302,25 +248,17 @@ async function submitOperatorLevelForm(levelId, button) {
     swrInvalidate('levels:');
     closeModal();
     await renderOperatorLevelsSettings();
-  } catch(e) {
-    if (err) {
-      err.textContent = typeof uiErrorMessage === 'function'
-        ? uiErrorMessage(e, 'Не удалось сохранить уровень')
-        : 'Не удалось сохранить уровень';
-      err.className = 'status-line status-error';
-    }
-    if (button?.isConnected) uiSetBusy(button, false);
-  }
+  } catch(e) { showToast(e.message, 'error'); }
 }
 
-function addOperatorLevelRuleUi(levelId) {
-  const level = (STATE.operatorLevels || []).find(l => l.id === levelId);
+async function addOperatorLevelRuleUi(levelId) {
+  const level = STATE.operatorLevels.find(l => l.id === levelId);
   showModal(`
     <h3 class="modal-title">Добавить показатель</h3>
     <div class="status-line" style="padding:0;color:var(--text-secondary)">Уровень: <b>${esc(level?.name || '')}</b></div>
     <div class="form-grid-2">
       <div class="form-group">
-        <label class="form-label" for="rule-metric">Показатель</label>
+        <label class="form-label">Показатель</label>
         <select id="rule-metric" class="form-select">
           <option value="tenure_days">Стаж</option>
           <option value="quality">Качество</option>
@@ -333,8 +271,8 @@ function addOperatorLevelRuleUi(levelId) {
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label" for="rule-operator">Условие</label>
-        <select id="rule-operator" class="form-select" onchange="syncOperatorLevelRuleFields()">
+        <label class="form-label">Условие</label>
+        <select id="rule-operator" class="form-select">
           <option value="gte">Больше или равно</option>
           <option value="lte">Меньше или равно</option>
           <option value="eq">Равно</option>
@@ -344,29 +282,20 @@ function addOperatorLevelRuleUi(levelId) {
     </div>
     <div class="form-grid-2">
       <div class="form-group">
-        <label class="form-label" for="rule-min">Минимум / значение</label>
-        <input id="rule-min" class="form-input" type="number" step="0.01" value="0" aria-describedby="rule-form-error">
+        <label class="form-label">Минимум / значение</label>
+        <input id="rule-min" class="form-input" type="number" step="0.01" value="0">
       </div>
       <div class="form-group">
-        <label class="form-label" for="rule-max">Максимум</label>
-        <input id="rule-max" class="form-input" type="number" step="0.01" aria-describedby="rule-form-error" placeholder="Для lte / between">
+        <label class="form-label">Максимум</label>
+        <input id="rule-max" class="form-input" type="number" step="0.01" placeholder="Для lte / between">
       </div>
     </div>
-    <div id="rule-form-error" class="status-line" role="alert" aria-live="polite"></div>
-    <button type="button" class="btn-primary" style="width:100%;margin-top:8px" onclick="submitOperatorLevelRuleForm(${levelId}, this)">Добавить</button>
+    <div id="rule-form-error" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:8px" onclick="submitOperatorLevelRuleForm(${levelId})">Добавить</button>
   `);
-  syncOperatorLevelRuleFields();
 }
 
-function syncOperatorLevelRuleFields() {
-  const operator = document.getElementById('rule-operator')?.value || 'gte';
-  const minInput = document.getElementById('rule-min');
-  const maxInput = document.getElementById('rule-max');
-  if (minInput) minInput.disabled = operator === 'lte';
-  if (maxInput) maxInput.disabled = operator === 'gte' || operator === 'eq';
-}
-
-async function submitOperatorLevelRuleForm(levelId, button) {
+async function submitOperatorLevelRuleForm(levelId) {
   const metric_code = document.getElementById('rule-metric')?.value;
   const operator = document.getElementById('rule-operator')?.value;
   const value_min_raw = document.getElementById('rule-min')?.value;
@@ -379,41 +308,22 @@ async function submitOperatorLevelRuleForm(levelId, button) {
     is_required: true,
   };
   if (operator === 'lte') payload.value_min = null;
-  if ((operator === 'gte' || operator === 'eq' || operator === 'between') && (payload.value_min === null || !Number.isFinite(payload.value_min))) {
+  if ((operator === 'gte' || operator === 'eq') && payload.value_min === null) {
     const err = document.getElementById('rule-form-error');
     if (err) { err.textContent = 'Укажите значение'; err.className = 'status-line status-error'; }
-    document.getElementById('rule-min')?.focus();
     return;
   }
-  if ((operator === 'lte' || operator === 'between') && (payload.value_max === null || !Number.isFinite(payload.value_max))) {
+  if ((operator === 'lte' || operator === 'between') && payload.value_max === null) {
     const err = document.getElementById('rule-form-error');
     if (err) { err.textContent = 'Укажите максимум'; err.className = 'status-line status-error'; }
-    document.getElementById('rule-max')?.focus();
     return;
   }
-  if (operator === 'between' && payload.value_min > payload.value_max) {
-    const err = document.getElementById('rule-form-error');
-    if (err) { err.textContent = 'Минимум не может быть больше максимума'; err.className = 'status-line status-error'; }
-    document.getElementById('rule-min')?.focus();
-    return;
-  }
-  if (button?.disabled) return;
-  if (button) uiSetBusy(button, true, 'Добавляем…');
   try {
     await api.addOperatorLevelRule(levelId, payload);
     swrInvalidate('levels:');
     closeModal();
     await renderOperatorLevelsSettings();
-  } catch(e) {
-    const err = document.getElementById('rule-form-error');
-    if (err) {
-      err.textContent = typeof uiErrorMessage === 'function'
-        ? uiErrorMessage(e, 'Не удалось добавить условие')
-        : 'Не удалось добавить условие';
-      err.className = 'status-line status-error';
-    }
-    if (button?.isConnected) uiSetBusy(button, false);
-  }
+  } catch(e) { showToast(e.message, 'error'); }
 }
 
 async function deleteOperatorLevelRuleUi(ruleId) {
@@ -466,98 +376,277 @@ async function toggleOperatorLevelUi(levelId, isActive) {
 }
 
 async function manualOperatorLevelUi(operatorId) {
-  const op = (STATE.adminOperators || []).find(o => o.id === operatorId);
-  const levels = STATE.operatorLevels?.length ? STATE.operatorLevels : await api.listOperatorLevels().catch(() => []);
+  const op = STATE.adminOperators.find(o => o.id === operatorId);
+  const levels = STATE.operatorLevels.length ? STATE.operatorLevels : await api.listOperatorLevels().catch(() => []);
   const activeLevels = levels.filter(l => l.is_active);
   if (!activeLevels.length) { showToast('Нет активных уровней', 'error'); return; }
-  showModal(`
-    <h3 class="modal-title">Изменить уровень оператора</h3>
-    <p class="form-hint">Оператор: <b>${esc(op?.full_name || 'Оператор')}</b></p>
-    <div class="form-group">
-      <label class="form-label" for="manual-level-id">Новый уровень</label>
-      <select id="manual-level-id" class="form-select" required aria-describedby="manual-level-error">
-        ${activeLevels.map(level => `<option value="${level.id}">${esc(level.name)}</option>`).join('')}
-      </select>
-    </div>
-    <div class="form-group">
-      <label class="form-label" for="manual-level-reason">Причина изменения</label>
-      <input id="manual-level-reason" class="form-input" maxlength="300" required aria-describedby="manual-level-error" placeholder="Например: решение руководителя">
-    </div>
-    <div class="form-group">
-      <label class="form-label" for="manual-level-comment">Комментарий <span class="optional">(необязательно)</span></label>
-      <textarea id="manual-level-comment" class="form-input" rows="3" maxlength="1000"></textarea>
-    </div>
-    <div id="manual-level-error" class="status-line" role="alert" aria-live="polite"></div>
-    <div class="modal-actions">
-      <button type="button" class="btn-outline" onclick="closeModal()">Отмена</button>
-      <button type="button" class="btn-primary" onclick="submitManualOperatorLevelUi(${operatorId}, this)">Изменить уровень</button>
-    </div>`);
-}
-
-async function submitManualOperatorLevelUi(operatorId, button) {
-  const levelId = Number(document.getElementById('manual-level-id')?.value);
-  const reasonInput = document.getElementById('manual-level-reason');
-  const reason = reasonInput?.value.trim() || '';
-  const comment = document.getElementById('manual-level-comment')?.value.trim() || '';
-  const error = document.getElementById('manual-level-error');
-  if (!levelId || !reason) {
-    if (error) error.textContent = !levelId ? 'Выберите уровень' : 'Укажите причину изменения';
-    (!levelId ? document.getElementById('manual-level-id') : reasonInput)?.focus();
-    return;
-  }
-  if (button?.disabled) return;
-  if (button) uiSetBusy(button, true, 'Изменяем…');
+  const options = activeLevels.map(l => `${l.id}: ${l.name}`).join('\n');
+  const raw = prompt(`Выберите уровень для ${op?.full_name || 'оператора'}:\n${options}`);
+  if (!raw) return;
+  const levelId = Number(String(raw).split(':')[0].trim());
+  if (!levelId) { showToast('Некорректный уровень', 'error'); return; }
+  const reason = prompt('Причина ручной смены уровня');
+  if (!reason || !reason.trim()) { showToast('Причина обязательна', 'error'); return; }
+  const comment = prompt('Комментарий', '') || '';
   try {
     await api.manualOperatorLevel(operatorId, { level_id: levelId, reason, comment });
     swrInvalidate('levels:');
     showToast('Уровень изменён', 'ok');
     swrInvalidate('rating:list');
-    closeModal();
     await reloadData();
-  } catch(e) {
-    if (error) {
-      error.textContent = typeof uiErrorMessage === 'function'
-        ? uiErrorMessage(e, 'Не удалось изменить уровень')
-        : 'Не удалось изменить уровень';
-    }
-    if (button?.isConnected) uiSetBusy(button, false);
+  } catch(e) { showToast(e.message, 'error'); }
+}
+
+/* ══════════════════════════════════════
+   VIEW: КАБИНЕТ ОПЕРАТОРА
+══════════════════════════════════════ */
+function renderCabinet() {
+  const el = document.getElementById('view-cabinet');
+  if (!el) return;
+  if (!(STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor')) {
+    el.innerHTML = `<div class="view-header">
+      <div>
+        <div class="section-kicker">Кабинет</div>
+        <h2 class="section-title">Мой кабинет</h2>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Администратор</h3>
+      <p class="muted">Личный кошелёк доступен только аккаунтам, привязанным к оператору.</p>
+    </div>`;
+    return;
+  }
+  const w = STATE.wallet;
+  if (!w) {
+    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div></div>
+      <div class="empty-state"><p>Данные загружаются…</p></div>`;
+    const _cabinetGen = STATE.navGen;
+    swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS).then(data => {
+      STATE.wallet = data;
+      if (!isNavStale(_cabinetGen)) renderCabinet();
+    }).catch(() => {});
+    return;
+  }
+
+  const myRow = STATE.rating.find(r => r.operator_id === w.operator_id);
+  const hasRank = myRow?.rank_position != null && Number(myRow.rank_position) > 0;
+  const rank = hasRank ? Number(myRow.rank_position) : null;
+  const total = STATE.rating.length || '—';
+  const delta = myRow?.rank_delta;
+  const levelInfo = STATE.myLevel;
+  // Стаж: берём из metrics (API /me/level) или из STATE.myOperator
+  const tenureDays = levelInfo?.metrics?.tenure_days ?? STATE.myOperator?.tenure_days ?? null;
+  const tenureStr = tenureDays != null ? formatTenureDays(tenureDays) : '—';
+  const levelCard = levelInfo ? `
+    <div class="panel level-card">
+      <div class="panel-head">
+        <h3>Мой уровень</h3>
+        ${levelBadgeHtml(levelInfo.level, 'level-badge-lg')}
+      </div>
+      <div class="level-tenure-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Стаж: <b>${esc(tenureStr)}</b></span>
+      </div>
+      ${levelInfo.next_level ? `
+        <div class="level-next">До следующего уровня: ${levelBadgeHtml(levelInfo.next_level)}</div>
+        <div class="level-gap-list">
+          ${(levelInfo.gaps || []).map(g => `
+            <div class="level-gap-row ${g.ok ? 'ok' : 'miss'}">
+              <span>${esc(g.label)}</span>
+              <b>${metricValueHtml(g)}</b>
+              <em>${g.ok ? 'готово' : levelRequirementHtml(g)}</em>
+            </div>`).join('')}
+        </div>` : `
+        <div class="empty-line">Вы достигли максимального уровня.</div>`}
+      ${levelInfo.is_manual ? `<div class="status-line">Ручной уровень: ${esc(levelInfo.manual_reason || '')}</div>` : ''}
+    </div>` : '';
+
+  el.innerHTML = `
+    <div class="view-header">
+      <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+      <button class="btn-outline btn-sm" onclick="reloadCabinet()">Обновить</button>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card kpi-accent">
+        <div class="kpi-label">Баланс коинов</div>
+        <div class="kpi-value">${w.current_balance} <span class="kpi-unit">₡</span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Всего заработано</div>
+        <div class="kpi-value">${w.total_earned} <span class="kpi-unit">₡</span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Потрачено</div>
+        <div class="kpi-value">${w.total_spent} <span class="kpi-unit">₡</span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Место в рейтинге</div>
+        <div class="kpi-value">${rank ? `${rank} <span class="kpi-unit">из ${total}</span>` : '<span class="kpi-unit">Пока не рассчитано</span>'}
+          ${delta != null ? `<span class="rank-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${delta > 0 ? '↑'+delta : delta < 0 ? '↓'+Math.abs(delta) : 'без изм.'}</span>` : ''}
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Стаж в компании</div>
+        <div class="kpi-value" style="font-size:clamp(14px,2vw,18px)">${esc(tenureStr)}</div>
+      </div>
+    </div>
+
+    ${levelCard}
+
+    <div class="cabinet-wow-grid">
+      <div id="cabinet-wheel-card"></div>
+      <div id="cabinet-wheel-winners"></div>
+    </div>
+
+    <div id="cabinet-weekly-detail"></div>
+
+    <div id="cabinet-achievements"></div>
+
+    <div class="cabinet-bottom-grid">
+      <div class="panel">
+        <div class="panel-head"><h3>История начислений</h3><span class="panel-badge">${w.transactions.length} записей</span></div>
+        <div class="tx-list">
+          ${w.transactions.length ? w.transactions.map(t => `
+            <div class="tx-row ${t.amount >= 0 ? 'tx-plus' : 'tx-minus'}">
+              <div class="tx-info">
+                <span class="tx-comment">${esc(t.comment)}</span>
+                <span class="tx-date">${fmtDate(t.created_at)}</span>
+              </div>
+              <div class="tx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</div>
+            </div>`).join('') : '<div class="empty-line">Операций пока нет</div>'}
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Топ-5 недели</h3></div>
+        ${miniRating(5, myRow?.operator_id)}
+        <div class="panel-footer">
+          <button class="btn-link" onclick="navigateTo('rating')">Полный рейтинг →</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="shop-banner">
+      <div>
+        <div class="shop-banner-title">Магазин бонусов</div>
+        <div class="shop-banner-sub">У вас ${w.current_balance} ₡ — потратьте на бонус</div>
+      </div>
+      <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
+    </div>`;
+
+  renderCabinetWheelCard();
+  renderWheelWinnersToday();
+  renderCabinetWeeklyDetail();
+  renderCabinetAchievements();
+}
+
+// Блок «Победитель Wheel of WOW сегодня» на главной (ТЗ п.10). Грузится
+// асинхронно; если сегодня никто не крутил — блок скрыт.
+async function renderWheelWinnersToday() {
+  const host = document.getElementById('cabinet-wheel-winners');
+  if (!host) return;
+  let data;
+  try {
+    data = await api.getWheelWinnersToday();
+  } catch {
+    host.innerHTML = '';
+    return;
+  }
+  const items = data && data.items ? data.items : [];
+  if (!items.length || !data.top) { host.innerHTML = ''; return; }
+
+  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₡` : esc(w.prize);
+  const top = data.top;
+  const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
+
+  host.innerHTML = `
+    <div class="panel wheel-winner-card">
+      <div class="wheel-winner-head">
+        <span class="wheel-winner-kicker">🎡 Победитель Wheel of WOW сегодня</span>
+        <span class="wheel-winner-badge">Крупнейший приз дня</span>
+      </div>
+      <div class="wheel-winner-hero">
+        <div class="wheel-winner-avatar">${esc((top.operator_name || '?').trim().charAt(0))}</div>
+        <div class="wheel-winner-main">
+          <div class="wheel-winner-name">${esc(top.operator_name)}</div>
+          ${top.reason ? `<div class="wheel-winner-reason">Причина допуска: ${esc(top.reason)}</div>` : ''}
+        </div>
+        <div class="wheel-winner-prize">${prizeText(top)}</div>
+      </div>
+      ${rest.length ? `<div class="wheel-winner-list">
+        <div class="wheel-winner-list-title">Сегодня крутили колесо:</div>
+        ${rest.slice(0, 6).map(w => `<div class="wheel-winner-row">
+          <span class="wheel-winner-row-icon">${WHEEL_PRIZE_ICON[w.prize_type] || '★'}</span>
+          <span class="wheel-winner-row-name">${esc(w.operator_name)}</span>
+          <span class="wheel-winner-row-prize">${prizeText(w)}</span>
+        </div>`).join('')}
+      </div>` : ''}
+    </div>`;
+}
+
+// Карточка «Колесо WOW» на главной панели оператора (ТЗ п.2). Грузится
+// асинхронно, чтобы не задерживать рендер кабинета; ошибки скрывают карточку.
+async function renderCabinetWheelCard() {
+  const host = document.getElementById('cabinet-wheel-card');
+  if (!host) return;
+  let status;
+  try {
+    status = await api.getWheelStatus();
+  } catch {
+    host.innerHTML = '';
+    return;
+  }
+  if (!status || !status.campaign) { host.innerHTML = ''; return; }
+
+  const tickets = status.available_tickets || 0;
+  const canSpin = status.can_spin;
+  const reason = status.next_ticket_reason;
+  const lp = status.last_prize;
+
+  if (tickets > 0) {
+    host.innerHTML = `
+      <div class="panel wheel-cabinet-card wheel-cabinet-have">
+        <div class="wheel-cabinet-main">
+          <div class="wheel-cabinet-kicker">🎡 Колесо WOW</div>
+          <div class="wheel-cabinet-title">Доступно вращений: <b>${tickets}</b></div>
+          ${reason ? `<div class="wheel-cabinet-sub">Получено за: ${esc(reason)}</div>` : ''}
+          ${!canSpin && status.reason_if_cannot_spin ? `<div class="wheel-cabinet-sub muted">${esc(status.reason_if_cannot_spin)}</div>` : ''}
+        </div>
+        <button class="btn-primary" onclick="navigateTo('wheel')">Крутить колесо</button>
+      </div>`;
+  } else {
+    host.innerHTML = `
+      <div class="panel wheel-cabinet-card wheel-cabinet-none">
+        <div class="wheel-cabinet-main">
+          <div class="wheel-cabinet-kicker">🎡 Колесо WOW</div>
+          <div class="wheel-cabinet-title">Сегодня вращений нет</div>
+          <div class="wheel-cabinet-sub muted">Чтобы получить попытку: пройди тест дня на 80%+, закрой день без опозданий, держи качество 90+.</div>
+          ${lp ? `<div class="wheel-cabinet-sub">Последний приз: ${esc(lp.title)}</div>` : ''}
+        </div>
+        <button class="btn-outline" onclick="navigateTo('wheel')">Открыть колесо</button>
+      </div>`;
   }
 }
 
-/* Cabinet data helpers live here; the single visual renderer is the v3
-   implementation in rating/99-operator-cabinet-rating-redesign.view.js. */
-
-function cabinetSessionKey() {
-  const user = STATE.user;
-  if (!user) return '';
-  return [user.id ?? '', user.operator_id ?? '', user.username ?? '', user.role ?? ''].join(':');
+async function reloadCabinet() {
+  STATE.wallet = await swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS).catch(() => STATE.wallet);
+  STATE.myLevel = await api.myLevel().catch(() => STATE.myLevel);
+  STATE.myOperator = await api.myOperator().catch(() => STATE.myOperator);
+  setText('side-level', STATE.myLevel?.level?.name || '—');
+  const ratingResp = await api.getRating().catch(() => ({ items: STATE.rating }));
+  STATE.rating = Array.isArray(ratingResp) ? ratingResp : (ratingResp.items || []);
+  STATE.cabinetData = null;
+  renderCabinet();
 }
 
-function cabinetSnapshotForCurrentUser() {
-  const ownerKey = cabinetSessionKey();
-  if (!ownerKey) {
-    STATE.cabinetSnapshot = null;
-    STATE.cabinetData = null;
-    return null;
-  }
-  if (STATE._cabinetSnapshotOwner && STATE._cabinetSnapshotOwner !== ownerKey) {
-    swrInvalidate('cabinet:me');
-    STATE.cabinetSnapshot = null;
-    STATE.cabinetData = null;
-    STATE.cabinetError = null;
-    STATE.cabinetFetchedAt = null;
-    STATE._cabinetSnapshotOwner = ownerKey;
-    return null;
-  }
-  if (!STATE._cabinetSnapshotOwner) STATE._cabinetSnapshotOwner = ownerKey;
-  return STATE.cabinetSnapshot;
+function cabinetFormatCoin(value) {
+  return `${levelNum(value || 0, 0)} <span class="kpi-unit">₡</span>`;
 }
 
-function syncCabinetSnapshot(snapshot, ownerKey = cabinetSessionKey()) {
-  if (!snapshot || !ownerKey || ownerKey !== cabinetSessionKey()) return false;
+function syncCabinetSnapshot(snapshot) {
+  if (!snapshot) return;
   const wallet = snapshot.wallet || {};
   const transactions = snapshot.recent_transactions || [];
-  STATE._cabinetSnapshotOwner = ownerKey;
   STATE.cabinetSnapshot = snapshot;
   STATE.cabinetData = snapshot;
   STATE.cabinetFetchedAt = snapshot.generated_at || new Date().toISOString();
@@ -572,54 +661,32 @@ function syncCabinetSnapshot(snapshot, ownerKey = cabinetSessionKey()) {
   };
   STATE.rating = snapshot.top_week || STATE.rating || [];
   if (snapshot.level?.level) setText('side-level', snapshot.level.level.name || '—');
-  return true;
 }
 
 async function loadCabinetSnapshot(force = false) {
-  const ownerKey = cabinetSessionKey();
-  if (!ownerKey) throw new Error('Сессия завершена. Войдите снова.');
-
-  const ownerChanged = STATE._cabinetSnapshotOwner && STATE._cabinetSnapshotOwner !== ownerKey;
-  if (force || ownerChanged) {
+  if (force) {
     swrInvalidate('cabinet:me');
     STATE.cabinetSnapshot = null;
     STATE.cabinetData = null;
-    STATE.cabinetError = null;
   }
-  if (cabinetSnapshotForCurrentUser() && !force) return STATE.cabinetSnapshot;
-  if (STATE._cabinetSnapshotPromise && STATE._cabinetSnapshotPromiseOwner === ownerKey && !force) {
-    return STATE._cabinetSnapshotPromise;
-  }
-
-  const requestVersion = Number(STATE._cabinetRequestVersion || 0) + 1;
-  STATE._cabinetRequestVersion = requestVersion;
-  STATE._cabinetSnapshotOwner = ownerKey;
-  STATE._cabinetSnapshotPromiseOwner = ownerKey;
-  const request = withTimeout(
-    swrFetch('cabinet:me', () => (api.getMyCabinetV2 ? api.getMyCabinetV2() : api.getMyCabinet()), null, SWR_FAST_TTL_MS),
-    12000,
-    'Кабинет не загрузился: сервер не ответил за 12 секунд'
-  ).then(data => {
-    if (STATE._cabinetRequestVersion === requestVersion && cabinetSessionKey() === ownerKey) {
-      syncCabinetSnapshot(data, ownerKey);
+  if (STATE.cabinetSnapshot && !force) return STATE.cabinetSnapshot;
+  if (!STATE._cabinetSnapshotPromise) {
+    STATE._cabinetSnapshotPromise = withTimeout(
+      swrFetch('cabinet:me', () => (api.getMyCabinetV2 ? api.getMyCabinetV2() : api.getMyCabinet()), null, SWR_FAST_TTL_MS),
+      12000,
+      'Кабинет не загрузился: сервер не ответил за 12 секунд'
+    ).then(data => {
+      syncCabinetSnapshot(data);
       STATE.cabinetError = null;
-    }
-    return data;
-  }).catch(err => {
-    if (STATE._cabinetRequestVersion === requestVersion && cabinetSessionKey() === ownerKey) {
-      STATE.cabinetError = typeof uiErrorMessage === 'function'
-        ? uiErrorMessage(err, 'Не удалось загрузить кабинет')
-        : 'Не удалось загрузить кабинет';
-    }
-    throw err;
-  }).finally(() => {
-    if (STATE._cabinetSnapshotPromise === request) {
+      return data;
+    }).catch(err => {
+      STATE.cabinetError = err.message || 'Не удалось загрузить кабинет';
+      throw err;
+    }).finally(() => {
       STATE._cabinetSnapshotPromise = null;
-      STATE._cabinetSnapshotPromiseOwner = null;
-    }
-  });
-  STATE._cabinetSnapshotPromise = request;
-  return request;
+    });
+  }
+  return STATE._cabinetSnapshotPromise;
 }
 
 function cabinetLoadingHtml() {
@@ -634,31 +701,214 @@ function cabinetLoadingHtml() {
     </div>`;
 }
 
+function cabinetLevelCard(levelInfo) {
+  if (!levelInfo) return '';
+  const tenureDays = levelInfo.metrics?.tenure_days ?? STATE.myOperator?.tenure_days ?? null;
+  const tenureStr = tenureDays != null ? formatTenureDays(tenureDays) : '—';
+  return `
+    <div class="panel level-card">
+      <div class="panel-head">
+        <h3>Мой уровень</h3>
+        ${levelBadgeHtml(levelInfo.level, 'level-badge-lg')}
+      </div>
+      <div class="level-tenure-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Стаж: <b>${esc(tenureStr)}</b></span>
+      </div>
+      ${levelInfo.next_level ? `
+        <div class="level-next">До следующего уровня: ${levelBadgeHtml(levelInfo.next_level)}</div>
+        <div class="level-gap-list">
+          ${(levelInfo.gaps || []).map(g => `
+            <div class="level-gap-row ${g.ok ? 'ok' : 'miss'}">
+              <span>${esc(g.label)}</span>
+              <b>${metricValueHtml(g)}</b>
+              <em>${g.ok ? 'готово' : levelRequirementHtml(g)}</em>
+            </div>`).join('')}
+        </div>` : '<div class="empty-line">Вы достигли максимального уровня.</div>'}
+      ${levelInfo.is_manual ? `<div class="status-line">Ручной уровень: ${esc(levelInfo.manual_reason || '')}</div>` : ''}
+    </div>`;
+}
+
+function cabinetWheelCard(status) {
+  if (!status || !status.campaign) return '';
+  const tickets = Number(status.available_tickets || 0);
+  const lp = status.last_prize;
+  return `
+    <div class="panel wheel-cabinet-card ${tickets > 0 ? 'wheel-cabinet-have' : 'wheel-cabinet-none'}">
+      <div class="wheel-cabinet-main">
+        <div class="wheel-cabinet-kicker">Колесо WOW</div>
+        <div class="wheel-cabinet-title">${tickets > 0 ? `Доступно вращений: <b>${tickets}</b>` : 'Сегодня вращений нет'}</div>
+        <div class="wheel-cabinet-sub ${tickets > 0 ? '' : 'muted'}">${esc(status.message || status.reason_if_cannot_spin || 'Пока нет доступных билетов')}</div>
+        ${lp ? `<div class="wheel-cabinet-sub">Последний приз: ${esc(lp.title || lp.value || '')}</div>` : ''}
+      </div>
+      <button class="${tickets > 0 ? 'btn-primary' : 'btn-outline'}" onclick="navigateTo('wheel')">${tickets > 0 ? 'Крутить колесо' : 'Открыть колесо'}</button>
+    </div>`;
+}
+
+function cabinetWinnersCard(data) {
+  const items = data?.items || [];
+  const top = data?.top;
+  if (!items.length || !top) return '';
+  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₡` : esc(w.prize || '—');
+  const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
+  return `
+    <div class="panel wheel-winner-card">
+      <div class="wheel-winner-head">
+        <span class="wheel-winner-kicker">Победитель Wheel of WOW сегодня</span>
+        <span class="wheel-winner-badge">Крупнейший приз дня</span>
+      </div>
+      <div class="wheel-winner-hero">
+        <div class="wheel-winner-avatar">${esc((top.operator_name || '?').trim().charAt(0))}</div>
+        <div class="wheel-winner-main">
+          <div class="wheel-winner-name">${esc(top.operator_name)}</div>
+          ${top.reason ? `<div class="wheel-winner-reason">Причина допуска: ${esc(top.reason)}</div>` : ''}
+        </div>
+        <div class="wheel-winner-prize">${prizeText(top)}</div>
+      </div>
+      ${rest.length ? `<div class="wheel-winner-list">
+        ${rest.slice(0, 5).map(w => `<div class="wheel-winner-row">
+          <span class="wheel-winner-row-icon">${WHEEL_PRIZE_ICON[w.prize_type] || '★'}</span>
+          <span class="wheel-winner-row-name">${esc(w.operator_name)}</span>
+          <span class="wheel-winner-row-prize">${prizeText(w)}</span>
+        </div>`).join('')}
+      </div>` : ''}
+    </div>`;
+}
+
+function cabinetTransactionsHtml(items) {
+  return items.length ? items.map(t => `
+    <div class="tx-row ${Number(t.amount || 0) >= 0 ? 'tx-plus' : 'tx-minus'}">
+      <div class="tx-info">
+        <span class="tx-comment">${esc(t.comment || t.type || 'Операция')}</span>
+        <span class="tx-date">${fmtDate(t.created_at || t.date)}</span>
+      </div>
+      <div class="tx-amount">${Number(t.amount || 0) >= 0 ? '+' : ''}${levelNum(t.amount || 0, 0)} ₡</div>
+    </div>`).join('') : '<div class="empty-line">Операций пока нет</div>';
+}
+
+function cabinetTopWeekHtml(rows, currentId) {
+  return rows.length ? `<div class="mini-rating">
+    ${rows.map((r, idx) => `<div class="mini-row ${r.operator_id === currentId ? 'current' : ''}">
+      <span class="mini-rank">${r.rank_position || idx + 1}</span>
+      <span class="mini-name">${esc(r.operator_name || r.full_name || '—')} ${r.level ? levelBadgeHtml(r.level) : ''}</span>
+      <b>${levelNum(r.coins_earned || r.total_balance || 0, 0)} ₡</b>
+      <em>${levelNum(r.contest_points || r.final_score || 0)}</em>
+    </div>`).join('')}
+  </div>` : '<div class="empty-line">Рейтинг пока не рассчитан</div>';
+}
+
+function renderCabinet() {
+  const el = document.getElementById('view-cabinet');
+  if (!el) return;
+  if (!(STATE.user?.role === 'operator' || STATE.user?.role === 'supervisor')) {
+    el.innerHTML = `
+      ${uiPageHeader({
+        kicker: 'Кабинет',
+        title: 'Рабочая область администратора',
+        description: 'Личный кабинет с показателями и наградами предназначен для операторов. Для управления командой используйте административные разделы.',
+      })}
+      ${uiEmptyState({
+        title: 'Вы вошли как администратор',
+        description: 'Здесь нет личных показателей оператора, поэтому нулевые значения не показываются.',
+        action: '<button class="btn-primary" onclick="navigateTo(\'summary\')">Перейти в сводку</button><button class="btn-outline" onclick="navigateTo(\'operators\')">Пользователи</button>',
+      })}`;
+    return;
+  }
+
+  const snapshot = STATE.cabinetSnapshot;
+  if (!snapshot) {
+    el.innerHTML = cabinetLoadingHtml();
+    const cabinetGen = STATE.navGen;
+    loadCabinetSnapshot(false).then(() => {
+      if (!isNavStale(cabinetGen)) renderCabinet();
+    }).catch(() => {
+      if (!isNavStale(cabinetGen)) renderCabinet();
+    });
+    if (STATE.cabinetError) {
+      el.innerHTML = `<div class="view-header">
+        <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+        <button class="btn-outline btn-sm" onclick="reloadCabinet()">Повторить</button>
+      </div><div class="panel empty-state"><p>${esc(STATE.cabinetError)}</p></div>`;
+    }
+    return;
+  }
+
+  syncCabinetSnapshot(snapshot);
+  const wallet = snapshot.wallet || {};
+  const rating = snapshot.rating || {};
+  const levelInfo = snapshot.level;
+  const tenureDays = levelInfo?.metrics?.tenure_days ?? STATE.myOperator?.tenure_days ?? null;
+  const tenureStr = tenureDays != null ? formatTenureDays(tenureDays) : '—';
+  const rank = rating.place;
+  const total = rating.total_participants || '—';
+  const delta = rating.delta;
+  const transactions = snapshot.recent_transactions || [];
+  const topWeek = snapshot.top_week || [];
+  const generatedAt = STATE.cabinetFetchedAt ? fmtDate(STATE.cabinetFetchedAt) : '';
+
+  el.innerHTML = `
+    <div class="view-header cabinet-v2-header">
+      <div>
+        <div class="section-kicker">Кабинет</div>
+        <h2 class="section-title">Мой кабинет</h2>
+        ${generatedAt ? `<div class="cabinet-snapshot-note">Обновлено: ${esc(generatedAt)}</div>` : ''}
+      </div>
+      <button class="btn-outline btn-sm" onclick="reloadCabinet()" ${STATE.cabinetLoading ? 'disabled' : ''}>${STATE.cabinetLoading ? 'Обновляем...' : 'Обновить'}</button>
+    </div>
+
+    <div class="kpi-grid cabinet-kpi-grid">
+      <div class="kpi-card kpi-accent"><div class="kpi-label">Баланс коинов</div><div class="kpi-value">${cabinetFormatCoin(wallet.balance)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Всего заработано</div><div class="kpi-value">${cabinetFormatCoin(wallet.total_earned)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Потрачено</div><div class="kpi-value">${cabinetFormatCoin(wallet.total_spent)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Место в рейтинге</div><div class="kpi-value">${rank ? `${rank} <span class="kpi-unit">из ${total}</span>` : '<span class="kpi-unit">Пока не рассчитано</span>'}${delta != null ? `<span class="rank-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${delta > 0 ? '↑'+delta : delta < 0 ? '↓'+Math.abs(delta) : 'без изм.'}</span>` : ''}</div></div>
+      <div class="kpi-card"><div class="kpi-label">Стаж в компании</div><div class="kpi-value cabinet-tenure-value">${esc(tenureStr)}</div></div>
+    </div>
+
+    ${cabinetLevelCard(levelInfo)}
+
+    <div class="cabinet-wow-grid">
+      <div id="cabinet-wheel-card">${cabinetWheelCard(snapshot.wheel)}</div>
+      <div id="cabinet-wheel-winners">${cabinetWinnersCard(snapshot.winners_today)}</div>
+    </div>
+
+    <div id="cabinet-weekly-detail"></div>
+    <div id="cabinet-achievements"></div>
+
+    <div class="cabinet-bottom-grid">
+      <div class="panel">
+        <div class="panel-head"><h3>История начислений</h3><span class="panel-badge">${transactions.length} записей</span></div>
+        <div class="tx-list">${cabinetTransactionsHtml(transactions)}</div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Топ-5 недели</h3></div>
+        ${cabinetTopWeekHtml(topWeek, snapshot.operator?.id)}
+        <div class="panel-footer"><button class="btn-link" onclick="navigateTo('rating')">Полный рейтинг →</button></div>
+      </div>
+    </div>
+
+    <div class="shop-banner">
+      <div>
+        <div class="shop-banner-title">Магазин бонусов</div>
+        <div class="shop-banner-sub">У вас ${levelNum(wallet.balance || 0, 0)} ₡ — можно обменять коины на доступные бонусы.</div>
+      </div>
+      <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
+    </div>`;
+
+  renderCabinetWeeklyDetail();
+  renderCabinetAchievements();
+}
+
 async function reloadCabinet() {
-  const ownerKey = cabinetSessionKey();
-  if (!ownerKey || (STATE.cabinetLoading && STATE._cabinetLoadingOwner === ownerKey)) return;
-  const navToken = STATE.navGen;
-  STATE._cabinetLoadingOwner = ownerKey;
   STATE.cabinetLoading = true;
-  if (STATE.currentView === 'cabinet') renderCabinet();
+  renderCabinet();
   try {
     await loadCabinetSnapshot(true);
-    if (cabinetSessionKey() === ownerKey) showToast('Кабинет обновлён', 'ok');
+    showToast('Кабинет обновлён', 'ok');
   } catch(e) {
-    if (cabinetSessionKey() === ownerKey) {
-      const message = typeof uiErrorMessage === 'function'
-        ? uiErrorMessage(e, 'Не удалось обновить кабинет')
-        : 'Не удалось обновить кабинет';
-      showToast(message, 'error');
-    }
+    showToast(e.message || 'Не удалось обновить кабинет', 'error');
   } finally {
-    if (STATE._cabinetLoadingOwner === ownerKey) {
-      STATE.cabinetLoading = false;
-      STATE._cabinetLoadingOwner = null;
-    }
-    if (cabinetSessionKey() === ownerKey && STATE.currentView === 'cabinet' && !isNavStale(navToken)) {
-      renderCabinet();
-    }
+    STATE.cabinetLoading = false;
+    renderCabinet();
   }
 }
 
@@ -666,97 +916,65 @@ function showChangePasswordModal() {
   showModal(`
     <h3 class="modal-title">Сменить пароль</h3>
     <div class="form-group">
-      <label class="form-label" for="cp-current">Текущий пароль</label>
-      <input id="cp-current" class="form-input" type="password" autocomplete="current-password" required aria-describedby="cp-err" placeholder="Введите текущий пароль">
+      <label class="form-label">Текущий пароль</label>
+      <input id="cp-current" class="form-input" type="password" placeholder="Введите текущий пароль">
     </div>
     <div class="form-group">
-      <label class="form-label" for="cp-new">Новый пароль</label>
-      <input id="cp-new" class="form-input" type="password" autocomplete="new-password" minlength="8" required aria-describedby="cp-err" placeholder="Минимум 8 символов">
+      <label class="form-label">Новый пароль</label>
+      <input id="cp-new" class="form-input" type="password" placeholder="Минимум 8 символов">
     </div>
     <div class="form-group">
-      <label class="form-label" for="cp-confirm">Повтор нового пароля</label>
-      <input id="cp-confirm" class="form-input" type="password" autocomplete="new-password" minlength="8" required aria-describedby="cp-err" placeholder="Повторите пароль">
+      <label class="form-label">Повтор нового пароля</label>
+      <input id="cp-confirm" class="form-input" type="password" placeholder="Повторите пароль">
     </div>
-    <div id="cp-err" class="status-line" role="alert" aria-live="polite"></div>
-    <button type="button" class="btn-primary" style="width:100%;margin-top:4px" onclick="submitLegacyChangePassword(this)">Сохранить</button>`);
+    <div id="cp-err" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitLegacyChangePassword()">Сохранить</button>`);
 }
 
-async function submitLegacyChangePassword(button) {
+async function submitLegacyChangePassword() {
   const current = document.getElementById('cp-current')?.value;
   const newPwd  = document.getElementById('cp-new')?.value;
   const confirm = document.getElementById('cp-confirm')?.value;
   const err     = document.getElementById('cp-err');
-  if (!current || !newPwd || !confirm) {
-    if (err) { err.textContent='Заполните все поля'; err.className='status-line status-error'; }
-    document.getElementById(!current ? 'cp-current' : !newPwd ? 'cp-new' : 'cp-confirm')?.focus();
-    return;
-  }
-  if (newPwd.length < 8) { if (err) { err.textContent='Пароль должен содержать минимум 8 символов'; err.className='status-line status-error'; } document.getElementById('cp-new')?.focus(); return; }
-  if (newPwd !== confirm) { if (err) { err.textContent='Пароли не совпадают'; err.className='status-line status-error'; } document.getElementById('cp-confirm')?.focus(); return; }
-  if (button?.disabled) return;
-  if (button) uiSetBusy(button, true);
+  if (!current || !newPwd || !confirm) { err.textContent='Заполните все поля'; err.className='status-line status-error'; return; }
+  if (newPwd.length < 8) { err.textContent='Пароль должен содержать минимум 8 символов'; err.className='status-line status-error'; return; }
+  if (newPwd !== confirm) { err.textContent='Пароли не совпадают'; err.className='status-line status-error'; return; }
   try {
     await api.changeOperatorPassword({current_password:current, new_password:newPwd, confirm_password:confirm});
-    closeModal();
-    showToast('Пароль изменён. Войдите снова.', 'ok');
-    setTimeout(() => logoutAndReload(), 700);
-  } catch(e) {
-    if (err) {
-      err.textContent = typeof uiErrorMessage === 'function' ? uiErrorMessage(e, 'Не удалось изменить пароль') : 'Не удалось изменить пароль';
-      err.className='status-line status-error';
-    }
-    if (button?.isConnected) uiSetBusy(button, false);
-  }
+    closeModal(); showToast('Пароль успешно изменён', 'ok');
+  } catch(e) { err.textContent=e.message; err.className='status-line status-error'; }
 }
 
 function showChangeUsernameModal() {
   showModal(`
     <h3 class="modal-title">Сменить логин</h3>
     <div class="form-group">
-      <label class="form-label" for="cu-current">Текущий логин</label>
-      <input id="cu-current" class="form-input" value="${esc(STATE.user?.username||'')}" disabled>
+      <label class="form-label">Текущий логин</label>
+      <input class="form-input" value="${esc(STATE.user?.username||'')}" disabled style="opacity:.5">
     </div>
     <div class="form-group">
-      <label class="form-label" for="cu-new">Новый логин</label>
-      <input id="cu-new" class="form-input" minlength="3" maxlength="120" pattern="[A-Za-z0-9._]+" autocomplete="username" required aria-describedby="cu-login-hint cu-err" placeholder="Только латиница, цифры, точка и _">
-      <div id="cu-login-hint" class="form-hint">От 3 до 120 символов: латиница, цифры, точка и подчёркивание.</div>
+      <label class="form-label">Новый логин</label>
+      <input id="cu-new" class="form-input" placeholder="Только латиница, цифры и _">
     </div>
     <div class="form-group">
-      <label class="form-label" for="cu-password">Текущий пароль</label>
-      <input id="cu-password" class="form-input" type="password" autocomplete="current-password" required aria-describedby="cu-err">
+      <label class="form-label">Текущий пароль</label>
+      <input id="cu-password" class="form-input" type="password" autocomplete="current-password">
     </div>
-    <div id="cu-err" class="status-line" role="alert" aria-live="polite"></div>
-    <button type="button" class="btn-primary" style="width:100%;margin-top:4px" onclick="submitChangeUsername(this)">Сохранить</button>`);
+    <div id="cu-err" class="status-line"></div>
+    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitChangeUsername()">Сохранить</button>`);
 }
 
-async function submitChangeUsername(button) {
+async function submitChangeUsername() {
   const newUsername = document.getElementById('cu-new')?.value?.trim();
   const currentPassword = document.getElementById('cu-password')?.value || '';
   const err = document.getElementById('cu-err');
-  if (!newUsername || !currentPassword) {
-    if (err) { err.textContent='Введите новый логин и текущий пароль'; err.className='status-line status-error'; }
-    document.getElementById(!newUsername ? 'cu-new' : 'cu-password')?.focus();
-    return;
-  }
-  if (!/^[A-Za-z0-9._]{3,120}$/.test(newUsername)) {
-    if (err) { err.textContent='Логин: 3–120 символов, только латиница, цифры, точка и _'; err.className='status-line status-error'; }
-    document.getElementById('cu-new')?.focus();
-    return;
-  }
-  if (button?.disabled) return;
-  if (button) uiSetBusy(button, true);
+  if (!newUsername || !currentPassword) { err.textContent='Введите новый логин и текущий пароль'; err.className='status-line status-error'; return; }
   try {
-    await api.changeOperatorUsername({new_username: newUsername, current_password: currentPassword});
-    closeModal();
-    showToast('Логин изменён. Войдите снова.', 'ok');
-    setTimeout(() => logoutAndReload(), 700);
-  } catch(e) {
-    if (err) {
-      err.textContent = typeof uiErrorMessage === 'function' ? uiErrorMessage(e, 'Не удалось изменить логин') : 'Не удалось изменить логин';
-      err.className='status-line status-error';
-    }
-    if (button?.isConnected) uiSetBusy(button, false);
-  }
+    const data = await api.changeOperatorUsername({new_username: newUsername, current_password: currentPassword});
+    closeModal(); showToast('Логин успешно изменён', 'ok');
+    STATE.user.username = newUsername;
+    setText('side-user', STATE.user.full_name);
+  } catch(e) { err.textContent=e.message; err.className='status-line status-error'; }
 }
 
 /* ══════════════════════════════════════

@@ -122,24 +122,16 @@ python scripts/import_operators.py --file /path/to/операторы.xlsx --gro
 
 ## Сборка фронтенда
 
-`index.html` подключает production-бандлы `js/app.min.js`, `js/api.min.js`,
-`css/styles.min.css` и отдельный файл токенов `css/tokens.css`. Минифицированные
-бандлы собираются детерминированно и коммитятся вместе с source-бандлами
-`js/app.js`, `js/api.js`, `css/styles.css`.
+`index.html` подключает обычные source-bundles: `js/app.js`, `js/api.js`, `css/styles.css`, `css/tokens.css`. Minified artifacts are not committed.
 
 ```bash
 npm install        # one-time setup
-npm run build      # rebuild source bundles and production .min bundles
-npm run check:minified  # verify .min bundles are current and smaller
+npm run build      # rebuild js/app.js, js/api.js, css/styles.css
 ```
 
-После изменения `js/src/**` или `css/src/**` пересоберите бандлы и при релизе
-поднимите версию `?v=...` в `index.html`, чтобы внешние прокси не удерживали
-предыдущие ресурсы.
+После изменения `js/src/**` или `css/src/**` пересоберите бандлы и поднимите версию `?v=...` в `index.html`, чтобы сбросить immutable-кеш статики.
 
-CI на каждом push/PR выполняет production-сборку и frontend-тесты, затем
-сверяет source-бандлы с Git. Перед публикацией дополнительно запускайте
-`npm run check:minified`, чтобы проверить закоммиченные `.min`-артефакты.
+CI на каждом push/PR пересобирает бандлы и сверяет их с закоммиченными `js/app.js`, `js/api.js`, `css/styles.css` — если забыть `npm run build`, проверка `checks` упадёт.
 
 ---
 
@@ -425,8 +417,7 @@ If Node/npm is not installed, the safe fallback bundle command is:
 powershell -ExecutionPolicy Bypass -File scripts/build-frontend.ps1
 ```
 
-The PowerShell fallback rebuilds only source bundles. A release build still requires
-Node.js and `npm run build`, which also creates the committed production `.min` artifacts.
+The fallback rebuilds the same source bundles as `npm run build`. The project no longer commits compressed frontend artifacts.
 
 ### Required checks before publish
 
@@ -435,7 +426,6 @@ ruff check app
 pytest -q
 npm install
 npm run build
-npm run check:minified
 ```
 
 Manual browser smoke-test before release:
@@ -448,3 +438,4 @@ Manual browser smoke-test before release:
 - shop purchases
 - tests
 - dashboard and analytics
+

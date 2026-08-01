@@ -350,7 +350,7 @@ html[data-theme="dark"] #view-analytics .an-filters-card { background: var(--car
   border-radius: 6px;
   background: transparent;
   color: var(--text-secondary);
-  font: 600 12px var(--font-main);
+  font: 600 12px 'Inter', sans-serif;
   cursor: pointer;
   white-space: nowrap;
   transition: color var(--transition-fast), background var(--transition-fast);
@@ -383,7 +383,7 @@ html[data-theme="dark"] #view-analytics .an-filters-card { background: var(--car
   border-radius: 6px;
   background: transparent;
   color: var(--text-secondary);
-  font: 600 12px var(--font-main);
+  font: 600 12px 'Inter', sans-serif;
   text-align: left;
   cursor: pointer;
 }
@@ -399,7 +399,7 @@ html[data-theme="dark"] #view-analytics .an-filters-card { background: var(--car
   border-radius: 8px;
   background: var(--card-bg);
   color: var(--text-primary);
-  font: 600 14px var(--font-main);
+  font: 600 14px 'Inter', sans-serif;
 }
 
 @media (max-width: 767px) {

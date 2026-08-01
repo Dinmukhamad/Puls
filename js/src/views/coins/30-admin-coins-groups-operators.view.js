@@ -46,7 +46,6 @@ function renderUsersPage() {
   const allowedRoles = STATE.user?.role === 'admin'
     ? ['operator','supervisor','manager','admin']
     : ['operator','supervisor'];
-  const mayManageUsers = canManageOperators();
 
   function isDismissed(o) {
     return o.status === 'dismissed' || o.status === 'inactive' || o.status === 'blocked';
@@ -78,7 +77,6 @@ function renderUsersPage() {
   }
 
   function operatorActions(o) {
-    if (!mayManageUsers) return '<span class="cell-muted">—</span>';
     return `<button class="user-open-button" type="button"
       aria-label="Действия пользователя ${esc(o.full_name)}"
       title="Открыть профиль и действия"
@@ -130,10 +128,7 @@ function renderUsersPage() {
             ${list.length ? list.map(o => {
               const dismissed = isDismissed(o);
               const isOp = o.role === 'operator';
-              const rowAttrs = mayManageUsers
-                ? `data-user-row="${o.id}" tabindex="0" aria-label="Открыть профиль ${esc(o.full_name)}"`
-                : '';
-              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}" ${rowAttrs}>
+              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}" data-user-row="${o.id}" tabindex="0" aria-label="Открыть профиль ${esc(o.full_name)}">
                 <td class="name-cell" data-label="Пользователь" data-sticky="start">
                   <div class="user-cell-name" title="${esc(o.full_name)}">${esc(o.full_name)}</div>
                   ${o.email ? `<div class="user-cell-sub">${esc(o.email)}</div>` : ''}
@@ -177,8 +172,10 @@ function renderUsersPage() {
       title: 'Пользователи',
       description: `${ops.length} ${pluralize(ops.length, 'учётная запись', 'учётные записи', 'учётных записей')}`,
       actions: `<button class="btn-outline btn-sm ui-icon-button" onclick="reloadData()" aria-label="Обновить пользователей" title="Обновить">↻</button>
-        ${['manager','admin'].includes(STATE.user?.role) ? '<button class="btn-outline btn-sm" onclick="showWorkNormsModal()">Нормы часов</button>' : ''}
-        ${mayManageUsers ? '<button class="btn-primary btn-sm" onclick="showAddOperatorModal()">+ Новый пользователь</button>' : ''}`,
+        ${['manager','admin'].includes(STATE.user?.role) ? `
+          <button class="btn-outline btn-sm" onclick="showWorkNormsModal()">Нормы часов</button>
+          <button class="btn-primary btn-sm" onclick="showAddOperatorModal()">+ Новый пользователь</button>
+        ` : ''}`,
     })}
 
     <div class="ops-tab-bar" id="ops-tab-bar">${renderTabsAndFilters()}</div>
@@ -220,93 +217,108 @@ function renderUsersPage() {
 
     <div id="ops-table-wrap">${renderTable()}</div>`;
 
-  function refreshUsersTable({ tabs = false } = {}) {
-    if (tabs) el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
-    el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-    el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-    el.querySelector('#ops-filter-chips').innerHTML = appliedFiltersHtml();
-  }
-
-  el.querySelector('#ops-search')?.addEventListener('input', event => {
-    searchVal = event.target.value;
-    savedFilters.search = searchVal;
-    syncUsersUrl();
-    refreshUsersTable();
-  });
-  [
-    ['#ops-group', 'group'],
-    ['#ops-role', 'role'],
-    ['#ops-status', 'status'],
-    ['#ops-level', 'level'],
-  ].forEach(([selector, key]) => {
-    el.querySelector(selector)?.addEventListener('change', event => {
-      const value = event.target.value;
-      if (key === 'group') filterGroup = value;
-      if (key === 'role') filterRole = value;
-      if (key === 'status') filterStatus = value;
-      if (key === 'level') filterLevel = value;
-      savedFilters[key] = value;
-      syncUsersUrl();
-      refreshUsersTable();
-    });
-  });
-
-  // The view root survives partial table renders, so one delegated handler is
-  // enough. Assigning the property also replaces a handler from a full rerender.
-  el.onclick = event => {
-    const tab = event.target.closest('.ops-tab');
-    if (tab && el.contains(tab)) {
-      activeTab = tab.dataset.tab;
-      savedFilters.tab = activeTab;
-      syncUsersUrl();
-      refreshUsersTable({ tabs: true });
-      return;
-    }
-
-    const clear = event.target.closest('[data-clear-user-filter]');
-    if (clear && el.contains(clear)) {
-      const key = clear.dataset.clearUserFilter;
-      if (key === 'all' || key === 'search') searchVal = '';
-      if (key === 'all' || key === 'role') filterRole = '';
-      if (key === 'all' || key === 'group') filterGroup = '';
-      if (key === 'all' || key === 'status') filterStatus = '';
-      if (key === 'all' || key === 'level') filterLevel = '';
-      Object.assign(savedFilters, {
-        search: searchVal, role: filterRole, group: filterGroup,
-        status: filterStatus, level: filterLevel,
+  function rebindOps() {
+    el.querySelectorAll('.ops-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeTab = btn.dataset.tab;
+        savedFilters.tab = activeTab;
+        syncUsersUrl();
+        el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
+        el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+        el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+        rebindOps();
       });
+    });
+    el.querySelector('#ops-search')?.addEventListener('input', e => {
+      searchVal = e.target.value;
+      savedFilters.search = searchVal;
       syncUsersUrl();
-      renderUsersPage();
-      return;
-    }
-
-    const quickCharge = event.target.closest('.quick-charge-btn');
-    if (quickCharge && el.contains(quickCharge)) {
-      navigateTo('manual');
-      const op = STATE.adminOperators.find(item => String(item.id) === String(quickCharge.dataset.id));
-      const hidden = document.getElementById('manual-op-id');
-      const display = document.getElementById('op-selected-display');
-      const name = document.getElementById('op-selected-name');
-      if (op && hidden && display && name) {
-        hidden.value = op.id;
-        name.textContent = op.full_name;
-        display.classList.add('visible');
-      }
-      return;
-    }
-
-    const row = event.target.closest('[data-user-row]');
-    if (row && el.contains(row) && !event.target.closest('button, a, input, select')) {
-      showUserManagementModal(Number(row.dataset.userRow));
-    }
-  };
-  el.onkeydown = event => {
-    const row = event.target.closest('[data-user-row]');
-    if (row && event.target === row && (event.key === 'Enter' || event.key === ' ')) {
-      event.preventDefault();
-      showUserManagementModal(Number(row.dataset.userRow));
-    }
-  };
+      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+      bindOpsActions();
+    });
+    el.querySelector('#ops-group')?.addEventListener('change', e => {
+      filterGroup = e.target.value;
+      savedFilters.group = filterGroup;
+      syncUsersUrl();
+      el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
+      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+      rebindOps();
+    });
+    el.querySelector('#ops-role')?.addEventListener('change', e => {
+      filterRole = e.target.value;
+      savedFilters.role = filterRole;
+      syncUsersUrl();
+      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+      bindOpsActions();
+    });
+    el.querySelector('#ops-status')?.addEventListener('change', e => {
+      filterStatus = e.target.value;
+      savedFilters.status = filterStatus;
+      syncUsersUrl();
+      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+      bindOpsActions();
+    });
+    el.querySelector('#ops-level')?.addEventListener('change', e => {
+      filterLevel = e.target.value;
+      savedFilters.level = filterLevel;
+      syncUsersUrl();
+      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+      bindOpsActions();
+    });
+    bindOpsActions();
+    el.querySelector('#ops-filter-chips').innerHTML = appliedFiltersHtml();
+    el.querySelectorAll('[data-clear-user-filter]').forEach(button => {
+      button.addEventListener('click', () => {
+        const key = button.dataset.clearUserFilter;
+        if (key === 'all' || key === 'search') searchVal = '';
+        if (key === 'all' || key === 'role') filterRole = '';
+        if (key === 'all' || key === 'group') filterGroup = '';
+        if (key === 'all' || key === 'status') filterStatus = '';
+        if (key === 'all' || key === 'level') filterLevel = '';
+        Object.assign(savedFilters, {
+          search: searchVal, role: filterRole, group: filterGroup,
+          status: filterStatus, level: filterLevel,
+        });
+        syncUsersUrl();
+        renderUsersPage();
+      });
+    });
+  }
+  rebindOps();
+  function bindOpsActions() {
+    el.querySelectorAll('[data-user-row]').forEach(row => {
+      const open = () => showUserManagementModal(Number(row.dataset.userRow));
+      row.addEventListener('click', event => {
+        if (!event.target.closest('button, a, input, select')) open();
+      });
+      row.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          open();
+        }
+      });
+    });
+    el.querySelectorAll('.quick-charge-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        navigateTo('manual');
+        const op = STATE.adminOperators.find(item => String(item.id) === String(btn.dataset.id));
+        const hidden = document.getElementById('manual-op-id');
+        const display = document.getElementById('op-selected-display');
+        const name = document.getElementById('op-selected-name');
+        if (op && hidden && display && name) {
+          hidden.value = op.id;
+          name.textContent = op.full_name;
+          display.classList.add('visible');
+        }
+      });
+    });
+  }
+  bindOpsActions();
 }
 
 /* ══════════════════════════════════════
@@ -1800,14 +1812,6 @@ async function showOperatorHistoryModal(id) {
 /* ══════════════════════════════════════
    MODALS
 ══════════════════════════════════════ */
-let _modalReturnFocus = null;
-
-function modalFocusableElements(container) {
-  return Array.from(container?.querySelectorAll(
-    'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  ) || []).filter(node => !node.hidden && node.getClientRects().length > 0);
-}
-
 function showModal(html, options = {}) {
   let overlay = document.getElementById('modal-overlay');
   if (!overlay) {
@@ -1816,64 +1820,18 @@ function showModal(html, options = {}) {
     overlay.className = 'modal-overlay';
     document.body.appendChild(overlay);
   }
-  _modalReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const forced = Boolean(options.force);
   overlay.dataset.force = forced ? 'true' : 'false';
   const extraClass = options.className ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '') : '';
-  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}" role="dialog" aria-modal="true">${html}${forced ? '' : `<button class="modal-close" type="button" data-modal-close aria-label="Закрыть окно"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>`}</div>`;
+  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
   overlay.style.display = 'flex';
-  document.body.classList.add('modal-open');
-  overlay.onclick = e => {
-    if ((e.target === overlay || e.target.closest('[data-modal-close]')) && !forced) closeModal();
-  };
-  overlay.onkeydown = event => {
-    if (event.key === 'Escape' && !forced) {
-      event.preventDefault();
-      closeModal();
-      return;
-    }
-    if (event.key !== 'Tab') return;
-    const modal = overlay.querySelector('.modal');
-    const focusable = modalFocusableElements(modal);
-    if (!focusable.length) {
-      event.preventDefault();
-      modal?.focus();
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-  requestAnimationFrame(() => {
-    const modal = overlay.querySelector('.modal');
-    const title = modal?.querySelector('.modal-title, h1, h2, h3');
-    if (title && !title.id) title.id = `modal-title-${Date.now()}`;
-    if (title?.id) modal?.setAttribute('aria-labelledby', title.id);
-    const focusable = modalFocusableElements(modal);
-    (focusable[0] || modal)?.focus?.({ preventScroll: true });
-    if (modal && !focusable.length) modal.tabIndex = -1;
-  });
+  overlay.onclick = e => { if (e.target === overlay && !forced) closeModal(); };
 }
 function closeModal(force = false) {
   const o = document.getElementById('modal-overlay');
   if (o?.dataset.force === 'true' && !force) return;
-  if (o) {
-    o.style.display = 'none';
-    o.innerHTML = '';
-    o.onclick = null;
-    o.onkeydown = null;
-  }
-  document.body.classList.remove('modal-open');
+  if (o) o.style.display = 'none';
   if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
-  const returnTarget = _modalReturnFocus;
-  _modalReturnFocus = null;
-  returnTarget?.focus?.({ preventScroll: true });
 }
 
 
@@ -2099,7 +2057,6 @@ function updateModal(html) {
 }
 
 async function showAddOperatorModal() {
-  if (!canManageOperators()) return showToast('Недостаточно прав для создания пользователей', 'error');
   let groups = [];
   let groupsError = '';
   try {
@@ -2229,7 +2186,6 @@ async function showAddOperatorModal() {
 }
 
 async function submitAddOperator() {
-  if (!canManageOperators()) return showToast('Недостаточно прав для создания пользователей', 'error');
   const name     = document.getElementById('new-op-name')?.value?.trim();
   const login    = document.getElementById('new-user-login')?.value?.trim();
   const groupId  = document.getElementById('new-op-group-id')?.value;
@@ -2307,7 +2263,6 @@ async function submitAddOperator() {
 }
 
 async function deactivateUserUi(userId) {
-  if (!canManageOperators()) return showToast('Недостаточно прав для изменения пользователей', 'error');
   const user = STATE.users.find(u => u.id === userId);
   const confirmed = await uiConfirmAction({
     title: 'Деактивировать пользователя?',
@@ -2343,7 +2298,6 @@ function setUserManagementTab(tab) {
 }
 
 async function showUserManagementModal(userId) {
-  if (!canManageOperators()) return showToast('Недостаточно прав для изменения пользователей', 'error');
   const user = STATE.users.find(item => item.id === userId);
   if (!user) return showToast('Пользователь не найден', 'error');
 
@@ -2493,7 +2447,6 @@ async function showUserManagementModal(userId) {
 }
 
 async function submitUserManagement(userId) {
-  if (!canManageOperators()) return showToast('Недостаточно прав для изменения пользователей', 'error');
   const user = STATE.users.find(item => item.id === userId);
   const error = document.getElementById('manage-user-error');
   const button = document.getElementById('manage-user-save');
@@ -2566,7 +2519,6 @@ async function submitUserManagement(userId) {
 }
 
 function showUserResetPasswordModal(userId) {
-  if (!canManageOperators()) return showToast('Недостаточно прав для сброса пароля', 'error');
   const user = STATE.users.find(u => u.id === userId);
   showModal(`
     <h3 class="modal-title">Сбросить пароль</h3>
@@ -2581,7 +2533,6 @@ function showUserResetPasswordModal(userId) {
 }
 
 async function submitUserResetPassword(userId) {
-  if (!canManageOperators()) return showToast('Недостаточно прав для сброса пароля', 'error');
   const password = document.getElementById('reset-user-password')?.value || '';
   const err = document.getElementById('reset-user-password-error');
   if (password.length < 8 || !/[A-Za-zА-Яа-я]/.test(password) || !/\d/.test(password)) {
@@ -2808,10 +2759,10 @@ function exportHistoryCSV() {
     fmtDate(t.created_at), t.operator_name, t.group_name, t.type,
     t.amount, t.comment, t.created_by_name||'Система',
   ]);
-  downloadCoinHistoryCsv([header, ...rows], 'pulse_history');
+  downloadCSV([header, ...rows], 'pulse_history');
 }
 
-function downloadCoinHistoryCsv(rows, name) {
+function downloadCSV(rows, name) {
   const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
@@ -2930,22 +2881,14 @@ async function logoutAndReload() {
   });
   // Очищаем sessionStorage (SWR-кеш)
   sessionStorage.clear();
-  localStorage.removeItem('pulse-last-view');
-  document.querySelectorAll('input[type="password"]').forEach(input => { input.value = ''; });
-  clearSessionUiState();
-  history.replaceState(null, '', '/');
+  STATE.user = null;
   location.reload();
 }
 
 function showAccountSettingsModal() {
   const u = STATE.user;
   if (!u) return;
-  const accountRoleLabel = { operator:'Оператор', supervisor:'Супервайзер', manager:'Руководитель', admin:'Администратор' }[u.role] || u.role;
-  const groupName = STATE.myOperator?.group_name
-    || STATE.myOperator?.group?.name
-    || STATE.users.find(item => item.id === u.id)?.group_name
-    || 'Не назначена';
-  const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+  const roleLabel = { operator:'Оператор', supervisor:'Супервайзер', manager:'Руководитель', admin:'Администратор' }[u.role] || u.role;
 
   showModal(`
     <div class="acc-modal">
@@ -2955,22 +2898,8 @@ function showAccountSettingsModal() {
         <div class="acc-avatar">${esc((u.full_name||'?')[0].toUpperCase())}</div>
         <div>
           <div class="acc-name">${esc(u.full_name || '—')}</div>
-          <div class="acc-role">${esc(accountRoleLabel)}</div>
-        </div>
-      </div>
-
-      <dl class="account-profile-details">
-        <div><dt>ФИО</dt><dd>${esc(u.full_name || 'Не указано')}</dd></div>
-        <div><dt>Роль</dt><dd>${esc(accountRoleLabel)}</dd></div>
-        <div><dt>Группа</dt><dd>${esc(groupName)}</dd></div>
-        <div><dt>Логин</dt><dd>${esc(u.username || 'Не указан')}</dd></div>
-      </dl>
-
-      <div class="acc-section account-theme-section">
-        <div class="acc-section-title">Оформление</div>
-        <div class="segmented-control" role="group" aria-label="Тема оформления">
-          <button type="button" data-account-theme="light" class="${currentTheme === 'light' ? 'active' : ''}">Светлая</button>
-          <button type="button" data-account-theme="dark" class="${currentTheme === 'dark' ? 'active' : ''}">Тёмная</button>
+          <div class="acc-role">${esc(roleLabel)}</div>
+          <div class="acc-login">Логин: <b>${esc(u.username || '—')}</b></div>
         </div>
       </div>
 
@@ -2980,14 +2909,14 @@ function showAccountSettingsModal() {
       <div class="acc-section">
         <div class="acc-section-title">Изменить логин</div>
         <div class="form-group">
-          <label class="form-label" for="acc-new-login">Новый логин</label>
+          <label class="form-label">Новый логин</label>
           <input id="acc-new-login" class="form-input" type="text"
             placeholder="Только буквы, цифры, точка, _"
             value="${esc(u.username || '')}">
           <div id="acc-login-hint" class="acc-field-hint"></div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="acc-login-pwd">Текущий пароль</label>
+          <label class="form-label">Текущий пароль</label>
           <input id="acc-login-pwd" class="form-input" type="password" placeholder="Подтвердите текущий пароль">
           <div id="acc-login-err" class="acc-field-err"></div>
         </div>
@@ -3000,39 +2929,23 @@ function showAccountSettingsModal() {
       <div class="acc-section">
         <div class="acc-section-title">Изменить пароль</div>
         <div class="form-group">
-          <label class="form-label" for="acc-cur-pwd">Текущий пароль</label>
+          <label class="form-label">Текущий пароль</label>
           <input id="acc-cur-pwd" class="form-input" type="password" placeholder="Текущий пароль">
         </div>
         <div class="form-group">
-          <label class="form-label" for="acc-new-pwd">Новый пароль</label>
+          <label class="form-label">Новый пароль</label>
           <input id="acc-new-pwd" class="form-input" type="password" placeholder="Минимум 8 символов">
           <div id="acc-pwd-hint" class="acc-field-hint"></div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="acc-confirm-pwd">Повторите новый пароль</label>
+          <label class="form-label">Повторите новый пароль</label>
           <input id="acc-confirm-pwd" class="form-input" type="password" placeholder="Повторите пароль">
           <div id="acc-pwd-err" class="acc-field-err"></div>
         </div>
         <button class="acc-btn" id="acc-save-pwd-btn" onclick="submitChangePassword()">Сохранить пароль</button>
       </div>
-
-      <div class="acc-divider"></div>
-      <button class="btn-outline account-logout-action" type="button" data-account-logout>Выйти из аккаунта</button>
     </div>
   `);
-
-  document.querySelectorAll('[data-account-theme]').forEach(button => {
-    button.addEventListener('click', () => {
-      const theme = button.dataset.accountTheme;
-      localStorage.setItem('pulse-theme', theme);
-      applyTheme(theme, 'manual');
-      document.querySelectorAll('[data-account-theme]').forEach(item => item.classList.toggle('active', item === button));
-    });
-  });
-  document.querySelector('[data-account-logout]')?.addEventListener('click', () => {
-    closeModal();
-    logoutAndReload();
-  });
 
   // Live validation for login
   document.getElementById('acc-new-login')?.addEventListener('input', function() {
