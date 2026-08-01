@@ -356,18 +356,40 @@ function initTheme() {
    NAV
 ══════════════════════════════════════ */
 function initNav() {
-  initAppShell();
+  const sideNav = document.querySelector('.side-nav');
+  if (sideNav && !sideNav.id) sideNav.id = 'primary-navigation';
+  if (sideNav && !document.getElementById('mobile-nav-toggle')) {
+    const mobileToggle = document.createElement('button');
+    mobileToggle.id = 'mobile-nav-toggle';
+    mobileToggle.className = 'mobile-nav-toggle';
+    mobileToggle.type = 'button';
+    mobileToggle.setAttribute('aria-controls', sideNav.id);
+    mobileToggle.setAttribute('aria-expanded', 'false');
+    mobileToggle.setAttribute('aria-label', 'Открыть навигацию');
+    mobileToggle.innerHTML = '<span aria-hidden="true">☰</span><b>Puls.</b>';
 
-  // Делегирование: работает и для пунктов сайдбара, и для таб-бара,
-  // который собирается уже после того, как стала известна роль.
-  document.addEventListener('click', e => {
-    const link = e.target.closest('[data-nav-target]');
-    if (!link) return;
-    e.preventDefault();
-    setShellNav(false);
-    navigateTo(link.dataset.navTarget);
+    const backdrop = document.createElement('button');
+    backdrop.className = 'mobile-nav-backdrop';
+    backdrop.type = 'button';
+    backdrop.setAttribute('aria-label', 'Закрыть навигацию');
+
+    const setMobileNav = open => {
+      document.body.classList.toggle('mobile-nav-open', open);
+      mobileToggle.setAttribute('aria-expanded', String(open));
+      mobileToggle.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию');
+    };
+    mobileToggle.addEventListener('click', () => setMobileNav(!document.body.classList.contains('mobile-nav-open')));
+    backdrop.addEventListener('click', () => setMobileNav(false));
+    document.body.append(mobileToggle, backdrop);
+  }
+  document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      document.body.classList.remove('mobile-nav-open');
+      document.getElementById('mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
+      navigateTo(link.dataset.navTarget);
+    });
   });
-
   const toggle = document.getElementById('side-nav-toggle');
   if (toggle) {
     toggle.addEventListener('click', () => {
@@ -437,8 +459,6 @@ function navigateTo(view, options = {}) {
     const target = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
     l.classList.toggle('active', target === view);
   });
-  syncTopbarTitle(view);
-  syncTabbarActive(view);
   const el = document.getElementById(`view-${view}`);
   if (el) el.classList.add('active');
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -798,7 +818,6 @@ function renderSidebar(role) {
     const t = link.dataset.navTarget;
     link.style.display = allowedViews.has(t) ? '' : 'none';
   });
-  buildTabbar(role);
 }
 
 /* ══════════════════════════════════════

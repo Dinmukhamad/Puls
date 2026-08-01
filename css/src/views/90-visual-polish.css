@@ -5,6 +5,44 @@
   outline-offset: 2px;
 }
 
+.btn-primary,
+.btn-secondary,
+.btn-outline,
+.btn-ghost,
+.btn-danger {
+  min-height: 36px;
+  border-radius: 8px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  border: 1px solid var(--accent-primary);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(2, 132, 199, .16);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-outline:disabled,
+.btn-ghost:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+  box-shadow: none;
+}
+
+.btn-primary.create-user-submit:disabled {
+  background: color-mix(in srgb, var(--accent-primary) 42%, var(--bg-muted));
+  border-color: transparent;
+  color: rgba(255, 255, 255, .92);
+}
+
 .form-grid,
 .form-grid-2 {
   display: grid;
@@ -19,7 +57,17 @@
   min-width: 0;
 }
 
-/* .form-label — css/src/views/zz-legacy-controls.css */
+.form-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
 
 .form-input,
 .form-select,
@@ -91,8 +139,8 @@ textarea:focus {
 }
 
 .table-wrap {
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
   border-color: var(--border-default);
   background: var(--card-bg);
   scrollbar-gutter: stable;
@@ -424,7 +472,60 @@ body {
   margin-inline: auto;
 }
 
-/* Сайдбар описан в css/src/layout/10-app-shell.css. */
+.side-nav {
+  width: var(--nav-w);
+  padding: 18px 12px 22px;
+  background: var(--sidebar-bg);
+  border-right-color: var(--sidebar-border);
+  transition: width var(--transition-default), transform var(--transition-default);
+}
+
+.side-nav-header {
+  margin-bottom: 24px;
+}
+
+.side-nav-brand {
+  color: var(--sidebar-text-active);
+  letter-spacing: 0;
+}
+
+.side-nav-brand em,
+.section-kicker,
+.accent-text {
+  color: var(--accent-primary);
+}
+
+.side-nav-link {
+  min-height: 42px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--sidebar-text);
+}
+
+.side-nav-link:hover {
+  background: var(--sidebar-hover-bg);
+  color: var(--sidebar-text-active);
+}
+
+.side-nav-link:hover svg {
+  stroke: var(--sidebar-text-active);
+}
+
+.side-nav-link.active {
+  background: var(--sidebar-active-bg) !important;
+  color: #fff !important;
+  box-shadow: 0 10px 24px rgba(22, 139, 255, .22);
+}
+
+.side-nav-link.active svg {
+  stroke: #fff !important;
+}
+
+.side-nav-toggle,
+.theme-toggle,
+.side-gear-btn {
+  border-radius: 10px;
+}
 
 .view-header {
   align-items: center;
@@ -530,10 +631,93 @@ body {
   box-shadow: var(--shadow-card);
 }
 
-/* Табличные цифры KPI — css/src/views/zz-legacy-controls.css */
+.kpi-value,
+.an-kpi-val,
+.pr-stat-val,
+.wheel-stat-num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
 
-/* Кнопки, поля, метки и вкладки описаны в
-   css/src/views/zz-legacy-controls.css. */
+.btn-primary,
+.btn-outline,
+.btn-ghost,
+.btn-danger,
+.btn-ok,
+.btn-secondary,
+.filter-tab,
+.analytics-tab,
+.race-seg-btn,
+.tab-btn {
+  min-height: 40px;
+  border-radius: 10px;
+  letter-spacing: 0;
+}
+
+.btn-primary {
+  background: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+  box-shadow: 0 8px 18px rgba(22, 139, 255, .16);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover) !important;
+  border-color: var(--accent-primary-hover) !important;
+}
+
+.btn-outline,
+.btn-ghost {
+  background: var(--card-bg);
+  border-color: var(--border-default);
+  color: var(--text-secondary);
+}
+
+.btn-outline:hover,
+.btn-ghost:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-secondary-soft);
+}
+
+.form-input,
+.form-select,
+input,
+select,
+textarea {
+  min-height: 42px;
+  border-radius: 10px;
+  border-color: var(--border-default);
+  background: var(--input-bg);
+  color: var(--text-primary);
+}
+
+.form-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  letter-spacing: .045em;
+}
+
+.filter-tabs,
+.analytics-tabs,
+.race-segmented {
+  max-width: 100%;
+  width: fit-content;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+}
+
+.filter-tab.active,
+.analytics-tab.active,
+.race-seg-btn.active,
+.tab-btn.active {
+  background: var(--accent-primary) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
 
 .table-wrap,
 .rating-table-wrap,
@@ -542,7 +726,7 @@ body {
 .wheel-rules-table-wrap,
 .wheel-prizes-wrap {
   max-width: 100%;
-  overflow: auto;
+  overflow: auto !important;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-default);
   background: var(--card-bg);
@@ -673,14 +857,109 @@ html[data-theme="dark"] .level-settings-shell {
   box-shadow: var(--shadow-sm);
 }
 
-/* Адаптив навигации (свёрнутый сайдбар, планшет, мобильный) описан
-   в css/src/layout/10-app-shell.css. Здесь остаётся только контент. */
+@media (min-width: 1280px) {
+  body.nav-collapsed {
+    padding-left: var(--nav-w-collapsed);
+  }
+
+  body.nav-collapsed .side-nav {
+    width: var(--nav-w-collapsed);
+  }
+
+  body.nav-collapsed .side-nav-brand,
+  body.nav-collapsed .side-nav-link span,
+  body.nav-collapsed .side-nav-section-label,
+  body.nav-collapsed .side-nav-meta span,
+  body.nav-collapsed .side-user-info {
+    display: none;
+  }
+
+  body.nav-collapsed .side-nav-logo,
+  body.nav-collapsed .side-nav-link {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 1279px) and (min-width: 1024px) {
+  :root {
+    --nav-w: var(--nav-w-collapsed);
+  }
+
+  .side-nav {
+    width: var(--nav-w-collapsed);
+    padding-inline: 10px;
+  }
+
+  .side-nav-brand,
+  .side-nav-link span,
+  .side-nav-section-label,
+  .side-user-info,
+  .side-nav-meta span {
+    display: none;
+  }
+
+  .side-nav-logo,
+  .side-nav-link {
+    justify-content: center;
+  }
+
+  .container {
+    padding-inline: 22px;
+  }
+}
 
 @media (max-width: 1023px) {
-  .container { width: 100%; }
+  body {
+    padding-left: 0;
+  }
+
+  .container {
+    width: 100%;
+    padding: 18px 16px 88px;
+  }
+
+  .side-nav {
+    inset: auto 0 0 0;
+    width: 100%;
+    height: 64px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-right: 0;
+    border-top: 1px solid var(--sidebar-border);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .side-nav-header,
+  .side-nav-logo,
+  .side-nav-separator,
+  .side-nav-section-label,
+  .side-nav-meta {
+    display: none;
+  }
+
+  .side-nav-group {
+    flex-direction: row;
+    gap: 6px;
+  }
+
+  .side-nav-link {
+    flex: 0 0 auto;
+    min-width: 46px;
+    justify-content: center;
+  }
+
+  .side-nav-link span {
+    display: none;
+  }
+
   .kpi-grid,
   .pr-stats-row,
-  .an-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .an-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 767px) {
@@ -755,7 +1034,16 @@ html[data-theme="dark"] .level-settings-shell {
   }
 }
 
-/* Глобальный guard reduced-motion — css/src/views/zzz-a11y-motion.css. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .001ms !important;
+  }
+}
 
 /* Operator cabinet: compact, polished account dashboard. */
 #view-cabinet {
