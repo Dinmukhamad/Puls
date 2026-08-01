@@ -3,7 +3,7 @@
    Design System v2.0
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+/* Веб-шрифты не грузятся: базовый стек системный, см. --font-main. */
 
 /* ═══════════════════════════════════════════════════
    ВАРИАНТ Б — Светлый бежево-белый
@@ -79,7 +79,7 @@ body {
   width: 36px; height: 36px;
 }
 .side-nav-brand {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-brand);
   font-size: 22px; font-weight: 800;
   color: #F8FAFC; letter-spacing: -.03em;
   white-space: nowrap;
@@ -239,14 +239,14 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   width: 44px; height: 44px;
 }
 .auth-visual-name {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-brand);
   font-size: 28px; font-weight: 800;
   color: #F8FAFC; letter-spacing: -.03em;
 }
 .auth-visual-name em { color: var(--accent); font-style: normal; }
 
 .auth-visual h1 {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-brand);
   font-size: clamp(32px, 4.5vw, 56px);
   font-weight: 800; letter-spacing: -.03em;
   line-height: 1.02; color: #fff;
@@ -282,7 +282,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   text-transform: uppercase; color: var(--accent);
 }
 .auth-form h2 {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-brand);
   font-size: 28px; font-weight: 800;
   letter-spacing: -.03em; color: var(--tx); margin: 0;
 }
@@ -323,7 +323,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 9px 16px; border: 1px solid var(--border); border-radius: 10px;
   background: transparent; color: var(--tx2);
-  font: 500 13px 'Inter', sans-serif;
+  font: 500 13px var(--font-main);
   cursor: pointer; transition: border-color var(--t), color var(--t), background var(--t);
   white-space: nowrap;
 }
@@ -333,7 +333,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: inline-flex; align-items: center; justify-content: center;
   padding: 8px 14px; border: none; border-radius: 10px;
   background: var(--surface-2); color: var(--tx2);
-  font: 500 12px 'Inter', sans-serif; cursor: pointer;
+  font: 500 12px var(--font-main); cursor: pointer;
   transition: background var(--t), color var(--t);
 }
 .btn-ghost:hover { background: var(--surface-3); color: var(--tx); }
@@ -343,7 +343,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .btn-icon {
   width: 34px; height: 34px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  font: 800 15px 'Inter', sans-serif;
+  font: 800 15px var(--font-main);
   line-height: 1; flex: 0 0 auto;
 }
 .operator-add-btn { font-size: 20px; }
@@ -359,7 +359,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
 .btn-link {
   background: none; border: none; padding: 0;
-  color: var(--accent); font: 500 13px 'Inter', sans-serif;
+  color: var(--accent); font: 500 13px var(--font-main);
   cursor: pointer;
 }
 .btn-link:hover { text-decoration: underline; }
@@ -422,7 +422,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   margin-bottom: 6px;
 }
 .section-title {
-  font-family: 'Syne', sans-serif;
+  font-family: var(--font-brand);
   font-size: clamp(22px, 2.8vw, 32px);
   font-weight: 800; letter-spacing: -.03em;
   color: var(--tx); line-height: 1.1;
@@ -717,7 +717,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .filter-tab {
   padding: 6px 14px; border-radius: 7px; border: none;
   background: transparent; color: var(--tx3);
-  font: 600 12px 'Inter', sans-serif; cursor: pointer;
+  font: 600 12px var(--font-main); cursor: pointer;
   display: flex; align-items: center; gap: 6px;
   transition: background var(--t), color var(--t);
 }
@@ -1001,7 +1001,7 @@ body.must-change-password .side-nav-link[data-nav-target] {
   padding: 8px 16px;
   border: none;
   background: none;
-  font: 500 13px 'Inter', sans-serif;
+  font: 500 13px var(--font-main);
   color: var(--tx3);
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -1027,7 +1027,7 @@ body.must-change-password .side-nav-link[data-nav-target] {
   height: 20px;
   padding: 0 6px;
   border-radius: 20px;
-  font: 600 11px 'Inter', sans-serif;
+  font: 600 11px var(--font-main);
   background: var(--surface-3);
   color: var(--tx3);
   transition: background var(--t), color var(--t);

@@ -130,3 +130,16 @@ test("универсальный transition на * не вернулся", () =>
     }
   }
 });
+
+test("веб-шрифты не подключаются: ни @import, ни ссылок на снятые семейства", () => {
+  for (const file of cssFiles()) {
+    const css = stripComments(readFileSync(file, "utf8"));
+    assert.ok(!css.includes("@import"), `${file}: @import блокирует рендер`);
+    for (const family of ["'Inter'", "'Syne'", "Plus Jakarta"]) {
+      assert.ok(!css.includes(family),
+        `${file}: ссылка на ${family} — семейство больше не грузится, браузер уйдёт в sans-serif`);
+    }
+  }
+  const html = readFileSync("index.html", "utf8");
+  assert.ok(!html.includes("fonts.googleapis.com"), "index.html: ссылка на Google Fonts");
+});
