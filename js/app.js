@@ -924,8 +924,8 @@ const TABBAR_MAX_PRIMARY = 4;
    берём подпись из соответствующей ссылки сайдбара. */
 const VIEW_TITLES = {
   summary: 'Сводка',
+  operators: 'Пользователи',
   analytics: 'Аналитика',
-  operators: 'Операторы',
   groups: 'Группы',
   coins: 'Коины',
   shop: 'Магазин',
@@ -944,9 +944,11 @@ function shellNavLink(view) {
 }
 
 function shellViewTitle(view) {
-  if (VIEW_TITLES[view]) return VIEW_TITLES[view];
+  // Источник правды — подпись в сайдбаре: она уже видна пользователю,
+  // и заголовок топбара не может с ней разойтись. VIEW_TITLES —
+  // только запасной вариант, если ссылки в разметке ещё нет.
   const label = shellNavLink(view)?.querySelector('span')?.textContent?.trim();
-  return label || 'Puls';
+  return label || VIEW_TITLES[view] || 'Puls';
 }
 
 /* Заголовок топбара. Вызывается из navigateTo() после смены раздела. */

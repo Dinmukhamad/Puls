@@ -1320,7 +1320,9 @@ body.side-nav-collapsed .side-nav-toggle { transform: rotate(180deg); }
   white-space: nowrap;
 }
 .app-topbar__actions { display: flex; align-items: center; gap: var(--space-1); flex: none; }
-.app-topbar__menu { display: none; }
+/* Специфичность (0,2,0): слой примитивов грузится после каркаса, и одиночный
+   класс .ui-icon-btn{display:inline-flex} иначе перебивал бы это правило. */
+.app-topbar .app-topbar__menu { display: none; }
 
 /* Кнопка-бургер и колокольчик используют примитив .ui-icon-btn.
    Бейдж уведомлений позиционируется относительно кнопки. */
@@ -1473,7 +1475,7 @@ html[data-theme="dark"]  .theme-toggle .icon-moon { display: none; }
     padding-left: max(var(--content-pad), var(--safe-left));
     padding-right: max(var(--content-pad), var(--safe-right));
   }
-  .app-topbar__menu { display: inline-flex; }
+  .app-topbar .app-topbar__menu { display: inline-flex; }
   /* Топбар зафиксирован — компенсируем его высоту отступом контента */
   main.container { padding-top: calc(var(--topbar-h) + var(--safe-top) + var(--space-4)); }
 

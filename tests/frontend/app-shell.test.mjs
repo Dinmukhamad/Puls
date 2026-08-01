@@ -151,3 +151,25 @@ test("мобильный каркас учитывает safe-area", () => {
     assert.ok(css.includes(token), `${token} используется в каркасе`);
   }
 });
+
+test("бургер скрыт на десктопе и не перебивается слоем примитивов", () => {
+  const shell = readFileSync("css/src/layout/10-app-shell.css", "utf8");
+  // Одиночный класс проиграл бы .ui-icon-btn из components/, который
+  // грузится позже. Правило обязано иметь специфичность выше (0,1,0).
+  assert.ok(shell.includes(".app-topbar .app-topbar__menu { display: none; }"),
+    "правило скрытия бургера должно быть на составном селекторе");
+  assert.ok(!/^\.app-topbar__menu\s*\{\s*display:\s*none/m.test(shell),
+    "одиночный .app-topbar__menu{display:none} снова проиграет каскаду");
+});
+
+test("заголовок топбара совпадает с подписью раздела в сайдбаре", () => {
+  const { doc, shell } = bootShell();
+  for (const link of doc.querySelectorAll(".side-nav-link[data-nav-target]")) {
+    const view = link.dataset.navTarget;
+    const sidebarLabel = link.querySelector("span")?.textContent.trim();
+    if (!sidebarLabel) continue;
+    shell.syncTopbarTitle(view);
+    assert.equal(doc.getElementById("app-topbar-title").textContent, sidebarLabel,
+      `раздел ${view}: топбар и сайдбар называют его по-разному`);
+  }
+});
