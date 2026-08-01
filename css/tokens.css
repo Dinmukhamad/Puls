@@ -1,176 +1,214 @@
-/* ═══════════════════════════════════════════════════════════
-   PULS DESIGN TOKENS — Variant 2: Minimal gamification
-   Dark sidebar, light canvas, measured blue/violet/cyan accents.
-═══════════════════════════════════════════════════════════ */
-
+/* Puls design tokens. This file is loaded before the generated component CSS. */
 :root {
-  --radius-sm:  8px;
-  --radius-md:  10px;
-  --radius-lg:  14px;
-  --radius-xl:  20px;
-
-  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;
-  --space-4: 16px;  --space-5: 20px;  --space-6: 24px;
-  --space-8: 32px;
-
-  --font-main:  "Plus Jakarta Sans", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-brand: "Plus Jakarta Sans", Inter, sans-serif;
-
-  --transition-fast:    0.14s ease;
-  --transition-default: 0.22s ease;
-  --ease-standard: cubic-bezier(.2, .8, .2, 1);
-
-  --nav-w: 236px;
-  --nav-w-collapsed: 76px;
-  --content-max: 1440px;
-  --content-pad: clamp(20px, 2.2vw, 32px);
-}
-
-/* ── Light theme ── */
-:root,
-html[data-theme="light"] {
   color-scheme: light;
 
-  /* Page */
-  --bg-page:          #F8FAFC;
-  --bg-surface:       #FFFFFF;
-  --bg-surface-hover: #F8FAFC;
-  --bg-muted:         #E2E8F0;
-  --bg-subtle:        #F8FAFC;
+  /* Typography */
+  --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-brand: var(--font-main);
+  --font-size-caption: 12px;
+  --font-size-callout: 13px;
+  --font-size-body: 15px;
+  --font-size-headline: 17px;
+  --font-size-section: 20px;
+  --font-size-title: 28px;
+  --font-size-large-title: 34px;
+  --line-caption: 1.35;
+  --line-body: 1.5;
+  --line-title: 1.18;
 
-  /* Text */
-  --text-primary:   #0F172A;
-  --text-secondary: #64748B;
-  --text-muted:     #94A3B8;
-  --text-inverse:   #FFFFFF;
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
 
-  /* Borders */
-  --border-default: #DCE5F0;
-  --border-soft:    #EAF0F7;
-  --border-strong:  #94A3B8;
+  /* Shape and controls */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-xl: 16px;
+  --control-height-sm: 36px;
+  --control-height: 44px;
+  --control-height-lg: 50px;
+
+  /* Layout */
+  --nav-w: 232px;
+  --nav-w-collapsed: 72px;
+  --topbar-h: 64px;
+  --content-max: 1440px;
+  --content-pad: 28px;
+
+  /* Motion and stacking */
+  --duration-fast: 150ms;
+  --duration-default: 220ms;
+  --duration-overlay: 280ms;
+  --ease-standard: cubic-bezier(.2, .8, .2, 1);
+  --transition-fast: var(--duration-fast) var(--ease-standard);
+  --transition-default: var(--duration-default) var(--ease-standard);
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-nav: 50;
+  --z-overlay: 100;
+  --z-modal: 110;
+  --z-toast: 120;
+
+  /* iOS-inspired light surfaces */
+  --bg-page: #f2f2f7;
+  --bg-surface: #ffffff;
+  --bg-surface-hover: #f7f7fa;
+  --bg-muted: #e9e9ee;
+  --bg-subtle: #f7f7fa;
+  --text-primary: #1c1c1e;
+  --text-secondary: #636366;
+  --text-muted: #8e8e93;
+  --text-inverse: #ffffff;
+  --border-default: rgba(60, 60, 67, .18);
+  --border-soft: rgba(60, 60, 67, .10);
+  --border-strong: rgba(60, 60, 67, .34);
 
   /* Accents */
-  --accent-primary:       #4F46E5;
-  --accent-primary-hover: #4338CA;
-  --accent-secondary:     #7C3AED;
-  --accent-secondary-soft:#EEF2FF;
-  --accent-violet:        #7C3AED;
-  --accent-violet-soft:   #F3E8FF;
-  --accent-cyan:          #24C7E8;
-  --accent-cyan-soft:     #E7FAFE;
-  --primary-gradient:     linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-  --focus-ring:           0 0 0 3px rgba(79,70,229,.18);
+  --accent-primary: #007aff;
+  --accent-primary-hover: #0066d6;
+  --accent-secondary: #30b0c7;
+  --accent-secondary-soft: rgba(48, 176, 199, .12);
+  --accent-violet: #af52de;
+  --accent-violet-soft: rgba(175, 82, 222, .12);
+  --accent-cyan: #30b0c7;
+  --accent-cyan-soft: rgba(48, 176, 199, .12);
+  --focus-color: rgba(0, 122, 255, .34);
+  --focus-ring: 0 0 0 4px var(--focus-color);
 
   /* Semantic */
-  --success:      #18A66A;  --success-soft: #E7F8EF;
-  --danger:       #E54865;  --danger-soft:  #FDECF0;
-  --warning:      #F5A524;  --warning-soft: #FFF5DC;
-  --info:         #24C7E8;  --info-soft:    #E7FAFE;
+  --success: #248a3d;
+  --success-soft: rgba(52, 199, 89, .13);
+  --danger: #d70015;
+  --danger-soft: rgba(255, 59, 48, .12);
+  --warning: #c93400;
+  --warning-soft: rgba(255, 149, 0, .15);
+  --info: #007aff;
+  --info-soft: rgba(0, 122, 255, .11);
 
-  /* Sidebar — Slate dark */
-  --sidebar-bg:          #111B2E;
-  --sidebar-border:      #243451;
-  --sidebar-text:        #9AA9BF;
-  --sidebar-text-active: #F8FAFC;
-  --sidebar-active-bg:   linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-  --sidebar-hover-bg:    #18243A;
+  /* Navigation */
+  --sidebar-bg: #1c1c1e;
+  --sidebar-border: rgba(255, 255, 255, .12);
+  --sidebar-text: #aeaeb2;
+  --sidebar-text-active: #ffffff;
+  --sidebar-active-bg: #0a84ff;
+  --sidebar-hover-bg: #2c2c2e;
 
   /* Components */
-  --card-bg:         #FFFFFF;
-  --input-bg:        #FFFFFF;
-  --table-header-bg: #F8FAFC;
-  --modal-bg:        #FFFFFF;
-  --modal-overlay:   rgba(15,23,42,0.5);
+  --card-bg: var(--bg-surface);
+  --input-bg: var(--bg-surface);
+  --table-header-bg: var(--bg-subtle);
+  --modal-bg: var(--bg-surface);
+  --modal-overlay: rgba(0, 0, 0, .42);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .04), 0 5px 16px rgba(0, 0, 0, .05);
+  --shadow-card: 0 8px 28px rgba(0, 0, 0, .07);
+  --shadow-hover: 0 12px 34px rgba(0, 0, 0, .10);
+  --shadow-button: 0 3px 10px rgba(0, 122, 255, .20);
+  --shadow-modal: 0 28px 72px rgba(0, 0, 0, .24);
 
-  /* Shadows */
-  --shadow-sm:     0 1px 2px rgba(15,23,42,.04), 0 4px 18px rgba(79,70,229,.055);
-  --shadow-card:   0 10px 25px -5px rgba(79,70,229,.15), 0 8px 10px -6px rgba(79,70,229,.1);
-  --shadow-hover:  0 14px 30px -6px rgba(79,70,229,.2);
-  --shadow-button: 0 4px 14px rgba(79,70,229,.3);
-  --shadow-modal:  0 28px 72px rgba(15,23,42,.22);
-
-  /* Legacy compat aliases */
-  --bg: var(--bg-page);  --surface: var(--card-bg);
-  --surface-2: var(--bg-muted);  --surface-3: var(--bg-subtle);
+  /* Compatibility aliases used by existing screens during migration. */
+  --bg: var(--bg-page);
+  --surface: var(--card-bg);
+  --surface-2: var(--bg-muted);
+  --surface-3: var(--bg-subtle);
   --surface-hover: var(--bg-surface-hover);
-  --tx: var(--text-primary);  --tx2: var(--text-secondary);
-  --tx3: var(--text-muted);   --tx4: var(--border-strong);
+  --tx: var(--text-primary);
+  --tx2: var(--text-secondary);
+  --tx3: var(--text-muted);
+  --tx4: var(--border-strong);
   --border: var(--border-default);
-  --accent: var(--accent-primary);  --accent-soft: var(--accent-secondary-soft);
-  --accent-2: var(--accent-primary-hover); --accent-glow: rgba(79,70,229,.24);
-  --ok: var(--success);  --ok-soft: var(--success-soft);
-  --warn: var(--warning); --warn-soft: var(--warning-soft);
-  --r-sm: var(--radius-sm); --r-md: var(--radius-md);
-  --r-lg: var(--radius-lg); --r-xl: var(--radius-xl);
+  --accent: var(--accent-primary);
+  --accent-soft: var(--info-soft);
+  --accent-2: var(--accent-primary-hover);
+  --accent-glow: rgba(0, 122, 255, .18);
+  --primary-gradient: var(--accent-primary);
+  --ok: var(--success);
+  --ok-soft: var(--success-soft);
+  --warn: var(--warning);
+  --warn-soft: var(--warning-soft);
+  --r-sm: var(--radius-sm);
+  --r-md: var(--radius-md);
+  --r-lg: var(--radius-lg);
+  --r-xl: var(--radius-xl);
   --t: var(--transition-fast);
-  --nav-bg: var(--sidebar-bg);    --nav-tx: var(--sidebar-text);
-  --nav-act: var(--sidebar-hover-bg); --nav-sep: var(--sidebar-border);
+  --nav-bg: var(--sidebar-bg);
+  --nav-tx: var(--sidebar-text);
+  --nav-act: var(--sidebar-active-bg);
+  --nav-sep: var(--sidebar-border);
 }
 
-/* ── Dark theme ── */
 html[data-theme="dark"] {
   color-scheme: dark;
+  --bg-page: #000000;
+  --bg-surface: #1c1c1e;
+  --bg-surface-hover: #2c2c2e;
+  --bg-muted: #2c2c2e;
+  --bg-subtle: #242426;
+  --text-primary: #ffffff;
+  --text-secondary: #aeaeb2;
+  --text-muted: #8e8e93;
+  --text-inverse: #000000;
+  --border-default: rgba(84, 84, 88, .65);
+  --border-soft: rgba(84, 84, 88, .42);
+  --border-strong: rgba(174, 174, 178, .55);
+  --accent-primary: #0a84ff;
+  --accent-primary-hover: #409cff;
+  --accent-secondary: #64d2ff;
+  --accent-secondary-soft: rgba(100, 210, 255, .15);
+  --accent-violet: #bf5af2;
+  --accent-violet-soft: rgba(191, 90, 242, .16);
+  --accent-cyan: #64d2ff;
+  --accent-cyan-soft: rgba(100, 210, 255, .15);
+  --focus-color: rgba(10, 132, 255, .45);
+  --success: #30d158;
+  --success-soft: rgba(48, 209, 88, .15);
+  --danger: #ff453a;
+  --danger-soft: rgba(255, 69, 58, .16);
+  --warning: #ff9f0a;
+  --warning-soft: rgba(255, 159, 10, .16);
+  --info: #64d2ff;
+  --info-soft: rgba(100, 210, 255, .14);
+  --sidebar-bg: #1c1c1e;
+  --sidebar-border: rgba(84, 84, 88, .65);
+  --sidebar-text: #aeaeb2;
+  --sidebar-text-active: #ffffff;
+  --sidebar-active-bg: #0a84ff;
+  --sidebar-hover-bg: #2c2c2e;
+  --card-bg: var(--bg-surface);
+  --input-bg: #2c2c2e;
+  --table-header-bg: #242426;
+  --modal-bg: var(--bg-surface);
+  --modal-overlay: rgba(0, 0, 0, .72);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .35), 0 6px 18px rgba(0, 0, 0, .22);
+  --shadow-card: 0 10px 30px rgba(0, 0, 0, .32);
+  --shadow-hover: 0 14px 36px rgba(0, 0, 0, .40);
+  --shadow-button: 0 4px 14px rgba(10, 132, 255, .25);
+  --shadow-modal: 0 28px 72px rgba(0, 0, 0, .64);
+}
 
-  --bg-page:          #0B1120;
-  --bg-surface:       #111827;
-  --bg-surface-hover: #1E293B;
-  --bg-muted:         #1E293B;
-  --bg-subtle:        #162032;
+@media (max-width: 1024px) {
+  :root { --content-pad: 20px; }
+}
 
-  --text-primary:   #F1F5F9;
-  --text-secondary: #CBD5E1;
-  --text-muted:     #64748B;
-  --text-inverse:   #0F172A;
+@media (max-width: 767px) {
+  :root {
+    --content-pad: 16px;
+    --font-size-large-title: 30px;
+    --font-size-title: 26px;
+  }
+}
 
-  --border-default: #334155;
-  --border-soft:    #1E293B;
-  --border-strong:  #475569;
-
-  --accent-primary:       #818CF8;
-  --accent-primary-hover: #A5B4FC;
-  --accent-secondary:     #A78BFA;
-  --accent-secondary-soft:rgba(99,102,241,.16);
-  --accent-violet:        #A78BFA;
-  --accent-violet-soft:   rgba(124,58,237,.18);
-  --accent-cyan:          #24C7E8;
-  --accent-cyan-soft:     rgba(36,199,232,0.16);
-  --primary-gradient:     linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
-  --focus-ring:           0 0 0 3px rgba(129,140,248,.24);
-
-  --success:      #22C55E;  --success-soft: rgba(34,197,94,0.14);
-  --danger:       #F87171;  --danger-soft:  rgba(248,113,113,0.14);
-  --warning:      #FBBF24;  --warning-soft: rgba(251,191,36,0.14);
-  --info:         #38BDF8;  --info-soft:    rgba(56,189,248,0.14);
-
-  --sidebar-bg:          #0B1120;
-  --sidebar-border:      #1E293B;
-  --sidebar-text:        #64748B;
-  --sidebar-text-active: #F1F5F9;
-  --sidebar-active-bg:   linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-  --sidebar-hover-bg:    #1E293B;
-
-  --card-bg:         #111827;
-  --input-bg:        #1E293B;
-  --table-header-bg: #1E293B;
-  --modal-bg:        #111827;
-  --modal-overlay:   rgba(0,0,0,0.65);
-
-  --shadow-sm:     0 1px 2px rgba(0,0,0,.38), 0 5px 16px rgba(0,0,0,.18);
-  --shadow-card:   0 10px 24px rgba(0,0,0,.28);
-  --shadow-hover:  0 14px 30px rgba(0,0,0,.34);
-  --shadow-button: 0 8px 20px rgba(22,139,255,.24);
-  --shadow-modal:  0 28px 72px rgba(0,0,0,.6);
-
-  --bg: var(--bg-page);  --surface: var(--card-bg);
-  --surface-2: var(--bg-muted);  --surface-3: var(--bg-subtle);
-  --surface-hover: var(--bg-surface-hover);
-  --tx: var(--text-primary);  --tx2: var(--text-secondary);
-  --tx3: var(--text-muted);   --tx4: var(--border-strong);
-  --border: var(--border-default);
-  --accent: var(--accent-primary);  --accent-soft: var(--accent-secondary-soft);
-  --accent-2: var(--accent-primary-hover); --accent-glow: rgba(56,189,248,.22);
-  --ok: var(--success);  --ok-soft: var(--success-soft);
-  --warn: var(--warning); --warn-soft: var(--warning-soft);
-  --nav-bg: var(--sidebar-bg);    --nav-tx: var(--sidebar-text);
-  --nav-act: var(--sidebar-hover-bg); --nav-sep: var(--sidebar-border);
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 1ms;
+    --duration-default: 1ms;
+    --duration-overlay: 1ms;
+  }
 }

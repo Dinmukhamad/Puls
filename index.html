@@ -4,13 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Puls — рейтинг операторов</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/tokens.css?v=corporate-trust-v2">
-  <link rel="stylesheet" href="css/styles.css?v=learning-worlds-sapar-v1">
-  <script src="js/theme-init.js?v=csrf-login-fix-v1"></script>
-  <script src="js/api.js?v=learning-worlds-sapar-v1" defer></script>
+  <link rel="stylesheet" href="css/tokens.css?v=ios-redesign-v2">
+  <link rel="stylesheet" href="css/styles.css?v=ios-redesign-v2">
+  <script src="js/theme-init.js?v=ios-redesign-v2"></script>
+  <script src="js/api.js?v=ios-redesign-v2" defer></script>
 </head>
 <body class="role-pending">
 
@@ -50,7 +47,7 @@
           <input id="auth-password" class="form-input" type="password" placeholder="Пароль" autocomplete="current-password">
         </div>
         <div id="auth-error" class="auth-error"></div>
-        <button id="auth-login-btn" class="btn-primary" style="width:100%;height:44px;font-size:14px;margin-top:4px">Войти</button>
+        <button id="auth-login-btn" class="btn-primary auth-submit">Войти</button>
       </div>
     </div>
   </div>
@@ -60,7 +57,7 @@
 <nav class="side-nav" aria-label="Навигация">
   <div class="side-nav-header">
     <a class="side-nav-logo" href="#" onclick="navigateTo('summary');return false;">
-      <div class="side-nav-mark" style="color:#38BDF8">
+      <div class="side-nav-mark">
         <svg viewBox="0 0 36 36" fill="none">
           <polyline points="2,18 8,18 12,8 16,28 20,12 24,24 28,18 34,18"
             stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -145,15 +142,15 @@
 
   <div class="side-nav-meta">
     <div class="side-user-row">
-      <div style="display:flex;align-items:center;gap:8px;min-width:0">
+      <div class="side-user-identity">
         <div id="side-user-avatar" class="side-user-avatar">?</div>
-        <div class="side-user-info" style="min-width:0">
+        <div class="side-user-info">
           <span id="side-user">—</span>
           <span id="side-role">—</span>
           <span id="side-level">—</span>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+      <div class="side-user-actions">
         <button class="side-bell-btn" id="side-bell-btn" onclick="showNotificationsModal()" title="Уведомления" aria-label="Уведомления">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           <span id="side-bell-badge" class="side-bell-badge" hidden>0</span>
@@ -163,8 +160,8 @@
       </button>
       </div>
     </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px">
-      <button id="auth-logout-btn" class="btn-link" style="font-size:11px;color:rgba(255,255,255,.3)">Выйти</button>
+    <div class="side-session-actions">
+      <button id="auth-logout-btn" class="btn-link side-logout-btn">Выйти</button>
       <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Сменить тему">
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">
           <path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>
@@ -181,6 +178,8 @@
   </div>
 </nav>
 
+<nav id="mobile-nav" class="mobile-nav" aria-label="Основная навигация на мобильном устройстве" hidden></nav>
+
 <!-- MAIN -->
 <main class="container">
   <div id="app-shell">
@@ -192,6 +191,6 @@
 </main>
 
 <!-- SCRIPTS -->
-<script src="js/app.js?v=smz-document-signing-v1" defer></script>
+<script src="js/app.js?v=ios-redesign-v2" defer></script>
 </body>
 </html>

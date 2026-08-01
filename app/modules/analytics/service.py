@@ -858,7 +858,12 @@ def management_dashboard(db, start_date, end_date, group_id, operator_query, par
     if cached is not None:
         return cached
 
-    rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
+    try:
+        rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+        rows = []
     result = compute_management_dashboard(rows)
     duration = (end_date - start_date).days
     prev_end = start_date - timedelta(days=1)
@@ -886,6 +891,7 @@ def management_dashboard(db, start_date, end_date, group_id, operator_query, par
         key: metric_definition(key) for key in ("quality", "kvz", "efficiency", "penalty")
     }
     result["data_availability_warning"] = data_availability_warning(db, start_date, end_date)
+    result["empty_reason"] = "no_data_for_period" if not rows else None
     cache_set(key, result, ttl_seconds=300)
     return result
 

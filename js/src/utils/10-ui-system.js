@@ -138,9 +138,6 @@ function uiConfirmAction({
   confirmLabel = 'Подтвердить',
   danger = true,
 } = {}) {
-  if (typeof showModal !== 'function') {
-    return Promise.resolve(window.confirm(`${title}\n\n${description}`));
-  }
   uiCancelPendingConfirm();
   return new Promise(resolve => {
     UI_CONFIRM_RESOLVER = resolve;

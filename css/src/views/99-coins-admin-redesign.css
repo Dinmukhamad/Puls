@@ -182,7 +182,7 @@ button.coins-summary-card:hover { border-color: var(--accent-primary); }
 #view-coins .data-table td { height: 50px; padding: 9px 12px; font-size: 11.5px; }
 #view-coins .panel-footer { min-height: 52px; padding: 9px 16px; }
 
-#view-coins .coins-weekly-toolbar .filter-row { display: grid !important; grid-template-columns: 170px 170px auto auto; }
+#view-coins .coins-weekly-toolbar .filter-row { display: grid; grid-template-columns: 170px 170px auto auto; }
 #view-coins .coins-weekly-toolbar .form-group { min-width: 0; }
 #view-coins #wa-preview-host .panel { margin-top: 12px; }
 #view-coins .bonus-chip { display: inline-flex; margin: 2px; }
@@ -231,8 +231,8 @@ html[data-theme="dark"] #view-coins .coins-page-tab { background: var(--card-bg)
   #view-coins .manual-col-right,
   #view-coins .coin-rules-form { grid-template-columns: 1fr; }
   #view-coins .manual-col-right .manual-card:last-child { grid-column: auto; }
-  #view-coins .coins-weekly-toolbar .filter-row { grid-template-columns: 1fr !important; }
-  #view-coins .coins-filter-panel .filter-row { display: grid !important; grid-template-columns: 1fr; }
+  #view-coins .coins-weekly-toolbar .filter-row { grid-template-columns: 1fr; }
+  #view-coins .coins-filter-panel .filter-row { display: grid; grid-template-columns: 1fr; }
   #view-coins .coins-filter-panel .form-group { width: 100%; }
   #view-coins .an-card-head-row { align-items: flex-start; flex-direction: column; gap: 8px; }
 }

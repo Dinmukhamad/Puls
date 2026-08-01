@@ -1,5 +1,5 @@
 /* Operator cabinet and rating v3. */
-.app-view:not(.active) { display: none !important; }
+.app-view:not(.active) { display: none; }
 
 #view-cabinet.app-view.active,
 #view-rating.app-view.active {

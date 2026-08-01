@@ -8,7 +8,7 @@
  * Порядок склейки — по имени файла (числовые префиксы 00-, 10-, ...).
  */
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
-import { basename, join, dirname } from "node:path";
+import { basename, join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -25,7 +25,14 @@ function sortedFiles(dir, ext) {
       }
       return entry.isFile() && entry.name.endsWith(ext) ? [path] : [];
     })
-    .sort((a, b) => basename(a).localeCompare(basename(b)) || a.localeCompare(b));
+    .sort((a, b) => {
+      const aName = basename(a);
+      const bName = basename(b);
+      if (aName !== bName) return aName < bName ? -1 : 1;
+      const aPath = relative(ROOT, a).replaceAll("\\", "/");
+      const bPath = relative(ROOT, b).replaceAll("\\", "/");
+      return aPath === bPath ? 0 : aPath < bPath ? -1 : 1;
+    });
 }
 
 function orderedFiles(groups, ext) {
@@ -71,8 +78,9 @@ const cssFiles = orderedFiles(
   [
     ["css", "src", "base"],
     ["css", "src", "layout"],
-    ["css", "src", "components"],
     ["css", "src", "views"],
+    // Shared component contracts are authoritative across every view.
+    ["css", "src", "components"],
   ],
   ".css",
 );

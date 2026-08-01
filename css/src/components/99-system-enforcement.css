@@ -1,0 +1,88 @@
+/* Final cross-screen contract. Keep this file small and component-oriented. */
+[hidden],
+.app-view:not(.active) { display: none; }
+
+#app-shell .app-view:not(.active) { display: none; }
+#view-analytics [hidden] { display: none; }
+
+html { background: var(--bg-page); }
+body { padding-left: var(--nav-w); background: var(--bg-page); }
+body.modal-open { overflow: hidden; }
+
+/* Late legacy view bundles still restyle the wordmark and focused SPA title. */
+.side-nav .side-nav-brand { color: #fff; }
+.side-nav .side-nav-brand em { color: #64d2ff; }
+
+.section-title[tabindex="-1"]:focus,
+.ui-page-title[tabindex="-1"]:focus,
+.view-header h1[tabindex="-1"]:focus,
+.view-header h2[tabindex="-1"]:focus,
+main h1[tabindex="-1"]:focus,
+main h2[tabindex="-1"]:focus {
+  outline: 0;
+  box-shadow: none;
+}
+
+.side-user-identity,
+.side-user-actions,
+.side-session-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.side-user-identity { gap: 8px; }
+.side-user-actions { flex: 0 0 auto; gap: 4px; }
+.side-session-actions { margin-top: 10px; justify-content: space-between; }
+.side-logout-btn { color: var(--sidebar-text); font-size: 12px; }
+
+.mobile-more-sheet { width: min(520px, 100%); }
+.mobile-more__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.mobile-more__item {
+  display: flex;
+  min-height: 52px;
+  padding: 10px 12px;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+.mobile-more__item svg { width: 20px; height: 20px; flex: 0 0 20px; stroke: var(--accent-primary); }
+
+.mobile-nav-toggle,
+.mobile-nav-backdrop { display: none; }
+
+.app-view img,
+.app-view canvas,
+.app-view svg { max-width: 100%; }
+
+.app-view button,
+.app-view a,
+.app-view input,
+.app-view select,
+.app-view textarea { max-width: 100%; }
+
+.app-view [style*="font-size"] { letter-spacing: 0; }
+
+@media (max-width: 1024px) {
+  body { padding-left: var(--nav-w-collapsed); }
+}
+
+@media (max-width: 767px) {
+  body { padding-left: 0; }
+  .mobile-more__grid { grid-template-columns: 1fr; }
+  .mobile-more-sheet { border-radius: 16px 16px 0 0; }
+  .app-view { overflow-x: clip; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto;
+    animation-duration: 1ms;
+    animation-iteration-count: 1;
+    transition-duration: 1ms;
+  }
+}

@@ -3,8 +3,6 @@
    Design System v2.0
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
-
 /* ═══════════════════════════════════════════════════
    ВАРИАНТ Б — Светлый бежево-белый
    Тёплый фон var(--bg-page), белые карточки, чёрный текст
@@ -19,7 +17,7 @@
    RESET
 ══════════════════════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-[hidden] { display: none !important; }
+[hidden] { display: none; }
 html { scroll-behavior: smooth; background: var(--bg-page); }
 html[data-theme="light"] { background: var(--bg-page); }
 
@@ -35,7 +33,7 @@ body {
   -webkit-font-smoothing: antialiased;
   transition: background var(--t), color var(--t), padding-left var(--t);
 }
-body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
+body.operator-login-required { padding-left: 0; overflow: hidden; }
 
 /* ══════════════════════════════════════════════════════════════
    SIDE NAV
@@ -208,7 +206,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: flex; align-items: stretch;
   background: var(--bg-page);
 }
-.auth-overlay[hidden] { display: none !important; }
+.auth-overlay[hidden] { display: none; }
 
 .auth-shell {
   width: 100%; display: grid;
@@ -995,18 +993,18 @@ body.must-change-password .side-nav-link[data-nav-target] {
 /* На мобильном нав горизонтальный — мета скрыта, кнопку показываем как fixed */
 @media (max-width: 760px) {
   .theme-toggle {
-    position: fixed !important;
+    position: fixed;
     bottom: 70px; right: 12px;
     width: 36px; height: 36px;
-    background: var(--surface) !important;
-    border: 1px solid var(--border) !important;
-    color: var(--tx3) !important;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--tx3);
     box-shadow: var(--shadow-md);
     z-index: 9500;
   }
   .theme-toggle:hover {
-    color: var(--accent) !important;
-    border-color: var(--accent) !important;
+    color: var(--accent);
+    border-color: var(--accent);
   }
 }
 
@@ -1069,7 +1067,7 @@ body.must-change-password .side-nav-link[data-nav-target] {
   justify-content: space-between;
 }
 #op-selected-display.visible {
-  display: flex !important;
+  display: flex;
 }
 
 /* ── Operator tab filters ──────────────────────────────────── */
