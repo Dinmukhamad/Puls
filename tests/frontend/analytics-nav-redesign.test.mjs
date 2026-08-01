@@ -2,10 +2,23 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const view = await readFile(
-  new URL('../../js/src/views/reports/40-reports-analytics.view.js', import.meta.url),
-  'utf8',
-);
+// Раздел аналитики разрезан на вкладки — был один файл на 2671 строку.
+const view = (
+  await Promise.all([
+    '../../js/src/views/reports/40-aa-period-report.view.js',
+    '../../js/src/views/reports/40-ab-period-report-blocks.view.js',
+    '../../js/src/views/analytics/40-c-analytics-core.view.js',
+    '../../js/src/views/analytics/40-d-analytics-shell.view.js',
+    '../../js/src/views/analytics/40-e-analytics-overview.view.js',
+    '../../js/src/views/analytics/40-f-analytics-operators.view.js',
+    '../../js/src/views/analytics/40-g-analytics-groups.view.js',
+    '../../js/src/views/analytics/40-h-analytics-quality.view.js',
+    '../../js/src/views/analytics/40-i-analytics-dynamics.view.js',
+    '../../js/src/views/analytics/40-j-analytics-risks.view.js',
+    '../../js/src/views/analytics/40-k-analytics-points.view.js',
+    '../../js/src/views/analytics/40-l-analytics-export.view.js',
+  ].map((rel) => readFile(new URL(rel, import.meta.url), 'utf8')))
+).join('\n');
 const css = await readFile(
   new URL('../../css/src/views/99-analytics-management-dashboard.css', import.meta.url),
   'utf8',

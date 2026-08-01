@@ -2,10 +2,18 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const wheel = await readFile(
-  new URL('../../js/src/views/wheel/60-wheel-tests.view.js', import.meta.url),
-  'utf8',
-);
+// Колесо разрезано на модули — было в одном файле с тестами.
+const wheel = (
+  await Promise.all([
+    '../../js/src/views/wheel/60-a-wheel-operator.view.js',
+    '../../js/src/views/wheel/60-b-wheel-spin.view.js',
+    '../../js/src/views/wheel/60-c-wheel-campaigns.view.js',
+    '../../js/src/views/wheel/60-d-wheel-prizes.view.js',
+    '../../js/src/views/wheel/60-e-wheel-operations.view.js',
+    '../../js/src/views/wheel/60-f-wheel-rules.view.js',
+    '../../js/src/views/wheel/60-g-wheel-logs.view.js',
+  ].map((rel) => readFile(new URL(rel, import.meta.url), 'utf8')))
+).join('\n');
 const wheelCss = await readFile(
   new URL('../../css/src/views/99-wheel-operator-redesign.css', import.meta.url),
   'utf8',

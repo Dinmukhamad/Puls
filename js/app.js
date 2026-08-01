@@ -824,7 +824,6 @@ function renderSidebar(role) {
 /* ══════════════════════════════════════
    VIEW: УРОВНИ ОПЕРАТОРОВ
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    УВЕДОМЛЕНИЯ (ТЗ P2) — колокольчик в сайдбаре, модалка со списком
 ══════════════════════════════════════ */
@@ -923,7 +922,127 @@ async function _loadNotificationsIntoModal() {
     });
   });
 }
+/* Общие утилиты интерфейса.
+   Раньше жили в конце js/src/views/coins/30-admin-coins-groups-operators.view.js
+   и работали только потому, что сборка склеивает всё в одну область видимости.
+   Форматирование и проверки ролей: esc, fmtDate, roleLabel, isAdmin и т.д.
+   esc() вызывается 661 раз по проекту — её место здесь, а не во вьюхе коинов. */
 
+/* ══════════════════════════════════════
+   HELPERS
+══════════════════════════════════════ */
+function esc(s) {
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
+function fmtDate(dt) {
+  return dt ? uiDate(dt) : '';
+}
+function fmtDateTime(dt) {
+  return dt ? uiDateTime(dt) : '';
+}
+function roleLabel(r) {
+  return { operator:'Оператор', supervisor:'Супервайзер', manager:'Руководитель', admin:'Администратор' }[r] || r || '';
+}
+function statusLabel(s) {
+  return uiStatusLabel(s);
+}
+function isAdmin(role) { return ['supervisor','manager','admin'].includes(role); }
+function canManageGroups(role = STATE.user?.role) { return ['manager','admin'].includes(role); }
+function canManageOperators() {
+  const role = STATE.user?.role;
+  return ['manager','admin'].includes(role) || (role === 'supervisor' && STATE.user?.can_manage_operators);
+}
+/* Общие утилиты интерфейса.
+   Раньше жили в конце js/src/views/coins/30-admin-coins-groups-operators.view.js
+   и работали только потому, что сборка склеивает всё в одну область видимости.
+   Модальные окна: showModal, closeModal, updateModal. */
+
+/* ══════════════════════════════════════
+   MODALS
+══════════════════════════════════════ */
+function showModal(html, options = {}) {
+  let overlay = document.getElementById('modal-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'modal-overlay';
+    overlay.className = 'modal-overlay';
+    document.body.appendChild(overlay);
+  }
+  const forced = Boolean(options.force);
+  overlay.dataset.force = forced ? 'true' : 'false';
+  const extraClass = options.className ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '') : '';
+  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
+  overlay.style.display = 'flex';
+  overlay.onclick = e => { if (e.target === overlay && !forced) closeModal(); };
+}
+function closeModal(force = false) {
+  const o = document.getElementById('modal-overlay');
+  if (o?.dataset.force === 'true' && !force) return;
+  if (o) o.style.display = 'none';
+  if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
+}
+
+function updateModal(html) {
+  // Обновляем содержимое открытого модального окна
+  const overlay = document.getElementById('modal-overlay');
+  const modal = overlay?.querySelector('.modal');
+  if (modal) {
+    modal.innerHTML = html + '<button class="modal-close" onclick="closeModal()">✕</button>';
+  } else {
+    showModal(html);
+  }
+}
+/* Общие утилиты интерфейса.
+   Раньше жили в конце js/src/views/coins/30-admin-coins-groups-operators.view.js
+   и работали только потому, что сборка склеивает всё в одну область видимости.
+   Всплывающие уведомления. */
+
+/* ══════════════════════════════════════
+   TOAST
+══════════════════════════════════════ */
+function showToast(msg, type = 'ok') {
+  let c = document.getElementById('toast-container');
+  if (!c) { c = document.createElement('div'); c.id = 'toast-container'; document.body.appendChild(c); }
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.classList.add('toast-show'), 10);
+  setTimeout(() => { t.classList.remove('toast-show'); setTimeout(() => t.remove(), 300); }, 3500);
+}
+/* Общие утилиты интерфейса.
+   Раньше жили в конце js/src/views/coins/30-admin-coins-groups-operators.view.js
+   и работали только потому, что сборка склеивает всё в одну область видимости.
+   Выгрузки CSV/XLSX. */
+
+/* ══════════════════════════════════════
+   EXPORT
+══════════════════════════════════════ */
+function exportCSV() {
+  window.open(api.exportUrl('/api/exports/operators', { format: 'csv' }), '_blank');
+}
+function exportOperatorsXLSX() {
+  window.open(api.exportUrl('/api/exports/operators', { format: 'xlsx' }), '_blank');
+}
+
+function exportHistoryCSV() {
+  const header = ['Дата','Оператор','Группа','Тип','Коины','Причина','Автор'];
+  const rows = STATE.history.map(t => [
+    fmtDate(t.created_at), t.operator_name, t.group_name, t.type,
+    t.amount, t.comment, t.created_by_name||'Система',
+  ]);
+  downloadCSV([header, ...rows], 'pulse_history');
+}
+
+function downloadCSV(rows, name) {
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${name}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
 /* Shared UI contracts. Keep screen-specific views free from raw enums and ad-hoc formats. */
 const UI_TIME_ZONE = 'Asia/Almaty';
 
@@ -1097,7 +1216,6 @@ function uiReadQuery(defaults = {}) {
     Object.entries(defaults).map(([key, fallback]) => [key, params.get(key) ?? fallback]),
   );
 }
-
 async function renderOperatorLevelsSettings() {
   const el = document.getElementById('view-operator-levels');
   if (!el) return;
@@ -2080,7 +2198,6 @@ async function submitChangeUsername() {
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    УРОВНИ: вкладка «Достижения» (ТЗ §7) — каталог, включение/выключение, ручная выдача
 ══════════════════════════════════════ */
@@ -2271,7 +2388,6 @@ async function submitGrantAchievement(achievementId) {
     if (errEl) errEl.textContent = e.message;
   }
 }
-
 /* ══════════════════════════════════════
    КАБИНЕТ: показатели недели, прозрачный расчёт коинов, достижения (ТЗ §5, §7)
    Один общий фетч /api/cabinet/me — данные шарятся между обоими блоками.
@@ -2448,7 +2564,6 @@ async function renderCabinetAchievements() {
       </div>
     </div>`;
 }
-
 /* Управленческая «Сводка»: компактный экран, не дублирующий подробные вкладки Analytics. */
 let _summaryManagement = { start: '', end: '', group: '', preset: 'week', ready: false };
 
@@ -2518,7 +2633,6 @@ async function renderManagementSummary() {
   el.querySelector('#summary-export').addEventListener('click', () => { readFilters(); const params = new URLSearchParams({ start_date: state.start, end_date: state.end }); if (state.group) params.set('group_id', state.group); window.location.href = api._base() + '/api/analytics/export.xlsx?' + params; });
   await load();
 }
-
 async function renderRatingOverviewTab(el) {
   const role  = STATE.user?.role || 'operator';
   const isOp  = role === 'operator';
@@ -3861,7 +3975,6 @@ function renderSummary() {
 /* ══════════════════════════════════════
    VIEW: ОПЕРАТОРЫ (ADMIN)
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    СВОДКА: детальная сводка по неделе с фильтрами (ТЗ §9)
 ══════════════════════════════════════ */
@@ -4060,7 +4173,6 @@ function exportAdminSummary() {
   if (f.group_id) params.group_id = f.group_id;
   window.open(api.exportUrl('/api/exports/rating', params), '_blank');
 }
-
 /* ══════════════════════════════════════
    СВОДКА: быстрые действия по строке оператора (ТЗ §9.5)
    Начислить / Списать / Открыть кабинет / Открыть историю / Открыть заявки
@@ -4176,6 +4288,8 @@ async function openOperatorCabinetModal(operatorId, operatorName) {
       <button class="btn-primary" onclick="closeModal(); openHistoryForOperator(${operatorId}, '${esc(operatorName).replace(/'/g, '&#39;')}')">Вся история →</button>
     </div>`;
 }
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Страница «Пользователи»: таблица, бейджи роли и статуса. */
 
 function renderAdminOperators() {
   return renderUsersPage();
@@ -4499,6 +4613,8 @@ function renderUsersPage() {
   }
   bindOpsActions();
 }
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Раздел «Коины»: обзор, правила, ручное начисление, поиск оператора. */
 
 /* ══════════════════════════════════════
    VIEW: РУЧНОЕ НАЧИСЛЕНИЕ
@@ -5012,6 +5128,8 @@ function initOpSearch(container, ops) {
     setTimeout(() => dropdown.setAttribute('hidden', ''), 150);
   });
 }
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Вкладка «Заявки из магазина»: фильтры, пагинация, действия, экспорт. */
 
 /* ══════════════════════════════════════
    VIEW: ЗАЯВКИ ИЗ МАГАЗИНА
@@ -5269,6 +5387,8 @@ function bindRequestActions() {
     });
   });
 }
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Вкладка «История операций»: фильтры, пагинация, серверный экспорт. */
 
 /* ══════════════════════════════════════
    VIEW: ИСТОРИЯ ОПЕРАЦИЙ
@@ -5474,6 +5594,8 @@ function exportHistoryServerSide(format = 'csv') {
   if (f.end_date) params.end_date = f.end_date;
   window.open(api.exportUrl('/api/exports/coin-transactions', params), '_blank');
 }
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Группы: список и CRUD. */
 
 /* ══════════════════════════════════════
    VIEW: ГРУППЫ
@@ -5724,6 +5846,8 @@ function groupOptionsForOperator(groups, selectedId) {
       </option>`)
     .join('');
 }
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Операторы: редактирование, сброс пароля, увольнение, восстановление, история. */
 
 async function showEditOperatorModal(id) {
   if (!canManageOperators()) return showToast('Недостаточно прав', 'error');
@@ -5987,32 +6111,8 @@ async function showOperatorHistoryModal(id) {
       <button class="btn-outline" onclick="closeModal()">Закрыть</button>`);
   }
 }
-
-/* ══════════════════════════════════════
-   MODALS
-══════════════════════════════════════ */
-function showModal(html, options = {}) {
-  let overlay = document.getElementById('modal-overlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'modal-overlay';
-    overlay.className = 'modal-overlay';
-    document.body.appendChild(overlay);
-  }
-  const forced = Boolean(options.force);
-  overlay.dataset.force = forced ? 'true' : 'false';
-  const extraClass = options.className ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '') : '';
-  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
-  overlay.style.display = 'flex';
-  overlay.onclick = e => { if (e.target === overlay && !forced) closeModal(); };
-}
-function closeModal(force = false) {
-  const o = document.getElementById('modal-overlay');
-  if (o?.dataset.force === 'true' && !force) return;
-  if (o) o.style.display = 'none';
-  if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
-}
-
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Ставки операторов и управление нормами часов. */
 
 /* ══════════════════════════════════════
    СТАВКИ И НОРМЫ ЧАСОВ
@@ -6223,17 +6323,8 @@ async function deleteNorm(normId) {
     renderWorkNormsModal(norms);
   } catch(e) { showToast(e.message, 'error'); }
 }
-
-function updateModal(html) {
-  // Обновляем содержимое открытого модального окна
-  const overlay = document.getElementById('modal-overlay');
-  const modal = overlay?.querySelector('.modal');
-  if (modal) {
-    modal.innerHTML = html + '<button class="modal-close" onclick="closeModal()">✕</button>';
-  } else {
-    showModal(html);
-  }
-}
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Создание оператора и деактивация учётной записи. */
 
 async function showAddOperatorModal() {
   let groups = [];
@@ -6456,6 +6547,8 @@ async function deactivateUserUi(userId) {
     await reloadData();
   } catch(e) { showToast(e.message, 'error'); }
 }
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Модальное окно управления пользователем и статусные хелперы. */
 
 function userManagementInitials(fullName) {
   return String(fullName || '?')
@@ -6751,6 +6844,8 @@ function operatorStatusBadge(o) {
 function positionLabel(s) {
   return { operator: 'Оператор', chat_manager: 'Чат-менеджер' }[s] || s || '';
 }
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Товары магазина: создание и редактирование. */
 
 function showAddItemModal() {
   const levelOptions = (STATE.operatorLevels || [])
@@ -6921,78 +7016,8 @@ async function submitEditItem(id) {
     STATE.shopItems = await api.listShopItems(); renderShop();
   } catch(e) { err.textContent = e.message; }
 }
-
-/* ══════════════════════════════════════
-   EXPORT
-══════════════════════════════════════ */
-function exportCSV() {
-  window.open(api.exportUrl('/api/exports/operators', { format: 'csv' }), '_blank');
-}
-function exportOperatorsXLSX() {
-  window.open(api.exportUrl('/api/exports/operators', { format: 'xlsx' }), '_blank');
-}
-
-function exportHistoryCSV() {
-  const header = ['Дата','Оператор','Группа','Тип','Коины','Причина','Автор'];
-  const rows = STATE.history.map(t => [
-    fmtDate(t.created_at), t.operator_name, t.group_name, t.type,
-    t.amount, t.comment, t.created_by_name||'Система',
-  ]);
-  downloadCSV([header, ...rows], 'pulse_history');
-}
-
-function downloadCSV(rows, name) {
-  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `${name}_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-}
-
-/* ══════════════════════════════════════
-   TOAST
-══════════════════════════════════════ */
-function showToast(msg, type = 'ok') {
-  let c = document.getElementById('toast-container');
-  if (!c) { c = document.createElement('div'); c.id = 'toast-container'; document.body.appendChild(c); }
-  const t = document.createElement('div');
-  t.className = `toast toast-${type}`;
-  t.textContent = msg;
-  c.appendChild(t);
-  setTimeout(() => t.classList.add('toast-show'), 10);
-  setTimeout(() => { t.classList.remove('toast-show'); setTimeout(() => t.remove(), 300); }, 3500);
-}
-
-/* ══════════════════════════════════════
-   HELPERS
-══════════════════════════════════════ */
-function esc(s) {
-  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
-function fmtDate(dt) {
-  return dt ? uiDate(dt) : '';
-}
-function fmtDateTime(dt) {
-  return dt ? uiDateTime(dt) : '';
-}
-function roleLabel(r) {
-  return { operator:'Оператор', supervisor:'Супервайзер', manager:'Руководитель', admin:'Администратор' }[r] || r || '';
-}
-function statusLabel(s) {
-  return uiStatusLabel(s);
-}
-function isAdmin(role) { return ['supervisor','manager','admin'].includes(role); }
-function canManageGroups(role = STATE.user?.role) { return ['manager','admin'].includes(role); }
-function canManageOperators() {
-  const role = STATE.user?.role;
-  return ['manager','admin'].includes(role) || (role === 'supervisor' && STATE.user?.can_manage_operators);
-}
-
-/* ══════════════════════════════════════
-   WINDOW EXPORTS
-══════════════════════════════════════ */
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Настройки аккаунта: смена логина и пароля, принудительная смена, выход. */
 
 /* ══════════════════════════════════════
    ACCOUNT SETTINGS MODAL
@@ -7214,6 +7239,8 @@ async function submitChangePassword() {
     btn.disabled = false; btn.textContent = 'Сохранить пароль';
   }
 }
+/* Выделено из 30-admin-coins-groups-operators.view.js (3110 строк).
+   Экспорт функций в window для инлайновых onclick в разметке. */
 
 window.showAccountSettingsModal = showAccountSettingsModal;
 window.submitChangeLogin        = submitChangeLogin;
@@ -7282,12 +7309,6 @@ window.submitOperatorLevelRuleForm = submitOperatorLevelRuleForm;
 window.deleteOperatorLevelRuleUi = deleteOperatorLevelRuleUi;
 window.disableOperatorLevelUi = disableOperatorLevelUi;
 window.manualOperatorLevelUi = manualOperatorLevelUi;
-
-
-/* ══════════════════════════════════════
-   VIEW: РАСЧЁТ ЗА ПЕРИОД
-══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    КОИНЫ: Еженедельный расчёт (ТЗ §3) — preview / apply / история запусков
 ══════════════════════════════════════ */
@@ -7491,7 +7512,6 @@ function exportWeeklyAccrualPeriod(format = 'csv') {
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
   window.open(api.exportUrl('/api/exports/weekly-results', { period_start: start, period_end: end, format }), '_blank');
 }
-
 /* ══════════════════════════════════════
    КОИНЫ: Настройки начислений (ТЗ §4) — GET/PUT /api/settings/coin-rules
 ══════════════════════════════════════ */
@@ -7624,7 +7644,6 @@ async function saveCoinRulesSettings() {
   const body = document.getElementById('coins-tab-body');
   if (body) renderCoinRulesSettingsTab(body);
 }
-
 let _sessionFilterStatus = 'active';
 let _sessionFilterQuery = '';
 let _sessionFilterRole = 'all';
@@ -7861,6 +7880,8 @@ async function revokeAllUserSessions(userId) {
 
 window.revokeUserSession = revokeUserSession;
 window.revokeAllUserSessions = revokeAllUserSessions;
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   «Расчёт за период»: экран, фильтры, загрузка и сборка отчёта. */
 
 function renderPeriodReport() {
   const el = document.getElementById('view-period-report');
@@ -8271,8 +8292,9 @@ function renderPeriodReport() {
 }
 
 window.renderPeriodReport = renderPeriodReport;
-
-
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Блоки отчёта за период: KPI, динамика, таблица операторов, сравнение
+   групп, матрица, тепловая карта, пирамида рисков, покрытие качеством. */
 
 function renderKpiBlock(summary) {
   const k = summary.kpi || {};
@@ -8860,6 +8882,9 @@ function renderAnalyticsWarningsBlock(warnings) {
 }
 
 /* ── Wiring: interactions for tabs, scatter plots, exports ──────────*/
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Фоновый прогрев кеша аналитики. */
+
 /* ══════════════════════════════════════
    VIEW: АНАЛИТИКА — с горизонтальными табами
 ══════════════════════════════════════ */
@@ -8928,6 +8953,8 @@ async function prefetchAnalyticsInBackground() {
     prefetchQueue[i]().catch(() => {}); // тихо, без throw
   }
 }
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Состояние, параметры, URL, SWR-кеш и форматирование аналитики. */
 
 const ANALYTICS_TABS = [
   { key: 'overview',   label: 'Сводка',            group: 'primary' },
@@ -9175,6 +9202,8 @@ function riskBadge(status) {
   const c = colors[status] || colors.no_data;
   return `<span class="risk-badge" style="color:${c.color};background:${c.bg}">${riskStatusLabel(status)}</span>`;
 }
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Каркас раздела: вкладки, диспетчер загрузки, предупреждения о данных. */
 
 async function renderAnalytics() {
   const el = document.getElementById('view-analytics');
@@ -9484,6 +9513,9 @@ async function loadAnalyticsTab(tab) {
 }
 
 /* ── Вкладка: Обзор ──────────────────────────────────────────*/
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Вкладка «Обзор» и управленческий дашборд. */
+
 async function loadOverviewTab(content) {
   const [dashboard, dynamics] = await Promise.all([
     analyticsFetch('management-dashboard', analyticsOpParams()),
@@ -9633,6 +9665,9 @@ function renderAnalyticsEmptyState() {
 }
 
 /* ── Вкладка: Операторы (таблица эффективности + зона внимания) ─*/
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Вкладка «Операторы»: таблица, сортировка, экспорт. */
+
 async function loadOperatorsTab(content) {
   // Один комбинированный запрос вместо 2
   const combined = await analyticsFetch('operators-combined', {
@@ -9747,6 +9782,9 @@ function downloadCsv(rows, filename) {
 }
 
 /* ── Вкладка: Группы ──────────────────────────────────────────*/
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Вкладка «Группы»: сравнение и графики по метрикам. */
+
 async function loadGroupsTab(content) {
   const groupsCmp = await analyticsFetch('groups-comparison', analyticsBaseParams());
   const items = groupsCmp.items || [];
@@ -9822,6 +9860,9 @@ function bindGroupsMetricTabs(items) {
 }
 
 /* ── Вкладка: Матрицы ──────────────────────────────────────────*/
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Вкладки «Матрица» и «Качество», недельная сетка. */
+
 async function loadMatrixTab(content) {
   content.innerHTML =
     renderQualityKvzMatrixBlock() +
@@ -9934,6 +9975,9 @@ function renderDailyGridBlock(grid) {
 }
 
 /* ── Вкладка: Динамика ────────────────────────────────────────*/
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Вкладки «Динамика» и «Штрафы». */
+
 async function loadDynamicsTab(content) {
   content.innerHTML = `
     <div class="an-card">
@@ -10003,6 +10047,9 @@ async function loadPenaltiesTab(content) {
 }
 
 /* ── Вкладка: Риски ───────────────────────────────────────────*/
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Вкладка «Риски»: таблица операторов и разрез по группам. */
+
 async function loadRisksTab(content) {
   const [riskPyramid, opsTable] = await Promise.all([
     analyticsFetch('risk-pyramid', analyticsBaseParams()),
@@ -10090,6 +10137,9 @@ function renderRiskByGroupsBlock(riskPyramid, items) {
 /* ── Вкладка: Баллы ───────────────────────────────────────────*/
 
 /* ── Вкладка: Баллы (полный анализ итоговых баллов) ───────────*/
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Вкладка «Баллы»: режимы отображения, формула, карточки, таблица, drawer. */
+
 let _pointsViewMode = 'top10'; // top10 | all | growth | table
 let _pointsData = null;
 
@@ -10457,6 +10507,9 @@ function openOperatorPointsDrawer(o) {
 
 
 /* ── Вкладка: Экспорт ─────────────────────────────────────────*/
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Вкладка «Экспорт»: выгрузки CSV и книги Excel. */
+
 async function loadExportTab(content) {
   content.innerHTML = `<div class="an-card">
     <div class="an-card-head">Экспорт отчётов</div>
@@ -10522,6 +10575,8 @@ async function exportAnalyticsCsv(kind) {
 }
 
 window.renderAnalytics = renderAnalytics;
+/* Выделено из 40-reports-analytics.view.js (2671 строка).
+   Раздел «Рейтинг»: описание горизонтальных вкладок. */
 
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ — обёртка с горизонтальными вкладками
@@ -10532,7 +10587,6 @@ const RATING_TABS = [
   { key: 'groups',   label: 'Сравнение групп' },
   { key: 'progress', label: 'Мой прогресс' },
 ];
-
 let _ratingActiveTab = 'overview';
 
 async function exportRatingFromRatingPage() {
@@ -10987,6 +11041,8 @@ const WHEEL_PRIZE_ICON = {
 const WHEEL_FAST_MS = 900;
 const WHEEL_TTL_MS = 45_000;
 const WHEEL_STATIC_TTL_MS = 5 * 60_000;
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Кеш, подписи призов и экран колеса для оператора. */
 
 function wheelCachedFetch(key, fetcher, fallback, onFresh, ttlMs = WHEEL_TTL_MS) {
   const cached = swrReadRaw(key);
@@ -11235,6 +11291,9 @@ async function renderWheelOperatorView(el) {
 }
 
 // Резервная палитра, если у приза не задан цвет
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Палитра, отрисовка SVG-колеса, вращение, результат, боковая панель. */
+
 const WHEEL_FALLBACK_COLORS = ['#38BDF8', '#818CF8', '#A78BFA', '#F472B6', '#FB7185', '#FBBF24', '#34D399', '#22D3EE'];
 
 // hex -> {r,g,b}
@@ -11456,6 +11515,9 @@ async function refreshWheelSidebar(el) {
 }
 
 /* ---------- Супервайзер / руководитель ---------- */
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Административный экран и вкладка кампаний. */
+
 let _wheelStaffTab = 'operations';
 
 async function renderWheelStaffView(el) {
@@ -11648,6 +11710,9 @@ async function createDefaultCampaign(body) {
 }
 
 /* ---------- Стафф: сектора (ТЗ 11.2) ---------- */
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Вкладка призов. */
+
 let _wheelSelectedPrizeIds = new Set();
 
 async function renderWheelPrizesTab(body) {
@@ -11862,6 +11927,9 @@ async function renderWheelPrizesTab(body) {
 }
 
 /* ---------- Стафф: билеты (ТЗ 12.3, 17) ---------- */
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Вкладки операций, билетов, вращений и статистики. */
+
 let _wheelTicketFilter = '';
 async function renderWheelOperationsTab(body) {
   body.innerHTML = `<div class="panel wheel-admin-panel"><div class="empty-state"><div class="loading-spinner"></div></div></div>`;
@@ -12076,6 +12144,8 @@ async function renderWheelStatsTab(body) {
       </div>
     </div>`;
 }
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Вкладка правил начисления билетов и её модальное окно. */
 
 function wheelSourceLabel(t) {
   return {
@@ -12351,6 +12421,9 @@ if (!window.__pulsWheelRuleModalClickFix) {
 }
 
 /* ---------- Стафф: логи проверок (ТЗ 8.7, 15) ---------- */
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Вкладки журнала и ручной выдачи билетов. */
+
 async function renderWheelLogsTab(body) {
   const data = await wheelCachedFetch(
     'wheel:admin:logs',
@@ -12518,6 +12591,8 @@ async function renderWheelIssueTab(body) {
     }
   };
 }
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Тесты для оператора: список доступных, история, карточки. */
 
 /* ══════════════════════════════════════
    VIEW: ТЕСТЫ — общий диспетчер по роли
@@ -12706,6 +12781,9 @@ function testCardHtml(t) {
 
 
 /* ── Прохождение теста ────────────────────────────────────────── */
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Прохождение теста: таймер, вопросы, завершение, экран результата. */
+
 let _activeTestRun = null; // { attemptId, questions, currentIndex, answers: {qid: [ids]}, expiresAt }
 
 /**
@@ -13019,6 +13097,8 @@ async function openTestResultModal(attemptId) {
 /* ────────────────────────────────────────────────────────────────
    АДМИНСКАЯ ЧАСТЬ (supervisor / manager / admin)
 ──────────────────────────────────────────────────────────────── */
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Административный список тестов. */
 
 async function renderTestsStaffView(el) {
   const myNavGen = STATE.navGen;
@@ -13128,6 +13208,9 @@ async function renderTestsStaffView(el) {
 }
 
 /* ── Конструктор теста ────────────────────────────────────────── */
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Конструктор теста: вопросы, награды, назначение, публикация. */
+
 let _testBuilderState = null; // { testId, test, questions: [...], assignTargetType, assignTargetIds }
 
 async function openTestBuilder(testId) {
@@ -13491,6 +13574,9 @@ async function saveTestBuilder(publish) {
 }
 
 /* ── Результаты и аналитика для руководства ─────────────────────── */
+/* Выделено из 60-wheel-tests.view.js (2603 строки).
+   Результаты теста: таблица попыток и аналитика. */
+
 async function openTestResultsView(testId) {
   const el = document.getElementById('view-tests');
   if (!el) return;
@@ -13590,7 +13676,6 @@ async function loadTestAnalyticsBlock(testId) {
     body.innerHTML = `<div class="status-line status-error">${esc(e.message)}</div>`;
   }
 }
-
 /* ══════════════════════════════════════
    РОЗЫГРЫШИ (ТЗ P2)
    Билеты — только из Колеса WOW. Оператор вкладывает билеты в розыгрыш,
@@ -13848,7 +13933,6 @@ window.renderRaffles = renderRaffles;
 window.submitEnterRaffle = submitEnterRaffle;
 window.openCreateRaffleModal = openCreateRaffleModal;
 window.submitCreateRaffle = submitCreateRaffle;
-
 let _missionAttempt = null;
 let _missionDirty = false;
 let _missionActionBusy = false;
@@ -14579,7 +14663,6 @@ async function saveMissionProviderWindow(missionId) {
     showToast(error.message, 'error');
   }
 }
-
 let _missionWorldCode = sessionStorage.getItem('puls-mission-world') || '';
 
 function learningWorldIllustration(world) {
@@ -14640,7 +14723,6 @@ function backToLearningWorlds() {
   sessionStorage.removeItem('puls-mission-world');
   renderMissions();
 }
-
 let _photoDialogReturnFocus = null;
 
 function photoRequirements(attempt) {
@@ -14754,7 +14836,6 @@ function closeMissionPreviewDialog() {
   if (_photoDialogReturnFocus?.isConnected) _photoDialogReturnFocus.focus();
   _photoDialogReturnFocus = null;
 }
-
 function renderLearningWorldRoute(el, world) {
   const missions = world.missions || [];
   el.innerHTML = `<div class="missions-page world-route-page" style="--world-accent:${esc(world.accent_color)}">
@@ -14766,7 +14847,6 @@ function renderLearningWorldRoute(el, world) {
     </section>
   </div>`;
 }
-
 function saparRow(icon, title, action = '', accent = false, subtitle = '') {
   const attrs = action ? `onclick="${action}"` : 'disabled';
   return `<button type="button" class="sapar-list-row ${accent ? 'is-target' : ''}" ${attrs}><i>${icon}</i><span><b>${esc(title)}</b>${subtitle ? `<small>${esc(subtitle)}</small>` : ''}</span><em>›</em></button>`;
@@ -14834,7 +14914,6 @@ function scheduleSaparProcessing(attempt) {
     if (_missionAttempt?.id === attempt.id && _missionAttempt?.current_step?.screen_key === 'sapar_processing') missionAction('finish_processing');
   }, 1200);
 }
-
 function smzPurposeForScreen(screen) {
   return screen.includes('documents') ? 'documents' : 'auth';
 }
@@ -14954,7 +15033,6 @@ function openTrainingAvr(number) {
   screen.insertAdjacentHTML('beforeend', `<div class="smz-pdf-preview" role="dialog" aria-modal="true" aria-label="Предпросмотр учебного АВР"><div><button type="button" onclick="this.closest('.smz-pdf-preview').remove()" aria-label="Закрыть">×</button><span>УЧЕБНЫЙ ДОКУМЕНТ</span><h3>АВР ${number}</h3><p>Без персональных данных, реальной подписи и юридической силы.</p></div></div>`);
   screen.querySelector('.smz-pdf-preview button')?.focus();
 }
-
 /* Operator workspace v3: one visual system for cabinet and rating. */
 
 const OP_COIN = '₡';
@@ -15277,7 +15355,6 @@ function opProgressInfographic(pointItems, coinItems, rankItems) {
 
 window.renderCabinet = renderCabinet;
 window.renderRating = renderRating;
-
 /* Operator rating v4: a focused competition dashboard without data tables. */
 
 const rcManagementRating = window.renderRating;
@@ -15563,4 +15640,3 @@ async function rcRatingEntry() {
 }
 
 window.renderRating = rcRatingEntry;
-

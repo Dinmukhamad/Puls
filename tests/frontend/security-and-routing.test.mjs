@@ -30,18 +30,28 @@ const shop = await readFile(
   new URL('../../js/src/views/rating/20-rating-shop-summary.view.js', import.meta.url),
   'utf8',
 );
-const users = await readFile(
-  new URL('../../js/src/views/coins/30-admin-coins-groups-operators.view.js', import.meta.url),
-  'utf8',
-);
+// Проверки прав живут в модулях групп, операторов и управления пользователями.
+const users = (
+  await Promise.all([
+    '../../js/src/views/groups/30-e-groups.view.js',
+    '../../js/src/views/operators/30-f-operators.view.js',
+    '../../js/src/views/users/30-i-user-management.view.js',
+  ].map((rel) => readFile(new URL(rel, import.meta.url), 'utf8')))
+).join('\n');
 const levels = await readFile(
   new URL('../../js/src/views/operator-levels/10-levels-cabinet.view.js', import.meta.url),
   'utf8',
 );
-const testsView = await readFile(
-  new URL('../../js/src/views/wheel/60-wheel-tests.view.js', import.meta.url),
-  'utf8',
-);
+// Тесты вынесены из файла колеса в js/src/views/tests/.
+const testsView = (
+  await Promise.all([
+    '../../js/src/views/tests/60-h-tests-operator.view.js',
+    '../../js/src/views/tests/60-i-test-runner.view.js',
+    '../../js/src/views/tests/60-j-tests-staff.view.js',
+    '../../js/src/views/tests/60-k-test-builder.view.js',
+    '../../js/src/views/tests/60-l-test-results.view.js',
+  ].map((rel) => readFile(new URL(rel, import.meta.url), 'utf8')))
+).join('\n');
 
 test('every hash navigation is checked against the role registry', () => {
   assert.match(core, /addEventListener\('hashchange'/);
