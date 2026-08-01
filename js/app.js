@@ -241,9 +241,9 @@ function parseStoredView(value) {
 }
 
 function allowedViewsForRole(role) {
-  if (!isAdmin(role)) return ['cabinet', 'rating', 'tests', 'missions', 'wheel', 'raffles', 'shop'];
+  if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests', 'missions'];
 
-  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'raffles', 'tests', 'missions', 'period-report', 'analytics'];
+  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'tests', 'missions', 'period-report', 'analytics'];
   if (role === 'manager' || role === 'admin') views.push('operator-levels');
   if (canManageGroups(role)) views.push('groups');
   if (role === 'admin') views.push('sessions', 'cabinet', 'rating');
@@ -291,24 +291,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Every browser-driven route change goes through the same role guard as sidebar
 // navigation. This also prevents a restricted hash from exposing an empty or
 // stale administrative view after Back/Forward navigation.
-let _routeEventPending = false;
-function restoreBrowserRoute() {
-  if (_routeEventPending) return;
-  _routeEventPending = true;
-  queueMicrotask(() => {
-    _routeEventPending = false;
+window.addEventListener('hashchange', () => {
   const role = STATE.user?.role;
   if (!role) return;
-    const requested = initialRouteForRole(role);
+  const requested = parseStoredView(location.hash);
   const fallback = isAdmin(role) ? 'summary' : 'cabinet';
   const view = allowedViewsForRole(role).includes(requested.view)
     ? requested.view
     : fallback;
   navigateTo(view, { tab: requested.tab, history: false });
-  });
-}
-window.addEventListener('hashchange', restoreBrowserRoute);
-window.addEventListener('popstate', restoreBrowserRoute);
+});
 
 async function tryRestoreSession() {
   try {
@@ -351,21 +343,13 @@ function normalizeUser(u) {
    THEME
 ══════════════════════════════════════ */
 function initTheme() {
-  const media = window.matchMedia('(prefers-color-scheme: dark)');
-  const saved = localStorage.getItem('pulse-theme');
-  const current = saved === 'light' || saved === 'dark'
-    ? saved
-    : (media.matches ? 'dark' : 'light');
-  document.documentElement.setAttribute('data-theme', current);
+  const saved = localStorage.getItem('pulse-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
   document.getElementById('theme-toggle')?.addEventListener('click', () => {
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     const next = dark ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('pulse-theme', next);
-  });
-  media.addEventListener?.('change', event => {
-    if (localStorage.getItem('pulse-theme')) return;
-    document.documentElement.setAttribute('data-theme', event.matches ? 'dark' : 'light');
   });
 }
 
@@ -375,9 +359,35 @@ function initTheme() {
 function initNav() {
   const sideNav = document.querySelector('.side-nav');
   if (sideNav && !sideNav.id) sideNav.id = 'primary-navigation';
+  if (sideNav && !document.getElementById('mobile-nav-toggle')) {
+    const mobileToggle = document.createElement('button');
+    mobileToggle.id = 'mobile-nav-toggle';
+    mobileToggle.className = 'mobile-nav-toggle';
+    mobileToggle.type = 'button';
+    mobileToggle.setAttribute('aria-controls', sideNav.id);
+    mobileToggle.setAttribute('aria-expanded', 'false');
+    mobileToggle.setAttribute('aria-label', 'Открыть навигацию');
+    mobileToggle.innerHTML = '<span aria-hidden="true">☰</span><b>Puls.</b>';
+
+    const backdrop = document.createElement('button');
+    backdrop.className = 'mobile-nav-backdrop';
+    backdrop.type = 'button';
+    backdrop.setAttribute('aria-label', 'Закрыть навигацию');
+
+    const setMobileNav = open => {
+      document.body.classList.toggle('mobile-nav-open', open);
+      mobileToggle.setAttribute('aria-expanded', String(open));
+      mobileToggle.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию');
+    };
+    mobileToggle.addEventListener('click', () => setMobileNav(!document.body.classList.contains('mobile-nav-open')));
+    backdrop.addEventListener('click', () => setMobileNav(false));
+    document.body.append(mobileToggle, backdrop);
+  }
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     link.addEventListener('click', e => {
       e.preventDefault();
+      document.body.classList.remove('mobile-nav-open');
+      document.getElementById('mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
       navigateTo(link.dataset.navTarget);
     });
   });
@@ -449,13 +459,6 @@ function navigateTo(view, options = {}) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(l => {
     const target = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
     l.classList.toggle('active', target === view);
-    if (target === view) l.setAttribute('aria-current', 'page');
-    else l.removeAttribute('aria-current');
-  });
-  document.querySelectorAll('.mobile-nav__item[data-nav-target]').forEach(item => {
-    item.classList.toggle('active', item.dataset.navTarget === view);
-    if (item.dataset.navTarget === view) item.setAttribute('aria-current', 'page');
-    else item.removeAttribute('aria-current');
   });
   const el = document.getElementById(`view-${view}`);
   if (el) el.classList.add('active');
@@ -602,7 +605,6 @@ async function bootApp() {
   document.body.classList.toggle('role-operator', !isAdmin(role));
   buildViews(role);
   renderSidebar(role);
-  renderMobileNav(role);
   setText('side-user', STATE.user?.full_name || STATE.user?.username || '');
   setText('side-role', roleLabel(role));
   setText('side-level', '—');
@@ -815,59 +817,14 @@ function renderSidebar(role) {
   const allowedViews = new Set(allowedViewsForRole(role));
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     const t = link.dataset.navTarget;
-    link.hidden = !allowedViews.has(t);
-  });
-}
-
-function renderMobileNav(role) {
-  const host = document.getElementById('mobile-nav');
-  if (!host) return;
-  const allowed = allowedViewsForRole(role);
-  const preferred = isAdmin(role)
-    ? ['summary', 'operators', 'analytics', 'coins']
-    : ['cabinet', 'rating', 'tests', 'wheel'];
-  const primary = preferred.filter(view => allowed.includes(view)).slice(0, 4);
-  const remaining = allowed.filter(view => !primary.includes(view));
-  const labels = {
-    summary: 'Сводка', operators: 'Люди', analytics: 'Аналитика', coins: 'Коины',
-    cabinet: 'Кабинет', rating: 'Рейтинг', tests: 'Тесты', wheel: 'WOW',
-    shop: 'Магазин', missions: 'Миссии', raffles: 'Розыгрыши', groups: 'Группы',
-    'operator-levels': 'Уровни', 'period-report': 'Расчёт', sessions: 'Сессии',
-  };
-  const sideLinks = new Map(
-    [...document.querySelectorAll('.side-nav-link[data-nav-target]')]
-      .map(link => [link.dataset.navTarget, link]),
-  );
-  host.innerHTML = primary.map(view => {
-    const icon = sideLinks.get(view)?.querySelector('svg')?.outerHTML || '';
-    return `<button class="mobile-nav__item" type="button" data-nav-target="${view}">${icon}<span>${esc(labels[view] || view)}</span></button>`;
-  }).join('') + `
-    <button class="mobile-nav__item mobile-nav__more" type="button" data-mobile-more aria-haspopup="dialog">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
-      <span>Ещё</span>
-    </button>`;
-  host.hidden = false;
-  host.querySelectorAll('[data-nav-target]').forEach(button => {
-    button.addEventListener('click', () => navigateTo(button.dataset.navTarget));
-  });
-  host.querySelector('[data-mobile-more]')?.addEventListener('click', () => {
-    const items = remaining.map(view => {
-      const icon = sideLinks.get(view)?.querySelector('svg')?.outerHTML || '';
-      return `<button class="mobile-more__item" type="button" data-mobile-nav-target="${view}">${icon}<span>${esc(labels[view] || view)}</span></button>`;
-    }).join('');
-    showModal(`<div class="mobile-more"><h2 class="modal-title">Разделы</h2><div class="mobile-more__grid">${items}</div></div>`, { className: 'mobile-more-sheet' });
-    document.querySelectorAll('[data-mobile-nav-target]').forEach(button => {
-      button.addEventListener('click', () => {
-        closeModal();
-        navigateTo(button.dataset.mobileNavTarget);
-      });
-    });
+    link.style.display = allowedViews.has(t) ? '' : 'none';
   });
 }
 
 /* ══════════════════════════════════════
    VIEW: УРОВНИ ОПЕРАТОРОВ
 ══════════════════════════════════════ */
+
 /* ══════════════════════════════════════
    УВЕДОМЛЕНИЯ (ТЗ P2) — колокольчик в сайдбаре, модалка со списком
 ══════════════════════════════════════ */
@@ -966,98 +923,7 @@ async function _loadNotificationsIntoModal() {
     });
   });
 }
-/* Shared accessible modal and bottom-sheet controller. */
-let UI_MODAL_RETURN_FOCUS = null;
 
-function modalFocusableElements(container) {
-  if (!container) return [];
-  return [...container.querySelectorAll(
-    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  )].filter(node => !node.hidden && node.getAttribute('aria-hidden') !== 'true');
-}
-
-function showModal(html, options = {}) {
-  let overlay = document.getElementById('modal-overlay');
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'modal-overlay';
-    overlay.className = 'modal-overlay';
-    overlay.hidden = true;
-    document.body.appendChild(overlay);
-  }
-
-  UI_MODAL_RETURN_FOCUS = document.activeElement instanceof HTMLElement
-    ? document.activeElement
-    : null;
-  const forced = Boolean(options.force);
-  const extraClass = options.className
-    ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '')
-    : '';
-  overlay.dataset.force = forced ? 'true' : 'false';
-  overlay.innerHTML = `
-    <div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}" role="${options.role || 'dialog'}" aria-modal="true">
-      ${html}
-      ${forced ? '' : '<button class="modal-close" type="button" aria-label="Закрыть окно" data-modal-close>×</button>'}
-    </div>`;
-  overlay.hidden = false;
-  document.body.classList.add('modal-open');
-
-  const dialog = overlay.querySelector('.modal');
-  const title = dialog?.querySelector('.modal-title, h1, h2, h3');
-  if (dialog && title) {
-    if (!title.id) title.id = `modal-title-${Date.now()}`;
-    dialog.setAttribute('aria-labelledby', title.id);
-  }
-  overlay.onclick = event => {
-    if (event.target === overlay && !forced) closeModal();
-  };
-  overlay.querySelector('[data-modal-close]')?.addEventListener('click', () => closeModal());
-  requestAnimationFrame(() => {
-    const focusable = modalFocusableElements(dialog);
-    (focusable[0] || dialog)?.focus?.({ preventScroll: true });
-    if (!focusable.length) dialog?.setAttribute('tabindex', '-1');
-  });
-}
-
-function closeModal(force = false) {
-  const overlay = document.getElementById('modal-overlay');
-  if (!overlay || overlay.hidden) return;
-  if (overlay.dataset.force === 'true' && !force) return;
-  overlay.hidden = true;
-  overlay.innerHTML = '';
-  document.body.classList.remove('modal-open');
-  if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
-  const returnFocus = UI_MODAL_RETURN_FOCUS;
-  UI_MODAL_RETURN_FOCUS = null;
-  if (returnFocus?.isConnected) requestAnimationFrame(() => returnFocus.focus({ preventScroll: true }));
-}
-
-document.addEventListener('keydown', event => {
-  const overlay = document.getElementById('modal-overlay');
-  if (!overlay || overlay.hidden) return;
-  if (event.key === 'Escape' && overlay.dataset.force !== 'true') {
-    event.preventDefault();
-    closeModal();
-    return;
-  }
-  if (event.key !== 'Tab') return;
-  const dialog = overlay.querySelector('.modal');
-  const focusable = modalFocusableElements(dialog);
-  if (!focusable.length) {
-    event.preventDefault();
-    dialog?.focus();
-    return;
-  }
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
-});
 /* Shared UI contracts. Keep screen-specific views free from raw enums and ad-hoc formats. */
 const UI_TIME_ZONE = 'Asia/Almaty';
 
@@ -1198,6 +1064,9 @@ function uiConfirmAction({
   confirmLabel = 'Подтвердить',
   danger = true,
 } = {}) {
+  if (typeof showModal !== 'function') {
+    return Promise.resolve(window.confirm(`${title}\n\n${description}`));
+  }
   uiCancelPendingConfirm();
   return new Promise(resolve => {
     UI_CONFIRM_RESOLVER = resolve;
@@ -1228,6 +1097,7 @@ function uiReadQuery(defaults = {}) {
     Object.entries(defaults).map(([key, fallback]) => [key, params.get(key) ?? fallback]),
   );
 }
+
 async function renderOperatorLevelsSettings() {
   const el = document.getElementById('view-operator-levels');
   if (!el) return;
@@ -2210,6 +2080,7 @@ async function submitChangeUsername() {
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
 ══════════════════════════════════════ */
+
 /* ══════════════════════════════════════
    УРОВНИ: вкладка «Достижения» (ТЗ §7) — каталог, включение/выключение, ручная выдача
 ══════════════════════════════════════ */
@@ -2400,6 +2271,7 @@ async function submitGrantAchievement(achievementId) {
     if (errEl) errEl.textContent = e.message;
   }
 }
+
 /* ══════════════════════════════════════
    КАБИНЕТ: показатели недели, прозрачный расчёт коинов, достижения (ТЗ §5, §7)
    Один общий фетч /api/cabinet/me — данные шарятся между обоими блоками.
@@ -2576,6 +2448,7 @@ async function renderCabinetAchievements() {
       </div>
     </div>`;
 }
+
 /* Управленческая «Сводка»: компактный экран, не дублирующий подробные вкладки Analytics. */
 let _summaryManagement = { start: '', end: '', group: '', preset: 'week', ready: false };
 
@@ -2645,6 +2518,7 @@ async function renderManagementSummary() {
   el.querySelector('#summary-export').addEventListener('click', () => { readFilters(); const params = new URLSearchParams({ start_date: state.start, end_date: state.end }); if (state.group) params.set('group_id', state.group); window.location.href = api._base() + '/api/analytics/export.xlsx?' + params; });
   await load();
 }
+
 async function renderRatingOverviewTab(el) {
   const role  = STATE.user?.role || 'operator';
   const isOp  = role === 'operator';
@@ -3987,6 +3861,7 @@ function renderSummary() {
 /* ══════════════════════════════════════
    VIEW: ОПЕРАТОРЫ (ADMIN)
 ══════════════════════════════════════ */
+
 /* ══════════════════════════════════════
    СВОДКА: детальная сводка по неделе с фильтрами (ТЗ §9)
 ══════════════════════════════════════ */
@@ -4185,6 +4060,7 @@ function exportAdminSummary() {
   if (f.group_id) params.group_id = f.group_id;
   window.open(api.exportUrl('/api/exports/rating', params), '_blank');
 }
+
 /* ══════════════════════════════════════
    СВОДКА: быстрые действия по строке оператора (ТЗ §9.5)
    Начислить / Списать / Открыть кабинет / Открыть историю / Открыть заявки
@@ -4300,6 +4176,7 @@ async function openOperatorCabinetModal(operatorId, operatorName) {
       <button class="btn-primary" onclick="closeModal(); openHistoryForOperator(${operatorId}, '${esc(operatorName).replace(/'/g, '&#39;')}')">Вся история →</button>
     </div>`;
 }
+
 function renderAdminOperators() {
   return renderUsersPage();
 }
@@ -6112,6 +5989,32 @@ async function showOperatorHistoryModal(id) {
 }
 
 /* ══════════════════════════════════════
+   MODALS
+══════════════════════════════════════ */
+function showModal(html, options = {}) {
+  let overlay = document.getElementById('modal-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'modal-overlay';
+    overlay.className = 'modal-overlay';
+    document.body.appendChild(overlay);
+  }
+  const forced = Boolean(options.force);
+  overlay.dataset.force = forced ? 'true' : 'false';
+  const extraClass = options.className ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '') : '';
+  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
+  overlay.style.display = 'flex';
+  overlay.onclick = e => { if (e.target === overlay && !forced) closeModal(); };
+}
+function closeModal(force = false) {
+  const o = document.getElementById('modal-overlay');
+  if (o?.dataset.force === 'true' && !force) return;
+  if (o) o.style.display = 'none';
+  if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
+}
+
+
+/* ══════════════════════════════════════
    СТАВКИ И НОРМЫ ЧАСОВ
 ══════════════════════════════════════ */
 
@@ -7384,6 +7287,7 @@ window.manualOperatorLevelUi = manualOperatorLevelUi;
 /* ══════════════════════════════════════
    VIEW: РАСЧЁТ ЗА ПЕРИОД
 ══════════════════════════════════════ */
+
 /* ══════════════════════════════════════
    КОИНЫ: Еженедельный расчёт (ТЗ §3) — preview / apply / история запусков
 ══════════════════════════════════════ */
@@ -7587,6 +7491,7 @@ function exportWeeklyAccrualPeriod(format = 'csv') {
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
   window.open(api.exportUrl('/api/exports/weekly-results', { period_start: start, period_end: end, format }), '_blank');
 }
+
 /* ══════════════════════════════════════
    КОИНЫ: Настройки начислений (ТЗ §4) — GET/PUT /api/settings/coin-rules
 ══════════════════════════════════════ */
@@ -7719,6 +7624,7 @@ async function saveCoinRulesSettings() {
   const body = document.getElementById('coins-tab-body');
   if (body) renderCoinRulesSettingsTab(body);
 }
+
 let _sessionFilterStatus = 'active';
 let _sessionFilterQuery = '';
 let _sessionFilterRole = 'all';
@@ -7955,6 +7861,7 @@ async function revokeAllUserSessions(userId) {
 
 window.revokeUserSession = revokeUserSession;
 window.revokeAllUserSessions = revokeAllUserSessions;
+
 function renderPeriodReport() {
   const el = document.getElementById('view-period-report');
   if (!el) return;
@@ -10625,6 +10532,7 @@ const RATING_TABS = [
   { key: 'groups',   label: 'Сравнение групп' },
   { key: 'progress', label: 'Мой прогресс' },
 ];
+
 let _ratingActiveTab = 'overview';
 
 async function exportRatingFromRatingPage() {
@@ -11079,6 +10987,7 @@ const WHEEL_PRIZE_ICON = {
 const WHEEL_FAST_MS = 900;
 const WHEEL_TTL_MS = 45_000;
 const WHEEL_STATIC_TTL_MS = 5 * 60_000;
+
 function wheelCachedFetch(key, fetcher, fallback, onFresh, ttlMs = WHEEL_TTL_MS) {
   const cached = swrReadRaw(key);
   const saveFresh = (fresh, previous) => {
@@ -13681,6 +13590,7 @@ async function loadTestAnalyticsBlock(testId) {
     body.innerHTML = `<div class="status-line status-error">${esc(e.message)}</div>`;
   }
 }
+
 /* ══════════════════════════════════════
    РОЗЫГРЫШИ (ТЗ P2)
    Билеты — только из Колеса WOW. Оператор вкладывает билеты в розыгрыш,
@@ -13938,6 +13848,7 @@ window.renderRaffles = renderRaffles;
 window.submitEnterRaffle = submitEnterRaffle;
 window.openCreateRaffleModal = openCreateRaffleModal;
 window.submitCreateRaffle = submitCreateRaffle;
+
 let _missionAttempt = null;
 let _missionDirty = false;
 let _missionActionBusy = false;
@@ -14562,16 +14473,8 @@ async function restartCurrentMission() {
   }
 }
 
-async function backToMissionMap(force = false) {
-  if (!force && _missionDirty) {
-    const confirmed = await uiConfirmAction({
-      title: 'Вернуться к карте?',
-      description: 'Введённое, но ещё не подтверждённое действие не сохранится.',
-      confirmLabel: 'Вернуться',
-      danger: false,
-    });
-    if (!confirmed) return;
-  }
+function backToMissionMap(force = false) {
+  if (!force && _missionDirty && !confirm('Введённое, но ещё не подтверждённое действие не сохранится. Вернуться к карте?')) return;
   sessionStorage.removeItem('puls-mission-attempt');
   _missionAttempt = null;
   _missionDirty = false;
@@ -14676,6 +14579,7 @@ async function saveMissionProviderWindow(missionId) {
     showToast(error.message, 'error');
   }
 }
+
 let _missionWorldCode = sessionStorage.getItem('puls-mission-world') || '';
 
 function learningWorldIllustration(world) {
@@ -14736,6 +14640,7 @@ function backToLearningWorlds() {
   sessionStorage.removeItem('puls-mission-world');
   renderMissions();
 }
+
 let _photoDialogReturnFocus = null;
 
 function photoRequirements(attempt) {
@@ -14849,6 +14754,7 @@ function closeMissionPreviewDialog() {
   if (_photoDialogReturnFocus?.isConnected) _photoDialogReturnFocus.focus();
   _photoDialogReturnFocus = null;
 }
+
 function renderLearningWorldRoute(el, world) {
   const missions = world.missions || [];
   el.innerHTML = `<div class="missions-page world-route-page" style="--world-accent:${esc(world.accent_color)}">
@@ -14860,6 +14766,7 @@ function renderLearningWorldRoute(el, world) {
     </section>
   </div>`;
 }
+
 function saparRow(icon, title, action = '', accent = false, subtitle = '') {
   const attrs = action ? `onclick="${action}"` : 'disabled';
   return `<button type="button" class="sapar-list-row ${accent ? 'is-target' : ''}" ${attrs}><i>${icon}</i><span><b>${esc(title)}</b>${subtitle ? `<small>${esc(subtitle)}</small>` : ''}</span><em>›</em></button>`;
@@ -14927,6 +14834,7 @@ function scheduleSaparProcessing(attempt) {
     if (_missionAttempt?.id === attempt.id && _missionAttempt?.current_step?.screen_key === 'sapar_processing') missionAction('finish_processing');
   }, 1200);
 }
+
 function smzPurposeForScreen(screen) {
   return screen.includes('documents') ? 'documents' : 'auth';
 }
@@ -15046,6 +14954,7 @@ function openTrainingAvr(number) {
   screen.insertAdjacentHTML('beforeend', `<div class="smz-pdf-preview" role="dialog" aria-modal="true" aria-label="Предпросмотр учебного АВР"><div><button type="button" onclick="this.closest('.smz-pdf-preview').remove()" aria-label="Закрыть">×</button><span>УЧЕБНЫЙ ДОКУМЕНТ</span><h3>АВР ${number}</h3><p>Без персональных данных, реальной подписи и юридической силы.</p></div></div>`);
   screen.querySelector('.smz-pdf-preview button')?.focus();
 }
+
 /* Operator workspace v3: one visual system for cabinet and rating. */
 
 const OP_COIN = '₡';
@@ -15368,6 +15277,7 @@ function opProgressInfographic(pointItems, coinItems, rankItems) {
 
 window.renderCabinet = renderCabinet;
 window.renderRating = renderRating;
+
 /* Operator rating v4: a focused competition dashboard without data tables. */
 
 const rcManagementRating = window.renderRating;
@@ -15653,3 +15563,4 @@ async function rcRatingEntry() {
 }
 
 window.renderRating = rcRatingEntry;
+

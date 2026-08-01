@@ -246,18 +246,6 @@ html[data-theme="dark"] .an-exec-hero,
 html[data-theme="dark"] #view-analytics .analytics-tabs,
 html[data-theme="dark"] #view-analytics .an-filters-card { background: var(--card-bg); }
 
-@media (min-width: 1181px) and (max-width: 1500px) {
-  #view-analytics .an-filters-row { grid-template-columns: repeat(12, minmax(0, 1fr)); }
-  #view-analytics .an-filters-row .form-group:nth-child(1),
-  #view-analytics .an-filters-row .form-group:nth-child(2),
-  #view-analytics .an-filters-row .form-group:nth-child(3) { grid-column: span 2; }
-  #view-analytics .an-filters-row .form-group:nth-child(4),
-  #view-analytics .an-filters-row .form-group:nth-child(5) { grid-column: span 3; }
-  #view-analytics .an-checkbox-label { grid-column: 1 / span 6; }
-  #view-analytics #an-reset-btn { grid-column: 9 / span 2; }
-  #view-analytics #an-apply-btn { grid-column: 11 / span 2; }
-}
-
 @media (max-width: 1180px) {
   #view-analytics .an-filters-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .an-exec-hero { grid-template-columns: auto 1fr; }

@@ -193,9 +193,9 @@ textarea {
 }
 
 .btn-primary {
-  color: #fff;
-  background: var(--primary-gradient);
-  border-color: transparent;
+  color: #fff !important;
+  background: var(--primary-gradient) !important;
+  border-color: transparent !important;
   box-shadow: var(--shadow-button);
 }
 
@@ -270,8 +270,8 @@ input:not([type="checkbox"]):not([type="radio"]):focus,
 select:focus,
 textarea:focus {
   outline: none;
-  border-color: var(--accent-primary);
-  box-shadow: var(--focus-ring);
+  border-color: var(--accent-primary) !important;
+  box-shadow: var(--focus-ring) !important;
 }
 
 .filter-tabs,
@@ -315,15 +315,15 @@ textarea:focus {
 
 /* Wheel workspace navigation: compact, balanced and visually connected. */
 #view-wheel .filter-tabs.wheel-tabs {
-  display: flex;
-  width: max-content;
+  display: flex !important;
+  width: max-content !important;
   max-width: calc(100% - 32px);
   min-height: 42px;
-  margin: 0 auto 18px;
-  padding: 4px;
+  margin: 0 auto 18px !important;
+  padding: 4px !important;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 2px !important;
   overflow-x: auto;
   background: color-mix(in srgb, var(--bg-muted) 76%, var(--card-bg));
   border: 1px solid var(--border-soft);
@@ -338,18 +338,18 @@ textarea:focus {
 
 #view-wheel .filter-tabs.wheel-tabs .filter-tab {
   position: relative;
-  flex: 0 0 auto;
-  width: auto;
-  min-width: 0;
-  min-height: 32px;
-  padding: 7px 15px;
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  min-height: 32px !important;
+  padding: 7px 15px !important;
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
   background: transparent;
-  border: 0;
-  border-radius: 7px;
+  border: 0 !important;
+  border-radius: 7px !important;
   box-shadow: none;
   transition: color .16s ease, background-color .16s ease, box-shadow .16s ease, transform .16s ease;
 }
@@ -382,14 +382,14 @@ html[data-theme="dark"] #view-wheel .filter-tabs.wheel-tabs {
 
 @media (max-width: 760px) {
   #view-wheel .filter-tabs.wheel-tabs {
-    width: calc(100% - 24px);
+    width: calc(100% - 24px) !important;
     max-width: none;
-    margin-inline: 12px;
+    margin-inline: 12px !important;
     justify-content: flex-start;
   }
 
   #view-wheel .filter-tabs.wheel-tabs .filter-tab {
-    padding-inline: 13px;
+    padding-inline: 13px !important;
   }
 }
 
@@ -545,9 +545,9 @@ html[data-theme="dark"] .btn-secondary {
   *,
   *::before,
   *::after {
-    scroll-behavior: auto;
-    animation-duration: .01ms;
-    animation-iteration-count: 1;
-    transition-duration: .01ms;
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
   }
 }

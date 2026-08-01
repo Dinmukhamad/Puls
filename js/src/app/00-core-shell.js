@@ -240,9 +240,9 @@ function parseStoredView(value) {
 }
 
 function allowedViewsForRole(role) {
-  if (!isAdmin(role)) return ['cabinet', 'rating', 'tests', 'missions', 'wheel', 'raffles', 'shop'];
+  if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests', 'missions'];
 
-  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'raffles', 'tests', 'missions', 'period-report', 'analytics'];
+  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'tests', 'missions', 'period-report', 'analytics'];
   if (role === 'manager' || role === 'admin') views.push('operator-levels');
   if (canManageGroups(role)) views.push('groups');
   if (role === 'admin') views.push('sessions', 'cabinet', 'rating');
@@ -290,24 +290,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Every browser-driven route change goes through the same role guard as sidebar
 // navigation. This also prevents a restricted hash from exposing an empty or
 // stale administrative view after Back/Forward navigation.
-let _routeEventPending = false;
-function restoreBrowserRoute() {
-  if (_routeEventPending) return;
-  _routeEventPending = true;
-  queueMicrotask(() => {
-    _routeEventPending = false;
+window.addEventListener('hashchange', () => {
   const role = STATE.user?.role;
   if (!role) return;
-    const requested = initialRouteForRole(role);
+  const requested = parseStoredView(location.hash);
   const fallback = isAdmin(role) ? 'summary' : 'cabinet';
   const view = allowedViewsForRole(role).includes(requested.view)
     ? requested.view
     : fallback;
   navigateTo(view, { tab: requested.tab, history: false });
-  });
-}
-window.addEventListener('hashchange', restoreBrowserRoute);
-window.addEventListener('popstate', restoreBrowserRoute);
+});
 
 async function tryRestoreSession() {
   try {
@@ -350,21 +342,13 @@ function normalizeUser(u) {
    THEME
 ══════════════════════════════════════ */
 function initTheme() {
-  const media = window.matchMedia('(prefers-color-scheme: dark)');
-  const saved = localStorage.getItem('pulse-theme');
-  const current = saved === 'light' || saved === 'dark'
-    ? saved
-    : (media.matches ? 'dark' : 'light');
-  document.documentElement.setAttribute('data-theme', current);
+  const saved = localStorage.getItem('pulse-theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
   document.getElementById('theme-toggle')?.addEventListener('click', () => {
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     const next = dark ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     localStorage.setItem('pulse-theme', next);
-  });
-  media.addEventListener?.('change', event => {
-    if (localStorage.getItem('pulse-theme')) return;
-    document.documentElement.setAttribute('data-theme', event.matches ? 'dark' : 'light');
   });
 }
 
@@ -374,9 +358,35 @@ function initTheme() {
 function initNav() {
   const sideNav = document.querySelector('.side-nav');
   if (sideNav && !sideNav.id) sideNav.id = 'primary-navigation';
+  if (sideNav && !document.getElementById('mobile-nav-toggle')) {
+    const mobileToggle = document.createElement('button');
+    mobileToggle.id = 'mobile-nav-toggle';
+    mobileToggle.className = 'mobile-nav-toggle';
+    mobileToggle.type = 'button';
+    mobileToggle.setAttribute('aria-controls', sideNav.id);
+    mobileToggle.setAttribute('aria-expanded', 'false');
+    mobileToggle.setAttribute('aria-label', 'Открыть навигацию');
+    mobileToggle.innerHTML = '<span aria-hidden="true">☰</span><b>Puls.</b>';
+
+    const backdrop = document.createElement('button');
+    backdrop.className = 'mobile-nav-backdrop';
+    backdrop.type = 'button';
+    backdrop.setAttribute('aria-label', 'Закрыть навигацию');
+
+    const setMobileNav = open => {
+      document.body.classList.toggle('mobile-nav-open', open);
+      mobileToggle.setAttribute('aria-expanded', String(open));
+      mobileToggle.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию');
+    };
+    mobileToggle.addEventListener('click', () => setMobileNav(!document.body.classList.contains('mobile-nav-open')));
+    backdrop.addEventListener('click', () => setMobileNav(false));
+    document.body.append(mobileToggle, backdrop);
+  }
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     link.addEventListener('click', e => {
       e.preventDefault();
+      document.body.classList.remove('mobile-nav-open');
+      document.getElementById('mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
       navigateTo(link.dataset.navTarget);
     });
   });
@@ -448,13 +458,6 @@ function navigateTo(view, options = {}) {
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(l => {
     const target = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
     l.classList.toggle('active', target === view);
-    if (target === view) l.setAttribute('aria-current', 'page');
-    else l.removeAttribute('aria-current');
-  });
-  document.querySelectorAll('.mobile-nav__item[data-nav-target]').forEach(item => {
-    item.classList.toggle('active', item.dataset.navTarget === view);
-    if (item.dataset.navTarget === view) item.setAttribute('aria-current', 'page');
-    else item.removeAttribute('aria-current');
   });
   const el = document.getElementById(`view-${view}`);
   if (el) el.classList.add('active');
@@ -601,7 +604,6 @@ async function bootApp() {
   document.body.classList.toggle('role-operator', !isAdmin(role));
   buildViews(role);
   renderSidebar(role);
-  renderMobileNav(role);
   setText('side-user', STATE.user?.full_name || STATE.user?.username || '');
   setText('side-role', roleLabel(role));
   setText('side-level', '—');
@@ -814,53 +816,7 @@ function renderSidebar(role) {
   const allowedViews = new Set(allowedViewsForRole(role));
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
     const t = link.dataset.navTarget;
-    link.hidden = !allowedViews.has(t);
-  });
-}
-
-function renderMobileNav(role) {
-  const host = document.getElementById('mobile-nav');
-  if (!host) return;
-  const allowed = allowedViewsForRole(role);
-  const preferred = isAdmin(role)
-    ? ['summary', 'operators', 'analytics', 'coins']
-    : ['cabinet', 'rating', 'tests', 'wheel'];
-  const primary = preferred.filter(view => allowed.includes(view)).slice(0, 4);
-  const remaining = allowed.filter(view => !primary.includes(view));
-  const labels = {
-    summary: 'Сводка', operators: 'Люди', analytics: 'Аналитика', coins: 'Коины',
-    cabinet: 'Кабинет', rating: 'Рейтинг', tests: 'Тесты', wheel: 'WOW',
-    shop: 'Магазин', missions: 'Миссии', raffles: 'Розыгрыши', groups: 'Группы',
-    'operator-levels': 'Уровни', 'period-report': 'Расчёт', sessions: 'Сессии',
-  };
-  const sideLinks = new Map(
-    [...document.querySelectorAll('.side-nav-link[data-nav-target]')]
-      .map(link => [link.dataset.navTarget, link]),
-  );
-  host.innerHTML = primary.map(view => {
-    const icon = sideLinks.get(view)?.querySelector('svg')?.outerHTML || '';
-    return `<button class="mobile-nav__item" type="button" data-nav-target="${view}">${icon}<span>${esc(labels[view] || view)}</span></button>`;
-  }).join('') + `
-    <button class="mobile-nav__item mobile-nav__more" type="button" data-mobile-more aria-haspopup="dialog">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
-      <span>Ещё</span>
-    </button>`;
-  host.hidden = false;
-  host.querySelectorAll('[data-nav-target]').forEach(button => {
-    button.addEventListener('click', () => navigateTo(button.dataset.navTarget));
-  });
-  host.querySelector('[data-mobile-more]')?.addEventListener('click', () => {
-    const items = remaining.map(view => {
-      const icon = sideLinks.get(view)?.querySelector('svg')?.outerHTML || '';
-      return `<button class="mobile-more__item" type="button" data-mobile-nav-target="${view}">${icon}<span>${esc(labels[view] || view)}</span></button>`;
-    }).join('');
-    showModal(`<div class="mobile-more"><h2 class="modal-title">Разделы</h2><div class="mobile-more__grid">${items}</div></div>`, { className: 'mobile-more-sheet' });
-    document.querySelectorAll('[data-mobile-nav-target]').forEach(button => {
-      button.addEventListener('click', () => {
-        closeModal();
-        navigateTo(button.dataset.mobileNavTarget);
-      });
-    });
+    link.style.display = allowedViews.has(t) ? '' : 'none';
   });
 }
 

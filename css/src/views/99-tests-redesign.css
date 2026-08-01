@@ -343,8 +343,8 @@
 .test-question-content { min-width: 0; }
 .test-question-editor-head { display: grid; grid-template-columns: minmax(240px, 1fr) 170px 78px 32px; gap: 8px; align-items: end; margin-bottom: 14px; }
 .test-question-editor-head .form-group { min-width: 0; margin: 0; }
-.test-question-editor-head .form-select { max-width: none; }
-.test-question-points .form-input { max-width: none; }
+.test-question-editor-head .form-select { max-width: none !important; }
+.test-question-points .form-input { max-width: none !important; }
 .test-icon-button {
   display: inline-grid;
   place-items: center;
@@ -488,7 +488,7 @@
 }
 .test-runner-answer-row:hover { border-color: color-mix(in srgb, var(--accent-primary) 60%, var(--border-default)); background: color-mix(in srgb, var(--accent-primary) 3%, var(--card-bg)); }
 .test-runner-answer-row.selected { border-color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary) 7%, var(--card-bg)); }
-.test-runner-answer-row input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.test-runner-answer-row input { position: absolute !important; width: 1px !important; height: 1px !important; margin: 0 !important; opacity: 0; pointer-events: none; }
 .test-answer-control { display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--border-strong); border-radius: 50%; background: var(--card-bg); }
 .test-runner-answer-row input[type="checkbox"] + .test-answer-control { border-radius: 4px; }
 .test-runner-answer-row.selected .test-answer-control { border-color: var(--accent-primary); background: var(--accent-primary); }
@@ -553,8 +553,8 @@
   .tests-summary-strip > div:last-child,
   .tests-admin-summary > div:last-child { border-bottom: 0; }
   .test-card-grid { grid-template-columns: 1fr; }
-  .test-card { border-right: 0; border-bottom: 1px solid var(--border-soft); }
-  .test-card:last-child { border-bottom: 0; }
+  .test-card { border-right: 0; border-bottom: 1px solid var(--border-soft) !important; }
+  .test-card:last-child { border-bottom: 0 !important; }
   .test-history-item { grid-template-columns: 1fr 1fr; gap: 14px; }
   .test-history-main { grid-column: 1 / -1; }
   .test-history-action { grid-column: 1 / -1; width: 100%; }

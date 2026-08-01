@@ -622,16 +622,8 @@ async function restartCurrentMission() {
   }
 }
 
-async function backToMissionMap(force = false) {
-  if (!force && _missionDirty) {
-    const confirmed = await uiConfirmAction({
-      title: 'Вернуться к карте?',
-      description: 'Введённое, но ещё не подтверждённое действие не сохранится.',
-      confirmLabel: 'Вернуться',
-      danger: false,
-    });
-    if (!confirmed) return;
-  }
+function backToMissionMap(force = false) {
+  if (!force && _missionDirty && !confirm('Введённое, но ещё не подтверждённое действие не сохранится. Вернуться к карте?')) return;
   sessionStorage.removeItem('puls-mission-attempt');
   _missionAttempt = null;
   _missionDirty = false;

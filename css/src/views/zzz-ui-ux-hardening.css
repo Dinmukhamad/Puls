@@ -134,12 +134,12 @@
   .side-nav-link span { display: block; }
   .side-nav-meta { display: block; }
   .theme-toggle {
-    position: static;
+    position: static !important;
     width: 40px;
     height: 40px;
-    color: var(--sidebar-text);
-    background: transparent;
-    border-color: var(--sidebar-border);
+    color: var(--sidebar-text) !important;
+    background: transparent !important;
+    border-color: var(--sidebar-border) !important;
     box-shadow: none;
   }
   #view-shop .shop-v2-grid,

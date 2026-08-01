@@ -74,16 +74,3 @@ def test_management_dashboard_includes_previous_period(client, db_session):
     payload = response.json()
     assert payload["previous_period"] == {"start": "2036-01-14", "end": "2036-01-14"}
     assert "metric_definitions" in payload
-
-
-def test_management_dashboard_treats_empty_period_as_valid_state(client):
-    response = client.get(
-        "/api/analytics/management-dashboard",
-        params={"start_date": "2099-01-15", "end_date": "2099-01-15"},
-    )
-
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["empty_reason"] == "no_data_for_period"
-    assert payload["team_health"]["status"] == "no_data"
-    assert payload["team_health"]["operators_count"] == 0

@@ -100,18 +100,18 @@
 }
 
 #view-wheel .wheel-v2-status {
-  display: inline-flex;
+  display: inline-flex !important;
   align-items: center;
   min-height: 24px;
   padding: 0 9px;
-  color: var(--text-muted);
+  color: var(--text-muted) !important;
   background: var(--bg-muted);
   border-radius: 6px;
-  font-size: 10px;
+  font-size: 10px !important;
 }
 
 #view-wheel .wheel-v2-status.is-ready {
-  color: var(--success);
+  color: var(--success) !important;
   background: var(--success-soft);
 }
 

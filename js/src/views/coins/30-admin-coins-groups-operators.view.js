@@ -1810,6 +1810,32 @@ async function showOperatorHistoryModal(id) {
 }
 
 /* ══════════════════════════════════════
+   MODALS
+══════════════════════════════════════ */
+function showModal(html, options = {}) {
+  let overlay = document.getElementById('modal-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'modal-overlay';
+    overlay.className = 'modal-overlay';
+    document.body.appendChild(overlay);
+  }
+  const forced = Boolean(options.force);
+  overlay.dataset.force = forced ? 'true' : 'false';
+  const extraClass = options.className ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '') : '';
+  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
+  overlay.style.display = 'flex';
+  overlay.onclick = e => { if (e.target === overlay && !forced) closeModal(); };
+}
+function closeModal(force = false) {
+  const o = document.getElementById('modal-overlay');
+  if (o?.dataset.force === 'true' && !force) return;
+  if (o) o.style.display = 'none';
+  if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
+}
+
+
+/* ══════════════════════════════════════
    СТАВКИ И НОРМЫ ЧАСОВ
 ══════════════════════════════════════ */
 
