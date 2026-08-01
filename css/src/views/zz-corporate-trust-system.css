@@ -296,7 +296,7 @@ textarea:focus {
 .tab {
   min-height: 34px;
   padding: 7px 13px;
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
   color: var(--text-secondary);
   font-weight: 700;
   white-space: nowrap;
@@ -327,7 +327,7 @@ textarea:focus {
   overflow-x: auto;
   background: color-mix(in srgb, var(--bg-muted) 76%, var(--card-bg));
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 4px 14px rgba(15, 23, 42, .06);
   scrollbar-width: none;
 }
@@ -349,7 +349,7 @@ textarea:focus {
   line-height: 1.2;
   background: transparent;
   border: 0 !important;
-  border-radius: 7px !important;
+  border-radius: var(--radius-xs) !important;
   box-shadow: none;
   transition: color .16s ease, background-color .16s ease, box-shadow .16s ease, transform .16s ease;
 }
@@ -428,7 +428,7 @@ html[data-theme="dark"] #view-wheel .filter-tabs.wheel-tabs {
 .shop-badge,
 .balance-chip,
 .badge {
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   font-weight: 700;
 }
 

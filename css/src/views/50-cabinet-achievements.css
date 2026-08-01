@@ -9,10 +9,10 @@
 }
 .metric-progress-label b { font-size: 13px; }
 .metric-progress-bar {
-  height: 7px; background: var(--bg-muted); border-radius: 999px; overflow: hidden;
+  height: 7px; background: var(--bg-muted); border-radius: var(--radius-full); overflow: hidden;
 }
 .metric-progress-fill {
-  height: 100%; background: var(--accent); border-radius: 999px;
+  height: 100%; background: var(--accent); border-radius: var(--radius-full);
   transition: width .3s ease;
 }
 .metric-progress-fill.ok { background: var(--ok); }
@@ -58,7 +58,7 @@
   color: var(--accent-primary);
   line-height: 1;
   background: var(--accent-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
   flex-shrink: 0;
 }
 .achievement-card-icon { width: 19px; height: 19px; }
@@ -110,7 +110,7 @@
 .toggle-switch .toggle-slider {
   position: absolute; inset: 0; cursor: pointer;
   background: var(--bg-muted); border: 1px solid var(--border);
-  border-radius: 999px; transition: background .18s ease, border-color .18s ease;
+  border-radius: var(--radius-full); transition: background .18s ease, border-color .18s ease;
 }
 .toggle-switch .toggle-slider::before {
   content: ''; position: absolute; height: 16px; width: 16px; left: 2px; top: 2px;
@@ -160,7 +160,7 @@
   gap: 14px;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   transition: border-color .18s ease, box-shadow .18s ease, opacity .18s ease;
 }
@@ -188,7 +188,7 @@
   color: var(--accent-primary);
   background: var(--accent-soft);
   border: 1px solid color-mix(in srgb, var(--accent-primary) 20%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .achievement-system-icon { width: 23px; height: 23px; }
@@ -219,7 +219,7 @@
   font-size: 10px;
   font-weight: 700;
   background: var(--bg-muted);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   white-space: nowrap;
 }
 
@@ -235,7 +235,7 @@
   padding: 10px 12px;
   background: var(--bg-subtle);
   border-left: 3px solid var(--accent-primary);
-  border-radius: 0 7px 7px 0;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
 }
 
 .achievement-admin-rule span,
@@ -263,7 +263,7 @@
   font-size: 9px;
   font-weight: 750;
   background: var(--bg-muted);
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 
 .achievement-admin-tag.repeatable { color: var(--accent-primary); background: var(--accent-soft); }
@@ -320,7 +320,7 @@
 .bonus-chip {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 11px; font-weight: 600; padding: 2px 7px; margin: 1px;
-  border-radius: 999px; background: var(--ok-soft); color: var(--ok); white-space: nowrap;
+  border-radius: var(--radius-full); background: var(--ok-soft); color: var(--ok); white-space: nowrap;
 }
 .bonus-chip.discipline-ok { background: var(--ok-soft); color: var(--ok); }
 .bonus-chip.discipline-bad { background: var(--danger-soft); color: var(--danger); }

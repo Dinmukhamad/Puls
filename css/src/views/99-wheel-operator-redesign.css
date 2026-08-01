@@ -28,7 +28,7 @@
   padding: 10px 13px;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
 }
 
@@ -61,7 +61,7 @@
 #view-wheel .wheel-v2-prizes-panel,
 #view-wheel .wheel-v2-history-panel {
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-card);
 }
 
@@ -106,7 +106,7 @@
   padding: 0 9px;
   color: var(--text-muted) !important;
   background: var(--bg-muted);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   font-size: 10px !important;
 }
 
@@ -140,7 +140,7 @@
   height: 36px;
   background: var(--accent-primary);
   clip-path: polygon(0 0, 100% 0, 50% 100%);
-  border-radius: 5px 5px 10px 10px;
+  border-radius: var(--radius-xs) var(--radius-xs) var(--radius-sm) var(--radius-sm);
   filter: drop-shadow(0 4px 5px rgba(15, 23, 42, .22));
 }
 
@@ -190,7 +190,7 @@
 #view-wheel .wheel-v2-ticket-summary {
   padding: 16px;
   background: var(--bg-muted);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 #view-wheel .wheel-v2-ticket-summary span,
@@ -223,7 +223,7 @@
   width: 100%;
   min-height: 46px;
   margin-top: 12px;
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
   font-size: 13px;
   box-shadow: none;
 }
@@ -256,7 +256,7 @@
   padding: 5px 9px;
   background: var(--bg-subtle);
   border: 1px solid var(--border-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   color: var(--text-secondary);
   font-size: 10px;
 }
@@ -291,10 +291,10 @@
   place-items: center;
   width: 36px;
   height: 36px;
-  color: color-mix(in srgb, var(--prize-color) 72%, #0f172a);
+  color: color-mix(in srgb, var(--prize-color) 72%, var(--text-primary));
   background: color-mix(in srgb, var(--prize-color) 18%, var(--card-bg));
   border: 1px solid color-mix(in srgb, var(--prize-color) 38%, transparent);
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
   font-size: 10px;
   font-weight: 900;
 }
@@ -322,7 +322,7 @@
   padding: 10px 12px;
   color: var(--text-secondary);
   background: var(--accent-secondary-soft);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   font-size: 10px;
   line-height: 1.4;
 }
@@ -343,14 +343,14 @@
   margin: 0;
   padding: 11px;
   background: var(--bg-muted);
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
 }
 
 #view-wheel .wheel-v2-history-panel .wheel-history-icon {
   width: 36px;
   height: 36px;
   background: var(--card-bg);
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
   font-size: 10px;
   font-weight: 900;
 }
@@ -385,7 +385,7 @@
   width: min(420px, calc(100vw - 32px));
   max-width: 420px;
   padding: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .wheel-result-icon {
@@ -397,7 +397,7 @@
   color: var(--accent-primary);
   background: var(--accent-secondary-soft);
   border: 1px solid color-mix(in srgb, var(--accent-primary) 28%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 15px;
   font-weight: 900;
 }

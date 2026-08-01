@@ -41,7 +41,7 @@
   color: var(--text-secondary);
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
 }
@@ -70,7 +70,7 @@
   align-content: center;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
 }
 
@@ -88,7 +88,7 @@
   color: var(--text-secondary);
   background: var(--accent-soft);
   border: 1px solid color-mix(in srgb, var(--accent-primary) 22%, var(--border-default));
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
 }
 
@@ -123,7 +123,7 @@
   overflow: hidden;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-card);
 }
 
@@ -186,7 +186,7 @@
   align-items: center;
   background: var(--bg-subtle);
   border: 1px solid var(--border-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
 }
 .level-condition-check {
   display: grid;
@@ -208,7 +208,7 @@
   color: var(--text-muted);
   background: transparent;
   border: 0;
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
 }
 .level-condition-row > button:hover { color: var(--danger); background: var(--danger-soft); }
@@ -218,7 +218,7 @@
   color: var(--text-muted);
   background: var(--bg-subtle);
   border: 1px dashed var(--border-default);
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
 }
 
@@ -230,11 +230,11 @@
   color: var(--text-secondary);
   background: var(--bg-subtle);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 .level-reward-block.has-reward {
-  background: color-mix(in srgb, #f59e0b 8%, var(--card-bg));
-  border-color: color-mix(in srgb, #f59e0b 28%, var(--border-default));
+  background: color-mix(in srgb, var(--warning) 8%, var(--card-bg));
+  border-color: color-mix(in srgb, var(--warning) 28%, var(--border-default));
 }
 .level-reward-block > span { font-size: 10px; font-weight: 800; text-transform: uppercase; }
 .level-reward-block > strong { margin: 5px 0; color: var(--text-primary); font-size: 17px; }

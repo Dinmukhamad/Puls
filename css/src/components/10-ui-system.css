@@ -65,7 +65,7 @@
   color: var(--text-secondary);
   background: var(--bg-muted);
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 
 .ui-data-table,
@@ -124,7 +124,7 @@
   white-space: nowrap;
   font-size: 12px;
   font-weight: 700;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 .ui-status--success { color: var(--success); background: var(--success-soft); }
 .ui-status--danger { color: var(--danger); background: var(--danger-soft); }

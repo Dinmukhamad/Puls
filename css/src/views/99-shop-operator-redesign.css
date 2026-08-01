@@ -22,7 +22,7 @@
   padding: 11px 15px;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
 }
 
@@ -38,7 +38,7 @@
   color: var(--success);
   background: var(--success-soft);
   border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border-default));
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 #view-shop .shop-v2-coupon-chip span,
@@ -86,7 +86,7 @@
   padding: 14px 16px;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
 }
 
@@ -117,7 +117,7 @@
 #view-shop .shop-v2-catalog,
 #view-shop .shop-v2-history {
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-card);
 }
 
@@ -155,7 +155,7 @@
   padding: 0 8px;
   color: var(--text-muted);
   background: var(--bg-muted);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   font-size: 10px;
 }
 
@@ -197,7 +197,7 @@
   color: var(--text-secondary);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
@@ -221,7 +221,7 @@
   padding: 0 5px;
   color: inherit;
   background: color-mix(in srgb, currentColor 12%, transparent);
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   font-size: 9px;
 }
 
@@ -240,7 +240,7 @@
   padding: 16px;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 }
 
@@ -272,7 +272,7 @@
   height: 48px;
   color: var(--accent-primary);
   background: var(--accent-secondary-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
 }
 
 #view-shop .shop-v2-icon svg,
@@ -295,7 +295,7 @@
 
 #view-shop .shop-v2-icon.is-gifts,
 .shop-v2-confirm .shop-v2-icon.is-gifts {
-  color: #7C3AED;
+  color: var(--accent-secondary);
   background: #EDE9FE;
 }
 
@@ -348,7 +348,7 @@
   padding: 3px 6px;
   color: var(--text-secondary);
   background: var(--bg-muted);
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   font-size: 8.5px;
 }
 
@@ -421,7 +421,7 @@
   color: var(--danger);
   background: var(--danger-soft);
   border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--border-default));
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   line-height: 1.3;
   text-align: right;
@@ -431,7 +431,7 @@
   width: 100%;
   min-height: 36px;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -488,7 +488,7 @@
   height: 32px;
   color: var(--text-secondary);
   background: var(--bg-muted);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
 }
 
 #view-shop .shop-v2-order-icon svg {
@@ -518,7 +518,7 @@
   padding: 4px 8px;
   color: var(--text-secondary);
   background: var(--bg-muted);
-  border-radius: 5px;
+  border-radius: var(--radius-xs);
   font-size: 9px;
   font-weight: 700;
   white-space: nowrap;
@@ -572,7 +572,7 @@
   margin-bottom: 14px;
   color: var(--accent-primary);
   background: var(--accent-secondary-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
 }
 
 .shop-v2-confirm > p {
@@ -591,7 +591,7 @@
   color: var(--success);
   background: var(--success-soft);
   border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border-default));
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 

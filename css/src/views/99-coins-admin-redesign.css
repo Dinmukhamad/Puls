@@ -38,7 +38,7 @@
   color: var(--text-secondary);
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   font: inherit;
   font-size: 11px;
@@ -85,7 +85,7 @@
   color: var(--text-primary);
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   font: inherit;
 }
@@ -110,7 +110,7 @@ button.coins-summary-card:hover { border-color: var(--accent-primary); }
   overflow: hidden;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
 }
 #view-coins .panel { margin-bottom: 12px; }
@@ -148,7 +148,7 @@ button.coins-summary-card:hover { border-color: var(--accent-primary); }
 #view-coins .manual-col-form .manual-card > .manual-submit-btn,
 #view-coins .manual-col-form .manual-card > .manual-note { margin-inline: 18px; }
 #view-coins .manual-col-form .manual-card > .form-group:first-of-type { margin-top: 16px; }
-#view-coins .manual-submit-btn { width: calc(100% - 36px); margin-top: 8px; border-radius: 7px; }
+#view-coins .manual-submit-btn { width: calc(100% - 36px); margin-top: 8px; border-radius: var(--radius-xs); }
 #view-coins .manual-note { padding-bottom: 16px; }
 #view-coins .manual-stats-grid { gap: 0; padding: 14px; }
 #view-coins .manual-stat { min-width: 0; padding: 8px; background: transparent; border-right: 1px solid var(--border-soft); border-radius: 0; }
@@ -164,16 +164,16 @@ button.coins-summary-card:hover { border-color: var(--accent-primary); }
   padding: 4px;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
 }
-#view-coins .filter-tab { min-height: 34px; border-radius: 6px; }
+#view-coins .filter-tab { min-height: 34px; border-radius: var(--radius-xs); }
 #view-coins .coins-filter-panel .panel-head { min-height: 44px; }
 #view-coins .coins-filter-panel .filter-row,
 #view-coins .coins-weekly-toolbar .filter-row { padding: 14px 16px 16px; }
 #view-coins .coins-filter-panel .form-group { flex: 1 1 190px; }
 #view-coins .coins-filter-panel .form-input { width: 100%; }
-#view-coins .filter-active-banner { margin-bottom: 10px; border-radius: 7px; }
+#view-coins .filter-active-banner { margin-bottom: 10px; border-radius: var(--radius-xs); }
 #view-coins .request-card { margin: 0; padding: 13px 16px; border-width: 0 0 1px 3px; border-radius: 0; box-shadow: none; }
 #view-coins .request-card:last-child { border-bottom: 0; }
 #view-coins .table-wrap { width: 100%; overflow: auto; }

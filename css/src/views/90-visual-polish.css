@@ -11,7 +11,7 @@
 .btn-ghost,
 .btn-danger {
   min-height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-weight: 700;
   line-height: 1.2;
 }
@@ -76,7 +76,7 @@ select,
 textarea {
   width: 100%;
   min-height: 38px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   transition: border-color var(--t), box-shadow var(--t), background var(--t), color var(--t);
 }
 
@@ -133,7 +133,7 @@ textarea:focus {
 }
 
 .modal-close {
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--bg-muted);
   color: var(--text-secondary);
 }
@@ -178,7 +178,7 @@ textarea:focus {
 }
 
 .status-line {
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   line-height: 1.45;
 }
 
@@ -271,7 +271,7 @@ textarea:focus {
   overflow: hidden;
   background: var(--modal-bg);
   border: 1px solid var(--border-default);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-modal);
 }
 
@@ -296,7 +296,7 @@ textarea:focus {
 
 .wheel-toggle-row {
   min-width: 0;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
 }
 
 .wheel-rule-modal-actions {
@@ -435,7 +435,7 @@ html[data-theme="dark"] .status-line.status-error {
   .modal {
     width: calc(100vw - 20px);
     max-height: calc(100dvh - 20px);
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     padding: 18px;
   }
 
@@ -497,7 +497,7 @@ body {
 
 .side-nav-link {
   min-height: 42px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   color: var(--sidebar-text);
 }
@@ -524,7 +524,7 @@ body {
 .side-nav-toggle,
 .theme-toggle,
 .side-gear-btn {
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
 }
 
 .view-header {
@@ -650,7 +650,7 @@ body {
 .race-seg-btn,
 .tab-btn {
   min-height: 40px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   letter-spacing: 0;
 }
 
@@ -685,7 +685,7 @@ input,
 select,
 textarea {
   min-height: 42px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   border-color: var(--border-default);
   background: var(--input-bg);
   color: var(--text-primary);
@@ -704,7 +704,7 @@ textarea {
   width: fit-content;
   padding: 4px;
   border: 1px solid var(--border-default);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--card-bg);
   box-shadow: var(--shadow-sm);
   overflow-x: auto;
@@ -821,7 +821,7 @@ textarea {
 .status-badge,
 .shop-badge,
 .balance-chip {
-  border-radius: 999px;
+  border-radius: var(--radius-full);
 }
 
 .progress-bar-fill,
@@ -1030,7 +1030,7 @@ html[data-theme="dark"] .level-settings-shell {
   .wheel-rule-modal {
     width: calc(100vw - 20px);
     max-height: calc(100dvh - 20px);
-    border-radius: 16px;
+    border-radius: var(--radius-lg);
   }
 }
 
@@ -1084,7 +1084,7 @@ html[data-theme="dark"] .level-settings-shell {
 #view-cabinet .kpi-card {
   min-height: 104px;
   padding: 18px 20px;
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, .76), rgba(255, 255, 255, .98)),
     var(--card-bg);
@@ -1389,7 +1389,7 @@ html[data-theme="dark"] .level-settings-shell {
 #view-cabinet .tx-row {
   min-height: 48px;
   border: 1px solid var(--border-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--card-bg);
 }
 
@@ -1400,7 +1400,7 @@ html[data-theme="dark"] .level-settings-shell {
 
 #view-cabinet .mini-row {
   min-height: 44px;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-soft);
   background: var(--bg-surface-hover);
 }

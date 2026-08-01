@@ -58,7 +58,7 @@
 #view-operators #ops-table-wrap {
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
 }
 
@@ -124,7 +124,7 @@
   font-weight: 700;
   background: var(--accent-soft);
   border: 1px solid var(--accent-primary);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
@@ -227,7 +227,7 @@
   align-items: center;
   background: var(--bg-subtle);
   border: 1px solid var(--border-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
 }
 
 .user-manage-level-row,
@@ -239,7 +239,7 @@
   align-items: center;
   justify-content: space-between;
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .user-manage-level-row > div,
@@ -263,7 +263,7 @@
 .modal-user-manage #manage-user-error:not(:empty) {
   margin: 0 22px;
   padding: 9px 12px;
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
 }
 
 .user-manage-footer {

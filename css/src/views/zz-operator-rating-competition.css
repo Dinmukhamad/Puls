@@ -20,7 +20,7 @@
   color: var(--text-muted);
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
   font-size: 11px;
 }
@@ -70,7 +70,7 @@
     radial-gradient(circle at 82% 5%, rgba(69, 196, 255, .2), transparent 27%),
     linear-gradient(130deg, #101b39 0%, #13285b 58%, #17499a 100%);
   border: 1px solid rgba(97, 169, 255, .34);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   box-shadow: 0 18px 42px rgba(17, 41, 91, .18);
 }
 
@@ -110,7 +110,7 @@
   color: #fff;
   background: rgba(255, 255, 255, .1);
   border: 1px solid rgba(255, 255, 255, .12);
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   font-size: 10px;
   font-weight: 800;
 }
@@ -149,7 +149,7 @@
   height: 10px;
   margin: 30px 8px 12px 0;
   background: rgba(255, 255, 255, .16);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .rc-target-progress > i {
@@ -193,7 +193,7 @@
   overflow: hidden;
   background: var(--card-bg);
   border: 1px solid var(--border-default);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-card);
 }
 
@@ -234,7 +234,7 @@
   padding: 15px;
   background: var(--bg-muted);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .rc-rival-card.is-me {
@@ -325,7 +325,7 @@
   padding: 8px 10px;
   background: var(--bg-muted);
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
 }
 
 .rc-group-rival.is-current {
@@ -342,7 +342,7 @@
   place-items: center;
   color: var(--text-secondary);
   background: var(--card-bg);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   font-size: 10px;
   font-weight: 900;
 }
@@ -358,7 +358,7 @@
 .rc-group-bars { display: grid; gap: 10px; padding: 2px 18px 18px; }
 .rc-group-bars > div { display: grid; grid-template-columns: 116px minmax(0, 1fr) 44px; align-items: center; gap: 9px; }
 .rc-group-bars span { color: var(--text-muted); font-size: 9px; }
-.rc-group-bars i { height: 6px; overflow: hidden; background: var(--bg-muted); border-radius: 5px; }
+.rc-group-bars i { height: 6px; overflow: hidden; background: var(--bg-muted); border-radius: var(--radius-xs); }
 .rc-group-bars i b { display: block; height: 100%; background: var(--border-default); border-radius: inherit; }
 .rc-group-bars i b.is-mine { background: var(--rc-blue); }
 .rc-group-bars i b.is-leader { background: var(--rc-orange); }
@@ -368,7 +368,7 @@
   padding: 6px 9px;
   color: var(--rc-blue);
   background: var(--rc-blue-soft);
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   font-size: 10px;
   font-weight: 800;
   white-space: nowrap;
@@ -383,7 +383,7 @@
   margin-bottom: 10px;
 }
 
-.rc-trend-summary > div { min-width: 0; padding: 9px 10px; background: var(--bg-muted); border-radius: 6px; }
+.rc-trend-summary > div { min-width: 0; padding: 9px 10px; background: var(--bg-muted); border-radius: var(--radius-xs); }
 .rc-trend-summary span,
 .rc-trend-summary b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-trend-summary span { color: var(--text-muted); font-size: 8px; text-transform: uppercase; }
@@ -417,7 +417,7 @@
   padding: 12px;
   background: var(--bg-muted);
   border: 1px solid var(--border-soft);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 .rc-podium article.is-me { background: var(--rc-blue-soft); border-color: color-mix(in srgb, var(--rc-blue) 28%, transparent); }
