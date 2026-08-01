@@ -6,5 +6,11 @@ js/app.js linguist-generated=true
 js/api.js linguist-generated=true
 css/styles.css linguist-generated=true
 
-# Keep Python sources deterministic across Windows development and Linux CI.
-*.py text eol=lf
+# Keep sources deterministic across Windows development and Linux CI.
+# Без этого scripts/build-frontend.ps1 (Windows, CRLF) и
+# scripts/build-frontend.mjs (нормализует в LF) дают побайтово разные
+# бандлы, и шаг CI "Verify committed bundles match sources" падает.
+*.py  text eol=lf
+*.js  text eol=lf
+*.css text eol=lf
+*.mjs text eol=lf

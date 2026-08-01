@@ -357,40 +357,18 @@ function initTheme() {
    NAV
 ══════════════════════════════════════ */
 function initNav() {
-  const sideNav = document.querySelector('.side-nav');
-  if (sideNav && !sideNav.id) sideNav.id = 'primary-navigation';
-  if (sideNav && !document.getElementById('mobile-nav-toggle')) {
-    const mobileToggle = document.createElement('button');
-    mobileToggle.id = 'mobile-nav-toggle';
-    mobileToggle.className = 'mobile-nav-toggle';
-    mobileToggle.type = 'button';
-    mobileToggle.setAttribute('aria-controls', sideNav.id);
-    mobileToggle.setAttribute('aria-expanded', 'false');
-    mobileToggle.setAttribute('aria-label', 'Открыть навигацию');
-    mobileToggle.innerHTML = '<span aria-hidden="true">☰</span><b>Puls.</b>';
+  initAppShell();
 
-    const backdrop = document.createElement('button');
-    backdrop.className = 'mobile-nav-backdrop';
-    backdrop.type = 'button';
-    backdrop.setAttribute('aria-label', 'Закрыть навигацию');
-
-    const setMobileNav = open => {
-      document.body.classList.toggle('mobile-nav-open', open);
-      mobileToggle.setAttribute('aria-expanded', String(open));
-      mobileToggle.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию');
-    };
-    mobileToggle.addEventListener('click', () => setMobileNav(!document.body.classList.contains('mobile-nav-open')));
-    backdrop.addEventListener('click', () => setMobileNav(false));
-    document.body.append(mobileToggle, backdrop);
-  }
-  document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {
-    link.addEventListener('click', e => {
-      e.preventDefault();
-      document.body.classList.remove('mobile-nav-open');
-      document.getElementById('mobile-nav-toggle')?.setAttribute('aria-expanded', 'false');
-      navigateTo(link.dataset.navTarget);
-    });
+  // Делегирование: работает и для пунктов сайдбара, и для таб-бара,
+  // который собирается уже после того, как стала известна роль.
+  document.addEventListener('click', e => {
+    const link = e.target.closest('[data-nav-target]');
+    if (!link) return;
+    e.preventDefault();
+    setShellNav(false);
+    navigateTo(link.dataset.navTarget);
   });
+
   const toggle = document.getElementById('side-nav-toggle');
   if (toggle) {
     toggle.addEventListener('click', () => {
@@ -460,6 +438,8 @@ function navigateTo(view, options = {}) {
     const target = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
     l.classList.toggle('active', target === view);
   });
+  syncTopbarTitle(view);
+  syncTabbarActive(view);
   const el = document.getElementById(`view-${view}`);
   if (el) el.classList.add('active');
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -819,12 +799,12 @@ function renderSidebar(role) {
     const t = link.dataset.navTarget;
     link.style.display = allowedViews.has(t) ? '' : 'none';
   });
+  buildTabbar(role);
 }
 
 /* ══════════════════════════════════════
    VIEW: УРОВНИ ОПЕРАТОРОВ
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    УВЕДОМЛЕНИЯ (ТЗ P2) — колокольчик в сайдбаре, модалка со списком
 ══════════════════════════════════════ */
@@ -923,7 +903,158 @@ async function _loadNotificationsIntoModal() {
     });
   });
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   APP SHELL — топбар и мобильный таб-бар
+   --------------------------------------------------------------------------
+   Права доступа здесь не дублируются: список разделов всегда приходит из
+   allowedViewsForRole() в 00-core-shell.js, а разметка пунктов клонируется
+   из уже отрендеренного сайдбара. Добавили раздел в сайдбар — он появится
+   и в таб-баре без правок этого файла.
+══════════════════════════════════════════════════════════════════════════ */
 
+/* Первые разделы таб-бара по роли. Всё, что не поместилось, доступно
+   через «Ещё» — полный список открывается шторкой (тот же .side-nav). */
+const TABBAR_PRIORITY = {
+  operator: ['cabinet', 'rating', 'missions', 'shop'],
+  admin: ['summary', 'analytics', 'operators', 'coins'],
+};
+const TABBAR_MAX_PRIMARY = 4;
+
+/* Понятные заголовки страниц для топбара. Если раздела нет в словаре,
+   берём подпись из соответствующей ссылки сайдбара. */
+const VIEW_TITLES = {
+  summary: 'Сводка',
+  analytics: 'Аналитика',
+  operators: 'Операторы',
+  groups: 'Группы',
+  coins: 'Коины',
+  shop: 'Магазин',
+  rating: 'Рейтинг',
+  cabinet: 'Кабинет',
+  missions: 'Миссии',
+  tests: 'Тесты',
+  wheel: 'Колесо',
+  'operator-levels': 'Уровни',
+  'period-report': 'Импорт данных',
+  sessions: 'Сессии',
+};
+
+function shellNavLink(view) {
+  return document.querySelector(`.side-nav-link[data-nav-target="${view}"]`);
+}
+
+function shellViewTitle(view) {
+  if (VIEW_TITLES[view]) return VIEW_TITLES[view];
+  const label = shellNavLink(view)?.querySelector('span')?.textContent?.trim();
+  return label || 'Puls';
+}
+
+/* Заголовок топбара. Вызывается из navigateTo() после смены раздела. */
+function syncTopbarTitle(view) {
+  const title = document.getElementById('app-topbar-title');
+  if (title) title.textContent = shellViewTitle(view);
+  document.title = view ? `${shellViewTitle(view)} — Puls` : 'Puls';
+}
+
+/* Активный пункт таб-бара. Вызывается из navigateTo(). */
+function syncTabbarActive(view) {
+  document.querySelectorAll('.app-tabbar__item[data-nav-target]').forEach(item => {
+    item.classList.toggle('active', item.dataset.navTarget === view);
+  });
+  const more = document.getElementById('app-tabbar-more');
+  if (more) {
+    const primary = [...document.querySelectorAll('.app-tabbar__item[data-nav-target]')]
+      .some(item => item.dataset.navTarget === view);
+    more.classList.toggle('active', !primary);
+  }
+}
+
+/* Сборка таб-бара под роль. Вызывается из renderSidebar(). */
+function buildTabbar(role) {
+  const bar = document.getElementById('app-tabbar');
+  if (!bar || typeof allowedViewsForRole !== 'function') return;
+
+  const allowed = allowedViewsForRole(role);
+  const isAdminRole = typeof isAdmin === 'function' && isAdmin(role);
+  const priority = TABBAR_PRIORITY[isAdminRole ? 'admin' : 'operator'] || [];
+
+  // Приоритетные разделы, затем остальные разрешённые — до лимита.
+  const primary = [
+    ...priority.filter(v => allowed.includes(v)),
+    ...allowed.filter(v => !priority.includes(v)),
+  ].slice(0, TABBAR_MAX_PRIMARY);
+
+  bar.textContent = '';
+  for (const view of primary) {
+    const source = shellNavLink(view);
+    if (!source) continue;
+    const item = document.createElement('a');
+    item.className = 'app-tabbar__item';
+    item.href = '#';
+    item.dataset.navTarget = view;
+    const icon = source.querySelector('svg');
+    if (icon) item.appendChild(icon.cloneNode(true));
+    const label = document.createElement('span');
+    label.textContent = shellViewTitle(view);
+    item.appendChild(label);
+    bar.appendChild(item);
+  }
+
+  // «Ещё» открывает ту же шторку, что и бургер в топбаре — отдельной
+  // копии списка разделов не существует.
+  if (allowed.length > primary.length) {
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.id = 'app-tabbar-more';
+    more.className = 'app-tabbar__item';
+    more.setAttribute('aria-controls', 'primary-navigation');
+    more.setAttribute('aria-expanded', 'false');
+    more.innerHTML =
+      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">'
+      + '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>'
+      + '</svg><span>Ещё</span>';
+    more.addEventListener('click', () => setShellNav(!document.body.classList.contains('mobile-nav-open')));
+    bar.appendChild(more);
+  }
+
+  syncTabbarActive(STATE?.currentView || '');
+}
+
+/* Единственная точка открытия/закрытия шторки навигации: ею пользуются
+   бургер в топбаре, кнопка «Ещё», подложка и Escape. */
+function setShellNav(open) {
+  document.body.classList.toggle('mobile-nav-open', open);
+  const menu = document.getElementById('app-topbar-menu');
+  if (menu) {
+    menu.setAttribute('aria-expanded', String(open));
+    menu.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию');
+  }
+  document.getElementById('app-tabbar-more')?.setAttribute('aria-expanded', String(open));
+}
+
+function initAppShell() {
+  const sideNav = document.querySelector('.side-nav');
+  if (sideNav && !sideNav.id) sideNav.id = 'primary-navigation';
+
+  document.getElementById('app-topbar-menu')
+    ?.addEventListener('click', () => setShellNav(!document.body.classList.contains('mobile-nav-open')));
+
+  if (!document.querySelector('.mobile-nav-backdrop')) {
+    const backdrop = document.createElement('button');
+    backdrop.className = 'mobile-nav-backdrop';
+    backdrop.type = 'button';
+    backdrop.setAttribute('aria-label', 'Закрыть навигацию');
+    backdrop.addEventListener('click', () => setShellNav(false));
+    document.body.appendChild(backdrop);
+  }
+
+  // Escape закрывает шторку и возвращает фокус на кнопку, которая её открыла.
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !document.body.classList.contains('mobile-nav-open')) return;
+    setShellNav(false);
+    document.getElementById('app-topbar-menu')?.focus();
+  });
+}
 /* Shared UI contracts. Keep screen-specific views free from raw enums and ad-hoc formats. */
 const UI_TIME_ZONE = 'Asia/Almaty';
 
@@ -1097,7 +1228,6 @@ function uiReadQuery(defaults = {}) {
     Object.entries(defaults).map(([key, fallback]) => [key, params.get(key) ?? fallback]),
   );
 }
-
 async function renderOperatorLevelsSettings() {
   const el = document.getElementById('view-operator-levels');
   if (!el) return;
@@ -2080,7 +2210,6 @@ async function submitChangeUsername() {
 /* ══════════════════════════════════════
    VIEW: РЕЙТИНГ
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    УРОВНИ: вкладка «Достижения» (ТЗ §7) — каталог, включение/выключение, ручная выдача
 ══════════════════════════════════════ */
@@ -2271,7 +2400,6 @@ async function submitGrantAchievement(achievementId) {
     if (errEl) errEl.textContent = e.message;
   }
 }
-
 /* ══════════════════════════════════════
    КАБИНЕТ: показатели недели, прозрачный расчёт коинов, достижения (ТЗ §5, §7)
    Один общий фетч /api/cabinet/me — данные шарятся между обоими блоками.
@@ -2448,7 +2576,6 @@ async function renderCabinetAchievements() {
       </div>
     </div>`;
 }
-
 /* Управленческая «Сводка»: компактный экран, не дублирующий подробные вкладки Analytics. */
 let _summaryManagement = { start: '', end: '', group: '', preset: 'week', ready: false };
 
@@ -2518,7 +2645,6 @@ async function renderManagementSummary() {
   el.querySelector('#summary-export').addEventListener('click', () => { readFilters(); const params = new URLSearchParams({ start_date: state.start, end_date: state.end }); if (state.group) params.set('group_id', state.group); window.location.href = api._base() + '/api/analytics/export.xlsx?' + params; });
   await load();
 }
-
 async function renderRatingOverviewTab(el) {
   const role  = STATE.user?.role || 'operator';
   const isOp  = role === 'operator';
@@ -3861,7 +3987,6 @@ function renderSummary() {
 /* ══════════════════════════════════════
    VIEW: ОПЕРАТОРЫ (ADMIN)
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    СВОДКА: детальная сводка по неделе с фильтрами (ТЗ §9)
 ══════════════════════════════════════ */
@@ -4060,7 +4185,6 @@ function exportAdminSummary() {
   if (f.group_id) params.group_id = f.group_id;
   window.open(api.exportUrl('/api/exports/rating', params), '_blank');
 }
-
 /* ══════════════════════════════════════
    СВОДКА: быстрые действия по строке оператора (ТЗ §9.5)
    Начислить / Списать / Открыть кабинет / Открыть историю / Открыть заявки
@@ -4176,7 +4300,6 @@ async function openOperatorCabinetModal(operatorId, operatorName) {
       <button class="btn-primary" onclick="closeModal(); openHistoryForOperator(${operatorId}, '${esc(operatorName).replace(/'/g, '&#39;')}')">Вся история →</button>
     </div>`;
 }
-
 function renderAdminOperators() {
   return renderUsersPage();
 }
@@ -7287,7 +7410,6 @@ window.manualOperatorLevelUi = manualOperatorLevelUi;
 /* ══════════════════════════════════════
    VIEW: РАСЧЁТ ЗА ПЕРИОД
 ══════════════════════════════════════ */
-
 /* ══════════════════════════════════════
    КОИНЫ: Еженедельный расчёт (ТЗ §3) — preview / apply / история запусков
 ══════════════════════════════════════ */
@@ -7491,7 +7613,6 @@ function exportWeeklyAccrualPeriod(format = 'csv') {
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
   window.open(api.exportUrl('/api/exports/weekly-results', { period_start: start, period_end: end, format }), '_blank');
 }
-
 /* ══════════════════════════════════════
    КОИНЫ: Настройки начислений (ТЗ §4) — GET/PUT /api/settings/coin-rules
 ══════════════════════════════════════ */
@@ -7624,7 +7745,6 @@ async function saveCoinRulesSettings() {
   const body = document.getElementById('coins-tab-body');
   if (body) renderCoinRulesSettingsTab(body);
 }
-
 let _sessionFilterStatus = 'active';
 let _sessionFilterQuery = '';
 let _sessionFilterRole = 'all';
@@ -7861,7 +7981,6 @@ async function revokeAllUserSessions(userId) {
 
 window.revokeUserSession = revokeUserSession;
 window.revokeAllUserSessions = revokeAllUserSessions;
-
 function renderPeriodReport() {
   const el = document.getElementById('view-period-report');
   if (!el) return;
@@ -10532,7 +10651,6 @@ const RATING_TABS = [
   { key: 'groups',   label: 'Сравнение групп' },
   { key: 'progress', label: 'Мой прогресс' },
 ];
-
 let _ratingActiveTab = 'overview';
 
 async function exportRatingFromRatingPage() {
@@ -10987,7 +11105,6 @@ const WHEEL_PRIZE_ICON = {
 const WHEEL_FAST_MS = 900;
 const WHEEL_TTL_MS = 45_000;
 const WHEEL_STATIC_TTL_MS = 5 * 60_000;
-
 function wheelCachedFetch(key, fetcher, fallback, onFresh, ttlMs = WHEEL_TTL_MS) {
   const cached = swrReadRaw(key);
   const saveFresh = (fresh, previous) => {
@@ -13590,7 +13707,6 @@ async function loadTestAnalyticsBlock(testId) {
     body.innerHTML = `<div class="status-line status-error">${esc(e.message)}</div>`;
   }
 }
-
 /* ══════════════════════════════════════
    РОЗЫГРЫШИ (ТЗ P2)
    Билеты — только из Колеса WOW. Оператор вкладывает билеты в розыгрыш,
@@ -13848,7 +13964,6 @@ window.renderRaffles = renderRaffles;
 window.submitEnterRaffle = submitEnterRaffle;
 window.openCreateRaffleModal = openCreateRaffleModal;
 window.submitCreateRaffle = submitCreateRaffle;
-
 let _missionAttempt = null;
 let _missionDirty = false;
 let _missionActionBusy = false;
@@ -14579,7 +14694,6 @@ async function saveMissionProviderWindow(missionId) {
     showToast(error.message, 'error');
   }
 }
-
 let _missionWorldCode = sessionStorage.getItem('puls-mission-world') || '';
 
 function learningWorldIllustration(world) {
@@ -14640,7 +14754,6 @@ function backToLearningWorlds() {
   sessionStorage.removeItem('puls-mission-world');
   renderMissions();
 }
-
 let _photoDialogReturnFocus = null;
 
 function photoRequirements(attempt) {
@@ -14754,7 +14867,6 @@ function closeMissionPreviewDialog() {
   if (_photoDialogReturnFocus?.isConnected) _photoDialogReturnFocus.focus();
   _photoDialogReturnFocus = null;
 }
-
 function renderLearningWorldRoute(el, world) {
   const missions = world.missions || [];
   el.innerHTML = `<div class="missions-page world-route-page" style="--world-accent:${esc(world.accent_color)}">
@@ -14766,7 +14878,6 @@ function renderLearningWorldRoute(el, world) {
     </section>
   </div>`;
 }
-
 function saparRow(icon, title, action = '', accent = false, subtitle = '') {
   const attrs = action ? `onclick="${action}"` : 'disabled';
   return `<button type="button" class="sapar-list-row ${accent ? 'is-target' : ''}" ${attrs}><i>${icon}</i><span><b>${esc(title)}</b>${subtitle ? `<small>${esc(subtitle)}</small>` : ''}</span><em>›</em></button>`;
@@ -14834,7 +14945,6 @@ function scheduleSaparProcessing(attempt) {
     if (_missionAttempt?.id === attempt.id && _missionAttempt?.current_step?.screen_key === 'sapar_processing') missionAction('finish_processing');
   }, 1200);
 }
-
 function smzPurposeForScreen(screen) {
   return screen.includes('documents') ? 'documents' : 'auth';
 }
@@ -14954,7 +15064,6 @@ function openTrainingAvr(number) {
   screen.insertAdjacentHTML('beforeend', `<div class="smz-pdf-preview" role="dialog" aria-modal="true" aria-label="Предпросмотр учебного АВР"><div><button type="button" onclick="this.closest('.smz-pdf-preview').remove()" aria-label="Закрыть">×</button><span>УЧЕБНЫЙ ДОКУМЕНТ</span><h3>АВР ${number}</h3><p>Без персональных данных, реальной подписи и юридической силы.</p></div></div>`);
   screen.querySelector('.smz-pdf-preview button')?.focus();
 }
-
 /* Operator workspace v3: one visual system for cabinet and rating. */
 
 const OP_COIN = '₡';
@@ -15277,7 +15386,6 @@ function opProgressInfographic(pointItems, coinItems, rankItems) {
 
 window.renderCabinet = renderCabinet;
 window.renderRating = renderRating;
-
 /* Operator rating v4: a focused competition dashboard without data tables. */
 
 const rcManagementRating = window.renderRating;
@@ -15563,4 +15671,3 @@ async function rcRatingEntry() {
 }
 
 window.renderRating = rcRatingEntry;
-

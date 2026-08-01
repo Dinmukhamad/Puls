@@ -1,0 +1,459 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   PULS APP SHELL — единственный источник правды по раскладке каркаса
+   ---------------------------------------------------------------------------
+   Здесь и только здесь живут: позиционирование сайдбара, верхняя панель,
+   мобильный таб-бар, шторка навигации, safe-area и поведение на брейкпоинтах.
+   Ни базовый слой, ни вьюхи не должны переопределять эти правила.
+
+   Брейкпоинты:
+     ≥1440  просторный desktop — контент ограничен --content-max
+     ≥1280  desktop
+     ≥1025  desktop, сайдбар с подписями
+      768…1024  планшет: сайдбар свёрнут в иконки
+      ≤767  мобильный: сайдбар → шторка, навигация → нижний таб-бар
+═══════════════════════════════════════════════════════════════════════════ */
+
+body {
+  padding-left: var(--nav-w);
+  padding-top: 0;
+  transition: padding-left var(--transition-default);
+}
+/* Экран логина: каркас не показывается */
+body.operator-login-required { padding-left: 0; overflow: hidden; }
+
+.container {
+  width: 100%;
+  max-width: calc(var(--content-max) + var(--content-pad) * 2);
+  margin: 0 auto;
+  padding: var(--space-6) var(--content-pad) var(--space-16);
+}
+
+/* ═══════════════════════════ SIDEBAR (desktop) ═════════════════════════ */
+.side-nav {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: var(--z-nav);
+  display: flex;
+  width: var(--nav-w);
+  padding: var(--space-4) var(--space-3)
+           calc(var(--space-5) + var(--safe-bottom));
+  flex-direction: column;
+  gap: var(--space-1);
+  background: var(--sidebar-bg);
+  border-right: var(--border-w) solid var(--sidebar-border);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  transition: width var(--transition-default), transform var(--transition-default);
+}
+.side-nav::-webkit-scrollbar { display: none; }
+
+/* Полупрозрачность работает только там, где браузер умеет backdrop-filter;
+   иначе --sidebar-bg-solid даёт непрозрачную подложку. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .side-nav { background: var(--sidebar-bg-solid); }
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .side-nav {
+    -webkit-backdrop-filter: var(--blur-nav);
+    backdrop-filter: var(--blur-nav);
+  }
+}
+
+.side-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--tap-target);
+  margin-bottom: var(--space-3);
+}
+.side-nav-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.side-nav-mark { color: var(--accent-primary); }
+.side-nav-mark svg { display: block; width: 26px; height: 26px; }
+.side-nav-brand {
+  font-size: var(--fs-headline);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
+}
+.side-nav-brand em { color: var(--accent-primary); font-style: normal; }
+
+.side-nav-group { display: flex; flex-direction: column; gap: 2px; }
+.side-nav-separator {
+  height: 1px;
+  margin: var(--space-3) var(--space-2);
+  background: var(--sidebar-border);
+  border: 0;
+}
+.side-nav-section-label {
+  padding: var(--space-3) var(--space-3) var(--space-1);
+  color: var(--text-tertiary);
+  font-size: var(--fs-caption-2);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+.side-nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap-target);
+  padding: 0 var(--space-3);
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--sidebar-text);
+  font-size: var(--fs-body);
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.side-nav-link svg {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.side-nav-link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.side-nav-link:hover { background: var(--sidebar-hover-bg); color: var(--text-primary); }
+.side-nav-link.active {
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-text-active);
+  font-weight: var(--fw-semibold);
+}
+.side-nav-link:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: var(--focus-ring);
+}
+
+.side-nav-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  flex: none;
+  border: var(--border-w) solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.side-nav-toggle svg { width: var(--icon-sm); height: var(--icon-sm); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.side-nav-toggle:hover { background: var(--sidebar-hover-bg); color: var(--text-primary); }
+
+/* Подвал сайдбара: пользователь, уведомления, настройки, выход */
+.side-nav-meta {
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: var(--border-w) solid var(--sidebar-border);
+}
+.side-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.side-user-identity { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.side-user-actions { display: flex; align-items: center; gap: var(--space-1); flex: none; }
+.side-user-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px; height: 34px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--accent-primary-soft);
+  color: var(--accent-primary);
+  font-size: var(--fs-footnote);
+  font-weight: var(--fw-semibold);
+}
+.side-user-info { display: flex; flex-direction: column; min-width: 0; line-height: var(--lh-snug); }
+.side-user-info > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-user-info > span:first-child { font-size: var(--fs-footnote); font-weight: var(--fw-semibold); color: var(--text-primary); }
+.side-user-info > span:not(:first-child) { font-size: var(--fs-caption-2); color: var(--text-tertiary); }
+
+.side-nav-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.side-nav-footer .btn-link {
+  padding: var(--space-1) 0;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-size: var(--fs-caption);
+  cursor: pointer;
+}
+.side-nav-footer .btn-link:hover { color: var(--danger); }
+
+/* ── Свёрнутый режим (кнопка в шапке сайдбара) ──────────────────────────── */
+body.side-nav-collapsed { padding-left: var(--nav-w-collapsed); }
+body.side-nav-collapsed .side-nav { width: var(--nav-w-collapsed); }
+body.side-nav-collapsed .side-nav-brand,
+body.side-nav-collapsed .side-nav-link span,
+body.side-nav-collapsed .side-nav-section-label,
+body.side-nav-collapsed .side-user-info,
+body.side-nav-collapsed .side-nav-footer .btn-link { display: none; }
+body.side-nav-collapsed .side-nav-link,
+body.side-nav-collapsed .side-nav-logo,
+body.side-nav-collapsed .side-user-row,
+body.side-nav-collapsed .side-nav-footer { justify-content: center; }
+body.side-nav-collapsed .side-nav-toggle { transform: rotate(180deg); }
+
+/* ═══════════════════════════ TOP BAR ═══════════════════════════════════ */
+.app-topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--topbar-h);
+  padding: var(--safe-top) var(--content-pad) 0;
+  background: var(--bg-translucent);
+  border-bottom: var(--border-w) solid var(--border-soft);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .app-topbar {
+    -webkit-backdrop-filter: var(--blur-nav);
+    backdrop-filter: var(--blur-nav);
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .app-topbar { background: var(--bg-surface); }
+}
+
+.app-topbar__title {
+  min-width: 0;
+  margin: 0;
+  flex: 1;
+  font-size: var(--fs-headline);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-topbar__actions { display: flex; align-items: center; gap: var(--space-1); flex: none; }
+.app-topbar__menu { display: none; }
+
+/* Кнопка-бургер и колокольчик используют примитив .ui-icon-btn.
+   Бейдж уведомлений позиционируется относительно кнопки. */
+.side-bell-btn, .side-gear-btn { position: relative; }
+.side-bell-badge {
+  position: absolute;
+  top: 4px; right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--radius-full);
+  background: var(--danger);
+  color: var(--text-on-accent);
+  font-size: var(--fs-caption-2);
+  font-weight: var(--fw-bold);
+  line-height: 16px;
+  text-align: center;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap-target);
+  height: var(--tap-target);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+.theme-toggle:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
+.theme-toggle svg { width: var(--icon-md); height: var(--icon-md); fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; }
+html[data-theme="light"] .theme-toggle .icon-sun,
+html[data-theme="dark"]  .theme-toggle .icon-moon { display: none; }
+
+/* ═══════════════════════ MOBILE TAB BAR ════════════════════════════════
+   Только основные разделы. Остальное — кнопка «Ещё», открывающая шторку
+   с полным списком. Скрыт по умолчанию, включается на ≤767px. */
+.app-tabbar {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: var(--z-nav);
+  display: none;
+  align-items: stretch;
+  height: calc(var(--tabbar-h) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+  background: var(--bg-translucent);
+  border-top: var(--border-w) solid var(--border-default);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .app-tabbar {
+    -webkit-backdrop-filter: var(--blur-nav);
+    backdrop-filter: var(--blur-nav);
+  }
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .app-tabbar { background: var(--bg-surface); }
+}
+
+.app-tabbar__item {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-1) 2px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font-family: var(--font-main);
+  font-size: 10px;
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--transition-fast);
+}
+.app-tabbar__item svg {
+  width: 22px; height: 22px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.app-tabbar__item span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-tabbar__item.active { color: var(--accent-primary); font-weight: var(--fw-semibold); }
+.app-tabbar__item:active { opacity: 0.6; }
+.app-tabbar__item:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+/* Разделы, не попавшие в основные пять, доступны через «Ещё» */
+.app-tabbar__item[hidden] { display: none; }
+
+/* Шторка навигации (открывается «Ещё») */
+.mobile-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-nav) - 1);
+  display: none;
+  visibility: hidden;
+  opacity: 0;
+  border: 0;
+  background: var(--modal-overlay);
+  transition: opacity var(--transition-default), visibility var(--transition-default);
+}
+
+/* ═══════════════════════════ БРЕЙКПОИНТЫ ═══════════════════════════════ */
+
+/* Планшет: сайдбар — только иконки, подписи в title/aria-label */
+@media (max-width: 1024px) and (min-width: 768px) {
+  :root { --nav-w: var(--nav-w-collapsed); }
+  .side-nav { width: var(--nav-w-collapsed); padding-left: var(--space-2); padding-right: var(--space-2); }
+  .side-nav-brand,
+  .side-nav-link span,
+  .side-nav-section-label,
+  .side-user-info,
+  .side-nav-footer .btn-link,
+  .side-nav-toggle { display: none; }
+  .side-nav-link, .side-nav-logo, .side-user-row, .side-nav-footer { justify-content: center; }
+  body.side-nav-collapsed { padding-left: var(--nav-w-collapsed); }
+  .two-col-grid { grid-template-columns: 1fr; }
+}
+
+/* Мобильный: сайдбар прячется в шторку, снизу — таб-бар */
+@media (max-width: 767px) {
+  :root { --nav-w: 0px; --content-pad: 16px; }
+
+  body {
+    padding-left: 0;
+    /* Контент не уезжает под таб-бар и под системный индикатор */
+    padding-bottom: calc(var(--tabbar-h) + var(--safe-bottom));
+  }
+  body.side-nav-collapsed { padding-left: 0; }
+
+  .container { padding: var(--space-4) var(--content-pad) var(--space-8); }
+
+  .app-topbar {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: var(--z-nav);
+    padding-left: max(var(--content-pad), var(--safe-left));
+    padding-right: max(var(--content-pad), var(--safe-right));
+  }
+  .app-topbar__menu { display: inline-flex; }
+  /* Топбар зафиксирован — компенсируем его высоту отступом контента */
+  main.container { padding-top: calc(var(--topbar-h) + var(--safe-top) + var(--space-4)); }
+
+  .app-tabbar {
+    display: flex;
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
+  }
+
+  /* Сайдбар превращается в выезжающую шторку */
+  .side-nav {
+    inset: 0 auto 0 0;
+    z-index: var(--z-modal);
+    width: min(320px, 86vw);
+    padding-top: calc(var(--space-4) + var(--safe-top));
+    padding-left: max(var(--space-3), var(--safe-left));
+    border-right: var(--border-w) solid var(--sidebar-border);
+    background: var(--sidebar-bg-solid);
+    transform: translateX(-104%);
+  }
+  body.mobile-nav-open .side-nav { transform: translateX(0); }
+  body.mobile-nav-open { overflow: hidden; }
+  .mobile-nav-backdrop { display: block; z-index: calc(var(--z-modal) - 1); }
+  body.mobile-nav-open .mobile-nav-backdrop { visibility: visible; opacity: 1; }
+
+  /* В шторке подписи и мета видны всегда, даже если включён compact-режим */
+  .side-nav-header,
+  .side-nav-link span,
+  .side-nav-section-label,
+  .side-user-info,
+  .side-nav-meta { display: revert; }
+  .side-nav-toggle { display: none; }
+  .side-nav-link { justify-content: flex-start; }
+
+  /* Экран логина: ни таб-бара, ни топбара */
+  body.operator-login-required .app-topbar,
+  body.operator-login-required .app-tabbar { display: none; }
+}
+
+@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
+  .side-nav { will-change: transform; }
+}
+
+/* Просторные экраны: контент центрируется, а не растягивается */
+@media (min-width: 1600px) {
+  :root { --content-pad: 40px; }
+}

@@ -183,7 +183,7 @@ textarea:focus-visible,
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
-.side-nav-link,
+/* .side-nav-link задаёт min-height в layout/10-app-shell.css (44px). */
 .side-bell-btn,
 .side-gear-btn,
 .theme-toggle,

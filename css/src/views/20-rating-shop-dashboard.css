@@ -271,7 +271,7 @@
   border-color: rgba(0,0,0,.12);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.03);
 }
-.pod-me { border-color: var(--accent-primary) !important; background: var(--accent-secondary-soft) !important; }
+.pod-me { border-color: var(--accent-primary); background: var(--accent-secondary-soft); }
 .pod-empty { color: var(--tx3); font-size: 13px; }
 .pod-medal  {
   display: inline-flex;
@@ -304,7 +304,7 @@
   position: relative;
   min-height: 112px;
 }
-.nom-me-v2 { border-color: var(--accent-primary) !important; background: var(--accent-secondary-soft) !important; }
+.nom-me-v2 { border-color: var(--accent-primary); background: var(--accent-secondary-soft); }
 .nom-you   { position: absolute; top: 8px; right: 8px; background: var(--accent-primary); color: #fff; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 20px; }
 .nom-t     { font: 500 11px 'Inter', sans-serif; color: var(--tx3); margin-bottom: 6px; }
 .nom-n     { font: 600 14px 'Inter', sans-serif; color: var(--tx); margin-bottom: 4px; }
@@ -360,7 +360,7 @@
   top: 0;
   z-index: 1;
 }
-.rating-my-row td { background: var(--accent-soft) !important; }
+.rating-my-row td { background: var(--accent-soft); }
 .rating-table td,
 .rating-table th { vertical-align: middle; }
 .rank-missing {
@@ -375,7 +375,7 @@
   font-size: 10px;
   font-weight: 600;
 }
-.rank-top { background: var(--accent-primary) !important; color: #fff !important; }
+.rank-top { background: var(--accent-primary); color: #fff; }
 .rating-my-sticky {
   margin-top: 12px; padding: 10px 14px;
   background: var(--accent-secondary-soft);
@@ -441,113 +441,19 @@
 .badge-info    { background: var(--info-soft);    color: var(--info);    }
 .badge-neutral { background: var(--bg-muted);     color: var(--text-secondary); }
 
-/* ══════════════════════════════════════════════════════
-   SIDEBAR — theme-aware (light sidebar in light theme)
-══════════════════════════════════════════════════════ */
-.side-nav-brand,
-.side-nav-logo,
-html[data-theme="light"] .side-nav-brand {
-  color: var(--text-primary);
-}
-
-/* Auth logout button adapts to theme */
-html[data-theme="light"] #auth-logout-btn {
-  color: var(--text-muted) !important;
-}
-html[data-theme="dark"] #auth-logout-btn {
-  color: rgba(255,255,255,.3) !important;
-}
-
-html[data-theme="light"] .side-nav-meta span {
-  color: var(--text-secondary);
-}
-
-/* Theme toggle button */
-.theme-toggle {
-  border: 1px solid var(--sidebar-border) !important;
-  background: transparent !important;
-  color: var(--sidebar-text) !important;
-}
-.theme-toggle:hover {
-  background: var(--sidebar-hover-bg) !important;
-  color: var(--text-primary) !important;
-}
-
-/* ══════════════════════════════════════════════════════
-   FORM LABEL — unified
-══════════════════════════════════════════════════════ */
-.form-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 4px;
-  display: block;
-}
+/* Оформление сайдбара, кнопки темы и подвала навигации принадлежит
+   css/src/layout/10-app-shell.css. Дублировать здесь нельзя. */
 
 /* ══════════════════════════════════════════════════════
    PAGE TRANSITIONS — smooth theme switch
 ══════════════════════════════════════════════════════ */
-*, *::before, *::after {
-  transition: background-color var(--transition-default),
-              border-color var(--transition-default),
-              color var(--transition-default);
-}
-/* But don't animate transforms and other non-color transitions */
-button, a, input, select, textarea {
-  transition: background-color var(--transition-fast),
-              border-color var(--transition-fast),
-              color var(--transition-fast),
-              opacity var(--transition-fast),
-              box-shadow var(--transition-fast);
-}
+/* Универсальный transition на `*` убран: он заставлял браузер анимировать
+   каждый элемент дерева при любой смене класса. Переходы задаются точечно
+   в components/05-ui-primitives.css и layout/10-app-shell.css. */
 
-
-/* ═══════════════════════════════════════════════════
-   SLATE+SKY POLISH — visual refinements
-═══════════════════════════════════════════════════ */
-
-/* Sidebar brand logo always white on slate */
-.side-nav-brand { color: #F8FAFC !important; }
-.side-nav-brand em { color: #38BDF8 !important; font-style: normal; }
-
-/* Sidebar links always slate theme */
-.side-nav-link { color: var(--sidebar-text) !important; }
-.side-nav-link svg { stroke: var(--sidebar-text) !important; }
-.side-nav-link:hover { background: var(--sidebar-hover-bg) !important; color: #CBD5E1 !important; }
-.side-nav-link:hover svg { stroke: #CBD5E1 !important; }
-.side-nav-link.active { background: var(--accent-primary) !important; color: #fff !important; }
-.side-nav-link.active svg { stroke: #fff !important; }
-
-/* Side nav meta */
-.side-nav-meta { color: var(--sidebar-text) !important; }
-.side-user-info #side-user { color: #CBD5E1 !important; }
-.side-user-info #side-role { color: var(--sidebar-text) !important; }
-#auth-logout-btn { color: var(--sidebar-text) !important; }
-#auth-logout-btn:hover { color: #CBD5E1 !important; }
-
-/* Gear button in sidebar */
-.side-gear-btn { border-color: var(--sidebar-border) !important; color: var(--sidebar-text) !important; }
-.side-gear-btn:hover { background: var(--sidebar-hover-bg) !important; color: #CBD5E1 !important; }
-
-/* Theme toggle */
-.theme-toggle { border-color: var(--sidebar-border) !important; color: var(--sidebar-text) !important; }
-.theme-toggle:hover { background: var(--sidebar-hover-bg) !important; color: #CBD5E1 !important; }
-
-/* Section separator */
-.side-nav-separator { background: var(--sidebar-border) !important; }
-.side-nav-section-label { color: #475569 !important; }
 
 /* KPI card accent border */
 .kpi-card.kpi-accent { border-top: 3px solid var(--accent-primary); }
-
-/* Btn primary sky blue */
-.btn-primary {
-  background: var(--accent-primary) !important;
-  color: #fff !important;
-}
-.btn-primary:hover { background: var(--accent-primary-hover) !important; }
 
 /* Panel head h3 */
 .panel-head h3 { color: var(--text-primary); font-weight: 600; }
@@ -560,16 +466,8 @@ button, a, input, select, textarea {
 .data-table td { border-bottom: 1px solid var(--border-soft); }
 .data-table tr:hover td { background: var(--bg-surface-hover); }
 
-/* Card panels */
-.panel, .rating-card, .manual-card {
-  border-color: var(--border-default) !important;
-}
-
-/* Focus ring sky blue */
-input:focus, select:focus, textarea:focus {
-  border-color: var(--accent-primary) !important;
-  box-shadow: 0 0 0 3px rgba(2,132,199,0.15) !important;
-}
+/* Кнопки, поля, вкладки, карточки, бейджи и KPI описаны один раз —
+   в css/src/views/zz-legacy-controls.css. Здесь только раскладка. */
 
 /* Scrollbar slate */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -580,10 +478,9 @@ input:focus, select:focus, textarea:focus {
 /* ── Global button border-radius enforcement ── */
 button, .btn, .btn-primary, .btn-outline, .btn-sm,
 .btn-action, .acc-btn, .manual-submit-btn,
-.choose, .ops-tab, .metric-tab, .side-nav-link {
+.choose, .ops-tab, .metric-tab {
   border-radius: 10px;
 }
-.side-nav-link { border-radius: 10px; }
 .status-badge  { border-radius: 8px; }
 .badge, .ops-tab-badge, .me-badge, .nom-you { border-radius: 20px; }
 .modal-box, .manual-card, .rating-card, .panel { border-radius: 16px; }
@@ -623,50 +520,29 @@ button, .btn, .btn-primary, .btn-outline, .btn-sm,
   overflow: hidden;
 }
 
-/* Request cards */
-.request-card {
-  border-radius: 14px !important;
-  background: var(--card-bg) !important;
-  border-color: var(--border-default) !important;
-}
-
-/* Approve / reject buttons — always readable */
-.btn-ok   { background: #16A34A !important; color: #ffffff !important; }
-.btn-danger { background: #DC2626 !important; color: #ffffff !important; }
-.btn-ok:hover   { background: #15803D !important; }
-.btn-danger:hover { background: #B91C1C !important; }
-
-/* Tab buttons */
-.tab-btn { border-radius: 8px 8px 0 0 !important; }
-.tab-btn.active { color: var(--accent-primary) !important; border-bottom-color: var(--accent-primary) !important; }
-
 /* Operator action buttons */
-.btn-action-primary { background: rgba(2,132,199,0.1) !important; color: var(--accent-primary) !important; }
-.btn-action-warn    { background: rgba(217,119,6,0.1) !important;  color: var(--warning) !important; }
-.btn-action-danger  { background: rgba(220,38,38,0.1) !important;  color: var(--danger) !important; }
-.btn-action-secondary { color: var(--text-secondary) !important; }
-.btn-action-secondary:hover { background: var(--bg-muted) !important; color: var(--text-primary) !important; }
+.btn-action-primary { background: rgba(2,132,199,0.1); color: var(--accent-primary); }
+.btn-action-warn    { background: rgba(217,119,6,0.1);  color: var(--warning); }
+.btn-action-danger  { background: rgba(220,38,38,0.1);  color: var(--danger); }
+.btn-action-secondary { color: var(--text-secondary); }
+.btn-action-secondary:hover { background: var(--bg-muted); color: var(--text-primary); }
 
 /* Text contrast fixes */
-.tx-comment, .tx-info span { color: var(--text-primary) !important; }
-.tx-date { color: var(--text-muted) !important; }
-.tx-amount { font-weight: 700 !important; }
-.tx-plus  .tx-amount { color: var(--success) !important; }
-.tx-minus .tx-amount { color: var(--danger) !important; }
-
-/* KPI values */
-.kpi-value { color: var(--text-primary) !important; font-weight: 700 !important; }
-.kpi-label { color: var(--text-muted) !important; font-size: 11px !important; }
+.tx-comment, .tx-info span { color: var(--text-primary); }
+.tx-date { color: var(--text-muted); }
+.tx-amount { font-weight: 700; }
+.tx-plus  .tx-amount { color: var(--success); }
+.tx-minus .tx-amount { color: var(--danger); }
 
 /* Status badges always readable */
-.status-badge.status-pending  { background: var(--warning-soft) !important; color: var(--warning) !important; }
-.status-badge.status-approved { background: var(--success-soft) !important; color: var(--success) !important; }
-.status-badge.status-rejected { background: var(--danger-soft)  !important; color: var(--danger)  !important; }
-.status-badge.status-active   { background: var(--info-soft)    !important; color: var(--info)    !important; }
-.status-badge.status-inactive { background: var(--warning-soft) !important; color: var(--warning) !important; }
+.status-badge.status-pending  { background: var(--warning-soft); color: var(--warning); }
+.status-badge.status-approved { background: var(--success-soft); color: var(--success); }
+.status-badge.status-rejected { background: var(--danger-soft) ; color: var(--danger) ; }
+.status-badge.status-active   { background: var(--info-soft)   ; color: var(--info)   ; }
+.status-badge.status-inactive { background: var(--warning-soft); color: var(--warning); }
 
 /* Participating badge — sky blue */
-.status-badge.status-participating { background: var(--accent-secondary-soft) !important; color: var(--accent-primary) !important; }
+.status-badge.status-participating { background: var(--accent-secondary-soft); color: var(--accent-primary); }
 
 /* Panel head */
 .panel-head {
@@ -680,36 +556,9 @@ button, .btn, .btn-primary, .btn-outline, .btn-sm,
   margin: 0;
 }
 
-/* Section titles */
-.section-title { color: var(--text-primary) !important; }
-.section-kicker { color: var(--accent-primary) !important; }
-
-/* Form labels */
-.form-label { color: var(--text-secondary) !important; }
-
-/* Input/select focus */
-.form-input:focus, .form-select:focus {
-  border-color: var(--accent-primary) !important;
-  box-shadow: 0 0 0 3px rgba(2,132,199,0.15) !important;
-  outline: none !important;
-}
-
-/* Shop cards rounded */
-.shop-card {
-  border-radius: 16px !important;
-  background: var(--card-bg) !important;
-  border-color: var(--border-default) !important;
-}
-
 /* Group cards */
 .groups-grid .panel, .group-card {
-  border-radius: 16px !important;
-}
-
-/* Rating cards */
-.rating-card, .rh-card, .r-my-card, .nom-card-v2, .pod-card {
-  border-color: var(--border-default) !important;
-  background: var(--card-bg) !important;
+  border-radius: 16px;
 }
 
 /* Responsive constraint */
