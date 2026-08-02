@@ -14,7 +14,7 @@ from datetime import date, timedelta
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.models.entities import Group, Operator
+from app.models.entities import Group
 from app.modules.analytics import repository as repo
 from app.modules.analytics.metrics_meta import (
     ANALYTICS_TARGETS_VERSION,
