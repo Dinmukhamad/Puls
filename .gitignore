@@ -53,6 +53,8 @@ desktop.ini
 .pytest_cache/
 .ruff_cache/
 
-# Generated minified frontend artifacts are not committed.
-*.min.js
-*.min.css
+# Минифицированные бандлы обязаны быть в репозитории: их напрямую отдаёт
+# деплой (Dockerfile — python:3.13-slim, Node в образе нет, фронтенд не
+# собирается). index.html ссылается именно на них, поэтому без коммита
+# продакшн получит 404 на весь JS и CSS.
+# Актуальность стережёт tests/frontend/asset-pipeline.test.mjs.

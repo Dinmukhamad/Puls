@@ -9,7 +9,7 @@ def test_unknown_page_serves_index_html(client):
     r = client.get("/unknown-page")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/html")
-    assert 'js/app.js' in r.text  # это действительно index.html
+    assert 'js/app.min.js' in r.text  # это действительно index.html
 
 
 def test_deep_frontend_route_serves_index_html(client):

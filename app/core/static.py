@@ -9,14 +9,31 @@ from fastapi.staticfiles import StaticFiles
 ROOT = Path(__file__).resolve().parents[2]
 
 
+IMMUTABLE = "public, max-age=31536000, immutable"
+REVALIDATE = "no-cache, must-revalidate"
+
+
 class CachedStaticFiles(StaticFiles):
     async def get_response(self, path: str, scope):
         response = await super().get_response(path, scope)
-        if response.status_code == 200:
-            if path.endswith((".css", ".js")):
-                response.headers["Cache-Control"] = "no-cache, must-revalidate"
-            else:
-                response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        if response.status_code != 200:
+            return response
+
+        if not path.endswith((".css", ".js")):
+            response.headers["Cache-Control"] = IMMUTABLE
+            return response
+
+        # index.html ссылается на бандлы с ?v=<хеш содержимого>, который
+        # проставляет scripts/stamp-assets.mjs. Такой URL меняется ровно при
+        # изменении файла, поэтому его можно кешировать навсегда: раньше без
+        # этого каждый повторный визит тратил round-trip на ревалидацию
+        # каждого бандла, передавая ноль байт.
+        #
+        # Запрос без версии (прямое обращение, отладка) по-прежнему
+        # перепроверяется — иначе можно навсегда закешировать неверный файл.
+        query = scope.get("query_string") or b""
+        versioned = b"v=" in query
+        response.headers["Cache-Control"] = IMMUTABLE if versioned else REVALIDATE
         return response
 
 
