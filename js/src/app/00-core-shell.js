@@ -624,12 +624,8 @@ async function bootApp() {
 
   await loadData(role);
 
-  // Фоновый прогрев кеша аналитики для admin и manager —
-  // пока пользователь смотрит Сводку, данные аналитики уже загружаются.
-  // Запускаем через 3 секунды чтобы не конкурировать с основными запросами.
-  if (role === 'admin' || role === 'manager') {
-    setTimeout(() => prefetchAnalyticsInBackground(), 3000);
-  }
+  // Прогрев кеша аналитики больше не нужен: экран руководителя грузится
+  // одним запросом /api/analytics/dashboard вместо полутора десятков.
   setTimeout(() => prefetchAppSectionsInBackground(role), 700);
 
   // Lazy preload групп

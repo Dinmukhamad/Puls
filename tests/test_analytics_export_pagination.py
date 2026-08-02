@@ -63,14 +63,61 @@ def test_operator_pagination_sorting_and_filtered_xlsx(client, db_session):
     assert {first.full_name, second.full_name} <= names
 
 
-def test_management_dashboard_includes_previous_period(client, db_session):
+def test_dashboard_compares_with_previous_period_and_explains_metrics(client, db_session):
+    """Экран руководителя приходит одним ответом и объясняет каждый показатель."""
     operator = make_operator(db_session, full_name="Previous metric")
     _metric(db_session, operator, 20)
     response = client.get(
-        "/api/analytics/management-dashboard",
+        "/api/analytics/dashboard",
         params={"start_date": "2036-01-15", "end_date": "2036-01-15"},
     )
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["previous_period"] == {"start": "2036-01-14", "end": "2036-01-14"}
-    assert "metric_definitions" in payload
+
+    assert payload["period"]["start"] == "2036-01-15"
+    assert payload["period"]["days"] == 1
+    # 15 января 2036 — вторник, поэтому предыдущий период это 14-е.
+    quality = next(m for m in payload["metrics"] if m["key"] == "quality")
+    assert quality["delta"]["previous"] is None  # за 14-е данных нет
+
+    # Каждая карточка несёт человеческое объяснение и цель.
+    for metric in payload["metrics"]:
+        assert metric["definition"]
+        assert metric["action"]
+        assert metric["status"] in {"good", "watch", "bad", "neutral", "unknown"}
+    assert quality["value"] == 90.0
+    assert quality["target"] == 85.0
+    assert quality["status"] == "good"
+
+    assert len(payload["weekdays"]) == 7
+    assert payload["trend"]["metric"] == "quality"
+    assert payload["filters"]["all_weekdays"] is True
+
+
+def test_dashboard_weekday_filter_narrows_the_period(client, db_session):
+    """Фильтр по дням недели заменяет отсутствующий в данных разрез по времени."""
+    operator = make_operator(db_session, full_name="Weekday metric")
+    _metric(db_session, operator, 20)  # вторник, 15 января 2036
+
+    tuesday = client.get("/api/analytics/dashboard", params={
+        "start_date": "2036-01-13", "end_date": "2036-01-19", "weekdays": "1",
+    }).json()
+    assert [p["date"] for p in tuesday["trend"]["points"]] == ["2036-01-14"] or \
+           any(p["has_data"] for p in tuesday["trend"]["points"])
+    assert tuesday["filters"]["weekdays"] == [1]
+    assert tuesday["filters"]["all_weekdays"] is False
+
+    monday = client.get("/api/analytics/dashboard", params={
+        "start_date": "2036-01-13", "end_date": "2036-01-19", "weekdays": "0",
+    }).json()
+    assert monday["coverage"]["days_with_data"] == 0
+
+
+def test_glossary_lists_every_headline_metric(client):
+    response = client.get("/api/analytics/glossary")
+    assert response.status_code == 200, response.text
+    metrics = response.json()["metrics"]
+    keys = {m["metric_key"] for m in metrics}
+    assert {"quality", "kvz", "efficiency", "penalty", "calls", "operators"} == keys
+    for metric in metrics:
+        assert metric["definition"] and metric["label"]

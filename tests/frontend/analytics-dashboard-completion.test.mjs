@@ -11,15 +11,9 @@ test('management summary exposes compact filters and server Excel export', () =>
   assert.match(app, /summary-management-kpis/);
 });
 
-test('analytics requests are coalesced and operator table is server paginated', () => {
+test('request coalescing still guards repeated view loads', () => {
   assert.match(app, /const SWR_IN_FLIGHT = new Map\(\)/);
-  assert.match(app, /page_size: 100/);
-  assert.match(app, /operatorSortOrder/);
-  assert.match(app, /Страница \$\{opsTable\.page\} из \$\{totalPages\}/);
 });
 
-test('analytics filters include quick periods, reset and URL-backed tab', () => {
-  assert.match(app, /data-an-period="day"/);
-  assert.match(app, /id="an-reset-btn"/);
-  assert.match(app, /qs\.set\('tab', params\.tab\)/);
-});
+// Фильтры и пагинация экрана аналитики переехали на единый /dashboard —
+// их контракт проверяет tests/frontend/analytics-dashboard.test.mjs.

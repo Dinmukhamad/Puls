@@ -20,6 +20,12 @@ class MetricDefinition(BaseModel):
     critical_threshold: float | None = None
     direction: str
     targets_version: str
+    # Человеческие пояснения для UI: что значит хороший/плохой результат и что делать.
+    short: str | None = None
+    good: str | None = None
+    bad: str | None = None
+    action: str | None = None
+    decimals: int | None = None
 
 
 class ScopeInfo(BaseModel):

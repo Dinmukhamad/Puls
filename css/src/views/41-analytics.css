@@ -1,0 +1,488 @@
+/* ══════════════════════════════════════════════
+   АНАЛИТИКА — экран руководителя (.an2-*)
+
+   Статус показателя всегда несёт текст рядом с цветом: зелёный и
+   оранжевый в статусной тройке дают ΔE ≈ 7 при протанопии, поэтому
+   цвет здесь — вторичный признак, а не единственный.
+══════════════════════════════════════════════ */
+
+.an2-lede {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* ── Фильтры: одна строка над данными ─────────────────── */
+
+.an2-filters { margin-bottom: 18px; }
+
+.an2-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px 28px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.an2-filter { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.an2-filter-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.an2-reset {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: 600 10px 'Inter', sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+.an2-reset:hover { text-decoration: underline; }
+
+.an2-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.an2-chip {
+  padding: 7px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font: 600 13px 'Inter', sans-serif;
+  cursor: pointer;
+  transition: background var(--t), color var(--t), border-color var(--t);
+}
+.an2-chip:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.an2-chip.is-on {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+.an2-chip-sm { padding: 5px 11px; font-size: 12px; }
+
+.an2-days { display: flex; gap: 4px; }
+
+.an2-day {
+  width: 38px;
+  height: 34px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font: 600 12px 'Inter', sans-serif;
+  cursor: pointer;
+  transition: background var(--t), color var(--t), border-color var(--t);
+}
+.an2-day:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.an2-day.is-on {
+  background: var(--accent-primary-soft, var(--accent-secondary-soft));
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.an2-dates { display: flex; gap: 10px; flex-wrap: wrap; }
+.an2-dates label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.an2-dates input {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font: 500 13px 'Inter', sans-serif;
+}
+.an2-select { height: 34px; min-width: 180px; font-size: 13px; }
+
+/* ── Покрытие данными ─────────────────────────────────── */
+
+.an2-coverage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.an2-coverage b { color: var(--text-primary); }
+.an2-coverage-note {
+  flex-basis: 100%;
+  color: var(--warning);
+  font-weight: 500;
+}
+
+/* ── Карточки показателей ─────────────────────────────── */
+
+.an2-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.an2-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  padding-left: 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+/* Статусная полоса — дублирует бейдж, помогает сканировать взглядом. */
+.an2-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--border-default);
+}
+.an2-status-good::before { background: var(--success); }
+.an2-status-watch::before { background: var(--warning); }
+.an2-status-bad::before { background: var(--danger); }
+
+.an2-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.an2-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.an2-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.an2-badge-icon { font-size: 10px; line-height: 1; }
+.an2-badge-good { background: var(--success-soft); color: var(--success); }
+.an2-badge-watch { background: var(--warning-soft); color: var(--warning); }
+.an2-badge-bad { background: var(--danger-soft); color: var(--danger); }
+.an2-badge-neutral,
+.an2-badge-unknown { background: var(--bg-muted); color: var(--text-muted); }
+
+.an2-value {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -.02em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.an2-unit {
+  margin-left: 5px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0;
+}
+
+.an2-meta { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.an2-target { color: var(--text-muted); }
+.an2-target-none { font-style: italic; }
+.an2-delta { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
+.an2-delta-up { color: var(--success); }
+.an2-delta-down { color: var(--danger); }
+.an2-delta-none { color: var(--text-muted); }
+
+.an2-plain {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.an2-card-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+.an2-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: 600 12px 'Inter', sans-serif;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+.an2-link:hover { text-decoration: underline; }
+.an2-link.is-active { color: var(--text-muted); cursor: default; }
+.an2-link.is-active:hover { text-decoration: none; }
+
+.an2-explain {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 12px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.an2-explain b { color: var(--text-primary); }
+.an2-explain-action { color: var(--text-primary); }
+.an2-formula {
+  margin-top: 2px;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-muted);
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* ── Раскрывающиеся секции ────────────────────────────── */
+
+.an2-section {
+  margin-bottom: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.an2-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 15px 18px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+.an2-section-head:hover { background: var(--bg-surface-hover); }
+.an2-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.an2-section-caret { color: var(--text-muted); font-size: 12px; }
+.an2-section-body { padding: 0 18px 18px; }
+
+.an2-hint {
+  margin: 0 0 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ── График динамики ──────────────────────────────────── */
+
+.an2-trend-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.an2-trend-unit { font-size: 12px; color: var(--text-muted); }
+
+.an2-chart { position: relative; margin: 0; }
+.an2-chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+
+/* Сетка и оси намеренно приглушены — данные должны быть заметнее разметки. */
+.an2-grid { stroke: var(--border-soft); stroke-width: 1; }
+.an2-axis { fill: var(--text-muted); font-size: 10px; }
+
+.an2-line {
+  fill: none;
+  stroke: var(--accent-primary);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.an2-area { fill: var(--accent-primary); opacity: .07; stroke: none; }
+
+.an2-target-line {
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  opacity: .7;
+}
+.an2-target-text { fill: var(--text-muted); font-size: 10px; font-weight: 600; }
+
+.an2-dot {
+  fill: var(--card-bg);
+  stroke: var(--accent-primary);
+  stroke-width: 2;
+  cursor: pointer;
+  transition: r .12s ease;
+}
+.an2-dot.is-hot, .an2-dot:focus { r: 6; outline: none; }
+
+.an2-tip {
+  position: absolute;
+  transform: translate(-50%, -140%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--text-primary);
+  color: var(--card-bg);
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: var(--shadow-md);
+  z-index: 5;
+}
+.an2-tip b { font-size: 12px; }
+
+.an2-table-toggle { margin-top: 14px; }
+.an2-table-toggle summary {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  cursor: pointer;
+}
+.an2-table-toggle .table-wrap { margin-top: 10px; }
+
+/* ── Дни недели ───────────────────────────────────────── */
+
+.an2-wd { display: flex; flex-direction: column; gap: 8px; }
+.an2-wd-row {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr) 62px 104px;
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+.an2-wd-name { color: var(--text-secondary); }
+.an2-wd-track {
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+.an2-wd-fill {
+  height: 100%;
+  /* Скруглённый конец у данных, ровный у базовой линии. */
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  background: var(--text-muted);
+}
+.an2-fill-good { background: var(--success); }
+.an2-fill-watch { background: var(--warning); }
+.an2-fill-bad { background: var(--danger); }
+.an2-wd-val {
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.an2-wd-status { justify-self: start; }
+
+/* ── Кому нужно внимание ──────────────────────────────── */
+
+.an2-att-list { display: flex; flex-direction: column; gap: 10px; list-style: none; margin: 0; padding: 0; }
+.an2-att {
+  padding: 13px 15px;
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+.an2-att-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.an2-att-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.an2-att-group { font-size: 11px; color: var(--text-muted); }
+.an2-att-fact { margin-top: 4px; font-size: 13px; color: var(--text-secondary); }
+.an2-att-fact b { color: var(--danger); }
+.an2-att-target { color: var(--text-muted); }
+.an2-att-action { margin-top: 6px; font-size: 12px; color: var(--text-primary); }
+
+/* ── Пустые состояния и ошибки ────────────────────────── */
+
+.an2-nodata {
+  margin: 0;
+  padding: 18px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.an2-nodata-good { color: var(--success); font-weight: 500; }
+
+.an2-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--card-bg);
+}
+.an2-alert b { font-size: 15px; color: var(--text-primary); }
+.an2-alert span { font-size: 13px; color: var(--text-secondary); }
+.an2-alert-bad { border-left: 3px solid var(--danger); }
+.an2-alert-empty { border-left: 3px solid var(--warning); }
+
+/* ── Глоссарий ────────────────────────────────────────── */
+
+.an2-gloss { display: flex; flex-direction: column; gap: 12px; max-height: 60vh; overflow-y: auto; }
+.an2-gloss-item {
+  padding: 13px 15px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+.an2-gloss-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.an2-gloss-head b { font-size: 14px; color: var(--text-primary); }
+.an2-gloss-head span { font-size: 11px; color: var(--text-muted); }
+.an2-gloss-item p { margin: 5px 0 8px; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.an2-gloss-line { font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+.an2-gloss-line b { color: var(--text-primary); }
+.an2-gloss-muted { color: var(--text-muted); font-style: italic; }
+
+/* ── Адаптив ──────────────────────────────────────────── */
+
+@media (max-width: 767px) {
+  .an2-filter-row { gap: 14px; padding: 12px; }
+  .an2-metrics { grid-template-columns: 1fr; }
+  .an2-value { font-size: 28px; }
+  .an2-wd-row {
+    grid-template-columns: 74px minmax(0, 1fr) 54px;
+    row-gap: 4px;
+  }
+  .an2-wd-status { grid-column: 2 / -1; }
+  .an2-select { min-width: 0; width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .an2-chip, .an2-day, .an2-dot { transition: none; }
+}
