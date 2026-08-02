@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.core.config import get_settings
+from app.modules.auth.rate_limit import login_rate_limiter
 from app.modules.auth.router import _client_ip
 
 
@@ -46,10 +47,11 @@ def test_rate_limit_is_per_client_ip_behind_proxy(db_session, make_client, monke
     monkeypatch.setattr(settings, "trust_forwarded_for", True)
     client = make_client()
 
-    # 6 неверных попыток от клиента A (разные несуществующие аккаунты, чтобы
-    # сработала именно IP-блокировка, а не аккаунтная) — IP A блокируется.
+    # Разные несуществующие аккаунты, чтобы сработала именно IP-блокировка,
+    # а не аккаунтная. Порог IP вдвое выше аккаунтного (коллеги за общим NAT
+    # делят адрес), поэтому попыток нужно больше.
     last = None
-    for i in range(6):
+    for i in range(login_rate_limiter.ip_threshold + 1):
         last = client.post(
             "/api/auth/login",
             json={"username": f"ghostA{i}", "password": "bad"},

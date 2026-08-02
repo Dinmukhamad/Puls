@@ -6,13 +6,14 @@ calculators (compute_*), управляет TTL-кешем, формирует �
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from io import BytesIO
 
 from fastapi import HTTPException
 from openpyxl import Workbook
 from sqlalchemy.orm import Session
 
+from app.core.datetime_utils import now_local
 from app.models.entities import Group, Operator
 from app.modules.analytics import calculators as calc
 from app.modules.analytics import repository as repo
@@ -978,7 +979,9 @@ def export_workbook(
     sheet = workbook.active
     sheet.title = "Аналитика"
     sheet.append(["Аналитика Puls"])
-    sheet.append(["Дата формирования", datetime.now().strftime("%d.%m.%Y %H:%M")])
+    # now_local(), а не datetime.now(): на сервере в UTC наивное время
+    # подписало бы UTC как местное — расхождение с Алматы в 5-6 часов.
+    sheet.append(["Дата формирования", now_local().strftime("%d.%m.%Y %H:%M")])
     sheet.append(["Период", f"{start_date:%d.%m.%Y} — {end_date:%d.%m.%Y}"])
     sheet.append(["Группа", str(group_id) if group_id is not None else "Все доступные"])
     sheet.append(["Оператор", operator_query or "Все"])

@@ -42,13 +42,49 @@ def test_access_scope_is_explicit_for_admin_and_supervisor(db_session):
 
 
 def test_login_rate_limit_uses_account_and_ip_keys():
-    limiter = LoginRateLimiter(threshold=2, maximum_delay=10)
+    limiter = LoginRateLimiter(threshold=2, ip_threshold=2, maximum_delay=10)
     limiter.failure("Operator", "10.0.0.1", now=100)
     limiter.failure("Operator", "10.0.0.1", now=100)
     assert limiter.retry_after("operator", "10.0.0.99", now=100) == 1
     assert limiter.retry_after("someone", "10.0.0.1", now=100) == 1
-    limiter.success("operator", "10.0.0.1")
-    assert limiter.retry_after("operator", "10.0.0.1", now=100) == 0
+    limiter.success("operator", "10.0.0.1", now=100)
+    # Аккаунт разблокирован, но IP — нет: иначе любой обладатель валидной
+    # учётки сбрасывал бы IP-лимит и продолжал перебор чужого пароля.
+    assert limiter.retry_after("operator", "10.0.0.99", now=100) == 0
+    assert limiter.retry_after("someone", "10.0.0.1", now=100) == 1
+
+
+def test_ip_threshold_is_looser_than_account_threshold():
+    """Коллеги за общим NAT делят один IP — пара опечаток не должна запирать офис."""
+    limiter = LoginRateLimiter(threshold=2, maximum_delay=10)
+    assert limiter.ip_threshold > limiter.threshold
+    limiter.failure("alice", "10.0.0.1", now=100)
+    limiter.failure("bob", "10.0.0.1", now=100)
+    limiter.failure("carol", "10.0.0.1", now=100)
+    # Каждый аккаунт ошибся лишь раз, общий IP ещё не набрал свой порог.
+    assert limiter.retry_after("dave", "10.0.0.1", now=100) == 0
+
+
+def test_failed_logins_do_not_grow_memory_forever():
+    """Перебор случайных логинов раньше надувал словарь до OOM."""
+    limiter = LoginRateLimiter(threshold=2, maximum_delay=10, window=60)
+    for index in range(500):
+        limiter.failure(f"ghost-{index}", f"10.1.{index // 256}.{index % 256}", now=100)
+    assert limiter.entry_count() > 0
+
+    # Окно прошло, новых попыток от старых ключей не было — записи истекают.
+    limiter.failure("someone", "10.9.9.9", now=100 + 61 + 11)
+    assert limiter.entry_count() <= 2, (
+        f"протухшие записи не вычищены: {limiter.entry_count()}"
+    )
+
+
+def test_entry_count_is_capped_even_within_the_window():
+    """Всплеск уникальных ключей внутри окна не должен переполнять память."""
+    limiter = LoginRateLimiter(threshold=2, maximum_delay=10, window=3600, max_entries=50)
+    for index in range(400):
+        limiter.failure(f"ghost-{index}", f"10.2.{index // 256}.{index % 256}", now=100 + index)
+    assert limiter.entry_count() <= 50
 
 
 def test_business_today_uses_almaty_boundary():

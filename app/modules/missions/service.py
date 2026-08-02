@@ -1698,11 +1698,28 @@ def admin_stats(db: Session, mission_code: str | None = None) -> dict[str, Any]:
     reward_transactions = db.scalars(
         select(CoinTransaction).where(CoinTransaction.source_type == "mission_reward")
     ).all()
-    awarded = 0
-    for transaction in reward_transactions:
-        reward_attempt = db.get(MissionAttempt, transaction.source_id)
-        if mission_ids is None or (reward_attempt and reward_attempt.mission_id in mission_ids):
-            awarded += transaction.amount
+    if mission_ids is None:
+        awarded = sum(transaction.amount for transaction in reward_transactions)
+    else:
+        # Раньше здесь был db.get() на каждую транзакцию — по запросу к БД на
+        # каждую выданную награду. Забираем связку attempt -> mission одним
+        # запросом и сопоставляем в памяти.
+        source_ids = {
+            transaction.source_id
+            for transaction in reward_transactions
+            if transaction.source_id is not None
+        }
+        mission_by_attempt = dict(
+            db.execute(
+                select(MissionAttempt.id, MissionAttempt.mission_id)
+                .where(MissionAttempt.id.in_(source_ids or [-1]))
+            ).all()
+        )
+        awarded = sum(
+            transaction.amount
+            for transaction in reward_transactions
+            if mission_by_attempt.get(transaction.source_id) in mission_ids
+        )
     scored = [float(attempt.score) for attempt in attempts if attempt.score is not None]
     attempt_ids = [attempt.id for attempt in attempts]
     error_rows = db.scalars(

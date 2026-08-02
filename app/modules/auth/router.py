@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.datetime_utils import now_utc
 from app.core.security import (
     create_access_token,
+    dummy_password_hash,
     get_current_user,
     hash_password,
     require_roles,
@@ -173,7 +174,14 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
             headers={"Retry-After": str(retry_after)},
         )
     user = db.scalar(select(User).where(User.username == payload.username))
-    if not user or not verify_password(payload.password, user.password_hash):
+    # Хеш сверяем всегда, даже если пользователя нет: иначе несуществующий
+    # логин отвечает мгновенно, а существующий — после bcrypt, и по этой
+    # разнице во времени собирают список валидных логинов.
+    password_matches = verify_password(
+        payload.password,
+        user.password_hash if user else dummy_password_hash(),
+    )
+    if not user or not password_matches:
         login_rate_limiter.failure(payload.username, client_ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Неверный логин или пароль")

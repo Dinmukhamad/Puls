@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from functools import lru_cache
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -81,6 +82,21 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
+
+
+@lru_cache(maxsize=1)
+def dummy_password_hash() -> str:
+    """Хеш-заглушка для несуществующих пользователей.
+
+    Без неё вход по несуществующему логину отвечает мгновенно (bcrypt не
+    считается), а по существующему — на порядок медленнее. Разница измерима и
+    выдаёт список валидных логинов. Сверяемся с заглушкой, чтобы стоимость
+    ответа не зависела от того, есть пользователь или нет.
+
+    Считается один раз при первом обращении и совпадает по параметрам с
+    остальными хешами, потому что идёт через тот же pwd_context.
+    """
+    return pwd_context.hash("password-that-never-matches")
 
 
 def supervisor_scope_group_id(db: Session, user: User) -> int | None:
