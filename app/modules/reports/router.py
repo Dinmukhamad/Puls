@@ -9,6 +9,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.core.security import require_roles
 from app.database.db import get_db
@@ -41,7 +42,14 @@ async def upload_period_files(
     if len(monthly_bytes) > service.MAX_REPORT_FILE_BYTES or len(report_bytes) > service.MAX_REPORT_FILE_BYTES:
         raise HTTPException(status_code=413, detail="Размер каждого Excel-файла не должен превышать 15 МБ")
 
-    return service.process_upload(
+    # Обработчик обязан быть async ради await file.read(), поэтому он живёт на
+    # event loop. process_upload синхронный и тяжёлый: sha256 по двум файлам до
+    # 15 МБ, парсинг Excel и запись в БД. Вызванный напрямую, он блокировал бы
+    # петлю на всё время загрузки — сервер не отвечал бы никому, включая
+    # healthcheck. Уводим его в threadpool: ровно так FastAPI поступает с
+    # обычными def-обработчиками.
+    return await run_in_threadpool(
+        service.process_upload,
         db,
         monthly_report_file.filename, monthly_bytes,
         report_file.filename, report_bytes,
