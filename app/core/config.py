@@ -87,7 +87,10 @@ class Settings(BaseSettings):
             os.getenv("RAILWAY_ENVIRONMENT", "").lower(),
         }
         is_railway = bool(os.getenv("RAILWAY_PROJECT_ID") or os.getenv("RAILWAY_SERVICE_ID"))
-        if "production" not in env_values and not is_railway:
+        # Render не выставляет APP_ENV=production сам, но задаёт RENDER=true и
+        # RENDER_SERVICE_ID. Без детекта проверки безопасности молча пропускались.
+        is_render = bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
+        if "production" not in env_values and not is_railway and not is_render:
             return
 
         problems = []
