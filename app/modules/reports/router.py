@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from app.core.security import require_roles
-from app.database.db import get_db
+from app.database.db import SessionLocal, get_db
 from app.models.entities import User
 from app.modules.reports import service
 from app.modules.reports.schemas import PeriodSummaryOut, SavePeriodReportRequest
@@ -20,11 +20,25 @@ from app.modules.reports.schemas import PeriodSummaryOut, SavePeriodReportReques
 router = APIRouter(prefix="/reports", tags=["period-reports"])
 
 
+def _process_upload_in_thread(monthly_name, monthly_bytes, report_name, report_bytes, user_id):
+    """Тяжёлая обработка выполняется в worker-потоке — поэтому и сессия БД должна
+    создаваться ЗДЕСЬ, а не передаваться из get_db. Сессию/соединение SQLAlchemy
+    (psycopg) нельзя использовать из другого потока: это портит соединение в пуле
+    и каскадом ломает БД для остальных запросов. process_upload сам делает
+    commit/rollback, нам остаётся закрыть сессию."""
+    db = SessionLocal()
+    try:
+        return service.process_upload(
+            db, monthly_name, monthly_bytes, report_name, report_bytes, user_id
+        )
+    finally:
+        db.close()
+
+
 @router.post("/period-report/upload")
 async def upload_period_files(
     monthly_report_file: UploadFile = File(...),
     report_file: UploadFile = File(...),
-    db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("supervisor", "manager", "admin")),
 ) -> dict:
     """Загрузка двух Excel-файлов. Сохраняются в БД — переживают редеплой."""
@@ -42,15 +56,11 @@ async def upload_period_files(
     if len(monthly_bytes) > service.MAX_REPORT_FILE_BYTES or len(report_bytes) > service.MAX_REPORT_FILE_BYTES:
         raise HTTPException(status_code=413, detail="Размер каждого Excel-файла не должен превышать 15 МБ")
 
-    # Обработчик обязан быть async ради await file.read(), поэтому он живёт на
-    # event loop. process_upload синхронный и тяжёлый: sha256 по двум файлам до
-    # 15 МБ, парсинг Excel и запись в БД. Вызванный напрямую, он блокировал бы
-    # петлю на всё время загрузки — сервер не отвечал бы никому, включая
-    # healthcheck. Уводим его в threadpool: ровно так FastAPI поступает с
-    # обычными def-обработчиками.
+    # Обработчик async ради await file.read(), поэтому живёт на event loop.
+    # process_upload синхронный и тяжёлый (sha256, парсинг Excel, запись в БД) —
+    # уводим его в threadpool, но с собственной сессией внутри потока.
     return await run_in_threadpool(
-        service.process_upload,
-        db,
+        _process_upload_in_thread,
         monthly_report_file.filename, monthly_bytes,
         report_file.filename, report_bytes,
         current_user.id,
