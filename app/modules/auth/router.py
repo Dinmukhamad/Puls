@@ -75,6 +75,21 @@ def _device_info(user_agent: str) -> tuple[str, str, str]:
     return f"{device} · {browser} · {os_label}", browser, os_label
 
 
+# Браузеры и так ограничивают куки ~400 днями; для бессрочной сессии ставим
+# этот максимум, а скользящее обновление на /me продлевает куку при каждом входе.
+_COOKIE_MAX_AGE_UNLIMITED = 400 * 24 * 60 * 60
+
+
+def _cookie_max_age(settings) -> int:
+    minutes = settings.access_token_expire_minutes
+    return minutes * 60 if minutes > 0 else _COOKIE_MAX_AGE_UNLIMITED
+
+
+def _session_expires_at(now, settings):
+    minutes = settings.access_token_expire_minutes
+    return now + timedelta(minutes=minutes) if minutes > 0 else None
+
+
 def _create_auth_session(db: Session, request: Request, user: User) -> UserSession:
     settings = get_settings()
     now = now_utc()
@@ -91,7 +106,7 @@ def _create_auth_session(db: Session, request: Request, user: User) -> UserSessi
         status="active",
         created_at=now,
         last_seen_at=now,
-        expires_at=now + timedelta(minutes=settings.access_token_expire_minutes),
+        expires_at=_session_expires_at(now, settings),
     )
     db.add(session)
     db.commit()
@@ -108,7 +123,7 @@ def _set_auth_cookie(response: Response, user: User, session_id: str) -> None:
         "httponly": True,
         "secure": settings.auth_cookie_secure,
         "samesite": settings.auth_cookie_samesite,
-        "max_age": settings.access_token_expire_minutes * 60,
+        "max_age": _cookie_max_age(settings),
         "path": "/",
     }
     if settings.auth_cookie_domain:
@@ -121,7 +136,7 @@ def _set_auth_cookie(response: Response, user: User, session_id: str) -> None:
         httponly=False,
         secure=settings.auth_cookie_secure,
         samesite=settings.auth_cookie_samesite,
-        max_age=settings.access_token_expire_minutes * 60,
+        max_age=_cookie_max_age(settings),
         path="/",
     )
 

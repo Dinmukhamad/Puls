@@ -116,11 +116,13 @@ def supervisor_scope_group_id(db: Session, user: User) -> int | None:
 
 def create_access_token(subject: dict | str, role: str = "") -> str:
     settings = get_settings()
-    expires = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
+    minutes = settings.access_token_expire_minutes
+    # minutes <= 0 → токен без exp (бессрочный). PyJWT без exp не проверяет срок.
+    exp = {"exp": datetime.now(UTC) + timedelta(minutes=minutes)} if minutes > 0 else {}
     if isinstance(subject, dict):
-        payload = {**subject, "exp": expires}
+        payload = {**subject, **exp}
     else:
-        payload = {"sub": subject, "role": role, "exp": expires}
+        payload = {"sub": subject, "role": role, **exp}
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 

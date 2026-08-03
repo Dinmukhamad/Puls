@@ -10,13 +10,20 @@ def _set_cookie_header(response) -> str:
     return response.headers.get("set-cookie", "")
 
 
-def test_login_cookie_lasts_12_hours(make_client):
+def test_login_cookie_is_unlimited(make_client):
+    """Сессия бессрочная: кука с максимальным сроком (~400 дней — предел
+    браузера), токен без exp."""
+    import jwt as pyjwt
+
+    settings = get_settings()
     c = make_client()
     r = c.post("/api/auth/login", json=ADMIN_CREDENTIALS)
 
     assert r.status_code == 200, r.text
-    assert f"Max-Age={12 * 60 * 60}" in _set_cookie_header(r)
-    assert f"Max-Age={get_settings().access_token_expire_minutes * 60}" in _set_cookie_header(r)
+    assert "Max-Age=34560000" in _set_cookie_header(r)
+    token = c.cookies.get(settings.auth_cookie_name)
+    payload = pyjwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+    assert "exp" not in payload
 
 
 def test_login_with_stale_auth_cookie_does_not_require_csrf_token(make_client):
@@ -43,7 +50,7 @@ def test_me_extends_auth_cookie(make_client):
     r = c.get("/api/auth/me")
 
     assert r.status_code == 200, r.text
-    assert f"Max-Age={12 * 60 * 60}" in _set_cookie_header(r)
+    assert "Max-Age=34560000" in _set_cookie_header(r)  # /me продлевает бессрочную куку
 
 
 def test_password_change_revokes_session_and_old_token(db_session, make_client):

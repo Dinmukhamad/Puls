@@ -16,8 +16,10 @@ class Settings(BaseSettings):
     # JWT
     jwt_secret_key: str = "change-me-in-env"
     jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 720
-    session_idle_timeout_minutes: int = 30
+    # 0 = бессрочная сессия (токен без exp, сессия без expires_at). >0 — срок в минутах.
+    access_token_expire_minutes: int = 0
+    # 0 = idle-таймаут выключен (не разлогинивать за бездействие). >0 — минуты бездействия.
+    session_idle_timeout_minutes: int = 0
 
     # CORS
     cors_origins: str = "*"
