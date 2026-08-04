@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import logging
 import random
 import re
@@ -10,7 +11,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
 from sqlalchemy import func, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -712,18 +713,21 @@ def delete_operator(
 
     try:
         conn = db.connection()
+        _sp_seq = itertools.count(1)
 
         def safe_exec(sql: str, params: dict) -> None:
             """
             Выполняет SQL через SAVEPOINT — если таблица не существует,
             откатывается к savepoint и продолжает. Соединение остаётся живым.
+            Имя savepoint из монотонного счётчика (без коллизий hash());
+            перехватываем только ошибки БД, чтобы не прятать баги кода.
             """
-            sp = f"sp_{abs(hash(sql)) % 100000}"
+            sp = f"sp_op_del_{next(_sp_seq)}"
             conn.execute(text(f"SAVEPOINT {sp}"))
             try:
                 conn.execute(text(sql), params)
                 conn.execute(text(f"RELEASE SAVEPOINT {sp}"))
-            except Exception:
+            except SQLAlchemyError:
                 conn.execute(text(f"ROLLBACK TO SAVEPOINT {sp}"))
 
         oid = op_id

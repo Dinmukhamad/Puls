@@ -17,7 +17,7 @@
 """
 from __future__ import annotations
 
-import random
+import secrets
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -33,7 +33,8 @@ from app.models.entities import (
 )
 from app.modules.wallet.service import add_transaction
 
-_rng = random.Random()
+# Крипто-стойкий выбор победителей (os.urandom): честность розыгрыша
+_rng = secrets.SystemRandom()
 
 
 def grant_raffle_ticket(db: Session, operator: Operator, count: int = 1) -> None:

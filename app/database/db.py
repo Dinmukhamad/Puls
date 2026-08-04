@@ -44,6 +44,20 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
+# SQLite по умолчанию НЕ проверяет внешние ключи. Из-за этого класс багов,
+# который на проде (PostgreSQL) даёт IntegrityError/500 (удаление группы/
+# оператора со ссылками), в тестах на sqlite проходил незамеченным. Включаем
+# enforcement, чтобы dev/CI вели себя как прод. Для PostgreSQL не нужно.
+if _is_sqlite:
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "connect")
+    def _sqlite_enable_foreign_keys(dbapi_connection, _connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+
 def get_db():
     db = SessionLocal()
     try:
