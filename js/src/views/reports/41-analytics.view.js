@@ -13,6 +13,7 @@
 ══════════════════════════════════════ */
 
 const AN_STATE = {
+  tab: 'summary',       // summary | operators | quality
   preset: '30d',
   start: null,
   end: null,
@@ -24,7 +25,15 @@ const AN_STATE = {
   loading: false,
   data: null,
   error: null,
+  // Вкладки «Операторы»/«Качество» — своя серверная выборка (пагинация/сортировка/поиск)
+  ops: { items: [], total: 0, page: 1, pageSize: 50, sortBy: 'final_points', sortOrder: 'desc', query: '', loading: false, error: null, loadedKey: null },
 };
+
+const AN_TABS = [
+  { key: 'summary', label: 'Общая сводка' },
+  { key: 'operators', label: 'Операторы' },
+  { key: 'quality', label: 'Качество' },
+];
 
 const AN_PRESETS = [
   { key: 'today', label: 'Сегодня', days: 1 },
@@ -76,12 +85,24 @@ function anFmt(value, decimals) {
 async function renderAnalytics() {
   const el = document.getElementById('view-analytics');
   if (!el) return;
+  AN_STATE.tab = anReadTab();
   if (!el.dataset.built) {
     el.innerHTML = anShellHtml();
     el.dataset.built = '1';
     anBindShell(el);
   }
   await anLoad(el);
+}
+
+function anReadTab() {
+  const t = new URLSearchParams(location.search).get('atab');
+  return AN_TABS.some(x => x.key === t) ? t : 'summary';
+}
+
+function anWriteTab(tab) {
+  const u = new URL(location.href);
+  u.searchParams.set('atab', tab);
+  history.replaceState(null, '', u);
 }
 
 function anShellHtml() {
@@ -99,6 +120,9 @@ function anShellHtml() {
         <button class="btn-outline btn-sm" id="an2-export" type="button">Выгрузить в Excel</button>
       </div>
     </div>
+    <nav class="an2-tabs" id="an2-tabs" role="tablist">
+      ${AN_TABS.map(t => `<button type="button" class="an2-tab ${t.key === AN_STATE.tab ? 'active' : ''}" data-an2="tab" data-value="${t.key}" role="tab" aria-selected="${t.key === AN_STATE.tab}">${anEsc(t.label)}</button>`).join('')}
+    </nav>
     <div class="an2-filters" id="an2-filters"></div>
     <div id="an2-body"></div>`;
 }
@@ -110,7 +134,33 @@ function anBindShell(el) {
     const action = target.dataset.an2;
     const value = target.dataset.value;
 
-    if (action === 'preset') {
+    if (action === 'tab') {
+      if (AN_STATE.tab === value) return;
+      AN_STATE.tab = value;
+      anWriteTab(value);
+      el.querySelectorAll('#an2-tabs .an2-tab').forEach(b => {
+        const on = b.dataset.value === value;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on);
+      });
+      if (value === 'operators' || value === 'quality') anEnsureOps(el);
+      else anPaint(el);
+    } else if (action === 'ops-page') {
+      AN_STATE.ops.page = Math.max(1, AN_STATE.ops.page + (value === 'prev' ? -1 : 1));
+      AN_STATE.ops.loadedKey = null;
+      anEnsureOps(el);
+    } else if (action === 'ops-sort') {
+      if (AN_STATE.ops.sortBy === value) {
+        AN_STATE.ops.sortOrder = AN_STATE.ops.sortOrder === 'desc' ? 'asc' : 'desc';
+      } else {
+        AN_STATE.ops.sortBy = value; AN_STATE.ops.sortOrder = 'desc';
+      }
+      AN_STATE.ops.page = 1; AN_STATE.ops.loadedKey = null;
+      anEnsureOps(el);
+    } else if (action === 'ops-row') {
+      AN_STATE.ops.expandedRow = AN_STATE.ops.expandedRow === value ? null : value;
+      anPaint(el);
+    } else if (action === 'preset') {
       AN_STATE.preset = value;
       if (value === 'custom') {
         const range = anResolveRange();
@@ -148,6 +198,10 @@ function anBindShell(el) {
       await anLoad(el);
     } else if (target.id === 'an2-start') {
       AN_STATE.start = target.value; AN_STATE.preset = 'custom'; await anLoad(el);
+    } else if (target.id === 'an2-ops-search') {
+      AN_STATE.ops.query = target.value.trim();
+      AN_STATE.ops.page = 1; AN_STATE.ops.loadedKey = null;
+      anEnsureOps(el);
     } else if (target.id === 'an2-end') {
       AN_STATE.end = target.value; AN_STATE.preset = 'custom'; await anLoad(el);
     }
@@ -187,6 +241,42 @@ async function anLoad(el) {
     AN_STATE.error = error?.message || 'Не удалось загрузить данные';
   } finally {
     AN_STATE.loading = false;
+    AN_STATE.ops.loadedKey = null; // фильтры могли измениться — таблицу перегрузим
+    anPaint(el);
+    if (AN_STATE.tab === 'operators' || AN_STATE.tab === 'quality') anEnsureOps(el);
+  }
+}
+
+function anOpsKey() {
+  const { start, end } = anResolveRange();
+  const o = AN_STATE.ops;
+  return [start, end, AN_STATE.groupId, o.page, o.pageSize, o.sortBy, o.sortOrder, o.query].join('|');
+}
+
+async function anEnsureOps(el) {
+  const key = anOpsKey();
+  if (AN_STATE.ops.loadedKey === key && !AN_STATE.ops.loading) { anPaint(el); return; }
+  const { start, end } = anResolveRange();
+  if (!start || !end) return;
+  AN_STATE.ops.loading = true;
+  AN_STATE.ops.error = null;
+  anPaint(el);
+  try {
+    const params = {
+      start_date: start, end_date: end,
+      page: AN_STATE.ops.page, page_size: AN_STATE.ops.pageSize,
+      sort_by: AN_STATE.ops.sortBy, sort_order: AN_STATE.ops.sortOrder,
+    };
+    if (AN_STATE.groupId) params.group_id = AN_STATE.groupId;
+    if (AN_STATE.ops.query) params.operator_query = AN_STATE.ops.query;
+    const res = await api.analyticsGet('operators', params);
+    AN_STATE.ops.items = res.items || [];
+    AN_STATE.ops.total = res.total || 0;
+    AN_STATE.ops.loadedKey = key;
+  } catch (error) {
+    AN_STATE.ops.error = error?.message || 'Не удалось загрузить операторов';
+  } finally {
+    AN_STATE.ops.loading = false;
     anPaint(el);
   }
 }
@@ -201,6 +291,19 @@ function anPaint(el) {
 
   filters.innerHTML = anFiltersHtml();
 
+  // Лид-строка контекста (период/группа) — из dashboard, если он загружен.
+  if (AN_STATE.data && !AN_STATE.data.empty) {
+    lede.textContent = `${AN_STATE.data.period.label} · ${AN_STATE.data.filters.group_label}`
+      + (AN_STATE.data.filters.all_weekdays ? '' : ' · только выбранные дни недели');
+  }
+
+  // Вкладки «Операторы»/«Качество» — свои данные и состояния, dashboard их не блокирует.
+  if (AN_STATE.tab === 'operators' || AN_STATE.tab === 'quality') {
+    body.innerHTML = AN_STATE.tab === 'operators' ? anOperatorsBody() : anQualityBody();
+    return;
+  }
+
+  // Вкладка «Общая сводка» — из /dashboard.
   if (AN_STATE.error) {
     lede.textContent = 'Не удалось загрузить показатели.';
     body.innerHTML = `<div class="an2-alert an2-alert-bad">
@@ -218,9 +321,6 @@ function anPaint(el) {
   const data = AN_STATE.data;
   if (!data) return;
 
-  lede.textContent = `${data.period.label} · ${data.filters.group_label}`
-    + (data.filters.all_weekdays ? '' : ' · только выбранные дни недели');
-
   if (data.empty) {
     body.innerHTML = `<div class="an2-alert an2-alert-empty">
       <b>За этот период данных нет</b>
@@ -229,7 +329,12 @@ function anPaint(el) {
     return;
   }
 
-  body.innerHTML = [
+  body.innerHTML = anSummaryBody(data);
+  anBindTrendHover(el);
+}
+
+function anSummaryBody(data) {
+  return [
     anCoverageHtml(data),
     anMetricsHtml(data),
     anSectionHtml('trend', 'Как менялось по дням', anTrendHtml(data)),
@@ -237,8 +342,125 @@ function anPaint(el) {
     anSectionHtml('groups', 'Сравнение групп', anGroupsHtml(data)),
     anSectionHtml('attention', 'Кому нужно внимание', anAttentionHtml(data)),
   ].join('');
+}
 
-  anBindTrendHover(el);
+/* ── Вкладка «Операторы» ─────────────────────────────────── */
+
+const AN_RISK_LABEL = { stable: 'Норма', watch: 'Внимание', critical: 'Критично', no_data: 'Нет данных' };
+const AN_RISK_CLASS = { stable: 'good', watch: 'watch', critical: 'bad', no_data: 'neutral' };
+
+function anSortArrow(key) {
+  if (AN_STATE.ops.sortBy !== key) return '';
+  return AN_STATE.ops.sortOrder === 'desc' ? ' ↓' : ' ↑';
+}
+
+function anTh(label, key) {
+  return `<th class="num an2-sortable" data-an2="ops-sort" data-value="${key}" role="button" tabindex="0">${label}${anSortArrow(key)}</th>`;
+}
+
+function anOperatorsBody() {
+  const o = AN_STATE.ops;
+  const toolbar = `<div class="an2-ops-toolbar">
+    <input type="search" id="an2-ops-search" class="an2-input" placeholder="Поиск по ФИО или группе" value="${anEsc(o.query)}" autocomplete="off">
+    <span class="an2-ops-count">${o.loading ? 'Загрузка…' : `Найдено: ${anFmt(o.total)}`}</span>
+  </div>`;
+
+  if (o.error) {
+    return toolbar + `<div class="an2-alert an2-alert-bad"><b>Не удалось загрузить</b><span>${anEsc(o.error)}</span></div>`;
+  }
+  if (o.loading && !o.items.length) {
+    return toolbar + `<div class="loading-state"><div class="loading-spinner"></div><span>Загружаем операторов</span></div>`;
+  }
+  if (!o.items.length) {
+    return toolbar + `<div class="an2-alert an2-alert-empty"><b>Операторы не найдены</b><span>Измените фильтры, период или поиск.</span></div>`;
+  }
+  return toolbar + anOpsTable(o) + anOpsPager(o);
+}
+
+function anOpsTable(o) {
+  const hasNorm = o.items.some(x => x.individual_norm_hours != null);
+  const rows = o.items.map((x, i) => {
+    const idx = String((o.page - 1) * o.pageSize + i);
+    const rk = x.risk_status || 'no_data';
+    const detailOpen = AN_STATE.ops.expandedRow === idx;
+    const detailCells = [
+      ['Ставка', x.rate != null ? String(x.rate) : '—'],
+      ['База часов', anFmt(x.base_hours, 1)],
+      ['Время в разговоре, ч', anFmt(x.call_time_hours, 1)],
+      ['Оценённых звонков', anFmt(x.quality_calls_count)],
+      ['Переработка, ч', x.overtime_hours ? '+' + anFmt(x.overtime_hours, 1) : '—'],
+      ['Норма часов', x.individual_norm_hours != null ? anFmt(x.individual_norm_hours, 1) : '—'],
+    ];
+    const detail = detailOpen
+      ? `<tr class="an2-ops-detail"><td colspan="11"><div class="an2-ops-detail-grid">${detailCells.map(([k, v]) => `<div><span>${k}</span><b>${anEsc(v)}</b></div>`).join('')}</div></td></tr>`
+      : '';
+    return `<tr class="an2-ops-row" data-an2="ops-row" data-value="${idx}" tabindex="0" aria-expanded="${detailOpen}">
+      <td class="an2-rank">${(o.page - 1) * o.pageSize + i + 1}</td>
+      <td class="an2-name">${anEsc(x.full_name)}<small>${anEsc(x.group_name || '—')}</small></td>
+      <td class="num">${anFmt(x.total_hours, 1)}</td>
+      <td class="num">${x.norm_completion_percent != null ? anFmt(x.norm_completion_percent, 0) + '%' : '—'}</td>
+      <td class="num">${anFmt(x.calls_total)}</td>
+      <td class="num">${anFmt(x.kvz, 1)}</td>
+      <td class="num">${anFmt(x.efficiency_percent, 1)}</td>
+      <td class="num">${x.quality_avg != null ? anFmt(x.quality_avg, 1) : '<span class="an2-muted">нет оценок</span>'}</td>
+      <td class="num">${anFmt(x.penalty_minutes, 1)}</td>
+      <td class="num"><b>${anFmt(x.final_points, 1)}</b></td>
+      <td><span class="an2-badge an2-badge-${AN_RISK_CLASS[rk]}">${AN_RISK_LABEL[rk]}</span></td>
+    </tr>${detail}`;
+  }).join('');
+
+  return `<div class="table-wrap an2-ops-wrap"><table class="data-table an2-ops-table">
+    <thead><tr>
+      <th class="an2-rank">#</th>
+      ${anTh('Оператор', 'full_name').replace('class="num ', 'class="')}
+      <th class="num">Часы</th>
+      <th class="num">Норма</th>
+      ${anTh('Звонки', 'calls_total')}
+      ${anTh('КВЗ', 'kvz')}
+      ${anTh('Эфф.%', 'efficiency_percent')}
+      ${anTh('Качество', 'quality_avg')}
+      ${anTh('Штраф', 'penalty_minutes')}
+      ${anTh('Итог', 'final_points')}
+      <th>Риск</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>
+  <p class="an2-hint">Нажмите на строку, чтобы раскрыть детали. Пустое качество — оценок за период не было (не считается за ноль).${hasNorm ? '' : ' Норма часов не задана для этой выборки.'}</p>`;
+}
+
+function anOpsPager(o) {
+  const pages = Math.max(1, Math.ceil(o.total / o.pageSize));
+  if (pages <= 1) return '';
+  const from = (o.page - 1) * o.pageSize + 1;
+  const to = Math.min(o.total, o.page * o.pageSize);
+  return `<div class="an2-pager">
+    <span>Показано ${from}–${to} из ${anFmt(o.total)}</span>
+    <div class="an2-pager-btns">
+      <button type="button" class="btn-outline btn-sm" data-an2="ops-page" data-value="prev" ${o.page <= 1 ? 'disabled' : ''}>← Назад</button>
+      <span class="an2-pager-label">Стр. ${o.page} из ${pages}</span>
+      <button type="button" class="btn-outline btn-sm" data-an2="ops-page" data-value="next" ${o.page >= pages ? 'disabled' : ''}>Вперёд →</button>
+    </div>
+  </div>`;
+}
+
+/* ── Вкладка «Качество» ──────────────────────────────────── */
+
+function anQualityBody() {
+  const data = AN_STATE.data;
+  const parts = ['<p class="an2-hint">Контроль качества прослушанных звонков за выбранный период. Средняя оценка считается только по проверенным звонкам — операторы без проверок в неё не входят.</p>'];
+
+  if (AN_STATE.loading && !data) {
+    return parts.join('') + `<div class="loading-state"><div class="loading-spinner"></div><span>Считаем показатели</span></div>`;
+  }
+  if (data && !data.empty) {
+    const qCards = (data.metrics || []).filter(m => ['quality', 'quality_coverage', 'quality_calls'].includes(m.key));
+    if (qCards.length) parts.push(`<div class="an2-metrics">${qCards.map(anMetricCard).join('')}</div>`);
+    parts.push(anCoverageHtml(data));
+    parts.push(anSectionHtml('attention', 'Кому нужно внимание по качеству', anAttentionHtml(data)));
+  } else if (data && data.empty) {
+    parts.push(`<div class="an2-alert an2-alert-empty"><b>За этот период данных нет</b><span>${anEsc(data.empty_reason || '')}</span></div>`);
+  }
+  return parts.join('');
 }
 
 function anFiltersHtml() {
