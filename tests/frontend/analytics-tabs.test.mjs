@@ -58,3 +58,26 @@ test('quality tab is built only from real dashboard data (no fabricated metrics)
   assert.match(view, /data\.metrics/);
   assert.doesNotMatch(view, /driver_rating|Оценка водител|\bATT\b:/);
 });
+
+test('summary (Общая сводка) leads with a plain-language verdict from real data', () => {
+  assert.match(view, /function anVerdictHtml/);
+  // вердикт синтезируется из реальных метрик/групп/внимания, без выдуманных чисел
+  assert.match(view, /m\.status === 'good' \|\| m\.status === 'watch' \|\| m\.status === 'bad'/);
+  assert.match(view, /Сильнее всех группа/);
+  assert.match(view, /требуют', 'операторов требуют'/);
+  assert.match(view, /anVerdictHtml\(data\)/);
+  assert.match(css, /\.an2-verdict\b/);
+});
+
+test('summary shows real leaders (top operators) from /operators, not fabricated', () => {
+  assert.match(view, /function anLeadersHtml/);
+  assert.match(view, /function anEnsureLeaders/);
+  assert.match(view, /sort_by: 'final_points', sort_order: 'desc'/);
+  assert.match(view, /anSectionHtml\('leaders'/);
+  assert.match(css, /\.an2-lead-list/);
+});
+
+test('summary hides the weekday block when there is too little data (no empty-feeling rows)', () => {
+  assert.match(view, /wd\.length >= 3/);
+  assert.match(view, /\.filter\(d => d\.value != null\)/);
+});

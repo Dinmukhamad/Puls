@@ -20,13 +20,15 @@ const AN_STATE = {
   groupId: null,
   weekdays: [0, 1, 2, 3, 4, 5, 6],
   metric: 'quality',
-  open: { trend: true, weekdays: false, groups: false, attention: true },
+  open: { trend: true, weekdays: false, groups: false, attention: true, leaders: true },
   expanded: null,       // ключ метрики с раскрытым объяснением
   loading: false,
   data: null,
   error: null,
   // Вкладки «Операторы»/«Качество» — своя серверная выборка (пагинация/сортировка/поиск)
   ops: { items: [], total: 0, page: 1, pageSize: 50, sortBy: 'final_points', sortOrder: 'desc', query: '', loading: false, error: null, loadedKey: null },
+  // Лидеры периода для «Сводки» — топ операторов по итоговому баллу (тот же /operators)
+  leaders: { items: [], key: null, loading: false },
 };
 
 const AN_TABS = [
@@ -241,9 +243,31 @@ async function anLoad(el) {
     AN_STATE.error = error?.message || 'Не удалось загрузить данные';
   } finally {
     AN_STATE.loading = false;
-    AN_STATE.ops.loadedKey = null; // фильтры могли измениться — таблицу перегрузим
+    AN_STATE.ops.loadedKey = null;   // фильтры могли измениться — таблицу перегрузим
+    AN_STATE.leaders.key = null;     // и лидеров пересчитаем
     anPaint(el);
     if (AN_STATE.tab === 'operators' || AN_STATE.tab === 'quality') anEnsureOps(el);
+    if (AN_STATE.tab === 'summary') anEnsureLeaders(el);
+  }
+}
+
+async function anEnsureLeaders(el) {
+  const { start, end } = anResolveRange();
+  if (!start || !end) return;
+  const key = [start, end, AN_STATE.groupId].join('|');
+  if (AN_STATE.leaders.key === key && !AN_STATE.leaders.loading) return;
+  AN_STATE.leaders.loading = true;
+  try {
+    const params = { start_date: start, end_date: end, page: 1, page_size: 5, sort_by: 'final_points', sort_order: 'desc' };
+    if (AN_STATE.groupId) params.group_id = AN_STATE.groupId;
+    const res = await api.analyticsGet('operators', params);
+    AN_STATE.leaders.items = (res.items || []).filter(x => x.final_points != null);
+    AN_STATE.leaders.key = key;
+  } catch {
+    AN_STATE.leaders.items = [];
+  } finally {
+    AN_STATE.leaders.loading = false;
+    if (AN_STATE.tab === 'summary') anPaint(el);
   }
 }
 
@@ -334,14 +358,90 @@ function anPaint(el) {
 }
 
 function anSummaryBody(data) {
+  const wd = (data.weekdays || []).filter(d => d.value != null);
+  const weekdaysBlock = wd.length >= 3
+    ? anSectionHtml('weekdays', 'Разрез по дням недели', anWeekdaysHtml(data))
+    : '';
   return [
+    anVerdictHtml(data),
     anCoverageHtml(data),
     anMetricsHtml(data),
-    anSectionHtml('trend', 'Как менялось по дням', anTrendHtml(data)),
-    anSectionHtml('weekdays', 'Разрез по дням недели', anWeekdaysHtml(data)),
-    anSectionHtml('groups', 'Сравнение групп', anGroupsHtml(data)),
+    anSectionHtml('leaders', 'Лидеры периода', anLeadersHtml()),
     anSectionHtml('attention', 'Кому нужно внимание', anAttentionHtml(data)),
+    anSectionHtml('trend', 'Как менялось по дням', anTrendHtml(data)),
+    anSectionHtml('groups', 'Сравнение групп', anGroupsHtml(data)),
+    weekdaysBlock,
   ].join('');
+}
+
+/* ── Словесная сводка: что происходит, одним абзацем ─────── */
+
+function anVerdictHtml(data) {
+  const metrics = data.metrics || [];
+  const scored = metrics.filter(m => m.status === 'good' || m.status === 'watch' || m.status === 'bad');
+  const bad = scored.filter(m => m.status === 'bad');
+  const watch = scored.filter(m => m.status === 'watch');
+
+  let headline, cls;
+  if (bad.length) { headline = `Есть критичные показатели (${bad.length})`; cls = 'bad'; }
+  else if (watch.length) { headline = `Есть отклонения от целей (${watch.length})`; cls = 'watch'; }
+  else if (scored.length) { headline = 'Ключевые показатели в норме'; cls = 'good'; }
+  else { headline = 'Недостаточно данных для оценки'; cls = 'neutral'; }
+
+  const byKey = k => metrics.find(m => m.key === k);
+  const phrases = [];
+  ['quality', 'kvz', 'efficiency', 'penalty'].forEach(k => {
+    const m = byKey(k);
+    if (!m || m.value == null || m.status === 'neutral' || m.status === 'unknown') return;
+    const val = anFmt(m.value, m.decimals || 0) + anUnitSuffix(m.unit);
+    phrases.push(`${anEsc(m.short || m.label)} ${val} — ${AN_STATUS_TEXT[m.status].toLowerCase()}`);
+  });
+
+  const groups = (data.groups || []).filter(g => g.quality != null);
+  let groupLine = '';
+  if (groups.length >= 2) {
+    groupLine = `Сильнее всех группа «${anEsc(groups[0].name)}», слабее — «${anEsc(groups[groups.length - 1].name)}».`;
+  }
+
+  const attn = (data.attention || []).length;
+  const attnLine = attn
+    ? `${attn} ${anPlural(attn, 'оператор требует', 'оператора требуют', 'операторов требуют')} внимания.`
+    : 'Операторов в красной зоне нет.';
+
+  const cov = data.coverage || {};
+  const covLine = cov.total_days ? `Данные за ${cov.days_with_data} из ${cov.total_days} дней периода.` : '';
+
+  const body = [phrases.join('; ') + (phrases.length ? '.' : ''), groupLine, attnLine, covLine]
+    .filter(Boolean).join(' ');
+
+  return `<div class="an2-verdict an2-verdict-${cls}">
+    <div class="an2-verdict-head">
+      <span class="an2-verdict-badge">${AN_STATUS_ICON[cls] || '·'}</span>
+      <b>${anEsc(headline)}</b>
+    </div>
+    <p class="an2-verdict-body">${body}</p>
+  </div>`;
+}
+
+/* ── Лидеры периода (топ по итоговому баллу) ─────────────── */
+
+function anLeadersHtml() {
+  const L = AN_STATE.leaders;
+  if (L.loading && !L.items.length) {
+    return '<p class="an2-nodata">Загружаем лидеров…</p>';
+  }
+  if (!L.items.length) {
+    return '<p class="an2-nodata">Пока некого выделить — нет операторов с данными за период.</p>';
+  }
+  const items = L.items.map((x, i) => `
+    <li class="an2-lead">
+      <span class="an2-lead-rank">${i + 1}</span>
+      <span class="an2-lead-name">${anEsc(x.full_name)}<small>${anEsc(x.group_name || '—')}</small></span>
+      <span class="an2-lead-score"><b>${anFmt(x.final_points, 1)}</b> балл</span>
+      <span class="an2-lead-extra">качество ${x.quality_avg != null ? anFmt(x.quality_avg, 1) + '%' : '—'} · ${anFmt(x.kvz, 1)} зв/ч</span>
+    </li>`).join('');
+  return `<p class="an2-hint">Топ операторов по итоговому баллу за период.</p>
+    <ol class="an2-lead-list">${items}</ol>`;
 }
 
 /* ── Вкладка «Операторы» ─────────────────────────────────── */
