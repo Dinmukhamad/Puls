@@ -866,12 +866,36 @@ body.must-change-password .side-nav-link[data-nav-target] {
 ::-webkit-scrollbar-thumb:hover { background: var(--tx4); }
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
+/* Выход — потенциально опасное действие: спокойный по умолчанию,
+   явный при наведении. Прежде цвет задавался инлайном как
+   rgba(255,255,255,.3) — это 2.73:1 на тёмной навигации, нечитаемо. */
+.side-logout-btn {
+  padding: 4px 6px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--sidebar-text);
+  font: inherit;
+  font-size: var(--text-tiny);
+  font-weight: 600;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.side-logout-btn:hover {
+  color: var(--sidebar-danger);
+  background: var(--sidebar-hover-bg);
+}
+.side-logout-btn:focus-visible {
+  outline: 2px solid var(--sidebar-danger);
+  outline-offset: 2px;
+}
+
 /* ══════════════════════════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════════════════════════ */
 @media (max-width: 1100px) {
-  :root { --nav-w: 64px; }
-  .side-nav { width: 64px; padding: 20px 8px 24px; }
+  :root { --nav-w: var(--nav-w-collapsed); }
+  .side-nav { width: var(--nav-w-collapsed); padding: 20px 8px 24px; }
   .side-nav-brand, .side-nav-link span, .side-nav-meta, .side-nav-section-label { display: none; }
   .side-nav-logo { justify-content: center; padding: 0; }
   .side-nav-link { justify-content: center; padding: 10px; }

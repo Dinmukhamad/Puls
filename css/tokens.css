@@ -131,6 +131,7 @@ html[data-theme="light"] {
   --sidebar-text-active: #FFFFFF;
   --sidebar-active-bg:   #6757E8;
   --sidebar-hover-bg:    #23222C;
+  --sidebar-danger:      #FDA29B;
 
   /* Компоненты */
   --card-bg:         #FFFFFF;
@@ -220,6 +221,7 @@ html[data-theme="dark"] {
   --sidebar-text-active: #FFFFFF;
   --sidebar-active-bg:   #6757E8;
   --sidebar-hover-bg:    #1D1F28;
+  --sidebar-danger:      #FDA29B;
 
   --card-bg:         #171820;
   --input-bg:        #1D1F28;

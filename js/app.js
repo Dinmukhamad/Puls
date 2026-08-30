@@ -477,9 +477,41 @@ function initNav() {
       document.body.classList.toggle('mobile-nav-open', open);
       mobileToggle.setAttribute('aria-expanded', String(open));
       mobileToggle.setAttribute('aria-label', open ? 'Закрыть навигацию' : 'Открыть навигацию');
+      // Открыли — уводим фокус внутрь, иначе с клавиатуры панель недостижима:
+      // Tab продолжал обходить страницу под затемнением. Закрыли — возвращаем
+      // фокус на кнопку, чтобы не терять место в обходе.
+      if (open) sideNav.querySelector('.side-nav-link')?.focus({ preventScroll: true });
+      else if (sideNav.contains(document.activeElement)) mobileToggle.focus({ preventScroll: true });
     };
     mobileToggle.addEventListener('click', () => setMobileNav(!document.body.classList.contains('mobile-nav-open')));
     backdrop.addEventListener('click', () => setMobileNav(false));
+
+    // Escape закрывает панель — как и любой другой слой поверх страницы.
+    document.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      if (!document.body.classList.contains('mobile-nav-open')) return;
+      event.preventDefault();
+      setMobileNav(false);
+    });
+
+    // Tab не выпускает фокус из открытой панели.
+    sideNav.addEventListener('keydown', event => {
+      if (event.key !== 'Tab') return;
+      if (!document.body.classList.contains('mobile-nav-open')) return;
+      const items = [...sideNav.querySelectorAll('a[href], button:not([disabled])')]
+        .filter(el => el.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+
     document.body.append(mobileToggle, backdrop);
   }
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(link => {

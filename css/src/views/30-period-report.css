@@ -4,12 +4,12 @@
 
 @media (min-width: 761px) {
 body.side-nav-collapsed {
-  padding-left: 64px;
+  padding-left: var(--nav-w-collapsed);
 }
 
 /* Nav container */
 body.side-nav-collapsed .side-nav {
-  width: 64px;
+  width: var(--nav-w-collapsed);
   padding: 16px 0 24px;
   overflow: hidden;
   align-items: center;

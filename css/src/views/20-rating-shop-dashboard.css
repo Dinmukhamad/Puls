@@ -449,13 +449,6 @@ html[data-theme="light"] .side-nav-brand {
   color: var(--text-primary);
 }
 
-/* Auth logout button adapts to theme */
-html[data-theme="light"] #auth-logout-btn {
-  color: var(--text-muted) !important;
-}
-html[data-theme="dark"] #auth-logout-btn {
-  color: rgba(255,255,255,.3) !important;
-}
 
 html[data-theme="light"] .side-nav-meta span {
   color: var(--text-secondary);
@@ -522,8 +515,6 @@ button, a, input, select, textarea {
 .side-nav-meta { color: var(--sidebar-text) !important; }
 .side-user-info #side-user { color: var(--text-tertiary) !important; }
 .side-user-info #side-role { color: var(--sidebar-text) !important; }
-#auth-logout-btn { color: var(--sidebar-text) !important; }
-#auth-logout-btn:hover { color: var(--text-tertiary) !important; }
 
 /* Gear button in sidebar */
 .side-gear-btn { border-color: var(--sidebar-border) !important; color: var(--sidebar-text) !important; }
