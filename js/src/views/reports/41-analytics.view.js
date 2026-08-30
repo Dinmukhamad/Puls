@@ -348,10 +348,18 @@ function anPaint(el) {
 
   filters.innerHTML = anFiltersHtml();
 
-  // Лид-строка контекста (период/группа) — из dashboard, если он загружен.
-  if (AN_STATE.data && !AN_STATE.data.empty) {
-    lede.textContent = `${AN_STATE.data.period.label} · ${AN_STATE.data.filters.group_label}`
-      + (AN_STATE.data.filters.all_weekdays ? '' : ' · только выбранные дни недели');
+  // Лид-строка контекста (период/группа). Раньше она обновлялась только при
+  // непустых данных, поэтому на пустом периоде навсегда оставалось
+  // «Загружаем показатели…», хотя тело уже показывало «данных нет».
+  if (AN_STATE.data) {
+    const period = AN_STATE.data.period?.label;
+    const group = AN_STATE.data.filters?.group_label;
+    if (period) {
+      lede.textContent = [period, group].filter(Boolean).join(' · ')
+        + (AN_STATE.data.filters?.all_weekdays === false ? ' · только выбранные дни недели' : '');
+    } else {
+      lede.textContent = 'Показатели колл-центра за выбранный период.';
+    }
   }
 
   // Вкладки «Операторы»/«Качество» — свои данные и состояния, dashboard их не блокирует.
@@ -371,7 +379,7 @@ function anPaint(el) {
   }
   if (AN_STATE.loading && !AN_STATE.data) {
     lede.textContent = 'Загружаем показатели…';
-    body.innerHTML = `<div class="loading-state"><div class="loading-spinner"></div><span>Считаем показатели</span></div>`;
+    body.innerHTML = `<div role="status" aria-live="polite"><span class="sr-only">Считаем показатели</span>${uiSkeleton({ cards: 4 })}${uiSkeleton({ lines: 4 })}</div>`;
     return;
   }
 
@@ -516,7 +524,7 @@ function anOperatorsBody() {
     return toolbar + `<div class="an2-alert an2-alert-bad"><b>Не удалось загрузить</b><span>${anEsc(o.error)}</span></div>`;
   }
   if (o.loading && !o.items.length) {
-    return toolbar + `<div class="loading-state"><div class="loading-spinner"></div><span>Загружаем операторов</span></div>`;
+    return toolbar + `<div class="table-wrap" role="status" aria-live="polite"><span class="sr-only">Загружаем операторов</span><table class="data-table"><tbody>${uiTableSkeleton(7, 6, [2, 3, 4, 5, 6])}</tbody></table></div>`;
   }
   if (!o.items.length) {
     return toolbar + `<div class="an2-alert an2-alert-empty"><b>Операторы не найдены</b><span>Измените фильтры, период или поиск.</span></div>`;
@@ -597,7 +605,7 @@ function anQualityBody() {
   const parts = ['<p class="an2-hint">Контроль качества прослушанных звонков за выбранный период. Средняя оценка считается только по проверенным звонкам — операторы без проверок в неё не входят.</p>'];
 
   if (AN_STATE.loading && !data) {
-    return parts.join('') + `<div class="loading-state"><div class="loading-spinner"></div><span>Считаем показатели</span></div>`;
+    return parts.join('') + `<div role="status" aria-live="polite"><span class="sr-only">Считаем показатели</span>${uiSkeleton({ cards: 3 })}</div>`;
   }
   if (data && !data.empty) {
     const qCards = (data.metrics || []).filter(m => ['quality', 'quality_coverage', 'quality_calls'].includes(m.key));
@@ -865,7 +873,7 @@ function anTrendTable(trend) {
       <summary>Показать таблицей</summary>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>День</th><th>${anEsc(trend.label)}, ${anEsc(trend.unit)}</th></tr></thead>
+          <thead><tr><th scope="col">День</th><th scope="col">${anEsc(trend.label)}, ${anEsc(trend.unit)}</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -951,8 +959,8 @@ function anGroupsHtml(data) {
     <div class="table-wrap">
       <table class="data-table">
         <thead><tr>
-          <th>Группа</th><th>Людей</th><th>Качество, %</th><th>Звонков/ч</th>
-          <th>В разговоре, %</th><th>Штрафы, мин</th><th>Оценка</th>
+          <th scope="col">Группа</th><th scope="col">Людей</th><th scope="col">Качество, %</th><th scope="col">Звонков/ч</th>
+          <th scope="col">В разговоре, %</th><th scope="col">Штрафы, мин</th><th scope="col">Оценка</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>

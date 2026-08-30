@@ -149,12 +149,12 @@ async function renderLevelsTabContent(el) {
       <table class="data-table">
         <thead>
           <tr>
-            <th>Оператор</th>
-            <th>Группа</th>
-            <th>Уровень</th>
-            <th class="num">Стаж</th>
-            <th class="num">Награда</th>
-            <th>Состояние награды</th>
+            <th scope="col">Оператор</th>
+            <th scope="col">Группа</th>
+            <th scope="col">Уровень</th>
+            <th scope="col" class="num">Стаж</th>
+            <th scope="col" class="num">Награда</th>
+            <th scope="col">Состояние награды</th>
           </tr>
         </thead>
         <tbody>

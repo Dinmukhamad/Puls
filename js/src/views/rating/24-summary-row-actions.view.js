@@ -64,7 +64,7 @@ async function submitManualCoinModal(operatorId, operation) {
 async function openOperatorCabinetModal(operatorId, operatorName) {
   showModal(`
     <h3 class="modal-title">Кабинет — ${esc(operatorName)}</h3>
-    <div id="op-cabinet-modal-body"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div>`,
+    <div id="op-cabinet-modal-body">${uiListSkeleton(4)}</div>`,
   );
   const body = document.getElementById('op-cabinet-modal-body');
   let data;

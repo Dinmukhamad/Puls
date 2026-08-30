@@ -988,7 +988,7 @@ async function renderWheelTicketsTab(body) {
           ${filters.map(([f, l]) => `<button class="filter-tab ${_wheelTicketFilter === f ? 'active' : ''}" data-ticket-filter="${f}">${l}</button>`).join('')}
         </div>
         ${rows.length ? `<div class="table-wrap"><table class="data-table">
-          <thead><tr><th>Создан</th><th>Оператор</th><th>Причина</th><th>Источник</th><th>Истекает</th><th>Использован</th><th>Статус</th></tr></thead>
+          <thead><tr><th scope="col">Создан</th><th scope="col">Оператор</th><th scope="col">Причина</th><th scope="col">Источник</th><th scope="col">Истекает</th><th scope="col">Использован</th><th scope="col">Статус</th></tr></thead>
           <tbody>${rows.map(t => `<tr>
             <td>${esc(fmtDateTime(t.created_at))}</td>
             <td class="name-cell">${esc(t.operator_name)}</td>
@@ -1031,7 +1031,7 @@ async function renderWheelSpinsTab(body) {
           <div class="wheel-stat"><span class="wheel-stat-num">${uniqueOperators}</span><span>участников</span></div>
         </div>
         ${rows.length ? `<div class="table-wrap"><table class="data-table">
-          <thead><tr><th>Дата</th><th>Оператор</th><th>Группа</th><th>Причина</th><th>Приз</th><th>Тип</th></tr></thead>
+          <thead><tr><th scope="col">Дата</th><th scope="col">Оператор</th><th scope="col">Группа</th><th scope="col">Причина</th><th scope="col">Приз</th><th scope="col">Тип</th></tr></thead>
           <tbody>${rows.map(r => `<tr>
             <td>${esc(fmtDateTime(r.date))}</td>
             <td class="name-cell">${esc(r.operator_name)}</td>
@@ -1071,14 +1071,14 @@ async function renderWheelStatsTab(body) {
           <div>
             <h4 class="panel-subtitle">Частота призов</h4>
             ${hist.length ? `<div class="table-wrap"><table class="data-table">
-              <thead><tr><th>Приз</th><th>Раз</th></tr></thead>
+              <thead><tr><th scope="col">Приз</th><th scope="col">Раз</th></tr></thead>
               <tbody>${hist.map(h => `<tr><td>${esc(h.title)}</td><td><strong>${h.count}</strong></td></tr>`).join('')}</tbody>
             </table></div>` : '<div class="empty-line">Прокруток сегодня нет</div>'}
           </div>
           <div>
             <h4 class="panel-subtitle">Топ источников попыток</h4>
             ${src.length ? `<div class="table-wrap"><table class="data-table">
-              <thead><tr><th>Источник</th><th>Токенов</th></tr></thead>
+              <thead><tr><th scope="col">Источник</th><th scope="col">Токенов</th></tr></thead>
               <tbody>${src.map(x => `<tr><td>${esc(wheelSourceLabel(x.reason_type))}</td><td><strong>${x.count}</strong></td></tr>`).join('')}</tbody>
             </table></div>` : '<div class="empty-line">Токенов сегодня не выдавалось</div>'}
           </div>
@@ -1557,7 +1557,7 @@ async function renderTestsOperatorView(el) {
       <div><div class="section-kicker">Обучение</div><h1 class="section-title">Мои тесты</h1><div class="section-subtitle">Проверяйте знания и получайте награды за результат.</div></div>
       <button class="btn-outline btn-sm" onclick="renderTests()">Обновить</button>
     </div>
-    <div id="tests-op-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
+    <div id="tests-op-body">${uiLoadingBlock('Загружаем данные')}</div>`;
 
   let data;
   try {
@@ -2040,7 +2040,7 @@ async function renderTestsStaffView(el) {
         <button class="btn-primary btn-sm" id="tests-new-btn">Создать тест</button>
       </div>
     </div>
-    <div id="tests-staff-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
+    <div id="tests-staff-body">${uiLoadingBlock('Загружаем данные')}</div>`;
 
   el.querySelector('#tests-new-btn').addEventListener('click', () => openTestBuilder(null));
 
@@ -2514,7 +2514,7 @@ async function openTestResultsView(testId) {
       <button class="filter-tab active" data-tr-tab="results">Результаты</button>
       <button class="filter-tab" data-tr-tab="analytics">Аналитика</button>
     </div>
-    <div id="tr-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
+    <div id="tr-body">${uiLoadingBlock('Загружаем данные')}</div>`;
 
   el.querySelectorAll('[data-tr-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -2531,7 +2531,7 @@ async function openTestResultsView(testId) {
 async function loadTestResultsTable(testId) {
   const body = document.getElementById('tr-body');
   if (!body) return;
-  body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div></div>';
+  body.innerHTML = uiLoadingBlock('Загружаем данные');
   try {
     const data = await api.getTestResults(testId);
     const items = data.items || [];
@@ -2541,9 +2541,9 @@ async function loadTestResultsTable(testId) {
     }
     body.innerHTML = `<div class="table-wrap"><table class="data-table">
       <thead><tr>
-        <th>Оператор</th><th>Группа</th><th>Статус</th><th>Начал</th><th>Завершил</th>
-        <th class="num">Время</th><th class="num">Правильных</th><th class="num">%</th>
-        <th class="num">Баллы</th><th class="num">Коины</th><th class="num">Попытка</th>
+        <th scope="col">Оператор</th><th scope="col">Группа</th><th scope="col">Статус</th><th scope="col">Начал</th><th scope="col">Завершил</th>
+        <th scope="col" class="num">Время</th><th scope="col" class="num">Правильных</th><th scope="col" class="num">%</th>
+        <th scope="col" class="num">Баллы</th><th scope="col" class="num">Коины</th><th scope="col" class="num">Попытка</th>
       </tr></thead>
       <tbody>
         ${items.map(r => `<tr>
@@ -2569,7 +2569,7 @@ async function loadTestResultsTable(testId) {
 async function loadTestAnalyticsBlock(testId) {
   const body = document.getElementById('tr-body');
   if (!body) return;
-  body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div></div>';
+  body.innerHTML = uiLoadingBlock('Загружаем данные');
   try {
     const a = await api.getTestAnalytics(testId);
     body.innerHTML = `
@@ -2585,7 +2585,7 @@ async function loadTestAnalyticsBlock(testId) {
       </div>
       <div class="rcard-title" style="margin-top:18px">Вопросы, вызывающие больше всего ошибок</div>
       <div class="table-wrap"><table class="data-table">
-        <thead><tr><th>Вопрос</th><th class="num">Правильных</th><th class="num">Неправильных</th><th class="num">% ошибок</th></tr></thead>
+        <thead><tr><th scope="col">Вопрос</th><th scope="col" class="num">Правильных</th><th scope="col" class="num">Неправильных</th><th scope="col" class="num">% ошибок</th></tr></thead>
         <tbody>
           ${(a.questions||[]).sort((x,y)=>(y.error_percent||0)-(x.error_percent||0)).map(q => `<tr>
             <td>${esc(q.question_text)}</td>

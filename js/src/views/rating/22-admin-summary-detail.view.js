@@ -43,7 +43,7 @@ function _metricsCellHtml(o) {
 async function renderAdminSummaryDetail() {
   const host = document.getElementById('admin-summary-extra');
   if (!host || !_adminSummaryState.open) return;
-  host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка сводки за неделю…</p></div>';
+  host.innerHTML = uiLoadingBlock('Загрузка сводки за неделю');
 
   if (!STATE.groups.length) {
     try { STATE.groups = await swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS); } catch { /* фильтр по группе просто будет пуст */ }
@@ -146,9 +146,9 @@ async function _loadAdminSummaryDetail() {
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>Место</th><th>ФИО</th><th>Группа</th><th>Статус</th>
-            <th>Баллы недели</th><th>Коины недели</th><th>Баланс</th>
-            <th>Дисциплина</th><th>Показатели</th><th>Действия</th>
+            <th scope="col">Место</th><th scope="col">ФИО</th><th scope="col">Группа</th><th scope="col">Статус</th>
+            <th scope="col">Баллы недели</th><th scope="col">Коины недели</th><th scope="col">Баланс</th>
+            <th scope="col">Дисциплина</th><th scope="col">Показатели</th><th scope="col">Действия</th>
           </tr></thead>
           <tbody>
             ${data.operators.length ? data.operators.map(o => `

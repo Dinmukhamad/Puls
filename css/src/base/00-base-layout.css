@@ -890,6 +890,32 @@ body.must-change-password .side-nav-link[data-nav-target] {
   outline-offset: 2px;
 }
 
+/* Текст только для скринридера. Класс использовался в разметке в восьми
+   местах, но нигде не был описан — подписи полей и статусы загрузки просто
+   показывались как обычный текст. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+/* Ссылка «к содержимому» и подобные показываются при получении фокуса. */
+.sr-only-focusable:focus,
+.sr-only-focusable:focus-visible {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+}
+
 /* ══════════════════════════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════════════════════════ */

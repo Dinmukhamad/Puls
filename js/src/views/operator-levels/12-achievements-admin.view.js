@@ -26,7 +26,7 @@ function achievementVisualIcon(achievement, extraClass = '') {
 
 async function renderAchievementsAdminTab(el) {
   if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка достижений…</p></div>';
+  el.innerHTML = uiLoadingBlock('Загрузка достижений');
 
   let achievements;
   try {

@@ -102,7 +102,16 @@ function missionStatusLabel(status) {
 }
 
 function missionLoading(el, text = 'Загружаем миссии') {
-  el.innerHTML = `<div class="missions-loading" role="status"><div class="loading-spinner"></div><strong>${esc(text)}</strong></div>`;
+  // Каркас повторяет будущую раскладку: карточки территорий и таблица
+  // попыток. Так экран не схлопывается в одну строку и обратно.
+  el.innerHTML = `
+    <div class="missions-loading" role="status" aria-live="polite">
+      <span class="sr-only">${esc(text)}</span>
+      ${uiSkeleton({ cards: 3 })}
+      <div class="table-wrap">
+        <table class="data-table"><tbody>${uiTableSkeleton(6, 5, [4, 5])}</tbody></table>
+      </div>
+    </div>`;
 }
 
 function resetMissionNavigation() {
@@ -701,7 +710,7 @@ async function renderMissionsAdmin(el) {
             <div><span>История</span><h2 id="mz-attempts">Попытки операторов</h2></div>
             <b>${attempts.total}</b>
           </div>
-          <div class="table-wrap"><table>
+          <div class="table-wrap"><table class="data-table mission-admin-table">
             <thead><tr>
               <th scope="col">Оператор</th><th scope="col">Миссия</th><th scope="col">Статус</th>
               <th scope="col">Шаг</th><th scope="col" class="num">Попытка</th><th scope="col" class="num">Активное время</th>

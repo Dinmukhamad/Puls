@@ -32,7 +32,7 @@ async function renderRaffles() {
   const el = document.getElementById('view-raffles');
   if (!el) return;
   const admin = isAdmin(STATE.user?.role);
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка розыгрышей…</p></div>';
+  el.innerHTML = uiLoadingBlock('Загрузка розыгрышей');
   try {
     if (admin) await renderRafflesAdmin(el);
     else await renderRafflesOperator(el);

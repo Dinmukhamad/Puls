@@ -194,7 +194,7 @@ async function renderRating() {
     await renderStaffRating();
     return;
   }
-  el.innerHTML = `<div class="op-page op-rating-page"><div class="op-page-head"><div><span>Рейтинг</span><h1>Мои результаты</h1><p>Позиция, динамика и сравнение с командой</p></div><button class="btn-outline btn-sm" data-rating-refresh>Обновить</button></div>${opRatingTabs()}<div id="rating-tab-content" class="op-rating-content"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div></div>`;
+  el.innerHTML = `<div class="op-page op-rating-page"><div class="op-page-head"><div><span>Рейтинг</span><h1>Мои результаты</h1><p>Позиция, динамика и сравнение с командой</p></div><button class="btn-outline btn-sm" data-rating-refresh>Обновить</button></div>${opRatingTabs()}<div id="rating-tab-content" class="op-rating-content">${uiSkeleton({ cards: 3 })}</div></div>`;
   el.querySelector('[data-rating-refresh]')?.addEventListener('click', () => { swrInvalidate('rating'); swrInvalidate('race:'); renderRating(); });
   el.querySelectorAll('[data-op-rating-tab]').forEach(button => button.addEventListener('click', () => {
     _ratingActiveTab = button.dataset.opRatingTab;
@@ -208,7 +208,7 @@ async function loadRatingTab(tab) {
   const host = document.getElementById('rating-tab-content');
   if (!host) return;
   const nav = STATE.navGen;
-  host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>';
+  host.innerHTML = uiSkeleton({ cards: 3 });
   try {
     if (tab === 'overview') await opRenderRatingOverview(host);
     else if (tab === 'race') await opRenderRatingRaceRestored(host);

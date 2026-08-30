@@ -56,7 +56,7 @@ function renderWeeklyAccrualTab(body) {
         <h3>История запусков</h3>
         <button class="btn-link" onclick="loadWeeklyAccrualRuns()">Обновить</button>
       </div>
-      <div id="wa-runs-host"><div class="empty-line">Загрузка…</div></div>
+      <div id="wa-runs-host">${uiListSkeleton(4)}</div>
     </div>`;
 
   if (_weeklyAccrualState.preview) _renderWeeklyAccrualPreview();
@@ -75,7 +75,7 @@ async function runWeeklyAccrualPreview() {
   const { start, end } = _readAccrualPeriodInputs();
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
   const host = document.getElementById('wa-preview-host');
-  if (host) host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем…</p></div>';
+  if (host) host.innerHTML = uiLoadingBlock('Считаем');
   try {
     _weeklyAccrualState.preview = await api.previewWeeklyAccrual(start, end);
   } catch (e) {
@@ -116,8 +116,8 @@ function _renderWeeklyAccrualPreview() {
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>Место</th><th>Оператор</th><th>Группа</th><th>Баллы</th><th>База</th>
-            <th>Бонусы</th><th>Итого</th><th>Динамика</th>
+            <th scope="col">Место</th><th scope="col">Оператор</th><th scope="col">Группа</th><th scope="col">Баллы</th><th scope="col">База</th>
+            <th scope="col">Бонусы</th><th scope="col">Итого</th><th scope="col">Динамика</th>
           </tr></thead>
           <tbody>
             ${p.operators.length ? p.operators.slice().sort((a, b) => (a.rank_place ?? 999) - (b.rank_place ?? 999)).map(o => `
@@ -179,7 +179,7 @@ async function loadWeeklyAccrualRuns() {
   host.innerHTML = `
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Период</th><th>Режим</th><th>Статус</th><th>Запущен</th><th>Операторов</th><th>Коинов</th><th>Автор</th></tr></thead>
+        <thead><tr><th scope="col">Период</th><th scope="col">Режим</th><th scope="col">Статус</th><th scope="col">Запущен</th><th scope="col">Операторов</th><th scope="col">Коинов</th><th scope="col">Автор</th></tr></thead>
         <tbody>
           ${runs.length ? runs.map(r => `
             <tr>

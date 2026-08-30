@@ -63,7 +63,7 @@ async function loadRatingTab(tab) {
   // успеет сработать таймер, и переключение вкладок будет мгновенным.
   const spinnerTimer = setTimeout(() => {
     if (isNavStale(myNavGen) || isRatingTabStale(myTabGen)) return;
-    content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>';
+    content.innerHTML = uiSkeleton({ cards: 3 });
   }, 150);
 
   try {
@@ -130,7 +130,7 @@ async function renderRatingRaceTab(content) {
           <button class="race-seg-btn ${_raceState.mode==='all'?'active':''}" data-mode="all">Все</button>
         </div>
       </div>
-      <div id="race-chart-wrap"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+      <div id="race-chart-wrap">${uiLoadingBlock('Загружаем данные')}</div>
     </div>
     <div id="race-bottom-grid"></div>
   `;
@@ -386,7 +386,7 @@ function renderRaceTopTable(items, cu) {
   return `<div class="rating-card race-side-card">
     <div class="rcard-title">Топ операторов</div>
     <div class="table-wrap"><table class="data-table">
-      <thead><tr><th>#</th><th>Оператор</th><th>Группа</th><th class="num">Баллы</th><th class="num">Разница с вами</th></tr></thead>
+      <thead><tr><th scope="col">#</th><th scope="col">Оператор</th><th scope="col">Группа</th><th scope="col" class="num">Баллы</th><th scope="col" class="num">Разница с вами</th></tr></thead>
       <tbody>
         ${items.slice(0, 10).map(it => {
           const diff = myPoints != null ? Math.round(it.points - myPoints) : null;

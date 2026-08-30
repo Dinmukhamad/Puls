@@ -258,7 +258,7 @@ async function rcRenderOperatorRating() {
   if (!el) return;
   el.innerHTML = `<div class="op-page rc-page">
     <div class="op-page-head rc-page-head"><div><span>Рейтинг операторов</span><h1>Моя гонка</h1><p>Кого догнать, кто догоняет вас и как движется ваша группа</p></div><button class="btn-outline btn-sm" data-rc-refresh>Обновить</button></div>
-    <div id="rc-rating-content"><div class="loading-state"><div class="loading-spinner"></div><p>Собираем вашу гонку…</p></div></div>
+    <div id="rc-rating-content">${uiLoadingBlock('Собираем вашу гонку')}</div>
   </div>`;
   el.querySelector('[data-rc-refresh]')?.addEventListener('click', () => {
     swrInvalidate('rating:competition:');

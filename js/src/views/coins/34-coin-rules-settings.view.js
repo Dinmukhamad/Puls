@@ -27,7 +27,7 @@ function _toggleRowHtml(id, label, checked, canEdit, hint = '') {
 }
 
 async function renderCoinRulesSettingsTab(body) {
-  body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка настроек…</p></div>';
+  body.innerHTML = uiLoadingBlock('Загрузка настроек');
   let rules;
   try {
     rules = await swrFetch('coin-rules:settings', () => api.getCoinRulesSettings(), null, SWR_STATIC_TTL_MS);

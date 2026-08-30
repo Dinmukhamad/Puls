@@ -1121,7 +1121,7 @@ async function showNotificationsModal() {
     <div class="notif-modal-actions">
       <button class="btn-link" id="notif-mark-all">Отметить все прочитанными</button>
     </div>
-    <div id="notif-list-host"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div>`);
+    <div id="notif-list-host">${uiListSkeleton(4)}</div>`);
 
   document.getElementById('notif-mark-all').onclick = async () => {
     try {
@@ -1230,6 +1230,66 @@ function uiSkeleton({ lines = 3, cards = 0 } = {}) {
     Array.from({ length: lines }, (_, i) =>
       `<div class="skeleton skeleton-line" style="width:${95 - i * 12}%"></div>`).join('')
   }</div>`;
+}
+
+/**
+ * Скелетон строк таблицы: пока данные едут, экран сохраняет свою форму,
+ * и содержимое не прыгает при подстановке. Пять–восемь строк — столько,
+ * чтобы каркас читался, но не выглядел как готовый список.
+ *
+ * @param {number} columns сколько колонок в таблице
+ * @param {number} rows    сколько строк-заглушек нарисовать
+ * @param {number[]} numeric индексы колонок с числами (выравниваются вправо)
+ */
+function uiTableSkeleton(columns, rows = 6, numeric = []) {
+  const count = Math.max(1, Math.min(8, rows));
+  const nums = new Set(numeric);
+  const cells = Array.from({ length: Math.max(1, columns) }, (_, i) =>
+    `<td class="${nums.has(i) ? 'num' : ''}"><div class="skeleton skeleton-cell"></div></td>`).join('');
+  return Array.from({ length: count }, () =>
+    `<tr class="is-skeleton" aria-hidden="true">${cells}</tr>`).join('');
+}
+
+/**
+ * Скелетон списка: строка с кружком и двумя полосками. Подходит там, где
+ * грузится перечень людей, операций или уведомлений.
+ */
+function uiListSkeleton(rows = 5) {
+  return `<div class="skeleton-list">${
+    Array.from({ length: Math.max(1, Math.min(8, rows)) }, () => `
+      <div class="skeleton-list__row">
+        <div class="skeleton skeleton-avatar"></div>
+        <div class="skeleton-list__text">
+          <div class="skeleton skeleton-line" style="width:42%"></div>
+          <div class="skeleton skeleton-line" style="width:68%"></div>
+        </div>
+      </div>`).join('')
+  }</div>`;
+}
+
+/** Скелетон формы: подпись и поле, столько пар, сколько полей ожидается. */
+function uiFormSkeleton(fields = 4) {
+  return `<div class="skeleton-form">${
+    Array.from({ length: Math.max(1, Math.min(10, fields)) }, () => `
+      <div class="skeleton-form__field">
+        <div class="skeleton skeleton-line" style="width:32%;height:10px"></div>
+        <div class="skeleton skeleton-input"></div>
+      </div>`).join('')
+  }</div>`;
+}
+
+/**
+ * Общее состояние загрузки. Вместо крутящегося кружка с подписью рисует
+ * каркас будущего содержимого: страница сохраняет форму, и при подстановке
+ * данных ничего не прыгает. Текст остаётся для скринридера.
+ *
+ * @param {string} text что именно грузится
+ * @param {{cards?: number, lines?: number}} shape форма каркаса
+ */
+function uiLoadingBlock(text = 'Загружаем данные', shape = { lines: 4 }) {
+  const body = shape.cards ? uiSkeleton({ cards: shape.cards }) : uiSkeleton({ lines: shape.lines || 4 });
+  return `<div class="ui-loading" role="status" aria-live="polite">`
+    + `<span class="sr-only">${esc(text)}</span>${body}</div>`;
 }
 
 function uiStateActions(actions = []) {
@@ -1689,12 +1749,12 @@ async function renderLevelsTabContent(el) {
       <table class="data-table">
         <thead>
           <tr>
-            <th>Оператор</th>
-            <th>Группа</th>
-            <th>Уровень</th>
-            <th class="num">Стаж</th>
-            <th class="num">Награда</th>
-            <th>Состояние награды</th>
+            <th scope="col">Оператор</th>
+            <th scope="col">Группа</th>
+            <th scope="col">Уровень</th>
+            <th scope="col" class="num">Стаж</th>
+            <th scope="col" class="num">Награда</th>
+            <th scope="col">Состояние награды</th>
           </tr>
         </thead>
         <tbody>
@@ -2548,7 +2608,7 @@ function achievementVisualIcon(achievement, extraClass = '') {
 
 async function renderAchievementsAdminTab(el) {
   if (!el) return;
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка достижений…</p></div>';
+  el.innerHTML = uiLoadingBlock('Загрузка достижений');
 
   let achievements;
   try {
@@ -3668,12 +3728,12 @@ async function renderRatingOverviewTab(el) {
       const myOpId = myData.operator_id || null;
       return `<div class="table-wrap rating-table-wrap"><table class="data-table rating-table">
         <thead><tr>
-          <th style="width:72px;text-align:center">Место</th>
-          <th>Оператор</th><th>Группа</th>
-          <th style="text-align:right">Баллы</th>
-          <th style="text-align:right">Коины</th>
-          <th style="text-align:right">Баланс</th>
-          <th style="text-align:center">Дин.</th>
+          <th scope="col" style="width:72px;text-align:center">Место</th>
+          <th scope="col">Оператор</th><th scope="col">Группа</th>
+          <th scope="col" style="text-align:right">Баллы</th>
+          <th scope="col" style="text-align:right">Коины</th>
+          <th scope="col" style="text-align:right">Баланс</th>
+          <th scope="col" style="text-align:center">Дин.</th>
         </tr></thead>
         <tbody>
           ${fr.map(r => {
@@ -3729,7 +3789,7 @@ async function renderRatingOverviewTab(el) {
               <div id="cmp-body">${renderComparison(personal.myCmp, cmpMetric)}</div>
             </div>
             <div class="rating-card rating-card-body">
-              <div id="dyn-body"><div class="loading-state" style="min-height:120px"><div class="loading-spinner"></div></div></div>
+              <div id="dyn-body">${uiLoadingBlock('Загружаем данные')}</div>
             </div>
           </div>
 
@@ -4668,7 +4728,7 @@ function _metricsCellHtml(o) {
 async function renderAdminSummaryDetail() {
   const host = document.getElementById('admin-summary-extra');
   if (!host || !_adminSummaryState.open) return;
-  host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка сводки за неделю…</p></div>';
+  host.innerHTML = uiLoadingBlock('Загрузка сводки за неделю');
 
   if (!STATE.groups.length) {
     try { STATE.groups = await swrFetch('groups:list', () => api.listGroups(false), null, SWR_STATIC_TTL_MS); } catch { /* фильтр по группе просто будет пуст */ }
@@ -4771,9 +4831,9 @@ async function _loadAdminSummaryDetail() {
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>Место</th><th>ФИО</th><th>Группа</th><th>Статус</th>
-            <th>Баллы недели</th><th>Коины недели</th><th>Баланс</th>
-            <th>Дисциплина</th><th>Показатели</th><th>Действия</th>
+            <th scope="col">Место</th><th scope="col">ФИО</th><th scope="col">Группа</th><th scope="col">Статус</th>
+            <th scope="col">Баллы недели</th><th scope="col">Коины недели</th><th scope="col">Баланс</th>
+            <th scope="col">Дисциплина</th><th scope="col">Показатели</th><th scope="col">Действия</th>
           </tr></thead>
           <tbody>
             ${data.operators.length ? data.operators.map(o => `
@@ -4887,7 +4947,7 @@ async function submitManualCoinModal(operatorId, operation) {
 async function openOperatorCabinetModal(operatorId, operatorName) {
   showModal(`
     <h3 class="modal-title">Кабинет — ${esc(operatorName)}</h3>
-    <div id="op-cabinet-modal-body"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div>`,
+    <div id="op-cabinet-modal-body">${uiListSkeleton(4)}</div>`,
   );
   const body = document.getElementById('op-cabinet-modal-body');
   let data;
@@ -5508,7 +5568,7 @@ async function refreshCoinsModule() {
 function renderCoinsOverview(body) {
   const overview = STATE.coinsOverview;
   if (!overview) {
-    body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка данных…</p></div>';
+    body.innerHTML = uiLoadingBlock('Загрузка данных');
     const myNavGen = STATE.navGen;
     swrFetch('coins:overview', () => api.getCoinsOverview(), data => {
       STATE.coinsOverview = data;
@@ -5617,7 +5677,7 @@ function renderManual() {
 
   // Load operators if empty
   if (!STATE.adminOperators.length) {
-    el.innerHTML = `<div class="coins-section-head"><div><div class="section-kicker">Начисление</div><h3>Ручная операция</h3></div></div><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>`;
+    el.innerHTML = `<div class="coins-section-head"><div><div class="section-kicker">Начисление</div><h3>Ручная операция</h3></div></div>${uiFormSkeleton(4)}`;
     api.getDashboardOperators()
       .then(ops => { STATE.adminOperators = ops; renderManual(); })
       .catch(() => { el.innerHTML += '<p style="color:var(--danger);padding:20px">Не удалось загрузить операторов</p>'; });
@@ -6021,7 +6081,7 @@ async function renderRequests() {
 
     <div class="panel">
       <div class="panel-head"><h3>Заявки</h3><span class="panel-badge" id="req-total-badge">…</span></div>
-      <div id="requests-list"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div>
+      <div id="requests-list">${uiListSkeleton(5)}</div>
       <div class="panel-footer" id="req-pagination-host"></div>
     </div>`;
 
@@ -6287,7 +6347,7 @@ function renderHistory() {
         <span class="panel-badge" id="hist-total-badge">…</span>
       </div>
       <div class="table-wrap" id="hist-table-host">
-        <div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>
+        <table class="data-table"><tbody>${uiTableSkeleton(8, 6, [4])}</tbody></table>
       </div>
       <div class="panel-footer" id="hist-pagination-host"></div>
     </div>`;
@@ -6334,8 +6394,8 @@ function paintHistoryTabData(data) {
   tableHost.innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Дата</th><th>Оператор</th><th>Группа</th>
-        <th>Тип</th><th>Коины</th><th>Причина</th><th>Автор</th><th>Источник</th>
+        <th scope="col">Дата</th><th scope="col">Оператор</th><th scope="col">Группа</th>
+        <th scope="col">Тип</th><th scope="col">Коины</th><th scope="col">Причина</th><th scope="col">Автор</th><th scope="col">Источник</th>
       </tr></thead>
       <tbody>
         ${items.length ? items.map(t => `
@@ -6434,7 +6494,7 @@ async function renderGroups() {
       </div>
     </div>
     <div class="panel">
-      <div class="loading-state"><div class="loading-spinner"></div><p>Загрузка групп…</p></div>
+      <table class="data-table"><tbody>${uiTableSkeleton(4, 4, [2])}</tbody></table>
     </div>`;
 
   try {
@@ -6469,17 +6529,17 @@ async function renderGroups() {
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>Название группы</th>
-            <th>Статус</th>
-            <th>Количество операторов</th>
-            <th>Действия</th>
+            <th scope="col">Название группы</th>
+            <th scope="col">Статус</th>
+            <th scope="col" class="num">Операторов</th>
+            <th scope="col">Действия</th>
           </tr></thead>
           <tbody>
             ${rows.length ? rows.map(g => `
               <tr>
                 <td class="name-cell">${esc(g.name)}</td>
                 <td>${groupStatusBadge(g.status)}</td>
-                <td>${g.operator_count || 0}</td>
+                <td class="num">${g.operator_count || 0}</td>
                 <td style="display:flex;gap:8px;flex-wrap:wrap">
                   <button class="btn-outline btn-sm" onclick="showEditGroupModal(${g.id})">Изменить</button>
                   <button class="btn-outline btn-sm" onclick="toggleGroupStatus(${g.id}, '${g.status === 'active' ? 'inactive' : 'active'}')">
@@ -6660,7 +6720,7 @@ function groupOptionsForOperator(groups, selectedId) {
 
 async function showEditOperatorModal(id) {
   if (!canManageOperators()) return showToast('Недостаточно прав', 'error');
-  showModal('<div class="loading-state" style="min-height:180px"><div class="loading-spinner"></div><p>Загрузка оператора…</p></div>');
+  showModal(uiLoadingBlock('Загрузка оператора'));
   try {
     const [op, groups] = await Promise.all([api.getOperator(id), ensureGroupsLoaded()]);
     const groupOptions = groupOptionsForOperator(groups, op.group_id);
@@ -6882,7 +6942,7 @@ async function deleteOperator(operatorId) {
 }
 
 async function showOperatorHistoryModal(id) {
-  showModal('<div class="loading-state" style="min-height:180px"><div class="loading-spinner"></div><p>Загрузка истории…</p></div>');
+  showModal(uiLoadingBlock('Загрузка истории'));
   try {
     const data = await api.operatorHistory(id);
     const op = data.operator || {};
@@ -7170,7 +7230,7 @@ function renderWorkNormsModal(norms) {
         <div class="panel-head"><h4>${MONTH_RU[parseInt(m)]} ${y}</h4></div>
         <div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th>Ставка</th><th>Норма</th><th>Дней</th><th>Статус</th><th></th></tr></thead>
+            <thead><tr><th scope="col">Ставка</th><th scope="col">Норма</th><th scope="col">Дней</th><th scope="col">Статус</th><th scope="col"></th></tr></thead>
             <tbody>${rowsHtml || '<tr><td colspan="5" class="empty-line">Нет норм</td></tr>'}</tbody>
           </table>
         </div>
@@ -7520,7 +7580,7 @@ async function showUserManagementModal(userId) {
   const user = STATE.users.find(item => item.id === userId);
   if (!user) return showToast('Пользователь не найден', 'error');
 
-  showModal('<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка карточки пользователя…</p></div>', {
+  showModal(uiLoadingBlock('Загрузка карточки пользователя'), {
     className: 'modal-user-manage',
   });
 
@@ -8385,7 +8445,7 @@ function renderWeeklyAccrualTab(body) {
         <h3>История запусков</h3>
         <button class="btn-link" onclick="loadWeeklyAccrualRuns()">Обновить</button>
       </div>
-      <div id="wa-runs-host"><div class="empty-line">Загрузка…</div></div>
+      <div id="wa-runs-host">${uiListSkeleton(4)}</div>
     </div>`;
 
   if (_weeklyAccrualState.preview) _renderWeeklyAccrualPreview();
@@ -8404,7 +8464,7 @@ async function runWeeklyAccrualPreview() {
   const { start, end } = _readAccrualPeriodInputs();
   if (!start || !end) { showToast('Укажите период', 'error'); return; }
   const host = document.getElementById('wa-preview-host');
-  if (host) host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Считаем…</p></div>';
+  if (host) host.innerHTML = uiLoadingBlock('Считаем');
   try {
     _weeklyAccrualState.preview = await api.previewWeeklyAccrual(start, end);
   } catch (e) {
@@ -8445,8 +8505,8 @@ function _renderWeeklyAccrualPreview() {
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>Место</th><th>Оператор</th><th>Группа</th><th>Баллы</th><th>База</th>
-            <th>Бонусы</th><th>Итого</th><th>Динамика</th>
+            <th scope="col">Место</th><th scope="col">Оператор</th><th scope="col">Группа</th><th scope="col">Баллы</th><th scope="col">База</th>
+            <th scope="col">Бонусы</th><th scope="col">Итого</th><th scope="col">Динамика</th>
           </tr></thead>
           <tbody>
             ${p.operators.length ? p.operators.slice().sort((a, b) => (a.rank_place ?? 999) - (b.rank_place ?? 999)).map(o => `
@@ -8508,7 +8568,7 @@ async function loadWeeklyAccrualRuns() {
   host.innerHTML = `
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Период</th><th>Режим</th><th>Статус</th><th>Запущен</th><th>Операторов</th><th>Коинов</th><th>Автор</th></tr></thead>
+        <thead><tr><th scope="col">Период</th><th scope="col">Режим</th><th scope="col">Статус</th><th scope="col">Запущен</th><th scope="col">Операторов</th><th scope="col">Коинов</th><th scope="col">Автор</th></tr></thead>
         <tbody>
           ${runs.length ? runs.map(r => `
             <tr>
@@ -8559,7 +8619,7 @@ function _toggleRowHtml(id, label, checked, canEdit, hint = '') {
 }
 
 async function renderCoinRulesSettingsTab(body) {
-  body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка настроек…</p></div>';
+  body.innerHTML = uiLoadingBlock('Загрузка настроек');
   let rules;
   try {
     rules = await swrFetch('coin-rules:settings', () => api.getCoinRulesSettings(), null, SWR_STATIC_TTL_MS);
@@ -9677,10 +9737,18 @@ function anPaint(el) {
 
   filters.innerHTML = anFiltersHtml();
 
-  // Лид-строка контекста (период/группа) — из dashboard, если он загружен.
-  if (AN_STATE.data && !AN_STATE.data.empty) {
-    lede.textContent = `${AN_STATE.data.period.label} · ${AN_STATE.data.filters.group_label}`
-      + (AN_STATE.data.filters.all_weekdays ? '' : ' · только выбранные дни недели');
+  // Лид-строка контекста (период/группа). Раньше она обновлялась только при
+  // непустых данных, поэтому на пустом периоде навсегда оставалось
+  // «Загружаем показатели…», хотя тело уже показывало «данных нет».
+  if (AN_STATE.data) {
+    const period = AN_STATE.data.period?.label;
+    const group = AN_STATE.data.filters?.group_label;
+    if (period) {
+      lede.textContent = [period, group].filter(Boolean).join(' · ')
+        + (AN_STATE.data.filters?.all_weekdays === false ? ' · только выбранные дни недели' : '');
+    } else {
+      lede.textContent = 'Показатели колл-центра за выбранный период.';
+    }
   }
 
   // Вкладки «Операторы»/«Качество» — свои данные и состояния, dashboard их не блокирует.
@@ -9700,7 +9768,7 @@ function anPaint(el) {
   }
   if (AN_STATE.loading && !AN_STATE.data) {
     lede.textContent = 'Загружаем показатели…';
-    body.innerHTML = `<div class="loading-state"><div class="loading-spinner"></div><span>Считаем показатели</span></div>`;
+    body.innerHTML = `<div role="status" aria-live="polite"><span class="sr-only">Считаем показатели</span>${uiSkeleton({ cards: 4 })}${uiSkeleton({ lines: 4 })}</div>`;
     return;
   }
 
@@ -9845,7 +9913,7 @@ function anOperatorsBody() {
     return toolbar + `<div class="an2-alert an2-alert-bad"><b>Не удалось загрузить</b><span>${anEsc(o.error)}</span></div>`;
   }
   if (o.loading && !o.items.length) {
-    return toolbar + `<div class="loading-state"><div class="loading-spinner"></div><span>Загружаем операторов</span></div>`;
+    return toolbar + `<div class="table-wrap" role="status" aria-live="polite"><span class="sr-only">Загружаем операторов</span><table class="data-table"><tbody>${uiTableSkeleton(7, 6, [2, 3, 4, 5, 6])}</tbody></table></div>`;
   }
   if (!o.items.length) {
     return toolbar + `<div class="an2-alert an2-alert-empty"><b>Операторы не найдены</b><span>Измените фильтры, период или поиск.</span></div>`;
@@ -9926,7 +9994,7 @@ function anQualityBody() {
   const parts = ['<p class="an2-hint">Контроль качества прослушанных звонков за выбранный период. Средняя оценка считается только по проверенным звонкам — операторы без проверок в неё не входят.</p>'];
 
   if (AN_STATE.loading && !data) {
-    return parts.join('') + `<div class="loading-state"><div class="loading-spinner"></div><span>Считаем показатели</span></div>`;
+    return parts.join('') + `<div role="status" aria-live="polite"><span class="sr-only">Считаем показатели</span>${uiSkeleton({ cards: 3 })}</div>`;
   }
   if (data && !data.empty) {
     const qCards = (data.metrics || []).filter(m => ['quality', 'quality_coverage', 'quality_calls'].includes(m.key));
@@ -10194,7 +10262,7 @@ function anTrendTable(trend) {
       <summary>Показать таблицей</summary>
       <div class="table-wrap">
         <table class="data-table">
-          <thead><tr><th>День</th><th>${anEsc(trend.label)}, ${anEsc(trend.unit)}</th></tr></thead>
+          <thead><tr><th scope="col">День</th><th scope="col">${anEsc(trend.label)}, ${anEsc(trend.unit)}</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -10280,8 +10348,8 @@ function anGroupsHtml(data) {
     <div class="table-wrap">
       <table class="data-table">
         <thead><tr>
-          <th>Группа</th><th>Людей</th><th>Качество, %</th><th>Звонков/ч</th>
-          <th>В разговоре, %</th><th>Штрафы, мин</th><th>Оценка</th>
+          <th scope="col">Группа</th><th scope="col">Людей</th><th scope="col">Качество, %</th><th scope="col">Звонков/ч</th>
+          <th scope="col">В разговоре, %</th><th scope="col">Штрафы, мин</th><th scope="col">Оценка</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -10409,7 +10477,7 @@ async function loadRatingTab(tab) {
   // успеет сработать таймер, и переключение вкладок будет мгновенным.
   const spinnerTimer = setTimeout(() => {
     if (isNavStale(myNavGen) || isRatingTabStale(myTabGen)) return;
-    content.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>';
+    content.innerHTML = uiSkeleton({ cards: 3 });
   }, 150);
 
   try {
@@ -10476,7 +10544,7 @@ async function renderRatingRaceTab(content) {
           <button class="race-seg-btn ${_raceState.mode==='all'?'active':''}" data-mode="all">Все</button>
         </div>
       </div>
-      <div id="race-chart-wrap"><div class="loading-state" style="padding:20px"><div class="loading-spinner"></div></div></div>
+      <div id="race-chart-wrap">${uiLoadingBlock('Загружаем данные')}</div>
     </div>
     <div id="race-bottom-grid"></div>
   `;
@@ -10732,7 +10800,7 @@ function renderRaceTopTable(items, cu) {
   return `<div class="rating-card race-side-card">
     <div class="rcard-title">Топ операторов</div>
     <div class="table-wrap"><table class="data-table">
-      <thead><tr><th>#</th><th>Оператор</th><th>Группа</th><th class="num">Баллы</th><th class="num">Разница с вами</th></tr></thead>
+      <thead><tr><th scope="col">#</th><th scope="col">Оператор</th><th scope="col">Группа</th><th scope="col" class="num">Баллы</th><th scope="col" class="num">Разница с вами</th></tr></thead>
       <tbody>
         ${items.slice(0, 10).map(it => {
           const diff = myPoints != null ? Math.round(it.points - myPoints) : null;
@@ -11799,7 +11867,7 @@ async function renderWheelTicketsTab(body) {
           ${filters.map(([f, l]) => `<button class="filter-tab ${_wheelTicketFilter === f ? 'active' : ''}" data-ticket-filter="${f}">${l}</button>`).join('')}
         </div>
         ${rows.length ? `<div class="table-wrap"><table class="data-table">
-          <thead><tr><th>Создан</th><th>Оператор</th><th>Причина</th><th>Источник</th><th>Истекает</th><th>Использован</th><th>Статус</th></tr></thead>
+          <thead><tr><th scope="col">Создан</th><th scope="col">Оператор</th><th scope="col">Причина</th><th scope="col">Источник</th><th scope="col">Истекает</th><th scope="col">Использован</th><th scope="col">Статус</th></tr></thead>
           <tbody>${rows.map(t => `<tr>
             <td>${esc(fmtDateTime(t.created_at))}</td>
             <td class="name-cell">${esc(t.operator_name)}</td>
@@ -11842,7 +11910,7 @@ async function renderWheelSpinsTab(body) {
           <div class="wheel-stat"><span class="wheel-stat-num">${uniqueOperators}</span><span>участников</span></div>
         </div>
         ${rows.length ? `<div class="table-wrap"><table class="data-table">
-          <thead><tr><th>Дата</th><th>Оператор</th><th>Группа</th><th>Причина</th><th>Приз</th><th>Тип</th></tr></thead>
+          <thead><tr><th scope="col">Дата</th><th scope="col">Оператор</th><th scope="col">Группа</th><th scope="col">Причина</th><th scope="col">Приз</th><th scope="col">Тип</th></tr></thead>
           <tbody>${rows.map(r => `<tr>
             <td>${esc(fmtDateTime(r.date))}</td>
             <td class="name-cell">${esc(r.operator_name)}</td>
@@ -11882,14 +11950,14 @@ async function renderWheelStatsTab(body) {
           <div>
             <h4 class="panel-subtitle">Частота призов</h4>
             ${hist.length ? `<div class="table-wrap"><table class="data-table">
-              <thead><tr><th>Приз</th><th>Раз</th></tr></thead>
+              <thead><tr><th scope="col">Приз</th><th scope="col">Раз</th></tr></thead>
               <tbody>${hist.map(h => `<tr><td>${esc(h.title)}</td><td><strong>${h.count}</strong></td></tr>`).join('')}</tbody>
             </table></div>` : '<div class="empty-line">Прокруток сегодня нет</div>'}
           </div>
           <div>
             <h4 class="panel-subtitle">Топ источников попыток</h4>
             ${src.length ? `<div class="table-wrap"><table class="data-table">
-              <thead><tr><th>Источник</th><th>Токенов</th></tr></thead>
+              <thead><tr><th scope="col">Источник</th><th scope="col">Токенов</th></tr></thead>
               <tbody>${src.map(x => `<tr><td>${esc(wheelSourceLabel(x.reason_type))}</td><td><strong>${x.count}</strong></td></tr>`).join('')}</tbody>
             </table></div>` : '<div class="empty-line">Токенов сегодня не выдавалось</div>'}
           </div>
@@ -12368,7 +12436,7 @@ async function renderTestsOperatorView(el) {
       <div><div class="section-kicker">Обучение</div><h1 class="section-title">Мои тесты</h1><div class="section-subtitle">Проверяйте знания и получайте награды за результат.</div></div>
       <button class="btn-outline btn-sm" onclick="renderTests()">Обновить</button>
     </div>
-    <div id="tests-op-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
+    <div id="tests-op-body">${uiLoadingBlock('Загружаем данные')}</div>`;
 
   let data;
   try {
@@ -12851,7 +12919,7 @@ async function renderTestsStaffView(el) {
         <button class="btn-primary btn-sm" id="tests-new-btn">Создать тест</button>
       </div>
     </div>
-    <div id="tests-staff-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
+    <div id="tests-staff-body">${uiLoadingBlock('Загружаем данные')}</div>`;
 
   el.querySelector('#tests-new-btn').addEventListener('click', () => openTestBuilder(null));
 
@@ -13325,7 +13393,7 @@ async function openTestResultsView(testId) {
       <button class="filter-tab active" data-tr-tab="results">Результаты</button>
       <button class="filter-tab" data-tr-tab="analytics">Аналитика</button>
     </div>
-    <div id="tr-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
+    <div id="tr-body">${uiLoadingBlock('Загружаем данные')}</div>`;
 
   el.querySelectorAll('[data-tr-tab]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -13342,7 +13410,7 @@ async function openTestResultsView(testId) {
 async function loadTestResultsTable(testId) {
   const body = document.getElementById('tr-body');
   if (!body) return;
-  body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div></div>';
+  body.innerHTML = uiLoadingBlock('Загружаем данные');
   try {
     const data = await api.getTestResults(testId);
     const items = data.items || [];
@@ -13352,9 +13420,9 @@ async function loadTestResultsTable(testId) {
     }
     body.innerHTML = `<div class="table-wrap"><table class="data-table">
       <thead><tr>
-        <th>Оператор</th><th>Группа</th><th>Статус</th><th>Начал</th><th>Завершил</th>
-        <th class="num">Время</th><th class="num">Правильных</th><th class="num">%</th>
-        <th class="num">Баллы</th><th class="num">Коины</th><th class="num">Попытка</th>
+        <th scope="col">Оператор</th><th scope="col">Группа</th><th scope="col">Статус</th><th scope="col">Начал</th><th scope="col">Завершил</th>
+        <th scope="col" class="num">Время</th><th scope="col" class="num">Правильных</th><th scope="col" class="num">%</th>
+        <th scope="col" class="num">Баллы</th><th scope="col" class="num">Коины</th><th scope="col" class="num">Попытка</th>
       </tr></thead>
       <tbody>
         ${items.map(r => `<tr>
@@ -13380,7 +13448,7 @@ async function loadTestResultsTable(testId) {
 async function loadTestAnalyticsBlock(testId) {
   const body = document.getElementById('tr-body');
   if (!body) return;
-  body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div></div>';
+  body.innerHTML = uiLoadingBlock('Загружаем данные');
   try {
     const a = await api.getTestAnalytics(testId);
     body.innerHTML = `
@@ -13396,7 +13464,7 @@ async function loadTestAnalyticsBlock(testId) {
       </div>
       <div class="rcard-title" style="margin-top:18px">Вопросы, вызывающие больше всего ошибок</div>
       <div class="table-wrap"><table class="data-table">
-        <thead><tr><th>Вопрос</th><th class="num">Правильных</th><th class="num">Неправильных</th><th class="num">% ошибок</th></tr></thead>
+        <thead><tr><th scope="col">Вопрос</th><th scope="col" class="num">Правильных</th><th scope="col" class="num">Неправильных</th><th scope="col" class="num">% ошибок</th></tr></thead>
         <tbody>
           ${(a.questions||[]).sort((x,y)=>(y.error_percent||0)-(x.error_percent||0)).map(q => `<tr>
             <td>${esc(q.question_text)}</td>
@@ -13445,7 +13513,7 @@ async function renderRaffles() {
   const el = document.getElementById('view-raffles');
   if (!el) return;
   const admin = isAdmin(STATE.user?.role);
-  el.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка розыгрышей…</p></div>';
+  el.innerHTML = uiLoadingBlock('Загрузка розыгрышей');
   try {
     if (admin) await renderRafflesAdmin(el);
     else await renderRafflesOperator(el);
@@ -13772,7 +13840,16 @@ function missionStatusLabel(status) {
 }
 
 function missionLoading(el, text = 'Загружаем миссии') {
-  el.innerHTML = `<div class="missions-loading" role="status"><div class="loading-spinner"></div><strong>${esc(text)}</strong></div>`;
+  // Каркас повторяет будущую раскладку: карточки территорий и таблица
+  // попыток. Так экран не схлопывается в одну строку и обратно.
+  el.innerHTML = `
+    <div class="missions-loading" role="status" aria-live="polite">
+      <span class="sr-only">${esc(text)}</span>
+      ${uiSkeleton({ cards: 3 })}
+      <div class="table-wrap">
+        <table class="data-table"><tbody>${uiTableSkeleton(6, 5, [4, 5])}</tbody></table>
+      </div>
+    </div>`;
 }
 
 function resetMissionNavigation() {
@@ -14371,7 +14448,7 @@ async function renderMissionsAdmin(el) {
             <div><span>История</span><h2 id="mz-attempts">Попытки операторов</h2></div>
             <b>${attempts.total}</b>
           </div>
-          <div class="table-wrap"><table>
+          <div class="table-wrap"><table class="data-table mission-admin-table">
             <thead><tr>
               <th scope="col">Оператор</th><th scope="col">Миссия</th><th scope="col">Статус</th>
               <th scope="col">Шаг</th><th scope="col" class="num">Попытка</th><th scope="col" class="num">Активное время</th>
@@ -15226,7 +15303,7 @@ async function renderRating() {
     await renderStaffRating();
     return;
   }
-  el.innerHTML = `<div class="op-page op-rating-page"><div class="op-page-head"><div><span>Рейтинг</span><h1>Мои результаты</h1><p>Позиция, динамика и сравнение с командой</p></div><button class="btn-outline btn-sm" data-rating-refresh>Обновить</button></div>${opRatingTabs()}<div id="rating-tab-content" class="op-rating-content"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div></div>`;
+  el.innerHTML = `<div class="op-page op-rating-page"><div class="op-page-head"><div><span>Рейтинг</span><h1>Мои результаты</h1><p>Позиция, динамика и сравнение с командой</p></div><button class="btn-outline btn-sm" data-rating-refresh>Обновить</button></div>${opRatingTabs()}<div id="rating-tab-content" class="op-rating-content">${uiSkeleton({ cards: 3 })}</div></div>`;
   el.querySelector('[data-rating-refresh]')?.addEventListener('click', () => { swrInvalidate('rating'); swrInvalidate('race:'); renderRating(); });
   el.querySelectorAll('[data-op-rating-tab]').forEach(button => button.addEventListener('click', () => {
     _ratingActiveTab = button.dataset.opRatingTab;
@@ -15240,7 +15317,7 @@ async function loadRatingTab(tab) {
   const host = document.getElementById('rating-tab-content');
   if (!host) return;
   const nav = STATE.navGen;
-  host.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>';
+  host.innerHTML = uiSkeleton({ cards: 3 });
   try {
     if (tab === 'overview') await opRenderRatingOverview(host);
     else if (tab === 'race') await opRenderRatingRaceRestored(host);
@@ -15637,7 +15714,7 @@ async function rcRenderOperatorRating() {
   if (!el) return;
   el.innerHTML = `<div class="op-page rc-page">
     <div class="op-page-head rc-page-head"><div><span>Рейтинг операторов</span><h1>Моя гонка</h1><p>Кого догнать, кто догоняет вас и как движется ваша группа</p></div><button class="btn-outline btn-sm" data-rc-refresh>Обновить</button></div>
-    <div id="rc-rating-content"><div class="loading-state"><div class="loading-spinner"></div><p>Собираем вашу гонку…</p></div></div>
+    <div id="rc-rating-content">${uiLoadingBlock('Собираем вашу гонку')}</div>
   </div>`;
   el.querySelector('[data-rc-refresh]')?.addEventListener('click', () => {
     swrInvalidate('rating:competition:');

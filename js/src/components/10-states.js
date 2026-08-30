@@ -55,6 +55,66 @@ function uiSkeleton({ lines = 3, cards = 0 } = {}) {
   }</div>`;
 }
 
+/**
+ * Скелетон строк таблицы: пока данные едут, экран сохраняет свою форму,
+ * и содержимое не прыгает при подстановке. Пять–восемь строк — столько,
+ * чтобы каркас читался, но не выглядел как готовый список.
+ *
+ * @param {number} columns сколько колонок в таблице
+ * @param {number} rows    сколько строк-заглушек нарисовать
+ * @param {number[]} numeric индексы колонок с числами (выравниваются вправо)
+ */
+function uiTableSkeleton(columns, rows = 6, numeric = []) {
+  const count = Math.max(1, Math.min(8, rows));
+  const nums = new Set(numeric);
+  const cells = Array.from({ length: Math.max(1, columns) }, (_, i) =>
+    `<td class="${nums.has(i) ? 'num' : ''}"><div class="skeleton skeleton-cell"></div></td>`).join('');
+  return Array.from({ length: count }, () =>
+    `<tr class="is-skeleton" aria-hidden="true">${cells}</tr>`).join('');
+}
+
+/**
+ * Скелетон списка: строка с кружком и двумя полосками. Подходит там, где
+ * грузится перечень людей, операций или уведомлений.
+ */
+function uiListSkeleton(rows = 5) {
+  return `<div class="skeleton-list">${
+    Array.from({ length: Math.max(1, Math.min(8, rows)) }, () => `
+      <div class="skeleton-list__row">
+        <div class="skeleton skeleton-avatar"></div>
+        <div class="skeleton-list__text">
+          <div class="skeleton skeleton-line" style="width:42%"></div>
+          <div class="skeleton skeleton-line" style="width:68%"></div>
+        </div>
+      </div>`).join('')
+  }</div>`;
+}
+
+/** Скелетон формы: подпись и поле, столько пар, сколько полей ожидается. */
+function uiFormSkeleton(fields = 4) {
+  return `<div class="skeleton-form">${
+    Array.from({ length: Math.max(1, Math.min(10, fields)) }, () => `
+      <div class="skeleton-form__field">
+        <div class="skeleton skeleton-line" style="width:32%;height:10px"></div>
+        <div class="skeleton skeleton-input"></div>
+      </div>`).join('')
+  }</div>`;
+}
+
+/**
+ * Общее состояние загрузки. Вместо крутящегося кружка с подписью рисует
+ * каркас будущего содержимого: страница сохраняет форму, и при подстановке
+ * данных ничего не прыгает. Текст остаётся для скринридера.
+ *
+ * @param {string} text что именно грузится
+ * @param {{cards?: number, lines?: number}} shape форма каркаса
+ */
+function uiLoadingBlock(text = 'Загружаем данные', shape = { lines: 4 }) {
+  const body = shape.cards ? uiSkeleton({ cards: shape.cards }) : uiSkeleton({ lines: shape.lines || 4 });
+  return `<div class="ui-loading" role="status" aria-live="polite">`
+    + `<span class="sr-only">${esc(text)}</span>${body}</div>`;
+}
+
 function uiStateActions(actions = []) {
   const buttons = actions.filter(Boolean).map(a => {
     const cls = a.variant === 'ghost' ? 'btn-outline' : 'btn-primary';

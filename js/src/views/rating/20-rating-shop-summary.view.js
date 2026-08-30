@@ -626,12 +626,12 @@ async function renderRatingOverviewTab(el) {
       const myOpId = myData.operator_id || null;
       return `<div class="table-wrap rating-table-wrap"><table class="data-table rating-table">
         <thead><tr>
-          <th style="width:72px;text-align:center">Место</th>
-          <th>Оператор</th><th>Группа</th>
-          <th style="text-align:right">Баллы</th>
-          <th style="text-align:right">Коины</th>
-          <th style="text-align:right">Баланс</th>
-          <th style="text-align:center">Дин.</th>
+          <th scope="col" style="width:72px;text-align:center">Место</th>
+          <th scope="col">Оператор</th><th scope="col">Группа</th>
+          <th scope="col" style="text-align:right">Баллы</th>
+          <th scope="col" style="text-align:right">Коины</th>
+          <th scope="col" style="text-align:right">Баланс</th>
+          <th scope="col" style="text-align:center">Дин.</th>
         </tr></thead>
         <tbody>
           ${fr.map(r => {
@@ -687,7 +687,7 @@ async function renderRatingOverviewTab(el) {
               <div id="cmp-body">${renderComparison(personal.myCmp, cmpMetric)}</div>
             </div>
             <div class="rating-card rating-card-body">
-              <div id="dyn-body"><div class="loading-state" style="min-height:120px"><div class="loading-spinner"></div></div></div>
+              <div id="dyn-body">${uiLoadingBlock('Загружаем данные')}</div>
             </div>
           </div>
 

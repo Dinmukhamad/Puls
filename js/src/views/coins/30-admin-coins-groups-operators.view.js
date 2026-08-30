@@ -570,7 +570,7 @@ async function refreshCoinsModule() {
 function renderCoinsOverview(body) {
   const overview = STATE.coinsOverview;
   if (!overview) {
-    body.innerHTML = '<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка данных…</p></div>';
+    body.innerHTML = uiLoadingBlock('Загрузка данных');
     const myNavGen = STATE.navGen;
     swrFetch('coins:overview', () => api.getCoinsOverview(), data => {
       STATE.coinsOverview = data;
@@ -679,7 +679,7 @@ function renderManual() {
 
   // Load operators if empty
   if (!STATE.adminOperators.length) {
-    el.innerHTML = `<div class="coins-section-head"><div><div class="section-kicker">Начисление</div><h3>Ручная операция</h3></div></div><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>`;
+    el.innerHTML = `<div class="coins-section-head"><div><div class="section-kicker">Начисление</div><h3>Ручная операция</h3></div></div>${uiFormSkeleton(4)}`;
     api.getDashboardOperators()
       .then(ops => { STATE.adminOperators = ops; renderManual(); })
       .catch(() => { el.innerHTML += '<p style="color:var(--danger);padding:20px">Не удалось загрузить операторов</p>'; });
@@ -1083,7 +1083,7 @@ async function renderRequests() {
 
     <div class="panel">
       <div class="panel-head"><h3>Заявки</h3><span class="panel-badge" id="req-total-badge">…</span></div>
-      <div id="requests-list"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div>
+      <div id="requests-list">${uiListSkeleton(5)}</div>
       <div class="panel-footer" id="req-pagination-host"></div>
     </div>`;
 
@@ -1349,7 +1349,7 @@ function renderHistory() {
         <span class="panel-badge" id="hist-total-badge">…</span>
       </div>
       <div class="table-wrap" id="hist-table-host">
-        <div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div>
+        <table class="data-table"><tbody>${uiTableSkeleton(8, 6, [4])}</tbody></table>
       </div>
       <div class="panel-footer" id="hist-pagination-host"></div>
     </div>`;
@@ -1396,8 +1396,8 @@ function paintHistoryTabData(data) {
   tableHost.innerHTML = `
     <table class="data-table">
       <thead><tr>
-        <th>Дата</th><th>Оператор</th><th>Группа</th>
-        <th>Тип</th><th>Коины</th><th>Причина</th><th>Автор</th><th>Источник</th>
+        <th scope="col">Дата</th><th scope="col">Оператор</th><th scope="col">Группа</th>
+        <th scope="col">Тип</th><th scope="col">Коины</th><th scope="col">Причина</th><th scope="col">Автор</th><th scope="col">Источник</th>
       </tr></thead>
       <tbody>
         ${items.length ? items.map(t => `
@@ -1496,7 +1496,7 @@ async function renderGroups() {
       </div>
     </div>
     <div class="panel">
-      <div class="loading-state"><div class="loading-spinner"></div><p>Загрузка групп…</p></div>
+      <table class="data-table"><tbody>${uiTableSkeleton(4, 4, [2])}</tbody></table>
     </div>`;
 
   try {
@@ -1531,17 +1531,17 @@ async function renderGroups() {
       <div class="table-wrap">
         <table class="data-table">
           <thead><tr>
-            <th>Название группы</th>
-            <th>Статус</th>
-            <th>Количество операторов</th>
-            <th>Действия</th>
+            <th scope="col">Название группы</th>
+            <th scope="col">Статус</th>
+            <th scope="col" class="num">Операторов</th>
+            <th scope="col">Действия</th>
           </tr></thead>
           <tbody>
             ${rows.length ? rows.map(g => `
               <tr>
                 <td class="name-cell">${esc(g.name)}</td>
                 <td>${groupStatusBadge(g.status)}</td>
-                <td>${g.operator_count || 0}</td>
+                <td class="num">${g.operator_count || 0}</td>
                 <td style="display:flex;gap:8px;flex-wrap:wrap">
                   <button class="btn-outline btn-sm" onclick="showEditGroupModal(${g.id})">Изменить</button>
                   <button class="btn-outline btn-sm" onclick="toggleGroupStatus(${g.id}, '${g.status === 'active' ? 'inactive' : 'active'}')">
@@ -1722,7 +1722,7 @@ function groupOptionsForOperator(groups, selectedId) {
 
 async function showEditOperatorModal(id) {
   if (!canManageOperators()) return showToast('Недостаточно прав', 'error');
-  showModal('<div class="loading-state" style="min-height:180px"><div class="loading-spinner"></div><p>Загрузка оператора…</p></div>');
+  showModal(uiLoadingBlock('Загрузка оператора'));
   try {
     const [op, groups] = await Promise.all([api.getOperator(id), ensureGroupsLoaded()]);
     const groupOptions = groupOptionsForOperator(groups, op.group_id);
@@ -1944,7 +1944,7 @@ async function deleteOperator(operatorId) {
 }
 
 async function showOperatorHistoryModal(id) {
-  showModal('<div class="loading-state" style="min-height:180px"><div class="loading-spinner"></div><p>Загрузка истории…</p></div>');
+  showModal(uiLoadingBlock('Загрузка истории'));
   try {
     const data = await api.operatorHistory(id);
     const op = data.operator || {};
@@ -2232,7 +2232,7 @@ function renderWorkNormsModal(norms) {
         <div class="panel-head"><h4>${MONTH_RU[parseInt(m)]} ${y}</h4></div>
         <div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th>Ставка</th><th>Норма</th><th>Дней</th><th>Статус</th><th></th></tr></thead>
+            <thead><tr><th scope="col">Ставка</th><th scope="col">Норма</th><th scope="col">Дней</th><th scope="col">Статус</th><th scope="col"></th></tr></thead>
             <tbody>${rowsHtml || '<tr><td colspan="5" class="empty-line">Нет норм</td></tr>'}</tbody>
           </table>
         </div>
@@ -2582,7 +2582,7 @@ async function showUserManagementModal(userId) {
   const user = STATE.users.find(item => item.id === userId);
   if (!user) return showToast('Пользователь не найден', 'error');
 
-  showModal('<div class="loading-state"><div class="loading-spinner"></div><p>Загрузка карточки пользователя…</p></div>', {
+  showModal(uiLoadingBlock('Загрузка карточки пользователя'), {
     className: 'modal-user-manage',
   });
 

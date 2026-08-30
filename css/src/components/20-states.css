@@ -585,3 +585,17 @@ body.modal-open { overflow: hidden; }
   .shop-admin-table .shop-admin-name small { white-space: normal; overflow-wrap: anywhere; }
   .shop-admin-table tbody td > * { min-width: 0; }
 }
+
+/* Скелетоны списка и формы: каркас повторяет форму будущего содержимого,
+   поэтому при подстановке данных ничего не прыгает. */
+.skeleton-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.skeleton-list__row { display: flex; align-items: center; gap: var(--space-3); }
+.skeleton-list__text { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.skeleton-avatar { width: 34px; height: 34px; border-radius: 50%; flex: none; }
+
+.skeleton-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.skeleton-form__field { display: flex; flex-direction: column; gap: 6px; }
+.skeleton-input { height: var(--control-h); border-radius: var(--radius-sm); }
+
+/* Обёртка состояния загрузки: держит каркасы на отступе от соседей. */
+.ui-loading { display: block; padding: var(--space-2) 0; }

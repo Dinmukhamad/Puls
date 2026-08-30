@@ -42,7 +42,7 @@ async function showNotificationsModal() {
     <div class="notif-modal-actions">
       <button class="btn-link" id="notif-mark-all">Отметить все прочитанными</button>
     </div>
-    <div id="notif-list-host"><div class="loading-state"><div class="loading-spinner"></div><p>Загрузка…</p></div></div>`);
+    <div id="notif-list-host">${uiListSkeleton(4)}</div>`);
 
   document.getElementById('notif-mark-all').onclick = async () => {
     try {
