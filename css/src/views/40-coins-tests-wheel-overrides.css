@@ -384,7 +384,6 @@
   justify-content: center;
 }
 
-
 /* ══════════════════════════════════════════════════════
    БЛОК ДИНАМИКИ ОПЕРАТОРА (новый дизайн)
 ══════════════════════════════════════════════════════ */
@@ -1056,8 +1055,7 @@
   text-transform: uppercase;
 }
 .wheel-campaign-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.wheel-campaign-actions .btn-primary,
-.wheel-campaign-actions .btn-outline { min-height: 40px; }
+
 .wheel-check { min-height: 64px; align-items: flex-start; justify-content: center; }
 .wheel-check input[type="checkbox"] { width: 18px; height: 18px; margin-top: 7px; }
 .wheel-prizes-wrap { overflow-x: auto; }
@@ -1075,7 +1073,7 @@
   min-height: 34px;
   padding: 6px 8px;
 }
-.wheel-prizes-table .btn-sm { min-height: 32px; padding: 6px 10px; }
+.wheel-prizes-table .btn-sm { min-height: var(--control-h-sm); padding: 6px 10px; }
 .wp-col-color { width: 48px; }
 .wp-col-select { width: 36px; }
 .wheel-newprize-field { display: flex; flex-direction: column; gap: 4px; }
@@ -1911,11 +1909,6 @@ html[data-theme="dark"] .wheel-ops-hero { background: var(--card-bg); }
   background: var(--surface);
 }
 
-.wheel-newprize-grid .btn-primary {
-  min-height: 38px;
-  border-radius: var(--radius-sm);
-}
-
 @media (max-width: 900px) {
   .wheel-prizes-table {
     min-width: 980px;
@@ -2108,10 +2101,6 @@ html[data-theme="dark"] input::placeholder {
   color: var(--text-muted) !important;
 }
 
-html[data-theme="dark"] .btn-secondary,
-html[data-theme="dark"] .btn-ghost,
-html[data-theme="dark"] .filter-tab,
-html[data-theme="dark"] .subtab,
 html[data-theme="dark"] .wheel-data-chip,
 html[data-theme="dark"] .wheel-limits span,
 html[data-theme="dark"] .wheel-prize-group-meta,
@@ -2119,13 +2108,6 @@ html[data-theme="dark"] .sessions-ip {
   background: var(--bg-surface-hover) !important;
   border-color: var(--border-default) !important;
   color: var(--text-secondary) !important;
-}
-
-html[data-theme="dark"] .filter-tab.active,
-html[data-theme="dark"] .subtab.active,
-html[data-theme="dark"] .btn-primary,
-html[data-theme="dark"] .side-nav-link.active {
-  color: var(--accent-fill-text) !important;
 }
 
 html[data-theme="dark"] .muted,
@@ -2366,8 +2348,8 @@ html[data-theme="dark"] .wheel-result-note {
 
 #view-wheel .wheel-issue-grid .form-input,
 #view-wheel .wheel-issue-actions .btn-primary {
-  min-height: 40px;
-  height: 40px;
+  min-height: var(--control-h);
+  height: var(--control-h);
 }
 
 #view-wheel .wheel-issue-actions {

@@ -155,14 +155,6 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
 
 /* Collapsed */
 
-
-
-
-
-
-
-
-
 /* Nav section label */
 .side-nav-section-label {
   font-size: 9px; font-weight: 700; letter-spacing: .12em;
@@ -339,40 +331,6 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 }
 .form-select:focus { outline: none; border-color: var(--accent); }
 
-/* ══════════════════════════════════════════════════════════════
-   BUTTONS
-══════════════════════════════════════════════════════════════ */
-.btn-primary {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 10px 20px; border: none; border-radius: var(--radius-sm);
-  background: var(--accent-fill); color: var(--accent-fill-text);
-  font: 600 13px 'Inter', sans-serif;
-  cursor: pointer; transition: background var(--t), box-shadow var(--t), transform .1s;
-  white-space: nowrap;
-}
-.btn-primary:hover { background: var(--accent-2); box-shadow: 0 4px 16px var(--accent-glow); }
-.btn-primary:active { transform: scale(.98); }
-.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
-
-.btn-outline {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 9px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: transparent; color: var(--tx2);
-  font: 500 13px 'Inter', sans-serif;
-  cursor: pointer; transition: border-color var(--t), color var(--t), background var(--t);
-  white-space: nowrap;
-}
-.btn-outline:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-
-.btn-ghost {
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 8px 14px; border: none; border-radius: var(--radius-sm);
-  background: var(--surface-2); color: var(--tx2);
-  font: 500 12px 'Inter', sans-serif; cursor: pointer;
-  transition: background var(--t), color var(--t);
-}
-.btn-ghost:hover { background: var(--surface-3); color: var(--tx); }
-
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .btn-xs { padding: 4px 9px; font-size: 11px; border-radius: var(--radius-xs); }
 .btn-icon {
@@ -398,23 +356,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   cursor: pointer;
 }
 .btn-link:hover { text-decoration: underline; }
-
-.btn-ok {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 16px; border: none; border-radius: var(--radius-sm);
-  background: var(--success); color: var(--text-inverse);
-  font: 600 13px 'Inter', sans-serif; cursor: pointer;
-  transition: filter var(--transition-fast);
-}
 .btn-ok:hover { filter: brightness(.92); }
-
-.btn-danger {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 16px; border: none; border-radius: var(--radius-sm);
-  background: var(--danger); color: #FFFFFF;
-  font: 600 13px 'Inter', sans-serif; cursor: pointer;
-  transition: filter var(--transition-fast);
-}
 .btn-danger:hover { filter: brightness(.92); }
 
 .btn-disabled { opacity: .35; cursor: not-allowed; }
@@ -763,14 +705,6 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-sm); margin-bottom: 16px; width: fit-content;
 }
-.filter-tab {
-  padding: 6px 14px; border-radius: var(--radius-xs); border: none;
-  background: transparent; color: var(--tx3);
-  font: 600 12px 'Inter', sans-serif; cursor: pointer;
-  display: flex; align-items: center; gap: 6px;
-  transition: background var(--t), color var(--t);
-}
-.filter-tab.active { background: var(--accent-fill); color: var(--accent-fill-text); }
 .badge {
   background: rgba(255,255,255,.25); color: inherit;
   font-size: 10px; font-weight: 700;
@@ -934,7 +868,6 @@ body.must-change-password .side-nav-link[data-nav-target] {
 ::-webkit-scrollbar-thumb:hover { background: var(--tx4); }
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
-
 /* ══════════════════════════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════════════════════════ */
@@ -996,7 +929,6 @@ body.must-change-password .side-nav-link[data-nav-target] {
 
 /* ── Theme toggle in sidebar ─────────────────────────────────── */
 
-
 /* На мобильном нав горизонтальный — мета скрыта, кнопку показываем как fixed */
 @media (max-width: 760px) {
   .theme-toggle {
@@ -1014,7 +946,6 @@ body.must-change-password .side-nav-link[data-nav-target] {
     border-color: var(--accent) !important;
   }
 }
-
 
 /* ── Searchable operator dropdown ────────────────────────── */
 .op-search-wrap {
@@ -1951,6 +1882,585 @@ body.modal-open { overflow: hidden; }
   .shop-admin-table .shop-admin-name small { white-space: normal; overflow-wrap: anywhere; }
   .shop-admin-table tbody td > * { min-width: 0; }
 }
+/* source: 30-controls.css */
+/* ══════════════════════════════════════════════════════════════
+   УПРАВЛЯЮЩИЕ ЭЛЕМЕНТЫ — единственное определение
+
+   До этого файла кнопка описывалась в одиннадцати местах: min-height
+   объявлялся как 36, 38, 40, 42 и 44 px, фон .btn-primary — четырьмя
+   разными способами (--accent-2, --accent-fill, --accent-primary
+   с !important и градиент с !important), а hover в одном файле менял
+   насыщенность и сдвигал кнопку вверх. Побеждал тот файл, что грузился
+   последним, поэтому кнопка выглядела по-разному на разных экранах.
+
+   Здесь описан весь набор: primary, secondary, ghost, destructive,
+   link, icon — со всеми состояниями. Экранам остаётся только геометрия
+   (ширина, участие в сетке), но не внешний вид.
+══════════════════════════════════════════════════════════════ */
+
+/* ── База ─────────────────────────────────────────────────── */
+.btn-primary,
+.btn-secondary,
+.btn-outline,
+.btn-ghost,
+.btn-danger,
+.btn-ok,
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--text-button);
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--transition-fast),
+              border-color var(--transition-fast),
+              color var(--transition-fast);
+}
+
+/* Кнопка не должна прыгать под курсором: на экранах с таблицами это
+   мешает попасть по соседней строке. */
+.btn-primary:hover,
+.btn-secondary:hover,
+.btn-outline:hover,
+.btn-ghost:hover,
+.btn-danger:hover,
+.btn-ok:hover {
+  transform: none;
+}
+
+.btn-primary:focus-visible,
+.btn-secondary:focus-visible,
+.btn-outline:focus-visible,
+.btn-ghost:focus-visible,
+.btn-danger:focus-visible,
+.btn-ok:focus-visible,
+.btn-link:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-outline:disabled,
+.btn-ghost:disabled,
+.btn-danger:disabled,
+.btn-ok:disabled,
+.btn-primary[aria-disabled="true"],
+.btn-secondary[aria-disabled="true"],
+.btn-outline[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: .5;
+  box-shadow: none;
+}
+
+/* ── Primary: одно главное действие на смысловой блок ─────── */
+.btn-primary {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--accent-fill-text);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  border-color: var(--accent-primary-hover);
+}
+.btn-primary:active:not(:disabled) {
+  background: var(--accent-primary-hover);
+  filter: brightness(.94);
+}
+
+/* ── Secondary: вторичное действие с границей ─────────────── */
+.btn-secondary,
+.btn-outline {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+.btn-secondary:hover:not(:disabled),
+.btn-outline:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+.btn-secondary:active:not(:disabled),
+.btn-outline:active:not(:disabled) {
+  background: var(--bg-muted);
+}
+
+/* ── Ghost: малозаметное действие ─────────────────────────── */
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+/* ── Destructive: удаление, завершение сессии, отключение ───
+   Спокойный по умолчанию, явный на наведении: постоянный красный фон
+   превращает страницу с несколькими такими кнопками в тревожную. */
+.btn-danger {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+  color: var(--danger-text);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger-text);
+}
+.btn-danger:focus-visible {
+  outline-color: var(--danger);
+}
+/* Подтверждающая кнопка внутри диалога — уже явно красная. */
+.btn-danger.is-solid,
+.modal-actions .btn-danger.is-solid {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+/* ── Успешное действие ────────────────────────────────────── */
+.btn-ok {
+  background: var(--bg-surface);
+  border-color: var(--border-strong);
+  color: var(--success-text);
+}
+.btn-ok:hover:not(:disabled) {
+  background: var(--success-soft);
+  border-color: var(--success);
+}
+
+/* ── Link: переход в связанный раздел ─────────────────────── */
+.btn-link {
+  min-height: auto;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+.btn-link:hover:not(:disabled) {
+  color: var(--accent-primary-hover);
+  text-decoration: underline;
+}
+
+/* ── Размеры ──────────────────────────────────────────────── */
+.btn-sm {
+  min-height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  font-size: var(--text-small);
+}
+.btn-lg { min-height: var(--control-h-lg); padding: 0 var(--space-5); }
+
+/* На телефоне палец должен попадать без прицеливания. */
+@media (max-width: 640px) {
+  .btn-primary,
+  .btn-secondary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-danger,
+  .btn-ok { min-height: var(--control-h-lg); }
+  .btn-sm { min-height: var(--control-h); }
+}
+
+/* ── Кнопка-иконка ────────────────────────────────────────── */
+.ui-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast),
+              border-color var(--transition-fast);
+}
+.ui-icon-button:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+.ui-icon-button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+.ui-icon-button:disabled { cursor: not-allowed; opacity: .5; }
+.ui-icon-button svg { width: 18px; height: 18px; }
+@media (max-width: 640px) {
+  .ui-icon-button { width: var(--control-h-lg); height: var(--control-h-lg); }
+}
+
+/* ── Состояние загрузки ───────────────────────────────────
+   Кнопка не должна менять ширину, иначе соседние съезжают: текст
+   остаётся на месте и гаснет, а спиннер рисуется поверх. */
+.btn-primary.is-loading,
+.btn-secondary.is-loading,
+.btn-outline.is-loading,
+.btn-danger.is-loading,
+.ui-icon-button.is-loading {
+  position: relative;
+  color: transparent;
+  pointer-events: none;
+}
+.btn-primary.is-loading::after,
+.btn-secondary.is-loading::after,
+.btn-outline.is-loading::after,
+.btn-danger.is-loading::after,
+.ui-icon-button.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  color: var(--accent-fill-text);
+  animation: ui-spin .6s linear infinite;
+}
+.btn-secondary.is-loading::after,
+.btn-outline.is-loading::after,
+.ui-icon-button.is-loading::after { color: var(--text-secondary); }
+.btn-danger.is-loading::after { color: var(--danger-text); }
+
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary.is-loading::after,
+  .btn-secondary.is-loading::after,
+  .btn-outline.is-loading::after,
+  .btn-danger.is-loading::after,
+  .ui-icon-button.is-loading::after { animation-duration: 1.6s; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ПОЛЯ ВВОДА
+══════════════════════════════════════════════════════════════ */
+.form-input,
+.form-select,
+.form-textarea,
+textarea.form-input {
+  width: 100%;
+  min-height: var(--control-h);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--text-body);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.form-textarea,
+textarea.form-input {
+  min-height: 92px;
+  padding: var(--space-3);
+  line-height: var(--leading-normal);
+  resize: vertical;
+}
+.form-input::placeholder,
+.form-textarea::placeholder { color: var(--text-tertiary); }
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus,
+textarea.form-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+.form-input:disabled,
+.form-select:disabled,
+.form-textarea:disabled,
+.form-input[readonly] {
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.form-input.is-invalid,
+.form-select.is-invalid,
+.form-textarea.is-invalid {
+  border-color: var(--danger);
+}
+.form-input.is-invalid:focus,
+.form-select.is-invalid:focus {
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.form-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: var(--text-tiny);
+  font-weight: 600;
+}
+.form-label .req { color: var(--danger-text); }
+
+/* Подсказка и ошибка стоят рядом с полем, а не только в toast. */
+.form-hint,
+.form-help,
+.field-hint {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: var(--text-tiny);
+  line-height: var(--leading-normal);
+}
+.form-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 5px;
+  color: var(--danger-text);
+  font-size: var(--text-tiny);
+  line-height: var(--leading-normal);
+}
+
+@media (max-width: 640px) {
+  .form-input,
+  .form-select { min-height: var(--control-h-lg); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ВКЛАДКИ — один вид для всех восьми семейств классов
+
+   В проекте вкладки размечены восемью разными наборами классов
+   (filter-tab, analytics-tab, ops-tab, coins-page-tab, an2-tab,
+   levels-page-tab, shop-v2-tab, tab-btn). Разметку менять нельзя без
+   риска задеть обработчики, поэтому вид сводится здесь.
+══════════════════════════════════════════════════════════════ */
+.filter-tab,
+.analytics-tab,
+.an2-tab,
+.ops-tab,
+.coins-page-tab,
+.levels-page-tab,
+.shop-v2-tab,
+.user-manage-tab,
+.tab-btn,
+.subtab,
+.wheel-admin-tab,
+.race-segment,
+.op-tabs > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-small);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.filter-tab:hover:not(.active):not([aria-selected="true"]),
+.analytics-tab:hover:not(.active),
+.an2-tab:hover:not(.active),
+.ops-tab:hover:not(.ops-tab-active),
+.coins-page-tab:hover:not(.active),
+.levels-page-tab:hover:not(.active),
+.shop-v2-tab:hover:not(.active),
+.tab-btn:hover:not(.active),
+.op-tabs > button:hover:not(.active) {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.filter-tab.active,
+.analytics-tab.active,
+.an2-tab.active,
+.ops-tab.ops-tab-active,
+.coins-page-tab.active,
+.levels-page-tab.active,
+.shop-v2-tab.active,
+.user-manage-tab.active,
+.tab-btn.active,
+.subtab.active,
+.wheel-admin-tab.active,
+.race-segment.active,
+.op-tabs > button.active,
+/* Часть экранов помечает активную вкладку классом is-active. */
+.coins-page-tab.is-active,
+.filter-tab.is-active,
+.an2-tab.is-active,
+.tab-btn.is-active,
+[role="tab"][aria-selected="true"] {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--accent-fill-text);
+}
+
+.filter-tab:focus-visible,
+.analytics-tab:focus-visible,
+.an2-tab:focus-visible,
+.ops-tab:focus-visible,
+.coins-page-tab:focus-visible,
+.levels-page-tab:focus-visible,
+.shop-v2-tab:focus-visible,
+.tab-btn:focus-visible,
+.op-tabs > button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.filter-tab:disabled,
+.analytics-tab:disabled,
+.an2-tab:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Счётчик рядом с названием вкладки. */
+.filter-tab-count,
+.ops-tab-badge {
+  min-width: 20px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.filter-tab.active .filter-tab-count,
+.ops-tab.ops-tab-active .ops-tab-badge,
+.ops-tab-badge-active {
+  background: rgba(255, 255, 255, .22);
+  color: var(--accent-fill-text);
+}
+
+/* Полоса вкладок прокручивается вбок, а не ломается на телефоне. */
+.filter-tabs,
+.analytics-tabs,
+.an2-tabs,
+.ops-tab-bar,
+.coins-page-tabs,
+.levels-page-tabs,
+.op-tabs,
+.user-manage-tabs {
+  display: flex;
+  gap: var(--space-1);
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+.filter-tabs > *,
+.analytics-tabs > *,
+.an2-tabs > *,
+.ops-tab-bar > *,
+.coins-page-tabs > *,
+.op-tabs > * { flex: 0 0 auto; }
+
+/* ══════════════════════════════════════════════════════════════
+   ЧИПЫ ФИЛЬТРОВ — визуально отличаются от вкладок,
+   потому что означают другое: не раздел, а условие отбора.
+══════════════════════════════════════════════════════════════ */
+.an2-chip,
+.an2-day,
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: var(--control-h-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--text-small);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+              color var(--transition-fast);
+}
+.an2-chip:hover:not(.is-on),
+.an2-day:hover:not(.is-on),
+.ui-chip:hover:not(.is-on) {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-hover);
+}
+.an2-chip.is-on,
+.an2-day.is-on,
+.ui-chip.is-on {
+  background: var(--accent-primary-soft);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+.an2-chip:focus-visible,
+.an2-day:focus-visible,
+.ui-chip:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   СТАТУСНЫЕ БЕЙДЖИ
+
+   Цвет не единственный носитель смысла: у каждого бейджа есть точка
+   слева, форма и текст, поэтому статус читается и без различения
+   цветов.
+══════════════════════════════════════════════════════════════ */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font-size: var(--text-tiny);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.ui-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.ui-badge--neutral { background: var(--bg-muted); border-color: var(--border-default); color: var(--text-muted); }
+.ui-badge--success { background: var(--success-soft); border-color: color-mix(in srgb, var(--success) 32%, transparent); color: var(--success-text); }
+.ui-badge--danger  { background: var(--danger-soft);  border-color: color-mix(in srgb, var(--danger) 32%, transparent);  color: var(--danger-text); }
+.ui-badge--warning { background: var(--warning-soft); border-color: var(--warning-border); color: var(--warning-text); }
+.ui-badge--info    { background: var(--info-soft);    border-color: color-mix(in srgb, var(--info) 32%, transparent);    color: var(--info-text); }
+.ui-badge--accent  { background: var(--accent-primary-soft); border-color: color-mix(in srgb, var(--accent-primary) 32%, transparent); color: var(--accent-primary); }
+/* Бейдж без точки — для пометок вроде «текущая сессия». */
+.ui-badge--plain::before { display: none; }
+
+/* ══════════════════════════════════════════════════════════════
+   ЧИСЛА
+   Цифры в таблицах и KPI должны выстраиваться в колонку.
+══════════════════════════════════════════════════════════════ */
+.data-table td.num,
+.data-table th.num,
+.kpi-value,
+.ui-num {
+  font-variant-numeric: tabular-nums;
+}
 /* source: 10-manual-account.css */
 
 
@@ -2734,7 +3244,6 @@ body.modal-open { overflow: hidden; }
   .rating-table-wrap { max-height: 420px; }
 }
 
-
 /* ══════════════════════════════════════════════════════
    BADGE SYSTEM — unified status badges
 ══════════════════════════════════════════════════════ */
@@ -2815,7 +3324,6 @@ button, a, input, select, textarea {
               box-shadow var(--transition-fast);
 }
 
-
 /* ═══════════════════════════════════════════════════
    SLATE+SKY POLISH — visual refinements
 ═══════════════════════════════════════════════════ */
@@ -2854,13 +3362,6 @@ button, a, input, select, textarea {
 /* KPI card accent border */
 .kpi-card.kpi-accent { border-top: 3px solid var(--accent-primary); }
 
-/* Btn primary sky blue */
-.btn-primary {
-  background: var(--accent-fill) !important;
-  color: var(--accent-fill-text) !important;
-}
-.btn-primary:hover { background: var(--accent-primary-hover) !important; }
-
 /* Panel head h3 */
 .panel-head h3 { color: var(--text-primary); font-weight: 600; }
 
@@ -2890,16 +3391,21 @@ input:focus, select:focus, textarea:focus {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ── Global button border-radius enforcement ── */
-button, .btn, .btn-primary, .btn-outline, .btn-sm,
-.btn-action, .acc-btn, .manual-submit-btn,
-.choose, .ops-tab, .metric-tab, .side-nav-link {
+button,
+.btn,
+.btn-action,
+.acc-btn,
+.manual-submit-btn,
+.choose,
+.ops-tab,
+.metric-tab,
+.side-nav-link {
   border-radius: var(--radius-sm);
 }
 .side-nav-link { border-radius: var(--radius-sm); }
 .status-badge  { border-radius: var(--radius-sm); }
 .badge, .ops-tab-badge, .me-badge, .nom-you { border-radius: var(--radius-xl); }
 .modal-box, .manual-card, .rating-card, .panel { border-radius: var(--radius-lg); }
-
 
 /* ═══════════════════════════════════════════════
    COMPREHENSIVE SLATE+SKY FIXES
@@ -2942,15 +3448,6 @@ button, .btn, .btn-primary, .btn-outline, .btn-sm,
   border-color: var(--border-default) !important;
 }
 
-/* Approve / reject buttons — always readable */
-.btn-ok   { background: var(--success) !important; color: #ffffff !important; }
-.btn-danger { background: var(--danger) !important; color: #ffffff !important; }
-.btn-ok:hover   { background: #15803D !important; }
-.btn-danger:hover { background: #B91C1C !important; }
-
-/* Tab buttons */
-.tab-btn { border-radius: var(--radius-sm) var(--radius-sm) 0 0 !important; }
-.tab-btn.active { color: var(--accent-primary) !important; border-bottom-color: var(--accent-primary) !important; }
 
 /* Operator action buttons */
 .btn-action-primary { background: rgba(2,132,199,0.1) !important; color: var(--accent-primary) !important; }
@@ -3032,7 +3529,6 @@ button, .btn, .btn-primary, .btn-outline, .btn-sm,
 @media (max-width: 768px) {
   /* removed — now handled by .app-view.active */
 }
-
 
 /* ═══════════════════════════════════════════════
    LAYOUT + DETAIL FIXES — ТЗ compliance
@@ -3263,8 +3759,8 @@ body { padding-left: var(--nav-w, 220px); }
   .mission-window-footer { flex-direction: column; align-items: stretch; }
   .mission-window-actions { justify-content: space-between; }
   /* Палец должен попадать по кнопке без прицеливания. */
-  .mission-window-actions .btn-primary { min-height: 44px; flex: 1; }
-  .mission-window-fields input { min-height: 44px; }
+  .mission-window-actions .btn-primary { min-height: var(--control-h-lg); flex: 1; }
+  .mission-window-fields input { min-height: var(--control-h-lg); }
 }
 /* source: 30-period-report.css */
 /* ══════════════════════════════════════════════
@@ -4376,7 +4872,6 @@ body.role-operator {
   justify-content: center;
 }
 
-
 /* ══════════════════════════════════════════════════════
    БЛОК ДИНАМИКИ ОПЕРАТОРА (новый дизайн)
 ══════════════════════════════════════════════════════ */
@@ -5048,8 +5543,7 @@ body.role-operator {
   text-transform: uppercase;
 }
 .wheel-campaign-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.wheel-campaign-actions .btn-primary,
-.wheel-campaign-actions .btn-outline { min-height: 40px; }
+
 .wheel-check { min-height: 64px; align-items: flex-start; justify-content: center; }
 .wheel-check input[type="checkbox"] { width: 18px; height: 18px; margin-top: 7px; }
 .wheel-prizes-wrap { overflow-x: auto; }
@@ -5067,7 +5561,7 @@ body.role-operator {
   min-height: 34px;
   padding: 6px 8px;
 }
-.wheel-prizes-table .btn-sm { min-height: 32px; padding: 6px 10px; }
+.wheel-prizes-table .btn-sm { min-height: var(--control-h-sm); padding: 6px 10px; }
 .wp-col-color { width: 48px; }
 .wp-col-select { width: 36px; }
 .wheel-newprize-field { display: flex; flex-direction: column; gap: 4px; }
@@ -5903,11 +6397,6 @@ html[data-theme="dark"] .wheel-ops-hero { background: var(--card-bg); }
   background: var(--surface);
 }
 
-.wheel-newprize-grid .btn-primary {
-  min-height: 38px;
-  border-radius: var(--radius-sm);
-}
-
 @media (max-width: 900px) {
   .wheel-prizes-table {
     min-width: 980px;
@@ -6100,10 +6589,6 @@ html[data-theme="dark"] input::placeholder {
   color: var(--text-muted) !important;
 }
 
-html[data-theme="dark"] .btn-secondary,
-html[data-theme="dark"] .btn-ghost,
-html[data-theme="dark"] .filter-tab,
-html[data-theme="dark"] .subtab,
 html[data-theme="dark"] .wheel-data-chip,
 html[data-theme="dark"] .wheel-limits span,
 html[data-theme="dark"] .wheel-prize-group-meta,
@@ -6111,13 +6596,6 @@ html[data-theme="dark"] .sessions-ip {
   background: var(--bg-surface-hover) !important;
   border-color: var(--border-default) !important;
   color: var(--text-secondary) !important;
-}
-
-html[data-theme="dark"] .filter-tab.active,
-html[data-theme="dark"] .subtab.active,
-html[data-theme="dark"] .btn-primary,
-html[data-theme="dark"] .side-nav-link.active {
-  color: var(--accent-fill-text) !important;
 }
 
 html[data-theme="dark"] .muted,
@@ -6358,8 +6836,8 @@ html[data-theme="dark"] .wheel-result-note {
 
 #view-wheel .wheel-issue-grid .form-input,
 #view-wheel .wheel-issue-actions .btn-primary {
-  min-height: 40px;
-  height: 40px;
+  min-height: var(--control-h);
+  height: var(--control-h);
 }
 
 #view-wheel .wheel-issue-actions {
@@ -6932,20 +7410,6 @@ html[data-theme="dark"] #view-wheel .wheel-prize-group-meta {
   width: fit-content;
   max-width: 100%;
 }
-.an2-tab {
-  height: 36px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: var(--radius-sm, 6px);
-  background: transparent;
-  color: var(--text-secondary);
-  font: 600 13px 'Inter', sans-serif;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background .15s, color .15s;
-}
-.an2-tab:hover { background: var(--bg-muted); color: var(--text-primary); }
-.an2-tab.active { background: var(--accent-fill); color: var(--accent-fill-text); }
 
 /* ── Операторы: тулбар, таблица, детали, пагинация ──────── */
 .an2-ops-toolbar {
@@ -7527,7 +7991,7 @@ html[data-theme="dark"] #view-wheel .wheel-prize-group-meta {
 @media (max-width:900px){.missions-progress-card{grid-template-columns:1fr auto}.missions-earned{grid-column:1/3;justify-content:flex-start;padding-top:15px;border-top: 1px solid var(--border-soft)}.missions-map-layout{grid-template-columns:1fr}.missions-info-card{display:grid;grid-template-columns:170px 1fr;column-gap:20px}.missions-info-visual{grid-row:1/5;height:180px}.missions-info-card ul{grid-column:2}.mission-admin-stats{grid-template-columns:repeat(2,1fr)}.mission-admin-grid{grid-template-columns:1fr}}
 @media (max-width:767px){.missions-header h1{font-size:27px}.missions-progress-card{padding:18px;gap:15px}.missions-progress-ring{width:72px;height:72px}.missions-route{padding:14px}.mission-card{grid-template-columns:52px minmax(0,1fr);padding:15px;gap:12px}.mission-number{width:52px;height:52px;border-radius:16px}.mission-card>.btn-primary,.mission-card>.btn-outline{grid-column:2;width:100%}.missions-route-line{left:25px}.missions-info-card{display:block}.missions-info-visual{height:150px}.missions-info-card ul{grid-column:auto}.mission-player-top{grid-template-columns:auto 1fr;gap:12px}.mission-step-progress{grid-column:1/3;grid-row:2}.mission-restart-btn{grid-column:2;grid-row:1}.mission-back-btn span{display:none}.mission-scene{display:flex;flex-direction:column;min-height:0;padding:14px;gap:17px;overflow:visible}.pulsar-panel{display:contents}.pulsar-stage{order:1;width:100%;height:145px}.pulsar-character{width:145px}.pulsar-speech{order:2;width:100%;box-sizing:border-box}.mission-phone-column{order:3;width:100%}.mission-phone{width:min(100%,390px)}.mission-goal-panel{order:4;width:100%;box-sizing:border-box}.mission-player-bottom{position:sticky;z-index:10;bottom:8px;flex-wrap:wrap;margin:10px 6px 0;box-shadow:var(--shadow-modal)}.mission-errors{width:100%;margin:0}.mission-admin-stats{grid-template-columns:1fr 1fr}.mission-admin-table{padding:13px}}
 @media (max-width:420px){.missions-progress-copy p{display:block;margin:2px 0}.missions-progress-card{grid-template-columns:1fr auto}.mission-card{grid-template-columns:1fr}.mission-number{width:46px;height:46px}.mission-card>.btn-primary,.mission-card>.btn-outline{grid-column:1}.missions-route-line{display:none}.mission-card-tags{margin-top:-52px;margin-left:60px;min-height:42px;align-items:flex-start}.mission-phone{width:min(100%,350px);border-width:3px;border-radius:36px}.mission-admin-stats{grid-template-columns:1fr}.mission-player-top{padding:11px}.mission-restart-btn{font-size:9px!important;padding:7px!important}.phone-profile{font-size:8px}}
-@media (max-width:360px){.mission-scene{padding:9px}.mission-phone{transform:none;width:100%;max-width:330px}.mission-player-bottom{padding:10px}.mission-player-bottom .btn-outline{min-height:44px}.mission-phone button{min-height:44px}.profile-check{min-height:44px}}
+@media (max-width:360px){.mission-scene{padding:9px}.mission-phone{transform:none;width:100%;max-width:330px}.mission-player-bottom{padding:10px}.mission-player-bottom .btn-outline{min-height:var(--control-h-lg)}.mission-phone button{min-height:var(--control-h-lg)}.profile-check{min-height:var(--control-h-lg)}}
 @media (prefers-reduced-motion:reduce){.pulsar-character,.pulsar-character .eyes,.pulsar-character.is-speak .arms,.profile-check.is-current{animation:none!important}.mission-card{transition:none}}
 /* source: 61-mission-photo-control.css */
 /* Mission 2: photo control. Phone screens intentionally stay light in every app theme. */
@@ -7556,38 +8020,6 @@ html[data-theme="dark"] #view-wheel .wheel-prize-group-meta {
 :where(button, input, select, textarea, a):focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent-primary) 72%, white);
   outline-offset: 2px;
-}
-
-.btn-primary,
-.btn-secondary,
-.btn-outline,
-.btn-ghost,
-.btn-danger {
-  min-height: 36px;
-  border-radius: var(--radius-sm);
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.btn-primary {
-  background: var(--accent-fill);
-  border: 1px solid var(--accent-primary);
-  color: var(--accent-fill-text);
-  box-shadow: 0 8px 18px rgba(2, 132, 199, .16);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-primary-hover);
-  border-color: var(--accent-primary-hover);
-}
-
-.btn-primary:disabled,
-.btn-secondary:disabled,
-.btn-outline:disabled,
-.btn-ghost:disabled {
-  cursor: not-allowed;
-  opacity: .58;
-  box-shadow: none;
 }
 
 .btn-primary.create-user-submit:disabled {
@@ -7755,11 +8187,6 @@ textarea:focus {
 .filter-tabs {
   max-width: 100%;
   overflow-x: auto;
-}
-
-.filter-tab {
-  flex: 0 0 auto;
-  white-space: nowrap;
 }
 
 .kpi-grid {
@@ -8198,46 +8625,6 @@ body {
   letter-spacing: 0;
 }
 
-.btn-primary,
-.btn-outline,
-.btn-ghost,
-.btn-danger,
-.btn-ok,
-.btn-secondary,
-.filter-tab,
-.analytics-tab,
-.race-seg-btn,
-.tab-btn {
-  min-height: 40px;
-  border-radius: var(--radius-sm);
-  letter-spacing: 0;
-}
-
-.btn-primary {
-  background: var(--accent-primary) !important;
-  border-color: var(--accent-primary) !important;
-  box-shadow: 0 8px 18px rgba(22, 139, 255, .16);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-primary-hover) !important;
-  border-color: var(--accent-primary-hover) !important;
-}
-
-.btn-outline,
-.btn-ghost {
-  background: var(--card-bg);
-  border-color: var(--border-default);
-  color: var(--text-secondary);
-}
-
-.btn-outline:hover,
-.btn-ghost:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  background: var(--accent-secondary-soft);
-}
-
 .form-input,
 .form-select,
 input,
@@ -8267,15 +8654,6 @@ textarea {
   background: var(--card-bg);
   box-shadow: var(--shadow-sm);
   overflow-x: auto;
-}
-
-.filter-tab.active,
-.analytics-tab.active,
-.race-seg-btn.active,
-.tab-btn.active {
-  background: var(--accent-fill) !important;
-  color: var(--accent-fill-text) !important;
-  border-color: transparent !important;
 }
 
 .table-wrap,
@@ -9583,34 +9961,10 @@ html[data-theme="dark"] #view-summary .summary-v2-avatar { color: #C7D2FE; backg
 }
 .coins-head-actions { display: flex; gap: 8px; align-items: center; }
 
-.coins-page-tabs {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 7px;
-  margin: 18px 0;
-}
-.coins-page-tab {
-  min-width: 0;
-  min-height: 44px;
-  padding: 8px 10px;
-  color: var(--text-secondary);
-  background: var(--card-bg);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-sm);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 750;
-  line-height: 1.25;
-  cursor: pointer;
-}
-.coins-page-tab:hover { color: var(--text-primary); border-color: var(--accent-primary); }
-.coins-page-tab.is-active {
-  color: var(--accent-primary);
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent-primary) 45%, var(--border-default));
-  box-shadow: inset 0 -3px 0 var(--accent-primary), var(--shadow-sm);
-}
+/* Семь равных колонок растягивали длинные названия во всю ячейку, и
+   «Еженедельный расчёт», «Настройки начислений» и «Правила» слипались.
+   Полоса вкладок ведёт себя как везде: по содержимому, с прокруткой. */
+.coins-page-tabs { margin: 18px 0; }
 
 .coins-tab-body { min-width: 0; }
 .coins-tab-body > .loading-state { min-height: 260px; }
@@ -9725,7 +10079,6 @@ button.coins-summary-card:hover { border-color: var(--accent-primary); }
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
 }
-#view-coins .filter-tab { min-height: 34px; border-radius: var(--radius-xs); }
 #view-coins .coins-filter-panel .panel-head { min-height: 44px; }
 #view-coins .coins-filter-panel .filter-row,
 #view-coins .coins-weekly-toolbar .filter-row { padding: 14px 16px 16px; }
@@ -9768,10 +10121,8 @@ html[data-theme="dark"] #view-coins .coins-surface,
 html[data-theme="dark"] #view-coins .panel,
 html[data-theme="dark"] #view-coins .manual-card,
 html[data-theme="dark"] #view-coins .an-card,
-html[data-theme="dark"] #view-coins .coins-page-tab { background: var(--card-bg); }
 
 @media (max-width: 1120px) {
-  .coins-page-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .coins-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #view-coins .manual-layout { grid-template-columns: 1fr; }
   #view-coins .manual-col-right { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -9783,7 +10134,7 @@ html[data-theme="dark"] #view-coins .coins-page-tab { background: var(--card-bg)
   .coins-page-head { min-height: 0; padding-top: 20px; align-items: flex-start; flex-direction: column; }
   .coins-head-actions { width: 100%; }
   .coins-page-tabs { display: flex; margin: 12px 0; padding-bottom: 4px; overflow-x: auto; }
-  .coins-page-tab { flex: 0 0 auto; min-height: 40px; padding-inline: 13px; white-space: nowrap; }
+  .coins-page-tab { flex: 0 0 auto; padding-inline: 13px; white-space: nowrap; }
   .coins-summary-grid,
   .coins-overview-grid,
   #view-coins .manual-col-right,
@@ -9846,12 +10197,14 @@ html[data-theme="dark"] #view-coins .coins-page-tab { background: var(--card-bg)
 .levels-page-tab span { font-size: 13px; font-weight: 800; }
 .levels-page-tab small { margin-top: 3px; color: var(--text-muted); font-size: 10.5px; }
 .levels-page-tab:hover { color: var(--text-primary); border-color: var(--accent-primary); }
+/* Активное состояние — как у остальных вкладок приложения: заливка
+   акцентом. На мягком фоне подпись давала 4.39:1 при требуемых 4.5. */
 .levels-page-tab.is-active {
-  color: var(--accent-primary);
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent-primary) 45%, var(--border-default));
-  box-shadow: inset 3px 0 0 var(--accent-primary), var(--shadow-sm);
+  color: var(--accent-fill-text);
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
 }
+.levels-page-tab.is-active small { color: var(--accent-fill-text); opacity: .92; }
 
 .levels-overview-grid {
   display: grid;
@@ -12753,62 +13106,6 @@ textarea {
   line-height: 1.2;
 }
 
-.btn-primary,
-.btn-secondary,
-.btn-outline,
-.btn-ghost,
-.btn-danger,
-.btn-ok {
-  min-height: 40px;
-  border-radius: var(--radius-sm);
-  font-weight: 700;
-  letter-spacing: 0;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
-}
-
-.btn-primary {
-  color: #fff !important;
-  background: var(--primary-gradient) !important;
-  border-color: transparent !important;
-  box-shadow: var(--shadow-button);
-}
-
-.btn-primary:hover:not(:disabled) {
-  filter: saturate(1.08) brightness(1.03);
-  box-shadow: var(--shadow-hover);
-  transform: translateY(-1px);
-}
-
-.btn-primary:active:not(:disabled),
-.btn-outline:active:not(:disabled),
-.btn-ghost:active:not(:disabled) {
-  transform: translateY(0) scale(.98);
-}
-
-.btn-outline,
-.btn-secondary {
-  color: var(--text-secondary);
-  background: var(--card-bg);
-  border-color: var(--border-default);
-}
-
-.btn-outline:hover:not(:disabled),
-.btn-secondary:hover:not(:disabled),
-.btn-ghost:hover:not(:disabled) {
-  color: var(--accent-primary);
-  background: var(--accent-secondary-soft);
-  border-color: color-mix(in srgb, var(--accent-primary) 36%, var(--border-default));
-}
-
-.btn-primary:disabled,
-.btn-secondary:disabled,
-.btn-outline:disabled,
-.btn-ghost:disabled {
-  opacity: .52;
-  box-shadow: none;
-  transform: none;
-}
-
 .form-label {
   margin-bottom: 7px;
   color: var(--text-secondary);
@@ -12863,39 +13160,6 @@ textarea:focus {
   box-shadow: var(--shadow-sm);
 }
 
-.filter-tab,
-.analytics-tab,
-.race-segment,
-.wheel-admin-tab,
-.tab {
-  min-height: 34px;
-  padding: 7px 13px;
-  border-radius: var(--radius-xs);
-  color: var(--text-secondary);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-/* Фон неактивной вкладки нигде не задавался, и <button> брал его из стилей
-   браузера. В тёмной схеме buttonface = #6B6B6B, и надпись давала 2.05:1 —
-   нечитаемо. Светлый buttonface (#F0F0F0) почти совпадает с
-   --bg-surface-hover (#F2F2F7), поэтому в светлой теме вид не меняется. */
-.analytics-tab {
-  background: var(--bg-surface-hover);
-  border: 1px solid var(--border-default);
-}
-
-.filter-tab.active,
-.analytics-tab.active,
-.race-segment.active,
-.wheel-admin-tab.active,
-.tab.active,
-.tab.is-active {
-  color: #fff;
-  background: var(--primary-gradient);
-  box-shadow: 0 5px 12px rgba(22, 139, 255, .18);
-}
-
 /* Wheel workspace navigation: compact, balanced and visually connected. */
 #view-wheel .filter-tabs.wheel-tabs {
   display: flex !important;
@@ -12943,9 +13207,8 @@ textarea:focus {
 }
 
 #view-wheel .filter-tabs.wheel-tabs .filter-tab.active {
-  color: #fff;
-  background: var(--primary-gradient);
-  box-shadow: 0 4px 10px rgba(79, 70, 229, .22);
+  color: var(--accent-fill-text);
+  background: var(--accent-fill);
 }
 
 #view-wheel .filter-tabs.wheel-tabs .filter-tab:active {
@@ -13049,11 +13312,6 @@ html[data-theme="dark"] .level-settings-head {
   background: color-mix(in srgb, var(--card-bg) 78%, var(--bg-muted));
 }
 
-html[data-theme="dark"] .btn-outline,
-html[data-theme="dark"] .btn-secondary {
-  background: var(--bg-surface);
-}
-
 @media (max-width: 900px) {
   .page-header {
     align-items: flex-start;
@@ -13107,15 +13365,6 @@ html[data-theme="dark"] .btn-secondary {
   .pr-stat {
     min-height: 94px;
     padding: 15px;
-  }
-
-  .btn-primary,
-  .btn-secondary,
-  .btn-outline,
-  .btn-ghost,
-  .btn-danger,
-  .btn-ok {
-    min-height: 42px;
   }
 
   .modal,

@@ -1,115 +1,155 @@
 /* ═══════════════════════════════════════════════════════════
-   PULS DESIGN TOKENS — iOS System Gray
-   Grouped-background canvas, neutral separators, SF-style radii.
-   Palette follows Apple Human Interface Guidelines system colors.
+   PULS DESIGN TOKENS
+
+   Единственный источник значений для всего интерфейса: цвет, размер,
+   отступ, радиус, тень и типографика. Ни один экран не должен задавать
+   их сам — если понадобилось новое значение, оно добавляется сюда.
+
+   Тёмная тема спроектирована отдельно, а не получена инверсией: у неё
+   свои поверхности, свои границы и свой акцент.
+
+   Про контраст. Раздел доступности требует WCAG AA (4.5:1 для обычного
+   текста). Поэтому цвет разделён по ролям:
+     · яркие семантические цвета (--success, --danger, …) верны как
+       заливка, рамка и иконка, но как текст не проходят AA;
+     · для текста у каждого есть вариант --*-text;
+     · --accent-primary служит цветом текста и потому в тёмной теме
+       светлый; для заливки под белым текстом есть --accent-fill.
+   Инварианты проверяются тестом tests/frontend/design-tokens.test.mjs,
+   который считает контраст по формуле WCAG прямо из этого файла.
 ═══════════════════════════════════════════════════════════ */
 
 :root {
-  /* iOS continuous-corner scale: controls 10–12, cards 16, sheets 22 */
-  --radius-xs:  6px;
-  --radius-sm:  10px;
-  --radius-md:  12px;
-  --radius-lg:  16px;
-  --radius-xl:  22px;
-  --radius-2xl: 28px;
+  /* ── Радиусы ──────────────────────────────────────────────
+     Поля и кнопки 8–10, карточки 12–16, листы и модалки крупнее. */
+  --radius-xs:   6px;
+  --radius-sm:   8px;
+  --radius-md:  10px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-2xl: 20px;
   --radius-full: 999px;
 
-  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;
-  --space-4: 16px;  --space-5: 20px;  --space-6: 24px;
-  --space-8: 32px;
+  /* ── Отступы: шаг 4px ─────────────────────────────────── */
+  --space-1:  4px;   --space-2:  8px;   --space-3: 12px;
+  --space-4: 16px;   --space-5: 20px;   --space-6: 24px;
+  --space-7: 28px;   --space-8: 32px;   --space-10: 40px;
 
+  /* ── Типографика ──────────────────────────────────────── */
   --font-main:  "Plus Jakarta Sans", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-brand: "Plus Jakarta Sans", Inter, sans-serif;
 
-  --transition-fast:    0.14s ease;
-  --transition-default: 0.22s ease;
+  --text-h1:    30px;  --text-h1-weight: 700;
+  --text-h2:    23px;  --text-h2-weight: 700;
+  --text-h3:    19px;  --text-h3-weight: 700;
+  --text-body:  14px;
+  --text-small: 13px;
+  --text-tiny:  12px;
+  --text-button: 14px;
+  --text-kpi:   30px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.45;
+
+  /* ── Движение: только короткие функциональные переходы ── */
+  --transition-fast:    0.12s ease;
+  --transition-default: 0.18s ease;
+  --transition-slow:    0.2s ease;
   --ease-standard: cubic-bezier(.2, .8, .2, 1);
 
-  --nav-w: 236px;
+  /* ── Раскладка ───────────────────────────────────────── */
+  --nav-w: 252px;
   --nav-w-collapsed: 76px;
-  --content-max: 1440px;
-  --content-pad: clamp(20px, 2.2vw, 32px);
+  --content-max: 1580px;
+  --content-pad: 32px;
+
+  /* ── Управляющие элементы ────────────────────────────── */
+  --control-h:    40px;   /* основная кнопка и поле */
+  --control-h-sm: 32px;   /* компактная кнопка */
+  --control-h-lg: 44px;   /* touch target на мобильном */
+  --row-h:        58px;   /* строка таблицы */
 }
 
-/* ── Light theme — iOS grouped background ── */
+/* ══════════════════════════════════════════════════════════
+   СВЕТЛАЯ ТЕМА
+══════════════════════════════════════════════════════════ */
 :root,
 html[data-theme="light"] {
   color-scheme: light;
 
-  /* Page — canvas sits a full step below the cards so they read as separate planes */
-  --bg-page:          #E9E9EF;
+  /* Поверхности */
+  --bg-page:          #F6F7FB;
   --bg-surface:       #FFFFFF;
-  --bg-surface-hover: #F2F2F7;
-  --bg-muted:         #E5E5EA;
-  --bg-subtle:        #F4F4F8;
+  --bg-surface-hover: #F2F4F7;
+  --bg-muted:         #F4F6F9;
+  --bg-subtle:        #F9FAFB;
 
-  /* Text — label / secondaryLabel / tertiaryLabel */
-  --text-primary:   #1C1C1E;
-  --text-secondary: #55555B;
-  --text-muted:     #66666C;
-  --text-tertiary:  #8E8E93;
+  /* Текст. #98A2B3 из брифа даёт на светлом фоне 2.4:1, поэтому он
+     закреплён за ролью, где это допустимо — placeholder, disabled,
+     иконки, разделители, — а для приглушённого текста взята ступень
+     выше (4.65:1). */
+  --text-primary:   #171923;
+  --text-secondary: #475467;
+  --text-muted:     #667085;
+  --text-tertiary:  #98A2B3;
   --text-inverse:   #FFFFFF;
 
-  /* Separators — systemGray5 / opaqueSeparator */
-  --border-default: #E5E5EA;
-  --border-soft:    #F0F0F3;
-  --border-strong:  #C6C6C8;
+  /* Границы */
+  --border-default: #E4E7EC;
+  --border-soft:    #F2F4F7;
+  --border-strong:  #D0D5DD;
 
-  /* Accents — brand indigo retained */
-  --accent-primary:       #4F46E5;
-  --accent-primary-hover: #4338CA;
-  --accent-primary-soft:  #EEF0FE;
-  --accent-secondary:     #5856D6;
-  --accent-secondary-soft:#EEF0FE;
-  --accent-violet:        #AF52DE;
-  --accent-violet-soft:   #F6EDFC;
-  --accent-cyan:          #32ADE6;
-  --accent-cyan-soft:     #E8F5FC;
-  --primary-gradient:     linear-gradient(135deg, #4F46E5 0%, #5856D6 100%);
-  --focus-ring:           0 0 0 4px rgba(79,70,229,.16);
+  /* Акцент */
+  --accent-primary:       #6757E8;
+  --accent-primary-hover: #5544D4;
+  --accent-primary-soft:  #F1EFFE;
+  --accent-secondary:     #7C6CF0;
+  --accent-secondary-soft:#F1EFFE;
+  --accent-violet:        #9E77ED;
+  --accent-violet-soft:   #F4F0FF;
+  --accent-cyan:          #22B8CF;
+  --accent-cyan-soft:     #E7F8FA;
+  --primary-gradient:     linear-gradient(135deg, #6757E8 0%, #7C6CF0 100%);
+  --focus-ring:           0 0 0 3px rgba(103, 87, 232, .28);
 
-  /* Заливка акцента под белым текстом. Отделена от --accent-primary: тот
-     используется и как цвет текста, поэтому в тёмной теме он светлее и белым
-     по нему уже не написать (3.6:1). */
-  --accent-fill:      #4F46E5;
+  /* Заливка акцента под белым текстом (5.1:1). */
+  --accent-fill:      #6757E8;
   --accent-fill-text: #FFFFFF;
 
-  /* Semantic — iOS system colors.
-     Яркие значения верны как заливка, иконка или рамка, но как текст не
-     проходят WCAG AA: #34C759 на белом даёт 2.2:1, #FF9500 — 2.1:1.
-     Поэтому у каждого есть текстовый вариант той же семьи, но контрастный. */
-  --success:  #34C759;  --success-soft: #E6F8EB;  --success-text: #1A7F37;
-  --danger:   #FF3B30;  --danger-soft:  #FFEBEA;  --danger-text:  #B3261E;
-  --warning:  #FF9500;  --warning-soft: #FFF2E3;  --warning-text: #9A6300;
-  --warning-border: #FFD9A8;
-  --info:     #32ADE6;  --info-soft:    #E8F5FC;  --info-text:    #0A6C9E;
-  --gold:     #FFB800;
+  /* Семантика: яркое — для заливок, --*-text — для надписей. */
+  --success:  #12B76A;  --success-soft: #ECFDF3;  --success-text: #027A48;
+  --danger:   #F04438;  --danger-soft:  #FEF3F2;  --danger-text:  #B42318;
+  --warning:  #F79009;  --warning-soft: #FFFAEB;  --warning-text: #B54708;
+  --warning-border: #FEDF89;
+  --info:     #2E90FA;  --info-soft:    #EFF8FF;  --info-text:    #175CD3;
+  --gold:     #DC6803;
 
-  /* Sidebar — neutral iOS dark */
-  --sidebar-bg:          #1C1C1E;
-  --sidebar-border:      #38383A;
-  --sidebar-text:        #98989F;
+  /* Навигация */
+  --sidebar-bg:          #17161D;
+  --sidebar-border:      #2A2932;
+  --sidebar-text:        #9A99A6;
   --sidebar-text-active: #FFFFFF;
-  --sidebar-active-bg:   #4F46E5;
-  --sidebar-hover-bg:    #2C2C2E;
+  --sidebar-active-bg:   #6757E8;
+  --sidebar-hover-bg:    #23222C;
 
-  /* Components */
+  /* Компоненты */
   --card-bg:         #FFFFFF;
   --input-bg:        #FFFFFF;
-  --table-header-bg: #F7F7FA;
+  --table-header-bg: #F9FAFB;
+  --table-row-hover: #F9FAFB;
   --modal-bg:        #FFFFFF;
-  --modal-overlay:   rgba(0,0,0,0.32);
+  --modal-overlay:   rgba(16, 18, 27, .48);
 
-  /* Shadows — neutral and shallow, iOS never tints elevation */
-  --shadow-sm:     0 1px 2px rgba(0,0,0,.04);
-  --shadow-md:     0 2px 8px rgba(0,0,0,.06), 0 1px 3px rgba(0,0,0,.04);
-  --shadow-lg:     0 12px 32px rgba(0,0,0,.10), 0 4px 10px rgba(0,0,0,.05);
-  --shadow-card:   0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.045);
-  --shadow-hover:  0 6px 18px rgba(0,0,0,.09);
-  --shadow-button: 0 1px 3px rgba(79,70,229,.28);
-  --shadow-modal:  0 24px 64px rgba(0,0,0,.22);
+  /* Тени: только модалки, dropdown и слегка приподнятые карточки. */
+  --shadow-sm:     0 1px 2px rgba(16, 24, 40, .05);
+  --shadow-md:     0 2px 6px rgba(16, 24, 40, .06), 0 1px 2px rgba(16, 24, 40, .04);
+  --shadow-lg:     0 12px 26px rgba(16, 24, 40, .10), 0 4px 8px rgba(16, 24, 40, .05);
+  --shadow-card:   0 1px 2px rgba(16, 24, 40, .05);
+  --shadow-hover:  0 4px 12px rgba(16, 24, 40, .09);
+  --shadow-button: none;
+  --shadow-modal:  0 20px 48px rgba(16, 24, 40, .22);
 
-  /* Legacy compat aliases */
+  /* Совместимость: короткие имена из старых файлов. */
   --bg: var(--bg-page);  --bg2: var(--bg-surface);
   --surface: var(--card-bg);  --surface-1: var(--card-bg);
   --surface-2: var(--bg-muted);  --surface-3: var(--bg-subtle);
@@ -118,7 +158,7 @@ html[data-theme="light"] {
   --tx3: var(--text-muted);   --tx4: var(--text-tertiary);
   --border: var(--border-default);
   --accent: var(--accent-primary);  --accent-soft: var(--accent-secondary-soft);
-  --accent-2: var(--accent-primary-hover); --accent-glow: rgba(79,70,229,.22);
+  --accent-2: var(--accent-primary-hover); --accent-glow: rgba(103, 87, 232, .22);
   --ok: var(--success);  --ok-soft: var(--success-soft);
   --warn: var(--warning); --warn-soft: var(--warning-soft);
   --r-sm: var(--radius-sm); --r-md: var(--radius-md);
@@ -128,71 +168,73 @@ html[data-theme="light"] {
   --nav-act: var(--sidebar-hover-bg); --nav-sep: var(--sidebar-border);
 }
 
-/* ── Dark theme — iOS elevated surfaces ── */
+/* ══════════════════════════════════════════════════════════
+   ТЁМНАЯ ТЕМА — собственные поверхности, не инверсия светлой
+══════════════════════════════════════════════════════════ */
 html[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-page:          #000000;
-  --bg-surface:       #1C1C1E;
-  --bg-surface-hover: #2C2C2E;
-  --bg-muted:         #2C2C2E;
-  --bg-subtle:        #1C1C1E;
+  --bg-page:          #0F1015;
+  --bg-surface:       #171820;
+  --bg-surface-hover: #1D1F28;
+  --bg-muted:         #1D1F28;
+  --bg-subtle:        #131420;
 
-  --text-primary:   #FFFFFF;
-  --text-secondary: #A0A0A8;
-  --text-muted:     #9A9AA0;
-  --text-tertiary:  #7C7C82;
-  --text-inverse:   #1C1C1E;
+  --text-primary:   #F5F6F8;
+  --text-secondary: #C3C8D4;
+  --text-muted:     #98A2B3;
+  --text-tertiary:  #7A828F;
+  --text-inverse:   #0F1015;
 
-  --border-default: #38383A;
-  --border-soft:    #2C2C2E;
-  --border-strong:  #48484A;
+  --border-default: #2B2E3A;
+  --border-soft:    #23252F;
+  --border-strong:  #3C4050;
 
-  --accent-primary:       #7D78F0;
-  --accent-primary-hover: #9C98F5;
-  --accent-primary-soft:  rgba(125,120,240,.16);
-  --accent-secondary:     #5E5CE6;
-  --accent-secondary-soft:rgba(125,120,240,.16);
-  --accent-violet:        #BF5AF2;
-  --accent-violet-soft:   rgba(191,90,242,.18);
-  --accent-cyan:          #64D2FF;
-  --accent-cyan-soft:     rgba(100,210,255,.16);
-  --primary-gradient:     linear-gradient(135deg, #5E5CE6 0%, #7D78F0 100%);
-  --focus-ring:           0 0 0 4px rgba(125,120,240,.28);
+  --accent-primary:       #8B7CF6;
+  --accent-primary-hover: #A395F9;
+  --accent-primary-soft:  rgba(139, 124, 246, .16);
+  --accent-secondary:     #7C6CF0;
+  --accent-secondary-soft:rgba(139, 124, 246, .16);
+  --accent-violet:        #B692F6;
+  --accent-violet-soft:   rgba(182, 146, 246, .18);
+  --accent-cyan:          #4FD3E3;
+  --accent-cyan-soft:     rgba(79, 211, 227, .16);
+  --primary-gradient:     linear-gradient(135deg, #6757E8 0%, #8B7CF6 100%);
+  --focus-ring:           0 0 0 3px rgba(139, 124, 246, .38);
 
-  /* Заливка темнее текстового акцента: белым по #7D78F0 всего 3.6:1. */
-  --accent-fill:      #5E5CE6;
+  --accent-fill:      #6757E8;
   --accent-fill-text: #FFFFFF;
 
-  /* На тёмном фоне яркие системные цвета читаются: текстовый вариант совпадает
-     с основным, отдельные значения нужны только светлой теме. */
-  --success:  #30D158;  --success-soft: rgba(48,209,88,.16);  --success-text: #30D158;
-  --danger:   #FF453A;  --danger-soft:  rgba(255,69,58,.16);  --danger-text:  #FF6961;
-  --warning:  #FF9F0A;  --warning-soft: rgba(255,159,10,.16); --warning-text: #FF9F0A;
-  --warning-border: rgba(255,159,10,.38);
-  --info:     #64D2FF;  --info-soft:    rgba(100,210,255,.16); --info-text:    #64D2FF;
-  --gold:     #FFD426;
+  /* На тёмном фоне яркие значения читаются: отдельный текстовый
+     вариант нужен только там, где надпись лежит на своей подложке. */
+  --success:  #32D583;  --success-soft: rgba(50, 213, 131, .16);  --success-text: #6CE9A6;
+  --danger:   #F97066;  --danger-soft:  rgba(249, 112, 102, .16); --danger-text:  #FDA29B;
+  --warning:  #FDB022;  --warning-soft: rgba(253, 176, 34, .16);  --warning-text: #FEC84B;
+  --warning-border: rgba(253, 176, 34, .38);
+  --info:     #53B1FD;  --info-soft:    rgba(83, 177, 253, .16);  --info-text:    #84CAFF;
+  --gold:     #FDB022;
 
-  --sidebar-bg:          #0A0A0B;
-  --sidebar-border:      #2C2C2E;
-  --sidebar-text:        #8E8E93;
+  --sidebar-bg:          #101117;
+  --sidebar-border:      #23252F;
+  --sidebar-text:        #98A2B3;
   --sidebar-text-active: #FFFFFF;
-  --sidebar-active-bg:   #5E5CE6;
-  --sidebar-hover-bg:    #1C1C1E;
+  --sidebar-active-bg:   #6757E8;
+  --sidebar-hover-bg:    #1D1F28;
 
-  --card-bg:         #1C1C1E;
-  --input-bg:        #2C2C2E;
-  --table-header-bg: #2C2C2E;
-  --modal-bg:        #1C1C1E;
-  --modal-overlay:   rgba(0,0,0,0.6);
+  --card-bg:         #171820;
+  --input-bg:        #1D1F28;
+  --table-header-bg: #1D1F28;
+  --table-row-hover: #1D1F28;
+  --modal-bg:        #1D1F28;
+  --modal-overlay:   rgba(0, 0, 0, .66);
 
-  --shadow-sm:     0 1px 2px rgba(0,0,0,.5);
-  --shadow-md:     0 2px 8px rgba(0,0,0,.45), 0 1px 3px rgba(0,0,0,.4);
-  --shadow-lg:     0 12px 32px rgba(0,0,0,.6), 0 4px 10px rgba(0,0,0,.45);
-  --shadow-card:   0 1px 2px rgba(0,0,0,.5), 0 4px 14px rgba(0,0,0,.35);
-  --shadow-hover:  0 6px 18px rgba(0,0,0,.55);
-  --shadow-button: 0 1px 3px rgba(0,0,0,.5);
-  --shadow-modal:  0 24px 64px rgba(0,0,0,.7);
+  --shadow-sm:     0 1px 2px rgba(0, 0, 0, .5);
+  --shadow-md:     0 2px 6px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-lg:     0 12px 26px rgba(0, 0, 0, .6), 0 4px 8px rgba(0, 0, 0, .45);
+  --shadow-card:   0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-hover:  0 4px 12px rgba(0, 0, 0, .55);
+  --shadow-button: none;
+  --shadow-modal:  0 20px 48px rgba(0, 0, 0, .7);
 
   --bg: var(--bg-page);  --bg2: var(--bg-surface);
   --surface: var(--card-bg);  --surface-1: var(--card-bg);
@@ -202,9 +244,22 @@ html[data-theme="dark"] {
   --tx3: var(--text-muted);   --tx4: var(--text-tertiary);
   --border: var(--border-default);
   --accent: var(--accent-primary);  --accent-soft: var(--accent-secondary-soft);
-  --accent-2: var(--accent-primary-hover); --accent-glow: rgba(125,120,240,.26);
+  --accent-2: var(--accent-primary-hover); --accent-glow: rgba(139, 124, 246, .26);
   --ok: var(--success);  --ok-soft: var(--success-soft);
   --warn: var(--warning); --warn-soft: var(--warning-soft);
   --nav-bg: var(--sidebar-bg);    --nav-tx: var(--sidebar-text);
   --nav-act: var(--sidebar-hover-bg); --nav-sep: var(--sidebar-border);
+}
+
+/* Планшет и телефон: поле страницы сужается по брифу. */
+@media (max-width: 1024px) { :root { --content-pad: 24px; } }
+@media (max-width: 640px)  { :root { --content-pad: 16px; --nav-w: 288px; } }
+
+/* Пользователь просил меньше движения — оставляем только смену состояний. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --transition-fast: 0.01ms;
+    --transition-default: 0.01ms;
+    --transition-slow: 0.01ms;
+  }
 }

@@ -422,7 +422,6 @@
   .rating-table-wrap { max-height: 420px; }
 }
 
-
 /* ══════════════════════════════════════════════════════
    BADGE SYSTEM — unified status badges
 ══════════════════════════════════════════════════════ */
@@ -503,7 +502,6 @@ button, a, input, select, textarea {
               box-shadow var(--transition-fast);
 }
 
-
 /* ═══════════════════════════════════════════════════
    SLATE+SKY POLISH — visual refinements
 ═══════════════════════════════════════════════════ */
@@ -542,13 +540,6 @@ button, a, input, select, textarea {
 /* KPI card accent border */
 .kpi-card.kpi-accent { border-top: 3px solid var(--accent-primary); }
 
-/* Btn primary sky blue */
-.btn-primary {
-  background: var(--accent-fill) !important;
-  color: var(--accent-fill-text) !important;
-}
-.btn-primary:hover { background: var(--accent-primary-hover) !important; }
-
 /* Panel head h3 */
 .panel-head h3 { color: var(--text-primary); font-weight: 600; }
 
@@ -578,16 +569,21 @@ input:focus, select:focus, textarea:focus {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ── Global button border-radius enforcement ── */
-button, .btn, .btn-primary, .btn-outline, .btn-sm,
-.btn-action, .acc-btn, .manual-submit-btn,
-.choose, .ops-tab, .metric-tab, .side-nav-link {
+button,
+.btn,
+.btn-action,
+.acc-btn,
+.manual-submit-btn,
+.choose,
+.ops-tab,
+.metric-tab,
+.side-nav-link {
   border-radius: var(--radius-sm);
 }
 .side-nav-link { border-radius: var(--radius-sm); }
 .status-badge  { border-radius: var(--radius-sm); }
 .badge, .ops-tab-badge, .me-badge, .nom-you { border-radius: var(--radius-xl); }
 .modal-box, .manual-card, .rating-card, .panel { border-radius: var(--radius-lg); }
-
 
 /* ═══════════════════════════════════════════════
    COMPREHENSIVE SLATE+SKY FIXES
@@ -630,15 +626,6 @@ button, .btn, .btn-primary, .btn-outline, .btn-sm,
   border-color: var(--border-default) !important;
 }
 
-/* Approve / reject buttons — always readable */
-.btn-ok   { background: var(--success) !important; color: #ffffff !important; }
-.btn-danger { background: var(--danger) !important; color: #ffffff !important; }
-.btn-ok:hover   { background: #15803D !important; }
-.btn-danger:hover { background: #B91C1C !important; }
-
-/* Tab buttons */
-.tab-btn { border-radius: var(--radius-sm) var(--radius-sm) 0 0 !important; }
-.tab-btn.active { color: var(--accent-primary) !important; border-bottom-color: var(--accent-primary) !important; }
 
 /* Operator action buttons */
 .btn-action-primary { background: rgba(2,132,199,0.1) !important; color: var(--accent-primary) !important; }
@@ -721,7 +708,6 @@ button, .btn, .btn-primary, .btn-outline, .btn-sm,
   /* removed — now handled by .app-view.active */
 }
 
-
 /* ═══════════════════════════════════════════════
    LAYOUT + DETAIL FIXES — ТЗ compliance
 ═══════════════════════════════════════════════ */
@@ -774,5 +760,4 @@ body { padding-left: var(--nav-w, 220px); }
   flex-shrink: 0; text-transform: uppercase;
   letter-spacing: 0.02em;
 }
-
 

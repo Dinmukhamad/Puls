@@ -501,20 +501,6 @@
   width: fit-content;
   max-width: 100%;
 }
-.an2-tab {
-  height: 36px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: var(--radius-sm, 6px);
-  background: transparent;
-  color: var(--text-secondary);
-  font: 600 13px 'Inter', sans-serif;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background .15s, color .15s;
-}
-.an2-tab:hover { background: var(--bg-muted); color: var(--text-primary); }
-.an2-tab.active { background: var(--accent-fill); color: var(--accent-fill-text); }
 
 /* ── Операторы: тулбар, таблица, детали, пагинация ──────── */
 .an2-ops-toolbar {

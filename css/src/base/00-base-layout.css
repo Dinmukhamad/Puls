@@ -153,14 +153,6 @@ body.operator-login-required { padding-left: 0 !important; overflow: hidden; }
 
 /* Collapsed */
 
-
-
-
-
-
-
-
-
 /* Nav section label */
 .side-nav-section-label {
   font-size: 9px; font-weight: 700; letter-spacing: .12em;
@@ -337,40 +329,6 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 }
 .form-select:focus { outline: none; border-color: var(--accent); }
 
-/* ══════════════════════════════════════════════════════════════
-   BUTTONS
-══════════════════════════════════════════════════════════════ */
-.btn-primary {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 10px 20px; border: none; border-radius: var(--radius-sm);
-  background: var(--accent-fill); color: var(--accent-fill-text);
-  font: 600 13px 'Inter', sans-serif;
-  cursor: pointer; transition: background var(--t), box-shadow var(--t), transform .1s;
-  white-space: nowrap;
-}
-.btn-primary:hover { background: var(--accent-2); box-shadow: 0 4px 16px var(--accent-glow); }
-.btn-primary:active { transform: scale(.98); }
-.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
-
-.btn-outline {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 9px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: transparent; color: var(--tx2);
-  font: 500 13px 'Inter', sans-serif;
-  cursor: pointer; transition: border-color var(--t), color var(--t), background var(--t);
-  white-space: nowrap;
-}
-.btn-outline:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-
-.btn-ghost {
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 8px 14px; border: none; border-radius: var(--radius-sm);
-  background: var(--surface-2); color: var(--tx2);
-  font: 500 12px 'Inter', sans-serif; cursor: pointer;
-  transition: background var(--t), color var(--t);
-}
-.btn-ghost:hover { background: var(--surface-3); color: var(--tx); }
-
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .btn-xs { padding: 4px 9px; font-size: 11px; border-radius: var(--radius-xs); }
 .btn-icon {
@@ -396,23 +354,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   cursor: pointer;
 }
 .btn-link:hover { text-decoration: underline; }
-
-.btn-ok {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 16px; border: none; border-radius: var(--radius-sm);
-  background: var(--success); color: var(--text-inverse);
-  font: 600 13px 'Inter', sans-serif; cursor: pointer;
-  transition: filter var(--transition-fast);
-}
 .btn-ok:hover { filter: brightness(.92); }
-
-.btn-danger {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 8px 16px; border: none; border-radius: var(--radius-sm);
-  background: var(--danger); color: #FFFFFF;
-  font: 600 13px 'Inter', sans-serif; cursor: pointer;
-  transition: filter var(--transition-fast);
-}
 .btn-danger:hover { filter: brightness(.92); }
 
 .btn-disabled { opacity: .35; cursor: not-allowed; }
@@ -761,14 +703,6 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r-sm); margin-bottom: 16px; width: fit-content;
 }
-.filter-tab {
-  padding: 6px 14px; border-radius: var(--radius-xs); border: none;
-  background: transparent; color: var(--tx3);
-  font: 600 12px 'Inter', sans-serif; cursor: pointer;
-  display: flex; align-items: center; gap: 6px;
-  transition: background var(--t), color var(--t);
-}
-.filter-tab.active { background: var(--accent-fill); color: var(--accent-fill-text); }
 .badge {
   background: rgba(255,255,255,.25); color: inherit;
   font-size: 10px; font-weight: 700;
@@ -932,7 +866,6 @@ body.must-change-password .side-nav-link[data-nav-target] {
 ::-webkit-scrollbar-thumb:hover { background: var(--tx4); }
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
 
-
 /* ══════════════════════════════════════════════════════════════
    RESPONSIVE
 ══════════════════════════════════════════════════════════════ */
@@ -994,7 +927,6 @@ body.must-change-password .side-nav-link[data-nav-target] {
 
 /* ── Theme toggle in sidebar ─────────────────────────────────── */
 
-
 /* На мобильном нав горизонтальный — мета скрыта, кнопку показываем как fixed */
 @media (max-width: 760px) {
   .theme-toggle {
@@ -1012,7 +944,6 @@ body.must-change-password .side-nav-link[data-nav-target] {
     border-color: var(--accent) !important;
   }
 }
-
 
 /* ── Searchable operator dropdown ────────────────────────── */
 .op-search-wrap {

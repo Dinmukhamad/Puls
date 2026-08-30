@@ -179,62 +179,6 @@ textarea {
   line-height: 1.2;
 }
 
-.btn-primary,
-.btn-secondary,
-.btn-outline,
-.btn-ghost,
-.btn-danger,
-.btn-ok {
-  min-height: 40px;
-  border-radius: var(--radius-sm);
-  font-weight: 700;
-  letter-spacing: 0;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast);
-}
-
-.btn-primary {
-  color: #fff !important;
-  background: var(--primary-gradient) !important;
-  border-color: transparent !important;
-  box-shadow: var(--shadow-button);
-}
-
-.btn-primary:hover:not(:disabled) {
-  filter: saturate(1.08) brightness(1.03);
-  box-shadow: var(--shadow-hover);
-  transform: translateY(-1px);
-}
-
-.btn-primary:active:not(:disabled),
-.btn-outline:active:not(:disabled),
-.btn-ghost:active:not(:disabled) {
-  transform: translateY(0) scale(.98);
-}
-
-.btn-outline,
-.btn-secondary {
-  color: var(--text-secondary);
-  background: var(--card-bg);
-  border-color: var(--border-default);
-}
-
-.btn-outline:hover:not(:disabled),
-.btn-secondary:hover:not(:disabled),
-.btn-ghost:hover:not(:disabled) {
-  color: var(--accent-primary);
-  background: var(--accent-secondary-soft);
-  border-color: color-mix(in srgb, var(--accent-primary) 36%, var(--border-default));
-}
-
-.btn-primary:disabled,
-.btn-secondary:disabled,
-.btn-outline:disabled,
-.btn-ghost:disabled {
-  opacity: .52;
-  box-shadow: none;
-  transform: none;
-}
-
 .form-label {
   margin-bottom: 7px;
   color: var(--text-secondary);
@@ -289,39 +233,6 @@ textarea:focus {
   box-shadow: var(--shadow-sm);
 }
 
-.filter-tab,
-.analytics-tab,
-.race-segment,
-.wheel-admin-tab,
-.tab {
-  min-height: 34px;
-  padding: 7px 13px;
-  border-radius: var(--radius-xs);
-  color: var(--text-secondary);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-/* Фон неактивной вкладки нигде не задавался, и <button> брал его из стилей
-   браузера. В тёмной схеме buttonface = #6B6B6B, и надпись давала 2.05:1 —
-   нечитаемо. Светлый buttonface (#F0F0F0) почти совпадает с
-   --bg-surface-hover (#F2F2F7), поэтому в светлой теме вид не меняется. */
-.analytics-tab {
-  background: var(--bg-surface-hover);
-  border: 1px solid var(--border-default);
-}
-
-.filter-tab.active,
-.analytics-tab.active,
-.race-segment.active,
-.wheel-admin-tab.active,
-.tab.active,
-.tab.is-active {
-  color: #fff;
-  background: var(--primary-gradient);
-  box-shadow: 0 5px 12px rgba(22, 139, 255, .18);
-}
-
 /* Wheel workspace navigation: compact, balanced and visually connected. */
 #view-wheel .filter-tabs.wheel-tabs {
   display: flex !important;
@@ -369,9 +280,8 @@ textarea:focus {
 }
 
 #view-wheel .filter-tabs.wheel-tabs .filter-tab.active {
-  color: #fff;
-  background: var(--primary-gradient);
-  box-shadow: 0 4px 10px rgba(79, 70, 229, .22);
+  color: var(--accent-fill-text);
+  background: var(--accent-fill);
 }
 
 #view-wheel .filter-tabs.wheel-tabs .filter-tab:active {
@@ -475,11 +385,6 @@ html[data-theme="dark"] .level-settings-head {
   background: color-mix(in srgb, var(--card-bg) 78%, var(--bg-muted));
 }
 
-html[data-theme="dark"] .btn-outline,
-html[data-theme="dark"] .btn-secondary {
-  background: var(--bg-surface);
-}
-
 @media (max-width: 900px) {
   .page-header {
     align-items: flex-start;
@@ -533,15 +438,6 @@ html[data-theme="dark"] .btn-secondary {
   .pr-stat {
     min-height: 94px;
     padding: 15px;
-  }
-
-  .btn-primary,
-  .btn-secondary,
-  .btn-outline,
-  .btn-ghost,
-  .btn-danger,
-  .btn-ok {
-    min-height: 42px;
   }
 
   .modal,

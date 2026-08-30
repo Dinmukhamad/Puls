@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
@@ -18,7 +19,11 @@ test('analytics has three tabs: summary, operators, quality (ТЗ §4)', () => {
   assert.match(m[0], /key: 'operators'/);
   assert.match(m[0], /key: 'quality'/);
   assert.match(view, /<nav class="an2-tabs"/);
-  assert.match(css, /\.an2-tab\b/);
+  // Вид вкладок описан в общем слое управляющих элементов, а не в файле
+  // экрана: проверяем, что он там есть, а не где именно лежит правило.
+  const controls = readFileSync(
+    new URL('../../css/src/components/30-controls.css', import.meta.url), 'utf8');
+  assert.match(controls, /\.an2-tab\b/, 'вкладки аналитики не описаны в общем слое');
 });
 
 test('active tab persists in the URL and is restored on load (ТЗ §4)', () => {

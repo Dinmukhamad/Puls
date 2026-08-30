@@ -11,6 +11,7 @@
  *  · публикация новой версии происходила без подтверждения.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
@@ -88,5 +89,13 @@ test('поля не сжимаются на узком экране, а пере
     'поля периода выложены не сеткой');
   assert.match(css, /@media \(max-width: 600px\)[\s\S]*?grid-template-columns: 1fr/,
     'на телефоне поля не переходят в одну колонку');
-  assert.match(css, /min-height: 44px/, 'на телефоне кнопка меньше комфортной цели нажатия');
+  // Высота берётся из токена, поэтому проверяем и ссылку, и само значение:
+  // уменьшение --control-h-lg тоже должно ронять тест.
+  assert.match(css, /min-height: var\(--control-h-lg\)/,
+    'высота кнопки задана мимо токена');
+  const tokens = readFileSync(new URL('../../css/tokens.css', import.meta.url), 'utf8');
+  const size = tokens.match(/--control-h-lg:\s*(\d+)px/);
+  assert.ok(size, 'токен --control-h-lg не объявлен');
+  assert.ok(Number(size[1]) >= 44,
+    `цель нажатия ${size[1]}px меньше комфортных 44px`);
 });

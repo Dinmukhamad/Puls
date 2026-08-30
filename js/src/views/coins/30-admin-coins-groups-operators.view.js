@@ -2004,7 +2004,13 @@ function _modalHasInput(root) {
   return [...root.querySelectorAll('input, textarea, select')].some(field => {
     if (field.type === 'hidden' || field.disabled) return false;
     if (field.type === 'checkbox' || field.type === 'radio') return field.checked !== field.defaultChecked;
-    if (field.tagName === 'SELECT') return field.selectedIndex > 0;
+    if (field.tagName === 'SELECT') {
+      // Сравниваем с тем вариантом, что выбран в разметке, а не с первым:
+      // у поля роли по умолчанию выбран не первый пункт, и нетронутая форма
+      // считалась заполненной — при закрытии спрашивалось подтверждение.
+      const defaultIndex = [...field.options].findIndex(option => option.defaultSelected);
+      return field.selectedIndex !== (defaultIndex === -1 ? 0 : defaultIndex);
+    }
     return Boolean(field.value) && field.value !== field.defaultValue;
   });
 }

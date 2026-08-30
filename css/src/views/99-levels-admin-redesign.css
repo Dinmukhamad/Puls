@@ -49,12 +49,14 @@
 .levels-page-tab span { font-size: 13px; font-weight: 800; }
 .levels-page-tab small { margin-top: 3px; color: var(--text-muted); font-size: 10.5px; }
 .levels-page-tab:hover { color: var(--text-primary); border-color: var(--accent-primary); }
+/* Активное состояние — как у остальных вкладок приложения: заливка
+   акцентом. На мягком фоне подпись давала 4.39:1 при требуемых 4.5. */
 .levels-page-tab.is-active {
-  color: var(--accent-primary);
-  background: var(--accent-soft);
-  border-color: color-mix(in srgb, var(--accent-primary) 45%, var(--border-default));
-  box-shadow: inset 3px 0 0 var(--accent-primary), var(--shadow-sm);
+  color: var(--accent-fill-text);
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
 }
+.levels-page-tab.is-active small { color: var(--accent-fill-text); opacity: .92; }
 
 .levels-overview-grid {
   display: grid;

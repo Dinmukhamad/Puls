@@ -5,38 +5,6 @@
   outline-offset: 2px;
 }
 
-.btn-primary,
-.btn-secondary,
-.btn-outline,
-.btn-ghost,
-.btn-danger {
-  min-height: 36px;
-  border-radius: var(--radius-sm);
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.btn-primary {
-  background: var(--accent-fill);
-  border: 1px solid var(--accent-primary);
-  color: var(--accent-fill-text);
-  box-shadow: 0 8px 18px rgba(2, 132, 199, .16);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-primary-hover);
-  border-color: var(--accent-primary-hover);
-}
-
-.btn-primary:disabled,
-.btn-secondary:disabled,
-.btn-outline:disabled,
-.btn-ghost:disabled {
-  cursor: not-allowed;
-  opacity: .58;
-  box-shadow: none;
-}
-
 .btn-primary.create-user-submit:disabled {
   background: color-mix(in srgb, var(--accent-primary) 42%, var(--bg-muted));
   border-color: transparent;
@@ -202,11 +170,6 @@ textarea:focus {
 .filter-tabs {
   max-width: 100%;
   overflow-x: auto;
-}
-
-.filter-tab {
-  flex: 0 0 auto;
-  white-space: nowrap;
 }
 
 .kpi-grid {
@@ -645,46 +608,6 @@ body {
   letter-spacing: 0;
 }
 
-.btn-primary,
-.btn-outline,
-.btn-ghost,
-.btn-danger,
-.btn-ok,
-.btn-secondary,
-.filter-tab,
-.analytics-tab,
-.race-seg-btn,
-.tab-btn {
-  min-height: 40px;
-  border-radius: var(--radius-sm);
-  letter-spacing: 0;
-}
-
-.btn-primary {
-  background: var(--accent-primary) !important;
-  border-color: var(--accent-primary) !important;
-  box-shadow: 0 8px 18px rgba(22, 139, 255, .16);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--accent-primary-hover) !important;
-  border-color: var(--accent-primary-hover) !important;
-}
-
-.btn-outline,
-.btn-ghost {
-  background: var(--card-bg);
-  border-color: var(--border-default);
-  color: var(--text-secondary);
-}
-
-.btn-outline:hover,
-.btn-ghost:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  background: var(--accent-secondary-soft);
-}
-
 .form-input,
 .form-select,
 input,
@@ -714,15 +637,6 @@ textarea {
   background: var(--card-bg);
   box-shadow: var(--shadow-sm);
   overflow-x: auto;
-}
-
-.filter-tab.active,
-.analytics-tab.active,
-.race-seg-btn.active,
-.tab-btn.active {
-  background: var(--accent-fill) !important;
-  color: var(--accent-fill-text) !important;
-  border-color: transparent !important;
 }
 
 .table-wrap,
