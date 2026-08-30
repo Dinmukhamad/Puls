@@ -95,7 +95,7 @@ button.coins-summary-card:hover { border-color: var(--accent-primary); }
 .coins-summary-card > strong { margin: 5px 0 3px; font-size: 25px; line-height: 1; }
 .coins-summary-card > small { overflow: hidden; max-width: 100%; color: var(--text-muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
 .coins-summary-card.is-accent { box-shadow: inset 3px 0 0 var(--accent-primary), var(--shadow-sm); }
-.coins-summary-card.is-positive > strong { color: var(--success); }
+.coins-summary-card.is-positive > strong { color: var(--success-text); }
 .coins-summary-card.has-alert { border-color: color-mix(in srgb, var(--warn) 45%, var(--border-default)); }
 
 .coins-overview-grid {

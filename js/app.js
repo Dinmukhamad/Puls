@@ -146,7 +146,11 @@ let STATE = {
 function levelBadgeHtml(level, extraClass = '') {
   if (!level) return '<span class="cell-muted">—</span>';
   const color = level.color || '#64748B';
-  return `<span class="level-badge ${extraClass}" style="--level-color:${esc(color)};border-color:${esc(color)};color:${esc(color)};background:${esc(color)}16">${esc(level.name || 'Стажёр')}</span>`;
+  // Цвет уровня задаётся в данных и может быть любым — светло-голубым или
+  // тёмно-синим. Как цвет текста он давал 2.8:1 на белом и 3.3:1 на тёмном
+  // фоне, поэтому инлайном отдаём только --level-color: рамку и подложку CSS
+  // берёт как есть, а текст подмешивает к цвету темы до читаемого контраста.
+  return `<span class="level-badge ${extraClass}" style="--level-color:${esc(color)};border-color:${esc(color)};background:${esc(color)}16">${esc(level.name || 'Стажёр')}</span>`;
 }
 
 function levelNum(v, decimals = 1) {

@@ -45,9 +45,9 @@ html[data-theme="light"] {
 
   /* Text — label / secondaryLabel / tertiaryLabel */
   --text-primary:   #1C1C1E;
-  --text-secondary: #6C6C70;
-  --text-muted:     #8E8E93;
-  --text-tertiary:  #AEAEB2;
+  --text-secondary: #55555B;
+  --text-muted:     #66666C;
+  --text-tertiary:  #8E8E93;
   --text-inverse:   #FFFFFF;
 
   /* Separators — systemGray5 / opaqueSeparator */
@@ -68,12 +68,21 @@ html[data-theme="light"] {
   --primary-gradient:     linear-gradient(135deg, #4F46E5 0%, #5856D6 100%);
   --focus-ring:           0 0 0 4px rgba(79,70,229,.16);
 
-  /* Semantic — iOS system colors */
-  --success:  #34C759;  --success-soft: #E6F8EB;
-  --danger:   #FF3B30;  --danger-soft:  #FFEBEA;
-  --warning:  #FF9500;  --warning-soft: #FFF2E3;
+  /* Заливка акцента под белым текстом. Отделена от --accent-primary: тот
+     используется и как цвет текста, поэтому в тёмной теме он светлее и белым
+     по нему уже не написать (3.6:1). */
+  --accent-fill:      #4F46E5;
+  --accent-fill-text: #FFFFFF;
+
+  /* Semantic — iOS system colors.
+     Яркие значения верны как заливка, иконка или рамка, но как текст не
+     проходят WCAG AA: #34C759 на белом даёт 2.2:1, #FF9500 — 2.1:1.
+     Поэтому у каждого есть текстовый вариант той же семьи, но контрастный. */
+  --success:  #34C759;  --success-soft: #E6F8EB;  --success-text: #1A7F37;
+  --danger:   #FF3B30;  --danger-soft:  #FFEBEA;  --danger-text:  #B3261E;
+  --warning:  #FF9500;  --warning-soft: #FFF2E3;  --warning-text: #9A6300;
   --warning-border: #FFD9A8;
-  --info:     #32ADE6;  --info-soft:    #E8F5FC;
+  --info:     #32ADE6;  --info-soft:    #E8F5FC;  --info-text:    #0A6C9E;
   --gold:     #FFB800;
 
   /* Sidebar — neutral iOS dark */
@@ -131,8 +140,8 @@ html[data-theme="dark"] {
 
   --text-primary:   #FFFFFF;
   --text-secondary: #A0A0A8;
-  --text-muted:     #8E8E93;
-  --text-tertiary:  #636366;
+  --text-muted:     #9A9AA0;
+  --text-tertiary:  #7C7C82;
   --text-inverse:   #1C1C1E;
 
   --border-default: #38383A;
@@ -151,11 +160,17 @@ html[data-theme="dark"] {
   --primary-gradient:     linear-gradient(135deg, #5E5CE6 0%, #7D78F0 100%);
   --focus-ring:           0 0 0 4px rgba(125,120,240,.28);
 
-  --success:  #30D158;  --success-soft: rgba(48,209,88,.16);
-  --danger:   #FF453A;  --danger-soft:  rgba(255,69,58,.16);
-  --warning:  #FF9F0A;  --warning-soft: rgba(255,159,10,.16);
+  /* Заливка темнее текстового акцента: белым по #7D78F0 всего 3.6:1. */
+  --accent-fill:      #5E5CE6;
+  --accent-fill-text: #FFFFFF;
+
+  /* На тёмном фоне яркие системные цвета читаются: текстовый вариант совпадает
+     с основным, отдельные значения нужны только светлой теме. */
+  --success:  #30D158;  --success-soft: rgba(48,209,88,.16);  --success-text: #30D158;
+  --danger:   #FF453A;  --danger-soft:  rgba(255,69,58,.16);  --danger-text:  #FF6961;
+  --warning:  #FF9F0A;  --warning-soft: rgba(255,159,10,.16); --warning-text: #FF9F0A;
   --warning-border: rgba(255,159,10,.38);
-  --info:     #64D2FF;  --info-soft:    rgba(100,210,255,.16);
+  --info:     #64D2FF;  --info-soft:    rgba(100,210,255,.16); --info-text:    #64D2FF;
   --gold:     #FFD426;
 
   --sidebar-bg:          #0A0A0B;

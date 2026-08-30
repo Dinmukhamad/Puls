@@ -126,10 +126,10 @@
   font-weight: 700;
   border-radius: var(--radius-full);
 }
-.ui-status--success { color: var(--success); background: var(--success-soft); }
-.ui-status--danger { color: var(--danger); background: var(--danger-soft); }
-.ui-status--warning { color: var(--warning); background: var(--warning-soft); }
-.ui-status--info { color: var(--info); background: var(--info-soft); }
+.ui-status--success { color: var(--success-text); background: var(--success-soft); }
+.ui-status--danger { color: var(--danger-text); background: var(--danger-soft); }
+.ui-status--warning { color: var(--warning-text); background: var(--warning-soft); }
+.ui-status--info { color: var(--info-text); background: var(--info-soft); }
 .ui-status--neutral { color: var(--text-secondary); background: var(--bg-muted); }
 
 .ui-empty-state {

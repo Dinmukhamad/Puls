@@ -138,7 +138,7 @@
 
 #view-operators .user-open-button:hover {
   color: var(--text-inverse);
-  background: var(--accent-primary);
+  background: var(--accent-fill);
 }
 
 .modal.modal-user-manage {
@@ -171,10 +171,10 @@
   width: 54px;
   height: 54px;
   place-items: center;
-  color: #fff;
+  color: var(--accent-fill-text);
   font-size: 17px;
   font-weight: 800;
-  background: var(--accent-primary);
+  background: var(--accent-fill);
   border-radius: 50%;
 }
 
@@ -263,7 +263,7 @@
 }
 
 .user-manage-danger-zone {
-  color: var(--danger);
+  color: var(--danger-text);
   background: var(--danger-soft);
   border-color: color-mix(in srgb, var(--danger) 35%, var(--border-default));
 }

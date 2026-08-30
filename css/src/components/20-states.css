@@ -102,8 +102,8 @@
 .state-empty .state-icon        { background: var(--bg-muted);      color: var(--text-muted); }
 .state-no-results .state-icon   { background: var(--bg-muted);      color: var(--text-secondary); }
 .state-error                    { border-color: var(--danger); }
-.state-error .state-icon        { background: var(--danger-soft);   color: var(--danger); }
-.state-forbidden .state-icon    { background: var(--warning-soft);  color: var(--warning); }
+.state-error .state-icon        { background: var(--danger-soft);   color: var(--danger-text); }
+.state-forbidden .state-icon    { background: var(--warning-soft);  color: var(--warning-text); }
 
 /* Компактный вариант — внутри карточки или вкладки, а не на весь экран. */
 .state-block.state-compact {
@@ -130,7 +130,7 @@
 .state-partial-mark {
   flex: none;
   font-weight: 700;
-  color: var(--warning);
+  color: var(--warning-text);
 }
 .state-partial b { font-weight: 600; }
 
@@ -147,7 +147,7 @@
   font-size: 13px;
   line-height: 1.45;
 }
-.state-inline-error .state-partial-mark { color: var(--danger); }
+.state-inline-error .state-partial-mark { color: var(--danger-text); }
 
 /* ── Загрузка раздела ───────────────────────────────────────── */
 .page-loader {
@@ -369,7 +369,7 @@ body.modal-open { overflow: hidden; }
   height: 18px;
   padding: 0 5px;
   border-radius: var(--radius-full);
-  background: var(--accent-primary);
+  background: var(--accent-fill);
   color: var(--text-inverse);
   font-size: 11px;
   font-weight: 600;
@@ -506,7 +506,7 @@ body.modal-open { overflow: hidden; }
   font-size: 11.5px;
   font-weight: 500;
 }
-.shop-admin-badge.is-on  { background: var(--success-soft); color: var(--success); }
+.shop-admin-badge.is-on  { background: var(--success-soft); color: var(--success-text); }
 .shop-admin-badge.is-off { background: var(--bg-muted);     color: var(--text-secondary); }
 
 @media (max-width: 1024px) {

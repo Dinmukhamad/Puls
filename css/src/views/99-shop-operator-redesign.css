@@ -35,7 +35,7 @@
 #view-shop .shop-v2-coupon-chip {
   min-width: 170px;
   padding: 11px 15px;
-  color: var(--success);
+  color: var(--success-text);
   background: var(--success-soft);
   border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border-default));
   border-radius: var(--radius-sm);
@@ -209,8 +209,8 @@
 }
 
 #view-shop .shop-v2-tab.active {
-  color: #fff;
-  background: var(--accent-primary);
+  color: var(--accent-fill-text);
+  background: var(--accent-fill);
 }
 
 #view-shop .shop-v2-tab span {
@@ -391,7 +391,7 @@
 
 #view-shop .shop-v2-price-stack em {
   flex-basis: 100%;
-  color: var(--success);
+  color: var(--success-text);
   font-size: 10px;
   font-style: normal;
   font-weight: 700;
@@ -418,7 +418,7 @@
 #view-shop .shop-v2-shortfall {
   max-width: 110px;
   padding: 5px 7px;
-  color: var(--danger);
+  color: var(--danger-text);
   background: var(--danger-soft);
   border: 1px solid color-mix(in srgb, var(--danger) 24%, var(--border-default));
   border-radius: var(--radius-xs);
@@ -526,9 +526,9 @@
 
 #view-shop .shop-v2-order-status.is-waiting { color: #B45309; background: #FEF3C7; }
 #view-shop .shop-v2-order-status.is-approved { color: var(--accent-primary); background: var(--accent-secondary-soft); }
-#view-shop .shop-v2-order-status.is-completed { color: var(--success); background: var(--success-soft); }
-#view-shop .shop-v2-order-status.is-rejected { color: var(--danger); background: var(--danger-soft); }
-#view-shop .shop-v2-order-status.is-refunded { color: var(--success); background: var(--success-soft); }
+#view-shop .shop-v2-order-status.is-completed { color: var(--success-text); background: var(--success-soft); }
+#view-shop .shop-v2-order-status.is-rejected { color: var(--danger-text); background: var(--danger-soft); }
+#view-shop .shop-v2-order-status.is-refunded { color: var(--success-text); background: var(--success-soft); }
 #view-shop .shop-v2-order-status.is-expired { color: var(--text-muted); background: var(--bg-muted); }
 
 #view-shop .shop-v2-tab:focus-visible,
@@ -588,7 +588,7 @@
   gap: 11px;
   margin: 16px 0 10px;
   padding: 13px;
-  color: var(--success);
+  color: var(--success-text);
   background: var(--success-soft);
   border: 1px solid color-mix(in srgb, var(--success) 30%, var(--border-default));
   border-radius: var(--radius-sm);

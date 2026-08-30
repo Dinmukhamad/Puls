@@ -67,9 +67,9 @@
 }
 .an2-chip:hover { border-color: var(--border-strong); color: var(--text-primary); }
 .an2-chip.is-on {
-  background: var(--accent-primary);
+  background: var(--accent-fill);
   border-color: var(--accent-primary);
-  color: #fff;
+  color: var(--accent-fill-text);
 }
 .an2-chip-sm { padding: 5px 11px; font-size: 12px; }
 
@@ -126,7 +126,7 @@
 .an2-coverage b { color: var(--text-primary); }
 .an2-coverage-note {
   flex-basis: 100%;
-  color: var(--warning);
+  color: var(--warning-text);
   font-weight: 500;
 }
 
@@ -187,9 +187,9 @@
   white-space: nowrap;
 }
 .an2-badge-icon { font-size: 10px; line-height: 1; }
-.an2-badge-good { background: var(--success-soft); color: var(--success); }
-.an2-badge-watch { background: var(--warning-soft); color: var(--warning); }
-.an2-badge-bad { background: var(--danger-soft); color: var(--danger); }
+.an2-badge-good { background: var(--success-soft); color: var(--success-text); }
+.an2-badge-watch { background: var(--warning-soft); color: var(--warning-text); }
+.an2-badge-bad { background: var(--danger-soft); color: var(--danger-text); }
 .an2-badge-neutral,
 .an2-badge-unknown { background: var(--bg-muted); color: var(--text-muted); }
 
@@ -213,8 +213,8 @@
 .an2-target { color: var(--text-muted); }
 .an2-target-none { font-style: italic; }
 .an2-delta { display: inline-flex; align-items: center; gap: 4px; font-weight: 500; }
-.an2-delta-up { color: var(--success); }
-.an2-delta-down { color: var(--danger); }
+.an2-delta-up { color: var(--success-text); }
+.an2-delta-down { color: var(--danger-text); }
 .an2-delta-none { color: var(--text-muted); }
 
 .an2-plain {
@@ -423,7 +423,7 @@
 .an2-att-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
 .an2-att-group { font-size: 11px; color: var(--text-muted); }
 .an2-att-fact { margin-top: 4px; font-size: 13px; color: var(--text-secondary); }
-.an2-att-fact b { color: var(--danger); }
+.an2-att-fact b { color: var(--danger-text); }
 .an2-att-target { color: var(--text-muted); }
 .an2-att-action { margin-top: 6px; font-size: 12px; color: var(--text-primary); }
 
@@ -436,7 +436,7 @@
   font-size: 13px;
   color: var(--text-muted);
 }
-.an2-nodata-good { color: var(--success); font-weight: 500; }
+.an2-nodata-good { color: var(--success-text); font-weight: 500; }
 
 .an2-alert {
   display: flex;
@@ -514,7 +514,7 @@
   transition: background .15s, color .15s;
 }
 .an2-tab:hover { background: var(--bg-muted); color: var(--text-primary); }
-.an2-tab.active { background: var(--accent-primary); color: #fff; }
+.an2-tab.active { background: var(--accent-fill); color: var(--accent-fill-text); }
 
 /* ── Операторы: тулбар, таблица, детали, пагинация ──────── */
 .an2-ops-toolbar {

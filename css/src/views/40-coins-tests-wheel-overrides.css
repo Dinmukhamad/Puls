@@ -186,7 +186,7 @@
   padding: 6px 16px;
   border-radius: var(--radius-sm);
 }
-.test-timer-warning { color: var(--danger); background: var(--danger-soft); }
+.test-timer-warning { color: var(--danger-text); background: var(--danger-soft); }
 .test-runner-progress { margin-bottom: 20px; }
 .test-runner-progress-bar {
   height: 6px;
@@ -251,7 +251,7 @@
 .test-result-stat-value { font: 700 16px 'Inter', sans-serif; color: var(--text-primary); }
 .test-result-reward {
   background: var(--success-soft);
-  color: var(--success);
+  color: var(--success-text);
   border-radius: var(--radius-sm);
   padding: 10px 14px;
   font-weight: 600;
@@ -263,8 +263,8 @@
 }
 .test-result-question-text { font-weight: 600; font-size: 13px; margin-bottom: 8px; }
 .test-result-answer-row { font-size: 12.5px; padding: 4px 0; color: var(--text-secondary); }
-.test-result-answer-row.correct { color: var(--success); font-weight: 600; }
-.test-result-answer-row.incorrect { color: var(--danger); }
+.test-result-answer-row.correct { color: var(--success-text); font-weight: 600; }
+.test-result-answer-row.incorrect { color: var(--danger-text); }
 
 @media (max-width: 700px) {
   .test-result-grid { grid-template-columns: repeat(2, 1fr); }
@@ -310,6 +310,10 @@
    УРОВНИ ОПЕРАТОРОВ
 ═══════════════════════════════════════════════════ */
 .level-badge {
+  /* Подмешиваем цвет уровня к основному цвету текста: оттенок уровня остаётся
+     узнаваемым, но контраст держится выше 4.5:1 и в светлой, и в тёмной теме
+     (в светлой примесь идёт к чёрному, в тёмной — к белому). */
+  color: color-mix(in srgb, var(--level-color, var(--accent-primary)) 58%, var(--text-primary));
   display: inline-flex;
   align-items: center;
   width: fit-content;
@@ -425,8 +429,8 @@
 }
 .dyn-tab:hover { color: var(--text-primary); }
 .dyn-tab-active {
-  background: var(--accent);
-  color: #fff !important;
+  background: var(--accent-fill);
+  color: var(--accent-fill-text) !important;
   box-shadow: 0 1px 4px rgba(0,0,0,.15);
 }
 
@@ -495,8 +499,8 @@
   font-size: 18px;
   color: var(--accent);
 }
-.dyn-delta-up { color: var(--success); }
-.dyn-delta-dn { color: var(--danger); }
+.dyn-delta-up { color: var(--success-text); }
+.dyn-delta-dn { color: var(--danger-text); }
 .dyn-delta-eq { color: var(--text-secondary); }
 
 /* Breakdown */
@@ -523,7 +527,7 @@
 .dyn-bk-icon { font-size: 13px; }
 .dyn-bk-lbl  { font-size: 11.5px; color: var(--text-secondary); }
 .dyn-bk-val  { font-size: 11.5px; font-weight: 600; text-align: right; color: var(--text-primary); }
-.dyn-bk-penalty { color: var(--danger); }
+.dyn-bk-penalty { color: var(--danger-text); }
 .dyn-bar-bg  {
   height: 5px;
   background: var(--border);
@@ -601,8 +605,8 @@
   font-size: 11px;
   color: var(--text-muted);
 }
-.level-gap-row.ok em { color: var(--success); }
-.level-gap-row.miss em { color: var(--danger); }
+.level-gap-row.ok em { color: var(--success-text); }
+.level-gap-row.miss em { color: var(--danger-text); }
 .level-view-header { align-items: flex-start; gap: 14px; }
 .level-header-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 .level-settings-shell {
@@ -705,7 +709,7 @@
   line-height: 1;
   flex: 0 0 auto;
 }
-.level-rule-chip button:hover { background: var(--danger-soft); color: var(--danger); }
+.level-rule-chip button:hover { background: var(--danger-soft); color: var(--danger-text); }
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -716,7 +720,7 @@
   font-weight: 700;
   white-space: nowrap;
 }
-.status-pill.ok { color: var(--success); background: var(--success-soft); }
+.status-pill.ok { color: var(--success-text); background: var(--success-soft); }
 .status-pill.muted { color: var(--text-muted); background: var(--bg-muted); }
 .role-badge {
   display: inline-flex;
@@ -851,7 +855,7 @@
 
 .wheel-ticket-badge { text-align: center; padding: 18px 16px; border-radius: var(--radius-md); }
 .wheel-ticket-have { background: var(--success-soft); border: 1px solid rgba(22,163,74,.35); }
-.wheel-ticket-count { display: block; font-size: 40px; font-weight: 900; line-height: 1; color: var(--success); letter-spacing: -.02em; }
+.wheel-ticket-count { display: block; font-size: 40px; font-weight: 900; line-height: 1; color: var(--success-text); letter-spacing: -.02em; }
 .wheel-ticket-badge span:not(.wheel-ticket-count) { color: var(--tx2); font-size: 13px; font-weight: 600; }
 .wheel-ticket-reason { margin-top: 10px; font-size: 12.5px; color: var(--tx2); }
 .wheel-ticket-none { background: var(--surface-3); border: 1px dashed var(--border-default); }
@@ -1316,7 +1320,7 @@
 .wheel-op-chip {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 5px 6px 5px 10px; border-radius: var(--radius-full);
-  background: var(--ok-soft, rgba(34,197,94,.12)); color: var(--ok);
+  background: var(--ok-soft, rgba(34,197,94,.12)); color: var(--success-text);
   font-size: 12px; font-weight: 600;
 }
 .wheel-op-chip button {
@@ -1340,7 +1344,7 @@
 .wheel-op-option:hover { background: var(--surface-2, var(--bg-muted)); }
 .wheel-op-option span { color: var(--tx3); font-size: 12px; }
 .wheel-op-empty { padding: 10px 12px; color: var(--tx3); font-size: 13px; }
-.wheel-op-chosen { margin-top: 7px; font-size: 12px; font-weight: 600; color: var(--ok); }
+.wheel-op-chosen { margin-top: 7px; font-size: 12px; font-weight: 600; color: var(--success-text); }
 
 /* Wheel of WOW admin workspace */
 #view-wheel .view-header { margin-bottom: 16px; }
@@ -1662,11 +1666,11 @@ html[data-theme="dark"] .wheel-ops-hero { background: var(--card-bg); }
 .wheel-winner-kicker { font-size: 13px; font-weight: 800; color: var(--tx); }
 .wheel-winner-badge { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #B45309; background: linear-gradient(135deg, #FDE68A, var(--warning)); padding: 5px 11px; border-radius: var(--radius-full); }
 .wheel-winner-hero { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--radius-md); background: radial-gradient(120% 120% at 0% 0%, var(--accent-secondary-soft), var(--surface-3)); border: 1px solid var(--border-soft); }
-.wheel-winner-avatar { flex: none; width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: #fff; background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary)); }
+.wheel-winner-avatar { flex: none; width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 800; color: var(--accent-fill-text); background: linear-gradient(135deg, var(--accent-secondary), var(--accent-fill)); }
 .wheel-winner-main { flex: 1; min-width: 0; }
 .wheel-winner-name { font-size: 17px; font-weight: 800; color: var(--tx); }
 .wheel-winner-reason { font-size: 12.5px; color: var(--tx2); margin-top: 2px; }
-.wheel-winner-prize { flex: none; font-size: 22px; font-weight: 900; color: var(--success); letter-spacing: -.02em; }
+.wheel-winner-prize { flex: none; font-size: 22px; font-weight: 900; color: var(--success-text); letter-spacing: -.02em; }
 .wheel-winner-list { margin-top: 14px; }
 .wheel-winner-list-title { font-size: 12px; font-weight: 700; color: var(--tx3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
 .wheel-winner-row { display: flex; align-items: center; gap: 10px; padding: 7px 4px; border-top: 1px solid var(--border-soft); }
@@ -1687,7 +1691,7 @@ html[data-theme="dark"] .wheel-ops-hero { background: var(--card-bg); }
 .panel-subtitle { font-size: 14px; font-weight: 600; margin: 4px 0 8px; }
 .muted-sm { font-size: 11px; color: var(--text-muted, #888); }
 .badge { display: inline-block; padding: 2px 8px; border-radius: var(--radius-full); font-size: 12px; font-weight: 600; }
-.badge-ok { background: rgba(34,197,94,.15); color: var(--success); }
+.badge-ok { background: rgba(34,197,94,.15); color: var(--success-text); }
 .badge-muted { background: rgba(148,163,184,.2); color: var(--text-secondary); }
 
 /* Wheel prizes table: compact admin style */
@@ -2121,7 +2125,7 @@ html[data-theme="dark"] .filter-tab.active,
 html[data-theme="dark"] .subtab.active,
 html[data-theme="dark"] .btn-primary,
 html[data-theme="dark"] .side-nav-link.active {
-  color: #fff !important;
+  color: var(--accent-fill-text) !important;
 }
 
 html[data-theme="dark"] .muted,
@@ -2160,7 +2164,7 @@ html[data-theme="dark"] .wheel-rule-modal-overlay {
 }
 
 html[data-theme="dark"] .wheel-result-note {
-  color: var(--success) !important;
+  color: var(--success-text) !important;
 }
 
 /* Wheel admin UX refinement: compact navigation and structured editors */

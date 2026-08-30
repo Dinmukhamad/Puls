@@ -166,8 +166,8 @@
 .rms-label { font-size: 13px; color: var(--tx3); }
 .rms-val   { font: 600 14px 'Inter', sans-serif; color: var(--tx); }
 .rms-val.accent { color: var(--accent); }
-.rd-up     { color: var(--ok);      font-weight: 600; }
-.rd-down   { color: var(--danger);  font-weight: 600; }
+.rd-up     { color: var(--success-text);      font-weight: 600; }
+.rd-down   { color: var(--danger-text);  font-weight: 600; }
 .rd-neutral{ color: var(--tx3); }
 
 /* Mid grid */
@@ -305,11 +305,11 @@
   min-height: 112px;
 }
 .nom-me-v2 { border-color: var(--accent-primary) !important; background: var(--accent-secondary-soft) !important; }
-.nom-you   { position: absolute; top: 8px; right: 8px; background: var(--accent-primary); color: #fff; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: var(--radius-xl); }
+.nom-you   { position: absolute; top: 8px; right: 8px; background: var(--accent-fill); color: var(--accent-fill-text); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: var(--radius-xl); }
 .nom-t     { font: 500 11px 'Inter', sans-serif; color: var(--tx3); margin-bottom: 6px; }
 .nom-n     { font: 600 14px 'Inter', sans-serif; color: var(--tx); margin-bottom: 4px; }
 .nom-v     { font-size: 13px; color: var(--tx2); }
-.nom-c     { font: 700 13px 'Inter', sans-serif; color: var(--ok); margin-top: 8px; }
+.nom-c     { font: 700 13px 'Inter', sans-serif; color: var(--success-text); margin-top: 8px; }
 
 /* Transactions */
 .rtx2-row {
@@ -326,8 +326,8 @@
   font: 700 14px 'Inter', sans-serif;
   white-space: nowrap;
 }
-.rtx2-plus  .rtx2-amount { color: var(--ok); }
-.rtx2-minus .rtx2-amount { color: var(--danger); }
+.rtx2-plus  .rtx2-amount { color: var(--success-text); }
+.rtx2-minus .rtx2-amount { color: var(--danger-text); }
 .rtx2-comment {
   font-size: 13px;
   color: var(--tx2);
@@ -375,7 +375,7 @@
   font-size: 10px;
   font-weight: 600;
 }
-.rank-top { background: var(--accent-primary) !important; color: #fff !important; }
+.rank-top { background: var(--accent-fill) !important; color: var(--accent-fill-text) !important; }
 .rating-my-sticky {
   margin-top: 12px; padding: 10px 14px;
   background: var(--accent-secondary-soft);
@@ -435,10 +435,10 @@
   font: 600 11px var(--font-main);
   white-space: nowrap;
 }
-.badge-success { background: var(--success-soft); color: var(--success); }
-.badge-danger  { background: var(--danger-soft);  color: var(--danger);  }
-.badge-warning { background: var(--warning-soft); color: var(--warning); }
-.badge-info    { background: var(--info-soft);    color: var(--info);    }
+.badge-success { background: var(--success-soft); color: var(--success-text); }
+.badge-danger  { background: var(--danger-soft);  color: var(--danger-text);  }
+.badge-warning { background: var(--warning-soft); color: var(--warning-text); }
+.badge-info    { background: var(--info-soft);    color: var(--info-text);    }
 .badge-neutral { background: var(--bg-muted);     color: var(--text-secondary); }
 
 /* ══════════════════════════════════════════════════════
@@ -517,7 +517,7 @@ button, a, input, select, textarea {
 .side-nav-link svg { stroke: var(--sidebar-text) !important; }
 .side-nav-link:hover { background: var(--sidebar-hover-bg) !important; color: var(--text-tertiary) !important; }
 .side-nav-link:hover svg { stroke: var(--text-tertiary) !important; }
-.side-nav-link.active { background: var(--accent-primary) !important; color: #fff !important; }
+.side-nav-link.active { background: var(--accent-fill) !important; color: var(--accent-fill-text) !important; }
 .side-nav-link.active svg { stroke: #fff !important; }
 
 /* Side nav meta */
@@ -544,8 +544,8 @@ button, a, input, select, textarea {
 
 /* Btn primary sky blue */
 .btn-primary {
-  background: var(--accent-primary) !important;
-  color: #fff !important;
+  background: var(--accent-fill) !important;
+  color: var(--accent-fill-text) !important;
 }
 .btn-primary:hover { background: var(--accent-primary-hover) !important; }
 
@@ -642,8 +642,8 @@ button, .btn, .btn-primary, .btn-outline, .btn-sm,
 
 /* Operator action buttons */
 .btn-action-primary { background: rgba(2,132,199,0.1) !important; color: var(--accent-primary) !important; }
-.btn-action-warn    { background: rgba(217,119,6,0.1) !important;  color: var(--warning) !important; }
-.btn-action-danger  { background: rgba(220,38,38,0.1) !important;  color: var(--danger) !important; }
+.btn-action-warn    { background: rgba(217,119,6,0.1) !important;  color: var(--warning-text) !important; }
+.btn-action-danger  { background: rgba(220,38,38,0.1) !important;  color: var(--danger-text) !important; }
 .btn-action-secondary { color: var(--text-secondary) !important; }
 .btn-action-secondary:hover { background: var(--bg-muted) !important; color: var(--text-primary) !important; }
 
@@ -651,19 +651,19 @@ button, .btn, .btn-primary, .btn-outline, .btn-sm,
 .tx-comment, .tx-info span { color: var(--text-primary) !important; }
 .tx-date { color: var(--text-muted) !important; }
 .tx-amount { font-weight: 700 !important; }
-.tx-plus  .tx-amount { color: var(--success) !important; }
-.tx-minus .tx-amount { color: var(--danger) !important; }
+.tx-plus  .tx-amount { color: var(--success-text) !important; }
+.tx-minus .tx-amount { color: var(--danger-text) !important; }
 
 /* KPI values */
 .kpi-value { color: var(--text-primary) !important; font-weight: 700 !important; }
 .kpi-label { color: var(--text-muted) !important; font-size: 11px !important; }
 
 /* Status badges always readable */
-.status-badge.status-pending  { background: var(--warning-soft) !important; color: var(--warning) !important; }
-.status-badge.status-approved { background: var(--success-soft) !important; color: var(--success) !important; }
-.status-badge.status-rejected { background: var(--danger-soft)  !important; color: var(--danger)  !important; }
-.status-badge.status-active   { background: var(--info-soft)    !important; color: var(--info)    !important; }
-.status-badge.status-inactive { background: var(--warning-soft) !important; color: var(--warning) !important; }
+.status-badge.status-pending  { background: var(--warning-soft) !important; color: var(--warning-text) !important; }
+.status-badge.status-approved { background: var(--success-soft) !important; color: var(--success-text) !important; }
+.status-badge.status-rejected { background: var(--danger-soft)  !important; color: var(--danger-text)  !important; }
+.status-badge.status-active   { background: var(--info-soft)    !important; color: var(--info-text)    !important; }
+.status-badge.status-inactive { background: var(--warning-soft) !important; color: var(--warning-text) !important; }
 
 /* Participating badge — sky blue */
 .status-badge.status-participating { background: var(--accent-secondary-soft) !important; color: var(--accent-primary) !important; }

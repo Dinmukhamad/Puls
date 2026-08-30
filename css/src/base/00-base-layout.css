@@ -307,7 +307,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   letter-spacing: -.03em; color: var(--tx); margin: 0;
 }
 .auth-form > p { font-size: 13px; color: var(--tx2); margin: 0; }
-.auth-error { font-size: 12px; color: var(--danger); min-height: 18px; }
+.auth-error { font-size: 12px; color: var(--danger-text); min-height: 18px; }
 
 /* ══════════════════════════════════════════════════════════════
    FORMS
@@ -343,7 +343,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .btn-primary {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   padding: 10px 20px; border: none; border-radius: var(--radius-sm);
-  background: var(--accent); color: #fff;
+  background: var(--accent-fill); color: var(--accent-fill-text);
   font: 600 13px 'Inter', sans-serif;
   cursor: pointer; transition: background var(--t), box-shadow var(--t), transform .1s;
   white-space: nowrap;
@@ -386,7 +386,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .row-actions .danger:hover,
 .danger-text:hover {
   border-color: var(--danger);
-  color: var(--danger);
+  color: var(--danger-text);
   background: var(--danger-soft);
 }
 
@@ -506,8 +506,8 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   font-size: 12px; font-weight: 700;
   padding: 2px 7px; border-radius: var(--radius-full); margin-left: 8px;
 }
-.rank-delta.up   { background: var(--ok-soft);   color: var(--ok); }
-.rank-delta.down { background: var(--danger-soft); color: var(--danger); }
+.rank-delta.up   { background: var(--ok-soft);   color: var(--success-text); }
+.rank-delta.down { background: var(--danger-soft); color: var(--danger-text); }
 
 /* ══════════════════════════════════════════════════════════════
    PANEL
@@ -558,8 +558,8 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 }
 .tx-date { font-size: 11px; color: var(--tx3); margin-top: 2px; }
 .tx-amount { font-size: 14px; font-weight: 700; white-space: nowrap; flex-shrink: 0; font-family: 'Inter', sans-serif; }
-.tx-plus  .tx-amount { color: var(--ok); }
-.tx-minus .tx-amount { color: var(--danger); }
+.tx-plus  .tx-amount { color: var(--success-text); }
+.tx-minus .tx-amount { color: var(--danger-text); }
 
 /* ══════════════════════════════════════════════════════════════
    PODIUM
@@ -637,7 +637,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   font-size: 11px; font-weight: 600; padding: 3px 9px;
   border-radius: var(--radius-full); background: var(--bg-muted); color: var(--tx3);
 }
-.shop-badge-danger { background: var(--danger-soft); color: var(--danger); }
+.shop-badge-danger { background: var(--danger-soft); color: var(--danger-text); }
 .shop-badge-info { background: var(--accent-soft); color: var(--accent); }
 .shop-card-price {
   font-family: 'Inter', sans-serif;
@@ -729,7 +729,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 .me-badge {
   display: inline-block; font-size: 10px; font-weight: 700;
   padding: 1px 6px; border-radius: var(--radius-xs);
-  background: var(--accent); color: #fff; margin-left: 6px;
+  background: var(--accent-fill); color: var(--accent-fill-text); margin-left: 6px;
 }
 .delta-cell { text-align: center; }
 .empty-line { padding: 18px; color: var(--tx3); font-size: 13px; text-align: center; }
@@ -768,7 +768,7 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   display: flex; align-items: center; gap: 6px;
   transition: background var(--t), color var(--t);
 }
-.filter-tab.active { background: var(--accent); color: #fff; }
+.filter-tab.active { background: var(--accent-fill); color: var(--accent-fill-text); }
 .badge {
   background: rgba(255,255,255,.25); color: inherit;
   font-size: 10px; font-weight: 700;
@@ -793,17 +793,17 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   color: var(--tx); margin-bottom: 5px; letter-spacing: 0;
 }
 .request-meta { font-size: 12px; color: var(--tx3); display: flex; gap: 6px; flex-wrap: wrap; }
-.request-reason { font-size: 12px; color: var(--danger); margin-top: 6px; }
+.request-reason { font-size: 12px; color: var(--danger-text); margin-top: 6px; }
 .request-status { justify-self: end; }
 .status-badge {
   display: inline-block; padding: 4px 10px; border-radius: var(--radius-full);
   font-size: 11px; font-weight: 700;
 }
-.status-badge.status-pending  { background: var(--warn-soft);   color: var(--warn); }
-.status-badge.status-approved { background: var(--ok-soft);     color: var(--ok); }
-.status-badge.status-rejected { background: var(--danger-soft); color: var(--danger); }
-.status-badge.status-active   { background: var(--ok-soft);     color: var(--ok); }
-.status-badge.status-inactive { background: var(--warn-soft);   color: var(--warn); }
+.status-badge.status-pending  { background: var(--warn-soft);   color: var(--warning-text); }
+.status-badge.status-approved { background: var(--ok-soft);     color: var(--success-text); }
+.status-badge.status-rejected { background: var(--danger-soft); color: var(--danger-text); }
+.status-badge.status-active   { background: var(--ok-soft);     color: var(--success-text); }
+.status-badge.status-inactive { background: var(--warn-soft);   color: var(--warning-text); }
 .status-badge.status-archive  { background: var(--surface-3);   color: var(--tx3); }
 .request-actions {
   grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end;
@@ -818,8 +818,8 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
   flex-wrap: wrap; padding: 16px 20px;
 }
 .status-line { padding: 8px 20px; font-size: 12px; min-height: 32px; }
-.status-ok    { color: var(--ok); }
-.status-error { color: var(--danger); }
+.status-ok    { color: var(--success-text); }
+.status-error { color: var(--danger-text); }
 
 /* ══════════════════════════════════════════════════════════════
    MODAL
@@ -1126,8 +1126,8 @@ body.must-change-password .side-nav-link[data-nav-target] {
   transition: background var(--t), color var(--t);
 }
 .ops-tab-badge-active {
-  background: var(--accent-primary);
-  color: #fff;
+  background: var(--accent-fill);
+  color: var(--accent-fill-text);
 }
 
 .ops-filters-row {

@@ -26,19 +26,19 @@
   background: var(--bg-muted); font-size: 12px;
 }
 .metric-anti-row b { font-size: 16px; }
-.metric-anti-row.bad { background: var(--danger-soft); color: var(--danger); }
-.metric-anti-row.good { background: var(--ok-soft); color: var(--ok); }
+.metric-anti-row.bad { background: var(--danger-soft); color: var(--danger-text); }
+.metric-anti-row.good { background: var(--ok-soft); color: var(--success-text); }
 
 .coin-calc-row {
   display: flex; justify-content: space-between; align-items: center;
   padding: 7px 0; font-size: 13px; border-bottom: 1px dashed var(--border);
 }
 .coin-calc-row:last-child { border-bottom: none; }
-.coin-calc-bonus { color: var(--ok); font-size: 12.5px; }
+.coin-calc-bonus { color: var(--success-text); font-size: 12.5px; }
 .coin-calc-total { font-weight: 700; font-size: 15px; border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; }
 
-.panel-badge.badge-final { background: var(--ok-soft); color: var(--ok); }
-.panel-badge.badge-pending { background: var(--warn-soft); color: var(--warn); }
+.panel-badge.badge-final { background: var(--ok-soft); color: var(--success-text); }
+.panel-badge.badge-pending { background: var(--warn-soft); color: var(--warning-text); }
 
 .achievements-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px;
@@ -65,7 +65,7 @@
 .achievement-info { min-width: 0; }
 .achievement-title { font-weight: 600; font-size: 13px; }
 .achievement-desc { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
-.achievement-meta { font-size: 11px; color: var(--ok); margin-top: 4px; font-weight: 600; }
+.achievement-meta { font-size: 11px; color: var(--success-text); margin-top: 4px; font-weight: 600; }
 .achievement-progress-line { font-size: 11.5px; margin-top: 4px; font-weight: 600; }
 
 @media (max-width: 640px) {
@@ -77,7 +77,7 @@
    Коины: еженедельный расчёт, настройки начислений (ТЗ §3, §4)
 ══════════════════════════════════════ */
 
-.status-pill.error { color: var(--danger); background: var(--danger-soft); }
+.status-pill.error { color: var(--danger-text); background: var(--danger-soft); }
 .row-muted { opacity: .5; }
 .row-muted td { color: var(--text-muted); }
 
@@ -224,7 +224,7 @@
 }
 
 .achievement-admin-state.is-active {
-  color: var(--success);
+  color: var(--success-text);
   background: var(--success-soft);
 }
 
@@ -320,10 +320,10 @@
 .bonus-chip {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 11px; font-weight: 600; padding: 2px 7px; margin: 1px;
-  border-radius: var(--radius-full); background: var(--ok-soft); color: var(--ok); white-space: nowrap;
+  border-radius: var(--radius-full); background: var(--ok-soft); color: var(--success-text); white-space: nowrap;
 }
-.bonus-chip.discipline-ok { background: var(--ok-soft); color: var(--ok); }
-.bonus-chip.discipline-bad { background: var(--danger-soft); color: var(--danger); }
+.bonus-chip.discipline-ok { background: var(--ok-soft); color: var(--success-text); }
+.bonus-chip.discipline-bad { background: var(--danger-soft); color: var(--danger-text); }
 
 /* ── Уведомления (ТЗ P2) ──────────────────────────────────── */
 .notif-modal-actions { display: flex; justify-content: flex-end; margin-bottom: 6px; }

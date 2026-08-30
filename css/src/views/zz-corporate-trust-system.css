@@ -26,8 +26,8 @@ textarea {
 }
 
 ::selection {
-  color: #fff;
-  background: var(--accent-primary);
+  color: var(--accent-fill-text);
+  background: var(--accent-fill);
 }
 
 .main-content,
@@ -300,6 +300,15 @@ textarea:focus {
   color: var(--text-secondary);
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* Фон неактивной вкладки нигде не задавался, и <button> брал его из стилей
+   браузера. В тёмной схеме buttonface = #6B6B6B, и надпись давала 2.05:1 —
+   нечитаемо. Светлый buttonface (#F0F0F0) почти совпадает с
+   --bg-surface-hover (#F2F2F7), поэтому в светлой теме вид не меняется. */
+.analytics-tab {
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-default);
 }
 
 .filter-tab.active,

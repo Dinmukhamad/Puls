@@ -111,7 +111,7 @@
 }
 
 #view-wheel .wheel-v2-status.is-ready {
-  color: var(--success) !important;
+  color: var(--success-text) !important;
   background: var(--success-soft);
 }
 
