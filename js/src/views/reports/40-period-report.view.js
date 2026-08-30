@@ -58,20 +58,90 @@ function renderPeriodReport() {
     <div id="pr-results"></div>
   `;
 
-  // File selection display
+  // Порог сознательно завышен: сервер ограничивает не сам файл, а его
+  // распакованный объём (120 МБ). Архив крупнее этого точно не пройдёт,
+  // а файлы обычного размера отклонять нельзя.
+  const MAX_FILE_BYTES = 60 * 1024 * 1024;
+
+  function humanSize(bytes) {
+    if (bytes < 1024) return `${bytes} Б`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} МБ`;
+  }
+
+  /**
+   * Зона загрузки со всеми состояниями: исходное, перетаскивание, файл
+   * выбран, неподдерживаемый формат, слишком большой файл и удаление
+   * выбранного. Раньше зона умела только «выбран» и показывала имя без
+   * размера, а заменить файл можно было лишь повторным выбором.
+   */
   function bindFileDrop(inputId, dropId) {
     const input = el.querySelector('#' + inputId);
     const drop = el.querySelector('#' + dropId);
-    input?.addEventListener('change', () => {
-      const file = input.files[0];
-      const textEl = drop.querySelector('.pr-file-drop-text');
-      if (file) {
-        drop.classList.add('pr-file-drop-filled');
-        textEl.textContent = file.name;
-      } else {
-        drop.classList.remove('pr-file-drop-filled');
-        textEl.textContent = 'Нажмите, чтобы выбрать файл .xlsx';
+    if (!input || !drop) return;
+    const textEl = drop.querySelector('.pr-file-drop-text');
+    const IDLE = 'Перетащите файл .xlsx или нажмите, чтобы выбрать';
+
+    const setState = (state, text) => {
+      drop.classList.remove('pr-file-drop-filled', 'pr-file-drop-error', 'pr-file-drop-over');
+      if (state) drop.classList.add(`pr-file-drop-${state}`);
+      textEl.textContent = text;
+      drop.querySelector('.pr-file-remove')?.remove();
+      if (state === 'filled') {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'pr-file-remove';
+        remove.setAttribute('aria-label', 'Убрать выбранный файл');
+        remove.title = 'Убрать файл';
+        remove.innerHTML = '<span aria-hidden="true">×</span>';
+        remove.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          input.value = '';
+          setState('', IDLE);
+          input.focus({ preventScroll: true });
+        });
+        drop.appendChild(remove);
       }
+    };
+
+    const accept = file => {
+      if (!file) { setState('', IDLE); return false; }
+      if (!file.name.toLowerCase().endsWith('.xlsx')) {
+        setState('error', `${file.name} — нужен файл .xlsx`);
+        input.value = '';
+        return false;
+      }
+      if (file.size > MAX_FILE_BYTES) {
+        setState('error', `${file.name} — ${humanSize(file.size)}, это больше допустимого`);
+        input.value = '';
+        return false;
+      }
+      setState('filled', `${file.name} · ${humanSize(file.size)}`);
+      return true;
+    };
+
+    setState('', IDLE);
+    input.addEventListener('change', () => accept(input.files[0]));
+
+    // Перетаскивание: подсветка зоны и приём файла.
+    ['dragenter', 'dragover'].forEach(type => drop.addEventListener(type, event => {
+      event.preventDefault();
+      drop.classList.add('pr-file-drop-over');
+    }));
+    ['dragleave', 'dragend'].forEach(type => drop.addEventListener(type, () => {
+      drop.classList.remove('pr-file-drop-over');
+    }));
+    drop.addEventListener('drop', event => {
+      event.preventDefault();
+      drop.classList.remove('pr-file-drop-over');
+      const file = event.dataTransfer?.files?.[0];
+      if (!file) return;
+      // Кладём файл в input, чтобы отправка шла тем же путём, что и выбор.
+      const data = new DataTransfer();
+      data.items.add(file);
+      input.files = data.files;
+      accept(file);
     });
   }
   bindFileDrop('pr-file-monthly', 'pr-file-monthly-drop');

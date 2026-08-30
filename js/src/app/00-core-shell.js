@@ -731,16 +731,55 @@ function handleAuthExpired(err) {
   }
   const username = document.getElementById('auth-username');
   if (username) setTimeout(() => username.focus(), 50);
+  // Браузер мог подставить сохранённые логин и пароль — событие input при
+  // этом не приходит, поэтому состояние кнопки пересчитываем сами.
+  setTimeout(syncAuthSubmit, 60);
 }
 window.handleAuthExpired = handleAuthExpired;
 
+/**
+ * Кнопка входа доступна только когда оба поля заполнены. Слушатель
+ * делегированный: форма входа появляется и скрывается вместе с оверлеем,
+ * и привязываться к конкретным узлам ненадёжно.
+ */
+function syncAuthSubmit() {
+  const btn = document.getElementById('auth-login-btn');
+  if (!btn || btn.classList.contains('is-loading')) return;
+  const username = document.getElementById('auth-username')?.value?.trim();
+  const password = document.getElementById('auth-password')?.value;
+  btn.disabled = !(username && password);
+}
+
+document.addEventListener('input', event => {
+  if (event.target.id === 'auth-username' || event.target.id === 'auth-password') syncAuthSubmit();
+});
+
 document.addEventListener('click', async e => {
+  // Показать/скрыть пароль: в скрытом поле опечатку не найти.
+  const toggle = e.target.closest?.('#auth-password-toggle');
+  if (toggle) {
+    const field = document.getElementById('auth-password');
+    if (field) {
+      const shown = field.type === 'text';
+      field.type = shown ? 'password' : 'text';
+      toggle.setAttribute('aria-pressed', String(!shown));
+      const label = shown ? 'Показать пароль' : 'Скрыть пароль';
+      toggle.setAttribute('aria-label', label);
+      toggle.setAttribute('title', label);
+      field.focus({ preventScroll: true });
+    }
+    return;
+  }
+
   if (e.target.id === 'auth-login-btn') {
     const username = document.getElementById('auth-username')?.value?.trim();
     const password = document.getElementById('auth-password')?.value;
     const errEl = document.getElementById('auth-error');
     if (!username || !password) { if (errEl) errEl.textContent = 'Введите логин и пароль'; return; }
-    e.target.disabled = true; e.target.textContent = 'Вход…';
+    if (errEl) errEl.textContent = '';
+    // Ширина кнопки не меняется: спиннер рисуется поверх текста.
+    e.target.disabled = true;
+    e.target.classList.add('is-loading');
     try {
       await api.login(username, password);
       STATE.user = normalizeUser(await api.me());
@@ -749,7 +788,10 @@ document.addEventListener('click', async e => {
       await bootApp();
     } catch (err) {
       if (errEl) errEl.textContent = err.message;
-      e.target.disabled = false; e.target.textContent = 'Войти';
+      e.target.classList.remove('is-loading');
+      syncAuthSubmit();
+    } finally {
+      e.target.classList.remove('is-loading');
     }
   }
   if (e.target.id === 'auth-logout-btn') {

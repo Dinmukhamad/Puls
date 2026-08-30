@@ -224,6 +224,54 @@ body.side-nav-collapsed .side-nav-toggle svg {
   border-color: var(--success);
   background: var(--success-soft);
   color: var(--success-text);
+  padding-right: 40px;
+}
+
+/* Файл тащат мышью — зона показывает, что готова его принять. */
+.pr-file-drop.pr-file-drop-over {
+  border-color: var(--accent-primary);
+  border-style: solid;
+  background: var(--accent-primary-soft);
+  color: var(--accent-primary);
+}
+
+/* Не тот формат или слишком большой файл: причина видна прямо в зоне,
+   а не только в общей строке статуса под формой. */
+.pr-file-drop.pr-file-drop-error {
+  border-style: solid;
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+/* Выбранный файл можно убрать, не открывая диалог выбора заново. */
+.pr-file-drop { position: relative; }
+.pr-file-remove {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: inherit;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pr-file-remove:hover { background: color-mix(in srgb, currentColor 16%, transparent); }
+.pr-file-remove:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
+
+@media (max-width: 640px) {
+  .pr-file-drop { height: auto; min-height: var(--control-h-lg); padding-block: var(--space-2); }
+  .pr-file-drop-text { white-space: normal; overflow-wrap: anywhere; }
+  .pr-file-remove { width: var(--control-h-lg); height: var(--control-h-lg); }
 }
 
 
