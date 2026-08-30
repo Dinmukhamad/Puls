@@ -664,41 +664,263 @@ async function renderMissionsAdmin(el) {
       }
     }
     const dropOff = Object.entries(stats.drop_off_by_step || {});
+    // Экран разложен по зонам: сначала структура обучения, затем каждая
+    // настройка периода отдельной карточкой, и только потом статистика и
+    // история. Раньше настройки были втиснуты в секцию «Территории и период
+    // SAPAR» и перемешаны со сводными цифрами.
     el.innerHTML = `<div class="missions-page missions-admin">
-      <header class="missions-header"><div><span class="missions-eyebrow">Обучение операторов</span><h1>Миссии</h1><p>Статистика прохождения интерактивных учебных сценариев</p></div><span class="mission-admin-badge">Только просмотр</span></header>
-      ${missionAdminConfiguration(worlds, saparMission, saparSetting, windowPreview, signingMission, signingSetting, signingPreview)}
-      <section class="mission-admin-stats">
+      <header class="missions-header">
+        <div>
+          <span class="missions-eyebrow">Обучение операторов</span>
+          <h1>Миссии</h1>
+          <p>Настройка учебных периодов и статистика прохождения</p>
+        </div>
+        ${STATE.user?.role === 'admin' ? '' : '<span class="mission-admin-badge">Только просмотр</span>'}
+      </header>
+
+      ${missionWorldsSection(worlds)}
+
+      ${saparMission
+        ? missionProviderWindowCard(saparMission, saparSetting, windowPreview, STATE.user?.role === 'admin')
+        : `<section class="panel mission-zone">${uiEmptyState('Смена провайдера не настроена', 'Миссия SAPAR ещё не назначена территории — настраивать период нечему.', [], true)}</section>`}
+
+      ${signingMission
+        ? documentSigningWindowEditor(signingMission, signingSetting, signingPreview, STATE.user?.role === 'admin')
+        : `<section class="panel mission-zone">${uiEmptyState('Подписание АВР не настроено', 'Миссия подписания документов ещё не назначена территории.', [], true)}</section>`}
+
+      <section class="mission-admin-stats" aria-label="Статистика прохождения">
         <article><span>Начали</span><strong>${stats.started_operators}</strong><small>уникальных операторов</small></article>
         <article><span>Завершили</span><strong>${stats.completed_operators}</strong><small>${stats.conversion_percent}% конверсия</small></article>
         <article><span>Среднее время</span><strong>${Math.round(stats.average_duration_seconds / 60)} мин</strong><small>по завершённым попыткам</small></article>
         <article><span>Выдано</span><strong>${missionCoinLabel(stats.awarded_coins)}</strong><small>за все миссии</small></article>
       </section>
+
       <div class="mission-admin-grid">
-        <section class="panel mission-admin-table"><div class="missions-section-head"><div><span>История</span><h2>Попытки операторов</h2></div><b>${attempts.total}</b></div>
-          <div class="table-wrap"><table><thead><tr><th>Оператор</th><th>Миссия</th><th>Статус</th><th>Шаг</th><th>Попытка</th><th>Активное время</th></tr></thead><tbody>${(attempts.items || []).map(row => `<tr><td><strong>${esc(row.operator_name)}</strong></td><td>${esc(row.mission_title)}</td><td><span class="mission-table-status is-${esc(row.status)}">${esc(missionStatusLabel(row.status))}</span></td><td>${esc(row.current_step_key)}</td><td>№${row.attempt_number}</td><td>${row.duration_anomalous ? 'Аномалия' : row.active_duration_seconds == null ? '—' : `${Math.max(1, Math.round(row.active_duration_seconds / 60))} мин`}</td></tr>`).join('') || '<tr><td colspan="6" class="missions-empty">Попыток пока нет</td></tr>'}</tbody></table></div>
+        <section class="panel mission-admin-table" aria-labelledby="mz-attempts">
+          <div class="missions-section-head">
+            <div><span>История</span><h2 id="mz-attempts">Попытки операторов</h2></div>
+            <b>${attempts.total}</b>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr>
+              <th scope="col">Оператор</th><th scope="col">Миссия</th><th scope="col">Статус</th>
+              <th scope="col">Шаг</th><th scope="col" class="num">Попытка</th><th scope="col" class="num">Активное время</th>
+            </tr></thead>
+            <tbody>${(attempts.items || []).map(row => `<tr>
+              <td><strong>${esc(row.operator_name)}</strong></td>
+              <td>${esc(row.mission_title)}</td>
+              <td><span class="mission-table-status is-${esc(row.status)}">${esc(missionStatusLabel(row.status))}</span></td>
+              <td>${esc(row.current_step_key)}</td>
+              <td class="num">№${row.attempt_number}</td>
+              <td class="num">${row.duration_anomalous ? 'Аномалия' : row.active_duration_seconds == null ? '—' : `${Math.max(1, Math.round(row.active_duration_seconds / 60))} мин`}</td>
+            </tr>`).join('') || `<tr><td colspan="6">${uiEmptyState('Попыток пока нет', 'Здесь появятся прохождения, как только операторы начнут миссии.', [], true)}</td></tr>`}</tbody>
+          </table></div>
         </section>
-        <aside class="panel mission-dropoff"><div class="missions-section-head"><div><span>Прогресс</span><h2>Точки остановки</h2></div></div>${dropOff.length ? dropOff.map(([step, count]) => `<div><span>${esc(step)}</span><b>${count}</b></div>`).join('') : '<p class="missions-empty">Незавершённых попыток нет</p>'}<div class="mission-repeat"><span>Повторные прохождения</span><strong>${stats.repeat_operators}</strong></div></aside>
+
+        <aside class="panel mission-dropoff" aria-labelledby="mz-dropoff">
+          <div class="missions-section-head"><div><span>Прогресс</span><h2 id="mz-dropoff">Точки остановки</h2></div></div>
+          ${dropOff.length
+            ? dropOff.map(([step, count]) => `<div><span>${esc(step)}</span><b>${count}</b></div>`).join('')
+            : uiEmptyState('Незавершённых попыток нет', 'Все начатые прохождения доведены до конца.', [], true)}
+          <div class="mission-repeat"><span>Повторные прохождения</span><strong>${stats.repeat_operators}</strong></div>
+        </aside>
       </div>
     </div>`;
+    bindMissionWindowDirty(el);
   } catch (error) {
     renderMissionError(el, error);
   }
 }
 
-function missionAdminConfiguration(worlds, saparMission, setting, preview, signingMission, signingSetting, signingPreview) {
-  const canEdit = STATE.user?.role === 'admin';
-  const rule = setting?.value || { start_day: 16, end_day: 1, operator_message: '' };
-  const allowed = (preview?.days || []).filter(day => day.allowed).length;
-  return `<section class="panel mission-admin-config"><div class="missions-section-head"><div><span>Структура обучения</span><h2>Территории и период SAPAR</h2></div><b>${worlds.length} территории</b></div>
-    <div class="mission-admin-worlds">${worlds.map(world => `<article style="--world-accent:${esc(world.accent_color)}"><i>${learningWorldIllustration(world)}</i><div><b>${esc(world.title)}</b><small>${(world.missions || []).length} мисс. · ${esc(world.availability)}</small></div></article>`).join('')}</div>
-    ${saparMission ? `<div class="mission-window-editor"><div><h3>Период смены провайдера</h3><p>Версия ${setting?.version || 1}. Активные попытки продолжают использовать сохранённую версию.</p></div><label>Начало<input id="mission-window-start" type="number" min="1" max="31" value="${rule.start_day}"></label><label>Окончание<input id="mission-window-end" type="number" min="1" max="31" value="${rule.end_day}"></label><label class="mission-window-message">Сообщение оператору<input id="mission-window-message" value="${esc(rule.operator_message || '')}" maxlength="1000"></label><button class="btn-primary" type="button" ${canEdit ? '' : 'disabled'} onclick="saveMissionProviderWindow(${saparMission.id})">${canEdit ? 'Опубликовать версию' : 'Только просмотр'}</button><div class="mission-window-preview"><b>${allowed}</b><span>разрешённых дней в текущем месяце</span></div></div>` : '<p class="missions-empty">Миссия SAPAR ещё не назначена территории.</p>'}
-    ${signingMission ? documentSigningWindowEditor(signingMission, signingSetting, signingPreview, canEdit) : ''}
+/** Системные значения доступности территории — человеческим языком. */
+function missionAvailabilityLabel(value) {
+  return ({
+    available: 'Доступно',
+    coming_soon: 'Скоро',
+    locked: 'Закрыто',
+    hidden: 'Скрыто',
+    archived: 'В архиве',
+  })[value] || value;
+}
+
+function missionAvailabilityClass(value) {
+  return ({ available: 'is-available', coming_soon: 'is-soon' })[value] || 'is-other';
+}
+
+/** Когда версия была опубликована — на местном языке, а не ISO-строкой. */
+function missionVersionDate(setting) {
+  const raw = setting?.updated_at || setting?.created_at;
+  if (!raw) return 'дата публикации не сохранена';
+  const parsed = new Date(raw);
+  return isNaN(parsed) ? 'дата публикации не сохранена' : `опубликована ${uiDateTime(raw)}`;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ЗОНА 1 — структура обучения
+══════════════════════════════════════════════════════════════ */
+function missionWorldsSection(worlds) {
+  const cards = worlds.map(world => `
+      <article style="--world-accent:${esc(world.accent_color)}">
+        <i>${learningWorldIllustration(world)}</i>
+        <div>
+          <b>${esc(world.title)}</b>
+          <small>${(world.missions || []).length} мисс.</small>
+          <span class="mission-avail ${missionAvailabilityClass(world.availability)}">${esc(missionAvailabilityLabel(world.availability))}</span>
+        </div>
+      </article>`).join('');
+
+  return `<section class="panel mission-zone" aria-labelledby="mz-worlds">
+    <div class="missions-section-head">
+      <div><span>Структура обучения</span><h2 id="mz-worlds">Территории</h2></div>
+      <b>${worlds.length}</b>
+    </div>
+    ${worlds.length
+      ? `<div class="mission-admin-worlds">${cards}</div>`
+      : uiEmptyState('Территории не настроены', 'Учебные территории появятся после наполнения справочника.', [], true)}
   </section>`;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   ЗОНЫ 2 и 3 — настройки периодов, каждая своей карточкой
+
+   Раньше обе настройки жили одной плотной строкой внутри секции
+   «Территории и период SAPAR»: поле сообщения на 1000 символов было
+   однострочным input шириной 120–265 px, а кнопка публикации стояла
+   между полями ввода. Теперь у каждой настройки своя карточка, поля —
+   в сетке, сообщение — полноценный textarea, а кнопка публикации стоит
+   рядом с номером версии, к которой относится.
+══════════════════════════════════════════════════════════════ */
+function missionWindowCard(config) {
+  const { id, eyebrow, title, note, version, versionDate, fields, message, preview, canEdit, saveCall } = config;
+  return `<section class="panel mission-zone mission-window-card" data-window-card="${esc(id)}" aria-labelledby="mz-${esc(id)}">
+    <div class="missions-section-head">
+      <div><span>${esc(eyebrow)}</span><h2 id="mz-${esc(id)}">${esc(title)}</h2></div>
+      <div class="mission-window-version">
+        <b>Версия ${version}</b>
+        <small>${esc(versionDate)}</small>
+      </div>
+    </div>
+    <p class="mission-window-note">${esc(note)}</p>
+
+    <div class="mission-window-fields">${fields}</div>
+
+    <label class="mission-window-message">
+      <span>Сообщение оператору</span>
+      <textarea id="${esc(message.id)}" rows="3" maxlength="1000"
+        placeholder="Что увидит оператор, открывший миссию вне периода">${esc(message.value || '')}</textarea>
+      <small class="mission-field-hint">Показывается оператору вне разрешённого периода. До 1000 символов.</small>
+    </label>
+
+    <div class="mission-window-footer">
+      <div class="mission-window-preview">${preview}</div>
+      <div class="mission-window-actions">
+        <span class="mission-dirty" data-dirty-for="${esc(id)}" hidden>Есть несохранённые изменения</span>
+        <button class="btn-primary" type="button" ${canEdit ? '' : 'disabled'}
+          onclick="${saveCall}">${canEdit ? 'Опубликовать версию' : 'Только просмотр'}</button>
+      </div>
+    </div>
+  </section>`;
+}
+
+function missionProviderWindowCard(mission, setting, preview, canEdit) {
+  const rule = setting?.value || { start_day: 16, end_day: 1, operator_message: '' };
+  const allowed = (preview?.days || []).filter(day => day.allowed).length;
+  return missionWindowCard({
+    id: 'provider',
+    eyebrow: 'Настройка периода',
+    title: 'Смена провайдера',
+    note: 'Активные попытки продолжают использовать ту версию, с которой начались. '
+      + 'Публикация создаёт новую версию и не влияет на уже начатые прохождения.',
+    version: setting?.version || 1,
+    versionDate: missionVersionDate(setting),
+    canEdit,
+    saveCall: `saveMissionProviderWindow(${mission.id})`,
+    fields: `
+      <label><span>Начало, день месяца</span><input id="mission-window-start" type="number" inputmode="numeric" min="1" max="31" value="${rule.start_day}"></label>
+      <label><span>Окончание, день месяца</span><input id="mission-window-end" type="number" inputmode="numeric" min="1" max="31" value="${rule.end_day}"></label>`,
+    message: { id: 'mission-window-message', value: rule.operator_message },
+    preview: preview
+      ? `<b>${allowed}</b><span>разрешённых дней в текущем месяце — по расчёту сервера</span>`
+      : '<span class="mission-preview-none">Расчёт периода сервером недоступен</span>',
+  });
+}
+
 function documentSigningWindowEditor(mission, setting, preview, canEdit) {
-  const rule = setting?.value || {start_day:5,end_day:15,exception_end_day:null,exception_year_month:null,operator_message:''};
-  return `<div class="mission-window-editor smz-window-editor"><div><h3>Подписание АВР</h3><p>Версия ${setting?.version || 1}. Базовый период и исключение сохраняются в активной попытке.</p></div><label>Начало<input id="smz-window-start" type="number" min="1" max="31" value="${rule.start_day}"></label><label>Окончание<input id="smz-window-end" type="number" min="1" max="31" value="${rule.end_day}"></label><label>Продлить до<input id="smz-window-exception-end" type="number" min="1" max="31" value="${rule.exception_end_day || ''}" placeholder="25"></label><label>Месяц исключения<input id="smz-window-exception-month" type="month" value="${rule.exception_year_month || ''}"></label><label class="mission-window-message">Сообщение оператору<input id="smz-window-message" value="${esc(rule.operator_message || '')}" maxlength="1000"></label><button class="btn-primary" type="button" ${canEdit ? '' : 'disabled'} onclick="saveDocumentSigningWindow(${mission.id})">${canEdit ? 'Опубликовать версию' : 'Только просмотр'}</button><div class="mission-window-preview"><b>${esc(preview?.effective_end_date || String(rule.end_day))}</b><span>фактическая конечная дата · документы ${esc(preview?.target_period?.label || '')}</span></div></div>`;
+  const rule = setting?.value
+    || { start_day: 5, end_day: 15, exception_end_day: null, exception_year_month: null, operator_message: '' };
+  return missionWindowCard({
+    id: 'signing',
+    eyebrow: 'Настройка периода',
+    title: 'Подписание АВР',
+    note: 'Базовый период и месяц-исключение сохраняются в активной попытке. '
+      + 'Исключение задаётся парой: день и месяц — либо оба, либо ни одного.',
+    version: setting?.version || 1,
+    versionDate: missionVersionDate(setting),
+    canEdit,
+    saveCall: `saveDocumentSigningWindow(${mission.id})`,
+    fields: `
+      <label><span>Начало, день месяца</span><input id="smz-window-start" type="number" inputmode="numeric" min="1" max="31" value="${rule.start_day}"></label>
+      <label><span>Окончание, день месяца</span><input id="smz-window-end" type="number" inputmode="numeric" min="1" max="31" value="${rule.end_day}"></label>
+      <label><span>Продлить до, день</span><input id="smz-window-exception-end" type="number" inputmode="numeric" min="1" max="31" value="${rule.exception_end_day || ''}" placeholder="например, 25"></label>
+      <label><span>Месяц исключения</span><input id="smz-window-exception-month" type="month" value="${rule.exception_year_month || ''}"></label>`,
+    message: { id: 'smz-window-message', value: rule.operator_message },
+    preview: preview
+      ? `<b>${esc(preview.effective_end_date || String(rule.end_day))}</b><span>фактическая конечная дата · документы ${esc(preview.target_period?.label || '')}</span>`
+      : '<span class="mission-preview-none">Расчёт периода сервером недоступен</span>',
+  });
+}
+
+/**
+ * Помечает карточку как изменённую, пока правки не опубликованы: иначе
+ * непонятно, показан на экране сохранённый период или незасланный черновик.
+ */
+function bindMissionWindowDirty(root) {
+  root.querySelectorAll('[data-window-card]').forEach(card => {
+    const id = card.dataset.windowCard;
+    const flag = card.querySelector(`[data-dirty-for="${id}"]`);
+    const fields = [...card.querySelectorAll('input, textarea')];
+    const initial = fields.map(field => field.value);
+    const check = () => {
+      const dirty = fields.some((field, index) => field.value !== initial[index]);
+      if (flag) flag.hidden = !dirty;
+      card.classList.toggle('is-dirty', dirty);
+    };
+    fields.forEach(field => {
+      field.addEventListener('input', check);
+      field.addEventListener('change', check);
+    });
+  });
+}
+
+/**
+ * Публикация новой версии — необратимое действие: операторы сразу увидят
+ * новый период. Поэтому подтверждаем и показываем, что именно меняется.
+ */
+async function confirmWindowPublish(title, summary) {
+  if (typeof uiConfirmAction === 'function') {
+    return uiConfirmAction({
+      title,
+      description: summary,
+      confirmLabel: 'Опубликовать',
+      cancelLabel: 'Отмена',
+    });
+  }
+  return confirm(`${title}\n\n${summary}`);
+}
+
+/** Показывает ошибку серверной валидации рядом с карточкой, а не только тостом. */
+function showWindowValidationError(cardId, error) {
+  const card = document.querySelector(`[data-window-card="${cardId}"]`);
+  const info = typeof uiClassifyError === 'function'
+    ? uiClassifyError(error)
+    : { title: 'Не удалось сохранить', text: error?.message || '', requestId: '' };
+  showToast(info.text || info.title, 'error');
+  if (!card) return;
+  card.querySelector('.mission-window-error')?.remove();
+  const box = document.createElement('div');
+  box.className = 'mission-window-error';
+  box.innerHTML = uiInlineError(`${info.title}. ${info.text || ''}`.trim(), info.requestId);
+  card.querySelector('.mission-window-footer')?.before(box);
 }
 
 async function saveDocumentSigningWindow(missionId) {
@@ -707,24 +929,64 @@ async function saveDocumentSigningWindow(missionId) {
   const exceptionEnd = Number(document.getElementById('smz-window-exception-end')?.value) || null;
   const exceptionMonth = document.getElementById('smz-window-exception-month')?.value || null;
   const message = document.getElementById('smz-window-message')?.value?.trim();
-  if (!start || !end || !message || Boolean(exceptionEnd) !== Boolean(exceptionMonth)) { showToast('Заполните базовый период; для исключения нужны и месяц, и день', 'error'); return; }
+
+  if (!start || !end || !message || Boolean(exceptionEnd) !== Boolean(exceptionMonth)) {
+    showToast('Заполните базовый период; для исключения нужны и месяц, и день', 'error');
+    return;
+  }
+
+  const exceptionNote = exceptionEnd ? ` Исключение: до ${exceptionEnd} числа в ${exceptionMonth}.` : '';
+  const ok = await confirmWindowPublish(
+    'Опубликовать новый период подписания АВР?',
+    `Период: с ${start} по ${end} число.${exceptionNote} Операторы увидят изменение сразу. `
+    + 'Уже начатые попытки продолжат работать по прежней версии.',
+  );
+  if (!ok) return;
+
+  const button = document.querySelector('[data-window-card="signing"] .btn-primary');
+  if (typeof uiSetBusy === 'function') uiSetBusy(button, true, 'Публикуем…');
   try {
-    await api.updateDocumentSigningWindow(missionId, {start_day:start,end_day:end,timezone:'Asia/Almaty',exception_end_day:exceptionEnd,exception_year_month:exceptionMonth,operator_message:message});
+    await api.updateDocumentSigningWindow(missionId, {
+      start_day: start, end_day: end, timezone: 'Asia/Almaty',
+      exception_end_day: exceptionEnd, exception_year_month: exceptionMonth,
+      operator_message: message,
+    });
     showToast('Новая версия периода подписания опубликована', 'ok');
     renderMissions();
-  } catch (error) { showToast(error.message, 'error'); }
+  } catch (error) {
+    if (typeof uiSetBusy === 'function') uiSetBusy(button, false);
+    showWindowValidationError('signing', error);
+  }
 }
 
 async function saveMissionProviderWindow(missionId) {
   const start = Number(document.getElementById('mission-window-start')?.value);
   const end = Number(document.getElementById('mission-window-end')?.value);
   const message = document.getElementById('mission-window-message')?.value?.trim();
-  if (!start || !end || !message) { showToast('Заполните период и сообщение оператору', 'error'); return; }
+
+  if (!start || !end || !message) {
+    showToast('Заполните период и сообщение оператору', 'error');
+    return;
+  }
+
+  const ok = await confirmWindowPublish(
+    'Опубликовать новый период смены провайдера?',
+    `Период: с ${start} по ${end} число. Операторы увидят изменение сразу. `
+    + 'Уже начатые попытки продолжат работать по прежней версии.',
+  );
+  if (!ok) return;
+
+  const button = document.querySelector('[data-window-card="provider"] .btn-primary');
+  if (typeof uiSetBusy === 'function') uiSetBusy(button, true, 'Публикуем…');
   try {
-    await api.updateProviderWindow(missionId, { start_day: start, end_day: end, timezone: 'Asia/Almaty', operator_message: message, is_active: true });
+    await api.updateProviderWindow(missionId, {
+      start_day: start, end_day: end, timezone: 'Asia/Almaty',
+      operator_message: message, is_active: true,
+    });
     showToast('Новая версия периода опубликована', 'ok');
     renderMissions();
   } catch (error) {
-    showToast(error.message, 'error');
+    if (typeof uiSetBusy === 'function') uiSetBusy(button, false);
+    showWindowValidationError('provider', error);
   }
 }
