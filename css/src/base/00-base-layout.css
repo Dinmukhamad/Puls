@@ -669,10 +669,14 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
    TABLES
 ══════════════════════════════════════════════════════════════ */
 .table-wrap {
+  /* overflow-x: auto оставляет широкие таблицы прокручиваемыми. Здесь же
+     раньше стоял overflow: hidden — он шёл следом и сбрасывал обе оси в
+     hidden, обрезая таблицу вместо прокрутки. Ниже по каскаду это чинили
+     повторным правилом с !important; убираем причину, а не симптом. */
   overflow-x: auto;
+  overflow-y: hidden;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-default);
-  overflow: hidden;
 }
 .data-table {
   width: 100%; border-collapse: collapse;
@@ -1078,6 +1082,9 @@ body.must-change-password .side-nav-link[data-nav-target] {
   margin-bottom: 16px;
   border-bottom: 1.5px solid var(--border);
   padding-bottom: 0;
+  /* На узком экране (360px) три вкладки не помещались в строку и
+     растягивали страницу на 23px вправо — переносим вместо этого. */
+  flex-wrap: wrap;
 }
 
 .ops-tab {

@@ -1,3 +1,14 @@
+/* Вкладки раздела «Рейтинг». Константа потерялась при разрезании вьюхи-монолита
+   на модули: обе использующие её функции (здесь и в кабинете оператора) падали
+   с ReferenceError, из-за чего раздел «Рейтинг» не отрисовывался вовсе.
+   Ключи совпадают с ветками loadRatingTab(). */
+const RATING_TABS = [
+  { key: 'overview', label: 'Общий рейтинг' },
+  { key: 'race',     label: 'Гонка баллов' },
+  { key: 'groups',   label: 'Сравнение групп' },
+  { key: 'progress', label: 'Мой прогресс' },
+];
+
 let _ratingActiveTab = 'overview';
 
 async function exportRatingFromRatingPage() {
@@ -17,7 +28,7 @@ async function renderStaffRating() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
+      <div><div class="section-kicker">Рейтинг</div><h1 class="section-title">Турнирная таблица</h1></div>
       <div class="header-right">
         ${isAdmin(STATE.user?.role) ? '<button class="btn-outline btn-sm" onclick="exportRatingFromRatingPage()">Экспорт CSV</button>' : ''}
         <button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button>

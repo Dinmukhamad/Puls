@@ -168,8 +168,19 @@ body.side-nav-collapsed .side-nav-toggle svg {
   flex-wrap: wrap;
 }
 
-.data-table th.sortable { cursor: pointer; user-select: none; }
+.data-table th.sortable { cursor: pointer; user-select: none; padding: 0; }
 .data-table th.sortable:hover { color: var(--accent-primary); }
+/* Кнопка сортировки заполняет ячейку: вид прежний, но доступна с клавиатуры. */
+.data-table th.sortable .sort-btn {
+  font: inherit; color: inherit; background: none; border: 0;
+  width: 100%; padding: 10px 12px; cursor: pointer;
+  text-align: right; white-space: nowrap;
+}
+.data-table th.sortable .sort-btn:hover { color: var(--accent-primary); }
+.data-table th.sortable .sort-btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
 .data-table td.num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 900px) {

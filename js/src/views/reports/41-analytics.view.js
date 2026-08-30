@@ -193,6 +193,17 @@ function anBindShell(el) {
     }
   });
 
+  // Строки таблицы раскрываются по клику и объявлены focusable (tabindex=0),
+  // но <tr> — не кнопка: Enter/Space по ней сами по себе клик не генерируют.
+  // Без этого обработчика детали строки были недоступны с клавиатуры.
+  el.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const row = event.target.closest('[data-an2="ops-row"]');
+    if (!row) return;
+    event.preventDefault();
+    row.click();
+  });
+
   el.addEventListener('change', async event => {
     const target = event.target;
     if (target.id === 'an2-group') {
@@ -219,10 +230,17 @@ function anBindShell(el) {
   });
 }
 
+/* Гонка фильтров: смена периода и группы подряд запускает несколько запросов,
+   и без маркера последовательности выигрывает тот, кто ответил последним, —
+   на экране оказываются данные уже отменённого фильтра. Каждый загрузчик
+   получает номер; результат применяется, только если он всё ещё актуален. */
+const AN_SEQ = { main: 0, ops: 0, leaders: 0 };
+
 async function anLoad(el) {
   const { start, end } = anResolveRange();
   if (!start || !end) return;
 
+  const seq = ++AN_SEQ.main;
   AN_STATE.loading = true;
   AN_STATE.error = null;
   anPaint(el);
@@ -235,19 +253,24 @@ async function anLoad(el) {
     };
     if (AN_STATE.groupId) params.group_id = AN_STATE.groupId;
     if (AN_STATE.weekdays.length < 7) params.weekdays = AN_STATE.weekdays.join(',');
-    AN_STATE.data = await api.analyticsGet('dashboard', params);
+    const data = await api.analyticsGet('dashboard', params);
+    if (seq !== AN_SEQ.main) return;   // ответ устарел — его уже отменил новый фильтр
+    AN_STATE.data = data;
     if (!AN_STATE.groups) {
       AN_STATE.groups = (await api.analyticsGet('groups-list', {}))?.items || [];
     }
   } catch (error) {
+    if (seq !== AN_SEQ.main) return;
     AN_STATE.error = error?.message || 'Не удалось загрузить данные';
   } finally {
-    AN_STATE.loading = false;
-    AN_STATE.ops.loadedKey = null;   // фильтры могли измениться — таблицу перегрузим
-    AN_STATE.leaders.key = null;     // и лидеров пересчитаем
-    anPaint(el);
-    if (AN_STATE.tab === 'operators' || AN_STATE.tab === 'quality') anEnsureOps(el);
-    if (AN_STATE.tab === 'summary') anEnsureLeaders(el);
+    if (seq === AN_SEQ.main) {
+      AN_STATE.loading = false;
+      AN_STATE.ops.loadedKey = null;   // фильтры могли измениться — таблицу перегрузим
+      AN_STATE.leaders.key = null;     // и лидеров пересчитаем
+      anPaint(el);
+      if (AN_STATE.tab === 'operators' || AN_STATE.tab === 'quality') anEnsureOps(el);
+      if (AN_STATE.tab === 'summary') anEnsureLeaders(el);
+    }
   }
 }
 
@@ -256,18 +279,23 @@ async function anEnsureLeaders(el) {
   if (!start || !end) return;
   const key = [start, end, AN_STATE.groupId].join('|');
   if (AN_STATE.leaders.key === key && !AN_STATE.leaders.loading) return;
+  const seq = ++AN_SEQ.leaders;
   AN_STATE.leaders.loading = true;
   try {
     const params = { start_date: start, end_date: end, page: 1, page_size: 5, sort_by: 'final_points', sort_order: 'desc' };
     if (AN_STATE.groupId) params.group_id = AN_STATE.groupId;
     const res = await api.analyticsGet('operators', params);
+    if (seq !== AN_SEQ.leaders) return;
     AN_STATE.leaders.items = (res.items || []).filter(x => x.final_points != null);
     AN_STATE.leaders.key = key;
   } catch {
+    if (seq !== AN_SEQ.leaders) return;
     AN_STATE.leaders.items = [];
   } finally {
-    AN_STATE.leaders.loading = false;
-    if (AN_STATE.tab === 'summary') anPaint(el);
+    if (seq === AN_SEQ.leaders) {
+      AN_STATE.leaders.loading = false;
+      if (AN_STATE.tab === 'summary') anPaint(el);
+    }
   }
 }
 
@@ -282,6 +310,7 @@ async function anEnsureOps(el) {
   if (AN_STATE.ops.loadedKey === key && !AN_STATE.ops.loading) { anPaint(el); return; }
   const { start, end } = anResolveRange();
   if (!start || !end) return;
+  const seq = ++AN_SEQ.ops;
   AN_STATE.ops.loading = true;
   AN_STATE.ops.error = null;
   anPaint(el);
@@ -294,14 +323,18 @@ async function anEnsureOps(el) {
     if (AN_STATE.groupId) params.group_id = AN_STATE.groupId;
     if (AN_STATE.ops.query) params.operator_query = AN_STATE.ops.query;
     const res = await api.analyticsGet('operators', params);
+    if (seq !== AN_SEQ.ops) return;   // пришёл ответ на прежнюю сортировку/страницу
     AN_STATE.ops.items = res.items || [];
     AN_STATE.ops.total = res.total || 0;
     AN_STATE.ops.loadedKey = key;
   } catch (error) {
+    if (seq !== AN_SEQ.ops) return;
     AN_STATE.ops.error = error?.message || 'Не удалось загрузить операторов';
   } finally {
-    AN_STATE.ops.loading = false;
-    anPaint(el);
+    if (seq === AN_SEQ.ops) {
+      AN_STATE.ops.loading = false;
+      anPaint(el);
+    }
   }
 }
 
@@ -454,8 +487,22 @@ function anSortArrow(key) {
   return AN_STATE.ops.sortOrder === 'desc' ? ' ↓' : ' ↑';
 }
 
-function anTh(label, key) {
-  return `<th class="num an2-sortable" data-an2="ops-sort" data-value="${key}" role="button" tabindex="0">${label}${anSortArrow(key)}</th>`;
+/* Заголовок сортируемой колонки.
+
+   Сортировка — настоящая <button> внутри <th>, а не role="button" на самой
+   ячейке: ARIA-роль не даёт нативной обработки Enter/Space, поэтому такие
+   заголовки не работали с клавиатуры вовсе, и <th> терял смысл заголовка
+   колонки для скринридера. Направление сортировки дублируется в aria-sort —
+   стрелка ↓/↑ остаётся только визуальной подсказкой. */
+function anTh(label, key, numeric = true) {
+  const active = AN_STATE.ops.sortBy === key;
+  const ariaSort = active
+    ? (AN_STATE.ops.sortOrder === 'desc' ? 'descending' : 'ascending')
+    : 'none';
+  const cls = numeric ? 'num an2-sortable' : 'an2-sortable';
+  return `<th class="${cls}" aria-sort="${ariaSort}" scope="col">`
+    + `<button type="button" class="an2-sort-btn" data-an2="ops-sort" data-value="${key}">`
+    + `${label}<span aria-hidden="true">${anSortArrow(key)}</span></button></th>`;
 }
 
 function anOperatorsBody() {
@@ -511,17 +558,17 @@ function anOpsTable(o) {
 
   return `<div class="table-wrap an2-ops-wrap"><table class="data-table an2-ops-table">
     <thead><tr>
-      <th class="an2-rank">#</th>
-      ${anTh('Оператор', 'full_name').replace('class="num ', 'class="')}
-      <th class="num">Часы</th>
-      <th class="num">Норма</th>
+      <th class="an2-rank" scope="col">#</th>
+      ${anTh('Оператор', 'full_name', false)}
+      <th class="num" scope="col">Часы</th>
+      <th class="num" scope="col">Норма</th>
       ${anTh('Звонки', 'calls_total')}
       ${anTh('КВЗ', 'kvz')}
       ${anTh('Эфф.%', 'efficiency_percent')}
       ${anTh('Качество', 'quality_avg')}
       ${anTh('Штраф', 'penalty_minutes')}
       ${anTh('Итог', 'final_points')}
-      <th>Риск</th>
+      <th scope="col">Риск</th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table></div>
@@ -832,7 +879,15 @@ function anBindTrendHover(el) {
   figure.querySelectorAll('.an2-dot').forEach(dot => {
     const show = () => {
       tip.hidden = false;
-      tip.innerHTML = `<b>${dot.dataset.label}</b><span>${dot.dataset.value}</span>`;
+      // Через dataset значение возвращается уже РАСКОДИРОВАННЫМ: экранирование,
+      // сделанное при записи атрибута, здесь теряется, и innerHTML снова
+      // трактовал бы содержимое как разметку. Пишем текстом.
+      tip.textContent = '';
+      const labelEl = document.createElement('b');
+      labelEl.textContent = dot.dataset.label || '';
+      const valueEl = document.createElement('span');
+      valueEl.textContent = dot.dataset.value || '';
+      tip.append(labelEl, valueEl);
       const box = figure.getBoundingClientRect();
       const point = dot.getBoundingClientRect();
       tip.style.left = `${point.left - box.left + point.width / 2}px`;

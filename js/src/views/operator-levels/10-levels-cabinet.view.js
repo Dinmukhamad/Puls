@@ -11,7 +11,7 @@ async function renderOperatorLevelsSettings() {
     <div class="levels-page-head">
       <div>
         <div class="section-kicker">Развитие команды</div>
-        <h2 class="section-title">Уровни операторов</h2>
+        <h1 class="section-title">Уровни операторов</h1>
         <p>Настройте путь роста, требования к каждому этапу и награды за повышение.</p>
       </div>
       <div class="header-right level-header-actions" ${tab === 'levels' ? '' : 'hidden'}>
@@ -407,7 +407,7 @@ function renderCabinet() {
     el.innerHTML = `<div class="view-header">
       <div>
         <div class="section-kicker">Кабинет</div>
-        <h2 class="section-title">Мой кабинет</h2>
+        <h1 class="section-title">Мой кабинет</h1>
       </div>
     </div>
     <div class="panel">
@@ -418,7 +418,7 @@ function renderCabinet() {
   }
   const w = STATE.wallet;
   if (!w) {
-    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div></div>
+    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Кабинет</div><h1 class="section-title">Мой кабинет</h1></div></div>
       <div class="empty-state"><p>Данные загружаются…</p></div>`;
     const _cabinetGen = STATE.navGen;
     swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS).then(data => {
@@ -463,7 +463,7 @@ function renderCabinet() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+      <div><div class="section-kicker">Кабинет</div><h1 class="section-title">Мой кабинет</h1></div>
       <button class="btn-outline btn-sm" onclick="reloadCabinet()">Обновить</button>
     </div>
 
@@ -692,7 +692,7 @@ async function loadCabinetSnapshot(force = false) {
 function cabinetLoadingHtml() {
   return `
     <div class="view-header">
-      <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+      <div><div class="section-kicker">Кабинет</div><h1 class="section-title">Мой кабинет</h1></div>
     </div>
     <div class="cabinet-skeleton-grid">
       <div class="cabinet-skeleton wide"></div>
@@ -826,7 +826,7 @@ function renderCabinet() {
     });
     if (STATE.cabinetError) {
       el.innerHTML = `<div class="view-header">
-        <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+        <div><div class="section-kicker">Кабинет</div><h1 class="section-title">Мой кабинет</h1></div>
         <button class="btn-outline btn-sm" onclick="reloadCabinet()">Повторить</button>
       </div><div class="panel empty-state"><p>${esc(STATE.cabinetError)}</p></div>`;
     }
@@ -850,7 +850,7 @@ function renderCabinet() {
     <div class="view-header cabinet-v2-header">
       <div>
         <div class="section-kicker">Кабинет</div>
-        <h2 class="section-title">Мой кабинет</h2>
+        <h1 class="section-title">Мой кабинет</h1>
         ${generatedAt ? `<div class="cabinet-snapshot-note">Обновлено: ${esc(generatedAt)}</div>` : ''}
       </div>
       <button class="btn-outline btn-sm" onclick="reloadCabinet()" ${STATE.cabinetLoading ? 'disabled' : ''}>${STATE.cabinetLoading ? 'Обновляем...' : 'Обновить'}</button>

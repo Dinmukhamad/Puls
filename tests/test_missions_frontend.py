@@ -14,9 +14,13 @@ def test_missions_navigation_keeps_levels_separate():
     shell = _read("js/src/app/00-core-shell.js")
     assert 'data-nav-target="missions"' in html
     assert 'data-nav-target="operator-levels"' in html
-    assert "case 'missions': renderMissions();" in shell
-    assert "'operator-levels'" in shell
-    assert "'missions'" in shell
+    # Диспетчеризация переехала из switch в реестр маршрутов ROUTES —
+    # требование то же: «Миссии» и «Уровни» остаются разными разделами,
+    # каждый со своей записью и своей функцией отрисовки.
+    assert "renderMissions()" in shell
+    assert "renderOperatorLevelsSettings()" in shell
+    assert "'operator-levels':" in shell
+    assert "missions:" in shell
 
 
 def test_missions_frontend_has_required_safe_interactions():

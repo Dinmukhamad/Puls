@@ -58,7 +58,7 @@ async function renderAdminSessions() {
     <div class="view-header">
       <div>
         <div class="section-kicker">Безопасность</div>
-        <h2 class="section-title">Сессии пользователей</h2>
+        <h1 class="section-title">Сессии пользователей</h1>
       </div>
       <div class="header-right">
         <button class="btn-outline" id="sessions-refresh-btn">Обновить</button>
@@ -85,7 +85,7 @@ function paintAdminSessions(el, data) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Безопасность</div>
-        <h2 class="section-title">Сессии пользователей</h2>
+        <h1 class="section-title">Сессии пользователей</h1>
       </div>
       <div class="header-right">
         <button class="btn-outline" id="sessions-refresh-btn">Обновить</button>

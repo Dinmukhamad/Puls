@@ -61,6 +61,15 @@ function renderUsersPage() {
     };
   }
 
+  // Сортировка и раскрытые строки таблицы пользователей.
+  const usersSort = STATE.usersSort || (STATE.usersSort = { key: 'full_name', dir: 'asc' });
+  const usersExpanded = STATE.usersExpanded || (STATE.usersExpanded = new Set());
+
+  /** Есть ли активные фильтры — чтобы отличить «никого нет» от «ничего не найдено». */
+  function usersHasActiveFilters() {
+    return Boolean(searchVal || filterGroup || filterLevel || filterRole || filterStatus || activeTab !== 'all');
+  }
+
   function filteredOps() {
     return ops.filter(o => {
       const matchSearch = !searchVal || (o.full_name || '').toLowerCase().includes(searchVal.toLowerCase())
@@ -109,41 +118,89 @@ function renderUsersPage() {
     </div>`;
   }
 
+  // Сортировка таблицы пользователей. Ключ — поле, направление — asc/desc.
+  const USERS_SORTABLE = {
+    full_name: { label: 'Пользователь', type: 'text' },
+    group_name: { label: 'Группа', type: 'text' },
+    level: { label: 'Уровень', type: 'number' },
+    status: { label: 'Статус', type: 'text' },
+  };
+
+  function sortedOps(list) {
+    const { key, dir } = usersSort;
+    if (!key || !USERS_SORTABLE[key]) return list;
+    const type = USERS_SORTABLE[key].type;
+    const value = o => {
+      if (key === 'level') return o.level?.sort_order ?? null;
+      if (key === 'status') return o.status || '';
+      return o[key] || '';
+    };
+    return [...list].sort((a, b) => {
+      const av = value(a); const bv = value(b);
+      // Отсутствующее значение — не ноль и не пустая строка: такие строки
+      // всегда внизу, в каком бы направлении ни сортировали.
+      const aMissing = av === null || av === undefined || av === '';
+      const bMissing = bv === null || bv === undefined || bv === '';
+      if (aMissing || bMissing) return aMissing - bMissing;
+      const cmp = type === 'number' ? av - bv : String(av).localeCompare(String(bv), 'ru');
+      return dir === 'desc' ? -cmp : cmp;
+    });
+  }
+
+  function usersTh(key, label, extraClass = '') {
+    const active = usersSort.key === key;
+    const ariaSort = active ? (usersSort.dir === 'desc' ? 'descending' : 'ascending') : 'none';
+    const arrow = active ? (usersSort.dir === 'desc' ? ' ↓' : ' ↑') : '';
+    return `<th scope="col" class="${extraClass}" aria-sort="${ariaSort}">`
+      + `<button type="button" class="users-sort-btn" data-users-sort="${key}">`
+      + `${esc(label)}<span aria-hidden="true">${arrow}</span></button></th>`;
+  }
+
   function renderTable() {
-    const list = filteredOps();
+    const list = sortedOps(filteredOps());
     return `
-      <div class="table-wrap">
+      <div class="table-wrap users-table-wrap">
         <table class="data-table users-table-compact">
           <thead><tr>
-            <th scope="col" data-sticky="start">Пользователь</th>
-            <th scope="col">Роль</th>
-            <th scope="col">Группа</th>
-            <th scope="col" class="tc">Ставка</th>
-            <th scope="col" class="tc">Уровень</th>
-            <th scope="col" class="tc">Стаж</th>
-            <th scope="col" class="tc">Статус</th>
-            <th scope="col" class="tc" data-sticky="end">Действия</th>
+            ${usersTh('full_name', 'Пользователь')}
+            ${usersTh('group_name', 'Группа')}
+            ${usersTh('level', 'Уровень', 'tc')}
+            ${usersTh('status', 'Статус', 'tc')}
+            <th scope="col" class="tc users-col-actions">Действия</th>
           </tr></thead>
           <tbody>
             ${list.length ? list.map(o => {
               const dismissed = isDismissed(o);
               const isOp = o.role === 'operator';
-              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}" data-user-row="${o.id}" tabindex="0" aria-label="Открыть профиль ${esc(o.full_name)}">
-                <td class="name-cell" data-label="Пользователь" data-sticky="start">
-                  <div class="user-cell-name" title="${esc(o.full_name)}">${esc(o.full_name)}</div>
-                  ${o.email ? `<div class="user-cell-sub">${esc(o.email)}</div>` : ''}
-                </td>
-                <td data-label="Роль">
-                  ${roleBadge(o.role)}
+              const open = usersExpanded.has(String(o.id));
+              // Ставка и стаж переехали в раскрываемую панель: на 1280px
+              // восемь колонок не помещались и таблица уезжала вбок на 260px.
+              const detail = open ? `<tr class="users-detail-row"><td colspan="5">
+                  <div class="users-detail-grid">
+                    <div><span>Роль</span><b>${roleBadge(o.role)}</b></div>
+                    <div><span>Ставка</span><b>${isOp ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">Не применяется</span>'}</b></div>
+                    <div><span>Стаж</span><b>${isOp && o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">Нет данных</span>'}</b></div>
+                    <div><span>Логин</span><b>${esc(o.login || o.username || '—')}</b></div>
+                    <div><span>Почта</span><b>${esc(o.email || '—')}</b></div>
+                  </div></td></tr>` : '';
+              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}" data-user-row="${o.id}" tabindex="0" aria-expanded="${open}" aria-label="Открыть профиль ${esc(o.full_name)}">
+                <td class="name-cell" data-label="Пользователь">
+                  <button type="button" class="users-expand" data-users-expand="${o.id}" aria-label="${open ? 'Свернуть' : 'Развернуть'} подробности: ${esc(o.full_name)}">${open ? '−' : '+'}</button>
+                  <span class="user-cell-body">
+                    <span class="user-cell-name" title="${esc(o.full_name)}">${esc(o.full_name)}</span>
+                    <span class="user-cell-sub">${roleLabel(o.role)}${o.email ? ` · ${esc(o.email)}` : ''}</span>
+                  </span>
                 </td>
                 <td data-label="Группа"><span class="user-table-value" title="${esc(o.group_name || 'Не назначена')}">${o.group_name ? esc(o.group_name) : 'Не назначена'}</span></td>
-                <td class="tc" data-label="Ставка">${isOp ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">Не применяется</span>'}</td>
-                <td class="tc" data-label="Уровень">${isOp ? levelBadgeHtml(o.level) : '<span class="cell-muted">Не применяется</span>'}</td>
-                <td class="tc" data-label="Стаж">${isOp && o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">Нет данных</span>'}</td>
+                <td class="tc" data-label="Уровень">${isOp ? levelBadgeHtml(o.level) : '<span class="cell-muted">—</span>'}</td>
                 <td class="tc" data-label="Статус">${userStatusBadge(o.status)}</td>
-                <td class="tc" data-label="Действия" data-sticky="end">${operatorActions(o)}</td>
-              </tr>`;
-            }).join('') : '<tr><td colspan="8" class="empty-line">Нет пользователей</td></tr>'}
+                <td class="tc" data-label="Действия" class="users-col-actions">${operatorActions(o)}</td>
+              </tr>${detail}`;
+            }).join('') : `<tr><td colspan="5">${
+              usersHasActiveFilters()
+                ? uiNoResultsState('Под фильтры никто не подошёл', 'Измените условия или сбросьте фильтры.', [], true)
+                : uiEmptyState('Пользователей пока нет', 'Добавьте первого сотрудника кнопкой «Создать пользователя».', [], true)
+            }</td></tr>`}
           </tbody>
         </table>
       </div>`;
@@ -291,6 +348,33 @@ function renderUsersPage() {
   }
   rebindOps();
   function bindOpsActions() {
+    // Сортировка: настоящая кнопка внутри th, направление отражено в aria-sort.
+    el.querySelectorAll('[data-users-sort]').forEach(btn => {
+      btn.addEventListener('click', event => {
+        event.stopPropagation();
+        const key = btn.dataset.usersSort;
+        if (usersSort.key === key) usersSort.dir = usersSort.dir === 'asc' ? 'desc' : 'asc';
+        else { usersSort.key = key; usersSort.dir = 'asc'; }
+        // rebindOps() только навешивает слушатели — таблицу надо перерисовать.
+        el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+        bindOpsActions();
+        // Кнопка пересоздана: возвращаем на неё фокус, иначе после сортировки
+        // с клавиатуры фокус улетает в начало страницы.
+        el.querySelector(`[data-users-sort="${key}"]`)?.focus();
+      });
+    });
+    // Раскрытие подробностей строки (ставка, стаж, логин, почта).
+    el.querySelectorAll('[data-users-expand]').forEach(btn => {
+      btn.addEventListener('click', event => {
+        event.stopPropagation();
+        const id = String(btn.dataset.usersExpand);
+        if (usersExpanded.has(id)) usersExpanded.delete(id);
+        else usersExpanded.add(id);
+        el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+        bindOpsActions();
+        el.querySelector(`[data-users-expand="${id}"]`)?.focus();
+      });
+    });
     el.querySelectorAll('[data-user-row]').forEach(row => {
       const open = () => showUserManagementModal(Number(row.dataset.userRow));
       row.addEventListener('click', event => {
@@ -318,7 +402,9 @@ function renderUsersPage() {
       });
     });
   }
-  bindOpsActions();
+  // bindOpsActions() уже вызван внутри rebindOps() выше. Повторный вызов
+  // навешивал каждый обработчик второй раз: первый клик по сортировке
+  // срабатывал дважды и возвращал таблицу в исходное состояние.
 }
 
 /* ══════════════════════════════════════
@@ -349,7 +435,7 @@ function renderCoins() {
     <div class="coins-page-head">
       <div>
         <div class="section-kicker">Коины</div>
-        <h2 class="section-title">Операции с коинами</h2>
+        <h1 class="section-title">Операции с коинами</h1>
         <p>Начисления, заявки и правила в одном рабочем пространстве</p>
       </div>
       <div class="coins-head-actions">
@@ -1307,7 +1393,7 @@ async function renderGroups() {
   if (!canManageGroups()) {
     el.innerHTML = `
       <div class="view-header">
-        <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+        <div><div class="section-kicker">Группы</div><h1 class="section-title">Управление группами</h1></div>
       </div>
       <div class="empty-state"><p>Недостаточно прав для управления группами</p></div>`;
     return;
@@ -1315,7 +1401,7 @@ async function renderGroups() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+      <div><div class="section-kicker">Группы</div><h1 class="section-title">Управление группами</h1></div>
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="renderGroups()">Обновить</button>
         <button class="btn-primary btn-sm" onclick="showAddGroupModal()">Создать группу</button>
@@ -1331,7 +1417,7 @@ async function renderGroups() {
     if (isNavStale(myNavGen)) return;
     el.innerHTML = `
       <div class="view-header">
-        <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+        <div><div class="section-kicker">Группы</div><h1 class="section-title">Управление группами</h1></div>
         <button class="btn-outline btn-sm" onclick="renderGroups()">Повторить</button>
       </div>
       <div class="status-line status-error" style="padding:20px">Не удалось загрузить список групп</div>`;
@@ -1342,7 +1428,7 @@ async function renderGroups() {
   const rows = STATE.groups;
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+      <div><div class="section-kicker">Группы</div><h1 class="section-title">Управление группами</h1></div>
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="renderGroups()">Обновить</button>
         <button class="btn-primary btn-sm" onclick="showAddGroupModal()">Создать группу</button>
@@ -1812,6 +1898,34 @@ async function showOperatorHistoryModal(id) {
 /* ══════════════════════════════════════
    MODALS
 ══════════════════════════════════════ */
+// Элемент, с которого открыли окно: фокус обязан вернуться именно на него.
+let _modalPreviousFocus = null;
+let _modalKeydown = null;
+let _modalSeq = 0;
+
+/** Все элементы окна, на которые можно поставить фокус клавишей Tab. */
+function _modalFocusable(root) {
+  return [...root.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), '
+    + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )].filter(el => el.offsetParent !== null || el === document.activeElement);
+}
+
+/** Есть ли в форме введённые данные — чтобы не закрыть их молча. */
+function _modalHasInput(root) {
+  return [...root.querySelectorAll('input, textarea, select')].some(field => {
+    if (field.type === 'hidden' || field.disabled) return false;
+    if (field.type === 'checkbox' || field.type === 'radio') return field.checked !== field.defaultChecked;
+    if (field.tagName === 'SELECT') return field.selectedIndex > 0;
+    return Boolean(field.value) && field.value !== field.defaultValue;
+  });
+}
+
+/**
+ * Единственное модальное окно приложения. Всё, что открывается поверх
+ * страницы, проходит через эту функцию, поэтому доступность настраивается
+ * здесь один раз для всех форм, подтверждений и карточек.
+ */
 function showModal(html, options = {}) {
   let overlay = document.getElementById('modal-overlay');
   if (!overlay) {
@@ -1820,17 +1934,90 @@ function showModal(html, options = {}) {
     overlay.className = 'modal-overlay';
     document.body.appendChild(overlay);
   }
+
+  // Запоминаем, откуда пришли, до того как перерисуем содержимое.
+  if (overlay.style.display !== 'flex') {
+    _modalPreviousFocus = document.activeElement;
+  }
+
   const forced = Boolean(options.force);
   overlay.dataset.force = forced ? 'true' : 'false';
   const extraClass = options.className ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '') : '';
-  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
+  const titleId = `modal-title-${++_modalSeq}`;
+
+  overlay.innerHTML = `
+    <div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}"
+         role="dialog" aria-modal="true" aria-labelledby="${titleId}">
+      ${html}
+      ${forced ? '' : '<button class="modal-close" type="button" aria-label="Закрыть окно"><span aria-hidden="true">✕</span></button>'}
+    </div>`;
+
+  const dialog = overlay.querySelector('.modal');
+  // Заголовок окна связываем с самим окном: скринридер объявит, что открылось.
+  const heading = dialog.querySelector('h1, h2, h3, .modal-title, .acc-title');
+  if (heading) heading.id = titleId;
+  else dialog.setAttribute('aria-label', options.label || 'Диалоговое окно');
+
   overlay.style.display = 'flex';
-  overlay.onclick = e => { if (e.target === overlay && !forced) closeModal(); };
+  // Фон не должен прокручиваться под открытым окном.
+  document.body.classList.add('modal-open');
+
+  dialog.querySelector('.modal-close')?.addEventListener('click', () => closeModal());
+  overlay.onclick = event => { if (event.target === overlay && !forced) closeModal(); };
+
+  // Фокус — на первое осмысленное поле, иначе на кнопку закрытия.
+  const focusables = _modalFocusable(dialog);
+  const firstField = dialog.querySelector(
+    'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])',
+  );
+  (firstField || focusables[0] || dialog).focus?.({ preventScroll: true });
+
+  // Escape закрывает, Tab не выпускает фокус за пределы окна.
+  if (_modalKeydown) document.removeEventListener('keydown', _modalKeydown, true);
+  _modalKeydown = event => {
+    if (overlay.style.display !== 'flex') return;
+    if (event.key === 'Escape' && !forced) {
+      event.preventDefault();
+      closeModal();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const items = _modalFocusable(dialog);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  document.addEventListener('keydown', _modalKeydown, true);
 }
+
 function closeModal(force = false) {
-  const o = document.getElementById('modal-overlay');
-  if (o?.dataset.force === 'true' && !force) return;
-  if (o) o.style.display = 'none';
+  const overlay = document.getElementById('modal-overlay');
+  if (!overlay) return;
+  if (overlay.dataset.force === 'true' && !force) return;
+
+  // Заполненную форму не закрываем молча — введённое легко потерять.
+  const dialog = overlay.querySelector('.modal');
+  if (!force && dialog && _modalHasInput(dialog)
+      && !confirm('Закрыть окно? Введённые данные не сохранятся.')) {
+    return;
+  }
+
+  overlay.style.display = 'none';
+  document.body.classList.remove('modal-open');
+  if (_modalKeydown) {
+    document.removeEventListener('keydown', _modalKeydown, true);
+    _modalKeydown = null;
+  }
+  // Возвращаем фокус туда, откуда окно открыли.
+  if (_modalPreviousFocus?.isConnected) _modalPreviousFocus.focus?.({ preventScroll: true });
+  _modalPreviousFocus = null;
   if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
 }
 

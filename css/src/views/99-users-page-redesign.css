@@ -68,10 +68,17 @@
   border-radius: inherit;
 }
 
+/* Таблица занимает доступную ширину и помещается целиком.
+
+   Раньше здесь стояли width: max-content и min-width: 1172px вместе с
+   фиксированными ширинами для ВОСЬМИ колонок. Колонок теперь пять
+   (роль ушла под имя, ставка и стаж — в раскрываемую панель), а жёсткий
+   минимум продолжал растягивать таблицу: на 1280px она занимала 1172px
+   в контейнере 912px и уезжала вбок на 260px. */
 #view-operators .users-table-compact {
-  width: max-content;
-  min-width: 1172px;
-  table-layout: auto;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
 }
 
 #view-operators .users-table-compact th,
@@ -79,14 +86,15 @@
   padding-inline: 12px;
 }
 
-#view-operators .users-table-compact th:nth-child(1) { width: 260px; min-width: 260px; }
-#view-operators .users-table-compact th:nth-child(2) { width: 120px; min-width: 120px; }
-#view-operators .users-table-compact th:nth-child(3) { width: 180px; min-width: 180px; }
-#view-operators .users-table-compact th:nth-child(4) { width: 100px; min-width: 100px; }
-#view-operators .users-table-compact th:nth-child(5) { width: 140px; min-width: 140px; }
-#view-operators .users-table-compact th:nth-child(6) { width: 110px; min-width: 110px; }
-#view-operators .users-table-compact th:nth-child(7) { width: 110px; min-width: 110px; }
-#view-operators .users-table-compact th:nth-child(8) { width: 64px; min-width: 64px; }
+/* Имя забирает остаток ширины, остальные колонки — по содержимому. */
+#view-operators .users-table-compact th:nth-child(1) { width: auto;  min-width: 220px; }
+#view-operators .users-table-compact th:nth-child(2) { width: 150px; }
+#view-operators .users-table-compact th:nth-child(3) { width: 140px; }
+#view-operators .users-table-compact th:nth-child(4) { width: 120px; }
+#view-operators .users-table-compact th:nth-child(5) { width: 116px; }
+
+/* Длинные значения обрезаются многоточием, а не растягивают колонку. */
+#view-operators .users-table-compact td { overflow: hidden; text-overflow: ellipsis; }
 
 #view-operators .users-table-compact tbody td {
   height: 70px;
@@ -285,7 +293,10 @@
     overflow-y: visible;
   }
 
-  #view-operators .users-table-compact { min-width: 1172px; }
+  /* На планшете колонка «Группа» скрыта (см. 20-states.css), остальные
+     ужимаются. Жёсткий минимум в 1172px здесь только возвращал вылет вбок,
+     ради которого таблицу и перестраивали. */
+  #view-operators .users-table-compact { min-width: 0; }
 }
 
 @media (max-width: 720px) {

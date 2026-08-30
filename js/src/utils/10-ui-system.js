@@ -95,13 +95,10 @@ function uiPageHeader({ eyebrow = '', title, description = '', meta = '', action
   </header>`;
 }
 
-function uiEmptyState(title, description = '', action = '') {
-  return `<div class="ui-empty-state" role="status">
-    <strong>${esc(title)}</strong>
-    ${description ? `<p>${esc(description)}</p>` : ''}
-    ${action}
-  </div>`;
-}
+// uiEmptyState переехал в js/src/components/10-states.js — там живёт единая
+// система состояний страницы (пусто / нет результатов / ошибка / нет прав).
+// Две реализации с одним именем перекрывали друг друга: побеждала та, что
+// шла в бандле последней, и вызовы с новой сигнатурой рисовали [object Object].
 
 function uiSetBusy(button, busy, label = 'Сохраняем…') {
   if (!button) return;

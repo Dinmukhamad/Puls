@@ -146,7 +146,7 @@ async function renderWheelOperatorView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">Wheel of WOW</h2>
+        <h1 class="section-title">Wheel of WOW</h1>
       </div>
     </div>
     <div class="panel"><div class="empty-state"><div class="loading-spinner"></div><p>Загрузка колеса…</p></div></div>`;
@@ -163,11 +163,11 @@ async function renderWheelOperatorView(el) {
 
   const items = prizes.items || [];
   if (status.__fallback || prizes.__fallback) {
-    el.innerHTML = `<div class="view-header"><h2 class="section-title">Wheel of WOW</h2></div>${wheelLoadingPanel('Готовим колесо')}`;
+    el.innerHTML = `<div class="view-header"><h1 class="section-title">Wheel of WOW</h1></div>${wheelLoadingPanel('Готовим колесо')}`;
     return;
   }
   if (!status.campaign || !items.length) {
-    el.innerHTML = `<div class="view-header"><h2 class="section-title">Wheel of WOW</h2></div>
+    el.innerHTML = `<div class="view-header"><h1 class="section-title">Wheel of WOW</h1></div>
       <div class="panel"><div class="empty-state"><p>Колесо сейчас недоступно. Загляните позже.</p></div></div>`;
     return;
   }
@@ -192,7 +192,7 @@ async function renderWheelOperatorView(el) {
     <div class="view-header wheel-v2-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">Колесо наград</h2>
+        <h1 class="section-title">Колесо наград</h1>
         <p class="wheel-v2-subtitle">Используйте билет и получите один из призов Wheel of WOW</p>
       </div>
       <div class="wheel-v2-counters">
@@ -483,7 +483,7 @@ async function renderWheelStaffView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Управление мотивацией</div>
-        <h2 class="section-title">Wheel of WOW</h2>
+        <h1 class="section-title">Wheel of WOW</h1>
         <p class="section-subtitle">Настройте призы, правила получения попыток и контролируйте прокрутки.</p>
       </div>
     </div>
@@ -1554,7 +1554,7 @@ async function renderTestsOperatorView(el) {
   const myNavGen = STATE.navGen;
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Обучение</div><h2 class="section-title">Мои тесты</h2><div class="section-subtitle">Проверяйте знания и получайте награды за результат.</div></div>
+      <div><div class="section-kicker">Обучение</div><h1 class="section-title">Мои тесты</h1><div class="section-subtitle">Проверяйте знания и получайте награды за результат.</div></div>
       <button class="btn-outline btn-sm" onclick="renderTests()">Обновить</button>
     </div>
     <div id="tests-op-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
@@ -1970,7 +1970,7 @@ function renderTestResultScreen(result) {
   if (!el) return;
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Тесты</div><h2 class="section-title">Результат теста</h2></div>
+      <div><div class="section-kicker">Тесты</div><h1 class="section-title">Результат теста</h1></div>
       <button class="btn-primary btn-sm" onclick="renderTests()">К списку тестов</button>
     </div>
     ${testResultCardHtml(result)}
@@ -2034,7 +2034,7 @@ async function renderTestsStaffView(el) {
   const myNavGen = STATE.navGen;
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Обучение команды</div><h2 class="section-title">Тесты</h2><div class="section-subtitle">Создавайте проверки знаний и отслеживайте результаты операторов.</div></div>
+      <div><div class="section-kicker">Обучение команды</div><h1 class="section-title">Тесты</h1><div class="section-subtitle">Создавайте проверки знаний и отслеживайте результаты операторов.</div></div>
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="renderTests()">Обновить</button>
         <button class="btn-primary btn-sm" id="tests-new-btn">Создать тест</button>
@@ -2193,7 +2193,7 @@ function renderTestBuilderScreen() {
 
   el.innerHTML = `
     <div class="view-header test-builder-header">
-      <div><div class="section-kicker">Конструктор теста</div><h2 class="section-title">${s.testId ? 'Настройка теста' : 'Новый тест'}</h2><div class="section-subtitle">Заполните параметры, добавьте вопросы и назначьте аудиторию.</div></div>
+      <div><div class="section-kicker">Конструктор теста</div><h1 class="section-title">${s.testId ? 'Настройка теста' : 'Новый тест'}</h1><div class="section-subtitle">Заполните параметры, добавьте вопросы и назначьте аудиторию.</div></div>
       <button class="btn-outline btn-sm" onclick="renderTests()">К списку</button>
     </div>
     ${isOpen ? '<div class="test-builder-notice">Тест уже открыт. Можно изменить дату закрытия и назначение.</div>' : ''}
@@ -2507,7 +2507,7 @@ async function openTestResultsView(testId) {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Тесты</div><h2 class="section-title">Результаты</h2></div>
+      <div><div class="section-kicker">Тесты</div><h1 class="section-title">Результаты</h1></div>
       <button class="btn-outline btn-sm" onclick="renderTests()">К списку</button>
     </div>
     <div class="filter-tabs" id="tr-tabs">

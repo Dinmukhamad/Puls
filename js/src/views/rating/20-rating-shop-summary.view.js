@@ -939,7 +939,7 @@ function renderShop() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Магазин</div><h2 class="section-title">Магазин бонусов</h2></div>
+      <div><div class="section-kicker">Магазин</div><h1 class="section-title">Магазин бонусов</h1></div>
       <div class="header-right">
         ${role === 'operator' ? `<div class="balance-chip">Баланс: <b>${balance} ₡</b></div>` : ''}
         ${isAdmin(role) ? `<button class="btn-primary btn-sm" onclick="showAddItemModal()">+ Добавить бонус</button>` : ''}
@@ -969,7 +969,7 @@ function renderOperatorShop(el, items, balance) {
     <div class="view-header shop-v2-header">
       <div>
         <div class="section-kicker">Магазин</div>
-        <h2 class="section-title">Бонусы за ваши результаты</h2>
+        <h1 class="section-title">Бонусы за ваши результаты</h1>
         <p class="shop-v2-subtitle">Обменивайте заработанные коины на полезные бонусы для работы и отдыха.</p>
       </div>
       <div class="shop-v2-header-meta">
@@ -1190,7 +1190,7 @@ function renderSummary() {
   if (!el) return;
   const d = STATE.dashboard;
   if (!d) {
-    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Сводка</div><h2 class="section-title">Рабочая сводка</h2></div></div>
+    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Сводка</div><h1 class="section-title">Рабочая сводка</h1></div></div>
       <div class="empty-state"><p>Загрузка данных…</p></div>`;
     const _summaryGen = STATE.navGen;
     api.getDashboard().then(data => {
@@ -1222,7 +1222,7 @@ function renderSummary() {
     <div class="view-header summary-v2-header">
       <div>
         <div class="section-kicker">Сводка</div>
-        <h2 class="section-title">Рабочая сводка</h2>
+        <h1 class="section-title">Рабочая сводка</h1>
         <p class="summary-v2-subtitle">Главное за неделю: команда, результаты и вопросы, требующие решения.</p>
       </div>
       <div class="header-right">

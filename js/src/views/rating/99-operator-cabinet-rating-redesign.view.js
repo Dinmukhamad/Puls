@@ -113,7 +113,32 @@ function renderCabinet() {
   const el = document.getElementById('view-cabinet');
   if (!el) return;
   if (!['operator', 'supervisor'].includes(STATE.user?.role)) {
-    el.innerHTML = `<div class="op-page">${opEmpty('Личный кабинет недоступен', 'Он предназначен для аккаунтов, связанных с оператором.')}</div>`;
+    // Управленческому аккаунту кабинет не нужен: у него нет своей карточки
+    // оператора, а значит ни баллов, ни коинов, ни места в рейтинге.
+    // Раньше здесь была одинокая строка без заголовка — экран выглядел
+    // сломанным. Показываем полноценное объяснение и куда идти дальше.
+    const isStaff = isAdmin(STATE.user?.role);
+    el.innerHTML = `
+      <div class="view-header">
+        <div>
+          <div class="section-kicker">Кабинет</div>
+          <h1 class="section-title">Мой кабинет</h1>
+        </div>
+      </div>
+      ${uiEmptyState(
+        'Кабинет заводится вместе с карточкой оператора',
+        'Этот раздел показывает личные баллы, коины и место в рейтинге, а они считаются '
+        + 'по карточке оператора. У вашей учётной записи её нет, поэтому показывать нечего. '
+        + (isStaff ? 'Результаты команды смотрите в разделах «Сводка» и «Рейтинг».' : ''),
+        isStaff ? [
+          { id: 'summary', label: 'Открыть сводку' },
+          { id: 'rating', label: 'Открыть рейтинг', variant: 'ghost' },
+        ] : [],
+      )}`;
+    uiBindStateActions(el, {
+      summary: () => navigateTo('summary'),
+      rating: () => navigateTo('rating'),
+    });
     return;
   }
   const snapshot = STATE.cabinetSnapshot;

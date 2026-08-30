@@ -44,9 +44,24 @@ const testsView = await readFile(
 );
 
 test('every hash navigation is checked against the role registry', () => {
-  assert.match(core, /addEventListener\('hashchange'/);
-  assert.match(core, /allowedViewsForRole\(role\)\.includes\(requested\.view\)/);
-  assert.match(core, /const fallback = isAdmin\(role\) \? 'summary' : 'cabinet'/);
+  // Проверка прав переехала из обработчика hashchange в resolveRoute, через
+  // который теперь проходит ЛЮБАЯ навигация — и по адресу, и по sidebar.
+  // Требование то же: раздел без прав не должен открыться.
+  assert.match(core, /addEventListener\('hashchange', syncRouteFromUrl\)/);
+  assert.match(core, /addEventListener\('popstate', syncRouteFromUrl\)/);
+
+  const sync = core.match(/function syncRouteFromUrl[\s\S]*?\n\}/)[0];
+  assert.match(sync, /resolveRoute\(requested\.view, requested\.tab\)/,
+    'навигация браузером обходит проверку маршрута');
+
+  const resolve = core.match(/function resolveRoute[\s\S]*?\n\}/)[0];
+  assert.match(resolve, /allowedViewsForRole\(role\)\.includes\(target\)/,
+    'права роли не проверяются при разборе маршрута');
+  assert.match(resolve, /fallbackViewForRole/,
+    'нет отката на стартовый раздел роли');
+
+  const fallback = core.match(/function fallbackViewForRole[\s\S]*?\n\}/)[0];
+  assert.match(fallback, /isAdmin\(role\) \? 'summary' : 'cabinet'/);
 });
 
 test('navigation disposes in-flight view requests', () => {

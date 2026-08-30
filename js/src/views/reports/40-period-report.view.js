@@ -12,7 +12,7 @@ function renderPeriodReport() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Расчёт</div><h2 class="section-title">Расчёт показателей за период</h2></div>
+      <div><div class="section-kicker">Расчёт</div><h1 class="section-title">Расчёт показателей за период</h1></div>
     </div>
 
     <div class="pr-card">
@@ -181,7 +181,13 @@ function renderPeriodReport() {
         (!filterGroup || o.group_name === filterGroup)
       );
       r.sort((a, b) => {
-        const av = a[sortKey] || 0, bv = b[sortKey] || 0;
+        // Отсутствующее значение (например, качество без единой оценки) — не ноль:
+        // такие строки уходят в конец при любом направлении, а не притворяются
+        // худшим результатом.
+        const av = a[sortKey], bv = b[sortKey];
+        const aMissing = av === null || av === undefined;
+        const bMissing = bv === null || bv === undefined;
+        if (aMissing || bMissing) return aMissing - bMissing;
         return sortDir === 'desc' ? bv - av : av - bv;
       });
       return r;
@@ -192,20 +198,31 @@ function renderPeriodReport() {
       return sortDir === 'desc' ? ' ↓' : ' ↑';
     }
 
+    /* Заголовок сортируемой колонки: настоящая кнопка внутри <th> + aria-sort.
+       Раньше обработчик висел на самой ячейке, поэтому сортировать таблицу
+       можно было только мышью — с клавиатуры заголовки не фокусировались. */
+    function sortTh(label, key) {
+      const active = sortKey === key;
+      const ariaSort = active ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none';
+      return `<th class="num sortable" aria-sort="${ariaSort}" scope="col">`
+        + `<button type="button" class="sort-btn" data-sort="${key}">`
+        + `${label}<span aria-hidden="true">${sortIndicator(key)}</span></button></th>`;
+    }
+
     function renderTable() {
       const rows = filteredSorted();
       if (!rows.length) return '<div class="empty-line">Нет данных для отображения</div>';
       return `<div class="table-wrap"><table class="data-table">
         <thead><tr>
-          <th>Оператор</th><th>Группа</th>
-          <th class="num sortable" data-sort="final_points">Баллы${sortIndicator('final_points')}</th>
-          <th class="num sortable" data-sort="quality_avg">Качество${sortIndicator('quality_avg')}</th>
-          <th class="num">Звонков оцен.</th>
-          <th class="num">Итог часов</th>
-          <th class="num">База часов</th>
-          <th class="num sortable" data-sort="kvz">КВЗ${sortIndicator('kvz')}</th>
-          <th class="num sortable" data-sort="efficiency_percent">Эфф. %${sortIndicator('efficiency_percent')}</th>
-          <th class="num sortable" data-sort="penalty_minutes">Штраф мин${sortIndicator('penalty_minutes')}</th>
+          <th scope="col">Оператор</th><th scope="col">Группа</th>
+          ${sortTh('Баллы', 'final_points')}
+          ${sortTh('Качество', 'quality_avg')}
+          <th class="num" scope="col">Звонков оцен.</th>
+          <th class="num" scope="col">Итог часов</th>
+          <th class="num" scope="col">База часов</th>
+          ${sortTh('КВЗ', 'kvz')}
+          ${sortTh('Эфф. %', 'efficiency_percent')}
+          ${sortTh('Штраф мин', 'penalty_minutes')}
         </tr></thead>
         <tbody>
           ${rows.map(o => `
@@ -331,13 +348,16 @@ function renderPeriodReport() {
     });
 
     function bindTableSort() {
-      el.querySelectorAll('.sortable').forEach(th => {
-        th.addEventListener('click', () => {
-          const key = th.dataset.sort;
+      el.querySelectorAll('.sort-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.sort;
           if (sortKey === key) sortDir = sortDir === 'desc' ? 'asc' : 'desc';
           else { sortKey = key; sortDir = 'desc'; }
           el.querySelector('#pr-table-wrap').innerHTML = renderTable();
           bindTableSort();
+          // Перерисовка заменила кнопку — возвращаем фокус на ту же колонку,
+          // иначе после сортировки с клавиатуры фокус улетает в начало страницы.
+          el.querySelector(`.sort-btn[data-sort="${key}"]`)?.focus();
         });
       });
     }

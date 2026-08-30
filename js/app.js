@@ -225,6 +225,8 @@ function bumpAnalyticsTabGen() { return ++STATE.analyticsTabGen; }
 function isAnalyticsTabStale(token) { return token !== STATE.analyticsTabGen; }
 
 const COIN_TABS = ['overview', 'accrual', 'requests', 'history', 'rules', 'weekly', 'settings'];
+// Разделы, которые когда-то были самостоятельными, а теперь стали вкладками
+// «Коинов». Старые ссылки и закладки обязаны продолжать работать.
 const LEGACY_COIN_VIEW_TAB = { accrual: 'accrual', manual: 'accrual', requests: 'requests', history: 'history' };
 
 function normalizeCoinTab(tab) {
@@ -232,14 +234,44 @@ function normalizeCoinTab(tab) {
   return COIN_TABS.includes(tab) ? tab : 'overview';
 }
 
-function parseStoredView(value) {
-  if (!value) return { view: '', tab: '' };
-  const clean = String(value).replace(/^#/, '');
-  const [view, query = ''] = clean.split('?');
-  const params = new URLSearchParams(query);
-  return { view, tab: params.get('tab') || '' };
+/* ══════════════════════════════════════
+   РЕЕСТР МАРШРУТОВ
+
+   Единственный источник правды о разделах: hash, заголовок вкладки браузера
+   и функция отрисовки. Раньше это было размазано по четырём местам —
+   switch в renderView, список ролей, сборка URL внутри navigateTo и разметка
+   sidebar, — и они разъезжались: «Коины» писались в pathname (/coins?tab=),
+   а не в hash, из-за чего адрес раздела пропадал, а Back/Forward между
+   «Коинами» и остальными разделами работал через раз.
+
+   render задан стрелкой, а не ссылкой на функцию: реестр объявляется раньше
+   файлов вьюх, и прямая ссылка вычислялась бы в момент создания объекта.
+══════════════════════════════════════ */
+const ROUTES = {
+  summary:           { title: 'Сводка',            render: () => renderSummary() },
+  operators:         { title: 'Пользователи',      render: () => renderAdminOperators() },
+  'operator-levels': { title: 'Уровни',            render: () => renderOperatorLevelsSettings() },
+  coins:             { title: 'Коины',             render: () => renderCoins(), tabs: COIN_TABS, normalizeTab: normalizeCoinTab },
+  groups:            { title: 'Группы',            render: () => renderGroups() },
+  analytics:         { title: 'Аналитика',         render: () => renderAnalytics() },
+  'period-report':   { title: 'Расчёт за период',  render: () => renderPeriodReport() },
+  sessions:          { title: 'Сессии',            render: () => renderAdminSessions() },
+  cabinet:           { title: 'Мой кабинет',       render: () => renderCabinet() },
+  rating:            { title: 'Рейтинг',           render: () => renderRating() },
+  tests:             { title: 'Тесты',             render: () => renderTests() },
+  missions:          { title: 'Миссии',            render: () => renderMissions() },
+  wheel:             { title: 'Колесо WOW',        render: () => renderWheel() },
+  raffles:           { title: 'Розыгрыши',         render: () => renderRaffles() },
+  shop:              { title: 'Магазин',           render: () => renderShop() },
+};
+
+const APP_TITLE = 'Puls';
+
+function isKnownRoute(view) {
+  return Object.prototype.hasOwnProperty.call(ROUTES, view);
 }
 
+/** Права по разделам. Правила не менялись — перенесены как были. */
 function allowedViewsForRole(role) {
   if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests', 'missions'];
 
@@ -250,32 +282,90 @@ function allowedViewsForRole(role) {
   return views;
 }
 
-function initialRouteForRole(role) {
-  const path = location.pathname.replace(/^\/+|\/+$/g, '');
-  const params = new URLSearchParams(location.search);
-  if (path === 'coins') return { view: 'coins', tab: normalizeCoinTab(params.get('tab')) };
-  if (path === 'accrual') return { view: 'coins', tab: 'accrual' };
-  if (path === 'requests') return { view: 'coins', tab: 'requests' };
-  if (path === 'history') return { view: 'coins', tab: 'history' };
-
-  const hashRoute = parseStoredView(location.hash);
-  if (hashRoute.view === 'coins') return { view: 'coins', tab: normalizeCoinTab(hashRoute.tab) };
-  if (LEGACY_COIN_VIEW_TAB[hashRoute.view]) return { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[hashRoute.view] };
-  // ВАЖНО: до сих пор здесь обрабатывался только частный случай 'coins' —
-  // любой другой раздел (rating, shop, tests, ...) из hash игнорировался,
-  // и F5 всегда откатывал на дефолтный раздел. Теперь любой непустой view
-  // из hash восстанавливается как есть.
-  if (hashRoute.view) return { view: hashRoute.view, tab: hashRoute.tab };
-
-  const savedRoute = parseStoredView(localStorage.getItem('pulse-last-view'));
-  if (savedRoute.view === 'coins') return { view: 'coins', tab: normalizeCoinTab(savedRoute.tab) };
-  if (LEGACY_COIN_VIEW_TAB[savedRoute.view]) return { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[savedRoute.view] };
-  // То же самое для localStorage-фоллбэка (срабатывает, когда hash пуст,
-  // например при заходе по чистому "/" без сохранённого hash в адресной строке).
-  if (savedRoute.view) return { view: savedRoute.view, tab: savedRoute.tab };
-
-  return { view: isAdmin(role) ? 'summary' : 'cabinet', tab: '' };
+function fallbackViewForRole(role) {
+  return isAdmin(role) ? 'summary' : 'cabinet';
 }
+
+/** Разбирает "#coins?tab=history", "coins?tab=history" и "/coins?tab=history". */
+function parseRoute(value) {
+  if (!value) return { view: '', tab: '' };
+  const clean = String(value).replace(/^[#/]+/, '');
+  const [rawView, query = ''] = clean.split('?');
+  const view = rawView.replace(/\/+$/, '');
+  const tab = new URLSearchParams(query).get('tab') || '';
+  if (LEGACY_COIN_VIEW_TAB[view]) return { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[view] };
+  return { view, tab };
+}
+
+/** Канонический адрес раздела. У каждого раздела он свой и стабильный. */
+function routeToHash(view, tab) {
+  const spec = ROUTES[view];
+  if (spec?.tabs && tab) return `#${view}?tab=${tab}`;
+  return `#${view}`;
+}
+
+/**
+ * Приводит запрошенный раздел к разрешённому: неизвестный маршрут и раздел
+ * без прав одинаково уходят на стартовый экран роли.
+ */
+function resolveRoute(view, tab) {
+  const role = STATE.user?.role;
+  const parsed = LEGACY_COIN_VIEW_TAB[view] ? { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[view] } : { view, tab };
+  let target = parsed.view;
+
+  if (!isKnownRoute(target)) target = fallbackViewForRole(role);
+  if (role && !allowedViewsForRole(role).includes(target)) target = fallbackViewForRole(role);
+
+  const spec = ROUTES[target];
+  const nextTab = spec?.normalizeTab
+    ? spec.normalizeTab(parsed.tab || (target === STATE.currentView ? STATE.coinsTab : ''))
+    : '';
+  return { view: target, tab: nextTab };
+}
+
+/** Стартовый маршрут: адресная строка → сохранённый раздел → дефолт роли. */
+function initialRouteForRole(role) {
+  const fromPath = parseRoute(location.pathname + location.search);
+  if (fromPath.view && isKnownRoute(parseRoute(fromPath.view).view)) return fromPath;
+
+  const fromHash = parseRoute(location.hash);
+  if (fromHash.view) return fromHash;
+
+  const saved = parseRoute(localStorage.getItem('pulse-last-view'));
+  if (saved.view) return saved;
+
+  return { view: fallbackViewForRole(role), tab: '' };
+}
+
+/* ══════════════════════════════════════
+   ГЛОБАЛЬНЫЙ ПЕРЕХВАТ ОШИБОК
+
+   Ошибка, не пойманная ни одним разделом, раньше просто уходила в консоль:
+   пользователь видел пустой или наполовину отрисованный экран и не понимал,
+   что произошло. Теперь она попадает в лог и показывается тостом — экран
+   при этом остаётся рабочим, из него можно уйти в другой раздел.
+══════════════════════════════════════ */
+let _lastGlobalErrorAt = 0;
+
+function reportGlobalError(source, error) {
+  console.error(`[global:${source}]`, error);
+  // Одна ошибка нередко порождает каскад — не заваливаем экран тостами.
+  const now = Date.now();
+  if (now - _lastGlobalErrorAt < 4000) return;
+  _lastGlobalErrorAt = now;
+  const message = error?.message || String(error || 'Неизвестная ошибка');
+  if (typeof showToast === 'function') {
+    showToast(`Что-то пошло не так: ${message}`, 'error');
+  }
+}
+
+window.addEventListener('error', event => {
+  reportGlobalError('error', event.error || event.message);
+});
+
+window.addEventListener('unhandledrejection', event => {
+  reportGlobalError('promise', event.reason);
+});
 
 /* ══════════════════════════════════════
    BOOT
@@ -288,19 +378,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   await tryRestoreSession();
 });
 
-// Every browser-driven route change goes through the same role guard as sidebar
-// navigation. This also prevents a restricted hash from exposing an empty or
-// stale administrative view after Back/Forward navigation.
-window.addEventListener('hashchange', () => {
-  const role = STATE.user?.role;
-  if (!role) return;
-  const requested = parseStoredView(location.hash);
-  const fallback = isAdmin(role) ? 'summary' : 'cabinet';
-  const view = allowedViewsForRole(role).includes(requested.view)
-    ? requested.view
-    : fallback;
-  navigateTo(view, { tab: requested.tab, history: false });
-});
+/**
+ * Любое изменение адреса браузером — Back, Forward, правка hash руками —
+ * приводит экран в соответствие с URL. Слушаем оба события: popstate ловит
+ * переходы по истории, hashchange — ручную правку адреса. Оба могут прийти
+ * на один переход, поэтому повторное применение того же маршрута отсекается.
+ */
+function syncRouteFromUrl() {
+  if (!STATE.user?.role) return;
+  const requested = parseRoute(location.hash);
+  const resolved = resolveRoute(requested.view, requested.tab);
+  const sameView = resolved.view === STATE.currentView;
+  const sameTab = !ROUTES[resolved.view]?.tabs || resolved.tab === STATE.coinsTab;
+  if (sameView && sameTab) return;
+  navigateTo(resolved.view, { tab: resolved.tab, history: false });
+}
+
+window.addEventListener('popstate', syncRouteFromUrl);
+window.addEventListener('hashchange', syncRouteFromUrl);
 
 async function tryRestoreSession() {
   try {
@@ -424,76 +519,110 @@ function onDataUpdated(views) {
 }
 
 function navigateTo(view, options = {}) {
-  if (LEGACY_COIN_VIEW_TAB[view]) {
-    options = { ...options, tab: LEGACY_COIN_VIEW_TAB[view] };
-    view = 'coins';
-  }
-  const role = STATE.user?.role;
-  if (role && !allowedViewsForRole(role).includes(view)) {
-    view = isAdmin(role) ? 'summary' : 'cabinet';
-    options = {};
-  }
+  const { view: target, tab } = resolveRoute(view, options.tab);
+
   if (
     STATE.currentView === 'missions'
-    && view !== 'missions'
+    && target !== 'missions'
     && typeof missionViewController !== 'undefined'
   ) {
     missionViewController.dispose();
   }
-  STATE.currentView = view;
+
+  STATE.currentView = target;
+  if (ROUTES[target]?.tabs) STATE.coinsTab = tab;
   _viewAbortController.abort();
   _viewAbortController = new AbortController();
-  if (view === 'coins') STATE.coinsTab = normalizeCoinTab(options.tab || STATE.coinsTab);
   bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов
-  // Save to URL hash so F5 restores the same section
-  const route = view === 'coins' ? `coins?tab=${STATE.coinsTab}` : view;
-  const routeUrl = view === 'coins' ? `/${route}` : '/#' + route;
-  if (options.history !== false) {
-    const sameRoute = `${location.pathname}${location.hash}` === routeUrl;
-    const method = !_routeInitialized || sameRoute ? 'replaceState' : 'pushState';
-    history[method](null, '', routeUrl);
+
+  // Адрес — единственный источник правды о текущем экране. Все разделы
+  // (включая «Коины») живут в hash, поэтому F5, копирование ссылки и
+  // открытие в новой вкладке ведут себя одинаково.
+  const hash = routeToHash(target, tab);
+  const canonicalUrl = `${location.pathname}${location.search}${hash}`;
+  if (options.history === false) {
+    // Переход инициировал сам браузер — историю не трогаем, только
+    // выравниваем адрес, если запрошенный маршрут пришлось заменить.
+    if (location.hash !== hash) history.replaceState(null, '', canonicalUrl);
+  } else {
+    const method = (!_routeInitialized || location.hash === hash) ? 'replaceState' : 'pushState';
+    history[method](null, '', canonicalUrl);
   }
   _routeInitialized = true;
-  localStorage.setItem('pulse-last-view', route);
+
+  try { localStorage.setItem('pulse-last-view', hash.slice(1)); } catch (e) { /* приватный режим */ }
+
+  document.title = `${ROUTES[target]?.title || 'Puls'} · ${APP_TITLE}`;
+
   document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(l => {
-    const target = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
-    l.classList.toggle('active', target === view);
+    const linkTarget = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
+    const active = linkTarget === target;
+    l.classList.toggle('active', active);
+    // Скринридер должен слышать, какой раздел открыт, а не догадываться по цвету.
+    if (active) l.setAttribute('aria-current', 'page');
+    else l.removeAttribute('aria-current');
   });
-  const el = document.getElementById(`view-${view}`);
+
+  const el = document.getElementById(`view-${target}`);
   if (el) el.classList.add('active');
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   document.querySelectorAll('.table-wrap, .an-table-scroll, [data-view-scroll]').forEach(node => {
     node.scrollTop = 0;
     node.scrollLeft = 0;
   });
-  renderView(view);
-  focusCurrentViewHeading(view);
+  renderView(target);
+  focusCurrentViewHeading(target);
 }
 
+/**
+ * Отрисовка раздела через реестр, обёрнутая в error boundary.
+ *
+ * Раньше сбой внутри любой render-функции оставлял пустой контейнер: именно
+ * так выглядела ошибка `RATING_TABS is not defined` — белый экран без единой
+ * подсказки. Теперь ошибка одного раздела показывает объяснимое состояние с
+ * повторной попыткой и не мешает уйти в другие разделы.
+ */
 function renderView(view) {
-  const el = document.getElementById(`view-${view}`);
-
-  switch (view) {
-    case 'cabinet':  renderCabinet();  break;
-    case 'rating':   renderRating();   break;
-    case 'shop':     renderShop();     break;
-    case 'summary':  renderSummary();  break;
-    case 'operators': renderAdminOperators(); break;
-    case 'operator-levels': renderOperatorLevelsSettings(); break;
-    case 'coins':    renderCoins();    break;
-    case 'wheel':    renderWheel();    break;
-    case 'raffles':  renderRaffles();  break;
-    case 'manual':   renderManual();   break;
-    case 'requests': renderRequests(); break;
-    case 'history':  renderHistory();  break;
-    case 'groups':   renderGroups();   break;
-    case 'period-report': renderPeriodReport(); break;
-    case 'analytics': renderAnalytics(); break;
-    case 'tests':    renderTests();    break;
-    case 'missions': renderMissions(); break;
-    case 'sessions': renderAdminSessions(); break;
+  const spec = ROUTES[view];
+  if (!spec) return;
+  try {
+    const result = spec.render();
+    // Асинхронные вьюхи возвращают промис — его отказ тоже наш.
+    if (result && typeof result.catch === 'function') {
+      result.catch(error => showViewError(view, error));
+    }
+  } catch (error) {
+    showViewError(view, error);
   }
+}
+
+/** Понятный экран вместо пустоты, когда раздел не смог отрисоваться. */
+function showViewError(view, error) {
+  console.error(`[view:${view}] ошибка отрисовки`, error);
+  const host = document.getElementById(`view-${view}`);
+  if (!host) return;
+  const title = ROUTES[view]?.title || 'Раздел';
+  const requestId = error?.requestId || error?.request_id || '';
+  host.innerHTML = `
+    <div class="view-header">
+      <div><h1 class="section-title">${esc(title)}</h1></div>
+    </div>
+    <div class="state-block state-error" role="alert">
+      <div class="state-icon" aria-hidden="true">!</div>
+      <h2 class="state-title">Раздел не открылся</h2>
+      <p class="state-text">Мы не смогли построить эту страницу. Данные не пострадали —
+      можно повторить попытку или перейти в другой раздел.</p>
+      <p class="state-detail">${esc(error?.message || 'Неизвестная ошибка')}</p>
+      ${requestId ? `<p class="state-meta">Код обращения: <code>${esc(requestId)}</code></p>` : ''}
+      <div class="state-actions">
+        <button class="btn-primary" type="button" data-view-retry="${esc(view)}">Повторить</button>
+      </div>
+    </div>`;
+  host.querySelector('[data-view-retry]')?.addEventListener('click', () => {
+    invalidateViewCache(view);
+    renderView(view);
+  });
 }
 
 function focusCurrentViewHeading(view) {
@@ -820,6 +949,98 @@ function renderSidebar(role) {
 /* ══════════════════════════════════════
    VIEW: УРОВНИ ОПЕРАТОРОВ
 ══════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════
+   ЗАПРОСЫ К АНАЛИТИКЕ
+
+   Эти три помощника потерялись при разрезании вьюхи-монолита на модули —
+   ровно как RATING_TABS. Потребители остались, объявления исчезли:
+
+     · analyticsFetch        — «Сводка» (2 вызова)
+     · ANALYTICS_SWR_TTL_MS  — «Гонка баллов» в рейтинге
+     · analyticsApiUrl       — сборка адреса для analyticsFetch
+
+   Из-за этого «Сводка» падала с ReferenceError на каждой загрузке, а её
+   пустой catch превращал отказ в одно и то же «Не удалось загрузить
+   сводку» независимо от причины.
+══════════════════════════════════════════════════════════════ */
+
+// Данные аналитики строятся из сохранённых PeriodReport и меняются редко.
+const ANALYTICS_SWR_TTL_MS = 10 * 60_000; // 10 минут
+
+function analyticsApiUrl(path, params) {
+  const qs = new URLSearchParams(params).toString();
+  return api._base() + '/api/analytics/' + path + (qs ? '?' + qs : '');
+}
+
+/**
+ * GET к аналитике через stale-while-revalidate кеш.
+ *
+ * Ошибку доносим целиком: статус нужен, чтобы отличить «нет прав» от
+ * «нет данных» и от сбоя сервера, а код обращения — чтобы пользователь мог
+ * назвать конкретный запрос в поддержке.
+ */
+async function analyticsFetch(path, params, onUpdate) {
+  const key = 'analytics:' + path + ':' + JSON.stringify(params || {});
+  return swrFetch(key, async () => {
+    const res = await fetch(analyticsApiUrl(path, params), { credentials: 'include' });
+    // Сначала читаем как текст: при 500 backend может вернуть обычный текст,
+    // и res.json() упал бы с «Unexpected token» вместо понятного сообщения.
+    const text = await res.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      const error = new Error(text?.slice(0, 200) || `Ошибка ${res.status}`);
+      error.status = res.status;
+      error.requestId = res.headers.get('X-Request-ID') || '';
+      throw error;
+    }
+    if (!res.ok) {
+      const msg = data.message || data.detail || data.error || `Ошибка ${res.status}`;
+      const error = new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      error.status = res.status;
+      error.requestId = data.request_id || res.headers.get('X-Request-ID') || '';
+      throw error;
+    }
+    return data;
+  }, onUpdate, ANALYTICS_SWR_TTL_MS);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ФОРМАТИРОВАНИЕ ПОКАЗАТЕЛЕЙ
+
+   Ещё четыре потерянных при рефакторинге помощника, без которых
+   «Сводка» падала уже на отрисовке — даже если запрос проходил.
+══════════════════════════════════════════════════════════════ */
+
+/**
+ * Единая канонизация статусов по всей аналитике: риск (норма / отклонение /
+ * вмешательство) не путается с отсутствием данных — это разные ситуации.
+ */
+const RISK_STATUS_LABELS = {
+  stable: 'Цель выполнена',
+  watch: 'Есть отклонение',
+  critical: 'Нужно вмешательство',
+  no_data: 'Недостаточно данных',
+};
+
+function riskStatusLabel(status) {
+  return RISK_STATUS_LABELS[status] || RISK_STATUS_LABELS.no_data;
+}
+
+function analyticsStatusLabel(status) {
+  return riskStatusLabel(status);
+}
+
+/** Число с единицей измерения. Отсутствие значения — прочерк, а не ноль. */
+function fmtA(v, decimals = 2, suffix = '') {
+  if (v === null || v === undefined || (typeof v === 'number' && isNaN(v))) return '—';
+  return Number(v).toFixed(decimals) + suffix;
+}
+
+function analyticsMetricValue(value, unit) {
+  return value == null ? '—' : `${fmtA(value, value % 1 ? 1 : 0)}${unit || ''}`;
+}
 /* ══════════════════════════════════════
    УВЕДОМЛЕНИЯ (ТЗ P2) — колокольчик в сайдбаре, модалка со списком
 ══════════════════════════════════════ */
@@ -916,6 +1137,199 @@ async function _loadNotificationsIntoModal() {
       const target = notif ? _notificationLinkTarget(notif.link) : null;
       if (target) { closeModal(); navigateTo(target); }
     });
+  });
+}
+/* ══════════════════════════════════════════════════════════════
+   СОСТОЯНИЯ СТРАНИЦЫ — общие построители разметки
+
+   Одна и та же ситуация обязана выглядеть одинаково во всех разделах.
+   До этого каждый раздел писал свою вёрстку: «Рейтинг» при ошибке
+   оставался пустым, «Миссии» показывали строку текста, «Аналитика» и
+   «Сводка» — два разных варианта ошибки.
+
+   Все функции возвращают строку HTML и ничего не вставляют сами —
+   вызывающий решает, куда её положить. Пользовательский текст всегда
+   проходит через esc().
+
+   Стили — css/src/components/20-states.css.
+══════════════════════════════════════════════════════════════ */
+
+/** Загрузка раздела. slowNote показывается, когда ожидание затянулось. */
+function uiPageLoader(message = 'Загружаем данные', slowNote = '') {
+  return `
+    <div class="page-loader" role="status" aria-live="polite">
+      <div class="page-loader-spinner" aria-hidden="true"></div>
+      <span>${esc(message)}</span>
+      ${slowNote ? `<p class="page-loader-slow">${esc(slowNote)}</p>` : ''}
+    </div>`;
+}
+
+/**
+ * Запускает загрузку с honest-ожиданием: если ответ не пришёл за
+ * threshold мс, текст меняется на объяснение, а не крутится вечно.
+ * Возвращает функцию отмены — вызовите её, когда данные пришли.
+ */
+function uiPageLoaderWithDelay(host, message, slowNote, threshold = 3000) {
+  if (!host) return () => {};
+  host.innerHTML = uiPageLoader(message);
+  const timer = setTimeout(() => {
+    const note = host.querySelector('.page-loader');
+    if (!note || note.querySelector('.page-loader-slow')) return;
+    const p = document.createElement('p');
+    p.className = 'page-loader-slow';
+    p.textContent = slowNote || 'Ответ идёт дольше обычного. Сервер мог «уснуть» — подождите ещё немного.';
+    note.appendChild(p);
+  }, threshold);
+  return () => clearTimeout(timer);
+}
+
+/** Скелетон под будущий контент: строки или карточки. */
+function uiSkeleton({ lines = 3, cards = 0 } = {}) {
+  if (cards > 0) {
+    return `<div class="skeleton-row">${
+      Array.from({ length: cards }, () => '<div class="skeleton skeleton-card"></div>').join('')
+    }</div>`;
+  }
+  return `<div class="skeleton-group"><div class="skeleton skeleton-title"></div>${
+    Array.from({ length: lines }, (_, i) =>
+      `<div class="skeleton skeleton-line" style="width:${95 - i * 12}%"></div>`).join('')
+  }</div>`;
+}
+
+function uiStateActions(actions = []) {
+  const buttons = actions.filter(Boolean).map(a => {
+    const cls = a.variant === 'ghost' ? 'btn-outline' : 'btn-primary';
+    return `<button class="${cls}" type="button" data-ui-action="${esc(a.id)}">${esc(a.label)}</button>`;
+  }).join('');
+  return buttons ? `<div class="state-actions">${buttons}</div>` : '';
+}
+
+function uiStateBlock({ kind, icon, title, text, detail, requestId, actions, rawActions, compact }) {
+  return `
+    <div class="state-block state-${esc(kind)}${compact ? ' state-compact' : ''}"${kind === 'error' ? ' role="alert"' : ''}>
+      <div class="state-icon" aria-hidden="true">${esc(icon)}</div>
+      <h2 class="state-title">${esc(title)}</h2>
+      ${text ? `<p class="state-text">${esc(text)}</p>` : ''}
+      ${detail ? `<p class="state-detail">${esc(detail)}</p>` : ''}
+      ${requestId ? `<p class="state-meta">Код обращения: <code>${esc(requestId)}</code></p>` : ''}
+      ${rawActions ? `<div class="state-actions">${rawActions}</div>` : uiStateActions(actions)}
+    </div>`;
+}
+
+/**
+ * Данных ещё нет — это нормальный сценарий, а не сбой.
+ *
+ * Принимает три формы вызова, потому что в проекте исторически сложились
+ * все три и ломать существующие экраны ради единообразия сигнатуры нельзя:
+ *   uiEmptyState('Заголовок', 'Текст')
+ *   uiEmptyState('Заголовок', 'Текст', '<button>…</button>')   — готовый HTML
+ *   uiEmptyState({ title, description, action })               — объектом
+ */
+function uiEmptyState(title, text, actions = [], compact = false) {
+  if (title && typeof title === 'object') {
+    const o = title;
+    return uiStateBlock({
+      kind: 'empty', icon: '—',
+      title: o.title, text: o.description || o.text,
+      actions: [], rawActions: o.action || '', compact: Boolean(o.compact),
+    });
+  }
+  if (typeof actions === 'string') {
+    return uiStateBlock({ kind: 'empty', icon: '—', title, text, actions: [], rawActions: actions, compact });
+  }
+  return uiStateBlock({ kind: 'empty', icon: '—', title, text, actions, compact });
+}
+
+/** Данные есть, но фильтры ничего не нашли. Отличается от пустоты. */
+function uiNoResultsState(title = 'Ничего не найдено', text = 'Измените условия поиска или сбросьте фильтры.', actions = [], compact = false) {
+  return uiStateBlock({ kind: 'no-results', icon: '∅', title, text, actions, compact });
+}
+
+/** Запрос не удался. Всегда с возможностью повторить. */
+function uiErrorState(title, text, { detail = '', requestId = '', actions = [], compact = false } = {}) {
+  return uiStateBlock({ kind: 'error', icon: '!', title, text, detail, requestId, actions, compact });
+}
+
+/** Нет прав. Не путаем с ошибкой сервера. */
+function uiForbiddenState(title = 'Раздел недоступен', text = 'У вашей роли нет доступа к этим данным. Обратитесь к администратору, если доступ нужен для работы.', compact = false) {
+  return uiStateBlock({ kind: 'forbidden', icon: '×', title, text, compact });
+}
+
+/** Плашка «показаны неполные данные» — поверх уже отрисованного контента. */
+function uiPartialNotice(text) {
+  return `
+    <div class="state-partial" role="status">
+      <span class="state-partial-mark" aria-hidden="true">!</span>
+      <span>${esc(text)}</span>
+    </div>`;
+}
+
+/** Компактная ошибка рядом с блоком, когда старые данные остаются на экране. */
+function uiInlineError(text, requestId = '') {
+  return `
+    <div class="state-inline-error" role="alert">
+      <span class="state-partial-mark" aria-hidden="true">!</span>
+      <span>${esc(text)}${requestId ? ` <code>${esc(requestId)}</code>` : ''}</span>
+    </div>`;
+}
+
+/**
+ * Приводит ошибку fetch к состоянию, понятному пользователю.
+ * Разные причины требуют разных слов: отсутствие прав — не сбой сервера,
+ * а обрыв сети — не ошибка данных.
+ */
+function uiClassifyError(error) {
+  const status = error?.status;
+  const message = String(error?.message || '');
+  const requestId = error?.requestId || error?.request_id || '';
+
+  if (status === 401) {
+    return { kind: 'session', title: 'Сессия завершена', text: 'Войдите заново, чтобы продолжить работу.', requestId };
+  }
+  if (status === 403) {
+    return { kind: 'forbidden', title: 'Раздел недоступен', text: 'У вашей роли нет доступа к этим данным.', requestId };
+  }
+  if (status === 404) {
+    return { kind: 'empty', title: 'Данных за период нет', text: 'За выбранный период записи не найдены. Попробуйте другой период.', requestId };
+  }
+  if (status === 400 || status === 422) {
+    return { kind: 'validation', title: 'Некорректные параметры', text: message || 'Проверьте выбранный период и фильтры.', requestId };
+  }
+  if (status >= 500) {
+    return { kind: 'server', title: 'Сервер не ответил', text: 'Похоже, это временный сбой. Повторите попытку через несколько секунд.', detail: message, requestId };
+  }
+  if (!status) {
+    return { kind: 'network', title: 'Нет связи с сервером', text: 'Проверьте подключение к сети и повторите попытку.', detail: message, requestId };
+  }
+  return { kind: 'server', title: 'Не удалось загрузить', text: message || 'Неизвестная ошибка.', requestId };
+}
+
+/**
+ * Готовый блок ошибки по объекту исключения: сам выбирает формулировку
+ * и добавляет кнопку повтора там, где повтор имеет смысл.
+ */
+function uiErrorStateFor(error, { retryLabel = 'Повторить', compact = false } = {}) {
+  const info = uiClassifyError(error);
+  if (info.kind === 'forbidden') return uiForbiddenState(info.title, info.text, compact);
+  if (info.kind === 'empty') return uiEmptyState(info.title, info.text, [], compact);
+  const actions = info.kind === 'session'
+    ? [{ id: 'reload', label: 'Войти заново' }]
+    : [{ id: 'retry', label: retryLabel }];
+  return uiErrorState(info.title, info.text, {
+    detail: info.detail || '',
+    requestId: info.requestId,
+    actions,
+    compact,
+  });
+}
+
+/** Навешивает обработчики на кнопки состояния внутри контейнера. */
+function uiBindStateActions(host, handlers = {}) {
+  if (!host) return;
+  host.querySelectorAll('[data-ui-action]').forEach(btn => {
+    const id = btn.dataset.uiAction;
+    const fn = handlers[id] || (id === 'reload' ? () => location.reload() : null);
+    if (fn) btn.addEventListener('click', fn);
   });
 }
 /* Shared UI contracts. Keep screen-specific views free from raw enums and ad-hoc formats. */
@@ -1015,13 +1429,10 @@ function uiPageHeader({ eyebrow = '', title, description = '', meta = '', action
   </header>`;
 }
 
-function uiEmptyState(title, description = '', action = '') {
-  return `<div class="ui-empty-state" role="status">
-    <strong>${esc(title)}</strong>
-    ${description ? `<p>${esc(description)}</p>` : ''}
-    ${action}
-  </div>`;
-}
+// uiEmptyState переехал в js/src/components/10-states.js — там живёт единая
+// система состояний страницы (пусто / нет результатов / ошибка / нет прав).
+// Две реализации с одним именем перекрывали друг друга: побеждала та, что
+// шла в бандле последней, и вызовы с новой сигнатурой рисовали [object Object].
 
 function uiSetBusy(button, busy, label = 'Сохраняем…') {
   if (!button) return;
@@ -1104,7 +1515,7 @@ async function renderOperatorLevelsSettings() {
     <div class="levels-page-head">
       <div>
         <div class="section-kicker">Развитие команды</div>
-        <h2 class="section-title">Уровни операторов</h2>
+        <h1 class="section-title">Уровни операторов</h1>
         <p>Настройте путь роста, требования к каждому этапу и награды за повышение.</p>
       </div>
       <div class="header-right level-header-actions" ${tab === 'levels' ? '' : 'hidden'}>
@@ -1500,7 +1911,7 @@ function renderCabinet() {
     el.innerHTML = `<div class="view-header">
       <div>
         <div class="section-kicker">Кабинет</div>
-        <h2 class="section-title">Мой кабинет</h2>
+        <h1 class="section-title">Мой кабинет</h1>
       </div>
     </div>
     <div class="panel">
@@ -1511,7 +1922,7 @@ function renderCabinet() {
   }
   const w = STATE.wallet;
   if (!w) {
-    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div></div>
+    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Кабинет</div><h1 class="section-title">Мой кабинет</h1></div></div>
       <div class="empty-state"><p>Данные загружаются…</p></div>`;
     const _cabinetGen = STATE.navGen;
     swrFetch('wallet:me', () => api.myWallet(), null, SWR_FAST_TTL_MS).then(data => {
@@ -1556,7 +1967,7 @@ function renderCabinet() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+      <div><div class="section-kicker">Кабинет</div><h1 class="section-title">Мой кабинет</h1></div>
       <button class="btn-outline btn-sm" onclick="reloadCabinet()">Обновить</button>
     </div>
 
@@ -1785,7 +2196,7 @@ async function loadCabinetSnapshot(force = false) {
 function cabinetLoadingHtml() {
   return `
     <div class="view-header">
-      <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+      <div><div class="section-kicker">Кабинет</div><h1 class="section-title">Мой кабинет</h1></div>
     </div>
     <div class="cabinet-skeleton-grid">
       <div class="cabinet-skeleton wide"></div>
@@ -1919,7 +2330,7 @@ function renderCabinet() {
     });
     if (STATE.cabinetError) {
       el.innerHTML = `<div class="view-header">
-        <div><div class="section-kicker">Кабинет</div><h2 class="section-title">Мой кабинет</h2></div>
+        <div><div class="section-kicker">Кабинет</div><h1 class="section-title">Мой кабинет</h1></div>
         <button class="btn-outline btn-sm" onclick="reloadCabinet()">Повторить</button>
       </div><div class="panel empty-state"><p>${esc(STATE.cabinetError)}</p></div>`;
     }
@@ -1943,7 +2354,7 @@ function renderCabinet() {
     <div class="view-header cabinet-v2-header">
       <div>
         <div class="section-kicker">Кабинет</div>
-        <h2 class="section-title">Мой кабинет</h2>
+        <h1 class="section-title">Мой кабинет</h1>
         ${generatedAt ? `<div class="cabinet-snapshot-note">Обновлено: ${esc(generatedAt)}</div>` : ''}
       </div>
       <button class="btn-outline btn-sm" onclick="reloadCabinet()" ${STATE.cabinetLoading ? 'disabled' : ''}>${STATE.cabinetLoading ? 'Обновляем...' : 'Обновить'}</button>
@@ -2454,6 +2865,20 @@ function summaryDelta(value, lowerIsBetter = false) {
   return `<span class="summary-delta ${improved ? 'is-positive' : value === 0 ? 'is-neutral' : 'is-negative'}">${value > 0 ? '+' : ''}${fmtA(value, 1)} к прошлому периоду</span>`;
 }
 
+/**
+ * Успешное состояние сводки. Вынесено из load(), чтобы обработка состояний
+ * (загрузка / пусто / ошибка / частичные данные) читалась отдельно от вёрстки.
+ */
+function renderSummaryData(el, content, warning, data) {
+  const health = data.team_health || {}; const metrics = data.metric_cards || []; const groups = data.groups || []; const priorities = data.priority_operators || [];
+  warning.innerHTML = data.data_availability_warning ? `<div class="an-availability-note">${esc(data.data_availability_warning)}</div>` : '';
+  el.querySelector('#summary-updated').textContent = `Обновлено: ${new Date().toLocaleString('ru-RU')}`;
+  content.innerHTML = `<section class="summary-health-strip an-status-${esc(health.status || 'no_data')}"><div><span>Состояние команды</span><strong>${health.score || 0}<small>/100 · ${analyticsStatusLabel(health.status)}</small></strong></div><p>${health.attention_count ? `${health.attention_count} оператор(ов) требуют внимания, критично — ${health.critical_count || 0}.` : 'Отклонений по доступным данным не обнаружено.'}</p><div class="summary-coverage"><b>${health.operators_with_data || 0}</b><span>учтено</span><b>${Math.max(0, (health.operators_count || 0) - (health.operators_with_data || 0))}</b><span>без данных</span></div></section>
+    <section class="summary-management-kpis">${metrics.map(metric => `<article class="summary-management-kpi an-status-${esc(metric.status)}" title="${esc(metric.definition || '')}"><div><span>${esc(metric.label)}</span><b>${analyticsStatusLabel(metric.status)}</b></div><strong>${analyticsMetricValue(metric.value, metric.unit)}</strong><small>Цель: ${analyticsMetricValue(metric.target, metric.unit)} · выборка: ${metric.operators_with_data || 0}</small>${summaryDelta(metric.change, metric.key === 'penalty')}</article>`).join('')}</section>
+    <section class="summary-management-grid"><article class="an-exec-section"><div class="an-exec-section-head"><div><span>Группы</span><small>Сначала группы с риском</small></div><button onclick="navigateTo('analytics',{tab:'groups'})">Подробнее</button></div><div class="an-group-health-list">${groups.slice(0,5).map(group => `<div class="an-group-health-row an-status-${esc(group.status)}"><div class="an-group-health-name"><i></i><div><strong>${esc(group.group_name)}</strong><small>${group.operators_count} оператор(ов), данные ${group.coverage_percent}%</small></div></div><div class="an-group-health-meter"><span><i style="width:${group.health_score}%"></i></span><b>${group.health_score}/100</b></div><div class="an-group-health-risk"><strong>${group.operators_in_risk}</strong><span>требуют внимания</span></div></div>`).join('') || '<div class="empty-line">Нет данных по группам</div>'}</div></article>
+    <article class="an-exec-section"><div class="an-exec-section-head"><div><span>Требуют внимания</span><small>Главные приоритеты периода</small></div><button onclick="navigateTo('analytics',{tab:'operators'})">Все операторы</button></div><div class="summary-attention-compact">${priorities.slice(0,5).map(item => `<div><span class="summary-v2-status ${item.status === 'critical' ? 'is-danger' : 'is-warning'}"></span><span><strong title="${esc(item.full_name)}">${esc(item.full_name)}</strong><small>${esc(item.recommendation)}</small></span><b>${item.health_score}</b></div>`).join('') || '<div class="empty-line">Все доступные показатели в норме</div>'}</div></article></section>`;
+}
+
 async function renderManagementSummary() {
   const el = document.getElementById('view-summary');
   if (!el) return;
@@ -2461,7 +2886,7 @@ async function renderManagementSummary() {
   if (!_summaryManagement.ready) Object.assign(_summaryManagement, summaryPresetDates('week'), { ready: true });
   const state = _summaryManagement;
   el.innerHTML = `
-    <div class="view-header summary-management-header"><div><div class="section-kicker">Сводка</div><h2 class="section-title">Управленческий дашборд</h2><p class="section-subtitle">Состояние команды, изменения и точки внимания.</p></div><div class="summary-updated" id="summary-updated">Обновляем данные…</div></div>
+    <div class="view-header summary-management-header"><div><div class="section-kicker">Сводка</div><h1 class="section-title">Управленческий дашборд</h1><p class="section-subtitle">Состояние команды, изменения и точки внимания.</p></div><div class="summary-updated" id="summary-updated">Обновляем данные…</div></div>
     <section class="summary-filter-panel" aria-label="Фильтры сводки">
       <div class="summary-period-switch">${[['day','День'],['week','Неделя'],['month','Месяц'],['custom','Диапазон']].map(([key,label]) => `<button type="button" data-summary-preset="${key}" class="${state.preset === key ? 'active' : ''}">${label}</button>`).join('')}</div>
       <label><span>С</span><input id="summary-start" type="date" class="form-input" value="${state.start}"></label>
@@ -2481,25 +2906,96 @@ async function renderManagementSummary() {
     state.group = groupSelect.value; state.preset = 'custom';
   }
 
+  // Последний успешный ответ. Если фоновое обновление упало, экран не
+  // обнуляется: показываем прежние цифры и отдельную плашку об ошибке —
+  // это честнее, чем менять готовые данные на сообщение о сбое.
+  let lastGood = null;
+
+  function validateRange() {
+    if (!state.start || !state.end) return 'Укажите обе даты периода.';
+    if (state.start > state.end) return 'Дата начала позже даты окончания.';
+    return '';
+  }
+
   async function load() {
-    const content = el.querySelector('#summary-management-content'); const warning = el.querySelector('#summary-warning'); const button = el.querySelector('#summary-refresh');
-    if (!state.start || !state.end || state.start > state.end) { warning.innerHTML = '<div class="an-availability-note an-availability-note-error">Проверьте выбранный диапазон дат.</div>'; return; }
-    button.disabled = true; button.textContent = 'Обновляем…';
+    const content = el.querySelector('#summary-management-content');
+    const warning = el.querySelector('#summary-warning');
+    const button = el.querySelector('#summary-refresh');
+
+    const invalid = validateRange();
+    if (invalid) {
+      warning.innerHTML = '';
+      content.innerHTML = uiErrorState('Период указан неверно', invalid, {
+        actions: [{ id: 'reset', label: 'Вернуть неделю' }],
+      });
+      uiBindStateActions(content, {
+        reset: () => {
+          Object.assign(state, summaryPresetDates('week'), { preset: 'week' });
+          renderManagementSummary();
+        },
+      });
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = 'Обновляем…';
+    // Пока данных нет — полноценная загрузка; если они уже показаны,
+    // обновляем молча, не выбрасывая пользователя на спиннер.
+    const stopLoader = lastGood
+      ? () => {}
+      : uiPageLoaderWithDelay(
+          content,
+          'Собираем сводку',
+          'Расчёт идёт дольше обычного: за большой период данных много. Ещё немного.',
+        );
+
     try {
-      const params = { start_date: state.start, end_date: state.end }; if (state.group) params.group_id = state.group;
+      const params = { start_date: state.start, end_date: state.end };
+      if (state.group) params.group_id = state.group;
       const data = await analyticsFetch('management-dashboard', params);
+      stopLoader();
       if (isNavStale(navGeneration)) return;
-      const health = data.team_health || {}; const metrics = data.metric_cards || []; const groups = data.groups || []; const priorities = data.priority_operators || [];
-      warning.innerHTML = data.data_availability_warning ? `<div class="an-availability-note">${esc(data.data_availability_warning)}</div>` : '';
-      el.querySelector('#summary-updated').textContent = `Обновлено: ${new Date().toLocaleString('ru-RU')}`;
-      content.innerHTML = `<section class="summary-health-strip an-status-${esc(health.status || 'no_data')}"><div><span>Состояние команды</span><strong>${health.score || 0}<small>/100 · ${analyticsStatusLabel(health.status)}</small></strong></div><p>${health.attention_count ? `${health.attention_count} оператор(ов) требуют внимания, критично — ${health.critical_count || 0}.` : 'Отклонений по доступным данным не обнаружено.'}</p><div class="summary-coverage"><b>${health.operators_with_data || 0}</b><span>учтено</span><b>${Math.max(0, (health.operators_count || 0) - (health.operators_with_data || 0))}</b><span>без данных</span></div></section>
-        <section class="summary-management-kpis">${metrics.map(metric => `<article class="summary-management-kpi an-status-${esc(metric.status)}" title="${esc(metric.definition || '')}"><div><span>${esc(metric.label)}</span><b>${analyticsStatusLabel(metric.status)}</b></div><strong>${analyticsMetricValue(metric.value, metric.unit)}</strong><small>Цель: ${analyticsMetricValue(metric.target, metric.unit)} · выборка: ${metric.operators_with_data || 0}</small>${summaryDelta(metric.change, metric.key === 'penalty')}</article>`).join('')}</section>
-        <section class="summary-management-grid"><article class="an-exec-section"><div class="an-exec-section-head"><div><span>Группы</span><small>Сначала группы с риском</small></div><button onclick="navigateTo('analytics',{tab:'groups'})">Подробнее</button></div><div class="an-group-health-list">${groups.slice(0,5).map(group => `<div class="an-group-health-row an-status-${esc(group.status)}"><div class="an-group-health-name"><i></i><div><strong>${esc(group.group_name)}</strong><small>${group.operators_count} оператор(ов), данные ${group.coverage_percent}%</small></div></div><div class="an-group-health-meter"><span><i style="width:${group.health_score}%"></i></span><b>${group.health_score}/100</b></div><div class="an-group-health-risk"><strong>${group.operators_in_risk}</strong><span>требуют внимания</span></div></div>`).join('') || '<div class="empty-line">Нет данных по группам</div>'}</div></article>
-        <article class="an-exec-section"><div class="an-exec-section-head"><div><span>Требуют внимания</span><small>Главные приоритеты периода</small></div><button onclick="navigateTo('analytics',{tab:'operators'})">Все операторы</button></div><div class="summary-attention-compact">${priorities.slice(0,5).map(item => `<div><span class="summary-v2-status ${item.status === 'critical' ? 'is-danger' : 'is-warning'}"></span><span><strong title="${esc(item.full_name)}">${esc(item.full_name)}</strong><small>${esc(item.recommendation)}</small></span><b>${item.health_score}</b></div>`).join('') || '<div class="empty-line">Все доступные показатели в норме</div>'}</div></article></section>`;
-    } catch {
-      content.innerHTML = '<div class="an-exec-section an-error-state"><strong>Не удалось загрузить сводку</strong><p>Проверьте период и повторите попытку.</p><button class="btn-outline btn-sm" id="summary-retry">Повторить</button></div>';
-      content.querySelector('#summary-retry')?.addEventListener('click', load);
-    } finally { button.disabled = false; button.textContent = 'Обновить'; }
+
+      // Пустой период — не ошибка. Бэкенд отдаёт причину явно.
+      if (data.empty_reason) {
+        warning.innerHTML = '';
+        const isNoUploads = data.empty_reason === 'no_reports_uploaded';
+        content.innerHTML = uiEmptyState(
+          isNoUploads ? 'Отчёты ещё не загружены' : 'За этот период данных нет',
+          data.data_availability_warning
+            || (isNoUploads
+              ? 'Загрузите Monthly Report и Report в разделе «Расчёт периода» — сводка построится сама.'
+              : 'Выберите другой период или проверьте фильтр по группе.'),
+          isNoUploads ? [{ id: 'goReports', label: 'Перейти к расчёту периода' }] : [],
+        );
+        uiBindStateActions(content, { goReports: () => navigateTo('period-report') });
+        el.querySelector('#summary-updated').textContent = 'Данных за период нет';
+        lastGood = null;
+        return;
+      }
+
+      lastGood = data;
+      renderSummaryData(el, content, warning, data);
+    } catch (error) {
+      stopLoader();
+      if (isNavStale(navGeneration)) return;
+      const info = uiClassifyError(error);
+
+      if (lastGood) {
+        // Данные на экране остаются — сверху узкая плашка о неудачном обновлении.
+        warning.innerHTML = uiInlineError(
+          `${info.title}. Показаны данные предыдущего обновления.`,
+          info.requestId,
+        );
+        return;
+      }
+      warning.innerHTML = '';
+      content.innerHTML = uiErrorStateFor(error, { retryLabel: 'Повторить' });
+      uiBindStateActions(content, { retry: load });
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Обновить';
+    }
   }
 
   el.querySelectorAll('[data-summary-preset]').forEach(button => button.addEventListener('click', () => { state.preset = button.dataset.summaryPreset; if (state.preset !== 'custom') Object.assign(state, summaryPresetDates(state.preset)); renderManagementSummary(); }));
@@ -3449,7 +3945,7 @@ function renderShop() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Магазин</div><h2 class="section-title">Магазин бонусов</h2></div>
+      <div><div class="section-kicker">Магазин</div><h1 class="section-title">Магазин бонусов</h1></div>
       <div class="header-right">
         ${role === 'operator' ? `<div class="balance-chip">Баланс: <b>${balance} ₡</b></div>` : ''}
         ${isAdmin(role) ? `<button class="btn-primary btn-sm" onclick="showAddItemModal()">+ Добавить бонус</button>` : ''}
@@ -3479,7 +3975,7 @@ function renderOperatorShop(el, items, balance) {
     <div class="view-header shop-v2-header">
       <div>
         <div class="section-kicker">Магазин</div>
-        <h2 class="section-title">Бонусы за ваши результаты</h2>
+        <h1 class="section-title">Бонусы за ваши результаты</h1>
         <p class="shop-v2-subtitle">Обменивайте заработанные коины на полезные бонусы для работы и отдыха.</p>
       </div>
       <div class="shop-v2-header-meta">
@@ -3700,7 +4196,7 @@ function renderSummary() {
   if (!el) return;
   const d = STATE.dashboard;
   if (!d) {
-    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Сводка</div><h2 class="section-title">Рабочая сводка</h2></div></div>
+    el.innerHTML = `<div class="view-header"><div><div class="section-kicker">Сводка</div><h1 class="section-title">Рабочая сводка</h1></div></div>
       <div class="empty-state"><p>Загрузка данных…</p></div>`;
     const _summaryGen = STATE.navGen;
     api.getDashboard().then(data => {
@@ -3732,7 +4228,7 @@ function renderSummary() {
     <div class="view-header summary-v2-header">
       <div>
         <div class="section-kicker">Сводка</div>
-        <h2 class="section-title">Рабочая сводка</h2>
+        <h1 class="section-title">Рабочая сводка</h1>
         <p class="summary-v2-subtitle">Главное за неделю: команда, результаты и вопросы, требующие решения.</p>
       </div>
       <div class="header-right">
@@ -4226,6 +4722,15 @@ function renderUsersPage() {
     };
   }
 
+  // Сортировка и раскрытые строки таблицы пользователей.
+  const usersSort = STATE.usersSort || (STATE.usersSort = { key: 'full_name', dir: 'asc' });
+  const usersExpanded = STATE.usersExpanded || (STATE.usersExpanded = new Set());
+
+  /** Есть ли активные фильтры — чтобы отличить «никого нет» от «ничего не найдено». */
+  function usersHasActiveFilters() {
+    return Boolean(searchVal || filterGroup || filterLevel || filterRole || filterStatus || activeTab !== 'all');
+  }
+
   function filteredOps() {
     return ops.filter(o => {
       const matchSearch = !searchVal || (o.full_name || '').toLowerCase().includes(searchVal.toLowerCase())
@@ -4274,41 +4779,89 @@ function renderUsersPage() {
     </div>`;
   }
 
+  // Сортировка таблицы пользователей. Ключ — поле, направление — asc/desc.
+  const USERS_SORTABLE = {
+    full_name: { label: 'Пользователь', type: 'text' },
+    group_name: { label: 'Группа', type: 'text' },
+    level: { label: 'Уровень', type: 'number' },
+    status: { label: 'Статус', type: 'text' },
+  };
+
+  function sortedOps(list) {
+    const { key, dir } = usersSort;
+    if (!key || !USERS_SORTABLE[key]) return list;
+    const type = USERS_SORTABLE[key].type;
+    const value = o => {
+      if (key === 'level') return o.level?.sort_order ?? null;
+      if (key === 'status') return o.status || '';
+      return o[key] || '';
+    };
+    return [...list].sort((a, b) => {
+      const av = value(a); const bv = value(b);
+      // Отсутствующее значение — не ноль и не пустая строка: такие строки
+      // всегда внизу, в каком бы направлении ни сортировали.
+      const aMissing = av === null || av === undefined || av === '';
+      const bMissing = bv === null || bv === undefined || bv === '';
+      if (aMissing || bMissing) return aMissing - bMissing;
+      const cmp = type === 'number' ? av - bv : String(av).localeCompare(String(bv), 'ru');
+      return dir === 'desc' ? -cmp : cmp;
+    });
+  }
+
+  function usersTh(key, label, extraClass = '') {
+    const active = usersSort.key === key;
+    const ariaSort = active ? (usersSort.dir === 'desc' ? 'descending' : 'ascending') : 'none';
+    const arrow = active ? (usersSort.dir === 'desc' ? ' ↓' : ' ↑') : '';
+    return `<th scope="col" class="${extraClass}" aria-sort="${ariaSort}">`
+      + `<button type="button" class="users-sort-btn" data-users-sort="${key}">`
+      + `${esc(label)}<span aria-hidden="true">${arrow}</span></button></th>`;
+  }
+
   function renderTable() {
-    const list = filteredOps();
+    const list = sortedOps(filteredOps());
     return `
-      <div class="table-wrap">
+      <div class="table-wrap users-table-wrap">
         <table class="data-table users-table-compact">
           <thead><tr>
-            <th scope="col" data-sticky="start">Пользователь</th>
-            <th scope="col">Роль</th>
-            <th scope="col">Группа</th>
-            <th scope="col" class="tc">Ставка</th>
-            <th scope="col" class="tc">Уровень</th>
-            <th scope="col" class="tc">Стаж</th>
-            <th scope="col" class="tc">Статус</th>
-            <th scope="col" class="tc" data-sticky="end">Действия</th>
+            ${usersTh('full_name', 'Пользователь')}
+            ${usersTh('group_name', 'Группа')}
+            ${usersTh('level', 'Уровень', 'tc')}
+            ${usersTh('status', 'Статус', 'tc')}
+            <th scope="col" class="tc users-col-actions">Действия</th>
           </tr></thead>
           <tbody>
             ${list.length ? list.map(o => {
               const dismissed = isDismissed(o);
               const isOp = o.role === 'operator';
-              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}" data-user-row="${o.id}" tabindex="0" aria-label="Открыть профиль ${esc(o.full_name)}">
-                <td class="name-cell" data-label="Пользователь" data-sticky="start">
-                  <div class="user-cell-name" title="${esc(o.full_name)}">${esc(o.full_name)}</div>
-                  ${o.email ? `<div class="user-cell-sub">${esc(o.email)}</div>` : ''}
-                </td>
-                <td data-label="Роль">
-                  ${roleBadge(o.role)}
+              const open = usersExpanded.has(String(o.id));
+              // Ставка и стаж переехали в раскрываемую панель: на 1280px
+              // восемь колонок не помещались и таблица уезжала вбок на 260px.
+              const detail = open ? `<tr class="users-detail-row"><td colspan="5">
+                  <div class="users-detail-grid">
+                    <div><span>Роль</span><b>${roleBadge(o.role)}</b></div>
+                    <div><span>Ставка</span><b>${isOp ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">Не применяется</span>'}</b></div>
+                    <div><span>Стаж</span><b>${isOp && o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">Нет данных</span>'}</b></div>
+                    <div><span>Логин</span><b>${esc(o.login || o.username || '—')}</b></div>
+                    <div><span>Почта</span><b>${esc(o.email || '—')}</b></div>
+                  </div></td></tr>` : '';
+              return `<tr class="${dismissed ? 'operator-dismissed-row' : ''}" data-user-row="${o.id}" tabindex="0" aria-expanded="${open}" aria-label="Открыть профиль ${esc(o.full_name)}">
+                <td class="name-cell" data-label="Пользователь">
+                  <button type="button" class="users-expand" data-users-expand="${o.id}" aria-label="${open ? 'Свернуть' : 'Развернуть'} подробности: ${esc(o.full_name)}">${open ? '−' : '+'}</button>
+                  <span class="user-cell-body">
+                    <span class="user-cell-name" title="${esc(o.full_name)}">${esc(o.full_name)}</span>
+                    <span class="user-cell-sub">${roleLabel(o.role)}${o.email ? ` · ${esc(o.email)}` : ''}</span>
+                  </span>
                 </td>
                 <td data-label="Группа"><span class="user-table-value" title="${esc(o.group_name || 'Не назначена')}">${o.group_name ? esc(o.group_name) : 'Не назначена'}</span></td>
-                <td class="tc" data-label="Ставка">${isOp ? rateBadgeHtml(o.rate, o.operator_id) : '<span class="cell-muted">Не применяется</span>'}</td>
-                <td class="tc" data-label="Уровень">${isOp ? levelBadgeHtml(o.level) : '<span class="cell-muted">Не применяется</span>'}</td>
-                <td class="tc" data-label="Стаж">${isOp && o.tenure_days != null ? tenureBadgeHtml(o.tenure_days) : '<span class="cell-muted">Нет данных</span>'}</td>
+                <td class="tc" data-label="Уровень">${isOp ? levelBadgeHtml(o.level) : '<span class="cell-muted">—</span>'}</td>
                 <td class="tc" data-label="Статус">${userStatusBadge(o.status)}</td>
-                <td class="tc" data-label="Действия" data-sticky="end">${operatorActions(o)}</td>
-              </tr>`;
-            }).join('') : '<tr><td colspan="8" class="empty-line">Нет пользователей</td></tr>'}
+                <td class="tc" data-label="Действия" class="users-col-actions">${operatorActions(o)}</td>
+              </tr>${detail}`;
+            }).join('') : `<tr><td colspan="5">${
+              usersHasActiveFilters()
+                ? uiNoResultsState('Под фильтры никто не подошёл', 'Измените условия или сбросьте фильтры.', [], true)
+                : uiEmptyState('Пользователей пока нет', 'Добавьте первого сотрудника кнопкой «Создать пользователя».', [], true)
+            }</td></tr>`}
           </tbody>
         </table>
       </div>`;
@@ -4456,6 +5009,33 @@ function renderUsersPage() {
   }
   rebindOps();
   function bindOpsActions() {
+    // Сортировка: настоящая кнопка внутри th, направление отражено в aria-sort.
+    el.querySelectorAll('[data-users-sort]').forEach(btn => {
+      btn.addEventListener('click', event => {
+        event.stopPropagation();
+        const key = btn.dataset.usersSort;
+        if (usersSort.key === key) usersSort.dir = usersSort.dir === 'asc' ? 'desc' : 'asc';
+        else { usersSort.key = key; usersSort.dir = 'asc'; }
+        // rebindOps() только навешивает слушатели — таблицу надо перерисовать.
+        el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+        bindOpsActions();
+        // Кнопка пересоздана: возвращаем на неё фокус, иначе после сортировки
+        // с клавиатуры фокус улетает в начало страницы.
+        el.querySelector(`[data-users-sort="${key}"]`)?.focus();
+      });
+    });
+    // Раскрытие подробностей строки (ставка, стаж, логин, почта).
+    el.querySelectorAll('[data-users-expand]').forEach(btn => {
+      btn.addEventListener('click', event => {
+        event.stopPropagation();
+        const id = String(btn.dataset.usersExpand);
+        if (usersExpanded.has(id)) usersExpanded.delete(id);
+        else usersExpanded.add(id);
+        el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+        bindOpsActions();
+        el.querySelector(`[data-users-expand="${id}"]`)?.focus();
+      });
+    });
     el.querySelectorAll('[data-user-row]').forEach(row => {
       const open = () => showUserManagementModal(Number(row.dataset.userRow));
       row.addEventListener('click', event => {
@@ -4483,7 +5063,9 @@ function renderUsersPage() {
       });
     });
   }
-  bindOpsActions();
+  // bindOpsActions() уже вызван внутри rebindOps() выше. Повторный вызов
+  // навешивал каждый обработчик второй раз: первый клик по сортировке
+  // срабатывал дважды и возвращал таблицу в исходное состояние.
 }
 
 /* ══════════════════════════════════════
@@ -4514,7 +5096,7 @@ function renderCoins() {
     <div class="coins-page-head">
       <div>
         <div class="section-kicker">Коины</div>
-        <h2 class="section-title">Операции с коинами</h2>
+        <h1 class="section-title">Операции с коинами</h1>
         <p>Начисления, заявки и правила в одном рабочем пространстве</p>
       </div>
       <div class="coins-head-actions">
@@ -5472,7 +6054,7 @@ async function renderGroups() {
   if (!canManageGroups()) {
     el.innerHTML = `
       <div class="view-header">
-        <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+        <div><div class="section-kicker">Группы</div><h1 class="section-title">Управление группами</h1></div>
       </div>
       <div class="empty-state"><p>Недостаточно прав для управления группами</p></div>`;
     return;
@@ -5480,7 +6062,7 @@ async function renderGroups() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+      <div><div class="section-kicker">Группы</div><h1 class="section-title">Управление группами</h1></div>
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="renderGroups()">Обновить</button>
         <button class="btn-primary btn-sm" onclick="showAddGroupModal()">Создать группу</button>
@@ -5496,7 +6078,7 @@ async function renderGroups() {
     if (isNavStale(myNavGen)) return;
     el.innerHTML = `
       <div class="view-header">
-        <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+        <div><div class="section-kicker">Группы</div><h1 class="section-title">Управление группами</h1></div>
         <button class="btn-outline btn-sm" onclick="renderGroups()">Повторить</button>
       </div>
       <div class="status-line status-error" style="padding:20px">Не удалось загрузить список групп</div>`;
@@ -5507,7 +6089,7 @@ async function renderGroups() {
   const rows = STATE.groups;
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Группы</div><h2 class="section-title">Управление группами</h2></div>
+      <div><div class="section-kicker">Группы</div><h1 class="section-title">Управление группами</h1></div>
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="renderGroups()">Обновить</button>
         <button class="btn-primary btn-sm" onclick="showAddGroupModal()">Создать группу</button>
@@ -5977,6 +6559,34 @@ async function showOperatorHistoryModal(id) {
 /* ══════════════════════════════════════
    MODALS
 ══════════════════════════════════════ */
+// Элемент, с которого открыли окно: фокус обязан вернуться именно на него.
+let _modalPreviousFocus = null;
+let _modalKeydown = null;
+let _modalSeq = 0;
+
+/** Все элементы окна, на которые можно поставить фокус клавишей Tab. */
+function _modalFocusable(root) {
+  return [...root.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), '
+    + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )].filter(el => el.offsetParent !== null || el === document.activeElement);
+}
+
+/** Есть ли в форме введённые данные — чтобы не закрыть их молча. */
+function _modalHasInput(root) {
+  return [...root.querySelectorAll('input, textarea, select')].some(field => {
+    if (field.type === 'hidden' || field.disabled) return false;
+    if (field.type === 'checkbox' || field.type === 'radio') return field.checked !== field.defaultChecked;
+    if (field.tagName === 'SELECT') return field.selectedIndex > 0;
+    return Boolean(field.value) && field.value !== field.defaultValue;
+  });
+}
+
+/**
+ * Единственное модальное окно приложения. Всё, что открывается поверх
+ * страницы, проходит через эту функцию, поэтому доступность настраивается
+ * здесь один раз для всех форм, подтверждений и карточек.
+ */
 function showModal(html, options = {}) {
   let overlay = document.getElementById('modal-overlay');
   if (!overlay) {
@@ -5985,17 +6595,90 @@ function showModal(html, options = {}) {
     overlay.className = 'modal-overlay';
     document.body.appendChild(overlay);
   }
+
+  // Запоминаем, откуда пришли, до того как перерисуем содержимое.
+  if (overlay.style.display !== 'flex') {
+    _modalPreviousFocus = document.activeElement;
+  }
+
   const forced = Boolean(options.force);
   overlay.dataset.force = forced ? 'true' : 'false';
   const extraClass = options.className ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '') : '';
-  overlay.innerHTML = `<div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}">${html}${forced ? '' : '<button class="modal-close" onclick="closeModal()">✕</button>'}</div>`;
+  const titleId = `modal-title-${++_modalSeq}`;
+
+  overlay.innerHTML = `
+    <div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}"
+         role="dialog" aria-modal="true" aria-labelledby="${titleId}">
+      ${html}
+      ${forced ? '' : '<button class="modal-close" type="button" aria-label="Закрыть окно"><span aria-hidden="true">✕</span></button>'}
+    </div>`;
+
+  const dialog = overlay.querySelector('.modal');
+  // Заголовок окна связываем с самим окном: скринридер объявит, что открылось.
+  const heading = dialog.querySelector('h1, h2, h3, .modal-title, .acc-title');
+  if (heading) heading.id = titleId;
+  else dialog.setAttribute('aria-label', options.label || 'Диалоговое окно');
+
   overlay.style.display = 'flex';
-  overlay.onclick = e => { if (e.target === overlay && !forced) closeModal(); };
+  // Фон не должен прокручиваться под открытым окном.
+  document.body.classList.add('modal-open');
+
+  dialog.querySelector('.modal-close')?.addEventListener('click', () => closeModal());
+  overlay.onclick = event => { if (event.target === overlay && !forced) closeModal(); };
+
+  // Фокус — на первое осмысленное поле, иначе на кнопку закрытия.
+  const focusables = _modalFocusable(dialog);
+  const firstField = dialog.querySelector(
+    'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])',
+  );
+  (firstField || focusables[0] || dialog).focus?.({ preventScroll: true });
+
+  // Escape закрывает, Tab не выпускает фокус за пределы окна.
+  if (_modalKeydown) document.removeEventListener('keydown', _modalKeydown, true);
+  _modalKeydown = event => {
+    if (overlay.style.display !== 'flex') return;
+    if (event.key === 'Escape' && !forced) {
+      event.preventDefault();
+      closeModal();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const items = _modalFocusable(dialog);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  document.addEventListener('keydown', _modalKeydown, true);
 }
+
 function closeModal(force = false) {
-  const o = document.getElementById('modal-overlay');
-  if (o?.dataset.force === 'true' && !force) return;
-  if (o) o.style.display = 'none';
+  const overlay = document.getElementById('modal-overlay');
+  if (!overlay) return;
+  if (overlay.dataset.force === 'true' && !force) return;
+
+  // Заполненную форму не закрываем молча — введённое легко потерять.
+  const dialog = overlay.querySelector('.modal');
+  if (!force && dialog && _modalHasInput(dialog)
+      && !confirm('Закрыть окно? Введённые данные не сохранятся.')) {
+    return;
+  }
+
+  overlay.style.display = 'none';
+  document.body.classList.remove('modal-open');
+  if (_modalKeydown) {
+    document.removeEventListener('keydown', _modalKeydown, true);
+    _modalKeydown = null;
+  }
+  // Возвращаем фокус туда, откуда окно открыли.
+  if (_modalPreviousFocus?.isConnected) _modalPreviousFocus.focus?.({ preventScroll: true });
+  _modalPreviousFocus = null;
   if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
 }
 
@@ -7668,7 +8351,7 @@ async function renderAdminSessions() {
     <div class="view-header">
       <div>
         <div class="section-kicker">Безопасность</div>
-        <h2 class="section-title">Сессии пользователей</h2>
+        <h1 class="section-title">Сессии пользователей</h1>
       </div>
       <div class="header-right">
         <button class="btn-outline" id="sessions-refresh-btn">Обновить</button>
@@ -7695,7 +8378,7 @@ function paintAdminSessions(el, data) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Безопасность</div>
-        <h2 class="section-title">Сессии пользователей</h2>
+        <h1 class="section-title">Сессии пользователей</h1>
       </div>
       <div class="header-right">
         <button class="btn-outline" id="sessions-refresh-btn">Обновить</button>
@@ -7858,7 +8541,7 @@ function renderPeriodReport() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Расчёт</div><h2 class="section-title">Расчёт показателей за период</h2></div>
+      <div><div class="section-kicker">Расчёт</div><h1 class="section-title">Расчёт показателей за период</h1></div>
     </div>
 
     <div class="pr-card">
@@ -8027,7 +8710,13 @@ function renderPeriodReport() {
         (!filterGroup || o.group_name === filterGroup)
       );
       r.sort((a, b) => {
-        const av = a[sortKey] || 0, bv = b[sortKey] || 0;
+        // Отсутствующее значение (например, качество без единой оценки) — не ноль:
+        // такие строки уходят в конец при любом направлении, а не притворяются
+        // худшим результатом.
+        const av = a[sortKey], bv = b[sortKey];
+        const aMissing = av === null || av === undefined;
+        const bMissing = bv === null || bv === undefined;
+        if (aMissing || bMissing) return aMissing - bMissing;
         return sortDir === 'desc' ? bv - av : av - bv;
       });
       return r;
@@ -8038,20 +8727,31 @@ function renderPeriodReport() {
       return sortDir === 'desc' ? ' ↓' : ' ↑';
     }
 
+    /* Заголовок сортируемой колонки: настоящая кнопка внутри <th> + aria-sort.
+       Раньше обработчик висел на самой ячейке, поэтому сортировать таблицу
+       можно было только мышью — с клавиатуры заголовки не фокусировались. */
+    function sortTh(label, key) {
+      const active = sortKey === key;
+      const ariaSort = active ? (sortDir === 'desc' ? 'descending' : 'ascending') : 'none';
+      return `<th class="num sortable" aria-sort="${ariaSort}" scope="col">`
+        + `<button type="button" class="sort-btn" data-sort="${key}">`
+        + `${label}<span aria-hidden="true">${sortIndicator(key)}</span></button></th>`;
+    }
+
     function renderTable() {
       const rows = filteredSorted();
       if (!rows.length) return '<div class="empty-line">Нет данных для отображения</div>';
       return `<div class="table-wrap"><table class="data-table">
         <thead><tr>
-          <th>Оператор</th><th>Группа</th>
-          <th class="num sortable" data-sort="final_points">Баллы${sortIndicator('final_points')}</th>
-          <th class="num sortable" data-sort="quality_avg">Качество${sortIndicator('quality_avg')}</th>
-          <th class="num">Звонков оцен.</th>
-          <th class="num">Итог часов</th>
-          <th class="num">База часов</th>
-          <th class="num sortable" data-sort="kvz">КВЗ${sortIndicator('kvz')}</th>
-          <th class="num sortable" data-sort="efficiency_percent">Эфф. %${sortIndicator('efficiency_percent')}</th>
-          <th class="num sortable" data-sort="penalty_minutes">Штраф мин${sortIndicator('penalty_minutes')}</th>
+          <th scope="col">Оператор</th><th scope="col">Группа</th>
+          ${sortTh('Баллы', 'final_points')}
+          ${sortTh('Качество', 'quality_avg')}
+          <th class="num" scope="col">Звонков оцен.</th>
+          <th class="num" scope="col">Итог часов</th>
+          <th class="num" scope="col">База часов</th>
+          ${sortTh('КВЗ', 'kvz')}
+          ${sortTh('Эфф. %', 'efficiency_percent')}
+          ${sortTh('Штраф мин', 'penalty_minutes')}
         </tr></thead>
         <tbody>
           ${rows.map(o => `
@@ -8177,13 +8877,16 @@ function renderPeriodReport() {
     });
 
     function bindTableSort() {
-      el.querySelectorAll('.sortable').forEach(th => {
-        th.addEventListener('click', () => {
-          const key = th.dataset.sort;
+      el.querySelectorAll('.sort-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.sort;
           if (sortKey === key) sortDir = sortDir === 'desc' ? 'asc' : 'desc';
           else { sortKey = key; sortDir = 'desc'; }
           el.querySelector('#pr-table-wrap').innerHTML = renderTable();
           bindTableSort();
+          // Перерисовка заменила кнопку — возвращаем фокус на ту же колонку,
+          // иначе после сортировки с клавиатуры фокус улетает в начало страницы.
+          el.querySelector(`.sort-btn[data-sort="${key}"]`)?.focus();
         });
       });
     }
@@ -8448,6 +9151,17 @@ function anBindShell(el) {
     }
   });
 
+  // Строки таблицы раскрываются по клику и объявлены focusable (tabindex=0),
+  // но <tr> — не кнопка: Enter/Space по ней сами по себе клик не генерируют.
+  // Без этого обработчика детали строки были недоступны с клавиатуры.
+  el.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const row = event.target.closest('[data-an2="ops-row"]');
+    if (!row) return;
+    event.preventDefault();
+    row.click();
+  });
+
   el.addEventListener('change', async event => {
     const target = event.target;
     if (target.id === 'an2-group') {
@@ -8474,10 +9188,17 @@ function anBindShell(el) {
   });
 }
 
+/* Гонка фильтров: смена периода и группы подряд запускает несколько запросов,
+   и без маркера последовательности выигрывает тот, кто ответил последним, —
+   на экране оказываются данные уже отменённого фильтра. Каждый загрузчик
+   получает номер; результат применяется, только если он всё ещё актуален. */
+const AN_SEQ = { main: 0, ops: 0, leaders: 0 };
+
 async function anLoad(el) {
   const { start, end } = anResolveRange();
   if (!start || !end) return;
 
+  const seq = ++AN_SEQ.main;
   AN_STATE.loading = true;
   AN_STATE.error = null;
   anPaint(el);
@@ -8490,19 +9211,24 @@ async function anLoad(el) {
     };
     if (AN_STATE.groupId) params.group_id = AN_STATE.groupId;
     if (AN_STATE.weekdays.length < 7) params.weekdays = AN_STATE.weekdays.join(',');
-    AN_STATE.data = await api.analyticsGet('dashboard', params);
+    const data = await api.analyticsGet('dashboard', params);
+    if (seq !== AN_SEQ.main) return;   // ответ устарел — его уже отменил новый фильтр
+    AN_STATE.data = data;
     if (!AN_STATE.groups) {
       AN_STATE.groups = (await api.analyticsGet('groups-list', {}))?.items || [];
     }
   } catch (error) {
+    if (seq !== AN_SEQ.main) return;
     AN_STATE.error = error?.message || 'Не удалось загрузить данные';
   } finally {
-    AN_STATE.loading = false;
-    AN_STATE.ops.loadedKey = null;   // фильтры могли измениться — таблицу перегрузим
-    AN_STATE.leaders.key = null;     // и лидеров пересчитаем
-    anPaint(el);
-    if (AN_STATE.tab === 'operators' || AN_STATE.tab === 'quality') anEnsureOps(el);
-    if (AN_STATE.tab === 'summary') anEnsureLeaders(el);
+    if (seq === AN_SEQ.main) {
+      AN_STATE.loading = false;
+      AN_STATE.ops.loadedKey = null;   // фильтры могли измениться — таблицу перегрузим
+      AN_STATE.leaders.key = null;     // и лидеров пересчитаем
+      anPaint(el);
+      if (AN_STATE.tab === 'operators' || AN_STATE.tab === 'quality') anEnsureOps(el);
+      if (AN_STATE.tab === 'summary') anEnsureLeaders(el);
+    }
   }
 }
 
@@ -8511,18 +9237,23 @@ async function anEnsureLeaders(el) {
   if (!start || !end) return;
   const key = [start, end, AN_STATE.groupId].join('|');
   if (AN_STATE.leaders.key === key && !AN_STATE.leaders.loading) return;
+  const seq = ++AN_SEQ.leaders;
   AN_STATE.leaders.loading = true;
   try {
     const params = { start_date: start, end_date: end, page: 1, page_size: 5, sort_by: 'final_points', sort_order: 'desc' };
     if (AN_STATE.groupId) params.group_id = AN_STATE.groupId;
     const res = await api.analyticsGet('operators', params);
+    if (seq !== AN_SEQ.leaders) return;
     AN_STATE.leaders.items = (res.items || []).filter(x => x.final_points != null);
     AN_STATE.leaders.key = key;
   } catch {
+    if (seq !== AN_SEQ.leaders) return;
     AN_STATE.leaders.items = [];
   } finally {
-    AN_STATE.leaders.loading = false;
-    if (AN_STATE.tab === 'summary') anPaint(el);
+    if (seq === AN_SEQ.leaders) {
+      AN_STATE.leaders.loading = false;
+      if (AN_STATE.tab === 'summary') anPaint(el);
+    }
   }
 }
 
@@ -8537,6 +9268,7 @@ async function anEnsureOps(el) {
   if (AN_STATE.ops.loadedKey === key && !AN_STATE.ops.loading) { anPaint(el); return; }
   const { start, end } = anResolveRange();
   if (!start || !end) return;
+  const seq = ++AN_SEQ.ops;
   AN_STATE.ops.loading = true;
   AN_STATE.ops.error = null;
   anPaint(el);
@@ -8549,14 +9281,18 @@ async function anEnsureOps(el) {
     if (AN_STATE.groupId) params.group_id = AN_STATE.groupId;
     if (AN_STATE.ops.query) params.operator_query = AN_STATE.ops.query;
     const res = await api.analyticsGet('operators', params);
+    if (seq !== AN_SEQ.ops) return;   // пришёл ответ на прежнюю сортировку/страницу
     AN_STATE.ops.items = res.items || [];
     AN_STATE.ops.total = res.total || 0;
     AN_STATE.ops.loadedKey = key;
   } catch (error) {
+    if (seq !== AN_SEQ.ops) return;
     AN_STATE.ops.error = error?.message || 'Не удалось загрузить операторов';
   } finally {
-    AN_STATE.ops.loading = false;
-    anPaint(el);
+    if (seq === AN_SEQ.ops) {
+      AN_STATE.ops.loading = false;
+      anPaint(el);
+    }
   }
 }
 
@@ -8709,8 +9445,22 @@ function anSortArrow(key) {
   return AN_STATE.ops.sortOrder === 'desc' ? ' ↓' : ' ↑';
 }
 
-function anTh(label, key) {
-  return `<th class="num an2-sortable" data-an2="ops-sort" data-value="${key}" role="button" tabindex="0">${label}${anSortArrow(key)}</th>`;
+/* Заголовок сортируемой колонки.
+
+   Сортировка — настоящая <button> внутри <th>, а не role="button" на самой
+   ячейке: ARIA-роль не даёт нативной обработки Enter/Space, поэтому такие
+   заголовки не работали с клавиатуры вовсе, и <th> терял смысл заголовка
+   колонки для скринридера. Направление сортировки дублируется в aria-sort —
+   стрелка ↓/↑ остаётся только визуальной подсказкой. */
+function anTh(label, key, numeric = true) {
+  const active = AN_STATE.ops.sortBy === key;
+  const ariaSort = active
+    ? (AN_STATE.ops.sortOrder === 'desc' ? 'descending' : 'ascending')
+    : 'none';
+  const cls = numeric ? 'num an2-sortable' : 'an2-sortable';
+  return `<th class="${cls}" aria-sort="${ariaSort}" scope="col">`
+    + `<button type="button" class="an2-sort-btn" data-an2="ops-sort" data-value="${key}">`
+    + `${label}<span aria-hidden="true">${anSortArrow(key)}</span></button></th>`;
 }
 
 function anOperatorsBody() {
@@ -8766,17 +9516,17 @@ function anOpsTable(o) {
 
   return `<div class="table-wrap an2-ops-wrap"><table class="data-table an2-ops-table">
     <thead><tr>
-      <th class="an2-rank">#</th>
-      ${anTh('Оператор', 'full_name').replace('class="num ', 'class="')}
-      <th class="num">Часы</th>
-      <th class="num">Норма</th>
+      <th class="an2-rank" scope="col">#</th>
+      ${anTh('Оператор', 'full_name', false)}
+      <th class="num" scope="col">Часы</th>
+      <th class="num" scope="col">Норма</th>
       ${anTh('Звонки', 'calls_total')}
       ${anTh('КВЗ', 'kvz')}
       ${anTh('Эфф.%', 'efficiency_percent')}
       ${anTh('Качество', 'quality_avg')}
       ${anTh('Штраф', 'penalty_minutes')}
       ${anTh('Итог', 'final_points')}
-      <th>Риск</th>
+      <th scope="col">Риск</th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table></div>
@@ -9087,7 +9837,15 @@ function anBindTrendHover(el) {
   figure.querySelectorAll('.an2-dot').forEach(dot => {
     const show = () => {
       tip.hidden = false;
-      tip.innerHTML = `<b>${dot.dataset.label}</b><span>${dot.dataset.value}</span>`;
+      // Через dataset значение возвращается уже РАСКОДИРОВАННЫМ: экранирование,
+      // сделанное при записи атрибута, здесь теряется, и innerHTML снова
+      // трактовал бы содержимое как разметку. Пишем текстом.
+      tip.textContent = '';
+      const labelEl = document.createElement('b');
+      labelEl.textContent = dot.dataset.label || '';
+      const valueEl = document.createElement('span');
+      valueEl.textContent = dot.dataset.value || '';
+      tip.append(labelEl, valueEl);
       const box = figure.getBoundingClientRect();
       const point = dot.getBoundingClientRect();
       tip.style.left = `${point.left - box.left + point.width / 2}px`;
@@ -9215,6 +9973,17 @@ async function anOpenGlossary() {
 }
 
 window.renderAnalytics = renderAnalytics;
+/* Вкладки раздела «Рейтинг». Константа потерялась при разрезании вьюхи-монолита
+   на модули: обе использующие её функции (здесь и в кабинете оператора) падали
+   с ReferenceError, из-за чего раздел «Рейтинг» не отрисовывался вовсе.
+   Ключи совпадают с ветками loadRatingTab(). */
+const RATING_TABS = [
+  { key: 'overview', label: 'Общий рейтинг' },
+  { key: 'race',     label: 'Гонка баллов' },
+  { key: 'groups',   label: 'Сравнение групп' },
+  { key: 'progress', label: 'Мой прогресс' },
+];
+
 let _ratingActiveTab = 'overview';
 
 async function exportRatingFromRatingPage() {
@@ -9234,7 +10003,7 @@ async function renderStaffRating() {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Рейтинг</div><h2 class="section-title">Турнирная таблица</h2></div>
+      <div><div class="section-kicker">Рейтинг</div><h1 class="section-title">Турнирная таблица</h1></div>
       <div class="header-right">
         ${isAdmin(STATE.user?.role) ? '<button class="btn-outline btn-sm" onclick="exportRatingFromRatingPage()">Экспорт CSV</button>' : ''}
         <button class="btn-outline btn-sm" onclick="renderRating()">Обновить</button>
@@ -9817,7 +10586,7 @@ async function renderWheelOperatorView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">Wheel of WOW</h2>
+        <h1 class="section-title">Wheel of WOW</h1>
       </div>
     </div>
     <div class="panel"><div class="empty-state"><div class="loading-spinner"></div><p>Загрузка колеса…</p></div></div>`;
@@ -9834,11 +10603,11 @@ async function renderWheelOperatorView(el) {
 
   const items = prizes.items || [];
   if (status.__fallback || prizes.__fallback) {
-    el.innerHTML = `<div class="view-header"><h2 class="section-title">Wheel of WOW</h2></div>${wheelLoadingPanel('Готовим колесо')}`;
+    el.innerHTML = `<div class="view-header"><h1 class="section-title">Wheel of WOW</h1></div>${wheelLoadingPanel('Готовим колесо')}`;
     return;
   }
   if (!status.campaign || !items.length) {
-    el.innerHTML = `<div class="view-header"><h2 class="section-title">Wheel of WOW</h2></div>
+    el.innerHTML = `<div class="view-header"><h1 class="section-title">Wheel of WOW</h1></div>
       <div class="panel"><div class="empty-state"><p>Колесо сейчас недоступно. Загляните позже.</p></div></div>`;
     return;
   }
@@ -9863,7 +10632,7 @@ async function renderWheelOperatorView(el) {
     <div class="view-header wheel-v2-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">Колесо наград</h2>
+        <h1 class="section-title">Колесо наград</h1>
         <p class="wheel-v2-subtitle">Используйте билет и получите один из призов Wheel of WOW</p>
       </div>
       <div class="wheel-v2-counters">
@@ -10154,7 +10923,7 @@ async function renderWheelStaffView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Управление мотивацией</div>
-        <h2 class="section-title">Wheel of WOW</h2>
+        <h1 class="section-title">Wheel of WOW</h1>
         <p class="section-subtitle">Настройте призы, правила получения попыток и контролируйте прокрутки.</p>
       </div>
     </div>
@@ -11225,7 +11994,7 @@ async function renderTestsOperatorView(el) {
   const myNavGen = STATE.navGen;
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Обучение</div><h2 class="section-title">Мои тесты</h2><div class="section-subtitle">Проверяйте знания и получайте награды за результат.</div></div>
+      <div><div class="section-kicker">Обучение</div><h1 class="section-title">Мои тесты</h1><div class="section-subtitle">Проверяйте знания и получайте награды за результат.</div></div>
       <button class="btn-outline btn-sm" onclick="renderTests()">Обновить</button>
     </div>
     <div id="tests-op-body"><div class="loading-state"><div class="loading-spinner"></div></div></div>`;
@@ -11641,7 +12410,7 @@ function renderTestResultScreen(result) {
   if (!el) return;
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Тесты</div><h2 class="section-title">Результат теста</h2></div>
+      <div><div class="section-kicker">Тесты</div><h1 class="section-title">Результат теста</h1></div>
       <button class="btn-primary btn-sm" onclick="renderTests()">К списку тестов</button>
     </div>
     ${testResultCardHtml(result)}
@@ -11705,7 +12474,7 @@ async function renderTestsStaffView(el) {
   const myNavGen = STATE.navGen;
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Обучение команды</div><h2 class="section-title">Тесты</h2><div class="section-subtitle">Создавайте проверки знаний и отслеживайте результаты операторов.</div></div>
+      <div><div class="section-kicker">Обучение команды</div><h1 class="section-title">Тесты</h1><div class="section-subtitle">Создавайте проверки знаний и отслеживайте результаты операторов.</div></div>
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="renderTests()">Обновить</button>
         <button class="btn-primary btn-sm" id="tests-new-btn">Создать тест</button>
@@ -11864,7 +12633,7 @@ function renderTestBuilderScreen() {
 
   el.innerHTML = `
     <div class="view-header test-builder-header">
-      <div><div class="section-kicker">Конструктор теста</div><h2 class="section-title">${s.testId ? 'Настройка теста' : 'Новый тест'}</h2><div class="section-subtitle">Заполните параметры, добавьте вопросы и назначьте аудиторию.</div></div>
+      <div><div class="section-kicker">Конструктор теста</div><h1 class="section-title">${s.testId ? 'Настройка теста' : 'Новый тест'}</h1><div class="section-subtitle">Заполните параметры, добавьте вопросы и назначьте аудиторию.</div></div>
       <button class="btn-outline btn-sm" onclick="renderTests()">К списку</button>
     </div>
     ${isOpen ? '<div class="test-builder-notice">Тест уже открыт. Можно изменить дату закрытия и назначение.</div>' : ''}
@@ -12178,7 +12947,7 @@ async function openTestResultsView(testId) {
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Тесты</div><h2 class="section-title">Результаты</h2></div>
+      <div><div class="section-kicker">Тесты</div><h1 class="section-title">Результаты</h1></div>
       <button class="btn-outline btn-sm" onclick="renderTests()">К списку</button>
     </div>
     <div class="filter-tabs" id="tr-tabs">
@@ -12331,7 +13100,7 @@ async function renderRafflesOperator(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">Розыгрыши</h2>
+        <h1 class="section-title">Розыгрыши</h1>
       </div>
       <div class="raffle-tickets-badge">🎟 Мои билеты: <b>${tickets}</b></div>
     </div>
@@ -12415,7 +13184,7 @@ async function renderRafflesAdmin(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">Розыгрыши</h2>
+        <h1 class="section-title">Розыгрыши</h1>
       </div>
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="renderRaffles()">Обновить</button>
@@ -13743,7 +14512,32 @@ function renderCabinet() {
   const el = document.getElementById('view-cabinet');
   if (!el) return;
   if (!['operator', 'supervisor'].includes(STATE.user?.role)) {
-    el.innerHTML = `<div class="op-page">${opEmpty('Личный кабинет недоступен', 'Он предназначен для аккаунтов, связанных с оператором.')}</div>`;
+    // Управленческому аккаунту кабинет не нужен: у него нет своей карточки
+    // оператора, а значит ни баллов, ни коинов, ни места в рейтинге.
+    // Раньше здесь была одинокая строка без заголовка — экран выглядел
+    // сломанным. Показываем полноценное объяснение и куда идти дальше.
+    const isStaff = isAdmin(STATE.user?.role);
+    el.innerHTML = `
+      <div class="view-header">
+        <div>
+          <div class="section-kicker">Кабинет</div>
+          <h1 class="section-title">Мой кабинет</h1>
+        </div>
+      </div>
+      ${uiEmptyState(
+        'Кабинет заводится вместе с карточкой оператора',
+        'Этот раздел показывает личные баллы, коины и место в рейтинге, а они считаются '
+        + 'по карточке оператора. У вашей учётной записи её нет, поэтому показывать нечего. '
+        + (isStaff ? 'Результаты команды смотрите в разделах «Сводка» и «Рейтинг».' : ''),
+        isStaff ? [
+          { id: 'summary', label: 'Открыть сводку' },
+          { id: 'rating', label: 'Открыть рейтинг', variant: 'ghost' },
+        ] : [],
+      )}`;
+    uiBindStateActions(el, {
+      summary: () => navigateTo('summary'),
+      rating: () => navigateTo('rating'),
+    });
     return;
   }
   const snapshot = STATE.cabinetSnapshot;

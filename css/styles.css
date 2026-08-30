@@ -671,10 +671,14 @@ html[data-theme="light"] .theme-toggle .icon-moon { display: none; }
    TABLES
 ══════════════════════════════════════════════════════════════ */
 .table-wrap {
+  /* overflow-x: auto оставляет широкие таблицы прокручиваемыми. Здесь же
+     раньше стоял overflow: hidden — он шёл следом и сбрасывал обе оси в
+     hidden, обрезая таблицу вместо прокрутки. Ниже по каскаду это чинили
+     повторным правилом с !important; убираем причину, а не симптом. */
   overflow-x: auto;
+  overflow-y: hidden;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-default);
-  overflow: hidden;
 }
 .data-table {
   width: 100%; border-collapse: collapse;
@@ -1080,6 +1084,9 @@ body.must-change-password .side-nav-link[data-nav-target] {
   margin-bottom: 16px;
   border-bottom: 1.5px solid var(--border);
   padding-bottom: 0;
+  /* На узком экране (360px) три вкладки не помещались в строку и
+     растягивали страницу на 23px вправо — переносим вместо этого. */
+  flex-wrap: wrap;
 }
 
 .ops-tab {
@@ -1355,6 +1362,352 @@ textarea:focus-visible,
   .ui-toolbar select,
   .ui-filter-bar input,
   .ui-filter-bar select { min-width: 0; flex: 1 1 100%; }
+}
+/* source: 20-states.css */
+/* ══════════════════════════════════════════════════════════════
+   СОСТОЯНИЯ СТРАНИЦЫ — общий слой
+
+   До этого файла каждый раздел рисовал загрузку, пустоту и ошибку
+   по-своему: в коде жили .empty-line, .empty-state, .r-empty-state,
+   .wheel-empty, .missions-empty, .v2-empty, .tests-empty-compact,
+   .alert-empty, .op-empty — девять вариантов одного и того же, плюс
+   .loading-state, объявленный сразу в двух файлах.
+
+   Здесь одна система на все разделы:
+     .state-block            — контейнер состояния
+       .state-empty          — данных ещё нет
+       .state-no-results     — данные есть, но фильтры ничего не нашли
+       .state-error          — запрос не удался
+       .state-forbidden      — нет прав
+     .state-partial          — узкая плашка «данные неполные»
+     .state-inline-error     — ошибка рядом с полем или блоком
+     .page-loader            — загрузка раздела
+     .skeleton               — заглушка под будущий контент
+
+   Токены берутся из css/tokens.css — отдельной палитры здесь нет.
+══════════════════════════════════════════════════════════════ */
+
+/* ── Блок состояния ─────────────────────────────────────────── */
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+  min-height: 240px;
+  padding: var(--space-8) var(--space-5);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+
+.state-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.state-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+.state-text {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+/* Техническая подробность: показываем, но не кричим ею. */
+.state-detail {
+  margin: 0;
+  max-width: 52ch;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.state-meta {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+.state-meta code {
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-muted);
+  font-size: 12px;
+  user-select: all;
+}
+
+.state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+  margin-top: var(--space-3);
+}
+
+/* Оттенки по типу состояния. Цвет — не единственный носитель смысла:
+   у каждого состояния свой заголовок и текст. */
+.state-empty .state-icon        { background: var(--bg-muted);      color: var(--text-muted); }
+.state-no-results .state-icon   { background: var(--bg-muted);      color: var(--text-secondary); }
+.state-error                    { border-color: var(--danger); }
+.state-error .state-icon        { background: var(--danger-soft);   color: var(--danger); }
+.state-forbidden .state-icon    { background: var(--warning-soft);  color: var(--warning); }
+
+/* Компактный вариант — внутри карточки или вкладки, а не на весь экран. */
+.state-block.state-compact {
+  min-height: 140px;
+  padding: var(--space-5) var(--space-4);
+  border-style: dashed;
+}
+.state-block.state-compact .state-icon { width: 34px; height: 34px; font-size: 16px; }
+.state-block.state-compact .state-title { font-size: 15px; }
+
+/* ── Частичные данные ───────────────────────────────────────── */
+.state-partial {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-md);
+  background: var(--warning-soft);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.state-partial-mark {
+  flex: none;
+  font-weight: 700;
+  color: var(--warning);
+}
+.state-partial b { font-weight: 600; }
+
+/* ── Ошибка рядом с контентом ───────────────────────────────── */
+.state-inline-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.state-inline-error .state-partial-mark { color: var(--danger); }
+
+/* ── Загрузка раздела ───────────────────────────────────────── */
+.page-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  min-height: 240px;
+  padding: var(--space-8) var(--space-5);
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.page-loader-spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  border: 2.5px solid var(--border-default);
+  border-top-color: var(--accent-primary);
+  animation: page-loader-spin .7s linear infinite;
+}
+@keyframes page-loader-spin { to { transform: rotate(360deg); } }
+
+/* Сообщение о затянувшейся загрузке — вместо бесконечного спиннера. */
+.page-loader-slow {
+  max-width: 44ch;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ── Скелетоны ──────────────────────────────────────────────── */
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    90deg,
+    var(--bg-muted) 25%,
+    var(--bg-surface-hover) 37%,
+    var(--bg-muted) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 50%; }
+  to   { background-position: 0 50%; }
+}
+.skeleton-line   { height: 12px; margin-bottom: var(--space-2); }
+.skeleton-line:last-child { margin-bottom: 0; }
+.skeleton-title  { height: 20px; width: 40%; margin-bottom: var(--space-3); }
+.skeleton-card   { height: 96px; border-radius: var(--radius-lg); }
+.skeleton-group  { display: flex; flex-direction: column; gap: var(--space-3); }
+.skeleton-row    { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); }
+
+/* Движение отключается там, где пользователь этого попросил. */
+@media (prefers-reduced-motion: reduce) {
+  .page-loader-spinner,
+  .skeleton {
+    animation: none;
+  }
+  .skeleton { background: var(--bg-muted); }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   ТАБЛИЦА ПОЛЬЗОВАТЕЛЕЙ
+
+   Было восемь колонок: на 1280px таблица занимала 1172px в контейнере
+   912px и уезжала вбок на 260px. Осталось пять; роль ушла подписью под
+   именем, ставка и стаж — в раскрываемую панель строки.
+══════════════════════════════════════════════════════════════ */
+
+.users-table-wrap {
+  /* Длинные списки: заголовок остаётся на виду при прокрутке. */
+  max-height: min(72vh, 760px);
+  overflow-y: auto;
+}
+.users-table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-surface);
+  box-shadow: inset 0 -1px 0 var(--border-default);
+}
+
+/* Кнопка сортировки заполняет ячейку: вид заголовка прежний,
+   но управление доступно с клавиатуры. */
+.users-table-compact th .users-sort-btn {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  width: 100%;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.users-table-compact th.tc .users-sort-btn { text-align: center; }
+.users-table-compact th:has(.users-sort-btn) { padding: 0; }
+.users-table-compact .users-sort-btn:hover { color: var(--accent-primary); }
+.users-table-compact .users-sort-btn:focus-visible,
+.users-expand:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+/* Имя + роль одной ячейкой: связанные данные читаются вместе. */
+.users-table-compact .name-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.user-cell-body { display: flex; flex-direction: column; min-width: 0; }
+.users-table-compact .user-cell-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.users-table-compact .user-cell-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.users-expand {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.users-expand:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+
+/* Панель подробностей: то, что раньше занимало три отдельные колонки. */
+.users-detail-row > td { background: var(--bg-subtle); padding: 0; }
+.users-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-2) var(--space-5);
+  padding: var(--space-3) var(--space-4) var(--space-3) 44px;
+}
+.users-detail-grid > div { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.users-detail-grid span { color: var(--text-muted); font-size: 11.5px; }
+
+/* Числа вправо, текст влево. */
+.users-table-compact td.tc, .users-table-compact th.tc { text-align: center; }
+.users-table-compact .users-col-actions { text-align: right; white-space: nowrap; }
+
+/* Планшет: группа уходит в подробности, остаются имя, уровень, статус, действия. */
+@media (max-width: 1024px) {
+  .users-table-compact th:nth-child(2),
+  .users-table-compact td:nth-child(2) { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   МОДАЛЬНОЕ ОКНО
+
+   Фон не прокручивается под открытым окном, само окно не выходит
+   за экран и прокручивается внутри — включая мобильную клавиатуру,
+   которая съедает половину высоты.
+══════════════════════════════════════════════════════════════ */
+body.modal-open { overflow: hidden; }
+
+#modal-overlay .modal {
+  max-height: 90dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#modal-overlay .modal-close {
+  min-width: 44px;
+  min-height: 44px;
+}
+#modal-overlay .modal-close:focus-visible,
+#modal-overlay .modal :focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  #modal-overlay .modal {
+    max-height: 92dvh;
+    /* Липкие кнопки внизу не должны перекрывать поля ввода. */
+    padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+  }
 }
 /* source: 10-manual-account.css */
 
@@ -2662,8 +3015,19 @@ body.side-nav-collapsed .side-nav-toggle svg {
   flex-wrap: wrap;
 }
 
-.data-table th.sortable { cursor: pointer; user-select: none; }
+.data-table th.sortable { cursor: pointer; user-select: none; padding: 0; }
 .data-table th.sortable:hover { color: var(--accent-primary); }
+/* Кнопка сортировки заполняет ячейку: вид прежний, но доступна с клавиатуры. */
+.data-table th.sortable .sort-btn {
+  font: inherit; color: inherit; background: none; border: 0;
+  width: 100%; padding: 10px 12px; cursor: pointer;
+  text-align: right; white-space: nowrap;
+}
+.data-table th.sortable .sort-btn:hover { color: var(--accent-primary); }
+.data-table th.sortable .sort-btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
 .data-table td.num, .data-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 900px) {
@@ -6191,8 +6555,22 @@ html[data-theme="dark"] #view-wheel .wheel-prize-group-meta {
 .an2-ops-table td.num, .an2-ops-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .an2-ops-table .an2-name { white-space: nowrap; }
 .an2-ops-table .an2-name small { display: block; font-size: 11px; font-weight: 500; color: var(--text-muted); }
-.an2-sortable { cursor: pointer; user-select: none; }
+.an2-sortable { cursor: pointer; user-select: none; padding: 0; }
 .an2-sortable:hover { color: var(--accent-primary); }
+/* Кнопка сортировки занимает всю ячейку, но выглядит как обычный заголовок:
+   доступность даёт нативный <button>, оформление остаётся прежним. */
+.an2-sort-btn {
+  font: inherit; color: inherit; background: none; border: 0;
+  width: 100%; padding: 10px 12px; cursor: pointer;
+  text-align: inherit; white-space: nowrap;
+}
+.an2-ops-table th.num .an2-sort-btn { text-align: right; }
+.an2-sort-btn:hover { color: var(--accent-primary); }
+.an2-sort-btn:focus-visible,
+.an2-ops-row:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
 .an2-muted { color: var(--text-muted); }
 .an2-ops-row { cursor: pointer; }
 .an2-ops-row:hover { background: var(--bg-muted); }
@@ -10897,10 +11275,17 @@ html[data-theme="dark"] #view-shop .shop-v2-shortfall {
   border-radius: inherit;
 }
 
+/* Таблица занимает доступную ширину и помещается целиком.
+
+   Раньше здесь стояли width: max-content и min-width: 1172px вместе с
+   фиксированными ширинами для ВОСЬМИ колонок. Колонок теперь пять
+   (роль ушла под имя, ставка и стаж — в раскрываемую панель), а жёсткий
+   минимум продолжал растягивать таблицу: на 1280px она занимала 1172px
+   в контейнере 912px и уезжала вбок на 260px. */
 #view-operators .users-table-compact {
-  width: max-content;
-  min-width: 1172px;
-  table-layout: auto;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
 }
 
 #view-operators .users-table-compact th,
@@ -10908,14 +11293,15 @@ html[data-theme="dark"] #view-shop .shop-v2-shortfall {
   padding-inline: 12px;
 }
 
-#view-operators .users-table-compact th:nth-child(1) { width: 260px; min-width: 260px; }
-#view-operators .users-table-compact th:nth-child(2) { width: 120px; min-width: 120px; }
-#view-operators .users-table-compact th:nth-child(3) { width: 180px; min-width: 180px; }
-#view-operators .users-table-compact th:nth-child(4) { width: 100px; min-width: 100px; }
-#view-operators .users-table-compact th:nth-child(5) { width: 140px; min-width: 140px; }
-#view-operators .users-table-compact th:nth-child(6) { width: 110px; min-width: 110px; }
-#view-operators .users-table-compact th:nth-child(7) { width: 110px; min-width: 110px; }
-#view-operators .users-table-compact th:nth-child(8) { width: 64px; min-width: 64px; }
+/* Имя забирает остаток ширины, остальные колонки — по содержимому. */
+#view-operators .users-table-compact th:nth-child(1) { width: auto;  min-width: 220px; }
+#view-operators .users-table-compact th:nth-child(2) { width: 150px; }
+#view-operators .users-table-compact th:nth-child(3) { width: 140px; }
+#view-operators .users-table-compact th:nth-child(4) { width: 120px; }
+#view-operators .users-table-compact th:nth-child(5) { width: 116px; }
+
+/* Длинные значения обрезаются многоточием, а не растягивают колонку. */
+#view-operators .users-table-compact td { overflow: hidden; text-overflow: ellipsis; }
 
 #view-operators .users-table-compact tbody td {
   height: 70px;
@@ -11114,7 +11500,10 @@ html[data-theme="dark"] #view-shop .shop-v2-shortfall {
     overflow-y: visible;
   }
 
-  #view-operators .users-table-compact { min-width: 1172px; }
+  /* На планшете колонка «Группа» скрыта (см. 20-states.css), остальные
+     ужимаются. Жёсткий минимум в 1172px здесь только возвращал вылет вбок,
+     ради которого таблицу и перестраивали. */
+  #view-operators .users-table-compact { min-width: 0; }
 }
 
 @media (max-width: 720px) {

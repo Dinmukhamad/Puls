@@ -8,9 +8,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/tokens.css?v=4323dc65af8d">
-  <link rel="stylesheet" href="css/styles.min.css?v=4da999bc323a">
+  <link rel="stylesheet" href="css/styles.min.css?v=cc1d62b8268e">
   <script src="js/theme-init.js?v=ef1f17f37f96"></script>
-  <script src="js/api.min.js?v=98130b4f2b43" defer></script>
+  <script src="js/api.min.js?v=2afc82808f6f" defer></script>
 </head>
 <body class="role-pending">
 
@@ -59,7 +59,7 @@
 <!-- SIDE NAV -->
 <nav class="side-nav" aria-label="Навигация">
   <div class="side-nav-header">
-    <a class="side-nav-logo" href="#" onclick="navigateTo('summary');return false;">
+    <a class="side-nav-logo" href="#summary" onclick="navigateTo('summary');return false;">
       <div class="side-nav-mark" style="color:#38BDF8">
         <svg viewBox="0 0 36 36" fill="none">
           <polyline points="2,18 8,18 12,8 16,28 20,12 24,24 28,18 34,18"
@@ -75,35 +75,35 @@
 
   <div class="side-nav-group">
     <!-- Admin -->
-    <a class="side-nav-link" href="#" data-nav-target="summary" title="Сводка">
+    <a class="side-nav-link" href="#summary" data-nav-target="summary" title="Сводка">
       <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       <span>Сводка</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="operators" title="Пользователи">
+    <a class="side-nav-link" href="#operators" data-nav-target="operators" title="Пользователи">
       <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       <span>Пользователи</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="operator-levels" title="Уровни">
+    <a class="side-nav-link" href="#operator-levels" data-nav-target="operator-levels" title="Уровни">
       <svg viewBox="0 0 24 24"><path d="M12 2l3 7h7l-5.5 4.4 2 7.1L12 16.4 5.5 20.5l2-7.1L2 9h7z"/></svg>
       <span>Уровни</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="coins" title="Коины">
+    <a class="side-nav-link" href="#coins" data-nav-target="coins" title="Коины">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
       <span>Коины</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="groups" title="Группы">
+    <a class="side-nav-link" href="#groups" data-nav-target="groups" title="Группы">
       <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
       <span>Группы</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="analytics" title="Аналитика">
+    <a class="side-nav-link" href="#analytics" data-nav-target="analytics" title="Аналитика">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
       <span>Аналитика</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="period-report" title="Расчёт за период">
+    <a class="side-nav-link" href="#period-report" data-nav-target="period-report" title="Расчёт за период">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       <span>Расчёт периода</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="sessions" title="Сессии">
+    <a class="side-nav-link" href="#sessions" data-nav-target="sessions" title="Сессии">
       <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/><path d="M8 9h8"/></svg>
       <span>Сессии</span>
     </a>
@@ -113,31 +113,31 @@
 
   <div class="side-nav-group">
     <!-- Shared -->
-    <a class="side-nav-link" href="#" data-nav-target="cabinet" title="Мой кабинет">
+    <a class="side-nav-link" href="#cabinet" data-nav-target="cabinet" title="Мой кабинет">
       <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <span>Кабинет</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="rating" title="Рейтинг">
+    <a class="side-nav-link" href="#rating" data-nav-target="rating" title="Рейтинг">
       <svg viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>
       <span>Рейтинг</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="tests" title="Тесты">
+    <a class="side-nav-link" href="#tests" data-nav-target="tests" title="Тесты">
       <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       <span>Тесты</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="missions" title="Миссии">
+    <a class="side-nav-link" href="#missions" data-nav-target="missions" title="Миссии">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v4"/><path d="M5.6 5.6l2.8 2.8"/><path d="M3 12h4"/><path d="M17 12h4"/><path d="M15.6 8.4l2.8-2.8"/><circle cx="12" cy="12" r="5"/><path d="M9.5 16.3 8 21l4-2 4 2-1.5-4.7"/></svg>
       <span>Миссии</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="wheel" title="Колесо WOW">
+    <a class="side-nav-link" href="#wheel" data-nav-target="wheel" title="Колесо WOW">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><path d="M12 3v6M12 15v6M3 12h6M15 12h6M5.6 5.6l4.2 4.2M14.2 14.2l4.2 4.2M18.4 5.6l-4.2 4.2M9.8 14.2l-4.2 4.2"/></svg>
       <span>Колесо WOW</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="raffles" title="Розыгрыши">
+    <a class="side-nav-link" href="#raffles" data-nav-target="raffles" title="Розыгрыши">
       <svg viewBox="0 0 24 24"><path d="M4 8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v2a2 2 0 0 0 0 4v2a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-4z"/><path d="M12 6v12" stroke-dasharray="2 3"/></svg>
       <span>Розыгрыши</span>
     </a>
-    <a class="side-nav-link" href="#" data-nav-target="shop" title="Магазин">
+    <a class="side-nav-link" href="#shop" data-nav-target="shop" title="Магазин">
       <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
       <span>Магазин</span>
     </a>
@@ -192,6 +192,6 @@
 </main>
 
 <!-- SCRIPTS -->
-<script src="js/app.min.js?v=6e01ec25392f" defer></script>
+<script src="js/app.min.js?v=3684144727b8" defer></script>
 </body>
 </html>

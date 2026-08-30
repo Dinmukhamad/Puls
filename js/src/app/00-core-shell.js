@@ -224,6 +224,8 @@ function bumpAnalyticsTabGen() { return ++STATE.analyticsTabGen; }
 function isAnalyticsTabStale(token) { return token !== STATE.analyticsTabGen; }
 
 const COIN_TABS = ['overview', 'accrual', 'requests', 'history', 'rules', 'weekly', 'settings'];
+// Разделы, которые когда-то были самостоятельными, а теперь стали вкладками
+// «Коинов». Старые ссылки и закладки обязаны продолжать работать.
 const LEGACY_COIN_VIEW_TAB = { accrual: 'accrual', manual: 'accrual', requests: 'requests', history: 'history' };
 
 function normalizeCoinTab(tab) {
@@ -231,14 +233,44 @@ function normalizeCoinTab(tab) {
   return COIN_TABS.includes(tab) ? tab : 'overview';
 }
 
-function parseStoredView(value) {
-  if (!value) return { view: '', tab: '' };
-  const clean = String(value).replace(/^#/, '');
-  const [view, query = ''] = clean.split('?');
-  const params = new URLSearchParams(query);
-  return { view, tab: params.get('tab') || '' };
+/* ══════════════════════════════════════
+   РЕЕСТР МАРШРУТОВ
+
+   Единственный источник правды о разделах: hash, заголовок вкладки браузера
+   и функция отрисовки. Раньше это было размазано по четырём местам —
+   switch в renderView, список ролей, сборка URL внутри navigateTo и разметка
+   sidebar, — и они разъезжались: «Коины» писались в pathname (/coins?tab=),
+   а не в hash, из-за чего адрес раздела пропадал, а Back/Forward между
+   «Коинами» и остальными разделами работал через раз.
+
+   render задан стрелкой, а не ссылкой на функцию: реестр объявляется раньше
+   файлов вьюх, и прямая ссылка вычислялась бы в момент создания объекта.
+══════════════════════════════════════ */
+const ROUTES = {
+  summary:           { title: 'Сводка',            render: () => renderSummary() },
+  operators:         { title: 'Пользователи',      render: () => renderAdminOperators() },
+  'operator-levels': { title: 'Уровни',            render: () => renderOperatorLevelsSettings() },
+  coins:             { title: 'Коины',             render: () => renderCoins(), tabs: COIN_TABS, normalizeTab: normalizeCoinTab },
+  groups:            { title: 'Группы',            render: () => renderGroups() },
+  analytics:         { title: 'Аналитика',         render: () => renderAnalytics() },
+  'period-report':   { title: 'Расчёт за период',  render: () => renderPeriodReport() },
+  sessions:          { title: 'Сессии',            render: () => renderAdminSessions() },
+  cabinet:           { title: 'Мой кабинет',       render: () => renderCabinet() },
+  rating:            { title: 'Рейтинг',           render: () => renderRating() },
+  tests:             { title: 'Тесты',             render: () => renderTests() },
+  missions:          { title: 'Миссии',            render: () => renderMissions() },
+  wheel:             { title: 'Колесо WOW',        render: () => renderWheel() },
+  raffles:           { title: 'Розыгрыши',         render: () => renderRaffles() },
+  shop:              { title: 'Магазин',           render: () => renderShop() },
+};
+
+const APP_TITLE = 'Puls';
+
+function isKnownRoute(view) {
+  return Object.prototype.hasOwnProperty.call(ROUTES, view);
 }
 
+/** Права по разделам. Правила не менялись — перенесены как были. */
 function allowedViewsForRole(role) {
   if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests', 'missions'];
 
@@ -249,32 +281,90 @@ function allowedViewsForRole(role) {
   return views;
 }
 
-function initialRouteForRole(role) {
-  const path = location.pathname.replace(/^\/+|\/+$/g, '');
-  const params = new URLSearchParams(location.search);
-  if (path === 'coins') return { view: 'coins', tab: normalizeCoinTab(params.get('tab')) };
-  if (path === 'accrual') return { view: 'coins', tab: 'accrual' };
-  if (path === 'requests') return { view: 'coins', tab: 'requests' };
-  if (path === 'history') return { view: 'coins', tab: 'history' };
-
-  const hashRoute = parseStoredView(location.hash);
-  if (hashRoute.view === 'coins') return { view: 'coins', tab: normalizeCoinTab(hashRoute.tab) };
-  if (LEGACY_COIN_VIEW_TAB[hashRoute.view]) return { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[hashRoute.view] };
-  // ВАЖНО: до сих пор здесь обрабатывался только частный случай 'coins' —
-  // любой другой раздел (rating, shop, tests, ...) из hash игнорировался,
-  // и F5 всегда откатывал на дефолтный раздел. Теперь любой непустой view
-  // из hash восстанавливается как есть.
-  if (hashRoute.view) return { view: hashRoute.view, tab: hashRoute.tab };
-
-  const savedRoute = parseStoredView(localStorage.getItem('pulse-last-view'));
-  if (savedRoute.view === 'coins') return { view: 'coins', tab: normalizeCoinTab(savedRoute.tab) };
-  if (LEGACY_COIN_VIEW_TAB[savedRoute.view]) return { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[savedRoute.view] };
-  // То же самое для localStorage-фоллбэка (срабатывает, когда hash пуст,
-  // например при заходе по чистому "/" без сохранённого hash в адресной строке).
-  if (savedRoute.view) return { view: savedRoute.view, tab: savedRoute.tab };
-
-  return { view: isAdmin(role) ? 'summary' : 'cabinet', tab: '' };
+function fallbackViewForRole(role) {
+  return isAdmin(role) ? 'summary' : 'cabinet';
 }
+
+/** Разбирает "#coins?tab=history", "coins?tab=history" и "/coins?tab=history". */
+function parseRoute(value) {
+  if (!value) return { view: '', tab: '' };
+  const clean = String(value).replace(/^[#/]+/, '');
+  const [rawView, query = ''] = clean.split('?');
+  const view = rawView.replace(/\/+$/, '');
+  const tab = new URLSearchParams(query).get('tab') || '';
+  if (LEGACY_COIN_VIEW_TAB[view]) return { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[view] };
+  return { view, tab };
+}
+
+/** Канонический адрес раздела. У каждого раздела он свой и стабильный. */
+function routeToHash(view, tab) {
+  const spec = ROUTES[view];
+  if (spec?.tabs && tab) return `#${view}?tab=${tab}`;
+  return `#${view}`;
+}
+
+/**
+ * Приводит запрошенный раздел к разрешённому: неизвестный маршрут и раздел
+ * без прав одинаково уходят на стартовый экран роли.
+ */
+function resolveRoute(view, tab) {
+  const role = STATE.user?.role;
+  const parsed = LEGACY_COIN_VIEW_TAB[view] ? { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[view] } : { view, tab };
+  let target = parsed.view;
+
+  if (!isKnownRoute(target)) target = fallbackViewForRole(role);
+  if (role && !allowedViewsForRole(role).includes(target)) target = fallbackViewForRole(role);
+
+  const spec = ROUTES[target];
+  const nextTab = spec?.normalizeTab
+    ? spec.normalizeTab(parsed.tab || (target === STATE.currentView ? STATE.coinsTab : ''))
+    : '';
+  return { view: target, tab: nextTab };
+}
+
+/** Стартовый маршрут: адресная строка → сохранённый раздел → дефолт роли. */
+function initialRouteForRole(role) {
+  const fromPath = parseRoute(location.pathname + location.search);
+  if (fromPath.view && isKnownRoute(parseRoute(fromPath.view).view)) return fromPath;
+
+  const fromHash = parseRoute(location.hash);
+  if (fromHash.view) return fromHash;
+
+  const saved = parseRoute(localStorage.getItem('pulse-last-view'));
+  if (saved.view) return saved;
+
+  return { view: fallbackViewForRole(role), tab: '' };
+}
+
+/* ══════════════════════════════════════
+   ГЛОБАЛЬНЫЙ ПЕРЕХВАТ ОШИБОК
+
+   Ошибка, не пойманная ни одним разделом, раньше просто уходила в консоль:
+   пользователь видел пустой или наполовину отрисованный экран и не понимал,
+   что произошло. Теперь она попадает в лог и показывается тостом — экран
+   при этом остаётся рабочим, из него можно уйти в другой раздел.
+══════════════════════════════════════ */
+let _lastGlobalErrorAt = 0;
+
+function reportGlobalError(source, error) {
+  console.error(`[global:${source}]`, error);
+  // Одна ошибка нередко порождает каскад — не заваливаем экран тостами.
+  const now = Date.now();
+  if (now - _lastGlobalErrorAt < 4000) return;
+  _lastGlobalErrorAt = now;
+  const message = error?.message || String(error || 'Неизвестная ошибка');
+  if (typeof showToast === 'function') {
+    showToast(`Что-то пошло не так: ${message}`, 'error');
+  }
+}
+
+window.addEventListener('error', event => {
+  reportGlobalError('error', event.error || event.message);
+});
+
+window.addEventListener('unhandledrejection', event => {
+  reportGlobalError('promise', event.reason);
+});
 
 /* ══════════════════════════════════════
    BOOT
@@ -287,19 +377,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   await tryRestoreSession();
 });
 
-// Every browser-driven route change goes through the same role guard as sidebar
-// navigation. This also prevents a restricted hash from exposing an empty or
-// stale administrative view after Back/Forward navigation.
-window.addEventListener('hashchange', () => {
-  const role = STATE.user?.role;
-  if (!role) return;
-  const requested = parseStoredView(location.hash);
-  const fallback = isAdmin(role) ? 'summary' : 'cabinet';
-  const view = allowedViewsForRole(role).includes(requested.view)
-    ? requested.view
-    : fallback;
-  navigateTo(view, { tab: requested.tab, history: false });
-});
+/**
+ * Любое изменение адреса браузером — Back, Forward, правка hash руками —
+ * приводит экран в соответствие с URL. Слушаем оба события: popstate ловит
+ * переходы по истории, hashchange — ручную правку адреса. Оба могут прийти
+ * на один переход, поэтому повторное применение того же маршрута отсекается.
+ */
+function syncRouteFromUrl() {
+  if (!STATE.user?.role) return;
+  const requested = parseRoute(location.hash);
+  const resolved = resolveRoute(requested.view, requested.tab);
+  const sameView = resolved.view === STATE.currentView;
+  const sameTab = !ROUTES[resolved.view]?.tabs || resolved.tab === STATE.coinsTab;
+  if (sameView && sameTab) return;
+  navigateTo(resolved.view, { tab: resolved.tab, history: false });
+}
+
+window.addEventListener('popstate', syncRouteFromUrl);
+window.addEventListener('hashchange', syncRouteFromUrl);
 
 async function tryRestoreSession() {
   try {
@@ -423,76 +518,110 @@ function onDataUpdated(views) {
 }
 
 function navigateTo(view, options = {}) {
-  if (LEGACY_COIN_VIEW_TAB[view]) {
-    options = { ...options, tab: LEGACY_COIN_VIEW_TAB[view] };
-    view = 'coins';
-  }
-  const role = STATE.user?.role;
-  if (role && !allowedViewsForRole(role).includes(view)) {
-    view = isAdmin(role) ? 'summary' : 'cabinet';
-    options = {};
-  }
+  const { view: target, tab } = resolveRoute(view, options.tab);
+
   if (
     STATE.currentView === 'missions'
-    && view !== 'missions'
+    && target !== 'missions'
     && typeof missionViewController !== 'undefined'
   ) {
     missionViewController.dispose();
   }
-  STATE.currentView = view;
+
+  STATE.currentView = target;
+  if (ROUTES[target]?.tabs) STATE.coinsTab = tab;
   _viewAbortController.abort();
   _viewAbortController = new AbortController();
-  if (view === 'coins') STATE.coinsTab = normalizeCoinTab(options.tab || STATE.coinsTab);
   bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов
-  // Save to URL hash so F5 restores the same section
-  const route = view === 'coins' ? `coins?tab=${STATE.coinsTab}` : view;
-  const routeUrl = view === 'coins' ? `/${route}` : '/#' + route;
-  if (options.history !== false) {
-    const sameRoute = `${location.pathname}${location.hash}` === routeUrl;
-    const method = !_routeInitialized || sameRoute ? 'replaceState' : 'pushState';
-    history[method](null, '', routeUrl);
+
+  // Адрес — единственный источник правды о текущем экране. Все разделы
+  // (включая «Коины») живут в hash, поэтому F5, копирование ссылки и
+  // открытие в новой вкладке ведут себя одинаково.
+  const hash = routeToHash(target, tab);
+  const canonicalUrl = `${location.pathname}${location.search}${hash}`;
+  if (options.history === false) {
+    // Переход инициировал сам браузер — историю не трогаем, только
+    // выравниваем адрес, если запрошенный маршрут пришлось заменить.
+    if (location.hash !== hash) history.replaceState(null, '', canonicalUrl);
+  } else {
+    const method = (!_routeInitialized || location.hash === hash) ? 'replaceState' : 'pushState';
+    history[method](null, '', canonicalUrl);
   }
   _routeInitialized = true;
-  localStorage.setItem('pulse-last-view', route);
+
+  try { localStorage.setItem('pulse-last-view', hash.slice(1)); } catch (e) { /* приватный режим */ }
+
+  document.title = `${ROUTES[target]?.title || 'Puls'} · ${APP_TITLE}`;
+
   document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.side-nav-link[data-nav-target]').forEach(l => {
-    const target = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
-    l.classList.toggle('active', target === view);
+    const linkTarget = LEGACY_COIN_VIEW_TAB[l.dataset.navTarget] ? 'coins' : l.dataset.navTarget;
+    const active = linkTarget === target;
+    l.classList.toggle('active', active);
+    // Скринридер должен слышать, какой раздел открыт, а не догадываться по цвету.
+    if (active) l.setAttribute('aria-current', 'page');
+    else l.removeAttribute('aria-current');
   });
-  const el = document.getElementById(`view-${view}`);
+
+  const el = document.getElementById(`view-${target}`);
   if (el) el.classList.add('active');
   window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   document.querySelectorAll('.table-wrap, .an-table-scroll, [data-view-scroll]').forEach(node => {
     node.scrollTop = 0;
     node.scrollLeft = 0;
   });
-  renderView(view);
-  focusCurrentViewHeading(view);
+  renderView(target);
+  focusCurrentViewHeading(target);
 }
 
+/**
+ * Отрисовка раздела через реестр, обёрнутая в error boundary.
+ *
+ * Раньше сбой внутри любой render-функции оставлял пустой контейнер: именно
+ * так выглядела ошибка `RATING_TABS is not defined` — белый экран без единой
+ * подсказки. Теперь ошибка одного раздела показывает объяснимое состояние с
+ * повторной попыткой и не мешает уйти в другие разделы.
+ */
 function renderView(view) {
-  const el = document.getElementById(`view-${view}`);
-
-  switch (view) {
-    case 'cabinet':  renderCabinet();  break;
-    case 'rating':   renderRating();   break;
-    case 'shop':     renderShop();     break;
-    case 'summary':  renderSummary();  break;
-    case 'operators': renderAdminOperators(); break;
-    case 'operator-levels': renderOperatorLevelsSettings(); break;
-    case 'coins':    renderCoins();    break;
-    case 'wheel':    renderWheel();    break;
-    case 'raffles':  renderRaffles();  break;
-    case 'manual':   renderManual();   break;
-    case 'requests': renderRequests(); break;
-    case 'history':  renderHistory();  break;
-    case 'groups':   renderGroups();   break;
-    case 'period-report': renderPeriodReport(); break;
-    case 'analytics': renderAnalytics(); break;
-    case 'tests':    renderTests();    break;
-    case 'missions': renderMissions(); break;
-    case 'sessions': renderAdminSessions(); break;
+  const spec = ROUTES[view];
+  if (!spec) return;
+  try {
+    const result = spec.render();
+    // Асинхронные вьюхи возвращают промис — его отказ тоже наш.
+    if (result && typeof result.catch === 'function') {
+      result.catch(error => showViewError(view, error));
+    }
+  } catch (error) {
+    showViewError(view, error);
   }
+}
+
+/** Понятный экран вместо пустоты, когда раздел не смог отрисоваться. */
+function showViewError(view, error) {
+  console.error(`[view:${view}] ошибка отрисовки`, error);
+  const host = document.getElementById(`view-${view}`);
+  if (!host) return;
+  const title = ROUTES[view]?.title || 'Раздел';
+  const requestId = error?.requestId || error?.request_id || '';
+  host.innerHTML = `
+    <div class="view-header">
+      <div><h1 class="section-title">${esc(title)}</h1></div>
+    </div>
+    <div class="state-block state-error" role="alert">
+      <div class="state-icon" aria-hidden="true">!</div>
+      <h2 class="state-title">Раздел не открылся</h2>
+      <p class="state-text">Мы не смогли построить эту страницу. Данные не пострадали —
+      можно повторить попытку или перейти в другой раздел.</p>
+      <p class="state-detail">${esc(error?.message || 'Неизвестная ошибка')}</p>
+      ${requestId ? `<p class="state-meta">Код обращения: <code>${esc(requestId)}</code></p>` : ''}
+      <div class="state-actions">
+        <button class="btn-primary" type="button" data-view-retry="${esc(view)}">Повторить</button>
+      </div>
+    </div>`;
+  host.querySelector('[data-view-retry]')?.addEventListener('click', () => {
+    invalidateViewCache(view);
+    renderView(view);
+  });
 }
 
 function focusCurrentViewHeading(view) {

@@ -114,6 +114,10 @@ const api = (() => {
       const error = new Error(msg);
       error.status = res.status;
       error.path = path;
+      // Код обращения нужен, чтобы пользователь мог назвать конкретный запрос
+      // при обращении в поддержку. Бэкенд отдаёт его и в теле ошибки, и в
+      // заголовке — берём первое доступное.
+      error.requestId = data.request_id || res.headers.get('X-Request-ID') || '';
       error.detail = data.detail; // необработанное значение — на случай, если кому-то нужен доступ к исходным данным
       error.code = data.detail?.code || data.error?.code || null;
       if (res.status === 401 && path !== '/api/auth/me') {

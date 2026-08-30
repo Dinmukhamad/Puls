@@ -58,7 +58,7 @@ async function renderRafflesOperator(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">Розыгрыши</h2>
+        <h1 class="section-title">Розыгрыши</h1>
       </div>
       <div class="raffle-tickets-badge">🎟 Мои билеты: <b>${tickets}</b></div>
     </div>
@@ -142,7 +142,7 @@ async function renderRafflesAdmin(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h2 class="section-title">Розыгрыши</h2>
+        <h1 class="section-title">Розыгрыши</h1>
       </div>
       <div class="header-right">
         <button class="btn-outline btn-sm" onclick="renderRaffles()">Обновить</button>
