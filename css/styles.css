@@ -1709,6 +1709,248 @@ body.modal-open { overflow: hidden; }
     padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   ПАНЕЛЬ ДОПОЛНИТЕЛЬНЫХ ФИЛЬТРОВ
+
+   Раньше это был <details>/<summary>: раскрытие работало, но состояние
+   не объявлялось — скринридер не сообщал, раскрыт блок или свёрнут.
+   Теперь настоящая кнопка с aria-expanded и aria-controls.
+══════════════════════════════════════════════════════════════ */
+.ui-more-filters__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.ui-more-filters__toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+/* Число заданных фильтров видно, даже когда панель свёрнута. */
+.ui-more-filters__count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+  font-size: 11px;
+  font-weight: 600;
+}
+.ui-more-filters__toggle[aria-expanded="true"] {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.ui-more-filters__panel {
+  margin: var(--space-3) 0 var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+.ui-more-filters__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+.ui-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.ui-filter-field > span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.ui-filter-field select { width: 100%; }
+
+@media (max-width: 600px) {
+  .ui-more-filters__grid { grid-template-columns: 1fr; }
+  .ui-more-filters__toggle { min-height: 44px; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   КАТАЛОГ БОНУСОВ ДЛЯ ШТАТА
+
+   Штату раньше показывалась операторская сетка карточек с кнопкой
+   «Изменить» на каждой: на 33 бонусах — 33 одинаковые кнопки без поиска,
+   фильтров и сортировки. Здесь компактная таблица; карточки оператора
+   остались прежними.
+══════════════════════════════════════════════════════════════ */
+.shop-admin-subtitle {
+  margin: var(--space-1) 0 0;
+  max-width: 62ch;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+}
+
+.shop-admin-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.shop-admin-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+.shop-admin-summary span { font-size: 12px; color: var(--text-secondary); }
+.shop-admin-summary b { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.shop-admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.shop-admin-toolbar #shop-admin-search { flex: 1 1 260px; min-width: 0; }
+.shop-admin-count { margin-left: auto; color: var(--text-secondary); font-size: 13px; }
+.shop-admin-count b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+.shop-admin-wrap { max-height: min(70vh, 720px); overflow-y: auto; }
+.shop-admin-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-surface);
+  box-shadow: inset 0 -1px 0 var(--border-default);
+}
+.shop-admin-table { width: 100%; table-layout: fixed; }
+.shop-admin-table th:nth-child(1) { width: auto; min-width: 220px; }
+.shop-admin-table th:nth-child(2) { width: 170px; }
+.shop-admin-table th:nth-child(3) { width: 120px; }
+.shop-admin-table th:nth-child(4) { width: 130px; }
+.shop-admin-table th:nth-child(5) { width: 110px; }
+.shop-admin-table th:nth-child(6) { width: 130px; }
+.shop-admin-table td { overflow: hidden; text-overflow: ellipsis; }
+.shop-admin-table td.num, .shop-admin-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.shop-admin-table td.tc, .shop-admin-table th.tc { text-align: center; }
+
+.shop-admin-table th:has(.shop-admin-sort) { padding: 0; }
+.shop-admin-sort {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  width: 100%;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.shop-admin-table th.num .shop-admin-sort { text-align: right; }
+.shop-admin-table th.tc .shop-admin-sort { text-align: center; }
+.shop-admin-sort:hover { color: var(--accent-primary); }
+.shop-admin-sort:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.shop-admin-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.shop-admin-name b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shop-admin-name small { font-size: 11.5px; color: var(--text-muted); }
+.shop-admin-was { display: block; font-size: 11px; color: var(--text-muted); text-decoration: line-through; }
+
+/* Скрытый бонус видно и без цвета — по подписи в колонке «Статус». */
+.shop-admin-row-hidden { opacity: .72; }
+.shop-admin-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.shop-admin-badge.is-on  { background: var(--success-soft); color: var(--success); }
+.shop-admin-badge.is-off { background: var(--bg-muted);     color: var(--text-secondary); }
+
+@media (max-width: 1024px) {
+  /* Категория уходит: название, цена, наличие и статус важнее. */
+  .shop-admin-table th:nth-child(2), .shop-admin-table td:nth-child(2) { display: none; }
+}
+@media (max-width: 700px) {
+  .shop-admin-table th:nth-child(4), .shop-admin-table td:nth-child(4) { display: none; }
+  .shop-admin-toolbar { flex-direction: column; align-items: stretch; }
+  .shop-admin-count { margin-left: 0; }
+  .shop-admin-toolbar .form-input, .shop-admin-toolbar .form-select { min-height: 44px; }
+}
+
+/* На телефоне компактная таблица каталога всё равно не помещается
+   (680 px в контейнере 314 px), поэтому строки становятся карточками —
+   тот же приём, что уже применён к таблице пользователей. */
+@media (max-width: 640px) {
+  .shop-admin-wrap { max-height: none; overflow: visible; border: 0; background: transparent; }
+  .shop-admin-table,
+  .shop-admin-table tbody,
+  .shop-admin-table tr,
+  .shop-admin-table td { display: block; width: 100%; min-width: 0; }
+  .shop-admin-table { table-layout: auto; }
+  .shop-admin-table thead { display: none; }
+  .shop-admin-table tbody { display: grid; gap: 12px; }
+  .shop-admin-table tbody tr {
+    padding: 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+  }
+  .shop-admin-table tbody td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: 7px 0;
+    text-align: right;
+    border: 0;
+  }
+  .shop-admin-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: left;
+  }
+  /* Название — шапка карточки, подпись ему не нужна. */
+  .shop-admin-table tbody td.shop-admin-name {
+    display: block;
+    padding-bottom: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .shop-admin-table tbody td.shop-admin-name::before { display: none; }
+  /* Колонки, скрытые на планшете, на телефоне снова видны: в карточке
+     место есть, и «Категория» с «Наличием» здесь полезны. */
+  .shop-admin-table th:nth-child(2), .shop-admin-table td:nth-child(2),
+  .shop-admin-table th:nth-child(4), .shop-admin-table td:nth-child(4) { display: block; }
+  .shop-admin-table thead th { display: none; }
+  .shop-admin-table .edit-item-btn { min-height: 44px; }
+}
+
+/* Внутри карточки контент обязан сжиматься: без этого длинное название
+   с white-space: nowrap растягивало строку шире экрана, и правый край
+   карточки обрезался (body скрывает горизонтальный скролл). */
+@media (max-width: 640px) {
+  .shop-admin-table { width: 100%; max-width: 100%; }
+  .shop-admin-table tbody tr { max-width: 100%; overflow: hidden; }
+  .shop-admin-table tbody td { min-width: 0; max-width: 100%; }
+  .shop-admin-table tbody td::before { flex: none; }
+  .shop-admin-table .shop-admin-name b {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .shop-admin-table .shop-admin-name small { white-space: normal; overflow-wrap: anywhere; }
+  .shop-admin-table tbody td > * { min-width: 0; }
+}
 /* source: 10-manual-account.css */
 
 
@@ -7454,8 +7696,14 @@ textarea:focus {
 }
 
 .data-table {
-  min-width: 720px;
   border-spacing: 0;
+}
+
+/* min-width задаём только таблицам, которые остаются таблицами: те, что на
+   телефоне превращаются в карточки, помечены data-mobile="cards" — жёсткий
+   минимум распирал бы карточку шире экрана. */
+.data-table:not([data-mobile="cards"]) {
+  min-width: 720px;
 }
 
 .data-table th,
@@ -8041,9 +8289,13 @@ textarea {
 }
 
 .data-table {
-  min-width: 760px;
   font-size: 13px;
   background: var(--card-bg);
+}
+
+/* См. комментарий выше: карточные таблицы исключены из жёсткого минимума. */
+.data-table:not([data-mobile="cards"]) {
+  min-width: 760px;
 }
 
 .data-table th {
@@ -8308,7 +8560,11 @@ html[data-theme="dark"] .level-settings-shell {
     width: 100%;
   }
 
-  .data-table {
+  /* Общий минимум для таблиц, которые на телефоне остаются таблицами и
+     прокручиваются вбок. Таблицы, которые превращаются в карточки,
+     помечены data-mobile="cards" и исключаются: иначе этот минимум
+     растягивал карточку до 680 px, и её правый край обрезался. */
+  .data-table:not([data-mobile="cards"]) {
     min-width: 680px;
   }
 }

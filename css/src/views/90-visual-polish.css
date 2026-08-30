@@ -147,8 +147,14 @@ textarea:focus {
 }
 
 .data-table {
-  min-width: 720px;
   border-spacing: 0;
+}
+
+/* min-width задаём только таблицам, которые остаются таблицами: те, что на
+   телефоне превращаются в карточки, помечены data-mobile="cards" — жёсткий
+   минимум распирал бы карточку шире экрана. */
+.data-table:not([data-mobile="cards"]) {
+  min-width: 720px;
 }
 
 .data-table th,
@@ -734,9 +740,13 @@ textarea {
 }
 
 .data-table {
-  min-width: 760px;
   font-size: 13px;
   background: var(--card-bg);
+}
+
+/* См. комментарий выше: карточные таблицы исключены из жёсткого минимума. */
+.data-table:not([data-mobile="cards"]) {
+  min-width: 760px;
 }
 
 .data-table th {
@@ -1001,7 +1011,11 @@ html[data-theme="dark"] .level-settings-shell {
     width: 100%;
   }
 
-  .data-table {
+  /* Общий минимум для таблиц, которые на телефоне остаются таблицами и
+     прокручиваются вбок. Таблицы, которые превращаются в карточки,
+     помечены data-mobile="cards" и исключаются: иначе этот минимум
+     растягивал карточку до 680 px, и её правый край обрезался. */
+  .data-table:not([data-mobile="cards"]) {
     min-width: 680px;
   }
 }

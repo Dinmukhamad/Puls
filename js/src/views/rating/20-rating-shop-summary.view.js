@@ -932,26 +932,267 @@ function renderShop() {
   const balance = STATE.wallet?.current_balance ?? 0;
   const role = STATE.user?.role;
 
-  if (role === 'operator') {
-    renderOperatorShop(el, items, balance);
-    return;
-  }
+  // Оператор выбирает бонус, штат ведёт каталог — это разные задачи и
+  // разные экраны. Карточки оператора остались без изменений.
+  if (role === 'operator') renderOperatorShop(el, items, balance);
+  else renderStaffShop(el, items);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   МАГАЗИН ДЛЯ ШТАТА — управление каталогом
+
+   Оператор и администратор пользуются магазином по-разному: оператор
+   выбирает бонус, администратор ведёт каталог. Раньше штату показывалась
+   та же сетка карточек, что и оператору, но с кнопкой «Изменить» на каждой:
+   на 33 бонусах это 33 одинаковые кнопки без поиска, фильтров и сортировки.
+
+   Карточки оператора не тронуты — renderOperatorShop остался прежним.
+   Правила покупки и списания коинов здесь не участвуют: экран только
+   читает каталог и открывает форму редактирования.
+══════════════════════════════════════════════════════════════ */
+
+const SHOP_ADMIN_SORTABLE = {
+  title: { label: 'Бонус', type: 'text' },
+  category: { label: 'Категория', type: 'text' },
+  price: { label: 'Цена', type: 'number' },
+  stock: { label: 'Наличие', type: 'number' },
+  status: { label: 'Статус', type: 'text' },
+};
+
+const SHOP_PRIZE_TYPES = {
+  physical: 'Вещь',
+  digital: 'Цифровой',
+  privilege: 'Привилегия',
+};
+
+function shopAdminState() {
+  return STATE.shopAdmin || (STATE.shopAdmin = {
+    search: '', category: '', status: '', stock: '',
+    sortKey: 'title', sortDir: 'asc',
+  });
+}
+
+function shopCategoryLabel(value) {
+  return SHOP_CATEGORIES[value]?.label || 'Без категории';
+}
+
+/** Остаток: null означает «без ограничения», а не ноль. */
+function shopStockValue(item) {
+  return item.stock_remaining == null ? Infinity : Number(item.stock_remaining);
+}
+
+function shopStockLabel(item) {
+  if (item.stock_remaining == null) return 'Без лимита';
+  return item.stock_remaining > 0 ? `${item.stock_remaining} шт.` : 'Закончился';
+}
+
+function shopAdminFiltered(items) {
+  const state = shopAdminState();
+  const query = state.search.trim().toLowerCase();
+  return items.filter(item => {
+    const matchSearch = !query
+      || (item.title || '').toLowerCase().includes(query)
+      || (item.code || '').toLowerCase().includes(query)
+      || (item.description || '').toLowerCase().includes(query);
+    const matchCategory = !state.category || item.category === state.category;
+    const matchStatus = !state.status
+      || (state.status === 'active' ? item.is_active : !item.is_active);
+    const matchStock = !state.stock || (
+      state.stock === 'in' ? shopStockValue(item) > 0
+        : state.stock === 'out' ? shopStockValue(item) <= 0
+          : item.stock_remaining != null
+    );
+    return matchSearch && matchCategory && matchStatus && matchStock;
+  });
+}
+
+function shopAdminSorted(list) {
+  const { sortKey, sortDir } = shopAdminState();
+  const spec = SHOP_ADMIN_SORTABLE[sortKey];
+  if (!spec) return list;
+  const value = item => {
+    if (sortKey === 'price') return Number(item.effective_price ?? item.price ?? 0);
+    if (sortKey === 'stock') return shopStockValue(item);
+    if (sortKey === 'category') return shopCategoryLabel(item.category);
+    if (sortKey === 'status') return item.is_active ? 'Активен' : 'Скрыт';
+    return item.title || '';
+  };
+  return [...list].sort((a, b) => {
+    const av = value(a); const bv = value(b);
+    const cmp = spec.type === 'number'
+      ? (av === bv ? 0 : av - bv)
+      : String(av).localeCompare(String(bv), 'ru');
+    return sortDir === 'desc' ? -cmp : cmp;
+  });
+}
+
+function shopAdminTh(key, extraClass = '') {
+  const state = shopAdminState();
+  const active = state.sortKey === key;
+  const ariaSort = active ? (state.sortDir === 'desc' ? 'descending' : 'ascending') : 'none';
+  const arrow = active ? (state.sortDir === 'desc' ? ' ↓' : ' ↑') : '';
+  return `<th scope="col" class="${extraClass}" aria-sort="${ariaSort}">`
+    + `<button type="button" class="shop-admin-sort" data-shop-sort="${key}">`
+    + `${esc(SHOP_ADMIN_SORTABLE[key].label)}<span aria-hidden="true">${arrow}</span></button></th>`;
+}
+
+function shopAdminHasFilters() {
+  const s = shopAdminState();
+  return Boolean(s.search || s.category || s.status || s.stock);
+}
+
+function renderStaffShop(el, items) {
+  const state = shopAdminState();
+  const rows = shopAdminSorted(shopAdminFiltered(items));
+  const categories = [...new Set(items.map(item => item.category).filter(Boolean))].sort();
+  const hidden = items.filter(item => !item.is_active).length;
+  const outOfStock = items.filter(item => shopStockValue(item) <= 0).length;
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Магазин</div><h1 class="section-title">Магазин бонусов</h1></div>
+      <div>
+        <div class="section-kicker">Магазин</div>
+        <h1 class="section-title">Каталог бонусов</h1>
+        <p class="shop-admin-subtitle">Управление ассортиментом: состав, цена, наличие и видимость для операторов.</p>
+      </div>
       <div class="header-right">
-        ${role === 'operator' ? `<div class="balance-chip">Баланс: <b>${balance} ₡</b></div>` : ''}
-        ${isAdmin(role) ? `<button class="btn-primary btn-sm" onclick="showAddItemModal()">+ Добавить бонус</button>` : ''}
+        <button class="btn-primary btn-sm" type="button" onclick="showAddItemModal()">+ Добавить бонус</button>
       </div>
     </div>
-    <div class="shop-grid">
-      ${items.length ? items.map(item => shopCard(item, balance, role)).join('') : '<div class="empty-state">Магазин пуст</div>'}
+
+    <section class="shop-admin-summary" aria-label="Сводка каталога">
+      <div><span>Всего бонусов</span><b>${items.length}</b></div>
+      <div><span>Скрыты от операторов</span><b>${hidden}</b></div>
+      <div><span>Закончились</span><b>${outOfStock}</b></div>
+    </section>
+
+    <div class="shop-admin-toolbar">
+      <label class="sr-only" for="shop-admin-search">Поиск по каталогу</label>
+      <input id="shop-admin-search" class="form-input" type="search" autocomplete="off"
+             placeholder="Название, код или описание…" value="${esc(state.search)}">
+
+      <label class="ui-filter-field">
+        <span>Категория</span>
+        <select id="shop-admin-category" class="form-select">
+          <option value="">Все категории</option>
+          ${categories.map(c => `<option value="${esc(c)}" ${state.category === c ? 'selected' : ''}>${esc(shopCategoryLabel(c))}</option>`).join('')}
+        </select>
+      </label>
+
+      <label class="ui-filter-field">
+        <span>Видимость</span>
+        <select id="shop-admin-status" class="form-select">
+          <option value="">Любая</option>
+          <option value="active" ${state.status === 'active' ? 'selected' : ''}>Виден операторам</option>
+          <option value="hidden" ${state.status === 'hidden' ? 'selected' : ''}>Скрыт</option>
+        </select>
+      </label>
+
+      <label class="ui-filter-field">
+        <span>Наличие</span>
+        <select id="shop-admin-stock" class="form-select">
+          <option value="">Любое</option>
+          <option value="in" ${state.stock === 'in' ? 'selected' : ''}>В наличии</option>
+          <option value="out" ${state.stock === 'out' ? 'selected' : ''}>Закончился</option>
+          <option value="limited" ${state.stock === 'limited' ? 'selected' : ''}>С ограничением</option>
+        </select>
+      </label>
+
+      <span class="shop-admin-count" aria-live="polite">Показано: <b>${rows.length}</b> из ${items.length}</span>
+      ${shopAdminHasFilters() ? '<button type="button" class="btn-link" id="shop-admin-reset">Сбросить всё</button>' : ''}
+    </div>
+
+    <div class="table-wrap shop-admin-wrap">
+      <table class="data-table shop-admin-table" data-mobile="cards">
+        <thead><tr>
+          ${shopAdminTh('title')}
+          ${shopAdminTh('category')}
+          ${shopAdminTh('price', 'num')}
+          ${shopAdminTh('stock', 'num')}
+          ${shopAdminTh('status', 'tc')}
+          <th scope="col" class="tc shop-admin-actions-col">Действия</th>
+        </tr></thead>
+        <tbody>
+          ${rows.length ? rows.map(item => `
+            <tr class="${item.is_active ? '' : 'shop-admin-row-hidden'}">
+              <td class="shop-admin-name" data-label="Бонус">
+                <b>${esc(item.title)}</b>
+                <small>${esc(SHOP_PRIZE_TYPES[item.prize_type] || item.prize_type || '')}${item.code ? ` · ${esc(item.code)}` : ''}</small>
+              </td>
+              <td data-label="Категория">${esc(shopCategoryLabel(item.category))}</td>
+              <td class="num" data-label="Цена">${item.effective_price ?? item.price} ₡${
+                item.is_seasonal_price && item.regular_price !== item.effective_price
+                  ? `<small class="shop-admin-was">было ${item.regular_price}</small>` : ''}</td>
+              <td class="num" data-label="Наличие">${esc(shopStockLabel(item))}</td>
+              <td class="tc" data-label="Статус">
+                <span class="shop-admin-badge ${item.is_active ? 'is-on' : 'is-off'}">${item.is_active ? 'Виден' : 'Скрыт'}</span>
+              </td>
+              <td class="tc" data-label="" >
+                <button class="edit-item-btn btn-outline btn-sm" data-id="${item.id}"
+                  aria-label="Изменить бонус: ${esc(item.title)}">Изменить</button>
+              </td>
+            </tr>`).join('')
+            : `<tr><td colspan="6">${
+                shopAdminHasFilters()
+                  ? uiNoResultsState('Под фильтры ничего не подошло', 'Измените условия поиска или сбросьте фильтры.', [], true)
+                  : uiEmptyState('Каталог пуст', 'Добавьте первый бонус кнопкой «Добавить бонус».', [], true)
+              }</td></tr>`}
+        </tbody>
+      </table>
     </div>`;
 
-  el.querySelectorAll('.edit-item-btn').forEach(btn => {
-    const item = items.find(i => i.id === +btn.dataset.id);
-    if (item) btn.addEventListener('click', () => showEditItemModal(item));
+  bindStaffShop(el, items);
+}
+
+function bindStaffShop(el, items) {
+  const state = shopAdminState();
+  const rerender = () => renderStaffShop(el, items);
+
+  // Поиск с задержкой: каталог фильтруется на клиенте, но перерисовывать
+  // таблицу на каждое нажатие клавиши незачем.
+  const search = el.querySelector('#shop-admin-search');
+  if (search) {
+    let timer = null;
+    search.addEventListener('input', event => {
+      state.search = event.target.value;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        rerender();
+        // Возвращаем фокус и каретку в конец строки поиска.
+        const field = el.querySelector('#shop-admin-search');
+        field?.focus();
+        field?.setSelectionRange(field.value.length, field.value.length);
+      }, 250);
+    });
+  }
+
+  [['#shop-admin-category', 'category'], ['#shop-admin-status', 'status'], ['#shop-admin-stock', 'stock']]
+    .forEach(([selector, key]) => {
+      el.querySelector(selector)?.addEventListener('change', event => {
+        state[key] = event.target.value;
+        rerender();
+        el.querySelector(selector)?.focus();
+      });
+    });
+
+  el.querySelector('#shop-admin-reset')?.addEventListener('click', () => {
+    Object.assign(state, { search: '', category: '', status: '', stock: '' });
+    rerender();
+  });
+
+  el.querySelectorAll('[data-shop-sort]').forEach(button => {
+    button.addEventListener('click', () => {
+      const key = button.dataset.shopSort;
+      if (state.sortKey === key) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      else { state.sortKey = key; state.sortDir = 'asc'; }
+      rerender();
+      el.querySelector(`[data-shop-sort="${key}"]`)?.focus();
+    });
+  });
+
+  el.querySelectorAll('.edit-item-btn').forEach(button => {
+    const item = items.find(candidate => candidate.id === Number(button.dataset.id));
+    if (item) button.addEventListener('click', () => showEditItemModal(item));
   });
 }
 

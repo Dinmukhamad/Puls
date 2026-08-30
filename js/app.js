@@ -3938,26 +3938,267 @@ function renderShop() {
   const balance = STATE.wallet?.current_balance ?? 0;
   const role = STATE.user?.role;
 
-  if (role === 'operator') {
-    renderOperatorShop(el, items, balance);
-    return;
-  }
+  // Оператор выбирает бонус, штат ведёт каталог — это разные задачи и
+  // разные экраны. Карточки оператора остались без изменений.
+  if (role === 'operator') renderOperatorShop(el, items, balance);
+  else renderStaffShop(el, items);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   МАГАЗИН ДЛЯ ШТАТА — управление каталогом
+
+   Оператор и администратор пользуются магазином по-разному: оператор
+   выбирает бонус, администратор ведёт каталог. Раньше штату показывалась
+   та же сетка карточек, что и оператору, но с кнопкой «Изменить» на каждой:
+   на 33 бонусах это 33 одинаковые кнопки без поиска, фильтров и сортировки.
+
+   Карточки оператора не тронуты — renderOperatorShop остался прежним.
+   Правила покупки и списания коинов здесь не участвуют: экран только
+   читает каталог и открывает форму редактирования.
+══════════════════════════════════════════════════════════════ */
+
+const SHOP_ADMIN_SORTABLE = {
+  title: { label: 'Бонус', type: 'text' },
+  category: { label: 'Категория', type: 'text' },
+  price: { label: 'Цена', type: 'number' },
+  stock: { label: 'Наличие', type: 'number' },
+  status: { label: 'Статус', type: 'text' },
+};
+
+const SHOP_PRIZE_TYPES = {
+  physical: 'Вещь',
+  digital: 'Цифровой',
+  privilege: 'Привилегия',
+};
+
+function shopAdminState() {
+  return STATE.shopAdmin || (STATE.shopAdmin = {
+    search: '', category: '', status: '', stock: '',
+    sortKey: 'title', sortDir: 'asc',
+  });
+}
+
+function shopCategoryLabel(value) {
+  return SHOP_CATEGORIES[value]?.label || 'Без категории';
+}
+
+/** Остаток: null означает «без ограничения», а не ноль. */
+function shopStockValue(item) {
+  return item.stock_remaining == null ? Infinity : Number(item.stock_remaining);
+}
+
+function shopStockLabel(item) {
+  if (item.stock_remaining == null) return 'Без лимита';
+  return item.stock_remaining > 0 ? `${item.stock_remaining} шт.` : 'Закончился';
+}
+
+function shopAdminFiltered(items) {
+  const state = shopAdminState();
+  const query = state.search.trim().toLowerCase();
+  return items.filter(item => {
+    const matchSearch = !query
+      || (item.title || '').toLowerCase().includes(query)
+      || (item.code || '').toLowerCase().includes(query)
+      || (item.description || '').toLowerCase().includes(query);
+    const matchCategory = !state.category || item.category === state.category;
+    const matchStatus = !state.status
+      || (state.status === 'active' ? item.is_active : !item.is_active);
+    const matchStock = !state.stock || (
+      state.stock === 'in' ? shopStockValue(item) > 0
+        : state.stock === 'out' ? shopStockValue(item) <= 0
+          : item.stock_remaining != null
+    );
+    return matchSearch && matchCategory && matchStatus && matchStock;
+  });
+}
+
+function shopAdminSorted(list) {
+  const { sortKey, sortDir } = shopAdminState();
+  const spec = SHOP_ADMIN_SORTABLE[sortKey];
+  if (!spec) return list;
+  const value = item => {
+    if (sortKey === 'price') return Number(item.effective_price ?? item.price ?? 0);
+    if (sortKey === 'stock') return shopStockValue(item);
+    if (sortKey === 'category') return shopCategoryLabel(item.category);
+    if (sortKey === 'status') return item.is_active ? 'Активен' : 'Скрыт';
+    return item.title || '';
+  };
+  return [...list].sort((a, b) => {
+    const av = value(a); const bv = value(b);
+    const cmp = spec.type === 'number'
+      ? (av === bv ? 0 : av - bv)
+      : String(av).localeCompare(String(bv), 'ru');
+    return sortDir === 'desc' ? -cmp : cmp;
+  });
+}
+
+function shopAdminTh(key, extraClass = '') {
+  const state = shopAdminState();
+  const active = state.sortKey === key;
+  const ariaSort = active ? (state.sortDir === 'desc' ? 'descending' : 'ascending') : 'none';
+  const arrow = active ? (state.sortDir === 'desc' ? ' ↓' : ' ↑') : '';
+  return `<th scope="col" class="${extraClass}" aria-sort="${ariaSort}">`
+    + `<button type="button" class="shop-admin-sort" data-shop-sort="${key}">`
+    + `${esc(SHOP_ADMIN_SORTABLE[key].label)}<span aria-hidden="true">${arrow}</span></button></th>`;
+}
+
+function shopAdminHasFilters() {
+  const s = shopAdminState();
+  return Boolean(s.search || s.category || s.status || s.stock);
+}
+
+function renderStaffShop(el, items) {
+  const state = shopAdminState();
+  const rows = shopAdminSorted(shopAdminFiltered(items));
+  const categories = [...new Set(items.map(item => item.category).filter(Boolean))].sort();
+  const hidden = items.filter(item => !item.is_active).length;
+  const outOfStock = items.filter(item => shopStockValue(item) <= 0).length;
 
   el.innerHTML = `
     <div class="view-header">
-      <div><div class="section-kicker">Магазин</div><h1 class="section-title">Магазин бонусов</h1></div>
+      <div>
+        <div class="section-kicker">Магазин</div>
+        <h1 class="section-title">Каталог бонусов</h1>
+        <p class="shop-admin-subtitle">Управление ассортиментом: состав, цена, наличие и видимость для операторов.</p>
+      </div>
       <div class="header-right">
-        ${role === 'operator' ? `<div class="balance-chip">Баланс: <b>${balance} ₡</b></div>` : ''}
-        ${isAdmin(role) ? `<button class="btn-primary btn-sm" onclick="showAddItemModal()">+ Добавить бонус</button>` : ''}
+        <button class="btn-primary btn-sm" type="button" onclick="showAddItemModal()">+ Добавить бонус</button>
       </div>
     </div>
-    <div class="shop-grid">
-      ${items.length ? items.map(item => shopCard(item, balance, role)).join('') : '<div class="empty-state">Магазин пуст</div>'}
+
+    <section class="shop-admin-summary" aria-label="Сводка каталога">
+      <div><span>Всего бонусов</span><b>${items.length}</b></div>
+      <div><span>Скрыты от операторов</span><b>${hidden}</b></div>
+      <div><span>Закончились</span><b>${outOfStock}</b></div>
+    </section>
+
+    <div class="shop-admin-toolbar">
+      <label class="sr-only" for="shop-admin-search">Поиск по каталогу</label>
+      <input id="shop-admin-search" class="form-input" type="search" autocomplete="off"
+             placeholder="Название, код или описание…" value="${esc(state.search)}">
+
+      <label class="ui-filter-field">
+        <span>Категория</span>
+        <select id="shop-admin-category" class="form-select">
+          <option value="">Все категории</option>
+          ${categories.map(c => `<option value="${esc(c)}" ${state.category === c ? 'selected' : ''}>${esc(shopCategoryLabel(c))}</option>`).join('')}
+        </select>
+      </label>
+
+      <label class="ui-filter-field">
+        <span>Видимость</span>
+        <select id="shop-admin-status" class="form-select">
+          <option value="">Любая</option>
+          <option value="active" ${state.status === 'active' ? 'selected' : ''}>Виден операторам</option>
+          <option value="hidden" ${state.status === 'hidden' ? 'selected' : ''}>Скрыт</option>
+        </select>
+      </label>
+
+      <label class="ui-filter-field">
+        <span>Наличие</span>
+        <select id="shop-admin-stock" class="form-select">
+          <option value="">Любое</option>
+          <option value="in" ${state.stock === 'in' ? 'selected' : ''}>В наличии</option>
+          <option value="out" ${state.stock === 'out' ? 'selected' : ''}>Закончился</option>
+          <option value="limited" ${state.stock === 'limited' ? 'selected' : ''}>С ограничением</option>
+        </select>
+      </label>
+
+      <span class="shop-admin-count" aria-live="polite">Показано: <b>${rows.length}</b> из ${items.length}</span>
+      ${shopAdminHasFilters() ? '<button type="button" class="btn-link" id="shop-admin-reset">Сбросить всё</button>' : ''}
+    </div>
+
+    <div class="table-wrap shop-admin-wrap">
+      <table class="data-table shop-admin-table" data-mobile="cards">
+        <thead><tr>
+          ${shopAdminTh('title')}
+          ${shopAdminTh('category')}
+          ${shopAdminTh('price', 'num')}
+          ${shopAdminTh('stock', 'num')}
+          ${shopAdminTh('status', 'tc')}
+          <th scope="col" class="tc shop-admin-actions-col">Действия</th>
+        </tr></thead>
+        <tbody>
+          ${rows.length ? rows.map(item => `
+            <tr class="${item.is_active ? '' : 'shop-admin-row-hidden'}">
+              <td class="shop-admin-name" data-label="Бонус">
+                <b>${esc(item.title)}</b>
+                <small>${esc(SHOP_PRIZE_TYPES[item.prize_type] || item.prize_type || '')}${item.code ? ` · ${esc(item.code)}` : ''}</small>
+              </td>
+              <td data-label="Категория">${esc(shopCategoryLabel(item.category))}</td>
+              <td class="num" data-label="Цена">${item.effective_price ?? item.price} ₡${
+                item.is_seasonal_price && item.regular_price !== item.effective_price
+                  ? `<small class="shop-admin-was">было ${item.regular_price}</small>` : ''}</td>
+              <td class="num" data-label="Наличие">${esc(shopStockLabel(item))}</td>
+              <td class="tc" data-label="Статус">
+                <span class="shop-admin-badge ${item.is_active ? 'is-on' : 'is-off'}">${item.is_active ? 'Виден' : 'Скрыт'}</span>
+              </td>
+              <td class="tc" data-label="" >
+                <button class="edit-item-btn btn-outline btn-sm" data-id="${item.id}"
+                  aria-label="Изменить бонус: ${esc(item.title)}">Изменить</button>
+              </td>
+            </tr>`).join('')
+            : `<tr><td colspan="6">${
+                shopAdminHasFilters()
+                  ? uiNoResultsState('Под фильтры ничего не подошло', 'Измените условия поиска или сбросьте фильтры.', [], true)
+                  : uiEmptyState('Каталог пуст', 'Добавьте первый бонус кнопкой «Добавить бонус».', [], true)
+              }</td></tr>`}
+        </tbody>
+      </table>
     </div>`;
 
-  el.querySelectorAll('.edit-item-btn').forEach(btn => {
-    const item = items.find(i => i.id === +btn.dataset.id);
-    if (item) btn.addEventListener('click', () => showEditItemModal(item));
+  bindStaffShop(el, items);
+}
+
+function bindStaffShop(el, items) {
+  const state = shopAdminState();
+  const rerender = () => renderStaffShop(el, items);
+
+  // Поиск с задержкой: каталог фильтруется на клиенте, но перерисовывать
+  // таблицу на каждое нажатие клавиши незачем.
+  const search = el.querySelector('#shop-admin-search');
+  if (search) {
+    let timer = null;
+    search.addEventListener('input', event => {
+      state.search = event.target.value;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        rerender();
+        // Возвращаем фокус и каретку в конец строки поиска.
+        const field = el.querySelector('#shop-admin-search');
+        field?.focus();
+        field?.setSelectionRange(field.value.length, field.value.length);
+      }, 250);
+    });
+  }
+
+  [['#shop-admin-category', 'category'], ['#shop-admin-status', 'status'], ['#shop-admin-stock', 'stock']]
+    .forEach(([selector, key]) => {
+      el.querySelector(selector)?.addEventListener('change', event => {
+        state[key] = event.target.value;
+        rerender();
+        el.querySelector(selector)?.focus();
+      });
+    });
+
+  el.querySelector('#shop-admin-reset')?.addEventListener('click', () => {
+    Object.assign(state, { search: '', category: '', status: '', stock: '' });
+    rerender();
+  });
+
+  el.querySelectorAll('[data-shop-sort]').forEach(button => {
+    button.addEventListener('click', () => {
+      const key = button.dataset.shopSort;
+      if (state.sortKey === key) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      else { state.sortKey = key; state.sortDir = 'asc'; }
+      rerender();
+      el.querySelector(`[data-shop-sort="${key}"]`)?.focus();
+    });
+  });
+
+  el.querySelectorAll('.edit-item-btn').forEach(button => {
+    const item = items.find(candidate => candidate.id === Number(button.dataset.id));
+    if (item) button.addEventListener('click', () => showEditItemModal(item));
   });
 }
 
@@ -4727,6 +4968,15 @@ function renderUsersPage() {
   const usersExpanded = STATE.usersExpanded || (STATE.usersExpanded = new Set());
 
   /** Есть ли активные фильтры — чтобы отличить «никого нет» от «ничего не найдено». */
+  // Раскрыта ли панель дополнительных фильтров. Живёт в STATE, чтобы
+  // перерисовка таблицы не схлопывала её под руками.
+  let moreFiltersOpen = Boolean(STATE.usersMoreFiltersOpen);
+
+  /** Сколько фильтров задано в скрытой панели — видно прямо на кнопке. */
+  function activeExtraFilterCount() {
+    return [filterRole, filterGroup, filterStatus, filterLevel].filter(Boolean).length;
+  }
+
   function usersHasActiveFilters() {
     return Boolean(searchVal || filterGroup || filterLevel || filterRole || filterStatus || activeTab !== 'all');
   }
@@ -4821,7 +5071,7 @@ function renderUsersPage() {
     const list = sortedOps(filteredOps());
     return `
       <div class="table-wrap users-table-wrap">
-        <table class="data-table users-table-compact">
+        <table class="data-table users-table-compact" data-mobile="cards">
           <thead><tr>
             ${usersTh('full_name', 'Пользователь')}
             ${usersTh('group_name', 'Группа')}
@@ -4900,36 +5150,57 @@ function renderUsersPage() {
 
     <div class="ops-filters-row ui-filter-bar">
       <label class="sr-only" for="ops-search">Поиск пользователей</label>
-      <input id="ops-search" class="form-input" placeholder="ФИО, логин или email…" value="${esc(searchVal)}">
-      <details class="ui-more-filters">
-        <summary class="btn-outline btn-sm">Ещё фильтры</summary>
-        <div class="ui-more-filters__panel">
-      <label class="sr-only" for="ops-role">Роль</label>
-      <select id="ops-role" class="form-select">
-        <option value="">Все роли</option>
-        ${allowedRoles.map(r => `<option value="${r}" ${filterRole===r?'selected':''}>${roleLabel(r)}</option>`).join('')}
-      </select>
-      <label class="sr-only" for="ops-group">Группа</label>
-      <select id="ops-group" class="form-select">
-        <option value="">Все группы</option>
-        ${groups.map(g => `<option value="${esc(g)}" ${filterGroup===g?'selected':''}>${esc(g)}</option>`).join('')}
-      </select>
-      <label class="sr-only" for="ops-status">Статус</label>
-      <select id="ops-status" class="form-select">
-        <option value="">Все статусы</option>
-        <option value="active" ${filterStatus==='active'?'selected':''}>Активен</option>
-        <option value="inactive" ${filterStatus==='inactive'?'selected':''}>Неактивен</option>
-        <option value="blocked" ${filterStatus==='blocked'?'selected':''}>Заблокирован</option>
-        <option value="dismissed" ${filterStatus==='dismissed'?'selected':''}>Уволен</option>
-      </select>
-      <label class="sr-only" for="ops-level">Уровень</label>
-      <select id="ops-level" class="form-select">
-        <option value="">Все уровни</option>
-        ${levels.map(l => `<option value="${esc(l.code)}" ${filterLevel===l.code?'selected':''}>${esc(l.name)}</option>`).join('')}
-      </select>
-        </div>
-      </details>
+      <input id="ops-search" class="form-input" type="search" autocomplete="off"
+             placeholder="ФИО, логин или email…" value="${esc(searchVal)}">
+
+      <!-- Настоящая кнопка вместо <summary>: раскрытие объявляется через
+           aria-expanded и связано с панелью через aria-controls. У <summary>
+           этих состояний нет, и скринридер не сообщал, раскрыт ли блок. -->
+      <button type="button" class="btn-outline btn-sm ui-more-filters__toggle"
+              id="ops-more-filters-toggle" data-more-filters
+              aria-expanded="${moreFiltersOpen ? 'true' : 'false'}"
+              aria-controls="ops-more-filters">
+        Ещё фильтры${activeExtraFilterCount() ? ` <span class="ui-more-filters__count">${activeExtraFilterCount()}</span>` : ''}
+      </button>
+
       <span class="ops-count-info" aria-live="polite">Показано: <b>${filteredOps().length}</b> из ${ops.length}</span>
+    </div>
+
+    <div class="ui-more-filters__panel" id="ops-more-filters" role="group"
+         aria-labelledby="ops-more-filters-toggle" ${moreFiltersOpen ? '' : 'hidden'}>
+      <div class="ui-more-filters__grid">
+        <label class="ui-filter-field">
+          <span>Роль</span>
+          <select id="ops-role" class="form-select">
+            <option value="">Все роли</option>
+            ${allowedRoles.map(r => `<option value="${r}" ${filterRole === r ? 'selected' : ''}>${roleLabel(r)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="ui-filter-field">
+          <span>Группа</span>
+          <select id="ops-group" class="form-select">
+            <option value="">Все группы</option>
+            ${groups.map(g => `<option value="${esc(g)}" ${filterGroup === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="ui-filter-field">
+          <span>Статус</span>
+          <select id="ops-status" class="form-select">
+            <option value="">Все статусы</option>
+            <option value="active" ${filterStatus === 'active' ? 'selected' : ''}>Активен</option>
+            <option value="inactive" ${filterStatus === 'inactive' ? 'selected' : ''}>Неактивен</option>
+            <option value="blocked" ${filterStatus === 'blocked' ? 'selected' : ''}>Заблокирован</option>
+            <option value="dismissed" ${filterStatus === 'dismissed' ? 'selected' : ''}>Уволен</option>
+          </select>
+        </label>
+        <label class="ui-filter-field">
+          <span>Уровень</span>
+          <select id="ops-level" class="form-select">
+            <option value="">Все уровни</option>
+            ${levels.map(l => `<option value="${esc(l.code)}" ${filterLevel === l.code ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
     </div>
     <div id="ops-filter-chips">${appliedFiltersHtml()}</div>
 
@@ -4947,49 +5218,107 @@ function renderUsersPage() {
         rebindOps();
       });
     });
-    el.querySelector('#ops-search')?.addEventListener('input', e => {
-      searchVal = e.target.value;
-      savedFilters.search = searchVal;
+    // Кнопка «Ещё фильтры»: раскрытие панели с объявлением состояния.
+    const moreToggle = el.querySelector('[data-more-filters]');
+    const morePanel = el.querySelector('#ops-more-filters');
+    moreToggle?.addEventListener('click', () => {
+      moreFiltersOpen = !moreFiltersOpen;
+      STATE.usersMoreFiltersOpen = moreFiltersOpen;
+      moreToggle.setAttribute('aria-expanded', String(moreFiltersOpen));
+      if (morePanel) morePanel.hidden = !moreFiltersOpen;
+      // Раскрыли — переводим фокус на первое поле панели, чтобы с клавиатуры
+      // не пришлось искать её табом заново.
+      if (moreFiltersOpen) morePanel?.querySelector('select')?.focus();
+    });
+
+    // Поиск с задержкой. Раньше каждое нажатие клавиши перерисовывало всю
+    // таблицу: шесть символов — шесть полных перерисовок. Ждём паузу в наборе.
+    const searchInput = el.querySelector('#ops-search');
+    if (searchInput) {
+      let searchTimer = null;
+      // Отменяем незавершённые запросы страницы при уходе с раздела: сигнал
+      // навигации общий для всех вызовов API этой вьюхи.
+      const viewSignal = typeof currentViewSignal === 'function' ? currentViewSignal() : null;
+      viewSignal?.addEventListener('abort', () => clearTimeout(searchTimer), { once: true });
+
+      const applySearch = () => {
+        savedFilters.search = searchVal;
+        syncUsersUrl();
+        el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+        el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+        el.querySelector('#ops-filter-chips').innerHTML = appliedFiltersHtml();
+        bindOpsActions();
+      };
+
+      searchInput.addEventListener('input', event => {
+        searchVal = event.target.value;
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(applySearch, 250);
+      });
+      // Enter применяет сразу, не дожидаясь паузы.
+      searchInput.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        clearTimeout(searchTimer);
+        applySearch();
+      });
+    }
+    /**
+     * Общая реакция на смену любого фильтра: таблица, счётчик найденного,
+     * чипы применённых фильтров и счётчик на кнопке «Ещё фильтры».
+     *
+     * Раньше каждый select перерисовывал только таблицу и счётчик, поэтому
+     * выбранная роль или уровень не появлялись в списке применённых фильтров
+     * и не считались на кнопке — панель можно было свернуть и забыть, что
+     * список отфильтрован.
+     */
+    function applyFilterChange() {
       syncUsersUrl();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+      el.querySelector('#ops-filter-chips').innerHTML = appliedFiltersHtml();
+      const count = activeExtraFilterCount();
+      const badge = el.querySelector('.ui-more-filters__count');
+      const toggle = el.querySelector('[data-more-filters]');
+      if (count && !badge && toggle) {
+        toggle.insertAdjacentHTML('beforeend', ` <span class="ui-more-filters__count">${count}</span>`);
+      } else if (count && badge) {
+        badge.textContent = String(count);
+      } else if (badge) {
+        badge.remove();
+      }
       bindOpsActions();
-    });
-    el.querySelector('#ops-group')?.addEventListener('change', e => {
-      filterGroup = e.target.value;
+      bindFilterChips();
+    }
+
+    el.querySelector('#ops-group')?.addEventListener('change', event => {
+      filterGroup = event.target.value;
       savedFilters.group = filterGroup;
-      syncUsersUrl();
-      el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      rebindOps();
+      applyFilterChange();
     });
-    el.querySelector('#ops-role')?.addEventListener('change', e => {
-      filterRole = e.target.value;
+    el.querySelector('#ops-role')?.addEventListener('change', event => {
+      filterRole = event.target.value;
       savedFilters.role = filterRole;
-      syncUsersUrl();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      bindOpsActions();
+      applyFilterChange();
     });
-    el.querySelector('#ops-status')?.addEventListener('change', e => {
-      filterStatus = e.target.value;
+    el.querySelector('#ops-status')?.addEventListener('change', event => {
+      filterStatus = event.target.value;
       savedFilters.status = filterStatus;
-      syncUsersUrl();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      bindOpsActions();
+      applyFilterChange();
     });
-    el.querySelector('#ops-level')?.addEventListener('change', e => {
-      filterLevel = e.target.value;
+    el.querySelector('#ops-level')?.addEventListener('change', event => {
+      filterLevel = event.target.value;
       savedFilters.level = filterLevel;
-      syncUsersUrl();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      bindOpsActions();
+      applyFilterChange();
     });
     bindOpsActions();
     el.querySelector('#ops-filter-chips').innerHTML = appliedFiltersHtml();
+    bindFilterChips();
+  }
+
+  /** Чипы применённых фильтров перерисовываются вместе с ними — привязку
+      обработчиков приходится повторять, поэтому она вынесена отдельно. */
+  function bindFilterChips() {
     el.querySelectorAll('[data-clear-user-filter]').forEach(button => {
       button.addEventListener('click', () => {
         const key = button.dataset.clearUserFilter;

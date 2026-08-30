@@ -66,6 +66,15 @@ function renderUsersPage() {
   const usersExpanded = STATE.usersExpanded || (STATE.usersExpanded = new Set());
 
   /** Есть ли активные фильтры — чтобы отличить «никого нет» от «ничего не найдено». */
+  // Раскрыта ли панель дополнительных фильтров. Живёт в STATE, чтобы
+  // перерисовка таблицы не схлопывала её под руками.
+  let moreFiltersOpen = Boolean(STATE.usersMoreFiltersOpen);
+
+  /** Сколько фильтров задано в скрытой панели — видно прямо на кнопке. */
+  function activeExtraFilterCount() {
+    return [filterRole, filterGroup, filterStatus, filterLevel].filter(Boolean).length;
+  }
+
   function usersHasActiveFilters() {
     return Boolean(searchVal || filterGroup || filterLevel || filterRole || filterStatus || activeTab !== 'all');
   }
@@ -160,7 +169,7 @@ function renderUsersPage() {
     const list = sortedOps(filteredOps());
     return `
       <div class="table-wrap users-table-wrap">
-        <table class="data-table users-table-compact">
+        <table class="data-table users-table-compact" data-mobile="cards">
           <thead><tr>
             ${usersTh('full_name', 'Пользователь')}
             ${usersTh('group_name', 'Группа')}
@@ -239,36 +248,57 @@ function renderUsersPage() {
 
     <div class="ops-filters-row ui-filter-bar">
       <label class="sr-only" for="ops-search">Поиск пользователей</label>
-      <input id="ops-search" class="form-input" placeholder="ФИО, логин или email…" value="${esc(searchVal)}">
-      <details class="ui-more-filters">
-        <summary class="btn-outline btn-sm">Ещё фильтры</summary>
-        <div class="ui-more-filters__panel">
-      <label class="sr-only" for="ops-role">Роль</label>
-      <select id="ops-role" class="form-select">
-        <option value="">Все роли</option>
-        ${allowedRoles.map(r => `<option value="${r}" ${filterRole===r?'selected':''}>${roleLabel(r)}</option>`).join('')}
-      </select>
-      <label class="sr-only" for="ops-group">Группа</label>
-      <select id="ops-group" class="form-select">
-        <option value="">Все группы</option>
-        ${groups.map(g => `<option value="${esc(g)}" ${filterGroup===g?'selected':''}>${esc(g)}</option>`).join('')}
-      </select>
-      <label class="sr-only" for="ops-status">Статус</label>
-      <select id="ops-status" class="form-select">
-        <option value="">Все статусы</option>
-        <option value="active" ${filterStatus==='active'?'selected':''}>Активен</option>
-        <option value="inactive" ${filterStatus==='inactive'?'selected':''}>Неактивен</option>
-        <option value="blocked" ${filterStatus==='blocked'?'selected':''}>Заблокирован</option>
-        <option value="dismissed" ${filterStatus==='dismissed'?'selected':''}>Уволен</option>
-      </select>
-      <label class="sr-only" for="ops-level">Уровень</label>
-      <select id="ops-level" class="form-select">
-        <option value="">Все уровни</option>
-        ${levels.map(l => `<option value="${esc(l.code)}" ${filterLevel===l.code?'selected':''}>${esc(l.name)}</option>`).join('')}
-      </select>
-        </div>
-      </details>
+      <input id="ops-search" class="form-input" type="search" autocomplete="off"
+             placeholder="ФИО, логин или email…" value="${esc(searchVal)}">
+
+      <!-- Настоящая кнопка вместо <summary>: раскрытие объявляется через
+           aria-expanded и связано с панелью через aria-controls. У <summary>
+           этих состояний нет, и скринридер не сообщал, раскрыт ли блок. -->
+      <button type="button" class="btn-outline btn-sm ui-more-filters__toggle"
+              id="ops-more-filters-toggle" data-more-filters
+              aria-expanded="${moreFiltersOpen ? 'true' : 'false'}"
+              aria-controls="ops-more-filters">
+        Ещё фильтры${activeExtraFilterCount() ? ` <span class="ui-more-filters__count">${activeExtraFilterCount()}</span>` : ''}
+      </button>
+
       <span class="ops-count-info" aria-live="polite">Показано: <b>${filteredOps().length}</b> из ${ops.length}</span>
+    </div>
+
+    <div class="ui-more-filters__panel" id="ops-more-filters" role="group"
+         aria-labelledby="ops-more-filters-toggle" ${moreFiltersOpen ? '' : 'hidden'}>
+      <div class="ui-more-filters__grid">
+        <label class="ui-filter-field">
+          <span>Роль</span>
+          <select id="ops-role" class="form-select">
+            <option value="">Все роли</option>
+            ${allowedRoles.map(r => `<option value="${r}" ${filterRole === r ? 'selected' : ''}>${roleLabel(r)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="ui-filter-field">
+          <span>Группа</span>
+          <select id="ops-group" class="form-select">
+            <option value="">Все группы</option>
+            ${groups.map(g => `<option value="${esc(g)}" ${filterGroup === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="ui-filter-field">
+          <span>Статус</span>
+          <select id="ops-status" class="form-select">
+            <option value="">Все статусы</option>
+            <option value="active" ${filterStatus === 'active' ? 'selected' : ''}>Активен</option>
+            <option value="inactive" ${filterStatus === 'inactive' ? 'selected' : ''}>Неактивен</option>
+            <option value="blocked" ${filterStatus === 'blocked' ? 'selected' : ''}>Заблокирован</option>
+            <option value="dismissed" ${filterStatus === 'dismissed' ? 'selected' : ''}>Уволен</option>
+          </select>
+        </label>
+        <label class="ui-filter-field">
+          <span>Уровень</span>
+          <select id="ops-level" class="form-select">
+            <option value="">Все уровни</option>
+            ${levels.map(l => `<option value="${esc(l.code)}" ${filterLevel === l.code ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}
+          </select>
+        </label>
+      </div>
     </div>
     <div id="ops-filter-chips">${appliedFiltersHtml()}</div>
 
@@ -286,49 +316,107 @@ function renderUsersPage() {
         rebindOps();
       });
     });
-    el.querySelector('#ops-search')?.addEventListener('input', e => {
-      searchVal = e.target.value;
-      savedFilters.search = searchVal;
+    // Кнопка «Ещё фильтры»: раскрытие панели с объявлением состояния.
+    const moreToggle = el.querySelector('[data-more-filters]');
+    const morePanel = el.querySelector('#ops-more-filters');
+    moreToggle?.addEventListener('click', () => {
+      moreFiltersOpen = !moreFiltersOpen;
+      STATE.usersMoreFiltersOpen = moreFiltersOpen;
+      moreToggle.setAttribute('aria-expanded', String(moreFiltersOpen));
+      if (morePanel) morePanel.hidden = !moreFiltersOpen;
+      // Раскрыли — переводим фокус на первое поле панели, чтобы с клавиатуры
+      // не пришлось искать её табом заново.
+      if (moreFiltersOpen) morePanel?.querySelector('select')?.focus();
+    });
+
+    // Поиск с задержкой. Раньше каждое нажатие клавиши перерисовывало всю
+    // таблицу: шесть символов — шесть полных перерисовок. Ждём паузу в наборе.
+    const searchInput = el.querySelector('#ops-search');
+    if (searchInput) {
+      let searchTimer = null;
+      // Отменяем незавершённые запросы страницы при уходе с раздела: сигнал
+      // навигации общий для всех вызовов API этой вьюхи.
+      const viewSignal = typeof currentViewSignal === 'function' ? currentViewSignal() : null;
+      viewSignal?.addEventListener('abort', () => clearTimeout(searchTimer), { once: true });
+
+      const applySearch = () => {
+        savedFilters.search = searchVal;
+        syncUsersUrl();
+        el.querySelector('#ops-table-wrap').innerHTML = renderTable();
+        el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+        el.querySelector('#ops-filter-chips').innerHTML = appliedFiltersHtml();
+        bindOpsActions();
+      };
+
+      searchInput.addEventListener('input', event => {
+        searchVal = event.target.value;
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(applySearch, 250);
+      });
+      // Enter применяет сразу, не дожидаясь паузы.
+      searchInput.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        clearTimeout(searchTimer);
+        applySearch();
+      });
+    }
+    /**
+     * Общая реакция на смену любого фильтра: таблица, счётчик найденного,
+     * чипы применённых фильтров и счётчик на кнопке «Ещё фильтры».
+     *
+     * Раньше каждый select перерисовывал только таблицу и счётчик, поэтому
+     * выбранная роль или уровень не появлялись в списке применённых фильтров
+     * и не считались на кнопке — панель можно было свернуть и забыть, что
+     * список отфильтрован.
+     */
+    function applyFilterChange() {
       syncUsersUrl();
       el.querySelector('#ops-table-wrap').innerHTML = renderTable();
       el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
+      el.querySelector('#ops-filter-chips').innerHTML = appliedFiltersHtml();
+      const count = activeExtraFilterCount();
+      const badge = el.querySelector('.ui-more-filters__count');
+      const toggle = el.querySelector('[data-more-filters]');
+      if (count && !badge && toggle) {
+        toggle.insertAdjacentHTML('beforeend', ` <span class="ui-more-filters__count">${count}</span>`);
+      } else if (count && badge) {
+        badge.textContent = String(count);
+      } else if (badge) {
+        badge.remove();
+      }
       bindOpsActions();
-    });
-    el.querySelector('#ops-group')?.addEventListener('change', e => {
-      filterGroup = e.target.value;
+      bindFilterChips();
+    }
+
+    el.querySelector('#ops-group')?.addEventListener('change', event => {
+      filterGroup = event.target.value;
       savedFilters.group = filterGroup;
-      syncUsersUrl();
-      el.querySelector('#ops-tab-bar').innerHTML = renderTabsAndFilters();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      rebindOps();
+      applyFilterChange();
     });
-    el.querySelector('#ops-role')?.addEventListener('change', e => {
-      filterRole = e.target.value;
+    el.querySelector('#ops-role')?.addEventListener('change', event => {
+      filterRole = event.target.value;
       savedFilters.role = filterRole;
-      syncUsersUrl();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      bindOpsActions();
+      applyFilterChange();
     });
-    el.querySelector('#ops-status')?.addEventListener('change', e => {
-      filterStatus = e.target.value;
+    el.querySelector('#ops-status')?.addEventListener('change', event => {
+      filterStatus = event.target.value;
       savedFilters.status = filterStatus;
-      syncUsersUrl();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      bindOpsActions();
+      applyFilterChange();
     });
-    el.querySelector('#ops-level')?.addEventListener('change', e => {
-      filterLevel = e.target.value;
+    el.querySelector('#ops-level')?.addEventListener('change', event => {
+      filterLevel = event.target.value;
       savedFilters.level = filterLevel;
-      syncUsersUrl();
-      el.querySelector('#ops-table-wrap').innerHTML = renderTable();
-      el.querySelector('.ops-count-info').innerHTML = `Показано: <b>${filteredOps().length}</b> из ${ops.length}`;
-      bindOpsActions();
+      applyFilterChange();
     });
     bindOpsActions();
     el.querySelector('#ops-filter-chips').innerHTML = appliedFiltersHtml();
+    bindFilterChips();
+  }
+
+  /** Чипы применённых фильтров перерисовываются вместе с ними — привязку
+      обработчиков приходится повторять, поэтому она вынесена отдельно. */
+  function bindFilterChips() {
     el.querySelectorAll('[data-clear-user-filter]').forEach(button => {
       button.addEventListener('click', () => {
         const key = button.dataset.clearUserFilter;
