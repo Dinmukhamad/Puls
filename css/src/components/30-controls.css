@@ -177,17 +177,6 @@
 }
 .btn-lg { min-height: var(--control-h-lg); padding: 0 var(--space-5); }
 
-/* На телефоне палец должен попадать без прицеливания. */
-@media (max-width: 640px) {
-  .btn-primary,
-  .btn-secondary,
-  .btn-outline,
-  .btn-ghost,
-  .btn-danger,
-  .btn-ok { min-height: var(--control-h-lg); }
-  .btn-sm { min-height: var(--control-h); }
-}
-
 /* ── Кнопка-иконка ────────────────────────────────────────── */
 .ui-icon-button {
   display: inline-flex;
@@ -576,3 +565,71 @@ textarea.form-input:focus {
 .ui-num {
   font-variant-numeric: tabular-nums;
 }
+
+/* Удаление условия уровня — опасное действие: спокойное по умолчанию,
+   красное при наведении, с подтверждением в обработчике. */
+.level-cond-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.level-cond-remove:hover { background: var(--danger-soft); color: var(--danger-text); }
+.level-cond-remove:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+
+/* ══════════════════════════════════════════════════════════════
+   ЦЕЛИ НАЖАТИЯ НА ТЕЛЕФОНЕ
+
+   Блок стоит последним намеренно: правила вкладок и чипов ниже по файлу
+   задают ту же min-height и при равной специфичности перебивали бы
+   медиазапрос, если бы он шёл раньше.
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .btn-primary,
+  .btn-secondary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-danger,
+  .btn-ok { min-height: var(--control-h-lg); }
+  .btn-sm { min-height: var(--control-h); }
+
+  /* Вкладки и чипы — тоже цели нажатия: 32px пальцем не берутся. */
+  .filter-tab, .analytics-tab, .an2-tab, .ops-tab, .coins-page-tab,
+  .levels-page-tab, .shop-v2-tab, .user-manage-tab, .tab-btn, .subtab,
+  .wheel-admin-tab, .race-segment, .op-tabs > button,
+  .an2-chip, .an2-day, .ui-chip { min-height: var(--control-h-lg); }
+
+  /* Мелкие кнопки внутри таблиц и панелей: раскрытие строки, удаление
+     условия, переключатель периода, сортировка. На телефоне по ним
+     промахиваются. */
+  .users-expand,
+  .shop-admin-sort,
+  .summary-period-switch button,
+  .level-cond-remove,
+  .row-actions button,
+  .ui-icon-button { min-height: var(--control-h-lg); }
+  .users-expand,
+  .level-cond-remove { min-width: var(--control-h-lg); }
+
+  /* Текстовая кнопка-ссылка тоже цель нажатия. */
+  .btn-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-h-lg);
+  }
+
+  /* Вкладки колеса заданы со своей высотой и !important. */
+  #view-wheel .filter-tabs.wheel-tabs .filter-tab { min-height: var(--control-h-lg) !important; }
+  #view-wheel .filter-tabs.wheel-tabs { min-height: auto; }
+}
+

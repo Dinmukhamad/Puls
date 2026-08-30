@@ -847,17 +847,52 @@ body.must-change-password .side-nav-link[data-nav-target] {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center;
 }
+/* Уведомление о результате действия.
+   Прежде это была плашка сплошного цвета с белым текстом: 2.62:1 на зелёном
+   и 3.76:1 на красном — ниже требуемых 4.5. Теперь поверхность нейтральная,
+   а тип действия показывает цветная полоса слева и точка: смысл читается и
+   без различения цветов. Длинный текст переносится, а не уезжает за экран. */
 .toast {
-  padding: 10px 20px; border-radius: var(--r-md);
-  font: 600 13px 'Inter', sans-serif;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: min(440px, calc(100vw - 32px));
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--text-muted);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--text-small);
+  font-weight: 600;
+  line-height: var(--leading-normal);
   box-shadow: var(--shadow-lg);
-  opacity: 0; transform: translateY(10px);
-  transition: opacity .22s ease, transform .22s ease;
-  pointer-events: none; white-space: nowrap;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity var(--transition-slow), transform var(--transition-slow);
+  pointer-events: none;
+}
+.toast::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
 }
 .toast-show { opacity: 1; transform: translateY(0); }
-.toast-ok    { background: var(--ok);     color: #fff; }
-.toast-error { background: var(--danger); color: #fff; }
+.toast-ok    { border-left-color: var(--success); }
+.toast-ok::before    { background: var(--success); }
+.toast-error { border-left-color: var(--danger); }
+.toast-error::before { background: var(--danger); }
+.toast-warn  { border-left-color: var(--warning); }
+.toast-warn::before  { background: var(--warning); }
+
+@media (max-width: 640px) {
+  #toast-container { left: var(--space-4); right: var(--space-4); transform: none; }
+  .toast { max-width: none; }
+}
 
 /* ══════════════════════════════════════════════════════════════
    SCROLLBAR
@@ -2126,17 +2161,6 @@ body.modal-open { overflow: hidden; }
 }
 .btn-lg { min-height: var(--control-h-lg); padding: 0 var(--space-5); }
 
-/* На телефоне палец должен попадать без прицеливания. */
-@media (max-width: 640px) {
-  .btn-primary,
-  .btn-secondary,
-  .btn-outline,
-  .btn-ghost,
-  .btn-danger,
-  .btn-ok { min-height: var(--control-h-lg); }
-  .btn-sm { min-height: var(--control-h); }
-}
-
 /* ── Кнопка-иконка ────────────────────────────────────────── */
 .ui-icon-button {
   display: inline-flex;
@@ -2525,6 +2549,73 @@ textarea.form-input:focus {
 .ui-num {
   font-variant-numeric: tabular-nums;
 }
+
+/* Удаление условия уровня — опасное действие: спокойное по умолчанию,
+   красное при наведении, с подтверждением в обработчике. */
+.level-cond-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.level-cond-remove:hover { background: var(--danger-soft); color: var(--danger-text); }
+.level-cond-remove:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+
+/* ══════════════════════════════════════════════════════════════
+   ЦЕЛИ НАЖАТИЯ НА ТЕЛЕФОНЕ
+
+   Блок стоит последним намеренно: правила вкладок и чипов ниже по файлу
+   задают ту же min-height и при равной специфичности перебивали бы
+   медиазапрос, если бы он шёл раньше.
+══════════════════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .btn-primary,
+  .btn-secondary,
+  .btn-outline,
+  .btn-ghost,
+  .btn-danger,
+  .btn-ok { min-height: var(--control-h-lg); }
+  .btn-sm { min-height: var(--control-h); }
+
+  /* Вкладки и чипы — тоже цели нажатия: 32px пальцем не берутся. */
+  .filter-tab, .analytics-tab, .an2-tab, .ops-tab, .coins-page-tab,
+  .levels-page-tab, .shop-v2-tab, .user-manage-tab, .tab-btn, .subtab,
+  .wheel-admin-tab, .race-segment, .op-tabs > button,
+  .an2-chip, .an2-day, .ui-chip { min-height: var(--control-h-lg); }
+
+  /* Мелкие кнопки внутри таблиц и панелей: раскрытие строки, удаление
+     условия, переключатель периода, сортировка. На телефоне по ним
+     промахиваются. */
+  .users-expand,
+  .shop-admin-sort,
+  .summary-period-switch button,
+  .level-cond-remove,
+  .row-actions button,
+  .ui-icon-button { min-height: var(--control-h-lg); }
+  .users-expand,
+  .level-cond-remove { min-width: var(--control-h-lg); }
+
+  /* Текстовая кнопка-ссылка тоже цель нажатия. */
+  .btn-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--control-h-lg);
+  }
+
+  /* Вкладки колеса заданы со своей высотой и !important. */
+  #view-wheel .filter-tabs.wheel-tabs .filter-tab { min-height: var(--control-h-lg) !important; }
+  #view-wheel .filter-tabs.wheel-tabs { min-height: auto; }
+}
 /* source: 40-table.css */
 /* ══════════════════════════════════════════════════════════════
    ТАБЛИЦЫ — единый вид и состояния
@@ -2743,6 +2834,139 @@ textarea.form-input:focus {
   .data-table[data-mobile="cards"] tbody td:not([data-label])::before { display: none; }
   .data-table[data-mobile="cards"] tbody td.num { text-align: right; }
 }
+/* source: 50-modal.css */
+/* ══════════════════════════════════════════════════════════════
+   МОДАЛЬНЫЕ ОКНА
+
+   Доступность окна настраивается один раз в showModal: role, aria-modal,
+   связь с заголовком, кнопка закрытия с подписью, Escape, удержание
+   фокуса, блокировка прокрутки фона и возврат фокуса. Здесь — только
+   внешний вид и поведение раскладки.
+
+   Главное, чего не хватало: у длинных форм подвал с действиями уезжал
+   за пределы видимой части, и до кнопки сохранения приходилось
+   прокручивать всё окно.
+══════════════════════════════════════════════════════════════ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(12px, 2vw, 24px);
+  background: var(--modal-overlay);
+}
+
+.modal,
+.modal-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(720px, calc(100vw - 28px));
+  max-height: calc(100dvh - 32px);
+  padding: var(--space-6);
+  overflow-y: auto;
+  background: var(--modal-bg);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-modal);
+}
+
+.modal-title,
+.acc-title {
+  margin: 0 var(--space-8) var(--space-2) 0;
+  color: var(--text-primary);
+  font-size: var(--text-h3);
+  font-weight: var(--text-h3-weight);
+}
+
+.modal-close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1;
+}
+.modal-close:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+.modal-close:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Логические секции формы вместо сплошного списка полей. */
+.modal-section { margin-top: var(--space-5); }
+.modal-section:first-of-type { margin-top: var(--space-4); }
+.modal-section__title {
+  margin: 0 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-tiny);
+  font-weight: 600;
+}
+
+/* Подвал держится на виду: у длинной формы до кнопки сохранения иначе
+   приходится прокручивать всё окно. Отмена — вторичная и слева,
+   основное действие — справа. */
+.modal-actions,
+.wheel-rule-modal-actions {
+  position: sticky;
+  bottom: calc(var(--space-6) * -1);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: var(--space-5) calc(var(--space-6) * -1) calc(var(--space-6) * -1);
+  padding: var(--space-4) var(--space-6);
+  background: var(--modal-bg);
+  border-top: 1px solid var(--border-default);
+}
+.modal-actions > .btn-ghost:first-child,
+.modal-actions > [data-modal-cancel] { margin-right: auto; }
+
+/* ── Телефон ──────────────────────────────────────────────
+   Длинная форма занимает экран целиком: так в неё помещается больше
+   полей, а подвал остаётся на месте. */
+@media (max-width: 640px) {
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal,
+  .modal-card {
+    width: 100%;
+    max-width: none;
+    max-height: 92dvh;
+    padding: var(--space-5) var(--space-4);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    border-bottom: none;
+  }
+  .modal-actions,
+  .wheel-rule-modal-actions {
+    margin-inline: calc(var(--space-4) * -1);
+    padding-inline: var(--space-4);
+    bottom: calc(var(--space-5) * -1);
+  }
+  /* Кнопки в подвале занимают доступную ширину, чтобы попадать пальцем. */
+  .modal-actions > .btn-primary,
+  .modal-actions > .btn-outline,
+  .modal-actions > .btn-secondary { flex: 1 1 auto; }
+}
+
+/* Фон под открытым окном не прокручивается. */
+body.modal-open { overflow: hidden; }
 /* source: 10-manual-account.css */
 
 
@@ -9827,6 +10051,20 @@ html[data-theme="dark"] #view-cabinet .shop-banner {
 .summary-filter-panel label { display: grid; min-width: 0; gap: 4px; }
 .summary-filter-panel label > span { color: var(--text-muted); font-size: 9px; font-weight: 700; text-transform: uppercase; }
 .summary-filter-panel .form-input,.summary-filter-panel .form-select { width: 100%; height: 34px; }
+/* Семь колонок фиксированной ширины не помещались уже на 1280px, и кнопка
+   «Обновить» уезжала за край экрана. Ниже этого порога панель переносит
+   фильтры логичными группами вместо жёсткой сетки. */
+@media (max-width: 1360px) {
+  .summary-filter-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+  .summary-filter-panel > * { min-width: 0; }
+  .summary-filter-panel label { flex: 1 1 150px; }
+  .summary-filter-panel > button { flex: 0 0 auto; }
+}
+
 .summary-period-switch { display: flex; height: 34px; padding: 3px; background: var(--bg-muted); border-radius: var(--radius-xs); }
 .summary-period-switch button { height: 28px; padding: 0 10px; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--text-secondary); font-size: 10px; font-weight: 700; cursor: pointer; }
 .summary-period-switch button.active { background: var(--card-bg); color: var(--accent-primary); box-shadow: var(--shadow-sm); }
@@ -13461,7 +13699,7 @@ textarea:focus {
   flex: 0 0 auto !important;
   width: auto !important;
   min-width: 0 !important;
-  min-height: 32px !important;
+  min-height: var(--control-h-sm) !important;
   padding: 7px 15px !important;
   color: var(--text-secondary);
   font-size: 11px;
@@ -13655,6 +13893,11 @@ html[data-theme="dark"] .level-settings-head {
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+}
+
+/* На телефоне вкладки колеса — такая же цель нажатия, как везде. */
+@media (max-width: 640px) {
+  #view-wheel .filter-tabs.wheel-tabs .filter-tab { min-height: var(--control-h-lg) !important; }
 }
 /* source: zz-operator-rating-competition.css */
 /* Operator rating v4 — focused rivalry dashboard. */

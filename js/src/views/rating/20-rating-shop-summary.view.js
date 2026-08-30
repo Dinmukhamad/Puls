@@ -1116,7 +1116,7 @@ function renderStaffShop(el, items) {
           ${rows.length ? rows.map(item => `
             <tr class="${item.is_active ? '' : 'shop-admin-row-hidden'}">
               <td class="shop-admin-name" data-label="Бонус">
-                <b>${esc(item.title)}</b>
+                <b title="${esc(item.title)}">${esc(item.title)}</b>
                 <small>${esc(SHOP_PRIZE_TYPES[item.prize_type] || item.prize_type || '')}${item.code ? ` · ${esc(item.code)}` : ''}</small>
               </td>
               <td data-label="Категория">${esc(shopCategoryLabel(item.category))}</td>

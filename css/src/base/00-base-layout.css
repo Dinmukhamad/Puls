@@ -845,17 +845,52 @@ body.must-change-password .side-nav-link[data-nav-target] {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
   z-index: 9999; display: flex; flex-direction: column; gap: 8px; align-items: center;
 }
+/* Уведомление о результате действия.
+   Прежде это была плашка сплошного цвета с белым текстом: 2.62:1 на зелёном
+   и 3.76:1 на красном — ниже требуемых 4.5. Теперь поверхность нейтральная,
+   а тип действия показывает цветная полоса слева и точка: смысл читается и
+   без различения цветов. Длинный текст переносится, а не уезжает за экран. */
 .toast {
-  padding: 10px 20px; border-radius: var(--r-md);
-  font: 600 13px 'Inter', sans-serif;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: min(440px, calc(100vw - 32px));
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--text-muted);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--text-small);
+  font-weight: 600;
+  line-height: var(--leading-normal);
   box-shadow: var(--shadow-lg);
-  opacity: 0; transform: translateY(10px);
-  transition: opacity .22s ease, transform .22s ease;
-  pointer-events: none; white-space: nowrap;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity var(--transition-slow), transform var(--transition-slow);
+  pointer-events: none;
+}
+.toast::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
 }
 .toast-show { opacity: 1; transform: translateY(0); }
-.toast-ok    { background: var(--ok);     color: #fff; }
-.toast-error { background: var(--danger); color: #fff; }
+.toast-ok    { border-left-color: var(--success); }
+.toast-ok::before    { background: var(--success); }
+.toast-error { border-left-color: var(--danger); }
+.toast-error::before { background: var(--danger); }
+.toast-warn  { border-left-color: var(--warning); }
+.toast-warn::before  { background: var(--warning); }
+
+@media (max-width: 640px) {
+  #toast-container { left: var(--space-4); right: var(--space-4); transform: none; }
+  .toast { max-width: none; }
+}
 
 /* ══════════════════════════════════════════════════════════════
    SCROLLBAR

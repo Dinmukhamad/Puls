@@ -1277,9 +1277,37 @@ function showWheelRuleModal(body) {
     </div>`;
   document.body.appendChild(modal);
 
-  const close = () => modal.remove();
+  // Окно правила — собственная реализация, но ведёт себя как все остальные:
+  // Escape закрывает, фон не прокручивается, фокус входит внутрь, не выходит
+  // за пределы окна и возвращается туда, откуда окно открыли.
+  const opener = document.activeElement;
+  const dialog = modal.querySelector('.wheel-rule-modal');
+  document.body.classList.add('modal-open');
+
+  const onKey = event => {
+    if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+    if (event.key !== 'Tab') return;
+    const items = [...dialog.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([type=hidden]):not([disabled]), select:not([disabled]), textarea:not([disabled])',
+    )].filter(el => el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  };
+
+  const close = () => {
+    document.removeEventListener('keydown', onKey, true);
+    document.body.classList.remove('modal-open');
+    modal.remove();
+    if (opener?.isConnected) opener.focus?.({ preventScroll: true });
+  };
+
+  document.addEventListener('keydown', onKey, true);
   modal.querySelectorAll('[data-wheel-rule-close]').forEach(b => b.onclick = close);
   modal.addEventListener('click', e => { if (e.target === modal) close(); });
+  (dialog.querySelector('input:not([type=hidden]):not([disabled])') || dialog).focus?.({ preventScroll: true });
 
   const setVal = (id, value) => { const n = document.getElementById(id); if (n) n.value = value; };
   const titleEl = document.getElementById('wr-title');

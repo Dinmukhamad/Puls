@@ -124,7 +124,7 @@ async function renderLevelsTabContent(el) {
               ${(level.rules || []).length ? level.rules.map(rule => `<div class="level-condition-row">
                 <span class="level-condition-check">✓</span>
                 <div><strong>${esc(rule.metric_label || ruleText(rule).split(':')[0])}</strong><span>${esc(ruleText(rule))}</span></div>
-                ${canDeleteLevels ? `<button type="button" onclick="deleteOperatorLevelRuleUi(${rule.id})" aria-label="Удалить условие" title="Удалить условие">×</button>` : ''}
+                ${canDeleteLevels ? `<button type="button" class="level-cond-remove" onclick="deleteOperatorLevelRuleUi(${rule.id})" aria-label="Удалить условие" title="Удалить условие"><span aria-hidden="true">×</span></button>` : ''}
               </div>`).join('') : '<div class="level-condition-empty">Условия пока не настроены. Без условий уровень доступен всем операторам.</div>'}
             </div>
           </section>

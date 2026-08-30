@@ -43,11 +43,11 @@ function renderPeriodReport() {
       <div class="pr-card-head">Период расчёта</div>
       <div class="pr-period-row">
         <div class="form-group">
-          <label class="form-label">Дата начала</label>
+          <label class="form-label" for="pr-start-date">Дата начала</label>
           <input id="pr-start-date" type="date" class="form-input">
         </div>
         <div class="form-group">
-          <label class="form-label">Дата окончания</label>
+          <label class="form-label" for="pr-end-date">Дата окончания</label>
           <input id="pr-end-date" type="date" class="form-input">
         </div>
         <button class="btn-primary" id="pr-calc-btn" style="align-self:flex-end">Рассчитать</button>

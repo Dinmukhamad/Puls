@@ -124,9 +124,11 @@ function paintAdminSessions(el, data) {
           <p class="panel-hint">IP определяется по proxy-заголовкам Railway, устройство — по User-Agent браузера.</p>
         </div>
         <div class="sessions-filters">
+          <label class="sr-only" for="sessions-status">Фильтр по состоянию сессии</label>
           <select class="form-select" id="sessions-status">
             ${[['active','Активные'],['all','Все'],['revoked','Сброшенные'],['expired','Истёкшие']].map(([v,t]) => `<option value="${v}" ${_sessionFilterStatus === v ? 'selected' : ''}>${t}</option>`).join('')}
           </select>
+          <label class="sr-only" for="sessions-query">Поиск по сессиям</label>
           <input class="form-input" id="sessions-query" placeholder="Поиск: имя, логин, IP, устройство" value="${esc(_sessionFilterQuery)}">
         </div>
       </div>

@@ -612,7 +612,7 @@ function renderCoinsOverview(body) {
               <div class="manual-tx-sign ${t.amount >= 0 ? 'plus' : 'minus'}">${t.amount >= 0 ? '+' : ''}${t.amount}</div>
               <div class="manual-tx-body">
                 <div class="manual-tx-name">${esc(t.operator_name)}</div>
-                <div class="manual-tx-meta">${esc(transactionTypeLabel(t.type))} · ${esc(t.comment)} · ${fmtDate(t.created_at)}</div>
+                <div class="manual-tx-meta" title="${esc(transactionTypeLabel(t.type))} · ${esc(t.comment)} · ${fmtDate(t.created_at)}">${esc(transactionTypeLabel(t.type))} · ${esc(t.comment)} · ${fmtDate(t.created_at)}</div>
               </div>
             </div>`).join('') : '<div class="empty-line">Операций пока нет</div>'}
         </div>
@@ -625,7 +625,7 @@ function renderCoinsOverview(body) {
               <div class="manual-tx-sign">${p.price}</div>
               <div class="manual-tx-body">
                 <div class="manual-tx-name">${esc(p.operator_name)} — ${esc(p.bonus_name)}</div>
-                <div class="manual-tx-meta">${esc(p.group_name || '—')} · ${statusLabel(p.status)} · ${fmtDate(p.created_at)}</div>
+                <div class="manual-tx-meta" title="${esc(p.group_name || '—')} · ${statusLabel(p.status)} · ${fmtDate(p.created_at)}">${esc(p.group_name || '—')} · ${statusLabel(p.status)} · ${fmtDate(p.created_at)}</div>
               </div>
             </div>`).join('') : '<div class="empty-line">Заявок нет</div>'}
         </div>
@@ -2037,34 +2037,22 @@ function showModal(html, options = {}) {
   const forced = Boolean(options.force);
   overlay.dataset.force = forced ? 'true' : 'false';
   const extraClass = options.className ? String(options.className).replace(/[^a-zA-Z0-9_\- ]/g, '') : '';
-  const titleId = `modal-title-${++_modalSeq}`;
-
   overlay.innerHTML = `
     <div class="modal ${forced ? 'modal-forced' : ''} ${extraClass}"
-         role="dialog" aria-modal="true" aria-labelledby="${titleId}">
+         role="dialog" aria-modal="true">
       ${html}
       ${forced ? '' : '<button class="modal-close" type="button" aria-label="Закрыть окно"><span aria-hidden="true">✕</span></button>'}
     </div>`;
 
   const dialog = overlay.querySelector('.modal');
-  // Заголовок окна связываем с самим окном: скринридер объявит, что открылось.
-  const heading = dialog.querySelector('h1, h2, h3, .modal-title, .acc-title');
-  if (heading) heading.id = titleId;
-  else dialog.setAttribute('aria-label', options.label || 'Диалоговое окно');
 
   overlay.style.display = 'flex';
   // Фон не должен прокручиваться под открытым окном.
   document.body.classList.add('modal-open');
 
-  dialog.querySelector('.modal-close')?.addEventListener('click', () => closeModal());
   overlay.onclick = event => { if (event.target === overlay && !forced) closeModal(); };
-
-  // Фокус — на первое осмысленное поле, иначе на кнопку закрытия.
-  const focusables = _modalFocusable(dialog);
-  const firstField = dialog.querySelector(
-    'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])',
-  );
-  (firstField || focusables[0] || dialog).focus?.({ preventScroll: true });
+  // Связь заголовка, кнопка закрытия и фокус — общие с updateModal.
+  _decorateModal(dialog, forced);
 
   // Escape закрывает, Tab не выпускает фокус за пределы окна.
   if (_modalKeydown) document.removeEventListener('keydown', _modalKeydown, true);
@@ -2326,15 +2314,48 @@ async function deleteNorm(normId) {
   } catch(e) { showToast(e.message, 'error'); }
 }
 
+/**
+ * Содержимое открытого окна. Раньше здесь пересобиралась кнопка закрытия без
+ * aria-label, заголовок терял связь с диалогом, а фокус оставался снаружи —
+ * то есть после подмены содержимого окно переставало быть доступным. Теперь
+ * оформление одно и то же, что при открытии.
+ */
 function updateModal(html) {
-  // Обновляем содержимое открытого модального окна
   const overlay = document.getElementById('modal-overlay');
   const modal = overlay?.querySelector('.modal');
-  if (modal) {
-    modal.innerHTML = html + '<button class="modal-close" onclick="closeModal()">✕</button>';
-  } else {
+  if (!modal) {
     showModal(html);
+    return;
   }
+  const forced = overlay.dataset.force === 'true';
+  modal.innerHTML = html
+    + (forced ? '' : '<button class="modal-close" type="button" aria-label="Закрыть окно"><span aria-hidden="true">✕</span></button>');
+  _decorateModal(modal, forced);
+}
+
+/**
+ * Общее оформление диалога: связь заголовка с окном, рабочая кнопка закрытия
+ * и фокус на первом осмысленном поле. Вызывается и при открытии, и при
+ * подмене содержимого.
+ */
+function _decorateModal(dialog, forced) {
+  const titleId = `modal-title-${++_modalSeq}`;
+  const heading = dialog.querySelector('h1, h2, h3, .modal-title, .acc-title');
+  if (heading) {
+    heading.id = titleId;
+    dialog.setAttribute('aria-labelledby', titleId);
+    dialog.removeAttribute('aria-label');
+  } else if (!dialog.getAttribute('aria-label')) {
+    dialog.setAttribute('aria-label', 'Диалоговое окно');
+  }
+  if (!forced) {
+    dialog.querySelector('.modal-close')?.addEventListener('click', () => closeModal());
+  }
+  const focusables = _modalFocusable(dialog);
+  const firstField = dialog.querySelector(
+    'input:not([type=hidden]):not([disabled]), textarea:not([disabled]), select:not([disabled])',
+  );
+  (firstField || focusables[0] || dialog).focus?.({ preventScroll: true });
 }
 
 async function showAddOperatorModal() {
@@ -2436,8 +2457,11 @@ async function showAddOperatorModal() {
       </div>
     </div>
     <div id="new-op-err" class="status-line"></div>
-    <button id="create-operator-btn" class="btn-primary create-user-submit" onclick="submitAddOperator()" disabled>Создать пользователя</button>
-    <div style="font-size:11px;color:var(--tx3);margin-top:6px">Пароль сохранится только в виде hash, при первом входе пользователь сменит его.</div>
+    <p class="form-hint">Пароль сохранится только в виде hash, при первом входе пользователь сменит его.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn-outline" data-modal-cancel onclick="closeModal()">Отмена</button>
+      <button id="create-operator-btn" class="btn-primary create-user-submit" onclick="submitAddOperator()" disabled>Создать пользователя</button>
+    </div>
   `, { className: 'modal-user-create' });
 
   const updateButton = () => {
@@ -2908,7 +2932,10 @@ function showAddItemModal() {
         <input id="ni-oplimit" class="form-input" type="number" min="0" value="0"></div>
     </div>
     <div id="ni-err" class="status-line"></div>
-    <button class="btn-primary" style="width:100%;margin-top:4px" onclick="submitAddItem()">Добавить</button>`);
+    <div class="modal-actions">
+      <button type="button" class="btn-outline" data-modal-cancel onclick="closeModal()">Отмена</button>
+      <button class="btn-primary" onclick="submitAddItem()">Добавить</button>
+    </div>`);
 }
 async function submitAddItem() {
   const code = document.getElementById('ni-code')?.value?.trim() || null;
@@ -3057,7 +3084,17 @@ function downloadCSV(rows, name) {
 ══════════════════════════════════════ */
 function showToast(msg, type = 'ok') {
   let c = document.getElementById('toast-container');
-  if (!c) { c = document.createElement('div'); c.id = 'toast-container'; document.body.appendChild(c); }
+  if (!c) {
+    c = document.createElement('div');
+    c.id = 'toast-container';
+    // Живая область: без неё сообщение о результате действия не доходит до
+    // тех, кто не видит экран.
+    c.setAttribute('role', 'status');
+    c.setAttribute('aria-live', 'polite');
+    document.body.appendChild(c);
+  }
+  // Ошибку объявляем сразу, остальное — в порядке очереди.
+  c.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
   t.textContent = msg;

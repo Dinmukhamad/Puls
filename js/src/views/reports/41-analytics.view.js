@@ -649,7 +649,7 @@ function anFiltersHtml() {
         ${custom}
       </div>
       <div class="an2-filter">
-        <span class="an2-filter-label">Группа</span>
+        <label class="an2-filter-label" for="an2-group">Группа</label>
         <select class="form-select an2-select" id="an2-group">
           <option value="">Все группы</option>${groups}
         </select>

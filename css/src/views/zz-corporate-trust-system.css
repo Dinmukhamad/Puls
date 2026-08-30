@@ -261,7 +261,7 @@ textarea:focus {
   flex: 0 0 auto !important;
   width: auto !important;
   min-width: 0 !important;
-  min-height: 32px !important;
+  min-height: var(--control-h-sm) !important;
   padding: 7px 15px !important;
   color: var(--text-secondary);
   font-size: 11px;
@@ -455,4 +455,9 @@ html[data-theme="dark"] .level-settings-head {
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+}
+
+/* На телефоне вкладки колеса — такая же цель нажатия, как везде. */
+@media (max-width: 640px) {
+  #view-wheel .filter-tabs.wheel-tabs .filter-tab { min-height: var(--control-h-lg) !important; }
 }
