@@ -135,12 +135,17 @@ def uploaded_report_file(db: Session, file_kind: str) -> UploadedReportFile | No
     return db.scalar(select(UploadedReportFile).where(UploadedReportFile.file_kind == file_kind))
 
 
-def upsert_period_report(db: Session, values: dict) -> None:
+def upsert_period_report(db: Session, values: dict, known: PeriodReport | None = None) -> None:
     """
     Атомарный upsert PeriodReport (INSERT ... ON CONFLICT DO UPDATE) для
     postgres, select-then-write для sqlite. Устойчиво к гонке параллельных
     HTTP-запросов (вкладка «Обзор» дёргает несколько эндпоинтов через
     Promise.all). Логика перенесена дословно из _save_period_report_from_metrics.
+
+    ``known`` — уже загруженная строка за тот же период (вызывающий получает их
+    пачкой через period_reports_for_range). Позволяет не делать повторный SELECT
+    на каждого оператора: это давало по одному лишнему запросу на оператора при
+    каждом чтении аналитики.
     """
     bind = db.get_bind()
     if bind.dialect.name == "postgresql":
@@ -153,13 +158,15 @@ def upsert_period_report(db: Session, values: dict) -> None:
         )
         db.execute(stmt)
     else:
-        existing = db.scalar(
-            select(PeriodReport).where(
-                PeriodReport.operator_id == values["operator_id"],
-                PeriodReport.period_start == values["period_start"],
-                PeriodReport.period_end == values["period_end"],
+        existing = known
+        if existing is None:
+            existing = db.scalar(
+                select(PeriodReport).where(
+                    PeriodReport.operator_id == values["operator_id"],
+                    PeriodReport.period_start == values["period_start"],
+                    PeriodReport.period_end == values["period_end"],
+                )
             )
-        )
         pr = existing or PeriodReport(
             operator_id=values["operator_id"],
             period_start=values["period_start"],

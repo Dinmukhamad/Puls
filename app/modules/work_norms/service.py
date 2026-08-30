@@ -40,11 +40,38 @@ def get_norm(db: Session, norm_id: int) -> WorkNorm | None:
     return db.get(WorkNorm, norm_id)
 
 
+_NORM_CACHE_KEY = "work_norms_by_month_rate"
+
+
+def _invalidate_norm_cache(db: Session) -> None:
+    """Сбросить кеш норм текущей сессии после изменения справочника."""
+    db.info.pop(_NORM_CACHE_KEY, None)
+
+
 def get_norm_for_month(db: Session, year: int, month: int, rate: float) -> WorkNorm | None:
+    """Активная норма часов для (год, месяц, ставка).
+
+    Результат кешируется в пределах одной сессии SQLAlchemy (= одного HTTP-
+    запроса). Аналитика вызывает эту функцию для каждого оператора за каждый
+    месяц периода, а справочник норм — десятки строк на всю систему: без кеша
+    выходило по одному SELECT на оператора (60 операторов → 60 одинаковых
+    запросов на каждый эндпоинт аналитики). Кеш живёт не дольше запроса,
+    поэтому не может показать устаревшие данные следующему пользователю;
+    записи в справочник дополнительно сбрасывают его явно.
+    """
     from decimal import Decimal
 
+    cache = db.info.get(_NORM_CACHE_KEY)
+    if cache is None:
+        cache = {}
+        db.info[_NORM_CACHE_KEY] = cache
+
+    key = (year, month, str(rate))
+    if key in cache:
+        return cache[key]
+
     rate_dec = Decimal(str(rate))
-    return db.scalar(
+    norm = db.scalar(
         select(WorkNorm).where(
             WorkNorm.year == year,
             WorkNorm.month == month,
@@ -52,6 +79,8 @@ def get_norm_for_month(db: Session, year: int, month: int, rate: float) -> WorkN
             WorkNorm.is_active.is_(True),
         )
     )
+    cache[key] = norm
+    return norm
 
 
 def create_norm(
@@ -73,17 +102,20 @@ def create_norm(
         created_by_user_id=created_by_user_id,
     )
     db.add(norm)
+    _invalidate_norm_cache(db)
     return norm
 
 
 def update_norm(db: Session, norm: WorkNorm, monthly_norm_hours: float) -> WorkNorm:
     norm.monthly_norm_hours = monthly_norm_hours
     norm.month_days = calendar.monthrange(norm.year, norm.month)[1]
+    _invalidate_norm_cache(db)
     return norm
 
 
 def deactivate_norm(db: Session, norm: WorkNorm) -> WorkNorm:
     norm.is_active = False
+    _invalidate_norm_cache(db)
     return norm
 
 

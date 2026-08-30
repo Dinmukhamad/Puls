@@ -76,17 +76,22 @@ def _inventory_for_update(db: Session, item_id: int) -> ShopItemInventory | None
     )
 
 
-def points_to_coins(points: float, db: Session | None = None) -> int:
+def points_to_coins(points: float, db: Session | None = None, rule=None) -> int:
     """Переводит баллы в коины по настраиваемому курсу (ТЗ §4).
 
     Если передана сессия БД — берёт активные правила (`coin_rules`): курс,
     режим округления и минимальный порог. Без сессии (например, вызов вне
     запроса) — старое поведение по умолчанию: floor(points / 5).
-    """
-    if db is not None:
-        from app.modules.settings.service import get_active_coin_rule
 
-        rule = get_active_coin_rule(db)
+    ``rule`` — уже загруженные правила. Пакетные расчёты (еженедельное
+    начисление по всем операторам) держат их на руках, и без этого параметра
+    правила перечитывались из БД на каждого оператора.
+    """
+    if db is not None or rule is not None:
+        if rule is None:
+            from app.modules.settings.service import get_active_coin_rule
+
+            rule = get_active_coin_rule(db)
         rate = rule.points_per_coin or 5
         min_points = rule.min_points_for_accrual or 0
         if points < min_points:

@@ -216,6 +216,7 @@ def _save_period_report_from_metrics(
     start_date: date,
     end_date: date,
     m: OperatorPeriodMetrics,
+    known: object | None = None,
 ) -> None:
     """Сохраняет агрегат как PeriodReport (read-cache) через атомарный upsert."""
     values = dict(
@@ -238,7 +239,7 @@ def _save_period_report_from_metrics(
         penalty_points=m.penalty_points,
         final_points=m.final_points,
     )
-    repo.upsert_period_report(db, values)
+    repo.upsert_period_report(db, values, known=known)
 
 
 def get_rows(
@@ -278,7 +279,10 @@ def get_rows(
             m.full_name = operator.full_name
             m.name_key = normalize_name(operator.full_name)
             enrich_metrics_with_norm(db, m, operator, start_date, end_date)
-            _save_period_report_from_metrics(db, operator_id, start_date, end_date, m)
+            _save_period_report_from_metrics(
+                db, operator_id, start_date, end_date, m,
+                known=existing_reports.get(operator_id),
+            )
         else:
             pr = existing_reports[operator_id]
             name_key = normalize_name(operator.full_name)
@@ -859,8 +863,24 @@ def management_dashboard(db, start_date, end_date, group_id, operator_query, par
     if cached is not None:
         return cached
 
-    rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
+    # Отсутствие данных за период — не ошибка сервера, а объяснимое пустое
+    # состояние: get_rows сигналит о нём 404-м, но экрану нужен нормальный
+    # ответ с причиной, иначе «нет отчётов за июль» неотличимо от падения
+    # бэкенда. Тот же приём уже используется в summary() выше.
+    try:
+        rows = get_rows(db, start_date, end_date, group_id, operator_query, participation_status)
+        no_reports = False
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+        rows = []
+        no_reports = True
+
     result = compute_management_dashboard(rows)
+    result["empty_reason"] = (
+        "no_reports_uploaded" if no_reports
+        else (None if rows else _empty_reason(db, False))
+    )
     duration = (end_date - start_date).days
     prev_end = start_date - timedelta(days=1)
     prev_start = prev_end - timedelta(days=duration)

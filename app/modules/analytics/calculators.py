@@ -399,6 +399,10 @@ def _operator_health_snapshot(row: OperatorAnalyticsRow) -> dict:
             "full_name": row.full_name,
             "group_name": row.group_name or "Без группы",
             "health_score": 0,
+            # Ни один компонент не измерен: 0 здесь — это признак «нет данных»
+            # (status "no_data"), а не оценка. Такие операторы не входят в
+            # среднее по команде — см. compute_management_dashboard.
+            "health_components": [],
             "status": "no_data",
             "priority_score": 100,
             "issues": [{
@@ -428,22 +432,44 @@ def _operator_health_snapshot(row: OperatorAnalyticsRow) -> dict:
         issues.append(_metric_issue("norm", "Выполнение нормы", m.norm_completion_percent, 100, 80, unit="%"))
     issues = [issue for issue in issues if issue]
 
-    component_scores = [
-        _clamp((quality or 0) / MANAGEMENT_TARGETS["quality"] * 100),
-        _clamp((kvz or 0) / MANAGEMENT_TARGETS["kvz"] * 100),
-        _clamp((efficiency or 0) / MANAGEMENT_TARGETS["efficiency"] * 100),
-        _clamp(100 - (m.penalty_minutes / max(MANAGEMENT_TARGETS["penalty"], 1) * 20)),
+    # Неизмеренный показатель исключается из среднего, а не входит в него нулём:
+    # качество ставят выборочно, и подстановка нуля занижала здоровье оператора
+    # на целый компонент, хотя нарушения не было. Отсутствие данных остаётся
+    # видимым отдельно — через issues (severity "no_data") и health_components.
+    components = [
+        ("quality", "Качество",
+         _clamp(quality / MANAGEMENT_TARGETS["quality"] * 100) if quality is not None else None),
+        ("kvz", "Звонков в час",
+         _clamp(kvz / MANAGEMENT_TARGETS["kvz"] * 100) if kvz is not None else None),
+        ("efficiency", "Эффективность",
+         _clamp(efficiency / MANAGEMENT_TARGETS["efficiency"] * 100) if efficiency is not None else None),
+        # Штрафы известны всегда: ноль штрафов — это реальный ноль, а не пропуск.
+        ("penalty", "Штрафы",
+         _clamp(100 - (m.penalty_minutes / max(MANAGEMENT_TARGETS["penalty"], 1) * 20))),
     ]
     if m.individual_norm_hours > 0:
-        component_scores.append(_clamp(m.norm_completion_percent))
+        components.append(("norm", "Выполнение нормы", _clamp(m.norm_completion_percent)))
+
+    health_components = [
+        {"metric": key, "label": label, "score": round(score) if score is not None else None,
+         "measured": score is not None}
+        for key, label, score in components
+    ]
+    component_scores = [score for _key, _label, score in components if score is not None]
     health_score = round(sum(component_scores) / len(component_scores)) if component_scores else 0
 
-    critical_count = sum(issue["severity"] in ("critical", "no_data") for issue in issues)
+    # "critical" — подтверждённо плохой измеренный показатель. Непроставленная
+    # оценка (severity "no_data") тоже требует внимания, но это пробел в данных,
+    # а не провал оператора: смешивая их, мы записывали в критические всех, кому
+    # просто не выпала выборочная проверка качества. Вес в priority_score у
+    # пропуска прежний — оператор так же поднимается в начало списка внимания.
+    critical_count = sum(issue["severity"] == "critical" for issue in issues)
+    no_data_count = sum(issue["severity"] == "no_data" for issue in issues)
     watch_count = sum(issue["severity"] == "watch" for issue in issues)
-    priority_score = critical_count * 30 + watch_count * 12 + max(0, 70 - health_score)
+    priority_score = (critical_count + no_data_count) * 30 + watch_count * 12 + max(0, 70 - health_score)
     if critical_count:
         status = "critical"
-    elif watch_count:
+    elif watch_count or no_data_count:
         status = "watch"
     else:
         status = "stable"
@@ -465,6 +491,7 @@ def _operator_health_snapshot(row: OperatorAnalyticsRow) -> dict:
         "full_name": row.full_name,
         "group_name": row.group_name or "Без группы",
         "health_score": health_score,
+        "health_components": health_components,
         "status": status,
         "priority_score": round(priority_score, 1),
         "issues": issues,
@@ -583,6 +610,32 @@ def compute_management_dashboard(rows: list[OperatorAnalyticsRow]) -> dict:
     else:
         team_status = "stable"
 
+    # Из чего собран индекс: средний балл каждого компонента по тем операторам,
+    # у кого он реально измерен. Без этой расшифровки «Здоровье команды 82»
+    # остаётся числом без объяснения, а неполное покрытие данных незаметно.
+    component_totals: dict[str, dict] = {}
+    for item in included:
+        for component in item.get("health_components", []):
+            bucket = component_totals.setdefault(
+                component["metric"],
+                {"metric": component["metric"], "label": component["label"],
+                 "scores": [], "operators_measured": 0},
+            )
+            if component["measured"]:
+                bucket["scores"].append(component["score"])
+                bucket["operators_measured"] += 1
+    health_components_out = [
+        {
+            "metric": bucket["metric"],
+            "label": bucket["label"],
+            "score": round(sum(bucket["scores"]) / len(bucket["scores"])) if bucket["scores"] else None,
+            "operators_measured": bucket["operators_measured"],
+            "operators_total": len(included),
+            "target": MANAGEMENT_TARGETS.get(bucket["metric"]),
+        }
+        for bucket in component_totals.values()
+    ]
+
     return {
         "team_health": {
             "score": team_health,
@@ -593,6 +646,10 @@ def compute_management_dashboard(rows: list[OperatorAnalyticsRow]) -> dict:
             "critical_count": status_counts["critical"],
             "data_coverage_percent": round(len(included) / total * 100) if total else 0,
             "quality_coverage_percent": round(quality_measured / total * 100) if total else 0,
+            # Индекс = среднее нормированных компонентов по операторам с данными.
+            # Компонент без данных в среднее не входит (не считается нулём).
+            "formula": "Среднее нормированных компонентов (100 = цель) по операторам с данными",
+            "components": health_components_out,
         },
         "risk_distribution": status_counts,
         "metric_cards": _management_metric_cards(rows),

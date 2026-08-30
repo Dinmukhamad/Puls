@@ -10,7 +10,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -105,6 +105,37 @@ def _operator_user(db: Session, op: Operator) -> User | None:
     return db.scalar(select(User).where(User.operator_id == op.id))
 
 
+def _users_for_operators(db: Session, operators: list[Operator]) -> dict[int, User]:
+    """Аккаунты для списка операторов одной выборкой (operator.id -> User).
+
+    Повторяет логику _operator_user для пачки: привязка бывает и через
+    Operator.user_id, и обратной ссылкой User.operator_id.
+    """
+    if not operators:
+        return {}
+    operator_ids = [op.id for op in operators]
+    user_ids = [op.user_id for op in operators if op.user_id]
+    conditions = [User.operator_id.in_(operator_ids)]
+    if user_ids:
+        conditions.append(User.id.in_(user_ids))
+    rows = db.scalars(select(User).where(or_(*conditions)))
+    by_user_id: dict[int, User] = {}
+    by_operator_id: dict[int, User] = {}
+    for user in rows:
+        by_user_id[user.id] = user
+        if user.operator_id is not None:
+            by_operator_id.setdefault(user.operator_id, user)
+
+    result: dict[int, User] = {}
+    for op in operators:
+        user = by_user_id.get(op.user_id) if op.user_id else None
+        if user is None:
+            user = by_operator_id.get(op.id)
+        if user is not None:
+            result[op.id] = user
+    return result
+
+
 def _sync_operator_state(db: Session, op: Operator) -> None:
     op.is_active = (
         op.employment_status == "active"
@@ -129,8 +160,12 @@ def _safe_level_badge(db: Session, operator) -> dict | None:
         return None
 
 
-def _operator_response(db: Session, op: Operator) -> dict:
-    user = _operator_user(db, op)
+def _operator_response(db: Session, op: Operator, user: User | None = None) -> dict:
+    """``user`` — уже загруженный аккаунт оператора. В списках он приходит из
+    одной пакетной выборки (см. _users_for_operators), иначе на каждого
+    оператора уходил отдельный SELECT."""
+    if user is None:
+        user = _operator_user(db, op)
     # Стаж: если задана start_date — считаем от неё, иначе от created_at
     start = op.start_date or op.created_at.date()
     tenure_days = max(0, (business_today() - start).days)
@@ -306,7 +341,8 @@ def list_operators(
     if limit is not None:
         query = query.offset(offset).limit(limit)
     operators = list(db.scalars(query))
-    return [_operator_response(db, op) for op in operators]
+    users_by_operator = _users_for_operators(db, operators)
+    return [_operator_response(db, op, users_by_operator.get(op.id)) for op in operators]
 
 
 @router.get("/me", response_model=OperatorRead)

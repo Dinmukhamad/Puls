@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -94,6 +94,36 @@ def _previous_rank(db: Session, operator_id: int, period_start: date) -> int | N
     return prev.rank_position if prev else None
 
 
+def _previous_ranks(
+    db: Session, operator_ids: list[int], period_start: date
+) -> dict[int, int | None]:
+    """Ранг за предыдущий период сразу для всех операторов (две выборки вместо
+    одной на каждого). Берётся самая поздняя неделя, закончившаяся до начала
+    текущего периода, — те же правила, что и в _previous_rank."""
+    if not operator_ids:
+        return {}
+    latest = (
+        select(
+            WeeklyResult.operator_id.label("operator_id"),
+            func.max(WeeklyResult.week_end).label("week_end"),
+        )
+        .where(
+            WeeklyResult.operator_id.in_(operator_ids),
+            WeeklyResult.week_end < period_start,
+        )
+        .group_by(WeeklyResult.operator_id)
+        .subquery()
+    )
+    rows = db.execute(
+        select(WeeklyResult.operator_id, WeeklyResult.rank_position).join(
+            latest,
+            (WeeklyResult.operator_id == latest.c.operator_id)
+            & (WeeklyResult.week_end == latest.c.week_end),
+        )
+    ).all()
+    return {operator_id: rank_position for operator_id, rank_position in rows}
+
+
 def _already_accrued_operator_ids(db: Session, period_start: date, period_end: date) -> set[int]:
     return set(db.scalars(
         select(WeeklyAccrualDetail.operator_id).where(
@@ -155,12 +185,13 @@ def calculate_period_accrual(db: Session, period_start: date, period_end: date) 
     rows_sorted = sorted(rows, key=lambda r: r.final_score, reverse=True)
     rank_by_op = {row.operator_id: idx + 1 for idx, row in enumerate(rows_sorted)}
     already_accrued_ids = _already_accrued_operator_ids(db, period_start, period_end)
+    previous_ranks = _previous_ranks(db, [row.operator_id for row in rows], period_start)
 
     accruals: list[OperatorAccrual] = []
     for row in rows:
         rank = rank_by_op[row.operator_id]
         eligible_for_bonus = row.final_score >= coin_rule.min_points_for_accrual
-        base_coins = points_to_coins(row.final_score, db) if eligible_for_bonus else 0
+        base_coins = points_to_coins(row.final_score, db, rule=coin_rule) if eligible_for_bonus else 0
         already = row.operator_id in already_accrued_ids
 
         acc = OperatorAccrual(
@@ -169,7 +200,7 @@ def calculate_period_accrual(db: Session, period_start: date, period_end: date) 
             contest_points=row.final_score,
             base_coins=base_coins,
             rank_place=rank,
-            previous_rank_place=_previous_rank(db, row.operator_id, period_start),
+            previous_rank_place=previous_ranks.get(row.operator_id),
             already_accrued=already,
             eligible_for_bonus=eligible_for_bonus,
         )

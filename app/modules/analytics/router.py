@@ -67,6 +67,28 @@ def get_dashboard(
     return dashboard_builder.build(db, start_date, end_date, group_id, weekdays, metric)
 
 
+@router.get("/management-dashboard")
+def get_management_dashboard(
+    start_date: date,
+    end_date: date,
+    group_id: int | None = Depends(_analytics_group_scope),
+    operator_query: str | None = Query(None),
+    participation_status: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Управленческая сводка: здоровье команды, метрики, группы, приоритеты.
+
+    Функция расчёта (service.management_dashboard) существует и покрыта
+    тестами с самого начала, но маршрут к ней потерялся при разделении
+    аналитики на экраны. Фронтенд всё это время звал несуществующий адрес и
+    показывал «Не удалось загрузить сводку» — раздел не мог открыться в
+    принципе. Область видимости и роли — те же, что у остальной аналитики.
+    """
+    return service.management_dashboard(
+        db, start_date, end_date, group_id, operator_query, participation_status
+    )
+
+
 @router.get("/glossary")
 def get_glossary(
     _: User = Depends(_require_analytics_access),

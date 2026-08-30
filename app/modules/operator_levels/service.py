@@ -378,9 +378,21 @@ def calculate_auto_level(
     operator: Operator,
     period_start: date | None = None,
     period_end: date | None = None,
+    precomputed: tuple[dict, PeriodReport | None] | None = None,
 ) -> tuple[OperatorLevel | None, dict, PeriodReport | None]:
+    """Подбирает уровень по правилам.
+
+    ``precomputed`` — уже посчитанные (metrics, report) за тот же период.
+    operator_level_summary считает их строкой выше и раньше передавал сюда
+    только аргументы, из-за чего operator_level_metrics выполнялся дважды на
+    каждого оператора (два лишних SELECT: period_reports и средний балл по
+    тестам). Функция читающая и детерминированная, поэтому переиспользование
+    результата не меняет поведение.
+    """
     levels = active_levels(db)
-    metrics, report = operator_level_metrics(db, operator, period_start, period_end)
+    metrics, report = precomputed if precomputed is not None else operator_level_metrics(
+        db, operator, period_start, period_end
+    )
     for level in sorted(levels, key=lambda lvl: (lvl.sort_order, lvl.id), reverse=True):
         if level_matches(level, metrics):
             return level, metrics, report
@@ -493,25 +505,44 @@ def assign_manual_level(
     return current
 
 
-def operator_level_summary(
+def _effective_level(
     db: Session,
     operator: Operator,
-    period_start: date | None = None,
-    period_end: date | None = None,
-) -> dict:
+    period_start: date | None,
+    period_end: date | None,
+) -> tuple[OperatorLevel | None, dict, PeriodReport | None, OperatorLevelAssignment | None]:
+    """Действующий уровень оператора: ручное назначение либо авторасчёт.
+
+    Общая часть operator_level_summary и operator_level_badge — значку не нужны
+    ни разрывы до следующего уровня, ни строки наград.
+    """
     assignment = _assignment(db, operator.id)
     levels = active_levels(db)
     metrics, report = operator_level_metrics(db, operator, period_start, period_end)
 
     if assignment and assignment.is_manual:
         level = db.get(OperatorLevel, assignment.level_id)
-        assignment_type = "manual"
     else:
-        level, metrics, report = calculate_auto_level(db, operator, period_start, period_end)
-        assignment_type = "auto"
+        level, metrics, report = calculate_auto_level(
+            db, operator, period_start, period_end, precomputed=(metrics, report)
+        )
 
     if not level and levels:
         level = levels[0]
+    return level, metrics, report, assignment
+
+
+def operator_level_summary(
+    db: Session,
+    operator: Operator,
+    period_start: date | None = None,
+    period_end: date | None = None,
+) -> dict:
+    level, metrics, report, assignment = _effective_level(
+        db, operator, period_start, period_end
+    )
+    levels = active_levels(db)
+    assignment_type = "manual" if (assignment and assignment.is_manual) else "auto"
 
     higher_levels = [lvl for lvl in levels if level and lvl.sort_order > level.sort_order]
     next_level = higher_levels[0] if higher_levels else None
@@ -550,7 +581,11 @@ def operator_level_summary(
 
 
 def operator_level_badge(db: Session, operator: Operator) -> dict:
-    return operator_level_summary(db, operator)["level"]
+    """Только значок уровня — без разрывов до следующего уровня и без строк
+    наград, которые operator_level_summary считает и тут же выбрасывал.
+    В списке операторов это давало два лишних SELECT на каждого."""
+    level, _metrics, _report, _assignment = _effective_level(db, operator, None, None)
+    return level_badge(level)
 
 
 def level_history_rows(db: Session, operator_id: int | None = None, limit: int = 100) -> list[dict]:

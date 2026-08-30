@@ -8,7 +8,7 @@ from pydantic import BaseModel, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.security import get_current_user, require_operator_access, require_roles
 from app.database.db import get_db
 from app.models.entities import Operator, User, WorkNorm
 from app.modules.work_norms.service import (
@@ -200,6 +200,13 @@ def api_operator_work_norm(
     op = db.get(Operator, operator_id)
     if not op:
         raise HTTPException(status_code=404, detail="Оператор не найден")
+
+    # Ставка, норма и отработанные часы — персональные данные сотрудника.
+    # Свои показатели оператор видит всегда; чужие — только штат, и супервайзер
+    # лишь в пределах своей группы. Без этой проверки любой авторизованный
+    # пользователь читал метрики коллег перебором operator_id.
+    if current_user.operator_id != operator_id:
+        require_operator_access(db, current_user, op)
 
     # Получаем фактические часы из period_report
     from app.models.entities import PeriodReport

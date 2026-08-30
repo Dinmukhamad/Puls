@@ -26,15 +26,30 @@ _RATING_CACHE: dict = {}
 _RATING_CACHE_TTL = 60  # секунд
 
 
+def _copy_rows(rows: list[dict]) -> list[dict]:
+    """Независимая копия строк рейтинга.
+
+    Вызывающие дописывают в строки признаки конкретного запроса: /rating
+    помечает is_current_user, «Гонка баллов» — служебный _local_rank. Если
+    отдавать сами закешированные словари, эти пометки живут в кеше все 60
+    секунд и достаются следующему пользователю. Значения строк — скаляры и
+    вложенный level-словарь, поэтому копии на два уровня достаточно.
+    """
+    return [
+        {k: (dict(v) if isinstance(v, dict) else v) for k, v in row.items()}
+        for row in rows
+    ]
+
+
 def _rating_cache_get() -> list[dict] | None:
     entry = _RATING_CACHE.get("rows")
     if entry and (time.time() - entry["ts"]) < _RATING_CACHE_TTL:
-        return entry["data"]
+        return _copy_rows(entry["data"])
     return None
 
 
 def _rating_cache_set(rows: list[dict]) -> None:
-    _RATING_CACHE["rows"] = {"data": rows, "ts": time.time()}
+    _RATING_CACHE["rows"] = {"data": _copy_rows(rows), "ts": time.time()}
 
 
 def rating_cache_invalidate() -> None:

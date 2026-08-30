@@ -91,10 +91,14 @@ def _group_name(db: Session, user: User, operator: Operator | None = None) -> st
     return None
 
 
-def _operator_for_user(db: Session, user: User) -> Operator | None:
-    if user.operator_id:
-        return db.get(Operator, user.operator_id)
-    return None
+def _operator_for_user(
+    db: Session, user: User, operators_by_id: dict[int, Operator] | None = None
+) -> Operator | None:
+    if not user.operator_id:
+        return None
+    if operators_by_id is not None:
+        return operators_by_id.get(user.operator_id)
+    return db.get(Operator, user.operator_id)
 
 
 def _tenure_days(operator) -> int | None:
@@ -116,8 +120,13 @@ def _safe_level_badge(db: Session, operator) -> dict | None:
         return None
 
 
-def _user_out(db: Session, user: User, level_cache: dict | None = None) -> dict:
-    operator = _operator_for_user(db, user)
+def _user_out(
+    db: Session,
+    user: User,
+    level_cache: dict | None = None,
+    operators_by_id: dict[int, Operator] | None = None,
+) -> dict:
+    operator = _operator_for_user(db, user, operators_by_id)
     # Для операторских аккаунтов карточка оператора является источником ФИО.
     # Это не даёт спискам и фильтрам расходиться, если старые записи users и
     # operators были созданы в разное время.
@@ -202,6 +211,17 @@ def list_users(
     # Preload operator level assignments одним запросом — избегаем N+1
     # Собираем operator_id всех операторов в текущей странице
     operator_ids = [u.operator_id for u in users if u.operator_id and u.role == "operator"]
+    # Карточки операторов — одной выборкой вместо db.get() на каждого
+    # пользователя. Карту передаём явно: полагаться на identity map нельзя,
+    # она держит слабые ссылки, и без сохранённого результата объекты успевает
+    # собрать сборщик мусора — запрос уходил бы снова на каждого оператора.
+    all_operator_ids = [u.operator_id for u in users if u.operator_id]
+    operators_by_id: dict[int, Operator] = {}
+    if all_operator_ids:
+        operators_by_id = {
+            op.id: op
+            for op in db.scalars(select(Operator).where(Operator.id.in_(all_operator_ids)))
+        }
     level_cache: dict = {}
     if operator_ids:
         try:
@@ -226,7 +246,8 @@ def list_users(
     items = []
     for u in users:
         try:
-            items.append(_user_out(db, u, level_cache=level_cache))
+            items.append(_user_out(db, u, level_cache=level_cache,
+                                   operators_by_id=operators_by_id))
         except Exception as e:
             logger.error(f"[list_users] ошибка при сборке user_id={u.id}: {e}", exc_info=True)
     return {"items": items, "total": total, "page": page, "limit": limit}
