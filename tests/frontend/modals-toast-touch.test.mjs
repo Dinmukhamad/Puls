@@ -82,3 +82,57 @@ test('на телефоне цели нажатия не меньше 44px', () 
   }
   assert.match(block, /min-height: var\(--control-h-lg\)/, 'высота не из токена');
 });
+
+test('мелкий текст не опускается ниже минимума ТЗ', async () => {
+  // Раздел 3 ТЗ: вспомогательный текст 12–13px. В проекте было 210 объявлений
+  // размером 7–10.5px, включая подписи полей в 8px и пояснение в превью в 7px.
+  const { readdir } = await import('node:fs/promises');
+  const root = new URL('../../css/src/', import.meta.url);
+  const bad = [];
+  for (const dir of await readdir(root, { withFileTypes: true })) {
+    if (!dir.isDirectory()) continue;
+    for (const f of await readdir(new URL(`${dir.name}/`, root))) {
+      if (!f.endsWith('.css')) continue;
+      const css = await readFile(new URL(`${dir.name}/${f}`, root), 'utf8');
+      for (const m of css.matchAll(/font-size:\s*([0-9.]+)px/g)) {
+        if (Number(m[1]) < 11) bad.push(`${dir.name}/${f}: ${m[0]}`);
+      }
+    }
+  }
+  assert.deepEqual(bad, [], `текст мельче 11px:\n  ${bad.slice(0, 12).join('\n  ')}`);
+});
+
+test('разрушительные действия оформлены соответствующей кнопкой', async () => {
+  const { readdir } = await import('node:fs/promises');
+  const root = new URL('../../js/src/views/', import.meta.url);
+  const files = [];
+  const walk = async dir => {
+    for (const e of await readdir(new URL(dir, root), { withFileTypes: true })) {
+      if (e.isDirectory()) await walk(`${dir}${e.name}/`);
+      else if (e.name.endsWith('.js')) files.push(`${dir}${e.name}`);
+    }
+  };
+  await walk('');
+  const bad = [];
+  for (const rel of files) {
+    const code = await readFile(new URL(rel, root), 'utf8');
+    // Кнопка с разрушительной надписью не должна быть обычной вторичной.
+    for (const m of code.matchAll(/<button[^>]*class="([^"]*)"[^>]*>\s*(Удалить|Завершить сессию|Отменить розыгрыш)\b/g)) {
+      if (!/btn-danger/.test(m[1])) bad.push(`${rel}: ${m[2]} — class="${m[1]}"`);
+    }
+  }
+  assert.deepEqual(bad, [], `разрушительное действие как обычная кнопка:\n  ${bad.join('\n  ')}`);
+});
+
+test('в боковой панели роль не дублирует имя, пустой уровень скрыт', async () => {
+  const core = await readFile(new URL('../../js/src/app/00-core-shell.js', import.meta.url), 'utf8');
+  assert.match(core, /roleEl\.hidden = duplicate/, 'дубль роли снова показывается');
+  assert.match(core, /function setSideLevel\(value\)/, 'нет отдельной установки уровня');
+  assert.doesNotMatch(core, /setText\('side-level', '—'\)/, 'вернулся прочерк вместо скрытия');
+});
+
+test('фокус на заголовке раздела не рисует рамку', async () => {
+  const base = await readFile(new URL('../../css/src/base/00-base-layout.css', import.meta.url), 'utf8');
+  assert.match(base, /\[tabindex="-1"\]:focus[\s\S]{0,120}outline: none/,
+    'вокруг заголовка снова рисуется рамка фокуса');
+});

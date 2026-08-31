@@ -327,7 +327,7 @@
   vertical-align: middle;
 }
 .level-badge-lg { min-height: 26px; padding: 4px 10px; font-size: 12px; margin-left: 0; }
-.level-badge-mini { min-height: 18px; padding: 2px 6px; font-size: 10px; margin-left: 4px; }
+.level-badge-mini { min-height: 18px; padding: 2px 6px; font-size: var(--text-tiny); margin-left: 4px; }
 .level-card { margin: 18px 0; }
 /* ── Compact users table ─────────────────────────────────────── */
 .user-cell-name {
@@ -486,7 +486,7 @@
   gap: 1px;
 }
 .dyn-sum-lbl {
-  font-size: 10.5px;
+  font-size: var(--text-tiny);
   color: var(--text-secondary);
 }
 .dyn-sum-val {
@@ -1487,7 +1487,7 @@
   margin-top: 10px;
 }
 .wheel-prize-card .form-group { min-width: 0; gap: 5px; }
-.wheel-prize-card .form-label { color: var(--tx3); font-size: 10px; }
+.wheel-prize-card .form-label { color: var(--tx3); font-size: var(--text-tiny); }
 .wheel-prize-card .form-input { width: 100%; min-width: 0; min-height: 38px; padding: 7px 9px; }
 .wheel-prize-card .wheel-chance {
   padding: 5px 8px;
@@ -1554,10 +1554,10 @@
 .wheel-rule-card h4 { margin: 0 0 4px; color: var(--tx); font-size: 14px; line-height: 1.4; }
 .wheel-rule-card code { color: var(--tx3); font-size: 11px; overflow-wrap: anywhere; }
 .wheel-rule-condition { margin-top: 13px; padding: 11px; background: var(--surface-2, var(--bg-subtle)); border-radius: var(--radius-xs); }
-.wheel-rule-condition span { display: block; margin-bottom: 4px; color: var(--tx3); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.wheel-rule-condition span { display: block; margin-bottom: 4px; color: var(--tx3); font-size: var(--text-tiny); font-weight: 800; text-transform: uppercase; }
 .wheel-rule-condition strong { color: var(--tx); font-size: 13px; overflow-wrap: anywhere; }
 .wheel-rule-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
-.wheel-rule-facts span { color: var(--tx3); font-size: 10px; line-height: 1.35; }
+.wheel-rule-facts span { color: var(--tx3); font-size: var(--text-tiny); line-height: 1.35; }
 .wheel-rule-facts b { display: block; color: var(--tx); font-size: 12px; }
 
 .wheel-log-list { display: flex; flex-direction: column; }
@@ -1718,7 +1718,7 @@ html[data-theme="dark"] .wheel-ops-hero { background: var(--card-bg); }
   height: 38px;
   padding: 8px 10px;
   color: var(--tx3);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 800;
   letter-spacing: .07em;
   border-bottom: 1px solid var(--border);
@@ -1946,7 +1946,7 @@ html[data-theme="dark"] .wheel-ops-hero { background: var(--card-bg); }
 .filter-tab-count {
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 18px; height: 16px; padding: 0 5px; margin-left: 6px;
-  border-radius: var(--radius-full); font-size: 10px; font-weight: 700; line-height: 1;
+  border-radius: var(--radius-full); font-size: var(--text-tiny); font-weight: 700; line-height: 1;
   background: var(--bg-muted); color: var(--text-muted);
 }
 .filter-tab.active .filter-tab-count { background: rgba(255,255,255,.25); color: #fff; }
@@ -2291,7 +2291,7 @@ html[data-theme="dark"] .wheel-result-note {
 
 #view-wheel .wheel-prize-config-title span {
   color: var(--tx3);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   line-height: 1.3;
 }
 

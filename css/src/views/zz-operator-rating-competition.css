@@ -53,7 +53,7 @@
 .rc-eyebrow {
   display: block;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 800;
   letter-spacing: .06em;
   text-transform: uppercase;
@@ -111,7 +111,7 @@
   background: rgba(255, 255, 255, .1);
   border: 1px solid rgba(255, 255, 255, .12);
   border-radius: var(--radius-xl);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 800;
 }
 
@@ -182,7 +182,7 @@
   justify-content: space-between;
   gap: 20px;
   color: rgba(255, 255, 255, .62);
-  font-size: 10px;
+  font-size: var(--text-tiny);
 }
 
 .rc-target-values span:last-child { text-align: right; }
@@ -254,7 +254,7 @@
 }
 
 .rc-rival-card.is-empty span { color: var(--text-secondary); font-size: 12px; font-weight: 800; }
-.rc-rival-card.is-empty small { margin-top: 4px; font-size: 10px; }
+.rc-rival-card.is-empty small { margin-top: 4px; font-size: var(--text-tiny); }
 
 .rc-rival-top,
 .rc-rival-score {
@@ -264,7 +264,7 @@
   gap: 12px;
 }
 
-.rc-rival-top > span { color: var(--text-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.rc-rival-top > span { color: var(--text-muted); font-size: var(--text-tiny); font-weight: 800; text-transform: uppercase; }
 .rc-rival-top > b { color: var(--text-secondary); font-size: 13px; }
 
 .rc-rival-person {
@@ -294,9 +294,9 @@
 .rc-rival-person b,
 .rc-rival-person small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-rival-person b { font-size: 12px; }
-.rc-rival-person small { margin-top: 3px; color: var(--text-muted); font-size: 9px; }
+.rc-rival-person small { margin-top: 3px; color: var(--text-muted); font-size: var(--text-tiny); }
 .rc-rival-score strong { font-size: 18px; }
-.rc-rival-score span { color: var(--text-muted); font-size: 9px; text-align: right; }
+.rc-rival-score span { color: var(--text-muted); font-size: var(--text-tiny); text-align: right; }
 
 .rc-insight-grid {
   display: grid;
@@ -312,7 +312,7 @@
   font-weight: 900;
 }
 
-.rc-group-rank small { color: var(--text-muted); font-size: 10px; font-weight: 600; }
+.rc-group-rank small { color: var(--text-muted); font-size: var(--text-tiny); font-weight: 600; }
 
 .rc-group-neighbours { display: grid; gap: 8px; padding: 16px 18px 12px; }
 
@@ -343,7 +343,7 @@
   color: var(--text-secondary);
   background: var(--card-bg);
   border-radius: var(--radius-xs);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 900;
 }
 
@@ -351,25 +351,25 @@
 .rc-group-rival > div small,
 .rc-group-rival > strong small { display: block; }
 .rc-group-rival > div b { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.rc-group-rival > div small { margin-top: 3px; color: var(--text-muted); font-size: 9px; }
+.rc-group-rival > div small { margin-top: 3px; color: var(--text-muted); font-size: var(--text-tiny); }
 .rc-group-rival > strong { font-size: 12px; text-align: right; }
-.rc-group-rival > strong small { margin-top: 2px; color: var(--text-muted); font-size: 8px; font-weight: 500; }
+.rc-group-rival > strong small { margin-top: 2px; color: var(--text-muted); font-size: var(--text-tiny); font-weight: 500; }
 
 .rc-group-bars { display: grid; gap: 10px; padding: 2px 18px 18px; }
 .rc-group-bars > div { display: grid; grid-template-columns: 116px minmax(0, 1fr) 44px; align-items: center; gap: 9px; }
-.rc-group-bars span { color: var(--text-muted); font-size: 9px; }
+.rc-group-bars span { color: var(--text-muted); font-size: var(--text-tiny); }
 .rc-group-bars i { height: 6px; overflow: hidden; background: var(--bg-muted); border-radius: var(--radius-xs); }
 .rc-group-bars i b { display: block; height: 100%; background: var(--border-default); border-radius: inherit; }
 .rc-group-bars i b.is-mine { background: var(--rc-blue); }
 .rc-group-bars i b.is-leader { background: var(--rc-orange); }
-.rc-group-bars strong { font-size: 10px; text-align: right; }
+.rc-group-bars strong { font-size: var(--text-tiny); text-align: right; }
 
 .rc-current-rank {
   padding: 6px 9px;
   color: var(--rc-blue);
   background: var(--rc-blue-soft);
   border-radius: var(--radius-xl);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -386,7 +386,7 @@
 .rc-trend-summary > div { min-width: 0; padding: 9px 10px; background: var(--bg-muted); border-radius: var(--radius-xs); }
 .rc-trend-summary span,
 .rc-trend-summary b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rc-trend-summary span { color: var(--text-muted); font-size: 8px; text-transform: uppercase; }
+.rc-trend-summary span { color: var(--text-muted); font-size: var(--text-tiny); text-transform: uppercase; }
 .rc-trend-summary b { margin-top: 4px; font-size: 12px; }
 .rc-trend-summary b.is-positive { color: var(--rc-green); }
 .rc-trend-summary b.is-negative { color: var(--rc-red); }
@@ -397,7 +397,7 @@
 .rc-chart-line { fill: none; stroke: var(--rc-blue); stroke-linecap: round; stroke-linejoin: round; stroke-width: 4; }
 .rc-trend-chart circle { fill: var(--card-bg); stroke: var(--rc-blue); stroke-width: 3; }
 .rc-trend-chart circle.is-current { fill: var(--rc-blue); stroke: color-mix(in srgb, var(--rc-blue) 22%, var(--card-bg)); stroke-width: 7; }
-.rc-trend-chart text { fill: var(--text-muted); font-family: inherit; font-size: 9px; }
+.rc-trend-chart text { fill: var(--text-muted); font-family: inherit; font-size: var(--text-tiny); }
 
 .rc-podium-card { margin-bottom: 8px; }
 
@@ -421,7 +421,7 @@
 }
 
 .rc-podium article.is-me { background: var(--rc-blue-soft); border-color: color-mix(in srgb, var(--rc-blue) 28%, transparent); }
-.rc-medal { display: grid; width: 26px; height: 26px; place-items: center; color: #fff; background: #8692a7; border-radius: 50%; font-size: 10px; font-weight: 900; }
+.rc-medal { display: grid; width: 26px; height: 26px; place-items: center; color: #fff; background: #8692a7; border-radius: 50%; font-size: var(--text-tiny); font-weight: 900; }
 .rc-podium article.is-1 .rc-medal { background: #e9ad24; }
 .rc-podium article.is-2 .rc-medal { background: #8492a9; }
 .rc-podium article.is-3 .rc-medal { background: #c77c4b; }
@@ -429,7 +429,7 @@
 .rc-podium article > div b,
 .rc-podium article > div small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-podium article > div b { font-size: 11px; }
-.rc-podium article > div small { margin-top: 3px; color: var(--text-muted); font-size: 9px; }
+.rc-podium article > div small { margin-top: 3px; color: var(--text-muted); font-size: var(--text-tiny); }
 .rc-podium article > strong { color: var(--text-secondary); font-size: 12px; }
 
 html[data-theme="dark"] .rc-hero-card { box-shadow: 0 18px 42px rgba(0, 0, 0, .28); }

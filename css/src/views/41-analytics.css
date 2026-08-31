@@ -34,7 +34,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 700;
   letter-spacing: .08em;
   text-transform: uppercase;
@@ -186,7 +186,7 @@
   font-weight: 700;
   white-space: nowrap;
 }
-.an2-badge-icon { font-size: 10px; line-height: 1; }
+.an2-badge-icon { font-size: var(--text-tiny); line-height: 1; }
 .an2-badge-good { background: var(--success-soft); color: var(--success-text); }
 .an2-badge-watch { background: var(--warning-soft); color: var(--warning-text); }
 .an2-badge-bad { background: var(--danger-soft); color: var(--danger-text); }
@@ -320,7 +320,7 @@
 
 /* Сетка и оси намеренно приглушены — данные должны быть заметнее разметки. */
 .an2-grid { stroke: var(--border-soft); stroke-width: 1; }
-.an2-axis { fill: var(--text-muted); font-size: 10px; }
+.an2-axis { fill: var(--text-muted); font-size: var(--text-tiny); }
 
 .an2-line {
   fill: none;
@@ -337,7 +337,7 @@
   stroke-dasharray: 5 4;
   opacity: .7;
 }
-.an2-target-text { fill: var(--text-muted); font-size: 10px; font-weight: 600; }
+.an2-target-text { fill: var(--text-muted); font-size: var(--text-tiny); font-weight: 600; }
 
 .an2-dot {
   fill: var(--card-bg);

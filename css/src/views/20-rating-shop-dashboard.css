@@ -286,7 +286,7 @@
   margin-bottom: 4px;
 }
 .pod-name   { font: 600 12px 'Inter', sans-serif; color: var(--tx); line-height: 1.35; }
-.pod-group  { font-size: 10px; color: var(--tx3); }
+.pod-group  { font-size: var(--text-tiny); color: var(--tx3); }
 .pod-pts    { font: 600 13px 'Inter', sans-serif; color: var(--tx); margin-top: 4px; }
 .pod-coins  { font: 700 12px 'Inter', sans-serif; color: var(--accent); }
 
@@ -305,7 +305,7 @@
   min-height: 112px;
 }
 .nom-me-v2 { border-color: var(--accent-primary) !important; background: var(--accent-secondary-soft) !important; }
-.nom-you   { position: absolute; top: 8px; right: 8px; background: var(--accent-fill); color: var(--accent-fill-text); font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: var(--radius-xl); }
+.nom-you   { position: absolute; top: 8px; right: 8px; background: var(--accent-fill); color: var(--accent-fill-text); font-size: var(--text-tiny); font-weight: 700; padding: 2px 6px; border-radius: var(--radius-xl); }
 .nom-t     { font: 500 11px 'Inter', sans-serif; color: var(--tx3); margin-bottom: 6px; }
 .nom-n     { font: 600 14px 'Inter', sans-serif; color: var(--tx); margin-bottom: 4px; }
 .nom-v     { font-size: 13px; color: var(--tx2); }
@@ -372,7 +372,7 @@
   border-radius: var(--radius-xs);
   background: var(--surface-2);
   color: var(--tx3);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 600;
 }
 .rank-top { background: var(--accent-fill) !important; color: var(--accent-fill-text) !important; }

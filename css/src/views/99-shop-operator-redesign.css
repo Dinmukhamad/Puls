@@ -47,7 +47,7 @@
 }
 
 #view-shop .shop-v2-coupon-chip span {
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 700;
 }
 
@@ -63,7 +63,7 @@
 
 #view-shop .shop-v2-balance span {
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--text-tiny);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -98,7 +98,7 @@
 
 #view-shop .shop-v2-summary span {
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--text-tiny);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -111,7 +111,7 @@
 #view-shop .shop-v2-summary small {
   margin-top: 2px;
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--text-tiny);
 }
 
 #view-shop .shop-v2-catalog,
@@ -136,7 +136,7 @@
 #view-shop .shop-v2-catalog-head > div > span,
 #view-shop .shop-v2-history-head > div > span {
   color: var(--accent-primary);
-  font-size: 9px;
+  font-size: var(--text-tiny);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -156,7 +156,7 @@
   color: var(--text-muted);
   background: var(--bg-muted);
   border-radius: var(--radius-xs);
-  font-size: 10px;
+  font-size: var(--text-tiny);
 }
 
 #view-shop .shop-v2-affordable {
@@ -222,7 +222,7 @@
   color: inherit;
   background: color-mix(in srgb, currentColor 12%, transparent);
   border-radius: var(--radius-xs);
-  font-size: 9px;
+  font-size: var(--text-tiny);
 }
 
 #view-shop .shop-v2-grid {
@@ -308,7 +308,7 @@
 #view-shop .shop-v2-category {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 800;
   text-overflow: ellipsis;
   text-transform: uppercase;
@@ -331,7 +331,7 @@
   overflow: hidden;
   margin: 7px 0 0;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   line-height: 1.5;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -349,7 +349,7 @@
   color: var(--text-secondary);
   background: var(--bg-muted);
   border-radius: var(--radius-xs);
-  font-size: 8.5px;
+  font-size: var(--text-tiny);
 }
 
 #view-shop .shop-v2-card-footer {
@@ -392,7 +392,7 @@
 #view-shop .shop-v2-price-stack em {
   flex-basis: 100%;
   color: var(--success-text);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-style: normal;
   font-weight: 700;
 }
@@ -409,7 +409,7 @@
 #view-shop .shop-v2-card-footer small {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -457,7 +457,7 @@
 
 #view-shop .shop-v2-empty span {
   margin-top: 4px;
-  font-size: 10px;
+  font-size: var(--text-tiny);
 }
 
 #view-shop .shop-v2-history {
@@ -511,7 +511,7 @@
 #view-shop .shop-v2-order small {
   margin-top: 3px;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--text-tiny);
 }
 
 #view-shop .shop-v2-order-status {
@@ -519,7 +519,7 @@
   color: var(--text-secondary);
   background: var(--bg-muted);
   border-radius: var(--radius-xs);
-  font-size: 9px;
+  font-size: var(--text-tiny);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -557,7 +557,7 @@
 #view-shop .shop-v2-history-empty span {
   margin-top: 4px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-tiny);
 }
 
 .shop-v2-confirm {
@@ -615,7 +615,7 @@
 .shop-v2-discount-option small {
   margin-top: 3px;
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--text-tiny);
 }
 
 .shop-v2-confirm-price {
@@ -637,7 +637,7 @@
   display: block;
   margin-top: 12px;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--text-tiny);
   line-height: 1.45;
 }
 

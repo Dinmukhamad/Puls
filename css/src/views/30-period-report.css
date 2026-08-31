@@ -675,7 +675,7 @@ body.side-nav-collapsed .side-nav-toggle svg {
   top: 100%;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 700;
   color: var(--accent-primary);
   margin-top: 2px;

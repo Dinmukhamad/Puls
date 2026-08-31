@@ -143,6 +143,15 @@ let STATE = {
   analyticsTabGen: 0,
 };
 
+/** Уровень в боковой панели: пустое значение прячем, а не показываем прочерком. */
+function setSideLevel(value) {
+  const el = document.getElementById('side-level');
+  if (!el) return;
+  const text = (value || '').trim();
+  el.textContent = text;
+  el.hidden = !text;
+}
+
 function levelBadgeHtml(level, extraClass = '') {
   if (!level) return '<span class="cell-muted">—</span>';
   const color = level.color || '#64748B';
@@ -812,9 +821,20 @@ async function bootApp() {
   document.body.classList.toggle('role-operator', !isAdmin(role));
   buildViews(role);
   renderSidebar(role);
-  setText('side-user', STATE.user?.full_name || STATE.user?.username || '');
-  setText('side-role', roleLabel(role));
-  setText('side-level', '—');
+  const displayName = STATE.user?.full_name || STATE.user?.username || '';
+  setText('side-user', displayName);
+  // Роль не повторяем, если она дословно совпадает с именем: у учётной записи
+  // «Администратор» под именем стояла та же надпись ещё раз.
+  const roleText = roleLabel(role);
+  const roleEl = document.getElementById('side-role');
+  if (roleEl) {
+    const duplicate = roleText.trim().toLowerCase() === displayName.trim().toLowerCase();
+    roleEl.textContent = duplicate ? '' : roleText;
+    roleEl.hidden = duplicate;
+  }
+  // Уровень есть только у оператора: у остальных строка показывала прочерк,
+  // который читался как незагруженные данные.
+  setSideLevel('');
   // Update initials avatar
   (function() {
     var av = document.getElementById('side-user-avatar');
@@ -895,7 +915,7 @@ async function loadData(role) {
   if (role === 'operator' || role === 'supervisor') {
     tasks.push(api.myLevel().catch(() => null).then(level => {
       STATE.myLevel = level;
-      setText('side-level', level?.level?.name || '—');
+      setSideLevel(level?.level?.name || '');
     }));
     tasks.push(api.myOperator().catch(() => null).then(op => { STATE.myOperator = op; }));
   }
@@ -6566,7 +6586,7 @@ async function renderGroups() {
     <div class="panel">
       <div class="panel-head">
         <h3>Список групп</h3>
-        <span class="panel-badge">${rows.length} групп</span>
+        <span class="panel-badge">${rows.length} ${pluralize(rows.length, 'группа', 'группы', 'групп')}</span>
       </div>
       <div class="table-wrap">
         <table class="data-table">
@@ -6588,7 +6608,7 @@ async function renderGroups() {
                     ${g.status === 'active' ? 'Отключить' : 'Включить'}
                   </button>
                   ${STATE.user?.role === 'admin'
-                    ? `<button class="btn-outline btn-sm danger-text" onclick="confirmDeleteGroup(${g.id})">Удалить</button>`
+                    ? `<button class="btn-danger btn-sm" onclick="confirmDeleteGroup(${g.id})">Удалить</button>`
                     : ''}
                 </td>
               </tr>`).join('') : '<tr><td colspan="4" class="empty-line">Группы не созданы</td></tr>'}
@@ -8995,7 +9015,7 @@ function sessionRow(s) {
       <td>${sessionSafeDate(s.last_seen_at)}</td>
       <td>${sessionStatusBadge(s.activity_state)}</td>
       <td class="row-actions">
-        <button class="btn-outline btn-sm danger-text" ${canRevoke ? '' : 'disabled title="Текущую или завершённую сессию нельзя завершить"'} onclick="revokeUserSession('${esc(s.session_id)}')">Завершить сессию</button>
+        <button class="btn-danger btn-sm" ${canRevoke ? '' : 'disabled title="Текущую или завершённую сессию нельзя завершить"'} onclick="revokeUserSession('${esc(s.session_id)}')">Завершить сессию</button>
         <button class="btn-ghost btn-sm" onclick="revokeAllUserSessions(${Number(s.user_id) || 0})" ${s.user_id ? '' : 'disabled'}>Завершить остальные</button>
       </td>
     </tr>`;
@@ -11787,7 +11807,7 @@ async function renderWheelPrizesTab(body) {
       <div class="wheel-admin-content">
         <div class="wheel-bulk-bar ${_wheelSelectedPrizeIds.size ? 'is-visible' : ''}" id="wheel-bulk-bar">
           <span><b id="wheel-bulk-count">${_wheelSelectedPrizeIds.size}</b> выбрано</span>
-          <button class="btn-outline btn-sm" id="wheel-bulk-disable">Отключить выбранные</button>
+          <button class="btn-danger btn-sm" id="wheel-bulk-disable">Отключить выбранные</button>
           <button class="btn-outline btn-sm" id="wheel-bulk-enable">Включить выбранные</button>
           <button class="btn-link" id="wheel-bulk-clear">Снять выбор</button>
         </div>
@@ -13859,7 +13879,7 @@ function _raffleCardAdmin(r) {
     ${_raffleWinnersHtml(r)}
     ${r.status === 'active' ? `<div class="raffle-card-actions">
       <button class="btn-primary btn-sm" data-draw-raffle="${r.id}" ${r.participants > 0 ? '' : 'disabled'}>Разыграть сейчас</button>
-      <button class="btn-outline btn-sm danger-text" data-cancel-raffle="${r.id}">Отменить</button>
+      <button class="btn-danger btn-sm" data-cancel-raffle="${r.id}">Отменить</button>
     </div>` : ''}
   </div>`;
 }

@@ -450,7 +450,16 @@ body.modal-open { overflow: hidden; }
   margin-bottom: var(--space-4);
 }
 .shop-admin-toolbar #shop-admin-search { flex: 1 1 260px; min-width: 0; }
-.shop-admin-count { margin-left: auto; color: var(--text-secondary); font-size: 13px; }
+/* Счётчик прижат вправо, но не сжимается и не обрезается: при узкой
+   панели он переносится на свою строку целиком. */
+.shop-admin-count {
+  margin-left: auto;
+  flex: 0 0 auto;
+  align-self: center;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+}
 .shop-admin-count b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
 .shop-admin-wrap { max-height: min(70vh, 720px); overflow-y: auto; }

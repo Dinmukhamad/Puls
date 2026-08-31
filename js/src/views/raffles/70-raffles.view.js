@@ -199,7 +199,7 @@ function _raffleCardAdmin(r) {
     ${_raffleWinnersHtml(r)}
     ${r.status === 'active' ? `<div class="raffle-card-actions">
       <button class="btn-primary btn-sm" data-draw-raffle="${r.id}" ${r.participants > 0 ? '' : 'disabled'}>Разыграть сейчас</button>
-      <button class="btn-outline btn-sm danger-text" data-cancel-raffle="${r.id}">Отменить</button>
+      <button class="btn-danger btn-sm" data-cancel-raffle="${r.id}">Отменить</button>
     </div>` : ''}
   </div>`;
 }

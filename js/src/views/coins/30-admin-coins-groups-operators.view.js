@@ -1526,7 +1526,7 @@ async function renderGroups() {
     <div class="panel">
       <div class="panel-head">
         <h3>Список групп</h3>
-        <span class="panel-badge">${rows.length} групп</span>
+        <span class="panel-badge">${rows.length} ${pluralize(rows.length, 'группа', 'группы', 'групп')}</span>
       </div>
       <div class="table-wrap">
         <table class="data-table">
@@ -1548,7 +1548,7 @@ async function renderGroups() {
                     ${g.status === 'active' ? 'Отключить' : 'Включить'}
                   </button>
                   ${STATE.user?.role === 'admin'
-                    ? `<button class="btn-outline btn-sm danger-text" onclick="confirmDeleteGroup(${g.id})">Удалить</button>`
+                    ? `<button class="btn-danger btn-sm" onclick="confirmDeleteGroup(${g.id})">Удалить</button>`
                     : ''}
                 </td>
               </tr>`).join('') : '<tr><td colspan="4" class="empty-line">Группы не созданы</td></tr>'}

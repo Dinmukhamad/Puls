@@ -35,12 +35,18 @@
 }
 
 /* ── Поля периода: сетка, а не одна строка ──────────────────── */
+/* Поля периода — числа в один-два знака. Прежде auto-fit с 1fr растягивал
+   два поля на всю ширину карточки: под число «16» отводилось 650px. Теперь
+   колонки фиксированной ширины и прижаты влево. */
 .mission-window-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 220px));
+  justify-content: start;
   gap: var(--space-3) var(--space-4);
   margin-bottom: var(--space-4);
 }
+/* Поля со свободным текстом занимают всю строку. */
+.mission-window-fields label.is-wide { grid-column: 1 / -1; max-width: 720px; }
 .mission-window-fields label {
   display: flex;
   flex-direction: column;
@@ -144,7 +150,7 @@
   font-size: 12px;
   font-weight: 500;
 }
-.mission-dirty::before { content: '●'; font-size: 9px; }
+.mission-dirty::before { content: '●'; font-size: var(--text-tiny); }
 .mission-window-card.is-dirty { border-color: var(--warning-border); }
 
 .mission-window-error { margin-bottom: var(--space-3); }

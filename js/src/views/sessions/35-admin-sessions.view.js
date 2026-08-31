@@ -192,7 +192,7 @@ function sessionRow(s) {
       <td>${sessionSafeDate(s.last_seen_at)}</td>
       <td>${sessionStatusBadge(s.activity_state)}</td>
       <td class="row-actions">
-        <button class="btn-outline btn-sm danger-text" ${canRevoke ? '' : 'disabled title="Текущую или завершённую сессию нельзя завершить"'} onclick="revokeUserSession('${esc(s.session_id)}')">Завершить сессию</button>
+        <button class="btn-danger btn-sm" ${canRevoke ? '' : 'disabled title="Текущую или завершённую сессию нельзя завершить"'} onclick="revokeUserSession('${esc(s.session_id)}')">Завершить сессию</button>
         <button class="btn-ghost btn-sm" onclick="revokeAllUserSessions(${Number(s.user_id) || 0})" ${s.user_id ? '' : 'disabled'}>Завершить остальные</button>
       </td>
     </tr>`;

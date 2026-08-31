@@ -40,7 +40,7 @@
 
 #view-wheel .wheel-v2-counters span {
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--text-tiny);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -83,7 +83,7 @@
 
 #view-wheel .wheel-v2-panel-head > div > span {
   color: var(--accent-primary);
-  font-size: 9px;
+  font-size: var(--text-tiny);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -95,7 +95,7 @@
 
 #view-wheel .wheel-v2-panel-head > b {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 700;
 }
 
@@ -107,7 +107,7 @@
   color: var(--text-muted) !important;
   background: var(--bg-muted);
   border-radius: var(--radius-xs);
-  font-size: 10px !important;
+  font-size: var(--text-tiny) !important;
 }
 
 #view-wheel .wheel-v2-status.is-ready {
@@ -170,7 +170,7 @@
 
 #view-wheel .wheel-hub span {
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: var(--text-tiny);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -201,7 +201,7 @@
 
 #view-wheel .wheel-v2-ticket-summary span {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -231,7 +231,7 @@
 #view-wheel .wheel-v2-action-note {
   margin: 10px 4px 0;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   line-height: 1.45;
   text-align: center;
 }
@@ -244,7 +244,7 @@
 
 #view-wheel .wheel-v2-guide > span {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 700;
 }
 
@@ -258,12 +258,12 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-xs);
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: var(--text-tiny);
 }
 
 #view-wheel .wheel-v2-guide b {
   color: var(--accent-primary);
-  font-size: 9px;
+  font-size: var(--text-tiny);
 }
 
 #view-wheel .wheel-v2-prize-list {
@@ -295,7 +295,7 @@
   background: color-mix(in srgb, var(--prize-color) 18%, var(--card-bg));
   border: 1px solid color-mix(in srgb, var(--prize-color) 38%, transparent);
   border-radius: var(--radius-xs);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 900;
 }
 
@@ -314,7 +314,7 @@
 #view-wheel .wheel-v2-prize-item small {
   margin-top: 3px;
   color: var(--text-muted);
-  font-size: 9.5px;
+  font-size: var(--text-tiny);
 }
 
 #view-wheel .wheel-v2-prize-note {
@@ -323,7 +323,7 @@
   color: var(--text-secondary);
   background: var(--accent-secondary-soft);
   border-radius: var(--radius-xs);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   line-height: 1.4;
 }
 
@@ -351,7 +351,7 @@
   height: 36px;
   background: var(--card-bg);
   border-radius: var(--radius-xs);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 900;
 }
 
@@ -368,7 +368,7 @@
 
 #view-wheel .wheel-v2-history-panel .wheel-history-reason,
 #view-wheel .wheel-v2-history-panel .wheel-history-date {
-  font-size: 9px;
+  font-size: var(--text-tiny);
 }
 
 #view-wheel .wheel-v2-history-panel .wheel-history-empty {
@@ -404,7 +404,7 @@
 
 .wheel-result-kicker {
   color: var(--accent-primary);
-  font-size: 10px;
+  font-size: var(--text-tiny);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -507,7 +507,7 @@ html[data-theme="dark"] #view-wheel .wheel-svg {
 }
 #view-wheel .wheel-hub-btn span {
   color: #7A5A12;
-  font-size: 8.5px;
+  font-size: var(--text-tiny);
   font-weight: 700;
   letter-spacing: .06em;
   text-transform: uppercase;

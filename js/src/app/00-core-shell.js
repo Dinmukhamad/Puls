@@ -142,6 +142,15 @@ let STATE = {
   analyticsTabGen: 0,
 };
 
+/** Уровень в боковой панели: пустое значение прячем, а не показываем прочерком. */
+function setSideLevel(value) {
+  const el = document.getElementById('side-level');
+  if (!el) return;
+  const text = (value || '').trim();
+  el.textContent = text;
+  el.hidden = !text;
+}
+
 function levelBadgeHtml(level, extraClass = '') {
   if (!level) return '<span class="cell-muted">—</span>';
   const color = level.color || '#64748B';
@@ -811,9 +820,20 @@ async function bootApp() {
   document.body.classList.toggle('role-operator', !isAdmin(role));
   buildViews(role);
   renderSidebar(role);
-  setText('side-user', STATE.user?.full_name || STATE.user?.username || '');
-  setText('side-role', roleLabel(role));
-  setText('side-level', '—');
+  const displayName = STATE.user?.full_name || STATE.user?.username || '';
+  setText('side-user', displayName);
+  // Роль не повторяем, если она дословно совпадает с именем: у учётной записи
+  // «Администратор» под именем стояла та же надпись ещё раз.
+  const roleText = roleLabel(role);
+  const roleEl = document.getElementById('side-role');
+  if (roleEl) {
+    const duplicate = roleText.trim().toLowerCase() === displayName.trim().toLowerCase();
+    roleEl.textContent = duplicate ? '' : roleText;
+    roleEl.hidden = duplicate;
+  }
+  // Уровень есть только у оператора: у остальных строка показывала прочерк,
+  // который читался как незагруженные данные.
+  setSideLevel('');
   // Update initials avatar
   (function() {
     var av = document.getElementById('side-user-avatar');
@@ -894,7 +914,7 @@ async function loadData(role) {
   if (role === 'operator' || role === 'supervisor') {
     tasks.push(api.myLevel().catch(() => null).then(level => {
       STATE.myLevel = level;
-      setText('side-level', level?.level?.name || '—');
+      setSideLevel(level?.level?.name || '');
     }));
     tasks.push(api.myOperator().catch(() => null).then(op => { STATE.myOperator = op; }));
   }

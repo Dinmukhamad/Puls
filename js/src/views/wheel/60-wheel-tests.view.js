@@ -757,7 +757,7 @@ async function renderWheelPrizesTab(body) {
       <div class="wheel-admin-content">
         <div class="wheel-bulk-bar ${_wheelSelectedPrizeIds.size ? 'is-visible' : ''}" id="wheel-bulk-bar">
           <span><b id="wheel-bulk-count">${_wheelSelectedPrizeIds.size}</b> выбрано</span>
-          <button class="btn-outline btn-sm" id="wheel-bulk-disable">Отключить выбранные</button>
+          <button class="btn-danger btn-sm" id="wheel-bulk-disable">Отключить выбранные</button>
           <button class="btn-outline btn-sm" id="wheel-bulk-enable">Включить выбранные</button>
           <button class="btn-link" id="wheel-bulk-clear">Снять выбор</button>
         </div>

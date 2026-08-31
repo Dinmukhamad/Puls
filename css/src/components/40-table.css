@@ -146,6 +146,13 @@
   padding: var(--space-8) var(--space-4);
   border-bottom: none;
 }
+/* Пустое состояние внутри таблицы не рисует собственную рамку: таблица уже
+   в рамке, и получалась коробка в коробке. */
+.data-table td > .state-block {
+  border: none;
+  background: none;
+  padding-block: var(--space-6);
+}
 
 /* ── Пагинация ────────────────────────────────────────────── */
 .table-pagination {

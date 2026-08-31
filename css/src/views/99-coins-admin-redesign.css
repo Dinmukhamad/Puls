@@ -67,9 +67,9 @@
 }
 button.coins-summary-card { cursor: pointer; }
 button.coins-summary-card:hover { border-color: var(--accent-primary); }
-.coins-summary-card > span { color: var(--text-secondary); font-size: 10.5px; font-weight: 750; }
+.coins-summary-card > span { color: var(--text-secondary); font-size: var(--text-tiny); font-weight: 750; }
 .coins-summary-card > strong { margin: 5px 0 3px; font-size: 25px; line-height: 1; }
-.coins-summary-card > small { overflow: hidden; max-width: 100%; color: var(--text-muted); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.coins-summary-card > small { overflow: hidden; max-width: 100%; color: var(--text-muted); font-size: var(--text-tiny); text-overflow: ellipsis; white-space: nowrap; }
 .coins-summary-card.is-accent { box-shadow: inset 3px 0 0 var(--accent-primary), var(--shadow-sm); }
 .coins-summary-card.is-positive > strong { color: var(--success-text); }
 .coins-summary-card.has-alert { border-color: color-mix(in srgb, var(--warn) 45%, var(--border-default)); }
@@ -106,7 +106,7 @@ button.coins-summary-card:hover { border-color: var(--accent-primary); }
 #view-coins .manual-tx-row { min-height: 58px; padding: 10px 16px; }
 #view-coins .manual-tx-sign { min-width: 48px; font-size: 13px; }
 #view-coins .manual-tx-name { font-size: 12px; }
-#view-coins .manual-tx-meta { overflow: hidden; max-width: 100%; font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+#view-coins .manual-tx-meta { overflow: hidden; max-width: 100%; font-size: var(--text-tiny); text-overflow: ellipsis; white-space: nowrap; }
 #view-coins .empty-line { min-height: 90px; display: grid; place-items: center; }
 
 #view-coins .manual-layout {
@@ -153,7 +153,7 @@ button.coins-summary-card:hover { border-color: var(--accent-primary); }
 #view-coins .request-card:last-child { border-bottom: 0; }
 #view-coins .table-wrap { width: 100%; overflow: auto; }
 #view-coins .data-table { min-width: 820px; }
-#view-coins .data-table th { height: 40px; padding: 9px 12px; font-size: 9.5px; }
+#view-coins .data-table th { height: 40px; padding: 9px 12px; font-size: var(--text-tiny); }
 #view-coins .data-table td { height: 50px; padding: 9px 12px; font-size: 11.5px; }
 #view-coins .panel-footer { min-height: 52px; padding: 9px 16px; }
 
@@ -169,8 +169,8 @@ button.coins-summary-card:hover { border-color: var(--accent-primary); }
   padding: 16px;
 }
 #view-coins .coin-rules-field { min-width: 0; }
-#view-coins .coin-rules-field label { display: block; min-height: 30px; margin-bottom: 5px; color: var(--text-secondary); font-size: 10.5px; font-weight: 750; }
-#view-coins .coin-rules-field .hint { display: block; margin-top: 5px; color: var(--text-muted); font-size: 10px; }
+#view-coins .coin-rules-field label { display: block; min-height: 30px; margin-bottom: 5px; color: var(--text-secondary); font-size: var(--text-tiny); font-weight: 750; }
+#view-coins .coin-rules-field .hint { display: block; margin-top: 5px; color: var(--text-muted); font-size: var(--text-tiny); }
 #view-coins .toggle-row { min-height: 58px; margin: 0; padding: 10px 16px; border-bottom: 1px solid var(--border-soft); }
 #view-coins .toggle-row:last-child { border-bottom: 0; }
 #view-coins .an-card { margin-bottom: 12px; }
