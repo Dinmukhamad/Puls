@@ -146,7 +146,7 @@ async function renderWheelOperatorView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h1 class="section-title">Wheel of WOW</h1>
+        <h1 class="section-title">Колесо WOW</h1>
       </div>
     </div>
     <div class="panel"><div class="empty-state"><div class="loading-spinner"></div><p>Загрузка колеса…</p></div></div>`;
@@ -163,11 +163,11 @@ async function renderWheelOperatorView(el) {
 
   const items = prizes.items || [];
   if (status.__fallback || prizes.__fallback) {
-    el.innerHTML = `<div class="view-header"><h1 class="section-title">Wheel of WOW</h1></div>${wheelLoadingPanel('Готовим колесо')}`;
+    el.innerHTML = `<div class="view-header"><h1 class="section-title">Колесо WOW</h1></div>${wheelLoadingPanel('Готовим колесо')}`;
     return;
   }
   if (!status.campaign || !items.length) {
-    el.innerHTML = `<div class="view-header"><h1 class="section-title">Wheel of WOW</h1></div>
+    el.innerHTML = `<div class="view-header"><h1 class="section-title">Колесо WOW</h1></div>
       <div class="panel"><div class="empty-state"><p>Колесо сейчас недоступно. Загляните позже.</p></div></div>`;
     return;
   }
@@ -483,7 +483,7 @@ async function renderWheelStaffView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Управление мотивацией</div>
-        <h1 class="section-title">Wheel of WOW</h1>
+        <h1 class="section-title">Колесо WOW</h1>
         <p class="section-subtitle">Настройте призы, правила получения попыток и контролируйте прокрутки.</p>
       </div>
     </div>
@@ -2085,7 +2085,12 @@ async function renderTestsStaffView(el) {
   const items = data.items || [];
   const body = el.querySelector('#tests-staff-body');
   if (!items.length) {
-    body.innerHTML = `<div class="empty-state"><p>Тестов пока нет. Создайте первый тест.</p></div>`;
+    // Раньше здесь была серая фраза прямо на фоне страницы, тогда как
+    // остальные разделы показывают карточку с иконкой и объяснением.
+    body.innerHTML = uiEmptyState(
+      'Тестов пока нет',
+      'Создайте первый тест — он появится у операторов в разделе «Тесты», а результаты придут сюда.'
+    );
     return;
   }
 

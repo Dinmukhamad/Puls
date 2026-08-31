@@ -875,14 +875,30 @@ html[data-theme="dark"] .level-settings-shell {
     gap: 6px;
   }
 
+  /* Раньше здесь оставались только иконки: пятнадцать одинаковых линейных
+     значков подряд, отличить «Уровни» от «Рейтинга» можно было лишь перебором.
+     Панель и так прокручивается по горизонтали, поэтому подписи помещаются. */
   .side-nav-link {
+    display: flex;
     flex: 0 0 auto;
-    min-width: 46px;
+    min-width: 64px;
+    height: 100%;
+    padding: 4px 8px;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
+    gap: 2px;
+    text-align: center;
   }
 
   .side-nav-link span {
-    display: none;
+    display: block;
+    max-width: 72px;
+    overflow: hidden;
+    font-size: var(--text-micro);
+    line-height: 1.15;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .kpi-grid,

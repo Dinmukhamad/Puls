@@ -133,7 +133,7 @@ function paintAdminSessions(el, data) {
         </div>
       </div>
       <div class="table-wrap sessions-table-wrap">
-        <table class="data-table sessions-table">
+        <table class="data-table sessions-table" data-mobile="cards">
           <thead>
             <tr>
               <th scope="col">Пользователь</th>
@@ -177,20 +177,27 @@ function paintAdminSessions(el, data) {
 
 function sessionRow(s) {
   const canRevoke = s.status === 'active' && !s.is_current;
+  // «Desktop · Chrome · Windows» и второй строкой «Chrome · Windows» —
+  // подпись дублировала заголовок. Показываем её только когда она добавляет
+  // что-то новое.
+  const deviceMain = s.device_label || 'Unknown device';
+  const deviceParts = [s.browser_label, s.os_label].filter(Boolean);
+  const deviceDetail = deviceParts.join(' · ');
+  const deviceSub = deviceDetail && !deviceMain.includes(deviceDetail) ? deviceDetail : '';
   return `
     <tr>
-      <td>
+      <td data-label="Пользователь">
         <div class="name-cell">${esc(s.user_name || s.username || '—')} ${s.is_current ? '<span class="me-badge">текущая</span>' : ''}</div>
         <div class="cell-muted">${esc(s.username || '')} · ${esc(roleLabel(s.role))}</div>
       </td>
-      <td>
-        <div class="sessions-device">${esc(s.device_label || 'Unknown device')}</div>
-        <div class="cell-muted">${esc(s.browser_label || '')}${s.os_label ? ' · ' + esc(s.os_label) : ''}</div>
+      <td data-label="Устройство">
+        <div class="sessions-device">${esc(deviceMain)}</div>
+        ${deviceSub ? `<div class="cell-muted">${esc(deviceSub)}</div>` : ''}
       </td>
-      <td><span class="sessions-ip">${esc(s.ip_address || '—')}</span></td>
-      <td>${sessionSafeDate(s.created_at)}</td>
-      <td>${sessionSafeDate(s.last_seen_at)}</td>
-      <td>${sessionStatusBadge(s.activity_state)}</td>
+      <td data-label="IP"><span class="sessions-ip">${esc(s.ip_address || '—')}</span></td>
+      <td data-label="Вход">${sessionSafeDate(s.created_at)}</td>
+      <td data-label="Активность">${sessionSafeDate(s.last_seen_at)}</td>
+      <td data-label="Состояние">${sessionStatusBadge(s.activity_state)}</td>
       <td class="row-actions">
         <button class="btn-danger btn-sm" ${canRevoke ? '' : 'disabled title="Текущую или завершённую сессию нельзя завершить"'} onclick="revokeUserSession('${esc(s.session_id)}')">Завершить сессию</button>
         <button class="btn-ghost btn-sm" onclick="revokeAllUserSessions(${Number(s.user_id) || 0})" ${s.user_id ? '' : 'disabled'}>Завершить остальные</button>

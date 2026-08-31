@@ -705,14 +705,70 @@ function _reattachViewListeners(view, el) {
 /* ══════════════════════════════════════
    AUTH
 ══════════════════════════════════════ */
+/**
+ * Пока показан экран входа, оболочка приложения остаётся в DOM. Раньше она
+ * при этом оставалась видимой для клавиатуры и скринридера: Tab из поля
+ * пароля уводил в невидимое меню на 21 ссылку. inert убирает её и из
+ * порядка обхода, и из дерева доступности.
+ */
+function setShellInert(inert) {
+  document.querySelectorAll('.side-nav, main.container, .mobile-nav-toggle').forEach(el => {
+    if (inert) {
+      el.setAttribute('inert', '');
+      el.setAttribute('aria-hidden', 'true');
+    } else {
+      el.removeAttribute('inert');
+      el.removeAttribute('aria-hidden');
+    }
+  });
+}
+
 function showAuth() {
   document.getElementById('auth-overlay')?.removeAttribute('hidden');
   document.body.classList.add('operator-login-required');
+  setShellInert(true);
 }
 function hideAuth() {
   document.getElementById('auth-overlay')?.setAttribute('hidden', '');
   document.body.classList.remove('operator-login-required');
+  setShellInert(false);
 }
+
+/**
+ * Отправка формы входа: срабатывает и по кнопке, и по Enter в любом поле.
+ */
+async function submitAuthForm() {
+  const btn = document.getElementById('auth-login-btn');
+  if (!btn || btn.classList.contains('is-loading')) return;
+  const username = document.getElementById('auth-username')?.value?.trim();
+  const password = document.getElementById('auth-password')?.value;
+  const errEl = document.getElementById('auth-error');
+  if (!username || !password) {
+    if (errEl) errEl.textContent = 'Введите логин и пароль';
+    return;
+  }
+  if (errEl) errEl.textContent = '';
+  // Ширина кнопки не меняется: спиннер рисуется поверх текста.
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  try {
+    await api.login(username, password);
+    STATE.user = normalizeUser(await api.me());
+    _authExpiredHandled = false;
+    hideAuth();
+    await bootApp();
+  } catch (err) {
+    if (errEl) errEl.textContent = err.message;
+    btn.classList.remove('is-loading');
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener('submit', event => {
+  if (event.target.id !== 'auth-form') return;
+  event.preventDefault();
+  submitAuthForm();
+});
 
 let _authExpiredHandled = false;
 function clearSessionUiState() {
@@ -781,7 +837,8 @@ document.addEventListener('click', async e => {
     return;
   }
 
-  if (e.target.id === 'auth-login-btn') {
+  if (e.target.id === 'auth-login-btn' && !e.target.form) {
+    // Запасной путь: кнопка вне формы. Основной сценарий — submit ниже.
     const username = document.getElementById('auth-username')?.value?.trim();
     const password = document.getElementById('auth-password')?.value;
     const errEl = document.getElementById('auth-error');
@@ -8956,7 +9013,7 @@ function paintAdminSessions(el, data) {
         </div>
       </div>
       <div class="table-wrap sessions-table-wrap">
-        <table class="data-table sessions-table">
+        <table class="data-table sessions-table" data-mobile="cards">
           <thead>
             <tr>
               <th scope="col">Пользователь</th>
@@ -9000,20 +9057,27 @@ function paintAdminSessions(el, data) {
 
 function sessionRow(s) {
   const canRevoke = s.status === 'active' && !s.is_current;
+  // «Desktop · Chrome · Windows» и второй строкой «Chrome · Windows» —
+  // подпись дублировала заголовок. Показываем её только когда она добавляет
+  // что-то новое.
+  const deviceMain = s.device_label || 'Unknown device';
+  const deviceParts = [s.browser_label, s.os_label].filter(Boolean);
+  const deviceDetail = deviceParts.join(' · ');
+  const deviceSub = deviceDetail && !deviceMain.includes(deviceDetail) ? deviceDetail : '';
   return `
     <tr>
-      <td>
+      <td data-label="Пользователь">
         <div class="name-cell">${esc(s.user_name || s.username || '—')} ${s.is_current ? '<span class="me-badge">текущая</span>' : ''}</div>
         <div class="cell-muted">${esc(s.username || '')} · ${esc(roleLabel(s.role))}</div>
       </td>
-      <td>
-        <div class="sessions-device">${esc(s.device_label || 'Unknown device')}</div>
-        <div class="cell-muted">${esc(s.browser_label || '')}${s.os_label ? ' · ' + esc(s.os_label) : ''}</div>
+      <td data-label="Устройство">
+        <div class="sessions-device">${esc(deviceMain)}</div>
+        ${deviceSub ? `<div class="cell-muted">${esc(deviceSub)}</div>` : ''}
       </td>
-      <td><span class="sessions-ip">${esc(s.ip_address || '—')}</span></td>
-      <td>${sessionSafeDate(s.created_at)}</td>
-      <td>${sessionSafeDate(s.last_seen_at)}</td>
-      <td>${sessionStatusBadge(s.activity_state)}</td>
+      <td data-label="IP"><span class="sessions-ip">${esc(s.ip_address || '—')}</span></td>
+      <td data-label="Вход">${sessionSafeDate(s.created_at)}</td>
+      <td data-label="Активность">${sessionSafeDate(s.last_seen_at)}</td>
+      <td data-label="Состояние">${sessionStatusBadge(s.activity_state)}</td>
       <td class="row-actions">
         <button class="btn-danger btn-sm" ${canRevoke ? '' : 'disabled title="Текущую или завершённую сессию нельзя завершить"'} onclick="revokeUserSession('${esc(s.session_id)}')">Завершить сессию</button>
         <button class="btn-ghost btn-sm" onclick="revokeAllUserSessions(${Number(s.user_id) || 0})" ${s.user_id ? '' : 'disabled'}>Завершить остальные</button>
@@ -11196,7 +11260,7 @@ async function renderWheelOperatorView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Геймификация</div>
-        <h1 class="section-title">Wheel of WOW</h1>
+        <h1 class="section-title">Колесо WOW</h1>
       </div>
     </div>
     <div class="panel"><div class="empty-state"><div class="loading-spinner"></div><p>Загрузка колеса…</p></div></div>`;
@@ -11213,11 +11277,11 @@ async function renderWheelOperatorView(el) {
 
   const items = prizes.items || [];
   if (status.__fallback || prizes.__fallback) {
-    el.innerHTML = `<div class="view-header"><h1 class="section-title">Wheel of WOW</h1></div>${wheelLoadingPanel('Готовим колесо')}`;
+    el.innerHTML = `<div class="view-header"><h1 class="section-title">Колесо WOW</h1></div>${wheelLoadingPanel('Готовим колесо')}`;
     return;
   }
   if (!status.campaign || !items.length) {
-    el.innerHTML = `<div class="view-header"><h1 class="section-title">Wheel of WOW</h1></div>
+    el.innerHTML = `<div class="view-header"><h1 class="section-title">Колесо WOW</h1></div>
       <div class="panel"><div class="empty-state"><p>Колесо сейчас недоступно. Загляните позже.</p></div></div>`;
     return;
   }
@@ -11533,7 +11597,7 @@ async function renderWheelStaffView(el) {
     <div class="view-header">
       <div>
         <div class="section-kicker">Управление мотивацией</div>
-        <h1 class="section-title">Wheel of WOW</h1>
+        <h1 class="section-title">Колесо WOW</h1>
         <p class="section-subtitle">Настройте призы, правила получения попыток и контролируйте прокрутки.</p>
       </div>
     </div>
@@ -13135,7 +13199,12 @@ async function renderTestsStaffView(el) {
   const items = data.items || [];
   const body = el.querySelector('#tests-staff-body');
   if (!items.length) {
-    body.innerHTML = `<div class="empty-state"><p>Тестов пока нет. Создайте первый тест.</p></div>`;
+    // Раньше здесь была серая фраза прямо на фоне страницы, тогда как
+    // остальные разделы показывают карточку с иконкой и объяснением.
+    body.innerHTML = uiEmptyState(
+      'Тестов пока нет',
+      'Создайте первый тест — он появится у операторов в разделе «Тесты», а результаты придут сюда.'
+    );
     return;
   }
 

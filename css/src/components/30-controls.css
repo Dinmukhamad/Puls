@@ -275,8 +275,10 @@ textarea.form-input {
   line-height: var(--leading-normal);
   resize: vertical;
 }
+/* --text-tertiary (#98A2B3) на белом даёт 2.6:1 при пороге 4.5.
+   Для подсказки внутри поля берём --text-muted (4.97:1). */
 .form-input::placeholder,
-.form-textarea::placeholder { color: var(--text-tertiary); }
+.form-textarea::placeholder { color: var(--text-muted); }
 
 .form-input:focus,
 .form-select:focus,

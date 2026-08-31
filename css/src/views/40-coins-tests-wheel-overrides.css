@@ -1149,7 +1149,10 @@
 }
 .wheel-metric-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* Было repeat(5, 1fr): до 1024px карточки ужимались до 130px и подпись
+     «ПОПЫТОК ВЫДАНО СЕГОДНЯ» не помещалась, а ниже 1024px сетка схлопывалась
+     сразу в одну колонку шириной 584px. auto-fit даёт промежуточные шаги. */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 .wheel-metric {

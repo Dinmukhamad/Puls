@@ -6,7 +6,7 @@
   <title>Puls — рейтинг операторов</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/tokens.css?v=7e56152f6020">
   <link rel="stylesheet" href="css/styles.min.css?v=03b70be11b3c">
   <script src="js/theme-init.js?v=ef1f17f37f96"></script>
@@ -19,10 +19,12 @@
   <div class="auth-shell">
     <div class="auth-visual">
       <div class="auth-visual-brand">
+<!-- Знак был залит и обведён #18181B на панели #17161D: контраст ≈1:1,
+             на телефоне и планшете он читался как мутный серый квадрат. -->
         <svg class="auth-visual-logo" viewBox="0 0 44 44" fill="none">
-          <rect width="44" height="44" rx="12" fill="#18181B" fill-opacity=".15"/>
+          <rect width="44" height="44" rx="12" fill="#FFFFFF" fill-opacity=".08"/>
           <polyline points="4,22 10,22 14,12 18,32 22,18 26,28 30,22 44,22"
-            stroke="#18181B" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span class="auth-visual-name">Puls<em>.</em></span>
       </div>
@@ -37,18 +39,20 @@
       <div class="auth-decorlines"><span></span><span></span><span></span></div>
     </div>
     <div class="auth-card">
-      <div class="auth-form">
+      <!-- Была <div>: Enter не отправлял, а менеджеры паролей хуже
+           распознавали пару логин/пароль без формы и без name. -->
+      <form class="auth-form" id="auth-form" novalidate>
         <div class="auth-kicker">Добро пожаловать</div>
         <h2>Вход в Puls</h2>
         <p>Введите логин и пароль для входа в систему.</p>
         <div class="form-group">
           <label class="form-label" for="auth-username">Логин</label>
-          <input id="auth-username" class="form-input" type="text" placeholder="Ваш логин" autocomplete="username">
+          <input id="auth-username" name="username" class="form-input" type="text" placeholder="Ваш логин" autocomplete="username">
         </div>
         <div class="form-group">
           <label class="form-label" for="auth-password">Пароль</label>
           <div class="auth-password-field">
-            <input id="auth-password" class="form-input" type="password" placeholder="Пароль" autocomplete="current-password">
+            <input id="auth-password" name="password" class="form-input" type="password" placeholder="Пароль" autocomplete="current-password">
             <button type="button" id="auth-password-toggle" class="auth-password-toggle"
                     aria-label="Показать пароль" aria-pressed="false" title="Показать пароль">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -58,8 +62,8 @@
           </div>
         </div>
         <div id="auth-error" class="auth-error" role="alert" aria-live="assertive"></div>
-        <button id="auth-login-btn" class="btn-primary auth-submit" disabled>Войти</button>
-      </div>
+        <button id="auth-login-btn" type="submit" class="btn-primary auth-submit" disabled>Войти</button>
+      </form>
     </div>
   </div>
 </div>

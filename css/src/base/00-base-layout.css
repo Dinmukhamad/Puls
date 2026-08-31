@@ -3,7 +3,11 @@
    Design System v2.0
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+/* Шрифты подключены в index.html одним <link>. Здесь был @import, который
+   браузер может начать грузить только после того, как скачает сам файл
+   стилей — лишний шаг в критическом пути. Inter из набора убран: он стоял
+   лишь запасным вариантом за Plus Jakarta Sans и никогда не отрисовывался,
+   но тянул четыре начертания. */
 
 /* ═══════════════════════════════════════════════════
    ВАРИАНТ Б — Светлый бежево-белый
@@ -929,6 +933,14 @@ body.must-change-password .side-nav-link[data-nav-target] {
    не найти, а вход по одной кнопке — самое частое действие в системе. */
 .auth-password-field { position: relative; }
 .auth-password-field .form-input { padding-right: 44px; }
+/* Кнопка 32x32 визуально помещается в поле высотой 42px, но по WCAG 2.2
+   цель нажатия должна быть не меньше 24px, а по рекомендации Apple — 44px.
+   Псевдоэлемент расширяет область нажатия, не меняя внешний вид. */
+.auth-password-toggle::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
 .auth-password-toggle {
   position: absolute;
   top: 50%;

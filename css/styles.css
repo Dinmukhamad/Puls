@@ -5,7 +5,11 @@
    Design System v2.0
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+/* Шрифты подключены в index.html одним <link>. Здесь был @import, который
+   браузер может начать грузить только после того, как скачает сам файл
+   стилей — лишний шаг в критическом пути. Inter из набора убран: он стоял
+   лишь запасным вариантом за Plus Jakarta Sans и никогда не отрисовывался,
+   но тянул четыре начертания. */
 
 /* ═══════════════════════════════════════════════════
    ВАРИАНТ Б — Светлый бежево-белый
@@ -931,6 +935,14 @@ body.must-change-password .side-nav-link[data-nav-target] {
    не найти, а вход по одной кнопке — самое частое действие в системе. */
 .auth-password-field { position: relative; }
 .auth-password-field .form-input { padding-right: 44px; }
+/* Кнопка 32x32 визуально помещается в поле высотой 42px, но по WCAG 2.2
+   цель нажатия должна быть не меньше 24px, а по рекомендации Apple — 44px.
+   Псевдоэлемент расширяет область нажатия, не меняя внешний вид. */
+.auth-password-toggle::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
 .auth-password-toggle {
   position: absolute;
   top: 50%;
@@ -1671,6 +1683,10 @@ textarea:focus-visible,
 
 /* Кнопка сортировки заполняет ячейку: вид заголовка прежний,
    но управление доступно с клавиатуры. */
+/* text-transform: none у кнопки сортировки отменял uppercase, заданный на
+   ячейке: «Пользователь / Уровень / Статус» шли строчными, а несортируемые
+   «ДЕЙСТВИЯ» — капсом. Наследуем регистр от th. */
+.users-table-compact th .users-sort-btn { text-transform: inherit; }
 .users-table-compact th .users-sort-btn {
   font: inherit;
   color: inherit;
@@ -1943,8 +1959,12 @@ body.modal-open { overflow: hidden; }
 .shop-admin-name small { font-size: 11.5px; color: var(--text-muted); }
 .shop-admin-was { display: block; font-size: 11px; color: var(--text-muted); text-decoration: line-through; }
 
-/* Скрытый бонус видно и без цвета — по подписи в колонке «Статус». */
-.shop-admin-row-hidden { opacity: .72; }
+/* Скрытый бонус видно и без цвета — по подписи в колонке «Статус».
+   Раньше строка целиком получала opacity: .72, из-за чего её подписи падали
+   до 2.9:1 при пороге 4.5. Скрыто 23 позиции из 33, то есть так выглядело
+   большинство каталога. Приглушаем только название, состояние несёт бейдж. */
+.shop-admin-row-hidden .shop-admin-name b { color: var(--text-secondary); }
+.shop-admin-row-hidden .shop-admin-name small { color: var(--text-muted); }
 .shop-admin-badge {
   display: inline-block;
   padding: 2px 10px;
@@ -1962,6 +1982,9 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 700px) {
   .shop-admin-table th:nth-child(4), .shop-admin-table td:nth-child(4) { display: none; }
   .shop-admin-toolbar { flex-direction: column; align-items: stretch; }
+  /* flex: 1 1 260px из десктопного правила в колоночном флексе задаёт не
+     ширину, а высоту — поле поиска вырастало в пустой прямоугольник 260px. */
+  .shop-admin-toolbar #shop-admin-search { flex: 0 0 auto; }
   .shop-admin-count { margin-left: 0; }
   .shop-admin-toolbar .form-input, .shop-admin-toolbar .form-select { min-height: 44px; }
 }
@@ -2345,8 +2368,10 @@ textarea.form-input {
   line-height: var(--leading-normal);
   resize: vertical;
 }
+/* --text-tertiary (#98A2B3) на белом даёт 2.6:1 при пороге 4.5.
+   Для подсказки внутри поля берём --text-muted (4.97:1). */
 .form-input::placeholder,
-.form-textarea::placeholder { color: var(--text-tertiary); }
+.form-textarea::placeholder { color: var(--text-muted); }
 
 .form-input:focus,
 .form-select:focus,
@@ -4013,7 +4038,10 @@ button,
 .app-view.active {
   display: block;
   width: 100%;
-  min-height: 100vh;
+  /* Без min-height: 100vh. Секция лежит внутри main.container с отступами
+     28px сверху и 56px снизу, поэтому «на всю высоту окна» давало документ
+     на 84px выше вьюпорта: вертикальный скролл появлялся на каждой странице,
+     даже полностью пустой. Фон окна и так красит body. */
   padding: 28px 32px 48px;
   max-width: 1360px;
   margin: 0 auto;
@@ -6281,7 +6309,10 @@ body.role-operator {
 }
 .wheel-metric-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* Было repeat(5, 1fr): до 1024px карточки ужимались до 130px и подпись
+     «ПОПЫТОК ВЫДАНО СЕГОДНЯ» не помещалась, а ниже 1024px сетка схлопывалась
+     сразу в одну колонку шириной 584px. auto-fit даёт промежуточные шаги. */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
 .wheel-metric {
@@ -9536,14 +9567,30 @@ html[data-theme="dark"] .level-settings-shell {
     gap: 6px;
   }
 
+  /* Раньше здесь оставались только иконки: пятнадцать одинаковых линейных
+     значков подряд, отличить «Уровни» от «Рейтинга» можно было лишь перебором.
+     Панель и так прокручивается по горизонтали, поэтому подписи помещаются. */
   .side-nav-link {
+    display: flex;
     flex: 0 0 auto;
-    min-width: 46px;
+    min-width: 64px;
+    height: 100%;
+    padding: 4px 8px;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
+    gap: 2px;
+    text-align: center;
   }
 
   .side-nav-link span {
-    display: none;
+    display: block;
+    max-width: 72px;
+    overflow: hidden;
+    font-size: var(--text-micro);
+    line-height: 1.15;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
 
   .kpi-grid,
@@ -14561,6 +14608,16 @@ html[data-theme="dark"] .rc-hero-card { box-shadow: 0 18px 42px rgba(0, 0, 0, .2
   max-width: calc(var(--content-max) + var(--content-pad) * 2);
   padding: 28px var(--content-pad) 56px;
 }
+/* Между 761 и 1023px навигация — фиксированная панель снизу высотой 64px.
+   Правило выше безусловное и загружается последним, поэтому оно перебивало
+   адаптивный отступ из 90-visual-polish (18px 16px 88px), и нижний блок
+   страницы уезжал под панель: бейдж этапа на «Уровнях», кнопка публикации
+   в «Миссиях». */
+@media (min-width: 761px) and (max-width: 1023px) {
+  .container {
+    padding: 18px 16px calc(64px + var(--space-6) + env(safe-area-inset-bottom, 0px));
+  }
+}
 .app-view.active { min-width: 0; }
 .section-subtitle,
 .panel-hint,
@@ -14701,4 +14758,65 @@ html[data-theme="dark"] .rc-hero-card { box-shadow: 0 18px 42px rgba(0, 0, 0, .2
   }
   #view-shop .shop-v2-grid,
   #view-shop .shop-grid { grid-template-columns: 1fr; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Правки по аудиту интерфейса (август 2026)
+══════════════════════════════════════════════════════════════ */
+
+/* Экран входа перестраивается в одну колонку раньше остальных сеток:
+   на 768px двухколоночная раскладка зажимала подзаголовок в четыре строки,
+   а под формой оставалось ~300px пустоты. Ниже 761px работает своя,
+   более компактная раскладка из 00-base-layout. */
+@media (min-width: 761px) and (max-width: 900px) {
+  .auth-shell { grid-template-columns: 1fr; }
+  .auth-visual {
+    padding: var(--space-8) var(--space-6);
+    text-align: center;
+  }
+  .auth-visual::before,
+  .auth-pulse,
+  .auth-decorlines { display: none; }
+  .auth-visual-brand { justify-content: center; }
+  .auth-visual h1 { font-size: 28px; line-height: 1.15; }
+  .auth-visual h1 br { display: none; }
+  .auth-visual p { max-width: 46ch; margin-inline: auto; }
+}
+
+/* Safari на iPhone увеличивает страницу при фокусе, если шрифт в поле мельче
+   16px, и обратно её не возвращает. Касается только полей ввода. */
+@media (max-width: 767px) {
+  .form-input,
+  .form-select,
+  .form-textarea,
+  textarea.form-input,
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea { font-size: 16px; }
+}
+
+/* Пустая таблица показывала горизонтальный скроллбар: обёртка считала ширину
+   по минимальным ширинам колонок, хотя строк не было. */
+.table-wrap:has(> table > tbody > tr:only-child > td[colspan]) { overflow-x: hidden; }
+.data-table tbody tr > td[colspan] { min-width: 0; }
+
+/* Таблица сессий на телефоне оставалась таблицей на 1366px внутри окна 309px:
+   карточный режим .data-table[data-mobile="cards"] к ней не был подключён.
+   Разметка получает data-mobile и data-label в 35-admin-sessions.view.js. */
+@media (max-width: 640px) {
+  .sessions-table[data-mobile="cards"] tbody tr {
+    padding: var(--space-3);
+    background: var(--card-bg);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+  }
+  .sessions-table[data-mobile="cards"] + .sessions-table tbody tr { margin-top: var(--space-2); }
+  .sessions-table[data-mobile="cards"] tbody tr + tr { margin-top: var(--space-2); }
+  .sessions-table[data-mobile="cards"] td.row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding-top: var(--space-3);
+  }
+  .sessions-table[data-mobile="cards"] td.row-actions .btn-sm { flex: 1 1 auto; }
 }

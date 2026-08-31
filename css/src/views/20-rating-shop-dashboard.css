@@ -592,7 +592,10 @@ button,
 .app-view.active {
   display: block;
   width: 100%;
-  min-height: 100vh;
+  /* Без min-height: 100vh. Секция лежит внутри main.container с отступами
+     28px сверху и 56px снизу, поэтому «на всю высоту окна» давало документ
+     на 84px выше вьюпорта: вертикальный скролл появлялся на каждой странице,
+     даже полностью пустой. Фон окна и так красит body. */
   padding: 28px 32px 48px;
   max-width: 1360px;
   margin: 0 auto;

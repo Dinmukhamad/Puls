@@ -704,14 +704,70 @@ function _reattachViewListeners(view, el) {
 /* ══════════════════════════════════════
    AUTH
 ══════════════════════════════════════ */
+/**
+ * Пока показан экран входа, оболочка приложения остаётся в DOM. Раньше она
+ * при этом оставалась видимой для клавиатуры и скринридера: Tab из поля
+ * пароля уводил в невидимое меню на 21 ссылку. inert убирает её и из
+ * порядка обхода, и из дерева доступности.
+ */
+function setShellInert(inert) {
+  document.querySelectorAll('.side-nav, main.container, .mobile-nav-toggle').forEach(el => {
+    if (inert) {
+      el.setAttribute('inert', '');
+      el.setAttribute('aria-hidden', 'true');
+    } else {
+      el.removeAttribute('inert');
+      el.removeAttribute('aria-hidden');
+    }
+  });
+}
+
 function showAuth() {
   document.getElementById('auth-overlay')?.removeAttribute('hidden');
   document.body.classList.add('operator-login-required');
+  setShellInert(true);
 }
 function hideAuth() {
   document.getElementById('auth-overlay')?.setAttribute('hidden', '');
   document.body.classList.remove('operator-login-required');
+  setShellInert(false);
 }
+
+/**
+ * Отправка формы входа: срабатывает и по кнопке, и по Enter в любом поле.
+ */
+async function submitAuthForm() {
+  const btn = document.getElementById('auth-login-btn');
+  if (!btn || btn.classList.contains('is-loading')) return;
+  const username = document.getElementById('auth-username')?.value?.trim();
+  const password = document.getElementById('auth-password')?.value;
+  const errEl = document.getElementById('auth-error');
+  if (!username || !password) {
+    if (errEl) errEl.textContent = 'Введите логин и пароль';
+    return;
+  }
+  if (errEl) errEl.textContent = '';
+  // Ширина кнопки не меняется: спиннер рисуется поверх текста.
+  btn.disabled = true;
+  btn.classList.add('is-loading');
+  try {
+    await api.login(username, password);
+    STATE.user = normalizeUser(await api.me());
+    _authExpiredHandled = false;
+    hideAuth();
+    await bootApp();
+  } catch (err) {
+    if (errEl) errEl.textContent = err.message;
+    btn.classList.remove('is-loading');
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener('submit', event => {
+  if (event.target.id !== 'auth-form') return;
+  event.preventDefault();
+  submitAuthForm();
+});
 
 let _authExpiredHandled = false;
 function clearSessionUiState() {
@@ -780,7 +836,8 @@ document.addEventListener('click', async e => {
     return;
   }
 
-  if (e.target.id === 'auth-login-btn') {
+  if (e.target.id === 'auth-login-btn' && !e.target.form) {
+    // Запасной путь: кнопка вне формы. Основной сценарий — submit ниже.
     const username = document.getElementById('auth-username')?.value?.trim();
     const password = document.getElementById('auth-password')?.value;
     const errEl = document.getElementById('auth-error');

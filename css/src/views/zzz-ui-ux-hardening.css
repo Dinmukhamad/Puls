@@ -4,6 +4,16 @@
   max-width: calc(var(--content-max) + var(--content-pad) * 2);
   padding: 28px var(--content-pad) 56px;
 }
+/* Между 761 и 1023px навигация — фиксированная панель снизу высотой 64px.
+   Правило выше безусловное и загружается последним, поэтому оно перебивало
+   адаптивный отступ из 90-visual-polish (18px 16px 88px), и нижний блок
+   страницы уезжал под панель: бейдж этапа на «Уровнях», кнопка публикации
+   в «Миссиях». */
+@media (min-width: 761px) and (max-width: 1023px) {
+  .container {
+    padding: 18px 16px calc(64px + var(--space-6) + env(safe-area-inset-bottom, 0px));
+  }
+}
 .app-view.active { min-width: 0; }
 .section-subtitle,
 .panel-hint,
@@ -144,4 +154,65 @@
   }
   #view-shop .shop-v2-grid,
   #view-shop .shop-grid { grid-template-columns: 1fr; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Правки по аудиту интерфейса (август 2026)
+══════════════════════════════════════════════════════════════ */
+
+/* Экран входа перестраивается в одну колонку раньше остальных сеток:
+   на 768px двухколоночная раскладка зажимала подзаголовок в четыре строки,
+   а под формой оставалось ~300px пустоты. Ниже 761px работает своя,
+   более компактная раскладка из 00-base-layout. */
+@media (min-width: 761px) and (max-width: 900px) {
+  .auth-shell { grid-template-columns: 1fr; }
+  .auth-visual {
+    padding: var(--space-8) var(--space-6);
+    text-align: center;
+  }
+  .auth-visual::before,
+  .auth-pulse,
+  .auth-decorlines { display: none; }
+  .auth-visual-brand { justify-content: center; }
+  .auth-visual h1 { font-size: 28px; line-height: 1.15; }
+  .auth-visual h1 br { display: none; }
+  .auth-visual p { max-width: 46ch; margin-inline: auto; }
+}
+
+/* Safari на iPhone увеличивает страницу при фокусе, если шрифт в поле мельче
+   16px, и обратно её не возвращает. Касается только полей ввода. */
+@media (max-width: 767px) {
+  .form-input,
+  .form-select,
+  .form-textarea,
+  textarea.form-input,
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea { font-size: 16px; }
+}
+
+/* Пустая таблица показывала горизонтальный скроллбар: обёртка считала ширину
+   по минимальным ширинам колонок, хотя строк не было. */
+.table-wrap:has(> table > tbody > tr:only-child > td[colspan]) { overflow-x: hidden; }
+.data-table tbody tr > td[colspan] { min-width: 0; }
+
+/* Таблица сессий на телефоне оставалась таблицей на 1366px внутри окна 309px:
+   карточный режим .data-table[data-mobile="cards"] к ней не был подключён.
+   Разметка получает data-mobile и data-label в 35-admin-sessions.view.js. */
+@media (max-width: 640px) {
+  .sessions-table[data-mobile="cards"] tbody tr {
+    padding: var(--space-3);
+    background: var(--card-bg);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+  }
+  .sessions-table[data-mobile="cards"] + .sessions-table tbody tr { margin-top: var(--space-2); }
+  .sessions-table[data-mobile="cards"] tbody tr + tr { margin-top: var(--space-2); }
+  .sessions-table[data-mobile="cards"] td.row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding-top: var(--space-3);
+  }
+  .sessions-table[data-mobile="cards"] td.row-actions .btn-sm { flex: 1 1 auto; }
 }

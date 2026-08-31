@@ -234,6 +234,10 @@
 
 /* Кнопка сортировки заполняет ячейку: вид заголовка прежний,
    но управление доступно с клавиатуры. */
+/* text-transform: none у кнопки сортировки отменял uppercase, заданный на
+   ячейке: «Пользователь / Уровень / Статус» шли строчными, а несортируемые
+   «ДЕЙСТВИЯ» — капсом. Наследуем регистр от th. */
+.users-table-compact th .users-sort-btn { text-transform: inherit; }
 .users-table-compact th .users-sort-btn {
   font: inherit;
   color: inherit;
@@ -506,8 +510,12 @@ body.modal-open { overflow: hidden; }
 .shop-admin-name small { font-size: 11.5px; color: var(--text-muted); }
 .shop-admin-was { display: block; font-size: 11px; color: var(--text-muted); text-decoration: line-through; }
 
-/* Скрытый бонус видно и без цвета — по подписи в колонке «Статус». */
-.shop-admin-row-hidden { opacity: .72; }
+/* Скрытый бонус видно и без цвета — по подписи в колонке «Статус».
+   Раньше строка целиком получала opacity: .72, из-за чего её подписи падали
+   до 2.9:1 при пороге 4.5. Скрыто 23 позиции из 33, то есть так выглядело
+   большинство каталога. Приглушаем только название, состояние несёт бейдж. */
+.shop-admin-row-hidden .shop-admin-name b { color: var(--text-secondary); }
+.shop-admin-row-hidden .shop-admin-name small { color: var(--text-muted); }
 .shop-admin-badge {
   display: inline-block;
   padding: 2px 10px;
@@ -525,6 +533,9 @@ body.modal-open { overflow: hidden; }
 @media (max-width: 700px) {
   .shop-admin-table th:nth-child(4), .shop-admin-table td:nth-child(4) { display: none; }
   .shop-admin-toolbar { flex-direction: column; align-items: stretch; }
+  /* flex: 1 1 260px из десктопного правила в колоночном флексе задаёт не
+     ширину, а высоту — поле поиска вырастало в пустой прямоугольник 260px. */
+  .shop-admin-toolbar #shop-admin-search { flex: 0 0 auto; }
   .shop-admin-count { margin-left: 0; }
   .shop-admin-toolbar .form-input, .shop-admin-toolbar .form-select { min-height: 44px; }
 }
