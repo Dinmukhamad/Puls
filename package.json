@@ -13,6 +13,7 @@
     "test": "node --test tests/frontend/*.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:update": "playwright test --update-snapshots",
+    "test:e2e:ci": "playwright test --grep-invert @visual",
     "audit": "npm audit --audit-level=high"
   },
   "devDependencies": {
