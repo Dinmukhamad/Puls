@@ -991,14 +991,22 @@ async function loadData(role) {
         onOperatorsUpdate, SWR_USER_TTL_MS
       ).then(o => STATE.adminOperators = o)
     );
+    // Раньше ошибка гасилась внутри fetcher и подменялась на { items: [] }.
+    // Для swrFetch это выглядело успешным ответом, и пустой список уезжал
+    // в sessionStorage на пять минут: страница показывала «Пользователей
+    // пока нет» и при перезагрузке даже не ходила в сеть. Ловим снаружи —
+    // тогда в кеш ничего не пишется, а экран получает состояние ошибки.
     tasks.push(
-      swrFetch('users:list', () =>
-        api.listUsers({ limit: 200 }).catch(err => {
+      swrFetch('users:list', () => api.listUsers({ limit: 200 }), onUsersUpdate, SWR_USER_TTL_MS)
+        .then(u => {
+          STATE.users = Array.isArray(u) ? u : (u.items || []);
+          STATE.usersError = null;
+        })
+        .catch(err => {
           console.error('[users:list] ошибка загрузки:', err?.message || err);
-          return { items: [] };
-        }),
-        onUsersUpdate, SWR_USER_TTL_MS
-      ).then(u => STATE.users = Array.isArray(u) ? u : (u.items || []))
+          STATE.usersError = err;
+          STATE.users = [];
+        })
     );
     // История транзакций — грузим лениво, не блокируем загрузку
     swrFetch('dashboard:history', () =>

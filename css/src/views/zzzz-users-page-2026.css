@@ -443,3 +443,6 @@
   .up-pager { justify-content: center; }
   .up-detail { margin-inline: var(--space-3); }
 }
+
+/* Состояние ошибки и пустоты внутри карточки списка. */
+.up-card-state { padding: var(--space-6) var(--space-4); }
