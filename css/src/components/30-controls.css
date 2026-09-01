@@ -17,6 +17,8 @@
 .btn-primary,
 .btn-secondary,
 .btn-outline,
+.btn-tertiary,
+.btn-split,
 .btn-ghost,
 .btn-danger,
 .btn-ok,
@@ -635,3 +637,123 @@ textarea.form-input:focus {
   #view-wheel .filter-tabs.wheel-tabs { min-height: auto; }
 }
 
+
+
+/* ══════════════════════════════════════════════════════════════
+   Примитивы по ТЗ (раздел «App shell и общие компоненты»).
+   Здесь же, а не отдельным слоем: внешний вид управляющих элементов
+   задаётся только в этом файле — это проверяет
+   controls-single-source.test.mjs.
+══════════════════════════════════════════════════════════════ */
+
+/* ── Tertiary: действие без веса, «Текстовая кнопка» из макета ── */
+.btn-tertiary {
+  color: var(--accent-primary);
+  background: transparent;
+  border-color: transparent;
+}
+.btn-tertiary:hover:not(:disabled) { background: var(--accent-primary-soft); }
+.btn-tertiary:active:not(:disabled) { background: var(--accent-secondary-soft); }
+.btn-tertiary:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* ── Split: основное действие плюс раскрытие рядом ── */
+.btn-split {
+  padding: 0;
+  color: var(--accent-fill-text);
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  overflow: hidden;
+}
+.btn-split > .btn-split-main,
+.btn-split > .btn-split-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--control-h);
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.btn-split > .btn-split-main { padding: 0 var(--space-4); }
+.btn-split > .btn-split-toggle {
+  width: var(--control-h);
+  /* Разделитель полупрозрачным белым, чтобы работать на любой заливке. */
+  border-left: 1px solid rgba(255, 255, 255, .28);
+}
+.btn-split > *:hover { background: rgba(255, 255, 255, .12); }
+.btn-split > *:focus-visible { outline: 2px solid var(--bg-surface); outline-offset: -3px; }
+
+/* ── Pressed: ТЗ требует отдельное состояние нажатия у всех вариантов ── */
+.btn-primary:active:not(:disabled),
+.btn-secondary:active:not(:disabled),
+.btn-outline:active:not(:disabled),
+.btn-danger:active:not(:disabled),
+.btn-ok:active:not(:disabled) {
+  /* Не двигаем кнопку: на экранах с таблицами смещение сбивает прицел.
+     Нажатие показываем затемнением. */
+  filter: brightness(.94);
+}
+
+/* ── Поля: обязательность, подсказка, ошибка и успех ── */
+.form-required {
+  margin-left: 2px;
+  color: var(--danger-text);
+}
+.form-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--text-tiny);
+  color: var(--text-muted);
+}
+.form-hint.is-error   { color: var(--danger-text); }
+.form-hint.is-success { color: var(--success-text); }
+
+.form-input.is-valid,
+.form-select.is-valid,
+.form-textarea.is-valid { border-color: var(--success); }
+.form-input.is-valid:focus,
+.form-select.is-valid:focus,
+.form-textarea.is-valid:focus {
+  box-shadow: 0 0 0 3px var(--success-soft);
+}
+.form-input[readonly] { cursor: default; }
+
+/* ── Сегментированный контроль: День / Неделя / Месяц / Год ── */
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--bg-muted);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+.segmented > button {
+  min-height: calc(var(--control-h) - 8px);
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-size: var(--text-small);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 4px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.segmented > button:hover:not([aria-pressed="true"]) { color: var(--text-primary); }
+.segmented > button[aria-pressed="true"] {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .08);
+}
+.segmented > button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
