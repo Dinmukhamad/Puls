@@ -35,7 +35,7 @@ import string
 import sys
 import zipfile
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -50,6 +50,11 @@ class OperatorRow:
     email: str | None
     status_raw: str
     participation_status: str
+    employment_status: str = "active"
+    dismissed_at: date | None = None
+    rate: float | None = None
+    start_date: date | None = None
+    position: str | None = None
 
 
 def _local_name(tag: str) -> str:
@@ -162,6 +167,65 @@ def _find_header(headers: list[str], *needles: str) -> int:
     raise ValueError(f"Не найдена колонка: {' / '.join(needles)}")
 
 
+def _find_header_optional(headers: list[str], *needles: str) -> int | None:
+    """То же, что _find_header, но без исключения — колонка необязательна."""
+    try:
+        return _find_header(headers, *needles)
+    except ValueError:
+        return None
+
+
+# Кадровый статус из выгрузки → (участие в рейтинге, статус занятости).
+# «Б/С» — без списания, человек работает, но в рейтинге не участвует.
+EMPLOYMENT_BY_STATUS = {
+    "работает": ("participating", "active"),
+    "больничный": ("participating", "active"),
+    "б/с": ("not_participating", "active"),
+    "бс": ("not_participating", "active"),
+    "уволен": ("not_participating", "dismissed"),
+    "уволена": ("not_participating", "dismissed"),
+}
+
+
+def _employment_from_raw(value: str) -> tuple[str, str, str | None]:
+    """Возвращает (participation_status, employment_status, предупреждение)."""
+    raw = (value or "").strip().lower().replace("ё", "е")
+    if not raw:
+        return "participating", "active", "Пустой кадровый статус: считаем работающим"
+    for key, (participation, employment) in EMPLOYMENT_BY_STATUS.items():
+        if raw.startswith(key):
+            return participation, employment, None
+    return (
+        "participating",
+        "active",
+        f"Неизвестный кадровый статус '{value}': считаем работающим",
+    )
+
+
+def _parse_rate(value: str) -> float | None:
+    raw = (value or "").strip().replace(",", ".")
+    if not raw:
+        return None
+    try:
+        rate = float(raw)
+    except ValueError:
+        return None
+    return rate if 0 < rate <= 2 else None
+
+
+def _parse_date(value: str) -> date | None:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    raw = raw.split(" ")[0].split("T")[0]
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
 def _status_from_raw(value: str) -> tuple[str, str | None]:
     raw = (value or "").strip().lower().replace("ё", "е")
     if not raw:
@@ -181,24 +245,50 @@ def parse_operator_rows(xlsx_path: Path) -> tuple[list[OperatorRow], list[str], 
     headers = [_normalize_header(value) for value in raw_rows[0]]
     fio_idx = _find_header(headers, "фио")
     email_idx = _find_header(headers, "почта", "email")
-    status_idx = _find_header(headers, "учатсвует", "участвует", "неучаствует", "участ")
+    # Колонка участия необязательна: в кадровых выгрузках её нет, зато есть
+    # «Статус» (Работает / Б/С / Уволен / Больничный). Хотя бы одна из двух
+    # должна присутствовать, иначе непонятно, кого включать в рейтинг.
+    status_idx = _find_header_optional(
+        headers, "учатсвует", "участвует", "неучаствует", "участ"
+    )
+    employment_idx = _find_header_optional(headers, "статус")
+    if status_idx is None and employment_idx is None:
+        raise ValueError("Не найдена колонка участия или кадрового статуса")
+    rate_idx = _find_header_optional(headers, "ставка")
+    start_idx = _find_header_optional(headers, "датапринятия", "датаприема", "датаприёма")
+    position_idx = _find_header_optional(headers, "направление", "должность")
+    dismissed_idx = _find_header_optional(headers, "датаувольнения")
+
+    def cell(raw_row: list[str], index: int | None) -> str:
+        if index is None or index >= len(raw_row):
+            return ""
+        return raw_row[index].strip()
 
     rows: list[OperatorRow] = []
     warnings: list[str] = []
     errors: list[str] = []
 
     for offset, raw_row in enumerate(raw_rows[1:], start=2):
-        full_name = raw_row[fio_idx].strip() if fio_idx < len(raw_row) else ""
-        email = raw_row[email_idx].strip().lower() if email_idx < len(raw_row) else ""
-        status_raw = raw_row[status_idx].strip() if status_idx < len(raw_row) else ""
+        full_name = cell(raw_row, fio_idx)
+        email = cell(raw_row, email_idx).lower()
 
         if not full_name:
             errors.append(f"Строка {offset}: нет ФИО, строка пропущена")
             continue
 
-        participation_status, warning = _status_from_raw(status_raw)
+        if status_idx is not None:
+            status_raw = cell(raw_row, status_idx)
+            participation_status, warning = _status_from_raw(status_raw)
+            employment_status = "active"
+        else:
+            status_raw = cell(raw_row, employment_idx)
+            participation_status, employment_status, warning = _employment_from_raw(status_raw)
         if warning:
             warnings.append(f"Строка {offset}: {warning}")
+
+        dismissed_at = _parse_date(cell(raw_row, dismissed_idx))
+        if employment_status == "dismissed" and dismissed_at is None:
+            warnings.append(f"Строка {offset}: уволен, но дата увольнения не указана")
 
         rows.append(
             OperatorRow(
@@ -207,6 +297,11 @@ def parse_operator_rows(xlsx_path: Path) -> tuple[list[OperatorRow], list[str], 
                 email=email or None,
                 status_raw=status_raw,
                 participation_status=participation_status,
+                employment_status=employment_status,
+                dismissed_at=dismissed_at,
+                rate=_parse_rate(cell(raw_row, rate_idx)),
+                start_date=_parse_date(cell(raw_row, start_idx)),
+                position=cell(raw_row, position_idx) or None,
             )
         )
 
@@ -325,7 +420,9 @@ def generate_temp_password(username: str, used_passwords: set[str]) -> str:
     raise RuntimeError("Не удалось сгенерировать уникальный временный пароль")
 
 
-def _status_fields(participation_status: str) -> tuple[str, bool]:
+def _status_fields(participation_status: str, employment_status: str = "active") -> tuple[str, bool]:
+    if employment_status == "dismissed":
+        return "inactive", False
     is_participating = participation_status == "participating"
     return ("active" if is_participating else "inactive", is_participating)
 
@@ -458,7 +555,7 @@ def main() -> int:
                     select(Operator).where(func.lower(Operator.full_name) == row.full_name.lower())
                 )
 
-            status_value, is_active = _status_fields(row.participation_status)
+            status_value, is_active = _status_fields(row.participation_status, row.employment_status)
 
             if operator is None:
                 created_operators += 1
@@ -481,10 +578,17 @@ def main() -> int:
                         group_id=group.id if group else None,
                         group_name=args.group,
                         participation_status=row.participation_status,
-                        employment_status="active",
+                        employment_status=row.employment_status,
+                        dismissed_at=(
+                            datetime.combine(row.dismissed_at, datetime.min.time())
+                            if row.dismissed_at
+                            else None
+                        ),
                         status=status_value,
                         is_active=is_active,
-                        position="operator",
+                        position=row.position or "operator",
+                        rate=row.rate,
+                        start_date=row.start_date,
                         email=row.email,
                         current_balance=0,
                         reserved_balance=0,
@@ -526,10 +630,18 @@ def main() -> int:
                 operator.group_id = group.id if group else operator.group_id
                 operator.group_name = args.group
                 operator.participation_status = row.participation_status
-                operator.employment_status = "active"
+                operator.employment_status = row.employment_status
+                if row.dismissed_at:
+                    operator.dismissed_at = datetime.combine(
+                        row.dismissed_at, datetime.min.time()
+                    )
                 operator.status = status_value
                 operator.is_active = is_active
-                operator.position = operator.position or "operator"
+                operator.position = row.position or operator.position or "operator"
+                if row.rate is not None:
+                    operator.rate = row.rate
+                if row.start_date is not None:
+                    operator.start_date = row.start_date
                 operator.updated_at = datetime.now(UTC).replace(tzinfo=None)
                 if row.email:
                     operator.email = row.email
