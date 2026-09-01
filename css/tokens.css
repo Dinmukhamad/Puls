@@ -36,8 +36,15 @@
   --space-7: 28px;   --space-8: 32px;   --space-10: 40px;
 
   /* ── Типографика ──────────────────────────────────────── */
-  --font-main:  "Plus Jakarta Sans", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-brand: "Plus Jakarta Sans", Inter, sans-serif;
+  /* Макет нарисован в SF Pro Display / SF Pro Text. Лицензия Apple не даёт
+     грузить их как веб-шрифт, поэтому берём системный стек: на macOS и iOS
+     он разрешается ровно в SF Pro, на Windows — в Segoe UI, на Android — в
+     Roboto. Бонусом ноль запросов за шрифтами в критическом пути. */
+  --font-main:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-brand: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  /* Syne — только слово «Puls» в логотипе, больше нигде. */
+  --font-display: Syne, var(--font-main);
 
   --text-h1:    30px;  --text-h1-weight: 700;
   --text-h2:    23px;  --text-h2-weight: 700;
@@ -104,20 +111,23 @@ html[data-theme="light"] {
   --border-strong:  #D0D5DD;
 
   /* Акцент */
-  --accent-primary:       #6757E8;
-  --accent-primary-hover: #5544D4;
-  --accent-primary-soft:  #F1EFFE;
+  /* #4F46E5 — акцент с экранных макетов. Под белым текстом даёт 6.29:1
+     против 4.99:1 у #5E5CE6 из листа дизайн-системы, поэтому основным
+     взят он, а #5E5CE6 оставлен ступенью для наведения. */
+  --accent-primary:       #4F46E5;
+  --accent-primary-hover: #5E5CE6;
+  --accent-primary-soft:  #EEF0FE;
   --accent-secondary:     #7C6CF0;
   --accent-secondary-soft:#F1EFFE;
   --accent-violet:        #9E77ED;
   --accent-violet-soft:   #F4F0FF;
   --accent-cyan:          #22B8CF;
   --accent-cyan-soft:     #E7F8FA;
-  --primary-gradient:     linear-gradient(135deg, #6757E8 0%, #7C6CF0 100%);
-  --focus-ring:           0 0 0 3px rgba(103, 87, 232, .28);
+  --primary-gradient:     linear-gradient(135deg, #4F46E5 0%, #5E5CE6 100%);
+  --focus-ring:           0 0 0 3px rgba(79, 70, 229, .30);
 
-  /* Заливка акцента под белым текстом (5.1:1). */
-  --accent-fill:      #6757E8;
+  /* Заливка акцента под белым текстом (6.29:1). */
+  --accent-fill:      #4F46E5;
   --accent-fill-text: #FFFFFF;
 
   /* Семантика: яркое — для заливок, --*-text — для надписей. */
@@ -133,7 +143,7 @@ html[data-theme="light"] {
   --sidebar-border:      #2A2932;
   --sidebar-text:        #9A99A6;
   --sidebar-text-active: #FFFFFF;
-  --sidebar-active-bg:   #6757E8;
+  --sidebar-active-bg:   #4F46E5;
   --sidebar-hover-bg:    #23222C;
   --sidebar-danger:      #FDA29B;
 
@@ -163,7 +173,7 @@ html[data-theme="light"] {
   --tx3: var(--text-muted);   --tx4: var(--text-tertiary);
   --border: var(--border-default);
   --accent: var(--accent-primary);  --accent-soft: var(--accent-secondary-soft);
-  --accent-2: var(--accent-primary-hover); --accent-glow: rgba(103, 87, 232, .22);
+  --accent-2: var(--accent-primary-hover); --accent-glow: rgba(79, 70, 229, .22);
   --ok: var(--success);  --ok-soft: var(--success-soft);
   --warn: var(--warning); --warn-soft: var(--warning-soft);
   --r-sm: var(--radius-sm); --r-md: var(--radius-md);
@@ -195,19 +205,19 @@ html[data-theme="dark"] {
   --border-soft:    #23252F;
   --border-strong:  #3C4050;
 
-  --accent-primary:       #8B7CF6;
-  --accent-primary-hover: #A395F9;
-  --accent-primary-soft:  rgba(139, 124, 246, .16);
+  --accent-primary:       #A5B4FC;
+  --accent-primary-hover: #C7D2FE;
+  --accent-primary-soft:  rgba(165, 180, 252, .16);
   --accent-secondary:     #7C6CF0;
   --accent-secondary-soft:rgba(139, 124, 246, .16);
   --accent-violet:        #B692F6;
   --accent-violet-soft:   rgba(182, 146, 246, .18);
   --accent-cyan:          #4FD3E3;
   --accent-cyan-soft:     rgba(79, 211, 227, .16);
-  --primary-gradient:     linear-gradient(135deg, #6757E8 0%, #8B7CF6 100%);
-  --focus-ring:           0 0 0 3px rgba(139, 124, 246, .38);
+  --primary-gradient:     linear-gradient(135deg, #4F46E5 0%, #6366F1 100%);
+  --focus-ring:           0 0 0 3px rgba(165, 180, 252, .38);
 
-  --accent-fill:      #6757E8;
+  --accent-fill:      #4F46E5;
   --accent-fill-text: #FFFFFF;
 
   /* На тёмном фоне яркие значения читаются: отдельный текстовый
@@ -223,7 +233,7 @@ html[data-theme="dark"] {
   --sidebar-border:      #23252F;
   --sidebar-text:        #98A2B3;
   --sidebar-text-active: #FFFFFF;
-  --sidebar-active-bg:   #6757E8;
+  --sidebar-active-bg:   #4F46E5;
   --sidebar-hover-bg:    #1D1F28;
   --sidebar-danger:      #FDA29B;
 
@@ -250,7 +260,7 @@ html[data-theme="dark"] {
   --tx3: var(--text-muted);   --tx4: var(--text-tertiary);
   --border: var(--border-default);
   --accent: var(--accent-primary);  --accent-soft: var(--accent-secondary-soft);
-  --accent-2: var(--accent-primary-hover); --accent-glow: rgba(139, 124, 246, .26);
+  --accent-2: var(--accent-primary-hover); --accent-glow: rgba(165, 180, 252, .26);
   --ok: var(--success);  --ok-soft: var(--success-soft);
   --warn: var(--warning); --warn-soft: var(--warning-soft);
   --nav-bg: var(--sidebar-bg);    --nav-tx: var(--sidebar-text);
