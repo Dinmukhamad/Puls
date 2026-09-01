@@ -93,6 +93,7 @@
 .lv-card-title {
   display: flex;
   align-items: center;
+  overflow-wrap: anywhere;
   gap: 8px;
   margin: 0;
   font-size: var(--text-h3);
@@ -118,6 +119,11 @@
   color: var(--text-muted);
 }
 .lv-card-code code {
+  /* Код уровня — строка без пробелов: точек переноса в ней нет, а как
+     флекс-элемент она не сожмётся ниже max-content и растянет карточку.
+     anywhere, а не break-word: только он уменьшает min-content. */
+  min-width: 0;
+  overflow-wrap: anywhere;
   padding: 1px 6px;
   font-family: var(--font-mono);
   background: var(--bg-muted);
@@ -177,17 +183,39 @@
 /* Поле, которое выбранное условие не использует: видно, но приглушено. */
 .lv-form-grid .form-group.is-muted { opacity: .55; }
 
+/* Подвал формы ведёт себя как общий .modal-actions: прилипает к низу окна,
+   переносится и растягивает кнопки на телефоне. Без этого в длинной форме
+   «Сохранить» уезжало за экран и до него нужно было доскроллить. */
 .lv-form-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: var(--space-3);
   padding-top: var(--space-3);
+  background: var(--bg-surface);
   border-top: 1px solid var(--border-soft);
 }
 .lv-form-actions button { min-width: 120px; }
+@media (max-width: 640px) {
+  .lv-form-actions button { flex: 1 1 auto; min-width: 0; }
+}
 
-.lv-check { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
-.lv-check input { width: 16px; height: 16px; }
+/* Метка целиком — цель нажатия: сам чекбокс 16px пальцем не берётся,
+   а обёртка по высоте текста давала около 22px. */
+.lv-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  cursor: pointer;
+}
+.lv-check input { width: 20px; height: 20px; }
+@media (max-width: 640px) {
+  .lv-check { min-height: var(--control-h-lg); }
+}
 
 .lv-color-pair { display: inline-flex; align-items: center; gap: var(--space-2); }
 .lv-color-input { width: 44px; height: 32px; padding: 2px; border: 1px solid var(--border-default); border-radius: var(--radius-xs); background: var(--bg-surface); }
@@ -216,3 +244,14 @@
 }
 .lv-result-title { margin: 0 0 6px; font-weight: 600; color: var(--text-primary); }
 .lv-result-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--text-small); color: var(--text-secondary); }
+
+/* Режим пересчёта один: показываем его текстом, а не кнопкой-переключателем,
+   которая ничего не переключает. */
+.lv-mode-fixed {
+  margin: 0 0 4px;
+  padding: 8px 12px;
+  font-size: var(--text-small);
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-xs);
+}

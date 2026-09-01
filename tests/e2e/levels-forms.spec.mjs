@@ -22,7 +22,8 @@ const FROZEN_NOW = new Date('2026-09-01T09:00:00').getTime();
  * @param {'ok'|'conflict'|'slow'} options.onCreate поведение POST уровня
  */
 async function openLevels(page, { onCreate = 'ok' } = {}) {
-  const calls = { createLevel: 0, addRule: 0, manual: 0, recalc: 0 };
+  const calls = { createLevel: 0, addRule: 0, manual: 0, recalc: 0, listLevels: 0 };
+  const created = [];
 
   await page.route('**/api/**', async route => {
     const request = route.request();
@@ -34,6 +35,13 @@ async function openLevels(page, { onCreate = 'ok' } = {}) {
 
     if (method === 'POST' && path === '/api/admin/operator-levels') {
       calls.createLevel++;
+      created.push({
+        ...sample.levels.json[0],
+        id: 900 + created.length,
+        code: 'created_' + created.length,
+        name: 'Созданный уровень',
+        sort_order: 100,
+      });
       if (onCreate === 'conflict') {
         return json({
           code: 'http_409',
@@ -55,7 +63,10 @@ async function openLevels(page, { onCreate = 'ok' } = {}) {
     }
 
     if (path === '/api/auth/me') return json(sample.me.json);
-    if (path === '/api/admin/operator-levels') return json(sample.levels.json);
+    if (path === '/api/admin/operator-levels') {
+      calls.listLevels++;
+      return json([...sample.levels.json, ...created]);
+    }
     if (path === '/api/admin/operator-levels/rewards') return json(sample.rewards.json);
     if (path === '/api/operator-levels') return json(sample.levels.json);
     if (path === '/api/operators') return json([{ id: 1, full_name: 'Иван Петров' }]);
@@ -76,6 +87,33 @@ async function openLevels(page, { onCreate = 'ok' } = {}) {
   await page.locator('.lv-card').first().waitFor({ timeout: 15_000 });
   return calls;
 }
+
+/**
+ * Ни один тест не должен проходить при ошибке в консоли.
+ *
+ * Повод конкретный: функция обновления экрана какое-то время вызывала саму
+ * себя, каждое сохранение падало с RangeError — и все проверки оставались
+ * зелёными, потому что смотрели только на видимый результат. Ошибка
+ * случалась после закрытия окна, и её никто не замечал.
+ */
+const consoleErrors = [];
+
+test.beforeEach(({ page }) => {
+  consoleErrors.length = 0;
+  page.on('pageerror', error => consoleErrors.push(`pageerror: ${error.message}`));
+  page.on('console', message => {
+    if (message.type() !== 'error') return;
+    // «Failed to load resource» — это браузер сообщает код ответа, а не сбой
+    // приложения. Тесты нарочно отдают 409 и 422, и такие строки означали бы
+    // ложное падение. Всё остальное, включая RangeError, остаётся ошибкой.
+    if (message.text().includes('Failed to load resource')) return;
+    consoleErrors.push(`console: ${message.text()}`);
+  });
+});
+
+test.afterEach(() => {
+  expect(consoleErrors, `ошибки в консоли страницы:\n${consoleErrors.join('\n')}`).toEqual([]);
+});
 
 const modal = page => page.locator('#modal-overlay');
 
@@ -135,11 +173,16 @@ test.describe('Уровни — формы', () => {
     await form.locator('[name="name"]').fill('Дважды');
 
     const submit = form.locator('[data-submit]');
+    await submit.focus();
     await submit.click();
-    await expect(submit).toBeDisabled();
+
+    // aria-disabled, а не disabled: выключенный элемент теряет фокус, и с
+    // клавиатуры человек оказывался за пределами диалога.
+    await expect(submit).toHaveAttribute('aria-disabled', 'true');
+    await expect(submit).toBeFocused();
     await submit.click({ force: true, timeout: 2000 }).catch(() => {});
 
-    await expect(submit).toBeEnabled({ timeout: 10_000 });
+    await expect(submit).not.toHaveAttribute('aria-disabled', 'true', { timeout: 10_000 });
     expect(calls.createLevel, 'повторный клик создал второй уровень').toBe(1);
   });
 
@@ -177,8 +220,13 @@ test.describe('Уровни — формы', () => {
 
     const form = page.locator('[data-lv-form="recalc"]');
     await expect(form).toBeVisible();
-    // Режима предпросмотра на сервере нет — кнопка не должна быть кликабельной.
-    await expect(form.locator('[data-mode="preview"]')).toBeDisabled();
+    // Режима предпросмотра на сервере нет. Кнопки-переключателя тоже нет:
+    // элемент, который выглядит как выбор, но ничего не переключает, хуже
+    // отсутствия выбора. Вместо него — текст и объяснение.
+    await expect(form.locator('[data-mode]')).toHaveCount(0);
+    await expect(form.locator('.lv-mode-fixed')).toContainText('Применить');
+    await expect(form.locator('[data-field="mode"] .form-hint'))
+      .toContainText('Предпросмотра нет');
 
     await form.locator('[data-submit]').click();
     const result = form.locator('[data-recalc-result]');
@@ -225,5 +273,29 @@ test.describe('Уровни — доступность', () => {
     });
     expect(outline.focused, 'заголовок не получил фокус — проверка ничего не значит').toBe(true);
     expect(outline.width, 'вокруг названия раздела рисуется рамка').toBe('0px');
+  });
+});
+
+test.describe('Уровни — после сохранения', () => {
+  test('созданный уровень появляется на экране', async ({ page }) => {
+    // Проверяем видимый результат, а не логи и не число запросов.
+    // Ошибка внутри обновления экрана ловится catch формы и до консоли не
+    // доходит, а список успевает перечитаться и без перерисовки — обе эти
+    // проверки в своё время остались зелёными при сломанном обновлении.
+    // Единственный честный признак — что новая карточка видна.
+    await openLevels(page);
+    await expect(page.getByText('Созданный уровень')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Добавить уровень' }).click();
+    const form = page.locator('[data-lv-form="level"]');
+    await form.locator('[name="code"]').fill('refresh_check');
+    await form.locator('[name="name"]').fill('Проверка обновления');
+    await form.locator('[data-submit]').click();
+
+    await expect(page.locator('#modal-overlay')).toBeHidden({ timeout: 10_000 });
+    await expect(
+      page.locator('[data-level-name]', { hasText: 'Созданный уровень' }),
+      'экран не перерисовался: сохранённый уровень не появился в списке',
+    ).toBeVisible({ timeout: 10_000 });
   });
 });

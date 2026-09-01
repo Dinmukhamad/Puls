@@ -54,6 +54,33 @@ async function openLevels(page) {
   await page.waitForTimeout(600);
 }
 
+/**
+ * Ни один тест не должен проходить при ошибке в консоли.
+ *
+ * Повод конкретный: функция обновления экрана какое-то время вызывала саму
+ * себя, каждое сохранение падало с RangeError — и все проверки оставались
+ * зелёными, потому что смотрели только на видимый результат. Ошибка
+ * случалась после закрытия окна, и её никто не замечал.
+ */
+const consoleErrors = [];
+
+test.beforeEach(({ page }) => {
+  consoleErrors.length = 0;
+  page.on('pageerror', error => consoleErrors.push(`pageerror: ${error.message}`));
+  page.on('console', message => {
+    if (message.type() !== 'error') return;
+    // «Failed to load resource» — это браузер сообщает код ответа, а не сбой
+    // приложения. Тесты нарочно отдают 409 и 422, и такие строки означали бы
+    // ложное падение. Всё остальное, включая RangeError, остаётся ошибкой.
+    if (message.text().includes('Failed to load resource')) return;
+    consoleErrors.push(`console: ${message.text()}`);
+  });
+});
+
+test.afterEach(() => {
+  expect(consoleErrors, `ошибки в консоли страницы:\n${consoleErrors.join('\n')}`).toEqual([]);
+});
+
 test.describe('Уровни — визуальный базлайн', () => {
   // @visual — снимок зависит от сглаживания шрифтов конкретной ОС.
   // В CI на ubuntu такие тесты исключаются: базлайн снят на windows.
@@ -88,6 +115,10 @@ test.describe('Уровни — визуальный базлайн', () => {
       .map(l => l.name);
     // Порядок задаёт сервер — экран не имеет права его переставлять.
     const shown = await page.locator('[data-level-name]').allTextContents();
-    if (shown.length) expect(shown.map(s => s.trim())).toEqual(expected);
+    // Без условия: раньше здесь стоял `if (shown.length)`, а узла
+    // [data-level-name] в разметке не было вовсе — проверка тихо не
+    // выполнялась ни разу и порядок карточек ничем не был закреплён.
+    expect(shown.length, 'на экране нет ни одного имени уровня').toBeGreaterThan(0);
+    expect(shown.map(s => s.trim())).toEqual(expected);
   });
 });

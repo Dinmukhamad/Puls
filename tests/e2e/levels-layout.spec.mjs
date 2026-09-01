@@ -61,6 +61,33 @@ async function overflowing(page, selector) {
   }, selector);
 }
 
+/**
+ * Ни один тест не должен проходить при ошибке в консоли.
+ *
+ * Повод конкретный: функция обновления экрана какое-то время вызывала саму
+ * себя, каждое сохранение падало с RangeError — и все проверки оставались
+ * зелёными, потому что смотрели только на видимый результат. Ошибка
+ * случалась после закрытия окна, и её никто не замечал.
+ */
+const consoleErrors = [];
+
+test.beforeEach(({ page }) => {
+  consoleErrors.length = 0;
+  page.on('pageerror', error => consoleErrors.push(`pageerror: ${error.message}`));
+  page.on('console', message => {
+    if (message.type() !== 'error') return;
+    // «Failed to load resource» — это браузер сообщает код ответа, а не сбой
+    // приложения. Тесты нарочно отдают 409 и 422, и такие строки означали бы
+    // ложное падение. Всё остальное, включая RangeError, остаётся ошибкой.
+    if (message.text().includes('Failed to load resource')) return;
+    consoleErrors.push(`console: ${message.text()}`);
+  });
+});
+
+test.afterEach(() => {
+  expect(consoleErrors, `ошибки в консоли страницы:\n${consoleErrors.join('\n')}`).toEqual([]);
+});
+
 test.describe('Уровни — геометрия', () => {
   test('страница не прокручивается по горизонтали', async ({ page }) => {
     await openLevels(page);
