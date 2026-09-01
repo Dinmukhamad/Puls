@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.conftest import make_operator, make_operator_user
+from tests.conftest import make_operator
 
 DENIED = {401, 403, 404}
 
