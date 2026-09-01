@@ -110,3 +110,18 @@ def make_operator_user(db, *, password: str = "OpPass123!"):
     db.commit()
     db.refresh(user)
     return op, user, password
+
+
+@pytest.fixture()
+def operator_client(client, make_client, db_session):
+    """Клиент, залогиненный рядовым оператором.
+
+    Живёт в conftest, а не в отдельном тесте: проверять запреты для
+    оператора нужно в разных файлах, и каждому заводить своего было бы
+    дублированием.
+    """
+    _op, user, password = make_operator_user(db_session)
+    c = make_client()
+    login = c.post("/api/auth/login", json={"username": user.username, "password": password})
+    assert login.status_code == 200, login.text
+    return c
