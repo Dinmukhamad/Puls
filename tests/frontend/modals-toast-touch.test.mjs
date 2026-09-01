@@ -77,7 +77,11 @@ test('на телефоне цели нажатия не меньше 44px', () 
   assert.ok(mobileAt > tabsAt, 'мобильный блок стоит раньше определений вкладок и будет перебит');
 
   const block = controls.slice(mobileAt);
-  for (const sel of ['.an2-chip', '.filter-tab', '.btn-link', '.users-expand', '.level-cond-remove']) {
+  // .btn-sm в списке не было, и на телефоне он оставался 40px при токене
+  // «touch target 44px» — кнопки карточек уровней как раз такие.
+  // Фактическая высота измеряется в tests/e2e/levels-layout.spec.mjs.
+  for (const sel of ['.an2-chip', '.filter-tab', '.btn-link', '.users-expand',
+    '.level-cond-remove', '.btn-sm']) {
     assert.ok(block.includes(sel), `${sel} не доведён до цели нажатия`);
   }
   assert.match(block, /min-height: var\(--control-h-lg\)/, 'высота не из токена');

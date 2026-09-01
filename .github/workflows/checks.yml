@@ -112,13 +112,59 @@ jobs:
             tests/e2e/.artifacts/
           retention-days: 7
 
-  # Запускается только вручную. Снимает линуксовые базлайны и отдаёт их
-  # артефактом: если их закоммитить в tests/e2e/__screenshots__, пиксельные
-  # снимки начнут проверяться и в CI. Ничего не коммитит сам — решение о
-  # том, что считать эталоном, остаётся за человеком.
+  # Пиксельные снимки на linux. Job включается сам, как только в репозитории
+  # появятся базлайны *-linux.png: до этого блокировать нечем, поэтому шаг
+  # честно сообщает, что защиты пока нет, и не красит сборку.
+  #
+  # Базлайны снимает job e2e-visual-baseline ниже и приносит веткой на ревью:
+  # снимок эталона — решение человека, автоматически в main он не попадает.
+  e2e-visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Есть ли базлайны для linux
+        id: baselines
+        run: |
+          if compgen -G "tests/e2e/__screenshots__/*-linux.png" > /dev/null; then
+            echo "have=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Базлайнов *-linux.png нет — визуальные регрессии в CI пока не ловятся. Снимите их вручную: Actions → checks → Run workflow (job e2e-visual-baseline)."
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.baselines.outputs.have == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+      - if: steps.baselines.outputs.have == 'true'
+        run: npm ci
+      - if: steps.baselines.outputs.have == 'true'
+        run: npm run build
+      - if: steps.baselines.outputs.have == 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Визуальные снимки
+        if: steps.baselines.outputs.have == 'true'
+        run: npx playwright test --grep @visual
+      - name: Upload diff
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diff
+          path: |
+            playwright-report/
+            tests/e2e/.artifacts/
+          retention-days: 7
+
+  # Запускается только вручную. Снимает линуксовые базлайны и приносит их
+  # веткой ci/linux-visual-baselines: картинки видно в диффе, и человек сам
+  # решает, эталон это или зафиксированная регрессия. В main ничего не
+  # попадает автоматически — сразу после мержа ветки job e2e-visual выше
+  # включается сам и начинает блокировать визуальные регрессии.
   e2e-visual-baseline:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -135,3 +181,18 @@ jobs:
           name: linux-screenshots
           path: tests/e2e/__screenshots__/*-linux.png
           retention-days: 14
+      - name: Принести базлайны отдельной веткой
+        env:
+          BRANCH: ci/linux-visual-baselines
+        run: |
+          if [ -z "$(git status --porcelain -- tests/e2e/__screenshots__)" ]; then
+            echo "::notice::Базлайны не изменились — ветка не нужна."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add tests/e2e/__screenshots__
+          git commit             -m "ci: линуксовые базлайны визуальных снимков"             -m "Сняты job e2e-visual-baseline на ubuntu-latest. Проверьте картинки глазами: это эталон, а не зафиксированная регрессия. После мержа job e2e-visual включится сам и начнёт блокировать визуальные расхождения."
+          git push -f origin "$BRANCH"
+          echo "::notice::Базлайны в ветке $BRANCH — откройте PR и просмотрите картинки."

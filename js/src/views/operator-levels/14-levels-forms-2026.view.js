@@ -82,6 +82,23 @@ const LV_LEVEL_DEFAULTS = {
   coin_multiplier_percent: 0, shop_discount_percent: 0, is_active: true,
 };
 
+/**
+ * Перерисовать экран и вернуть фокус в осмысленное место.
+ *
+ * closeModal возвращает фокус на кнопку, которая открыла окно, но следом
+ * renderOperatorLevelsSettings переписывает innerHTML раздела — этой кнопки
+ * больше не существует, и фокус уходит на body. Для работы с клавиатуры это
+ * означает, что после каждого сохранения обход начинается заново с шапки
+ * страницы. Ставим фокус на заголовок раздела: он же объявляет экран.
+ */
+async function lvRefreshScreen() {
+  await renderOperatorLevelsSettings();
+  const heading = document.querySelector('#view-operator-levels .section-title');
+  if (!heading) return;
+  if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+  heading.focus({ preventScroll: true });
+}
+
 /* ── Разметка полей ──────────────────────────────────────────── */
 
 function lvControl(field, value, disabled) {
@@ -92,8 +109,10 @@ function lvControl(field, value, disabled) {
     field.maxlength ? `maxlength="${field.maxlength}"` : '',
     field.min != null ? `min="${field.min}"` : '',
     field.step != null ? `step="${field.step}"` : '',
-    field.required ? 'required' : '',
-    `aria-describedby="${id}-hint"`,
+    field.required ? 'required aria-required="true"' : '',
+    // Ошибка перечислена в describedby вместе с подсказкой: без ссылки на
+    // неё программа экранного доступа прочитает поле как исправное.
+    `aria-describedby="${id}-hint ${id}-error"`,
   ].filter(Boolean).join(' ');
 
   if (field.type === 'textarea') {
@@ -106,9 +125,13 @@ function lvControl(field, value, disabled) {
     </label>`;
   }
   if (field.type === 'color') {
+    // Нижний регистр намеренно: браузер возвращает значение input[type=color]
+    // строчными буквами, и при «#5E5CE6» в атрибуте нетронутое поле выглядело
+    // изменённым — уходил лишний PATCH, а «Изменений нет» не срабатывало.
+    const hex = String(value || '#5E5CE6').toLowerCase();
     return `<span class="lv-color-pair">
-      <input type="color" class="lv-color-input" ${attrs}${off} value="${esc(value || '#5E5CE6')}">
-      <output class="lv-color-value" for="${id}">${esc(value || '#5E5CE6')}</output>
+      <input type="color" class="lv-color-input" ${attrs}${off} value="${esc(hex)}">
+      <output class="lv-color-value" for="${id}">${esc(hex)}</output>
     </span>`;
   }
   return `<input type="${field.type}" class="form-input" ${attrs}${off} value="${esc(value ?? '')}">`;
@@ -125,7 +148,8 @@ function lvGroup(field, value, { disabled = false, note = '' } = {}) {
       ${labelHtml}
       ${lvControl(field, value, disabled)}
       <p class="form-hint" id="${id}-hint">${esc(hint)}</p>
-      <p class="form-hint is-error" data-error-for="${field.name}" hidden></p>
+      <p class="form-hint is-error" id="${id}-error" role="alert"
+         data-error-for="${field.name}" hidden></p>
     </div>`;
 }
 
@@ -168,7 +192,17 @@ function lvFocusFirstError(form) {
   const slot = form.querySelector('[data-error-for]:not([hidden])');
   const name = slot?.getAttribute('data-error-for');
   const control = name && form.querySelector(`[name="${name}"]`);
-  if (control) control.focus({ preventScroll: false });
+  if (control) {
+    control.focus({ preventScroll: false });
+    return;
+  }
+  // Ошибка без своего поля («Изменений нет», отказ сервера) иначе оставалась
+  // незамеченной: фокус никуда не двигался, и с клавиатуры о ней было не узнать.
+  const general = form.querySelector('[data-form-error]:not([hidden])');
+  if (general) {
+    general.setAttribute('tabindex', '-1');
+    general.focus({ preventScroll: false });
+  }
 }
 
 /**
@@ -213,7 +247,12 @@ function lvSubmitOnce(form, { run, onSuccess, busyLabel = 'Сохраняем…
   form.dataset.busy = '1';
   const restore = button ? button.textContent : '';
   if (button) {
-    button.disabled = true;
+    // Именно aria-disabled, а не disabled: браузер снимает фокус с
+    // выключенного элемента на body, то есть за пределы диалога. Отправляют
+    // форму обычно с клавиатуры, стоя на этой самой кнопке, — и следующий
+    // Tab уводил в боковое меню под оверлеем. Повторную отправку не пускает
+    // form.dataset.busy ниже, а не атрибут.
+    button.setAttribute('aria-disabled', 'true');
     button.setAttribute('aria-busy', 'true');
     button.textContent = busyLabel;
   }
@@ -226,7 +265,7 @@ function lvSubmitOnce(form, { run, onSuccess, busyLabel = 'Сохраняем…
     .finally(() => {
       form.dataset.busy = '0';
       if (button && button.isConnected) {
-        button.disabled = false;
+        button.removeAttribute('aria-disabled');
         button.removeAttribute('aria-busy');
         button.textContent = restore;
       }
@@ -261,9 +300,16 @@ function lvChangedOnly(values, original) {
   const out = {};
   for (const [key, value] of Object.entries(values)) {
     const before = original?.[key];
-    const same = typeof value === 'number'
-      ? Number(before ?? 0) === value
-      : String(before ?? '') === String(value ?? '');
+    let same;
+    if (typeof value === 'number') {
+      same = Number(before ?? 0) === value;
+    } else if (key === 'color') {
+      // Цвет сравниваем без учёта регистра: «#64748B» с сервера и «#64748b»
+      // из поля — одно и то же значение.
+      same = String(before ?? '').toLowerCase() === String(value ?? '').toLowerCase();
+    } else {
+      same = String(before ?? '') === String(value ?? '');
+    }
     if (!same) out[key] = value;
   }
   return out;
@@ -289,7 +335,7 @@ function showLevelFormModal(level = null) {
     <p class="modal-subtitle">Поля соответствуют настройкам уровня на сервере.</p>
     <form class="lv-form" data-lv-form="level" novalidate>
       <div class="lv-form-grid">${groups}</div>
-      <p class="form-hint is-error" data-form-error hidden></p>
+      <p class="form-hint is-error" role="alert" data-form-error hidden></p>
       <div class="lv-form-actions">
         <button class="btn-outline" type="button" data-cancel>Отмена</button>
         <button class="btn-primary" type="submit" data-submit>
@@ -309,6 +355,9 @@ function showLevelFormModal(level = null) {
 
   form.addEventListener('submit', event => {
     event.preventDefault();
+    // Сбрасываем прошлые ошибки до проверок: клиентские ветки ниже уходят
+    // в lvApplyError напрямую, минуя lvSubmitOnce, где сброс и происходит.
+    lvClearErrors(form);
     const editable = LV_LEVEL_FIELDS.filter(f => !(f.adminOnly && !isAdmin));
     const values2 = lvReadLevelForm(form, editable);
 
@@ -318,7 +367,8 @@ function showLevelFormModal(level = null) {
 
     const payload = isEdit ? lvChangedOnly(values2, level) : values2;
     if (isEdit && !Object.keys(payload).length) {
-      lvSetGeneralError(form, 'Изменений нет.');
+      lvSetGeneralError(form, 'Изменений нет — сохранять нечего.');
+      lvFocusFirstError(form);
       return;
     }
 
@@ -330,7 +380,7 @@ function showLevelFormModal(level = null) {
         swrInvalidate('levels:');
         closeModal(true);
         showToast(isEdit ? 'Уровень сохранён' : 'Уровень создан', 'success');
-        await renderOperatorLevelsSettings();
+        await lvRefreshScreen();
       },
     });
   });
@@ -380,29 +430,33 @@ function showLevelRulesModal(level, editingRule = null) {
       <div class="lv-form-grid">
         <div class="form-group" data-field="metric_code">
           <label class="form-label form-required" for="lv-f-metric_code">Показатель</label>
-          <select class="form-select" id="lv-f-metric_code" name="metric_code">
+          <select class="form-select" id="lv-f-metric_code" name="metric_code" aria-required="true" aria-describedby="lv-f-metric_code-error">
             ${LV_METRICS.map(m => `<option value="${m.code}"${m.code === current.metric_code ? ' selected' : ''}>${esc(m.label)}</option>`).join('')}
           </select>
-          <p class="form-hint is-error" data-error-for="metric_code" hidden></p>
+          <p class="form-hint is-error" role="alert" id="lv-f-metric_code-error" data-error-for="metric_code" hidden></p>
         </div>
         <div class="form-group" data-field="operator">
           <label class="form-label form-required" for="lv-f-operator">Условие</label>
-          <select class="form-select" id="lv-f-operator" name="operator">
+          <select class="form-select" id="lv-f-operator" name="operator" aria-required="true" aria-describedby="lv-f-operator-error">
             ${LV_OPERATORS.map(o => `<option value="${o.code}"${o.code === current.operator ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}
           </select>
-          <p class="form-hint is-error" data-error-for="operator" hidden></p>
+          <p class="form-hint is-error" role="alert" id="lv-f-operator-error" data-error-for="operator" hidden></p>
         </div>
         <div class="form-group" data-field="value_min">
           <label class="form-label" for="lv-f-value_min">Минимум</label>
           <input class="form-input" id="lv-f-value_min" name="value_min" type="number" step="0.01"
+                 aria-describedby="lv-f-value_min-hint lv-f-value_min-error"
                  value="${current.value_min ?? ''}">
-          <p class="form-hint is-error" data-error-for="value_min" hidden></p>
+          <p class="form-hint" id="lv-f-value_min-hint" data-bound-hint></p>
+          <p class="form-hint is-error" role="alert" id="lv-f-value_min-error" data-error-for="value_min" hidden></p>
         </div>
         <div class="form-group" data-field="value_max">
           <label class="form-label" for="lv-f-value_max">Максимум</label>
           <input class="form-input" id="lv-f-value_max" name="value_max" type="number" step="0.01"
+                 aria-describedby="lv-f-value_max-hint lv-f-value_max-error"
                  value="${current.value_max ?? ''}">
-          <p class="form-hint is-error" data-error-for="value_max" hidden></p>
+          <p class="form-hint" id="lv-f-value_max-hint" data-bound-hint></p>
+          <p class="form-hint is-error" role="alert" id="lv-f-value_max-error" data-error-for="value_max" hidden></p>
         </div>
         <div class="form-group" data-field="is_required">
           <label class="lv-check">
@@ -410,10 +464,10 @@ function showLevelRulesModal(level, editingRule = null) {
             <span>Обязательное условие</span>
           </label>
           <p class="form-hint">Необязательные условия показываются оператору, но на присвоение не влияют.</p>
-          <p class="form-hint is-error" data-error-for="is_required" hidden></p>
+          <p class="form-hint is-error" role="alert" id="lv-f-is_required-error" data-error-for="is_required" hidden></p>
         </div>
       </div>
-      <p class="form-hint is-error" data-form-error hidden></p>
+      <p class="form-hint is-error" role="alert" data-form-error hidden></p>
       <div class="lv-form-actions">
         <button class="btn-outline" type="button" data-cancel>Закрыть</button>
         <button class="btn-primary" type="submit" data-submit>
@@ -447,6 +501,19 @@ function showLevelRulesModal(level, editingRule = null) {
       group.classList.toggle('is-muted', !used);
       const label = group.querySelector('.form-label');
       if (label) label.classList.toggle('form-required', used);
+
+      // Ненужную границу не просто гасим цветом: поле выключается и говорит
+      // об этом словами. Раньше в него можно было ввести значение, которое
+      // затем молча выбрасывалось при отправке.
+      const input = group.querySelector('input');
+      input.disabled = !used;
+      input.toggleAttribute('aria-required', used);
+      const hint = group.querySelector('[data-bound-hint]');
+      if (hint) {
+        hint.textContent = used
+          ? 'Обязательно для выбранного условия.'
+          : 'Не используется для выбранного условия.';
+      }
     }
   };
   form.querySelector('[name="operator"]').addEventListener('change', syncBounds);
@@ -492,12 +559,19 @@ function showLevelRulesModal(level, editingRule = null) {
         swrInvalidate('levels:');
         closeModal(true);
         showToast(editing ? 'Условие сохранено' : 'Условие добавлено', 'success');
-        await renderOperatorLevelsSettings();
+        await lvRefreshScreen();
       },
     });
   });
 }
 
+/**
+ * Удаление условия из окна условий.
+ *
+ * Подтверждение открывается через тот же единственный оверлей, поэтому
+ * окно условий им уничтожается. Раньше после отмены пользователь просто
+ * оставался ни с чем — окно пропадало. Возвращаем его в обеих ветках.
+ */
 async function deleteLevelRuleUi(level, rule) {
   const metric = LV_METRICS.find(m => m.code === rule.metric_code);
   const confirmed = await uiConfirmAction({
@@ -505,14 +579,22 @@ async function deleteLevelRuleUi(level, rule) {
     description: `Условие «${metric?.label || rule.metric_code}» перестанет учитываться при расчёте уровня «${level.name}».`,
     confirmLabel: 'Удалить условие',
   });
-  if (!confirmed) return;
+  if (!confirmed) {
+    showLevelRulesModal(level);
+    return;
+  }
   try {
     await api.deleteOperatorLevelRule(rule.id);
     swrInvalidate('levels:');
     showToast('Условие удалено', 'success');
     await renderOperatorLevelsSettings();
+    // Возвращаем окно с уже обновлённым списком условий.
+    const fresh = await api.listAdminOperatorLevels().catch(() => null);
+    const updated = fresh?.find(item => item.id === level.id);
+    showLevelRulesModal(updated || { ...level, rules: (level.rules || []).filter(r => r.id !== rule.id) });
   } catch (error) {
     showToast(error.message || 'Не удалось удалить условие', 'error');
+    showLevelRulesModal(level);
   }
 }
 
@@ -539,30 +621,27 @@ function showRecalculateModal() {
       <div class="lv-form-grid">
         <div class="form-group" data-field="period_start">
           <label class="form-label form-required" for="lv-f-period_start">Начало периода</label>
-          <input class="form-input" id="lv-f-period_start" name="period_start" type="date" value="${start}">
-          <p class="form-hint is-error" data-error-for="period_start" hidden></p>
+          <input class="form-input" id="lv-f-period_start" name="period_start" type="date" aria-required="true" aria-describedby="lv-f-period_start-error" value="${start}">
+          <p class="form-hint is-error" role="alert" id="lv-f-period_start-error" data-error-for="period_start" hidden></p>
         </div>
         <div class="form-group" data-field="period_end">
           <label class="form-label form-required" for="lv-f-period_end">Конец периода</label>
-          <input class="form-input" id="lv-f-period_end" name="period_end" type="date" value="${end}">
-          <p class="form-hint is-error" data-error-for="period_end" hidden></p>
+          <input class="form-input" id="lv-f-period_end" name="period_end" type="date" aria-required="true" aria-describedby="lv-f-period_end-error" value="${end}">
+          <p class="form-hint is-error" role="alert" id="lv-f-period_end-error" data-error-for="period_end" hidden></p>
         </div>
       </div>
 
-      <fieldset class="form-group" data-field="mode">
-        <legend class="form-label">Режим</legend>
-        <div class="segmented" role="group" aria-label="Режим пересчёта">
-          <button type="button" data-mode="apply" aria-pressed="true">Применить</button>
-          <button type="button" data-mode="preview" aria-pressed="false" disabled>Предпросмотр</button>
-        </div>
+      <div class="form-group" data-field="mode">
+        <p class="form-label" id="lv-f-mode-label">Режим</p>
+        <p class="lv-mode-fixed">Применить — результат записывается сразу.</p>
         <p class="form-hint">
-          Предпросмотр недоступен: сервер выполняет пересчёт сразу и не умеет
-          показывать результат без записи. Кнопка появится, когда появится режим на сервере.
+          Предпросмотра нет: сервер выполняет пересчёт и не умеет показывать
+          результат без записи. Выбор появится здесь, когда появится на сервере.
         </p>
-      </fieldset>
+      </div>
 
-      <p class="form-hint is-error" data-form-error hidden></p>
-      <div class="lv-result" data-recalc-result hidden></div>
+      <p class="form-hint is-error" role="alert" data-form-error hidden></p>
+      <div class="lv-result" data-recalc-result role="status" tabindex="-1" hidden></div>
       <div class="lv-form-actions">
         <button class="btn-outline" type="button" data-cancel>Отмена</button>
         <button class="btn-primary" type="submit" data-submit>Пересчитать и применить</button>
@@ -579,8 +658,10 @@ function showRecalculateModal() {
     const period_end = form.querySelector('[name="period_end"]').value;
 
     lvClearErrors(form);
-    if (!period_start) return lvSetFieldError(form, 'period_start', 'Укажите начало периода');
-    if (!period_end) return lvSetFieldError(form, 'period_end', 'Укажите конец периода');
+    // Через lvApplyError, а не lvSetFieldError: фокус на поле с ошибкой
+    // ставится внутри него — иначе эти две ветки молчали для клавиатуры.
+    if (!period_start) return lvApplyError(form, { fieldErrors: { period_start: 'Укажите начало периода' } });
+    if (!period_end) return lvApplyError(form, { fieldErrors: { period_end: 'Укажите конец периода' } });
     if (period_start > period_end) {
       lvSetFieldError(form, 'period_end', 'Конец периода раньше начала');
       lvFocusFirstError(form);
@@ -608,7 +689,10 @@ function showRecalculateModal() {
         }
         swrInvalidate('levels:');
         showToast(updated ? `Уровень изменился у ${updated} операторов` : 'Изменений нет', 'success');
+        // Окно пересчёта остаётся открытым ради итога, поэтому обновляем
+        // экран без перевода фокуса на заголовок: он лежит под оверлеем.
         await renderOperatorLevelsSettings();
+        box?.focus({ preventScroll: true });
       },
     });
   });
@@ -634,34 +718,34 @@ async function showManualAssignModal(levels) {
       <div class="lv-form-grid">
         <div class="form-group" data-field="operator_id">
           <label class="form-label form-required" for="lv-f-operator_id">Оператор</label>
-          <select class="form-select" id="lv-f-operator_id" name="operator_id">
+          <select class="form-select" id="lv-f-operator_id" name="operator_id" aria-required="true" aria-describedby="lv-f-operator_id-error">
             <option value="">Выберите оператора</option>
             ${items.map(op => `<option value="${op.id}">${esc(op.full_name || op.name || `#${op.id}`)}</option>`).join('')}
           </select>
-          <p class="form-hint is-error" data-error-for="operator_id" hidden></p>
+          <p class="form-hint is-error" role="alert" id="lv-f-operator_id-error" data-error-for="operator_id" hidden></p>
         </div>
         <div class="form-group" data-field="level_id">
           <label class="form-label form-required" for="lv-f-level_id">Уровень</label>
-          <select class="form-select" id="lv-f-level_id" name="level_id">
+          <select class="form-select" id="lv-f-level_id" name="level_id" aria-required="true" aria-describedby="lv-f-level_id-error">
             <option value="">Выберите уровень</option>
             ${sorted.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('')}
           </select>
-          <p class="form-hint is-error" data-error-for="level_id" hidden></p>
+          <p class="form-hint is-error" role="alert" id="lv-f-level_id-error" data-error-for="level_id" hidden></p>
         </div>
       </div>
       <div class="form-group" data-field="reason">
         <label class="form-label form-required" for="lv-f-reason">Причина</label>
-        <input class="form-input" id="lv-f-reason" name="reason" type="text" maxlength="200"
+        <input class="form-input" id="lv-f-reason" name="reason" type="text" aria-required="true" aria-describedby="lv-f-reason-error" maxlength="200"
                placeholder="Например: перевод на новую линию">
         <p class="form-hint">Обязательно. Останется в истории уровня оператора.</p>
-        <p class="form-hint is-error" data-error-for="reason" hidden></p>
+        <p class="form-hint is-error" role="alert" id="lv-f-reason-error" data-error-for="reason" hidden></p>
       </div>
       <div class="form-group" data-field="comment">
         <label class="form-label" for="lv-f-comment">Комментарий</label>
         <textarea class="form-textarea" id="lv-f-comment" name="comment" rows="2" maxlength="500"></textarea>
-        <p class="form-hint is-error" data-error-for="comment" hidden></p>
+        <p class="form-hint is-error" role="alert" id="lv-f-comment-error" data-error-for="comment" hidden></p>
       </div>
-      <p class="form-hint is-error" data-form-error hidden></p>
+      <p class="form-hint is-error" role="alert" data-form-error hidden></p>
       <div class="lv-form-actions">
         <button class="btn-outline" type="button" data-cancel>Отмена</button>
         <button class="btn-primary" type="submit" data-submit>Назначить уровень</button>
@@ -694,7 +778,7 @@ async function showManualAssignModal(levels) {
         swrInvalidate('levels:');
         closeModal(true);
         showToast('Уровень назначен вручную', 'success');
-        await renderOperatorLevelsSettings();
+        await lvRefreshScreen();
       },
     });
   });
@@ -724,7 +808,7 @@ async function disableLevelUi(level) {
     await api.deleteOperatorLevel(level.id);
     swrInvalidate('levels:');
     showToast('Уровень отключён', 'success');
-    await renderOperatorLevelsSettings();
+    await lvRefreshScreen();
   } catch (error) {
     if (error?.status === 409) {
       // Защитная ветка: сегодня сервер 409 на этой операции не возвращает.
@@ -746,7 +830,7 @@ function showLevelConflictModal(level, message) {
       но данные операторов и история сохранятся. Ничего не выполнено — выберите действие сами.
     </p>
     <form class="lv-form" data-lv-form="conflict" novalidate>
-      <p class="form-hint is-error" data-form-error hidden></p>
+      <p class="form-hint is-error" role="alert" data-form-error hidden></p>
       <div class="lv-form-actions">
         <button class="btn-outline" type="button" data-cancel>Ничего не делать</button>
         <button class="btn-primary" type="submit" data-submit>Снять уровень с расчёта</button>
@@ -766,7 +850,7 @@ function showLevelConflictModal(level, message) {
         swrInvalidate('levels:');
         closeModal(true);
         showToast('Уровень снят с расчёта', 'success');
-        await renderOperatorLevelsSettings();
+        await lvRefreshScreen();
       },
     });
   });

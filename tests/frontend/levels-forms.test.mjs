@@ -282,11 +282,15 @@ test('повторный submit не отправляет второй запр�
 
   const first = sandbox.lvSubmitOnce(form, { run: slow, onSuccess: () => {} });
   const second = sandbox.lvSubmitOnce(form, { run: slow, onSuccess: () => {} });
-  assert.equal(form._submit.disabled, true, 'кнопка не заблокирована на время запроса');
+  // aria-disabled, а не disabled: браузер снимает фокус с выключенного
+  // элемента на body, то есть за пределы диалога. Повторную отправку не
+  // пускает флаг busy, а не атрибут.
+  assert.equal(form._submit._attrs['aria-disabled'], 'true', 'кнопка не помечена занятой');
+  assert.equal(form._submit._attrs['aria-busy'], 'true', 'не объявлено, что идёт отправка');
   await Promise.all([first, second]);
 
   assert.equal(calls, 1, 'второй submit прошёл, хотя первый ещё выполнялся');
-  assert.equal(form._submit.disabled, false, 'кнопка осталась заблокированной после ответа');
+  assert.equal(form._submit._attrs['aria-disabled'], undefined, 'кнопка осталась помеченной после ответа');
 });
 
 test('после ошибки форма снова принимает отправку', async () => {
@@ -304,7 +308,7 @@ test('успешная отправка не оставляет кнопку в 
   const form = fakeForm(['code']);
   await sandbox.lvSubmitOnce(form, { run: () => Promise.resolve({}), onSuccess: () => {} });
   assert.equal(form._submit.textContent, 'Сохранить');
-  assert.equal(form._submit.disabled, false);
+  assert.equal(form._submit._attrs['aria-disabled'], undefined);
 });
 
 /* ── Тесты: разбор ошибок в API-клиенте ──────────────────────── */
@@ -367,4 +371,17 @@ test('форма не отправляет вычисляемые поля да�
   assert.ok(!/stage_number|rules_count|reward_label/.test(
     forms.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')),
   'в коде форм упомянуто вычисляемое поле');
+});
+
+test('цвет не считается изменённым из-за регистра', () => {
+  // Браузер возвращает значение input[type=color] строчными буквами, сервер
+  // отдаёт «#64748B». Без нормализации открыть форму и сразу сохранить —
+  // значило отправить PATCH с «изменением» цвета, которого не было.
+  const out = sandbox.lvChangedOnly({ color: '#64748b' }, { color: '#64748B' });
+  assert.deepEqual(out, {}, 'нетронутый цвет попал в изменения');
+});
+
+test('настоящая смена цвета не теряется', () => {
+  const out = sandbox.lvChangedOnly({ color: '#ff0000' }, { color: '#64748B' });
+  assert.deepEqual(out, { color: '#ff0000' });
 });

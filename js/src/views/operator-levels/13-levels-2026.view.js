@@ -84,18 +84,39 @@ async function renderOperatorLevelsSettings() {
       <div class="lv-tabs" role="tablist" aria-label="Разделы настройки уровней">
         ${Object.entries(LEVELS_TAB_LABELS).map(([key, meta]) => `
           <button class="lv-tab${tab === key ? ' is-active' : ''}" role="tab"
-                  aria-selected="${tab === key}" data-lv-tab="${key}">
+                  id="lv-tab-${key}" aria-controls="lv-body"
+                  aria-selected="${tab === key}"
+                  tabindex="${tab === key ? '0' : '-1'}" data-lv-tab="${key}">
             <span class="lv-tab-title">${esc(meta.title)}</span>
             <span class="lv-tab-sub">${esc(meta.sub)}</span>
           </button>`).join('')}
       </div>
-      <div id="lv-body">${uiPageLoader('Загружаем уровни')}</div>
+      <div id="lv-body" role="tabpanel" aria-labelledby="lv-tab-${tab}" tabindex="-1">
+        ${uiPageLoader('Загружаем уровни')}
+      </div>
     </div>`;
 
-  el.querySelectorAll('[data-lv-tab]').forEach(btn => btn.addEventListener('click', () => {
+  const tabButtons = [...el.querySelectorAll('[data-lv-tab]')];
+  tabButtons.forEach((btn, index) => {
     // Вкладка уходит в адрес — F5 и Back/Forward возвращают ту же.
-    navigateTo('operator-levels', { tab: btn.dataset.lvTab });
-  }));
+    btn.addEventListener('click', () => navigateTo('operator-levels', { tab: btn.dataset.lvTab }));
+
+    // Паттерн ARIA для вкладок: стрелки переводят фокус, но не переключают
+    // раздел. Переключение грузит данные, и делать это на каждое нажатие
+    // стрелки нельзя — выбор подтверждается Enter или пробелом.
+    btn.addEventListener('keydown', event => {
+      const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+      let next = null;
+      if (step) next = tabButtons[(index + step + tabButtons.length) % tabButtons.length];
+      else if (event.key === 'Home') next = tabButtons[0];
+      else if (event.key === 'End') next = tabButtons[tabButtons.length - 1];
+      if (!next) return;
+      event.preventDefault();
+      tabButtons.forEach(item => item.setAttribute('tabindex', '-1'));
+      next.setAttribute('tabindex', '0');
+      next.focus();
+    });
+  });
 
   const body = el.querySelector('#lv-body');
   if (tab === 'achievements') {
@@ -157,7 +178,9 @@ async function renderLevelsList(body, actionsHost, generation) {
       'Заведите первый этап роста — операторы начнут получать его автоматически, как только выполнят условия.',
       [{ id: 'create', label: 'Добавить уровень' }],
     );
-    uiBindStateActions(body, { create: () => showCreateOperatorLevelPrompt() });
+    // Та же форма, что и в шапке: раньше пустое состояние вело в старую
+    // реализацию, где у полей нет подписей, а ошибка не связана с полем.
+    uiBindStateActions(body, { create: () => showLevelFormModal() });
     return;
   }
 
@@ -196,11 +219,11 @@ function levelCard(level, index, isAdmin) {
   return `
     <article class="lv-card${inactive ? ' is-inactive' : ''}" data-lv-card="${level.id}">
       <header class="lv-card-head">
-        <span class="lv-stage" aria-hidden="true">${level.stage_number ?? index + 1}</span>
+        <span class="lv-stage"><span class="sr-only">Этап </span>${level.stage_number ?? index + 1}</span>
         <div class="lv-card-title-wrap">
           <h3 class="lv-card-title">
             <span class="lv-dot" style="--lv-color:${esc(level.color || '#64748B')}" aria-hidden="true"></span>
-            ${esc(level.name)}
+            <span data-level-name>${esc(level.name)}</span>
           </h3>
           <p class="lv-card-code">
             <code>${esc(level.code)}</code>
@@ -232,9 +255,9 @@ function levelCard(level, index, isAdmin) {
       <footer class="lv-card-actions">
         <button class="btn-outline btn-sm" type="button" data-lv-edit
                 aria-label="Редактировать уровень «${esc(level.name)}»">Редактировать</button>
-        <button class="btn-tertiary btn-sm" type="button" data-lv-rules
-                aria-label="Условия уровня «${esc(level.name)}»">
-          Условия${rules.length ? ` · ${rules.length}` : ''}
+        <button class="btn-tertiary btn-sm" type="button" data-lv-rules>
+          Условия${rules.length ? ` · ${rules.length}` : ''}<span
+            class="sr-only"> уровня «${esc(level.name)}»</span>
         </button>
         ${isAdmin ? `<button class="btn-tertiary btn-sm" type="button" data-lv-toggle
                 aria-label="${inactive ? 'Включить' : 'Отключить'} уровень «${esc(level.name)}»">
@@ -271,7 +294,7 @@ async function enableLevelUi(level) {
     await api.updateOperatorLevel(level.id, { is_active: true });
     swrInvalidate('levels:');
     showToast('Уровень включён', 'success');
-    await renderOperatorLevelsSettings();
+    await lvRefreshScreen();
   } catch (error) {
     showToast(error?.message || 'Не удалось включить уровень', 'error');
   }
