@@ -286,9 +286,14 @@ function isKnownRoute(view) {
 
 /** Права по разделам. Правила не менялись — перенесены как были. */
 function allowedViewsForRole(role) {
-  if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests', 'missions'];
+  // «Розыгрыши» доступны обеим сторонам: у бэкенда админские операции
+  // закрыты STAFF_ROLES, а участие оператора — обычный эндпоинт, и
+  // renderRaffles сам разводит эти ветки. Раздел был в ROUTES и в меню,
+  // но отсутствовал в этом списке, поэтому #raffles не открывался ни у
+  // кого: маршрут молча подменялся на стартовый.
+  if (!isAdmin(role)) return ['cabinet', 'rating', 'shop', 'wheel', 'tests', 'missions', 'raffles'];
 
-  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'tests', 'missions', 'period-report', 'analytics'];
+  const views = ['summary', 'operators', 'coins', 'shop', 'wheel', 'tests', 'missions', 'period-report', 'analytics', 'raffles'];
   if (role === 'manager' || role === 'admin') views.push('operator-levels');
   if (canManageGroups(role)) views.push('groups');
   if (role === 'admin') views.push('sessions', 'cabinet', 'rating');
