@@ -170,8 +170,8 @@ function uiErrorState(title, text, { detail = '', requestId = '', actions = [], 
 }
 
 /** Нет прав. Не путаем с ошибкой сервера. */
-function uiForbiddenState(title = 'Раздел недоступен', text = 'У вашей роли нет доступа к этим данным. Обратитесь к администратору, если доступ нужен для работы.', compact = false) {
-  return uiStateBlock({ kind: 'forbidden', icon: '×', title, text, compact });
+function uiForbiddenState(title = 'Раздел недоступен', text = 'У вашей роли нет доступа к этим данным. Обратитесь к администратору, если доступ нужен для работы.', compact = false, actions = []) {
+  return uiStateBlock({ kind: 'forbidden', icon: '×', title, text, compact, actions });
 }
 
 /** Плашка «показаны неполные данные» — поверх уже отрисованного контента. */

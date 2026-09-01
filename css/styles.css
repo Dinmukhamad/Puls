@@ -3208,6 +3208,251 @@ textarea.form-input:focus {
 
 /* Фон под открытым окном не прокручивается. */
 body.modal-open { overflow: hidden; }
+/* source: 60-primitives.css */
+/* ══════════════════════════════════════════════════════════════
+   Общие примитивы: Card, KPI, Table, Pagination, Chart shell.
+   Разметку выдаёт js/src/components/20-primitives.js.
+
+   Кнопки и вкладки здесь не описываются — их внешний вид задаётся
+   только в 30-controls.css (controls-single-source.test.mjs).
+══════════════════════════════════════════════════════════════ */
+
+.ui-tone-ok      { --ui: var(--success);        --ui-soft: var(--success-soft); }
+.ui-tone-warn    { --ui: var(--warning);        --ui-soft: var(--warning-soft); }
+.ui-tone-danger  { --ui: var(--danger);         --ui-soft: var(--danger-soft); }
+.ui-tone-neutral { --ui: var(--accent-primary); --ui-soft: var(--accent-primary-soft); }
+
+/* ── Card ────────────────────────────────────────────────── */
+.ui-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+  overflow: hidden;
+}
+.ui-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-soft);
+}
+.ui-card-head-text { min-width: 0; }
+.ui-card-title {
+  margin: 0;
+  font-size: var(--text-h3);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.ui-card-sub { margin: 2px 0 0; font-size: var(--text-tiny); color: var(--text-muted); }
+.ui-card-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; flex-shrink: 0; }
+.ui-card-body { padding: var(--space-5); min-width: 0; }
+.ui-card.is-flush > .ui-card-body { padding: 0; }
+
+/* ── KPI ─────────────────────────────────────────────────── */
+.ui-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-top: 3px solid var(--ui);
+  border-radius: var(--radius-lg);
+}
+.ui-kpi-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.ui-kpi-label { margin: 0; font-size: var(--text-small); font-weight: 600; color: var(--text-secondary); }
+.ui-kpi-hint {
+  width: 20px; height: 20px; flex-shrink: 0;
+  font-size: var(--text-micro); font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-muted);
+  border: 0; border-radius: 50%;
+  cursor: help;
+}
+.ui-kpi-value {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -.02em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.ui-kpi-nodata { font-size: var(--text-body); font-weight: 500; color: var(--text-muted); }
+.ui-kpi-meta, .ui-kpi-note { margin: 0; font-size: var(--text-tiny); color: var(--text-muted); }
+
+.ui-delta { font-size: var(--text-tiny); font-weight: 500; }
+.ui-delta.is-up   { color: var(--success-text); }
+.ui-delta.is-down { color: var(--danger-text); }
+.ui-delta.is-flat,
+.ui-delta.is-none { color: var(--text-muted); }
+
+/* ── Table ───────────────────────────────────────────────── */
+.ui-table-wrap { width: 100%; overflow-x: auto; }
+.ui-table { width: 100%; border-collapse: collapse; }
+.ui-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-default);
+  white-space: nowrap;
+}
+.ui-table thead th.num { text-align: right; }
+.ui-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  font: inherit;
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ui-sort:hover { color: var(--text-primary); }
+.ui-th.is-sorted .ui-sort { color: var(--text-primary); }
+.ui-sort:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.ui-sort-i { font-size: 11px; opacity: .7; }
+.ui-th-actions { width: 56px; }
+
+.ui-row > td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+}
+.ui-row > td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ui-row:hover > td { background: var(--bg-subtle); }
+.ui-row.is-open > td { background: var(--accent-primary-soft); border-bottom-color: transparent; }
+.ui-td-actions { width: 56px; text-align: right; }
+.ui-detail-row > td { padding: 0; border-bottom: 1px solid var(--border-soft); }
+
+/* ── Pagination ──────────────────────────────────────────── */
+.ui-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-default);
+}
+.ui-pager-range {
+  margin: 0;
+  font-size: var(--text-small);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.ui-pages { display: flex; align-items: center; gap: 4px; }
+.ui-page {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: var(--text-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+.ui-page:hover:not(:disabled):not(.is-current) { background: var(--bg-surface-hover); color: var(--text-primary); }
+.ui-page.is-current {
+  color: var(--accent-fill-text);
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  font-weight: 600;
+}
+.ui-page:disabled { opacity: .4; cursor: default; }
+.ui-page:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+.ui-page-gap { padding: 0 4px; color: var(--text-tertiary); }
+.ui-perpage-select {
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  font: inherit;
+  font-size: var(--text-small);
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+/* ── Chart shell ─────────────────────────────────────────── */
+.ui-chart { margin: 0; display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.ui-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.ui-chart-head-text { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+.ui-chart-title { font-size: var(--text-body); font-weight: 600; color: var(--text-primary); }
+.ui-chart-sub, .ui-chart-unit { font-size: var(--text-tiny); color: var(--text-muted); }
+.ui-chart-controls { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.ui-chart-body { min-width: 0; }
+
+/* Текстовая альтернатива графику — требование ТЗ. Свёрнута, но доступна
+   с клавиатуры и скринридеру, а не спрятана из дерева доступности. */
+.ui-chart-data > summary {
+  font-size: var(--text-tiny);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.ui-chart-data > summary:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.ui-chart-table { margin-top: var(--space-2); font-size: var(--text-tiny); }
+.ui-chart-table th, .ui-chart-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+}
+
+/* ── Узкие экраны: таблица становится карточками ─────────── */
+@media (max-width: 767px) {
+  .ui-table[data-mobile="cards"] thead {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .ui-table[data-mobile="cards"],
+  .ui-table[data-mobile="cards"] tbody,
+  .ui-table[data-mobile="cards"] tr,
+  .ui-table[data-mobile="cards"] td { display: block; width: auto; }
+  .ui-table[data-mobile="cards"] .ui-row {
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .ui-table[data-mobile="cards"] .ui-row > td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: 5px var(--space-4);
+    border-bottom: 0;
+    text-align: left;
+  }
+  .ui-table[data-mobile="cards"] .ui-row > td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    font-size: var(--text-tiny);
+    color: var(--text-muted);
+  }
+  .ui-table[data-mobile="cards"] .ui-row > td.num { text-align: right; }
+  .ui-pager { justify-content: center; }
+}
 /* source: 10-manual-account.css */
 
 
