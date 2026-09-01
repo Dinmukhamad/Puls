@@ -1,0 +1,140 @@
+/* ══════════════════════════════════════════════════════════════
+   Диаграммы редизайна 2026 — стили к js/src/utils/20-charts-2026.js.
+
+   Цвет берётся только из токенов. Тон (ok / warn / danger / neutral)
+   приходит со статусом от бэкенда: пороги считает сервер, а фронт их
+   не выдумывает.
+══════════════════════════════════════════════════════════════ */
+
+.ch-tone-ok      { --ch: var(--success);       --ch-soft: var(--success-soft); }
+.ch-tone-warn    { --ch: var(--warning);       --ch-soft: var(--warning-soft); }
+.ch-tone-danger  { --ch: var(--danger);        --ch-soft: var(--danger-soft); }
+.ch-tone-neutral { --ch: var(--accent-primary); --ch-soft: var(--accent-primary-soft); }
+
+.ch-empty {
+  margin: 0;
+  padding: var(--space-5) 0;
+  text-align: center;
+  font-size: var(--text-small);
+  color: var(--text-muted);
+}
+
+/* ── Спарклайн ───────────────────────────────────────────── */
+.ch-spark { display: block; width: 100%; height: 44px; }
+.ch-spark-line { stroke: var(--ch); }
+.ch-spark-area { fill: var(--ch); opacity: .10; }
+.ch-spark-dot  { fill: var(--ch); }
+
+/* ── Кольцевой индикатор ─────────────────────────────────── */
+.ch-gauge { display: block; flex-shrink: 0; }
+.ch-gauge-track { stroke: var(--bg-muted); }
+.ch-gauge-value { stroke: var(--ch); transition: stroke-dashoffset var(--transition-slow); }
+.ch-gauge-num {
+  font-family: var(--font-main);
+  font-size: 34px;
+  font-weight: 700;
+  fill: var(--text-primary);
+}
+.ch-gauge-max {
+  font-family: var(--font-main);
+  font-size: var(--text-tiny);
+  fill: var(--text-muted);
+}
+
+/* ── Линейный график ─────────────────────────────────────── */
+.ch-line { display: block; width: 100%; height: auto; }
+.ch-grid { stroke: var(--border-soft); stroke-width: 1; }
+.ch-axis {
+  font-family: var(--font-main);
+  font-size: var(--text-micro);
+  fill: var(--text-muted);
+}
+.ch-line-cur  { stroke: var(--accent-primary); }
+.ch-line-prev { stroke: var(--text-tertiary); }
+.ch-line-dot  { fill: var(--bg-surface); stroke: var(--accent-primary); stroke-width: 2; }
+.ch-line-dot:hover { r: 6; }
+
+/* ── Кольцевая диаграмма ─────────────────────────────────── */
+.ch-donut { display: block; flex-shrink: 0; }
+.ch-donut-track { stroke: var(--bg-muted); }
+.ch-donut-num {
+  font-family: var(--font-main);
+  font-size: 24px;
+  font-weight: 700;
+  fill: var(--text-primary);
+}
+.ch-donut-cap {
+  font-family: var(--font-main);
+  font-size: var(--text-micro);
+  fill: var(--text-muted);
+}
+
+/* Шкала долей качества упорядочена по смыслу: отлично → плохо.
+   Это не категории, а ступени, поэтому берём семантическую лестницу,
+   а не случайный набор оттенков. */
+.ch-seq-1 { stroke: var(--success); }
+.ch-seq-2 { stroke: var(--info); }
+.ch-seq-3 { stroke: var(--warning); }
+.ch-seq-4 { stroke: var(--danger); }
+.ch-seq-5 { stroke: var(--accent-violet); }
+.ch-seq-6 { stroke: var(--text-tertiary); }
+
+/* ── Легенда ─────────────────────────────────────────────── */
+.ch-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; min-width: 0; }
+.ch-legend-item {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--text-small);
+}
+.ch-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  /* У точки цвет задан обводкой в ch-seq-*, поэтому переносим её в фон. */
+  background: currentColor;
+  color: var(--text-tertiary);
+}
+.ch-legend-dot.ch-seq-1 { color: var(--success); }
+.ch-legend-dot.ch-seq-2 { color: var(--info); }
+.ch-legend-dot.ch-seq-3 { color: var(--warning); }
+.ch-legend-dot.ch-seq-4 { color: var(--danger); }
+.ch-legend-dot.ch-seq-5 { color: var(--accent-violet); }
+.ch-legend-dot.ch-seq-6 { color: var(--text-tertiary); }
+.ch-legend-label { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-legend-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Полоса шкалы ────────────────────────────────────────── */
+.ch-scale { display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
+.ch-scale-track {
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--danger) 0%, var(--warning) 50%, var(--success) 100%);
+}
+.ch-scale-mark {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--text-primary);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px var(--bg-surface);
+}
+.ch-scale-ends {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-micro);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ch-gauge-value { transition: none; }
+}
