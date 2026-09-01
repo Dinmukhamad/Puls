@@ -605,7 +605,10 @@ textarea.form-input:focus {
   .btn-ghost,
   .btn-danger,
   .btn-ok { min-height: var(--control-h-lg); }
-  .btn-sm { min-height: var(--control-h); }
+  /* Компактная кнопка на телефоне — такая же цель нажатия, как обычная:
+     40px пальцем берутся хуже, а токен --control-h-lg и назван «touch
+     target на мобильном». Кнопки в карточках уровней — как раз этот случай. */
+  .btn-sm { min-height: var(--control-h-lg); }
 
   /* Вкладки и чипы — тоже цели нажатия: 32px пальцем не берутся. */
   .filter-tab, .analytics-tab, .an2-tab, .ops-tab, .coins-page-tab,
