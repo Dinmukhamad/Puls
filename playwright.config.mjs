@@ -14,12 +14,17 @@ const PORT = Number(process.env.PULS_E2E_PORT || 8930);
 export default defineConfig({
   testDir: './tests/e2e',
   outputDir: './tests/e2e/.artifacts',
-  snapshotPathTemplate: '{testDir}/__screenshots__/{arg}-{projectName}{ext}',
+  // Платформа в имени намеренно: сглаживание шрифтов у Windows и Linux
+  // разное, и один общий базлайн либо падал бы в CI, либо был бы там
+  // бесполезно терпимым. Разные платформы — разные снимки.
+  snapshotPathTemplate: '{testDir}/__screenshots__/{arg}-{projectName}-{platform}{ext}',
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: 0,
   workers: 1,
-  reporter: process.env.CI ? 'line' : [['list']],
+  reporter: process.env.CI
+    ? [['line'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
+    : [['list']],
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
     // Анимации в снимках дают ложные расхождения между прогонами.
@@ -41,8 +46,9 @@ export default defineConfig({
     { name: 'mobile',  use: { ...devices['Desktop Chrome'], viewport: { width: 390, height: 844 } } },
   ],
   webServer: {
-    // cmd.exe не понимает прямые слэши в имени исполняемого файла.
-    command: `.venv\\Scripts\\python.exe -m http.server ${PORT} --bind 127.0.0.1`,
+    // Свой статик-сервер на node вместо python из .venv: путь к нему был
+    // записан в windows-виде и в CI на ubuntu не запустился бы.
+    command: `node scripts/static-server.mjs ${PORT}`,
     url: `http://127.0.0.1:${PORT}/index.html`,
     reuseExistingServer: true,
     timeout: 30_000,

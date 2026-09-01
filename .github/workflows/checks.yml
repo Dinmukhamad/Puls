@@ -3,6 +3,7 @@ name: checks
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   backend:
@@ -75,3 +76,62 @@ jobs:
             exit 1
           fi
           echo "Бандлы синхронны с исходниками."
+
+  # Playwright гоняет поведение экранов в настоящем браузере: то, что юнит-
+  # тесты на заглушках DOM не проверяют — открылась ли форма, пережил ли
+  # ввод ошибку сервера, не ушёл ли второй запрос по второму клику.
+  #
+  # Пиксельные снимки (@visual) здесь исключены осознанно. Базлайны сняты
+  # на windows, а сглаживание шрифтов в ubuntu другое: общий снимок либо
+  # красил бы CI без причины, либо требовал бы такого допуска, при котором
+  # уже ничего не ловит. Имя базлайна содержит платформу, поэтому линуксовые
+  # снимки можно добавить рядом — заготовка ниже, job e2e-visual-baseline.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install Node dependencies
+        run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: E2E (поведение, без пиксельных снимков)
+        run: npm run test:e2e:ci
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            tests/e2e/.artifacts/
+          retention-days: 7
+
+  # Запускается только вручную. Снимает линуксовые базлайны и отдаёт их
+  # артефактом: если их закоммитить в tests/e2e/__screenshots__, пиксельные
+  # снимки начнут проверяться и в CI. Ничего не коммитит сам — решение о
+  # том, что считать эталоном, остаётся за человеком.
+  e2e-visual-baseline:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Снять базлайны для linux
+        run: npx playwright test --grep @visual --update-snapshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-screenshots
+          path: tests/e2e/__screenshots__/*-linux.png
+          retention-days: 14

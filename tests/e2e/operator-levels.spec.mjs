@@ -55,7 +55,9 @@ async function openLevels(page) {
 }
 
 test.describe('Уровни — визуальный базлайн', () => {
-  test('экран целиком', async ({ page }) => {
+  // @visual — снимок зависит от сглаживания шрифтов конкретной ОС.
+  // В CI на ubuntu такие тесты исключаются: базлайн снят на windows.
+  test('экран целиком @visual', async ({ page }) => {
     await openLevels(page);
     await expect(page).toHaveScreenshot('operator-levels.png', { fullPage: true });
   });
