@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.datetime_utils import business_today
 from app.core.security import get_current_user, hash_password
 from app.database.db import get_db
-from app.models.entities import AuditLog, Group, Operator, User
+from app.models.entities import AuditLog, Group, Operator, User, UserSession
 from app.modules.operator_levels.service import ensure_default_levels, operator_level_badge
 from app.modules.users.schemas import (
     UserChangeRoleRequest,
@@ -125,6 +125,7 @@ def _user_out(
     user: User,
     level_cache: dict | None = None,
     operators_by_id: dict[int, Operator] | None = None,
+    last_seen_by_user: dict[int, object] | None = None,
 ) -> dict:
     operator = _operator_for_user(db, user, operators_by_id)
     # Для операторских аккаунтов карточка оператора является источником ФИО.
@@ -159,6 +160,7 @@ def _user_out(
         "must_change_password": user.must_change_password,
         "can_manage_operators": user.can_manage_operators,
         "created_at": user.created_at,
+        "last_seen_at": (last_seen_by_user or {}).get(user.id),
         "tenure_days": _tenure_days(operator),
         "start_date": operator.start_date.isoformat() if operator and operator.start_date else None,
     }
@@ -185,6 +187,7 @@ def _visible_user_stmt(db: Session, actor: User):
 def list_users(
     role: str | None = None,
     group_id: int | None = None,
+    level_id: int | None = None,
     status: str | None = None,
     search: str | None = None,
     page: int = 1,
@@ -205,6 +208,14 @@ def list_users(
     if search:
         q = f"%{search.strip()}%"
         stmt = stmt.where(or_(User.full_name.ilike(q), User.username.ilike(q), User.email.ilike(q)))
+    if level_id:
+        # Фильтр по уровню: у списка есть колонка «Уровень», но отфильтровать
+        # по ней было нельзя — выбор в интерфейсе ничего не менял.
+        from app.models.entities import OperatorLevelAssignment
+        leveled = select(OperatorLevelAssignment.operator_id).where(
+            OperatorLevelAssignment.level_id == level_id
+        )
+        stmt = stmt.where(User.operator_id.in_(leveled))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     users = list(db.scalars(stmt.order_by(User.created_at.desc()).offset((page - 1) * limit).limit(limit)))
 
@@ -243,11 +254,26 @@ def list_users(
         except Exception as e:
             logger.error(f"[list_users] ошибка загрузки уровней: {e}")
 
+    # Последняя активность — одним запросом на всю страницу, а не по одному
+    # на пользователя.
+    last_seen_by_user: dict[int, object] = {}
+    page_user_ids = [u.id for u in users]
+    if page_user_ids:
+        last_seen_by_user = {
+            uid: seen
+            for uid, seen in db.execute(
+                select(UserSession.user_id, func.max(UserSession.last_seen_at))
+                .where(UserSession.user_id.in_(page_user_ids))
+                .group_by(UserSession.user_id)
+            )
+        }
+
     items = []
     for u in users:
         try:
             items.append(_user_out(db, u, level_cache=level_cache,
-                                   operators_by_id=operators_by_id))
+                                   operators_by_id=operators_by_id,
+                                   last_seen_by_user=last_seen_by_user))
         except Exception as e:
             logger.error(f"[list_users] ошибка при сборке user_id={u.id}: {e}", exc_info=True)
     return {"items": items, "total": total, "page": page, "limit": limit}

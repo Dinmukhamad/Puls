@@ -60,6 +60,9 @@ class UserReadOut(BaseModel):
     must_change_password: bool
     can_manage_operators: bool
     created_at: datetime
+    # Максимум по last_seen_at всех сессий пользователя. None — ни разу не
+    # заходил. Собирается одним группировочным запросом на страницу списка.
+    last_seen_at: datetime | None = None
     rate: float | None = None
     tenure_days: int | None = None
     start_date: str | None = None
