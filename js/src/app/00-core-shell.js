@@ -137,6 +137,9 @@ let STATE = {
   currentView: 'cabinet',
   coinsOverview: null,
   coinsTab: 'overview',
+  // Активная вкладка каждого раздела: адрес — источник правды, здесь только
+  // память на случай возврата в раздел без явной вкладки в hash.
+  routeTabs: { coins: 'overview', 'operator-levels': 'levels' },
   navGen: 0,         // увеличивается при каждой смене раздела/вкладки —
   ratingTabGen: 0,   // используется для отмены "осиротевших" async-рендеров
   analyticsTabGen: 0,
@@ -237,6 +240,11 @@ function bumpAnalyticsTabGen() { return ++STATE.analyticsTabGen; }
 function isAnalyticsTabStale(token) { return token !== STATE.analyticsTabGen; }
 
 const COIN_TABS = ['overview', 'accrual', 'requests', 'history', 'rules', 'weekly', 'settings'];
+const LEVEL_TABS = ['levels', 'achievements'];
+
+function normalizeLevelTab(tab) {
+  return LEVEL_TABS.includes(tab) ? tab : 'levels';
+}
 // Разделы, которые когда-то были самостоятельными, а теперь стали вкладками
 // «Коинов». Старые ссылки и закладки обязаны продолжать работать.
 const LEGACY_COIN_VIEW_TAB = { accrual: 'accrual', manual: 'accrual', requests: 'requests', history: 'history' };
@@ -262,7 +270,7 @@ function normalizeCoinTab(tab) {
 const ROUTES = {
   summary:           { title: 'Сводка',            render: () => renderSummary() },
   operators:         { title: 'Пользователи',      render: () => renderAdminOperators() },
-  'operator-levels': { title: 'Уровни',            render: () => renderOperatorLevelsSettings() },
+  'operator-levels': { title: 'Уровни',            render: () => renderOperatorLevelsSettings(), tabs: LEVEL_TABS, normalizeTab: normalizeLevelTab },
   coins:             { title: 'Коины',             render: () => renderCoins(), tabs: COIN_TABS, normalizeTab: normalizeCoinTab },
   groups:            { title: 'Группы',            render: () => renderGroups() },
   analytics:         { title: 'Аналитика',         render: () => renderAnalytics() },
@@ -338,7 +346,7 @@ function resolveRoute(view, tab) {
 
   const spec = ROUTES[target];
   const nextTab = spec?.normalizeTab
-    ? spec.normalizeTab(parsed.tab || (target === STATE.currentView ? STATE.coinsTab : ''))
+    ? spec.normalizeTab(parsed.tab || (target === STATE.currentView ? STATE.routeTabs[target] : ''))
     : '';
   return { view: target, tab: nextTab, forbidden };
 }
@@ -582,7 +590,12 @@ function navigateTo(view, options = {}) {
   }
 
   STATE.currentView = target;
-  if (ROUTES[target]?.tabs) STATE.coinsTab = tab;
+  if (ROUTES[target]?.tabs) {
+    STATE.routeTabs[target] = tab;
+    // Раздел «Коины» читает STATE.coinsTab напрямую — оставляем совместимость.
+    if (target === 'coins') STATE.coinsTab = tab;
+    if (target === 'operator-levels') STATE.opLevelsTab = tab;
+  }
   _viewAbortController.abort();
   _viewAbortController = new AbortController();
   bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов
