@@ -9248,8 +9248,11 @@ function bindUsersPage(el) {
   const paging = STATE.usersPaging;
   const rerender = () => renderUsersPage();
 
-  el.querySelector('[data-up="create"]')?.addEventListener('click', () => showUserManagementModal?.());
-  el.querySelector('[data-up="norms"]')?.addEventListener('click', () => window.showWorkNormsModal?.());
+  // Создание — отдельная модалка. Карточка управления (showUserManagementModal)
+  // ищет пользователя по id в STATE.users и без него выходит через
+  // «Пользователь не найден», поэтому для создания она не годится.
+  el.querySelector('[data-up="create"]')?.addEventListener('click', () => showAddOperatorModal());
+  el.querySelector('[data-up="norms"]')?.addEventListener('click', () => showWorkNormsModal());
 
   el.querySelectorAll('[data-up-tab]').forEach(b => b.addEventListener('click', () => {
     f.tab = b.dataset.upTab; paging.page = 1; rerender();
@@ -9312,17 +9315,14 @@ function bindUsersPage(el) {
     }
   }));
 
-  const byId = id => (STATE.users || []).find(u => u.id === Number(id));
-  el.querySelectorAll('[data-up-edit]').forEach(b => b.addEventListener('click',
-    () => showUserManagementModal?.(byId(b.dataset.upEdit))));
-  el.querySelectorAll('[data-up-menu]').forEach(b => b.addEventListener('click',
-    () => showUserManagementModal?.(byId(b.dataset.upMenu))));
-  el.querySelectorAll('[data-up-role]').forEach(b => b.addEventListener('click',
-    () => showChangeUsernameModal?.(byId(b.dataset.upRole))));
+  // Все модалки принимают id числом, а не объект пользователя.
+  el.querySelectorAll('[data-up-edit], [data-up-menu], [data-up-role]').forEach(b =>
+    b.addEventListener('click', () => showUserManagementModal(
+      Number(b.dataset.upEdit || b.dataset.upMenu || b.dataset.upRole))));
   el.querySelectorAll('[data-up-password]').forEach(b => b.addEventListener('click',
-    () => showUserResetPasswordModal?.(byId(b.dataset.upPassword))));
+    () => showUserResetPasswordModal(Number(b.dataset.upPassword))));
   el.querySelectorAll('[data-up-off]').forEach(b => b.addEventListener('click',
-    () => deactivateUserUi?.(Number(b.dataset.upOff))));
+    () => deactivateUserUi(Number(b.dataset.upOff))));
 }
 
 
