@@ -23,10 +23,10 @@
   /* ── Радиусы ──────────────────────────────────────────────
      Поля и кнопки 8–10, карточки 12–16, листы и модалки крупнее. */
   --radius-xs:   6px;
-  --radius-sm:   8px;
+  --radius-sm:  10px;   /* ТЗ: control */
   --radius-md:  10px;
-  --radius-lg:  12px;
-  --radius-xl:  16px;
+  --radius-lg:  14px;   /* ТЗ: card */
+  --radius-xl:  18px;   /* ТЗ: modal */
   --radius-2xl: 20px;
   --radius-full: 999px;
 
@@ -46,9 +46,9 @@
   /* Syne — только слово «Puls» в логотипе, больше нигде. */
   --font-display: Syne, var(--font-main);
 
-  --text-h1:    30px;  --text-h1-weight: 700;
-  --text-h2:    23px;  --text-h2-weight: 700;
-  --text-h3:    19px;  --text-h3-weight: 700;
+  --text-h1:    32px;  --text-h1-weight: 700;
+  --text-h2:    24px;  --text-h2-weight: 700;
+  --text-h3:    17px;  --text-h3-weight: 700;
   --text-body:  14px;
   --text-small: 13px;
   --text-tiny:  12px;
@@ -69,9 +69,9 @@
   --ease-standard: cubic-bezier(.2, .8, .2, 1);
 
   /* ── Раскладка ───────────────────────────────────────── */
-  --nav-w: 252px;
-  --nav-w-collapsed: 76px;
-  --content-max: 1580px;
+  --nav-w: 248px;
+  --nav-w-collapsed: 80px;
+  --content-max: 1440px;
   --content-pad: 32px;
 
   /* ── Управляющие элементы ────────────────────────────── */
@@ -89,7 +89,7 @@ html[data-theme="light"] {
   color-scheme: light;
 
   /* Поверхности */
-  --bg-page:          #F6F7FB;
+  --bg-page:          #F5F5F7;
   --bg-surface:       #FFFFFF;
   --bg-surface-hover: #F2F4F7;
   --bg-muted:         #F4F6F9;
@@ -99,14 +99,14 @@ html[data-theme="light"] {
      закреплён за ролью, где это допустимо — placeholder, disabled,
      иконки, разделители, — а для приглушённого текста взята ступень
      выше (4.65:1). */
-  --text-primary:   #171923;
-  --text-secondary: #475467;
+  --text-primary:   #1D1D1F;
+  --text-secondary: #6E6E73;
   --text-muted:     #667085;
   --text-tertiary:  #98A2B3;
   --text-inverse:   #FFFFFF;
 
   /* Границы */
-  --border-default: #E4E7EC;
+  --border-default: #E3E6EB;
   --border-soft:    #F2F4F7;
   --border-strong:  #D0D5DD;
 
@@ -114,32 +114,32 @@ html[data-theme="light"] {
   /* #4F46E5 — акцент с экранных макетов. Под белым текстом даёт 6.29:1
      против 4.99:1 у #5E5CE6 из листа дизайн-системы, поэтому основным
      взят он, а #5E5CE6 оставлен ступенью для наведения. */
-  --accent-primary:       #4F46E5;
-  --accent-primary-hover: #5E5CE6;
+  --accent-primary:       #5E5CE6;
+  --accent-primary-hover: #4F46E5;
   --accent-primary-soft:  #EEF0FE;
   --accent-secondary:     #7C6CF0;
   --accent-secondary-soft:#F1EFFE;
   --accent-violet:        #9E77ED;
   --accent-violet-soft:   #F4F0FF;
-  --accent-cyan:          #22B8CF;
+  --accent-cyan:          #09C7E8;
   --accent-cyan-soft:     #E7F8FA;
-  --primary-gradient:     linear-gradient(135deg, #4F46E5 0%, #5E5CE6 100%);
-  --focus-ring:           0 0 0 3px rgba(79, 70, 229, .30);
+  --primary-gradient:     linear-gradient(135deg, #5E5CE6 0%, #4F46E5 100%);
+  --focus-ring:           0 0 0 3px rgba(94, 92, 230, .30);
 
   /* Заливка акцента под белым текстом (6.29:1). */
-  --accent-fill:      #4F46E5;
+  --accent-fill:      #5E5CE6;
   --accent-fill-text: #FFFFFF;
 
   /* Семантика: яркое — для заливок, --*-text — для надписей. */
-  --success:  #12B76A;  --success-soft: #ECFDF3;  --success-text: #027A48;
-  --danger:   #F04438;  --danger-soft:  #FEF3F2;  --danger-text:  #B42318;
-  --warning:  #F79009;  --warning-soft: #FFFAEB;  --warning-text: #B54708;
+  --success:  #159A63;  --success-soft: #ECFDF3;  --success-text: #027A48;
+  --danger:   #E53935;  --danger-soft:  #FEF3F2;  --danger-text:  #B42318;
+  --warning:  #E88900;  --warning-soft: #FFFAEB;  --warning-text: #B54708;
   --warning-border: #FEDF89;
   --info:     #2E90FA;  --info-soft:    #EFF8FF;  --info-text:    #175CD3;
   --gold:     #DC6803;
 
   /* Навигация */
-  --sidebar-bg:          #17161D;
+  --sidebar-bg:          #0B1726;
   --sidebar-border:      #2A2932;
   --sidebar-text:        #9A99A6;
   --sidebar-text-active: #FFFFFF;
@@ -217,7 +217,7 @@ html[data-theme="dark"] {
   --primary-gradient:     linear-gradient(135deg, #4F46E5 0%, #6366F1 100%);
   --focus-ring:           0 0 0 3px rgba(165, 180, 252, .38);
 
-  --accent-fill:      #4F46E5;
+  --accent-fill:      #5E5CE6;
   --accent-fill-text: #FFFFFF;
 
   /* На тёмном фоне яркие значения читаются: отдельный текстовый
