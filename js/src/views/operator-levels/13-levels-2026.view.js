@@ -25,20 +25,29 @@ function levelRuleText(rule) {
   if (rule.condition_text) return rule.condition_text;
   const label = rule.metric_label || rule.metric_code;
   if (rule.operator === 'between') return `${label}: от ${rule.value_min} до ${rule.value_max}`;
-  if (rule.operator === 'lte') return `${label}: не больше ${rule.value_max ?? rule.value_min}`;
+  // Бэкенд для lte сверяется только с value_max: подставлять сюда value_min
+  // значило бы показать условие, которого на самом деле нет.
+  if (rule.operator === 'lte') return `${label}: не больше ${rule.value_max}`;
   if (rule.operator === 'eq') return `${label}: ровно ${rule.value_min}`;
   return `${label}: от ${rule.value_min}`;
 }
 
 function levelRewardText(level) {
-  if (level.reward_label) return level.reward_label;
+  // Серверный reward_label намеренно не используем: он собирается из одного
+  // reward_coins и не смотрит на reward_once (router.py: _serialize_level),
+  // поэтому у выключенной награды писал бы «N коинов при повышении».
   const parts = [];
   if (level.reward_coins) {
-    parts.push(`${level.reward_coins} ₡${level.reward_once ? ' один раз' : ' при каждом присвоении'}`);
+    // service.py: `if not level.reward_once: return None` — при снятом флаге
+    // награда не начисляется вообще. Раньше здесь было «при каждом
+    // присвоении», то есть подпись обещала обратное тому, что делает сервер.
+    parts.push(level.reward_once
+      ? `${level.reward_coins} ₡ один раз`
+      : `${level.reward_coins} ₡ настроено, но начисление выключено`);
   }
   if (level.coin_multiplier_percent) parts.push(`коины ×${1 + level.coin_multiplier_percent / 100}`);
   if (level.shop_discount_percent) parts.push(`скидка ${level.shop_discount_percent}%`);
-  return parts.join(' · ') || 'Без награды';
+  return parts.join(' · ') || 'Без награды за повышение';
 }
 
 async function renderOperatorLevelsSettings() {
@@ -124,14 +133,20 @@ async function renderLevelsList(body, actionsHost, generation) {
   }
 
   actionsHost.innerHTML = `
+    <button class="btn-tertiary" type="button" data-lv="manual">Назначить вручную</button>
     <button class="btn-outline" type="button" data-lv="recalc">Пересчитать уровни</button>
     <button class="btn-primary" type="button" data-lv="create">Добавить уровень</button>`;
+  actionsHost.querySelector('[data-lv="manual"]')
+    ?.addEventListener('click', () => showManualAssignModal(levels));
   actionsHost.querySelector('[data-lv="recalc"]')
-    ?.addEventListener('click', () => recalculateOperatorLevelsUi());
+    ?.addEventListener('click', () => showRecalculateModal());
   actionsHost.querySelector('[data-lv="create"]')
-    ?.addEventListener('click', () => showCreateOperatorLevelPrompt());
+    ?.addEventListener('click', () => showLevelFormModal());
 
   const sorted = levelsSorted(levels);
+  // Отключать и включать уровни бэкенд разрешает только администратору,
+  // поэтому руководителю кнопку не показываем, а не ловим 403 после клика.
+  const isAdmin = STATE.user?.role === 'admin';
   const active = sorted.filter(l => l.is_active);
   const withRules = sorted.filter(l => (l.rules || []).length);
 
@@ -169,13 +184,13 @@ async function renderLevelsList(body, actionsHost, generation) {
     </p>
 
     <div class="lv-grid">
-      ${sorted.map((level, index) => levelCard(level, index)).join('')}
+      ${sorted.map((level, index) => levelCard(level, index, isAdmin)).join('')}
     </div>`;
 
-  bindLevelCards(body);
+  bindLevelCards(body, sorted);
 }
 
-function levelCard(level, index) {
+function levelCard(level, index, isAdmin) {
   const rules = level.rules || [];
   const inactive = !level.is_active;
   return `
@@ -217,18 +232,47 @@ function levelCard(level, index) {
       <footer class="lv-card-actions">
         <button class="btn-outline btn-sm" type="button" data-lv-edit
                 aria-label="Редактировать уровень «${esc(level.name)}»">Редактировать</button>
-        <button class="btn-tertiary btn-sm" type="button" data-lv-toggle
+        <button class="btn-tertiary btn-sm" type="button" data-lv-rules
+                aria-label="Условия уровня «${esc(level.name)}»">
+          Условия${rules.length ? ` · ${rules.length}` : ''}
+        </button>
+        ${isAdmin ? `<button class="btn-tertiary btn-sm" type="button" data-lv-toggle
                 aria-label="${inactive ? 'Включить' : 'Отключить'} уровень «${esc(level.name)}»">
           ${inactive ? 'Включить' : 'Отключить'}
-        </button>
+        </button>` : ''}
       </footer>
     </article>`;
 }
 
-function bindLevelCards(host) {
+function bindLevelCards(host, levels) {
   host.querySelectorAll('[data-lv-card]').forEach(card => {
     const id = Number(card.dataset.lvCard);
-    card.querySelector('[data-lv-edit]')?.addEventListener('click', () => editOperatorLevelUi(id));
-    card.querySelector('[data-lv-toggle]')?.addEventListener('click', () => toggleOperatorLevelUi(id));
+    // Обработчики получают сам уровень: старый editOperatorLevelUi искал его
+    // в STATE.operatorLevels, который этот экран не заполняет, и молча
+    // выходил по `if (!level) return`.
+    const level = levels.find(item => item.id === id);
+    if (!level) return;
+    card.querySelector('[data-lv-edit]')?.addEventListener('click', () => showLevelFormModal(level));
+    card.querySelector('[data-lv-rules]')?.addEventListener('click', () => showLevelRulesModal(level));
+    card.querySelector('[data-lv-toggle]')?.addEventListener('click', () => {
+      if (level.is_active) return disableLevelUi(level);
+      return enableLevelUi(level);
+    });
   });
+}
+
+/** Включение — обычный PATCH; отдельный эндпоинт есть только у отключения. */
+async function enableLevelUi(level) {
+  if (STATE.user?.role !== 'admin') {
+    showToast('Включать уровни может только администратор', 'error');
+    return;
+  }
+  try {
+    await api.updateOperatorLevel(level.id, { is_active: true });
+    swrInvalidate('levels:');
+    showToast('Уровень включён', 'success');
+    await renderOperatorLevelsSettings();
+  } catch (error) {
+    showToast(error?.message || 'Не удалось включить уровень', 'error');
+  }
 }

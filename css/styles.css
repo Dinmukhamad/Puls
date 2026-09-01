@@ -1419,7 +1419,12 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
-[tabindex]:focus-visible {
+/* tabindex="-1" исключён намеренно: такие элементы клавиатурой не
+   обходятся, фокус на них ставит код (заголовок раздела после перехода —
+   чтобы диктор объявил страницу). Правило [tabindex="-1"]:focus-visible в
+   базовом слое имеет ту же специфичность и раньше проигрывало этому по
+   порядку — вокруг названия страницы рисовалась синяя рамка. */
+[tabindex]:not([tabindex="-1"]):focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
@@ -15495,6 +15500,59 @@ html[data-theme="dark"] .rc-hero-card { box-shadow: 0 18px 42px rgba(0, 0, 0, .2
   border-top: 1px solid var(--border-soft);
   flex-wrap: wrap;
 }
+
+/* ── Формы уровней ───────────────────────────────────────── */
+.lv-modal { max-width: 640px; }
+.lv-form { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); }
+.lv-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+@media (max-width: 599px) { .lv-form-grid { grid-template-columns: 1fr; } }
+
+/* Поле, которое выбранное условие не использует: видно, но приглушено. */
+.lv-form-grid .form-group.is-muted { opacity: .55; }
+
+.lv-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-soft);
+}
+.lv-form-actions button { min-width: 120px; }
+
+.lv-check { display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer; }
+.lv-check input { width: 16px; height: 16px; }
+
+.lv-color-pair { display: inline-flex; align-items: center; gap: var(--space-2); }
+.lv-color-input { width: 44px; height: 32px; padding: 2px; border: 1px solid var(--border-default); border-radius: var(--radius-xs); background: var(--bg-surface); }
+.lv-color-value { font-family: var(--font-mono); font-size: var(--text-tiny); color: var(--text-secondary); }
+
+/* ── Список условий в модалке ────────────────────────────── */
+.lv-rule-rows { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: 6px; }
+.lv-rule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 8px 10px;
+  font-size: var(--text-small);
+  background: var(--bg-subtle);
+  border-radius: var(--radius-xs);
+}
+.lv-rule-row-text { min-width: 0; }
+.lv-rule-row-actions { display: flex; gap: var(--space-2); flex-shrink: 0; }
+
+/* ── Итог пересчёта ──────────────────────────────────────── */
+.lv-result {
+  padding: var(--space-3) var(--space-4);
+  background: var(--accent-primary-soft);
+  border-radius: var(--radius-md);
+}
+.lv-result-title { margin: 0 0 6px; font-weight: 600; color: var(--text-primary); }
+.lv-result-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--text-small); color: var(--text-secondary); }
 /* source: zzzz-summary-2026.css */
 /* ══════════════════════════════════════════════════════════════
    «Сводка» по макету 2026. Загружается после базовых слоёв.

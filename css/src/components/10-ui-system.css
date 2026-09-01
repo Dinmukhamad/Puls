@@ -179,7 +179,12 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
-[tabindex]:focus-visible {
+/* tabindex="-1" исключён намеренно: такие элементы клавиатурой не
+   обходятся, фокус на них ставит код (заголовок раздела после перехода —
+   чтобы диктор объявил страницу). Правило [tabindex="-1"]:focus-visible в
+   базовом слое имеет ту же специфичность и раньше проигрывало этому по
+   порядку — вокруг названия страницы рисовалась синяя рамка. */
+[tabindex]:not([tabindex="-1"]):focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }

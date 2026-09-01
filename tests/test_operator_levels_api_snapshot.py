@@ -36,6 +36,8 @@ NULLABLE_FIELDS = frozenset({
     "GET /api/operator-levels.item.rules.item.value_max",
 })
 
+SNAPSHOT_CODE_PREFIX = "snapshot_"
+
 LEVEL_PAYLOAD = {
     "name": "Снимок контракта",
     "description": "Служебный уровень теста контракта",
@@ -60,18 +62,37 @@ RULE_PAYLOAD = {
 
 
 @pytest.fixture()
-def level_with_rule(client):
-    """Свой уровень с правилом — снимок не должен зависеть от чужих данных."""
-    payload = dict(LEVEL_PAYLOAD, code=f"snapshot_{uuid.uuid4().hex[:8]}")
+def level_with_rule(client, request):
+    """Свой уровень с правилом — снимок не должен зависеть от чужих данных.
+
+    Финализатор регистрируется сразу после создания уровня, до всех
+    остальных проверок. Раньше уборка стояла в try, который начинался уже
+    после assert на создание правила: упавшая проверка оставляла уровень в
+    базе навсегда — client сессионный, и мусор жил до конца всего прогона.
+
+    Финализатор вместо try/finally выбран сознательно: ошибка уборки
+    придёт отдельной teardown-ошибкой и не подменит собой настоящую
+    причину падения теста.
+    """
+    payload = dict(LEVEL_PAYLOAD, code=f"{SNAPSHOT_CODE_PREFIX}{uuid.uuid4().hex[:8]}")
     created = client.post("/api/admin/operator-levels", json=payload)
     assert created.status_code in (200, 201), created.text
     level = created.json()
+
+    def remove_level():
+        removed = client.delete(f"/api/admin/operator-levels/{level['id']}")
+        # Молча провалившаяся уборка копит служебные уровни от прогона к
+        # прогону, поэтому падаем громко.
+        assert removed.status_code in (200, 204, 404), (
+            f"служебный уровень {level['id']} остался в базе: "
+            f"{removed.status_code} {removed.text[:200]}"
+        )
+
+    request.addfinalizer(remove_level)
+
     rule = client.post(f"/api/admin/operator-levels/{level['id']}/rules", json=RULE_PAYLOAD)
     assert rule.status_code in (200, 201), rule.text
-    try:
-        yield level["code"]
-    finally:
-        client.delete(f"/api/admin/operator-levels/{level['id']}")
+    return level["code"]
 
 
 def shape(value):
@@ -195,3 +216,20 @@ def test_operator_denied_on_levels_admin(operator_client, path):
     """Экран уровней — для manager и admin. Оператору данные не отдаются."""
     response = operator_client.get(path)
     assert response.status_code in (401, 403), f"{path} → {response.status_code}"
+
+
+def test_snapshot_fixture_leaves_no_active_leftovers(client):
+    """Служебные уровни фикстуры не должны переживать свои тесты активными.
+
+    Идёт последним в файле: к этому моменту финализаторы предыдущих тестов
+    уже отработали. client сессионный, поэтому протечка была бы видна.
+
+    Проверяется именно активность, а не отсутствие строки: DELETE у уровней
+    мягкий (см. test_delete_is_soft_deactivation), строку он не убирает.
+    Опасен для соседних тестов и для расчёта именно активный уровень.
+    """
+    levels = client.get("/api/admin/operator-levels").json()
+    leaked = [item["code"] for item in levels
+              if str(item.get("code", "")).startswith(SNAPSHOT_CODE_PREFIX)
+              and item.get("is_active")]
+    assert not leaked, f"фикстура оставила активные служебные уровни: {leaked}"
