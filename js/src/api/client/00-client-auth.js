@@ -100,9 +100,33 @@ const api = (() => {
       res = await fetch(base() + path, opts);
     } catch (err) {
       if (err.name === 'AbortError') {
-        throw new Error('Сервер не отвечает (превышено время ожидания). Попробуйте обновить страницу.');
+        // Навигация отменила запрос намеренно — это не сбой, пробрасываем как есть.
+        if (viewSignal?.aborted) throw err;
+        // На бесплатном тарифе Render контейнер засыпает без трафика, и первый
+        // запрос после пробуждения легко перешагивает 20 секунд. Один повтор
+        // отличает «сервис просыпался» от «сервис не работает». Повторяем
+        // только чтение: у POST и PATCH повтор может продублировать операцию.
+        if (method === 'GET' && !opts.__retried) {
+          const retryOpts = { ...opts, __retried: true };
+          const retryController = new AbortController();
+          retryOpts.signal = retryController.signal;
+          const retryTimeout = setTimeout(() => retryController.abort(), 20000);
+          try {
+            res = await fetch(base() + path, retryOpts);
+          } catch (retryErr) {
+            if (retryErr.name === 'AbortError') {
+              throw new Error('Сервер не отвечает (превышено время ожидания). Попробуйте обновить страницу.');
+            }
+            throw retryErr;
+          } finally {
+            clearTimeout(retryTimeout);
+          }
+        } else {
+          throw new Error('Сервер не отвечает (превышено время ожидания). Попробуйте обновить страницу.');
+        }
+      } else {
+        throw err;
       }
-      throw err;
     } finally {
       clearTimeout(timeoutId);
       viewSignal?.removeEventListener('abort', abortForNavigation);

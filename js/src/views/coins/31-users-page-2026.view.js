@@ -68,6 +68,26 @@ function renderUsersPage() {
   const el = document.getElementById('view-operators');
   if (!el) return;
 
+  // Список не загрузился — это не «никого нет». Показываем ошибку с
+  // повтором, иначе экран врёт: предлагает завести первого сотрудника,
+  // когда в базе их шестьдесят.
+  if (STATE.usersError && !(STATE.users || []).length) {
+    el.innerHTML = `
+      <div class="up">
+        <header class="up-head">
+          <div class="up-head-text">
+            <h1 class="up-title">Пользователи</h1>
+            <p class="up-count">Список не загрузился</p>
+          </div>
+        </header>
+        <div class="up-card up-card-state">
+          ${uiErrorStateFor(STATE.usersError, { retryLabel: 'Загрузить снова' })}
+        </div>
+      </div>`;
+    uiBindStateActions(el, { retry: () => reloadUsersList() });
+    return;
+  }
+
   const all = Array.isArray(STATE.users) ? STATE.users : [];
   const f = STATE.usersFilters || (STATE.usersFilters = {});
   const sort = STATE.usersSort || (STATE.usersSort = { key: 'full_name', dir: 'asc' });
@@ -444,4 +464,24 @@ function bindUsersPage(el) {
     () => showUserResetPasswordModal?.(byId(b.dataset.upPassword))));
   el.querySelectorAll('[data-up-off]').forEach(b => b.addEventListener('click',
     () => deactivateUserUi?.(Number(b.dataset.upOff))));
+}
+
+
+/**
+ * Повторная загрузка списка после ошибки: сбрасываем кеш ключа, иначе
+ * swrFetch отдаст то, что лежит, и повтор окажется бессмысленным.
+ */
+async function reloadUsersList() {
+  const el = document.getElementById('view-operators');
+  if (el) el.innerHTML = uiPageLoader('Загружаем пользователей');
+  try {
+    swrInvalidate('users:list');
+    const data = await api.listUsers({ limit: 200 });
+    STATE.users = Array.isArray(data) ? data : (data.items || []);
+    STATE.usersError = null;
+  } catch (err) {
+    STATE.usersError = err;
+    STATE.users = [];
+  }
+  renderUsersPage();
 }
