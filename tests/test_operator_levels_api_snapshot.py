@@ -38,6 +38,35 @@ def shape(value):
     return type(value).__name__
 
 
+def compare(expected, actual, path: str, problems: list[str]) -> None:
+    """Сравнение контрактов, устойчивое к данным.
+
+    Тесты в общей сессии добавляют уровням правила, поэтому вложенный
+    список в одном прогоне пуст, а в другом нет — на форму контракта это
+    не влияет, и пустой список считается совместимым с любым. Так же
+    nullable-поле приходит то как null, то как значение. Зато пропавший,
+    переименованный или сменивший тип ключ ловится.
+    """
+    if isinstance(expected, dict) and isinstance(actual, dict):
+        for key in sorted(set(expected) | set(actual)):
+            where = f"{path}.{key}" if path else key
+            if key not in actual:
+                problems.append(f"пропало поле {where}")
+            elif key not in expected:
+                problems.append(f"появилось поле {where} — перегенерируйте снимок")
+            else:
+                compare(expected[key], actual[key], where, problems)
+        return
+    if isinstance(expected, list) and isinstance(actual, list):
+        if expected and actual:
+            compare(expected[0], actual[0], f"{path}[]", problems)
+        return
+    if expected == "null" or actual == "null":
+        return  # nullable-поле
+    if expected != actual:
+        problems.append(f"{path}: было {expected}, стало {actual}")
+
+
 def collect(client) -> dict:
     endpoints = {
         "GET /api/admin/operator-levels": "/api/admin/operator-levels",
@@ -63,8 +92,10 @@ def test_levels_api_snapshot(client):
         return
 
     expected = json.loads(FIXTURE.read_text(encoding="utf-8"))
-    assert actual == expected, (
-        "контракт API уровней изменился.\n"
+    problems: list[str] = []
+    compare(expected, actual, "", problems)
+    assert not problems, (
+        "контракт API уровней изменился:\n  " + "\n  ".join(problems) + "\n"
         "Если это осознанно — перегенерируйте снимок:\n"
         "  PULS_UPDATE_SNAPSHOTS=1 pytest -k levels_api_snapshot"
     )
