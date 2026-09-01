@@ -11,8 +11,6 @@
    в API добавлен параметр level_id.
 ══════════════════════════════════════════════════════════════ */
 
-const USERS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
-
 function usersInitials(name) {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return '—';
@@ -194,33 +192,19 @@ function renderUsersPage() {
 
       <div class="up-card">
         ${pageRows.length ? `
-          <table class="data-table up-table">
-            <thead>
-              <tr>
-                ${upTh('full_name', 'Пользователь', sort)}
-                ${upTh('group', 'Группа', sort)}
-                ${upTh('level', 'Уровень', sort)}
-                ${upTh('status', 'Статус', sort)}
-                <th class="up-th-actions" scope="col"><span class="sr-only">Действия</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${pageRows.map(u => upRow(u, expanded.has(u.id))).join('')}
-            </tbody>
-          </table>
-          <div class="up-pager">
-            <p class="up-pager-range">
-              Показано ${from + 1}–${from + pageRows.length} из ${rows.length}
-            </p>
-            ${upPages(page, pageCount)}
-            <label class="up-perpage">
-              <span class="sr-only">Записей на странице</span>
-              <select class="up-perpage-select" data-up="perpage">
-                ${USERS_PER_PAGE_OPTIONS.map(n =>
-                  `<option value="${n}"${n === perPage ? ' selected' : ''}>${n} на странице</option>`).join('')}
-              </select>
-            </label>
-          </div>
+          ${uiTable({
+            columns: [
+              { key: 'full_name', label: 'Пользователь', sortable: true },
+              { key: 'group',     label: 'Группа',       sortable: true },
+              { key: 'level',     label: 'Уровень',      sortable: true },
+              { key: 'status',    label: 'Статус',       sortable: true },
+              { key: 'actions',   label: 'Действия',     actions: true },
+            ],
+            rows: pageRows.map(u => upRow(u, expanded.has(u.id))),
+            sort,
+            caption: 'Учётные записи',
+          })}
+          ${uiPagination({ page, perPage, total: rows.length, label: 'учётных записей' })}
         ` : (hasFilters
           ? uiNoResultsState('Никого не нашли',
               'Под выбранные условия не подходит ни одна запись. Измените фильтры или сбросьте их.',
@@ -269,41 +253,6 @@ function upSelect(key, label, value, pairs, allLabel) {
     </label>`;
 }
 
-function upTh(key, label, sort) {
-  const active = sort.key === key;
-  const next = active && sort.dir === 'asc' ? 'по убыванию' : 'по возрастанию';
-  return `<th class="up-th${active ? ' is-sorted' : ''}" scope="col" aria-sort="${active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">
-    <button class="up-sort" type="button" data-up-sort="${key}" title="Сортировать ${next}">
-      ${esc(label)}<span class="up-sort-i" aria-hidden="true">${active ? (sort.dir === 'asc' ? '↑' : '↓') : '⇅'}</span>
-    </button>
-  </th>`;
-}
-
-function upPages(page, pageCount) {
-  if (pageCount <= 1) return '<div class="up-pages"></div>';
-  const nums = [];
-  const push = n => { if (!nums.includes(n)) nums.push(n); };
-  push(1);
-  for (let n = page - 1; n <= page + 1; n++) if (n > 1 && n < pageCount) push(n);
-  push(pageCount);
-  nums.sort((a, b) => a - b);
-  const out = [];
-  let prev = 0;
-  for (const n of nums) {
-    if (prev && n - prev > 1) out.push('<span class="up-gap">…</span>');
-    out.push(`<button class="up-page${n === page ? ' is-current' : ''}" type="button"
-      data-up-page="${n}"${n === page ? ' aria-current="page"' : ''}>${n}</button>`);
-    prev = n;
-  }
-  return `<div class="up-pages">
-    <button class="up-page up-nav" type="button" data-up-page="${page - 1}"
-      ${page === 1 ? 'disabled' : ''} aria-label="Предыдущая страница">‹</button>
-    ${out.join('')}
-    <button class="up-page up-nav" type="button" data-up-page="${page + 1}"
-      ${page === pageCount ? 'disabled' : ''} aria-label="Следующая страница">›</button>
-  </div>`;
-}
-
 function upField(label, value, copyable) {
   if (!value) return '';
   return `<div class="up-field">
@@ -316,6 +265,7 @@ function upField(label, value, copyable) {
   </div>`;
 }
 
+/** Данные строки для uiTable: разметку <tr> собирает сам примитив. */
 function upRow(u, isOpen) {
   const role = USERS_ROLE_LABEL[u.role] || u.role || '';
   const login = u.login || u.username || '';
@@ -323,9 +273,7 @@ function upRow(u, isOpen) {
   const seen = usersWhen(u.last_seen_at) || 'Ни разу не заходил';
   const added = usersWhen(u.created_at, { withTime: false }) || '—';
 
-  return `
-    <tr class="up-row${isOpen ? ' is-open' : ''}" data-up-row="${u.id}">
-      <td class="up-cell-user">
+  const userCell = `<span class="up-cell-user">
         <button class="up-expand" type="button" data-up-expand="${u.id}"
                 aria-expanded="${isOpen}" aria-label="${isOpen ? 'Свернуть' : 'Развернуть'} карточку">
           ${upIcon('chevron')}
@@ -335,24 +283,9 @@ function upRow(u, isOpen) {
           <span class="up-user-name">${esc(u.full_name || '—')}</span>
           <span class="up-user-sub">${esc(role)}${login ? ` · ${esc(login)}` : ''}</span>
         </span>
-      </td>
-      <td class="up-cell-group">${u.group_name ? esc(u.group_name) : '<span class="up-dash">Не назначена</span>'}</td>
-      <td class="up-cell-level">${u.level
-        ? `<span class="up-level">${esc(u.level.name)}</span>`
-        : '<span class="up-dash">—</span>'}</td>
-      <td class="up-cell-status">
-        <span class="up-status up-status-${usersStatusTone(u.status)}">
-          ${esc(USERS_STATUS_LABEL[u.status] || u.status || '—')}
-        </span>
-      </td>
-      <td class="up-cell-actions">
-        <button class="up-more" type="button" data-up-menu="${u.id}" aria-label="Действия">···</button>
-      </td>
-    </tr>
-    ${isOpen ? `
-    <tr class="up-detail-row">
-      <td colspan="5">
-        <div class="up-detail">
+      </span>`;
+
+  const detail = isOpen ? `<div class="up-detail">
           <dl class="up-fields">
             ${upField('Email', u.email, true)}
             ${upField('Логин', login, true)}
@@ -379,9 +312,20 @@ function upRow(u, isOpen) {
               ${upIcon('off')}<span>Деактивировать</span>
             </button>
           </div>
-        </div>
-      </td>
-    </tr>` : ''}`;
+        </div>` : '';
+
+  return {
+    id: u.id,
+    expanded: isOpen,
+    detail,
+    cells: [
+      userCell,
+      u.group_name ? esc(u.group_name) : '<span class="up-dash">Не назначена</span>',
+      u.level ? `<span class="up-level">${esc(u.level.name)}</span>` : '<span class="up-dash">—</span>',
+      `<span class="up-status up-status-${usersStatusTone(u.status)}">${esc(USERS_STATUS_LABEL[u.status] || u.status || '—')}</span>`,
+      `<button class="up-more" type="button" data-up-menu="${u.id}" aria-label="Действия">···</button>`,
+    ],
+  };
 }
 
 function bindUsersPage(el) {
@@ -421,23 +365,8 @@ function bindUsersPage(el) {
       STATE.usersFilters = { tab: 'all' }; paging.page = 1; rerender();
     }));
 
-  el.querySelectorAll('[data-up-sort]').forEach(b => b.addEventListener('click', () => {
-    const key = b.dataset.upSort;
-    const sort = STATE.usersSort;
-    if (sort.key === key) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
-    else { sort.key = key; sort.dir = 'asc'; }
-    rerender();
-  }));
-
-  el.querySelectorAll('[data-up-page]').forEach(b => b.addEventListener('click', () => {
-    const n = Number(b.dataset.upPage);
-    if (!Number.isFinite(n) || n < 1) return;
-    paging.page = n; rerender();
-    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  }));
-  el.querySelector('[data-up="perpage"]')?.addEventListener('change', e => {
-    paging.perPage = Number(e.target.value) || 10; paging.page = 1; rerender();
-  });
+  uiBindTable(el, STATE.usersSort, rerender);
+  uiBindPagination(el, paging, rerender);
 
   el.querySelectorAll('[data-up-expand]').forEach(b => b.addEventListener('click', () => {
     const id = Number(b.dataset.upExpand);

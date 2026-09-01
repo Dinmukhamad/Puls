@@ -155,44 +155,8 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
-.up-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.up-table thead th {
-  padding: var(--space-3) var(--space-4);
-  text-align: left;
-  background: var(--bg-subtle);
-  border-bottom: 1px solid var(--border-default);
-  white-space: nowrap;
-}
-.up-sort {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0;
-  font: inherit;
-  font-size: var(--text-micro);
-  font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  background: none;
-  border: 0;
-  cursor: pointer;
-}
-.up-sort:hover { color: var(--text-primary); }
-.up-th.is-sorted .up-sort { color: var(--text-primary); }
-.up-sort-i { font-size: 11px; opacity: .7; }
-.up-th-actions { width: 56px; }
-
-.up-row > td {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border-soft);
-  vertical-align: middle;
-}
-.up-row:hover > td { background: var(--bg-subtle); }
-.up-row.is-open > td { background: var(--accent-primary-soft); border-bottom-color: transparent; }
+/* Таблица, сортировка и строки рисуются общим uiTable, пагинация —
+   uiPagination (60-primitives.css). Свои копии удалены. */
 
 .up-cell-user {
   display: flex;
@@ -215,7 +179,7 @@
   transition: transform var(--transition-fast), background var(--transition-fast);
 }
 .up-expand:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
-.up-row.is-open .up-expand { transform: rotate(90deg); }
+.ui-row.is-open .up-expand { transform: rotate(90deg); }
 .up-expand:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
 
 .up-avatar {
@@ -287,7 +251,6 @@
 .up-more:hover { color: var(--text-primary); background: var(--bg-surface-hover); border-color: var(--border-default); }
 
 /* ── Раскрытая карточка ──────────────────────────────────── */
-.up-detail-row > td { padding: 0; border-bottom: 1px solid var(--border-soft); }
 .up-detail {
   display: flex;
   flex-direction: column;
@@ -365,84 +328,10 @@
 .up-act-danger:not(:disabled) { color: var(--danger-text); border-color: var(--danger-soft); }
 .up-act-danger:not(:disabled):hover { background: var(--danger-soft); }
 
-/* ── Пагинация ───────────────────────────────────────────── */
-.up-pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  padding: var(--space-3) var(--space-4);
-  border-top: 1px solid var(--border-default);
-}
-.up-pager-range {
-  margin: 0;
-  font-size: var(--text-small);
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-.up-pages { display: flex; align-items: center; gap: 4px; }
-.up-page {
-  min-width: 32px;
-  height: 32px;
-  padding: 0 8px;
-  font: inherit;
-  font-size: var(--text-small);
-  font-variant-numeric: tabular-nums;
-  color: var(--text-secondary);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-}
-.up-page:hover:not(:disabled):not(.is-current) {
-  background: var(--bg-surface-hover);
-  color: var(--text-primary);
-}
-.up-page.is-current {
-  color: var(--accent-fill-text);
-  background: var(--accent-fill);
-  border-color: var(--accent-fill);
-  font-weight: 600;
-}
-.up-page:disabled { opacity: .4; cursor: default; }
-.up-gap { padding: 0 4px; color: var(--text-tertiary); }
-.up-perpage-select {
-  min-height: 32px;
-  padding: 0 var(--space-2);
-  font: inherit;
-  font-size: var(--text-small);
-  color: var(--text-secondary);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-}
-
 /* ── Узкие экраны ────────────────────────────────────────── */
-@media (max-width: 900px) {
-  .up-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .up-table, .up-table tbody, .up-row, .up-row > td, .up-detail-row, .up-detail-row > td {
-    display: block;
-    width: auto;
-  }
-  .up-row {
-    padding: var(--space-2) 0;
-    border-bottom: 1px solid var(--border-soft);
-  }
-  .up-row > td { border-bottom: 0; padding: 4px var(--space-4); }
-  .up-cell-group, .up-cell-level, .up-cell-status {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-  .up-cell-group::before { content: 'Группа'; color: var(--text-muted); font-size: var(--text-tiny); }
-  .up-cell-level::before { content: 'Уровень'; color: var(--text-muted); font-size: var(--text-tiny); }
-  .up-cell-status::before { content: 'Статус'; color: var(--text-muted); font-size: var(--text-tiny); }
-  .up-cell-actions { display: none; }
-  .up-pager { justify-content: center; }
+/* Карточный режим на узком экране даёт uiTable (60-primitives.css):
+   он же расставляет подписи ячеек. Своя копия удалена. */
+@media (max-width: 767px) {
+  .up-cell-user { gap: var(--space-2); }
   .up-detail { margin-inline: var(--space-3); }
 }
-
-/* Состояние ошибки и пустоты внутри карточки списка. */
-.up-card-state { padding: var(--space-6) var(--space-4); }
