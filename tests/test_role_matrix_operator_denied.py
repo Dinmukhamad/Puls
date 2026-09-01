@@ -32,6 +32,12 @@ ADMIN_ENDPOINTS = [
     ("GET", "/api/settings/coin-rules", None),
     ("GET", "/api/admin/economy/rules", None),
     ("GET", "/api/sessions/admin/sessions", None),
+    # Розыгрыши: оператору открыт сам раздел (он в них участвует), поэтому
+    # особенно важно, что администрирование ему по-прежнему запрещено.
+    ("GET", "/api/admin/raffles", None),
+    ("POST", "/api/admin/raffles", {"title": "x", "prize": "y", "tickets_cost": 1}),
+    ("POST", "/api/admin/raffles/1/draw", None),
+    ("POST", "/api/admin/raffles/1/cancel", None),
     ("POST", "/api/reports/period-report/save",
      {"start_date": "2026-06-01", "end_date": "2026-06-30", "award_coins": False,
       "coins_per_points": 5}),
