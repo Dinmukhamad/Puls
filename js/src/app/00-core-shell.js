@@ -137,6 +137,9 @@ let STATE = {
   currentView: 'cabinet',
   coinsOverview: null,
   coinsTab: 'overview',
+  // Активная вкладка каждого раздела: адрес — источник правды, здесь только
+  // память на случай возврата в раздел без явной вкладки в hash.
+  routeTabs: { coins: 'overview', 'operator-levels': 'levels' },
   navGen: 0,         // увеличивается при каждой смене раздела/вкладки —
   ratingTabGen: 0,   // используется для отмены "осиротевших" async-рендеров
   analyticsTabGen: 0,
@@ -237,6 +240,25 @@ function bumpAnalyticsTabGen() { return ++STATE.analyticsTabGen; }
 function isAnalyticsTabStale(token) { return token !== STATE.analyticsTabGen; }
 
 const COIN_TABS = ['overview', 'accrual', 'requests', 'history', 'rules', 'weekly', 'settings'];
+const LEVEL_TABS = ['levels', 'achievements'];
+
+function normalizeLevelTab(tab) {
+  return LEVEL_TABS.includes(tab) ? tab : 'levels';
+}
+
+/**
+ * Активная вкладка хранится по маршруту, а не в одной общей переменной.
+ * Старые экраны читают свои зеркала напрямую, поэтому зеркала остаются —
+ * но пишутся ровно здесь, чтобы не разъезжались с STATE.routeTabs.
+ */
+const LEGACY_TAB_MIRRORS = { coins: 'coinsTab', 'operator-levels': 'opLevelsTab' };
+
+function rememberRouteTab(view, tab) {
+  if (!ROUTES[view]?.tabs) return;
+  STATE.routeTabs[view] = tab;
+  const mirror = LEGACY_TAB_MIRRORS[view];
+  if (mirror) STATE[mirror] = tab;
+}
 // Разделы, которые когда-то были самостоятельными, а теперь стали вкладками
 // «Коинов». Старые ссылки и закладки обязаны продолжать работать.
 const LEGACY_COIN_VIEW_TAB = { accrual: 'accrual', manual: 'accrual', requests: 'requests', history: 'history' };
@@ -262,7 +284,7 @@ function normalizeCoinTab(tab) {
 const ROUTES = {
   summary:           { title: 'Сводка',            render: () => renderSummary() },
   operators:         { title: 'Пользователи',      render: () => renderAdminOperators() },
-  'operator-levels': { title: 'Уровни',            render: () => renderOperatorLevelsSettings() },
+  'operator-levels': { title: 'Уровни',            render: () => renderOperatorLevelsSettings(), tabs: LEVEL_TABS, normalizeTab: normalizeLevelTab },
   coins:             { title: 'Коины',             render: () => renderCoins(), tabs: COIN_TABS, normalizeTab: normalizeCoinTab },
   groups:            { title: 'Группы',            render: () => renderGroups() },
   analytics:         { title: 'Аналитика',         render: () => renderAnalytics() },
@@ -338,7 +360,7 @@ function resolveRoute(view, tab) {
 
   const spec = ROUTES[target];
   const nextTab = spec?.normalizeTab
-    ? spec.normalizeTab(parsed.tab || (target === STATE.currentView ? STATE.coinsTab : ''))
+    ? spec.normalizeTab(parsed.tab || (target === STATE.currentView ? STATE.routeTabs[target] : ''))
     : '';
   return { view: target, tab: nextTab, forbidden };
 }
@@ -409,7 +431,12 @@ function syncRouteFromUrl() {
   const requested = parseRoute(location.hash);
   const resolved = resolveRoute(requested.view, requested.tab);
   const sameView = resolved.view === STATE.currentView;
-  const sameTab = !ROUTES[resolved.view]?.tabs || resolved.tab === STATE.coinsTab;
+  // Сверяемся с вкладкой этого же маршрута: общий coinsTab здесь означал,
+  // что Back/Forward внутри любого другого раздела с вкладками либо зря
+  // перерисовывает экран, либо — при совпадении имён вкладок — молча
+  // не срабатывает вовсе.
+  const sameTab = !ROUTES[resolved.view]?.tabs
+    || resolved.tab === STATE.routeTabs[resolved.view];
   if (sameView && sameTab) return;
   navigateTo(resolved.view, { tab: resolved.tab, history: false });
 }
@@ -582,7 +609,7 @@ function navigateTo(view, options = {}) {
   }
 
   STATE.currentView = target;
-  if (ROUTES[target]?.tabs) STATE.coinsTab = tab;
+  rememberRouteTab(target, tab);
   _viewAbortController.abort();
   _viewAbortController = new AbortController();
   bumpNavGen(); // отменяет все ещё не завершённые рендеры предыдущих разделов

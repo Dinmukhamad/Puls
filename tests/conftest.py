@@ -125,3 +125,35 @@ def operator_client(client, make_client, db_session):
     login = c.post("/api/auth/login", json={"username": user.username, "password": password})
     assert login.status_code == 200, login.text
     return c
+
+
+def make_staff_user(db, *, role: str, password: str = "StaffPass123!"):
+    """Сотрудник с указанной ролью. Возвращает (user, password)."""
+    from app.core.security import hash_password
+    from app.models import entities as m
+    user = m.User(
+        full_name=f"Тестовый {role}",
+        username=f"{role}_{uuid.uuid4().hex[:10]}",
+        password_hash=hash_password(password),
+        role=role,
+        is_active=True,
+        must_change_password=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user, password
+
+
+@pytest.fixture()
+def manager_client(client, make_client, db_session):
+    """Клиент, залогиненный руководителем.
+
+    Нужен там, где права manager и admin расходятся: например, менять
+    is_active у уровня и отключать уровень может только администратор.
+    """
+    user, password = make_staff_user(db_session, role="manager")
+    c = make_client()
+    login = c.post("/api/auth/login", json={"username": user.username, "password": password})
+    assert login.status_code == 200, login.text
+    return c

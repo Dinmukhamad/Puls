@@ -60,6 +60,25 @@ test.describe('Уровни — визуальный базлайн', () => {
     await expect(page).toHaveScreenshot('operator-levels.png', { fullPage: true });
   });
 
+  test('сетка карточек 4 → 2 → 1 по ширине экрана', async ({ page }, testInfo) => {
+    await openLevels(page);
+    const grid = page.locator('.lv-grid');
+    await grid.waitFor({ timeout: 10_000 });
+    const columns = await grid.evaluate(
+      el => getComputedStyle(el).gridTemplateColumns.split(' ').filter(Boolean).length,
+    );
+    const expected = { desktop: 4, tablet: 2, mobile: 1 }[testInfo.project.name];
+    expect(columns, `на ${testInfo.project.name} ожидали ${expected} колонки`).toBe(expected);
+  });
+
+  test('цвет уровня не единственный признак: рядом имя, код и словесный статус', async ({ page }) => {
+    await openLevels(page);
+    const card = page.locator('.lv-card').first();
+    await expect(card.locator('.lv-card-title')).not.toBeEmpty();
+    await expect(card.locator('.lv-card-code code')).not.toBeEmpty();
+    await expect(card.locator('.lv-state')).toHaveText(/расчёте/);
+  });
+
   test('карточки уровней идут по sort_order', async ({ page }) => {
     await openLevels(page);
     const expected = [...sample.levels.json]

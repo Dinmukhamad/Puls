@@ -1,6 +1,7 @@
 {
-  "GET /api/admin/operator-levels": [
-    {
+  "GET /api/admin/operator-levels": {
+    "__type__": "list",
+    "item": {
       "code": "str",
       "coin_multiplier_percent": "float",
       "color": "str",
@@ -14,8 +15,9 @@
       "reward_coins": "int",
       "reward_label": "str",
       "reward_once": "bool",
-      "rules": [
-        {
+      "rules": {
+        "__type__": "list",
+        "item": {
           "condition_text": "str",
           "created_at": "str",
           "id": "int",
@@ -29,19 +31,17 @@
           "value_max": "float",
           "value_min": "float"
         }
-      ],
+      },
       "rules_count": "int",
       "shop_discount_percent": "float",
       "sort_order": "int",
       "stage_number": "int",
       "updated_at": "str"
     }
-  ],
-  "GET /api/admin/operator-levels/rewards": {
-    "items": []
   },
-  "GET /api/operator-levels": [
-    {
+  "GET /api/operator-levels": {
+    "__type__": "list",
+    "item": {
       "code": "str",
       "coin_multiplier_percent": "float",
       "color": "str",
@@ -55,8 +55,9 @@
       "reward_coins": "int",
       "reward_label": "str",
       "reward_once": "bool",
-      "rules": [
-        {
+      "rules": {
+        "__type__": "list",
+        "item": {
           "condition_text": "str",
           "created_at": "str",
           "id": "int",
@@ -70,12 +71,18 @@
           "value_max": "float",
           "value_min": "float"
         }
-      ],
+      },
       "rules_count": "int",
       "shop_discount_percent": "float",
       "sort_order": "int",
       "stage_number": "int",
       "updated_at": "str"
     }
-  ]
+  },
+  "GET /api/admin/operator-levels/rewards": {
+    "items": {
+      "__type__": "list",
+      "item": null
+    }
+  }
 }

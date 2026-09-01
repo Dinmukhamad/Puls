@@ -2004,6 +2004,12 @@ function _modalHasInput(root) {
   return [...root.querySelectorAll('input, textarea, select')].some(field => {
     if (field.type === 'hidden' || field.disabled) return false;
     if (field.type === 'checkbox' || field.type === 'radio') return field.checked !== field.defaultChecked;
+    if (field.type === 'color') {
+      // Браузер нормализует цвет к нижнему регистру, а defaultValue отдаёт
+      // атрибут как написан. Без сравнения без учёта регистра нетронутое
+      // поле цвета считалось заполненным, и Esc спрашивал про потерю данных.
+      return field.value.toLowerCase() !== String(field.defaultValue || '').toLowerCase();
+    }
     if (field.tagName === 'SELECT') {
       // Сравниваем с тем вариантом, что выбран в разметке, а не с первым:
       // у поля роли по умолчанию выбран не первый пункт, и нетронутая форма

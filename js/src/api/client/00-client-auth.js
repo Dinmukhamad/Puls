@@ -40,9 +40,15 @@ const api = (() => {
     comment: 'Комментарий', points_per_coin: 'Баллов за коин', quantity: 'Количество',
     operator_id: 'Оператор', operator_ids: 'Операторы', stock_limit: 'Лимит остатка',
     purchase_limit_per_operator: 'Лимит на оператора', starts_at: 'Дата начала', ends_at: 'Дата окончания',
+    code: 'Код', name: 'Название', color: 'Цвет', icon: 'Иконка', sort_order: 'Порядок',
+    is_active: 'Активен', min_total_xp: 'Минимальный опыт', reward_coins: 'Награда в коинах',
+    reward_once: 'Награда однократно', coin_multiplier_percent: 'Множитель коинов',
+    shop_discount_percent: 'Скидка в магазине', metric_code: 'Показатель', operator: 'Условие',
+    value_min: 'Минимум', value_max: 'Максимум', is_required: 'Обязательное',
+    level_id: 'Уровень', period_start: 'Начало периода', period_end: 'Конец периода',
   };
 
-  function _formatValidationError(entry) {
+  function _formatValidationError(entry, { withLabel = true } = {}) {
     const field = Array.isArray(entry.loc) ? entry.loc[entry.loc.length - 1] : '';
     const label = FIELD_LABELS_RU[field] || (typeof field === 'string' ? field : '');
     const ctx = entry.ctx || {};
@@ -55,13 +61,49 @@ const api = (() => {
     else if (entry.type === 'string_too_long' && ctx.max_length != null) msg = `максимум ${ctx.max_length} символов`;
     else if (entry.type === 'missing') msg = 'обязательное поле';
     else msg = entry.msg || 'некорректное значение';
+    // Рядом с полем подпись уже есть — второй раз её печатать незачем.
+    if (!withLabel) return msg;
     return label ? `${label}: ${msg}` : msg;
   }
 
+  /**
+   * Массив ошибок Pydantic из конверта бэкенда.
+   *
+   * Бэкенд кладёт его в data.details (мн. ч.), а data.detail уплощает до
+   * строки «Проверьте заполнение полей». Клиент читал только detail,
+   * поэтому весь разбор выше был мёртвым кодом: на 422 пользователь любой
+   * формы видел общую фразу и не понимал, какое поле неверно.
+   * Старый формат (массив прямо в detail) тоже поддерживаем.
+   */
+  function _validationEntries(data) {
+    if (Array.isArray(data?.details)) return data.details;
+    if (Array.isArray(data?.detail)) return data.detail;
+    return null;
+  }
+
+  /** Ошибки по именам полей: { name: 'обязательное поле' }. */
+  function _fieldErrorsFrom(data) {
+    const entries = _validationEntries(data);
+    if (!entries) return null;
+    const out = {};
+    for (const entry of entries) {
+      const loc = Array.isArray(entry?.loc) ? entry.loc : [];
+      // loc выглядит как ['body', 'name'] или ['body', 'rules', 0, 'metric_code'].
+      const field = [...loc].reverse().find(part => typeof part === 'string' && part !== 'body');
+      if (field && !out[field]) out[field] = _formatValidationError(entry, { withLabel: false });
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
   function _errorMessageFromResponse(data, status) {
+    const entries = _validationEntries(data);
+    if (entries) {
+      const formatted = entries.map(entry => _formatValidationError(entry)).filter(Boolean).join('; ');
+      if (formatted) return formatted;
+    }
     const detail = data.detail || data.error;
     if (Array.isArray(detail)) {
-      const formatted = detail.map(_formatValidationError).filter(Boolean).join('; ');
+      const formatted = detail.map(entry => _formatValidationError(entry)).filter(Boolean).join('; ');
       return formatted || `Ошибка ${status}`;
     }
     if (detail && typeof detail === 'object') {
@@ -143,7 +185,11 @@ const api = (() => {
       // заголовке — берём первое доступное.
       error.requestId = data.request_id || res.headers.get('X-Request-ID') || '';
       error.detail = data.detail; // необработанное значение — на случай, если кому-то нужен доступ к исходным данным
-      error.code = data.detail?.code || data.error?.code || null;
+      // Форма показывает ошибку рядом с полем, а не только общим тостом.
+      error.fieldErrors = _fieldErrorsFrom(data);
+      // Код лежит в data.code; раньше искали его в data.detail (это строка)
+      // и в data.error (такого ключа бэкенд не отдаёт) — всегда выходил null.
+      error.code = data.code || data.detail?.code || data.error?.code || null;
       if (res.status === 401 && path !== '/api/auth/me') {
         setTimeout(() => {
           if (typeof window !== 'undefined' && typeof window.handleAuthExpired === 'function') {
