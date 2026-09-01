@@ -58,3 +58,8 @@ desktop.ini
 # собирается). index.html ссылается именно на них, поэтому без коммита
 # продакшн получит 404 на весь JS и CSS.
 # Актуальность стережёт tests/frontend/asset-pipeline.test.mjs.
+
+# Playwright: артефакты прогонов (снимки-базлайны коммитятся, отчёты — нет)
+tests/e2e/.artifacts/
+playwright-report/
+test-results/

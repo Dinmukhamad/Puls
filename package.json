@@ -11,9 +11,12 @@
     "check:minified": "node scripts/minify-frontend.mjs --check",
     "check:stamped": "node scripts/stamp-assets.mjs --check",
     "test": "node --test tests/frontend/*.test.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:update": "playwright test --update-snapshots",
     "audit": "npm audit --audit-level=high"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "clean-css": "^5.3.3",
     "terser": "^5.36.0"
   }

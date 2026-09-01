@@ -1,0 +1,81 @@
+{
+  "GET /api/admin/operator-levels": [
+    {
+      "code": "str",
+      "coin_multiplier_percent": "float",
+      "color": "str",
+      "created_at": "str",
+      "description": "str",
+      "icon": "str",
+      "id": "int",
+      "is_active": "bool",
+      "min_total_xp": "int",
+      "name": "str",
+      "reward_coins": "int",
+      "reward_label": "str",
+      "reward_once": "bool",
+      "rules": [
+        {
+          "condition_text": "str",
+          "created_at": "str",
+          "id": "int",
+          "is_required": "bool",
+          "level_id": "int",
+          "metric_code": "str",
+          "metric_label": "str",
+          "operator": "str",
+          "operator_label": "str",
+          "updated_at": "str",
+          "value_max": "float",
+          "value_min": "float"
+        }
+      ],
+      "rules_count": "int",
+      "shop_discount_percent": "float",
+      "sort_order": "int",
+      "stage_number": "int",
+      "updated_at": "str"
+    }
+  ],
+  "GET /api/admin/operator-levels/rewards": {
+    "items": []
+  },
+  "GET /api/operator-levels": [
+    {
+      "code": "str",
+      "coin_multiplier_percent": "float",
+      "color": "str",
+      "created_at": "str",
+      "description": "str",
+      "icon": "str",
+      "id": "int",
+      "is_active": "bool",
+      "min_total_xp": "int",
+      "name": "str",
+      "reward_coins": "int",
+      "reward_label": "str",
+      "reward_once": "bool",
+      "rules": [
+        {
+          "condition_text": "str",
+          "created_at": "str",
+          "id": "int",
+          "is_required": "bool",
+          "level_id": "int",
+          "metric_code": "str",
+          "metric_label": "str",
+          "operator": "str",
+          "operator_label": "str",
+          "updated_at": "str",
+          "value_max": "float",
+          "value_min": "float"
+        }
+      ],
+      "rules_count": "int",
+      "shop_discount_percent": "float",
+      "sort_order": "int",
+      "stage_number": "int",
+      "updated_at": "str"
+    }
+  ]
+}

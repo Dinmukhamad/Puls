@@ -45,16 +45,6 @@ ADMIN_ENDPOINTS = [
 ]
 
 
-@pytest.fixture()
-def operator_client(client, make_client, db_session):
-    """Клиент, залогиненный рядовым оператором."""
-    _op, user, password = make_operator_user(db_session)
-    c = make_client()
-    login = c.post("/api/auth/login", json={"username": user.username, "password": password})
-    assert login.status_code == 200, login.text
-    return c
-
-
 @pytest.mark.parametrize("method,path,body", ADMIN_ENDPOINTS,
                          ids=[f"{m} {p.split('?')[0]}" for m, p, _ in ADMIN_ENDPOINTS])
 def test_operator_denied_on_admin_endpoints(operator_client, method, path, body):
