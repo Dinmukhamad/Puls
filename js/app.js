@@ -331,14 +331,17 @@ function resolveRoute(view, tab) {
   const parsed = LEGACY_COIN_VIEW_TAB[view] ? { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[view] } : { view, tab };
   let target = parsed.view;
 
+  // Несуществующий адрес заменяем — показывать нечего. Существующий, но
+  // запрещённый, оставляем как есть: ТЗ требует честный отказ вместо тихой
+  // подмены, и введённый адрес должен сохраниться в строке браузера.
   if (!isKnownRoute(target)) target = fallbackViewForRole(role);
-  if (role && !allowedViewsForRole(role).includes(target)) target = fallbackViewForRole(role);
+  const forbidden = Boolean(role) && !allowedViewsForRole(role).includes(target);
 
   const spec = ROUTES[target];
   const nextTab = spec?.normalizeTab
     ? spec.normalizeTab(parsed.tab || (target === STATE.currentView ? STATE.coinsTab : ''))
     : '';
-  return { view: target, tab: nextTab };
+  return { view: target, tab: nextTab, forbidden };
 }
 
 /** Стартовый маршрут: адресная строка → сохранённый раздел → дефолт роли. */
@@ -569,7 +572,7 @@ function onDataUpdated(views) {
 }
 
 function navigateTo(view, options = {}) {
-  const { view: target, tab } = resolveRoute(view, options.tab);
+  const { view: target, tab, forbidden } = resolveRoute(view, options.tab);
 
   if (
     STATE.currentView === 'missions'
@@ -621,8 +624,46 @@ function navigateTo(view, options = {}) {
     node.scrollTop = 0;
     node.scrollLeft = 0;
   });
+  if (forbidden) {
+    // Ни одного запроса за данными раздела: они всё равно вернут 403,
+    // а лишний вызов только шумит в сети и в логах.
+    renderForbiddenView(target);
+    return;
+  }
   renderView(target);
   focusCurrentViewHeading(target);
+}
+
+/**
+ * Экран запрещённого раздела. Адрес в строке сохраняется — человек видит,
+ * куда он пытался попасть, и может переслать ссылку тому, у кого доступ
+ * есть. Настоящий отказ бэкенда остаётся HTTP 403; это лишь его
+ * отображение до запроса.
+ */
+function renderForbiddenView(view) {
+  const el = document.getElementById(`view-${view}`);
+  if (!el) return;
+  const title = ROUTES[view]?.title || 'Раздел';
+  el.innerHTML = `<div class="view-forbidden">${uiForbiddenState(
+    'Раздел недоступен',
+    `У вашей роли нет доступа к разделу «${esc(title)}». Обратитесь к администратору, если доступ нужен для работы.`,
+    false,
+    [{ id: 'back', label: 'Вернуться' }],
+  )}</div>`;
+  uiBindStateActions(el, { back: goBackSafely });
+  focusCurrentViewHeading(view);
+}
+
+/**
+ * Назад по истории, а если возвращаться некуда — на стартовый экран роли.
+ * При заходе по прямой ссылке history.back() увёл бы человека с сайта.
+ */
+function goBackSafely() {
+  if (window.history.length > 1 && document.referrer) {
+    window.history.back();
+    return;
+  }
+  navigateTo(fallbackViewForRole(STATE.user?.role));
 }
 
 /**
@@ -1479,8 +1520,8 @@ function uiErrorState(title, text, { detail = '', requestId = '', actions = [], 
 }
 
 /** Нет прав. Не путаем с ошибкой сервера. */
-function uiForbiddenState(title = 'Раздел недоступен', text = 'У вашей роли нет доступа к этим данным. Обратитесь к администратору, если доступ нужен для работы.', compact = false) {
-  return uiStateBlock({ kind: 'forbidden', icon: '×', title, text, compact });
+function uiForbiddenState(title = 'Раздел недоступен', text = 'У вашей роли нет доступа к этим данным. Обратитесь к администратору, если доступ нужен для работы.', compact = false, actions = []) {
+  return uiStateBlock({ kind: 'forbidden', icon: '×', title, text, compact, actions });
 }
 
 /** Плашка «показаны неполные данные» — поверх уже отрисованного контента. */
@@ -1558,6 +1599,227 @@ function uiBindStateActions(host, handlers = {}) {
     const id = btn.dataset.uiAction;
     const fn = handlers[id] || (id === 'reload' ? () => location.reload() : null);
     if (fn) btn.addEventListener('click', fn);
+  });
+}
+/* ══════════════════════════════════════════════════════════════
+   Общие примитивы по ТЗ: Card, KPI, Table, Pagination, Chart shell.
+
+   Modal (showModal/closeModal) и Toast (showToast) уже существуют —
+   здесь они не дублируются. Состояния loading / empty / error /
+   forbidden живут в 10-states.js и переиспользуются как есть.
+
+   Всё возвращает строку разметки: экраны собирают её в innerHTML, как и
+   раньше. Обработчики вешаются отдельно — uiBindTable и uiBindPagination,
+   чтобы разметка оставалась чистой, без inline onclick.
+══════════════════════════════════════════════════════════════ */
+
+const UI_PAGE_SIZES = [10, 25, 50, 100];
+
+/**
+ * Карточка-контейнер: заголовок, подпись, действия и тело.
+ * Вокруг таблиц, списков и графиков — одна и та же рамка на всех экранах.
+ */
+function uiCard({ title = '', subtitle = '', actions = '', body = '', tone = '', id = '', flush = false } = {}) {
+  const head = (title || subtitle || actions) ? `
+    <header class="ui-card-head">
+      <div class="ui-card-head-text">
+        ${title ? `<h2 class="ui-card-title">${esc(title)}</h2>` : ''}
+        ${subtitle ? `<p class="ui-card-sub">${esc(subtitle)}</p>` : ''}
+      </div>
+      ${actions ? `<div class="ui-card-actions">${actions}</div>` : ''}
+    </header>` : '';
+  return `<section class="ui-card${tone ? ` ui-tone-${esc(tone)}` : ''}${flush ? ' is-flush' : ''}"${id ? ` id="${esc(id)}"` : ''}>
+    ${head}<div class="ui-card-body">${body}</div>
+  </section>`;
+}
+
+/**
+ * KPI-карточка. Показывает только то, что реально пришло: значение, цель,
+ * выборку, изменение. Отсутствующее поле не выдумывается и не рисуется —
+ * ТЗ прямо запрещает подставлять фиктивные значения.
+ *
+ * tone задаётся статусом с бэкенда, а не порогом на фронте.
+ */
+function uiKpi({ label, value, unit = '', target = null, sample = null, tone = 'neutral',
+                 delta = '', note = '', hint = '', chart = '' } = {}) {
+  const hasValue = value !== null && value !== undefined && value !== '';
+  const meta = [];
+  if (target !== null && target !== undefined && target !== '') meta.push(`Цель: ${esc(String(target))}${esc(unit)}`);
+  if (sample !== null && sample !== undefined) meta.push(`выборка: ${esc(String(sample))}`);
+  return `
+    <article class="ui-kpi ui-tone-${esc(tone)}">
+      <header class="ui-kpi-head">
+        <h3 class="ui-kpi-label">${esc(label)}</h3>
+        ${hint ? `<button class="ui-kpi-hint" type="button" title="${esc(hint)}"
+          aria-label="Что означает показатель «${esc(label)}»">i</button>` : ''}
+      </header>
+      <p class="ui-kpi-value">${hasValue ? `${esc(String(value))}${esc(unit)}` : '<span class="ui-kpi-nodata">нет данных</span>'}</p>
+      ${meta.length ? `<p class="ui-kpi-meta">${meta.join(' · ')}</p>` : ''}
+      ${chart}
+      ${note ? `<p class="ui-kpi-note">${esc(note)}</p>` : ''}
+      ${delta}
+    </article>`;
+}
+
+/** Изменение к прошлому периоду. Без сравнения — честная подпись, а не ноль. */
+function uiKpiDelta(change, { lowerIsBetter = false, suffix = 'к прошлому периоду' } = {}) {
+  if (change === null || change === undefined || Number.isNaN(Number(change))) {
+    return `<span class="ui-delta is-none">Нет сравнения ${esc(suffix)}</span>`;
+  }
+  const num = Number(change);
+  const improved = lowerIsBetter ? num < 0 : num > 0;
+  const cls = num === 0 ? 'is-flat' : (improved ? 'is-up' : 'is-down');
+  const sign = num > 0 ? '+' : '';
+  return `<span class="ui-delta ${cls}">${sign}${esc(String(Math.round(num * 10) / 10))} ${esc(suffix)}</span>`;
+}
+
+/**
+ * Таблица по канону ТЗ: липкая шапка, сортировка с aria-sort, scope у
+ * заголовков, колонка действий справа, карточный режим на узком экране.
+ *
+ * columns: [{ key, label, sortable, numeric, actions }]
+ * rows:    [{ id, cells: [html], detail, expanded }]
+ */
+function uiTable({ columns = [], rows = [], sort = null, caption = '', mobile = 'cards', empty = '' } = {}) {
+  if (!rows.length) return empty || uiEmptyState('Нет данных', 'Пока показывать нечего.', [], true);
+
+  const th = columns.map(c => {
+    const active = sort && sort.key === c.key;
+    const ariaSort = active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+    const cls = ['ui-th', c.numeric ? 'num' : '', c.actions ? 'ui-th-actions' : '', active ? 'is-sorted' : '']
+      .filter(Boolean).join(' ');
+    const label = c.actions
+      ? `<span class="sr-only">${esc(c.label || 'Действия')}</span>`
+      : (c.sortable
+        ? `<button class="ui-sort" type="button" data-ui-sort="${esc(c.key)}">${esc(c.label)}<span class="ui-sort-i" aria-hidden="true">${active ? (sort.dir === 'asc' ? '↑' : '↓') : '⇅'}</span></button>`
+        : esc(c.label));
+    return `<th class="${cls}" scope="col" aria-sort="${ariaSort}">${label}</th>`;
+  }).join('');
+
+  const body = rows.map(r => {
+    const cells = r.cells.map((html, i) => {
+      const c = columns[i] || {};
+      const label = c.actions ? '' : ` data-label="${esc(c.label || '')}"`;
+      return `<td class="${c.numeric ? 'num' : ''}${c.actions ? ' ui-td-actions' : ''}"${label}>${html}</td>`;
+    }).join('');
+    const detail = r.detail
+      ? `<tr class="ui-detail-row"><td colspan="${columns.length}">${r.detail}</td></tr>` : '';
+    return `<tr class="ui-row${r.expanded ? ' is-open' : ''}"${r.id != null ? ` data-ui-row="${esc(String(r.id))}"` : ''}>${cells}</tr>${detail}`;
+  }).join('');
+
+  return `<div class="ui-table-wrap">
+    <table class="data-table ui-table" data-mobile="${esc(mobile)}">
+      ${caption ? `<caption class="sr-only">${esc(caption)}</caption>` : ''}
+      <thead><tr>${th}</tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+  </div>`;
+}
+
+/**
+ * Пагинация: диапазон, страницы и размер страницы.
+ * ТЗ требует показывать и диапазон, и общее число — «1–10 из 60».
+ */
+function uiPagination({ page = 1, perPage = 10, total = 0, pageSizes = UI_PAGE_SIZES, label = 'записей' } = {}) {
+  const pageCount = Math.max(1, Math.ceil(total / perPage));
+  const current = Math.min(Math.max(1, page), pageCount);
+  const from = total ? (current - 1) * perPage + 1 : 0;
+  const to = Math.min(total, current * perPage);
+
+  const nums = [];
+  const push = n => { if (n >= 1 && n <= pageCount && !nums.includes(n)) nums.push(n); };
+  push(1);
+  for (let n = current - 1; n <= current + 1; n++) push(n);
+  push(pageCount);
+  nums.sort((a, b) => a - b);
+
+  let pages = '';
+  let prev = 0;
+  for (const n of nums) {
+    if (prev && n - prev > 1) pages += '<span class="ui-page-gap">…</span>';
+    pages += `<button class="ui-page${n === current ? ' is-current' : ''}" type="button"
+      data-ui-page="${n}"${n === current ? ' aria-current="page"' : ''}>${n}</button>`;
+    prev = n;
+  }
+
+  return `<nav class="ui-pager" aria-label="Постраничная навигация">
+    <p class="ui-pager-range">Показано ${from}–${to} из ${total} ${esc(label)}</p>
+    ${pageCount > 1 ? `<div class="ui-pages">
+      <button class="ui-page ui-page-nav" type="button" data-ui-page="${current - 1}"
+        ${current === 1 ? 'disabled' : ''} aria-label="Предыдущая страница">‹</button>
+      ${pages}
+      <button class="ui-page ui-page-nav" type="button" data-ui-page="${current + 1}"
+        ${current === pageCount ? 'disabled' : ''} aria-label="Следующая страница">›</button>
+    </div>` : '<div class="ui-pages"></div>'}
+    <label class="ui-perpage">
+      <span class="sr-only">Записей на странице</span>
+      <select class="ui-perpage-select" data-ui-perpage>
+        ${pageSizes.map(n => `<option value="${n}"${n === perPage ? ' selected' : ''}>${n} на странице</option>`).join('')}
+      </select>
+    </label>
+  </nav>`;
+}
+
+/**
+ * Оболочка графика. ТЗ требует: подпись, единицу, легенду и обязательную
+ * текстовую альтернативу — скрытую таблицу данных. Без данных показывается
+ * честное пустое состояние, а не линия из одной точки.
+ */
+function uiChartShell({ title = '', subtitle = '', unit = '', controls = '', chart = '',
+                        legend = '', rows = [], columns = [], emptyText = '' } = {}) {
+  if (!chart) {
+    return uiEmptyState(
+      'Недостаточно данных для графика',
+      emptyText || 'Точек за выбранный период слишком мало. Измените период или дождитесь расчёта.',
+      [], true,
+    );
+  }
+  const table = rows.length ? `
+    <details class="ui-chart-data">
+      <summary>Данные графика таблицей</summary>
+      <table class="data-table ui-chart-table">
+        <thead><tr>${columns.map(c => `<th scope="col">${esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(r => `<tr>${r.map(v => `<td>${esc(String(v))}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+    </details>` : '';
+  return `
+    <figure class="ui-chart">
+      ${(title || controls) ? `<figcaption class="ui-chart-head">
+        <div class="ui-chart-head-text">
+          ${title ? `<span class="ui-chart-title">${esc(title)}</span>` : ''}
+          ${subtitle ? `<span class="ui-chart-sub">${esc(subtitle)}</span>` : ''}
+          ${unit ? `<span class="ui-chart-unit">${esc(unit)}</span>` : ''}
+        </div>
+        ${controls ? `<div class="ui-chart-controls">${controls}</div>` : ''}
+      </figcaption>` : ''}
+      <div class="ui-chart-body">${chart}</div>
+      ${legend}
+      ${table}
+    </figure>`;
+}
+
+/** Сортировка таблицы: клик по заголовку переключает направление. */
+function uiBindTable(host, state, onChange) {
+  host?.querySelectorAll('[data-ui-sort]').forEach(btn => btn.addEventListener('click', () => {
+    const key = btn.dataset.uiSort;
+    if (state.key === key) state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+    else { state.key = key; state.dir = 'asc'; }
+    onChange();
+  }));
+}
+
+/** Страницы и размер страницы. Смена размера всегда возвращает на первую. */
+function uiBindPagination(host, state, onChange) {
+  host?.querySelectorAll('[data-ui-page]').forEach(btn => btn.addEventListener('click', () => {
+    const n = Number(btn.dataset.uiPage);
+    if (!Number.isFinite(n) || n < 1) return;
+    state.page = n;
+    onChange();
+  }));
+  host?.querySelector('[data-ui-perpage]')?.addEventListener('change', e => {
+    state.perPage = Number(e.target.value) || 10;
+    state.page = 1;
+    onChange();
   });
 }
 /* Shared UI contracts. Keep screen-specific views free from raw enums and ad-hoc formats. */
@@ -4997,16 +5259,6 @@ function smNum(value, unit) {
   return `${analyticsMetricValue(value, unit)}`;
 }
 
-function smDelta(change, lowerIsBetter) {
-  if (change === null || change === undefined) {
-    return '<span class="sm-delta is-neutral">Нет сравнения с прошлым периодом</span>';
-  }
-  const improved = lowerIsBetter ? change < 0 : change > 0;
-  const cls = change === 0 ? 'is-neutral' : (improved ? 'is-up' : 'is-down');
-  const sign = change > 0 ? '+' : '';
-  return `<span class="sm-delta ${cls}">${sign}${fmtA(change, 1)} к прошлому периоду</span>`;
-}
-
 function renderSummaryData(el, content, warning, data) {
   const health = data.team_health || {};
   const metrics = data.metric_cards || [];
@@ -5049,39 +5301,35 @@ function renderSummaryData(el, content, warning, data) {
       <section class="sm-kpis" aria-label="Ключевые показатели">
         ${metrics.map(m => {
           const t = chartTone(m.status);
-          const lower = m.key === 'penalty';
-          return `
-          <article class="sm-kpi sm-tone-${t}">
-            <header class="sm-kpi-head">
-              <h3 class="sm-kpi-label">${esc(m.label)}</h3>
-              ${m.definition ? `<button class="sm-kpi-info" type="button"
-                title="${esc(m.definition)}" aria-label="Что означает показатель «${esc(m.label)}»">i</button>` : ''}
-            </header>
-            <p class="sm-kpi-value">${smNum(m.value, m.unit)}</p>
-            <p class="sm-kpi-target">Цель: ${smNum(m.target, m.unit)} · выборка: ${m.operators_with_data || 0}</p>
-            ${chartScaleBar(m.attainment ?? 0, {
-              max: 120, tone: t,
-              label: `Достижение цели: ${m.attainment ?? 0}%`,
-            })}
-            <p class="sm-kpi-below">${m.operators_below_target
+          return uiKpi({
+            label: m.label,
+            // Значение и цель форматируются словарём аналитики: у штрафов
+            // единица «мин», у качества «%» — правило одно на весь продукт.
+            value: m.value === null || m.value === undefined ? null : smNum(m.value, m.unit),
+            target: m.target === null || m.target === undefined ? null : smNum(m.target, m.unit),
+            sample: m.operators_with_data || 0,
+            tone: t,
+            hint: m.definition || '',
+            chart: chartScaleBar(m.attainment ?? 0, {
+              max: 120, tone: t, label: `Достижение цели: ${m.attainment ?? 0}%`,
+            }),
+            note: m.operators_below_target
               ? `${m.operators_below_target} ${uiPlural(m.operators_below_target, 'оператор', 'оператора', 'операторов')} ниже цели`
-              : 'Все в пределах цели'}</p>
-            ${smDelta(m.change, lower)}
-          </article>`;
+              : 'Все в пределах цели',
+            // У штрафов меньше — лучше, поэтому минус здесь улучшение.
+            delta: uiKpiDelta(m.change, { lowerIsBetter: m.key === 'penalty' }),
+          });
         }).join('') || '<p class="ch-empty">Показатели за период не рассчитаны</p>'}
       </section>
 
       <div class="sm-grid">
-        <section class="sm-panel" aria-label="Группы">
-          <header class="sm-panel-head">
-            <div>
-              <h2 class="sm-panel-title">Группы</h2>
-              <p class="sm-panel-sub">Сначала группы с риском</p>
-            </div>
-            <button class="btn-outline btn-sm" type="button"
-                    onclick="navigateTo('analytics',{tab:'groups'})">Подробнее</button>
-          </header>
-          <div class="sm-groups">
+        ${uiCard({
+          title: 'Группы',
+          subtitle: 'Сначала группы с риском',
+          actions: `<button class="btn-outline btn-sm" type="button"
+                      onclick="navigateTo('analytics',{tab:'groups'})">Подробнее</button>`,
+          flush: true,
+          body: `<div class="sm-groups">
             ${groups.slice(0, 5).map(g => `
               <article class="sm-group sm-tone-${chartTone(g.status)}">
                 <div class="sm-group-top">
@@ -5093,19 +5341,16 @@ function renderSummaryData(el, content, warning, data) {
                 <p class="sm-group-risk">${g.operators_in_risk} требуют внимания</p>
               </article>`).join('')
               || uiEmptyState('Групп пока нет', 'Заведите группу, чтобы видеть срез по командам.', [], true)}
-          </div>
-        </section>
+          </div>`,
+        })}
 
-        <section class="sm-panel" aria-label="Требуют внимания">
-          <header class="sm-panel-head">
-            <div>
-              <h2 class="sm-panel-title">Требуют внимания</h2>
-              <p class="sm-panel-sub">Главные приоритеты периода</p>
-            </div>
-            <button class="btn-outline btn-sm" type="button"
-                    onclick="navigateTo('analytics',{tab:'operators'})">Все операторы</button>
-          </header>
-          <ul class="sm-attention">
+        ${uiCard({
+          title: 'Требуют внимания',
+          subtitle: 'Главные приоритеты периода',
+          actions: `<button class="btn-outline btn-sm" type="button"
+                      onclick="navigateTo('analytics',{tab:'operators'})">Все операторы</button>`,
+          flush: true,
+          body: `<ul class="sm-attention">
             ${priorities.slice(0, 6).map(p => `
               <li class="sm-attention-item sm-tone-${chartTone(p.status)}">
                 <span class="sm-dot" aria-hidden="true"></span>
@@ -5116,8 +5361,8 @@ function renderSummaryData(el, content, warning, data) {
                 <span class="sm-attention-score" title="Индекс состояния">${p.health_score}</span>
               </li>`).join('')
               || `<li class="sm-attention-ok">Все доступные показатели в норме</li>`}
-          </ul>
-        </section>
+          </ul>`,
+        })}
       </div>
     </div>`;
 }
@@ -8875,8 +9120,6 @@ window.manualOperatorLevelUi = manualOperatorLevelUi;
    в API добавлен параметр level_id.
 ══════════════════════════════════════════════════════════════ */
 
-const USERS_PER_PAGE_OPTIONS = [10, 25, 50, 100];
-
 function usersInitials(name) {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return '—';
@@ -9058,33 +9301,19 @@ function renderUsersPage() {
 
       <div class="up-card">
         ${pageRows.length ? `
-          <table class="data-table up-table">
-            <thead>
-              <tr>
-                ${upTh('full_name', 'Пользователь', sort)}
-                ${upTh('group', 'Группа', sort)}
-                ${upTh('level', 'Уровень', sort)}
-                ${upTh('status', 'Статус', sort)}
-                <th class="up-th-actions" scope="col"><span class="sr-only">Действия</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${pageRows.map(u => upRow(u, expanded.has(u.id))).join('')}
-            </tbody>
-          </table>
-          <div class="up-pager">
-            <p class="up-pager-range">
-              Показано ${from + 1}–${from + pageRows.length} из ${rows.length}
-            </p>
-            ${upPages(page, pageCount)}
-            <label class="up-perpage">
-              <span class="sr-only">Записей на странице</span>
-              <select class="up-perpage-select" data-up="perpage">
-                ${USERS_PER_PAGE_OPTIONS.map(n =>
-                  `<option value="${n}"${n === perPage ? ' selected' : ''}>${n} на странице</option>`).join('')}
-              </select>
-            </label>
-          </div>
+          ${uiTable({
+            columns: [
+              { key: 'full_name', label: 'Пользователь', sortable: true },
+              { key: 'group',     label: 'Группа',       sortable: true },
+              { key: 'level',     label: 'Уровень',      sortable: true },
+              { key: 'status',    label: 'Статус',       sortable: true },
+              { key: 'actions',   label: 'Действия',     actions: true },
+            ],
+            rows: pageRows.map(u => upRow(u, expanded.has(u.id))),
+            sort,
+            caption: 'Учётные записи',
+          })}
+          ${uiPagination({ page, perPage, total: rows.length, label: 'учётных записей' })}
         ` : (hasFilters
           ? uiNoResultsState('Никого не нашли',
               'Под выбранные условия не подходит ни одна запись. Измените фильтры или сбросьте их.',
@@ -9133,41 +9362,6 @@ function upSelect(key, label, value, pairs, allLabel) {
     </label>`;
 }
 
-function upTh(key, label, sort) {
-  const active = sort.key === key;
-  const next = active && sort.dir === 'asc' ? 'по убыванию' : 'по возрастанию';
-  return `<th class="up-th${active ? ' is-sorted' : ''}" scope="col" aria-sort="${active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}">
-    <button class="up-sort" type="button" data-up-sort="${key}" title="Сортировать ${next}">
-      ${esc(label)}<span class="up-sort-i" aria-hidden="true">${active ? (sort.dir === 'asc' ? '↑' : '↓') : '⇅'}</span>
-    </button>
-  </th>`;
-}
-
-function upPages(page, pageCount) {
-  if (pageCount <= 1) return '<div class="up-pages"></div>';
-  const nums = [];
-  const push = n => { if (!nums.includes(n)) nums.push(n); };
-  push(1);
-  for (let n = page - 1; n <= page + 1; n++) if (n > 1 && n < pageCount) push(n);
-  push(pageCount);
-  nums.sort((a, b) => a - b);
-  const out = [];
-  let prev = 0;
-  for (const n of nums) {
-    if (prev && n - prev > 1) out.push('<span class="up-gap">…</span>');
-    out.push(`<button class="up-page${n === page ? ' is-current' : ''}" type="button"
-      data-up-page="${n}"${n === page ? ' aria-current="page"' : ''}>${n}</button>`);
-    prev = n;
-  }
-  return `<div class="up-pages">
-    <button class="up-page up-nav" type="button" data-up-page="${page - 1}"
-      ${page === 1 ? 'disabled' : ''} aria-label="Предыдущая страница">‹</button>
-    ${out.join('')}
-    <button class="up-page up-nav" type="button" data-up-page="${page + 1}"
-      ${page === pageCount ? 'disabled' : ''} aria-label="Следующая страница">›</button>
-  </div>`;
-}
-
 function upField(label, value, copyable) {
   if (!value) return '';
   return `<div class="up-field">
@@ -9180,6 +9374,7 @@ function upField(label, value, copyable) {
   </div>`;
 }
 
+/** Данные строки для uiTable: разметку <tr> собирает сам примитив. */
 function upRow(u, isOpen) {
   const role = USERS_ROLE_LABEL[u.role] || u.role || '';
   const login = u.login || u.username || '';
@@ -9187,9 +9382,7 @@ function upRow(u, isOpen) {
   const seen = usersWhen(u.last_seen_at) || 'Ни разу не заходил';
   const added = usersWhen(u.created_at, { withTime: false }) || '—';
 
-  return `
-    <tr class="up-row${isOpen ? ' is-open' : ''}" data-up-row="${u.id}">
-      <td class="up-cell-user">
+  const userCell = `<span class="up-cell-user">
         <button class="up-expand" type="button" data-up-expand="${u.id}"
                 aria-expanded="${isOpen}" aria-label="${isOpen ? 'Свернуть' : 'Развернуть'} карточку">
           ${upIcon('chevron')}
@@ -9199,24 +9392,9 @@ function upRow(u, isOpen) {
           <span class="up-user-name">${esc(u.full_name || '—')}</span>
           <span class="up-user-sub">${esc(role)}${login ? ` · ${esc(login)}` : ''}</span>
         </span>
-      </td>
-      <td class="up-cell-group">${u.group_name ? esc(u.group_name) : '<span class="up-dash">Не назначена</span>'}</td>
-      <td class="up-cell-level">${u.level
-        ? `<span class="up-level">${esc(u.level.name)}</span>`
-        : '<span class="up-dash">—</span>'}</td>
-      <td class="up-cell-status">
-        <span class="up-status up-status-${usersStatusTone(u.status)}">
-          ${esc(USERS_STATUS_LABEL[u.status] || u.status || '—')}
-        </span>
-      </td>
-      <td class="up-cell-actions">
-        <button class="up-more" type="button" data-up-menu="${u.id}" aria-label="Действия">···</button>
-      </td>
-    </tr>
-    ${isOpen ? `
-    <tr class="up-detail-row">
-      <td colspan="5">
-        <div class="up-detail">
+      </span>`;
+
+  const detail = isOpen ? `<div class="up-detail">
           <dl class="up-fields">
             ${upField('Email', u.email, true)}
             ${upField('Логин', login, true)}
@@ -9243,9 +9421,20 @@ function upRow(u, isOpen) {
               ${upIcon('off')}<span>Деактивировать</span>
             </button>
           </div>
-        </div>
-      </td>
-    </tr>` : ''}`;
+        </div>` : '';
+
+  return {
+    id: u.id,
+    expanded: isOpen,
+    detail,
+    cells: [
+      userCell,
+      u.group_name ? esc(u.group_name) : '<span class="up-dash">Не назначена</span>',
+      u.level ? `<span class="up-level">${esc(u.level.name)}</span>` : '<span class="up-dash">—</span>',
+      `<span class="up-status up-status-${usersStatusTone(u.status)}">${esc(USERS_STATUS_LABEL[u.status] || u.status || '—')}</span>`,
+      `<button class="up-more" type="button" data-up-menu="${u.id}" aria-label="Действия">···</button>`,
+    ],
+  };
 }
 
 function bindUsersPage(el) {
@@ -9285,23 +9474,8 @@ function bindUsersPage(el) {
       STATE.usersFilters = { tab: 'all' }; paging.page = 1; rerender();
     }));
 
-  el.querySelectorAll('[data-up-sort]').forEach(b => b.addEventListener('click', () => {
-    const key = b.dataset.upSort;
-    const sort = STATE.usersSort;
-    if (sort.key === key) sort.dir = sort.dir === 'asc' ? 'desc' : 'asc';
-    else { sort.key = key; sort.dir = 'asc'; }
-    rerender();
-  }));
-
-  el.querySelectorAll('[data-up-page]').forEach(b => b.addEventListener('click', () => {
-    const n = Number(b.dataset.upPage);
-    if (!Number.isFinite(n) || n < 1) return;
-    paging.page = n; rerender();
-    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  }));
-  el.querySelector('[data-up="perpage"]')?.addEventListener('change', e => {
-    paging.perPage = Number(e.target.value) || 10; paging.page = 1; rerender();
-  });
+  uiBindTable(el, STATE.usersSort, rerender);
+  uiBindPagination(el, paging, rerender);
 
   el.querySelectorAll('[data-up-expand]').forEach(b => b.addEventListener('click', () => {
     const id = Number(b.dataset.upExpand);

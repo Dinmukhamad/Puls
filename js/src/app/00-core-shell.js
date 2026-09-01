@@ -330,14 +330,17 @@ function resolveRoute(view, tab) {
   const parsed = LEGACY_COIN_VIEW_TAB[view] ? { view: 'coins', tab: LEGACY_COIN_VIEW_TAB[view] } : { view, tab };
   let target = parsed.view;
 
+  // Несуществующий адрес заменяем — показывать нечего. Существующий, но
+  // запрещённый, оставляем как есть: ТЗ требует честный отказ вместо тихой
+  // подмены, и введённый адрес должен сохраниться в строке браузера.
   if (!isKnownRoute(target)) target = fallbackViewForRole(role);
-  if (role && !allowedViewsForRole(role).includes(target)) target = fallbackViewForRole(role);
+  const forbidden = Boolean(role) && !allowedViewsForRole(role).includes(target);
 
   const spec = ROUTES[target];
   const nextTab = spec?.normalizeTab
     ? spec.normalizeTab(parsed.tab || (target === STATE.currentView ? STATE.coinsTab : ''))
     : '';
-  return { view: target, tab: nextTab };
+  return { view: target, tab: nextTab, forbidden };
 }
 
 /** Стартовый маршрут: адресная строка → сохранённый раздел → дефолт роли. */
@@ -568,7 +571,7 @@ function onDataUpdated(views) {
 }
 
 function navigateTo(view, options = {}) {
-  const { view: target, tab } = resolveRoute(view, options.tab);
+  const { view: target, tab, forbidden } = resolveRoute(view, options.tab);
 
   if (
     STATE.currentView === 'missions'
@@ -620,8 +623,46 @@ function navigateTo(view, options = {}) {
     node.scrollTop = 0;
     node.scrollLeft = 0;
   });
+  if (forbidden) {
+    // Ни одного запроса за данными раздела: они всё равно вернут 403,
+    // а лишний вызов только шумит в сети и в логах.
+    renderForbiddenView(target);
+    return;
+  }
   renderView(target);
   focusCurrentViewHeading(target);
+}
+
+/**
+ * Экран запрещённого раздела. Адрес в строке сохраняется — человек видит,
+ * куда он пытался попасть, и может переслать ссылку тому, у кого доступ
+ * есть. Настоящий отказ бэкенда остаётся HTTP 403; это лишь его
+ * отображение до запроса.
+ */
+function renderForbiddenView(view) {
+  const el = document.getElementById(`view-${view}`);
+  if (!el) return;
+  const title = ROUTES[view]?.title || 'Раздел';
+  el.innerHTML = `<div class="view-forbidden">${uiForbiddenState(
+    'Раздел недоступен',
+    `У вашей роли нет доступа к разделу «${esc(title)}». Обратитесь к администратору, если доступ нужен для работы.`,
+    false,
+    [{ id: 'back', label: 'Вернуться' }],
+  )}</div>`;
+  uiBindStateActions(el, { back: goBackSafely });
+  focusCurrentViewHeading(view);
+}
+
+/**
+ * Назад по истории, а если возвращаться некуда — на стартовый экран роли.
+ * При заходе по прямой ссылке history.back() увёл бы человека с сайта.
+ */
+function goBackSafely() {
+  if (window.history.length > 1 && document.referrer) {
+    window.history.back();
+    return;
+  }
+  navigateTo(fallbackViewForRole(STATE.user?.role));
 }
 
 /**

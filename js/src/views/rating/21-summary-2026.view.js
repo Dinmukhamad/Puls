@@ -16,16 +16,6 @@ function smNum(value, unit) {
   return `${analyticsMetricValue(value, unit)}`;
 }
 
-function smDelta(change, lowerIsBetter) {
-  if (change === null || change === undefined) {
-    return '<span class="sm-delta is-neutral">Нет сравнения с прошлым периодом</span>';
-  }
-  const improved = lowerIsBetter ? change < 0 : change > 0;
-  const cls = change === 0 ? 'is-neutral' : (improved ? 'is-up' : 'is-down');
-  const sign = change > 0 ? '+' : '';
-  return `<span class="sm-delta ${cls}">${sign}${fmtA(change, 1)} к прошлому периоду</span>`;
-}
-
 function renderSummaryData(el, content, warning, data) {
   const health = data.team_health || {};
   const metrics = data.metric_cards || [];
@@ -68,39 +58,35 @@ function renderSummaryData(el, content, warning, data) {
       <section class="sm-kpis" aria-label="Ключевые показатели">
         ${metrics.map(m => {
           const t = chartTone(m.status);
-          const lower = m.key === 'penalty';
-          return `
-          <article class="sm-kpi sm-tone-${t}">
-            <header class="sm-kpi-head">
-              <h3 class="sm-kpi-label">${esc(m.label)}</h3>
-              ${m.definition ? `<button class="sm-kpi-info" type="button"
-                title="${esc(m.definition)}" aria-label="Что означает показатель «${esc(m.label)}»">i</button>` : ''}
-            </header>
-            <p class="sm-kpi-value">${smNum(m.value, m.unit)}</p>
-            <p class="sm-kpi-target">Цель: ${smNum(m.target, m.unit)} · выборка: ${m.operators_with_data || 0}</p>
-            ${chartScaleBar(m.attainment ?? 0, {
-              max: 120, tone: t,
-              label: `Достижение цели: ${m.attainment ?? 0}%`,
-            })}
-            <p class="sm-kpi-below">${m.operators_below_target
+          return uiKpi({
+            label: m.label,
+            // Значение и цель форматируются словарём аналитики: у штрафов
+            // единица «мин», у качества «%» — правило одно на весь продукт.
+            value: m.value === null || m.value === undefined ? null : smNum(m.value, m.unit),
+            target: m.target === null || m.target === undefined ? null : smNum(m.target, m.unit),
+            sample: m.operators_with_data || 0,
+            tone: t,
+            hint: m.definition || '',
+            chart: chartScaleBar(m.attainment ?? 0, {
+              max: 120, tone: t, label: `Достижение цели: ${m.attainment ?? 0}%`,
+            }),
+            note: m.operators_below_target
               ? `${m.operators_below_target} ${uiPlural(m.operators_below_target, 'оператор', 'оператора', 'операторов')} ниже цели`
-              : 'Все в пределах цели'}</p>
-            ${smDelta(m.change, lower)}
-          </article>`;
+              : 'Все в пределах цели',
+            // У штрафов меньше — лучше, поэтому минус здесь улучшение.
+            delta: uiKpiDelta(m.change, { lowerIsBetter: m.key === 'penalty' }),
+          });
         }).join('') || '<p class="ch-empty">Показатели за период не рассчитаны</p>'}
       </section>
 
       <div class="sm-grid">
-        <section class="sm-panel" aria-label="Группы">
-          <header class="sm-panel-head">
-            <div>
-              <h2 class="sm-panel-title">Группы</h2>
-              <p class="sm-panel-sub">Сначала группы с риском</p>
-            </div>
-            <button class="btn-outline btn-sm" type="button"
-                    onclick="navigateTo('analytics',{tab:'groups'})">Подробнее</button>
-          </header>
-          <div class="sm-groups">
+        ${uiCard({
+          title: 'Группы',
+          subtitle: 'Сначала группы с риском',
+          actions: `<button class="btn-outline btn-sm" type="button"
+                      onclick="navigateTo('analytics',{tab:'groups'})">Подробнее</button>`,
+          flush: true,
+          body: `<div class="sm-groups">
             ${groups.slice(0, 5).map(g => `
               <article class="sm-group sm-tone-${chartTone(g.status)}">
                 <div class="sm-group-top">
@@ -112,19 +98,16 @@ function renderSummaryData(el, content, warning, data) {
                 <p class="sm-group-risk">${g.operators_in_risk} требуют внимания</p>
               </article>`).join('')
               || uiEmptyState('Групп пока нет', 'Заведите группу, чтобы видеть срез по командам.', [], true)}
-          </div>
-        </section>
+          </div>`,
+        })}
 
-        <section class="sm-panel" aria-label="Требуют внимания">
-          <header class="sm-panel-head">
-            <div>
-              <h2 class="sm-panel-title">Требуют внимания</h2>
-              <p class="sm-panel-sub">Главные приоритеты периода</p>
-            </div>
-            <button class="btn-outline btn-sm" type="button"
-                    onclick="navigateTo('analytics',{tab:'operators'})">Все операторы</button>
-          </header>
-          <ul class="sm-attention">
+        ${uiCard({
+          title: 'Требуют внимания',
+          subtitle: 'Главные приоритеты периода',
+          actions: `<button class="btn-outline btn-sm" type="button"
+                      onclick="navigateTo('analytics',{tab:'operators'})">Все операторы</button>`,
+          flush: true,
+          body: `<ul class="sm-attention">
             ${priorities.slice(0, 6).map(p => `
               <li class="sm-attention-item sm-tone-${chartTone(p.status)}">
                 <span class="sm-dot" aria-hidden="true"></span>
@@ -135,8 +118,8 @@ function renderSummaryData(el, content, warning, data) {
                 <span class="sm-attention-score" title="Индекс состояния">${p.health_score}</span>
               </li>`).join('')
               || `<li class="sm-attention-ok">Все доступные показатели в норме</li>`}
-          </ul>
-        </section>
+          </ul>`,
+        })}
       </div>
     </div>`;
 }
