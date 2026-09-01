@@ -14911,20 +14911,20 @@ html[data-theme="dark"] .rc-hero-card { box-shadow: 0 18px 42px rgba(0, 0, 0, .2
   gap: 10px;
   font-size: var(--text-small);
 }
+/* Точка легенды — заливка, а не текст: яркие семантические цвета годятся
+   как фон, но не как color (проверяется design-tokens.test.mjs). */
 .ch-legend-dot {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  /* У точки цвет задан обводкой в ch-seq-*, поэтому переносим её в фон. */
-  background: currentColor;
-  color: var(--text-tertiary);
+  background: var(--text-tertiary);
 }
-.ch-legend-dot.ch-seq-1 { color: var(--success); }
-.ch-legend-dot.ch-seq-2 { color: var(--info); }
-.ch-legend-dot.ch-seq-3 { color: var(--warning); }
-.ch-legend-dot.ch-seq-4 { color: var(--danger); }
-.ch-legend-dot.ch-seq-5 { color: var(--accent-violet); }
-.ch-legend-dot.ch-seq-6 { color: var(--text-tertiary); }
+.ch-legend-dot.ch-seq-1 { background: var(--success); }
+.ch-legend-dot.ch-seq-2 { background: var(--info); }
+.ch-legend-dot.ch-seq-3 { background: var(--warning); }
+.ch-legend-dot.ch-seq-4 { background: var(--danger); }
+.ch-legend-dot.ch-seq-5 { background: var(--accent-violet); }
+.ch-legend-dot.ch-seq-6 { background: var(--text-tertiary); }
 .ch-legend-label { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ch-legend-value {
   color: var(--text-primary);
