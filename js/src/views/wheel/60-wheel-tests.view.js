@@ -1635,7 +1635,8 @@ async function renderTestsOperatorView(el) {
 
   const body = el.querySelector('#tests-op-body');
   if (!items.length) {
-    body.innerHTML = `<div class="empty-state"><p>Доступных тестов пока нет.</p></div>`;
+    body.innerHTML = uiEmptyState('Доступных тестов пока нет',
+      'Тесты назначает руководитель. Когда появится новое задание, оно откроется здесь, а за верные ответы начислятся баллы и коины.');
     return;
   }
 
@@ -1980,16 +1981,24 @@ async function finishTestRun() {
   if (!_activeTestRun) return;
   clearInterval(_testTimerInterval);
   const attemptId = _activeTestRun.attemptId;
+
+  // Попытка снимается до запроса, а не после ответа. Раньше _activeTestRun
+  // обнулялся уже за await, и два срабатывания подряд — клик по «Завершить
+  // тест» и истёкший таймер — оба проходили проверку выше и отправляли
+  // finishTest дважды. У эндпоинта нет Idempotency-Key, поэтому защита
+  // от повторной отправки должна быть здесь.
+  const run = _activeTestRun;
+  _activeTestRun = null;
   try {
     const result = await api.finishTest(attemptId);
-    _activeTestRun.questionObserver?.disconnect?.();
-    _activeTestRun = null;
+    run.questionObserver?.disconnect?.();
     swrInvalidate('tests:my'); // статус теста изменился (finished) — следующий заход в список не должен показать устаревшее "in_progress"
     invalidateViewCache('tests');
     renderTestResultScreen(result);
   } catch(e) {
     showToast(e.message || 'Не удалось завершить тест', 'error');
-    if (_activeTestRun) startTestTimer();
+    _activeTestRun = run;
+    startTestTimer();
   }
 }
 

@@ -37,7 +37,11 @@ async function renderRaffles() {
     if (admin) await renderRafflesAdmin(el);
     else await renderRafflesOperator(el);
   } catch (e) {
-    el.innerHTML = `<div class="empty-state">Не удалось загрузить: ${esc(e.message || e)}</div>`;
+    // Сбой загрузки — не пустота. uiErrorStateFor отличает нет прав и
+    // истёкшую сессию от отказа сервера и даёт кнопку повтора; раньше
+    // сюда попадало сырое e.message без возможности что-то сделать.
+    el.innerHTML = uiErrorStateFor(e, { retryLabel: 'Повторить загрузку' });
+    uiBindStateActions(el, { retry: () => renderRaffles() });
   }
 }
 
@@ -65,7 +69,8 @@ async function renderRafflesOperator(el) {
     <p class="panel-hint" style="margin:-4px 0 16px">Билеты можно выиграть в Колесе WOW. Вложите билеты в розыгрыш — чем больше билетов, тем выше шанс.</p>
 
     ${active.length ? `<div class="raffle-grid">${active.map(r => _raffleCardOperator(r, tickets)).join('')}</div>`
-      : '<div class="empty-state">Сейчас нет активных розыгрышей</div>'}
+      : uiEmptyState('Сейчас нет активных розыгрышей',
+          'Розыгрыши открывают периодически. Копите билеты в Колесе WOW — когда розыгрыш появится, их можно будет вложить.')}
 
     ${finished.length ? `<h3 class="panel-subtitle" style="margin-top:24px">Завершённые</h3>
       <div class="raffle-grid">${finished.map(r => _raffleCardOperator(r, tickets)).join('')}</div>` : ''}`;
@@ -106,15 +111,26 @@ function _openEnterRaffleModal(raffleId, maxTickets) {
     <div id="raffle-enter-err" class="status-line"></div>
     <div class="modal-actions">
       <button class="btn-outline" onclick="closeModal()">Отмена</button>
-      <button class="btn-primary" onclick="submitEnterRaffle(${raffleId})">Участвовать</button>
+      <button class="btn-primary" id="raffle-enter-submit" onclick="submitEnterRaffle(${raffleId})">Участвовать</button>
     </div>`);
 }
 
+// Повторная отправка. У POST /raffles/{id}/enter нет Idempotency-Key, а
+// вложенные билеты списываются, поэтому второй клик означал бы двойное
+// списание. Флаг и заблокированная кнопка — единственная защита, которую
+// можно дать со стороны интерфейса.
+let _raffleEnterBusy = false;
+
 async function submitEnterRaffle(raffleId) {
+  if (_raffleEnterBusy) return;
   const input = document.getElementById('raffle-enter-tickets');
   const errEl = document.getElementById('raffle-enter-err');
+  const submit = document.getElementById('raffle-enter-submit');
   const tickets = parseInt(input?.value, 10);
   if (!tickets || tickets < 1) { if (errEl) errEl.textContent = 'Укажите число билетов'; return; }
+
+  _raffleEnterBusy = true;
+  if (submit) { submit.disabled = true; submit.classList.add('is-loading'); }
   try {
     await api.enterRaffle(raffleId, tickets);
     swrInvalidate('raffles:');
@@ -124,6 +140,9 @@ async function submitEnterRaffle(raffleId) {
     renderRaffles();
   } catch (e) {
     if (errEl) errEl.textContent = e.message;
+    if (submit) { submit.disabled = false; submit.classList.remove('is-loading'); }
+  } finally {
+    _raffleEnterBusy = false;
   }
 }
 
@@ -138,6 +157,16 @@ async function renderRafflesAdmin(el) {
   const active = raffles.filter(r => r.status === 'active');
   const finished = raffles.filter(r => r.status !== 'active');
 
+  // Показатели считаются из полей ответа: participants, total_tickets и
+  // winners приходят в RaffleRead. Участия по активным розыгрышам
+  // складываются, поэтому это именно участия, а не люди: один оператор
+  // может вложить билеты в несколько розыгрышей сразу.
+  const sum = (list, field) => list.reduce((acc, r) => acc + (Number(r[field]) || 0), 0);
+  const entries = sum(active, 'participants');
+  const tickets = sum(active, 'total_tickets');
+  const winners = raffles.reduce((acc, r) => acc + (Array.isArray(r.winners) ? r.winners.length : 0), 0);
+  const drawn = finished.filter(r => r.drawn_at).length;
+
   el.innerHTML = `
     <div class="view-header">
       <div>
@@ -151,11 +180,42 @@ async function renderRafflesAdmin(el) {
     </div>
     <p class="panel-hint" style="margin:-4px 0 16px">Участники вкладывают билеты, выигранные в Колесе WOW. Тираж можно запустить вручную или он пройдёт автоматически по дате окончания.</p>
 
+    <div class="ui-kpi-grid">
+      ${uiKpi({
+        label: 'Активных розыгрышей',
+        value: active.length,
+        tone: active.length ? 'ok' : 'neutral',
+        note: finished.length ? `в архиве ${finished.length}` : '',
+      })}
+      ${uiKpi({
+        label: 'Участий',
+        value: entries,
+        note: 'в активных розыгрышах',
+        hint: 'Сумма участников по активным розыгрышам. Один оператор может участвовать в нескольких, поэтому это участия, а не число людей.',
+      })}
+      ${uiKpi({
+        label: 'Билетов вложено',
+        value: tickets,
+        note: 'в активных розыгрышах',
+        hint: 'Билеты выигрываются в Колесе WOW и вкладываются в розыгрыш. Чем больше билетов, тем выше шанс.',
+      })}
+      ${uiKpi({
+        label: 'Победителей определено',
+        value: winners,
+        note: drawn ? `тиражей проведено: ${drawn}` : 'тиражей ещё не было',
+      })}
+    </div>
+
     ${active.length ? `<div class="raffle-grid">${active.map(_raffleCardAdmin).join('')}</div>`
-      : '<div class="empty-state">Нет активных розыгрышей</div>'}
+      : uiEmptyState('Нет активных розыгрышей',
+          'Создайте розыгрыш, чтобы операторы могли вложить билеты, выигранные в Колесе WOW.',
+          [{ id: 'raffles-create-empty', label: 'Новый розыгрыш', variant: 'primary' }])}
 
     ${finished.length ? `<h3 class="panel-subtitle" style="margin-top:24px">Архив</h3>
       <div class="raffle-grid">${finished.map(_raffleCardAdmin).join('')}</div>` : ''}`;
+
+  const createFromEmpty = el.querySelector('[data-ui-action="raffles-create-empty"]');
+  if (createFromEmpty) createFromEmpty.onclick = () => openCreateRaffleModal();
 
   el.querySelectorAll('[data-draw-raffle]').forEach(btn => {
     btn.onclick = async () => {

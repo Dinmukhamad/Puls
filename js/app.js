@@ -15805,7 +15805,8 @@ async function renderTestsOperatorView(el) {
 
   const body = el.querySelector('#tests-op-body');
   if (!items.length) {
-    body.innerHTML = `<div class="empty-state"><p>Доступных тестов пока нет.</p></div>`;
+    body.innerHTML = uiEmptyState('Доступных тестов пока нет',
+      'Тесты назначает руководитель. Когда появится новое задание, оно откроется здесь, а за верные ответы начислятся баллы и коины.');
     return;
   }
 
@@ -16150,16 +16151,24 @@ async function finishTestRun() {
   if (!_activeTestRun) return;
   clearInterval(_testTimerInterval);
   const attemptId = _activeTestRun.attemptId;
+
+  // Попытка снимается до запроса, а не после ответа. Раньше _activeTestRun
+  // обнулялся уже за await, и два срабатывания подряд — клик по «Завершить
+  // тест» и истёкший таймер — оба проходили проверку выше и отправляли
+  // finishTest дважды. У эндпоинта нет Idempotency-Key, поэтому защита
+  // от повторной отправки должна быть здесь.
+  const run = _activeTestRun;
+  _activeTestRun = null;
   try {
     const result = await api.finishTest(attemptId);
-    _activeTestRun.questionObserver?.disconnect?.();
-    _activeTestRun = null;
+    run.questionObserver?.disconnect?.();
     swrInvalidate('tests:my'); // статус теста изменился (finished) — следующий заход в список не должен показать устаревшее "in_progress"
     invalidateViewCache('tests');
     renderTestResultScreen(result);
   } catch(e) {
     showToast(e.message || 'Не удалось завершить тест', 'error');
-    if (_activeTestRun) startTestTimer();
+    _activeTestRun = run;
+    startTestTimer();
   }
 }
 
@@ -16842,7 +16851,11 @@ async function renderRaffles() {
     if (admin) await renderRafflesAdmin(el);
     else await renderRafflesOperator(el);
   } catch (e) {
-    el.innerHTML = `<div class="empty-state">Не удалось загрузить: ${esc(e.message || e)}</div>`;
+    // Сбой загрузки — не пустота. uiErrorStateFor отличает нет прав и
+    // истёкшую сессию от отказа сервера и даёт кнопку повтора; раньше
+    // сюда попадало сырое e.message без возможности что-то сделать.
+    el.innerHTML = uiErrorStateFor(e, { retryLabel: 'Повторить загрузку' });
+    uiBindStateActions(el, { retry: () => renderRaffles() });
   }
 }
 
@@ -16870,7 +16883,8 @@ async function renderRafflesOperator(el) {
     <p class="panel-hint" style="margin:-4px 0 16px">Билеты можно выиграть в Колесе WOW. Вложите билеты в розыгрыш — чем больше билетов, тем выше шанс.</p>
 
     ${active.length ? `<div class="raffle-grid">${active.map(r => _raffleCardOperator(r, tickets)).join('')}</div>`
-      : '<div class="empty-state">Сейчас нет активных розыгрышей</div>'}
+      : uiEmptyState('Сейчас нет активных розыгрышей',
+          'Розыгрыши открывают периодически. Копите билеты в Колесе WOW — когда розыгрыш появится, их можно будет вложить.')}
 
     ${finished.length ? `<h3 class="panel-subtitle" style="margin-top:24px">Завершённые</h3>
       <div class="raffle-grid">${finished.map(r => _raffleCardOperator(r, tickets)).join('')}</div>` : ''}`;
@@ -16911,15 +16925,26 @@ function _openEnterRaffleModal(raffleId, maxTickets) {
     <div id="raffle-enter-err" class="status-line"></div>
     <div class="modal-actions">
       <button class="btn-outline" onclick="closeModal()">Отмена</button>
-      <button class="btn-primary" onclick="submitEnterRaffle(${raffleId})">Участвовать</button>
+      <button class="btn-primary" id="raffle-enter-submit" onclick="submitEnterRaffle(${raffleId})">Участвовать</button>
     </div>`);
 }
 
+// Повторная отправка. У POST /raffles/{id}/enter нет Idempotency-Key, а
+// вложенные билеты списываются, поэтому второй клик означал бы двойное
+// списание. Флаг и заблокированная кнопка — единственная защита, которую
+// можно дать со стороны интерфейса.
+let _raffleEnterBusy = false;
+
 async function submitEnterRaffle(raffleId) {
+  if (_raffleEnterBusy) return;
   const input = document.getElementById('raffle-enter-tickets');
   const errEl = document.getElementById('raffle-enter-err');
+  const submit = document.getElementById('raffle-enter-submit');
   const tickets = parseInt(input?.value, 10);
   if (!tickets || tickets < 1) { if (errEl) errEl.textContent = 'Укажите число билетов'; return; }
+
+  _raffleEnterBusy = true;
+  if (submit) { submit.disabled = true; submit.classList.add('is-loading'); }
   try {
     await api.enterRaffle(raffleId, tickets);
     swrInvalidate('raffles:');
@@ -16929,6 +16954,9 @@ async function submitEnterRaffle(raffleId) {
     renderRaffles();
   } catch (e) {
     if (errEl) errEl.textContent = e.message;
+    if (submit) { submit.disabled = false; submit.classList.remove('is-loading'); }
+  } finally {
+    _raffleEnterBusy = false;
   }
 }
 
@@ -16943,6 +16971,16 @@ async function renderRafflesAdmin(el) {
   const active = raffles.filter(r => r.status === 'active');
   const finished = raffles.filter(r => r.status !== 'active');
 
+  // Показатели считаются из полей ответа: participants, total_tickets и
+  // winners приходят в RaffleRead. Участия по активным розыгрышам
+  // складываются, поэтому это именно участия, а не люди: один оператор
+  // может вложить билеты в несколько розыгрышей сразу.
+  const sum = (list, field) => list.reduce((acc, r) => acc + (Number(r[field]) || 0), 0);
+  const entries = sum(active, 'participants');
+  const tickets = sum(active, 'total_tickets');
+  const winners = raffles.reduce((acc, r) => acc + (Array.isArray(r.winners) ? r.winners.length : 0), 0);
+  const drawn = finished.filter(r => r.drawn_at).length;
+
   el.innerHTML = `
     <div class="view-header">
       <div>
@@ -16956,11 +16994,42 @@ async function renderRafflesAdmin(el) {
     </div>
     <p class="panel-hint" style="margin:-4px 0 16px">Участники вкладывают билеты, выигранные в Колесе WOW. Тираж можно запустить вручную или он пройдёт автоматически по дате окончания.</p>
 
+    <div class="ui-kpi-grid">
+      ${uiKpi({
+        label: 'Активных розыгрышей',
+        value: active.length,
+        tone: active.length ? 'ok' : 'neutral',
+        note: finished.length ? `в архиве ${finished.length}` : '',
+      })}
+      ${uiKpi({
+        label: 'Участий',
+        value: entries,
+        note: 'в активных розыгрышах',
+        hint: 'Сумма участников по активным розыгрышам. Один оператор может участвовать в нескольких, поэтому это участия, а не число людей.',
+      })}
+      ${uiKpi({
+        label: 'Билетов вложено',
+        value: tickets,
+        note: 'в активных розыгрышах',
+        hint: 'Билеты выигрываются в Колесе WOW и вкладываются в розыгрыш. Чем больше билетов, тем выше шанс.',
+      })}
+      ${uiKpi({
+        label: 'Победителей определено',
+        value: winners,
+        note: drawn ? `тиражей проведено: ${drawn}` : 'тиражей ещё не было',
+      })}
+    </div>
+
     ${active.length ? `<div class="raffle-grid">${active.map(_raffleCardAdmin).join('')}</div>`
-      : '<div class="empty-state">Нет активных розыгрышей</div>'}
+      : uiEmptyState('Нет активных розыгрышей',
+          'Создайте розыгрыш, чтобы операторы могли вложить билеты, выигранные в Колесе WOW.',
+          [{ id: 'raffles-create-empty', label: 'Новый розыгрыш', variant: 'primary' }])}
 
     ${finished.length ? `<h3 class="panel-subtitle" style="margin-top:24px">Архив</h3>
       <div class="raffle-grid">${finished.map(_raffleCardAdmin).join('')}</div>` : ''}`;
+
+  const createFromEmpty = el.querySelector('[data-ui-action="raffles-create-empty"]');
+  if (createFromEmpty) createFromEmpty.onclick = () => openCreateRaffleModal();
 
   el.querySelectorAll('[data-draw-raffle]').forEach(btn => {
     btn.onclick = async () => {
@@ -18435,18 +18504,30 @@ function openTrainingAvr(number) {
 
 const OP_COIN = '₡';
 
-function opNum(value, digits = 0) {
-  const number = Number(value || 0);
-  return Number.isFinite(number) ? number.toLocaleString('ru-RU', { maximumFractionDigits: digits }) : '0';
+/**
+ * Число из ответа. `Number(value || 0)` превращал null, undefined и пустую
+ * строку в ноль, и экран показывал «Баллы 0 · Качество 0%» там, где данных
+ * просто нет. Definition of Done требует различать zero, null и missing:
+ * ноль — это результат, отсутствие — прочерк.
+ */
+function opNum(value, digits = 0, empty = '—') {
+  if (value === null || value === undefined || value === '') return empty;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return empty;
+  return number.toLocaleString('ru-RU', { maximumFractionDigits: digits });
 }
 
+/** Сумма в коинах общим форматтером: «1 250 ₡», минус перед числом. */
 function opCoin(value, sign = false) {
-  const number = Number(value || 0);
-  return `${sign && number > 0 ? '+' : ''}${opNum(number)} <span class="op-coin">${OP_COIN}</span>`;
+  if (value === null || value === undefined || value === '') return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return fmtCoins(number, { sign });
 }
 
 function opPercent(value) {
-  return `${opNum(value, 1)}%`;
+  const shown = opNum(value, 1);
+  return shown === '—' ? shown : `${shown}%`;
 }
 
 function opEmpty(title, text) {
@@ -18860,8 +18941,16 @@ function rcChallengeCard(current, ahead, behind) {
 
 function rcRivalCard(person, current, kind) {
   if (!person) {
-    const title = kind === 'ahead' ? 'Вы лидер' : 'Никого рядом';
-    const text = kind === 'ahead' ? 'Выше вас сейчас никого нет' : 'Ближайший преследователь не определён';
+    // Пустой сосед сверху означает две разные вещи: оператор действительно
+    // первый либо его место вообще не рассчитано. Без проверки места экран
+    // писал «Вы лидер» тем, кого в рейтинге нет, — утверждение о том, чего
+    // мы не знаем. Лидерство заявляем только при rank === 1.
+    const ranked = Number(current?.rank) > 0;
+    const leader = ranked && Number(current.rank) === 1;
+    const title = kind === 'ahead' ? (leader ? 'Вы лидер' : 'Соперник не определён') : 'Никого рядом';
+    const text = kind === 'ahead'
+      ? (leader ? 'Выше вас сейчас никого нет' : 'Место в рейтинге ещё не рассчитано')
+      : 'Ближайший преследователь не определён';
     return `<article class="rc-rival-card is-empty"><span>${title}</span><small>${text}</small></article>`;
   }
   const isMe = kind === 'me';
@@ -18879,6 +18968,15 @@ function rcRivalCard(person, current, kind) {
 }
 
 function rcRivalLane(current, ahead, behind) {
+  // Зона гонки строится вокруг места оператора. Без места три карточки
+  // рисовались вхолостую: «Вы лидер», собственная карточка с «#0» и
+  // «Никого рядом». Показываем причину вместо выдуманной расстановки.
+  if (!current || !(Number(current.rank) > 0)) {
+    return `<section class="rc-card rc-rivals">
+      <header class="rc-card-head"><div><span class="rc-eyebrow">Ваша зона гонки</span><h3>Ближайшие соперники</h3></div></header>
+      ${opEmpty('Соперники появятся после расчёта', 'Ближайшие соперники определяются по вашему месту в рейтинге. Как только место будет рассчитано, они появятся здесь.')}
+    </section>`;
+  }
   return `<section class="rc-card rc-rivals">
     <header class="rc-card-head"><div><span class="rc-eyebrow">Ваша зона гонки</span><h3>Ближайшие соперники</h3></div><p>Только те, кто влияет на вашу следующую позицию</p></header>
     <div class="rc-rival-lane">

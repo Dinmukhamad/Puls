@@ -2,18 +2,30 @@
 
 const OP_COIN = '₡';
 
-function opNum(value, digits = 0) {
-  const number = Number(value || 0);
-  return Number.isFinite(number) ? number.toLocaleString('ru-RU', { maximumFractionDigits: digits }) : '0';
+/**
+ * Число из ответа. `Number(value || 0)` превращал null, undefined и пустую
+ * строку в ноль, и экран показывал «Баллы 0 · Качество 0%» там, где данных
+ * просто нет. Definition of Done требует различать zero, null и missing:
+ * ноль — это результат, отсутствие — прочерк.
+ */
+function opNum(value, digits = 0, empty = '—') {
+  if (value === null || value === undefined || value === '') return empty;
+  const number = Number(value);
+  if (!Number.isFinite(number)) return empty;
+  return number.toLocaleString('ru-RU', { maximumFractionDigits: digits });
 }
 
+/** Сумма в коинах общим форматтером: «1 250 ₡», минус перед числом. */
 function opCoin(value, sign = false) {
-  const number = Number(value || 0);
-  return `${sign && number > 0 ? '+' : ''}${opNum(number)} <span class="op-coin">${OP_COIN}</span>`;
+  if (value === null || value === undefined || value === '') return '—';
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return fmtCoins(number, { sign });
 }
 
 function opPercent(value) {
-  return `${opNum(value, 1)}%`;
+  const shown = opNum(value, 1);
+  return shown === '—' ? shown : `${shown}%`;
 }
 
 function opEmpty(title, text) {

@@ -80,8 +80,16 @@ function rcChallengeCard(current, ahead, behind) {
 
 function rcRivalCard(person, current, kind) {
   if (!person) {
-    const title = kind === 'ahead' ? 'Вы лидер' : 'Никого рядом';
-    const text = kind === 'ahead' ? 'Выше вас сейчас никого нет' : 'Ближайший преследователь не определён';
+    // Пустой сосед сверху означает две разные вещи: оператор действительно
+    // первый либо его место вообще не рассчитано. Без проверки места экран
+    // писал «Вы лидер» тем, кого в рейтинге нет, — утверждение о том, чего
+    // мы не знаем. Лидерство заявляем только при rank === 1.
+    const ranked = Number(current?.rank) > 0;
+    const leader = ranked && Number(current.rank) === 1;
+    const title = kind === 'ahead' ? (leader ? 'Вы лидер' : 'Соперник не определён') : 'Никого рядом';
+    const text = kind === 'ahead'
+      ? (leader ? 'Выше вас сейчас никого нет' : 'Место в рейтинге ещё не рассчитано')
+      : 'Ближайший преследователь не определён';
     return `<article class="rc-rival-card is-empty"><span>${title}</span><small>${text}</small></article>`;
   }
   const isMe = kind === 'me';
@@ -99,6 +107,15 @@ function rcRivalCard(person, current, kind) {
 }
 
 function rcRivalLane(current, ahead, behind) {
+  // Зона гонки строится вокруг места оператора. Без места три карточки
+  // рисовались вхолостую: «Вы лидер», собственная карточка с «#0» и
+  // «Никого рядом». Показываем причину вместо выдуманной расстановки.
+  if (!current || !(Number(current.rank) > 0)) {
+    return `<section class="rc-card rc-rivals">
+      <header class="rc-card-head"><div><span class="rc-eyebrow">Ваша зона гонки</span><h3>Ближайшие соперники</h3></div></header>
+      ${opEmpty('Соперники появятся после расчёта', 'Ближайшие соперники определяются по вашему месту в рейтинге. Как только место будет рассчитано, они появятся здесь.')}
+    </section>`;
+  }
   return `<section class="rc-card rc-rivals">
     <header class="rc-card-head"><div><span class="rc-eyebrow">Ваша зона гонки</span><h3>Ближайшие соперники</h3></div><p>Только те, кто влияет на вашу следующую позицию</p></header>
     <div class="rc-rival-lane">
