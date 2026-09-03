@@ -2767,6 +2767,18 @@ textarea.form-input:focus {
   /* Вкладки колеса заданы со своей высотой и !important. */
   #view-wheel .filter-tabs.wheel-tabs .filter-tab { min-height: var(--control-h-lg) !important; }
   #view-wheel .filter-tabs.wheel-tabs { min-height: auto; }
+
+  /* Кнопки в подвале боковой панели. На телефоне панель — выезжающий ящик,
+     и с открытым ящиком они измерялись 28x40, 48x27 и 40x40: WCAG 2.2 AA
+     (24x24) это проходит, но собственную планку ТЗ в 44px — нет. Раньше их
+     не было видно в обходе, потому что закрытый ящик сдвинут за экран. */
+  .side-bell-btn,
+  .side-gear-btn,
+  .side-logout-btn,
+  .theme-toggle {
+    min-width: var(--control-h-lg);
+    min-height: var(--control-h-lg);
+  }
 }
 
 

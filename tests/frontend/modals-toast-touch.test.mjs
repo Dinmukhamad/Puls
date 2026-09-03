@@ -80,11 +80,18 @@ test('на телефоне цели нажатия не меньше 44px', () 
   // .btn-sm в списке не было, и на телефоне он оставался 40px при токене
   // «touch target 44px» — кнопки карточек уровней как раз такие.
   // Фактическая высота измеряется в tests/e2e/levels-layout.spec.mjs.
+  // Кнопки в подвале боковой панели пропустили: на телефоне панель — это
+  // выезжающий ящик, закрытый ящик сдвинут за экран, и в замерах они не
+  // попадались. С открытым ящиком они были 28x40, 48x27 и 40x40.
   for (const sel of ['.an2-chip', '.filter-tab', '.btn-link', '.users-expand',
-    '.level-cond-remove', '.btn-sm']) {
+    '.level-cond-remove', '.btn-sm',
+    '.side-bell-btn', '.side-gear-btn', '.side-logout-btn', '.theme-toggle']) {
     assert.ok(block.includes(sel), `${sel} не доведён до цели нажатия`);
   }
   assert.match(block, /min-height: var\(--control-h-lg\)/, 'высота не из токена');
+  // Узкие кнопки нужно расширять, а не только повышать: 28px в ширину
+  // остаются промахом даже при высоте 44.
+  assert.match(block, /min-width: var\(--control-h-lg\)/, 'ширина не доведена до цели нажатия');
 });
 
 test('мелкий текст не опускается ниже минимума ТЗ', async () => {
