@@ -280,8 +280,8 @@ function upRow(u, isOpen) {
         </button>
         <span class="up-avatar" aria-hidden="true">${esc(usersInitials(u.full_name))}</span>
         <span class="up-user">
-          <span class="up-user-name">${esc(u.full_name || '—')}</span>
-          <span class="up-user-sub">${esc(role)}${login ? ` · ${esc(login)}` : ''}</span>
+          <span class="up-user-name" title="${esc(u.full_name || '—')}">${esc(u.full_name || '—')}</span>
+          <span class="up-user-sub" title="${esc(role)}${login ? ` · ${esc(login)}` : ''}">${esc(role)}${login ? ` · ${esc(login)}` : ''}</span>
         </span>
       </span>`;
 

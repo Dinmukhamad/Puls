@@ -10,8 +10,8 @@
        поэтому за ним запросов нет. Из Google Fonts тянем только Syne — им
        набрано слово «Puls» в логотипе. Было восемь начертаний, стало три. -->
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/tokens.css?v=6fbc1ed48ab8">
-  <link rel="stylesheet" href="css/styles.min.css?v=2697f065e329">
+  <link rel="stylesheet" href="css/tokens.css?v=60a14ea6d90d">
+  <link rel="stylesheet" href="css/styles.min.css?v=d6b9b2d0e31c">
   <script src="js/theme-init.js?v=5c5cba6c57b1"></script>
   <script src="js/api.min.js?v=b541f3ee2d0a" defer></script>
 </head>
@@ -198,6 +198,62 @@
 
 <!-- MAIN -->
 <main class="container">
+  <!-- Верхняя панель: поиск по разделам и людям, уведомления, меню профиля.
+       Поиск не декоративный — он ходит в /api/users и переключает маршруты. -->
+  <div class="topbar" id="topbar" hidden>
+    <div class="topbar-search" role="search">
+      <label class="sr-only" for="global-search">Поиск по разделам и пользователям</label>
+      <span class="topbar-search-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>
+        </svg>
+      </span>
+      <input id="global-search" class="topbar-search-input" type="search" autocomplete="off"
+             placeholder="Поиск по разделам и пользователям"
+             role="combobox" aria-expanded="false" aria-autocomplete="list"
+             aria-controls="global-search-results">
+      <kbd class="topbar-search-hint" aria-hidden="true">Ctrl + K</kbd>
+      <div class="topbar-results" id="global-search-results" role="listbox"
+           aria-label="Результаты поиска" hidden></div>
+    </div>
+
+    <div class="topbar-actions">
+      <button class="ui-icon-button" id="topbar-bell" type="button"
+              aria-label="Уведомления" title="Уведомления">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span class="topbar-bell-badge" id="topbar-bell-badge" hidden>0</span>
+      </button>
+
+      <div class="topbar-profile">
+        <button class="topbar-avatar" id="topbar-avatar" type="button"
+                aria-haspopup="menu" aria-expanded="false" aria-controls="topbar-menu"
+                aria-label="Меню профиля" title="Меню профиля">
+          <span class="topbar-avatar-initials" id="topbar-initials" aria-hidden="true">?</span>
+          <svg class="topbar-avatar-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m6 9 6 6 6-6"/>
+          </svg>
+        </button>
+        <div class="topbar-menu" id="topbar-menu" role="menu" aria-labelledby="topbar-avatar" hidden>
+          <div class="topbar-menu-head">
+            <b id="topbar-menu-name">—</b>
+            <span id="topbar-menu-role">—</span>
+          </div>
+          <button class="topbar-menu-item" type="button" role="menuitem" data-topbar-action="account">
+            Настройки аккаунта
+          </button>
+          <button class="topbar-menu-item" type="button" role="menuitem" data-topbar-action="theme">
+            Сменить тему
+          </button>
+          <button class="topbar-menu-item is-danger" type="button" role="menuitem" data-topbar-action="logout">
+            Выйти
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="app-shell">
     <div class="loading-state">
       <div class="loading-spinner"></div>
@@ -207,6 +263,6 @@
 </main>
 
 <!-- SCRIPTS -->
-<script src="js/app.min.js?v=951aa2e0f977" defer></script>
+<script src="js/app.min.js?v=32c7ef065323" defer></script>
 </body>
 </html>

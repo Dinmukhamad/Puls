@@ -213,7 +213,10 @@
   white-space: nowrap;
 }
 .up-cell-group, .up-cell-level, .up-cell-status { font-size: var(--text-small); color: var(--text-secondary); }
-.up-dash { color: var(--text-tertiary); }
+/* --text-tertiary предназначен для placeholder, disabled и иконок: как текст
+   на белом он даёт 2.58:1. «Не назначена» — обычная подпись, ей нужен
+   приглушённый текстовый цвет. */
+.up-dash { color: var(--text-muted); }
 
 .up-level {
   display: inline-block;
@@ -334,4 +337,15 @@
 @media (max-width: 767px) {
   .up-cell-user { gap: var(--space-2); }
   .up-detail { margin-inline: var(--space-3); }
+}
+
+/* ТЗ требует цель нажатия 44×44 на touch. Раскрытие строки (28px), меню
+   действий (32px) и выбор размера страницы (32px) были меньше. */
+@media (max-width: 640px) {
+  .up-expand,
+  .up-more {
+    min-width: var(--control-h-lg);
+    min-height: var(--control-h-lg);
+  }
+  .ui-perpage-select { min-height: var(--control-h-lg); }
 }

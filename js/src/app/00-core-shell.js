@@ -796,6 +796,8 @@ function setShellInert(inert) {
 }
 
 function showAuth() {
+  // Панель принадлежит вошедшему пользователю: на экране входа её быть не должно.
+  hideTopbar();
   document.getElementById('auth-overlay')?.removeAttribute('hidden');
   document.body.classList.add('operator-login-required');
   setShellInert(true);
@@ -950,6 +952,7 @@ async function bootApp() {
   document.body.classList.toggle('role-operator', !isAdmin(role));
   buildViews(role);
   renderSidebar(role);
+  initTopbar();
   const displayName = STATE.user?.full_name || STATE.user?.username || '';
   setText('side-user', displayName);
   // Роль не повторяем, если она дословно совпадает с именем: у учётной записи

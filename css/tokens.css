@@ -116,9 +116,11 @@ html[data-theme="light"] {
      взят он, а #5E5CE6 оставлен ступенью для наведения. */
   --accent-primary:       #5E5CE6;
   --accent-primary-hover: #4F46E5;
-  --accent-primary-soft:  #EEF0FE;
+  /* Светлее, чем было (#EEF0FE): акцентный текст на прежней подложке давал
+     4.47:1 при требуемых по ТЗ 4.5. Сам --accent-primary задан ТЗ и не меняется. */
+  --accent-primary-soft:  #F1F2FE;
   --accent-secondary:     #7C6CF0;
-  --accent-secondary-soft:#F1EFFE;
+  --accent-secondary-soft:#F1F2FE;
   --accent-violet:        #9E77ED;
   --accent-violet-soft:   #F4F0FF;
   --accent-cyan:          #09C7E8;

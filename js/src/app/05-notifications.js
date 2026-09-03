@@ -11,15 +11,21 @@ function startNotificationPolling() {
 }
 
 async function refreshNotificationBadge() {
-  const badge = document.getElementById('side-bell-badge');
-  if (!badge) return;
+  // Колокол есть и в подвале навигации, и в верхней панели: счётчик один,
+  // поэтому обновляем оба места из одного ответа.
+  const badges = ['side-bell-badge', 'topbar-bell-badge']
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+  if (!badges.length) return;
   try {
     const { unread_count } = await api.getUnreadNotificationCount();
-    if (unread_count > 0) {
-      badge.textContent = unread_count > 99 ? '99+' : String(unread_count);
-      badge.hidden = false;
-    } else {
-      badge.hidden = true;
+    for (const badge of badges) {
+      if (unread_count > 0) {
+        badge.textContent = unread_count > 99 ? '99+' : String(unread_count);
+        badge.hidden = false;
+      } else {
+        badge.hidden = true;
+      }
     }
   } catch {
     // не авторизован / сеть — тихо пропускаем, это фоновый опрос

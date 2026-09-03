@@ -87,6 +87,17 @@ for (const theme of ['light', 'dark']) {
     }
   });
 
+  test(`${theme}: акцентный текст читается на своей мягкой подложке`, () => {
+    // Пара «--accent-primary на --accent-primary-soft» встречается в активных
+    // вкладках, аватарах и чипах. На прежней подложке она давала 4.47:1.
+    for (const soft of ['--accent-primary-soft', '--accent-secondary-soft']) {
+      const card = rgb(p['--card-bg'], p);
+      const ratio = contrast(rgb(p['--accent-primary'], p), over(rgb(p[soft], p), card));
+      assert.ok(ratio >= AA,
+        `${theme}: --accent-primary на ${soft} даёт ${ratio.toFixed(2)}:1, нужно ${AA}`);
+    }
+  });
+
   test(`${theme}: текст на заливке акцента читается`, () => {
     const ratio = contrast(rgb(p['--accent-fill-text'], p), rgb(p['--accent-fill'], p));
     assert.ok(ratio >= AA,
