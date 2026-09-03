@@ -1,10 +1,12 @@
 """Конфигурация приложения (12-factor: всё через переменные окружения)."""
 from __future__ import annotations
 
+import json
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -35,7 +37,10 @@ class Settings(BaseSettings):
     PASSWORD_MIN_LENGTH: int = 8
 
     # --- CORS ---
-    CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["*"])
+    #: Задаётся списком через запятую: "https://app.example.com,https://admin.example.com"
+    #: либо "*" для всех источников. NoDecode отключает разбор значения как JSON:
+    #: без него pydantic-settings падает на строке вида "*" ещё до валидатора.
+    CORS_ORIGINS: Annotated[list[str], NoDecode] = Field(default_factory=lambda: ["*"])
 
     # --- планировщик еженедельного пересчёта (п. 5 «Автоматизация») ---
     SCHEDULER_ENABLED: bool = True
@@ -62,9 +67,17 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, v: object) -> object:
-        if isinstance(v, str):
-            return [item.strip() for item in v.split(",") if item.strip()]
-        return v
+        """Разбирает список источников как из строки с запятыми, так и из JSON-массива."""
+        if not isinstance(v, str):
+            return v
+        raw = v.strip()
+        if raw.startswith("["):
+            # Совместимость с JSON-форматом: CORS_ORIGINS='["https://a","https://b"]'
+            try:
+                return json.loads(raw)
+            except ValueError:
+                pass
+        return [item.strip() for item in raw.split(",") if item.strip()]
 
     @field_validator("DATABASE_URL")
     @classmethod
