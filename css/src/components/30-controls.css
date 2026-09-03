@@ -449,10 +449,14 @@ textarea.form-input:focus {
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
+/* Бейдж на активной вкладке затемняет заливку, а не осветляет её. Осветление
+   белым на 22–25% поднимало фон акцента #5E5CE6 до rgb(134,133,236), и белая
+   цифра давала 3.19:1 против нужных 4.5 по WCAG 2.2 AA — в обеих темах, так
+   как заливка активной вкладки одинаковая. Затемнение на 24% даёт 7.6:1. */
 .filter-tab.active .filter-tab-count,
 .ops-tab.ops-tab-active .ops-tab-badge,
 .ops-tab-badge-active {
-  background: rgba(255, 255, 255, .22);
+  background: rgba(0, 0, 0, .24);
   color: var(--accent-fill-text);
 }
 

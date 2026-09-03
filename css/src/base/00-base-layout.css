@@ -1235,3 +1235,30 @@ body.must-change-password .side-nav-link[data-nav-target] {
 .pagination-controls { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .pagination-page { font-size: 12px; color: var(--tx2); font-weight: 600; min-width: 90px; text-align: center; }
 .pagination-controls button[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* Обход навигации. Видна только при фокусе с клавиатуры: мышью она не нужна,
+   а прятать её через .sr-only нельзя — сфокусированный элемент обязан быть
+   видимым. */
+.skip-link {
+  position: fixed;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 1200;
+  padding: var(--space-3) var(--space-5);
+  min-height: var(--control-h);
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--accent-fill);
+  color: var(--accent-fill-text);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(calc(-100% - var(--space-4)));
+  transition: transform var(--t);
+}
+.skip-link:focus {
+  transform: translateY(0);
+  outline: 2px solid var(--accent-fill-text);
+  outline-offset: 2px;
+}
+#main-content:focus { outline: none; }

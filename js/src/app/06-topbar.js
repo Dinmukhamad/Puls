@@ -283,4 +283,29 @@ function hideTopbar() {
   topbarCloseMenu();
   const bar = document.getElementById('topbar');
   if (bar) bar.hidden = true;
+  // На экране входа обходить нечего: боковой панели нет, а ссылка увела бы
+  // фокус в пустой main.
+  const skip = document.getElementById('skip-to-content');
+  if (skip) skip.hidden = true;
+}
+
+/**
+ * Обход навигации (WCAG 2.4.1 Bypass Blocks). Это кнопка, а не ссылка:
+ * маршруты приложения живут в хеше, и href="#main-content" увёл бы роутер
+ * на несуществующий раздел, если бы обработчик не успел привязаться.
+ * Фокус ставим на заголовок открытого экрана, а если его ещё нет — на main.
+ */
+function initSkipLink() {
+  const skip = document.getElementById('skip-to-content');
+  if (!skip || initSkipLink._bound) return;
+  initSkipLink._bound = true;
+  skip.hidden = false;
+  skip.addEventListener('click', () => {
+    const target = document.querySelector('.app-view.active h1')
+      || document.getElementById('main-content');
+    if (!target) return;
+    if (!target.hasAttribute('tabindex')) target.setAttribute('tabindex', '-1');
+    target.focus();
+    target.scrollIntoView({ block: 'start' });
+  });
 }

@@ -1952,7 +1952,9 @@ html[data-theme="dark"] .wheel-ops-hero { background: var(--card-bg); }
   border-radius: var(--radius-full); font-size: var(--text-tiny); font-weight: 700; line-height: 1;
   background: var(--bg-muted); color: var(--text-muted);
 }
-.filter-tab.active .filter-tab-count { background: rgba(255,255,255,.25); color: #fff; }
+/* То же значение, что в 30-controls.css: это правило идёт позже и перебивало
+   каноническое, поэтому расхождение здесь снова уронило бы контраст. */
+.filter-tab.active .filter-tab-count { background: rgba(0,0,0,.24); color: #fff; }
 
 .sessions-panel {
   margin-top: 0;

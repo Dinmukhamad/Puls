@@ -954,6 +954,7 @@ async function bootApp() {
   renderSidebar(role);
   initTopbar();
   initTablistKeyboard();
+  initSkipLink();
   const displayName = STATE.user?.full_name || STATE.user?.username || '';
   setText('side-user', displayName);
   // Роль не повторяем, если она дословно совпадает с именем: у учётной записи
