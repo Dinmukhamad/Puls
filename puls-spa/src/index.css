@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+/* Тёмная тема включается классом на <html>, а не системной настройкой:
+   переключатель в верхней панели должен работать в обе стороны. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* Фон и поверхности. Значения заданы явно, а не взяты из zinc:
+     разница в пару единиц между слоями — это и есть вся глубина, которую
+     позволяет строгий монохром. */
+  --color-canvas: #0d0e12;
+  --color-panel: #151619;
+  --color-raised: #1b1c21;
+  --color-canvas-light: #fafafa;
+  --color-panel-light: #ffffff;
+  --color-raised-light: #f4f4f5;
+
+  /* Функциональный цвет. Три значения на всё приложение: подтверждение,
+     монета, предупреждение. Ничего декоративного. */
+  --color-affirm: #4ade80;
+  --color-affirm-dim: #16653d;
+  --color-coin: #d4b656;
+  --color-coin-dim: #6b5720;
+  --color-caution: #d97757;
+
+  --font-mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Числа выравниваются по колонкам везде, где стоят в столбик. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Полоса прокрутки не должна быть элементом интерфейса. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(63 63 70) transparent;
+}
+html:not(.dark) * {
+  scrollbar-color: rgb(212 212 216) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(63 63 70);
+  border-radius: 999px;
+}
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: rgb(212 212 216);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
