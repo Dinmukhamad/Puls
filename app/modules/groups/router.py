@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, require_roles
+from app.core.security import require_roles
 from app.database.db import get_db
 from app.models.entities import AuditLog, Group, Operator, User, now_utc
 
@@ -65,9 +65,16 @@ def _audit_group(db: Session, action: str, group: Group, details: str, user: Use
 def list_groups(
     active_only: bool = False,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_roles("supervisor", "manager", "admin")),
 ) -> list[dict]:
-    """List all groups. Pass ?active_only=true to get only active groups."""
+    """List all groups. Pass ?active_only=true to get only active groups.
+
+    Читать список может тот же круг ролей, что видит админские разделы.
+    Раньше проверки роли не было вовсе, только факт входа: оператор
+    получал полный перечень групп со статусом, числом людей и датами
+    создания — ту же выдачу, что и администратор. Операторскому интерфейсу
+    это не нужно, имена групп он берёт из /api/rating/race.
+    """
     q = select(
         Group,
         func.count(Operator.id).label("operator_count")
