@@ -11778,6 +11778,7 @@ let _sessionFilterStatus = 'active';
 let _sessionFilterQuery = '';
 let _sessionFilterRole = 'all';
 let _sessionFilterDevice = 'all';
+let _sessionFilterLimit = 100;
 
 function sessionsDebounce(fn, delay = 300) {
   let timer = null;
@@ -11787,16 +11788,33 @@ function sessionsDebounce(fn, delay = 300) {
   };
 }
 
-function sessionStatusBadge(state) {
+/**
+ * Живость сессии: как давно её видели. ТЗ (стр. 24) отдельно оговаривает,
+ * что activity_state и status — разные понятия и разные бейджи. Раньше в
+ * колонке «Состояние» показывался только activity_state, и отозванную
+ * сессию было не отличить от давно неактивной.
+ */
+function sessionActivityBadge(state) {
   const meta = {
-    current: ['Текущая', 'badge-info'],
-    active: ['Активна <15 мин', 'badge-ok'],
-    recent: ['Недавняя', 'badge-warning'],
-    inactive: ['Неактивна', 'badge-muted'],
-    ended: ['Завершена', 'badge-muted'],
+    current: ['Текущая', 'accent'],
+    active: ['Активна <15 мин', 'success'],
+    recent: ['Недавняя', 'warning'],
+    inactive: ['Неактивна', 'neutral'],
+    ended: ['Завершена', 'neutral'],
   };
-  const [label, cls] = meta[state] || ['Неактивна', 'badge-muted'];
-  return `<span class="badge ${cls}">${label}</span>`;
+  const [label, tone] = meta[state] || ['Неактивна', 'neutral'];
+  return `<span class="ui-badge ui-badge--${tone}">${label}</span>`;
+}
+
+/** Судьба сессии: жива, отозвана или истёк срок. */
+function sessionStatusBadge(status) {
+  const meta = {
+    active: ['Активна', 'success'],
+    revoked: ['Отозвана', 'danger'],
+    expired: ['Истекла', 'neutral'],
+  };
+  const [label, tone] = meta[status] || [status || '—', 'neutral'];
+  return `<span class="ui-badge ui-badge--${tone}">${label}</span>`;
 }
 
 function sessionSafeDate(value) {
@@ -11804,7 +11822,7 @@ function sessionSafeDate(value) {
 }
 
 function sessionsCacheKey() {
-  return `sessions:list:${_sessionFilterStatus}:${_sessionFilterRole}:${_sessionFilterDevice}:${_sessionFilterQuery || ''}`;
+  return `sessions:list:${_sessionFilterStatus}:${_sessionFilterRole}:${_sessionFilterDevice}:${_sessionFilterLimit}:${_sessionFilterQuery || ''}`;
 }
 
 function sessionsFetchCurrent(onFresh) {
@@ -11815,7 +11833,7 @@ function sessionsFetchCurrent(onFresh) {
       q: _sessionFilterQuery,
       role: _sessionFilterRole,
       device: _sessionFilterDevice,
-      limit: 250,
+      limit: _sessionFilterLimit,
     }),
     onFresh,
     SWR_FAST_TTL_MS,
@@ -11868,11 +11886,18 @@ function paintAdminSessions(el, data) {
       </div>
     </div>
 
-    <div class="kpi-grid sessions-kpis">
-      <div class="kpi-card kpi-accent"><div class="kpi-label">Активны сейчас</div><div class="kpi-value">${stats.active_now || 0}</div></div>
-      <div class="kpi-card"><div class="kpi-label">За 24 часа</div><div class="kpi-value">${stats.last_24h || 0}</div></div>
-      <div class="kpi-card kpi-warn"><div class="kpi-label">Подозрительные</div><div class="kpi-value">${stats.suspicious || 0}</div></div>
-      <div class="kpi-card"><div class="kpi-label">Всего устройств</div><div class="kpi-value">${stats.total_devices || 0}</div></div>
+    <div class="ui-kpi-grid sessions-kpis">
+      ${uiKpi({ label: 'Активных сессий', value: stats.active || 0, tone: 'neutral' })}
+      ${uiKpi({ label: 'Активны сейчас', value: stats.active_now || 0, tone: 'ok',
+                note: 'видели за последние 15 минут' })}
+      ${uiKpi({ label: 'За 24 часа', value: stats.last_24h || 0 })}
+      ${uiKpi({ label: 'Подозрительные', value: stats.suspicious || 0,
+                tone: (stats.suspicious || 0) ? 'warn' : 'neutral',
+                note: 'пять и больше активных сессий у одного человека' })}
+      ${uiKpi({ label: 'Устройств', value: stats.total_devices || 0 })}
+      ${uiKpi({ label: 'Пользователей', value: stats.total_users || 0 })}
+      ${uiKpi({ label: 'Отозвано', value: stats.revoked || 0 })}
+      ${uiKpi({ label: 'Истекло', value: stats.expired || 0 })}
     </div>
 
     <div class="sessions-filterbar">
@@ -11906,6 +11931,10 @@ function paintAdminSessions(el, data) {
           </select>
           <label class="sr-only" for="sessions-query">Поиск по сессиям</label>
           <input class="form-input" id="sessions-query" placeholder="Поиск: имя, логин, IP, устройство" value="${esc(_sessionFilterQuery)}">
+          <label class="sr-only" for="sessions-limit">Сколько сессий показывать</label>
+          <select class="form-select" id="sessions-limit">
+            ${[25, 50, 100, 200].map(n => `<option value="${n}" ${_sessionFilterLimit === n ? 'selected' : ''}>${n} на странице</option>`).join('')}
+          </select>
         </div>
       </div>
       <div class="table-wrap sessions-table-wrap">
@@ -11922,13 +11951,33 @@ function paintAdminSessions(el, data) {
             </tr>
           </thead>
           <tbody>
-            ${items.length ? items.map(sessionRow).join('') : '<tr><td colspan="7"><div class="empty-line">Сессий пока нет</div></td></tr>'}
+            ${items.length ? items.map(sessionRow).join('') : `<tr><td colspan="7" class="table-state">${
+              (_sessionFilterQuery || _sessionFilterRole !== 'all' || _sessionFilterDevice !== 'all')
+                ? uiNoResultsState('Ничего не найдено', 'Под выбранные условия сессий нет.',
+                    [{ id: 'reset', label: 'Сбросить фильтры' }], true)
+                : _sessionFilterStatus === 'active'
+                  ? uiEmptyState('Активных сессий нет',
+                      'Никто сейчас не работает в системе — это нормальное состояние, а не ошибка.', [], true)
+                  : uiEmptyState('Сессий нет', 'За выбранное состояние записей не нашлось.', [], true)
+            }</td></tr>`}
           </tbody>
         </table>
       </div>
     </div>`;
 
   el.querySelector('#sessions-refresh-btn')?.addEventListener('click', () => renderAdminSessions());
+  el.querySelector('#sessions-limit')?.addEventListener('change', e => {
+    _sessionFilterLimit = Number(e.target.value) || 100;
+    renderAdminSessions();
+  });
+  uiBindStateActions(el, {
+    reset: () => {
+      _sessionFilterQuery = '';
+      _sessionFilterRole = 'all';
+      _sessionFilterDevice = 'all';
+      renderAdminSessions();
+    },
+  });
   el.querySelector('#sessions-status')?.addEventListener('change', e => {
     _sessionFilterStatus = e.target.value || 'active';
     renderAdminSessions();
@@ -11973,7 +12022,12 @@ function sessionRow(s) {
       <td data-label="IP"><span class="sessions-ip">${esc(s.ip_address || '—')}</span></td>
       <td data-label="Вход">${sessionSafeDate(s.created_at)}</td>
       <td data-label="Активность">${sessionSafeDate(s.last_seen_at)}</td>
-      <td data-label="Состояние">${sessionStatusBadge(s.activity_state)}</td>
+      <td data-label="Состояние">
+        <div class="sessions-state">
+          ${sessionStatusBadge(s.status)}
+          ${sessionActivityBadge(s.activity_state)}
+        </div>
+      </td>
       <td class="row-actions">
         <button class="btn-danger btn-sm" ${canRevoke ? '' : 'disabled title="Текущую или завершённую сессию нельзя завершить"'} onclick="revokeUserSession('${esc(s.session_id)}')">Завершить сессию</button>
         <button class="btn-ghost btn-sm" onclick="revokeAllUserSessions(${Number(s.user_id) || 0})" ${s.user_id ? '' : 'disabled'}>Завершить остальные</button>

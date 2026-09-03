@@ -1423,3 +1423,7 @@ html[data-theme="dark"] #view-cabinet .shop-banner {
     margin-right: 16px;
   }
 }
+
+/* Состояние сессии — два разных понятия рядом: судьба (активна/отозвана/
+   истекла) и живость (когда видели). ТЗ (стр. 24) требует их различать. */
+.sessions-state { display: flex; flex-wrap: wrap; gap: 4px; }
