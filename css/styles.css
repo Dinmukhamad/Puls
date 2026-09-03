@@ -3465,6 +3465,61 @@ body.modal-open { overflow: hidden; }
   .ui-table[data-mobile="cards"] .ui-row > td.num { text-align: right; }
   .ui-pager { justify-content: center; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   СЕТКА KPI И ПАНЕЛЬ НАД ТАБЛИЦЕЙ
+
+   ТЗ требует одинаковую посадку заголовка, фильтров и показателей на всех
+   экранах («Заголовок и action-зона не скачут между разделами»). До этого
+   каждый экран заводил свои классы, поэтому отступы и переносы у них
+   расходились.
+══════════════════════════════════════════════════════════════ */
+.ui-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+/* ТЗ: KPI 4 -> 2 -> 1 колонки. */
+@media (max-width: 1100px) { .ui-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px)  { .ui-kpi-grid { grid-template-columns: 1fr; } }
+
+.ui-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-default);
+}
+.ui-toolbar-search { flex: 1 1 260px; min-width: 0; }
+.ui-toolbar-count {
+  margin-left: auto;
+  flex: 0 0 auto;
+  align-self: center;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: var(--text-small);
+}
+.ui-toolbar-count b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .ui-toolbar { padding: var(--space-3) var(--space-4); }
+  .ui-toolbar-search { flex-basis: 100%; }
+  .ui-toolbar-count { margin-left: 0; }
+}
+
+/* Колонка действий не переносит кнопки: иначе строка вырастает втрое
+   (137px против 56–64 по ТЗ). На узком экране таблица уже уходит в
+   карточки, поэтому перенос там не нужен. */
+.ui-table .ui-td-actions,
+.ui-table .ui-th-actions { width: 1%; white-space: nowrap; }
+.ui-table .ui-td-actions .row-actions { flex-wrap: nowrap; justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .ui-table[data-mobile="cards"] .ui-td-actions { width: auto; }
+  .ui-table[data-mobile="cards"] .ui-td-actions .row-actions { flex-wrap: wrap; justify-content: flex-start; }
+}
 /* source: 70-topbar.css */
 /* ══════════════════════════════════════════════════════════════
    ВЕРХНЯЯ ПАНЕЛЬ
