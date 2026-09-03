@@ -55,3 +55,34 @@ test('every version is a content hash, not a hand-written label', () => {
     assert.match(version, /^[0-9a-f]{12}$/, `версия «${version}» не похожа на хеш содержимого`);
   }
 });
+
+/* ── Критический путь отрисовки ──────────────────────────────── */
+
+test('внешний шрифт не задерживает первую отрисовку', () => {
+  // Обычный rel="stylesheet" на fonts.googleapis.com держал первую
+  // отрисовку: запрос уходил на 9-й миллисекунде и отвечал 1288 мс, из-за
+  // чего first-contentful-paint случался на 688 мс вместо 64. Шрифт нужен
+  // только для слова «Puls» в логотипе — задерживать ради него весь экран
+  // незачем.
+  const links = [...index.matchAll(/<link\b[^>]*fonts\.googleapis\.com[^>]*>/g)].map(m => m[0]);
+  assert.ok(links.length >= 1, 'ссылки на внешний шрифт нет — проверять нечего');
+
+  const blocking = links.filter(link =>
+    /rel=["']stylesheet["']/.test(link) && !/media=["']print["']/.test(link));
+
+  // Копия в <noscript> обязана быть блокирующей: без скриптов onload не
+  // сработает, и это единственный способ получить шрифт вообще.
+  const inNoscript = [...index.matchAll(/<noscript>[\s\S]*?<\/noscript>/g)]
+    .map(m => m[0]).join('');
+  const blockingOutsideNoscript = blocking.filter(link => !inNoscript.includes(link));
+
+  assert.deepEqual(blockingOutsideNoscript, [],
+    'внешняя таблица стилей шрифта блокирует отрисовку: ' + blockingOutsideNoscript.join(' | '));
+
+  const deferred = links.find(link => /media=["']print["']/.test(link));
+  assert.ok(deferred, 'нет отложенной загрузки шрифта');
+  assert.match(deferred, /onload=["']this\.media=/,
+    'media="print" без onload оставит шрифт неприменённым навсегда');
+  assert.ok(inNoscript.includes('fonts.googleapis.com'),
+    'без скриптов шрифт не загрузится: нужна копия в <noscript>');
+});

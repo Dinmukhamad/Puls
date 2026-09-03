@@ -8,8 +8,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Интерфейс набран системным шрифтом (см. --font-main в tokens.css),
        поэтому за ним запросов нет. Из Google Fonts тянем только Syne — им
-       набрано слово «Puls» в логотипе. Было восемь начертаний, стало три. -->
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap" rel="stylesheet">
+       набрано слово «Puls» в логотипе. Было восемь начертаний, стало три.
+
+       Загружаем без блокировки отрисовки. Обычный rel="stylesheet" на
+       внешний домен держал первую отрисовку: запрос уходил на 9-й
+       миллисекунде и отвечал 1288 мс, из-за чего первая отрисовка
+       случалась на 688 мс вместо 64. Приём с media="print" отдаёт файл
+       вне критического пути, а onload возвращает его в дело. Ради слова
+       в логотипе задерживать весь экран незачем; display=swap и так велит
+       показать текст системным шрифтом до подмены. -->
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap"
+        rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&display=swap" rel="stylesheet"></noscript>
   <link rel="stylesheet" href="css/tokens.css?v=60a14ea6d90d">
   <link rel="stylesheet" href="css/styles.min.css?v=1b1942ac81e5">
   <script src="js/theme-init.js?v=5c5cba6c57b1"></script>
