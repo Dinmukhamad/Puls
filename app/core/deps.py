@@ -1,0 +1,137 @@
+"""Зависимости FastAPI: текущий пользователь, проверка ролей, границы видимости."""
+from typing import Annotated
+
+import jwt
+from fastapi import Depends, HTTPException, Query, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import ColumnElement, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.core.config import settings
+from app.core.errors import PermissionDeniedError
+from app.core.security import decode_token
+from app.db.session import get_session
+from app.models.enums import Role
+from app.models.user import Group, User
+
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_PREFIX}/auth/login", auto_error=False
+)
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+_CREDENTIALS_ERROR = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Не удалось подтвердить учётные данные",
+    headers={"WWW-Authenticate": "Bearer"},
+)
+
+
+async def get_current_user(
+    session: SessionDep,
+    token: Annotated[str | None, Depends(oauth2_scheme)],
+) -> User:
+    if not token:
+        raise _CREDENTIALS_ERROR
+    try:
+        payload = decode_token(token, "access")
+        user_id = int(payload["sub"])
+    except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
+        raise _CREDENTIALS_ERROR from exc
+
+    user = await session.scalar(
+        select(User).options(selectinload(User.group)).where(User.id == user_id)
+    )
+    if user is None:
+        raise _CREDENTIALS_ERROR
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Учётная запись отключена"
+        )
+    return user
+
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+class RequireRole:
+    """Зависимость-страж: пропускает пользователей с ролью не ниже указанной."""
+
+    def __init__(self, minimum: Role) -> None:
+        self.minimum = minimum
+
+    async def __call__(self, user: CurrentUser) -> User:
+        if not user.has_role_at_least(self.minimum):
+            raise PermissionDeniedError(
+                "Недостаточно прав для этого раздела", code="role_required"
+            )
+        return user
+
+
+require_operator = RequireRole(Role.OPERATOR)
+require_supervisor = RequireRole(Role.SUPERVISOR)
+require_head = RequireRole(Role.HEAD)
+require_admin = RequireRole(Role.ADMIN)
+
+StaffUser = Annotated[User, Depends(require_supervisor)]
+HeadUser = Annotated[User, Depends(require_head)]
+AdminUser = Annotated[User, Depends(require_admin)]
+
+
+async def supervised_group_ids(session: AsyncSession, actor: User) -> list[int]:
+    """Идентификаторы групп, за которые отвечает супервайзер."""
+    rows = await session.scalars(select(Group.id).where(Group.supervisor_id == actor.id))
+    return list(rows)
+
+
+async def visible_users_filter(session: AsyncSession, actor: User) -> ColumnElement[bool]:
+    """
+    Условие SQL, ограничивающее выборку операторов зоной ответственности актора.
+
+    Руководитель и администратор видят всех; супервайзер - свои группы и себя;
+    оператор - только себя (п. 5 «Права доступа»).
+    """
+    if actor.has_role_at_least(Role.HEAD):
+        return User.id.is_not(None)
+    if actor.role == Role.SUPERVISOR:
+        group_ids = await supervised_group_ids(session, actor)
+        if not group_ids:
+            return User.id == actor.id
+        return (User.group_id.in_(group_ids)) | (User.id == actor.id)
+    return User.id == actor.id
+
+
+async def ensure_can_manage(session: AsyncSession, actor: User, target: User) -> None:
+    """Проверяет право актора выполнять операции над конкретным оператором."""
+    if actor.has_role_at_least(Role.HEAD):
+        return
+    if actor.role == Role.SUPERVISOR:
+        group_ids = await supervised_group_ids(session, actor)
+        if target.group_id is not None and target.group_id in group_ids:
+            return
+        raise PermissionDeniedError(
+            f"Оператор {target.full_name} не входит в вашу зону ответственности"
+        )
+    raise PermissionDeniedError("Недостаточно прав для этой операции")
+
+
+class Pagination:
+    """Общие параметры постраничной выдачи."""
+
+    def __init__(
+        self,
+        page: Annotated[int, Query(ge=1, description="Номер страницы, с единицы")] = 1,
+        size: Annotated[
+            int | None, Query(ge=1, le=500, description="Размер страницы")
+        ] = None,
+    ) -> None:
+        self.page = page
+        self.size = min(size or settings.DEFAULT_PAGE_SIZE, settings.MAX_PAGE_SIZE)
+
+    @property
+    def offset(self) -> int:
+        return (self.page - 1) * self.size
+
+
+PaginationDep = Annotated[Pagination, Depends(Pagination)]

@@ -1,0 +1,91 @@
+# Blueprint для Render: веб-сервис + PostgreSQL.
+# Создание: Render Dashboard -> New -> Blueprint -> выбрать этот репозиторий.
+#
+# При первом деплое Render спросит значения переменных с `sync: false`.
+
+databases:
+  - name: gamification-db
+    databaseName: gamification
+    user: gamification
+    plan: free
+    region: frankfurt
+    postgresMajorVersion: "17"
+
+services:
+  - type: web
+    name: gamification-api
+    runtime: python
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    # Схема раскатывается миграциями перед запуском приложения.
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gamification-db
+          property: connectionString
+
+      # Ключ подписи JWT генерируется Render и не попадает в репозиторий.
+      - key: SECRET_KEY
+        generateValue: true
+
+      # Схемой управляет Alembic, автосоздание таблиц выключено.
+      - key: AUTO_CREATE_SCHEMA
+        value: "false"
+      # Справочники (показатели, номинации, бейджи, каталог) досоздаются
+      # идемпотентно: уже настроенные записи не трогаются.
+      - key: SEED_REFERENCE_DATA
+        value: "true"
+
+      # Встроенный планировщик работает, пока инстанс не засыпает.
+      # На free-плане сервис останавливается без трафика - см. README,
+      # раздел «Еженедельный расчёт на Render».
+      - key: SCHEDULER_ENABLED
+        value: "true"
+      - key: WEEKLY_CLOSE_CRON_DAY_OF_WEEK
+        value: mon
+      - key: WEEKLY_CLOSE_CRON_HOUR
+        value: "3"
+
+      - key: TIMEZONE
+        value: Asia/Almaty
+      - key: DEBUG
+        value: "false"
+
+      # Домены фронтенда через запятую. Замените после его появления.
+      - key: CORS_ORIGINS
+        value: "*"
+
+      # Учётная запись администратора создаётся при первом старте.
+      - key: BOOTSTRAP_ADMIN_LOGIN
+        value: admin
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+
+# Еженедельный расчёт отдельным Cron Job (платная возможность Render).
+# Раскомментируйте и выставьте SCHEDULER_ENABLED=false у веб-сервиса,
+# чтобы расчёт не запускался дважды.
+#
+#  - type: cron
+#    name: gamification-weekly-close
+#    runtime: python
+#    plan: starter
+#    region: frankfurt
+#    schedule: "0 22 * * 0"        # UTC; 03:00 понедельника в Asia/Almaty
+#    buildCommand: pip install -r requirements.txt
+#    startCommand: python -m scripts.close_week
+#    envVars:
+#      - key: DATABASE_URL
+#        fromDatabase:
+#          name: gamification-db
+#          property: connectionString
+#      - key: AUTO_CREATE_SCHEMA
+#        value: "false"
+#      - key: SEED_REFERENCE_DATA
+#        value: "false"
+#      - key: SCHEDULER_ENABLED
+#        value: "false"
+#      - key: TIMEZONE
+#        value: Asia/Almaty
