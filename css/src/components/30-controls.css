@@ -781,6 +781,173 @@ textarea.form-input:focus {
   outline-offset: 1px;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   ПЛАСТИКА 2026
+
+   Мягче угол, тише граница, отклик на нажатие. Прежде контролы читались
+   как элементы административной панели: прямые углы, сплошная серая
+   рамка, нативный select с браузерным оформлением.
+══════════════════════════════════════════════════════════════ */
+
+/* Нативный select с браузерным оформлением — главный признак дешёвой
+   административной панели. Снимаем оформление и рисуем свою стрелку.
+   Стрелка идёт фоном, а не псевдоэлементом: у select нет ::after. */
+select,
+.form-select,
+.ui-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1.5 1.75 6 6.25l4.5-4.5' stroke='%239EA1AB' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 8px;
+}
+
+/* Поля и кнопки: мягче угол, тише граница, отклик на наведение. */
+.form-input,
+.form-select,
+.form-textarea,
+select,
+input[type="text"],
+input[type="search"],
+input[type="number"],
+input[type="date"],
+input[type="password"],
+input[type="email"] {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--input-bg);
+  transition: border-color var(--transition-fast),
+              box-shadow var(--transition-fast),
+              background var(--transition-fast);
+}
+
+.form-input:hover,
+.form-select:hover,
+select:hover {
+  border-color: var(--border-strong);
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus,
+select:focus,
+input:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+/* Кнопки. Основная — заливка акцента, вторичная — прозрачная с волосяной
+   границей. Нажатие даёт лёгкую просадку: экран отвечает на касание. */
+.btn-primary,
+.btn-secondary,
+.btn-outline,
+.btn-ghost,
+.btn-danger,
+.btn-ok,
+.btn-sm {
+  border-radius: var(--radius-sm);
+  font-weight: 550;
+  letter-spacing: var(--tracking-normal);
+  transition: background var(--transition-fast),
+              border-color var(--transition-fast),
+              box-shadow var(--transition-fast),
+              transform var(--transition-fast);
+}
+
+.btn-primary {
+  background: var(--accent-fill);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-button);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-primary:active:not(:disabled),
+.btn-outline:active:not(:disabled),
+.btn-secondary:active:not(:disabled) {
+  transform: scale(.975);
+}
+
+.btn-outline,
+.btn-secondary {
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+}
+
+.btn-outline:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-hover);
+}
+
+/* Вкладки и чипы — одна идиома вместо трёх. Активный не обводится
+   рамкой, а подсвечивается подложкой. */
+.filter-tab,
+.analytics-tab,
+.an2-tab,
+.ops-tab,
+.coins-page-tab,
+.levels-page-tab,
+.user-manage-tab,
+.up-tab,
+.lv-tab,
+.ui-chip,
+.an2-chip,
+.an2-day {
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 520;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.filter-tab:hover,
+.analytics-tab:hover,
+.an2-tab:hover,
+.ops-tab:hover,
+.coins-page-tab:hover,
+.levels-page-tab:hover,
+.ui-chip:hover,
+.an2-chip:hover,
+.an2-day:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.filter-tab.active,
+.analytics-tab.active,
+.an2-tab.active,
+.ops-tab.ops-tab-active,
+.coins-page-tab.active,
+.levels-page-tab.active,
+.ui-chip.is-active,
+.an2-chip.is-active,
+.an2-day.is-active,
+[role="tab"][aria-selected="true"] {
+  background: var(--accent-primary-soft);
+  border-color: transparent;
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* Бейджи: подложка вместо обводки. */
+.badge,
+.ui-badge,
+.status-badge {
+  border-radius: var(--radius-full);
+  border: none;
+  font-weight: 550;
+  letter-spacing: 0;
+}
+
 /* Полоса вкладок шире экрана: край подсвечивается затуханием, иначе не видно,
    что справа есть ещё вкладки. ТЗ: «Tabs scrollable с fade hint». */
 .filter-tabs,

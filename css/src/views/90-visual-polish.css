@@ -483,14 +483,17 @@ body {
   stroke: var(--sidebar-text-active);
 }
 
+/* Активный пункт помечается мягкой заливкой акцента, а не залитым
+   прямоугольником с тенью: цвет берётся из токена и потому одинаково
+   верен в обеих темах. Белый текст здесь был зашит под тёмный сайдбар. */
 .side-nav-link.active {
-  background: var(--sidebar-active-bg) !important;
-  color: #fff !important;
-  box-shadow: 0 10px 24px rgba(22, 139, 255, .22);
+  background: var(--sidebar-active-bg);
+  color: var(--accent-primary);
+  font-weight: 600;
 }
 
 .side-nav-link.active svg {
-  stroke: #fff !important;
+  stroke: var(--accent-primary);
 }
 
 .side-nav-toggle,

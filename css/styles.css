@@ -2906,6 +2906,173 @@ textarea.form-input:focus {
   outline-offset: 1px;
 }
 
+/* ══════════════════════════════════════════════════════════════
+   ПЛАСТИКА 2026
+
+   Мягче угол, тише граница, отклик на нажатие. Прежде контролы читались
+   как элементы административной панели: прямые углы, сплошная серая
+   рамка, нативный select с браузерным оформлением.
+══════════════════════════════════════════════════════════════ */
+
+/* Нативный select с браузерным оформлением — главный признак дешёвой
+   административной панели. Снимаем оформление и рисуем свою стрелку.
+   Стрелка идёт фоном, а не псевдоэлементом: у select нет ::after. */
+select,
+.form-select,
+.ui-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1.5 1.75 6 6.25l4.5-4.5' stroke='%239EA1AB' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 8px;
+}
+
+/* Поля и кнопки: мягче угол, тише граница, отклик на наведение. */
+.form-input,
+.form-select,
+.form-textarea,
+select,
+input[type="text"],
+input[type="search"],
+input[type="number"],
+input[type="date"],
+input[type="password"],
+input[type="email"] {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--input-bg);
+  transition: border-color var(--transition-fast),
+              box-shadow var(--transition-fast),
+              background var(--transition-fast);
+}
+
+.form-input:hover,
+.form-select:hover,
+select:hover {
+  border-color: var(--border-strong);
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus,
+select:focus,
+input:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+/* Кнопки. Основная — заливка акцента, вторичная — прозрачная с волосяной
+   границей. Нажатие даёт лёгкую просадку: экран отвечает на касание. */
+.btn-primary,
+.btn-secondary,
+.btn-outline,
+.btn-ghost,
+.btn-danger,
+.btn-ok,
+.btn-sm {
+  border-radius: var(--radius-sm);
+  font-weight: 550;
+  letter-spacing: var(--tracking-normal);
+  transition: background var(--transition-fast),
+              border-color var(--transition-fast),
+              box-shadow var(--transition-fast),
+              transform var(--transition-fast);
+}
+
+.btn-primary {
+  background: var(--accent-fill);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-button);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-primary:active:not(:disabled),
+.btn-outline:active:not(:disabled),
+.btn-secondary:active:not(:disabled) {
+  transform: scale(.975);
+}
+
+.btn-outline,
+.btn-secondary {
+  border: 1px solid var(--border-default);
+  background: var(--bg-surface);
+}
+
+.btn-outline:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-hover);
+}
+
+/* Вкладки и чипы — одна идиома вместо трёх. Активный не обводится
+   рамкой, а подсвечивается подложкой. */
+.filter-tab,
+.analytics-tab,
+.an2-tab,
+.ops-tab,
+.coins-page-tab,
+.levels-page-tab,
+.user-manage-tab,
+.up-tab,
+.lv-tab,
+.ui-chip,
+.an2-chip,
+.an2-day {
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 520;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.filter-tab:hover,
+.analytics-tab:hover,
+.an2-tab:hover,
+.ops-tab:hover,
+.coins-page-tab:hover,
+.levels-page-tab:hover,
+.ui-chip:hover,
+.an2-chip:hover,
+.an2-day:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.filter-tab.active,
+.analytics-tab.active,
+.an2-tab.active,
+.ops-tab.ops-tab-active,
+.coins-page-tab.active,
+.levels-page-tab.active,
+.ui-chip.is-active,
+.an2-chip.is-active,
+.an2-day.is-active,
+[role="tab"][aria-selected="true"] {
+  background: var(--accent-primary-soft);
+  border-color: transparent;
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
+/* Бейджи: подложка вместо обводки. */
+.badge,
+.ui-badge,
+.status-badge {
+  border-radius: var(--radius-full);
+  border: none;
+  font-weight: 550;
+  letter-spacing: 0;
+}
+
 /* Полоса вкладок шире экрана: край подсвечивается затуханием, иначе не видно,
    что справа есть ещё вкладки. ТЗ: «Tabs scrollable с fade hint». */
 .filter-tabs,
@@ -4708,17 +4875,9 @@ button, a, input, select, textarea {
    SLATE+SKY POLISH — visual refinements
 ═══════════════════════════════════════════════════ */
 
-/* Sidebar brand logo always white on slate */
-.side-nav-brand { color: #F8FAFC !important; }
-.side-nav-brand em { color: var(--accent-cyan) !important; font-style: normal; }
-
-/* Sidebar links always slate theme */
-.side-nav-link { color: var(--sidebar-text) !important; }
-.side-nav-link svg { stroke: var(--sidebar-text) !important; }
-.side-nav-link:hover { background: var(--sidebar-hover-bg) !important; color: var(--text-tertiary) !important; }
-.side-nav-link:hover svg { stroke: var(--text-tertiary) !important; }
-.side-nav-link.active { background: var(--accent-fill) !important; color: var(--accent-fill-text) !important; }
-.side-nav-link.active svg { stroke: #fff !important; }
+/* Правила «always white on slate» удалены вместе с тёмно-синей плашкой:
+   сайдбар стал светлым стеклом, и белый логотип на нём пропадал. Цвета
+   навигации задаются токенами --sidebar-* в одном месте. */
 
 /* Side nav meta */
 .side-nav-meta { color: var(--sidebar-text) !important; }
@@ -4872,7 +5031,9 @@ button,
 
 /* Section titles */
 .section-title { color: var(--text-primary) !important; }
-.section-kicker { color: var(--accent-primary) !important; }
+/* Надзаголовок раздела был акцентного цвета: получалась третья строка
+   заголовка, спорящая с самим заголовком. Акцент оставлен действиям. */
+.section-kicker { color: var(--text-tertiary); }
 
 /* Form labels */
 .form-label { color: var(--text-secondary) !important; }
@@ -9969,14 +10130,17 @@ body {
   stroke: var(--sidebar-text-active);
 }
 
+/* Активный пункт помечается мягкой заливкой акцента, а не залитым
+   прямоугольником с тенью: цвет берётся из токена и потому одинаково
+   верен в обеих темах. Белый текст здесь был зашит под тёмный сайдбар. */
 .side-nav-link.active {
-  background: var(--sidebar-active-bg) !important;
-  color: #fff !important;
-  box-shadow: 0 10px 24px rgba(22, 139, 255, .22);
+  background: var(--sidebar-active-bg);
+  color: var(--accent-primary);
+  font-weight: 600;
 }
 
 .side-nav-link.active svg {
-  stroke: #fff !important;
+  stroke: var(--accent-primary);
 }
 
 .side-nav-toggle,
@@ -14526,18 +14690,20 @@ textarea {
   transform: translateX(2px);
 }
 
+/* Белый текст был зашит под тёмно-синюю плашку сайдбара. Панель стала
+   светлым стеклом, и активный пункт на ней пропадал. Цвет берётся из
+   токена и потому верен в обеих темах. */
 .side-nav-link.active,
 .nav-item.active,
 .nav-item.is-active {
-  color: #fff;
+  color: var(--accent-primary);
   background: var(--sidebar-active-bg);
-  box-shadow: 0 8px 18px rgba(22, 139, 255, .22);
 }
 
 .side-nav-link.active svg,
 .nav-item.active svg,
 .nav-item.is-active svg {
-  color: #fff;
+  color: var(--accent-primary);
   stroke: currentColor;
 }
 
@@ -15787,10 +15953,13 @@ html[data-theme="dark"] .rc-hero-card { box-shadow: 0 18px 42px rgba(0, 0, 0, .2
 }
 .lv-tab:hover { border-color: var(--border-strong); }
 .lv-tab:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+/* Активная вкладка помечается подложкой, а не заливкой во весь блок:
+   залитый тёмно-синий прямоугольник спорил с основной кнопкой экрана —
+   два одинаково громких элемента, и непонятно, какой из них действие. */
 .lv-tab.is-active {
-  color: var(--accent-fill-text);
-  background: var(--accent-fill);
-  border-color: var(--accent-fill);
+  color: var(--accent-primary);
+  background: var(--accent-primary-soft);
+  border-color: transparent;
 }
 .lv-tab-title { font-size: var(--text-body); font-weight: 600; }
 .lv-tab-sub { font-size: var(--text-tiny); opacity: .85; }
@@ -15896,13 +16065,15 @@ html[data-theme="dark"] .rc-hero-card { box-shadow: 0 18px 42px rgba(0, 0, 0, .2
 .lv-state.is-off { color: var(--text-muted); }
 
 .lv-card-desc { margin: 0; font-size: var(--text-small); color: var(--text-secondary); }
+/* Подписи внутри карточки набирались капсом с разрядкой — в карточке их
+   по две, и обе кричали громче содержимого, которое подписывают. */
 .lv-sub {
   margin: 0 0 6px;
-  font-size: var(--text-micro);
+  font-size: var(--text-small);
   font-weight: 600;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text-secondary);
 }
 .lv-rule-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .lv-rule {
@@ -16505,3 +16676,400 @@ html[data-theme="dark"] .rc-hero-card { box-shadow: 0 18px 42px rgba(0, 0, 0, .2
   }
   .ui-perpage-select { min-height: var(--control-h-lg); }
 }
+/* source: zzzzz-material-2026.css */
+/* ═══════════════════════════════════════════════════════════
+   МАТЕРИАЛ 2026 — общий визуальный язык
+
+   Этот файл собирается последним и задаёт пластику всего интерфейса.
+   Он появился не от хорошей жизни: за годы в css/src/views накопилось
+   три десятка файлов, которые правят одни и те же элементы наперебой,
+   местами через !important. Переписывать их разом — значит переписать
+   семнадцать тысяч строк и потерять всё, что уже проверено тестами.
+   Поэтому язык задаётся здесь, в одном месте, а старые слои постепенно
+   вычищаются (первыми ушли правила «always white on slate», описывавшие
+   тёмно-синий сайдбар, которого больше нет).
+
+   Три правила, на которых всё держится:
+
+     1. Иерархию задаёт свет, а не контур. Поверхность отличается от
+        фона подложкой и мягкой многослойной тенью. Рамка появляется
+        только там, где без неё теряется край.
+     2. Материал важнее краски. Панель навигации, верхняя строка,
+        прилипшая шапка таблицы и модальные окна — полупрозрачное
+        стекло: сквозь них видно, что страница продолжается.
+     3. Движение объясняет, а не украшает. Появление — подъём на десять
+        пикселей с торможением; наведение — сто сорок миллисекунд. Всё
+        обнуляется при prefers-reduced-motion, потому что величины
+        берутся из токенов.
+═══════════════════════════════════════════════════════════ */
+
+/* ═══ 1. СТЕКЛО ═══════════════════════════════════════════ */
+
+/* Панель навигации. Прежде — сплошная тёмно-синяя плашка: самый жирный
+   контраст экрана доставался списку ссылок. Теперь она полупрозрачная и
+   отступает на второй план, а вперёд выходит содержимое. */
+.side-nav {
+  background: var(--sidebar-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-right: 1px solid var(--sidebar-border);
+  box-shadow: none;
+}
+
+/* Верхняя строка едет вместе со страницей и потому тоже стеклянная:
+   под ней видно, что содержимое продолжается. */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border-soft);
+  margin-inline: calc(var(--content-pad) * -1);
+  padding-inline: var(--content-pad);
+}
+
+/* Модальное окно — тоже материал, а не белый прямоугольник поверх. */
+.modal-content,
+.modal-card,
+.ui-modal {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-modal);
+}
+
+.modal-overlay,
+.modal-backdrop {
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+/* ═══ 2. ПОВЕРХНОСТИ БЕЗ КОНТУРОВ ═════════════════════════ */
+
+/* Карточки, панели и показатели держатся на тени, а не на рамке.
+   Волосяная полупрозрачная граница остаётся ради края на цветных
+   подложках — сплошной серый на них выглядел бы грязным. */
+.panel,
+.card,
+.ui-card,
+.ui-kpi,
+.data-card,
+.stat-card,
+.kpi-card,
+.raffle-card,
+.lv-card,
+.op-panel,
+.rc-card,
+.state-block {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-soft);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--transition-default),
+              transform var(--transition-default);
+}
+
+/* Приподнимаются только те карточки, по которым можно щёлкнуть. Тень без
+   действия обманывает: обещает отклик, которого нет. */
+.ui-card[role="button"]:hover,
+.raffle-card:hover,
+.lv-card:hover,
+.shop-card:hover {
+  box-shadow: var(--shadow-hover);
+  transform: translateY(-2px);
+}
+
+/* Показатель — самая частая карточка в интерфейсе. Число крупное и
+   набрано на минусовом трекинге, подпись спокойная. */
+.ui-kpi,
+.kpi-card,
+.stat-card {
+  padding: var(--space-5) var(--space-5) var(--space-4);
+}
+
+.ui-kpi-value,
+.kpi-value,
+.stat-value {
+  font-size: var(--text-kpi);
+  font-weight: 640;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.1;
+}
+
+.ui-kpi-label,
+.kpi-label,
+.stat-label {
+  font-size: var(--text-small);
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* ═══ 3. ТИПОГРАФИКА ══════════════════════════════════════ */
+
+/* Прежде экран прыгал с тридцати двух пикселей чёрного на четырнадцать
+   серого — между криком и шёпотом не было ступени. */
+.section-title,
+.view-header h1,
+h1.section-title {
+  font-size: var(--text-h1);
+  font-weight: var(--text-h1-weight);
+  letter-spacing: var(--tracking-display);
+  line-height: var(--leading-tight);
+}
+
+.panel-title,
+.panel-subtitle,
+h2, h3 {
+  letter-spacing: var(--tracking-title);
+}
+
+/* Надзаголовок над каждым экраном был капсом акцентного цвета — ещё одна
+   строка перед содержимым, которая ничего не сообщала. Оставляем его
+   спокойным и мелким. */
+.section-kicker {
+  font-size: var(--text-micro);
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+}
+
+/* Капс был всюду: шапки таблиц, подписи полей и показателей, названия
+   разделов навигации, кнопки сортировки. Набор заглавными читается
+   медленнее строчного и здесь ничего не сообщал — только шумел. Заглавные
+   остаются у одного элемента, надзаголовка экрана, где они работают как
+   метка раздела.
+
+   Кнопки сортировки перечислены отдельно: капс задан на них, а не на
+   ячейке, и правило для th их не достаёт. */
+.data-table th,
+.ui-table th,
+.ui-th,
+.data-table th button,
+.ui-table th button,
+.ui-th button,
+.ui-sort,
+.users-table-compact thead th,
+.form-label,
+.kpi-label,
+.ui-kpi-label,
+.stat-label,
+.rs-label,
+.race-summary-label,
+.side-nav-section-label,
+.panel-label,
+.field-label,
+.lv-sub,
+.op-section-label,
+.rc-eyebrow,
+.panel-hint-label {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.data-table th,
+.ui-table th,
+.ui-th {
+  font-size: var(--text-small);
+  font-weight: 550;
+  color: var(--text-secondary);
+}
+
+.form-label,
+.field-label {
+  font-size: var(--text-small);
+  font-weight: 550;
+  color: var(--text-secondary);
+}
+
+/* ═══ 4. ТАБЛИЦЫ ══════════════════════════════════════════ */
+
+/* Рамка у каждой строки превращала список в решётку. Строки разделяет
+   волосяная линия, а выделяет — подложка при наведении. */
+.data-table,
+.ui-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.data-table thead th,
+.ui-table thead th,
+.ui-table thead .ui-th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--table-header-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--border-default);
+  border-top: none;
+}
+
+.data-table tbody td,
+.ui-table tbody td {
+  border-bottom: 1px solid var(--border-soft);
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+
+.data-table tbody tr:last-child td,
+.ui-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr,
+.ui-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.data-table tbody tr:hover,
+.ui-table tbody tr:hover {
+  background: var(--table-row-hover);
+}
+
+/* Кнопки действий в каждой строке — тридцать три одинаковых прямоугольника
+   в столбик. Показываем их при наведении и с клавиатуры; на устройстве без
+   курсора они видны всегда, иначе до них не добраться. */
+@media (hover: hover) and (pointer: fine) {
+  .data-table tbody .row-actions,
+  .ui-table tbody .row-actions {
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+  }
+  .data-table tbody tr:hover .row-actions,
+  .ui-table tbody tr:hover .row-actions,
+  .data-table tbody tr:focus-within .row-actions,
+  .ui-table tbody tr:focus-within .row-actions {
+    opacity: 1;
+  }
+}
+
+/* ═══ 5. КОНТРОЛЫ ═════════════════════════════════════════
+
+   Кнопки, поля, вкладки и чипы описаны в css/src/components/30-controls.css
+   и только там. Это правило я ввёл раньше сам, и тест
+   controls-single-source его стережёт: когда внешний вид контрола можно
+   задать в двух местах, через полгода он задан в пяти. Новая пластика
+   уехала в канон, а не осталась здесь.
+   ═══════════════════════════════════════════════════════ */
+
+/* ═══ 6. ЗНАК КОИНА ═══════════════════════════════════════ */
+
+/* ₡ отсутствует в системных шрифтах Windows: браузер подставлял серифный
+   запасной и рисовал другой глиф — знак выглядел сломанным. Явный стек с
+   гарантированным начертанием и лёгкая коррекция размера. */
+.op-coin,
+.ui-coin,
+.coin-symbol {
+  font-family: "Segoe UI Symbol", "Apple Symbols", var(--font-main);
+  font-size: .92em;
+  letter-spacing: .01em;
+}
+
+/* ═══ 7. ДВИЖЕНИЕ ═════════════════════════════════════════ */
+
+@keyframes puls-enter {
+  from { opacity: 0; transform: translateY(var(--enter-rise)); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Экран появляется целиком, а карточки внутри — по очереди. Задержка
+   маленькая: это подсказка о порядке чтения, а не представление. */
+.app-view.active {
+  animation: puls-enter var(--transition-slow) var(--ease-out-soft) both;
+}
+
+.ui-kpi-grid > *,
+.raffle-grid > *,
+.lv-grid > * {
+  animation: puls-enter var(--transition-slow) var(--ease-out-soft) both;
+}
+
+.ui-kpi-grid > :nth-child(1),
+.raffle-grid > :nth-child(1),
+.lv-grid > :nth-child(1) { animation-delay: calc(var(--stagger-step) * 0); }
+.ui-kpi-grid > :nth-child(2),
+.raffle-grid > :nth-child(2),
+.lv-grid > :nth-child(2) { animation-delay: calc(var(--stagger-step) * 1); }
+.ui-kpi-grid > :nth-child(3),
+.raffle-grid > :nth-child(3),
+.lv-grid > :nth-child(3) { animation-delay: calc(var(--stagger-step) * 2); }
+.ui-kpi-grid > :nth-child(4),
+.raffle-grid > :nth-child(4),
+.lv-grid > :nth-child(4) { animation-delay: calc(var(--stagger-step) * 3); }
+
+/* Модальное окно приезжает с лёгкой пружиной — так оно читается как
+   предмет, а не как включённый свет. */
+.modal-content,
+.modal-card {
+  animation: puls-enter var(--transition-slow) var(--ease-spring) both;
+}
+
+/* Уважение к системной настройке: анимации выключаются полностью, а не
+   ускоряются. Величины уже обнулены в токенах, здесь снимаем сами
+   ключевые кадры. */
+@media (prefers-reduced-motion: reduce) {
+  .app-view.active,
+  .ui-kpi-grid > *,
+  .raffle-grid > *,
+  .lv-grid > *,
+  .modal-content,
+  .modal-card {
+    animation: none;
+  }
+  .btn-primary:active:not(:disabled),
+  .btn-outline:active:not(:disabled),
+  .btn-secondary:active:not(:disabled),
+  .ui-card[role="button"]:hover,
+  .raffle-card:hover,
+  .lv-card:hover,
+  .shop-card:hover {
+    transform: none;
+  }
+}
+
+/* ═══ 8. ПЛОТНОСТЬ ════════════════════════════════════════ */
+
+/* Между шапкой экрана и содержимым стояла линия — ещё один контур там,
+   где хватает воздуха. */
+.view-header {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: var(--space-7);
+  gap: var(--space-4);
+}
+
+/* Полоса фильтров была обведена и залита — панель ради панели.
+   Оставляем контролы стоять прямо на странице. */
+.filters-bar,
+.ui-toolbar,
+.an2-filters,
+.filter-panel {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding-inline: 0;
+}
+
+/* Пустое состояние занимало высокий бокс с рамкой. Пустота не нуждается
+   в оправе. */
+.state-block.state-empty {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* Полосы прокрутки тонкие и появляются при наведении: широкая серая
+   полоса — лишний элемент интерфейса, который ничего не сообщает. */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover { scrollbar-color: var(--border-strong) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: var(--radius-full);
+  transition: background var(--transition-default);
+}
+*:hover::-webkit-scrollbar-thumb { background: var(--border-strong); }

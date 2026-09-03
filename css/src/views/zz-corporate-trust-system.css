@@ -90,18 +90,20 @@ textarea {
   transform: translateX(2px);
 }
 
+/* Белый текст был зашит под тёмно-синюю плашку сайдбара. Панель стала
+   светлым стеклом, и активный пункт на ней пропадал. Цвет берётся из
+   токена и потому верен в обеих темах. */
 .side-nav-link.active,
 .nav-item.active,
 .nav-item.is-active {
-  color: #fff;
+  color: var(--accent-primary);
   background: var(--sidebar-active-bg);
-  box-shadow: 0 8px 18px rgba(22, 139, 255, .22);
 }
 
 .side-nav-link.active svg,
 .nav-item.active svg,
 .nav-item.is-active svg {
-  color: #fff;
+  color: var(--accent-primary);
   stroke: currentColor;
 }
 

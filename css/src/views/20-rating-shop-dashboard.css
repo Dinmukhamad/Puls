@@ -499,17 +499,9 @@ button, a, input, select, textarea {
    SLATE+SKY POLISH — visual refinements
 ═══════════════════════════════════════════════════ */
 
-/* Sidebar brand logo always white on slate */
-.side-nav-brand { color: #F8FAFC !important; }
-.side-nav-brand em { color: var(--accent-cyan) !important; font-style: normal; }
-
-/* Sidebar links always slate theme */
-.side-nav-link { color: var(--sidebar-text) !important; }
-.side-nav-link svg { stroke: var(--sidebar-text) !important; }
-.side-nav-link:hover { background: var(--sidebar-hover-bg) !important; color: var(--text-tertiary) !important; }
-.side-nav-link:hover svg { stroke: var(--text-tertiary) !important; }
-.side-nav-link.active { background: var(--accent-fill) !important; color: var(--accent-fill-text) !important; }
-.side-nav-link.active svg { stroke: #fff !important; }
+/* Правила «always white on slate» удалены вместе с тёмно-синей плашкой:
+   сайдбар стал светлым стеклом, и белый логотип на нём пропадал. Цвета
+   навигации задаются токенами --sidebar-* в одном месте. */
 
 /* Side nav meta */
 .side-nav-meta { color: var(--sidebar-text) !important; }
@@ -663,7 +655,9 @@ button,
 
 /* Section titles */
 .section-title { color: var(--text-primary) !important; }
-.section-kicker { color: var(--accent-primary) !important; }
+/* Надзаголовок раздела был акцентного цвета: получалась третья строка
+   заголовка, спорящая с самим заголовком. Акцент оставлен действиям. */
+.section-kicker { color: var(--text-tertiary); }
 
 /* Form labels */
 .form-label { color: var(--text-secondary) !important; }
