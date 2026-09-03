@@ -394,3 +394,99 @@ h2, h3 {
   transition: background var(--transition-default);
 }
 *:hover::-webkit-scrollbar-thumb { background: var(--border-strong); }
+
+/* ═══ 9. КОЛЬЦА ПРОГРЕССА ═════════════════════════════════
+
+   Требования до следующего уровня были плоским списком: подпись,
+   число, условие — и по нему нельзя было понять, близко ли до цели.
+   Кольцо отвечает на этот вопрос формой, а не чтением.
+
+   Цвет несёт смысл: бирюза — выполнено, кобальт — идёт к цели, янтарь —
+   вышли за предел. Подпись под кольцом дублирует цвет словами, поэтому
+   состояние читается и при дальтонизме.
+═══════════════════════════════════════════════════════════ */
+
+.op-rings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.op-ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+}
+
+.op-ring-dial {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+}
+
+.op-ring-dial svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Отсчёт начинается сверху, а не справа: так читается как циферблат. */
+  transform: rotate(-90deg);
+}
+
+.op-ring-track,
+.op-ring-arc {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+
+.op-ring-track { stroke: var(--border-default); }
+
+.op-ring-arc {
+  stroke: var(--accent-primary);
+  /* Дуга дорисовывается при появлении карточки. Длина задана в
+     stroke-dasharray, поэтому анимируем именно её. */
+  animation: op-ring-draw var(--transition-slow) var(--ease-out-soft) both;
+  animation-delay: var(--ring-delay, 0ms);
+}
+
+.op-ring.is-done .op-ring-arc { stroke: var(--success); }
+.op-ring.is-over .op-ring-arc { stroke: var(--warning); }
+
+.op-ring-value {
+  position: relative;
+  font-size: var(--text-small);
+  font-weight: 640;
+  letter-spacing: var(--tracking-normal);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.op-ring-label {
+  font-size: var(--text-small);
+  font-weight: 550;
+  color: var(--text-primary);
+  margin-top: var(--space-2);
+}
+
+.op-ring-hint {
+  font-size: var(--text-tiny);
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.op-ring.is-done .op-ring-hint { color: var(--success-text); }
+.op-ring.is-over .op-ring-hint { color: var(--warning-text); }
+
+@keyframes op-ring-draw {
+  from { stroke-dasharray: 0 999; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .op-ring-arc { animation: none; }
+}

@@ -12139,12 +12139,14 @@ html[data-theme="dark"] #view-coins .an-card,
   border-bottom: 1px solid var(--border-default);
 }
 .op-page-head > div > span,
+/* Подпись над значением была акцентного цвета, капсом и восьмисотым
+   начертанием: три способа сказать «смотри сюда» у строки, которая
+   всего лишь подписывает. Акцент оставлен действиям. */
 .op-label {
   display: block;
-  color: var(--accent-primary);
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-size: var(--text-small);
+  font-weight: 550;
 }
 .op-page-head h1 {
   margin: 4px 0 2px;
@@ -12169,8 +12171,13 @@ html[data-theme="dark"] #view-coins .an-card,
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-card);
 }
-.op-kpi.is-primary { border-top: 3px solid var(--accent-primary); padding-top: 16px; }
-.op-kpi > span { display: block; color: var(--text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+/* Синяя полоска сверху стояла у первой карточки жёстко и ничего не
+   означала — ни выбора, ни внимания. Показатели теперь различаются
+   содержанием, а не меткой без смысла. */
+.op-kpi.is-primary { padding-top: 16px; }
+/* Подпись показателя набиралась капсом в одиннадцать пунктов жирным:
+   она кричала громче самого числа, которое подписывает. */
+.op-kpi > span { display: block; color: var(--text-secondary); font-size: var(--text-small); font-weight: 550; }
 .op-kpi > strong { display: block; margin: 9px 0 5px; font-size: 25px; line-height: 1; }
 .op-kpi > strong small { color: var(--text-muted); font-size: 12px; }
 .op-kpi > strong.is-text { font-size: 18px; line-height: 1.25; }
@@ -17100,3 +17107,99 @@ h2, h3 {
   transition: background var(--transition-default);
 }
 *:hover::-webkit-scrollbar-thumb { background: var(--border-strong); }
+
+/* ═══ 9. КОЛЬЦА ПРОГРЕССА ═════════════════════════════════
+
+   Требования до следующего уровня были плоским списком: подпись,
+   число, условие — и по нему нельзя было понять, близко ли до цели.
+   Кольцо отвечает на этот вопрос формой, а не чтением.
+
+   Цвет несёт смысл: бирюза — выполнено, кобальт — идёт к цели, янтарь —
+   вышли за предел. Подпись под кольцом дублирует цвет словами, поэтому
+   состояние читается и при дальтонизме.
+═══════════════════════════════════════════════════════════ */
+
+.op-rings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.op-ring {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 2px;
+}
+
+.op-ring-dial {
+  position: relative;
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+}
+
+.op-ring-dial svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Отсчёт начинается сверху, а не справа: так читается как циферблат. */
+  transform: rotate(-90deg);
+}
+
+.op-ring-track,
+.op-ring-arc {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+
+.op-ring-track { stroke: var(--border-default); }
+
+.op-ring-arc {
+  stroke: var(--accent-primary);
+  /* Дуга дорисовывается при появлении карточки. Длина задана в
+     stroke-dasharray, поэтому анимируем именно её. */
+  animation: op-ring-draw var(--transition-slow) var(--ease-out-soft) both;
+  animation-delay: var(--ring-delay, 0ms);
+}
+
+.op-ring.is-done .op-ring-arc { stroke: var(--success); }
+.op-ring.is-over .op-ring-arc { stroke: var(--warning); }
+
+.op-ring-value {
+  position: relative;
+  font-size: var(--text-small);
+  font-weight: 640;
+  letter-spacing: var(--tracking-normal);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.op-ring-label {
+  font-size: var(--text-small);
+  font-weight: 550;
+  color: var(--text-primary);
+  margin-top: var(--space-2);
+}
+
+.op-ring-hint {
+  font-size: var(--text-tiny);
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.op-ring.is-done .op-ring-hint { color: var(--success-text); }
+.op-ring.is-over .op-ring-hint { color: var(--warning-text); }
+
+@keyframes op-ring-draw {
+  from { stroke-dasharray: 0 999; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .op-ring-arc { animation: none; }
+}

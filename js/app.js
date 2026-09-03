@@ -18598,16 +18598,92 @@ function opMetric(label, value, target, tone = '') {
   </div>`;
 }
 
+/**
+ * Насколько требование выполнено, от 0 до 1. Сто процентов означает
+ * «выполнено», а не «достигнут максимум»: у требований разная форма, и
+ * сравнивать их можно только по этой общей шкале.
+ *
+ *   gte     — набрать не меньше порога: доля от порога.
+ *   lte     — уложиться в предел: пока укладываешься, кольцо полное;
+ *             превысил — показываем, насколько вышел за него.
+ *   between — попасть в вилку: снизу это доля от нижней границы,
+ *             сверху — перебор.
+ *
+ * Возвращает null, если значения нет: пустое кольцо и прочерк честнее
+ * нуля, который читался бы как «ничего не сделано».
+ */
+function opGapProgress(gap) {
+  const value = Number(gap?.current);
+  if (gap?.current === null || gap?.current === undefined || !Number.isFinite(value)) return null;
+  if (gap.ok) return 1;
+  const min = Number(gap.required_min);
+  const max = Number(gap.required_max);
+  const clamp = x => Math.max(0, Math.min(1, x));
+
+  if (gap.operator === 'lte') {
+    if (!Number.isFinite(max) || max <= 0) return value <= 0 ? 1 : 0;
+    return value <= max ? 1 : clamp(max / value);
+  }
+  if (gap.operator === 'between') {
+    if (Number.isFinite(min) && value < min) return min > 0 ? clamp(value / min) : 0;
+    if (Number.isFinite(max) && value > max) return max > 0 ? clamp(max / value) : 0;
+    return 1;
+  }
+  if (!Number.isFinite(min) || min <= 0) return value > 0 ? 1 : 0;
+  return clamp(value / min);
+}
+
+/**
+ * Кольцо прогресса. Дуга рисуется через stroke-dasharray по окружности,
+ * поэтому не нужен ни холст, ни библиотека — одна окружность и поворот
+ * на четверть, чтобы отсчёт начинался сверху.
+ *
+ * Цвет несёт смысл, а не украшает: бирюза — требование выполнено,
+ * кобальт — идёт к цели, янтарь — вышли за предел, то есть нужно
+ * вмешаться. Форма дублирует цвет подписью, поэтому кольца читаются и
+ * при дальтонизме.
+ */
+function opGapRing(gap, index) {
+  const R = 30;
+  const C = 2 * Math.PI * R;
+  const progress = opGapProgress(gap);
+  const known = progress !== null;
+  const done = gap.ok === true;
+  const over = !done && (gap.operator === 'lte' || gap.operator === 'between')
+    && Number.isFinite(Number(gap.required_max)) && Number(gap.current) > Number(gap.required_max);
+  const tone = done ? 'is-done' : over ? 'is-over' : 'is-going';
+  const dash = known ? C * progress : 0;
+
+  return `<div class="op-ring ${tone}" style="--ring-delay:${index * 90}ms">
+    <div class="op-ring-dial">
+      <svg viewBox="0 0 76 76" aria-hidden="true" focusable="false">
+        <circle class="op-ring-track" cx="38" cy="38" r="${R}"></circle>
+        <circle class="op-ring-arc" cx="38" cy="38" r="${R}"
+          stroke-dasharray="${dash.toFixed(2)} ${(C - dash).toFixed(2)}"
+          stroke-dashoffset="0"></circle>
+      </svg>
+      <span class="op-ring-value">${known ? metricValueHtml(gap) : '—'}</span>
+    </div>
+    <span class="op-ring-label">${esc(gap.label || '')}</span>
+    <small class="op-ring-hint">${done ? 'Выполнено' : known ? levelRequirementHtml(gap) : 'Нет данных'}</small>
+  </div>`;
+}
+
 function opCabinetLevel(levelInfo) {
   if (!levelInfo) return opEmpty('Уровень не рассчитан', 'Данные появятся после первого расчёта периода.');
   const level = levelInfo.level || {};
   const gaps = levelInfo.gaps || [];
+  const shown = gaps.slice(0, 4);
+  const ready = gaps.filter(g => g.ok).length;
+
   return `<div class="op-level-main">
     <div><span class="op-label">Текущий уровень</span><div class="op-level-name">${levelBadgeHtml(level)} <strong>${esc(level.name || 'Стажёр')}</strong></div></div>
     <div class="op-level-tenure"><span>Стаж</span><b>${esc(formatTenureDays(levelInfo.metrics?.tenure_days || 0))}</b></div>
   </div>
   ${levelInfo.next_level ? `<div class="op-next-level"><span>Следующий уровень</span>${levelBadgeHtml(levelInfo.next_level)}</div>` : '<div class="op-success-line">Максимальный уровень достигнут</div>'}
-  <div class="op-requirements">${gaps.length ? gaps.slice(0, 4).map(g => `<div class="op-requirement ${g.ok ? 'is-ready' : ''}"><span>${esc(g.label)}</span><b>${metricValueHtml(g)}</b><small>${g.ok ? 'Выполнено' : levelRequirementHtml(g)}</small></div>`).join('') : '<div class="op-success-line">Все требования выполнены</div>'}</div>`;
+  ${shown.length ? `<div class="op-rings" role="group" aria-label="Прогресс до следующего уровня: выполнено ${ready} из ${gaps.length}">
+      ${shown.map((g, i) => opGapRing(g, i)).join('')}
+    </div>` : '<div class="op-success-line">Все требования выполнены</div>'}`;
 }
 
 function opCabinetAchievements(data) {
