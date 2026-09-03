@@ -9264,8 +9264,20 @@ function closeModal(force = false) {
     document.removeEventListener('keydown', _modalKeydown, true);
     _modalKeydown = null;
   }
-  // Возвращаем фокус туда, откуда окно открыли.
-  if (_modalPreviousFocus?.isConnected) _modalPreviousFocus.focus?.({ preventScroll: true });
+  // Возвращаем фокус туда, откуда окно открыли. Если после сохранения экран
+  // перерисовался и кнопки-инициатора больше нет, фокус проваливается на
+  // body — обход табом начинался бы заново с шапки. В этом случае ставим его
+  // на заголовок раздела: он не участвует в обходе (tabindex="-1"), но задаёт
+  // предсказуемую точку продолжения.
+  if (_modalPreviousFocus?.isConnected) {
+    _modalPreviousFocus.focus?.({ preventScroll: true });
+  } else {
+    const heading = document.querySelector('.app-view.active h1[tabindex="-1"], .app-view.active h1');
+    if (heading) {
+      if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+      heading.focus?.({ preventScroll: true });
+    }
+  }
   _modalPreviousFocus = null;
   if (typeof uiCancelPendingConfirm === 'function') uiCancelPendingConfirm();
 }
