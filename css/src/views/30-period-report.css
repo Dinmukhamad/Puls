@@ -768,3 +768,32 @@ body.role-pending,
 body.role-operator {
   --nav-w: 200px;
 }
+
+/* Полоса статуса: что уже лежит на сервере. Файлы хранятся в БД и переживают
+   редеплой, поэтому после перезагрузки страница показывает состояние, а не
+   пустую форму. */
+.pr-status-strip { margin-bottom: var(--space-4); }
+.pr-status {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--text-muted);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+.pr-status.is-ready { border-left-color: var(--success); }
+.pr-status.is-waiting { border-left-color: var(--warning); }
+.pr-status-mark { flex: none; color: var(--text-muted); font-weight: 700; }
+.pr-status.is-ready .pr-status-mark { color: var(--success-text); }
+.pr-status.is-waiting .pr-status-mark { color: var(--warning-text); }
+.pr-status-text { min-width: 0; }
+.pr-status-text b { display: block; font-size: var(--text-small); }
+.pr-status-text span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--text-tiny);
+  overflow-wrap: anywhere;
+}

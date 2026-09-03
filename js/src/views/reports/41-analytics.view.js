@@ -119,14 +119,22 @@ function anShellHtml() {
         <button class="btn-outline btn-sm" id="an2-glossary-btn" type="button">
           Что означают показатели
         </button>
+        <button class="btn-outline btn-sm" id="an2-reset" type="button"
+                title="Вернуть период, группу и дни недели к исходным">Сбросить</button>
         <button class="btn-outline btn-sm" id="an2-export" type="button">Выгрузить в Excel</button>
+        <button class="ui-icon-button" id="an2-refresh" type="button"
+                aria-label="Обновить показатели" title="Обновить показатели">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/>
+          </svg>
+        </button>
       </div>
     </div>
     <nav class="an2-tabs" id="an2-tabs" role="tablist">
-      ${AN_TABS.map(t => `<button type="button" class="an2-tab ${t.key === AN_STATE.tab ? 'active' : ''}" data-an2="tab" data-value="${t.key}" role="tab" aria-selected="${t.key === AN_STATE.tab}">${anEsc(t.label)}</button>`).join('')}
+      ${AN_TABS.map(t => `<button type="button" class="an2-tab ${t.key === AN_STATE.tab ? 'active' : ''}" data-an2="tab" data-value="${t.key}" role="tab" id="an2-tab-${t.key}" aria-controls="an2-body" aria-selected="${t.key === AN_STATE.tab}">${anEsc(t.label)}</button>`).join('')}
     </nav>
     <div class="an2-filters" id="an2-filters"></div>
-    <div id="an2-body"></div>`;
+    <div id="an2-body" role="tabpanel" aria-labelledby="an2-tab-${AN_STATE.tab}" tabindex="-1"></div>`;
 }
 
 function anBindShell(el) {
@@ -221,6 +229,33 @@ function anBindShell(el) {
   });
 
   el.querySelector('#an2-glossary-btn')?.addEventListener('click', anOpenGlossary);
+
+  // Обновление сохраняет фильтры и не очищает экран: данные остаются, пока
+  // не придут новые. ТЗ (стр. 20): «Refresh не сбрасывает view».
+  el.querySelector('#an2-refresh')?.addEventListener('click', async event => {
+    const btn = event.currentTarget;
+    btn.classList.add('is-loading');
+    swrInvalidate('analytics:');
+    try {
+      await anLoad(el);
+      if (AN_STATE.tab === 'operators') await anEnsureOps(el);
+    } finally {
+      btn.classList.remove('is-loading');
+    }
+  });
+
+  // Сброс возвращает период, группу и дни недели к исходным. Вкладку не
+  // меняем: она часть адреса и выбрана пользователем осознанно.
+  el.querySelector('#an2-reset')?.addEventListener('click', async () => {
+    AN_STATE.preset = '30d';
+    AN_STATE.start = null;
+    AN_STATE.end = null;
+    AN_STATE.groupId = null;
+    AN_STATE.weekdays = [0, 1, 2, 3, 4, 5, 6];
+    AN_STATE.metric = 'quality';
+    await anLoad(el);
+    if (AN_STATE.tab === 'operators') await anEnsureOps(el);
+  });
   el.querySelector('#an2-export')?.addEventListener('click', () => {
     const { start, end } = anResolveRange();
     if (!start || !end) return;

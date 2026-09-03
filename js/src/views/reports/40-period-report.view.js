@@ -10,10 +10,64 @@ function renderPeriodReport() {
     return Number(v).toFixed(decimals);
   }
 
+  /** Что уже лежит на сервере. Только реальные поля upload_status. */
+  function prStatusStrip(status) {
+    const files = [
+      ['Monthly Report', status?.monthly],
+      ['Report', status?.report],
+    ];
+    const ready = files.every(([, f]) => f);
+    return `
+      <div class="pr-status ${ready ? 'is-ready' : 'is-waiting'}">
+        <span class="pr-status-mark" aria-hidden="true">${ready ? '✓' : '•'}</span>
+        <div class="pr-status-text">
+          <b>${ready ? 'Исходные файлы загружены' : 'Файлы ещё не загружены полностью'}</b>
+          <span>${files.map(([label, f]) => f
+            ? `${esc(label)}: ${esc(f.filename)}${f.uploaded_at ? ` · ${esc(fmtDateTime(f.uploaded_at))}` : ''}`
+            : `${esc(label)}: нет`).join(' · ')}</span>
+        </div>
+      </div>`;
+  }
+
+  /**
+   * Блокировка действий по условиям ТЗ (стр. 22): загрузка недоступна без
+   * обоих файлов, расчёт — без корректного периода, причём конец не раньше
+   * начала. Раньше обе кнопки были всегда активны и объясняли отказ уже
+   * после нажатия.
+   */
+  function prSyncActions(host) {
+    const monthly = host.querySelector('#pr-file-monthly')?.files?.[0];
+    const report = host.querySelector('#pr-file-report')?.files?.[0];
+    const start = host.querySelector('#pr-start-date')?.value;
+    const end = host.querySelector('#pr-end-date')?.value;
+
+    const uploadBtn = host.querySelector('#pr-upload-btn');
+    if (uploadBtn) {
+      const ready = Boolean(monthly && report);
+      uploadBtn.disabled = !ready;
+      uploadBtn.title = ready ? '' : 'Выберите оба файла .xlsx';
+    }
+
+    const calcBtn = host.querySelector('#pr-calc-btn');
+    if (calcBtn) {
+      const datesOk = Boolean(start && end && start <= end);
+      // Файлы могут быть уже на сервере с прошлого раза — тогда выбирать их
+      // заново не нужно, достаточно корректного периода.
+      const filesOnServer = host.querySelector('#pr-status-strip .pr-status.is-ready');
+      const ready = datesOk && Boolean(filesOnServer || (monthly && report));
+      calcBtn.disabled = !ready;
+      calcBtn.title = !datesOk
+        ? (start && end ? 'Дата окончания не может быть раньше начала' : 'Укажите обе даты периода')
+        : (ready ? '' : 'Сначала загрузите оба файла');
+    }
+  }
+
   el.innerHTML = `
     <div class="view-header">
       <div><div class="section-kicker">Расчёт</div><h1 class="section-title">Расчёт показателей за период</h1></div>
     </div>
+
+    <div class="pr-status-strip" id="pr-status-strip" role="status" aria-live="polite"></div>
 
     <div class="pr-card">
       <div class="pr-card-head">Загрузка файлов</div>
@@ -99,6 +153,7 @@ function renderPeriodReport() {
           event.stopPropagation();
           input.value = '';
           setState('', IDLE);
+          prSyncActions(el);
           input.focus({ preventScroll: true });
         });
         drop.appendChild(remove);
@@ -122,7 +177,7 @@ function renderPeriodReport() {
     };
 
     setState('', IDLE);
-    input.addEventListener('change', () => accept(input.files[0]));
+    input.addEventListener('change', () => { accept(input.files[0]); prSyncActions(el); });
 
     // Перетаскивание: подсветка зоны и приём файла.
     ['dragenter', 'dragover'].forEach(type => drop.addEventListener(type, event => {
@@ -137,29 +192,45 @@ function renderPeriodReport() {
       drop.classList.remove('pr-file-drop-over');
       const file = event.dataTransfer?.files?.[0];
       if (!file) return;
+      // Порядок важен: сначала кладём файл в input, потом пересчитываем
+      // доступность — иначе кнопка останется заблокированной.
       // Кладём файл в input, чтобы отправка шла тем же путём, что и выбор.
       const data = new DataTransfer();
       data.items.add(file);
       input.files = data.files;
       accept(file);
+      prSyncActions(el);
     });
   }
+  ['#pr-start-date', '#pr-end-date'].forEach(sel => {
+    el.querySelector(sel)?.addEventListener('change', () => prSyncActions(el));
+  });
+
   bindFileDrop('pr-file-monthly', 'pr-file-monthly-drop');
   bindFileDrop('pr-file-report', 'pr-file-report-drop');
+  prSyncActions(el);
 
-  // Проверяем, сохранены ли файлы в БД (переживают редеплой)
+  // Полоса статуса: что уже лежит на сервере. Файлы хранятся в БД и
+  // переживают редеплой, поэтому после перезагрузки страницы состояние
+  // восстанавливается, а не показывается «ничего не выбрано».
+  //
+  // Дату сохранённого расчёта API не отдаёт (upload_status возвращает только
+  // загруженные файлы), поэтому её здесь нет — выдумывать нельзя.
   (async () => {
     try {
       const status = await swrFetch('period-report:status', () => api.getPeriodReportStatus(), null, SWR_FAST_TTL_MS);
+      const strip = el.querySelector('#pr-status-strip');
+      if (strip) strip.innerHTML = prStatusStrip(status);
       const statusEl = el.querySelector('#pr-upload-status');
       if (status.monthly && status.report) {
-        statusEl.innerHTML = `✓ Файлы уже загружены и сохранены: <b>${esc(status.monthly.filename)}</b>, <b>${esc(status.report.filename)}</b>. Можно сразу выбрать период.`;
+        statusEl.innerHTML = `Файлы уже загружены и сохранены: <b>${esc(status.monthly.filename)}</b>, <b>${esc(status.report.filename)}</b>. Можно сразу выбрать период.`;
         statusEl.className = 'status-line status-ok';
       } else if (status.monthly || status.report) {
         statusEl.textContent = 'Загружен только один из файлов — дозагрузите второй.';
         statusEl.className = 'status-line status-error';
       }
-    } catch(e) { /* тихо игнорируем — не критично для работы страницы */ }
+      prSyncActions(el);
+    } catch (e) { /* тихо игнорируем — не критично для работы страницы */ }
   })();
 
   // Upload handler
