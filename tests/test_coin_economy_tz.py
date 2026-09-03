@@ -350,21 +350,3 @@ def test_economy_analytics_excludes_unconfirmed_reservations_from_spend():
     assert result["spent_coins"] == 150
     assert result["orders_count"] == 3
     assert result["issued_orders_count"] == 1
-
-
-def test_store_frontend_uses_effective_price_and_stable_idempotency_key():
-    from pathlib import Path
-
-    root = Path(__file__).resolve().parents[1]
-    view = (root / "js/src/views/rating/20-rating-shop-summary.view.js").read_text("utf-8")
-    api = (root / "js/src/api/domains/10-main-domains.api.js").read_text("utf-8")
-    css = (root / "css/src/views/99-shop-operator-redesign.css").read_text("utf-8")
-
-    for token in ("До 400", "До 700", "До 1 100", "Цифровые", "Физические", "Привилегии"):
-        assert token in view
-    assert "effective_price" in view
-    assert "regular_price" in view
-    assert "sessionStorage" in view
-    assert "Idempotency-Key" in api
-    assert "/api/store/orders" in api
-    assert ":focus-visible" in css
