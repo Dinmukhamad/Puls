@@ -438,3 +438,16 @@ async def test_staff_roles_reach_operators_table(
     token = await login(client, "staff")
     response = await client.get("/api/v1/admin/operators", headers=auth(token))
     assert response.status_code == 200
+
+
+async def test_root_redirects_to_docs(client: AsyncClient) -> None:
+    """Корень домена не должен упираться в 404 при открытии в браузере."""
+    response = await client.get("/")
+    assert response.status_code == 307
+    assert response.headers["location"] == "/docs"
+
+
+async def test_health_is_public(client: AsyncClient) -> None:
+    response = await client.get("/health")
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"

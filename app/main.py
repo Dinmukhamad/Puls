@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -68,6 +69,17 @@ app.add_middleware(
 
 register_exception_handlers(app)
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> RedirectResponse:
+    """
+    Корень отдаёт документацию.
+
+    Сервис - это API без собственного интерфейса, и без этого маршрута открытие
+    домена в браузере упиралось бы в 404.
+    """
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health", tags=["Служебные"], summary="Проверка живости сервиса")
