@@ -97,7 +97,7 @@ async function _loadAdminSummaryDetail() {
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Коинов в обороте</div>
-          <div class="kpi-value">${data.total_coins_balance} <span class="kpi-unit">₡</span></div>
+          <div class="kpi-value">${fmtCoins(data.total_coins_balance)}</div>
         </div>
         <div class="kpi-card ${data.new_shop_requests > 0 ? 'kpi-warn' : ''}">
           <div class="kpi-label">Новых заявок магазина</div>
@@ -158,8 +158,8 @@ async function _loadAdminSummaryDetail() {
                 <td>${esc(o.group_name || '')}</td>
                 <td>${o.participation_status === 'participating' ? 'Участвует' : 'Не участвует'}</td>
                 <td>${o.week_points != null ? levelNum(o.week_points) : '—'}</td>
-                <td>${o.week_coins != null ? `<b class="accent-text">${o.week_coins} ₡</b>` : '—'}</td>
-                <td>${o.total_balance} ₡</td>
+                <td>${o.week_coins != null ? `<b class="accent-text">${fmtCoins(o.week_coins)}</b>` : '—'}</td>
+                <td>${fmtCoins(o.total_balance)}</td>
                 <td>${_disciplineCellHtml(o)}</td>
                 <td>${_metricsCellHtml(o)}</td>
                 <td>${summaryRowActionsHtml(o.id, o.full_name)}</td>

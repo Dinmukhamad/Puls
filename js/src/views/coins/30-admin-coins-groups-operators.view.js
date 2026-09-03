@@ -531,9 +531,9 @@ function renderCoins() {
       </div>
     </div>
     <div class="coins-page-tabs" role="tablist" aria-label="Разделы операций с коинами">
-      ${tabs.map(([id, label]) => `<button class="coins-page-tab ${tab === id ? 'is-active' : ''}" type="button" role="tab" aria-selected="${tab === id}" data-coins-tab="${id}">${label}</button>`).join('')}
+      ${tabs.map(([id, label]) => `<button class="coins-page-tab ${tab === id ? 'is-active' : ''}" type="button" role="tab" id="coins-tab-${id}" aria-selected="${tab === id}" aria-controls="coins-tab-body" data-coins-tab="${id}">${label}</button>`).join('')}
     </div>
-    <div id="coins-tab-body" class="coins-tab-body"></div>`;
+    <div id="coins-tab-body" class="coins-tab-body" role="tabpanel" aria-labelledby="coins-tab-${tab}" tabindex="-1"></div>`;
 
   el.querySelectorAll('[data-coins-tab]').forEach(btn => {
     btn.addEventListener('click', () => navigateTo('coins', { tab: btn.dataset.coinsTab }));
@@ -594,13 +594,13 @@ function renderCoinsOverview(body) {
         <span>Операций сегодня</span><strong>${overview.today_operations || 0}</strong><small>Всего: ${overview.total_operations || 0}</small>
       </button>
       <button class="coins-summary-card is-positive" type="button" onclick="navigateTo('coins',{tab:'history'})">
-        <span>Баланс дня</span><strong>${(overview.today_credited || 0) - (overview.today_debited || 0) >= 0 ? '+' : ''}${(overview.today_credited || 0) - (overview.today_debited || 0)} ₡</strong><small>+${overview.today_credited || 0} / -${overview.today_debited || 0}</small>
+        <span>Баланс дня</span><strong>${fmtCoins((overview.today_credited || 0) - (overview.today_debited || 0), { sign: true })}</strong><small>+${overview.today_credited || 0} / -${overview.today_debited || 0}</small>
       </button>
       <button class="coins-summary-card ${overview.new_requests ? 'has-alert' : ''}" type="button" onclick="navigateTo('coins',{tab:'requests'})">
         <span>Новые заявки</span><strong>${overview.new_requests || 0}</strong><small>${overview.new_requests ? 'Требуют решения' : 'Очередь обработана'}</small>
       </button>
       <div class="coins-summary-card">
-        <span>Зарезервировано</span><strong>${overview.reserved_coins || 0} ₡</strong><small>В активных заявках</small>
+        <span>Зарезервировано</span><strong>${fmtCoins(overview.reserved_coins || 0)}</strong><small>В активных заявках</small>
       </div>
     </div>
     <div class="coins-overview-grid">
@@ -891,7 +891,7 @@ function renderManual() {
     try {
       await api.manualTransaction({ operator_id: +opId, amount: finalAmount, reason: reason, comment: comment });
       invalidateCoinsData();
-      statusEl.textContent = `✓ Сохранено: ${finalAmount > 0 ? '+' : ''}${finalAmount} ₡`;
+      statusEl.textContent = `✓ Сохранено: ${fmtCoins(finalAmount, { sign: true })}`;
       statusEl.className = 'status-line status-ok';
       el.querySelector('#manual-amount').value = '';
       el.querySelector('#manual-comment').value = '';
@@ -958,7 +958,7 @@ function initOpSearch(container, ops) {
     list.innerHTML = filtered.slice(0, 50).map(o => `
       <div class="op-search-item" data-id="${o.id}" data-name="${esc(o.full_name)}">
         <div class="op-search-name">${esc(o.full_name)}</div>
-        <div class="op-search-meta">Группа: ${esc(o.group_name)} · ${o.current_balance} ₡</div>
+        <div class="op-search-meta">Группа: ${esc(o.group_name)} · ${fmtCoins(o.current_balance)}</div>
       </div>`).join('');
 
     list.querySelectorAll('.op-search-item').forEach(item => {
@@ -1158,7 +1158,7 @@ function paintRequestsTabData(data) {
         <div class="request-meta">
           <span><b>${esc(p.operator_name)}</b></span>
           <span>·</span><span>${esc(p.group_name || '—')}</span>
-          <span>·</span><span class="accent-text">${p.price} ₡</span>
+          <span>·</span><span class="accent-text">${fmtCoins(p.price)}</span>
           <span>·</span><span>${fmtDate(p.created_at)}</span>
         </div>
         ${p.reject_reason ? `<div class="request-reason">Причина отказа: ${esc(p.reject_reason)}</div>` : ''}
@@ -1406,7 +1406,7 @@ function paintHistoryTabData(data) {
             <td class="name-cell">${esc(t.operator_name)}</td>
             <td>${esc(t.group_name)}</td>
             <td><span style="font-size:11px;color:var(--tx3)">${esc(transactionTypeLabel(t.type))}</span></td>
-            <td><b style="color:${t.amount>=0?'var(--ok)':'var(--danger)'}">${t.amount>=0?'+':''}${t.amount} ₡</b></td>
+            <td><b style="color:${t.amount>=0?'var(--ok)':'var(--danger)'}">${fmtCoins(t.amount, { sign: true })}</b></td>
             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.comment)}">${esc(t.comment)}</td>
             <td style="font-size:12px;color:var(--tx3)">${esc(t.created_by_name||'Система')}</td>
             <td style="font-size:11px;color:var(--tx3)">${esc(_historySourceLabels[t.source_type] || t.source_type || '—')}</td>
@@ -1964,11 +1964,11 @@ async function showOperatorHistoryModal(id) {
       </div>
       <div class="history-block">
         <h4>Коины</h4>
-        ${transactions.length ? transactions.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${row.amount > 0 ? '+' : ''}${row.amount} ₡</b><small>${esc(row.comment || row.type)}</small></div>`).join('') : '<div class="empty-line">Нет операций</div>'}
+        ${transactions.length ? transactions.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${fmtCoins(row.amount, { sign: true })}</b><small>${esc(row.comment || row.type)}</small></div>`).join('') : '<div class="empty-line">Нет операций</div>'}
       </div>
       <div class="history-block">
         <h4>Заявки</h4>
-        ${purchases.length ? purchases.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${statusLabel(row.status)}</b><small>${row.price} ₡</small></div>`).join('') : '<div class="empty-line">Нет заявок</div>'}
+        ${purchases.length ? purchases.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${statusLabel(row.status)}</b><small>${fmtCoins(row.price)}</small></div>`).join('') : '<div class="empty-line">Нет заявок</div>'}
       </div>
       <div class="history-block">
         <h4>Рейтинг</h4>

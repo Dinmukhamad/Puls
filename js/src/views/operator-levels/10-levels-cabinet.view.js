@@ -470,15 +470,15 @@ function renderCabinet() {
     <div class="kpi-grid">
       <div class="kpi-card kpi-accent">
         <div class="kpi-label">Баланс коинов</div>
-        <div class="kpi-value">${w.current_balance} <span class="kpi-unit">₡</span></div>
+        <div class="kpi-value">${fmtCoins(w.current_balance)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Всего заработано</div>
-        <div class="kpi-value">${w.total_earned} <span class="kpi-unit">₡</span></div>
+        <div class="kpi-value">${fmtCoins(w.total_earned)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Потрачено</div>
-        <div class="kpi-value">${w.total_spent} <span class="kpi-unit">₡</span></div>
+        <div class="kpi-value">${fmtCoins(w.total_spent)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Место в рейтинге</div>
@@ -513,7 +513,7 @@ function renderCabinet() {
                 <span class="tx-comment">${esc(t.comment)}</span>
                 <span class="tx-date">${fmtDate(t.created_at)}</span>
               </div>
-              <div class="tx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</div>
+              <div class="tx-amount">${fmtCoins(t.amount, { sign: true })}</div>
             </div>`).join('') : '<div class="empty-line">Операций пока нет</div>'}
         </div>
       </div>
@@ -529,7 +529,7 @@ function renderCabinet() {
     <div class="shop-banner">
       <div>
         <div class="shop-banner-title">Магазин бонусов</div>
-        <div class="shop-banner-sub">У вас ${w.current_balance} ₡ — потратьте на бонус</div>
+        <div class="shop-banner-sub">У вас ${fmtCoins(w.current_balance)} — потратьте на бонус</div>
       </div>
       <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
     </div>`;
@@ -555,7 +555,7 @@ async function renderWheelWinnersToday() {
   const items = data && data.items ? data.items : [];
   if (!items.length || !data.top) { host.innerHTML = ''; return; }
 
-  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₡` : esc(w.prize);
+  const prizeText = (w) => w.prize_type === 'coins' ? `+${fmtCoins(w.amount)}` : esc(w.prize);
   const top = data.top;
   const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
 
@@ -640,7 +640,7 @@ async function reloadCabinet() {
 }
 
 function cabinetFormatCoin(value) {
-  return `${levelNum(value || 0, 0)} <span class="kpi-unit">₡</span>`;
+  return `${fmtCoins(levelNum(value || 0, 0))}`;
 }
 
 function syncCabinetSnapshot(snapshot) {
@@ -749,7 +749,7 @@ function cabinetWinnersCard(data) {
   const items = data?.items || [];
   const top = data?.top;
   if (!items.length || !top) return '';
-  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₡` : esc(w.prize || '—');
+  const prizeText = (w) => w.prize_type === 'coins' ? `+${fmtCoins(w.amount)}` : esc(w.prize || '—');
   const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
   return `
     <div class="panel wheel-winner-card">
@@ -782,7 +782,7 @@ function cabinetTransactionsHtml(items) {
         <span class="tx-comment">${esc(t.comment || t.type || 'Операция')}</span>
         <span class="tx-date">${fmtDate(t.created_at || t.date)}</span>
       </div>
-      <div class="tx-amount">${Number(t.amount || 0) >= 0 ? '+' : ''}${levelNum(t.amount || 0, 0)} ₡</div>
+      <div class="tx-amount">${fmtCoins(levelNum(t.amount || 0, 0), { sign: true })}</div>
     </div>`).join('') : '<div class="empty-line">Операций пока нет</div>';
 }
 
@@ -791,7 +791,7 @@ function cabinetTopWeekHtml(rows, currentId) {
     ${rows.map((r, idx) => `<div class="mini-row ${r.operator_id === currentId ? 'current' : ''}">
       <span class="mini-rank">${r.rank_position || idx + 1}</span>
       <span class="mini-name">${esc(r.operator_name || r.full_name || '—')} ${r.level ? levelBadgeHtml(r.level) : ''}</span>
-      <b>${levelNum(r.coins_earned || r.total_balance || 0, 0)} ₡</b>
+      <b>${fmtCoins(levelNum(r.coins_earned || r.total_balance || 0, 0))}</b>
       <em>${levelNum(r.contest_points || r.final_score || 0)}</em>
     </div>`).join('')}
   </div>` : '<div class="empty-line">Рейтинг пока не рассчитан</div>';
@@ -889,7 +889,7 @@ function renderCabinet() {
     <div class="shop-banner">
       <div>
         <div class="shop-banner-title">Магазин бонусов</div>
-        <div class="shop-banner-sub">У вас ${levelNum(wallet.balance || 0, 0)} ₡ — можно обменять коины на доступные бонусы.</div>
+        <div class="shop-banner-sub">У вас ${fmtCoins(levelNum(wallet.balance || 0, 0))} — можно обменять коины на доступные бонусы.</div>
       </div>
       <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
     </div>`;

@@ -954,6 +954,7 @@ async function bootApp() {
   buildViews(role);
   renderSidebar(role);
   initTopbar();
+  initTablistKeyboard();
   const displayName = STATE.user?.full_name || STATE.user?.username || '';
   setText('side-user', displayName);
   // Роль не повторяем, если она дословно совпадает с именем: у учётной записи
@@ -1671,6 +1672,89 @@ function hideTopbar() {
   if (bar) bar.hidden = true;
 }
 /* ══════════════════════════════════════════════════════════════
+   КЛАВИАТУРА ДЛЯ ПОЛОС ВКЛАДОК
+
+   ТЗ (раздел «Кнопки и формы», стр. 6) требует у вкладок состояния
+   active/hover/focus и корректные роли. Роли расставлены на шести
+   полосах, но обходились они только табом: стрелки не работали, и
+   каждая вкладка была отдельной остановкой в обходе — на экране
+   «Коины» это семь остановок подряд до содержимого.
+
+   Здесь общий обработчик для любого [role="tablist"]:
+     · Tab заходит в полосу один раз — на активную вкладку;
+     · стрелки перемещают фокус по вкладкам, Home и End — к краям;
+     · переключение по Enter или пробелу, то есть намеренно.
+
+   Активация не привязана к перемещению фокуса намеренно: вкладки здесь
+   меняют адрес и загружают данные, и «проматывание» стрелками
+   запускало бы лишние запросы.
+══════════════════════════════════════════════════════════════ */
+
+function tablistTabs(list) {
+  return [...list.querySelectorAll('[role="tab"]')]
+    .filter(tab => tab.offsetParent !== null && !tab.disabled);
+}
+
+/** Одна остановка в обходе: активная вкладка, остальные — только стрелками. */
+function tablistSyncRoving(list) {
+  const tabs = tablistTabs(list);
+  if (!tabs.length) return;
+  const active = tabs.find(tab => tab.getAttribute('aria-selected') === 'true') || tabs[0];
+  tabs.forEach(tab => { tab.tabIndex = tab === active ? 0 : -1; });
+}
+
+function tablistFocus(list, index) {
+  const tabs = tablistTabs(list);
+  if (!tabs.length) return;
+  const next = tabs[(index + tabs.length) % tabs.length];
+  tabs.forEach(tab => { tab.tabIndex = tab === next ? 0 : -1; });
+  next.focus();
+  next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+function initTablistKeyboard() {
+  if (initTablistKeyboard._bound) return;
+  initTablistKeyboard._bound = true;
+
+  document.addEventListener('keydown', event => {
+    const tab = event.target.closest?.('[role="tab"]');
+    const list = tab?.closest('[role="tablist"]');
+    if (!tab || !list) return;
+
+    const tabs = tablistTabs(list);
+    const at = tabs.indexOf(tab);
+    if (at === -1) return;
+
+    // Вертикальные полосы в приложении не используются, но обрабатываем обе
+    // пары стрелок: раскладка полосы может измениться на узком экране.
+    const back = event.key === 'ArrowLeft' || event.key === 'ArrowUp';
+    const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown';
+
+    if (back || forward) {
+      event.preventDefault();
+      tablistFocus(list, at + (forward ? 1 : -1));
+      return;
+    }
+    if (event.key === 'Home') { event.preventDefault(); tablistFocus(list, 0); return; }
+    if (event.key === 'End') { event.preventDefault(); tablistFocus(list, tabs.length - 1); return; }
+    if (event.key === 'Enter' || event.key === ' ') {
+      // Кнопки сами обрабатывают Enter и пробел; ссылкам нужен пробел.
+      if (tab.tagName !== 'BUTTON' && event.key === ' ') {
+        event.preventDefault();
+        tab.click();
+      }
+    }
+  });
+
+  // Полосы перерисовываются вместе с экранами, поэтому обход пересчитываем
+  // после каждой отрисовки, а не один раз при загрузке.
+  const observer = new MutationObserver(() => {
+    document.querySelectorAll('[role="tablist"]').forEach(tablistSyncRoving);
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  document.querySelectorAll('[role="tablist"]').forEach(tablistSyncRoving);
+}
+/* ══════════════════════════════════════════════════════════════
    СОСТОЯНИЯ СТРАНИЦЫ — общие построители разметки
 
    Одна и та же ситуация обязана выглядеть одинаково во всех разделах.
@@ -2146,6 +2230,28 @@ function uiBindPagination(host, state, onChange) {
 }
 /* Shared UI contracts. Keep screen-specific views free from raw enums and ad-hoc formats. */
 const UI_TIME_ZONE = 'Asia/Almaty';
+
+/** Единственный знак коинов. ТЗ (стр. 3) запрещает €, $, ¢ и тенге. */
+const UI_COIN = '₡';
+
+/**
+ * Сумма в коинах по формату ТЗ (стр. 16): «1 250 ₡», минус перед числом,
+ * знак валюты не заменяется иконкой — он попадает и в экспорт, и в
+ * озвучивание. Разряды разделяются неразрывным узким пробелом, поэтому
+ * число не переносится по строке.
+ *
+ * @param {number|string|null} value сумма
+ * @param {{sign?: boolean, empty?: string}} options sign — показывать «+»
+ *        у положительных (для журналов операций); empty — что показать,
+ *        если значения нет. Ноль значением является: 0 ₡, а не пустота.
+ */
+function fmtCoins(value, { sign = false, empty = '—' } = {}) {
+  const num = Number(value);
+  if (value === null || value === undefined || value === '' || Number.isNaN(num)) return empty;
+  const body = Math.abs(num).toLocaleString('ru-RU').replace(/ /g, ' ');
+  const prefix = num < 0 ? '-' : (sign && num > 0 ? '+' : '');
+  return `${prefix}${body} ${UI_COIN}`;
+}
 
 const UI_STATUS_META = Object.freeze({
   active: ['Активен', 'success'],
@@ -2950,15 +3056,15 @@ function renderCabinet() {
     <div class="kpi-grid">
       <div class="kpi-card kpi-accent">
         <div class="kpi-label">Баланс коинов</div>
-        <div class="kpi-value">${w.current_balance} <span class="kpi-unit">₡</span></div>
+        <div class="kpi-value">${fmtCoins(w.current_balance)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Всего заработано</div>
-        <div class="kpi-value">${w.total_earned} <span class="kpi-unit">₡</span></div>
+        <div class="kpi-value">${fmtCoins(w.total_earned)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Потрачено</div>
-        <div class="kpi-value">${w.total_spent} <span class="kpi-unit">₡</span></div>
+        <div class="kpi-value">${fmtCoins(w.total_spent)}</div>
       </div>
       <div class="kpi-card">
         <div class="kpi-label">Место в рейтинге</div>
@@ -2993,7 +3099,7 @@ function renderCabinet() {
                 <span class="tx-comment">${esc(t.comment)}</span>
                 <span class="tx-date">${fmtDate(t.created_at)}</span>
               </div>
-              <div class="tx-amount">${t.amount >= 0 ? '+' : ''}${t.amount} ₡</div>
+              <div class="tx-amount">${fmtCoins(t.amount, { sign: true })}</div>
             </div>`).join('') : '<div class="empty-line">Операций пока нет</div>'}
         </div>
       </div>
@@ -3009,7 +3115,7 @@ function renderCabinet() {
     <div class="shop-banner">
       <div>
         <div class="shop-banner-title">Магазин бонусов</div>
-        <div class="shop-banner-sub">У вас ${w.current_balance} ₡ — потратьте на бонус</div>
+        <div class="shop-banner-sub">У вас ${fmtCoins(w.current_balance)} — потратьте на бонус</div>
       </div>
       <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
     </div>`;
@@ -3035,7 +3141,7 @@ async function renderWheelWinnersToday() {
   const items = data && data.items ? data.items : [];
   if (!items.length || !data.top) { host.innerHTML = ''; return; }
 
-  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₡` : esc(w.prize);
+  const prizeText = (w) => w.prize_type === 'coins' ? `+${fmtCoins(w.amount)}` : esc(w.prize);
   const top = data.top;
   const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
 
@@ -3120,7 +3226,7 @@ async function reloadCabinet() {
 }
 
 function cabinetFormatCoin(value) {
-  return `${levelNum(value || 0, 0)} <span class="kpi-unit">₡</span>`;
+  return `${fmtCoins(levelNum(value || 0, 0))}`;
 }
 
 function syncCabinetSnapshot(snapshot) {
@@ -3229,7 +3335,7 @@ function cabinetWinnersCard(data) {
   const items = data?.items || [];
   const top = data?.top;
   if (!items.length || !top) return '';
-  const prizeText = (w) => w.prize_type === 'coins' ? `+${w.amount} ₡` : esc(w.prize || '—');
+  const prizeText = (w) => w.prize_type === 'coins' ? `+${fmtCoins(w.amount)}` : esc(w.prize || '—');
   const rest = items.filter(w => !(w.operator_id === top.operator_id && w.at === top.at));
   return `
     <div class="panel wheel-winner-card">
@@ -3262,7 +3368,7 @@ function cabinetTransactionsHtml(items) {
         <span class="tx-comment">${esc(t.comment || t.type || 'Операция')}</span>
         <span class="tx-date">${fmtDate(t.created_at || t.date)}</span>
       </div>
-      <div class="tx-amount">${Number(t.amount || 0) >= 0 ? '+' : ''}${levelNum(t.amount || 0, 0)} ₡</div>
+      <div class="tx-amount">${fmtCoins(levelNum(t.amount || 0, 0), { sign: true })}</div>
     </div>`).join('') : '<div class="empty-line">Операций пока нет</div>';
 }
 
@@ -3271,7 +3377,7 @@ function cabinetTopWeekHtml(rows, currentId) {
     ${rows.map((r, idx) => `<div class="mini-row ${r.operator_id === currentId ? 'current' : ''}">
       <span class="mini-rank">${r.rank_position || idx + 1}</span>
       <span class="mini-name">${esc(r.operator_name || r.full_name || '—')} ${r.level ? levelBadgeHtml(r.level) : ''}</span>
-      <b>${levelNum(r.coins_earned || r.total_balance || 0, 0)} ₡</b>
+      <b>${fmtCoins(levelNum(r.coins_earned || r.total_balance || 0, 0))}</b>
       <em>${levelNum(r.contest_points || r.final_score || 0)}</em>
     </div>`).join('')}
   </div>` : '<div class="empty-line">Рейтинг пока не рассчитан</div>';
@@ -3369,7 +3475,7 @@ function renderCabinet() {
     <div class="shop-banner">
       <div>
         <div class="shop-banner-title">Магазин бонусов</div>
-        <div class="shop-banner-sub">У вас ${levelNum(wallet.balance || 0, 0)} ₡ — можно обменять коины на доступные бонусы.</div>
+        <div class="shop-banner-sub">У вас ${fmtCoins(levelNum(wallet.balance || 0, 0))} — можно обменять коины на доступные бонусы.</div>
       </div>
       <button class="btn-primary" onclick="navigateTo('shop')">В магазин</button>
     </div>`;
@@ -3511,7 +3617,7 @@ async function renderAchievementsAdminTab(el) {
       quality_threshold: `Качество ≥ ${v}%`,
       calls_leader_week: 'Лучший по звонкам за неделю',
       efficiency_leader_week: 'Лучший по эффективности за неделю',
-      total_coins: `Всего начислено ≥ ${v} ₡`,
+      total_coins: `Всего начислено ≥ ${fmtCoins(v)}`,
       manual: 'Только ручная выдача',
       test_score: `Результат теста ≥ ${v}%`,
     }[a.condition_type] || a.condition_type;
@@ -3694,8 +3800,8 @@ function levelRewardText(level) {
     // награда не начисляется вообще. Раньше здесь было «при каждом
     // присвоении», то есть подпись обещала обратное тому, что делает сервер.
     parts.push(level.reward_once
-      ? `${level.reward_coins} ₡ один раз`
-      : `${level.reward_coins} ₡ настроено, но начисление выключено`);
+      ? `${fmtCoins(level.reward_coins)} один раз`
+      : `${fmtCoins(level.reward_coins)} настроено, но начисление выключено`);
   }
   if (level.coin_multiplier_percent) parts.push(`коины ×${1 + level.coin_multiplier_percent / 100}`);
   if (level.shop_discount_percent) parts.push(`скидка ${level.shop_discount_percent}%`);
@@ -4927,14 +5033,14 @@ async function renderCabinetWeeklyDetail() {
           <span>Итоговый балл</span><b>${levelNum(cc.contest_points)}</b>
         </div>
         <div class="coin-calc-row">
-          <span>Базовые коины</span><b>${cc.base_coins} ₡</b>
+          <span>Базовые коины</span><b>${fmtCoins(cc.base_coins)}</b>
         </div>
         ${cc.bonuses.map(b => `
           <div class="coin-calc-row coin-calc-bonus">
-            <span>+ ${esc(bonusLabels[b.type] || b.label)}</span><b>+${b.coins} ₡</b>
+            <span>+ ${esc(bonusLabels[b.type] || b.label)}</span><b>+${fmtCoins(b.coins)}</b>
           </div>`).join('')}
         <div class="coin-calc-row coin-calc-total">
-          <span>Итого за неделю</span><b>${cc.total_week_coins} ₡</b>
+          <span>Итого за неделю</span><b>${fmtCoins(cc.total_week_coins)}</b>
         </div>
         ${!cc.is_final ? '<div class="empty-line" style="margin-top:8px">Расчёт предварительный — начисление ещё не применено.</div>' : ''}
       </div>` : ''}
@@ -5930,7 +6036,7 @@ function miniRating(limit, highlightId) {
     return `<div class="mini-rating-row ${isMe ? 'mini-me' : ''}">
       <span class="rank-badge ${topCls}">${rank}</span>
       <span class="mini-name">${esc(r.operator_name || 'Оператор')} ${levelBadgeHtml(r.level, 'level-badge-mini')}</span>
-      <span class="mini-coins">${r.coins_earned || 0} ₡</span>
+      <span class="mini-coins">${fmtCoins(r.coins_earned || 0)}</span>
       <span class="mini-pts">${(r.contest_points || 0).toFixed(1)}</span>
     </div>`;
   }).join('') + '</div>';
@@ -6260,7 +6366,7 @@ function renderStaffShop(el, items) {
                 <small>${esc(SHOP_PRIZE_TYPES[item.prize_type] || item.prize_type || '')}${item.code ? ` · ${esc(item.code)}` : ''}</small>
               </td>
               <td data-label="Категория">${esc(shopCategoryLabel(item.category))}</td>
-              <td class="num" data-label="Цена">${item.effective_price ?? item.price} ₡${
+              <td class="num" data-label="Цена">${fmtCoins(item.effective_price ?? item.price)}${
                 item.is_seasonal_price && item.regular_price !== item.effective_price
                   ? `<small class="shop-admin-was">было ${item.regular_price}</small>` : ''}</td>
               <td class="num" data-label="Наличие">${esc(shopStockLabel(item))}</td>
@@ -6945,7 +7051,7 @@ async function _loadAdminSummaryDetail() {
         </div>
         <div class="kpi-card">
           <div class="kpi-label">Коинов в обороте</div>
-          <div class="kpi-value">${data.total_coins_balance} <span class="kpi-unit">₡</span></div>
+          <div class="kpi-value">${fmtCoins(data.total_coins_balance)}</div>
         </div>
         <div class="kpi-card ${data.new_shop_requests > 0 ? 'kpi-warn' : ''}">
           <div class="kpi-label">Новых заявок магазина</div>
@@ -7006,8 +7112,8 @@ async function _loadAdminSummaryDetail() {
                 <td>${esc(o.group_name || '')}</td>
                 <td>${o.participation_status === 'participating' ? 'Участвует' : 'Не участвует'}</td>
                 <td>${o.week_points != null ? levelNum(o.week_points) : '—'}</td>
-                <td>${o.week_coins != null ? `<b class="accent-text">${o.week_coins} ₡</b>` : '—'}</td>
-                <td>${o.total_balance} ₡</td>
+                <td>${o.week_coins != null ? `<b class="accent-text">${fmtCoins(o.week_coins)}</b>` : '—'}</td>
+                <td>${fmtCoins(o.total_balance)}</td>
                 <td>${_disciplineCellHtml(o)}</td>
                 <td>${_metricsCellHtml(o)}</td>
                 <td>${summaryRowActionsHtml(o.id, o.full_name)}</td>
@@ -7128,9 +7234,9 @@ async function openOperatorCabinetModal(operatorId, operatorName) {
 
   body.innerHTML = `
     <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:16px">
-      <div class="kpi-card"><div class="kpi-label">Баланс</div><div class="kpi-value">${data.wallet.balance} <span class="kpi-unit">₡</span></div></div>
-      <div class="kpi-card"><div class="kpi-label">В резерве</div><div class="kpi-value">${data.wallet.reserved} <span class="kpi-unit">₡</span></div></div>
-      <div class="kpi-card"><div class="kpi-label">За неделю</div><div class="kpi-value">${data.wallet.earned_this_week} <span class="kpi-unit">₡</span></div></div>
+      <div class="kpi-card"><div class="kpi-label">Баланс</div><div class="kpi-value">${fmtCoins(data.wallet.balance)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">В резерве</div><div class="kpi-value">${fmtCoins(data.wallet.reserved)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">За неделю</div><div class="kpi-value">${fmtCoins(data.wallet.earned_this_week)}</div></div>
       <div class="kpi-card"><div class="kpi-label">Место в рейтинге</div><div class="kpi-value">${data.rating.place ?? '—'}${data.rating.total_participants ? ` <span class="kpi-unit">/ ${data.rating.total_participants}</span>` : ''}</div></div>
     </div>
 
@@ -7142,7 +7248,7 @@ async function openOperatorCabinetModal(operatorId, operatorName) {
 
     ${cc ? `
       <div class="coin-calc-row coin-calc-total" style="margin-top:10px">
-        <span>Расчёт за неделю (${cc.is_final ? 'начислено' : 'предварительно'})</span><b>${cc.total_week_coins} ₡</b>
+        <span>Расчёт за неделю (${cc.is_final ? 'начислено' : 'предварительно'})</span><b>${fmtCoins(cc.total_week_coins)}</b>
       </div>` : ''}
 
     <div class="coin-rules-section-title">Достижения (${ach.completed.length})</div>
@@ -7692,9 +7798,9 @@ function renderCoins() {
       </div>
     </div>
     <div class="coins-page-tabs" role="tablist" aria-label="Разделы операций с коинами">
-      ${tabs.map(([id, label]) => `<button class="coins-page-tab ${tab === id ? 'is-active' : ''}" type="button" role="tab" aria-selected="${tab === id}" data-coins-tab="${id}">${label}</button>`).join('')}
+      ${tabs.map(([id, label]) => `<button class="coins-page-tab ${tab === id ? 'is-active' : ''}" type="button" role="tab" id="coins-tab-${id}" aria-selected="${tab === id}" aria-controls="coins-tab-body" data-coins-tab="${id}">${label}</button>`).join('')}
     </div>
-    <div id="coins-tab-body" class="coins-tab-body"></div>`;
+    <div id="coins-tab-body" class="coins-tab-body" role="tabpanel" aria-labelledby="coins-tab-${tab}" tabindex="-1"></div>`;
 
   el.querySelectorAll('[data-coins-tab]').forEach(btn => {
     btn.addEventListener('click', () => navigateTo('coins', { tab: btn.dataset.coinsTab }));
@@ -7755,13 +7861,13 @@ function renderCoinsOverview(body) {
         <span>Операций сегодня</span><strong>${overview.today_operations || 0}</strong><small>Всего: ${overview.total_operations || 0}</small>
       </button>
       <button class="coins-summary-card is-positive" type="button" onclick="navigateTo('coins',{tab:'history'})">
-        <span>Баланс дня</span><strong>${(overview.today_credited || 0) - (overview.today_debited || 0) >= 0 ? '+' : ''}${(overview.today_credited || 0) - (overview.today_debited || 0)} ₡</strong><small>+${overview.today_credited || 0} / -${overview.today_debited || 0}</small>
+        <span>Баланс дня</span><strong>${fmtCoins((overview.today_credited || 0) - (overview.today_debited || 0), { sign: true })}</strong><small>+${overview.today_credited || 0} / -${overview.today_debited || 0}</small>
       </button>
       <button class="coins-summary-card ${overview.new_requests ? 'has-alert' : ''}" type="button" onclick="navigateTo('coins',{tab:'requests'})">
         <span>Новые заявки</span><strong>${overview.new_requests || 0}</strong><small>${overview.new_requests ? 'Требуют решения' : 'Очередь обработана'}</small>
       </button>
       <div class="coins-summary-card">
-        <span>Зарезервировано</span><strong>${overview.reserved_coins || 0} ₡</strong><small>В активных заявках</small>
+        <span>Зарезервировано</span><strong>${fmtCoins(overview.reserved_coins || 0)}</strong><small>В активных заявках</small>
       </div>
     </div>
     <div class="coins-overview-grid">
@@ -8052,7 +8158,7 @@ function renderManual() {
     try {
       await api.manualTransaction({ operator_id: +opId, amount: finalAmount, reason: reason, comment: comment });
       invalidateCoinsData();
-      statusEl.textContent = `✓ Сохранено: ${finalAmount > 0 ? '+' : ''}${finalAmount} ₡`;
+      statusEl.textContent = `✓ Сохранено: ${fmtCoins(finalAmount, { sign: true })}`;
       statusEl.className = 'status-line status-ok';
       el.querySelector('#manual-amount').value = '';
       el.querySelector('#manual-comment').value = '';
@@ -8119,7 +8225,7 @@ function initOpSearch(container, ops) {
     list.innerHTML = filtered.slice(0, 50).map(o => `
       <div class="op-search-item" data-id="${o.id}" data-name="${esc(o.full_name)}">
         <div class="op-search-name">${esc(o.full_name)}</div>
-        <div class="op-search-meta">Группа: ${esc(o.group_name)} · ${o.current_balance} ₡</div>
+        <div class="op-search-meta">Группа: ${esc(o.group_name)} · ${fmtCoins(o.current_balance)}</div>
       </div>`).join('');
 
     list.querySelectorAll('.op-search-item').forEach(item => {
@@ -8319,7 +8425,7 @@ function paintRequestsTabData(data) {
         <div class="request-meta">
           <span><b>${esc(p.operator_name)}</b></span>
           <span>·</span><span>${esc(p.group_name || '—')}</span>
-          <span>·</span><span class="accent-text">${p.price} ₡</span>
+          <span>·</span><span class="accent-text">${fmtCoins(p.price)}</span>
           <span>·</span><span>${fmtDate(p.created_at)}</span>
         </div>
         ${p.reject_reason ? `<div class="request-reason">Причина отказа: ${esc(p.reject_reason)}</div>` : ''}
@@ -8567,7 +8673,7 @@ function paintHistoryTabData(data) {
             <td class="name-cell">${esc(t.operator_name)}</td>
             <td>${esc(t.group_name)}</td>
             <td><span style="font-size:11px;color:var(--tx3)">${esc(transactionTypeLabel(t.type))}</span></td>
-            <td><b style="color:${t.amount>=0?'var(--ok)':'var(--danger)'}">${t.amount>=0?'+':''}${t.amount} ₡</b></td>
+            <td><b style="color:${t.amount>=0?'var(--ok)':'var(--danger)'}">${fmtCoins(t.amount, { sign: true })}</b></td>
             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.comment)}">${esc(t.comment)}</td>
             <td style="font-size:12px;color:var(--tx3)">${esc(t.created_by_name||'Система')}</td>
             <td style="font-size:11px;color:var(--tx3)">${esc(_historySourceLabels[t.source_type] || t.source_type || '—')}</td>
@@ -9125,11 +9231,11 @@ async function showOperatorHistoryModal(id) {
       </div>
       <div class="history-block">
         <h4>Коины</h4>
-        ${transactions.length ? transactions.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${row.amount > 0 ? '+' : ''}${row.amount} ₡</b><small>${esc(row.comment || row.type)}</small></div>`).join('') : '<div class="empty-line">Нет операций</div>'}
+        ${transactions.length ? transactions.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${fmtCoins(row.amount, { sign: true })}</b><small>${esc(row.comment || row.type)}</small></div>`).join('') : '<div class="empty-line">Нет операций</div>'}
       </div>
       <div class="history-block">
         <h4>Заявки</h4>
-        ${purchases.length ? purchases.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${statusLabel(row.status)}</b><small>${row.price} ₡</small></div>`).join('') : '<div class="empty-line">Нет заявок</div>'}
+        ${purchases.length ? purchases.map(row => `<div class="history-line"><span>${fmtDateTime(row.created_at)}</span><b>${statusLabel(row.status)}</b><small>${fmtCoins(row.price)}</small></div>`).join('') : '<div class="empty-line">Нет заявок</div>'}
       </div>
       <div class="history-block">
         <h4>Рейтинг</h4>
@@ -11446,7 +11552,7 @@ function _renderWeeklyAccrualPreview() {
     <div class="panel">
       <div class="panel-head">
         <h3>Предварительный расчёт: ${esc(p.period_start)} — ${esc(p.period_end)}</h3>
-        <span class="panel-badge">${p.total_operators} операторов · ${p.total_coins} ₡</span>
+        <span class="panel-badge">${p.total_operators} операторов · ${fmtCoins(p.total_coins)}</span>
       </div>
       <div class="table-wrap">
         <table class="data-table">
@@ -11461,9 +11567,9 @@ function _renderWeeklyAccrualPreview() {
                 <td class="name-cell">${esc(o.operator_name)}${o.already_accrued ? '<div class="cell-muted" style="font-size:11px">уже начислено</div>' : ''}</td>
                 <td>${esc(o.group_name || '')}</td>
                 <td>${levelNum(o.contest_points)}</td>
-                <td>${o.base_coins} ₡</td>
+                <td>${fmtCoins(o.base_coins)}</td>
                 <td>${_bonusChipsHtml(o)}</td>
-                <td><b class="accent-text">${o.total_coins} ₡</b></td>
+                <td><b class="accent-text">${fmtCoins(o.total_coins)}</b></td>
                 <td>${o.rank_delta != null ? `<span class="rank-delta ${o.rank_delta > 0 ? 'up' : o.rank_delta < 0 ? 'down' : ''}">${o.rank_delta > 0 ? '↑' + o.rank_delta : o.rank_delta < 0 ? '↓' + Math.abs(o.rank_delta) : '—'}</span>` : '—'}</td>
               </tr>`).join('') : '<tr><td colspan="8" class="empty-line">Нет данных WeeklyResult за этот период</td></tr>'}
           </tbody>
@@ -11485,7 +11591,7 @@ async function runWeeklyAccrualApply() {
   try {
     const run = await api.applyWeeklyAccrual({ period_start: start, period_end: end, mode: 'manual' });
     if (run.status === 'success') {
-      showToast(`Начислено: ${run.operators_count} операторов, ${run.total_coins} ₡ (пропущено уже начисленных: ${run.skipped_existing_count})`, 'ok');
+      showToast(`Начислено: ${run.operators_count} операторов, ${fmtCoins(run.total_coins)} (пропущено уже начисленных: ${run.skipped_existing_count})`, 'ok');
     } else {
       showToast(`Расчёт завершился с ошибкой: ${run.error_message || 'см. историю запусков'}`, 'error');
     }
@@ -11523,7 +11629,7 @@ async function loadWeeklyAccrualRuns() {
               <td><span class="status-pill ${r.status === 'success' ? 'ok' : 'error'}">${r.status === 'success' ? 'Успешно' : 'Ошибка'}</span></td>
               <td style="white-space:nowrap">${fmtDateTime(r.started_at)}</td>
               <td>${r.operators_count}${r.skipped_existing_count ? ` <span class="cell-muted">(+${r.skipped_existing_count} пропущено)</span>` : ''}</td>
-              <td><b>${r.total_coins} ₡</b></td>
+              <td><b>${fmtCoins(r.total_coins)}</b></td>
               <td>${esc(r.created_by)}</td>
             </tr>`).join('') : '<tr><td colspan="7" class="empty-line">Запусков ещё не было</td></tr>'}
         </tbody>
@@ -15612,7 +15718,7 @@ function testStatusBadge(status) {
 
 function testCardHtml(t) {
   const rewardParts = [];
-  if (t.reward_type?.includes('coins')) rewardParts.push(`${t.reward_coins} ₡`);
+  if (t.reward_type?.includes('coins')) rewardParts.push(`${fmtCoins(t.reward_coins)}`);
   if (t.reward_type?.includes('points')) rewardParts.push(`${fmtA(t.reward_points, 0)} баллов`);
   const rewardLabel = rewardParts.join(' + ') || 'Без награды';
 
@@ -15625,7 +15731,7 @@ function testCardHtml(t) {
     actionHtml = `<div class="test-card-disabled-note">Тест откроется ${fmtDateTime(t.opens_at)}</div>`;
   } else if (t.status === 'finished') {
     actionHtml = `<div class="test-card-result"><b>${fmtA(t.score_percent,0)}%</b><span>${t.correct_count} из ${t.questions_count} верно</span></div>
-      ${t.reward_coins_earned ? `<div class="test-card-reward-earned">Получено +${t.reward_coins_earned} ₡</div>` : ''}
+      ${t.reward_coins_earned ? `<div class="test-card-reward-earned">Получено +${fmtCoins(t.reward_coins_earned)}</div>` : ''}
       <button class="btn-outline btn-sm" data-test-action="result" data-attempt-id="${t.attempt_id}">Подробнее</button>`;
   } else if (t.status === 'expired') {
     actionHtml = `<div class="test-card-disabled-note">Срок прохождения истёк</div>`;
@@ -16554,7 +16660,7 @@ function _raffleStatusBadge(status) {
 
 function _rafflePrizeText(r) {
   const parts = [];
-  if (r.prize_coins > 0) parts.push(`${r.prize_coins} ₡`);
+  if (r.prize_coins > 0) parts.push(`${fmtCoins(r.prize_coins)}`);
   if (r.prize_description) parts.push(esc(r.prize_description));
   return parts.length ? parts.join(' + ') : '—';
 }
@@ -16563,7 +16669,7 @@ function _raffleWinnersHtml(r) {
   if (r.status !== 'drawn' || !r.winners || !r.winners.length) return '';
   return `<div class="raffle-winners">
     <div class="raffle-winners-title">🏆 Победители</div>
-    ${r.winners.map(w => `<div class="raffle-winner-row">${esc(w.operator_name || ('#' + w.operator_id))}${w.prize_coins ? ` · +${w.prize_coins} ₡` : ''}</div>`).join('')}
+    ${r.winners.map(w => `<div class="raffle-winner-row">${esc(w.operator_name || ('#' + w.operator_id))}${w.prize_coins ? ` · +${fmtCoins(w.prize_coins)}` : ''}</div>`).join('')}
   </div>`;
 }
 

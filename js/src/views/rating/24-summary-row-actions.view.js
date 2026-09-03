@@ -82,9 +82,9 @@ async function openOperatorCabinetModal(operatorId, operatorName) {
 
   body.innerHTML = `
     <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:16px">
-      <div class="kpi-card"><div class="kpi-label">Баланс</div><div class="kpi-value">${data.wallet.balance} <span class="kpi-unit">₡</span></div></div>
-      <div class="kpi-card"><div class="kpi-label">В резерве</div><div class="kpi-value">${data.wallet.reserved} <span class="kpi-unit">₡</span></div></div>
-      <div class="kpi-card"><div class="kpi-label">За неделю</div><div class="kpi-value">${data.wallet.earned_this_week} <span class="kpi-unit">₡</span></div></div>
+      <div class="kpi-card"><div class="kpi-label">Баланс</div><div class="kpi-value">${fmtCoins(data.wallet.balance)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">В резерве</div><div class="kpi-value">${fmtCoins(data.wallet.reserved)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">За неделю</div><div class="kpi-value">${fmtCoins(data.wallet.earned_this_week)}</div></div>
       <div class="kpi-card"><div class="kpi-label">Место в рейтинге</div><div class="kpi-value">${data.rating.place ?? '—'}${data.rating.total_participants ? ` <span class="kpi-unit">/ ${data.rating.total_participants}</span>` : ''}</div></div>
     </div>
 
@@ -96,7 +96,7 @@ async function openOperatorCabinetModal(operatorId, operatorName) {
 
     ${cc ? `
       <div class="coin-calc-row coin-calc-total" style="margin-top:10px">
-        <span>Расчёт за неделю (${cc.is_final ? 'начислено' : 'предварительно'})</span><b>${cc.total_week_coins} ₡</b>
+        <span>Расчёт за неделю (${cc.is_final ? 'начислено' : 'предварительно'})</span><b>${fmtCoins(cc.total_week_coins)}</b>
       </div>` : ''}
 
     <div class="coin-rules-section-title">Достижения (${ach.completed.length})</div>

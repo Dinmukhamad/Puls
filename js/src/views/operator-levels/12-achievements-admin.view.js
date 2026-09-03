@@ -49,7 +49,7 @@ async function renderAchievementsAdminTab(el) {
       quality_threshold: `Качество ≥ ${v}%`,
       calls_leader_week: 'Лучший по звонкам за неделю',
       efficiency_leader_week: 'Лучший по эффективности за неделю',
-      total_coins: `Всего начислено ≥ ${v} ₡`,
+      total_coins: `Всего начислено ≥ ${fmtCoins(v)}`,
       manual: 'Только ручная выдача',
       test_score: `Результат теста ≥ ${v}%`,
     }[a.condition_type] || a.condition_type;

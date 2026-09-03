@@ -1,6 +1,28 @@
 /* Shared UI contracts. Keep screen-specific views free from raw enums and ad-hoc formats. */
 const UI_TIME_ZONE = 'Asia/Almaty';
 
+/** Единственный знак коинов. ТЗ (стр. 3) запрещает €, $, ¢ и тенге. */
+const UI_COIN = '₡';
+
+/**
+ * Сумма в коинах по формату ТЗ (стр. 16): «1 250 ₡», минус перед числом,
+ * знак валюты не заменяется иконкой — он попадает и в экспорт, и в
+ * озвучивание. Разряды разделяются неразрывным узким пробелом, поэтому
+ * число не переносится по строке.
+ *
+ * @param {number|string|null} value сумма
+ * @param {{sign?: boolean, empty?: string}} options sign — показывать «+»
+ *        у положительных (для журналов операций); empty — что показать,
+ *        если значения нет. Ноль значением является: 0 ₡, а не пустота.
+ */
+function fmtCoins(value, { sign = false, empty = '—' } = {}) {
+  const num = Number(value);
+  if (value === null || value === undefined || value === '' || Number.isNaN(num)) return empty;
+  const body = Math.abs(num).toLocaleString('ru-RU').replace(/ /g, ' ');
+  const prefix = num < 0 ? '-' : (sign && num > 0 ? '+' : '');
+  return `${prefix}${body} ${UI_COIN}`;
+}
+
 const UI_STATUS_META = Object.freeze({
   active: ['Активен', 'success'],
   inactive: ['Неактивен', 'neutral'],

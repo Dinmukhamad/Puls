@@ -2862,6 +2862,37 @@ textarea.form-input:focus {
   outline: 2px solid var(--accent-primary);
   outline-offset: 1px;
 }
+
+/* Полоса вкладок шире экрана: край подсвечивается затуханием, иначе не видно,
+   что справа есть ещё вкладки. ТЗ: «Tabs scrollable с fade hint». */
+.filter-tabs,
+.analytics-tabs,
+.an2-tabs,
+.ops-tab-bar,
+.coins-page-tabs,
+.levels-page-tabs,
+.up-tabs,
+.lv-tabs,
+.op-tabs,
+.user-manage-tabs {
+  position: relative;
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
+}
+/* Когда прокручивать нечего, затухание не нужно. */
+@supports (animation-timeline: scroll()) {
+  .filter-tabs, .analytics-tabs, .an2-tabs, .ops-tab-bar, .coins-page-tabs,
+  .levels-page-tabs, .up-tabs, .lv-tabs, .op-tabs, .user-manage-tabs {
+    animation: ui-tabs-fade linear;
+    animation-timeline: scroll(self inline);
+  }
+  @keyframes ui-tabs-fade {
+    from { -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
+           mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%); }
+    to   { -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 100%);
+           mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 100%); }
+  }
+}
 /* source: 40-table.css */
 /* ══════════════════════════════════════════════════════════════
    ТАБЛИЦЫ — единый вид и состояния

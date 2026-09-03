@@ -1708,7 +1708,7 @@ function testStatusBadge(status) {
 
 function testCardHtml(t) {
   const rewardParts = [];
-  if (t.reward_type?.includes('coins')) rewardParts.push(`${t.reward_coins} ₡`);
+  if (t.reward_type?.includes('coins')) rewardParts.push(`${fmtCoins(t.reward_coins)}`);
   if (t.reward_type?.includes('points')) rewardParts.push(`${fmtA(t.reward_points, 0)} баллов`);
   const rewardLabel = rewardParts.join(' + ') || 'Без награды';
 
@@ -1721,7 +1721,7 @@ function testCardHtml(t) {
     actionHtml = `<div class="test-card-disabled-note">Тест откроется ${fmtDateTime(t.opens_at)}</div>`;
   } else if (t.status === 'finished') {
     actionHtml = `<div class="test-card-result"><b>${fmtA(t.score_percent,0)}%</b><span>${t.correct_count} из ${t.questions_count} верно</span></div>
-      ${t.reward_coins_earned ? `<div class="test-card-reward-earned">Получено +${t.reward_coins_earned} ₡</div>` : ''}
+      ${t.reward_coins_earned ? `<div class="test-card-reward-earned">Получено +${fmtCoins(t.reward_coins_earned)}</div>` : ''}
       <button class="btn-outline btn-sm" data-test-action="result" data-attempt-id="${t.attempt_id}">Подробнее</button>`;
   } else if (t.status === 'expired') {
     actionHtml = `<div class="test-card-disabled-note">Срок прохождения истёк</div>`;

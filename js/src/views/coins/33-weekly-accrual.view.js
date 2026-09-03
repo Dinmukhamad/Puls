@@ -111,7 +111,7 @@ function _renderWeeklyAccrualPreview() {
     <div class="panel">
       <div class="panel-head">
         <h3>Предварительный расчёт: ${esc(p.period_start)} — ${esc(p.period_end)}</h3>
-        <span class="panel-badge">${p.total_operators} операторов · ${p.total_coins} ₡</span>
+        <span class="panel-badge">${p.total_operators} операторов · ${fmtCoins(p.total_coins)}</span>
       </div>
       <div class="table-wrap">
         <table class="data-table">
@@ -126,9 +126,9 @@ function _renderWeeklyAccrualPreview() {
                 <td class="name-cell">${esc(o.operator_name)}${o.already_accrued ? '<div class="cell-muted" style="font-size:11px">уже начислено</div>' : ''}</td>
                 <td>${esc(o.group_name || '')}</td>
                 <td>${levelNum(o.contest_points)}</td>
-                <td>${o.base_coins} ₡</td>
+                <td>${fmtCoins(o.base_coins)}</td>
                 <td>${_bonusChipsHtml(o)}</td>
-                <td><b class="accent-text">${o.total_coins} ₡</b></td>
+                <td><b class="accent-text">${fmtCoins(o.total_coins)}</b></td>
                 <td>${o.rank_delta != null ? `<span class="rank-delta ${o.rank_delta > 0 ? 'up' : o.rank_delta < 0 ? 'down' : ''}">${o.rank_delta > 0 ? '↑' + o.rank_delta : o.rank_delta < 0 ? '↓' + Math.abs(o.rank_delta) : '—'}</span>` : '—'}</td>
               </tr>`).join('') : '<tr><td colspan="8" class="empty-line">Нет данных WeeklyResult за этот период</td></tr>'}
           </tbody>
@@ -150,7 +150,7 @@ async function runWeeklyAccrualApply() {
   try {
     const run = await api.applyWeeklyAccrual({ period_start: start, period_end: end, mode: 'manual' });
     if (run.status === 'success') {
-      showToast(`Начислено: ${run.operators_count} операторов, ${run.total_coins} ₡ (пропущено уже начисленных: ${run.skipped_existing_count})`, 'ok');
+      showToast(`Начислено: ${run.operators_count} операторов, ${fmtCoins(run.total_coins)} (пропущено уже начисленных: ${run.skipped_existing_count})`, 'ok');
     } else {
       showToast(`Расчёт завершился с ошибкой: ${run.error_message || 'см. историю запусков'}`, 'error');
     }
@@ -188,7 +188,7 @@ async function loadWeeklyAccrualRuns() {
               <td><span class="status-pill ${r.status === 'success' ? 'ok' : 'error'}">${r.status === 'success' ? 'Успешно' : 'Ошибка'}</span></td>
               <td style="white-space:nowrap">${fmtDateTime(r.started_at)}</td>
               <td>${r.operators_count}${r.skipped_existing_count ? ` <span class="cell-muted">(+${r.skipped_existing_count} пропущено)</span>` : ''}</td>
-              <td><b>${r.total_coins} ₡</b></td>
+              <td><b>${fmtCoins(r.total_coins)}</b></td>
               <td>${esc(r.created_by)}</td>
             </tr>`).join('') : '<tr><td colspan="7" class="empty-line">Запусков ещё не было</td></tr>'}
         </tbody>

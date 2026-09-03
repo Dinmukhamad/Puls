@@ -15,7 +15,7 @@ function _raffleStatusBadge(status) {
 
 function _rafflePrizeText(r) {
   const parts = [];
-  if (r.prize_coins > 0) parts.push(`${r.prize_coins} ₡`);
+  if (r.prize_coins > 0) parts.push(`${fmtCoins(r.prize_coins)}`);
   if (r.prize_description) parts.push(esc(r.prize_description));
   return parts.length ? parts.join(' + ') : '—';
 }
@@ -24,7 +24,7 @@ function _raffleWinnersHtml(r) {
   if (r.status !== 'drawn' || !r.winners || !r.winners.length) return '';
   return `<div class="raffle-winners">
     <div class="raffle-winners-title">🏆 Победители</div>
-    ${r.winners.map(w => `<div class="raffle-winner-row">${esc(w.operator_name || ('#' + w.operator_id))}${w.prize_coins ? ` · +${w.prize_coins} ₡` : ''}</div>`).join('')}
+    ${r.winners.map(w => `<div class="raffle-winner-row">${esc(w.operator_name || ('#' + w.operator_id))}${w.prize_coins ? ` · +${fmtCoins(w.prize_coins)}` : ''}</div>`).join('')}
   </div>`;
 }
 

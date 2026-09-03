@@ -953,6 +953,7 @@ async function bootApp() {
   buildViews(role);
   renderSidebar(role);
   initTopbar();
+  initTablistKeyboard();
   const displayName = STATE.user?.full_name || STATE.user?.username || '';
   setText('side-user', displayName);
   // Роль не повторяем, если она дословно совпадает с именем: у учётной записи

@@ -35,7 +35,14 @@ function extractFn(source, name) {
   throw new Error(`не нашёл конец функции ${name}`);
 }
 
+// Подпись награды форматирует сумму общим fmtCoins, поэтому песочнице нужна
+// та же зависимость: иначе проверяется не текст, а отсутствие функции.
+const utilsSource = await readFile(
+  new URL('../../js/src/utils/10-ui-system.js', import.meta.url), 'utf8');
+
 const card = new Function(`
+  const UI_COIN = '₡';
+  ${utilsSource.match(/function fmtCoins[\s\S]*?\n\}/)[0]}
   ${extractFn(view, 'levelRuleText')}
   ${extractFn(view, 'levelRewardText')}
   ${extractFn(view, 'levelsSorted')}
@@ -46,7 +53,7 @@ const card = new Function(`
 
 test('включённая награда описана как разовая', () => {
   const text = card.levelRewardText({ reward_coins: 5, reward_once: true });
-  assert.match(text, /5 ₡/);
+  assert.match(text, /5\s?₡/, 'в подписи нет суммы награды');
   assert.match(text, /один раз/);
 });
 

@@ -117,14 +117,14 @@ async function renderCabinetWeeklyDetail() {
           <span>Итоговый балл</span><b>${levelNum(cc.contest_points)}</b>
         </div>
         <div class="coin-calc-row">
-          <span>Базовые коины</span><b>${cc.base_coins} ₡</b>
+          <span>Базовые коины</span><b>${fmtCoins(cc.base_coins)}</b>
         </div>
         ${cc.bonuses.map(b => `
           <div class="coin-calc-row coin-calc-bonus">
-            <span>+ ${esc(bonusLabels[b.type] || b.label)}</span><b>+${b.coins} ₡</b>
+            <span>+ ${esc(bonusLabels[b.type] || b.label)}</span><b>+${fmtCoins(b.coins)}</b>
           </div>`).join('')}
         <div class="coin-calc-row coin-calc-total">
-          <span>Итого за неделю</span><b>${cc.total_week_coins} ₡</b>
+          <span>Итого за неделю</span><b>${fmtCoins(cc.total_week_coins)}</b>
         </div>
         ${!cc.is_final ? '<div class="empty-line" style="margin-top:8px">Расчёт предварительный — начисление ещё не применено.</div>' : ''}
       </div>` : ''}

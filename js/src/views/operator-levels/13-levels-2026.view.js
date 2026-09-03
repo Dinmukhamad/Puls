@@ -42,8 +42,8 @@ function levelRewardText(level) {
     // награда не начисляется вообще. Раньше здесь было «при каждом
     // присвоении», то есть подпись обещала обратное тому, что делает сервер.
     parts.push(level.reward_once
-      ? `${level.reward_coins} ₡ один раз`
-      : `${level.reward_coins} ₡ настроено, но начисление выключено`);
+      ? `${fmtCoins(level.reward_coins)} один раз`
+      : `${fmtCoins(level.reward_coins)} настроено, но начисление выключено`);
   }
   if (level.coin_multiplier_percent) parts.push(`коины ×${1 + level.coin_multiplier_percent / 100}`);
   if (level.shop_discount_percent) parts.push(`скидка ${level.shop_discount_percent}%`);

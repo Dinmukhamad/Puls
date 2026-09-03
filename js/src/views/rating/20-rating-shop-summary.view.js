@@ -790,7 +790,7 @@ function miniRating(limit, highlightId) {
     return `<div class="mini-rating-row ${isMe ? 'mini-me' : ''}">
       <span class="rank-badge ${topCls}">${rank}</span>
       <span class="mini-name">${esc(r.operator_name || 'Оператор')} ${levelBadgeHtml(r.level, 'level-badge-mini')}</span>
-      <span class="mini-coins">${r.coins_earned || 0} ₡</span>
+      <span class="mini-coins">${fmtCoins(r.coins_earned || 0)}</span>
       <span class="mini-pts">${(r.contest_points || 0).toFixed(1)}</span>
     </div>`;
   }).join('') + '</div>';
@@ -1120,7 +1120,7 @@ function renderStaffShop(el, items) {
                 <small>${esc(SHOP_PRIZE_TYPES[item.prize_type] || item.prize_type || '')}${item.code ? ` · ${esc(item.code)}` : ''}</small>
               </td>
               <td data-label="Категория">${esc(shopCategoryLabel(item.category))}</td>
-              <td class="num" data-label="Цена">${item.effective_price ?? item.price} ₡${
+              <td class="num" data-label="Цена">${fmtCoins(item.effective_price ?? item.price)}${
                 item.is_seasonal_price && item.regular_price !== item.effective_price
                   ? `<small class="shop-admin-was">было ${item.regular_price}</small>` : ''}</td>
               <td class="num" data-label="Наличие">${esc(shopStockLabel(item))}</td>
