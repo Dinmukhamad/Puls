@@ -2768,6 +2768,10 @@ textarea.form-input:focus {
   #view-wheel .filter-tabs.wheel-tabs .filter-tab { min-height: var(--control-h-lg) !important; }
   #view-wheel .filter-tabs.wheel-tabs { min-height: auto; }
 
+  /* Полоса вкладок «Коинов» прокручивается вбок, и вертикальный
+     разделитель между группами в ней только мешает. */
+  .coins-tabs-divider { display: none; }
+
   /* Кнопки в подвале боковой панели. На телефоне панель — выезжающий ящик,
      и с открытым ящиком они измерялись 28x40, 48x27 и 40x40: WCAG 2.2 AA
      (24x24) это проходит, но собственную планку ТЗ в 44px — нет. Раньше их
@@ -2780,8 +2784,6 @@ textarea.form-input:focus {
     min-height: var(--control-h-lg);
   }
 }
-
-
 
 /* ══════════════════════════════════════════════════════════════
    Примитивы по ТЗ (раздел «App shell и общие компоненты»).
@@ -3071,6 +3073,27 @@ input:focus-visible {
   border: none;
   font-weight: 550;
   letter-spacing: 0;
+}
+
+/* Семь вкладок «Коинов» читались как список без начала и конца. Они
+   делятся очевидно: четыре про ежедневную работу и три про то, как всё
+   настроено. Ничего не спрятано — до любой по-прежнему один щелчок, —
+   но настройка идёт за разделителем и тише, поэтому взгляд сначала
+   попадает на работу. */
+.coins-tabs-divider {
+  width: 1px;
+  align-self: stretch;
+  margin-inline: var(--space-2);
+  background: var(--border-default);
+  flex: 0 0 auto;
+}
+
+.coins-page-tab.is-setup:not(.is-active) {
+  color: var(--text-tertiary);
+}
+
+.coins-page-tab.is-setup:not(.is-active):hover {
+  color: var(--text-secondary);
 }
 
 /* Полоса вкладок шире экрана: край подсвечивается затуханием, иначе не видно,
@@ -11679,7 +11702,11 @@ button.coins-summary-card:hover { border-color: var(--accent-primary); }
 .coins-summary-card > span { color: var(--text-secondary); font-size: var(--text-tiny); font-weight: 750; }
 .coins-summary-card > strong { margin: 5px 0 3px; font-size: 25px; line-height: 1; }
 .coins-summary-card > small { overflow: hidden; max-width: 100%; color: var(--text-muted); font-size: var(--text-tiny); text-overflow: ellipsis; white-space: nowrap; }
-.coins-summary-card.is-accent { box-shadow: inset 3px 0 0 var(--accent-primary), var(--shadow-sm); }
+/* Синяя полоска слева стояла у первой карточки жёстко, ничего не означая:
+   не выбранная, не требующая внимания — просто первая. Рядом has-alert
+   помечает настоящее (есть новые заявки), и на его фоне декоративная
+   метка сбивала: непонятно, какая из подсветок что-то значит. */
+.coins-summary-card.is-accent { box-shadow: var(--shadow-card); }
 .coins-summary-card.is-positive > strong { color: var(--success-text); }
 .coins-summary-card.has-alert { border-color: color-mix(in srgb, var(--warn) 45%, var(--border-default)); }
 

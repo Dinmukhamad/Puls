@@ -509,15 +509,23 @@ function renderCoins() {
 
   const tab = normalizeCoinTab(STATE.coinsTab);
   STATE.coinsTab = tab;
-  const tabs = [
+  // Семь вкладок в один ряд читались как список без начала и конца, хотя
+  // делятся они очевидно: четыре про ежедневную работу и три про то, как
+  // всё это настроено. Ничего не прячем — маршруты у всех семи прежние, и
+  // до любой по-прежнему один щелчок. Меняется только вес: настройка идёт
+  // за разделителем и тише.
+  const workTabs = [
     ['overview', 'Обзор'],
     ['accrual', 'Начисление'],
     ['requests', 'Заявки'],
     ['history', 'История'],
+  ];
+  const setupTabs = [
     ['weekly', 'Еженедельный расчёт'],
     ['settings', 'Настройки начислений'],
     ['rules', 'Правила'],
   ];
+  const tabButton = ([id, label], extra = '') => `<button class="coins-page-tab ${extra} ${tab === id ? 'is-active' : ''}" type="button" role="tab" id="coins-tab-${id}" aria-selected="${tab === id}" aria-controls="coins-tab-body" data-coins-tab="${id}">${label}</button>`;
 
   el.innerHTML = `
     <div class="coins-page-head">
@@ -531,7 +539,9 @@ function renderCoins() {
       </div>
     </div>
     <div class="coins-page-tabs" role="tablist" aria-label="Разделы операций с коинами">
-      ${tabs.map(([id, label]) => `<button class="coins-page-tab ${tab === id ? 'is-active' : ''}" type="button" role="tab" id="coins-tab-${id}" aria-selected="${tab === id}" aria-controls="coins-tab-body" data-coins-tab="${id}">${label}</button>`).join('')}
+      ${workTabs.map(t => tabButton(t)).join('')}
+      <span class="coins-tabs-divider" aria-hidden="true"></span>
+      ${setupTabs.map(t => tabButton(t, 'is-setup')).join('')}
     </div>
     <div id="coins-tab-body" class="coins-tab-body" role="tabpanel" aria-labelledby="coins-tab-${tab}" tabindex="-1"></div>`;
 
