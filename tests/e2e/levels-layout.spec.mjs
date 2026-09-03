@@ -134,11 +134,16 @@ test.describe('Уровни — геометрия', () => {
     // На мыши достаточно 32px (WCAG 2.5.8 требует 24px), и завышать здесь
     // планку значило бы проверять не то, что нужно пользователю.
     const min = testInfo.project.name === 'mobile' ? 44 : 32;
+    // Высоту округляем до целого пикселя перед сравнением. На linux
+    // getBoundingClientRect давал 31.99 там, где min-height: 32px соблюдён:
+    // проверка падала, а сообщение печатало округлённые «32px» и выглядело
+    // бессмысленно. Дробный пиксель ниже порога — не проблема доступности,
+    // кнопка в 30px — проблема, и она по-прежнему ловится.
     const small = await page.locator('.lv-card-actions button').evaluateAll(
       (buttons, limit) => buttons
-        .map(b => ({ text: b.textContent.trim().slice(0, 20), h: b.getBoundingClientRect().height }))
+        .map(b => ({ text: b.textContent.trim().slice(0, 20), h: Math.round(b.getBoundingClientRect().height) }))
         .filter(item => item.h < limit)
-        .map(item => `${item.text}: ${Math.round(item.h)}px`),
+        .map(item => `${item.text}: ${item.h}px`),
       min,
     );
     expect(small, `меньше ${min}px: ${small.join('; ')}`).toEqual([]);

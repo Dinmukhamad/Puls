@@ -141,3 +141,18 @@ test('движение отключается по запросу системы
   const block = layout.match(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?\n\}/)[0];
   assert.match(block, /animation|transition/, 'блок не трогает ни анимации, ни переходы');
 });
+
+/* ── Полоса вкладок ─────────────────────────────────────────── */
+
+test('видимость вкладки не проверяется через offsetParent', async () => {
+  // offsetParent равен null у любого элемента с position: fixed. Полоса
+  // вкладок внутри модального окна или выехавшего на телефоне ящика
+  // считалась бы пустой, и стрелки молча переставали бы работать.
+  const tablist = await readFile(new URL('js/src/app/07-tablist.js', root), 'utf8');
+  // Ищем именно обращение к свойству: упоминание в комментарии объясняет
+  // причину правки и мешать не должно.
+  assert.doesNotMatch(tablist, /\.offsetParent/,
+    'offsetParent слеп к position: fixed — видимость надо считать иначе');
+  assert.match(tablist, /getClientRects\(\)\.length > 0/,
+    'нет проверки видимости по прямоугольникам');
+});

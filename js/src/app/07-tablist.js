@@ -17,9 +17,19 @@
    запускало бы лишние запросы.
 ══════════════════════════════════════════════════════════════ */
 
+/**
+ * Видимость проверяем по прямоугольникам, а не по offsetParent: у элемента
+ * с position: fixed offsetParent равен null всегда. Полоса вкладок внутри
+ * модального окна или выехавшего на телефоне ящика считалась бы пустой, и
+ * стрелки молча переставали бы работать.
+ */
+function tablistVisible(tab) {
+  return tab.getClientRects().length > 0;
+}
+
 function tablistTabs(list) {
   return [...list.querySelectorAll('[role="tab"]')]
-    .filter(tab => tab.offsetParent !== null && !tab.disabled);
+    .filter(tab => tablistVisible(tab) && !tab.disabled);
 }
 
 /** Одна остановка в обходе: активная вкладка, остальные — только стрелками. */
