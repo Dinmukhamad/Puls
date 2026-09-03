@@ -597,6 +597,11 @@ def operators_table(
 
 
 def groups_comparison(db, start_date, end_date, group_id=None) -> dict:
+    # Проверка диапазона есть у всех достижимых функций аналитики. Эта и
+    # points_analysis её растеряли, пока до них не вёл ни один маршрут:
+    # перевёрнутый диапазон отвечал «нет загруженных данных» вместо
+    # «дата конца раньше даты начала».
+    _validate_range(start_date, end_date)
     key = cache_key(
         "groups-comparison", start_date=start_date, end_date=end_date, group_id=group_id
     )
@@ -655,6 +660,7 @@ def points_breakdown(db, start_date, end_date, group_id, operator_query) -> dict
 
 
 def points_analysis(db, start_date, end_date, group_id, operator_query, participation_status, only_with_data) -> dict:
+    _validate_range(start_date, end_date)
     key = cache_key("points", start_date=start_date, end_date=end_date, group_id=group_id,
                     operator_query=operator_query, participation_status=participation_status,
                     only_with_data=only_with_data)

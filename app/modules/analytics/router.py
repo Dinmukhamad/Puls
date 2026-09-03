@@ -6,7 +6,7 @@ dashboard.py, расчёты — calculators.py, SQL — repository.py, кеш �
 
 Экран руководителя целиком собирается одним вызовом /dashboard. Остальные
 эндпоинты — справочные (периоды, группы, глоссарий), детализация по
-операторам и выгрузка в Excel.
+операторам и группам, разбор баллов и выгрузка в Excel.
 """
 from __future__ import annotations
 
@@ -159,6 +159,53 @@ def get_operators_table(
     return service.operators_table(
         db, start_date, end_date, group_id, operator_query, participation_status, only_with_data,
         page, page_size, sort_by, sort_order,
+    )
+
+
+@router.get("/groups-comparison")
+def get_groups_comparison(
+    start_date: date,
+    end_date: date,
+    group_id: int | None = Depends(_analytics_group_scope),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Сравнение групп между собой за период.
+
+    Те же цифры приходят внутри /dashboard полем groups_comparison — здесь
+    отдельный вход для разбора по группам без сборки всего экрана.
+
+    Среднее качество взвешено по числу оценённых звонков, а не усреднено
+    наивно: иначе оператор с тремя оценками весил бы столько же, сколько
+    оператор с тремя сотнями. Флаг ranking_reliable снимается, если в
+    группе меньше трёх человек — такую выборку ранжировать нечестно.
+    """
+    return service.groups_comparison(db, start_date, end_date, group_id)
+
+
+@router.get("/points")
+def get_points_analysis(
+    start_date: date,
+    end_date: date,
+    group_id: int | None = Depends(_analytics_group_scope),
+    operator_query: str | None = Query(None),
+    participation_status: str | None = Query(None),
+    only_with_data: bool = Query(False),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Итоговые баллы по операторам с разбором вклада и сравнением с
+    предыдущим периодом равной длины.
+
+    Отвечает на вопрос «почему у человека изменился счёт»: рядом с текущими
+    качеством, КВЗ, часами, эффективностью и штрафом идут дельты к прошлому
+    периоду и main_change_reason. Ни один другой эндпоинт подушевую дельту
+    не отдаёт: /dashboard считает её только на уровне общих показателей.
+
+    Отсутствующие данные приходят как null, а не как ноль: качество, КВЗ и
+    эффективность вычисляются, только если есть оценённые звонки и базовые
+    часы.
+    """
+    return service.points_analysis(
+        db, start_date, end_date, group_id, operator_query, participation_status, only_with_data
     )
 
 
