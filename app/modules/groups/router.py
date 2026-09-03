@@ -35,6 +35,22 @@ class GroupRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+def _name_taken(db: Session, name: str, exclude_id: int | None = None) -> bool:
+    """Занято ли название другой группой.
+
+    Сравнение делается в Python, а не через func.lower(): встроенный lower()
+    в SQLite работает только с латиницей, поэтому «Группа 1» и «группа 1»
+    там считались разными, проверка промахивалась и падало уже ограничение
+    UNIQUE — пользователь видел 500 вместо понятного 409. В PostgreSQL
+    lower() кириллицу обрабатывает, но полагаться на различие СУБД нельзя.
+    """
+    needle = name.strip().casefold()
+    stmt = select(Group.id, Group.name)
+    if exclude_id is not None:
+        stmt = stmt.where(Group.id != exclude_id)
+    return any(str(existing).strip().casefold() == needle for _id, existing in db.execute(stmt))
+
+
 def _audit_group(db: Session, action: str, group: Group, details: str, user: User) -> None:
     db.add(AuditLog(
         action=action,
@@ -86,8 +102,7 @@ def create_group(
     if payload.status not in ("active", "inactive"):
         raise HTTPException(status_code=400, detail="Статус должен быть active или inactive")
 
-    existing = db.scalar(select(Group).where(func.lower(Group.name) == name.lower()))
-    if existing:
+    if _name_taken(db, name):
         raise HTTPException(status_code=409, detail=f"Группа '{name}' уже существует")
 
     group = Group(name=name, status=payload.status)
@@ -118,8 +133,7 @@ def update_group(
         name = payload.name.strip()
         if not name:
             raise HTTPException(status_code=400, detail="Название группы обязательно")
-        existing = db.scalar(select(Group).where(func.lower(Group.name) == name.lower(), Group.id != group_id))
-        if existing:
+        if _name_taken(db, name, exclude_id=group_id):
             raise HTTPException(status_code=409, detail=f"Группа '{name}' уже существует")
         if group.name != name:
             old_name = group.name
