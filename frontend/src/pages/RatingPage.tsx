@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { ApiError } from "../api/client";
 import { rating } from "../api/endpoints";
 import type { NominationOut, PodiumEntry, RatingRowOut } from "../api/types";
 import {
@@ -33,7 +34,23 @@ export function RatingPage() {
   });
 
   if (board.isLoading) return <Spinner label="Загружаем рейтинг" />;
-  if (board.isError) return <ErrorState error={board.error} onRetry={() => board.refetch()} />;
+  if (board.isError) {
+    // На свежей системе недель ещё нет: это не сбой, а пустое состояние.
+    if (board.error instanceof ApiError && board.error.status === 404) {
+      return (
+        <div className="stack">
+          <h1 className="page-title">Рейтинг</h1>
+          <Card>
+            <EmptyState
+              title="Конкурс ещё не начался"
+              hint="Рейтинг появится, когда супервайзер заведёт неделю и выгрузит показатели"
+            />
+          </Card>
+        </div>
+      );
+    }
+    return <ErrorState error={board.error} onRetry={() => board.refetch()} />;
+  }
 
   const data = board.data!;
   const { header } = data;
