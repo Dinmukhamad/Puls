@@ -1,14 +1,30 @@
 import type { ApiErrorBody, Token } from "./types";
 
 /**
- * Пустая база означает относительные пути: в разработке их перехватывает
- * прокси Vite, в продакшене адрес приходит из VITE_API_BASE_URL.
+ * Публичный адрес API по умолчанию.
  *
- * Значение принимается и полным URL, и голым именем хоста: Render подставляет
- * адрес сервиса без схемы.
+ * Нужен, потому что VITE_API_BASE_URL встраивается в сборку и легко
+ * рассинхронизируется с конфигурацией: Render обновляет переменные сервиса
+ * только при синхронизации blueprint, а не при обычном автодеплое. Значение
+ * из окружения имеет приоритет - здесь лишь запасной вариант.
  */
-const RAW_BASE = (import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/$/, "");
-const BASE = RAW_BASE && !/^https?:\/\//i.test(RAW_BASE) ? `https://${RAW_BASE}` : RAW_BASE;
+const DEFAULT_API_BASE = "https://gamification-api-lbtb.onrender.com";
+
+/**
+ * Выбирает базовый адрес API.
+ *
+ * Пустое значение в разработке означает относительные пути - их перехватывает
+ * прокси Vite. Голое имя без точки браузер разрешить не может: так выглядит
+ * внутреннее имя сервиса Render, и такое значение отбрасывается.
+ */
+function resolveApiBase(raw: string): string {
+  if (!raw) return import.meta.env.DEV ? "" : DEFAULT_API_BASE;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.includes(".")) return `https://${raw}`;
+  return DEFAULT_API_BASE;
+}
+
+const BASE = resolveApiBase((import.meta.env.VITE_API_BASE_URL ?? "").trim().replace(/\/$/, ""));
 
 const ACCESS_KEY = "pulse.access";
 const REFRESH_KEY = "pulse.refresh";
