@@ -86,13 +86,11 @@ services:
           - key: Cache-Control
             value: public, max-age=31536000, immutable
     envVars:
-      # Адрес API берётся из соседнего сервиса: хардкодить домен не нужно.
-      # Render отдаёт host без схемы, клиент сам подставляет https.
+      # Публичный адрес API. Подставить его из соседнего сервиса нельзя:
+      # fromService отдаёт только внутренние имена сети Render, а этот адрес
+      # исполняет браузер. Меняйте здесь, если сервис API переименован.
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: gamification-api
-          property: host
+        value: https://gamification-api-lbtb.onrender.com
 
 # Еженедельный расчёт отдельным Cron Job (платная возможность Render).
 # Раскомментируйте и выставьте SCHEDULER_ENABLED=false у веб-сервиса,
