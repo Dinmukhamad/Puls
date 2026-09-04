@@ -170,7 +170,8 @@ async def my_requests(
         select(ShopRequest)
         .options(
             selectinload(ShopRequest.item),
-            selectinload(ShopRequest.decided_by),
+            selectinload(ShopRequest.user).selectinload(User.group),
+            selectinload(ShopRequest.decided_by).selectinload(User.group),
         )
         .where(ShopRequest.user_id == user.id)
         .order_by(ShopRequest.created_at.desc())

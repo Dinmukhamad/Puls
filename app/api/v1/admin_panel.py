@@ -251,8 +251,8 @@ async def shop_requests(
         .join(User, User.id == ShopRequest.user_id)
         .options(
             selectinload(ShopRequest.item),
-            selectinload(ShopRequest.user),
-            selectinload(ShopRequest.decided_by),
+            selectinload(ShopRequest.user).selectinload(User.group),
+            selectinload(ShopRequest.decided_by).selectinload(User.group),
         )
         .where(*conditions)
         .order_by(ShopRequest.created_at.desc())

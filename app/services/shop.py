@@ -32,7 +32,13 @@ async def get_item(session: AsyncSession, item_id: int) -> ShopItem:
 async def get_request(session: AsyncSession, request_id: int) -> ShopRequest:
     request = await session.scalar(
         select(ShopRequest)
-        .options(selectinload(ShopRequest.item), selectinload(ShopRequest.user))
+        .options(
+            selectinload(ShopRequest.item),
+            # Группы нужны сериализации ответа: без них ORM полезет в базу
+            # во время формирования JSON и запрос упадёт.
+            selectinload(ShopRequest.user).selectinload(User.group),
+            selectinload(ShopRequest.decided_by).selectinload(User.group),
+        )
         .where(ShopRequest.id == request_id)
     )
     if request is None:

@@ -451,3 +451,60 @@ async def test_health_is_public(client: AsyncClient) -> None:
     response = await client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+async def test_head_without_group_sees_requests_with_operator_group(
+    client: AsyncClient, operator: User, supervisor: User, head: User
+) -> None:
+    """
+    Заявки сериализуются вместе с группой оператора.
+
+    Связь user.group должна загружаться запросом заранее. Руководитель своей
+    группы не имеет, поэтому в его сессии нет ни одной загруженной группы -
+    и ленивая подгрузка на этапе сериализации ответа обрывает запрос.
+    Супервайзер эту поломку не показывает: его собственная группа уже лежит
+    в карте объектов сессии.
+    """
+    op_token = await login(client, "op1")
+    sv_token = await login(client, "sv1")
+    await client.post(
+        "/api/v1/admin/coins/manual",
+        headers=auth(sv_token),
+        json={"user_id": operator.id, "amount": 60, "reason": "Баланс для покупки"},
+    )
+    catalog = (await client.get("/api/v1/shop/items", headers=auth(op_token))).json()
+    item = next(i for i in catalog["items"] if i["code"] == "raffle_ticket")
+    created = await client.post(
+        "/api/v1/shop/requests", headers=auth(op_token), json={"item_id": item["id"]}
+    )
+    assert created.status_code == 201, created.text
+
+    head_token = await login(client, "head1")
+    response = await client.get(
+        "/api/v1/admin/shop/requests", headers=auth(head_token), params={"status": "new"}
+    )
+    assert response.status_code == 200, response.text
+
+    row = response.json()["items"][0]
+    assert row["user"]["full_name"] == operator.full_name
+    # Группа приходит в ответе развёрнутой - ради этого и нужна ранняя загрузка.
+    assert row["user"]["group"]["code"] == "G1"
+
+
+async def test_operator_requests_include_own_group(
+    client: AsyncClient, operator: User, supervisor: User
+) -> None:
+    sv_token = await login(client, "sv1")
+    await client.post(
+        "/api/v1/admin/coins/manual",
+        headers=auth(sv_token),
+        json={"user_id": operator.id, "amount": 60, "reason": "Баланс для покупки"},
+    )
+    op_token = await login(client, "op1")
+    catalog = (await client.get("/api/v1/shop/items", headers=auth(op_token))).json()
+    item = next(i for i in catalog["items"] if i["code"] == "raffle_ticket")
+    await client.post("/api/v1/shop/requests", headers=auth(op_token), json={"item_id": item["id"]})
+
+    response = await client.get("/api/v1/me/shop-requests", headers=auth(op_token))
+    assert response.status_code == 200, response.text
+    assert response.json()["items"][0]["item"]["code"] == "raffle_ticket"
