@@ -2,11 +2,36 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f9f9f7" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Puls - конкурсы, коины, рейтинг и магазин бонусов" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Puls" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="description" content="Система геймификации операторов: коины, рейтинг и магазин бонусов" />
-    <title>Pulse — конкурсы и коины</title>
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <title>Puls</title>
+    <script>
+      // Тема выставляется до первой отрисовки: иначе тёмный интерфейс
+      // мигает белым на старте.
+      (function () {
+        try {
+          var saved = localStorage.getItem("puls.theme") || "system";
+          var dark =
+            saved === "dark" ||
+            (saved === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (saved !== "system") {
+            document.documentElement.setAttribute("data-theme", saved);
+          }
+          var meta = document.createElement("meta");
+          meta.name = "theme-color";
+          meta.content = dark ? "#090B10" : "#F4F6FA";
+          document.head.appendChild(meta);
+        } catch (error) {
+          /* приватный режим без localStorage - остаётся системная тема */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

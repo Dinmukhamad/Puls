@@ -1,87 +1,282 @@
 /*
- * Дизайн-токены. Светлая корпоративная тема.
+ * Puls Design System - дизайн-токены.
  *
- * Палитра проверена валидатором на контраст и различимость при дальтонизме.
- * Ключевой вывод проверки: пара «успех / ошибка» (зелёный и красный) при
- * дейтеранопии почти неразличима, поэтому цвет нигде не является единственным
- * носителем смысла - рядом всегда знак числа, стрелка или текстовая подпись.
+ * Компоненты не обращаются к сырым значениям цвета: только к семантическим
+ * переменным из этого файла. Смена темы меняет значения здесь, а не в разметке.
+ *
+ * Тёмная тема объявлена дважды: под медиазапросом (системная настройка)
+ * и под [data-theme="dark"] (явный выбор пользователя), чтобы явный выбор
+ * побеждал системный в обе стороны.
  */
 
 :root {
   color-scheme: light;
 
-  /* --- поверхности --- */
-  --page: #f9f9f7;
-  --surface: #fcfcfb;
-  --surface-raised: #ffffff;
-  --surface-sunken: #f2f2ef;
+  /* ---------------------------------------------------------------- */
+  /* Бренд                                                            */
+  /* ---------------------------------------------------------------- */
+  --puls-blue: #4f68ff;
+  --puls-blue-hover: #4459e6;
+  --puls-blue-active: #3b4ecc;
+  --puls-violet: #7a5cfa;
 
-  /* --- текст --- */
-  --ink: #0b0b0b;
-  --ink-secondary: #52514e;
-  --ink-muted: #898781;
-  --ink-inverse: #ffffff;
+  --accent-primary: var(--puls-blue);
+  --accent-secondary: var(--puls-violet);
+  --accent-on: #ffffff;
+  /* Мягкая подложка бренда: активный пункт меню, выделение своей строки. */
+  --accent-tint: rgba(79, 104, 255, 0.1);
+  --accent-tint-strong: rgba(79, 104, 255, 0.16);
+  --accent-ink: #2b3ba8;
 
-  /* --- границы и разделители --- */
-  --border: rgba(11, 11, 11, 0.1);
-  --border-strong: #e1e0d9;
-  --rule: #e1e0d9;
+  --gradient-brand: linear-gradient(135deg, #4f68ff 0%, #765bff 100%);
+  --gradient-cool: linear-gradient(135deg, #5d7cff 0%, #42b9ff 100%);
 
-  /* --- акцент: синий, он же основа последовательной шкалы --- */
-  --accent: #2a78d6;
-  --accent-hover: #256abf;
-  --accent-active: #1c5cab;
-  --accent-ink: #0d366b;
-  --accent-wash: #eaf2fd;
-  --accent-track: #cde2fb;
+  /* ---------------------------------------------------------------- */
+  /* Функциональные цвета                                             */
+  /* ---------------------------------------------------------------- */
+  --status-success: #28c798;
+  --status-warning: #f2b84b;
+  --status-danger: #ff5d6c;
+  --status-info: #42a5ff;
 
-  /* --- статусы. Всегда в паре со значком и подписью --- */
-  --good: #0ca30c;
-  --good-text: #006300;
-  --good-wash: #e8f6e8;
-  --warning: #fab219;
-  --warning-text: #7a5200;
-  --warning-wash: #fef4e0;
-  --serious: #ec835a;
-  --critical: #d03b3b;
-  --critical-text: #a32020;
-  --critical-wash: #fbeaea;
+  /* Читаемые на светлом фоне варианты для текста и подписей. */
+  --status-success-text: #0f7a5c;
+  --status-warning-text: #8a6210;
+  --status-danger-text: #c62b3c;
+  --status-info-text: #1668b8;
 
-  /* --- медали пьедестала. Рядом всегда стоит номер места --- */
-  --gold: #d4a017;
-  --gold-wash: #fdf6e3;
-  --silver: #8f9296;
-  --silver-wash: #f2f3f4;
-  --bronze: #b07040;
-  --bronze-wash: #f9efe7;
+  --status-success-tint: rgba(40, 199, 152, 0.12);
+  --status-warning-tint: rgba(242, 184, 75, 0.16);
+  --status-danger-tint: rgba(255, 93, 108, 0.12);
+  --status-info-tint: rgba(66, 165, 255, 0.12);
 
-  /* --- типографика --- */
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --text-xs: 0.75rem;
-  --text-sm: 0.8125rem;
-  --text-base: 0.875rem;
-  --text-md: 1rem;
-  --text-lg: 1.25rem;
-  --text-xl: 1.75rem;
-  --text-hero: 3rem;
+  /* XP и коины - две разные валюты, цвета не смешиваются. */
+  --xp-color: #7a5cfa;
+  --xp-tint: rgba(122, 92, 250, 0.12);
+  --coin-color: #f4b844;
+  --coin-tint: rgba(244, 184, 68, 0.16);
+  /* Читаемый на светлом фоне вариант золота для текста и значков. */
+  --gold-text: #8a6210;
 
-  /* --- сетка отступов, шаг 4px --- */
-  --sp-1: 0.25rem;
-  --sp-2: 0.5rem;
-  --sp-3: 0.75rem;
-  --sp-4: 1rem;
-  --sp-5: 1.5rem;
-  --sp-6: 2rem;
-  --sp-7: 3rem;
+  /* ---------------------------------------------------------------- */
+  /* Поверхности и текст                                              */
+  /* ---------------------------------------------------------------- */
+  --bg-primary: #f4f6fa;
+  --surface-primary: #ffffff;
+  --surface-secondary: #f0f2f7;
+  --surface-tertiary: #e8ebf2;
+  --surface-elevated: #ffffff;
+  --surface-hover: rgba(20, 24, 32, 0.035);
+  --surface-pressed: rgba(20, 24, 32, 0.06);
 
-  --radius-sm: 4px;
-  --radius: 8px;
-  --radius-lg: 12px;
+  --text-primary: #111318;
+  --text-secondary: #666c79;
+  /*
+   * Спецификация задаёт для tertiary #9298a5, но на белом это 2.89:1 при
+   * норме WCAG 4.5:1 - требования п. 8 и п. 200 противоречат друг другу.
+   * Информативный текст получает проходящий контраст, а исходный светлый
+   * оттенок сохранён отдельным токеном для декоративных элементов, где
+   * контраст не требуется: плейсхолдеры, разделители, фоновые цифры.
+   */
+  --text-tertiary: #676e7c;
+  --text-quaternary: #9298a5;
+  --text-on-accent: #ffffff;
 
-  --shadow-sm: 0 1px 2px rgba(11, 11, 11, 0.06);
-  --shadow: 0 2px 8px rgba(11, 11, 11, 0.08);
-  --shadow-lg: 0 8px 24px rgba(11, 11, 11, 0.12);
+  --separator: rgba(20, 24, 32, 0.08);
+  --border-strong: rgba(20, 24, 32, 0.14);
 
-  --header-height: 56px;
-  --content-max: 1280px;
+  /* ---------------------------------------------------------------- */
+  /* Liquid Glass                                                     */
+  /* ---------------------------------------------------------------- */
+  --glass-subtle-bg: rgba(255, 255, 255, 0.6);
+  --glass-regular-bg: rgba(255, 255, 255, 0.72);
+  --glass-prominent-bg: rgba(255, 255, 255, 0.84);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-inner-highlight: rgba(255, 255, 255, 0.5);
+  --glass-blur: 24px;
+  --glass-saturate: 160%;
+  /* Подставляется вместо стекла там, где blur недоступен или отключён. */
+  --glass-fallback: #ffffff;
+
+  /* ---------------------------------------------------------------- */
+  /* Тени                                                             */
+  /* ---------------------------------------------------------------- */
+  --shadow-sm: 0 1px 2px rgba(20, 25, 35, 0.04);
+  --shadow-card: 0 4px 16px rgba(20, 25, 35, 0.05);
+  --shadow-elevated: 0 12px 32px rgba(20, 25, 35, 0.1);
+  --shadow-float: 0 8px 28px rgba(20, 25, 35, 0.12);
+  --shadow-glass: 0 8px 32px rgba(20, 25, 35, 0.1);
+
+  /* ---------------------------------------------------------------- */
+  /* Типографика                                                      */
+  /* ---------------------------------------------------------------- */
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+
+  --text-display: 2.5rem;
+  --text-page-title: 2rem;
+  --text-kpi: 2rem;
+  --text-section: 1.375rem;
+  --text-card-title: 1.0625rem;
+  --text-body: 0.9375rem;
+  --text-secondary-size: 0.875rem;
+  --text-caption: 0.8125rem;
+  --text-micro: 0.75rem;
+
+  /* ---------------------------------------------------------------- */
+  /* Геометрия. Вложенные скругления согласованы: 24 -> 16 -> 12       */
+  /* ---------------------------------------------------------------- */
+  --radius-xs: 8px;
+  --radius-s: 12px;
+  --radius-m: 16px;
+  --radius-l: 20px;
+  --radius-xl: 24px;
+  --radius-2xl: 28px;
+  --radius-pill: 999px;
+
+  /* ---------------------------------------------------------------- */
+  /* Отступы. Базовая единица 4px, основной ритм 8px                  */
+  /* ---------------------------------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ---------------------------------------------------------------- */
+  /* Движение                                                         */
+  /* ---------------------------------------------------------------- */
+  --motion-fast: 140ms;
+  --motion-normal: 220ms;
+  --motion-slow: 320ms;
+  --motion-hero: 400ms;
+  --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---------------------------------------------------------------- */
+  /* Раскладка                                                        */
+  /* ---------------------------------------------------------------- */
+  --content-max: 1600px;
+  --sidebar-width: 260px;
+  --sidebar-collapsed: 76px;
+  --sidebar-inset: 12px;
+  --tabbar-height: 66px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+/* Тёмная тема: системная настройка, если пользователь не выбрал светлую явно. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --puls-blue-hover: #647aff;
+    --puls-blue-active: #7a8cff;
+    --accent-tint: rgba(79, 104, 255, 0.2);
+    --accent-tint-strong: rgba(79, 104, 255, 0.3);
+    --accent-ink: #b9c4ff;
+
+    --status-success-text: #4dd6ae;
+    --status-warning-text: #f5c86f;
+    --status-danger-text: #ff8b96;
+    --status-info-text: #6fbcff;
+
+    --status-success-tint: rgba(40, 199, 152, 0.16);
+    --status-warning-tint: rgba(242, 184, 75, 0.18);
+    --status-danger-tint: rgba(255, 93, 108, 0.18);
+    --status-info-tint: rgba(66, 165, 255, 0.16);
+    --xp-tint: rgba(122, 92, 250, 0.22);
+    --coin-tint: rgba(244, 184, 68, 0.2);
+    --gold-text: #f0c064;
+
+    --bg-primary: #090b10;
+    --surface-primary: #12151c;
+    --surface-secondary: #191d26;
+    --surface-tertiary: #202530;
+    --surface-elevated: #202530;
+    --surface-hover: rgba(255, 255, 255, 0.05);
+    --surface-pressed: rgba(255, 255, 255, 0.08);
+
+    --text-primary: #f6f7f9;
+    --text-secondary: #a7acb7;
+    --text-tertiary: #848b99;
+    --text-quaternary: #717785;
+
+    --separator: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+
+    /* В тёмной теме стекло держит непрозрачность выше: иначе текст плывёт. */
+    --glass-subtle-bg: rgba(28, 32, 42, 0.62);
+    --glass-regular-bg: rgba(28, 32, 42, 0.76);
+    --glass-prominent-bg: rgba(30, 35, 46, 0.88);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-inner-highlight: rgba(255, 255, 255, 0.06);
+    --glass-fallback: #1c202a;
+
+    /* В темноте тень почти не читается, разделение держат границы. */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.35);
+    --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.45);
+    --shadow-float: 0 8px 28px rgba(0, 0, 0, 0.5);
+    --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* Тёмная тема, выбранная явно: побеждает системную светлую. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --puls-blue-hover: #647aff;
+  --puls-blue-active: #7a8cff;
+  --accent-tint: rgba(79, 104, 255, 0.2);
+  --accent-tint-strong: rgba(79, 104, 255, 0.3);
+  --accent-ink: #b9c4ff;
+
+  --status-success-text: #4dd6ae;
+  --status-warning-text: #f5c86f;
+  --status-danger-text: #ff8b96;
+  --status-info-text: #6fbcff;
+
+  --status-success-tint: rgba(40, 199, 152, 0.16);
+  --status-warning-tint: rgba(242, 184, 75, 0.18);
+  --status-danger-tint: rgba(255, 93, 108, 0.18);
+  --status-info-tint: rgba(66, 165, 255, 0.16);
+  --xp-tint: rgba(122, 92, 250, 0.22);
+  --coin-tint: rgba(244, 184, 68, 0.2);
+  --gold-text: #f0c064;
+
+  --bg-primary: #090b10;
+  --surface-primary: #12151c;
+  --surface-secondary: #191d26;
+  --surface-tertiary: #202530;
+  --surface-elevated: #202530;
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --surface-pressed: rgba(255, 255, 255, 0.08);
+
+  --text-primary: #f6f7f9;
+  --text-secondary: #a7acb7;
+  --text-tertiary: #848b99;
+  --text-quaternary: #717785;
+
+  --separator: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+
+  --glass-subtle-bg: rgba(28, 32, 42, 0.62);
+  --glass-regular-bg: rgba(28, 32, 42, 0.76);
+  --glass-prominent-bg: rgba(30, 35, 46, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-inner-highlight: rgba(255, 255, 255, 0.06);
+  --glass-fallback: #1c202a;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-float: 0 8px 28px rgba(0, 0, 0, 0.5);
+  --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45);
 }

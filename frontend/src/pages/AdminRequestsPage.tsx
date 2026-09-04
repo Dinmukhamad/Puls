@@ -4,28 +4,34 @@ import { useState } from "react";
 import { ApiError } from "../api/client";
 import { admin } from "../api/endpoints";
 import type { ShopRequestOut, ShopRequestStatus } from "../api/types";
-import { Modal } from "../components/Modal";
+import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import {
+  Avatar,
+  Badge,
+  Button,
   Card,
+  CoinAmount,
   EmptyState,
   ErrorState,
   Pagination,
-  Pill,
-  Spinner,
+  RowsSkeleton,
+  SegmentedControl,
   type Tone,
 } from "../components/ui";
 import { REQUEST_STATUS_LABELS, coins, dateTime } from "../utils/format";
 
 const STATUS_TONE: Record<ShopRequestStatus, Tone> = {
   new: "accent",
-  approved: "good",
-  fulfilled: "good",
-  rejected: "critical",
+  approved: "success",
+  fulfilled: "success",
+  rejected: "danger",
   cancelled: "neutral",
 };
 
-const TABS: { value: ShopRequestStatus | ""; label: string }[] = [
+type StatusFilter = ShopRequestStatus | "";
+
+const TABS: { value: StatusFilter; label: string }[] = [
   { value: "new", label: "Новые" },
   { value: "approved", label: "Одобренные" },
   { value: "fulfilled", label: "Выполненные" },
@@ -36,7 +42,7 @@ const TABS: { value: ShopRequestStatus | ""; label: string }[] = [
 export function AdminRequestsPage() {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [status, setStatus] = useState<ShopRequestStatus | "">("new");
+  const [status, setStatus] = useState<StatusFilter>("new");
   const [page, setPage] = useState(1);
   const [rejecting, setRejecting] = useState<ShopRequestOut | null>(null);
   const size = 20;
@@ -81,120 +87,193 @@ export function AdminRequestsPage() {
       <Card
         title="Очередь"
         action={
-          <div className="tabs" role="tablist">
-            {TABS.map((tab) => (
-              <button
-                key={tab.value || "all"}
-                type="button"
-                role="tab"
-                aria-selected={status === tab.value}
-                className={status === tab.value ? "tab tab--active" : "tab"}
-                onClick={() => {
-                  setStatus(tab.value);
-                  setPage(1);
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            options={TABS}
+            value={status}
+            label="Статус заявки"
+            onChange={(value) => {
+              setStatus(value);
+              setPage(1);
+            }}
+          />
         }
         padded={false}
       >
-        {requests.isLoading && <div className="card__body"><Spinner /></div>}
+        {requests.isLoading && (
+          <div className="card__body">
+            <RowsSkeleton />
+          </div>
+        )}
         {requests.isError && (
           <div className="card__body">
             <ErrorState error={requests.error} onRetry={() => requests.refetch()} />
           </div>
         )}
         {requests.data && requests.data.items.length === 0 && (
-          <div className="card__body">
-            <EmptyState
-              title="Заявок нет"
-              hint={status === "new" ? "Всё разобрано" : "Попробуйте другой фильтр"}
-            />
-          </div>
+          <EmptyState
+            title="Заявок нет"
+            hint={status === "new" ? "Всё разобрано" : "Попробуйте другой фильтр"}
+          />
         )}
+
         {requests.data && requests.data.items.length > 0 && (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Дата</th>
-                  <th>Оператор</th>
-                  <th>Бонус</th>
-                  <th className="num">Коины</th>
-                  <th>Статус</th>
-                  <th>Комментарий</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {requests.data.items.map((request) => (
-                  <tr key={request.id}>
-                    <td className="nowrap">{dateTime(request.created_at)}</td>
-                    <td>
-                      {request.user?.full_name ?? "—"}
-                      {request.user?.group && (
-                        <span className="muted small block">{request.user.group.name}</span>
-                      )}
-                    </td>
-                    <td>{request.item.title}</td>
-                    <td className="num">{coins(request.price)}</td>
-                    <td>
-                      <Pill tone={STATUS_TONE[request.status]}>
-                        {REQUEST_STATUS_LABELS[request.status]}
-                      </Pill>
-                    </td>
-                    <td className="muted table__reason">
-                      {request.comment ?? request.decision_comment ?? "—"}
-                    </td>
-                    <td className="actions">
-                      {request.status === "new" && (
-                        <>
-                          <button
-                            type="button"
-                            className="btn btn--primary btn--sm"
-                            disabled={decide.isPending}
-                            onClick={() => decide.mutate({ id: request.id, action: "approve" })}
-                          >
-                            Одобрить
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn--danger btn--sm"
-                            onClick={() => setRejecting(request)}
-                          >
-                            Отклонить
-                          </button>
-                        </>
-                      )}
-                      {request.status === "approved" && (
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          disabled={decide.isPending}
-                          onClick={() => decide.mutate({ id: request.id, action: "fulfill" })}
-                        >
-                          Отметить выданным
-                        </button>
-                      )}
-                    </td>
+          <>
+            <div className="table-wrap table-wrap--responsive">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Дата</th>
+                    <th>Оператор</th>
+                    <th>Бонус</th>
+                    <th className="num">Коины</th>
+                    <th>Статус</th>
+                    <th>Комментарий</th>
+                    <th />
                   </tr>
+                </thead>
+                <tbody>
+                  {requests.data.items.map((request) => (
+                    <tr key={request.id}>
+                      <td className="nowrap secondary">{dateTime(request.created_at)}</td>
+                      <td>
+                        <span className="cell-person">
+                          {request.user && (
+                            <Avatar
+                              name={request.user.full_name}
+                              id={request.user.id}
+                              size={32}
+                            />
+                          )}
+                          <span className="cell-person__text">
+                            <span className="cell-person__name">
+                              {request.user?.full_name ?? "—"}
+                            </span>
+                            <span className="cell-person__meta">
+                              {request.user?.group?.name ?? ""}
+                            </span>
+                          </span>
+                        </span>
+                      </td>
+                      <td>{request.item.title}</td>
+                      <td className="num">{coins(request.price)}</td>
+                      <td>
+                        <Badge tone={STATUS_TONE[request.status]}>
+                          {REQUEST_STATUS_LABELS[request.status]}
+                        </Badge>
+                      </td>
+                      <td className="muted">
+                        {request.comment ?? request.decision_comment ?? "—"}
+                      </td>
+                      <td className="cell-actions">
+                        {request.status === "new" && (
+                          <>
+                            <Button
+                              size="s"
+                              variant="primary"
+                              disabled={decide.isPending}
+                              onClick={() => decide.mutate({ id: request.id, action: "approve" })}
+                            >
+                              Одобрить
+                            </Button>
+                            <Button
+                              size="s"
+                              variant="destructive"
+                              onClick={() => setRejecting(request)}
+                            >
+                              Отклонить
+                            </Button>
+                          </>
+                        )}
+                        {request.status === "approved" && (
+                          <Button
+                            size="s"
+                            disabled={decide.isPending}
+                            onClick={() => decide.mutate({ id: request.id, action: "fulfill" })}
+                          >
+                            Отметить выданным
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="card__body">
+              <ul className="card-list">
+                {requests.data.items.map((request) => (
+                  <li key={request.id} className="list-card">
+                    <div className="list-card__head">
+                      <span className="cell-person">
+                        {request.user && (
+                          <Avatar name={request.user.full_name} id={request.user.id} size={36} />
+                        )}
+                        <span className="cell-person__text">
+                          <span className="cell-person__name">
+                            {request.user?.full_name ?? "—"}
+                          </span>
+                          <span className="cell-person__meta">
+                            {dateTime(request.created_at)}
+                          </span>
+                        </span>
+                      </span>
+                      <Badge tone={STATUS_TONE[request.status]}>
+                        {REQUEST_STATUS_LABELS[request.status]}
+                      </Badge>
+                    </div>
+                    <div className="list-card__head">
+                      <span>{request.item.title}</span>
+                      <CoinAmount value={request.price} size="s" />
+                    </div>
+                    {request.status === "new" && (
+                      <div className="row">
+                        <Button
+                          size="s"
+                          variant="primary"
+                          disabled={decide.isPending}
+                          onClick={() => decide.mutate({ id: request.id, action: "approve" })}
+                        >
+                          Одобрить
+                        </Button>
+                        <Button
+                          size="s"
+                          variant="destructive"
+                          onClick={() => setRejecting(request)}
+                        >
+                          Отклонить
+                        </Button>
+                      </div>
+                    )}
+                    {request.status === "approved" && (
+                      <Button
+                        size="s"
+                        block
+                        disabled={decide.isPending}
+                        onClick={() => decide.mutate({ id: request.id, action: "fulfill" })}
+                      >
+                        Отметить выданным
+                      </Button>
+                    )}
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {requests.data && (
-          <div className="card__body card__body--tight">
-            <Pagination page={page} size={size} total={requests.data.total} onChange={setPage} />
-          </div>
+              </ul>
+            </div>
+
+            <div className="card__body--flush">
+              <Pagination
+                page={page}
+                size={size}
+                total={requests.data.total}
+                onChange={setPage}
+              />
+            </div>
+          </>
         )}
       </Card>
 
       {rejecting && (
-        <RejectModal
+        <RejectSheet
           request={rejecting}
           onClose={() => setRejecting(null)}
           onDone={() => {
@@ -207,7 +286,7 @@ export function AdminRequestsPage() {
   );
 }
 
-function RejectModal({
+function RejectSheet({
   request,
   onClose,
   onDone,
@@ -222,7 +301,7 @@ function RejectModal({
   const mutation = useMutation({
     mutationFn: () => admin.reject(request.id, comment.trim()),
     onSuccess: () => {
-      toast.info(`Заявка отклонена, ${coins(request.price)} ◆ вернулись оператору`);
+      toast.info(`Заявка отклонена, ${coins(request.price)} коинов вернулись оператору`);
       onDone();
     },
     onError: (error: unknown) => {
@@ -233,29 +312,30 @@ function RejectModal({
   const tooShort = comment.trim().length < 3;
 
   return (
-    <Modal
-      title={`Отклонить заявку №${request.id}`}
+    <Sheet
+      title="Отклонить заявку"
+      subtitle={`${request.user?.full_name ?? ""} · ${request.item.title}`}
       onClose={onClose}
+      size="s"
       footer={
         <>
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
-            Отмена
-          </button>
-          <button
-            type="button"
-            className="btn btn--danger"
+          <Button onClick={onClose}>Отмена</Button>
+          <Button
+            variant="destructive"
             disabled={mutation.isPending || tooShort}
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending ? "Отклоняем…" : "Отклонить"}
-          </button>
+          </Button>
         </>
       }
     >
-      <p>
-        {request.user?.full_name} — «{request.item.title}» за {coins(request.price)} ◆
-      </p>
-      <label className="field">
+      <div className="confirm-row">
+        <span>Вернётся оператору</span>
+        <strong>{coins(request.price)} коинов</strong>
+      </div>
+
+      <label className="field" style={{ marginTop: "var(--sp-4)" }}>
         <span className="field__label">
           Причина отказа <span className="field__req">обязательно</span>
         </span>
@@ -269,7 +349,6 @@ function RejectModal({
         />
       </label>
       {tooShort && <p className="field__error">Оператор увидит эту причину, опишите её</p>}
-      <p className="muted small">Зарезервированные коины сразу вернутся на баланс.</p>
-    </Modal>
+    </Sheet>
   );
 }

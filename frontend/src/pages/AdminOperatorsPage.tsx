@@ -4,15 +4,22 @@ import { useState } from "react";
 import { ApiError, downloadFile } from "../api/client";
 import { admin, rating } from "../api/endpoints";
 import type { OperatorRowOut } from "../api/types";
-import { Modal } from "../components/Modal";
+import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
+import { DownloadIcon, SearchIcon } from "../components/icons";
+import { GlassSurface } from "../components/GlassSurface";
 import {
+  Avatar,
+  Button,
   Card,
   EmptyState,
   ErrorState,
+  KPI,
+  KPISkeleton,
   Pagination,
-  Spinner,
-  StatTile,
+  RowsSkeleton,
+  SegmentedControl,
+  StatusIcon,
 } from "../components/ui";
 import { WEEK_STATUS_LABELS, coins, points, signed } from "../utils/format";
 
@@ -48,52 +55,73 @@ export function AdminOperatorsPage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">Операторы</h1>
-          <p className="page-subtitle">
-            Показатели недели, балансы и ручное начисление коинов
-          </p>
+          <p className="page-subtitle">Показатели недели, балансы и ручное начисление коинов</p>
         </div>
-        <div className="page-head__controls">
-          <select
-            className="input input--sm"
-            aria-label="Неделя"
-            value={weekId ?? ""}
-            onChange={(event) => {
-              setWeekId(event.target.value ? Number(event.target.value) : undefined);
-              setPage(1);
-            }}
-          >
-            <option value="">Последняя рассчитанная</option>
-            {(weeks.data ?? []).map((week) => (
-              <option key={week.id} value={week.id}>
-                {week.label} · {WEEK_STATUS_LABELS[week.status] ?? week.status}
-              </option>
-            ))}
-          </select>
-          <button type="button" className="btn btn--ghost" onClick={exportCsv}>
+        <div className="page-head__actions">
+          <Button icon={<DownloadIcon size={17} />} onClick={exportCsv}>
             Выгрузить CSV
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* Сводная статистика - п. 4.4.1 ТЗ */}
+      <GlassSurface variant="regular" className="filterbar">
+        <label className="search">
+          <span className="search__icon">
+            <SearchIcon size={16} />
+          </span>
+          <input
+            className="input input--s"
+            style={{ width: 220 }}
+            placeholder="Найти оператора"
+            value={search}
+            aria-label="Поиск по ФИО"
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
+          />
+        </label>
+        <span className="filterbar__spacer" />
+        <select
+          className="input input--s"
+          aria-label="Неделя"
+          value={weekId ?? ""}
+          onChange={(event) => {
+            setWeekId(event.target.value ? Number(event.target.value) : undefined);
+            setPage(1);
+          }}
+        >
+          <option value="">Последняя рассчитанная</option>
+          {(weeks.data ?? []).map((week) => (
+            <option key={week.id} value={week.id}>
+              {week.label} · {WEEK_STATUS_LABELS[week.status] ?? week.status}
+            </option>
+          ))}
+        </select>
+      </GlassSurface>
+
+      {/* Сводная статистика - п. 4.4.1 бизнес-ТЗ */}
+      {summary.isLoading && <KPISkeleton />}
       {summary.data && (
-        <div className="kpi">
-          <StatTile
-            label="Операторов в системе"
+        <div className="kpi-grid">
+          <KPI
+            label="Операторов"
             value={coins(summary.data.operators_total)}
             hint={`Активных ${summary.data.operators_active}`}
           />
-          <StatTile
+          <KPI
             label="Начислено за неделю"
             value={coins(summary.data.coins_awarded_this_week)}
-            hint="Сумма всех положительных операций за 7 дней"
+            tone="coin"
+            hint="Все положительные операции за 7 дней"
           />
-          <StatTile
+          <KPI
             label="Новых заявок"
             value={coins(summary.data.new_shop_requests)}
+            tone={summary.data.new_shop_requests > 0 ? "accent" : "neutral"}
             hint="Ожидают решения"
           />
-          <StatTile
+          <KPI
             label="Средняя позиция"
             value={summary.data.average_rank !== null ? summary.data.average_rank.toFixed(1) : "—"}
             hint={summary.data.week_label ? `Неделя ${summary.data.week_label}` : undefined}
@@ -101,118 +129,152 @@ export function AdminOperatorsPage() {
         </div>
       )}
 
-      <Card
-        title="Таблица операторов"
-        action={
-          <input
-            className="input input--sm"
-            placeholder="Поиск по ФИО"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
-            }}
-          />
-        }
-        padded={false}
-      >
-        {operators.isLoading && <div className="card__body"><Spinner /></div>}
+      <Card title="Таблица операторов" padded={false}>
+        {operators.isLoading && (
+          <div className="card__body">
+            <RowsSkeleton />
+          </div>
+        )}
         {operators.isError && (
           <div className="card__body">
             <ErrorState error={operators.error} onRetry={() => operators.refetch()} />
           </div>
         )}
         {operators.data && operators.data.items.length === 0 && (
-          <div className="card__body">
-            <EmptyState title="Операторов не найдено" />
-          </div>
+          <EmptyState title="Ничего не найдено" hint="Измените фильтры или поисковый запрос" />
         )}
+
         {operators.data && operators.data.items.length > 0 && (
-          <div className="table-wrap">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th className="num">Место</th>
-                  <th>ФИО</th>
-                  <th>Группа</th>
-                  <th className="num">Баллы</th>
-                  <th className="num">Коины за неделю</th>
-                  <th className="num">Баланс</th>
-                  <th className="num">Опоздания</th>
-                  <th className="num">Сайты</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {operators.data.items.map((row) => (
-                  <tr key={row.user_id}>
-                    <td className="num">{row.rank ?? "—"}</td>
-                    <td>
-                      {row.full_name}
-                      <span className="muted small block">{row.login}</span>
-                    </td>
-                    <td className="muted">{row.group_name ?? "—"}</td>
-                    <td className="num">{points(row.points)}</td>
-                    <td className="num">{coins(row.coins_week)}</td>
-                    <td className="num">
-                      {coins(row.balance)}
-                      {row.reserved > 0 && (
-                        <span className="muted small block">резерв {coins(row.reserved)}</span>
-                      )}
-                    </td>
-                    <AntiCell value={row.lateness} />
-                    <AntiCell value={row.forbidden_sites} />
-                    <td className="num">
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => setTarget(row)}
-                      >
-                        Начислить
-                      </button>
-                    </td>
+          <>
+            <div className="table-wrap table-wrap--responsive">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th className="num">Место</th>
+                    <th>Оператор</th>
+                    <th>Группа</th>
+                    <th className="num">Баллы</th>
+                    <th className="num">Коины</th>
+                    <th className="num">Баланс</th>
+                    <th className="num">Опоздания</th>
+                    <th className="num">Сайты</th>
+                    <th />
                   </tr>
+                </thead>
+                <tbody>
+                  {operators.data.items.map((row) => (
+                    <tr key={row.user_id}>
+                      <td className="num">
+                        <span className="rank-badge">{row.rank ?? "—"}</span>
+                      </td>
+                      <td>
+                        <span className="cell-person">
+                          <Avatar name={row.full_name} id={row.user_id} size={32} />
+                          <span className="cell-person__text">
+                            <span className="cell-person__name">{row.full_name}</span>
+                            <span className="cell-person__meta">{row.login}</span>
+                          </span>
+                        </span>
+                      </td>
+                      <td className="muted">{row.group_name ?? "—"}</td>
+                      <td className="num">{points(row.points)}</td>
+                      <td className="num">{coins(row.coins_week)}</td>
+                      <td className="num">
+                        {coins(row.balance)}
+                        {row.reserved > 0 && (
+                          <span className="muted micro block">резерв {coins(row.reserved)}</span>
+                        )}
+                      </td>
+                      <AntiCell value={row.lateness} />
+                      <AntiCell value={row.forbidden_sites} />
+                      <td className="cell-actions">
+                        <Button size="s" onClick={() => setTarget(row)}>
+                          Начислить
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="card__body">
+              <ul className="card-list">
+                {operators.data.items.map((row) => (
+                  <li key={row.user_id} className="list-card">
+                    <div className="list-card__head">
+                      <span className="cell-person">
+                        <Avatar name={row.full_name} id={row.user_id} size={36} />
+                        <span className="cell-person__text">
+                          <span className="cell-person__name">{row.full_name}</span>
+                          <span className="cell-person__meta">
+                            {row.group_name ?? row.login}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="rank-badge">{row.rank ?? "—"}</span>
+                    </div>
+                    <div className="list-card__metrics">
+                      <span className="list-card__metric">
+                        <span>Баллы</span>
+                        <span>{points(row.points)}</span>
+                      </span>
+                      <span className="list-card__metric">
+                        <span>Баланс</span>
+                        <span>{coins(row.balance)}</span>
+                      </span>
+                      <span className="list-card__metric">
+                        <span>Опоздания</span>
+                        <span>{row.lateness === 0 ? "нет" : points(row.lateness)}</span>
+                      </span>
+                      <span className="list-card__metric">
+                        <span>Сайты</span>
+                        <span>
+                          {row.forbidden_sites === 0 ? "нет" : points(row.forbidden_sites)}
+                        </span>
+                      </span>
+                    </div>
+                    <Button size="s" block onClick={() => setTarget(row)}>
+                      Начислить коины
+                    </Button>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {operators.data && (
-          <div className="card__body card__body--tight">
-            <Pagination page={page} size={size} total={operators.data.total} onChange={setPage} />
-          </div>
+              </ul>
+            </div>
+
+            <div className="card__body--flush">
+              <Pagination
+                page={page}
+                size={size}
+                total={operators.data.total}
+                onChange={setPage}
+              />
+            </div>
+          </>
         )}
       </Card>
 
-      {target && <ManualCoinsModal operator={target} onClose={() => setTarget(null)} />}
+      {target && <ManualCoinsSheet operator={target} onClose={() => setTarget(null)} />}
     </div>
   );
 }
 
-/** Антипоказатель: ноль помечен галочкой, нарушения - значком и цветом. */
+/** Антипоказатель: ноль помечен галочкой, нарушения — значком и цветом. */
 function AntiCell({ value }: { value: number }) {
-  if (value === 0) {
-    return (
-      <td className="num">
-        <span className="icon-ok" aria-hidden="true">
-          ✓
-        </span>
-        <span className="muted"> нет</span>
-      </td>
-    );
-  }
   return (
-    <td className="num cell--bad">
-      <span className="icon-warn" aria-hidden="true">
-        !
-      </span>{" "}
-      {points(value)}
+    <td className="num">
+      <span className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap" }}>
+        <StatusIcon ok={value === 0} />
+        <span className={value === 0 ? "muted" : undefined}>
+          {value === 0 ? "нет" : points(value)}
+        </span>
+      </span>
     </td>
   );
 }
 
 /* --------------------------------------------------------------------------
- * Ручное начисление - п. 4.4.3 ТЗ. Комментарий обязателен.
+ * Ручное начисление - п. 4.4.3 бизнес-ТЗ. Комментарий обязателен.
  * -------------------------------------------------------------------------- */
 
 const PRESETS = [
@@ -221,7 +283,7 @@ const PRESETS = [
   { amount: 7, reason: "Активность вне основного конкурса" },
 ];
 
-function ManualCoinsModal({
+function ManualCoinsSheet({
   operator,
   onClose,
 }: {
@@ -230,10 +292,10 @@ function ManualCoinsModal({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const [mode, setMode] = useState<"manual" | "gratitude">("manual");
   const [amount, setAmount] = useState(10);
   const [reason, setReason] = useState("");
   const [driverRef, setDriverRef] = useState("");
-  const [mode, setMode] = useState<"manual" | "gratitude">("manual");
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -242,7 +304,7 @@ function ManualCoinsModal({
         : admin.manualCoins(operator.user_id, amount, reason.trim()),
     onSuccess: (tx) => {
       toast.success(
-        `${operator.full_name}: ${signed(tx.amount)} ◆. Баланс ${coins(tx.balance_after)}.`,
+        `${operator.full_name}: ${signed(tx.amount)} коинов. Баланс ${coins(tx.balance_after)}.`,
       );
       void queryClient.invalidateQueries({ queryKey: ["admin-operators"] });
       void queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
@@ -256,117 +318,110 @@ function ManualCoinsModal({
   const reasonTooShort = mode === "manual" && reason.trim().length < 5;
 
   return (
-    <Modal
-      title={`Начисление: ${operator.full_name}`}
+    <Sheet
+      title="Начисление коинов"
+      subtitle={operator.full_name}
       onClose={onClose}
       footer={
         <>
-          <button type="button" className="btn btn--ghost" onClick={onClose}>
-            Отмена
-          </button>
-          <button
-            type="button"
-            className="btn btn--primary"
+          <Button onClick={onClose}>Отмена</Button>
+          <Button
+            variant="primary"
             disabled={mutation.isPending || reasonTooShort}
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending ? "Сохраняем…" : "Провести"}
-          </button>
+          </Button>
         </>
       }
     >
-      <div className="tabs tabs--block" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "manual"}
-          className={mode === "manual" ? "tab tab--active" : "tab"}
-          onClick={() => setMode("manual")}
-        >
-          Начисление или списание
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === "gratitude"}
-          className={mode === "gratitude" ? "tab tab--active" : "tab"}
-          onClick={() => setMode("gratitude")}
-        >
-          Благодарность водителя
-        </button>
-      </div>
+      <SegmentedControl
+        block
+        value={mode}
+        onChange={setMode}
+        label="Тип операции"
+        options={[
+          { value: "manual", label: "Начисление или списание" },
+          { value: "gratitude", label: "Благодарность водителя" },
+        ]}
+      />
 
-      {mode === "manual" ? (
-        <>
-          <label className="field">
-            <span className="field__label">
-              Количество коинов
-              <span className="field__note">
-                положительное — начисление, отрицательное — списание
+      <div style={{ marginTop: "var(--sp-5)" }}>
+        {mode === "manual" ? (
+          <>
+            <label className="field">
+              <span className="field__label">
+                Количество коинов
+                <span className="field__note">
+                  положительное — начисление, отрицательное — списание
+                </span>
               </span>
-            </span>
-            <input
-              className="input"
-              type="number"
-              value={amount}
-              min={-100}
-              max={100}
-              onChange={(event) => setAmount(Number(event.target.value))}
-            />
-          </label>
+              <input
+                className="input"
+                type="number"
+                inputMode="numeric"
+                value={amount}
+                min={-100}
+                max={100}
+                onChange={(event) => setAmount(Number(event.target.value))}
+              />
+            </label>
 
-          <div className="presets">
-            {PRESETS.map((preset) => (
-              <button
-                key={preset.reason}
-                type="button"
-                className="chip"
-                onClick={() => {
-                  setAmount(preset.amount);
-                  setReason(preset.reason);
-                }}
-              >
-                +{preset.amount} · {preset.reason}
-              </button>
-            ))}
-          </div>
+            <div className="row" style={{ marginBottom: "var(--sp-4)" }}>
+              {PRESETS.map((preset) => (
+                <Button
+                  key={preset.reason}
+                  size="s"
+                  onClick={() => {
+                    setAmount(preset.amount);
+                    setReason(preset.reason);
+                  }}
+                >
+                  +{preset.amount} · {preset.reason}
+                </Button>
+              ))}
+            </div>
 
-          <label className="field">
-            <span className="field__label">
-              Причина <span className="field__req">обязательно</span>
-            </span>
-            <textarea
-              className="input"
-              rows={2}
-              value={reason}
-              maxLength={500}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="Например: помощь новому сотруднику"
-            />
-          </label>
-          {reasonTooShort && (
-            <p className="field__error">Комментарий должен содержать не менее 5 символов</p>
-          )}
-          <p className="muted small">
-            Операция попадёт в неизменяемую историю с вашим именем и датой. Отредактировать
-            или удалить её потом нельзя — только провести обратную.
-          </p>
-        </>
-      ) : (
-        <>
-          <p>Начислит фиксированный бонус за благодарность от водителя.</p>
-          <label className="field">
-            <span className="field__label">Номер водителя или заявки (необязательно)</span>
-            <input
-              className="input"
-              value={driverRef}
-              maxLength={64}
-              onChange={(event) => setDriverRef(event.target.value)}
-              placeholder="1247"
-            />
-          </label>
-        </>
-      )}
-    </Modal>
+            <label className="field">
+              <span className="field__label">
+                Причина <span className="field__req">обязательно</span>
+              </span>
+              <textarea
+                className="input"
+                rows={2}
+                value={reason}
+                maxLength={500}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="Например: помощь новому сотруднику"
+              />
+            </label>
+            {reasonTooShort && (
+              <p className="field__error">Комментарий должен содержать не менее 5 символов</p>
+            )}
+
+            <p className="muted micro">
+              Операция попадёт в неизменяемую историю с вашим именем и датой. Отредактировать
+              или удалить её потом нельзя — только провести обратную.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="secondary">
+              Начислит фиксированный бонус за благодарность от водителя.
+            </p>
+            <label className="field" style={{ marginTop: "var(--sp-4)" }}>
+              <span className="field__label">Номер водителя или заявки (необязательно)</span>
+              <input
+                className="input"
+                value={driverRef}
+                maxLength={64}
+                onChange={(event) => setDriverRef(event.target.value)}
+                placeholder="1247"
+              />
+            </label>
+          </>
+        )}
+      </div>
+    </Sheet>
   );
 }

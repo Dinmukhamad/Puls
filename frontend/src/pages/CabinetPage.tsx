@@ -1,24 +1,37 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import { cabinet } from "../api/endpoints";
 import type { MetricProgress, NominationBrief, WeekMetricsBlock } from "../api/types";
 import {
+  AlertIcon,
+  CoinIcon,
+  MedalIcon,
+  SparkIcon,
+  StoreIcon,
+  TrophyIcon,
+} from "../components/icons";
+import {
+  Badge,
+  Button,
   Card,
-  CoinValue,
+  CoinAmount,
+  Delta,
   EmptyState,
   ErrorState,
-  Meter,
+  KPI,
+  KPISkeleton,
   Pagination,
-  Pill,
-  Spinner,
-  StatTile,
+  Progress,
+  RowsSkeleton,
+  SegmentedControl,
+  Skeleton,
+  StatusIcon,
 } from "../components/ui";
 import {
   TX_LABELS,
   coins,
-  coinsWithUnit,
   dateTime,
   percent,
   periodLabel,
@@ -28,19 +41,34 @@ import {
 
 type HistoryKind = "" | "accrual" | "writeoff" | "purchase";
 
-export function CabinetPage() {
-  const dashboard = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => cabinet.dashboard(),
-  });
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 5) return "Доброй ночи";
+  if (hour < 12) return "Доброе утро";
+  if (hour < 18) return "Добрый день";
+  return "Добрый вечер";
+}
 
-  if (dashboard.isLoading) return <Spinner label="Загружаем кабинет" />;
+export function CabinetPage() {
+  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: () => cabinet.dashboard() });
+
+  if (dashboard.isLoading) {
+    return (
+      <div className="page-skeleton">
+        <Skeleton height={36} width="40%" radius="var(--radius-s)" />
+        <Skeleton height={180} radius="var(--radius-xl)" />
+        <KPISkeleton />
+      </div>
+    );
+  }
+
   if (dashboard.isError) {
     return <ErrorState error={dashboard.error} onRetry={() => dashboard.refetch()} />;
   }
 
   const data = dashboard.data!;
   const { balance, week } = data;
+  const firstName = data.full_name.trim().split(/\s+/)[0];
 
   return (
     <div className="stack">
@@ -52,47 +80,50 @@ export function CabinetPage() {
             {data.group_name ? ` · ${data.group_name}` : ""}
           </p>
         </div>
-        <Link to="/shop" className="btn btn--primary">
-          В магазин бонусов
-        </Link>
       </div>
 
-      {/* Блок «Мой баланс» - п. 4.1.1 ТЗ */}
-      <div className="kpi">
-        <StatTile
-          hero
-          label="Баланс коинов"
-          value={coins(balance.balance)}
-          hint={
-            balance.reserved > 0
-              ? `${coins(balance.reserved)} в резерве под заявки · доступно ${coins(balance.available)}`
-              : "Коины не сгорают и копятся без ограничения срока"
-          }
+      <div className="grid grid--2-1">
+        <Hero
+          greetingName={firstName}
+          balance={balance}
+          week={week}
+          nominations={data.my_nominations}
         />
-        <StatTile
+        <QuickActions available={balance.available} pending={data.pending_shop_requests} />
+      </div>
+
+      {/* Блок «Мой баланс» - п. 4.1.1 бизнес-ТЗ */}
+      <div className="kpi-grid">
+        <KPI
           label="Начислено за неделю"
           value={signed(balance.earned_this_week)}
           hint={week.week_label ? `Неделя ${week.week_label}` : undefined}
         />
-        <StatTile
+        <KPI
           label="Место в рейтинге"
           value={balance.rank ? `#${balance.rank}` : "—"}
           delta={balance.rank_delta}
           deltaLabel="к прошлой неделе"
           hint={balance.participants ? `из ${balance.participants} участников` : undefined}
         />
-        <StatTile
+        <KPI
           label="Всего начислено"
           value={coins(balance.total_earned)}
-          hint={`Потрачено ${coinsWithUnit(balance.total_spent)}`}
+          hint={`Потрачено ${coins(balance.total_spent)}`}
+        />
+        <KPI
+          label="Достижения"
+          value={`${data.badges_unlocked}`}
+          unit={`из ${data.badges_total}`}
+          hint="Открыто бейджей"
         />
       </div>
 
       <div className="grid grid--2-1">
         <WeekMetricsCard week={week} />
-        <div className="stack">
-          <WeekCoinsCard week={week} nominations={data.my_nominations} />
-          <BadgesCard unlocked={data.badges_unlocked} total={data.badges_total} />
+        <div className="stack stack--tight">
+          <WeekCoinsCard week={week} />
+          <BadgesCard />
         </div>
       </div>
 
@@ -102,14 +133,124 @@ export function CabinetPage() {
 }
 
 /* --------------------------------------------------------------------------
- * Блок «Показатели недели» - п. 4.1.2 ТЗ
+ * Ведущий блок кабинета. Ровно одна крупная цифра на экране - баланс.
+ * -------------------------------------------------------------------------- */
+
+function Hero({
+  greetingName,
+  balance,
+  week,
+  nominations,
+}: {
+  greetingName: string;
+  balance: import("../api/types").BalanceBlock;
+  week: WeekMetricsBlock;
+  nominations: NominationBrief[];
+}) {
+  return (
+    <section className="hero">
+      <p className="hero__greeting">
+        {greeting()}, {greetingName}
+      </p>
+
+      <div className="hero__balance">
+        <span className="hero__amount">{coins(balance.balance)}</span>
+        <span className="hero__coin" aria-hidden="true" />
+      </div>
+      <p className="hero__caption">
+        {balance.reserved > 0
+          ? `${coins(balance.reserved)} зарезервировано под заявки · доступно ${coins(balance.available)}`
+          : "Коины не сгорают и копятся без ограничения срока"}
+      </p>
+
+      <div className="hero__stats">
+        <div className="hero__stat">
+          <span className="hero__stat-label">Место</span>
+          <span className="hero__stat-value">
+            {balance.rank ? `#${balance.rank}` : "—"}
+            {balance.rank_delta !== null && balance.rank_delta !== 0 && (
+              <Delta value={balance.rank_delta} />
+            )}
+          </span>
+        </div>
+        <div className="hero__stat">
+          <span className="hero__stat-label">За неделю</span>
+          <span className="hero__stat-value">{signed(balance.earned_this_week)}</span>
+        </div>
+        <div className="hero__stat">
+          <span className="hero__stat-label">Итог недели</span>
+          <span className="hero__stat-value">
+            {points(week.final_points)}
+            <span className="muted small">баллов</span>
+          </span>
+        </div>
+        {nominations.length > 0 && (
+          <div className="hero__stat">
+            <span className="hero__stat-label">Номинации</span>
+            <span className="hero__stat-value">
+              <MedalIcon size={18} />
+              {nominations.length}
+            </span>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function QuickActions({ available, pending }: { available: number; pending: number }) {
+  const navigate = useNavigate();
+  return (
+    <Card title="Быстрые действия">
+      <div className="quick-actions">
+        <button type="button" className="quick-action" onClick={() => navigate("/shop")}>
+          <span className="quick-action__icon">
+            <StoreIcon size={20} />
+          </span>
+          <span className="quick-action__text">
+            <span className="quick-action__title">Магазин бонусов</span>
+            <span className="quick-action__hint">Доступно {coins(available)} коинов</span>
+          </span>
+        </button>
+
+        <button type="button" className="quick-action" onClick={() => navigate("/rating")}>
+          <span className="quick-action__icon">
+            <TrophyIcon size={20} />
+          </span>
+          <span className="quick-action__text">
+            <span className="quick-action__title">Рейтинг недели</span>
+            <span className="quick-action__hint">Пьедестал и номинации</span>
+          </span>
+        </button>
+
+        {pending > 0 && (
+          <button type="button" className="quick-action" onClick={() => navigate("/shop")}>
+            <span className="quick-action__icon">
+              <CoinIcon size={20} />
+            </span>
+            <span className="quick-action__text">
+              <span className="quick-action__title">Заявки на рассмотрении</span>
+              <span className="quick-action__hint">{pending} шт. ждут решения</span>
+            </span>
+          </button>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/* --------------------------------------------------------------------------
+ * Показатели недели - п. 4.1.2 бизнес-ТЗ
  * -------------------------------------------------------------------------- */
 
 function WeekMetricsCard({ week }: { week: WeekMetricsBlock }) {
   if (!week.week_id) {
     return (
       <Card title="Показатели недели">
-        <EmptyState title="Неделя ещё не заведена" hint="Данные появятся после выгрузки показателей" />
+        <EmptyState
+          title="Неделя ещё не заведена"
+          hint="Данные появятся после выгрузки показателей"
+        />
       </Card>
     );
   }
@@ -120,15 +261,13 @@ function WeekMetricsCard({ week }: { week: WeekMetricsBlock }) {
   return (
     <Card
       title="Показатели недели"
+      subtitle={
+        week.starts_on && week.ends_on ? periodLabel(week.starts_on, week.ends_on) : undefined
+      }
       action={
-        <div className="card__meta">
-          {week.starts_on && week.ends_on && (
-            <span className="muted">{periodLabel(week.starts_on, week.ends_on)}</span>
-          )}
-          <Pill tone={week.is_final ? "good" : "accent"}>
-            {week.is_final ? "Итог подведён" : "Неделя идёт"}
-          </Pill>
-        </div>
+        <Badge tone={week.is_final ? "success" : "accent"} dot>
+          {week.is_final ? "Итог подведён" : "Неделя идёт"}
+        </Badge>
       }
     >
       {positive.length === 0 && anti.length === 0 ? (
@@ -143,11 +282,9 @@ function WeekMetricsCard({ week }: { week: WeekMetricsBlock }) {
 
           {anti.length > 0 && (
             <>
-              <h3 className="metrics__group">Антипоказатели</h3>
-              <p className="metrics__note">
-                Снижают итоговый балл до перевода в коины
-              </p>
-              <ul className="metrics">
+              <h3 className="group-title">Антипоказатели</h3>
+              <p className="group-note">Снижают итоговый балл до перевода в коины</p>
+              <ul className="metrics stack--tight">
                 {anti.map((metric) => (
                   <AntiMetricRow key={metric.code} metric={metric} />
                 ))}
@@ -163,9 +300,7 @@ function WeekMetricsCard({ week }: { week: WeekMetricsBlock }) {
             {week.penalty_points > 0 && (
               <div className="totals__row totals__row--penalty">
                 <span>
-                  <span className="icon-warn" aria-hidden="true">
-                    !
-                  </span>
+                  <AlertIcon size={15} />
                   Штраф за антипоказатели
                 </span>
                 <strong>−{points(week.penalty_points)}</strong>
@@ -184,6 +319,9 @@ function WeekMetricsCard({ week }: { week: WeekMetricsBlock }) {
 
 function MetricRow({ metric }: { metric: MetricProgress }) {
   const unit = metric.unit ? ` ${metric.unit}` : "";
+  // Приближение к плану окрашивает шкалу: заполнено, но ещё не дотянуто.
+  const tone = metric.completion >= 0.95 ? "success" : metric.completion >= 0.7 ? "accent" : "warning";
+
   return (
     <li className="metric">
       <div className="metric__head">
@@ -198,10 +336,10 @@ function MetricRow({ metric }: { metric: MetricProgress }) {
           </span>
         </span>
       </div>
-      <Meter completion={metric.completion} />
+      <Progress value={metric.completion} tone={tone} label={metric.title} />
       <div className="metric__foot">
-        <span className="muted">{percent(metric.completion)} плана</span>
-        <span className="muted">
+        <span>{percent(metric.completion)} плана</span>
+        <span>
           {points(metric.points)} из {points(metric.max_points)} баллов
         </span>
       </div>
@@ -214,34 +352,31 @@ function AntiMetricRow({ metric }: { metric: MetricProgress }) {
   const unit = metric.unit ? ` ${metric.unit}` : "";
   return (
     <li className="metric metric--anti">
-      <div className="metric__head">
-        <span className="metric__title">
-          {/* Значок и подпись дублируют цвет: красный и зелёный различимы не для всех. */}
-          <span className={clean ? "icon-ok" : "icon-warn"} aria-hidden="true">
-            {clean ? "✓" : "!"}
-          </span>
-          {metric.title}
-        </span>
-        <span className={clean ? "metric__value metric__value--ok" : "metric__value metric__value--bad"}>
-          {clean ? "Нарушений нет" : `${points(metric.value)}${unit}`}
-        </span>
-      </div>
-      {!clean && <div className="metric__penalty">Штраф −{points(metric.penalty)} балла(ов)</div>}
+      <span className="metric__title">
+        {/* Значок и подпись дублируют цвет: красный и зелёный различимы не для всех. */}
+        <StatusIcon ok={clean} />
+        {metric.title}
+      </span>
+      <span className="metric__value">
+        {clean ? (
+          <span className="secondary">Нарушений нет</span>
+        ) : (
+          <>
+            {points(metric.value)}
+            {unit}
+            <span className="metric__target"> · штраф −{points(metric.penalty)}</span>
+          </>
+        )}
+      </span>
     </li>
   );
 }
 
 /* --------------------------------------------------------------------------
- * Из чего сложатся коины за неделю
+ * Из чего складываются коины недели
  * -------------------------------------------------------------------------- */
 
-function WeekCoinsCard({
-  week,
-  nominations,
-}: {
-  week: WeekMetricsBlock;
-  nominations: NominationBrief[];
-}) {
+function WeekCoinsCard({ week }: { week: WeekMetricsBlock }) {
   const rows = [
     { label: "За баллы конкурса", value: week.coins_from_points },
     { label: "Призовое место", value: week.coins_rank_bonus },
@@ -249,17 +384,15 @@ function WeekCoinsCard({
     { label: "Номинации", value: week.coins_nomination_bonus },
   ].filter((row) => row.value > 0);
 
+  const title = `${week.is_final ? "Итог недели" : "Ожидается за неделю"} ${week.week_label ?? ""}`.trim();
+
   return (
-    <Card
-      title={`${week.is_final ? "Итог недели" : "Ожидается за неделю"} ${week.week_label ?? ""}`.trim()}
-    >
+    <Card title={title}>
       {week.coins_total === 0 ? (
         <EmptyState title="Пока ноль коинов" hint="Показатели ещё набираются" />
       ) : (
         <>
-          <div className="coins-total">
-            <CoinValue value={week.coins_total} />
-          </div>
+          <CoinAmount value={week.coins_total} size="l" />
           <ul className="breakdown">
             {rows.map((row) => (
               <li key={row.label} className="breakdown__row">
@@ -269,21 +402,9 @@ function WeekCoinsCard({
             ))}
           </ul>
           {!week.is_final && (
-            <p className="muted small">
+            <p className="muted micro">
               Значение предварительное: коины зачислятся после закрытия недели.
             </p>
-          )}
-          {nominations.length > 0 && (
-            <div className="nominations-mine">
-              <h3 className="metrics__group">Мои номинации</h3>
-              {nominations.map((nomination) => (
-                <div key={nomination.code} className="nomination-chip">
-                  <span aria-hidden="true">★</span>
-                  {nomination.title}
-                  <strong>{signed(nomination.coins_awarded)}</strong>
-                </div>
-              ))}
-            </div>
           )}
         </>
       )}
@@ -292,28 +413,32 @@ function WeekCoinsCard({
 }
 
 /* --------------------------------------------------------------------------
- * Блок «Мои достижения» - п. 4.1.4 ТЗ
+ * Достижения - п. 4.1.4 бизнес-ТЗ
  * -------------------------------------------------------------------------- */
 
-function BadgesCard({ unlocked, total }: { unlocked: number; total: number }) {
+function BadgesCard() {
   const badges = useQuery({ queryKey: ["badges"], queryFn: cabinet.badges });
 
   return (
-    <Card title="Мои достижения" action={<span className="muted">{unlocked} из {total}</span>}>
-      {badges.isLoading && <Spinner />}
+    <Card title="Мои достижения">
+      {badges.isLoading && <RowsSkeleton rows={3} />}
       {badges.isError && <ErrorState error={badges.error} onRetry={() => badges.refetch()} />}
       {badges.data && (
-        <ul className="badges">
+        <ul className="badges-list">
           {badges.data.map((badge) => (
-            <li key={badge.code} className={badge.unlocked ? "badge badge--on" : "badge"}>
-              <span className="badge__icon" aria-hidden="true">
-                {badge.unlocked ? "★" : "☆"}
+            <li
+              key={badge.code}
+              className={badge.unlocked ? "badge-card is-unlocked" : "badge-card"}
+            >
+              <span className="badge-card__icon">
+                {badge.unlocked ? <MedalIcon size={20} /> : <SparkIcon size={20} />}
               </span>
-              <div className="badge__text">
-                <span className="badge__title">{badge.title}</span>
-                <span className="badge__hint">{badge.hint || badge.description}</span>
+              <div className="badge-card__text">
+                <span className="badge-card__title">{badge.title}</span>
+                <span className="badge-card__hint">{badge.hint || badge.description}</span>
+                {/* Заблокированный бейдж показывает критерий, а не серую заглушку. */}
                 {!badge.unlocked && badge.progress_target > 0 && (
-                  <Meter completion={badge.progress_percent / 100} />
+                  <Progress value={badge.progress_percent / 100} size="s" />
                 )}
               </div>
             </li>
@@ -325,10 +450,10 @@ function BadgesCard({ unlocked, total }: { unlocked: number; total: number }) {
 }
 
 /* --------------------------------------------------------------------------
- * Блок «История начислений и списаний» - п. 4.1.3 ТЗ
+ * История операций - п. 4.1.3 бизнес-ТЗ
  * -------------------------------------------------------------------------- */
 
-const KIND_TABS: { value: HistoryKind; label: string }[] = [
+const KIND_OPTIONS: { value: HistoryKind; label: string }[] = [
   { value: "", label: "Все" },
   { value: "accrual", label: "Начисления" },
   { value: "writeoff", label: "Списания" },
@@ -338,117 +463,105 @@ const KIND_TABS: { value: HistoryKind; label: string }[] = [
 function HistoryCard() {
   const [kind, setKind] = useState<HistoryKind>("");
   const [page, setPage] = useState(1);
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const size = 12;
 
-  const size = 15;
   const history = useQuery({
-    queryKey: ["transactions", kind, page, from, to],
-    queryFn: () =>
-      cabinet.transactions({
-        kind: kind || undefined,
-        page,
-        size,
-        date_from: from ? `${from}T00:00:00` : undefined,
-        date_to: to ? `${to}T23:59:59` : undefined,
-      }),
+    queryKey: ["transactions", kind, page],
+    queryFn: () => cabinet.transactions({ kind: kind || undefined, page, size }),
   });
 
   return (
     <Card
       title="История операций"
       action={
-        <div className="filters">
-          <div className="tabs" role="tablist">
-            {KIND_TABS.map((tab) => (
-              <button
-                key={tab.value}
-                type="button"
-                role="tab"
-                aria-selected={kind === tab.value}
-                className={kind === tab.value ? "tab tab--active" : "tab"}
-                onClick={() => {
-                  setKind(tab.value);
-                  setPage(1);
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          <input
-            type="date"
-            className="input input--sm"
-            value={from}
-            aria-label="Начало периода"
-            onChange={(event) => {
-              setFrom(event.target.value);
-              setPage(1);
-            }}
-          />
-          <input
-            type="date"
-            className="input input--sm"
-            value={to}
-            aria-label="Конец периода"
-            onChange={(event) => {
-              setTo(event.target.value);
-              setPage(1);
-            }}
-          />
-        </div>
+        <SegmentedControl
+          options={KIND_OPTIONS}
+          value={kind}
+          label="Тип операции"
+          onChange={(value) => {
+            setKind(value);
+            setPage(1);
+          }}
+        />
       }
       padded={false}
     >
-      {history.isLoading && <div className="card__body"><Spinner /></div>}
+      {history.isLoading && (
+        <div className="card__body">
+          <RowsSkeleton />
+        </div>
+      )}
       {history.isError && (
         <div className="card__body">
           <ErrorState error={history.error} onRetry={() => history.refetch()} />
         </div>
       )}
-      {history.data && (
+
+      {history.data && history.data.items.length === 0 && (
+        <EmptyState
+          title="Операций за выбранный период нет"
+          hint="Измените фильтр или дождитесь итогов недели"
+          action={
+            kind ? (
+              <Button onClick={() => setKind("")}>Показать все</Button>
+            ) : undefined
+          }
+        />
+      )}
+
+      {history.data && history.data.items.length > 0 && (
         <>
-          {history.data.items.length === 0 ? (
-            <div className="card__body">
-              <EmptyState title="Операций за выбранный период нет" />
-            </div>
-          ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Дата</th>
-                    <th>Операция</th>
-                    <th>Причина</th>
-                    <th>Автор</th>
-                    <th className="num">Коины</th>
-                    <th className="num">Баланс после</th>
+          <div className="table-wrap table-wrap--responsive">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Дата</th>
+                  <th>Операция</th>
+                  <th>Причина</th>
+                  <th>Автор</th>
+                  <th className="num">Коины</th>
+                  <th className="num">Баланс</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.data.items.map((tx) => (
+                  <tr key={tx.id}>
+                    <td className="nowrap secondary">{dateTime(tx.created_at)}</td>
+                    <td>{TX_LABELS[tx.tx_type] ?? tx.tx_type}</td>
+                    <td className="secondary">{tx.reason}</td>
+                    <td className="muted">{tx.author_name ?? "Система"}</td>
+                    <td className="num">
+                      <CoinAmount value={tx.amount} signed />
+                    </td>
+                    <td className="num muted">{coins(tx.balance_after)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {history.data.items.map((tx) => (
-                    <tr key={tx.id}>
-                      <td className="nowrap">{dateTime(tx.created_at)}</td>
-                      <td>{TX_LABELS[tx.tx_type] ?? tx.tx_type}</td>
-                      <td className="table__reason">{tx.reason}</td>
-                      <td className="muted">{tx.author_name ?? "Система"}</td>
-                      <td className="num">
-                        <CoinValue value={tx.amount} signed />
-                      </td>
-                      <td className="num muted">{coins(tx.balance_after)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="card__body card__body--tight">
-            <Pagination
-              page={page}
-              size={size}
-              total={history.data.total}
-              onChange={setPage}
-            />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* На телефоне таблица превращается в список карточек. */}
+          <div className="card__body">
+            <ul className="card-list">
+              {history.data.items.map((tx) => (
+                <li key={tx.id} className="list-card">
+                  <div className="list-card__head">
+                    <span className="cell-person__text">
+                      <span className="cell-person__name">
+                        {TX_LABELS[tx.tx_type] ?? tx.tx_type}
+                      </span>
+                      <span className="cell-person__meta">{dateTime(tx.created_at)}</span>
+                    </span>
+                    <CoinAmount value={tx.amount} signed />
+                  </div>
+                  <p className="small secondary">{tx.reason}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="card__body--flush">
+            <Pagination page={page} size={size} total={history.data.total} onChange={setPage} />
           </div>
         </>
       )}

@@ -7,6 +7,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { AlertIcon, CheckIcon, SparkIcon } from "./icons";
+
 type ToastTone = "good" | "critical" | "accent";
 
 interface Toast {
@@ -23,10 +25,10 @@ interface ToastApi {
 
 const ToastContext = createContext<ToastApi | null>(null);
 
-const ICONS: Record<ToastTone, string> = {
-  good: "✓",
-  critical: "!",
-  accent: "i",
+const ICONS: Record<ToastTone, ReactNode> = {
+  good: <CheckIcon size={13} />,
+  critical: <AlertIcon size={13} />,
+  accent: <SparkIcon size={13} />,
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -54,11 +56,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="toasts" aria-live="polite">
         {toasts.map((toast) => (
-          <div key={toast.id} className={`toast toast--${toast.tone}`}>
-            {/* Значок дублирует цвет: тон сообщения не должен читаться только по нему. */}
-            <span className="toast__icon" aria-hidden="true">
-              {ICONS[toast.tone]}
-            </span>
+          <div key={toast.id} className={`toast glass glass--prominent toast--${toast.tone}`}>
+            {/* Значок дублирует цвет: тон сообщения не читается по одному оттенку. */}
+            <span className="toast__icon">{ICONS[toast.tone]}</span>
             <span>{toast.text}</span>
           </div>
         ))}
