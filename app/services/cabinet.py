@@ -18,12 +18,14 @@ from app.models.shop import ShopRequest
 from app.models.user import User
 from app.schemas.cabinet import (
     BalanceBlock,
+    LevelBlock,
     MetricProgress,
     NominationBrief,
     WeekMetricsBlock,
 )
 from app.services import badges as badges_service
 from app.services import coins as coins_service
+from app.services import levels as levels_service
 from app.services import weekly as weekly_service
 from app.services.rules import get_rules
 from app.services.scoring import points_to_coins, score_week
@@ -180,6 +182,24 @@ async def balance_block(
         participants=participants,
         previous_rank=previous_rank,
         rank_delta=rank_delta,
+    )
+
+
+async def level_block(session: AsyncSession, *, total_earned: int) -> LevelBlock:
+    """Блок прогресса по ступеням для кабинета и профиля."""
+    progress = await levels_service.for_user(session, total_earned)
+    return LevelBlock(
+        code=progress.current.code if progress.current else None,
+        title=progress.current.title if progress.current else None,
+        description=progress.current.description if progress.current else None,
+        index=progress.index,
+        total_levels=progress.total_levels,
+        total_earned=progress.total_earned,
+        next_title=progress.next.title if progress.next else None,
+        next_at=progress.next.min_earned if progress.next else None,
+        remaining=progress.remaining,
+        progress=progress.fraction,
+        is_max=progress.next is None and progress.total_levels > 0,
     )
 
 

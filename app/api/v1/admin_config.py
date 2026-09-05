@@ -9,11 +9,15 @@ from app.core.deps import HeadUser, SessionDep, StaffUser
 from app.core.errors import ConflictError, NotFoundError
 from app.models.badge import BadgeDefinition
 from app.models.contest import MetricDefinition, NominationDefinition
+from app.models.level import LevelDefinition
 from app.models.shop import ShopItem
 from app.schemas.admin import (
     BadgeCreate,
     BadgeOut,
     BadgeUpdate,
+    LevelCreate,
+    LevelOut,
+    LevelUpdate,
     MetricCreate,
     MetricOut,
     MetricUpdate,
@@ -213,6 +217,72 @@ async def update_badge(
         setattr(badge, field, value)
     await _commit(session, "Бейдж")
     return badge
+
+
+# --------------------------------------------------------------------------- #
+# Уровни (п. 6.2 ТЗ)
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/levels", response_model=list[LevelOut], summary="Ступени прогресса")
+async def list_levels(session: SessionDep, _: StaffUser) -> list[LevelDefinition]:
+    return list(
+        await session.scalars(
+            select(LevelDefinition).order_by(LevelDefinition.min_earned, LevelDefinition.id)
+        )
+    )
+
+
+@router.post(
+    "/levels",
+    response_model=LevelOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Добавить ступень",
+)
+async def create_level(
+    session: SessionDep, actor: HeadUser, payload: LevelCreate
+) -> LevelDefinition:
+    level = LevelDefinition(**payload.model_dump())
+    session.add(level)
+    await _commit(session, "Ступень")
+    await write_audit(
+        session,
+        actor_id=actor.id,
+        action="level.create",
+        entity_type="level",
+        entity_id=level.id,
+        payload={"code": level.code, "min_earned": level.min_earned},
+    )
+    await session.commit()
+    return level
+
+
+@router.patch("/levels/{level_id}", response_model=LevelOut, summary="Изменить ступень")
+async def update_level(
+    session: SessionDep, actor: HeadUser, level_id: int, payload: LevelUpdate
+) -> LevelDefinition:
+    """
+    Меняет порог или название ступени.
+
+    Уровень нигде не хранится: он вычисляется от накопленной суммы при каждом
+    запросе, поэтому новый порог применяется сразу ко всем операторам.
+    """
+    level = await session.get(LevelDefinition, level_id)
+    if level is None:
+        raise NotFoundError(f"Ступень id={level_id} не найдена")
+    changes = payload.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(level, field, value)
+    await write_audit(
+        session,
+        actor_id=actor.id,
+        action="level.update",
+        entity_type="level",
+        entity_id=level.id,
+        payload=changes,
+    )
+    await _commit(session, "Ступень")
+    return level
 
 
 # --------------------------------------------------------------------------- #

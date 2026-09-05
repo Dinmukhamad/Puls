@@ -257,9 +257,19 @@ a {
   flex: none;
 }
 
-.shell--collapsed .sidebar__name,
-.shell--collapsed .sidebar__toggle {
+.shell--collapsed .sidebar__name {
   display: none;
+}
+
+/* Кнопка остаётся видимой и в свёрнутом виде - иначе развернуть меню нечем. */
+.shell--collapsed .sidebar__brand {
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-2);
+}
+
+.shell--collapsed .sidebar__toggle {
+  transform: rotate(180deg);
 }
 
 .sidebar__nav {
@@ -2295,24 +2305,9 @@ select.input {
   }
 }
 
-/* Планшет: сайдбар всегда свёрнут. */
+/* Планшет: сайдбар по умолчанию свёрнут, но состоянием управляет пользователь. */
 @media (max-width: 1023px) and (min-width: 768px) {
-  .sidebar {
-    width: var(--sidebar-collapsed);
-  }
-  .sidebar__name,
-  .sidebar__toggle,
-  .nav-item__label,
-  .sidebar__user-text,
-  .sidebar__section-title {
-    display: none;
-  }
-  .nav-item {
-    justify-content: center;
-    padding: 0;
-  }
   .main {
-    margin-left: calc(var(--sidebar-collapsed) + var(--sidebar-inset) * 2);
     padding: var(--sp-6);
   }
 }
@@ -2599,4 +2594,115 @@ select.input {
   .quick-action:active {
     transform: none;
   }
+}
+
+/* --------------------------------------------------------------------------
+ * Ступень прогресса
+ * -------------------------------------------------------------------------- */
+
+.level {
+  position: relative;
+  z-index: 1;
+  margin-top: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.level__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.level__title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-card-title);
+  font-weight: 620;
+  /* XP и уровни носят собственный акцент, отличный от цвета коинов. */
+  color: var(--xp-color);
+}
+
+.level__step {
+  font-size: var(--text-micro);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.level__hint {
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+/* Лестница ступеней в профиле */
+
+.ladder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.ladder__step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-m);
+  background: var(--surface-secondary);
+  border: 1px solid transparent;
+}
+
+.ladder__step.is-current {
+  background: var(--xp-tint);
+  border-color: var(--xp-color);
+}
+
+/* Недостигнутая ступень приглушена, но остаётся читаемой и показывает порог. */
+.ladder__step.is-locked .ladder__title,
+.ladder__step.is-locked .ladder__threshold {
+  color: var(--text-secondary);
+}
+
+.ladder__marker {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface-tertiary);
+  color: var(--text-secondary);
+  font-size: var(--text-micro);
+  font-weight: 650;
+  flex: none;
+}
+
+.ladder__step.is-reached .ladder__marker {
+  background: var(--xp-color);
+  color: #fff;
+}
+
+.ladder__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ladder__title {
+  font-weight: 590;
+  font-size: var(--text-secondary-size);
+}
+
+.ladder__desc {
+  font-size: var(--text-micro);
+  color: var(--text-secondary);
+}
+
+.ladder__threshold {
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }

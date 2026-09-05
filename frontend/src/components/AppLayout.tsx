@@ -48,10 +48,18 @@ const NAV: NavItem[] = [
 ];
 
 const COLLAPSE_KEY = "puls.sidebar.collapsed";
+/** Ниже этой ширины сайдбар по умолчанию свёрнут, но развернуть его можно. */
+const AUTO_COLLAPSE_WIDTH = 1024;
+
+function initialCollapsed(): boolean {
+  const saved = localStorage.getItem(COLLAPSE_KEY);
+  if (saved !== null) return saved === "1";
+  return window.innerWidth < AUTO_COLLAPSE_WIDTH;
+}
 
 export function AppLayout() {
   const { user, atLeast } = useAuth();
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [compactTabBar, setCompactTabBar] = useState(false);
   const lastScroll = useRef(0);
 
@@ -87,6 +95,7 @@ export function AppLayout() {
           <IconButton
             label={collapsed ? "Развернуть меню" : "Свернуть меню"}
             className="sidebar__toggle"
+            aria-expanded={!collapsed}
             onClick={() => setCollapsed((value) => !value)}
           >
             <ChevronLeftIcon size={18} />
@@ -106,7 +115,10 @@ export function AppLayout() {
                     className={({ isActive }) =>
                       isActive ? "nav-item is-active" : "nav-item"
                     }
+                    // В свёрнутом виде остаётся только иконка, поэтому название
+                    // уходит в подсказку и в доступное имя ссылки.
                     title={collapsed ? item.label : undefined}
+                    aria-label={collapsed ? item.label : undefined}
                   >
                     <span className="nav-item__icon">
                       <item.icon size={20} />

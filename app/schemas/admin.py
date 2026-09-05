@@ -260,6 +260,33 @@ class NominationUpdate(BaseModel):
     sort_order: int | None = None
 
 
+class LevelOut(ORMModel):
+    id: int
+    code: str
+    title: str
+    description: str | None = None
+    min_earned: int
+    is_active: bool
+    sort_order: int
+
+
+class LevelCreate(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=255)
+    min_earned: int = Field(ge=0, description="Порог в накопленных за всё время коинах")
+    description: str | None = None
+    is_active: bool = True
+    sort_order: int = 100
+
+
+class LevelUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    min_earned: int | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+    sort_order: int | None = None
+
+
 class BadgeOut(ORMModel):
     id: int
     code: str

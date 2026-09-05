@@ -19,6 +19,7 @@ from app.models.enums import (
     TxType,
     WeekStatus,
 )
+from app.models.level import LevelDefinition
 from app.models.settings import AuditLog, GamificationSettings
 from app.models.shop import ShopItem, ShopRequest
 from app.models.user import CoinAccount, Group, User
@@ -33,6 +34,7 @@ __all__ = [
     "ContestWeek",
     "GamificationSettings",
     "Group",
+    "LevelDefinition",
     "MetricDefinition",
     "MetricDirection",
     "MetricKind",

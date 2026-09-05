@@ -3,7 +3,12 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { cabinet } from "../api/endpoints";
-import type { MetricProgress, NominationBrief, WeekMetricsBlock } from "../api/types";
+import type {
+  LevelBlock,
+  MetricProgress,
+  NominationBrief,
+  WeekMetricsBlock,
+} from "../api/types";
 import {
   AlertIcon,
   CoinIcon,
@@ -35,6 +40,7 @@ import {
   dateTime,
   percent,
   periodLabel,
+  plural,
   points,
   signed,
 } from "../utils/format";
@@ -87,6 +93,7 @@ export function CabinetPage() {
           greetingName={firstName}
           balance={balance}
           week={week}
+          level={data.level}
           nominations={data.my_nominations}
         />
         <QuickActions available={balance.available} pending={data.pending_shop_requests} />
@@ -140,11 +147,13 @@ function Hero({
   greetingName,
   balance,
   week,
+  level,
   nominations,
 }: {
   greetingName: string;
   balance: import("../api/types").BalanceBlock;
   week: WeekMetricsBlock;
+  level: LevelBlock;
   nominations: NominationBrief[];
 }) {
   return (
@@ -162,6 +171,8 @@ function Hero({
           ? `${coins(balance.reserved)} зарезервировано под заявки · доступно ${coins(balance.available)}`
           : "Коины не сгорают и копятся без ограничения срока"}
       </p>
+
+      {level.title && <LevelStrip level={level} />}
 
       <div className="hero__stats">
         <div className="hero__stat">
@@ -195,6 +206,32 @@ function Hero({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * Ступень прогресса. Считается от накопленных за всё время коинов, поэтому
+ * трата в магазине уровень не понижает.
+ */
+function LevelStrip({ level }: { level: LevelBlock }) {
+  return (
+    <div className="level">
+      <div className="level__head">
+        <span className="level__title">
+          <SparkIcon size={16} />
+          {level.title}
+        </span>
+        <span className="level__step">
+          Ступень {level.index} из {level.total_levels}
+        </span>
+      </div>
+      <Progress value={level.progress} tone="xp" label={`Уровень ${level.title}`} />
+      <p className="level__hint">
+        {level.is_max
+          ? "Высшая ступень достигнута"
+          : `Ещё ${coins(level.remaining)} ${plural(level.remaining, "коин", "коина", "коинов")} до ступени «${level.next_title}»`}
+      </p>
+    </div>
   );
 }
 

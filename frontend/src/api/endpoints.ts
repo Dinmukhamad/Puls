@@ -1,6 +1,7 @@
 import { buildQuery, request } from "./client";
 import type {
   BadgeOut,
+  LevelDefinitionOut,
   DashboardOut,
   OperatorRowOut,
   Page,
@@ -50,6 +51,7 @@ export const cabinet = {
   transactions: (filters: HistoryFilters) =>
     request<Page<TransactionOut>>(`${V1}/me/transactions${buildQuery({ ...filters })}`),
   badges: () => request<BadgeOut[]>(`${V1}/me/badges`),
+  levels: () => request<LevelDefinitionOut[]>(`${V1}/me/levels`),
   myRequests: (page = 1, size = 20) =>
     request<Page<ShopRequestOut>>(`${V1}/me/shop-requests${buildQuery({ page, size })}`),
 };

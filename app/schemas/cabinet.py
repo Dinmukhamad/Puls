@@ -94,6 +94,24 @@ class BadgeOut(BaseModel):
     hint: str = Field(default="", description="Чего не хватает до получения")
 
 
+class LevelBlock(BaseModel):
+    """Ступень прогресса и путь до следующей (п. 6.2 ТЗ)."""
+
+    code: str | None = None
+    title: str | None = None
+    description: str | None = None
+    index: int = Field(default=0, description="Номер ступени, начиная с единицы")
+    total_levels: int = 0
+    total_earned: int = 0
+    next_title: str | None = None
+    next_at: int | None = Field(
+        default=None, description="Порог следующей ступени в накопленных коинах"
+    )
+    remaining: int = Field(default=0, description="Сколько коинов до следующей ступени")
+    progress: float = Field(default=0.0, description="Доля пройденного отрезка, 0..1")
+    is_max: bool = Field(default=False, description="Достигнута последняя ступень")
+
+
 class NominationBrief(BaseModel):
     code: str
     title: str
@@ -108,6 +126,7 @@ class DashboardOut(BaseModel):
     group_name: str | None = None
     balance: BalanceBlock
     week: WeekMetricsBlock
+    level: LevelBlock = Field(default_factory=LevelBlock)
     badges_unlocked: int = 0
     badges_total: int = 0
     my_nominations: list[NominationBrief] = Field(default_factory=list)
