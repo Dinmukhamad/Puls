@@ -30,7 +30,7 @@ export const learning = {
   simulator: (id: number, action: string) => request<LearningAttempt>(`/api/v1/learning/attempts/${id}/simulator`, { method: "POST", json: { action } }),
   definitions: () => request<LearningContent[]>("/api/v1/admin/learning"),
   save: (data: ContentInput, id?: number) => request<LearningContent>(`/api/v1/admin/learning${id ? `/${id}` : ""}`, { method: id ? "PUT" : "POST", json: data }),
-  results: (params: { page?: number; user_id?: number; content_id?: number } = {}) => request<Page<LearningResult>>(`/api/v1/admin/learning-results${buildQuery(params)}`),
+  results: (params: { page?: number; user_id?: number; content_id?: number; kind?: LearningKind } = {}) => request<Page<LearningResult>>(`/api/v1/admin/learning-results${buildQuery(params)}`),
 };
 export const LEARNING_LABELS: Record<LearningKind, string> = { test: "Тесты", mission: "Миссии", simulator: "Driver Simulator" };
 export const DIFFICULTY = { basic: "Начальная", medium: "Средняя", advanced: "Высокая" };

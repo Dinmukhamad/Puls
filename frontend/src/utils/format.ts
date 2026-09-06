@@ -21,8 +21,13 @@ export function percent(fraction: number | null | undefined): string {
   return `${Math.round(fraction * 100)} %`;
 }
 
+/** API timestamps are UTC; SQLite may serialize them without a timezone suffix. */
+export function parseTimestamp(iso: string): Date {
+  return new Date(/T/.test(iso) && !/(Z|[+-]\d{2}:?\d{2})$/i.test(iso) ? `${iso}Z` : iso);
+}
+
 export function dateTime(iso: string): string {
-  return new Date(iso).toLocaleString("ru-RU", {
+  return parseTimestamp(iso).toLocaleString("ru-RU", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

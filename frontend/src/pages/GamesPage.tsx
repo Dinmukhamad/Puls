@@ -15,7 +15,7 @@ export function GamesPage({ administrative = false }: { administrative?: boolean
   const tab = params.get("tab") === "raffles" ? "raffles" : "wheel";
   return <div className="stack games-page"><div className="page-head"><div><h1 className="page-title">{administrative ? "Управление играми" : "Моменты WOW"}</h1><p className="page-subtitle">{administrative ? "Награды и правила участия" : "Небольшие приятные события в рабочем дне"}</p></div>{!administrative && atLeast("supervisor") && <Link className="btn btn--secondary" to="/admin/games">Управление</Link>}</div><SegmentedControl label="Игры" value={tab} options={[{ value:"wheel",label:"Колесо WOW" },{ value:"raffles",label:"Розыгрыши" }]} onChange={(value) => setParams({tab:value})} />{tab === "wheel" ? administrative ? <WheelSettings /> : <Wheel /> : <Raffles administrative={administrative} />}</div>;
 }
-export function invalidateRewards(client: ReturnType<typeof useQueryClient>) { for (const key of ["wheel","wheel-history","dashboard","xp-summary", "xp-ledger","xp-history","notifications"]) void client.invalidateQueries({ queryKey:[key] }); }
+export function invalidateRewards(client: ReturnType<typeof useQueryClient>) { for (const key of ["wheel","wheel-history","dashboard","wallet","xp-summary", "xp-ledger","xp-history","notifications"]) void client.invalidateQueries({ queryKey:[key] }); }
 function Wheel() {
   const query = useQuery({ queryKey:["wheel"], queryFn:games.wheel });
   const [page,setPage] = useState(1); const history = useQuery({ queryKey:["wheel-history",page],queryFn:()=>games.history(page) });

@@ -60,6 +60,7 @@ export const cabinet = {
 /* --- рейтинг --- */
 
 export const rating = {
+  progress: (weekId?: number, count = 8) => request<{ points: { week_id: number | null; label: string; starts_on: string; status: string | null; rank: number | null; points: number | null; coins: number | null }[] }>(`${V1}/rating/me/progress${buildQuery({ week_id: weekId, count })}`),
   weeks: (limit = 20) => request<WeekOut[]>(`${V1}/rating/weeks${buildQuery({ limit })}`),
   leaderboard: (params: { week_id?: number; page?: number; size?: number; search?: string }) =>
     request<RatingOut>(`${V1}/rating${buildQuery({ ...params })}`),
@@ -87,15 +88,15 @@ export const admin = {
     request<Page<OperatorRowOut>>(`${V1}/admin/operators${buildQuery({ ...params })}`),
   exportPath: (weekId?: number) => `${V1}/admin/operators/export${buildQuery({ week_id: weekId })}`,
 
-  manualCoins: (userId: number, amount: number, reason: string) =>
+  manualCoins: (userId: number, amount: number, reason: string, requestId?: string) =>
     request<TransactionOut>(`${V1}/admin/coins/manual`, {
       method: "POST",
-      json: { user_id: userId, amount, reason },
+      json: { user_id: userId, amount, reason, request_id: requestId },
     }),
-  gratitude: (userId: number, driverRef?: string) =>
+  gratitude: (userId: number, driverRef?: string, requestId?: string) =>
     request<TransactionOut>(`${V1}/admin/coins/gratitude`, {
       method: "POST",
-      json: { user_id: userId, driver_ref: driverRef || null },
+      json: { user_id: userId, driver_ref: driverRef || null, request_id: requestId },
     }),
 
   shopRequests: (params: { status?: ShopRequestStatus | ""; page?: number; size?: number }) =>

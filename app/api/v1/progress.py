@@ -36,6 +36,14 @@ async def my_progress(session: SessionDep, user: CurrentUser):
     return await xp_summary(session, user.id)
 
 
+@router.get("/admin/xp/users/{user_id}", response_model=XpSummary)
+async def user_progress(session: SessionDep, actor: StaffUser, user_id: int):
+    visible = await visible_users_filter(session, actor)
+    if await session.scalar(select(User.id).where(User.id == user_id, visible)) is None:
+        raise NotFoundError("Сотрудник не найден")
+    return await xp_summary(session, user_id)
+
+
 async def _entries(session: SessionDep, conditions: list, pagination: PaginationDep):
     total = int(
         await session.scalar(

@@ -3,6 +3,7 @@
 
 Соответствует п. 3.3, 4.4.1-4.4.3 ТЗ.
 """
+
 from __future__ import annotations
 
 import csv
@@ -13,14 +14,16 @@ from datetime import timedelta
 from sqlalchemy import ColumnElement, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import DomainError, NotFoundError
+from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.db.base import utcnow
 from app.models.coin import CoinTransaction
 from app.models.contest import ContestWeek, OperatorWeekResult
 from app.models.enums import Role, ShopRequestStatus, TxType
+from app.models.progress import Notification
 from app.models.shop import ShopRequest
 from app.models.user import CoinAccount, Group, User
 from app.services import coins as coins_service
+from app.services.locking import lock_user
 from app.services.rules import get_rules, write_audit
 
 
@@ -64,6 +67,7 @@ async def manual_transaction(
     amount: int,
     reason: str,
     tx_type: TxType | None = None,
+    request_id: str | None = None,
 ) -> CoinTransaction:
     """
     Ручное начисление или списание коинов (п. 3.3).
@@ -71,6 +75,23 @@ async def manual_transaction(
     Комментарий обязателен, а сама операция и её автор попадают в неизменяемый
     журнал: запись нельзя отредактировать или удалить (п. 5 «Аудит»).
     """
+    cleaned = (reason or "").strip()
+    resolved_type = tx_type or (TxType.MANUAL_CREDIT if amount > 0 else TxType.MANUAL_DEBIT)
+    key = f"manual:{actor.id}:{request_id}" if request_id else None
+    if key:
+        await lock_user(session, actor.id)
+        previous = await session.scalar(
+            select(CoinTransaction).where(CoinTransaction.idempotency_key == key)
+        )
+        if previous:
+            if (previous.user_id, previous.amount, previous.reason, previous.tx_type) != (
+                target.id,
+                amount,
+                cleaned,
+                resolved_type,
+            ):
+                raise ConflictError("Этот запрос уже использован для другой операции")
+            return previous
     rules = await get_rules(session)
 
     if target.role != Role.OPERATOR:
@@ -83,17 +104,12 @@ async def manual_transaction(
             code="amount_out_of_range",
         )
 
-    cleaned = (reason or "").strip()
     if len(cleaned) < rules.manual_reason_min_length:
         raise DomainError(
             f"Комментарий обязателен и должен содержать не менее "
             f"{rules.manual_reason_min_length} символов",
             code="reason_required",
         )
-
-    resolved_type = tx_type or (
-        TxType.MANUAL_CREDIT if amount > 0 else TxType.MANUAL_DEBIT
-    )
 
     transaction = await coins_service.post_transaction(
         session,
@@ -102,9 +118,19 @@ async def manual_transaction(
         tx_type=resolved_type,
         reason=cleaned,
         created_by_id=actor.id,
+        idempotency_key=key,
         meta={"actor_name": actor.full_name, "actor_role": str(actor.role)},
     )
     assert transaction is not None
+    session.add(
+        Notification(
+            user_id=target.id,
+            title="Начислены коины" if amount > 0 else "Списаны коины",
+            body=f"{amount:+d} коинов · {cleaned}",
+            kind="coins",
+            link="/wallet",
+        )
+    )
 
     await write_audit(
         session,
@@ -119,7 +145,12 @@ async def manual_transaction(
 
 
 async def gratitude(
-    session: AsyncSession, *, actor: User, target: User, driver_ref: str | None
+    session: AsyncSession,
+    *,
+    actor: User,
+    target: User,
+    driver_ref: str | None,
+    request_id: str | None = None,
 ) -> CoinTransaction:
     """Начисление за благодарность от водителя фиксированным бонусом (п. 3.2)."""
     rules = await get_rules(session)
@@ -131,6 +162,7 @@ async def gratitude(
         amount=rules.driver_gratitude_bonus,
         reason=f"Благодарность от водителя{suffix}",
         tx_type=TxType.DRIVER_GRATITUDE,
+        request_id=request_id,
     )
 
 
@@ -151,9 +183,7 @@ async def operators_table(
     if search:
         conditions.append(User.full_name.ilike(f"%{search.strip()}%"))
 
-    total = int(
-        await session.scalar(select(func.count(User.id)).where(*conditions)) or 0
-    )
+    total = int(await session.scalar(select(func.count(User.id)).where(*conditions)) or 0)
 
     # Результат недели подтягивается левым соединением: оператор без выгруженных
     # показателей всё равно должен попасть в таблицу с нулями.

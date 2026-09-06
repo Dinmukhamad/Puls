@@ -1,4 +1,5 @@
 """Схемы административной панели и настроек (п. 4.4)."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -43,10 +44,9 @@ class ManualCoinsIn(BaseModel):
     """Ручное начисление или списание (п. 3.3, 4.4.3)."""
 
     user_id: int
-    amount: int = Field(
-        description="Положительное - начисление, отрицательное - списание"
-    )
+    amount: int = Field(description="Положительное - начисление, отрицательное - списание")
     reason: str = Field(min_length=1, max_length=500, description="Обязательный комментарий")
+    request_id: str | None = Field(default=None, min_length=16, max_length=80)
 
     @model_validator(mode="after")
     def _non_zero(self) -> ManualCoinsIn:
@@ -67,6 +67,7 @@ class GratitudeIn(BaseModel):
     """Благодарность от водителя фиксированным бонусом (п. 3.2)."""
 
     user_id: int
+    request_id: str | None = Field(default=None, min_length=16, max_length=80)
     driver_ref: str | None = Field(
         default=None, max_length=64, description="Номер водителя или заявки"
     )

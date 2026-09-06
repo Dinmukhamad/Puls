@@ -55,6 +55,9 @@ export function AdminRequestsPage() {
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
     void queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
+    void queryClient.invalidateQueries({ queryKey: ["wallet"] });
+    void queryClient.invalidateQueries({ queryKey: ["team-transactions"] });
+    void queryClient.invalidateQueries({ queryKey: ["team-purchases"] });
   };
 
   const decide = useMutation({

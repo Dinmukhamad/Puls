@@ -1,10 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { ApiError, downloadFile } from "../api/client";
 import { admin, rating } from "../api/endpoints";
 import type { OperatorRowOut } from "../api/types";
-import { Sheet } from "../components/Sheet";
+import { ManualCoinsSheet } from "../components/ManualCoinsSheet";
 import { useToast } from "../components/Toast";
 import { DownloadIcon, SearchIcon } from "../components/icons";
 import { GlassSurface } from "../components/GlassSurface";
@@ -18,10 +18,9 @@ import {
   KPISkeleton,
   Pagination,
   RowsSkeleton,
-  SegmentedControl,
   StatusIcon,
 } from "../components/ui";
-import { WEEK_STATUS_LABELS, coins, points, signed } from "../utils/format";
+import { WEEK_STATUS_LABELS, coins, points } from "../utils/format";
 
 export function AdminOperatorsPage() {
   const toast = useToast();
@@ -270,158 +269,5 @@ function AntiCell({ value }: { value: number }) {
         </span>
       </span>
     </td>
-  );
-}
-
-/* --------------------------------------------------------------------------
- * Ручное начисление - п. 4.4.3 бизнес-ТЗ. Комментарий обязателен.
- * -------------------------------------------------------------------------- */
-
-const PRESETS = [
-  { amount: 10, reason: "Попадание на доску почёта" },
-  { amount: 5, reason: "Помощь новому сотруднику" },
-  { amount: 7, reason: "Активность вне основного конкурса" },
-];
-
-function ManualCoinsSheet({
-  operator,
-  onClose,
-}: {
-  operator: OperatorRowOut;
-  onClose: () => void;
-}) {
-  const toast = useToast();
-  const queryClient = useQueryClient();
-  const [mode, setMode] = useState<"manual" | "gratitude">("manual");
-  const [amount, setAmount] = useState(10);
-  const [reason, setReason] = useState("");
-  const [driverRef, setDriverRef] = useState("");
-
-  const mutation = useMutation({
-    mutationFn: () =>
-      mode === "gratitude"
-        ? admin.gratitude(operator.user_id, driverRef)
-        : admin.manualCoins(operator.user_id, amount, reason.trim()),
-    onSuccess: (tx) => {
-      toast.success(
-        `${operator.full_name}: ${signed(tx.amount)} коинов. Баланс ${coins(tx.balance_after)}.`,
-      );
-      void queryClient.invalidateQueries({ queryKey: ["admin-operators"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
-      onClose();
-    },
-    onError: (error: unknown) => {
-      toast.error(error instanceof ApiError ? error.message : "Операция не выполнена");
-    },
-  });
-
-  const reasonTooShort = mode === "manual" && reason.trim().length < 5;
-
-  return (
-    <Sheet
-      title="Начисление коинов"
-      subtitle={operator.full_name}
-      onClose={onClose}
-      footer={
-        <>
-          <Button onClick={onClose}>Отмена</Button>
-          <Button
-            variant="primary"
-            disabled={mutation.isPending || reasonTooShort}
-            onClick={() => mutation.mutate()}
-          >
-            {mutation.isPending ? "Сохраняем…" : "Провести"}
-          </Button>
-        </>
-      }
-    >
-      <SegmentedControl
-        block
-        value={mode}
-        onChange={setMode}
-        label="Тип операции"
-        options={[
-          { value: "manual", label: "Начисление или списание" },
-          { value: "gratitude", label: "Благодарность водителя" },
-        ]}
-      />
-
-      <div style={{ marginTop: "var(--sp-5)" }}>
-        {mode === "manual" ? (
-          <>
-            <label className="field">
-              <span className="field__label">
-                Количество коинов
-                <span className="field__note">
-                  положительное — начисление, отрицательное — списание
-                </span>
-              </span>
-              <input
-                className="input"
-                type="number"
-                inputMode="numeric"
-                value={amount}
-                min={-100}
-                max={100}
-                onChange={(event) => setAmount(Number(event.target.value))}
-              />
-            </label>
-
-            <div className="row" style={{ marginBottom: "var(--sp-4)" }}>
-              {PRESETS.map((preset) => (
-                <Button
-                  key={preset.reason}
-                  size="s"
-                  onClick={() => {
-                    setAmount(preset.amount);
-                    setReason(preset.reason);
-                  }}
-                >
-                  +{preset.amount} · {preset.reason}
-                </Button>
-              ))}
-            </div>
-
-            <label className="field">
-              <span className="field__label">
-                Причина <span className="field__req">обязательно</span>
-              </span>
-              <textarea
-                className="input"
-                rows={2}
-                value={reason}
-                maxLength={500}
-                onChange={(event) => setReason(event.target.value)}
-                placeholder="Например: помощь новому сотруднику"
-              />
-            </label>
-            {reasonTooShort && (
-              <p className="field__error">Комментарий должен содержать не менее 5 символов</p>
-            )}
-
-            <p className="muted micro">
-              Операция попадёт в неизменяемую историю с вашим именем и датой. Отредактировать
-              или удалить её потом нельзя — только провести обратную.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="secondary">
-              Начислит фиксированный бонус за благодарность от водителя.
-            </p>
-            <label className="field" style={{ marginTop: "var(--sp-4)" }}>
-              <span className="field__label">Номер водителя или заявки (необязательно)</span>
-              <input
-                className="input"
-                value={driverRef}
-                maxLength={64}
-                onChange={(event) => setDriverRef(event.target.value)}
-                placeholder="1247"
-              />
-            </label>
-          </>
-        )}
-      </div>
-    </Sheet>
   );
 }

@@ -1,4 +1,5 @@
 """Административная панель супервайзера и руководителя (п. 4.4.1-4.4.4)."""
+
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -39,18 +40,14 @@ router = APIRouter(prefix="/admin", tags=["Админ-панель"])
 
 
 @router.get("/summary", response_model=SummaryOut, summary="Сводная статистика")
-async def summary(
-    session: SessionDep, actor: StaffUser, week_id: int | None = None
-) -> SummaryOut:
+async def summary(session: SessionDep, actor: StaffUser, week_id: int | None = None) -> SummaryOut:
     week = await weekly_service.resolve_week(session, week_id, prefer_ranked=True)
     visibility = await visible_users_filter(session, actor)
     data = await staff_service.summary(session, week=week, visibility=visibility)
     return SummaryOut(**asdict(data))
 
 
-@router.get(
-    "/operators", response_model=Page[OperatorRowOut], summary="Таблица операторов"
-)
+@router.get("/operators", response_model=Page[OperatorRowOut], summary="Таблица операторов")
 async def operators(
     session: SessionDep,
     actor: StaffUser,
@@ -121,7 +118,12 @@ async def manual_coins(
     target = await staff_service.get_operator(session, payload.user_id)
     await ensure_can_manage(session, actor, target)
     transaction = await staff_service.manual_transaction(
-        session, actor=actor, target=target, amount=payload.amount, reason=payload.reason
+        session,
+        actor=actor,
+        target=target,
+        amount=payload.amount,
+        reason=payload.reason,
+        request_id=payload.request_id,
     )
     await session.commit()
     item = TransactionOut.model_validate(transaction)
@@ -167,7 +169,11 @@ async def driver_gratitude(
     target = await staff_service.get_operator(session, payload.user_id)
     await ensure_can_manage(session, actor, target)
     transaction = await staff_service.gratitude(
-        session, actor=actor, target=target, driver_ref=payload.driver_ref
+        session,
+        actor=actor,
+        target=target,
+        driver_ref=payload.driver_ref,
+        request_id=payload.request_id,
     )
     await session.commit()
     item = TransactionOut.model_validate(transaction)
@@ -222,9 +228,7 @@ async def all_transactions(
 # --------------------------------------------------------------------------- #
 
 
-@router.get(
-    "/shop/requests", response_model=Page[ShopRequestOut], summary="Очередь заявок"
-)
+@router.get("/shop/requests", response_model=Page[ShopRequestOut], summary="Очередь заявок")
 async def shop_requests(
     session: SessionDep,
     actor: StaffUser,
@@ -324,8 +328,6 @@ async def refund(
     session: SessionDep, actor: HeadUser, request_id: int, payload: ShopRejection
 ) -> Message:
     request = await shop_service.get_request(session, request_id)
-    await shop_service.refund_request(
-        session, request=request, actor=actor, reason=payload.comment
-    )
+    await shop_service.refund_request(session, request=request, actor=actor, reason=payload.comment)
     await session.commit()
     return Message(detail=f"Коины возвращены по заявке #{request_id}")

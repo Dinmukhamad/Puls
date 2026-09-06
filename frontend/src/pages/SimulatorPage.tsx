@@ -27,7 +27,7 @@ function Simulator({ id }: { id: number }) {
   useEffect(() => () => { if (photo) URL.revokeObjectURL(photo); }, [photo]);
   function update(attempt: LearningAttempt) {
     client.setQueryData(["learning-attempt", id], attempt);
-    for (const key of ["learning", "dashboard", "xp-summary", "xp-ledger", "xp-history", "notifications"]) void client.invalidateQueries({ queryKey: [key] });
+    for (const key of ["learning", "learning-results", "dashboard", "wallet", "xp-summary", "xp-ledger", "xp-history", "notifications"]) void client.invalidateQueries({ queryKey: [key] });
   }
   const action = useMutation({ mutationFn: async (name: string) => { const attempt = await learning.simulator(id, name); return name === "finish_trip" ? learning.finish(id) : attempt; }, onSuccess: update });
   const answer = useMutation({ mutationFn: ({ step, value }: { step: number; value: number }) => learning.answer(id, step, value), onSuccess: update });

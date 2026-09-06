@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { rating } from "../api/endpoints";
@@ -15,9 +15,11 @@ import {
   ErrorState,
   Pagination,
   RowsSkeleton,
+  SegmentedControl,
   Skeleton,
 } from "../components/ui";
 import { GlassSurface } from "../components/GlassSurface";
+import { RatingProgressPanel } from "./RatingProgressPanel";
 import { WEEK_STATUS_LABELS, coins, dateTime, periodLabel, points } from "../utils/format";
 
 const MEDAL_LABEL: Record<string, string> = {
@@ -27,15 +29,29 @@ const MEDAL_LABEL: Record<string, string> = {
 };
 
 export function RatingPage() {
-  const [weekId, setWeekId] = useState<number | undefined>();
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "progress" ? "progress" : "board";
+  return <div className="stack"><header className="page-head"><div><h1 className="page-title">Рейтинг</h1><p className="page-subtitle">Результаты команды и ваш прогресс по неделям</p></div></header>
+    <SegmentedControl label="Раздел рейтинга" value={tab} options={[{ value: "board", label: "Рейтинг команды" }, { value: "progress", label: "Мой прогресс" }]} onChange={(value) => { const next = new URLSearchParams(params); next.set("tab", value); setParams(next); }} />
+    {tab === "progress" ? <RatingProgressPanel /> : <Leaderboard />}
+  </div>;
+}
+
+function Leaderboard() {
+  const [params, setParams] = useSearchParams();
+  const selectedWeek = Number(params.get("week"));
+  const weekId = Number.isInteger(selectedWeek) && selectedWeek > 0 ? selectedWeek : undefined;
+  const page = Math.max(1, Math.floor(Number(params.get("page")) || 1));
+  const search = params.get("search") ?? "";
+  const update = (values: Record<string, string | undefined>) => { const next = new URLSearchParams(params); for (const [key, value] of Object.entries(values)) { if (value) next.set(key, value); else next.delete(key); } setParams(next, { replace: "search" in values }); };
+  const setPage = (value: number) => update({ page: String(value) });
   const size = 25;
 
   const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks() });
   const board = useQuery({
     queryKey: ["rating", weekId, page, search],
     queryFn: () => rating.leaderboard({ week_id: weekId, page, size, search: search || undefined }),
+    placeholderData: keepPreviousData,
   });
 
   if (board.isLoading) {
@@ -53,7 +69,6 @@ export function RatingPage() {
     if (board.error instanceof ApiError && board.error.status === 404) {
       return (
         <div className="stack">
-          <h1 className="page-title">Рейтинг</h1>
           <Card>
             <EmptyState
               title="Конкурс ещё не начался"
@@ -75,7 +90,7 @@ export function RatingPage() {
     <div className="stack">
       <div className="page-head">
         <div>
-          <h1 className="page-title">{header.contest_title}</h1>
+          <h2 className="page-title">{header.contest_title}</h2>
           <p className="page-subtitle">
             Неделя {header.week_label} · {periodLabel(header.period_start, header.period_end)} ·{" "}
             {header.participants} участников
@@ -102,8 +117,7 @@ export function RatingPage() {
             value={search}
             aria-label="Поиск по ФИО"
             onChange={(event) => {
-              setSearch(event.target.value);
-              setPage(1);
+              update({ search: event.target.value, page: undefined });
             }}
           />
         </label>
@@ -113,8 +127,7 @@ export function RatingPage() {
           aria-label="Неделя конкурса"
           value={weekId ?? header.week_id}
           onChange={(event) => {
-            setWeekId(Number(event.target.value));
-            setPage(1);
+            update({ week: event.target.value, page: undefined });
           }}
         >
           {(weeks.data ?? []).map((week) => (
@@ -145,6 +158,7 @@ export function RatingPage() {
         </Card>
       )}
 
+      {data.my_row && <Card title="Моё место" variant="highlight"><div className="row"><strong className="rank-badge">{data.my_row.rank ? `#${data.my_row.rank}` : "—"}</strong><span>{points(data.my_row.points)} баллов</span><CoinAmount value={data.my_row.coins_week} size="s" />{data.my_row.rank_delta != null && <Delta value={data.my_row.rank_delta} />}</div><p className="small secondary">Ваш результат за выбранную неделю отображается независимо от поиска и страницы таблицы.</p></Card>}
       <Card title="Общая таблица" padded={false}>
         {data.rows.length === 0 ? (
           <EmptyState

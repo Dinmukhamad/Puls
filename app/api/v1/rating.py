@@ -1,6 +1,8 @@
 """Турнирная таблица (п. 4.2)."""
+
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Query
@@ -8,13 +10,15 @@ from sqlalchemy import select
 
 from app.core.deps import CurrentUser, PaginationDep, SessionDep
 from app.core.errors import NotFoundError
-from app.models.contest import ContestWeek
-from app.models.enums import Role
+from app.models.contest import ContestWeek, OperatorWeekResult
+from app.models.enums import Role, WeekStatus
 from app.schemas.rating import (
     NominationOut,
     PodiumEntry,
     RatingHeader,
     RatingOut,
+    RatingProgress,
+    RatingProgressPoint,
     RatingRowOut,
     WeekOut,
 )
@@ -28,11 +32,58 @@ _MEDALS = {1: "gold", 2: "silver", 3: "bronze"}
 
 
 @router.get("/weeks", response_model=list[WeekOut], summary="Список недель конкурса")
-async def weeks(session: SessionDep, _: CurrentUser, limit: int = 20) -> list[ContestWeek]:
+async def weeks(
+    session: SessionDep, _: CurrentUser, limit: Annotated[int, Query(ge=1, le=104)] = 20
+) -> list[ContestWeek]:
     rows = await session.scalars(
         select(ContestWeek).order_by(ContestWeek.starts_on.desc()).limit(limit)
     )
     return list(rows)
+
+
+@router.get("/me/progress", response_model=RatingProgress)
+async def my_progress(
+    session: SessionDep,
+    user: CurrentUser,
+    week_id: int | None = None,
+    count: Annotated[int, Query(ge=4, le=16)] = 8,
+):
+    anchor = await weekly_service.resolve_week(session, week_id, prefer_ranked=True)
+    end = anchor.starts_on if anchor else date.today() - timedelta(days=date.today().weekday())
+    start = end - timedelta(weeks=count - 1)
+    rows = await session.execute(
+        select(ContestWeek, OperatorWeekResult)
+        .outerjoin(
+            OperatorWeekResult,
+            (OperatorWeekResult.week_id == ContestWeek.id)
+            & (OperatorWeekResult.user_id == user.id),
+        )
+        .where(ContestWeek.starts_on >= start, ContestWeek.starts_on <= end)
+    )
+    by_date = {week.starts_on: (week, result) for week, result in rows}
+    timeline = []
+    for index in range(count):
+        day = start + timedelta(weeks=index)
+        week, result = by_date.get(day, (None, None))
+        # An invalidated calculation is a gap until the week is calculated again.
+        ready = (
+            week is not None
+            and week.status in (WeekStatus.CALCULATED, WeekStatus.CLOSED)
+            and result is not None
+        )
+        year, number, _ = day.isocalendar()
+        timeline.append(
+            RatingProgressPoint(
+                week_id=week.id if week else None,
+                label=f"{year}-W{number:02d}",
+                starts_on=day,
+                status=week.status if week else None,
+                rank=result.rank if ready else None,
+                points=result.final_points if ready else None,
+                coins=result.coins_total if ready else None,
+            )
+        )
+    return RatingProgress(points=timeline)
 
 
 def _to_row(row: rating_service.RatingRow) -> RatingRowOut:
@@ -81,9 +132,7 @@ async def leaderboard(
         offset=pagination.offset,
         limit=pagination.size,
     )
-    top = await rating_service.podium(
-        session, week=week, viewer=user, show_balance=show_balance
-    )
+    top = await rating_service.podium(session, week=week, viewer=user, show_balance=show_balance)
 
     my_result = await rating_service.my_row(session, week=week, user_id=user.id)
     my_row_out = None
@@ -138,9 +187,7 @@ async def leaderboard(
     )
 
 
-@router.get(
-    "/nominations", response_model=list[NominationOut], summary="Номинации недели"
-)
+@router.get("/nominations", response_model=list[NominationOut], summary="Номинации недели")
 async def nominations(
     session: SessionDep, _: CurrentUser, week_id: int | None = None
 ) -> list[NominationOut]:

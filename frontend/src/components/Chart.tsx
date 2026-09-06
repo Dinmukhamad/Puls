@@ -9,13 +9,15 @@ export interface ChartSeries {
 }
 
 /** Weekly observations with explicit gaps and an equivalent readable table. */
-export function Chart({ title, labels, series, target, unit, compact = false }: {
+export function Chart({ title, labels, series, target, unit, compact = false, lowerAtTop = false, integerAxis = false }: {
   title: string;
   labels: string[];
   series: ChartSeries[];
   target?: number | null;
   unit?: string | null;
   compact?: boolean;
+  lowerAtTop?: boolean;
+  integerAxis?: boolean;
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -34,7 +36,7 @@ export function Chart({ title, labels, series, target, unit, compact = false }: 
   const top = 24;
   const bottom = 40;
   const x = (index: number) => left + index * (width - left - right) / Math.max(labels.length - 1, 1);
-  const y = (value: number) => top + (max - value) * (height - top - bottom) / (max - min);
+  const y = (value: number) => top + (lowerAtTop ? value - min : max - value) * (height - top - bottom) / (max - min);
   const readable = (value: number | null) => value === null ? "Нет данных" : `${points(value)}${unit ? ` ${unit}` : ""}`;
 
   return (
@@ -43,7 +45,7 @@ export function Chart({ title, labels, series, target, unit, compact = false }: 
         <svg viewBox={`0 0 ${width} ${height}`} role="group" aria-labelledby={titleId} aria-describedby={descriptionId}>
           <title id={titleId}>{title}</title>
           <desc id={descriptionId}>Недельные значения. Пропуски разрывают линию. Ниже доступна таблица данных.</desc>
-          {[low, (low + high) / 2, high].filter((value, index, values) => values.indexOf(value) === index).map((value) => (
+          {[low, (low + high) / 2, high].map((value) => integerAxis ? Math.round(value) : value).filter((value, index, values) => values.indexOf(value) === index).map((value) => (
             <g key={value} className="analytics-chart__grid" aria-hidden="true">
               <line x1={left} x2={width - right} y1={y(value)} y2={y(value)} />
               <text x={left - 10} y={y(value) + 4} textAnchor="end">{points(value)}</text>
@@ -55,7 +57,7 @@ export function Chart({ title, labels, series, target, unit, compact = false }: 
               <text x={width - right} y={y(target) - 8} textAnchor="end">Цель {points(target)}</text>
             </g>
           )}
-          {labels.map((label, index) => <text key={`${label}-${index}`} className="analytics-chart__label" x={x(index)} y={height - 14} textAnchor="middle" aria-hidden="true">{label.replace(/^\d{4}-/, "")}</text>)}
+          {labels.map((label, index) => index % Math.ceil(labels.length / 8) === 0 || index === labels.length - 1 ? <text key={`${label}-${index}`} className="analytics-chart__label" x={x(index)} y={height - 14} textAnchor="middle" aria-hidden="true">{label.replace(/^\d{4}-/, "")}</text> : null)}
           {series.map((item, seriesIndex) => {
             let path = "";
             let connected = false;

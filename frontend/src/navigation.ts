@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Role } from "./api/types";
 import {
   HomeIcon,
+  CoinIcon,
   SparkIcon,
   InboxIcon,
   StoreIcon,
@@ -29,6 +30,8 @@ export const NAVIGATION: readonly NavItem[] = [
   { to: "/rating", label: "Рейтинг", icon: TrophyIcon, mobilePrimary: true, section: "Главное" },
   { to: "/shop", label: "Магазин", icon: StoreIcon, mobilePrimary: true, section: "Главное" },
   { to: "/progress", label: "Опыт и уровни", icon: TrophyIcon, section: "Главное" },
+  { to: "/wallet", label: "Мой кошелёк", icon: CoinIcon, section: "Главное" },
+  { to: "/admin/wallet", label: "Коины команды", icon: CoinIcon, minRole: "supervisor", section: "Работа" },
   { to: "/training", label: "Обучение", icon: TrophyIcon, section: "Развитие" },
   { to: "/games", label: "Колесо и розыгрыши", icon: SparkIcon, section: "Игры" },
   { to: "/admin/games", label: "Управление играми", icon: InboxIcon, minRole: "supervisor", section: "Игры" },

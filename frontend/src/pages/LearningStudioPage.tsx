@@ -82,9 +82,9 @@ function ContentEditor({ target, kind, onClose }: { target?: LearningContent; ki
   </Sheet>;
 }
 
-export function LearningResults({ userId }: { userId?: number }) {
+export function LearningResults({ userId, kind }: { userId?: number; kind?: LearningKind }) {
   const [page, setPage] = useState(1);
-  const query = useQuery({ queryKey: ["learning-results", userId, page], queryFn: () => learning.results({ user_id: userId, page }) });
+  const query = useQuery({ queryKey: ["learning-results", userId, kind, page], queryFn: () => learning.results({ user_id: userId, kind, page }) });
   if (query.isLoading) return <RowsSkeleton />;
   if (query.isError) return <ErrorState error={query.error} onRetry={() => query.refetch()} />;
   return <div className="stack">{!query.data?.total && <EmptyState title="Попыток пока нет" hint="Результаты появятся, когда сотрудники начнут обучение." />}{query.data?.items.map((row) => <Card key={row.id} title={row.title} subtitle={row.full_name} action={<Badge tone={row.state === "passed" ? "success" : row.state === "failed" ? "warning" : "neutral"}>{row.state === "passed" ? "✓ Пройдено" : row.state === "failed" ? "Не пройдено" : "В процессе"}</Badge>}><p>{LEARNING_LABELS[row.kind]} · {row.answered} из {row.total} шагов{row.score !== null ? ` · ${row.score}%` : ""}</p>{row.finished_at && <p className="secondary small">{dateTime(row.finished_at)} · +{row.awarded_xp} XP · +{row.awarded_coins} коинов</p>}</Card>)}<Pagination page={page} size={20} total={query.data?.total ?? 0} onChange={setPage} /></div>;

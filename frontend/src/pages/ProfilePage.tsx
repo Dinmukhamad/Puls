@@ -8,6 +8,7 @@ import { CheckIcon, DisplayIcon, LogoutIcon, MoonIcon, SunIcon } from "../compon
 import { Avatar, Badge, Button, Card, CoinAmount, Progress, Skeleton } from "../components/ui";
 import { useTheme, type ThemePreference } from "../theme/ThemeContext";
 import { Sheet } from "../components/Sheet";
+import { XpProgress } from "../components/XpProgress";
 import { useToast } from "../components/Toast";
 import { PwaInstallCard } from "../pwa/PwaProvider";
 import { ROLE_LABELS, coins, dateOnly, plural } from "../utils/format";
@@ -137,9 +138,10 @@ export function ProfilePage() {
             </div>
           </Card>
 
+          <XpProgress />
           <LevelsCard totalEarned={dashboard.data?.balance.total_earned ?? 0} />
 
-          <Card title="Мои коины">
+          <Card title="Мои коины" action={<Link to="/wallet">Кошелёк →</Link>}>
             {dashboard.isLoading && <Skeleton height={64} radius="var(--radius-m)" />}
             {dashboard.data && (
               <div className="grouped">

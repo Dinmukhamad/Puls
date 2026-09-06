@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { cabinet } from "../api/endpoints";
+import { progressApi } from "../api/progress";
 import type {
-  LevelBlock,
   MetricProgress,
   NominationBrief,
   WeekMetricsBlock,
@@ -40,7 +40,6 @@ import {
   dateTime,
   percent,
   periodLabel,
-  plural,
   points,
   signed,
 } from "../utils/format";
@@ -93,7 +92,6 @@ export function CabinetPage() {
           greetingName={firstName}
           balance={balance}
           week={week}
-          level={data.level}
           nominations={data.my_nominations}
         />
         <QuickActions available={balance.available} pending={data.pending_shop_requests} />
@@ -140,41 +138,43 @@ export function CabinetPage() {
 }
 
 /* --------------------------------------------------------------------------
- * Ведущий блок кабинета. Ровно одна крупная цифра на экране - баланс.
+ * Основной прогресс — XP, баланс коинов остаётся отдельным показателем.
  * -------------------------------------------------------------------------- */
 
 function Hero({
   greetingName,
   balance,
   week,
-  level,
   nominations,
 }: {
   greetingName: string;
   balance: import("../api/types").BalanceBlock;
   week: WeekMetricsBlock;
-  level: LevelBlock;
   nominations: NominationBrief[];
 }) {
+  const xp = useQuery({ queryKey: ["xp-summary", "me"], queryFn: () => progressApi.summary() });
   return (
     <section className="hero">
       <p className="hero__greeting">
         {greeting()}, {greetingName}
       </p>
 
-      <div className="hero__balance">
-        <span className="hero__amount">{coins(balance.balance)}</span>
-        <span className="hero__coin" aria-hidden="true" />
-      </div>
+      {xp.isLoading && <Skeleton height={150} />}
+      {xp.isError && <ErrorState error={xp.error} onRetry={() => xp.refetch()} />}
+      {xp.data && <div className="level">
+        <Link className="level__title" to="/progress"><SparkIcon size={20} />{xp.data.current?.title ?? "Ваш путь в Puls"}</Link>
+        <div className="hero__balance"><span className="hero__amount">{coins(xp.data.total)}</span><span className="hero__xp-unit">XP</span></div>
+        <Progress value={xp.data.progress} tone="xp" label="Прогресс уровня XP" />
+        <p className="level__hint">{xp.data.next ? `${coins(xp.data.remaining)} XP до уровня «${xp.data.next.title}»` : xp.data.current ? "Высший уровень достигнут" : "Уровни ещё не настроены"}</p>
+      </div>}
       <p className="hero__caption">
         {balance.reserved > 0
           ? `${coins(balance.reserved)} зарезервировано под заявки · доступно ${coins(balance.available)}`
           : "Коины не сгорают и копятся без ограничения срока"}
       </p>
 
-      {level.title && <LevelStrip level={level} />}
-
       <div className="hero__stats">
+        <div className="hero__stat"><span className="hero__stat-label">Кошелёк</span><Link className="hero__stat-value" to="/wallet"><CoinIcon size={18} />{coins(balance.balance)}</Link></div>
         <div className="hero__stat">
           <span className="hero__stat-label">Место</span>
           <span className="hero__stat-value">
@@ -209,37 +209,12 @@ function Hero({
   );
 }
 
-/**
- * Ступень прогресса. Считается от накопленных за всё время коинов, поэтому
- * трата в магазине уровень не понижает.
- */
-function LevelStrip({ level }: { level: LevelBlock }) {
-  return (
-    <div className="level">
-      <div className="level__head">
-        <span className="level__title">
-          <SparkIcon size={16} />
-          {level.title}
-        </span>
-        <span className="level__step">
-          Ступень {level.index} из {level.total_levels}
-        </span>
-      </div>
-      <Progress value={level.progress} tone="xp" label={`Уровень ${level.title}`} />
-      <p className="level__hint">
-        {level.is_max
-          ? "Высшая ступень достигнута"
-          : `Ещё ${coins(level.remaining)} ${plural(level.remaining, "коин", "коина", "коинов")} до ступени «${level.next_title}»`}
-      </p>
-    </div>
-  );
-}
-
 function QuickActions({ available, pending }: { available: number; pending: number }) {
   const navigate = useNavigate();
   return (
     <Card title="Быстрые действия">
       <div className="quick-actions">
+        <button type="button" className="quick-action" onClick={() => navigate("/training")}><span className="quick-action__icon"><SparkIcon size={20} /></span><span className="quick-action__text"><span className="quick-action__title">Продолжить обучение</span><span className="quick-action__hint">Тесты, миссии и новые уровни</span></span></button>
         <button type="button" className="quick-action" onClick={() => navigate("/shop")}>
           <span className="quick-action__icon">
             <StoreIcon size={20} />

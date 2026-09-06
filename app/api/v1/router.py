@@ -17,6 +17,7 @@ from app.api.v1 import (
     rating,
     shop,
     system,
+    wallet,
 )
 
 api_router = APIRouter()
@@ -33,3 +34,4 @@ api_router.include_router(progress.router)
 api_router.include_router(analytics.router)
 api_router.include_router(learning.router)
 api_router.include_router(games.router)
+api_router.include_router(wallet.router)

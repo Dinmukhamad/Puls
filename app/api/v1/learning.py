@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter
 from sqlalchemy import func, select
 
@@ -152,12 +154,15 @@ async def results(
     pagination: PaginationDep,
     user_id: int | None = None,
     content_id: int | None = None,
+    kind: Literal["test", "mission", "simulator"] | None = None,
 ):
     conditions = [await visible_users_filter(session, actor)]
     if user_id is not None:
         conditions.append(LearningAttempt.user_id == user_id)
     if content_id is not None:
         conditions.append(LearningAttempt.content_id == content_id)
+    if kind is not None:
+        conditions.append(LearningAttempt.snapshot["kind"].as_string() == kind)
     total = int(
         await session.scalar(select(func.count(LearningAttempt.id)).join(User).where(*conditions))
         or 0

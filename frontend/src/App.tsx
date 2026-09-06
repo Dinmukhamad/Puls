@@ -29,6 +29,7 @@ import { LearningPlayerPage } from "./pages/LearningPlayerPage";
 import { LearningStudioPage } from "./pages/LearningStudioPage";
 import { SimulatorPage } from "./pages/SimulatorPage";
 import { GamesPage } from "./pages/GamesPage";
+import { WalletPage } from "./pages/WalletPage";
 
 export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
@@ -58,6 +59,8 @@ export function App() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/sessions" element={<SessionsPage />} />
         <Route path="/progress" element={<ProgressPage />} />
+        <Route path="/wallet" element={<WalletPage />} />
+        <Route path="/admin/wallet" element={staff ? <WalletPage administrative /> : <AccessPage />} />
         <Route path="/training" element={<TrainingPage />} />
         <Route path="/games" element={<GamesPage />} />
         <Route path="/admin/games" element={staff ? <GamesPage administrative /> : <AccessPage />} />

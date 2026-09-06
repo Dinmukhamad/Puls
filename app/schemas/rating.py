@@ -1,4 +1,5 @@
 """Схемы турнирной таблицы (п. 4.2)."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -32,9 +33,21 @@ class RatingHeader(BaseModel):
     period_end: date
     status: WeekStatus
     participants: int
-    updated_at: datetime | None = Field(
-        default=None, description="Момент последнего пересчёта"
-    )
+    updated_at: datetime | None = Field(default=None, description="Момент последнего пересчёта")
+
+
+class RatingProgressPoint(BaseModel):
+    week_id: int | None
+    label: str
+    starts_on: date
+    status: WeekStatus | None
+    rank: int | None
+    points: float | None
+    coins: int | None
+
+
+class RatingProgress(BaseModel):
+    points: list[RatingProgressPoint]
 
 
 class RatingRowOut(BaseModel):

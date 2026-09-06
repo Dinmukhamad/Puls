@@ -4,13 +4,57 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
-from app.models.contest import OperatorWeekMetric
-from app.models.enums import Role
+from app.models.contest import OperatorWeekMetric, OperatorWeekResult
+from app.models.enums import Role, WeekStatus
 from app.models.progress import XpEntry
 from app.models.user import CoinAccount
 from app.services import weekly
 from app.services.progress import grant_xp
 from tests.conftest import auth, login, make_group, make_user
+
+
+async def test_personal_rating_history_preserves_gaps_zero_and_privacy(client, session, operator):
+    outsider = await make_user(session, login="rating-history-other")
+    previous = await weekly.get_or_create_week(session, date(2026, 8, 17))
+    invalidated = await weekly.get_or_create_week(session, date(2026, 8, 24))
+    current = await weekly.get_or_create_week(session, date(2026, 8, 31))
+    previous.status = WeekStatus.CLOSED
+    current.status = WeekStatus.CALCULATED
+    session.add_all(
+        [
+            OperatorWeekResult(week_id=previous.id, user_id=operator.id, rank=3, final_points=85),
+            OperatorWeekResult(
+                week_id=invalidated.id, user_id=operator.id, rank=1, final_points=99
+            ),
+            OperatorWeekResult(week_id=current.id, user_id=operator.id, rank=4, final_points=0),
+            OperatorWeekResult(week_id=current.id, user_id=outsider.id, rank=1, final_points=100),
+        ]
+    )
+    await session.commit()
+    own = auth(await login(client, operator.login))
+    result = await client.get(
+        f"/api/v1/rating/me/progress?week_id={current.id}&count=4", headers=own
+    )
+    assert result.status_code == 200, result.text
+    timeline = result.json()["points"]
+    assert [p["label"] for p in timeline] == ["2026-W33", "2026-W34", "2026-W35", "2026-W36"]
+    assert [p["rank"] for p in timeline] == [None, 3, None, 4]
+    assert [p["points"] for p in timeline] == [None, 85, None, 0]
+    assert [p["status"] for p in timeline] == [None, "closed", "open", "calculated"]
+    assert (
+        await client.get("/api/v1/rating/me/progress?count=100000", headers=own)
+    ).status_code == 422
+
+
+async def test_rating_history_empty_installation_and_unknown_week(client, operator):
+    own = auth(await login(client, operator.login))
+    result = await client.get("/api/v1/rating/me/progress", headers=own)
+    assert result.status_code == 200, result.text
+    assert len(result.json()["points"]) == 8
+    assert all(p["points"] is None for p in result.json()["points"])
+    assert (
+        await client.get("/api/v1/rating/me/progress?week_id=99999", headers=own)
+    ).status_code == 404
 
 
 async def test_xp_grant_is_independent_idempotent_and_notifies(client, session, head, operator):

@@ -18,7 +18,7 @@ function AttemptPlayer({ id }: { id: number }) {
     return step === attempt.content.steps.length - 1 ? learning.finish(id) : attempt;
   }, onSuccess: (attempt, { step }) => {
     client.setQueryData(["learning-attempt", id], attempt);
-    for (const key of ["learning", "xp-summary", "xp-ledger", "xp-history", "dashboard", "notifications"]) void client.invalidateQueries({ queryKey: [key] });
+    for (const key of ["learning", "learning-results", "xp-summary", "xp-ledger", "xp-history", "dashboard", "wallet", "notifications"]) void client.invalidateQueries({ queryKey: [key] });
     if (attempt.state === "in_progress") setIndex(step + 1);
   } });
   if (query.isLoading) return <RowsSkeleton />;

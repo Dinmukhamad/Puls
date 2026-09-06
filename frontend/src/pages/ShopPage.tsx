@@ -43,6 +43,7 @@ export function ShopPage() {
     void queryClient.invalidateQueries({ queryKey: ["shop-catalog"] });
     void queryClient.invalidateQueries({ queryKey: ["my-requests"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    void queryClient.invalidateQueries({ queryKey: ["wallet"] });
   };
 
   const buy = useMutation({
