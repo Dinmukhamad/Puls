@@ -4,14 +4,14 @@ import { Link } from "react-router-dom";
 
 import { auth, cabinet } from "../api/endpoints";
 import { useAuth } from "../auth/AuthContext";
-import { CheckIcon, DisplayIcon, LogoutIcon, MoonIcon, SunIcon } from "../components/icons";
-import { Avatar, Badge, Button, Card, CoinAmount, Progress, Skeleton } from "../components/ui";
+import { DisplayIcon, LogoutIcon, MoonIcon, SunIcon } from "../components/icons";
+import { Avatar, Badge, Button, Card, CoinAmount, Skeleton } from "../components/ui";
 import { useTheme, type ThemePreference } from "../theme/ThemeContext";
 import { Sheet } from "../components/Sheet";
 import { XpProgress } from "../components/XpProgress";
 import { useToast } from "../components/Toast";
 import { PwaInstallCard } from "../pwa/PwaProvider";
-import { ROLE_LABELS, coins, dateOnly, plural } from "../utils/format";
+import { ROLE_LABELS, coins, dateOnly } from "../utils/format";
 
 const THEME_OPTIONS: {
   value: ThemePreference;
@@ -139,8 +139,6 @@ export function ProfilePage() {
           </Card>
 
           <XpProgress />
-          <LevelsCard totalEarned={dashboard.data?.balance.total_earned ?? 0} />
-
           <Card title="Мои коины" action={<Link to="/wallet">Кошелёк →</Link>}>
             {dashboard.isLoading && <Skeleton height={64} radius="var(--radius-m)" />}
             {dashboard.data && (
@@ -252,70 +250,3 @@ function PasswordSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
-/* --------------------------------------------------------------------------
- * Лестница ступеней. Порог виден и у недостигнутых, чтобы цель была понятна.
- * -------------------------------------------------------------------------- */
-
-function LevelsCard({ totalEarned }: { totalEarned: number }) {
-  const levels = useQuery({ queryKey: ["levels"], queryFn: cabinet.levels });
-
-  if (levels.isLoading) {
-    return (
-      <Card title="Прежние ступени по коинам">
-        <Skeleton height={140} radius="var(--radius-m)" />
-      </Card>
-    );
-  }
-  if (levels.isError || !levels.data?.length) return null;
-
-  const active = levels.data.filter((level) => level.is_active);
-  const reachedCount = active.filter((level) => totalEarned >= level.min_earned).length;
-  const current = active[Math.max(0, reachedCount - 1)];
-  const next = active.find((level) => level.min_earned > totalEarned);
-  const floor = current ? current.min_earned : 0;
-  const fraction = next ? (totalEarned - floor) / (next.min_earned - floor) : 1;
-
-  return (
-    <Card
-      title="Прежние ступени по коинам"
-      subtitle={`Накоплено за всё время: ${coins(totalEarned)}`}
-    >
-      <Progress value={fraction} tone="xp" label="Прогресс уровня" />
-      <p className="small secondary" style={{ margin: "var(--sp-3) 0 var(--sp-4)" }}>
-        {next
-          ? `Ещё ${coins(next.min_earned - totalEarned)} ${plural(next.min_earned - totalEarned, "коин", "коина", "коинов")} до ступени «${next.title}»`
-          : "Высшая ступень достигнута"}
-      </p>
-
-      <ul className="ladder">
-        {active.map((level, index) => {
-          const reached = totalEarned >= level.min_earned;
-          const isCurrent = current?.id === level.id;
-          const classes = [
-            "ladder__step",
-            reached ? "is-reached" : "is-locked",
-            isCurrent ? "is-current" : "",
-          ]
-            .filter(Boolean)
-            .join(" ");
-          return (
-            <li key={level.id} className={classes}>
-              <span className="ladder__marker">
-                {reached ? <CheckIcon size={14} /> : index + 1}
-              </span>
-              <span className="ladder__body">
-                <span className="ladder__title">{level.title}</span>
-                {level.description && (
-                  <span className="ladder__desc block">{level.description}</span>
-                )}
-              </span>
-              <span className="ladder__threshold">
-                {level.min_earned === 0 ? "старт" : `от ${coins(level.min_earned)}`}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
-  );
-}

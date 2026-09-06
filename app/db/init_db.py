@@ -19,7 +19,6 @@ from app.db.progress_guards import progress_guard_statements
 from app.db.session import engine
 from app.models import (
     BadgeDefinition,
-    LevelDefinition,
     MetricDefinition,
     NominationDefinition,
     ShopItem,
@@ -276,38 +275,6 @@ DEFAULT_BADGES: tuple[dict, ...] = (
 )
 
 
-DEFAULT_LEVELS: tuple[dict, ...] = (
-    {
-        "code": "rookie",
-        "title": "Новичок",
-        "min_earned": 0,
-        "description": "Первые недели в конкурсе",
-        "sort_order": 10,
-    },
-    {
-        "code": "pro",
-        "title": "Профи",
-        "min_earned": 150,
-        "description": "Стабильный результат из недели в неделю",
-        "sort_order": 20,
-    },
-    {
-        "code": "expert",
-        "title": "Эксперт",
-        "min_earned": 400,
-        "description": "Регулярно в верхней части рейтинга",
-        "sort_order": 30,
-    },
-    {
-        "code": "legend",
-        "title": "Легенда",
-        "min_earned": 1000,
-        "description": "Высшая ступень прогресса",
-        "sort_order": 40,
-    },
-)
-
-
 async def create_schema() -> None:
     """
     Создаёт таблицы и защиту журналов. Идемпотентно.
@@ -335,7 +302,6 @@ async def seed_reference_data(session: AsyncSession) -> dict[str, int]:
         "nominations": 0,
         "shop_items": 0,
         "badges": 0,
-        "levels": 0,
         "users": 0,
     }
 
@@ -351,7 +317,6 @@ async def seed_reference_data(session: AsyncSession) -> dict[str, int]:
     await ensure(NominationDefinition, DEFAULT_NOMINATIONS, "nominations")
     await ensure(ShopItem, DEFAULT_SHOP_ITEMS, "shop_items")
     await ensure(BadgeDefinition, DEFAULT_BADGES, "badges")
-    await ensure(LevelDefinition, DEFAULT_LEVELS, "levels")
 
     await get_rules(session)
 

@@ -154,14 +154,12 @@ async def user_dashboard(
         else await cabinet_service.current_week(session)
     )
     unlocked, total = await cabinet_service.badge_counters(session, user.id)
-    account = await coins_service.get_account(session, user.id)
     return DashboardOut(
         user_id=user.id,
         full_name=user.full_name,
         group_name=user.group.name if user.group else None,
         balance=await cabinet_service.balance_block(session, user=user, week=week),
         week=await cabinet_service.week_block(session, user_id=user.id, week=week),
-        level=await cabinet_service.level_block(session, total_earned=account.total_earned),
         badges_unlocked=unlocked,
         badges_total=total,
         my_nominations=await cabinet_service.my_nominations(session, user_id=user.id, week=week),

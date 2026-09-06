@@ -105,20 +105,6 @@ export interface WeekMetricsBlock {
   is_final: boolean;
 }
 
-export interface LevelBlock {
-  code: string | null;
-  title: string | null;
-  description: string | null;
-  index: number;
-  total_levels: number;
-  total_earned: number;
-  next_title: string | null;
-  next_at: number | null;
-  remaining: number;
-  progress: number;
-  is_max: boolean;
-}
-
 export interface NominationBrief {
   code: string;
   title: string;
@@ -131,7 +117,6 @@ export interface DashboardOut {
   group_name: string | null;
   balance: BalanceBlock;
   week: WeekMetricsBlock;
-  level: LevelBlock;
   badges_unlocked: number;
   badges_total: number;
   my_nominations: NominationBrief[];
@@ -300,16 +285,6 @@ export interface OperatorRowOut {
   total_spent: number;
   lateness: number;
   forbidden_sites: number;
-}
-
-export interface LevelDefinitionOut {
-  id: number;
-  code: string;
-  title: string;
-  description: string | null;
-  min_earned: number;
-  is_active: boolean;
-  sort_order: number;
 }
 
 /** Тело ошибки, которое возвращает бэкенд для доменных исключений. */

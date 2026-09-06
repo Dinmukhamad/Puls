@@ -10,10 +10,8 @@ from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, PaginationDep, SessionDep
 from app.models.coin import CoinTransaction
-from app.models.level import LevelDefinition
 from app.models.shop import ShopRequest
 from app.models.user import User
-from app.schemas.admin import LevelOut
 from app.schemas.cabinet import (
     BadgeOut,
     BalanceBlock,
@@ -26,7 +24,6 @@ from app.schemas.shop import ShopRequestOut
 from app.services import badges as badges_service
 from app.services import cabinet as cabinet_service
 from app.services import coins as coins_service
-from app.services import levels as levels_service
 from app.services import weekly as weekly_service
 
 router = APIRouter(prefix="/me", tags=["Кабинет оператора"])
@@ -46,14 +43,12 @@ async def dashboard(
         else await cabinet_service.current_week(session)
     )
     unlocked, total_badges = await cabinet_service.badge_counters(session, user.id)
-    account = await coins_service.get_account(session, user.id)
     return DashboardOut(
         user_id=user.id,
         full_name=user.full_name,
         group_name=user.group.name if user.group else None,
         balance=await cabinet_service.balance_block(session, user=user, week=week),
         week=await cabinet_service.week_block(session, user_id=user.id, week=week),
-        level=await cabinet_service.level_block(session, total_earned=account.total_earned),
         badges_unlocked=unlocked,
         badges_total=total_badges,
         my_nominations=await cabinet_service.my_nominations(
@@ -155,12 +150,6 @@ async def my_badges(session: SessionDep, user: CurrentUser) -> list[BadgeOut]:
         )
         for progress, award in board
     ]
-
-
-@router.get("/levels", response_model=list[LevelOut], summary="Ступени прогресса")
-async def levels(session: SessionDep, _: CurrentUser) -> list[LevelDefinition]:
-    """Лестница уровней целиком: оператор должен видеть и будущие ступени."""
-    return await levels_service.active_levels(session)
 
 
 @router.get(

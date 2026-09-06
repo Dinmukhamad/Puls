@@ -25,45 +25,75 @@ export interface NavItem {
   mobilePrimary?: boolean;
 }
 
+/*
+ * Четыре раздела вместо семи, сгруппированные по адресату, а не по теме:
+ * что оператор делает для себя, что относится к его аккаунту, что руководитель
+ * делает по команде и что настраивается один раз.
+ *
+ * Несколько страниц работают в двух режимах - личном и командном. Это разные
+ * области данных, а не дубли, поэтому они разведены по разделам и названы так,
+ * чтобы различие читалось из самого пункта: «Кошелёк» и «Коины команды»,
+ * «Мои устройства» и «Сессии сотрудников».
+ *
+ * Порядок в массиве задаёт порядок разделов в меню.
+ */
 export const NAVIGATION: readonly NavItem[] = [
+  // --- Главное: ежедневные действия оператора ---
   { to: "/cabinet", label: "Главная", icon: HomeIcon, mobilePrimary: true, section: "Главное" },
   { to: "/rating", label: "Рейтинг", icon: TrophyIcon, mobilePrimary: true, section: "Главное" },
+  { to: "/training", label: "Обучение", icon: SparkIcon, section: "Главное" },
   { to: "/shop", label: "Магазин", icon: StoreIcon, mobilePrimary: true, section: "Главное" },
-  { to: "/progress", label: "Опыт и уровни", icon: TrophyIcon, section: "Главное" },
-  { to: "/wallet", label: "Мой кошелёк", icon: CoinIcon, section: "Главное" },
-  { to: "/admin/wallet", label: "Коины команды", icon: CoinIcon, minRole: "supervisor", section: "Работа" },
-  { to: "/training", label: "Обучение", icon: TrophyIcon, section: "Развитие" },
-  { to: "/games", label: "Колесо и розыгрыши", icon: SparkIcon, section: "Игры" },
-  { to: "/admin/games", label: "Управление играми", icon: InboxIcon, minRole: "supervisor", section: "Игры" },
-  { to: "/admin/learning", label: "Студия обучения", icon: InboxIcon, minRole: "supervisor", section: "Развитие" },
-  { to: "/notifications", label: "Уведомления", icon: InboxIcon, section: "Аккаунт" },
-  { to: "/admin/summary", label: "Сводка", icon: HomeIcon, minRole: "supervisor", section: "Работа" },
-  { to: "/analytics", label: "Аналитика", icon: TrophyIcon, minRole: "supervisor", section: "Работа" },
-  { to: "/admin/xp", label: "Начисления XP", icon: TrophyIcon, minRole: "supervisor", section: "Работа" },
-  { to: "/admin/levels", label: "Уровни XP", icon: TrophyIcon, minRole: "supervisor", section: "Система" },
-  { to: "/admin/settings", label: "Настройки", icon: InboxIcon, minRole: "supervisor", section: "Система" },
-  { to: "/admin/store", label: "Каталог магазина", icon: StoreIcon, minRole: "supervisor", section: "Работа" },
-  { to: "/admin/users", label: "Пользователи", icon: UsersIcon, minRole: "supervisor", section: "Команда" },
-  { to: "/admin/groups", label: "Группы", icon: UsersIcon, minRole: "supervisor", section: "Команда" },
-  { to: "/admin/periods", label: "Расчёт периода", icon: InboxIcon, minRole: "supervisor", section: "Работа" },
-  { to: "/admin/sessions", label: "Сессии", icon: UserIcon, minRole: "admin", section: "Система" },
-  { to: "/admin/audit", label: "Аудит", icon: InboxIcon, minRole: "admin", section: "Система" },
-  { to: "/sessions", label: "Мои устройства", icon: UserIcon, section: "Аккаунт" },
+  { to: "/games", label: "Моменты WOW", icon: SparkIcon, section: "Главное" },
+
+  // --- Мой профиль: всё про собственный аккаунт ---
+  { to: "/wallet", label: "Мой кошелёк", icon: CoinIcon, section: "Мой профиль" },
+  { to: "/progress", label: "Опыт и уровни", icon: TrophyIcon, section: "Мой профиль" },
+  { to: "/notifications", label: "Уведомления", icon: InboxIcon, section: "Мой профиль" },
+  { to: "/sessions", label: "Мои устройства", icon: UserIcon, section: "Мой профиль" },
+  { to: "/profile", label: "Профиль", icon: UserIcon, mobilePrimary: true, section: "Мой профиль" },
+
+  // --- Команда: ежедневная работа руководителя ---
+  { to: "/admin/summary", label: "Сводка", icon: HomeIcon, minRole: "supervisor", section: "Команда" },
+  { to: "/analytics", label: "Аналитика", icon: TrophyIcon, minRole: "supervisor", section: "Команда" },
   {
     to: "/admin/operators",
-    label: "Операторы",
+    label: "Показатели недели",
     icon: UsersIcon,
     minRole: "supervisor",
     section: "Команда",
   },
   {
     to: "/admin/requests",
-    label: "Заявки",
+    label: "Заявки из магазина",
     icon: InboxIcon,
     minRole: "supervisor",
     section: "Команда",
   },
-  { to: "/profile", label: "Профиль", icon: UserIcon, mobilePrimary: true, section: "Аккаунт" },
+  { to: "/admin/wallet", label: "Коины команды", icon: CoinIcon, minRole: "supervisor", section: "Команда" },
+  { to: "/admin/xp", label: "Опыт сотрудников", icon: TrophyIcon, minRole: "supervisor", section: "Команда" },
+  { to: "/admin/users", label: "Сотрудники", icon: UsersIcon, minRole: "supervisor", section: "Команда" },
+  { to: "/admin/groups", label: "Группы", icon: UsersIcon, minRole: "supervisor", section: "Команда" },
+  { to: "/admin/periods", label: "Расчёт периода", icon: InboxIcon, minRole: "supervisor", section: "Команда" },
+
+  // --- Настройка: то, что задаётся один раз и редко меняется ---
+  { to: "/admin/store", label: "Каталог магазина", icon: StoreIcon, minRole: "supervisor", section: "Настройка" },
+  {
+    to: "/admin/learning",
+    label: "Студия обучения",
+    icon: SparkIcon,
+    minRole: "supervisor",
+    section: "Настройка",
+  },
+  { to: "/admin/levels", label: "Уровни XP", icon: TrophyIcon, minRole: "supervisor", section: "Настройка" },
+  { to: "/admin/settings", label: "Настройки", icon: InboxIcon, minRole: "supervisor", section: "Настройка" },
+  {
+    to: "/admin/sessions",
+    label: "Сессии сотрудников",
+    icon: UserIcon,
+    minRole: "admin",
+    section: "Настройка",
+  },
+  { to: "/admin/audit", label: "Аудит", icon: InboxIcon, minRole: "admin", section: "Настройка" },
 ];
 
 export function visibleNavigation(role: Role, atLeast: (minimum: Role) => boolean): NavItem[] {
