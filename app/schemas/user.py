@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from string import ascii_letters, digits
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
@@ -97,6 +98,28 @@ class PasswordChange(PasswordMixin):
 
 class PasswordReset(PasswordMixin):
     """Сброс пароля оператора администратором."""
+
+
+class LoginChange(BaseModel):
+    """Смена собственного логина. Доступна любой роли."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    login: str = Field(min_length=3, max_length=150)
+    #: Логин - это учётные данные для входа, поэтому смена требует пароль.
+    current_password: str
+
+    @field_validator("login")
+    @classmethod
+    def _check_characters(cls, value: str) -> str:
+        # Логин набирают при каждом входе, в том числе с телефона. Кириллица
+        # и пробелы приводят к ошибкам ввода, поэтому допускаем только латиницу.
+        if any(char.isspace() for char in value):
+            raise ValueError("Логин не может содержать пробелы")
+        allowed = set(ascii_letters + digits + "._-@")
+        if not set(value) <= allowed:
+            raise ValueError("Допустимы латиница, цифры и символы . _ - @")
+        return value
 
 
 class GroupCreate(BaseModel):

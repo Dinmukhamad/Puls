@@ -9,11 +9,13 @@ from typing import Annotated
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.deps import CurrentUser, SessionDep
+from app.core.errors import ConflictError
 from app.core.security import (
     decode_token,
     hash_password,
@@ -22,7 +24,7 @@ from app.core.security import (
 from app.models.session import LoginSession
 from app.models.user import User
 from app.schemas.common import Message
-from app.schemas.user import PasswordChange, RefreshRequest, Token, UserOut
+from app.schemas.user import LoginChange, PasswordChange, RefreshRequest, Token, UserOut
 from app.services.rules import write_audit
 from app.services.sessions import (
     is_valid,
@@ -104,6 +106,58 @@ async def me(session: SessionDep, user: CurrentUser) -> User:
         select(User).options(selectinload(User.group)).where(User.id == user.id)
     )
     return loaded or user
+
+
+@router.post("/username", response_model=UserOut, summary="Сменить свой логин")
+async def change_login(
+    session: SessionDep,
+    user: CurrentUser,
+    payload: LoginChange,
+) -> User:
+    """
+    Меняет логин текущего пользователя. Доступно любой роли.
+
+    Пароль подтверждает, что действие выполняет владелец аккаунта. Сеансы не
+    завершаются: идентификатор пользователя и пароль не менялись, поэтому
+    входы на других устройствах остаются рабочими.
+    """
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Текущий пароль неверен"
+        )
+
+    previous = user.login
+    if payload.login == previous:
+        return user
+
+    # Вход по логину чувствителен к регистру, поэтому пара «Ivan» и «ivan»
+    # приводила бы к постоянным ошибкам входа. Такие совпадения отклоняем.
+    clash = await session.scalar(
+        select(User.id).where(
+            func.lower(User.login) == payload.login.lower(), User.id != user.id
+        )
+    )
+    if clash is not None:
+        raise ConflictError("Такой логин уже занят")
+
+    user.login = payload.login
+    await write_audit(
+        session,
+        actor_id=user.id,
+        action="user.login_change",
+        entity_type="user",
+        entity_id=user.id,
+        payload={"from": previous, "to": payload.login},
+    )
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise ConflictError("Такой логин уже занят") from exc
+
+    return await session.scalar(
+        select(User).options(selectinload(User.group)).where(User.id == user.id)
+    )
 
 
 @router.post("/password", response_model=Message, summary="Сменить свой пароль")

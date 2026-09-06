@@ -65,9 +65,12 @@ export class ApiError extends Error {
   private static readMessage(status: number, body: ApiErrorBody): string {
     const { detail } = body;
     if (typeof detail === "string") return detail;
-    // 422 от FastAPI приходит списком ошибок валидации.
+    // 422 от FastAPI приходит списком ошибок валидации. Pydantic добавляет
+    // к своему сообщению технический префикс - пользователю он не нужен.
     if (Array.isArray(detail) && detail.length > 0) {
-      return detail.map((item) => item.msg).join("; ");
+      return detail
+        .map((item) => item.msg.replace(/^(Value|Assertion|Type) error,\s*/i, ""))
+        .join("; ");
     }
     if (status === 0) {
       return "Сервер не отвечает. Проверьте соединение и повторите попытку.";

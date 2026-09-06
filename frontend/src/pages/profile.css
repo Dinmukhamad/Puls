@@ -13,3 +13,5 @@
 .profile-settings-grid .card__body > p:last-child { margin-bottom: 0; }
 @media (max-width: 680px) { .profile-settings-grid { grid-template-columns: minmax(0, 1fr); } .profile-identity .profile-head { flex-wrap: wrap; } }
 @media (max-width: 380px) { .profile-data-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.profile-login-action { margin-top: var(--sp-4); }

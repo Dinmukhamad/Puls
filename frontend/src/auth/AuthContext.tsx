@@ -20,6 +20,8 @@ interface AuthState {
   retryRestore: () => void;
   login: (login: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** Обновляет профиль в контексте после изменения его данных. */
+  applyProfile: (profile: UserOut) => void;
   /** Роль не ниже указанной: operator < supervisor < head < admin. */
   atLeast: (role: Role) => boolean;
 }
@@ -86,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [restoreAttempt]);
 
+  const applyProfile = useCallback((profile: UserOut) => setUser(profile), []);
+
   const login = useCallback(async (loginName: string, password: string) => {
     await queryClient.cancelQueries();
     queryClient.clear();
@@ -102,9 +106,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       retryRestore,
       login,
       logout,
+      applyProfile,
       atLeast: (role) => (user ? ROLE_LEVEL[user.role] >= ROLE_LEVEL[role] : false),
     }),
-    [user, loading, restoreError, retryRestore, login, logout],
+    [user, loading, restoreError, retryRestore, login, logout, applyProfile],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

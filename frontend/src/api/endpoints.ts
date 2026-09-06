@@ -28,6 +28,11 @@ export const auth = {
       auth: false,
     }),
   me: () => request<UserOut>(`${V1}/auth/me`),
+  changeLogin: (login: string, currentPassword: string) =>
+    request<UserOut>(`${V1}/auth/username`, {
+      method: "POST",
+      json: { login, current_password: currentPassword },
+    }),
   changePassword: (currentPassword: string, password: string) =>
     request<{ detail: string }>(`${V1}/auth/password`, {
       method: "POST",

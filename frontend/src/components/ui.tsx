@@ -458,11 +458,11 @@ export function Avatar({
         width: size,
         height: size,
         background: AVATAR_GRADIENTS[id % AVATAR_GRADIENTS.length],
-        fontSize: Math.round(size * 0.36),
+        fontSize: Math.round(size * 0.4),
       }}
       aria-hidden="true"
     >
-      {initials}
+      <span className="avatar__initials">{initials}</span>
     </span>
   );
 }
