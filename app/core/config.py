@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_TTL_MINUTES: int = 60
     REFRESH_TOKEN_TTL_DAYS: int = 30
     PASSWORD_MIN_LENGTH: int = 8
+    # Единственный аккаунт разработчика; назначается на сервере, не через роли в UI.
+    DEVELOPER_LOGIN: str = "admin"
 
     # --- CORS ---
     #: Задаётся списком через запятую: "https://app.example.com,https://admin.example.com"

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Boolean, Date, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.developer import is_developer
 from app.db.base import Base, TimestampMixin
 from app.models.enums import ROLE_LEVEL, Role
 
@@ -75,6 +76,10 @@ class User(Base, TimestampMixin):
     badges: Mapped[list[UserBadge]] = relationship(
         "UserBadge", back_populates="user", cascade="all, delete-orphan"
     )
+
+    @property
+    def is_developer(self) -> bool:
+        return is_developer(self)
 
     @property
     def role_level(self) -> int:

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import AdminUser, CurrentUser, PaginationDep, SessionDep
+from app.core.deps import AdminUser, DeveloperUser, PaginationDep, SessionDep
 from app.core.errors import NotFoundError
 from app.models.session import LoginSession
 from app.models.settings import AuditLog
@@ -58,17 +58,17 @@ async def _sessions(session: SessionDep, current: str, user_id: int | None) -> l
 
 
 @router.get("/me/sessions", response_model=list[SessionOut])
-async def my_sessions(session: SessionDep, user: CurrentUser, request: Request):
+async def my_sessions(session: SessionDep, user: DeveloperUser, request: Request):
     return await _sessions(session, request.state.auth_session_id, user.id)
 
 
 @router.get("/admin/sessions", response_model=list[SessionOut])
-async def all_sessions(session: SessionDep, _: AdminUser, request: Request):
+async def all_sessions(session: SessionDep, _: DeveloperUser, request: Request):
     return await _sessions(session, request.state.auth_session_id, None)
 
 
 @router.post("/me/sessions/revoke-others", response_model=Message)
-async def revoke_others(session: SessionDep, user: CurrentUser, request: Request):
+async def revoke_others(session: SessionDep, user: DeveloperUser, request: Request):
     await revoke_user_sessions(session, user.id, except_id=request.state.auth_session_id)
     await write_audit(
         session,
@@ -99,12 +99,12 @@ async def _revoke(session: SessionDep, actor: User, session_id: str, own_only: b
 
 
 @router.post("/me/sessions/{session_id}/revoke", response_model=Message)
-async def revoke_mine(session: SessionDep, user: CurrentUser, session_id: str):
+async def revoke_mine(session: SessionDep, user: DeveloperUser, session_id: str):
     return await _revoke(session, user, session_id, True)
 
 
 @router.post("/admin/sessions/{session_id}/revoke", response_model=Message)
-async def revoke_any(session: SessionDep, user: AdminUser, session_id: str):
+async def revoke_any(session: SessionDep, user: DeveloperUser, session_id: str):
     return await _revoke(session, user, session_id, False)
 
 

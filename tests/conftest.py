@@ -131,3 +131,11 @@ async def supervisor(session: AsyncSession, operator: User) -> User:
 @pytest.fixture
 async def head(session: AsyncSession) -> User:
     return await make_user(session, login="head1", role=Role.HEAD)
+
+
+@pytest.fixture
+async def developer(session: AsyncSession, monkeypatch) -> User:
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "DEVELOPER_LOGIN", "developer-test")
+    return await make_user(session, login="developer-test", role=Role.ADMIN)

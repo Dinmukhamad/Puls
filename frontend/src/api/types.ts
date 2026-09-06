@@ -48,6 +48,7 @@ export interface UserOut {
   full_name: string;
   role: Role;
   is_active: boolean;
+  is_developer: boolean;
   hired_on: string | null;
   group: GroupBrief | null;
 }

@@ -7,6 +7,7 @@ export type TargetType = "all" | "role" | "group" | "user";
 export type Effect = "allow" | "deny" | "inherit";
 export interface SectionDefinition { code: SectionCode; title: string; description: string; defaults: Role[]; admin_only: boolean }
 export interface AccessState {
+  capabilities: { manage_sessions: boolean };
   allowed: AccessMap;
   decisions: Record<SectionCode, { allowed: boolean; source: TargetType | "default" | "admin_only" }>;
   revision: number;

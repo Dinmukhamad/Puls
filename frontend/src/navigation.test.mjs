@@ -26,6 +26,21 @@ test("management roles do not have empty operator destinations", () => {
   }
 });
 
+test("sessions have one developer-only entry and never appear in the profile", () => {
+  for (const role of ["operator", "supervisor", "head", "admin"]) {
+    const all = Object.fromEntries(Object.keys(nav.defaultAccess(role)).map((key) => [key, true]));
+    assert.equal(nav.canVisit(role, "/sessions", all), false);
+    assert.equal(nav.canVisit(role, "/admin/sessions", all), false);
+    assert.ok(!nav.visibleNavigation(role, all).flatMap((item) => item.tabs).some((tab) => tab.to.includes("sessions")));
+    assert.equal(nav.canVisit(role, "/admin/sessions", all, true), role === "admin");
+  }
+  const items = nav.visibleNavigation("admin", {}, true);
+  const entries = items.flatMap((item) => item.tabs.filter((tab) => tab.to.includes("sessions")).map((tab) => ({ section: item.id, to: tab.to })));
+  assert.deepEqual(entries, [{ section: "system", to: "/admin/sessions" }]);
+  assert.equal(nav.currentSection("admin", "/admin/sessions", "", {}, true)?.id, "system");
+  assert.ok(nav.ACCOUNT_SECTION.tabs.every((tab) => !tab.to.includes("sessions")));
+});
+
 test("grants add discoverable destinations and revocations remove every tab", () => {
   for (const role of ["operator", "supervisor", "head", "admin"]) {
     const all = Object.fromEntries(Object.keys(nav.defaultAccess(role)).map((key) => [key, true]));

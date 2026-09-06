@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.core.developer import is_developer
 from app.core.errors import PermissionDeniedError
 from app.core.security import decode_token
 from app.db.session import get_session
@@ -72,6 +73,17 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+async def require_developer(user: CurrentUser) -> User:
+    if not is_developer(user):
+        raise PermissionDeniedError(
+            "Сессии и устройства доступны только разработчику", code="developer_required"
+        )
+    return user
+
+
+DeveloperUser = Annotated[User, Depends(require_developer)]
 
 
 class RequireRole:

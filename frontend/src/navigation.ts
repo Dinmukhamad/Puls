@@ -20,7 +20,7 @@ const section = (id: string, label: string, icon: NavItem["icon"], tabs: Section
 });
 
 export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
-  tab("/profile", "Мои данные и настройки"), tab("/notifications", "Уведомления"), tab("/sessions", "Сессии"),
+  tab("/profile", "Мои данные и настройки"), tab("/notifications", "Уведомления"),
 ]);
 const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс"), tab("/wallet", "Мои коины")];
 const learningTabs = [tab("/training", "Всё обучение"), tab("/training?kind=test", "Тесты"), tab("/training?kind=mission", "Миссии"), tab("/training?kind=simulator", "Driver Simulator")];
@@ -63,7 +63,7 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
   supervisor: [staffHome, team(false, true), analytics(true), staffLearning(false), motivation(true), ACCOUNT_SECTION],
   head: [staffHome, team(), analytics(), performance(), staffLearning(false), motivation(), section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")])],
   admin: [staffHome, team(true), performance(true), analytics(), staffLearning(true), motivation(),
-    section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии пользователей"), tab("/admin/audit", "Журнал аудита"), tab("/reports", "Отчёты и экспорт")])],
+    section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии и устройства"), tab("/admin/audit", "Журнал аудита"), tab("/reports", "Отчёты и экспорт")])],
 };
 
 export function defaultAccess(role: Role): AccessMap {
@@ -71,9 +71,10 @@ export function defaultAccess(role: Role): AccessMap {
   return { personal: !staff, results: true, training: !staff, rewards: !staff, overview: staff, team: staff, analytics: staff, performance: staff, learning_admin: staff, motivation: staff, reports: role === "head" || role === "admin", system: role === "admin" };
 }
 
-export function routeSection(pathname: string, search = ""): SectionCode | "account" | "access" | undefined {
+export function routeSection(pathname: string, search = ""): SectionCode | "account" | "access" | "developer" | undefined {
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
-  if (["/profile", "/notifications", "/sessions"].some(matches)) return "account";
+  if (["/sessions", "/admin/sessions"].some(matches)) return "developer";
+  if (["/profile", "/notifications"].some(matches)) return "account";
   if (matches("/admin/access")) return "access";
   if (matches("/admin/settings")) return new URLSearchParams(search).get("tab") === "badges" ? "motivation" : "performance";
   const routes: [SectionCode, string[]][] = [
@@ -82,22 +83,23 @@ export function routeSection(pathname: string, search = ""): SectionCode | "acco
     ["overview", ["/admin/summary"]], ["team", ["/admin/users", "/admin/groups", "/admin/operators"]],
     ["analytics", ["/analytics"]], ["performance", ["/admin/periods"]], ["learning_admin", ["/admin/learning"]],
     ["motivation", ["/admin/wallet", "/admin/xp", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games"]],
-    ["reports", ["/reports"]], ["system", ["/admin/sessions", "/admin/audit"]],
+    ["reports", ["/reports"]], ["system", ["/admin/audit"]],
   ];
   return routes.find(([, paths]) => paths.some(matches))?.[0];
 }
 
-export function canVisit(role: Role, to: string, allowed: AccessMap): boolean {
+export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper = false): boolean {
   if (to === "/") return true;
   const [path, search = ""] = to.split("?");
   const permission = routeSection(path, search);
   if (permission === "account") return true;
+  if (permission === "developer") return role === "admin" && isDeveloper;
   if (permission === "access") return role === "admin";
   if (permission === "system" && role !== "admin") return false;
   return !!permission && allowed[permission] === true;
 }
 
-export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess(role)): readonly NavItem[] {
+export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess(role), isDeveloper = false): readonly NavItem[] {
   const items = ROLE_NAVIGATION[role].map((item) => ({ ...item, tabs: [...item.tabs] }));
   // Extra grants also make sections discoverable to roles that did not originally have them.
   const additions = [
@@ -107,7 +109,7 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
     section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг")]),
     section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=wheel", "Колесо WOW"), tab("/games?tab=raffles", "Розыгрыши")]),
     section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")]),
-    section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии пользователей"), tab("/admin/audit", "Журнал аудита")]),
+    section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии и устройства"), tab("/admin/audit", "Журнал аудита")]),
   ];
   // Existing role placement wins, so shared features never occur twice in the sidebar.
   const placed = new Set(items.flatMap((item) => item.tabs.map((link) => routeSection(link.to.split("?")[0], link.to.split("?")[1]))));
@@ -124,7 +126,7 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
     system.tabs = [tab("/admin/access", "Доступ к разделам"), ...system.tabs.filter((link) => link.to !== "/admin/access" && link.to !== "/admin/settings")];
   }
   const visible = items.flatMap((item) => {
-    const tabs = item.tabs.filter((link) => canVisit(role, link.to, allowed) && !(role !== "operator" && !allowed.personal && link.to === "/rating?tab=progress"));
+    const tabs = item.tabs.filter((link) => canVisit(role, link.to, allowed, isDeveloper) && !(role !== "operator" && !allowed.personal && link.to === "/rating?tab=progress"));
     if (!tabs.length) return [];
     let { id, label } = item;
     if ((id === "performance" && !allowed.performance) || (id === "motivation" && !allowed.motivation)) { id = "results"; label = "Результаты"; }
@@ -136,9 +138,9 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
   return visible;
 }
 
-export function currentSection(role: Role, pathname: string, search = "", allowed: AccessMap = defaultAccess(role)): NavItem | undefined {
-  if (!canVisit(role, `${pathname}${search}`, allowed)) return undefined;
-  const sections = visibleNavigation(role, allowed);
+export function currentSection(role: Role, pathname: string, search = "", allowed: AccessMap = defaultAccess(role), isDeveloper = false): NavItem | undefined {
+  if (!canVisit(role, `${pathname}${search}`, allowed, isDeveloper)) return undefined;
+  const sections = visibleNavigation(role, allowed, isDeveloper);
   // Settings pages are hosted by their business domain, even on direct legacy links.
   if (pathname === "/admin/settings") {
     const selected = new URLSearchParams(search).get("tab");

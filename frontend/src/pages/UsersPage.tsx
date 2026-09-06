@@ -57,7 +57,7 @@ export function UsersPage() {
     </>;
   }
 
-  const canEdit = (target: UserOut) => atLeast("head") && (target.role !== "admin" || actor?.role === "admin");
+  const canEdit = (target: UserOut) => atLeast("head") && (target.role !== "admin" || actor?.role === "admin") && (!target.is_developer || actor?.is_developer);
   const actions = (target: UserOut) => <div className="team-actions">
     <Link className="btn btn--secondary btn--s" to={`/admin/users/${target.id}`}>Открыть</Link>
     {canEdit(target) && <Button size="s" variant="plain" onClick={() => setEditor(target)}>Изменить</Button>}

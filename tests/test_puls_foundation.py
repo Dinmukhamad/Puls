@@ -7,6 +7,7 @@ import pytest
 from openpyxl import Workbook
 from sqlalchemy import func, select
 
+from app.core.security import decode_token
 from app.models.contest import OperatorWeekMetric
 from app.models.enums import MetricDirection, Role
 from app.services import weekly
@@ -35,15 +36,18 @@ async def tokens(client, name="op1", password="password123"):
     return response.json()
 
 
-async def test_revoked_session_rejects_access_and_refresh(client, operator):
+async def test_revoked_session_rejects_access_and_refresh(client, operator, developer):
     first = await tokens(client)
     second = await tokens(client)
-    sessions = (await client.get("/api/v1/me/sessions", headers=auth(first["access_token"]))).json()
-    other = next(item for item in sessions if not item["current"])
-    assert "refresh_hash" not in other
-    response = await client.post(
-        f"/api/v1/me/sessions/{other['id']}/revoke", headers=auth(first["access_token"])
+    owner = auth(await login(client, developer.login))
+    sessions = (await client.get("/api/v1/admin/sessions", headers=owner)).json()
+    other = next(
+        item
+        for item in sessions
+        if item["id"] == decode_token(second["access_token"], "access")["sid"]
     )
+    assert "refresh_hash" not in other
+    response = await client.post(f"/api/v1/admin/sessions/{other['id']}/revoke", headers=owner)
     assert response.status_code == 200
     assert (
         await client.get("/api/v1/auth/me", headers=auth(second["access_token"]))
@@ -95,14 +99,12 @@ async def test_cannot_revoke_another_users_session(client, session, operator):
     mine = await tokens(client)
     await make_user(session, login="stranger")
     stranger = await tokens(client, "stranger")
-    sessions = (
-        await client.get("/api/v1/me/sessions", headers=auth(stranger["access_token"]))
-    ).json()
+    session_id = decode_token(stranger["access_token"], "access")["sid"]
     assert (
         await client.post(
-            f"/api/v1/me/sessions/{sessions[0]['id']}/revoke", headers=auth(mine["access_token"])
+            f"/api/v1/me/sessions/{session_id}/revoke", headers=auth(mine["access_token"])
         )
-    ).status_code == 404
+    ).status_code == 403
 
 
 @pytest.mark.parametrize("extension", ["csv", "xlsx"])

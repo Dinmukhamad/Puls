@@ -251,7 +251,7 @@ export function PwaInstallCard() {
   return (
     <Card title="Приложение Puls">
       {pwa.installed ? <p className="secondary">Puls установлен на этом устройстве.</p> : pwa.canInstall ? (
-        <><p className="secondary small">Открывайте кабинет с экрана Домой в отдельном окне.</p><Button block onClick={() => void pwa.install()} disabled={pwa.installing} className="pwa-install-button">{pwa.installing ? "Открываем установку…" : "Установить Puls"}</Button></>
+        <><p className="secondary small">Открывайте Puls с экрана Домой в отдельном окне.</p><Button block onClick={() => void pwa.install()} disabled={pwa.installing} className="pwa-install-button">{pwa.installing ? "Открываем установку…" : "Установить Puls"}</Button></>
       ) : <p className="secondary small">Если браузер поддерживает установку, она будет доступна в его меню.</p>}
       {pwa.installError && <p className="pwa-error" role="alert">{pwa.installError}</p>}
     </Card>

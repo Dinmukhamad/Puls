@@ -3,6 +3,7 @@ from dataclasses import asdict, dataclass
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.developer import is_developer
 from app.models.access import AccessPolicy, AccessRule
 from app.models.enums import Role
 from app.models.user import User
@@ -75,7 +76,7 @@ SECTIONS = (
     Section(
         "system",
         "Системное администрирование",
-        "Сессии пользователей и полный журнал аудита",
+        "Полный журнал аудита действий пользователей",
         (Role.ADMIN,),
         True,
     ),
@@ -117,6 +118,7 @@ async def effective_access(session: AsyncSession, user: User):
         decisions[section.code] = {"allowed": allowed, "source": source}
     return {
         "allowed": {key: item["allowed"] for key, item in decisions.items()},
+        "capabilities": {"manage_sessions": is_developer(user)},
         "decisions": decisions,
         "revision": await session.scalar(select(AccessPolicy.revision).where(AccessPolicy.id == 1))
         or 0,
@@ -127,7 +129,14 @@ def request_sections(path: str, method: str) -> tuple[str, ...]:
     """Alternative section permissions for an endpoint; supporting reference reads are explicit."""
     read = method in ("GET", "HEAD")
     if path.startswith(
-        ("/auth/", "/admin/access", "/me/access", "/me/sessions", "/me/notifications")
+        (
+            "/auth/",
+            "/admin/access",
+            "/me/access",
+            "/me/sessions",
+            "/admin/sessions",
+            "/me/notifications",
+        )
     ):
         return ()
     if path.startswith("/lookups/"):
@@ -164,7 +173,7 @@ def request_sections(path: str, method: str) -> tuple[str, ...]:
         return ("learning_admin",)
     if path.startswith("/learning"):
         return ("training",)
-    if path.startswith(("/admin/sessions", "/admin/audit")):
+    if path.startswith("/admin/audit"):
         return ("system",)
     if path.startswith("/admin/config"):
         if path.startswith(("/admin/config/shop-items", "/admin/config/badges")):

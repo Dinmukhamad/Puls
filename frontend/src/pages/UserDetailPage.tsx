@@ -34,11 +34,11 @@ export function UserDetailPage() {
   if (user.isError) return <ErrorState error={user.error} onRetry={() => user.refetch()} />;
   if (!user.data) return <EmptyState title="Сотрудник не найден" />;
   const data = user.data;
-  const editable = atLeast("head") && (data.role !== "admin" || actor?.role === "admin");
+  const editable = atLeast("head") && (data.role !== "admin" || actor?.role === "admin") && (!data.is_developer || actor?.is_developer);
   return <div className="stack team-page">
     <Link className="secondary" to="/admin/users">← Пользователи</Link>
     <Card><div className="team-detail-hero"><Avatar name={data.full_name} id={id} size={64} /><div className="team-detail-hero__body"><h1 className="page-title">{data.full_name}</h1><div className="team-meta"><span>{ROLE_LABELS[data.role]}</span><span>{data.group?.name ?? "Без группы"}</span><UserStatus active={data.is_active} /></div></div>
-      <div className="team-actions">{editable && <Button onClick={() => setEditor(true)}>Изменить</Button>}{editable && actor?.id !== id && <Button onClick={() => setArchive(true)}>{data.is_active ? "Архивировать" : "Восстановить"}</Button>}{actor?.role === "admin" && <Button onClick={() => setPassword(true)}>Сбросить пароль</Button>}</div></div></Card>
+      <div className="team-actions">{editable && <Button onClick={() => setEditor(true)}>Изменить</Button>}{editable && actor?.id !== id && <Button onClick={() => setArchive(true)}>{data.is_active ? "Архивировать" : "Восстановить"}</Button>}{actor?.role === "admin" && (!data.is_developer || actor.is_developer) && <Button onClick={() => setPassword(true)}>Сбросить пароль</Button>}</div></div></Card>
     <nav className="team-section-nav" aria-label="Разделы карточки">{[["profile", "Профиль"], ["results", "Результаты"], ["coins", "Коины"], ["xp", "XP"], ["test", "Тесты"], ["mission", "Миссии"], ["simulator", "Симулятор"], ["purchases", "Покупки"]].filter(([key]) => tabAllowed(key)).map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
     {tab === "xp" && <><XpProgress key={id} userId={id} showLevels /><XpHistory userId={id} page={page} onPage={(p) => setParams({ tab, page: String(p) })} /></>}
     {(tab === "test" || tab === "mission" || tab === "simulator") && <LearningResults key={`${id}-${tab}`} userId={id} kind={tab} />}

@@ -41,6 +41,7 @@ class UserOut(ORMModel):
     full_name: str
     role: Role
     is_active: bool
+    is_developer: bool = False
     hired_on: date | None = None
     group: GroupBrief | None = None
 

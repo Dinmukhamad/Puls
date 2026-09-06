@@ -49,7 +49,7 @@ async def test_role_defaults(client, session, role):
         result = await client.get(f"/api/v1{path}", headers=headers)
         assert result.status_code == (200 if role == Role.OPERATOR else 403), result.text
     assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 200
-    assert (await client.get("/api/v1/me/sessions", headers=headers)).status_code == 200
+    assert (await client.get("/api/v1/me/sessions", headers=headers)).status_code == 403
 
 
 async def test_precedence_bulk_inherit_and_group_change(client, session, operator, supervisor):
@@ -265,7 +265,14 @@ async def test_invalid_bulk_is_atomic_and_stale_revision_conflicts(client, sessi
 
 
 async def test_every_business_endpoint_has_section_mapping():
-    exempt = ("/auth/", "/me/access", "/admin/access", "/me/sessions", "/me/notifications")
+    exempt = (
+        "/auth/",
+        "/me/access",
+        "/admin/access",
+        "/me/sessions",
+        "/admin/sessions",
+        "/me/notifications",
+    )
     for route in app.routes:
         if not isinstance(route, APIRoute) or not route.path.startswith("/api/v1/"):
             continue

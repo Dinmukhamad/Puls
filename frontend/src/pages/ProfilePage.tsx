@@ -1,98 +1,44 @@
 import { useId, useState, type FormEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-
-import { auth, cabinet } from "../api/endpoints";
+import { auth } from "../api/endpoints";
 import { useAccess } from "../auth/AccessContext";
 import { useAuth } from "../auth/AuthContext";
 import { DisplayIcon, LogoutIcon, MoonIcon, SunIcon } from "../components/icons";
-import { Avatar, Badge, Button, Card, CoinAmount, Skeleton } from "../components/ui";
+import { Avatar, Badge, Button, Card } from "../components/ui";
 import { useTheme, type ThemePreference } from "../theme/ThemeContext";
 import { Sheet } from "../components/Sheet";
-import { XpProgress } from "../components/XpProgress";
 import { useToast } from "../components/Toast";
 import { PwaInstallCard } from "../pwa/PwaProvider";
-import { ROLE_LABELS, coins, dateOnly } from "../utils/format";
+import { ROLE_LABELS, dateOnly } from "../utils/format";
+import "./profile.css";
 
-const THEME_OPTIONS: {
-  value: ThemePreference;
-  label: string;
-  icon: (props: { size?: number }) => JSX.Element;
-}[] = [
+const THEME_OPTIONS: { value: ThemePreference; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
   { value: "system", label: "Система", icon: DisplayIcon },
   { value: "light", label: "Светлая", icon: SunIcon },
   { value: "dark", label: "Тёмная", icon: MoonIcon },
 ];
 
 export function ProfilePage() {
-  const { user, logout } = useAuth();
-  const { can } = useAccess();
+  const { user, logout, atLeast } = useAuth();
+  const { can, isDeveloper } = useAccess();
   const { preference, setPreference } = useTheme();
-  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: () => cabinet.dashboard(), enabled: can("personal") });
   const [securityOpen, setSecurityOpen] = useState(false);
-
   if (!user) return null;
-
-  return (
-    <div className="stack">
-      <div className="page-head">
-        <h1 className="page-title">Профиль</h1>
-      </div>
-
-      <Card>
-        <div className="profile-head">
-          <Avatar name={user.full_name} id={user.id} size={64} />
-          <div className="profile-head__text">
-            <p className="profile-head__name">{user.full_name}</p>
-            <p className="profile-head__meta">
-              {ROLE_LABELS[user.role]}
-              {user.group ? ` · ${user.group.name}` : ""}
-            </p>
-            <div className="row" style={{ marginTop: "var(--sp-2)" }}>
-              <Badge tone={user.is_active ? "success" : "neutral"} dot>
-                {user.is_active ? "Активен" : "Отключён"}
-              </Badge>
-              {dashboard.data && (
-                <Badge tone="neutral">
-                  Баланс {coins(dashboard.data.balance.balance)}
-                </Badge>
-              )}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <div className="grid grid--1-1">
-        <Card title="Аккаунт">
-          <div className="grouped">
-            <div className="grouped__row">
-              <span className="grouped__label">Логин</span>
-              <span className="grouped__value">{user.login}</span>
-            </div>
-            <div className="grouped__row">
-              <span className="grouped__label">Электронная почта</span>
-              <span className="grouped__value">{user.email ?? "—"}</span>
-            </div>
-            <div className="grouped__row">
-              <span className="grouped__label">Роль</span>
-              <span className="grouped__value">{ROLE_LABELS[user.role]}</span>
-            </div>
-            <div className="grouped__row">
-              <span className="grouped__label">Группа</span>
-              <span className="grouped__value">{user.group?.name ?? "—"}</span>
-            </div>
-            <div className="grouped__row">
-              <span className="grouped__label">В компании с</span>
-              <span className="grouped__value">
-                {user.hired_on ? dateOnly(user.hired_on) : "—"}
-              </span>
-            </div>
-          </div>
-        </Card>
-
-        <div className="stack stack--tight">
-          <Card title="Внешний вид" subtitle="По умолчанию тема следует за системой">
-            <div className="theme-options" role="radiogroup" aria-label="Тема оформления">
+  const fields = [
+    { label: "Логин", value: user.login },
+    { label: "Роль", value: ROLE_LABELS[user.role] },
+    ...(user.email ? [{ label: "Электронная почта", value: user.email }] : []),
+    ...(user.group ? [{ label: "Группа", value: user.group.name }] : []),
+    ...(user.hired_on ? [{ label: "В компании с", value: dateOnly(user.hired_on) }] : []),
+  ];
+  return <div className="stack profile-page">
+    <header className="page-head"><div><h1 className="page-title">Мой профиль</h1><p className="page-subtitle">Данные аккаунта и настройки Puls</p></div><Button icon={<LogoutIcon size={18} />} onClick={logout}>Выйти</Button></header>
+    <Card className="profile-identity"><div className="profile-head"><Avatar name={user.full_name} id={user.id} size={56} /><div className="profile-head__text"><h2 className="profile-head__name">{user.full_name}</h2><p className="profile-head__meta">{isDeveloper ? "Разработчик Puls" : ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</p></div><Badge tone={user.is_active ? "success" : "neutral"} dot>{user.is_active ? "Активен" : "Отключён"}</Badge></div></Card>
+    <div className="profile-settings-grid">
+      <Card title="Данные аккаунта" action={can("team") && atLeast("head") ? <Link to={`/admin/users/${user.id}`}>Изменить данные</Link> : undefined}><dl className="profile-data-grid">{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl></Card>
+      <Card title="Внешний вид" subtitle="Выберите тему или используйте настройки системы">
+        <div className="theme-options" role="radiogroup" aria-label="Тема оформления">
               {THEME_OPTIONS.map((option) => (
                 <button
                   key={option.value}
@@ -122,68 +68,12 @@ export function ProfilePage() {
                 </button>
               ))}
             </div>
-          </Card>
-
-          <Card title="Безопасность" subtitle="Пароль и устройства, на которых открыт аккаунт">
-            <div className="stack stack--tight">
-              <Button block onClick={() => setSecurityOpen(true)}>Изменить пароль</Button>
-              <Link className="btn btn--secondary btn--m btn--block" to="/sessions">Мои устройства</Link>
-            </div>
-          </Card>
-
-          <PwaInstallCard />
-
-          <Card title="Развитие и события">
-            <div className="stack stack--tight">
-              {can("personal") && <Link className="btn btn--secondary btn--m btn--block" to="/progress">Опыт и уровни</Link>}
-              <Link className="btn btn--secondary btn--m btn--block" to="/notifications">Уведомления</Link>
-            </div>
-          </Card>
-
-          {can("personal") && <><XpProgress />
-          <Card title="Мои коины" action={<Link to="/wallet">Кошелёк →</Link>}>
-            {dashboard.isLoading && <Skeleton height={64} radius="var(--radius-m)" />}
-            {dashboard.data && (
-              <div className="grouped">
-                <div className="grouped__row">
-                  <span className="grouped__label">Баланс</span>
-                  <span className="grouped__value">
-                    <CoinAmount value={dashboard.data.balance.balance} />
-                  </span>
-                </div>
-                <div className="grouped__row">
-                  <span className="grouped__label">В резерве</span>
-                  <span className="grouped__value">
-                    {coins(dashboard.data.balance.reserved)}
-                  </span>
-                </div>
-                <div className="grouped__row">
-                  <span className="grouped__label">Всего начислено</span>
-                  <span className="grouped__value">
-                    {coins(dashboard.data.balance.total_earned)}
-                  </span>
-                </div>
-                <div className="grouped__row">
-                  <span className="grouped__label">Всего потрачено</span>
-                  <span className="grouped__value">
-                    {coins(dashboard.data.balance.total_spent)}
-                  </span>
-                </div>
-              </div>
-            )}
-          </Card>
-
-          </>}
-          <Card title="Система">
-            <Button variant="destructive" block icon={<LogoutIcon size={18} />} onClick={logout}>
-              Выйти из аккаунта
-            </Button>
-          </Card>
-        </div>
-      </div>
-      {securityOpen && <PasswordSheet onClose={() => setSecurityOpen(false)} />}
+      </Card>
+      <Card title="Пароль" subtitle="Измените пароль для входа в свой аккаунт"><Button onClick={() => setSecurityOpen(true)}>Изменить пароль</Button></Card>
+      <PwaInstallCard />
     </div>
-  );
+    {securityOpen && <PasswordSheet onClose={() => setSecurityOpen(false)} />}
+  </div>;
 }
 
 function PasswordSheet({ onClose }: { onClose: () => void }) {

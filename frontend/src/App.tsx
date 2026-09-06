@@ -66,7 +66,7 @@ export function App() {
         <Route path="/rating" element={<RatingPage />} />
         <Route path="/shop" element={<ShopPage />} />
         <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/sessions" element={<SessionsPage />} />
+        <Route path="/sessions" element={<Navigate to="/admin/sessions" replace />} />
         <Route path="/progress" element={<ProgressPage />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/admin/wallet" element={<WalletPage administrative />} />
@@ -86,7 +86,7 @@ export function App() {
         <Route path="/admin/users/:userId" element={<UserDetailPage />} />
         <Route path="/admin/groups" element={<GroupsPage />} />
         <Route path="/admin/periods" element={<PeriodsPage />} />
-        <Route path="/admin/sessions" element={atLeast("admin") ? <SessionsPage administrative /> : <AccessPage />} />
+        <Route path="/admin/sessions" element={access.isDeveloper ? <SessionsPage /> : <AccessPage />} />
         <Route path="/admin/audit" element={atLeast("admin") ? <AuditPage /> : <AccessPage />} />
         <Route
           path="/admin/operators"

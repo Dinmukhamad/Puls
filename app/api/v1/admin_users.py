@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.core.deps import (
     AdminUser,
     HeadUser,
@@ -18,6 +19,7 @@ from app.core.deps import (
     StaffUser,
     visible_users_filter,
 )
+from app.core.developer import protect_developer_account
 from app.core.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.core.security import hash_password
 from app.models.coin import CoinTransaction
@@ -233,6 +235,10 @@ async def user_purchases(
 )
 async def create_user(session: SessionDep, actor: HeadUser, payload: UserCreate) -> User:
     """Создаёт учётную запись и сразу открывает коин-счёт для операторов."""
+    if payload.login == settings.DEVELOPER_LOGIN:
+        raise PermissionDeniedError(
+            "Аккаунт разработчика создаётся только при настройке сервера", code="developer_required"
+        )
     if payload.role == Role.ADMIN and actor.role != Role.ADMIN:
         raise ConflictError("Роль администратора назначает только администратор")
     await _check_group(session, payload.group_id)
@@ -275,6 +281,7 @@ async def update_user(
     session: SessionDep, actor: HeadUser, user_id: int, payload: UserUpdate
 ) -> User:
     user = await _visible_user(session, actor, user_id)
+    protect_developer_account(actor, user)
     if user.role == Role.ADMIN and actor.role != Role.ADMIN:
         raise PermissionDeniedError("Учётную запись администратора изменяет только администратор")
 
@@ -329,6 +336,7 @@ async def reset_password(
     user = await session.get(User, user_id)
     if user is None:
         raise NotFoundError(f"Пользователь id={user_id} не найден")
+    protect_developer_account(actor, user)
     user.hashed_password = hash_password(payload.password)
     await revoke_user_sessions(session, user.id)
     await write_audit(

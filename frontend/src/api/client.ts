@@ -194,7 +194,7 @@ export async function request<T>(
 
   if (!response.ok) {
     const error = new ApiError(response.status, await parseBody(response));
-    if (error.code === "section_denied") sectionDeniedListeners.forEach((listener) => listener());
+    if (error.code === "section_denied" || error.code === "developer_required") sectionDeniedListeners.forEach((listener) => listener());
     throw error;
   }
 
