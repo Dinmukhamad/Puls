@@ -168,12 +168,6 @@ function Hero({
         <Progress value={xp.data.progress} tone="xp" label="Прогресс уровня XP" />
         <p className="level__hint">{xp.data.next ? `${coins(xp.data.remaining)} XP до уровня «${xp.data.next.title}»` : xp.data.current ? "Высший уровень достигнут" : "Уровни ещё не настроены"}</p>
       </div>}
-      <p className="hero__caption">
-        {balance.reserved > 0
-          ? `${coins(balance.reserved)} зарезервировано под заявки · доступно ${coins(balance.available)}`
-          : "Коины не сгорают и копятся без ограничения срока"}
-      </p>
-
       <div className="hero__stats">
         <div className="hero__stat"><span className="hero__stat-label">Кошелёк</span><Link className="hero__stat-value" to="/wallet"><CoinIcon size={18} />{coins(balance.balance)}</Link></div>
         <div className="hero__stat">

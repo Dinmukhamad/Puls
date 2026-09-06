@@ -33,18 +33,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   const [installing, setInstalling] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [iosInstructions, setIosInstructions] = useState(false);
-  const [online, setOnline] = useState(navigator.onLine);
-  const [reconnected, setReconnected] = useState(false);
-  const [reconnecting, setReconnecting] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [updateDismissed, setUpdateDismissed] = useState(false);
-  const [updateDialog, setUpdateDialog] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [updateError, setUpdateError] = useState<string | null>(null);
   const registration = useRef<ServiceWorkerRegistration | null>(null);
-  const reloadRequested = useRef(false);
-  const reloadTimer = useRef<number | undefined>();
 
   useEffect(() => {
     const displayMode = window.matchMedia("(display-mode: standalone)");
@@ -65,76 +54,67 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const onOffline = () => { setOnline(false); setReconnected(false); };
-    const onOnline = () => {
-      setOnline(true);
-      setReconnected(true);
-      setConnectionError(null);
-      // Only reads are retried. Purchases, rewards and other writes are not queued.
-      void queryClient.invalidateQueries({ refetchType: "active" });
-    };
+    // Вернулась сеть - молча перезапрашиваем открытые данные, без сообщения.
+    // Повторяются только чтения: покупки, награды и прочие записи не копятся.
+    const onOnline = () => { void queryClient.invalidateQueries({ refetchType: "active" }); };
     window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-    };
+    return () => window.removeEventListener("online", onOnline);
   }, [queryClient]);
 
   useEffect(() => {
     if (!import.meta.env.PROD || !("serviceWorker" in navigator)) return;
     let cancelled = false;
     let cleanupRegistration: (() => void) | undefined;
-    let alreadyControlled = Boolean(navigator.serviceWorker.controller);
-    const onControllerChange = () => {
-      window.clearTimeout(reloadTimer.current);
-      if (reloadRequested.current) {
-        window.location.reload();
-      } else if (alreadyControlled) {
-        // Another tab accepted an update. This tab keeps its forms and waits.
-        setUpdateAvailable(true);
-        setUpdateDismissed(false);
+
+    /*
+     * Новая версия применяется молча и без перезагрузки страницы.
+     *
+     * Текущая вкладка продолжает работать на своих файлах: служебный воркер
+     * держит прежний кеш, пока вкладка открыта, и отдаёт из него запрошенные
+     * чанки. Обновление вступает в силу при следующем открытии страницы,
+     * поэтому спрашивать разрешение и прерывать работу не нужно.
+     */
+    const activateSilently = (reg: ServiceWorkerRegistration) => {
+      if (reg.waiting && navigator.serviceWorker.controller) {
+        reg.waiting.postMessage({ type: "ACTIVATE_UPDATE" });
       }
-      alreadyControlled = true;
     };
-    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+
     void navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).then((reg) => {
       if (cancelled) return;
       registration.current = reg;
-      const offerUpdate = () => {
-        if (reg.waiting && navigator.serviceWorker.controller) {
-          setUpdateAvailable(true);
-          setUpdateDismissed(false);
-        }
-      };
+
       const workers = new Set<ServiceWorker>();
+      const onStateChange = () => activateSilently(reg);
       const watchInstalling = () => {
         const worker = reg.installing;
         if (!worker) return;
         workers.add(worker);
-        worker.addEventListener("statechange", offerUpdate);
+        worker.addEventListener("statechange", onStateChange);
       };
-      offerUpdate();
+
+      activateSilently(reg);
       watchInstalling();
       reg.addEventListener("updatefound", watchInstalling);
+
       const checkUpdate = () => {
         if (document.visibilityState === "visible" && navigator.onLine) void reg.update().catch(() => undefined);
       };
       document.addEventListener("visibilitychange", checkUpdate);
+
       cleanupRegistration = () => {
         reg.removeEventListener("updatefound", watchInstalling);
-        workers.forEach((worker) => worker.removeEventListener("statechange", offerUpdate));
+        workers.forEach((worker) => worker.removeEventListener("statechange", onStateChange));
         document.removeEventListener("visibilitychange", checkUpdate);
       };
     }).catch((error: unknown) => {
       // PWA support is optional; normal web navigation must keep working.
       console.error("Puls service worker registration failed", error);
     });
+
     return () => {
       cancelled = true;
       cleanupRegistration?.();
-      window.clearTimeout(reloadTimer.current);
-      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
     };
   }, []);
 
@@ -158,70 +138,10 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     }
   }, [installed, installPrompt]);
 
-  async function reconnect() {
-    setReconnecting(true);
-    setConnectionError(null);
-    setOnline(navigator.onLine);
-    if (!navigator.onLine) {
-      setReconnecting(false);
-      setConnectionError("Сеть пока недоступна. Проверьте подключение и повторите.");
-      return;
-    }
-    try {
-      await queryClient.refetchQueries({ type: "active" }, { throwOnError: true });
-      setReconnected(true);
-    } catch {
-      setConnectionError("Не удалось загрузить данные. Попробуйте ещё раз.");
-    } finally {
-      setReconnecting(false);
-    }
-  }
-
-  function applyUpdate() {
-    setUpdateError(null);
-    const worker = registration.current?.waiting;
-    if (!worker) {
-      window.location.reload();
-      return;
-    }
-    setUpdating(true);
-    reloadRequested.current = true;
-    worker.postMessage({ type: "ACTIVATE_UPDATE" });
-    reloadTimer.current = window.setTimeout(() => {
-      reloadRequested.current = false;
-      setUpdating(false);
-      setUpdateError("Обновление не завершилось. Попробуйте ещё раз.");
-    }, 15000);
-  }
-
   return (
     <PwaContext.Provider value={{ installed, canInstall: !installed && Boolean(installPrompt || isIOS()), installing, install, installError }}>
       {children}
-      {(!online || reconnected || connectionError || (updateAvailable && !updateDismissed)) && (
-        <aside className="pwa-status" aria-label="Состояние приложения">
-          {(!online || reconnected || connectionError) && (
-            <div className="pwa-status__card" role="status">
-              <div>
-                <strong>{online ? "Сеть доступна" : "Нет соединения"}</strong>
-                <p>{connectionError || (online ? "Можно продолжить работу и обновить данные." : "Данные могут быть устаревшими. Подключитесь к сети, чтобы сохранить изменения.")}</p>
-              </div>
-              <div className="row">
-                <Button size="s" disabled={reconnecting} onClick={() => void reconnect()}>{reconnecting ? "Проверяем…" : "Повторить"}</Button>
-                {online && <Button size="s" onClick={() => { setReconnected(false); setConnectionError(null); }}>Закрыть</Button>}
-              </div>
-            </div>
-          )}
-          {updateAvailable && !updateDismissed && (
-            <div className="pwa-status__card" role="status">
-              <div><strong>Доступна новая версия Puls</strong><p>Установите обновление, когда завершите текущую работу.</p></div>
-              <div className="row">
-                <Button size="s" onClick={() => setUpdateDialog(true)}>Обновить</Button>
-                <Button size="s" onClick={() => setUpdateDismissed(true)}>Позже</Button>
-              </div>
-            </div>
-          )}
-        </aside>
-      )}
+      {/* Установка открывается только по действию пользователя - это не всплывающее уведомление. */}
       {iosInstructions && (
         <Sheet title="Установить Puls" onClose={() => setIosInstructions(false)} size="s" footer={<Button onClick={() => setIosInstructions(false)}>Понятно</Button>}>
           <ol className="pwa-install-steps">
@@ -230,15 +150,6 @@ export function PwaProvider({ children }: { children: ReactNode }) {
             <li>Нажмите «Добавить».</li>
           </ol>
           <p className="secondary small">После этого открывайте Puls с экрана Домой.</p>
-        </Sheet>
-      )}
-      {updateDialog && (
-        <Sheet title="Обновить Puls?" onClose={() => { if (!updating) setUpdateDialog(false); }} size="s" footer={<>
-          <Button disabled={updating} onClick={() => setUpdateDialog(false)}>Позже</Button>
-          <Button variant="primary" disabled={updating} onClick={applyUpdate}>{updating ? "Обновляем…" : "Обновить сейчас"}</Button>
-        </>}>
-          <p>Страница перезагрузится. Сначала сохраните введённые данные или завершите текущее действие.</p>
-          {updateError && <p className="pwa-error" role="alert">{updateError}</p>}
         </Sheet>
       )}
     </PwaContext.Provider>
