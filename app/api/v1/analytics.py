@@ -15,6 +15,7 @@ router = APIRouter(prefix="/analytics", tags=["Аналитика"])
 
 
 @router.get("/summary", response_model=AnalyticsOut)
+@router.get("/overview", response_model=AnalyticsOut)
 async def summary(
     session: SessionDep,
     actor: StaffUser,

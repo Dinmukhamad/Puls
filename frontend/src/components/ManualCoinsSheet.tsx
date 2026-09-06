@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useRef, useState, type FormEvent } from "react";
+import { lookups } from "../api/access";
 import { admin } from "../api/endpoints";
 import { configuration } from "../api/configuration";
 import { ApiError } from "../api/client";
@@ -20,7 +21,7 @@ export function ManualCoinsSheet({ operator, onClose }: { operator?: { user_id: 
   const [amount, setAmount] = useState("10"); const [reason, setReason] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const rules = useQuery({ queryKey: ["configuration-rules"], queryFn: configuration.rules });
-  const people = useQuery({ queryKey: ["wallet-people", search], queryFn: () => admin.operators({ search, size: 100 }), enabled: !operator });
+  const people = useQuery({ queryKey: ["wallet-people", search], queryFn: () => lookups.operators({ search, size: 100 }), enabled: !operator });
   const save = useMutation({
     mutationFn: () => direction === "gratitude"
       ? admin.gratitude(target!.user_id, driverRef.trim(), requestId.current)

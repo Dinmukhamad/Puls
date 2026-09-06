@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { progressApi, type XpLevel } from "../api/progress";
-import { team } from "../api/team";
+import { lookups } from "../api/access";
+
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
@@ -24,7 +25,7 @@ export function XpAdminPage({ levelsOnly = false }: { levelsOnly?: boolean }) {
 function GrantXp({ onClose }: { onClose: () => void }) {
   const [search, setSearch] = useState(""); const [userId, setUserId] = useState(""); const [amount, setAmount] = useState(50); const [reason, setReason] = useState("");
   const key = useRef(crypto.randomUUID()); const client = useQueryClient(); const toast = useToast();
-  const users = useQuery({ queryKey: ["grant-users", search], queryFn: () => team.users({ search, only_active: true, size: 100 }) });
+  const users = useQuery({ queryKey: ["grant-users", search], queryFn: () => lookups.users({ search, size: 100 }) });
   const save = useMutation({ mutationFn: () => progressApi.grant(Number(userId), amount, reason, key.current), onSuccess: () => { for (const key of ["xp-summary", "xp-history", "xp-ledger", "notifications"]) void client.invalidateQueries({ queryKey: [key] }); toast.success("XP начислен"); onClose(); } });
   const submit = (e: FormEvent) => { e.preventDefault(); if (!save.isPending) save.mutate(); };
   return <Sheet title="Начислить опыт" onClose={() => { if (!save.isPending) onClose(); }} footer={<Button form="grant-xp" type="submit" variant="primary" disabled={save.isPending || !userId}>{save.isPending ? "Начисляем…" : "Подтвердить начисление"}</Button>}><form id="grant-xp" className="stack" onSubmit={submit}><label className="field"><span className="field__label">Найти сотрудника</span><input className="input" type="search" value={search} onChange={(e) => setSearch(e.target.value)} /></label><label className="field"><span className="field__label">Сотрудник</span><select className="input" required value={userId} onChange={(e) => setUserId(e.target.value)}><option value="">Выберите сотрудника</option>{users.data?.items.map((u) => <option key={u.id} value={u.id}>{u.full_name}</option>)}</select></label>{users.isError && <ErrorState error={users.error} onRetry={() => users.refetch()} />}<label className="field"><span className="field__label">Количество XP</span><input className="input" type="number" required min={1} max={100000} value={amount} onChange={(e) => setAmount(Number(e.target.value))} /></label><label className="field"><span className="field__label">Причина</span><textarea className="input" required minLength={5} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></label>{save.isError && <ErrorState error={save.error} />}</form></Sheet>;

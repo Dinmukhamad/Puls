@@ -1,0 +1,13 @@
+.access-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.access-page p { line-height: 1.55; }
+.access-rule-list { display: grid; margin-block: 16px; }
+.access-rule { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 240px); align-items: center; gap: 20px; padding-block: 16px; border-bottom: 1px solid var(--separator); }
+.access-rule h3 { font-size: 15px; margin: 0 0 6px; }
+.access-rule p { margin: 5px 0; }
+.access-role-options, .access-actions, .access-selection { display: flex; flex-wrap: wrap; gap: 12px; }
+.access-check { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 10px 14px; background: var(--surface-secondary); border-radius: var(--radius-m); cursor: pointer; overflow-wrap: anywhere; }
+.access-check input { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--accent-primary); }
+.access-subject-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 360px; overflow: auto; }
+.access-notice { padding: 16px; border-radius: var(--radius-m); background: var(--surface-secondary); }
+.access-rule select { min-height: 44px; }
+@media (max-width: 640px) { .access-rule { grid-template-columns: minmax(0, 1fr); gap: 10px; } .access-subject-list { grid-template-columns: minmax(0, 1fr); } .access-actions > button { flex: 1; } }

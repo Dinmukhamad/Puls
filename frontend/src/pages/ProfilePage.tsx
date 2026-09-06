@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import { auth, cabinet } from "../api/endpoints";
+import { useAccess } from "../auth/AccessContext";
 import { useAuth } from "../auth/AuthContext";
 import { DisplayIcon, LogoutIcon, MoonIcon, SunIcon } from "../components/icons";
 import { Avatar, Badge, Button, Card, CoinAmount, Skeleton } from "../components/ui";
@@ -25,8 +26,9 @@ const THEME_OPTIONS: {
 
 export function ProfilePage() {
   const { user, logout } = useAuth();
+  const { can } = useAccess();
   const { preference, setPreference } = useTheme();
-  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: () => cabinet.dashboard() });
+  const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: () => cabinet.dashboard(), enabled: can("personal") });
   const [securityOpen, setSecurityOpen] = useState(false);
 
   if (!user) return null;
@@ -133,12 +135,12 @@ export function ProfilePage() {
 
           <Card title="Развитие и события">
             <div className="stack stack--tight">
-              <Link className="btn btn--secondary btn--m btn--block" to="/progress">Опыт и уровни</Link>
+              {can("personal") && <Link className="btn btn--secondary btn--m btn--block" to="/progress">Опыт и уровни</Link>}
               <Link className="btn btn--secondary btn--m btn--block" to="/notifications">Уведомления</Link>
             </div>
           </Card>
 
-          <XpProgress />
+          {can("personal") && <><XpProgress />
           <Card title="Мои коины" action={<Link to="/wallet">Кошелёк →</Link>}>
             {dashboard.isLoading && <Skeleton height={64} radius="var(--radius-m)" />}
             {dashboard.data && (
@@ -171,6 +173,7 @@ export function ProfilePage() {
             )}
           </Card>
 
+          </>}
           <Card title="Система">
             <Button variant="destructive" block icon={<LogoutIcon size={18} />} onClick={logout}>
               Выйти из аккаунта

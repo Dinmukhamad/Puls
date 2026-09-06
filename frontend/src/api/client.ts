@@ -79,6 +79,11 @@ export class ApiError extends Error {
 /** Сессия истекла - слой авторизации подписывается и разлогинивает пользователя. */
 type Listener = () => void;
 const unauthorizedListeners = new Set<Listener>();
+const sectionDeniedListeners = new Set<Listener>();
+export function onSectionDenied(listener: Listener): () => void {
+  sectionDeniedListeners.add(listener);
+  return () => { sectionDeniedListeners.delete(listener); };
+}
 
 export function onUnauthorized(listener: Listener): () => void {
   unauthorizedListeners.add(listener);
@@ -188,7 +193,9 @@ export async function request<T>(
   }
 
   if (!response.ok) {
-    throw new ApiError(response.status, await parseBody(response));
+    const error = new ApiError(response.status, await parseBody(response));
+    if (error.code === "section_denied") sectionDeniedListeners.forEach((listener) => listener());
+    throw error;
   }
 
   if (response.status === 204) return undefined as T;

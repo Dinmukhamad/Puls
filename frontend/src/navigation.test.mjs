@@ -7,13 +7,49 @@ import { build } from "esbuild";
 const built = await build({ entryPoints: [fileURLToPath(new URL("./navigation.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false });
 const nav = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
 
-test("roles expose exactly 5/6/7/7 major sections and role-specific defaults", () => {
+test("roles expose task-specific defaults with an account entry", () => {
   assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Награды", "Профиль"]);
   assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "Рейтинг и мотивация", "Профиль"]);
-  assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Производительность", "Обучение", "Мотивация", "Отчёты"]);
-  assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Пользователи и структура", "Производительность", "Аналитика", "Обучение", "Мотивация", "Система"]);
+  assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Производительность", "Обучение", "Мотивация", "Отчёты", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Пользователи и структура", "Производительность", "Аналитика", "Обучение", "Мотивация", "Система", "Профиль"]);
   assert.equal(nav.visibleNavigation("operator")[0].to, "/cabinet");
   assert.equal(nav.visibleNavigation("head")[0].to, "/admin/summary");
+});
+
+test("management roles do not have empty operator destinations", () => {
+  for (const role of ["supervisor", "head", "admin"]) {
+    const tabs = nav.visibleNavigation(role).flatMap((item) => item.tabs);
+    for (const path of ["/cabinet", "/progress", "/wallet", "/training", "/shop", "/games"]) {
+      assert.ok(!tabs.some((tab) => tab.to.split("?")[0] === path), `${role}: ${path}`);
+      assert.equal(nav.canVisit(role, path, nav.defaultAccess(role)), false);
+    }
+  }
+});
+
+test("grants add discoverable destinations and revocations remove every tab", () => {
+  for (const role of ["operator", "supervisor", "head", "admin"]) {
+    const all = Object.fromEntries(Object.keys(nav.defaultAccess(role)).map((key) => [key, true]));
+    const allowed = nav.visibleNavigation(role, all);
+    for (const item of allowed) for (const tab of item.tabs) {
+      const url = new URL(tab.to, "https://puls.test");
+      assert.equal(nav.currentSection(role, url.pathname, url.search, all)?.id, item.id, `${role}: ${tab.to}`);
+      assert.equal(nav.canVisit(role, tab.to, all), true);
+    }
+    for (const code of Object.keys(all)) {
+      const denied = { ...all, [code]: false };
+      for (const item of nav.visibleNavigation(role, denied)) for (const tab of item.tabs) {
+        const url = new URL(tab.to, "https://puls.test");
+        assert.notEqual(nav.routeSection(url.pathname, url.search), code);
+        assert.equal(nav.currentSection(role, url.pathname, url.search, denied)?.id, item.id);
+      }
+    }
+    const none = nav.visibleNavigation(role, {});
+    assert.deepEqual(none.map((item) => item.id), role === "admin" ? ["system", "profile"] : ["profile"]);
+    assert.equal(nav.canVisit(role, "/profile", {}), true);
+    assert.equal(nav.canVisit(role, "/admin/access", {}), role === "admin");
+  }
+  assert.ok(nav.visibleNavigation("operator", { analytics: true }).some((item) => item.to.startsWith("/analytics")));
+  assert.ok(nav.visibleNavigation("head", { training: true }).some((item) => item.to.startsWith("/training")));
 });
 
 test("every subsection activates its parent, including settings shared by domains", () => {

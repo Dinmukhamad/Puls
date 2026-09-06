@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { Role } from "./api/types";
+import type { AccessMap, SectionCode } from "./api/access";
 import { HomeIcon, InboxIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon } from "./components/icons";
 
 export interface SectionTab { to: string; label: string }
@@ -28,11 +29,11 @@ const staffLearning = (admin: boolean) => section("training", "Обучение"
   tab("/admin/learning?kind=test", "Тесты"),
   tab("/admin/learning?kind=mission", admin ? "Mission Studio" : "Миссии"),
   tab("/admin/learning?kind=simulator", admin ? "Driver Simulator Studio" : "Driver Simulator"),
-  tab("/admin/learning?tab=results", "Результаты команды"), tab("/training", "Пройти обучение"),
+  tab("/admin/learning?tab=results", "Результаты команды"),
 ]);
 const team = (admin = false, supervisor = false) => section("team", admin ? "Пользователи и структура" : "Команда", UsersIcon, [
   tab("/admin/users", admin ? "Пользователи" : "Операторы"), tab("/admin/groups", supervisor ? "Моя группа" : "Группы"),
-  tab("/admin/operators", "Показатели сотрудников"), ...(admin ? [tab("/admin/sessions", "Сессии пользователей")] : []),
+  tab("/admin/operators", "Показатели сотрудников"),
 ]);
 const analytics = (supervisor = false) => section("analytics", "Аналитика", TrophyIcon, [
   tab("/analytics?tab=summary", "Сводка и сравнение"), tab("/analytics?tab=operators", "Операторы"), tab("/analytics?tab=quality", "Качество"),
@@ -47,7 +48,6 @@ const motivation = (supervisor = false) => section("motivation", supervisor ? "�
   tab("/admin/levels", "Уровни"), tab("/admin/settings?tab=badges", "Достижения"),
   tab("/admin/store", "Товары магазина"), tab("/admin/requests", "Заказы и выдача"),
   tab("/admin/games?tab=wheel", "Колесо WOW"), tab("/admin/games?tab=raffles", "Розыгрыши"),
-  tab("/shop", "Мой магазин"), tab("/games", "Мои игры"),
 ], ["/admin/wallet", "/admin/xp", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
 const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summary", "Сводка"), ...personal]);
 
@@ -63,18 +63,87 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
   supervisor: [staffHome, team(false, true), analytics(true), staffLearning(false), motivation(true), ACCOUNT_SECTION],
   head: [staffHome, team(), analytics(), performance(), staffLearning(false), motivation(), section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")])],
   admin: [staffHome, team(true), performance(true), analytics(), staffLearning(true), motivation(),
-    section("system", "Система", InboxIcon, [tab("/admin/settings", "Настройки Puls"), tab("/admin/audit", "Audit Log"), tab("/reports", "Отчёты и экспорт")])],
+    section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии пользователей"), tab("/admin/audit", "Журнал аудита"), tab("/reports", "Отчёты и экспорт")])],
 };
 
-export function visibleNavigation(role: Role): readonly NavItem[] { return ROLE_NAVIGATION[role]; }
+export function defaultAccess(role: Role): AccessMap {
+  const staff = role !== "operator";
+  return { personal: !staff, results: true, training: !staff, rewards: !staff, overview: staff, team: staff, analytics: staff, performance: staff, learning_admin: staff, motivation: staff, reports: role === "head" || role === "admin", system: role === "admin" };
+}
 
-export function currentSection(role: Role, pathname: string, search = ""): NavItem | undefined {
-  const sections = visibleNavigation(role);
+export function routeSection(pathname: string, search = ""): SectionCode | "account" | "access" | undefined {
+  const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
+  if (["/profile", "/notifications", "/sessions"].some(matches)) return "account";
+  if (matches("/admin/access")) return "access";
+  if (matches("/admin/settings")) return new URLSearchParams(search).get("tab") === "badges" ? "motivation" : "performance";
+  const routes: [SectionCode, string[]][] = [
+    ["personal", ["/cabinet", "/progress", "/wallet"]], ["results", ["/rating"]],
+    ["training", ["/training", "/simulator"]], ["rewards", ["/shop", "/games"]],
+    ["overview", ["/admin/summary"]], ["team", ["/admin/users", "/admin/groups", "/admin/operators"]],
+    ["analytics", ["/analytics"]], ["performance", ["/admin/periods"]], ["learning_admin", ["/admin/learning"]],
+    ["motivation", ["/admin/wallet", "/admin/xp", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games"]],
+    ["reports", ["/reports"]], ["system", ["/admin/sessions", "/admin/audit"]],
+  ];
+  return routes.find(([, paths]) => paths.some(matches))?.[0];
+}
+
+export function canVisit(role: Role, to: string, allowed: AccessMap): boolean {
+  if (to === "/") return true;
+  const [path, search = ""] = to.split("?");
+  const permission = routeSection(path, search);
+  if (permission === "account") return true;
+  if (permission === "access") return role === "admin";
+  if (permission === "system" && role !== "admin") return false;
+  return !!permission && allowed[permission] === true;
+}
+
+export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess(role)): readonly NavItem[] {
+  const items = ROLE_NAVIGATION[role].map((item) => ({ ...item, tabs: [...item.tabs] }));
+  // Extra grants also make sections discoverable to roles that did not originally have them.
+  const additions = [
+    section("home", "Главная", HomeIcon, [tab("/admin/summary", "Сводка"), ...personal]),
+    team(), analytics(), performance(), staffLearning(role === "admin"), motivation(),
+    section("personal_training", "Моё обучение", SparkIcon, learningTabs),
+    section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг")]),
+    section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=wheel", "Колесо WOW"), tab("/games?tab=raffles", "Розыгрыши")]),
+    section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")]),
+    section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии пользователей"), tab("/admin/audit", "Журнал аудита")]),
+  ];
+  // Existing role placement wins, so shared features never occur twice in the sidebar.
+  const placed = new Set(items.flatMap((item) => item.tabs.map((link) => routeSection(link.to.split("?")[0], link.to.split("?")[1]))));
+  for (const addition of additions) {
+    const tabs = addition.tabs.filter((link) => !placed.has(routeSection(link.to.split("?")[0], link.to.split("?")[1])));
+    if (!tabs.length) continue;
+    const existing = items.find((item) => item.id === addition.id);
+    if (existing) existing.tabs.push(...tabs); else items.push({ ...addition, tabs });
+    tabs.forEach((link) => placed.add(routeSection(link.to.split("?")[0], link.to.split("?")[1])));
+  }
+  // Access management is always available to admins, even after denying every configurable module.
+  if (role === "admin") {
+    const system = items.find((item) => item.id === "system")!;
+    system.tabs = [tab("/admin/access", "Доступ к разделам"), ...system.tabs.filter((link) => link.to !== "/admin/access" && link.to !== "/admin/settings")];
+  }
+  const visible = items.flatMap((item) => {
+    const tabs = item.tabs.filter((link) => canVisit(role, link.to, allowed) && !(role !== "operator" && !allowed.personal && link.to === "/rating?tab=progress"));
+    if (!tabs.length) return [];
+    let { id, label } = item;
+    if ((id === "performance" && !allowed.performance) || (id === "motivation" && !allowed.motivation)) { id = "results"; label = "Результаты"; }
+    if (id === "analytics" && !allowed.analytics) { id = "performance"; label = "Производительность"; }
+    if (id === "motivation" && !allowed.results) label = "Мотивация";
+    return [{ ...item, id, label, tabs, to: tabs[0].to, paths: Array.from(new Set(tabs.map((link) => link.to.split("?")[0]))) }];
+  });
+  if (!visible.some((item) => item.id === "profile")) visible.push(ACCOUNT_SECTION);
+  return visible;
+}
+
+export function currentSection(role: Role, pathname: string, search = "", allowed: AccessMap = defaultAccess(role)): NavItem | undefined {
+  if (!canVisit(role, `${pathname}${search}`, allowed)) return undefined;
+  const sections = visibleNavigation(role, allowed);
   // Settings pages are hosted by their business domain, even on direct legacy links.
   if (pathname === "/admin/settings") {
     const selected = new URLSearchParams(search).get("tab");
     if (selected === "badges") return sections.find((item) => item.id === "motivation");
-    if (["metrics", "rules", "nominations"].includes(selected ?? "")) return sections.find((item) => item.id === "performance") ?? sections.find((item) => item.id === "analytics");
+    if (selected !== "badges") return sections.find((item) => item.id === "performance") ?? sections.find((item) => item.id === "analytics");
   }
   return [...sections, ACCOUNT_SECTION].find((item) => item.paths.some((path) => pathname === path || pathname.startsWith(`${path}/`)));
 }

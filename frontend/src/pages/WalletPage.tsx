@@ -1,7 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { admin } from "../api/endpoints";
+import { AccessLink as Link } from "../components/AccessLink";
+import { useSearchParams } from "react-router-dom";
+import { lookups } from "../api/access";
+import { useAuth } from "../auth/AuthContext";
+
 import { walletApi, type WalletKind } from "../api/wallet";
 import { ManualCoinsSheet } from "../components/ManualCoinsSheet";
 import { Badge, Button, Card, EmptyState, ErrorState, KPI, Pagination, Skeleton } from "../components/ui";
@@ -11,18 +14,19 @@ import "./wallet.css";
 const KINDS: [WalletKind, string][] = [["", "Все операции"], ["accrual", "Начисления"], ["writeoff", "Списания"], ["purchase", "Покупки"], ["refund", "Возвраты"]];
 
 export function WalletPage({ administrative = false }: { administrative?: boolean }) {
+  const { atLeast } = useAuth();
   const [params, setParams] = useSearchParams();
   const [manual, setManual] = useState(false); const [search, setSearch] = useState("");
   const page = Math.max(1, Math.floor(Number(params.get("page")) || 1));
   const kind = KINDS.find(([value]) => value === params.get("kind"))?.[0] ?? "";
   const dateFrom = params.get("from") ?? ""; const dateTo = params.get("to") ?? "";
   const selected = Number(params.get("user")); const userId = administrative && Number.isInteger(selected) && selected > 0 ? selected : undefined;
-  const people = useQuery({ queryKey: ["wallet-people", search], queryFn: () => admin.operators({ search, size: 100 }), enabled: administrative });
+  const people = useQuery({ queryKey: ["wallet-people", search], queryFn: () => lookups.operators({ search, size: 100 }), enabled: administrative });
   const filters = { page, kind, date_from: dateFrom, date_to: dateTo, user_id: userId };
   const data = useQuery({ queryKey: ["wallet", administrative, filters], queryFn: () => walletApi.report(administrative, filters) });
   const update = (key: string, value: string) => { const next = new URLSearchParams(params); next.delete("page"); if (value) next.set(key, value); else next.delete(key); setParams(next); };
   const summary = data.data?.summary;
-  return <div className="stack"><div className="page-head"><div><h1 className="page-title">{administrative ? "Коины команды" : "Мой кошелёк"}</h1><p className="page-subtitle">{administrative ? "Баланс операторов и история операций в вашей области доступа" : "Баланс, начисления и покупки"}</p></div>{administrative ? <Button variant="primary" onClick={() => setManual(true)}>Начислить / списать</Button> : <Link className="btn btn--primary btn--m" to="/shop">В магазин</Link>}</div>
+  return <div className="stack"><div className="page-head"><div><h1 className="page-title">{administrative ? "Коины команды" : "Мой кошелёк"}</h1><p className="page-subtitle">{administrative ? "Баланс операторов и история операций в вашей области доступа" : "Баланс, начисления и покупки"}</p></div>{administrative ? atLeast("supervisor") && <Button variant="primary" onClick={() => setManual(true)}>Начислить / списать</Button> : <Link hideWhenDenied className="btn btn--primary btn--m" to="/shop">В магазин</Link>}</div>
     <Card title="Фильтры"><div className="wallet-filters">
       <label className="field"><span className="field__label">Начало периода</span><input className="input" type="date" value={dateFrom} max={dateTo || "9999-12-30"} onChange={(e) => update("from", e.target.value)} /></label>
       <label className="field"><span className="field__label">Конец периода</span><input className="input" type="date" value={dateTo} min={dateFrom || undefined} max="9999-12-30" onChange={(e) => update("to", e.target.value)} /></label>

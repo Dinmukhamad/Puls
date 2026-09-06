@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { ApiError } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { admin } from "../api/endpoints";
 import type { ShopRequestOut, ShopRequestStatus } from "../api/types";
 import { Sheet } from "../components/Sheet";
@@ -40,6 +41,7 @@ const TABS: { value: StatusFilter; label: string }[] = [
 ];
 
 export function AdminRequestsPage() {
+  const { atLeast } = useAuth();
   const toast = useToast();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<StatusFilter>("new");
@@ -168,7 +170,7 @@ export function AdminRequestsPage() {
                         {request.comment ?? request.decision_comment ?? "—"}
                       </td>
                       <td className="cell-actions">
-                        {request.status === "new" && (
+                        {atLeast("supervisor") && request.status === "new" && (
                           <>
                             <Button
                               size="s"
@@ -187,7 +189,7 @@ export function AdminRequestsPage() {
                             </Button>
                           </>
                         )}
-                        {request.status === "approved" && (
+                        {atLeast("supervisor") && request.status === "approved" && (
                           <Button
                             size="s"
                             disabled={decide.isPending}
@@ -229,7 +231,7 @@ export function AdminRequestsPage() {
                       <span>{request.item.title}</span>
                       <CoinAmount value={request.price} size="s" />
                     </div>
-                    {request.status === "new" && (
+                    {atLeast("supervisor") && request.status === "new" && (
                       <div className="row">
                         <Button
                           size="s"
@@ -248,7 +250,7 @@ export function AdminRequestsPage() {
                         </Button>
                       </div>
                     )}
-                    {request.status === "approved" && (
+                    {atLeast("supervisor") && request.status === "approved" && (
                       <Button
                         size="s"
                         block
@@ -275,7 +277,7 @@ export function AdminRequestsPage() {
         )}
       </Card>
 
-      {rejecting && (
+      {rejecting && atLeast("supervisor") && (
         <RejectSheet
           request={rejecting}
           onClose={() => setRejecting(null)}

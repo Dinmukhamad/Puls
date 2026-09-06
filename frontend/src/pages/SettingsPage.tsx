@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { configuration, configurationError, type Definition, type DefinitionInput, type DefinitionKind, type FieldValue, type Rules } from "../api/configuration";
+import { useAccess } from "../auth/AccessContext";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
@@ -32,12 +33,13 @@ const finalFields: FieldSpec[] = [
 ];
 
 export function SettingsPage() {
+  const { can } = useAccess();
   const [params, setParams] = useSearchParams();
   const selected = params.get("tab");
   const tab = selected && ["metrics", "nominations", "badges"].includes(selected) ? selected as DefinitionKind : "rules";
   return <div className="stack configuration-page">
     <div className="page-head"><div><h1 className="page-title">Настройки</h1><p className="page-subtitle">Правила начисления, показатели и условия достижений</p></div></div>
-    <nav className="configuration-nav" aria-label="Разделы настроек">{[["rules", "Правила"], ["metrics", "Показатели"], ["nominations", "Номинации"], ["badges", "Достижения"]].map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
+    <nav className="configuration-nav" aria-label="Разделы настроек">{[["rules", "Правила"], ["metrics", "Показатели"], ["nominations", "Номинации"], ["badges", "Достижения"]].filter(([key]) => can(key === "badges" ? "motivation" : "performance")).map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
     {tab === "rules" ? <RulesSection /> : <DefinitionSection key={tab} kind={tab} />}
   </div>;
 }

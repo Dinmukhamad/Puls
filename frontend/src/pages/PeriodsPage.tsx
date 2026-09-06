@@ -19,6 +19,7 @@ export function PeriodsPage() {
 function PeriodWorkspace() {
   const { atLeast } = useAuth();
   const canPublish = atLeast("head");
+  const canImport = atLeast("supervisor");
   const [params, setParams] = useSearchParams();
   const selected = Number(params.get("week")) || undefined;
   const weeks = useQuery({ queryKey: ["periods"], queryFn: periods.list });
@@ -68,7 +69,7 @@ function PeriodWorkspace() {
   } });
   const busy = inspect.isPending || apply.isPending || calculate.isPending || publish.isPending;
   const inspectFile = (file?: File) => {
-    if (!file || !selected || closed || busy) return;
+    if (!canImport || !file || !selected || closed || busy) return;
     generation.current += 1; setInspected(null); setApplied(false); apply.reset();
     inspect.mutate({ id: selected, file, revision: generation.current });
   };
@@ -85,9 +86,9 @@ function PeriodWorkspace() {
             <option value="">Выберите неделю</option>
             {weeks.data?.map((item) => <option key={item.id} value={item.id}>{item.label} · {WEEK_STATUS_LABELS[item.status]}</option>)}
           </select></label>
-        <label className="field"><span className="field__label">Дата внутри новой недели</span>
+        {canImport && <><label className="field"><span className="field__label">Дата внутри новой недели</span>
           <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} disabled={create.isPending || busy} /></label>
-        <Button disabled={!date || create.isPending || busy} onClick={() => create.mutate()}>{create.isPending ? "Открываем…" : "Открыть неделю"}</Button>
+        <Button disabled={!date || create.isPending || busy} onClick={() => create.mutate()}>{create.isPending ? "Открываем…" : "Открыть неделю"}</Button></>}
       </div>
       {weeks.isLoading && <Skeleton height={44} />}
       {weeks.isError && <ErrorState error={weeks.error} onRetry={() => weeks.refetch()} />}
@@ -96,7 +97,7 @@ function PeriodWorkspace() {
     {error && <ErrorState error={error} />}
     {!selected ? <EmptyState title="Выберите период для работы" hint="Можно открыть новую неделю или продолжить ранее созданную" /> : <>
       <ol className="workflow-steps" aria-label="Этапы расчёта">{steps.map((label, index) => <li key={label} className="workflow-step" aria-current={index === step ? "step" : undefined}><span>{index + 1}</span>{label}</li>)}</ol>
-      {!closed && <Card title="1. Загрузка показателей" subtitle="CSV или XLSX. Повторная загрузка обновляет только переданные значения.">
+      {!closed && canImport && <Card title="1. Загрузка показателей" subtitle="CSV или XLSX. Повторная загрузка обновляет только переданные значения.">
         <div className={`upload-zone${dragging ? " is-dragging" : ""}`}
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)}
           onDrop={(e) => { e.preventDefault(); setDragging(false); inspectFile(e.dataTransfer.files[0]); }}>

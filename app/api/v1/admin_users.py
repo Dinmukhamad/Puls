@@ -351,6 +351,8 @@ async def list_groups(session: SessionDep, actor: StaffUser) -> list[GroupOut]:
     )
     if actor.role == Role.SUPERVISOR:
         query = query.where(Group.supervisor_id == actor.id)
+    elif actor.role == Role.OPERATOR:
+        query = query.where(Group.id == actor.group_id)
     groups = list(await session.scalars(query))
     group_ids = [group.id for group in groups]
     counts = await session.execute(

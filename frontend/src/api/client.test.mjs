@@ -23,6 +23,19 @@ const json = (value, status = 200) => Response.json(value, { status });
 const oldToken = { access_token: "old-access", refresh_token: "old-refresh" };
 const newToken = { access_token: "new-access", refresh_token: "new-refresh" };
 
+test("section revocation refreshes permissions without clearing the login", async () => {
+  const api = await setup(); api.tokenStore.save(oldToken);
+  let notifications = 0;
+  const stop = api.onSectionDenied(() => { notifications++; });
+  globalThis.fetch = async () => json({ code: "section_denied", detail: "Access closed" }, 403);
+  await assert.rejects(api.request("/api/v1/admin/users"), { status: 403, code: "section_denied" });
+  assert.equal(notifications, 1);
+  assert.equal(api.tokenStore.access, oldToken.access_token);
+  stop();
+  await assert.rejects(api.request("/api/v1/admin/users"), { status: 403 });
+  assert.equal(notifications, 1);
+});
+
 test("parallel expired requests share one refresh and retry with the rotated access", async () => {
   const api = await setup(); api.tokenStore.save(oldToken);
   const refresh = deferred(); let refreshes = 0;

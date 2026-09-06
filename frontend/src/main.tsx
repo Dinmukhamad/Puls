@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom";
 
 import { App } from "./App";
 import { AuthProvider } from "./auth/AuthContext";
+import { AccessProvider } from "./auth/AccessContext";
 import { ToastProvider } from "./components/Toast";
 import { ThemeProvider } from "./theme/ThemeContext";
 import { PwaProvider } from "./pwa/PwaProvider";
@@ -35,7 +36,7 @@ createRoot(document.getElementById("root")!).render(
           <AuthProvider>
             <ToastProvider>
               <PwaProvider>
-                <App />
+                <AccessProvider><App /></AccessProvider>
               </PwaProvider>
             </ToastProvider>
           </AuthProvider>

@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { useAuth } from "../auth/AuthContext";
+import { useAccess } from "../auth/AccessContext";
 import { ApiError, downloadFile } from "../api/client";
 import { admin, rating } from "../api/endpoints";
 import type { OperatorRowOut } from "../api/types";
@@ -24,6 +26,8 @@ import { WEEK_STATUS_LABELS, coins, points } from "../utils/format";
 
 export function AdminOperatorsPage() {
   const toast = useToast();
+  const { can } = useAccess(); const { atLeast } = useAuth();
+  const canCredit = can("motivation") && atLeast("supervisor");
   const [weekId, setWeekId] = useState<number | undefined>();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -33,7 +37,7 @@ export function AdminOperatorsPage() {
   const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks() });
   const summary = useQuery({
     queryKey: ["admin-summary", weekId],
-    queryFn: () => admin.summary(weekId),
+    queryFn: () => admin.summary(weekId), enabled: can("overview"),
   });
   const operators = useQuery({
     queryKey: ["admin-operators", weekId, page, search],
@@ -57,9 +61,9 @@ export function AdminOperatorsPage() {
           <p className="page-subtitle">Показатели недели, балансы и ручное начисление коинов</p>
         </div>
         <div className="page-head__actions">
-          <Button icon={<DownloadIcon size={17} />} onClick={exportCsv}>
+          {can("reports") && <Button icon={<DownloadIcon size={17} />} onClick={exportCsv}>
             Выгрузить CSV
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -187,9 +191,9 @@ export function AdminOperatorsPage() {
                       <AntiCell value={row.lateness} />
                       <AntiCell value={row.forbidden_sites} />
                       <td className="cell-actions">
-                        <Button size="s" onClick={() => setTarget(row)}>
+                        {canCredit && <Button size="s" onClick={() => setTarget(row)}>
                           Начислить
-                        </Button>
+                        </Button>}
                       </td>
                     </tr>
                   ))}
@@ -233,9 +237,9 @@ export function AdminOperatorsPage() {
                         </span>
                       </span>
                     </div>
-                    <Button size="s" block onClick={() => setTarget(row)}>
+                    {canCredit && <Button size="s" block onClick={() => setTarget(row)}>
                       Начислить коины
-                    </Button>
+                    </Button>}
                   </li>
                 ))}
               </ul>
@@ -253,7 +257,7 @@ export function AdminOperatorsPage() {
         )}
       </Card>
 
-      {target && <ManualCoinsSheet operator={target} onClose={() => setTarget(null)} />}
+      {target && canCredit && <ManualCoinsSheet operator={target} onClose={() => setTarget(null)} />}
     </div>
   );
 }

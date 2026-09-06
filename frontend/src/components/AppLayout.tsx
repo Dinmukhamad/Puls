@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { useAccess } from "../auth/AccessContext";
+import { SectionGuard } from "./SectionGuard";
 import { ACCOUNT_SECTION, currentSection, currentTab, mobileNavigation, subsectionDestination, visibleNavigation } from "../navigation";
 import { ROLE_LABELS } from "../utils/format";
 import { GlassSurface } from "./GlassSurface";
@@ -17,13 +19,14 @@ function initialCollapsed(): boolean {
 
 export function AppLayout() {
   const { user } = useAuth(); const location = useLocation();
+  const { allowed } = useAccess();
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [compactTabBar, setCompactTabBar] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId(); const lastScroll = useRef(0);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-  const items = user ? visibleNavigation(user.role) : [];
-  const active = user ? currentSection(user.role, location.pathname, location.search) : undefined;
+  const items = user ? visibleNavigation(user.role, allowed) : [];
+  const active = user ? currentSection(user.role, location.pathname, location.search, allowed) : undefined;
   const activeTab = active ? currentTab(active, location.pathname, location.search) : undefined;
   const { primary, overflow } = mobileNavigation(items);
   const separateProfile = !items.some((item) => item.id === "profile");
@@ -52,7 +55,7 @@ export function AppLayout() {
 
     <main className="main"><div className="main__inner">
       {active && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p>{active.tabs.length > 1 && <nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav>}</div>}
-      <Outlet />
+      <SectionGuard><Outlet /></SectionGuard>
     </div></main>
 
     <GlassSurface as="nav" variant="prominent" className={compactTabBar ? "tabbar tabbar--compact" : "tabbar"} aria-label="Основные разделы, мобильное меню">

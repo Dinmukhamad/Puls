@@ -1,5 +1,6 @@
 """Модели ORM. Импорт здесь регистрирует все таблицы в общей метадате."""
 from app.db.base import Base
+from app.models.access import AccessPolicy, AccessRule
 from app.models.badge import BadgeDefinition, UserBadge
 from app.models.coin import CoinTransaction
 from app.models.contest import (
@@ -28,6 +29,8 @@ from app.models.shop import ShopItem, ShopRequest
 from app.models.user import CoinAccount, Group, User
 
 __all__ = [
+    "AccessPolicy",
+    "AccessRule",
     "AuditLog",
     "BadgeDefinition",
     "BadgeRule",

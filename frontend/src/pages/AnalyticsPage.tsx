@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { AccessLink as Link } from "../components/AccessLink";
+import { useSearchParams } from "react-router-dom";
 
 import { analytics, type AnalyticsOperator, type MetricSummary } from "../api/analytics";
 import { rating } from "../api/endpoints";
-import { team } from "../api/team";
+import { lookups } from "../api/access";
+
 import { Chart } from "../components/Chart";
 import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
@@ -15,12 +17,12 @@ import "./analytics.css";
 const TABS = [{ value: "summary", label: "Сводка" }, { value: "operators", label: "Операторы" }, { value: "quality", label: "Качество" }];
 const positiveInt = (value: string | null) => value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : undefined;
 
-export function useAnalyticsReport() {
+export function useAnalyticsReport(overview = false) {
   const [params, setParams] = useSearchParams();
   const filters = { week_id: positiveInt(params.get("week_id")), group_id: positiveInt(params.get("group_id")), metric_code: params.get("metric") || undefined, operator_ids: params.get("operators") || undefined };
-  const data = useQuery({ queryKey: ["analytics", filters], queryFn: ({ signal }) => analytics.summary(filters, signal) });
+  const data = useQuery({ queryKey: ["analytics", overview ? "overview" : "report", filters], queryFn: ({ signal }) => overview ? analytics.overview(filters, signal) : analytics.summary(filters, signal) });
   const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks(100) });
-  const groups = useQuery({ queryKey: ["team-groups"], queryFn: team.groups });
+  const groups = useQuery({ queryKey: ["lookup-groups"], queryFn: lookups.groups });
   function update(values: Record<string, string | undefined>) {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(values)) { if (value) next.set(key, value); else next.delete(key); }
@@ -89,7 +91,7 @@ export function AnalyticsPage() {
     {data.isLoading && <><KPISkeleton /><Card title="Динамика"><div className="analytics-loading" aria-label="Загрузка аналитики" /></Card></>}
     {data.isError && <ErrorState error={data.error} onRetry={() => void data.refetch()} />}
     {value && !data.isError && <>
-      {!value.week ? <EmptyState title="Периодов пока нет" hint="Загрузите показатели и выполните расчёт периода." action={<Link className="btn btn--primary" to="/admin/periods">Перейти к расчёту</Link>} /> : !metric ? <EmptyState title="Показатели не настроены" hint="Добавьте определения показателей в настройках системы." /> : <>
+      {!value.week ? <EmptyState title="Периодов пока нет" hint="Загрузите показатели и выполните расчёт периода." action={<Link hideWhenDenied className="btn btn--primary" to="/admin/periods">Перейти к расчёту</Link>} /> : !metric ? <EmptyState title="Показатели не настроены" hint="Добавьте определения показателей в настройках системы." /> : <>
         <div className="kpi-grid">
           <KPI label={metric.title} value={points(metric.value)} unit={metric.unit ?? undefined} hint={<MetricDelta value={metric.delta} improved={metric.improved} unit={metric.unit} />} />
           <KPI label="Текущая цель" value={points(metric.target)} unit={metric.unit ?? undefined} hint={metric.direction === "higher_is_better" ? "↑ Больше — лучше" : "↓ Меньше — лучше"} />

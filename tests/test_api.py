@@ -95,7 +95,7 @@ async def test_operator_cannot_open_admin_panel(
     token = await login(client, "op1")
     response = await client.get("/api/v1/admin/summary", headers=auth(token))
     assert response.status_code == 403
-    assert response.json()["code"] == "role_required"
+    assert response.json()["code"] == "section_denied"
 
 
 async def test_supervisor_cannot_change_rules(

@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { team, teamError } from "../api/team";
+import { useAccess } from "../auth/AccessContext";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
@@ -16,7 +17,10 @@ export function UserDetailPage() {
   const id = Number(useParams().userId);
   const { user: actor, atLeast } = useAuth();
   const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") ?? "profile";
+  const { can } = useAccess();
+  const tabAllowed = (key: string) => ["xp", "coins", "purchases"].includes(key) ? can("motivation") : ["test", "mission", "simulator"].includes(key) ? can("learning_admin") : true;
+  const requestedTab = params.get("tab") ?? "profile";
+  const tab = tabAllowed(requestedTab) ? requestedTab : "profile";
   const page = Math.max(1, Number(params.get("page")) || 1);
   const [editor, setEditor] = useState(false);
   const [archive, setArchive] = useState(false);
@@ -35,7 +39,7 @@ export function UserDetailPage() {
     <Link className="secondary" to="/admin/users">← Пользователи</Link>
     <Card><div className="team-detail-hero"><Avatar name={data.full_name} id={id} size={64} /><div className="team-detail-hero__body"><h1 className="page-title">{data.full_name}</h1><div className="team-meta"><span>{ROLE_LABELS[data.role]}</span><span>{data.group?.name ?? "Без группы"}</span><UserStatus active={data.is_active} /></div></div>
       <div className="team-actions">{editable && <Button onClick={() => setEditor(true)}>Изменить</Button>}{editable && actor?.id !== id && <Button onClick={() => setArchive(true)}>{data.is_active ? "Архивировать" : "Восстановить"}</Button>}{actor?.role === "admin" && <Button onClick={() => setPassword(true)}>Сбросить пароль</Button>}</div></div></Card>
-    <nav className="team-section-nav" aria-label="Разделы карточки">{[["profile", "Профиль"], ["results", "Результаты"], ["coins", "Коины"], ["xp", "XP"], ["test", "Тесты"], ["mission", "Миссии"], ["simulator", "Симулятор"], ["purchases", "Покупки"]].map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
+    <nav className="team-section-nav" aria-label="Разделы карточки">{[["profile", "Профиль"], ["results", "Результаты"], ["coins", "Коины"], ["xp", "XP"], ["test", "Тесты"], ["mission", "Миссии"], ["simulator", "Симулятор"], ["purchases", "Покупки"]].filter(([key]) => tabAllowed(key)).map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
     {tab === "xp" && <><XpProgress key={id} userId={id} showLevels /><XpHistory userId={id} page={page} onPage={(p) => setParams({ tab, page: String(p) })} /></>}
     {(tab === "test" || tab === "mission" || tab === "simulator") && <LearningResults key={`${id}-${tab}`} userId={id} kind={tab} />}
     {tab === "profile" && <Card title="Личные данные"><dl className="team-definition-list"><dt>Логин</dt><dd>{data.login}</dd><dt>ID сотрудника</dt><dd>{id}</dd><dt>Email</dt><dd>{data.email ?? "—"}</dd><dt>Дата приёма</dt><dd>{data.hired_on ? dateOnly(data.hired_on) : "—"}</dd><dt>Группа</dt><dd>{data.group?.name ?? "Не назначена"}</dd></dl></Card>}

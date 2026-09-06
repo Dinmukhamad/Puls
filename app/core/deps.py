@@ -1,4 +1,5 @@
 """Зависимости FastAPI: текущий пользователь, проверка ролей, границы видимости."""
+
 from typing import Annotated
 
 import jwt
@@ -15,6 +16,7 @@ from app.db.session import get_session
 from app.models.enums import Role
 from app.models.session import LoginSession
 from app.models.user import Group, User
+from app.services.access import effective_access, request_sections
 from app.services.sessions import is_valid
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -57,6 +59,15 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Учётная запись отключена"
         )
+    access = await effective_access(session, user)
+    request.state.section_access = access
+    path = request.url.path.removeprefix(settings.API_V1_PREFIX)
+    sections = request_sections(path, request.method)
+    request.state.required_sections = sections
+    if sections and not any(access["allowed"].get(code, False) for code in sections):
+        raise PermissionDeniedError(
+            "Доступ к разделу закрыт администратором", code="section_denied"
+        )
     return user
 
 
@@ -69,11 +80,20 @@ class RequireRole:
     def __init__(self, minimum: Role) -> None:
         self.minimum = minimum
 
-    async def __call__(self, user: CurrentUser) -> User:
+    async def __call__(self, user: CurrentUser, request: Request) -> User:
         if not user.has_role_at_least(self.minimum):
-            raise PermissionDeniedError(
-                "Недостаточно прав для этого раздела", code="role_required"
-            )
+            # Explicit section grants open read views; roles still bound data and writes.
+            access = request.state.section_access
+            if (
+                self.minimum != Role.ADMIN
+                and request.method in ("GET", "HEAD")
+                and any(
+                    access["allowed"].get(code) and access["decisions"][code]["source"] != "default"
+                    for code in request.state.required_sections
+                )
+            ):
+                return user
+            raise PermissionDeniedError("Недостаточно прав для этого раздела", code="role_required")
         return user
 
 
@@ -130,9 +150,7 @@ class Pagination:
     def __init__(
         self,
         page: Annotated[int, Query(ge=1, description="Номер страницы, с единицы")] = 1,
-        size: Annotated[
-            int | None, Query(ge=1, le=500, description="Размер страницы")
-        ] = None,
+        size: Annotated[int | None, Query(ge=1, le=500, description="Размер страницы")] = None,
     ) -> None:
         self.page = page
         self.size = min(size or settings.DEFAULT_PAGE_SIZE, settings.MAX_PAGE_SIZE)

@@ -1,3 +1,4 @@
+import { useAccess } from "../auth/AccessContext";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -210,50 +211,16 @@ function Hero({
 }
 
 function QuickActions({ available, pending }: { available: number; pending: number }) {
-  const navigate = useNavigate();
-  return (
-    <Card title="Быстрые действия">
-      <div className="quick-actions">
-        <button type="button" className="quick-action" onClick={() => navigate("/training")}><span className="quick-action__icon"><SparkIcon size={20} /></span><span className="quick-action__text"><span className="quick-action__title">Продолжить обучение</span><span className="quick-action__hint">Тесты, миссии и новые уровни</span></span></button>
-        <button type="button" className="quick-action" onClick={() => navigate("/shop")}>
-          <span className="quick-action__icon">
-            <StoreIcon size={20} />
-          </span>
-          <span className="quick-action__text">
-            <span className="quick-action__title">Магазин бонусов</span>
-            <span className="quick-action__hint">Доступно {coins(available)} коинов</span>
-          </span>
-        </button>
-
-        <button type="button" className="quick-action" onClick={() => navigate("/rating")}>
-          <span className="quick-action__icon">
-            <TrophyIcon size={20} />
-          </span>
-          <span className="quick-action__text">
-            <span className="quick-action__title">Рейтинг недели</span>
-            <span className="quick-action__hint">Пьедестал и номинации</span>
-          </span>
-        </button>
-
-        {pending > 0 && (
-          <button type="button" className="quick-action" onClick={() => navigate("/shop")}>
-            <span className="quick-action__icon">
-              <CoinIcon size={20} />
-            </span>
-            <span className="quick-action__text">
-              <span className="quick-action__title">Заявки на рассмотрении</span>
-              <span className="quick-action__hint">{pending} шт. ждут решения</span>
-            </span>
-          </button>
-        )}
-      </div>
-    </Card>
-  );
+  const navigate = useNavigate(); const { canPath } = useAccess();
+  const actions = [
+    { to: "/training", title: "Продолжить обучение", hint: "Тесты, миссии и новые уровни", icon: SparkIcon },
+    { to: "/shop", title: "Магазин бонусов", hint: `Доступно ${coins(available)} коинов`, icon: StoreIcon },
+    { to: "/rating", title: "Рейтинг недели", hint: "Пьедестал и номинации", icon: TrophyIcon },
+    ...(pending > 0 ? [{ to: "/shop", title: "Заявки на рассмотрении", hint: `${pending} шт. ждут решения`, icon: StoreIcon }] : []),
+  ].filter((action) => canPath(action.to));
+  if (!actions.length) return null;
+  return <Card title="Быстрые действия"><div className="quick-actions">{actions.map((action) => <button key={action.title} type="button" className="quick-action" onClick={() => navigate(action.to)}><span className="quick-action__icon"><action.icon size={20} /></span><span className="quick-action__text"><span className="quick-action__title">{action.title}</span><span className="quick-action__hint">{action.hint}</span></span></button>)}</div></Card>;
 }
-
-/* --------------------------------------------------------------------------
- * Показатели недели - п. 4.1.2 бизнес-ТЗ
- * -------------------------------------------------------------------------- */
 
 function WeekMetricsCard({ week }: { week: WeekMetricsBlock }) {
   if (!week.week_id) {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useAccess } from "../auth/AccessContext";
 import { Link } from "react-router-dom";
 import { admin } from "../api/endpoints";
 import { downloadFile } from "../api/client";
@@ -14,9 +15,10 @@ const reports = [
 ];
 
 export function ReportsPage() {
+  const { canPath } = useAccess();
   const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>(null);
   const exportReport = async () => { setBusy(true); setError(null); try { await downloadFile(admin.exportPath(), "puls-operators.csv"); } catch (error) { setError(error); } finally { setBusy(false); } };
   return <div className="stack"><header className="page-head"><div><h1 className="page-title">Отчёты</h1><p className="page-subtitle">Результаты работы, обучения и экономики</p></div><Button disabled={busy} onClick={exportReport}>{busy ? "Готовим CSV…" : "Экспорт показателей в CSV"}</Button></header>{!!error && <ErrorState error={error} />}
-    <div className="grid grid--1-1">{reports.map((report) => <Card key={report.to} title={report.title}><p className="secondary">{report.text}</p><Link className="btn btn--secondary btn--m" to={report.to}>Открыть отчёт</Link></Card>)}</div>
+    <div className="grid grid--1-1">{reports.filter((report) => canPath(report.to)).map((report) => <Card key={report.to} title={report.title}><p className="secondary">{report.text}</p><Link className="btn btn--secondary btn--m" to={report.to}>Открыть отчёт</Link></Card>)}</div>
   </div>;
 }

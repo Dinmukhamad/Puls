@@ -195,7 +195,8 @@ async def all_transactions(
     date_to: datetime | None = None,
 ) -> Page[TransactionOut]:
     """Полная история операций - доступна руководителю и администратору (п. 4.4.5)."""
-    conditions = []
+    visible_ids = select(User.id).where(await visible_users_filter(session, actor))
+    conditions = [CoinTransaction.user_id.in_(visible_ids)]
     if user_id is not None:
         conditions.append(CoinTransaction.user_id == user_id)
     if date_from is not None:

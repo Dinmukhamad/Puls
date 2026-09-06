@@ -78,6 +78,8 @@ export interface AnalyticsFilters {
 }
 
 export const analytics = {
+  overview: (filters: AnalyticsFilters, signal?: AbortSignal) =>
+    request<AnalyticsOut>(`/api/v1/analytics/overview${buildQuery({ ...filters })}`, { signal }),
   summary: (filters: AnalyticsFilters, signal?: AbortSignal) =>
     request<AnalyticsOut>(`/api/v1/analytics/summary${buildQuery({ ...filters })}`, { signal }),
   mine: (filters: Pick<AnalyticsFilters, "week_id" | "metric_code"> = {}, signal?: AbortSignal) =>

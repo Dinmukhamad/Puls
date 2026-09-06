@@ -113,7 +113,7 @@ async def test_learning_permissions_and_drafts(client, session, operator, superv
     published = await publish(client, head)
     attempt = (await client.post(f"/api/v1/learning/{published['id']}/start", headers=own)).json()
     path = f"/api/v1/learning/attempts/{attempt['id']}"
-    assert (await client.get(path, headers=staff)).status_code == 404
+    assert (await client.get(path, headers=staff)).status_code == 403
     results = (await client.get("/api/v1/admin/learning-results", headers=staff)).json()
     assert results["total"] == 1 and results["items"][0]["user_id"] == operator.id
     assert await session.scalar(select(func.count(LearningAttempt.id))) == 1
