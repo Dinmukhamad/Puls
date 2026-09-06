@@ -14,7 +14,7 @@ from app.core.developer import is_developer
 from app.core.errors import PermissionDeniedError
 from app.core.security import decode_token
 from app.db.session import get_session
-from app.models.enums import Role
+from app.models.enums import ROLE_LEVEL, Role
 from app.models.session import LoginSession
 from app.models.user import Group, User
 from app.services.access import effective_access, request_sections
@@ -154,6 +154,48 @@ async def ensure_can_manage(session: AsyncSession, actor: User, target: User) ->
             f"Оператор {target.full_name} не входит в вашу зону ответственности"
         )
     raise PermissionDeniedError("Недостаточно прав для этой операции")
+
+
+async def ensure_can_manage_credentials(
+    session: AsyncSession, actor: User, target: User
+) -> None:
+    """
+    Право менять чужой логин и пароль.
+
+    Иерархия ролей: администратор - любому сотруднику, руководитель -
+    супервайзерам и операторам, супервайзер - операторам. Роль актора должна
+    быть строго выше роли сотрудника, иначе равные могли бы отбирать доступ
+    друг у друга.
+
+    Поверх иерархии действует обычная зона ответственности: супервайзер
+    работает только со своими группами. Сбрасывать пароль сотруднику, которого
+    не видно даже в списке, он не должен.
+
+    Свой аккаунт через этот путь не меняется. Смена собственных данных живёт
+    в профиле и требует текущего пароля - иначе оставленная открытой сессия
+    позволила бы сменить пароль, не зная старого.
+    """
+    if actor.id == target.id:
+        raise PermissionDeniedError(
+            "Свои логин и пароль меняются в профиле, с подтверждением паролем",
+            code="self_service_required",
+        )
+
+    if actor.role == Role.ADMIN:
+        return
+
+    if ROLE_LEVEL[Role(actor.role)] <= ROLE_LEVEL[Role(target.role)]:
+        raise PermissionDeniedError(
+            f"Недостаточно прав, чтобы менять учётные данные: {target.full_name} "
+            f"занимает равную или более высокую должность"
+        )
+
+    if actor.role == Role.SUPERVISOR:
+        group_ids = await supervised_group_ids(session, actor)
+        if target.group_id is None or target.group_id not in group_ids:
+            raise PermissionDeniedError(
+                f"Сотрудник {target.full_name} не входит в вашу зону ответственности"
+            )
 
 
 class Pagination:

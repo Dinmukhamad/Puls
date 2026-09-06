@@ -38,6 +38,8 @@ export const team = {
     request<UserOut>(`/api/v1/admin/users/${id}`, { method: "PATCH", json }),
   resetPassword: (id: number, password: string) =>
     request<{ detail: string }>(`/api/v1/admin/users/${id}/password`, { method: "POST", json: { password } }),
+  resetLogin: (id: number, login: string) =>
+    request<UserOut>(`/api/v1/admin/users/${id}/login`, { method: "POST", json: { login } }),
   dashboard: (id: number, weekId?: number) =>
     request<DashboardOut>(`/api/v1/admin/users/${id}/dashboard${buildQuery({ week_id: weekId })}`),
   transactions: (id: number, page: number) =>

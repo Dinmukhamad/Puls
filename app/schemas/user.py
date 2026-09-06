@@ -100,14 +100,12 @@ class PasswordReset(PasswordMixin):
     """Сброс пароля оператора администратором."""
 
 
-class LoginChange(BaseModel):
-    """Смена собственного логина. Доступна любой роли."""
+class LoginRules(BaseModel):
+    """Общие правила для логина: и своего, и чужого."""
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
     login: str = Field(min_length=3, max_length=150)
-    #: Логин - это учётные данные для входа, поэтому смена требует пароль.
-    current_password: str
 
     @field_validator("login")
     @classmethod
@@ -120,6 +118,17 @@ class LoginChange(BaseModel):
         if not set(value) <= allowed:
             raise ValueError("Допустимы латиница, цифры и символы . _ - @")
         return value
+
+
+class LoginChange(LoginRules):
+    """Смена собственного логина. Доступна любой роли."""
+
+    #: Логин - это учётные данные для входа, поэтому смена требует пароль.
+    current_password: str
+
+
+class LoginReset(LoginRules):
+    """Смена логина сотруднику. Право даёт роль, пароль актора не нужен."""
 
 
 class GroupCreate(BaseModel):

@@ -12,11 +12,11 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.deps import (
-    AdminUser,
     HeadUser,
     PaginationDep,
     SessionDep,
     StaffUser,
+    ensure_can_manage_credentials,
     visible_users_filter,
 )
 from app.core.developer import protect_developer_account
@@ -33,6 +33,7 @@ from app.schemas.user import (
     GroupCreate,
     GroupOut,
     GroupUpdate,
+    LoginReset,
     PasswordReset,
     UserCreate,
     UserOut,
@@ -329,14 +330,70 @@ async def update_user(
     )
 
 
-@router.post("/users/{user_id}/password", response_model=Message, summary="Сбросить пароль")
-async def reset_password(
-    session: SessionDep, actor: AdminUser, user_id: int, payload: PasswordReset
-) -> Message:
+@router.post("/users/{user_id}/login", response_model=UserOut, summary="Сменить логин сотруднику")
+async def reset_login(
+    session: SessionDep, actor: StaffUser, user_id: int, payload: LoginReset
+) -> User:
+    """
+    Меняет логин сотрудника.
+
+    Права те же, что и у сброса пароля. Сеансы не завершаются: пароль и
+    идентификатор пользователя не менялись, поэтому открытые входы остаются
+    рабочими - сотрудник просто будет вводить новый логин в следующий раз.
+    """
     user = await session.get(User, user_id)
     if user is None:
         raise NotFoundError(f"Пользователь id={user_id} не найден")
     protect_developer_account(actor, user)
+    await ensure_can_manage_credentials(session, actor, user)
+
+    previous = user.login
+    if payload.login == previous:
+        return await _visible_user(session, actor, user_id)
+
+    # Вход чувствителен к регистру: пара «Ivan» и «ivan» ломала бы вход обоим.
+    clash = await session.scalar(
+        select(User.id).where(
+            func.lower(User.login) == payload.login.lower(), User.id != user.id
+        )
+    )
+    if clash is not None:
+        raise ConflictError("Такой логин уже занят")
+
+    user.login = payload.login
+    await write_audit(
+        session,
+        actor_id=actor.id,
+        action="user.login_reset",
+        entity_type="user",
+        entity_id=user.id,
+        payload={"from": previous, "to": payload.login},
+    )
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise ConflictError("Такой логин уже занят") from exc
+
+    return await _visible_user(session, actor, user_id)
+
+
+@router.post("/users/{user_id}/password", response_model=Message, summary="Сбросить пароль")
+async def reset_password(
+    session: SessionDep, actor: StaffUser, user_id: int, payload: PasswordReset
+) -> Message:
+    """
+    Задаёт сотруднику новый пароль.
+
+    Кто кому: администратор - любому, руководитель - супервайзерам и
+    операторам, супервайзер - операторам своих групп. Все сеансы сотрудника
+    завершаются: прежний пароль больше не действует.
+    """
+    user = await session.get(User, user_id)
+    if user is None:
+        raise NotFoundError(f"Пользователь id={user_id} не найден")
+    protect_developer_account(actor, user)
+    await ensure_can_manage_credentials(session, actor, user)
     user.hashed_password = hash_password(payload.password)
     await revoke_user_sessions(session, user.id)
     await write_audit(
