@@ -1,0 +1,68 @@
+import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
+import { test } from "node:test";
+import { build } from "esbuild";
+
+const built = await build({ entryPoints: [fileURLToPath(new URL("./navigation.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false });
+const nav = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
+
+test("roles expose exactly 5/6/7/7 major sections and role-specific defaults", () => {
+  assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Награды", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "Рейтинг и мотивация", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Производительность", "Обучение", "Мотивация", "Отчёты"]);
+  assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Пользователи и структура", "Производительность", "Аналитика", "Обучение", "Мотивация", "Система"]);
+  assert.equal(nav.visibleNavigation("operator")[0].to, "/cabinet");
+  assert.equal(nav.visibleNavigation("head")[0].to, "/admin/summary");
+});
+
+test("every subsection activates its parent, including settings shared by domains", () => {
+  for (const role of ["operator", "supervisor", "head", "admin"]) {
+    for (const section of nav.visibleNavigation(role)) for (const tab of section.tabs) {
+      const url = new URL(tab.to, "https://puls.test");
+      assert.equal(nav.currentSection(role, url.pathname, url.search)?.id, section.id, `${role}: ${tab.to}`);
+      assert.equal(nav.currentTab(section, url.pathname, url.search)?.to, tab.to, `${role}: ${tab.to}`);
+    }
+  }
+});
+
+test("deep links and query filters retain the proper section", () => {
+  assert.equal(nav.currentSection("admin", "/admin/users/25", "?tab=xp")?.id, "team");
+  assert.equal(nav.currentSection("operator", "/training/attempts/23")?.id, "training");
+  assert.equal(nav.currentSection("head", "/profile")?.id, "profile");
+  assert.equal(nav.currentSection("operator", "/admin/wallet"), undefined);
+  assert.equal(nav.currentSection("supervisor", "/admin/audit"), undefined);
+  assert.equal(nav.currentSection("head", "/admin/users-invalid"), undefined);
+  const learning = nav.currentSection("head", "/admin/learning");
+  assert.equal(nav.currentTab(learning, "/admin/learning", "?tab=results&kind=simulator").label, "Результаты команды");
+});
+
+test("mobile bar shows all five operator sections and bounds larger role menus", () => {
+  const operator = nav.mobileNavigation(nav.visibleNavigation("operator"));
+  assert.equal(operator.primary.length, 5); assert.equal(operator.overflow.length, 0);
+  for (const role of ["supervisor", "head", "admin"]) {
+    const menu = nav.mobileNavigation(nav.visibleNavigation(role));
+    assert.equal(menu.primary.length, 4);
+    assert.deepEqual([...menu.primary, ...menu.overflow], nav.visibleNavigation(role));
+  }
+});
+
+test("all navigation destinations have an implemented application route", () => {
+  const app = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+  const paths = new Set(Array.from(app.matchAll(/<Route\s+path="([^"]+)"/g), (match) => match[1]));
+  for (const role of ["operator", "supervisor", "head", "admin"]) for (const section of nav.visibleNavigation(role)) for (const tab of section.tabs) {
+    assert.ok(paths.has(new URL(tab.to, "https://puls.test").pathname), tab.to);
+  }
+});
+
+test("section switches preserve selected reporting periods and reset pagination", () => {
+  const to = (destination, path, search) => new URL(nav.subsectionDestination({ to: destination, label: "Test" }, path, search), "https://puls.test").searchParams;
+  const rating = to("/rating?tab=progress", "/rating", "?week=42&page=3&search=Anna");
+  assert.equal(rating.get("week"), "42"); assert.equal(rating.get("tab"), "progress"); assert.equal(rating.has("page"), false);
+  const analytics = to("/analytics?tab=quality", "/analytics", "?week_id=42&group_id=5&page=3");
+  assert.equal(analytics.get("week_id"), "42"); assert.equal(analytics.get("group_id"), "5"); assert.equal(analytics.has("page"), false);
+  const results = to("/admin/learning?tab=results", "/admin/learning", "?kind=simulator");
+  assert.equal(results.get("kind"), "simulator");
+  const materials = to("/admin/learning?kind=test", "/admin/learning", "?tab=results&kind=simulator");
+  assert.equal(materials.get("kind"), "test"); assert.equal(materials.has("tab"), false);
+});

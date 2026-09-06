@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { rating } from "../api/endpoints";
+import { useAuth } from "../auth/AuthContext";
 import type { NominationOut, PodiumEntry, RatingRowOut } from "../api/types";
 import { MedalIcon, SearchIcon, SparkIcon } from "../components/icons";
 import {
@@ -29,10 +30,11 @@ const MEDAL_LABEL: Record<string, string> = {
 };
 
 export function RatingPage() {
+  const { atLeast } = useAuth();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") === "progress" ? "progress" : "board";
   return <div className="stack"><header className="page-head"><div><h1 className="page-title">Рейтинг</h1><p className="page-subtitle">Результаты команды и ваш прогресс по неделям</p></div></header>
-    <SegmentedControl label="Раздел рейтинга" value={tab} options={[{ value: "board", label: "Рейтинг команды" }, { value: "progress", label: "Мой прогресс" }]} onChange={(value) => { const next = new URLSearchParams(params); next.set("tab", value); setParams(next); }} />
+    {atLeast("supervisor") && <SegmentedControl label="Раздел рейтинга" value={tab} options={[{ value: "board", label: "Рейтинг команды" }, { value: "progress", label: "Мой прогресс" }]} onChange={(value) => { const next = new URLSearchParams(params); next.set("tab", value); setParams(next); }} />}
     {tab === "progress" ? <RatingProgressPanel /> : <Leaderboard />}
   </div>;
 }

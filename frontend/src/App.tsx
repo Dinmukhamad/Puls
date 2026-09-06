@@ -30,6 +30,7 @@ import { LearningStudioPage } from "./pages/LearningStudioPage";
 import { SimulatorPage } from "./pages/SimulatorPage";
 import { GamesPage } from "./pages/GamesPage";
 import { WalletPage } from "./pages/WalletPage";
+import { ReportsPage } from "./pages/ReportsPage";
 
 export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
@@ -52,7 +53,8 @@ export function App() {
     <Routes>
       <Route path="/simulator/attempts/:attemptId" element={<SimulatorPage />} />
       <Route element={<AppLayout />}>
-        <Route index element={<Navigate to="/cabinet" replace />} />
+        <Route index element={<Navigate to={staff ? "/admin/summary" : "/cabinet"} replace />} />
+        <Route path="/reports" element={atLeast("head") ? <ReportsPage /> : <AccessPage />} />
         <Route path="/cabinet" element={<CabinetPage />} />
         <Route path="/rating" element={<RatingPage />} />
         <Route path="/shop" element={<ShopPage />} />

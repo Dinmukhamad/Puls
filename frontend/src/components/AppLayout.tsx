@@ -1,199 +1,64 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
-
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { ACCOUNT_SECTION, currentSection, currentTab, mobileNavigation, subsectionDestination, visibleNavigation } from "../navigation";
+import { ROLE_LABELS } from "../utils/format";
 import { GlassSurface } from "./GlassSurface";
 import { ChevronLeftIcon, MenuIcon, PulsMark } from "./icons";
 import { Sheet } from "./Sheet";
 import { Avatar, IconButton } from "./ui";
-import { ROLE_LABELS } from "../utils/format";
-import { visibleNavigation } from "../navigation";
+import "./section-navigation.css";
 
 const COLLAPSE_KEY = "puls.sidebar.collapsed";
-/** Ниже этой ширины сайдбар по умолчанию свёрнут, но развернуть его можно. */
-const AUTO_COLLAPSE_WIDTH = 1024;
-
 function initialCollapsed(): boolean {
-  try {
-    const saved = localStorage.getItem(COLLAPSE_KEY);
-    if (saved !== null) return saved === "1";
-  } catch {
-    // The layout remains usable when storage is unavailable.
-  }
-  return window.innerWidth < AUTO_COLLAPSE_WIDTH;
+  try { const saved = localStorage.getItem(COLLAPSE_KEY); if (saved !== null) return saved === "1"; } catch { /* Optional preference. */ }
+  return window.innerWidth < 1024;
 }
 
 export function AppLayout() {
-  const { user, atLeast } = useAuth();
-  const location = useLocation();
+  const { user } = useAuth(); const location = useLocation();
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [compactTabBar, setCompactTabBar] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const menuId = useId();
+  const menuId = useId(); const lastScroll = useRef(0);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-  const lastScroll = useRef(0);
+  const items = user ? visibleNavigation(user.role) : [];
+  const active = user ? currentSection(user.role, location.pathname, location.search) : undefined;
+  const activeTab = active ? currentTab(active, location.pathname, location.search) : undefined;
+  const { primary, overflow } = mobileNavigation(items);
+  const separateProfile = !items.some((item) => item.id === "profile");
+  const overflowActive = overflow.some((item) => item.id === active?.id) || (separateProfile && active?.id === "profile");
 
-  const items = user ? visibleNavigation(user.role, atLeast) : [];
-  const tabItems = items.filter((item) => item.mobilePrimary).slice(0, 4);
-  const overflowItems = items.filter((item) => !tabItems.includes(item));
-  const overflowActive = overflowItems.some(
-    (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
-  );
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
-    } catch {
-      // Persisting the preference is optional.
-    }
-  }, [collapsed]);
-
+  useEffect(() => { try { localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0"); } catch { /* Optional preference. */ } }, [collapsed]);
   useEffect(closeMenu, [location.pathname, location.search, closeMenu]);
-
   useEffect(() => {
     const desktop = window.matchMedia("(min-width: 768px)");
-    const onChange = (event: MediaQueryListEvent) => {
-      if (event.matches) closeMenu();
-    };
-    desktop.addEventListener("change", onChange);
-    return () => desktop.removeEventListener("change", onChange);
+    const change = (event: MediaQueryListEvent) => { if (event.matches) closeMenu(); };
+    desktop.addEventListener("change", change); return () => desktop.removeEventListener("change", change);
   }, [closeMenu]);
-
-  // Прокрутка вниз ужимает нижнюю панель, вверх - возвращает.
   useEffect(() => {
-    function onScroll() {
-      const current = window.scrollY;
-      if (Math.abs(current - lastScroll.current) < 8) return;
-      setCompactTabBar(current > lastScroll.current && current > 60);
-      lastScroll.current = current;
-    }
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    const onScroll = () => { const y = window.scrollY; if (Math.abs(y - lastScroll.current) < 8) return; setCompactTabBar(y > lastScroll.current && y > 60); lastScroll.current = y; };
+    window.addEventListener("scroll", onScroll, { passive: true }); return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const sections = Array.from(new Set(items.map((item) => item.section)));
+  return <div className={collapsed ? "shell shell--collapsed" : "shell"}>
+    <GlassSurface as="aside" variant="regular" className="sidebar">
+      <div className="sidebar__brand"><span className="sidebar__mark"><PulsMark /></span><span className="sidebar__name">Puls</span><IconButton label={collapsed ? "Развернуть меню" : "Свернуть меню"} className="sidebar__toggle" aria-expanded={!collapsed} onClick={() => setCollapsed((value) => !value)}><ChevronLeftIcon size={18} /></IconButton></div>
+      <nav className="sidebar__nav" aria-label="Основные разделы">
+        {items.map((item) => <Link key={item.id} to={item.to} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}><span className="nav-item__icon"><item.icon size={20} /></span><span className="nav-item__label">{item.label}</span></Link>)}
+      </nav>
+      {user && <Link to="/profile" className="sidebar__user" aria-label={`Профиль: ${user.full_name}`}><Avatar name={user.full_name} id={user.id} size={36} /><span className="sidebar__user-text"><span className="sidebar__user-name">{user.full_name}</span><span className="sidebar__user-role">{ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</span></span></Link>}
+    </GlassSurface>
 
-  return (
-    <div className={collapsed ? "shell shell--collapsed" : "shell"}>
-      <GlassSurface as="aside" variant="regular" className="sidebar">
-        <div className="sidebar__brand">
-          <span className="sidebar__mark">
-            <PulsMark />
-          </span>
-          <span className="sidebar__name">Puls</span>
-          <IconButton
-            label={collapsed ? "Развернуть меню" : "Свернуть меню"}
-            className="sidebar__toggle"
-            aria-expanded={!collapsed}
-            onClick={() => setCollapsed((value) => !value)}
-          >
-            <ChevronLeftIcon size={18} />
-          </IconButton>
-        </div>
+    <main className="main"><div className="main__inner">
+      {active && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p>{active.tabs.length > 1 && <nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav>}</div>}
+      <Outlet />
+    </div></main>
 
-        <nav className="sidebar__nav" aria-label="Основная навигация">
-          {sections.map((section) => (
-            <div className="sidebar__section" key={section}>
-              <span className="sidebar__section-title">{section}</span>
-              {items
-                .filter((item) => item.section === section)
-                .map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      isActive ? "nav-item is-active" : "nav-item"
-                    }
-                    // В свёрнутом виде остаётся только иконка, поэтому название
-                    // уходит в подсказку и в доступное имя ссылки.
-                    title={collapsed ? item.label : undefined}
-                    aria-label={collapsed ? item.label : undefined}
-                  >
-                    <span className="nav-item__icon">
-                      <item.icon size={20} />
-                    </span>
-                    <span className="nav-item__label">{item.label}</span>
-                  </NavLink>
-                ))}
-            </div>
-          ))}
-        </nav>
-
-        {user && (
-          <NavLink to="/profile" className="sidebar__user" aria-label={`Профиль: ${user.full_name}`}>
-            <Avatar name={user.full_name} id={user.id} size={36} />
-            <span className="sidebar__user-text">
-              <span className="sidebar__user-name">{user.full_name}</span>
-              <span className="sidebar__user-role">
-                {ROLE_LABELS[user.role]}
-                {user.group ? ` · ${user.group.name}` : ""}
-              </span>
-            </span>
-          </NavLink>
-        )}
-      </GlassSurface>
-
-      <main className="main">
-        <div className="main__inner">
-          <Outlet />
-        </div>
-      </main>
-
-      <GlassSurface
-        as="nav"
-        variant="prominent"
-        className={compactTabBar ? "tabbar tabbar--compact" : "tabbar"}
-      >
-        {tabItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            aria-label={item.label}
-            className={({ isActive }) => (isActive ? "tab is-active" : "tab")}
-          >
-            <span className="tab__icon">
-              <item.icon size={22} />
-            </span>
-            <span className="tab__label">{item.label}</span>
-          </NavLink>
-        ))}
-        {overflowItems.length > 0 && (
-          <button
-            type="button"
-            className={menuOpen || overflowActive ? "tab is-active" : "tab"}
-            aria-label="Ещё разделы"
-            aria-haspopup="dialog"
-            aria-expanded={menuOpen}
-            aria-controls={menuOpen ? menuId : undefined}
-            onClick={() => setMenuOpen(true)}
-          >
-            <span className="tab__icon"><MenuIcon size={22} /></span>
-            <span className="tab__label">Ещё</span>
-          </button>
-        )}
-      </GlassSurface>
-      {menuOpen && (
-        <Sheet id={menuId} title="Разделы Puls" onClose={closeMenu} size="s">
-          <nav className="mobile-menu" aria-label="Все разделы">
-            {sections.map((section) => (
-              <section className="mobile-menu__section" key={section}>
-                <h3 className="mobile-menu__heading">{section}</h3>
-                {items.filter((item) => item.section === section).map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    className={({ isActive }) => isActive ? "nav-item is-active" : "nav-item"}
-                    onClick={closeMenu}
-                  >
-                    <span className="nav-item__icon"><item.icon size={20} /></span>
-                    <span>{item.label}</span>
-                  </NavLink>
-                ))}
-              </section>
-            ))}
-          </nav>
-        </Sheet>
-      )}
-    </div>
-  );
+    <GlassSurface as="nav" variant="prominent" className={compactTabBar ? "tabbar tabbar--compact" : "tabbar"} aria-label="Основные разделы, мобильное меню">
+      {primary.map((item) => <Link key={item.id} to={item.to} aria-label={item.label} aria-current={active?.id === item.id ? "page" : undefined} className={active?.id === item.id ? "tab is-active" : "tab"}><span className="tab__icon"><item.icon size={22} /></span><span className="tab__label">{item.label}</span></Link>)}
+      {overflow.length > 0 && <button type="button" className={menuOpen || overflowActive ? "tab is-active" : "tab"} aria-label="Ещё разделы" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} onClick={() => setMenuOpen(true)}><span className="tab__icon"><MenuIcon size={22} /></span><span className="tab__label">Ещё</span></button>}
+    </GlassSurface>
+    {menuOpen && <Sheet id={menuId} title="Разделы Puls" onClose={closeMenu} size="s"><nav className="mobile-menu" aria-label="Все основные разделы">{items.map((item) => <Link key={item.id} to={item.to} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} onClick={closeMenu}><span className="nav-item__icon"><item.icon size={20} /></span><span>{item.label}</span></Link>)}</nav>{separateProfile && <Link to={ACCOUNT_SECTION.to} className="section-navigation__account" onClick={closeMenu}>{user && <Avatar name={user.full_name} id={user.id} size={32} />}<span>Мой профиль, настройки и устройства</span></Link>}</Sheet>}
+  </div>;
 }

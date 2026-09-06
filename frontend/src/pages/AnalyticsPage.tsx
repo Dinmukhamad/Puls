@@ -85,7 +85,6 @@ export function AnalyticsPage() {
 
   return <div className="stack analytics-page">
     <header className="page-head"><div><h1 className="page-title">Аналитика</h1><p className="page-subtitle">Как работает команда и где нужна поддержка.</p></div></header>
-    <SegmentedControl label="Раздел аналитики" value={tab} options={TABS} onChange={(next) => update({ tab: next, page: undefined, ...(next === "quality" && value?.metrics.some((item) => item.code === "quality") ? { metric: "quality" } : {}) })} />
     <ReportFilters report={report} />
     {data.isLoading && <><KPISkeleton /><Card title="Динамика"><div className="analytics-loading" aria-label="Загрузка аналитики" /></Card></>}
     {data.isError && <ErrorState error={data.error} onRetry={() => void data.refetch()} />}

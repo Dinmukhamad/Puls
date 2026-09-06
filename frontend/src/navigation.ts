@@ -1,103 +1,109 @@
 import type { ReactNode } from "react";
-
 import type { Role } from "./api/types";
-import {
-  HomeIcon,
-  CoinIcon,
-  SparkIcon,
-  InboxIcon,
-  StoreIcon,
-  TrophyIcon,
-  UserIcon,
-  UsersIcon,
-} from "./components/icons";
+import { HomeIcon, InboxIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon } from "./components/icons";
 
-/** Add a destination here only after its route and permission guard exist. */
+export interface SectionTab { to: string; label: string }
 export interface NavItem {
-  to: string;
+  id: string;
   label: string;
+  to: string;
   icon: (props: { size?: number }) => ReactNode;
-  section: string;
-  minRole?: Role;
-  /** Optional exact-role restriction, in addition to the minimum role. */
-  roles?: readonly Role[];
-  /** Up to four primary destinations precede the mobile overflow menu. */
-  mobilePrimary?: boolean;
+  paths: string[];
+  tabs: SectionTab[];
 }
 
-/*
- * Четыре раздела вместо семи, сгруппированные по адресату, а не по теме:
- * что оператор делает для себя, что относится к его аккаунту, что руководитель
- * делает по команде и что настраивается один раз.
- *
- * Несколько страниц работают в двух режимах - личном и командном. Это разные
- * области данных, а не дубли, поэтому они разведены по разделам и названы так,
- * чтобы различие читалось из самого пункта: «Кошелёк» и «Коины команды»,
- * «Мои устройства» и «Сессии сотрудников».
- *
- * Порядок в массиве задаёт порядок разделов в меню.
- */
-export const NAVIGATION: readonly NavItem[] = [
-  // --- Главное: ежедневные действия оператора ---
-  { to: "/cabinet", label: "Главная", icon: HomeIcon, mobilePrimary: true, section: "Главное" },
-  { to: "/rating", label: "Рейтинг", icon: TrophyIcon, mobilePrimary: true, section: "Главное" },
-  { to: "/training", label: "Обучение", icon: SparkIcon, section: "Главное" },
-  { to: "/shop", label: "Магазин", icon: StoreIcon, mobilePrimary: true, section: "Главное" },
-  { to: "/games", label: "Моменты WOW", icon: SparkIcon, section: "Главное" },
+const tab = (to: string, label: string): SectionTab => ({ to, label });
+const section = (id: string, label: string, icon: NavItem["icon"], tabs: SectionTab[], paths?: string[]): NavItem => ({
+  id, label, icon, to: tabs[0].to, tabs,
+  paths: paths ?? Array.from(new Set(tabs.map((item) => item.to.split("?")[0]))),
+});
 
-  // --- Мой профиль: всё про собственный аккаунт ---
-  { to: "/wallet", label: "Мой кошелёк", icon: CoinIcon, section: "Мой профиль" },
-  { to: "/progress", label: "Опыт и уровни", icon: TrophyIcon, section: "Мой профиль" },
-  { to: "/notifications", label: "Уведомления", icon: InboxIcon, section: "Мой профиль" },
-  { to: "/sessions", label: "Мои устройства", icon: UserIcon, section: "Мой профиль" },
-  { to: "/profile", label: "Профиль", icon: UserIcon, mobilePrimary: true, section: "Мой профиль" },
+export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
+  tab("/profile", "Мои данные и настройки"), tab("/notifications", "Уведомления"), tab("/sessions", "Сессии"),
+]);
+const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс"), tab("/wallet", "Мои коины")];
+const learningTabs = [tab("/training", "Всё обучение"), tab("/training?kind=test", "Тесты"), tab("/training?kind=mission", "Миссии"), tab("/training?kind=simulator", "Driver Simulator")];
+const staffLearning = (admin: boolean) => section("training", "Обучение", SparkIcon, [
+  tab("/admin/learning", "Все материалы"),
+  tab("/admin/learning?kind=test", "Тесты"),
+  tab("/admin/learning?kind=mission", admin ? "Mission Studio" : "Миссии"),
+  tab("/admin/learning?kind=simulator", admin ? "Driver Simulator Studio" : "Driver Simulator"),
+  tab("/admin/learning?tab=results", "Результаты команды"), tab("/training", "Пройти обучение"),
+]);
+const team = (admin = false, supervisor = false) => section("team", admin ? "Пользователи и структура" : "Команда", UsersIcon, [
+  tab("/admin/users", admin ? "Пользователи" : "Операторы"), tab("/admin/groups", supervisor ? "Моя группа" : "Группы"),
+  tab("/admin/operators", "Показатели сотрудников"), ...(admin ? [tab("/admin/sessions", "Сессии пользователей")] : []),
+]);
+const analytics = (supervisor = false) => section("analytics", "Аналитика", TrophyIcon, [
+  tab("/analytics?tab=summary", "Сводка и сравнение"), tab("/analytics?tab=operators", "Операторы"), tab("/analytics?tab=quality", "Качество"),
+  ...(supervisor ? [tab("/admin/periods", "Периоды"), tab("/admin/settings", "Правила и показатели")] : []),
+]);
+const performance = (admin = false) => section("performance", "Производительность", InboxIcon, [
+  tab("/admin/periods", "Расчёт и история периодов"), tab("/admin/settings?tab=metrics", "Рабочие метрики"),
+  tab("/admin/settings?tab=rules", "Правила расчёта"), tab("/admin/settings?tab=nominations", "Номинации"), tab("/rating", "Рейтинг"),
+], ["/admin/periods", "/rating", ...(admin ? [] : ["/admin/settings"])]);
+const motivation = (supervisor = false) => section("motivation", supervisor ? "Рейтинг и мотивация" : "Мотивация", StoreIcon, [
+  ...(supervisor ? [tab("/rating", "Рейтинг")] : []), tab("/admin/wallet", "Коины"), tab("/admin/xp", "XP"),
+  tab("/admin/levels", "Уровни"), tab("/admin/settings?tab=badges", "Достижения"),
+  tab("/admin/store", "Товары магазина"), tab("/admin/requests", "Заказы и выдача"),
+  tab("/admin/games?tab=wheel", "Колесо WOW"), tab("/admin/games?tab=raffles", "Розыгрыши"),
+  tab("/shop", "Мой магазин"), tab("/games", "Мои игры"),
+], ["/admin/wallet", "/admin/xp", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
+const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summary", "Сводка"), ...personal]);
 
-  // --- Команда: ежедневная работа руководителя ---
-  { to: "/admin/summary", label: "Сводка", icon: HomeIcon, minRole: "supervisor", section: "Команда" },
-  { to: "/analytics", label: "Аналитика", icon: TrophyIcon, minRole: "supervisor", section: "Команда" },
-  {
-    to: "/admin/operators",
-    label: "Показатели недели",
-    icon: UsersIcon,
-    minRole: "supervisor",
-    section: "Команда",
-  },
-  {
-    to: "/admin/requests",
-    label: "Заявки из магазина",
-    icon: InboxIcon,
-    minRole: "supervisor",
-    section: "Команда",
-  },
-  { to: "/admin/wallet", label: "Коины команды", icon: CoinIcon, minRole: "supervisor", section: "Команда" },
-  { to: "/admin/xp", label: "Опыт сотрудников", icon: TrophyIcon, minRole: "supervisor", section: "Команда" },
-  { to: "/admin/users", label: "Сотрудники", icon: UsersIcon, minRole: "supervisor", section: "Команда" },
-  { to: "/admin/groups", label: "Группы", icon: UsersIcon, minRole: "supervisor", section: "Команда" },
-  { to: "/admin/periods", label: "Расчёт периода", icon: InboxIcon, minRole: "supervisor", section: "Команда" },
+/** Only major destinations enter the sidebar. Future modules extend tabs inside these sections. */
+export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
+  operator: [
+    section("home", "Главная", HomeIcon, personal),
+    section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг"), tab("/rating?tab=progress", "Мой прогресс")]),
+    section("training", "Обучение", SparkIcon, learningTabs),
+    section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=wheel", "Колесо WOW"), tab("/games?tab=raffles", "Розыгрыши")]),
+    ACCOUNT_SECTION,
+  ],
+  supervisor: [staffHome, team(false, true), analytics(true), staffLearning(false), motivation(true), ACCOUNT_SECTION],
+  head: [staffHome, team(), analytics(), performance(), staffLearning(false), motivation(), section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")])],
+  admin: [staffHome, team(true), performance(true), analytics(), staffLearning(true), motivation(),
+    section("system", "Система", InboxIcon, [tab("/admin/settings", "Настройки Puls"), tab("/admin/audit", "Audit Log"), tab("/reports", "Отчёты и экспорт")])],
+};
 
-  // --- Настройка: то, что задаётся один раз и редко меняется ---
-  { to: "/admin/store", label: "Каталог магазина", icon: StoreIcon, minRole: "supervisor", section: "Настройка" },
-  {
-    to: "/admin/learning",
-    label: "Студия обучения",
-    icon: SparkIcon,
-    minRole: "supervisor",
-    section: "Настройка",
-  },
-  { to: "/admin/levels", label: "Уровни XP", icon: TrophyIcon, minRole: "supervisor", section: "Настройка" },
-  { to: "/admin/settings", label: "Настройки", icon: InboxIcon, minRole: "supervisor", section: "Настройка" },
-  {
-    to: "/admin/sessions",
-    label: "Сессии сотрудников",
-    icon: UserIcon,
-    minRole: "admin",
-    section: "Настройка",
-  },
-  { to: "/admin/audit", label: "Аудит", icon: InboxIcon, minRole: "admin", section: "Настройка" },
-];
+export function visibleNavigation(role: Role): readonly NavItem[] { return ROLE_NAVIGATION[role]; }
 
-export function visibleNavigation(role: Role, atLeast: (minimum: Role) => boolean): NavItem[] {
-  return NAVIGATION.filter(
-    (item) => (!item.minRole || atLeast(item.minRole)) && (!item.roles || item.roles.includes(role)),
-  );
+export function currentSection(role: Role, pathname: string, search = ""): NavItem | undefined {
+  const sections = visibleNavigation(role);
+  // Settings pages are hosted by their business domain, even on direct legacy links.
+  if (pathname === "/admin/settings") {
+    const selected = new URLSearchParams(search).get("tab");
+    if (selected === "badges") return sections.find((item) => item.id === "motivation");
+    if (["metrics", "rules", "nominations"].includes(selected ?? "")) return sections.find((item) => item.id === "performance") ?? sections.find((item) => item.id === "analytics");
+  }
+  return [...sections, ACCOUNT_SECTION].find((item) => item.paths.some((path) => pathname === path || pathname.startsWith(`${path}/`)));
+}
+
+/** Query-specific tabs take precedence over generic destinations on the same route. */
+export function currentTab(item: NavItem, pathname: string, search: string): SectionTab | undefined {
+  const params = new URLSearchParams(search);
+  const candidates = item.tabs.filter((link) => { const path = link.to.split("?")[0]; return pathname === path || pathname.startsWith(`${path}/`); });
+  return candidates.map((link) => {
+    const expected = new URLSearchParams(link.to.split("?")[1] ?? "");
+    const entries = Array.from(expected.entries());
+    return { link, score: entries.every(([key, value]) => params.get(key) === value) ? entries.length + (expected.has("tab") ? 1 : 0) : -1 };
+  }).filter((candidate) => candidate.score >= 0).sort((a, b) => b.score - a.score)[0]?.link ?? candidates[0];
+}
+
+export function mobileNavigation(items: readonly NavItem[]) {
+  return items.length <= 5 ? { primary: items, overflow: [] } : { primary: items.slice(0, 4), overflow: items.slice(4) };
+}
+
+export function subsectionDestination(link: SectionTab, pathname: string, search: string): string {
+  const [targetPath, targetSearch] = link.to.split("?");
+  if (targetPath !== pathname) return link.to;
+  const source = new URLSearchParams(search); const destination = new URLSearchParams(targetSearch ?? "");
+  const shared: Record<string, string[]> = {
+    "/rating": ["week", "count", "search"],
+    "/analytics": ["week_id", "group_id", "metric", "operators", "compare", "group_compare", "search", "status"],
+    "/training": ["state"],
+    "/admin/learning": destination.has("tab") ? ["kind"] : [],
+  };
+  for (const key of shared[pathname] ?? []) if (source.has(key) && !destination.has(key)) destination.set(key, source.get(key)!);
+  const query = destination.toString(); return `${targetPath}${query ? `?${query}` : ""}`;
 }
