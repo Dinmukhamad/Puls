@@ -19,7 +19,11 @@ from app.models.enums import (
     TxType,
     WeekStatus,
 )
+from app.models.games import Raffle, RaffleEntry, WheelConfig, WheelSpin
+from app.models.learning import LearningAttempt, LearningAward, LearningContent
 from app.models.level import LevelDefinition
+from app.models.progress import Notification, XpAccount, XpEntry, XpLevel
+from app.models.session import LoginSession
 from app.models.settings import AuditLog, GamificationSettings
 from app.models.shop import ShopItem, ShopRequest
 from app.models.user import CoinAccount, Group, User
@@ -34,14 +38,21 @@ __all__ = [
     "ContestWeek",
     "GamificationSettings",
     "Group",
+    "LearningAttempt",
+    "LearningAward",
+    "LearningContent",
     "LevelDefinition",
+    "LoginSession",
     "MetricDefinition",
     "MetricDirection",
     "MetricKind",
     "NominationDefinition",
     "NominationWinner",
+    "Notification",
     "OperatorWeekMetric",
     "OperatorWeekResult",
+    "Raffle",
+    "RaffleEntry",
     "Role",
     "ShopItem",
     "ShopRequest",
@@ -50,4 +61,9 @@ __all__ = [
     "User",
     "UserBadge",
     "WeekStatus",
+    "WheelConfig",
+    "WheelSpin",
+    "XpAccount",
+    "XpEntry",
+    "XpLevel",
 ]

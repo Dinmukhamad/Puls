@@ -1,4 +1,5 @@
 """Точка входа приложения: сборка FastAPI, жизненный цикл, служебные маршруты."""
+
 from __future__ import annotations
 
 import logging
@@ -15,6 +16,7 @@ from app.core.errors import register_exception_handlers
 from app.db.init_db import create_schema, seed_reference_data
 from app.db.session import SessionLocal, engine
 from app.scheduler import start_scheduler, stop_scheduler
+from app.services.rules import audit_ip
 
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
@@ -68,6 +70,17 @@ app.add_middleware(
 )
 
 register_exception_handlers(app)
+
+
+@app.middleware("http")
+async def audit_request_context(request, call_next):
+    marker = audit_ip.set(request.client.host[:64] if request.client else None)
+    try:
+        return await call_next(request)
+    finally:
+        audit_ip.reset(marker)
+
+
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 

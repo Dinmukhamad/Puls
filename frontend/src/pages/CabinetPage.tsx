@@ -355,6 +355,9 @@ function WeekMetricsCard({ week }: { week: WeekMetricsBlock }) {
 }
 
 function MetricRow({ metric }: { metric: MetricProgress }) {
+  if (metric.value === null || metric.completion === null) {
+    return <li className="metric"><div className="metric__head"><span>{metric.title}</span><span className="secondary">Нет данных</span></div></li>;
+  }
   const unit = metric.unit ? ` ${metric.unit}` : "";
   // Приближение к плану окрашивает шкалу: заполнено, но ещё не дотянуто.
   const tone = metric.completion >= 0.95 ? "success" : metric.completion >= 0.7 ? "accent" : "warning";
@@ -385,6 +388,9 @@ function MetricRow({ metric }: { metric: MetricProgress }) {
 }
 
 function AntiMetricRow({ metric }: { metric: MetricProgress }) {
+  if (metric.value === null) {
+    return <li className="metric metric--anti"><span>{metric.title}</span><span className="secondary">Нет данных</span></li>;
+  }
   const clean = metric.value === 0;
   const unit = metric.unit ? ` ${metric.unit}` : "";
   return (

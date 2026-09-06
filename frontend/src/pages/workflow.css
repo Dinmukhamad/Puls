@@ -1,0 +1,19 @@
+.workflow-toolbar { display:flex; flex-wrap:wrap; align-items:end; gap:var(--sp-4); }
+.workflow-toolbar .field { flex:1; min-width:160px; }
+.workflow-steps { list-style:none; display:flex; flex-wrap:wrap; gap:var(--sp-3); padding:0; margin:0; }
+.workflow-step { display:flex; align-items:center; gap:var(--sp-2); color:var(--text-secondary); font-size:14px; }
+.workflow-step span { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; background:var(--surface-secondary); font-variant-numeric:tabular-nums; }
+.workflow-step[aria-current="step"] { color:var(--accent-primary); font-weight:650; }
+.workflow-step[aria-current="step"] span { background:var(--accent-primary); color:var(--text-on-accent, #fff); }
+.upload-zone { display:flex; flex-direction:column; align-items:center; gap:var(--sp-3); padding:var(--sp-8); border:2px dashed var(--separator); border-radius:var(--radius-l); text-align:center; background:var(--surface-secondary); }
+.upload-zone.is-dragging { border-color:var(--accent-primary); }
+.upload-zone input { max-width:100%; }
+.workflow-note { color:var(--text-secondary); line-height:1.6; margin:var(--sp-3) 0; }
+.workflow-issues { padding-left:var(--sp-5); display:grid; gap:var(--sp-3); line-height:1.5; }
+.workflow-results { display:grid; gap:var(--sp-3); }
+.workflow-result { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:var(--sp-3); padding:var(--sp-4); border:1px solid var(--separator); border-radius:var(--radius-m); }
+.workflow-result p { margin:var(--sp-1) 0; }
+.workflow-stats { display:flex; flex-wrap:wrap; gap:var(--sp-4); font-variant-numeric:tabular-nums; }
+.workflow-actions { display:flex; flex-wrap:wrap; gap:var(--sp-3); }
+.workflow-error { padding:var(--sp-4); border-radius:var(--radius-m); background:var(--surface-secondary); color:var(--text-primary); border-left:3px solid var(--status-danger); }
+@media(max-width:767px) { .workflow-toolbar .field { min-width:100%; } .upload-zone { padding:var(--sp-5); } .workflow-steps { gap:var(--sp-2); } .workflow-step { font-size:12px; } .workflow-step span { width:24px; height:24px; } }

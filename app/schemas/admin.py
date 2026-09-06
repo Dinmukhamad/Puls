@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, FiniteFloat, model_validator
 
 from app.models.enums import BadgeRule, MetricDirection, MetricKind
 from app.schemas.common import ORMModel
@@ -85,15 +85,15 @@ class WeekCreate(BaseModel):
 
 
 class MetricValueIn(BaseModel):
-    user_id: int
+    user_id: int = Field(gt=0)
     metric_code: str = Field(min_length=1, max_length=64)
-    value: float
+    value: FiniteFloat
 
 
 class MetricsBulkIn(BaseModel):
     """Загрузка показателей недели (шаг 2 п. 7)."""
 
-    values: list[MetricValueIn] = Field(min_length=1)
+    values: list[MetricValueIn] = Field(min_length=1, max_length=100000)
     source: str = Field(default="import", max_length=32)
     replace: bool = Field(
         default=False,
@@ -121,6 +121,7 @@ class WeekPreviewRow(BaseModel):
     coins_rank_bonus: int
     coins_discipline_bonus: int
     coins_nomination_bonus: int
+    missing_metrics: list[str] = Field(default_factory=list)
 
 
 class WeekPreviewOut(BaseModel):

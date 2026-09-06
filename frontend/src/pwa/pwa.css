@@ -1,0 +1,53 @@
+.pwa-status {
+  position: fixed;
+  right: var(--sp-5);
+  bottom: calc(var(--sp-5) + var(--safe-bottom));
+  z-index: 80;
+  width: min(400px, calc(100vw - 32px));
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.pwa-status__card {
+  padding: var(--sp-4);
+  border-radius: var(--radius-l);
+  border: 1px solid var(--separator);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-elevated);
+  display: grid;
+  gap: var(--sp-3);
+}
+
+.pwa-status__card p {
+  margin-top: var(--sp-1);
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+}
+
+.pwa-install-steps {
+  list-style: decimal;
+  padding-left: var(--sp-6);
+  display: grid;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.pwa-install-button,
+.pwa-error { margin-top: var(--sp-3); }
+.pwa-error { color: var(--status-danger-text); }
+
+.profile-password-field { display: flex; gap: var(--sp-2); }
+.profile-password-field .input { min-width: 0; }
+.profile-password-field .btn { flex-shrink: 0; }
+
+@media (max-width: 767px) {
+  .pwa-status {
+    left: var(--sp-3);
+    right: var(--sp-3);
+    bottom: calc(var(--tabbar-height) + var(--sp-6) + var(--safe-bottom));
+    width: auto;
+    max-height: min(42dvh, 360px);
+    overflow-y: auto;
+  }
+}

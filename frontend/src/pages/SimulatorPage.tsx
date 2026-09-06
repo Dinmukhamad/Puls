@@ -1,0 +1,83 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { learning, type LearningAttempt } from "../api/learning";
+import { GlassSurface } from "../components/GlassSurface";
+import { Sheet } from "../components/Sheet";
+import { SimulatorMap, type Position } from "../components/SimulatorMap";
+import { Badge, Button, ErrorState, Progress, RowsSkeleton } from "../components/ui";
+import { LearningResult, Question } from "./LearningPlayerPage";
+import "./simulator.css";
+
+export function SimulatorPage() { const { attemptId } = useParams(); return <Simulator key={attemptId} id={Number(attemptId)} />; }
+function Simulator({ id }: { id: number }) {
+  const query = useQuery({ queryKey: ["learning-attempt", id], queryFn: () => learning.attempt(id), refetchOnWindowFocus: false });
+  const client = useQueryClient();
+  const [phone, setPhone] = useState(""); const [otp, setOtp] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null); const [scanning, setScanning] = useState(false);
+  const [position, setPosition] = useState<Position | null>(null); const [geoInfo, setGeoInfo] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null); const [locating, setLocating] = useState(false);
+  const [route, setRoute] = useState({ from: "Дом", to: "Деловой центр" });
+  const [address, setAddress] = useState<"from" | "to" | null>(null); const [search, setSearch] = useState("");
+  const [support, setSupport] = useState(false); const [supportTopic, setSupportTopic] = useState<string | null>(null);
+  const [exit, setExit] = useState(false); const [elapsed, setElapsed] = useState(0); const [motion, setMotion] = useState(0);
+  const photoTimer = useRef<number | null>(null); const watcher = useRef<number | null>(null); const geoGeneration = useRef(0);
+  function stopLocation() { geoGeneration.current += 1; if (watcher.current !== null) navigator.geolocation.clearWatch(watcher.current); watcher.current = null; setPosition(null); setLocating(false); }
+  useEffect(() => () => { if (photoTimer.current !== null) window.clearTimeout(photoTimer.current); geoGeneration.current += 1; if (watcher.current !== null) navigator.geolocation.clearWatch(watcher.current); }, []);
+  useEffect(() => () => { if (photo) URL.revokeObjectURL(photo); }, [photo]);
+  function update(attempt: LearningAttempt) {
+    client.setQueryData(["learning-attempt", id], attempt);
+    for (const key of ["learning", "dashboard", "xp-summary", "xp-ledger", "xp-history", "notifications"]) void client.invalidateQueries({ queryKey: [key] });
+  }
+  const action = useMutation({ mutationFn: async (name: string) => { const attempt = await learning.simulator(id, name); return name === "finish_trip" ? learning.finish(id) : attempt; }, onSuccess: update });
+  const answer = useMutation({ mutationFn: ({ step, value }: { step: number; value: number }) => learning.answer(id, step, value), onSuccess: update });
+  const finish = useMutation({ mutationFn: () => learning.finish(id), onSuccess: update });
+  const stage = query.data?.sim_stage;
+  useEffect(() => { setElapsed(0); if (stage !== "waiting") return; const start = Date.now(); const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)),1000); return () => clearInterval(timer); }, [stage]);
+  useEffect(() => { if (stage !== "in_trip") return; const start = Date.now(); setMotion(0); const timer = window.setInterval(() => { const value = Math.min(1, (Date.now() - start) / 6000); setMotion(value); if (value === 1) clearInterval(timer); },100); return () => clearInterval(timer); }, [stage]);
+  useEffect(() => { if (query.data?.state && query.data.state !== "in_progress") stopLocation(); }, [query.data?.state]);
+  function locate() {
+    setGeoError(null);
+    if (!navigator.geolocation) { setGeoError("Браузер не поддерживает геолокацию. Выберите виртуальную поездку."); return; }
+    stopLocation(); setLocating(true); const generation = geoGeneration.current; let first = true;
+    watcher.current = navigator.geolocation.watchPosition((value) => {
+      if (generation !== geoGeneration.current) return;
+      setPosition({ latitude: value.coords.latitude, longitude: value.coords.longitude, accuracy: value.coords.accuracy });
+      if (first) { first = false; setLocating(false); setGeoInfo(false); action.mutate("mode"); }
+    }, (error) => { if (generation !== geoGeneration.current) return; stopLocation(); setGeoError(error.code === 1 ? "Доступ не разрешён. Можно выбрать виртуальную поездку или разрешить геолокацию в настройках браузера." : "Не удалось определить местоположение. Повторите или выберите виртуальный режим."); }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 5000 });
+  }
+  if (query.isLoading) return <div className="sim-boot"><RowsSkeleton /></div>;
+  if (query.isError) return <div className="sim-boot"><Link to="/training">‹ Обучение</Link><ErrorState error={query.error} onRetry={() => query.refetch()} /></div>;
+  const attempt = query.data!;
+  if (attempt.content.kind !== "simulator") return <div className="sim-boot"><Link to={`/training/attempts/${id}`}>Перейти к заданию</Link></div>;
+  if (attempt.state !== "in_progress") return <div className="sim-results"><LearningResult attempt={attempt} /></div>;
+  const busy = action.isPending || answer.isPending || finish.isPending || scanning;
+  const answered = Object.keys(attempt.answers).length;
+  const beforeMap = ["registration","otp","photo","mode"].includes(stage!);
+  const driveProgress = stage === "in_trip" ? .66 + motion * .34 : stage === "event" || stage === "waiting" ? .66 : stage === "accepted" ? .33 : 0;
+  return <div className={`sim-shell${beforeMap ? " sim-shell--onboarding" : ""}`}>
+    <SimulatorMap position={position} progress={driveProgress} ready={!beforeMap && stage !== "route"} />
+    <GlassSurface className="sim-top" variant="regular"><Button size="s" onClick={() => setExit(true)}>‹ Puls</Button><span>Учебная среда</span>{position && <Badge tone="info">GPS включён</Badge>}</GlassSurface>
+    <div className="sim-workspace"><section className="sim-panel" aria-live="polite"><div className="sim-handle" aria-hidden="true" /><span className="training-eyebrow">DRIVER SIMULATOR</span>
+      {stage === "registration" && <form className="stack" onSubmit={(e) => { e.preventDefault(); if (!busy) action.mutate("register", { onSuccess: () => setPhone("") }); }}><h1>Ваш путь<br />начинается здесь.</h1><p className="secondary">Пройдите регистрацию и выполните учебный заказ.</p><label className="field"><span>Ваш номер телефона</span><input type="tel" inputMode="tel" className="input sim-phone" placeholder="+7 777 123 45 67" value={phone} onChange={(e) => setPhone(e.target.value)} minLength={10} maxLength={24} pattern="[+0-9 ()-]{10,24}" required autoComplete="off" /></label><p className="secondary small">Номер используется только на этом экране учебного сценария.</p><Button type="submit" variant="primary" disabled={busy}>Продолжить</Button><p className="sim-safety">Проходите обучение в безопасном месте. Не используйте симулятор за рулём.</p></form>}
+      {stage === "otp" && <form className="stack" onSubmit={(e) => { e.preventDefault(); if (otp === "1234" && !busy) action.mutate("verify", { onSuccess: () => setOtp("") }); }}><h1>Введите код</h1><p className="sim-notice">Учебное сообщение: ваш код <strong>1234</strong></p><label className="field"><span>Код подтверждения</span><input className="input sim-otp" inputMode="numeric" pattern="1234" maxLength={4} value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g,""))} required autoComplete="off" /></label><p className="secondary small">Это имитация SMS. Сообщение на телефон не отправляется.</p><Button type="submit" variant="primary" disabled={busy || otp.length !== 4}>Подтвердить</Button></form>}
+      {stage === "photo" && <div className="stack"><h1>Фотоконтроль</h1><p className="secondary">Поместите лицо в область камеры</p><div className={`sim-photo${scanning ? " is-scanning" : ""}`}>{photo ? <img src={photo} alt="Снимок для учебного фотоконтроля" /> : <svg viewBox="0 0 120 140" aria-hidden="true"><circle cx="60" cy="43" r="25" fill="currentColor" /><path d="M15 128C15 70 105 70 105 128Z" fill="currentColor" /></svg>}</div><label className="btn btn--secondary sim-camera">{photo ? "Сделать другое фото" : "Открыть камеру"}<input className="sr-only" type="file" accept="image/*" capture="user" onChange={(e) => { const file = e.target.files?.[0]; if (file?.type.startsWith("image/") && file.size <= 10 * 1024 * 1024) setPhoto(URL.createObjectURL(file)); }} disabled={busy} /></label><Button variant="primary" disabled={busy} onClick={() => { setScanning(true); photoTimer.current = window.setTimeout(() => { setScanning(false); setPhoto(null); action.mutate("photo"); },600); }}>{scanning ? "Проверяем…" : photo ? "Пройти учебную проверку" : "Использовать учебный образец"}</Button><p className="secondary small">Фото не отправляется на сервер и удаляется при переходе. Проверка учебная.</p></div>}
+      {stage === "mode" && <div className="stack"><h1>Как поедем?</h1><Button className="sim-mode" variant="primary" disabled={busy || locating} onClick={() => { stopLocation(); action.mutate("mode"); }}>Виртуальная поездка<span>Маршрут воспроизводится автоматически</span></Button><Button className="sim-mode" disabled={busy || locating} onClick={() => setGeoInfo(true)}>Реальная поездка<span>Карта с вашим текущим местоположением</span></Button><p className="secondary small">Оба режима проверяют решения в учебных ситуациях. Навигационные подсказки для реального вождения не предоставляются.</p></div>}
+      {stage === "route" && <div className="stack"><h1>Ваш маршрут</h1><p className="secondary">Выберите точки учебного заказа</p><div className="sim-route-input"><Button onClick={() => { setSearch(""); setAddress("from"); }}><strong>A</strong><span>{route.from}</span></Button><Button onClick={() => { setSearch(""); setAddress("to"); }}><strong>B</strong><span>{route.to}</span></Button></div><Button variant="primary" disabled={busy || route.from === route.to} onClick={() => action.mutate("route")}>Построить маршрут</Button>{route.from === route.to && <p role="alert">Выберите разные точки маршрута</p>}</div>}
+      {stage === "ready" && <div className="stack"><h1>Маршрут готов</h1><div className="sim-route-stats"><strong>2,4 км</strong><span>≈ 9 минут по сценарию</span></div><p>A · {route.from}<br />B · {route.to}</p><p className="secondary small">Учебный маршрут. Виртуальное время поездки ускорено.</p><Button variant="primary" disabled={busy} onClick={() => action.mutate("online")}>Выйти на линию</Button></div>}
+      {stage === "offer" && <div className="stack"><Badge tone="success">● Онлайн</Badge><h1>Новый заказ</h1><div className="sim-order-row"><span>До подачи</span><strong>650 м · 3 мин</strong></div><div className="sim-order-row"><span>Поездка</span><strong>2,4 км · 9 мин</strong></div><p className="sim-fare">+750 ₸ <small>учебный доход</small></p><Button variant="primary" disabled={busy} onClick={() => action.mutate("accept")}>Принять</Button><Button disabled={busy} onClick={() => action.mutate("skip")}>Пропустить</Button></div>}
+      {stage === "accepted" && <div className="stack"><Badge tone="info">Заказ принят</Badge><h1>К точке подачи</h1><div className="sim-route-stats"><strong>600 м</strong><span>3 минуты по сценарию</span></div><p className="secondary">В учебном режиме подтвердите прибытие, чтобы перейти к ожиданию пассажира.</p><Button variant="primary" disabled={busy} onClick={() => action.mutate("arrive")}>На месте</Button></div>}
+      {stage === "waiting" && <div className="stack"><Badge tone="warning">Ожидаем пассажира</Badge><h1>{String(Math.floor(elapsed / 60)).padStart(2,"0")}:{String(elapsed % 60).padStart(2,"0")}</h1><p className="secondary">Пассажир подошёл. Проверьте имя и конечную точку перед началом.</p><Button variant="primary" disabled={busy} onClick={() => action.mutate("start_trip")}>Начать поездку</Button></div>}
+      {stage === "event" && <div className="stack"><Badge tone="xp">Учебное событие</Badge><h1>Ваше решение</h1><Progress value={answered / attempt.content.steps.length} tone="xp" label="Разобранные ситуации" />{answered < attempt.content.steps.length ? <Question key={answered} step={attempt.content.steps[answered]} pending={busy} onSave={(value) => answer.mutate({ step: answered, value })} /> : <><p>Все ситуации разобраны. Продолжим поездку.</p><Button variant="primary" disabled={busy} onClick={() => action.mutate("resolve")}>Продолжить поездку</Button></>}</div>}
+      {stage === "in_trip" && <div className="stack"><Badge tone="success">В поездке</Badge><h1>{motion < 1 ? "К точке B" : "Вы прибыли"}</h1><p>{route.to}</p><Progress value={motion} label="Учебная поездка" /><p className="secondary">{motion < 1 ? "Виртуальный маршрут воспроизводится…" : "Можно завершить заказ и посмотреть результат."}</p><Button variant="primary" disabled={busy || motion < 1} onClick={() => action.mutate("finish_trip")}>Завершить поездку</Button></div>}
+      {stage === "complete" && <div className="stack"><h1>Поездка завершена</h1><Button variant="primary" disabled={busy} onClick={() => finish.mutate()}>Получить результат</Button></div>}
+      {(action.error || answer.error || finish.error) && <ErrorState error={action.error || answer.error || finish.error} />}
+      {!beforeMap && <div className="sim-support-row"><Button onClick={() => { setSupportTopic(null); setSupport(true); }}>Поддержка</Button><Button onClick={() => { setSupportTopic("Заказ"); setSupport(true); }}>Проблема</Button></div>}
+      <p className="sim-privacy">{position ? "Геолокация только в этой сессии · история не сохраняется" : "Виртуальный режим · без GPS"}</p>
+    </section></div>
+    {geoInfo && <Sheet title="Местоположение в обучении" size="s" onClose={() => { if (!locating) setGeoInfo(false); }} footer={<Button variant="primary" disabled={locating} onClick={locate}>{locating ? "Определяем…" : "Продолжить и разрешить"}</Button>}><div className="stack"><p>Геолокация используется, пока открыт этот учебный режим. Puls не сохраняет историю перемещений и не показывает руководителям вашу карту.</p><p>Картографические изображения загружаются из OpenStreetMap. Провайдер карты получает область просмотра.</p><p>Проходите обучение в безопасном месте, не за рулём.</p>{geoError && <p role="alert">{geoError}</p>}<Button onClick={() => { stopLocation(); setGeoInfo(false); action.mutate("mode"); }}>Выбрать виртуальную поездку</Button></div></Sheet>}
+    {address && <Sheet title={address === "from" ? "Откуда" : "Куда"} onClose={() => setAddress(null)}><div className="stack"><label className="field"><span>Найти точку учебного города</span><input className="input" type="search" value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off" /></label>{["Дом","Деловой центр","Вокзал","Парк","Торговый центр"].filter((item) => item.toLowerCase().includes(search.toLowerCase())).map((item) => <Button key={item} onClick={() => { setRoute({ ...route, [address]: item }); setAddress(null); }}>{item}</Button>)}<p className="secondary small">Точки маршрута не сохраняются между сеансами. Это адреса учебного города.</p></div></Sheet>}
+    {support && <Sheet title="Учебная поддержка" onClose={() => setSupport(false)}><div className="stack">{!supportTopic ? <><p>С чем возникла проблема?</p>{["Пассажир","Оплата","Заказ","Аккаунт","Другое"].map((topic) => <Button key={topic} onClick={() => setSupportTopic(topic)}>{topic}</Button>)}</> : <><div className="sim-chat sim-chat--user">{supportTopic}</div><div className="sim-chat">Это учебный чат. Остановитесь в безопасном месте, уточните обстоятельства и зафиксируйте детали обращения. В рабочей ситуации используйте действующий регламент своей службы.</div><Button onClick={() => setSupportTopic(null)}>Другая тема</Button></>}<p className="secondary small">Сообщения имитируются. Обращение сотруднику поддержки не отправляется.</p></div></Sheet>}
+    {exit && <Sheet title="Вернуться в Puls?" size="s" onClose={() => setExit(false)} footer={<><Button onClick={() => setExit(false)}>Остаться</Button><Link className="btn btn--primary" to="/training" onClick={stopLocation}>Вернуться</Link></>}><p>Сохранённые ответы и этап останутся в обучении. Фото, номер телефона и местоположение будут удалены с этого экрана.</p></Sheet>}
+  </div>;
+}

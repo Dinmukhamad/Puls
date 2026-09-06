@@ -1,9 +1,10 @@
 """Схемы пользователей, групп и аутентификации."""
+
 from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.core.config import settings
 from app.models.enums import Role
@@ -62,17 +63,31 @@ class UserCreate(PasswordMixin):
     full_name: str = Field(min_length=3, max_length=255)
     email: EmailStr | None = None
     role: Role = Role.OPERATOR
-    group_id: int | None = None
+    group_id: int | None = Field(default=None, gt=0)
     hired_on: date | None = None
+
+    @field_validator("login", "full_name", mode="before")
+    @classmethod
+    def _trim_text(cls, value: str) -> str:
+        return value.strip() if isinstance(value, str) else value
 
 
 class UserUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     full_name: str | None = Field(default=None, min_length=3, max_length=255)
     email: EmailStr | None = None
     role: Role | None = None
-    group_id: int | None = None
+    group_id: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
     hired_on: date | None = None
+
+    @model_validator(mode="after")
+    def _required_fields_not_null(self) -> UserUpdate:
+        for name in ("full_name", "role", "is_active"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError("ФИО, роль и статус не могут быть пустыми")
+        return self
 
 
 class PasswordChange(PasswordMixin):
@@ -84,15 +99,26 @@ class PasswordReset(PasswordMixin):
 
 
 class GroupCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     code: str = Field(min_length=1, max_length=32)
     name: str = Field(min_length=1, max_length=255)
-    supervisor_id: int | None = None
+    supervisor_id: int | None = Field(default=None, gt=0)
 
 
 class GroupUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     name: str | None = Field(default=None, min_length=1, max_length=255)
-    supervisor_id: int | None = None
+    supervisor_id: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
+
+    @model_validator(mode="after")
+    def _required_fields_not_null(self) -> GroupUpdate:
+        for name in ("name", "is_active"):
+            if name in self.model_fields_set and getattr(self, name) is None:
+                raise ValueError("Название и статус группы не могут быть пустыми")
+        return self
 
 
 class GroupOut(ORMModel):
@@ -101,3 +127,5 @@ class GroupOut(ORMModel):
     name: str
     is_active: bool
     supervisor: UserBrief | None = None
+    member_count: int = 0
+    operator_count: int = 0

@@ -1,10 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
+import { useId, useState, type FormEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
-import { cabinet } from "../api/endpoints";
+import { auth, cabinet } from "../api/endpoints";
 import { useAuth } from "../auth/AuthContext";
 import { CheckIcon, DisplayIcon, LogoutIcon, MoonIcon, SunIcon } from "../components/icons";
 import { Avatar, Badge, Button, Card, CoinAmount, Progress, Skeleton } from "../components/ui";
 import { useTheme, type ThemePreference } from "../theme/ThemeContext";
+import { Sheet } from "../components/Sheet";
+import { useToast } from "../components/Toast";
+import { PwaInstallCard } from "../pwa/PwaProvider";
 import { ROLE_LABELS, coins, dateOnly, plural } from "../utils/format";
 
 const THEME_OPTIONS: {
@@ -21,6 +26,7 @@ export function ProfilePage() {
   const { user, logout } = useAuth();
   const { preference, setPreference } = useTheme();
   const dashboard = useQuery({ queryKey: ["dashboard"], queryFn: () => cabinet.dashboard() });
+  const [securityOpen, setSecurityOpen] = useState(false);
 
   if (!user) return null;
 
@@ -90,15 +96,44 @@ export function ProfilePage() {
                   type="button"
                   role="radio"
                   aria-checked={preference === option.value}
+                  tabIndex={preference === option.value ? 0 : -1}
                   className={
                     preference === option.value ? "theme-option is-active" : "theme-option"
                   }
                   onClick={() => setPreference(option.value)}
+                  onKeyDown={(event) => {
+                    const index = THEME_OPTIONS.indexOf(option);
+                    let next = index;
+                    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % THEME_OPTIONS.length;
+                    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index + THEME_OPTIONS.length - 1) % THEME_OPTIONS.length;
+                    else if (event.key === "Home") next = 0;
+                    else if (event.key === "End") next = THEME_OPTIONS.length - 1;
+                    else return;
+                    event.preventDefault();
+                    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+                    setPreference(THEME_OPTIONS[next].value);
+                  }}
                 >
                   <option.icon size={22} />
                   {option.label}
                 </button>
               ))}
+            </div>
+          </Card>
+
+          <Card title="Безопасность" subtitle="Пароль и устройства, на которых открыт аккаунт">
+            <div className="stack stack--tight">
+              <Button block onClick={() => setSecurityOpen(true)}>Изменить пароль</Button>
+              <Link className="btn btn--secondary btn--m btn--block" to="/sessions">Мои устройства</Link>
+            </div>
+          </Card>
+
+          <PwaInstallCard />
+
+          <Card title="Развитие и события">
+            <div className="stack stack--tight">
+              <Link className="btn btn--secondary btn--m btn--block" to="/progress">Опыт и уровни</Link>
+              <Link className="btn btn--secondary btn--m btn--block" to="/notifications">Уведомления</Link>
             </div>
           </Card>
 
@@ -143,7 +178,75 @@ export function ProfilePage() {
           </Card>
         </div>
       </div>
+      {securityOpen && <PasswordSheet onClose={() => setSecurityOpen(false)} />}
     </div>
+  );
+}
+
+function PasswordSheet({ onClose }: { onClose: () => void }) {
+  const formId = useId();
+  const currentId = useId();
+  const newId = useId();
+  const confirmId = useId();
+  const errorId = useId();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const mutation = useMutation({
+    mutationFn: () => auth.changePassword(currentPassword, password),
+    onSuccess: (result) => {
+      setCurrentPassword("");
+      setPassword("");
+      setConfirmation("");
+      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+      toast.success(result.detail);
+      onClose();
+    },
+  });
+  const error = validationError || (mutation.error instanceof Error ? mutation.error.message : null);
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (mutation.isPending) return;
+    setValidationError(null);
+    if (password !== confirmation) {
+      setValidationError("Новый пароль и подтверждение не совпадают.");
+      return;
+    }
+    if (password === currentPassword) {
+      setValidationError("Новый пароль должен отличаться от текущего.");
+      return;
+    }
+    mutation.mutate();
+  }
+
+  return (
+    <Sheet title="Изменить пароль" subtitle="После смены пароля остальные сеансы будут завершены." size="s" onClose={() => { if (!mutation.isPending) onClose(); }} footer={<>
+      <Button disabled={mutation.isPending} onClick={onClose}>Отмена</Button>
+      <Button type="submit" form={formId} variant="primary" disabled={mutation.isPending}>{mutation.isPending ? "Сохраняем…" : "Сохранить пароль"}</Button>
+    </>}>
+      <form id={formId} onSubmit={submit} className="stack stack--tight" aria-describedby={error ? errorId : undefined}>
+        <div className="field">
+          <label className="field__label" htmlFor={currentId}>Текущий пароль</label>
+          <input id={currentId} className="input" type={showPassword ? "text" : "password"} autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} disabled={mutation.isPending} />
+        </div>
+        <div className="field">
+          <label className="field__label" htmlFor={newId}>Новый пароль</label>
+          <input id={newId} className="input" type={showPassword ? "text" : "password"} autoComplete="new-password" minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} disabled={mutation.isPending} />
+          <span className="field__note">Не менее 8 символов.</span>
+        </div>
+        <div className="field">
+          <label className="field__label" htmlFor={confirmId}>Повторите новый пароль</label>
+          <input id={confirmId} className="input" type={showPassword ? "text" : "password"} autoComplete="new-password" required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} disabled={mutation.isPending} aria-invalid={validationError ? true : undefined} />
+        </div>
+        <Button size="s" aria-pressed={showPassword} onClick={() => setShowPassword((value) => !value)}>{showPassword ? "Скрыть пароли" : "Показать пароли"}</Button>
+        {error && <p className="field__error" id={errorId} role="alert">{error}</p>}
+      </form>
+    </Sheet>
   );
 }
 
@@ -156,7 +259,7 @@ function LevelsCard({ totalEarned }: { totalEarned: number }) {
 
   if (levels.isLoading) {
     return (
-      <Card title="Ступени прогресса">
+      <Card title="Прежние ступени по коинам">
         <Skeleton height={140} radius="var(--radius-m)" />
       </Card>
     );
@@ -172,7 +275,7 @@ function LevelsCard({ totalEarned }: { totalEarned: number }) {
 
   return (
     <Card
-      title="Ступени прогресса"
+      title="Прежние ступени по коинам"
       subtitle={`Накоплено за всё время: ${coins(totalEarned)}`}
     >
       <Progress value={fraction} tone="xp" label="Прогресс уровня" />

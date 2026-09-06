@@ -1,4 +1,5 @@
 """Хеширование паролей и выпуск/проверка JWT."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -22,15 +23,20 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, hashed: str) -> bool:
     try:
-        return bcrypt.checkpw(
-            password.encode("utf-8")[:_BCRYPT_MAX_BYTES], hashed.encode("utf-8")
-        )
+        return bcrypt.checkpw(password.encode("utf-8")[:_BCRYPT_MAX_BYTES], hashed.encode("utf-8"))
     except (ValueError, TypeError):
         # Повреждённый или пустой хеш не должен ронять аутентификацию.
         return False
 
 
-def _create_token(subject: str | int, token_type: TokenType, ttl: timedelta) -> str:
+def _create_token(
+    subject: str | int,
+    token_type: TokenType,
+    ttl: timedelta,
+    *,
+    session_id: str | None = None,
+    secret: str | None = None,
+) -> str:
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
         "sub": str(subject),
@@ -38,17 +44,35 @@ def _create_token(subject: str | int, token_type: TokenType, ttl: timedelta) -> 
         "iat": int(now.timestamp()),
         "exp": int((now + ttl).timestamp()),
     }
+    if session_id:
+        payload["sid"] = session_id
+    if secret:
+        payload["jti"] = secret
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 
 
-def create_access_token(subject: str | int) -> str:
+def create_access_token(subject: str | int, *, session_id: str | None = None) -> str:
     return _create_token(
-        subject, "access", timedelta(minutes=settings.ACCESS_TOKEN_TTL_MINUTES)
+        subject,
+        "access",
+        timedelta(minutes=settings.ACCESS_TOKEN_TTL_MINUTES),
+        session_id=session_id,
     )
 
 
-def create_refresh_token(subject: str | int) -> str:
-    return _create_token(subject, "refresh", timedelta(days=settings.REFRESH_TOKEN_TTL_DAYS))
+def create_refresh_token(
+    subject: str | int,
+    *,
+    session_id: str | None = None,
+    secret: str | None = None,
+) -> str:
+    return _create_token(
+        subject,
+        "refresh",
+        timedelta(days=settings.REFRESH_TOKEN_TTL_DAYS),
+        session_id=session_id,
+        secret=secret,
+    )
 
 
 def decode_token(token: str, expected_type: TokenType = "access") -> dict[str, Any]:

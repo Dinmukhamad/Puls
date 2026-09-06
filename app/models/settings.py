@@ -108,5 +108,6 @@ class AuditLog(Base, TimestampMixin):
     entity_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONType, nullable=True)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     actor: Mapped[User | None] = relationship("User")

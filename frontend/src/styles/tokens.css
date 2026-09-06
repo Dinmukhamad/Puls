@@ -52,6 +52,7 @@
 
   /* XP и коины - две разные валюты, цвета не смешиваются. */
   --xp-color: #7a5cfa;
+  --xp-text: #5939c2;
   --xp-tint: rgba(122, 92, 250, 0.12);
   --coin-color: #f4b844;
   --coin-tint: rgba(244, 184, 68, 0.16);
@@ -192,6 +193,7 @@
     --status-danger-tint: rgba(255, 93, 108, 0.18);
     --status-info-tint: rgba(66, 165, 255, 0.16);
     --xp-tint: rgba(122, 92, 250, 0.22);
+  --xp-text: #c2afff;
     --coin-tint: rgba(244, 184, 68, 0.2);
     --gold-text: #f0c064;
 
@@ -248,6 +250,7 @@
   --status-danger-tint: rgba(255, 93, 108, 0.18);
   --status-info-tint: rgba(66, 165, 255, 0.16);
   --xp-tint: rgba(122, 92, 250, 0.22);
+  --xp-text: #c2afff;
   --coin-tint: rgba(244, 184, 68, 0.2);
   --gold-text: #f0c064;
 

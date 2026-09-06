@@ -24,7 +24,9 @@ export type TxType =
   | "manual_debit"
   | "purchase"
   | "purchase_refund"
-  | "correction";
+  | "correction"
+  | "learning_reward"
+  | "game_reward";
 
 export interface Token {
   access_token: string;
@@ -77,9 +79,9 @@ export interface MetricProgress {
   title: string;
   unit: string | null;
   kind: MetricKind;
-  value: number;
+  value: number | null;
   target: number;
-  completion: number;
+  completion: number | null;
   points: number;
   max_points: number;
   penalty: number;

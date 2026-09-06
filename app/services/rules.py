@@ -1,12 +1,16 @@
 """Доступ к настройкам геймификации и запись в журнал аудита."""
+
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.settings import SETTINGS_SINGLETON_ID, AuditLog, GamificationSettings
+
+audit_ip: ContextVar[str | None] = ContextVar("audit_ip", default=None)
 
 
 async def get_rules(session: AsyncSession) -> GamificationSettings:
@@ -39,6 +43,7 @@ async def write_audit(
         entity_id=None if entity_id is None else str(entity_id),
         payload=payload,
         comment=comment,
+        ip_address=audit_ip.get(),
     )
     session.add(entry)
     await session.flush()

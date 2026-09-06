@@ -1,16 +1,23 @@
 """Настройки правил, показателей, номинаций, бейджей и магазина (п. 4.4.5)."""
+
 from __future__ import annotations
 
+import math
+from typing import Any
+
 from fastapi import APIRouter, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.deps import HeadUser, SessionDep, StaffUser
-from app.core.errors import ConflictError, NotFoundError
+from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.models.badge import BadgeDefinition
 from app.models.contest import MetricDefinition, NominationDefinition
+from app.models.enums import BadgeRule, MetricKind
 from app.models.level import LevelDefinition
 from app.models.shop import ShopItem
+from app.models.user import User
 from app.schemas.admin import (
     BadgeCreate,
     BadgeOut,
@@ -42,6 +49,111 @@ async def _commit(session: SessionDep, entity: str) -> None:
         raise ConflictError(f"{entity}: нарушено ограничение уникальности") from exc
 
 
+def _clean_changes(changes: dict[str, Any], nullable: tuple[str, ...] = ()) -> dict[str, Any]:
+    for key, value in changes.items():
+        if value is None and key not in nullable:
+            raise DomainError("Обязательные поля не могут быть пустыми")
+        if isinstance(value, float) and not math.isfinite(value):
+            raise DomainError("Числовые значения должны быть конечными")
+        if key in (
+            "title",
+            "code",
+            "metric_code",
+            "lateness_metric_code",
+            "forbidden_sites_metric_code",
+        ):
+            if not isinstance(value, str) or not value.strip():
+                raise DomainError("Заполните название и код")
+            changes[key] = value.strip()
+            if len(changes[key]) > (255 if key == "title" else 64):
+                raise DomainError("Название или код слишком длинные")
+    return changes
+
+
+async def _save(
+    session: SessionDep,
+    actor: User,
+    entity: Any,
+    entity_type: str,
+    changes: dict[str, Any],
+    before: dict[str, Any] | None = None,
+) -> None:
+    # The entity and its audit record must commit atomically, including creates.
+    try:
+        await session.flush()
+        await write_audit(
+            session,
+            actor_id=actor.id,
+            action=f"{entity_type}.{'create' if before is None else 'update'}",
+            entity_type=entity_type,
+            entity_id=entity.id,
+            payload=jsonable_encoder({"before": before or {}, "after": changes}),
+        )
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise ConflictError("Этот код уже используется. Выберите другой код.") from exc
+
+
+async def _metric_exists(session: SessionDep, code: str, *, progress: bool = False) -> None:
+    if progress and code == "__progress__":
+        return
+    if (
+        await session.scalar(select(MetricDefinition.id).where(MetricDefinition.code == code))
+        is None
+    ):
+        raise DomainError("Выбранный показатель не найден")
+
+
+def _validate_metric(data: dict[str, Any]) -> None:
+    if data["max_points"] < 0 or data["penalty_per_unit"] < 0 or data["target_value"] < 0:
+        raise DomainError("Цель, баллы и штраф не могут быть отрицательными")
+    if data["kind"] == MetricKind.POSITIVE and data["target_value"] <= 0:
+        raise DomainError("У положительного показателя цель должна быть больше нуля")
+    if data.get("unit") is not None and len(data["unit"]) > 32:
+        raise DomainError("Единица измерения не должна превышать 32 символа")
+
+
+async def _validate_badge(session: SessionDep, data: dict[str, Any]) -> None:
+    params = data["rule_params"]
+    rule = data["rule_type"]
+    if rule in (
+        BadgeRule.ZERO_METRIC_STREAK,
+        BadgeRule.METRIC_THRESHOLD_STREAK,
+        BadgeRule.METRIC_TOTAL,
+    ):
+        metric = params.get(
+            "metric",
+            {
+                BadgeRule.ZERO_METRIC_STREAK: "lateness",
+                BadgeRule.METRIC_THRESHOLD_STREAK: "quality",
+            }.get(rule, "driver_gratitudes"),
+        )
+        if not isinstance(metric, str):
+            raise DomainError("Выберите показатель для достижения")
+        await _metric_exists(session, metric)
+    keys = {
+        BadgeRule.TOP_RANK: ("max_rank",),
+        BadgeRule.ZERO_METRIC_STREAK: ("weeks",),
+        BadgeRule.METRIC_THRESHOLD_STREAK: ("weeks", "gte"),
+        BadgeRule.METRIC_TOTAL: ("gte",),
+        BadgeRule.TOTAL_EARNED: ("gte",),
+        BadgeRule.NOMINATION_COUNT: ("gte",),
+    }[rule]
+    for key in keys:
+        if key not in params:
+            continue  # Existing documented service defaults remain supported.
+        value = params[key]
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int | float)
+            or not math.isfinite(value)
+        ):
+            raise DomainError("Порог достижения должен быть числом")
+        if value <= 0 or (key in ("weeks", "max_rank") and int(value) != value):
+            raise DomainError("Количество недель, место и порог должны быть положительными")
+
+
 # --------------------------------------------------------------------------- #
 # Правила начисления
 # --------------------------------------------------------------------------- #
@@ -53,9 +165,7 @@ async def read_rules(session: SessionDep, _: StaffUser) -> RulesOut:
 
 
 @router.put("/rules", response_model=RulesOut, summary="Изменить правила начисления")
-async def update_rules(
-    session: SessionDep, actor: HeadUser, payload: RulesUpdate
-) -> RulesOut:
+async def update_rules(session: SessionDep, actor: HeadUser, payload: RulesUpdate) -> RulesOut:
     """
     Меняет курс перевода и размеры бонусов.
 
@@ -63,7 +173,13 @@ async def update_rules(
     пересчёту не подлежат - их правила сохранены в снимке недели.
     """
     rules = await get_rules(session)
-    changes = payload.model_dump(exclude_unset=True)
+    changes = _clean_changes(payload.model_dump(exclude_unset=True))
+    if changes.get("manual_reason_min_length", 0) > 500:
+        raise DomainError("Минимальная длина комментария не может превышать 500 символов")
+    for key in ("lateness_metric_code", "forbidden_sites_metric_code"):
+        if key in changes:
+            await _metric_exists(session, changes[key])
+    before = {field: getattr(rules, field) for field in changes}
     for field, value in changes.items():
         setattr(rules, field, value)
     rules.updated_by_id = actor.id
@@ -74,7 +190,7 @@ async def update_rules(
         action="rules.update",
         entity_type="gamification_settings",
         entity_id=rules.id,
-        payload=changes,
+        payload={"before": before, "after": changes},
     )
     await session.commit()
     return RulesOut.model_validate(rules)
@@ -89,9 +205,7 @@ async def update_rules(
 async def list_metrics(
     session: SessionDep, _: StaffUser, include_inactive: bool = True
 ) -> list[MetricDefinition]:
-    stmt = select(MetricDefinition).order_by(
-        MetricDefinition.sort_order, MetricDefinition.id
-    )
+    stmt = select(MetricDefinition).order_by(MetricDefinition.sort_order, MetricDefinition.id)
     if not include_inactive:
         stmt = stmt.where(MetricDefinition.is_active.is_(True))
     return list(await session.scalars(stmt))
@@ -106,9 +220,11 @@ async def list_metrics(
 async def create_metric(
     session: SessionDep, actor: HeadUser, payload: MetricCreate
 ) -> MetricDefinition:
-    metric = MetricDefinition(**payload.model_dump())
+    data = _clean_changes(payload.model_dump(), ("unit", "description"))
+    _validate_metric(data)
+    metric = MetricDefinition(**data)
     session.add(metric)
-    await _commit(session, "Показатель")
+    await _save(session, actor, metric, "metric", data)
     return metric
 
 
@@ -119,9 +235,12 @@ async def update_metric(
     metric = await session.get(MetricDefinition, metric_id)
     if metric is None:
         raise NotFoundError(f"Показатель id={metric_id} не найден")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = _clean_changes(payload.model_dump(exclude_unset=True), ("unit", "description"))
+    _validate_metric({**MetricOut.model_validate(metric).model_dump(), **changes})
+    before = {field: getattr(metric, field) for field in changes}
+    for field, value in changes.items():
         setattr(metric, field, value)
-    await _commit(session, "Показатель")
+    await _save(session, actor, metric, "metric", changes, before)
     return metric
 
 
@@ -131,9 +250,7 @@ async def update_metric(
 
 
 @router.get("/nominations", response_model=list[NominationOut], summary="Номинации")
-async def list_nominations(
-    session: SessionDep, _: StaffUser
-) -> list[NominationDefinition]:
+async def list_nominations(session: SessionDep, _: StaffUser) -> list[NominationDefinition]:
     return list(
         await session.scalars(
             select(NominationDefinition).order_by(
@@ -152,9 +269,11 @@ async def list_nominations(
 async def create_nomination(
     session: SessionDep, actor: HeadUser, payload: NominationCreate
 ) -> NominationDefinition:
-    nomination = NominationDefinition(**payload.model_dump())
+    data = _clean_changes(payload.model_dump(), ("description", "min_value"))
+    await _metric_exists(session, data["metric_code"], progress=True)
+    nomination = NominationDefinition(**data)
     session.add(nomination)
-    await _commit(session, "Номинация")
+    await _save(session, actor, nomination, "nomination", data)
     return nomination
 
 
@@ -169,9 +288,13 @@ async def update_nomination(
     nomination = await session.get(NominationDefinition, nomination_id)
     if nomination is None:
         raise NotFoundError(f"Номинация id={nomination_id} не найдена")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = _clean_changes(payload.model_dump(exclude_unset=True), ("description", "min_value"))
+    if "metric_code" in changes:
+        await _metric_exists(session, changes["metric_code"], progress=True)
+    before = {field: getattr(nomination, field) for field in changes}
+    for field, value in changes.items():
         setattr(nomination, field, value)
-    await _commit(session, "Номинация")
+    await _save(session, actor, nomination, "nomination", changes, before)
     return nomination
 
 
@@ -184,9 +307,7 @@ async def update_nomination(
 async def list_badges(session: SessionDep, _: StaffUser) -> list[BadgeDefinition]:
     return list(
         await session.scalars(
-            select(BadgeDefinition).order_by(
-                BadgeDefinition.sort_order, BadgeDefinition.id
-            )
+            select(BadgeDefinition).order_by(BadgeDefinition.sort_order, BadgeDefinition.id)
         )
     )
 
@@ -200,9 +321,11 @@ async def list_badges(session: SessionDep, _: StaffUser) -> list[BadgeDefinition
 async def create_badge(
     session: SessionDep, actor: HeadUser, payload: BadgeCreate
 ) -> BadgeDefinition:
-    badge = BadgeDefinition(**payload.model_dump())
+    data = _clean_changes(payload.model_dump(), ("description", "icon"))
+    await _validate_badge(session, data)
+    badge = BadgeDefinition(**data)
     session.add(badge)
-    await _commit(session, "Бейдж")
+    await _save(session, actor, badge, "badge", data)
     return badge
 
 
@@ -213,9 +336,12 @@ async def update_badge(
     badge = await session.get(BadgeDefinition, badge_id)
     if badge is None:
         raise NotFoundError(f"Бейдж id={badge_id} не найден")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = _clean_changes(payload.model_dump(exclude_unset=True), ("description", "icon"))
+    await _validate_badge(session, {**BadgeOut.model_validate(badge).model_dump(), **changes})
+    before = {field: getattr(badge, field) for field in changes}
+    for field, value in changes.items():
         setattr(badge, field, value)
-    await _commit(session, "Бейдж")
+    await _save(session, actor, badge, "badge", changes, before)
     return badge
 
 
@@ -293,9 +419,7 @@ async def update_level(
 @router.get("/shop-items", response_model=list[ShopItemOut], summary="Каталог магазина")
 async def list_shop_items(session: SessionDep, _: StaffUser) -> list[ShopItem]:
     return list(
-        await session.scalars(
-            select(ShopItem).order_by(ShopItem.sort_order, ShopItem.price)
-        )
+        await session.scalars(select(ShopItem).order_by(ShopItem.sort_order, ShopItem.price))
     )
 
 
@@ -308,24 +432,16 @@ async def list_shop_items(session: SessionDep, _: StaffUser) -> list[ShopItem]:
 async def create_shop_item(
     session: SessionDep, actor: HeadUser, payload: ShopItemCreate
 ) -> ShopItem:
-    item = ShopItem(**payload.model_dump())
-    session.add(item)
-    await _commit(session, "Бонус")
-    await write_audit(
-        session,
-        actor_id=actor.id,
-        action="shop_item.create",
-        entity_type="shop_item",
-        entity_id=item.id,
-        payload={"code": item.code, "price": item.price},
+    data = _clean_changes(
+        payload.model_dump(), ("description", "stock_limit", "per_user_monthly_limit")
     )
-    await session.commit()
+    item = ShopItem(**data)
+    session.add(item)
+    await _save(session, actor, item, "shop_item", data)
     return item
 
 
-@router.patch(
-    "/shop-items/{item_id}", response_model=ShopItemOut, summary="Изменить бонус"
-)
+@router.patch("/shop-items/{item_id}", response_model=ShopItemOut, summary="Изменить бонус")
 async def update_shop_item(
     session: SessionDep, actor: HeadUser, item_id: int, payload: ShopItemUpdate
 ) -> ShopItem:
@@ -337,27 +453,19 @@ async def update_shop_item(
     item = await session.get(ShopItem, item_id)
     if item is None:
         raise NotFoundError(f"Бонус id={item_id} не найден")
-    changes = payload.model_dump(exclude_unset=True)
+    changes = _clean_changes(
+        payload.model_dump(exclude_unset=True),
+        ("description", "stock_limit", "per_user_monthly_limit"),
+    )
+    before = {field: getattr(item, field) for field in changes}
     for field, value in changes.items():
         setattr(item, field, value)
-    await write_audit(
-        session,
-        actor_id=actor.id,
-        action="shop_item.update",
-        entity_type="shop_item",
-        entity_id=item.id,
-        payload=changes,
-    )
-    await _commit(session, "Бонус")
+    await _save(session, actor, item, "shop_item", changes, before)
     return item
 
 
-@router.delete(
-    "/shop-items/{item_id}", response_model=Message, summary="Отключить бонус"
-)
-async def disable_shop_item(
-    session: SessionDep, actor: HeadUser, item_id: int
-) -> Message:
+@router.delete("/shop-items/{item_id}", response_model=Message, summary="Отключить бонус")
+async def disable_shop_item(session: SessionDep, actor: HeadUser, item_id: int) -> Message:
     """
     Позиция не удаляется физически: на неё ссылаются уже поданные заявки.
     Вместо удаления бонус скрывается из каталога.

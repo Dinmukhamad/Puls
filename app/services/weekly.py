@@ -95,8 +95,11 @@ async def get_or_create_week(
     return week
 
 
-async def get_week(session: AsyncSession, week_id: int) -> ContestWeek:
-    week = await session.get(ContestWeek, week_id)
+async def get_week(session: AsyncSession, week_id: int, *, lock: bool = False) -> ContestWeek:
+    stmt = select(ContestWeek).where(ContestWeek.id == week_id)
+    if lock:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    week = await session.scalar(stmt)
     if week is None:
         raise NotFoundError(f"Неделя id={week_id} не найдена")
     return week
@@ -310,6 +313,16 @@ async def calculate_week(
     return results
 
 
+async def invalidate_calculation(session: AsyncSession, week: ContestWeek) -> None:
+    """Metric edits invalidate the shared ranking before a new calculation."""
+    if week.status == WeekStatus.CLOSED:
+        raise ConflictError("Закрытая неделя неизменна", code="week_closed")
+    await _reset_week_results(session, week.id)
+    week.status = WeekStatus.OPEN
+    week.calculated_at = None
+    await session.flush()
+
+
 async def _reset_week_results(session: AsyncSession, week_id: int) -> None:
     await session.execute(
         delete(NominationWinner).where(NominationWinner.week_id == week_id)
@@ -427,7 +440,11 @@ def _nomination_value(
 
     for metric in (result.breakdown or {}).get("metrics", []):
         if metric.get("code") == nomination.metric_code:
-            return float(metric.get("value", 0.0))
+            reported = (result.breakdown or {}).get("reported_codes")
+            if reported is not None and nomination.metric_code not in reported:
+                return None
+            value = metric.get("value")
+            return float(value) if value is not None else None
     return None
 
 

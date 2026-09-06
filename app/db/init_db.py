@@ -15,6 +15,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.guards import guard_statements
+from app.db.progress_guards import progress_guard_statements
 from app.db.session import engine
 from app.models import (
     BadgeDefinition,
@@ -25,6 +26,7 @@ from app.models import (
     User,
 )
 from app.models.enums import BadgeRule, MetricDirection, MetricKind, Role
+from app.services.progress import seed_xp_levels
 from app.services.rules import get_rules
 
 logger = logging.getLogger(__name__)
@@ -317,6 +319,8 @@ async def create_schema() -> None:
         await conn.run_sync(Base.metadata.create_all)
         for statement in guard_statements(conn.dialect.name):
             await conn.execute(text(statement))
+        for statement in progress_guard_statements(conn.dialect.name):
+            await conn.execute(text(statement))
 
 
 async def seed_reference_data(session: AsyncSession) -> dict[str, int]:
@@ -325,6 +329,7 @@ async def seed_reference_data(session: AsyncSession) -> dict[str, int]:
 
     Возвращает количество созданных объектов по типам.
     """
+    await seed_xp_levels(session)
     created = {
         "metrics": 0,
         "nominations": 0,

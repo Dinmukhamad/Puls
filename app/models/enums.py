@@ -36,6 +36,8 @@ class TxType(StrEnum):
     PURCHASE = "purchase"                    # покупка бонуса (одобренная заявка)
     PURCHASE_REFUND = "purchase_refund"      # возврат по отменённой покупке
     CORRECTION = "correction"                # техническая корректировка
+    LEARNING_REWARD = "learning_reward"      # награда за обучение
+    GAME_REWARD = "game_reward"              # награда колеса или розыгрыша
 
 
 #: Группировка типов для фильтра истории (п. 4.1.3).
@@ -49,6 +51,8 @@ TX_GROUPS: dict[str, tuple[TxType, ...]] = {
         TxType.DRIVER_GRATITUDE,
         TxType.MANUAL_CREDIT,
         TxType.PURCHASE_REFUND,
+        TxType.LEARNING_REWARD,
+        TxType.GAME_REWARD,
     ),
     "writeoff": (TxType.MANUAL_DEBIT, TxType.CORRECTION),
     "purchase": (TxType.PURCHASE,),

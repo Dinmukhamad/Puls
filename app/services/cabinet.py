@@ -94,10 +94,17 @@ async def week_block(
         block.coins_discipline_bonus = result.coins_discipline_bonus
         block.coins_nomination_bonus = result.coins_nomination_bonus
         block.coins_total = result.coins_total
-        block.metrics = [
-            MetricProgress(**metric)
-            for metric in (result.breakdown or {}).get("metrics", [])
-        ]
+        # Старые снимки содержали 0 для отсутствующих показателей. Если есть
+        # список фактически загруженных кодов, восстанавливаем отсутствие в UI,
+        # не меняя сохранённых итогов закрытой недели.
+        snapshot = result.breakdown or {}
+        reported = snapshot.get("reported_codes")
+        block.metrics = []
+        for metric in snapshot.get("metrics", []):
+            item = dict(metric)
+            if reported is not None and item.get("code") not in reported:
+                item.update(value=None, completion=None)
+            block.metrics.append(MetricProgress(**item))
         return block
 
     # Неделя ещё не рассчитывалась - считаем предварительно.

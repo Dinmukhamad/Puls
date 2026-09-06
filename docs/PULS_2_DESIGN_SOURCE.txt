@@ -1,0 +1,1099 @@
+PULS 2.0
+DESIGN SYSTEM & UI/UX SPECIFICATION
+Полное дизайн-ТЗ для Desktop Web, Mobile Web и PWA
+Проект: Puls 2.0Версия документа: 1.0Визуальное направление: iOS 26 / Liquid Glass principlesПодход: Puls со своей идентичностью на принципах iOSТемы: Light / Dark / SystemПлатформы: Desktop + Mobile + PWAFrontend: React + TypeScript + Vite
+
+Главная задача дизайна
+На телефоне Puls должен ощущаться как личное рабочее приложение оператора. На desktop — как серьёзный инструмент руководителя. Driver Simulator — как иммерсивный учебный режим внутри единого продукта.
+
+Документ предназначен для использования вместе с основным техническим заданием Puls 2.0.
+
+0. Оглавление
+1
+Визуальная концепция Puls 2.0
+2
+Новая визуальная идентичность
+3
+Типографика, геометрия и ритм
+4
+Liquid Glass и иерархия поверхностей
+5
+App Shell и навигация
+6
+Библиотека компонентов
+7
+Состояния интерфейса и motion
+8
+Экран авторизации
+9
+Мой кабинет оператора
+10
+Рейтинг
+11
+Сводка, пользователи и группы
+12
+Аналитика
+13
+Расчёт периода и импорт
+14
+Коины, XP, уровни и достижения
+15
+Training Hub
+16
+Тесты
+17
+Миссии и Mission Studio
+18
+Driver Simulator — иммерсивный режим
+19
+Магазин, Колесо WOW и Розыгрыши
+20
+Уведомления, профиль, сессии, аудит и настройки
+21
+Графики и визуализация данных
+22
+Responsive, Mobile и PWA
+23
+Accessibility
+24
+Форматы данных и навигационное поведение
+25
+Архитектура дизайн-системы
+26
+Запрещённые UI-паттерны
+27
+Иконография, аватары и бренд-элементы
+28
+Visual QA и тестирование дизайна
+29
+Design Definition of Done
+30
+Итоговая визуальная модель Puls 2.0
+A
+Приложение: полный список экранов
+B
+Приложение: матрица адаптивности
+
+1. Визуальная концепция Puls 2.0
+Puls — корпоративная система управления эффективностью, геймификации и обучения. Дизайн не должен превращать систему ни в тяжёлую административную панель, ни в детскую игру. Интерфейс строится на принципах iOS 26: ясная иерархия, крупная типографика, округлая геометрия, плавающая навигация, аккуратные материалы и выборочное использование Liquid Glass.
+
+Основной принцип
+Content first. Содержание является главным слоем; навигация и действия визуально располагаются над ним. Glass применяется как функциональный материал, а не как декоративная текстура на каждой карточке.
+
+Премиальный, спокойный и технологичный характер.
+Собственная визуальная идентичность Puls, без прямого копирования интерфейса Apple.
+Одинаковый язык на desktop, mobile и PWA.
+Рабочие разделы спокойные; игровые механики эмоциональнее, но остаются взрослыми.
+Аналитика должна читаться быстрее, чем выглядит эффектно.
+Driver Simulator должен ощущаться отдельным immersive-режимом, не отдельным приложением.
+1.1 Чем Puls не должен стать
+Excel с border-radius и тенями.
+Клоном iPhone Settings.
+Криптовалютной биржей с десятками неоновых графиков.
+Казино-интерфейсом с анимацией на каждом действии.
+Стеклянной витриной, где blur используется на всех поверхностях.
+Админкой, в которой мобильный интерфейс — это просто уменьшенный desktop.
+1.2 Интенсивность геймификации
+Раздел
+Интенсивность
+Рабочие разделы
+10%
+Мой кабинет
+25%
+Обучение
+35%
+Достижения
+50%
+Колесо WOW
+80%
+
+Геймификация усиливается только там, где она помогает мотивации. Аналитика, расчёт периода, пользователи и аудит остаются строгими и спокойными.
+
+2. Новая визуальная идентичность
+2.1 Брендовые цвета
+Старая палитра не переносится. Puls получает новую систему цветов с отдельными семантическими токенами.
+Цвет
+HEX
+Назначение
+Образец
+Puls Blue
+#4F68FF
+Основной бренд и действия
+
+Puls Violet
+#7A5CFA
+XP, уровни, достижения
+
+Success
+#28C798
+Выполнено, рост, успех
+
+Warning
+#F2B84B
+Предупреждение, внимание
+
+Danger
+#FF5D6C
+Ошибка, критический риск
+
+Info
+#42A5FF
+Информация
+
+Coin Gold
+#F4B844
+Коины, стоимость, награды
+
+
+2.2 Light Theme
+Token
+Значение
+--bg-primary
+#F4F6FA
+--surface-primary
+#FFFFFF
+--surface-secondary
+#F0F2F7
+--surface-tertiary
+#E8EBF2
+--text-primary
+#111318
+--text-secondary
+#666C79
+--text-tertiary
+#9298A5
+--separator
+rgba(20,24,32,0.08)
+
+2.3 Dark Theme
+Token
+Значение
+--bg-primary
+#090B10
+--surface-primary
+#12151C
+--surface-secondary
+#191D26
+--surface-elevated
+#202530
+--text-primary
+#F6F7F9
+--text-secondary
+#A7ACB7
+--text-tertiary
+#717785
+--separator
+rgba(255,255,255,0.08)
+
+2.4 Semantic Tokens
+--accent-primary--accent-secondary--status-success--status-warning--status-danger--status-info--xp-color--coin-color--surface-primary--surface-secondary--surface-elevated--surface-glass--text-primary--text-secondary--text-tertiary
+
+
+Правило
+Компонент не должен жёстко использовать #4F68FF, #FFFFFF и другие цвета. Он получает семантический token. Благодаря этому Light/Dark/System работают без переписывания компонентов.
+
+2.5 Градиенты
+Основной accent: #4F68FF → #765BFF.
+Дополнительный accent: #5D7CFF → #42B9FF.
+Использовать для hero, XP, уровня, достижений и специальных кампаний.
+Не использовать как постоянный фон страниц, таблиц, форм и аналитических дашбордов.
+3. Типографика, геометрия и ритм
+3.1 Шрифтовая система
+В web-версии не требуется поставлять SF Pro. Используется системный stack. На устройствах Apple интерфейс автоматически использует системную типографику, на Windows — системный шрифт платформы.
+font-family:  -apple-system,  BlinkMacSystemFont,  "Segoe UI",  system-ui,  sans-serif;
+
+Стиль
+Размер / насыщенность
+Display
+40–48 px / 600–700
+Page Title Desktop
+32 px / 650
+Mobile Large Title
+32–34 px / 700
+Section Title
+22 px / 650
+Card Title
+17 px / 600
+Body
+15–16 px / 400
+Secondary
+14 px / 400
+Caption
+12–13 px / 500
+KPI Desktop
+30–36 px / 650
+KPI Mobile
+26–32 px / 650
+
+Для KPI включить tabular numbers, чтобы цифры не меняли ширину при обновлении значений.
+font-variant-numeric: tabular-nums;
+
+3.2 Rounded Geometry
+Token
+Radius
+XS
+8 px
+S
+12 px
+M
+16 px
+L
+20 px
+XL
+24 px
+2XL
+28 px
+Pill
+999 px
+
+Базовые карточки: 20–24 px. Modal: 24 px. Mobile Sheet: верхние углы 28 px. Вложенные элементы используют согласованную концентрическую геометрию: Card 24 → control 16 → icon container 12.
+3.3 Spacing System
+4 / 8 / 12 / 16 / 20 / 24 / 32 / 40 / 48 / 64 px
+
+Базовая единица — 4 px, основной вертикальный и горизонтальный ритм — 8 px.
+3.4 Тени
+Уровень
+Значение
+Standard Light
+0 4px 16px rgba(20,25,35,.05)
+Elevated Light
+0 12px 32px rgba(20,25,35,.10)
+Dark Mode
+минимум тени, разделение через surface/border
+
+4. Liquid Glass и иерархия поверхностей
+Liquid Glass является отдельным primitive дизайн-системы, а не случайным backdrop-filter в каждом компоненте.
+4.1 Где использовать Glass
+Desktop Sidebar и floating navigation.
+Mobile Tab Bar.
+Sticky/filter toolbars.
+Bottom Sheets и отдельные modal layers.
+Floating controls Driver Simulator.
+Context controls, tooltips и редкие hero-элементы.
+4.2 Где Glass не использовать
+Обычные KPI cards.
+Каждая таблица.
+Все input-поля.
+Все chart containers.
+Основной background страницы.
+Большие длинные текстовые поверхности.
+4.3 Glass Variants
+Variant
+Назначение
+glass-subtle
+лёгкая прозрачность, минимальный blur
+glass-regular
+основные navigation/sheet
+glass-prominent
+только редкие hero/floating состояния
+
+4.4 Fallback
+Если blur недоступен, отключён пользователем или ухудшает производительность, GlassSurface превращается в solid elevated surface. Интерфейс обязан оставаться читаемым.
+
+Performance
+Нельзя создавать десятки независимых backdrop-filter слоёв. Glass должен быть ограничен navigation, sheets и floating actions.
+
+5. App Shell и навигация
+5.1 Desktop App Shell
+┌──────────────────────────────────────────────────────┐│  Floating Sidebar        Main content               ││  ┌────────────────┐     ┌────────────────────────┐  ││  │ Puls           │     │ Page Header            │  ││  │ Navigation     │     │                        │  ││  │                │     │ Content                │  ││  │ User           │     │                        │  ││  └────────────────┘     └────────────────────────┘  │└──────────────────────────────────────────────────────┘
+
+Sidebar: 260 px expanded, 76 px collapsed, внешний отступ 12 px, radius около 24 px. Sidebar визуально плавает, но не должен конкурировать с контентом.
+5.2 Admin Navigation
+Главное  СводкаКоманда  Пользователи  ГруппыРабота  Расчёт периода  Аналитика  РейтингРазвитие  Тесты  Миссии  Driver SimulatorЭкономика  Коины  Магазин  УровниИгры  Колесо WOW  РозыгрышиСистема  Сессии  Аудит  Настройки
+
+5.3 Operator Navigation
+Главная.
+Рейтинг.
+Обучение.
+Магазин.
+Награды/Профиль.
+5.4 Mobile App Shell
+Mobile-first навигация строится вокруг floating bottom tab bar. Базовые пункты: Главная, Рейтинг, Обучение, Магазин, Профиль. Административные разделы при необходимости доступны через отдельное меню, но не засоряют операторский интерфейс.
+Параметр
+Значение
+Высота
+64–68 px
+Внешние отступы
+12 px по бокам, около 10 px снизу + safe-area
+Radius
+28–32 px
+Материал
+glass-regular
+
+При scroll вниз tab bar может переходить в compact state, при scroll вверх возвращаться. Поведение не должно мешать навигации.
+5.5 Page Header
+Desktop: название, короткое описание, контекст периода и основные действия справа. Mobile: large title + минимальные действия. Заголовок может уменьшаться при прокрутке.
+6. Библиотека компонентов
+6.1 Обязательные primitives
+Button
+IconButton
+Input
+Select
+Search
+DateRange
+SegmentedControl
+Tabs
+Card
+GlassSurface
+KPI
+Badge
+Table
+Pagination
+Modal
+Drawer
+Bottom Sheet
+Toast
+Tooltip
+Dropdown
+Skeleton
+EmptyState
+ErrorState
+PermissionDenied
+FilterBar
+ChartContainer
+6.2 Buttons
+Тип
+Описание
+Primary
+brand background, белый label
+Secondary
+neutral surface
+Glass
+floating actions
+Destructive
+danger tint
+
+Высота: 44 px desktop, 50 px mobile. Radius: 14–16 px, крупные мобильные действия до 18 px. Press feedback: scale ~0.97–0.98 и мягкое возвращение.
+6.3 Inputs
+Высота 44–48 px desktop и около 50 px mobile. Radius 14–16 px. Основное разделение через surface, а не тяжёлый border. Focus state обязателен: 2 px accent ring.
+6.4 Search и Segmented Control
+Search — отдельный крупный control с иконкой и понятным placeholder. Segmented Control применяется только для небольших наборов выбора: Неделя/Месяц, Все/Активные/Архив, Light/Dark/System. Для десяти пунктов использовать tabs/select.
+6.5 Cards
+Standard Card — основная solid surface.
+Elevated Card — поверх контента, умеренная тень.
+Interactive Card — hover/press/focus.
+Glass Card — редкие специальные случаи.
+Highlight Card — brand tint для важного действия или достижения.
+Padding: 20–24 px desktop, 16–20 px mobile.
+6.6 KPI Card
+Качество94,7%↑ 1,2 п.п.к прошлой неделе
+
+Положительность/отрицательность изменения определяется MetricDefinition. Рост AR может быть отрицательным, поэтому frontend не должен решать это по знаку числа.
+6.7 Tables
+Sticky header.
+52–60 px высота строки.
+Сортировка, фильтры, pagination, actions.
+Clickable row получает hover и keyboard focus.
+На mobile таблица превращается в карточки, а не ужимается до нечитаемого состояния.
+6.8 Filters
+Desktop: sticky/floating FilterBar. Mobile: одна кнопка «Фильтры N» открывает Bottom Sheet. Нельзя помещать семь select в одну строку на 390 px.
+6.9 Modal, Drawer, Sheet, Toast
+Primitive
+Правило
+Desktop Modal
+480 / 640 / 800 px по типу контента
+Mobile Sheet
+нижний sheet с drag handle
+Toast Desktop
+top-right
+Toast Mobile
+верх или над tab bar
+
+7. Состояния интерфейса и motion
+7.1 Обязательные состояния каждого экрана
+Loading — Skeleton.
+Content — нормальное состояние.
+Empty — данных ещё нет.
+No Results — данные есть, но фильтры не нашли результат.
+Error — ошибка загрузки.
+Permission Denied — нет прав.
+Disabled — действие временно недоступно.
+
+NULL ≠ 0
+Отсутствие данных показывается как «—» или «Нет данных». Ноль отображается числом 0. Это разные состояния и в аналитике, и в UI.
+
+7.2 Motion Tokens
+Token
+Duration
+Fast
+140 ms
+Normal
+220 ms
+Slow
+320 ms
+Hero
+400 ms
+
+Spring motion используется для sheets, tab bar, modal, achievement, Wheel и Driver order cards. На desktop page transitions минимальны. prefers-reduced-motion отключает bounce, morph, parallax и декоративные эффекты.
+7.3 Confetti и celebrations
+Разрешено: новый уровень, редкое достижение, выигрыш в raffle, крупная награда Wheel.
+Запрещено: login, сохранение профиля, применение фильтра, обычная покупка, каждый новый XP.
+8. Экран авторизации
+Login должен быть одним из самых чистых экранов Puls. Основная задача — войти, а не показать портфолио motion-дизайнера.
+Desktop┌──────────────────────┬──────────────────────┐│ Puls visual / glow   │ Войти                ││                      │ Login                ││                      │ Password             ││                      │ [Войти]              │└──────────────────────┴──────────────────────┘MobileОдна колонка: logo → title → fields → action
+
+Ambient Puls gradient допустим только как мягкий background glow.
+Не использовать частицы, 3D-шары, Matrix rain и тяжёлые анимации.
+Пароль имеет show/hide action.
+Ошибки выводятся рядом с формой, без native alert.
+9. Мой кабинет оператора
+Это центральный продуктовый экран оператора. За несколько секунд он должен понять: текущий уровень, место, XP, баланс, состояние KPI и следующее полезное действие.
+9.1 Mobile hierarchy
+1.  Greeting
+2.  Hero Progress
+3.  Quick Actions
+4.  My Metrics
+5.  Ranking
+6.  Training
+7.  Achievements
+8.  Recent Activity
+9.2 Hero Progress
+Доброе утро, ДаниярПрофессионал████████████░░░2 480 XP520 XP до Эксперта#4 в рейтинге           1 240 🪙
+
+Hero в Light — светлая surface с мягким branded glow. В Dark — глубокая surface с очень умеренным blue/violet glow.
+9.3 Quick Actions
+Пройти тест.
+Продолжить миссию.
+Колесо WOW.
+Открыть магазин.
+Посмотреть результат периода.
+9.4 My Metrics
+Качество       Эффективность94,2%          88%AR             Часы4,1%           162 / 168
+
+Mobile — 2-column grid. Desktop — отдельный KPI row.
+9.5 Что улучшить
+Отдельная recommendation card без агрессивного danger-дизайна. Пример: «До цели качества не хватает 1,4 п.п.» или «До следующего уровня осталось 120 XP».
+9.6 Desktop composition
+Hero 2/3 width      Quick actions 1/3Metrics rowPerformance chart   Ranking cardTrainingAchievementsActivity
+
+10. Рейтинг
+10.1 Общая композиция
+Page title + выбранный период.
+Top 3 как эмоциональный блок, но не огромный пьедестал.
+Остальные участники — компактный список/таблица.
+Текущий пользователь выделяется лёгким brand tint.
+Вкладка «Мой прогресс» показывает динамику места и баллов отдельными графиками.
+10.2 Top 3
+Desktop: три premium cards, первое место визуально главнее. Mobile: компактная horizontal composition, без вертикального пьедестала на полэкрана.
+10.3 Фильтры
+Текущая неделя.
+Прошлая неделя.
+Месяц.
+Custom.
+Scope — только при наличии соответствующих прав.
+11. Сводка, пользователи и группы
+11.1 Административная сводка
+Dashboard должен отвечать на вопрос «что сейчас происходит?», а не просто демонстрировать много цифр.
+KPI row: операторы, качество, эффективность, AR, часы.
+Вторичная строка: коины, заказы, активные тесты, миссии.
+Блок «Требует внимания» с кликабельными проблемами.
+Timeline последних системных событий.
+11.2 Пользователи
+Header: «Пользователи», количество сотрудников, Import/Create actions. FilterBar: Search, Group, Role, Status, More filters.
+Основная колонка — avatar + ФИО + employee_id.
+Role/Group/Status — рабочая информация.
+Level/XP/Coins — вторично, чтобы таблица не становилась игровой карточкой.
+Mobile — card list с ключевыми полями и кнопкой «Открыть».
+11.3 Статусы пользователя
+Статус
+Визуальное представление
+Active
+зелёная точка + текст
+Probation
+warning
+Vacation
+info
+Dismissed / Archived
+neutral
+
+11.4 Карточка пользователя
+Header: avatar, ФИО, роль, группа, статус, overflow actions.
+Desktop tabs: Профиль, Работа, Результаты, Коины, XP, Тесты, Миссии, Покупки, Аудит.
+Mobile: horizontal tabs / section navigation. Девять пунктов не помещать в bottom navigation.
+11.5 Группы
+Группа 5112 операторовСВ: ...Качество      94,2%Эффективность 86%AR            4,8%
+
+Сравнение групп лучше строить через bar/dot/comparison table. Не использовать набор одинаковых donut charts.
+12. Аналитика
+Analytics имеет только три главные вкладки: Сводка, Операторы, Качество. Это основной рабочий интерфейс руководителя.
+12.1 Общие фильтры
+Период.
+Группа / несколько групп.
+Оператор / несколько операторов.
+Статус.
+Уровень.
+Ставка.
+Качество.
+Эффективность.
+AR.
+Выполнение нормы.
+Нарушения.
+Desktop FilterBar sticky под header; mobile — Bottom Sheet. Состояние фильтров хранится в URL и восстанавливается после F5/Back/Forward.
+12.2 Сводка
+1.  KPI row
+2.  Main Trend Chart
+3.  Risk cards
+4.  Group comparison
+5.  Detailed breakdown
+Main Trend Chart содержит название, значение, delta, selector метрики, target line и tooltip. Дни без данных являются пропуском, не нулём.
+12.3 Операторы
+Главная таблица СВ: оператор, группа, часы, выполнение нормы, звонки, звонков/час, качество, количество оценок, эффективность, AR, штрафы, итог, динамика.
+Режим один оператор — персональная аналитика.
+Несколько операторов — сравнение.
+Группа — список.
+Две группы — сравнительный режим.
+12.4 Карточка оператора в Analytics
+Данияр Алиев · Группа 51Общий статус: В нормеКачествоВы              94,2%Медиана группы  92,8%Цель             93,0%
+
+Риски имеют severity Info / Attention / Risk / Critical. Не каждый warning должен быть красной карточкой.
+12.5 Качество
+Среднее качество.
+Количество проверенных звонков.
+Оценённые операторы.
+Coverage.
+Ниже цели.
+Без оценок.
+Матрица Operator × Day.
+12.6 Quality Matrix
+Ячейки имеют состояния No Data, Critical, Below Target, Target, Excellent. Состояние различается не только цветом. Tooltip показывает дату, качество и количество оценок.
+
+Aggregation
+Графики и KPI не должны визуально маскировать неверную агрегацию. Backend возвращает корректно рассчитанное значение, sample_size, coverage, status и empty_reason.
+
+13. Расчёт периода и импорт
+Это административный workflow, поэтому дизайн должен максимально снижать вероятность ошибочного действия.
+13.1 Stepper
+1 Файл  →  2 Проверка  →  3 Preview  →  4 Расчёт  →  5 Публикация
+
+13.2 Upload
+Large drop zone: «Перетащите XLSX или CSV» + кнопка выбора файла. После загрузки отображаются filename, progress и этап проверки.
+13.3 Preview
+3 482 строки68 операторов12 предупреждений3 ошибки
+
+Ошибки группируются по типам: Unknown operator, Invalid date, Duplicate, Invalid value. Пользователь должен быстро понять, что нужно исправить.
+13.4 Publish confirmation
+68 PeriodReport+6 850 XP+3 420 coins[Опубликовать]
+
+
+Критическое действие
+Публикация — не optimistic UI. Награды и PeriodReport подтверждаются backend, после чего UI показывает результат операции.
+
+14. Коины, XP, уровни и достижения
+14.1 Wallet / Коины
+KPI: коины в обращении, начислено, потрачено, возвращено.
+История в table/timeline с amount и source.
++100 / -250 / +250 refund визуально различимы, но не только цветом.
+Manual credit/debit modal содержит оператора, сумму, обязательную причину.
+14.2 XP
+XP визуально отделён от коинов. Основной цвет XP — Puls Violet. Экран XP похож на ledger/history, но без сценариев расходования. Допускается график роста XP.
+14.3 Levels Admin
+Новичок           0–499 XPСпециалист        500–1499 XPПрофессионал      1500–2999 XPЭксперт           ...
+
+Для оператора уровни показываются progression cards. Current level выделяется, locked levels остаются читаемыми и показывают условие открытия.
+14.4 Achievements
+Achievements — карточная grid. Полученное достижение показывает дату. Locked achievement может показывать критерий получения; не делать его полностью скрытым серым прямоугольником.
+14.5 Level Up
+Допускается полноэкранный короткий moment: новый уровень, название, XP threshold, мягкий scale/glow и optional confetti с учётом reduced-motion.
+15. Training Hub
+Обучение объединяет Tests, Missions и Driver Simulator. Экран должен отвечать на вопрос: «что мне пройти следующим?»
+15.1 Training Hero
+ОбучениеРазвивайте навыки,проходите заданияи практические сценарии.Общий прогресс 68%Тесты       8 / 10Миссии      12 / 15Simulator    5 / 8
+
+15.2 Continue Learning
+Самый заметный блок: последний in-progress элемент или обязательное обучение. Содержит тип, название, прогресс и действие «Продолжить».
+15.3 Категории
+Тесты — более строгие карточки.
+Миссии — narrative cards.
+Driver Simulator — визуально чуть более premium и immersive.
+16. Тесты
+16.1 Список
+Filters: Все / Новые / В процессе / Пройденные.
+Карточка: тема, название, количество вопросов, время, награда, статус.
+Обязательный тест получает badge и deadline.
+16.2 Прохождение
+Вопрос 4 из 10████████░░░░Текст вопроса○ Ответ 1○ Ответ 2○ Ответ 3
+
+Mobile-first. Пользователь может вернуться к предыдущему вопросу без потери сохранённого ответа, если правила теста это допускают.
+16.3 Результат
+Тест завершён92%Пройден9 из 10 правильных+50 XP[Посмотреть ошибки]
+
+17. Миссии и Mission Studio
+17.1 Mission List
+Миссии визуально повествовательнее тестов. Допускается группировка по world: Яндекс Про, CRM, СМЗ, Wolt и т.п.
+17.2 Mission Card
+Пассажир не вышелСредняя сложность10 минутProgress 3 / 7
+
+17.3 Mission Player
+Desktop content width 720–800 px, чтобы диалоги не растягивались на всю ширину. Dialogue step — спокойная карточка speaker + message, ответы ниже.
+17.4 Mission Studio
+Desktop┌──────────┬──────────────────┬──────────────┐│ Steps    │ Editor           │ Phone Preview││ 01       │ Content          │              ││ 02       │ Rules            │              ││ 03       │ Reward           │              │└──────────┴──────────────────┴──────────────┘
+
+На мобильном административный редактор может быть ограничен read-only / basic edit. Полноценная production-работа Studio ориентирована на desktop.
+18. Driver Simulator — иммерсивный режим
+
+Ключевой принцип
+Driver Simulator остаётся модулем Puls. При запуске он скрывает обычный mobile tab bar и переходит в отдельный full-screen режим, но использует те же tokens, typography, buttons и interaction patterns.
+
+18.1 Entry Card
+Driver SimulatorПройдите путь водителя:от регистрации до выполнения заказов.Прогресс 62%[Продолжить]
+
+18.2 Fullscreen shell
+Обычный Puls tab bar скрыт.
+Вверху floating glass capsule: «‹ Puls» + «Учебная среда».
+Map может занимать весь viewport.
+Bottom Sheet является основным контейнером действий.
+18.3 Регистрация и номер
+Ваш номер телефона+7 777 123 45 67Мы используем его тольков учебном сценарии.[Продолжить]
+
+18.4 OTP
+Код вводится в крупные ячейки. Simulated notification может появляться сверху. Реальная SMS для MVP не требуется.
+18.5 Фотоконтроль
+ФотоконтрольПоместите лицо в область камеры      ◯[Сделать фото]
+
+После снимка — короткое состояние «Проверяем…» с subtle scanning animation и затем success state. Фото не сохраняется на backend.
+18.6 Выбор режима
+Режим
+Описание
+Реальная поездка
+Использует текущее местоположение пользователя.
+Виртуальная поездка
+Маршрут воспроизводится автоматически без реального GPS.
+
+18.7 Explainer геолокации
+Перед browser permission показывается отдельный экран: геолокация используется только во время учебной сессии; история перемещений не сохраняется. После объяснения пользователь нажимает «Продолжить», и только потом появляется системный permission.
+18.8 Map
+60–100% viewport в зависимости от состояния.
+Минимум POI.
+Отображать roads, route, current location, pickup, destination.
+Current location — Puls-specific directional blue dot + accuracy halo.
+18.9 A/B Route Input
+МаршрутA  Откуда   [Дом]B  Куда     [Работа][Построить маршрут]
+
+Address Search открывается как full-screen mobile sheet. Если privacy policy запрещает хранение A/B, recent addresses не сохраняются.
+18.10 Route Ready
+8,4 км~24 минутыA ДомB Работа[Выйти на линию]
+
+18.11 Online State
+Floating status pill «● Онлайн». Зеленый цвет используется как статус, а не как постоянный декоративный accent.
+18.12 Новый заказ
+Новый заказДо подачи650 м · 3 минПоездка2,4 км · 9 мин+750 ₸[Принять]Пропустить
+
+Карточка заказа morphs из bottom sheet. Если есть таймер — спокойный linear/circular countdown, без мигающего красного интерфейса.
+18.13 Accepted / Waiting / In Trip
+AcceptedДо точки подачи600 м · 3 минуты[На месте]WaitingПассажирОжидание 00:42[Начать поездку]In TripДо точки B1,8 км · 7 минут[Поддержка] [Проблема]
+
+Кнопка «Завершить поездку» появляется активной только когда state machine разрешает действие.
+18.14 Scenario Event
+Учебное событие появляется как sheet: «Пассажир изменил конечную точку», «Пассажир не вышел», «Проблема с оплатой» и т.д. Сценарий не должен визуально блокировать карту дольше необходимого.
+18.15 Поддержка
+ПоддержкаС чем возникла проблема?ПассажирОплатаЗаказАккаунтДругое
+
+Учебный чат нейтральный и не копирует конкретный мессенджер. Диалоги могут быть scripted.
+18.16 Simulation Result
+Симуляция завершена87%4 заказа3 сценария2 / 3 правильных решения1 ошибка+100 XP+50 coins
+
+После result пользователь видит разбор ошибок и может повторить конкретный сценарий.
+18.17 Desktop Driver Simulator
+Desktop ориентирован прежде всего на virtual mode.
+┌───────────────────────────┬────────────────────┐│                           │ Scenario / Order   ││           MAP             │                    ││                           │ Controls           │└───────────────────────────┴────────────────────┘
+
+18.18 Privacy indication
+В real mode показывать small indicator «Location active».
+При завершении: «Location stopped».
+Supervisor не получает live-map сотрудников.
+Фактический маршрут и GPS-history не являются UI-сущностями Puls.
+18.19 Безопасность использования
+
+Во время движения
+Интерфейс real mode не должен поощрять сложные действия во время самостоятельного управления автомобилем. Крупные touch targets, минимум текста, сценарии с безопасной логикой взаимодействия.
+
+19. Магазин, Колесо WOW и Розыгрыши
+19.1 Магазин
+Визуально магазин ближе к чистому каталогу Apple Store, а не к маркетплейсу с десятками badges.
+Header: баланс пользователя.
+Product Grid: 3–4 колонки desktop, 2–3 tablet, 2 mobile.
+Card: image, название, цена, остаток/доступность.
+Product Detail: mobile sheet/full-screen, desktop modal/page.
+Покупка подтверждается backend; success screen показывает номер и статус заказа.
+19.2 Колесо WOW
+Самый эмоциональный экран продукта, но без casino aesthetic.
+Цвета: Puls Blue, Violet, Mint, Gold, subtle glow.
+Spin button крупный.
+Animation 2.5–4 sec.
+Результат определяется backend до завершения анимации.
+No reward формулируется нейтрально: «В этот раз без награды».
+19.3 Розыгрыши
+Card: приз, срок, количество участников, CTA.
+После участия — состояние «✓ Вы участвуете».
+Для победителя допустимы subtle confetti/celebration с учётом reduced-motion.
+20. Уведомления, профиль, сессии, аудит и настройки
+20.1 Notifications
+Mobile — отдельная page/sheet, сгруппированная по времени: Сегодня, Вчера, Ранее. Каждый тип имеет semantic icon, но не отдельную кислотную цветовую схему.
+20.2 Profile
+AvatarДанияр АлиевOperator · Group 51Аккаунт  Личные данные  БезопасностьPuls  Уведомления  Внешний видСистема  Устройства  Выйти
+
+20.3 Appearance
+Light / Dark / System. Default — System. Theme определяется до первого paint, чтобы не было белой вспышки в Dark Mode.
+20.4 Sessions
+Chrome · WindowsАлматыТекущаяSafari · iPhone2 часа назад[Завершить]
+
+20.5 Audit
+Audit ориентирован на desktop. Table: Time, Actor, Action, Entity, Changes, IP. Detail открывается в right-side Drawer. Пользователь видит человекочитаемые before/after, а не только raw JSON.
+20.6 Admin Settings
+Общие.
+Метрики.
+Нормы.
+Scoring.
+Экономика.
+Driver Simulator.
+Integrations.
+Scoring Policy должен визуально показывать правила человеческим языком, например «90–92% → +50 XP», а не требовать редактировать JSON.
+21. Графики и визуализация данных
+21.1 Разрешённые типы
+Line.
+Area.
+Bar.
+Horizontal Bar.
+Stacked Bar.
+Dot Plot.
+Heatmap.
+Progress.
+Distribution.
+Donut используется редко и только при понятной долевой задаче. 3D-графики запрещены.
+21.2 Chart Color Logic
+Элемент
+Правило
+Primary series
+Puls Blue
+Secondary series
+Puls Violet
+Comparison
+Neutral gray
+Target
+Dashed neutral/accent
+
+Danger не используется как основной цвет series только потому, что значение низкое. Risk отображается через status/annotation.
+21.3 Tooltip
+14 августаКачество 94,7%Оценок 12
+
+Tooltip может использовать glass-subtle при достаточной контрастности.
+22. Responsive, Mobile и PWA
+22.1 Breakpoints
+Диапазон
+Поведение
+360–767 px
+Mobile: bottom tab, sheets, card lists.
+768–1023 px
+Tablet: compact sidebar/drawer, 2-column layouts.
+1024+ px
+Desktop: floating sidebar, tables, расширенная аналитика.
+
+22.2 Поддерживаемые контрольные ширины
+360 / 390 / 768 / 1024 / 1280 / 1440 / 1920 px
+
+22.3 Safe Areas
+env(safe-area-inset-top)env(safe-area-inset-bottom)
+
+Особенно важно для Dynamic Island, home indicator, floating tab bar и Driver Simulator.
+22.4 PWA Standalone
+Не показывать browser-инструкции после установки.
+Корректный viewport.
+Понятное back behavior.
+Полноценная navigation без адресной строки.
+Install action в Profile, когда приложение не установлено.
+22.5 Install Puls
+Для iPhone — instruction sheet: Поделиться → На экран «Домой» → Добавить. Не имитировать native install prompt, если браузер его не предоставляет.
+22.6 PWA Update
+При доступной новой версии показывать ненавязчивый update card/toast: «Доступна новая версия Puls» → «Обновить». Критически несовместимая версия может требовать обязательное обновление.
+22.7 Landscape
+Основной UX проектируется для portrait на телефоне, но landscape не должен ломать layout. Driver Simulator перестраивает map/sheet без горизонтального scroll страницы.
+23. Accessibility
+Keyboard navigation.
+Visible focus states.
+Semantic HTML.
+aria-label / screen-reader labels.
+WCAG contrast.
+prefers-reduced-motion.
+Color independence.
+Touch target минимум примерно 44×44 px на mobile.
+23.1 Color Independence
+Нельзя передавать состояние только цветом. Использовать одновременно icon, text и/или направление: ↑, ↓, !, ✓, label.
+23.2 Transparency Accessibility
+При reduced transparency или отсутствии backdrop-filter glass превращается в solid elevated surface. Текст всегда остаётся читаемым.
+24. Форматы данных и навигационное поведение
+24.1 Числа и даты
+Тип
+Формат
+Процент
+94,7%
+Большое число
+1 240
+Часы
+168 ч
+П.п.
+4,2 п.п.
+Дата long
+5 сентября 2026
+Дата compact
+05.09.2026
+Время
+14:42
+
+24.2 URL State
+/analytics/operators?period=this_week&group=51
+
+После F5, Back и Forward пользователь остаётся в том же контексте.
+24.3 Browser Back
+Back должен возвращать предыдущий UI state, а не выбрасывать пользователя на login после закрытия фильтра или drawer.
+24.4 Gestures
+Bottom Sheet поддерживает swipe down + drag handle.
+У каждого gesture есть button alternative.
+В Driver Simulator gestures не конфликтуют с map pan/zoom.
+25. Архитектура дизайн-системы
+25.1 Design Tokens
+tokens/  color  typography  spacing  radius  shadow  blur  motion  breakpoint
+
+25.2 UI Components
+ui/  Button  IconButton  Input  Select  Search  Card  GlassSurface  Badge  KPI  Table  Modal  Sheet  Toast  Tabs  SegmentedControl  FilterBar  Skeleton  EmptyState  ErrorState  Chart
+
+25.3 GlassSurface
+Отдельный primitive обязателен. Нельзя позволять каждому feature писать собственный backdrop-filter с разными blur/opacity/border.
+25.4 Surface Hierarchy
+Page Background    ↓Content Surface    ↓Elevated Surface    ↓Glass Controls
+
+25.5 Проверка нового компонента
+1.  Есть ли уже такой primitive?
+2.  Как работает mobile?
+3.  Как работает dark?
+4.  Есть ли keyboard/focus?
+5.  Есть ли loading?
+6.  Disabled?
+7.  Error?
+8.  Reduced motion?
+26. Запрещённые UI-паттерны
+native alert / confirm / prompt;
+giant gradient backgrounds;
+glass на каждой карточке;
+восемь разных стилей кнопок;
+горизонтальный scroll всей страницы;
+tiny mobile controls;
+critical actions только через hover;
+random colors;
+raw JSON как единственное представление;
+бесконечные tabs;
+desktop table без адаптации на mobile;
+modal внутри modal внутри modal;
+десятки donut charts;
+dashboard из 30 KPI;
+optimistic UI для wallet, rewards, purchase, wheel и period publish;
+hardcoded white/black без semantic tokens.
+27. Иконография, аватары и бренд-элементы
+27.1 Icons
+Единый набор: simple, rounded, monochromatic, одинаковая optical weight. Допускается Lucide или собственный набор. Не смешивать несколько библиотек.
+27.2 Avatars
+Если фото отсутствует, показываются инициалы. Gradient генерируется стабильно по user id, чтобы цвет пользователя не менялся между сессиями.
+27.3 Logo Puls
+Направление: символ P + pulse/wave + rounded geometry. Не использовать буквальное сердце с ЭКГ, чтобы бренд не выглядел медицинским сервисом.
+27.4 App Icon
+Простой знак.
+Минимум мелких деталей.
+Узнаваем на 40 px.
+Подготовить Light/Dark варианты.
+28. Visual QA и тестирование дизайна
+28.1 Visual Regression Viewports
+Сценарий
+Viewport
+Mobile Light
+390×844
+Mobile Dark
+390×844
+Tablet
+1024×768
+Desktop Light
+1536×1024
+Desktop Dark
+1536×1024
+
+28.2 Обязательные Visual Screens
+Login
+Operator Cabinet
+Rating
+Training Hub
+Tests
+Mission
+Driver Simulator Map
+Driver Order
+Driver Result
+Store
+Wheel
+Admin Dashboard
+Users
+User Detail
+Groups
+Analytics Summary
+Analytics Operators
+Analytics Quality
+Period Import
+Wallet
+Levels
+Sessions
+Audit
+28.3 Mobile Acceptance
+Нет horizontal page scroll на 390 px.
+Текст не обрезается.
+Bottom nav не закрывает контент.
+Safe-area работает.
+Sheets работают.
+Touch targets минимум 44 px.
+Клавиатура не ломает формы.
+28.4 Desktop Acceptance
+Sidebar не перекрывает content.
+Analytics использует доступную ширину.
+Карточки не растягиваются бессмысленно.
+Tables читаемы.
+Page hierarchy очевидна.
+28.5 Dark Mode Acceptance
+Нет hardcoded white.
+Charts адаптированы.
+Glass читаем.
+Product images не теряются.
+Status colors сохраняют контраст.
+28.6 Liquid Glass Acceptance
+Navigation выглядит floating.
+Sheets используют material.
+Primary content остаётся ясным.
+Blur имеет fallback.
+Производительность не деградирует.
+Glass не мешает contrast.
+29. Design Definition of Done
+Дизайн Puls 2.0 считается завершённым только после выполнения всех нижеперечисленных условий.
+29.1 Foundation
+Colors.
+Typography.
+Spacing.
+Radius.
+Shadows.
+Motion.
+Light/Dark/System.
+Glass tokens.
+29.2 Components
+Button
+Input
+Select
+Search
+Tabs
+Segmented Control
+Card
+KPI
+Badge
+Table
+Pagination
+Modal
+Sheet
+Toast
+Tooltip
+Dropdown
+Skeleton
+Empty
+Error
+Chart
+29.3 Navigation
+Desktop Sidebar expanded/collapsed.
+Mobile Drawer.
+Mobile Tab Bar.
+Page Headers.
+Back navigation.
+29.4 Operator Screens
+Cabinet
+Rating
+Training
+Tests
+Missions
+Driver Simulator
+Store
+Wheel
+Raffles
+Notifications
+Profile
+29.5 Supervisor / Manager
+Summary
+Users
+Groups
+Analytics
+Operator Detail
+Rating
+Training Progress
+29.6 Admin
+Period Engine
+Wallet
+XP
+Levels
+Tests Admin
+Mission Studio
+Driver Scenario Studio
+Store Admin
+Wheel Admin
+Raffle Admin
+Sessions
+Audit
+Settings
+29.7 PWA
+Standalone.
+Install.
+Safe Area.
+Mobile Navigation.
+Update UX.
+Offline state.
+29.8 States
+Каждый ключевой экран должен иметь: Loading, Content, Empty, No Results, Error, Permission Denied, Disabled, Mobile и Dark состояния.
+30. Итоговая визуальная модель Puls 2.0
+Puls должен ощущаться как единый продукт, а не набор независимых страниц, которые случайно используют одинаковый логотип.
+Контекст
+Ощущение
+Телефон
+Личное рабочее приложение оператора.
+Desktop
+Серьёзный инструмент руководителя.
+Driver Simulator
+Иммерсивный учебный режим.
+Игровые разделы
+Эмоциональные, но взрослые.
+Аналитика
+Спокойная, плотная и предельно читаемая.
+
+
+Финальная формула
+CONTENT FIRST + CLEAR HIERARCHY + FLOATING NAVIGATION + SELECTIVE LIQUID GLASS + PULS BRAND + LIGHT/DARK + DESKTOP PRODUCTIVITY + MOBILE APP EXPERIENCE + CONTROLLED GAMIFICATION
+
+Основное техническое ТЗ определяет, что делает Puls 2.0. Этот документ определяет, как продукт выглядит, как ведёт себя на разных устройствах и какие визуальные ограничения обязательны для всех новых экранов и компонентов.
+A. Приложение: полный список экранов для дизайна
+Область
+Экраны
+Auth
+Login, Permission denied, Session expired
+Operator
+Cabinet, Ranking, Training Hub, Tests, Mission Player, Driver Simulator, Store, Product, Orders, Wheel, Raffles, Notifications, Profile, Appearance, Sessions
+Supervisor/Manager
+Summary, Users, User detail, Groups, Group detail, Analytics Summary, Analytics Operators, Operator Analytics, Analytics Quality, Rating, Training Progress
+Admin
+Period Import/Preview/Calculate/Publish, Wallet, XP, Levels, Achievements, Tests Admin, Mission Studio, Driver Scenario Studio, Store Admin, Wheel Admin, Raffle Admin, Sessions, Audit, Settings
+PWA
+Install instructions, Update available, Offline, Reconnect
+Driver Simulator
+Entry, Registration, OTP, Photo Control, Mode Select, Location Explainer, A/B Search, Route Ready, Online, New Order, Accepted, Waiting, In Trip, Scenario, Support, Chat, Result, Error Review
+
+B. Приложение: матрица адаптивности
+Ширина
+Фокус проверки
+360 / 390
+Операторские разделы, Training, Store, Driver Simulator — приоритет.
+768
+Tablet layouts, drawer/compact navigation.
+1024
+Переход к desktop structure; сложная аналитика уже доступна.
+1280 / 1440
+Основной desktop QA.
+1920
+Проверка max-width, аналитики и отсутствия бессмысленного растягивания.
+
+— Конец документа —

@@ -7,6 +7,7 @@ import { App } from "./App";
 import { AuthProvider } from "./auth/AuthContext";
 import { ToastProvider } from "./components/Toast";
 import { ThemeProvider } from "./theme/ThemeContext";
+import { PwaProvider } from "./pwa/PwaProvider";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
@@ -33,7 +34,9 @@ createRoot(document.getElementById("root")!).render(
         <BrowserRouter>
           <AuthProvider>
             <ToastProvider>
-              <App />
+              <PwaProvider>
+                <App />
+              </PwaProvider>
             </ToastProvider>
           </AuthProvider>
         </BrowserRouter>

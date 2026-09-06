@@ -21,6 +21,7 @@ const V1 = "/api/v1";
 /* --- аутентификация --- */
 
 export const auth = {
+  logout: () => request<{ detail: string }>(`${V1}/auth/logout`, { method: "POST", signal: AbortSignal.timeout(15000) }),
   login: (login: string, password: string) =>
     request<Token>(`${V1}/auth/login`, {
       method: "POST",

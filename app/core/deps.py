@@ -2,7 +2,7 @@
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, Query, status
+from fastapi import Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +13,9 @@ from app.core.errors import PermissionDeniedError
 from app.core.security import decode_token
 from app.db.session import get_session
 from app.models.enums import Role
+from app.models.session import LoginSession
 from app.models.user import Group, User
+from app.services.sessions import is_valid
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_PREFIX}/auth/login", auto_error=False
@@ -31,15 +33,21 @@ _CREDENTIALS_ERROR = HTTPException(
 async def get_current_user(
     session: SessionDep,
     token: Annotated[str | None, Depends(oauth2_scheme)],
+    request: Request,
 ) -> User:
     if not token:
         raise _CREDENTIALS_ERROR
     try:
         payload = decode_token(token, "access")
         user_id = int(payload["sub"])
+        session_id = str(payload["sid"])
     except (jwt.PyJWTError, KeyError, TypeError, ValueError) as exc:
         raise _CREDENTIALS_ERROR from exc
 
+    record = await session.get(LoginSession, session_id)
+    if not is_valid(record, user_id):
+        raise _CREDENTIALS_ERROR
+    request.state.auth_session_id = session_id
     user = await session.scalar(
         select(User).options(selectinload(User.group)).where(User.id == user_id)
     )

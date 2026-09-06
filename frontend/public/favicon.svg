@@ -1,4 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#2a78d6"/>
-  <path d="M16 6 L25 16 L16 26 L7 16 Z" fill="#fcfcfb"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><style>.background{fill:#4F68FF}.mark{stroke:#fff}@media(prefers-color-scheme:dark){.background{fill:#12151C}.mark{stroke:#8C9CFF}}</style><rect class="background" width="512" height="512" rx="104"/><path class="mark" d="M182 356V156h86c52 0 82 28 82 72s-30 72-82 72h-34" fill="none" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/></svg>

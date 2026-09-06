@@ -8,10 +8,15 @@ from app.api.v1 import (
     admin_panel,
     admin_users,
     admin_weeks,
+    analytics,
     auth,
     cabinet,
+    games,
+    learning,
+    progress,
     rating,
     shop,
+    system,
 )
 
 api_router = APIRouter()
@@ -23,3 +28,8 @@ api_router.include_router(admin_panel.router)
 api_router.include_router(admin_weeks.router)
 api_router.include_router(admin_config.router)
 api_router.include_router(admin_users.router)
+api_router.include_router(system.router)
+api_router.include_router(progress.router)
+api_router.include_router(analytics.router)
+api_router.include_router(learning.router)
+api_router.include_router(games.router)

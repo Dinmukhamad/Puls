@@ -28,6 +28,7 @@ const BASE = resolveApiBase((import.meta.env.VITE_API_BASE_URL ?? "").trim().rep
 
 const ACCESS_KEY = "pulse.access";
 const REFRESH_KEY = "pulse.refresh";
+let sessionVersion = 0;
 
 export const tokenStore = {
   get access(): string | null {
@@ -36,11 +37,13 @@ export const tokenStore = {
   get refresh(): string | null {
     return localStorage.getItem(REFRESH_KEY);
   },
-  save(token: Token): void {
+  save(token: Token, rotation = false): void {
+    if (!rotation) sessionVersion += 1;
     localStorage.setItem(ACCESS_KEY, token.access_token);
     localStorage.setItem(REFRESH_KEY, token.refresh_token);
   },
   clear(): void {
+    sessionVersion += 1;
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
   },
@@ -91,6 +94,7 @@ interface RequestOptions {
   method?: string;
   json?: unknown;
   form?: Record<string, string>;
+  multipart?: FormData;
   auth?: boolean;
   signal?: AbortSignal;
 }
@@ -118,10 +122,12 @@ async function refreshAccessToken(): Promise<boolean> {
         body: JSON.stringify({ refresh_token: refresh }),
       });
       if (!response.ok) return false;
-      tokenStore.save((await response.json()) as Token);
+      const token = (await response.json()) as Token;
+      if (tokenStore.refresh !== refresh) return false;
+      tokenStore.save(token, true);
       return true;
     } catch {
-      return false;
+      throw new ApiError(0, {});
     } finally {
       refreshing = null;
     }
@@ -132,13 +138,20 @@ async function refreshAccessToken(): Promise<boolean> {
 
 export async function request<T>(
   path: string,
-  { method = "GET", json, form, auth = true, signal }: RequestOptions = {},
+  { method = "GET", json, form, multipart, auth = true, signal }: RequestOptions = {},
 ): Promise<T> {
+  const version = sessionVersion;
+  const ensureSession = () => {
+    if (auth && version !== sessionVersion) throw new DOMException("Сеанс изменился", "AbortError");
+  };
   const send = async (): Promise<Response> => {
+    ensureSession();
     const headers: Record<string, string> = {};
     let body: BodyInit | undefined;
 
-    if (form) {
+    if (multipart) {
+      body = multipart;
+    } else if (form) {
       headers["Content-Type"] = "application/x-www-form-urlencoded";
       body = new URLSearchParams(form).toString();
     } else if (json !== undefined) {
@@ -156,15 +169,17 @@ export async function request<T>(
   try {
     response = await send();
   } catch (error) {
-    if (signal?.aborted) throw error;
+    if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
     throw new ApiError(0, {});
   }
+  ensureSession();
 
   // Просроченный access-токен обновляем молча и повторяем запрос один раз.
   if (response.status === 401 && auth && tokenStore.refresh) {
     if (await refreshAccessToken()) {
       response = await send();
     }
+    ensureSession();
   }
 
   if (response.status === 401 && auth) {
@@ -182,7 +197,9 @@ export async function request<T>(
   if (!contentType.includes("application/json")) {
     return (await response.text()) as T;
   }
-  return (await response.json()) as T;
+  const result = (await response.json()) as T;
+  ensureSession();
+  return result;
 }
 
 /** Скачивание файла: бэкенд отдаёт CSV вложением, а fetch нужен ради заголовка авторизации. */

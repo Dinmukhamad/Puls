@@ -5,6 +5,7 @@
 юнит-тестами и переиспользовать их для предварительного просмотра итогов
 до закрытия недели.
 """
+
 from __future__ import annotations
 
 import math
@@ -22,10 +23,10 @@ class MetricScore:
     title: str
     unit: str | None
     kind: MetricKind
-    value: float
+    value: float | None
     target: float
     #: Доля выполнения плана, 0..1 (для антипоказателей не заполняется).
-    completion: float
+    completion: float | None
     points: float
     max_points: float
     #: Штрафные баллы, вычитаемые из суммы (только для антипоказателей).
@@ -73,8 +74,23 @@ def _completion(definition: MetricDefinition, value: float) -> float:
     return max(0.0, min(ratio, 1.0))
 
 
-def score_metric(definition: MetricDefinition, value: float) -> MetricScore:
+def score_metric(definition: MetricDefinition, value: float | None) -> MetricScore:
     """Считает баллы (или штраф) по одному показателю."""
+    if value is None:
+        return MetricScore(
+            code=definition.code,
+            title=definition.title,
+            unit=definition.unit,
+            kind=definition.kind,
+            value=None,
+            target=definition.target_value,
+            completion=None,
+            points=0.0,
+            max_points=definition.max_points,
+            penalty=0.0,
+        )
+    if not math.isfinite(value):
+        raise ValueError("Значение показателя должно быть конечным числом")
     if definition.kind == MetricKind.ANTI:
         penalty = max(0.0, value) * definition.penalty_per_unit
         return MetricScore(
@@ -106,9 +122,7 @@ def score_metric(definition: MetricDefinition, value: float) -> MetricScore:
     )
 
 
-def score_week(
-    definitions: list[MetricDefinition], values: dict[str, float]
-) -> WeekScore:
+def score_week(definitions: list[MetricDefinition], values: dict[str, float | None]) -> WeekScore:
     """
     Считает итоговый балл оператора за неделю.
 
@@ -116,7 +130,7 @@ def score_week(
     затем вычитаются антипоказатели, и только после этого результат переводится
     в коины. Итог не опускается ниже нуля.
     """
-    scores = [score_metric(d, float(values.get(d.code, 0.0))) for d in definitions]
+    scores = [score_metric(d, values.get(d.code)) for d in definitions]
     base = sum(s.points for s in scores)
     penalty = sum(s.penalty for s in scores)
     final = max(0.0, base - penalty)

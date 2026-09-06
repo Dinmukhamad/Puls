@@ -170,7 +170,8 @@ a {
  * становится непрозрачной поверхностью. Интерфейс не ломается.
  */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .glass {
+  .glass,
+  .btn--glass {
     background: var(--glass-fallback);
   }
   .glass::before {
@@ -179,7 +180,8 @@ a {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .glass {
+  .glass,
+  .btn--glass {
     background: var(--glass-fallback);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
@@ -420,6 +422,25 @@ a {
 
 .tabbar {
   display: none;
+}
+
+.mobile-menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.mobile-menu__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.mobile-menu__heading {
+  padding: 0 var(--sp-3) var(--sp-1);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  color: var(--text-tertiary);
 }
 
 /* --------------------------------------------------------------------------
@@ -980,6 +1001,8 @@ select.input {
   background: var(--accent-tint);
   color: var(--accent-ink);
 }
+.badge--xp { color: var(--xp-text); background: var(--xp-tint); }
+.badge--coin { color: var(--gold-text); background: var(--coin-tint); }
 .badge--success {
   background: var(--status-success-tint);
   color: var(--status-success-text);
@@ -2318,7 +2341,8 @@ select.input {
     display: none;
   }
 
-  .main {
+  .main,
+  .shell--collapsed .main {
     margin-left: 0;
     padding: calc(var(--sp-5) + var(--safe-top)) var(--sp-4)
       calc(var(--tabbar-height) + var(--sp-8) + var(--safe-bottom));
@@ -2355,6 +2379,9 @@ select.input {
     justify-content: center;
     gap: 3px;
     flex: 1;
+    padding: 0;
+    border: 0;
+    background: transparent;
     /* Минимальная зона нажатия для касания. */
     min-width: 44px;
     min-height: 44px;
@@ -2371,6 +2398,35 @@ select.input {
 
   .tab:active {
     transform: scale(0.94);
+  }
+
+  .btn {
+    min-width: 44px;
+    min-height: 50px;
+  }
+
+  .btn--s {
+    min-height: 44px;
+  }
+
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+  }
+
+  .input {
+    height: 50px;
+    font-size: 16px;
+  }
+
+  .input--s {
+    height: 44px;
+  }
+
+  .segmented__item {
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .kpi-grid,
@@ -2593,6 +2649,14 @@ select.input {
   .tab:active,
   .quick-action:active {
     transform: none;
+  }
+
+  .tabbar--compact {
+    height: var(--tabbar-height);
+  }
+
+  .tabbar--compact .tab__label {
+    display: block;
   }
 }
 

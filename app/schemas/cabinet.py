@@ -33,9 +33,9 @@ class MetricProgress(BaseModel):
     title: str
     unit: str | None = None
     kind: MetricKind
-    value: float
+    value: float | None
     target: float
-    completion: float = Field(description="Доля выполнения плана, 0..1")
+    completion: float | None = Field(description="Доля выполнения плана, 0..1; null — нет данных")
     points: float
     max_points: float
     penalty: float = Field(default=0.0, description="Штрафные баллы антипоказателя")

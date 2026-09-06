@@ -188,7 +188,7 @@ export function Progress({
  * Метки состояний. Цвет всегда сопровождается текстом, часто значком.
  * -------------------------------------------------------------------------- */
 
-export type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";
+export type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info" | "xp" | "coin";
 
 export function Badge({
   tone = "neutral",
@@ -347,20 +347,34 @@ export function SegmentedControl<T extends string>({
   label?: string;
   block?: boolean;
 }) {
+  const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   return (
     <div
       className={block ? "segmented segmented--block" : "segmented"}
-      role="tablist"
+      role="radiogroup"
       aria-label={label}
     >
-      {options.map((option) => (
+      {options.map((option, index) => (
         <button
           key={option.value}
           type="button"
-          role="tab"
-          aria-selected={value === option.value}
+          role="radio"
+          aria-checked={value === option.value}
+          tabIndex={index === selectedIndex ? 0 : -1}
           className={value === option.value ? "segmented__item is-active" : "segmented__item"}
           onClick={() => onChange(option.value)}
+          onKeyDown={(event) => {
+            let next = index;
+            if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % options.length;
+            else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + options.length) % options.length;
+            else if (event.key === "Home") next = 0;
+            else if (event.key === "End") next = options.length - 1;
+            else return;
+            event.preventDefault();
+            const controls = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+            controls?.[next]?.focus();
+            onChange(options[next].value);
+          }}
         >
           {option.label}
         </button>

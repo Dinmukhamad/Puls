@@ -11,11 +11,13 @@ export function signed(value: number): string {
   return value > 0 ? `+${numberFormat.format(value)}` : numberFormat.format(value);
 }
 
-export function points(value: number): string {
+export function points(value: number | null | undefined): string {
+  if (value == null) return "—";
   return numberFormat.format(Math.round(value * 100) / 100);
 }
 
-export function percent(fraction: number): string {
+export function percent(fraction: number | null | undefined): string {
+  if (fraction == null) return "—";
   return `${Math.round(fraction * 100)} %`;
 }
 
@@ -69,6 +71,8 @@ export const TX_LABELS: Record<string, string> = {
   purchase: "Покупка в магазине",
   purchase_refund: "Возврат",
   correction: "Корректировка",
+  learning_reward: "Обучение",
+  game_reward: "Игровая награда",
 };
 
 export const REQUEST_STATUS_LABELS: Record<string, string> = {
