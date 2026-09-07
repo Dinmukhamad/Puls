@@ -449,7 +449,9 @@ a {
 
 .page-head {
   display: flex;
-  align-items: flex-start;
+  /* Действия выравниваются по середине заголовка: при подзаголовке в две
+     строки кнопка, прижатая к верху, зрительно висит выше текста. */
+  align-items: center;
   justify-content: space-between;
   gap: var(--sp-4);
   flex-wrap: wrap;

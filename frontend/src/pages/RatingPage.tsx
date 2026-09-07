@@ -4,10 +4,9 @@ import { Navigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { rating } from "../api/endpoints";
 import type { NominationOut, PodiumEntry, RatingRowOut } from "../api/types";
-import { MedalIcon, SearchIcon, SparkIcon } from "../components/icons";
+import { MedalIcon, SparkIcon } from "../components/icons";
 import {
   Avatar,
-  Badge,
   Card,
   CoinAmount,
   Delta,
@@ -18,7 +17,7 @@ import {
   Skeleton,
 } from "../components/ui";
 import { GlassSurface } from "../components/GlassSurface";
-import { WEEK_STATUS_LABELS, coins, dateTime, periodLabel, points } from "../utils/format";
+import { WEEK_STATUS_LABELS, coins, points } from "../utils/format";
 
 const MEDAL_LABEL: Record<string, string> = {
   gold: "1 место",
@@ -39,15 +38,14 @@ function Leaderboard() {
   const selectedWeek = Number(params.get("week"));
   const weekId = Number.isInteger(selectedWeek) && selectedWeek > 0 ? selectedWeek : undefined;
   const page = Math.max(1, Math.floor(Number(params.get("page")) || 1));
-  const search = params.get("search") ?? "";
   const update = (values: Record<string, string | undefined>) => { const next = new URLSearchParams(params); for (const [key, value] of Object.entries(values)) { if (value) next.set(key, value); else next.delete(key); } setParams(next, { replace: "search" in values }); };
   const setPage = (value: number) => update({ page: String(value) });
   const size = 25;
 
   const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks() });
   const board = useQuery({
-    queryKey: ["rating", weekId, page, search],
-    queryFn: () => rating.leaderboard({ week_id: weekId, page, size, search: search || undefined }),
+    queryKey: ["rating", weekId, page],
+    queryFn: () => rating.leaderboard({ week_id: weekId, page, size }),
     placeholderData: keepPreviousData,
   });
 
@@ -85,40 +83,8 @@ function Leaderboard() {
 
   return (
     <div className="stack">
-      <div className="page-head">
-        <div>
-          <h2 className="page-title">{header.contest_title}</h2>
-          <p className="page-subtitle">
-            Неделя {header.week_label} · {periodLabel(header.period_start, header.period_end)} ·{" "}
-            {header.participants} участников
-            {header.updated_at ? ` · обновлено ${dateTime(header.updated_at)}` : ""}
-          </p>
-        </div>
-        <div className="page-head__actions">
-          <Badge tone={header.status === "closed" ? "success" : "accent"} dot>
-            {WEEK_STATUS_LABELS[header.status] ?? header.status}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Плавающая панель фильтров - один из немногих стеклянных элементов. */}
+      {/* Переключатель недели: единственный фильтр рейтинга. */}
       <GlassSurface variant="regular" className="filterbar">
-        <label className="search">
-          <span className="search__icon">
-            <SearchIcon size={16} />
-          </span>
-          <input
-            className="input input--s"
-            style={{ width: 210 }}
-            placeholder="Найти оператора"
-            value={search}
-            aria-label="Поиск по ФИО"
-            onChange={(event) => {
-              update({ search: event.target.value, page: undefined });
-            }}
-          />
-        </label>
-        <span className="filterbar__spacer" />
         <select
           className="input input--s"
           aria-label="Неделя конкурса"
@@ -155,7 +121,7 @@ function Leaderboard() {
         </Card>
       )}
 
-      {data.my_row && <Card title="Моё место" variant="highlight"><div className="row"><strong className="rank-badge">{data.my_row.rank ? `#${data.my_row.rank}` : "—"}</strong><span>{points(data.my_row.points)} баллов</span><CoinAmount value={data.my_row.coins_week} size="s" />{data.my_row.rank_delta != null && <Delta value={data.my_row.rank_delta} />}</div><p className="small secondary">Ваш результат за выбранную неделю отображается независимо от поиска и страницы таблицы.</p></Card>}
+      {data.my_row && <Card title="Моё место" variant="highlight"><div className="row"><strong className="rank-badge">{data.my_row.rank ? `#${data.my_row.rank}` : "—"}</strong><span>{points(data.my_row.points)} баллов</span><CoinAmount value={data.my_row.coins_week} size="s" />{data.my_row.rank_delta != null && <Delta value={data.my_row.rank_delta} />}</div><p className="small secondary">Ваш результат за выбранную неделю виден здесь, на какой бы странице таблицы он ни находился.</p></Card>}
       <Card title="Общая таблица" padded={false}>
         {data.rows.length === 0 ? (
           <EmptyState

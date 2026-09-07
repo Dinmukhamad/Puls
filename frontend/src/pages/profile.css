@@ -14,5 +14,6 @@
 @media (max-width: 680px) { .profile-settings-grid { grid-template-columns: minmax(0, 1fr); } .profile-identity .profile-head { flex-wrap: wrap; } }
 @media (max-width: 380px) { .profile-data-grid { grid-template-columns: minmax(0, 1fr); } }
 
-.profile-account-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-4); }
-.profile-account-actions .btn { flex: 1 1 160px; }
+/* Та же сетка, что и у данных выше: кнопки встают ровно под своими колонками. */
+.profile-account-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); margin-top: var(--sp-5); }
+@media (max-width: 380px) { .profile-account-actions { grid-template-columns: minmax(0, 1fr); } }
