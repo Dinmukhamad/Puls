@@ -538,6 +538,10 @@ a {
   padding: 0 var(--sp-6) var(--sp-6);
 }
 
+.card > .card__body:first-child {
+  padding-top: var(--sp-6);
+}
+
 .card__body--flush {
   padding: var(--sp-4) var(--sp-6);
 }
@@ -2477,6 +2481,10 @@ select.input {
     padding: 0 var(--sp-4) var(--sp-4);
   }
 
+  .card > .card__body:first-child {
+    padding-top: var(--sp-4);
+  }
+
   .card__body--flush {
     padding: var(--sp-3) var(--sp-4);
   }
@@ -2718,4 +2726,3 @@ select.input {
   font-size: var(--text-caption);
   color: var(--text-secondary);
 }
-
