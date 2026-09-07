@@ -22,14 +22,14 @@ STAFF = (Role.SUPERVISOR, Role.HEAD, Role.ADMIN)
 SECTIONS = (
     Section(
         "personal",
-        "Личный кабинет, XP и кошелёк",
-        "Собственные рабочие показатели, опыт и коины участника",
+        "Личный кабинет и кошелёк",
+        "Собственные показатели и коины; для управленческих ролей также личный XP",
         (Role.OPERATOR,),
     ),
     Section(
         "results",
         "Рейтинг и результаты",
-        "Рейтинг команды и личная история места и баллов",
+        "Рейтинг команды; для оператора также личный XP, опыт и уровни",
         tuple(Role),
     ),
     Section(
@@ -125,7 +125,7 @@ async def effective_access(session: AsyncSession, user: User):
     }
 
 
-def request_sections(path: str, method: str) -> tuple[str, ...]:
+def request_sections(path: str, method: str, role: Role | None = None) -> tuple[str, ...]:
     """Alternative section permissions for an endpoint; supporting reference reads are explicit."""
     read = method in ("GET", "HEAD")
     if path.startswith(
@@ -193,6 +193,12 @@ def request_sections(path: str, method: str) -> tuple[str, ...]:
         return ("rewards",)
     if path in ("/me/balance", "/me/badges"):
         return ("personal", "rewards")
-    if path.startswith(("/me/dashboard", "/me/week", "/me/transactions", "/me/xp", "/me/wallet")):
+    if path.startswith("/me/xp"):
+        if role == Role.OPERATOR:
+            # The cabinet still displays an XP summary, while the full history
+            # belongs to the operator's Results section.
+            return ("results",) if path.startswith("/me/xp/history") else ("personal", "results")
+        return ("personal",)
+    if path.startswith(("/me/dashboard", "/me/week", "/me/transactions", "/me/wallet")):
         return ("personal",)
     return ()

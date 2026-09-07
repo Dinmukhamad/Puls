@@ -1,10 +1,8 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { rating } from "../api/endpoints";
-import { useAccess } from "../auth/AccessContext";
-import { useAuth } from "../auth/AuthContext";
 import type { NominationOut, PodiumEntry, RatingRowOut } from "../api/types";
 import { MedalIcon, SearchIcon, SparkIcon } from "../components/icons";
 import {
@@ -17,11 +15,9 @@ import {
   ErrorState,
   Pagination,
   RowsSkeleton,
-  SegmentedControl,
   Skeleton,
 } from "../components/ui";
 import { GlassSurface } from "../components/GlassSurface";
-import { RatingProgressPanel } from "./RatingProgressPanel";
 import { WEEK_STATUS_LABELS, coins, dateTime, periodLabel, points } from "../utils/format";
 
 const MEDAL_LABEL: Record<string, string> = {
@@ -31,13 +27,10 @@ const MEDAL_LABEL: Record<string, string> = {
 };
 
 export function RatingPage() {
-  const { atLeast } = useAuth();
-  const { can } = useAccess();
-  const [params, setParams] = useSearchParams();
-  const tab = (!atLeast("supervisor") || can("personal")) && params.get("tab") === "progress" ? "progress" : "board";
+  const [params] = useSearchParams();
+  if (params.get("tab") === "progress") return <Navigate to="/progress" replace />;
   return <div className="stack"><header className="page-head"><div><h1 className="page-title">Рейтинг</h1><p className="page-subtitle">Результаты команды по неделям</p></div></header>
-    {atLeast("supervisor") && can("personal") && <SegmentedControl label="Раздел рейтинга" value={tab} options={[{ value: "board", label: "Рейтинг команды" }, { value: "progress", label: "Мой прогресс" }]} onChange={(value) => { const next = new URLSearchParams(params); next.set("tab", value); setParams(next); }} />}
-    {tab === "progress" ? <RatingProgressPanel /> : <Leaderboard />}
+    <Leaderboard />
   </div>;
 }
 

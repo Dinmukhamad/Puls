@@ -1,0 +1,21 @@
+.cabinet-page { width: 100%; max-width: 1080px; margin-inline: auto; }
+.week-metric-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--sp-4); }
+.week-metric-group { min-width: 0; border: 1px solid var(--separator); border-radius: var(--radius-l); background: var(--surface-secondary); }
+.week-metric-group__summary { display: flex; align-items: center; gap: var(--sp-3); min-height: 76px; padding: var(--sp-4); cursor: pointer; list-style: none; border-radius: inherit; }
+.week-metric-group__summary::-webkit-details-marker { display: none; }
+.week-metric-group__summary:hover { background: var(--surface-hover); }
+.week-metric-group__sign { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: var(--radius-s); background: var(--accent-tint); color: var(--accent-ink); font-size: 22px; font-weight: 600; }
+.week-metric-group__sign--negative { background: var(--status-warning-tint); color: var(--status-warning-text); }
+.week-metric-group__label { flex: 1; min-width: 0; display: grid; gap: var(--sp-1); overflow-wrap: anywhere; }
+.week-metric-group__count { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.week-metric-group__chevron { flex: none; color: var(--text-secondary); }
+.week-metric-group[open] > summary .week-metric-group__chevron { transform: rotate(180deg); }
+.week-metric-list { display: grid; gap: var(--sp-3); padding: 0 var(--sp-3) var(--sp-3); }
+.week-metric-tile { display: grid; gap: var(--sp-3); padding: var(--sp-4); border: 1px solid var(--separator); border-radius: var(--radius-m); background: var(--surface-primary); }
+.week-metric-tile__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+.week-metric-tile h3 { min-width: 0; font-size: var(--text-secondary-size); font-weight: 600; overflow-wrap: anywhere; }
+.week-metric-tile__score { flex: none; display: grid; justify-items: end; gap: 2px; color: var(--accent-ink); font-size: var(--text-caption); }
+.week-metric-tile__score strong { font-size: 20px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.week-metric-tile__score.is-negative { color: var(--status-warning-text); }
+.week-metric-tile__score.is-missing { color: var(--text-secondary); }
+@media (max-width: 767px) { .week-metric-groups { grid-template-columns: minmax(0, 1fr); } }

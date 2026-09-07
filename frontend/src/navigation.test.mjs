@@ -26,6 +26,24 @@ test("management roles do not have empty operator destinations", () => {
   }
 });
 
+test("operator XP has a single entry in results while the home keeps cabinet and wallet", () => {
+  const sections = nav.visibleNavigation("operator");
+  assert.deepEqual(sections.find((item) => item.id === "home").tabs.map((item) => item.to), ["/cabinet", "/wallet"]);
+  assert.deepEqual(sections.find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/progress"]);
+  assert.equal(sections.flatMap((item) => item.tabs).filter((item) => item.label === "Мой прогресс").length, 1);
+  assert.equal(nav.currentSection("operator", "/progress")?.id, "results");
+  assert.ok(sections.every((item) => item.tabs.every((item) => item.to !== "/rating?tab=progress")));
+});
+
+test("operator XP follows results access independently of cabinet access", () => {
+  const allowed = { ...nav.defaultAccess("operator"), personal: false };
+  assert.equal(nav.currentSection("operator", "/progress", "", allowed)?.id, "results");
+  assert.deepEqual(nav.visibleNavigation("operator", allowed).find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/progress"]);
+  const denied = { ...nav.defaultAccess("operator"), results: false };
+  assert.equal(nav.canVisit("operator", "/progress", denied), false);
+  assert.ok(nav.visibleNavigation("operator", denied).every((item) => item.tabs.every((item) => item.to !== "/progress")));
+});
+
 test("sessions have one developer-only entry and never appear in the profile", () => {
   for (const role of ["operator", "supervisor", "head", "admin"]) {
     const all = Object.fromEntries(Object.keys(nav.defaultAccess(role)).map((key) => [key, true]));
@@ -54,7 +72,7 @@ test("grants add discoverable destinations and revocations remove every tab", ()
       const denied = { ...all, [code]: false };
       for (const item of nav.visibleNavigation(role, denied)) for (const tab of item.tabs) {
         const url = new URL(tab.to, "https://puls.test");
-        assert.notEqual(nav.routeSection(url.pathname, url.search), code);
+        assert.notEqual(nav.routeSection(url.pathname, url.search, role), code);
         assert.equal(nav.currentSection(role, url.pathname, url.search, denied)?.id, item.id);
       }
     }

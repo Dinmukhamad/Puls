@@ -45,11 +45,38 @@ async def test_role_defaults(client, session, role):
         assert allowed[section] is (role == Role.OPERATOR)
     assert allowed["team"] is (role != Role.OPERATOR)
     assert allowed["system"] is (role == Role.ADMIN)
-    for path in ("/me/dashboard", "/me/wallet", "/learning", "/shop/items"):
+    for path in (
+        "/me/dashboard", "/me/wallet", "/me/xp", "/me/xp/history", "/learning", "/shop/items"
+    ):
         result = await client.get(f"/api/v1{path}", headers=headers)
         assert result.status_code == (200 if role == Role.OPERATOR else 403), result.text
     assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 200
     assert (await client.get("/api/v1/me/sessions", headers=headers)).status_code == 403
+
+
+@pytest.mark.parametrize(
+    "personal,results", [(True, True), (True, False), (False, True), (False, False)]
+)
+async def test_operator_xp_moves_to_results_without_losing_cabinet_summary(
+    client, session, operator, personal, results
+):
+    _, admin_headers = await administrator(client, session)
+    response = await change(
+        client,
+        admin_headers,
+        kind="user",
+        ids=[str(operator.id)],
+        changes=[
+            {"section": "personal", "effect": "allow" if personal else "deny"},
+            {"section": "results", "effect": "allow" if results else "deny"},
+        ],
+    )
+    assert response.status_code == 200
+    headers = auth(await login(client, operator.login))
+    summary = await client.get("/api/v1/me/xp", headers=headers)
+    history = await client.get("/api/v1/me/xp/history", headers=headers)
+    assert summary.status_code == (200 if personal or results else 403)
+    assert history.status_code == (200 if results else 403)
 
 
 async def test_precedence_bulk_inherit_and_group_change(client, session, operator, supervisor):

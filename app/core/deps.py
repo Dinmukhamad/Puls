@@ -63,7 +63,7 @@ async def get_current_user(
     access = await effective_access(session, user)
     request.state.section_access = access
     path = request.url.path.removeprefix(settings.API_V1_PREFIX)
-    sections = request_sections(path, request.method)
+    sections = request_sections(path, request.method, user.role)
     request.state.required_sections = sections
     if sections and not any(access["allowed"].get(code, False) for code in sections):
         raise PermissionDeniedError(
