@@ -14,4 +14,5 @@
 @media (max-width: 680px) { .profile-settings-grid { grid-template-columns: minmax(0, 1fr); } .profile-identity .profile-head { flex-wrap: wrap; } }
 @media (max-width: 380px) { .profile-data-grid { grid-template-columns: minmax(0, 1fr); } }
 
-.profile-login-action { margin-top: var(--sp-4); }
+.profile-account-actions { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-4); }
+.profile-account-actions .btn { flex: 1 1 160px; }

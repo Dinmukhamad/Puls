@@ -39,7 +39,10 @@ export function ProfilePage() {
     <div className="profile-settings-grid">
       <Card title="Данные аккаунта" action={can("team") && atLeast("head") ? <Link to={`/admin/users/${user.id}`}>Изменить данные</Link> : undefined}>
         <dl className="profile-data-grid">{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>
-        <Button size="s" className="profile-login-action" onClick={() => setLoginOpen(true)}>Изменить логин</Button>
+        <div className="profile-account-actions">
+          <Button onClick={() => setLoginOpen(true)}>Изменить логин</Button>
+          <Button onClick={() => setSecurityOpen(true)}>Изменить пароль</Button>
+        </div>
       </Card>
       <Card title="Внешний вид" subtitle="Выберите тему или используйте настройки системы">
         <div className="theme-options" role="radiogroup" aria-label="Тема оформления">
@@ -73,7 +76,6 @@ export function ProfilePage() {
               ))}
             </div>
       </Card>
-      <Card title="Пароль" subtitle="Измените пароль для входа в свой аккаунт"><Button onClick={() => setSecurityOpen(true)}>Изменить пароль</Button></Card>
       <PwaInstallCard />
     </div>
     {loginOpen && <LoginSheet current={user.login} onClose={() => setLoginOpen(false)} />}
@@ -232,4 +234,3 @@ function PasswordSheet({ onClose }: { onClose: () => void }) {
     </Sheet>
   );
 }
-
