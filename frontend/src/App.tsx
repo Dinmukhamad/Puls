@@ -10,7 +10,6 @@ import { ErrorState, Skeleton } from "./components/ui";
 import { AdminOperatorsPage } from "./pages/AdminOperatorsPage";
 import { AdminRequestsPage } from "./pages/AdminRequestsPage";
 import { CabinetPage } from "./pages/CabinetPage";
-import { ProfilePage } from "./pages/ProfilePage";
 import { RatingPage } from "./pages/RatingPage";
 import { ShopPage } from "./pages/ShopPage";
 import { UsersPage } from "./pages/UsersPage";
@@ -37,6 +36,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 
 const AccessAdminPage = lazy(() => import("./pages/AccessAdminPage").then((module) => ({ default: module.AccessAdminPage })));
 const DriverAppPage = lazy(() => import("./pages/DriverAppPage").then((module) => ({ default: module.DriverAppPage })));
+const ProfilePage = lazy(() => import("./pages/ProfilePage").then((module) => ({ default: module.ProfilePage })));
 
 export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
@@ -67,7 +67,7 @@ export function App() {
         <Route path="/cabinet" element={<CabinetPage />} />
         <Route path="/rating" element={<RatingPage />} />
         <Route path="/shop" element={<ShopPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile" element={<Suspense fallback={<Skeleton height={300} />}><ProfilePage /></Suspense>} />
         <Route path="/sessions" element={<Navigate to="/admin/sessions" replace />} />
         <Route path="/progress" element={<ProgressPage />} />
         <Route path="/wallet" element={<WalletPage />} />

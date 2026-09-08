@@ -2,6 +2,12 @@ import react from "@vitejs/plugin-react";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { defineConfig, type Plugin } from "vite";
+import releaseDetails from "./src/pwa/release.json";
+
+const builtAt = new Date().toISOString();
+const release = { ...releaseDetails, builtAt,
+  buildId: createHash("sha256").update(builtAt).update(JSON.stringify(releaseDetails)).digest("hex").slice(0, 20),
+};
 
 const PUBLIC_ASSETS = [
   "/manifest.webmanifest", "/offline.html", "/favicon.svg",
@@ -15,6 +21,9 @@ function pulsPwa(): Plugin {
     name: "puls-pwa",
     apply: "build",
     enforce: "post",
+    transformIndexHtml() {
+      return [{ tag: "meta", attrs: { name: "puls-build", content: release.buildId }, injectTo: "head" }];
+    },
     generateBundle(_options, bundle) {
       const template = readFileSync(new URL("./src/pwa/service-worker.js", import.meta.url), "utf8");
       const hash = createHash("sha256").update(template);
@@ -26,13 +35,16 @@ function pulsPwa(): Plugin {
       }
       for (const url of PUBLIC_ASSETS) hash.update(url).update(readFileSync(new URL(`./public${url}`, import.meta.url)));
       const source = template.replace("__BUILD_ID__", hash.digest("hex").slice(0, 20))
-        .replace("__STATIC_URLS__", JSON.stringify(urls.sort()));
+        .replace("__STATIC_URLS__", JSON.stringify(urls.sort()))
+        .replace("__RELEASE__", JSON.stringify(release));
       this.emitFile({ type: "asset", fileName: "sw.js", source });
+      this.emitFile({ type: "asset", fileName: "version.json", source: JSON.stringify(release) });
     },
   };
 }
 
 export default defineConfig({
+  define: { __PULS_RELEASE__: JSON.stringify(release) },
   plugins: [react(), pulsPwa()],
   server: {
     port: 5173,

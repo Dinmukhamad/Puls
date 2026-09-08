@@ -9,8 +9,18 @@
 .pwa-install-button,
 .pwa-error { margin-top: var(--sp-3); }
 .pwa-error { color: var(--status-danger-text); }
+.pwa-update { display:flex; flex-direction:column; gap:12px; padding-bottom:20px; margin-bottom:16px; border-bottom:1px solid var(--border-strong); }
+.pwa-version { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 16px; }
+.pwa-version>span { font-size:12px; color:var(--text-secondary); }
+.pwa-update-status { font-weight:600; }
+.pwa-update-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.pwa-update-actions .btn { flex:1 1 170px; white-space:normal; }
+.pwa-release-notes summary { cursor:pointer; font-weight:600; padding:10px 0; }
+.pwa-release-notes ul { margin:4px 0 0; padding-left:20px; display:grid; gap:8px; font-size:13px; line-height:1.5; color:var(--text-secondary); }
+.pwa-update-dot { display:inline-block; width:9px; height:9px; flex:none; border-radius:50%; background:var(--accent-primary); box-shadow:0 0 0 2px var(--surface-primary); }
+.pwa-update-anchor { position:relative; }
+.pwa-update-anchor>.pwa-update-dot { position:absolute; right:-3px; top:-3px; }
 
 .profile-password-field { display: flex; gap: var(--sp-2); }
 .profile-password-field .input { min-width: 0; }
 .profile-password-field .btn { flex-shrink: 0; }
-

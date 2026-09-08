@@ -8,6 +8,7 @@ const artifact = new URL("../../dist/sw.js", import.meta.url);
 const source = readFileSync(artifact, "utf8");
 const cacheName = source.match(/const CACHE_NAME = "([^"]+)"/)[1];
 const staticUrls = JSON.parse(source.match(/const STATIC_URLS = (\[[^;]+\]);/)[1]);
+const release = JSON.parse(readFileSync(new URL("../../dist/version.json", import.meta.url), "utf8"));
 
 function runtime({ offline = false, windows = 1 } = {}) {
   const handlers = new Map();
@@ -47,7 +48,7 @@ function runtime({ offline = false, windows = 1 } = {}) {
       addEventListener: (event, handler) => handlers.set(event, handler),
       skipWaiting: async () => { activations++; },
       clients: {
-        matchAll: async () => Array.from({ length: windows }, () => ({})),
+        matchAll: async () => Array.from({ length: windows }, (_, index) => ({ id: `window-${index}` })),
         claim: async () => { claimed = true; },
       },
     },
@@ -81,6 +82,10 @@ test("production worker has a content fingerprint and all precache files exist",
   assert.match(cacheName, /^puls-static-[a-f0-9]{20}$/);
   assert.ok(!source.includes("__BUILD_ID__") && !source.includes("__STATIC_URLS__"));
   assert.ok(staticUrls.includes("/offline.html"));
+  assert.ok(!staticUrls.includes("/version.json"));
+  assert.match(release.buildId, /^[a-f0-9]{20}$/);
+  assert.ok(source.includes(release.buildId));
+  assert.ok(readFileSync(new URL("../../dist/index.html", import.meta.url), "utf8").includes(`content="${release.buildId}"`));
   assert.ok(staticUrls.some((path) => path.startsWith("/assets/") && path.endsWith(".js")));
   for (const path of staticUrls) {
     assert.ok(!path.startsWith("/api") && !path.includes("?"));
@@ -106,6 +111,7 @@ test("API, authenticated requests, writes, external resources and unknown paths 
     request("/icons/puls-192.png", { method: "POST" }),
     request("https://api.example/me"), request("/private/export.csv"),
     request("/icons/puls-192.png?user=123"),
+    request("/version.json"),
   ]) assert.equal(await sw.dispatch("fetch", { request: req }), undefined);
   assert.equal(sw.stores.get(cacheName).size, before);
 });
@@ -135,7 +141,7 @@ test("cached build assets work offline without caching runtime responses", async
   assert.equal(online.stores.get(cacheName).has(`${origin}/assets/unknown-script.js`), false);
 });
 
-test("update activates only on explicit message and retains assets needed by other tabs", async () => {
+test("activation preserves old lazy chunks even for a single old tab", async () => {
   const sw = runtime({ windows: 2 });
   sw.stores.set("puls-static-old", new Map());
   sw.stores.set("unrelated-app", new Map());
@@ -149,7 +155,28 @@ test("update activates only on explicit message and retains assets needed by oth
   single.stores.set("puls-static-old", new Map());
   single.stores.set("unrelated-app", new Map());
   await single.dispatch("activate");
+  assert.ok(single.stores.has("puls-static-old") && single.stores.has("unrelated-app"));
+  await single.dispatch("message", { data: { type: "CLIENT_READY", buildId: release.buildId }, source: { id: "window-0" } });
   assert.ok(!single.stores.has("puls-static-old") && single.stores.has("unrelated-app"));
+});
+
+test("all open clients must report the new version before cache cleanup", async () => {
+  const sw = runtime({ windows: 2 });
+  const oldFile = new URL("/assets/old-lazy.js", origin).href;
+  sw.stores.set("puls-static-old", new Map([[oldFile, new Response("old module")]]));
+  await sw.dispatch("activate");
+  await sw.dispatch("message", { data: { type: "CLIENT_READY", buildId: release.buildId }, source: { id: "window-0" } });
+  await sw.dispatch("message", { data: { type: "CLIENT_READY", buildId: "old" }, source: { id: "window-1" } });
+  assert.equal(await (await sw.dispatch("fetch", { request: request("/assets/old-lazy.js") })).text(), "old module");
+  await sw.dispatch("message", { data: { type: "CLIENT_READY", buildId: release.buildId }, source: { id: "window-1" } });
+  assert.equal(sw.stores.has("puls-static-old"), false);
+});
+
+test("worker tells the app which release is actually installed", async () => {
+  const sw = runtime(); let result;
+  await sw.dispatch("message", { data: { type: "GET_RELEASE" }, ports: [{ postMessage(value) { result = value; } }] });
+  assert.equal(result.buildId, release.buildId);
+  assert.equal(result.version, release.version);
 });
 
 test("manifest points to correctly sized PNG icons and permits landscape", () => {

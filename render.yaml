@@ -89,6 +89,18 @@ services:
     # Имена файлов сборки содержат хеш содержимого, поэтому их можно
     # кешировать надолго. Заголовки задаются вложенным списком key/value.
     headers:
+      - path: /version.json
+        headers:
+          - key: Cache-Control
+            value: no-store
+      - path: /sw.js
+        headers:
+          - key: Cache-Control
+            value: no-cache, no-store, must-revalidate
+      - path: /index.html
+        headers:
+          - key: Cache-Control
+            value: no-cache
       - path: /assets/*
         headers:
           - key: Cache-Control
