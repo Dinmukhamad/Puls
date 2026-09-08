@@ -36,6 +36,7 @@ import { WalletPage } from "./pages/WalletPage";
 import { ReportsPage } from "./pages/ReportsPage";
 
 const AccessAdminPage = lazy(() => import("./pages/AccessAdminPage").then((module) => ({ default: module.AccessAdminPage })));
+const DriverAppPage = lazy(() => import("./pages/DriverAppPage").then((module) => ({ default: module.DriverAppPage })));
 
 export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
@@ -57,6 +58,7 @@ export function App() {
 
   return (
     <Routes>
+      <Route path="/simulator" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense></SectionGuard>} />
       <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><SimulatorPage /></SectionGuard>} />
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to={access.home} replace />} />

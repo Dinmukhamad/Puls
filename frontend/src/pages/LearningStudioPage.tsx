@@ -8,6 +8,7 @@ import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSkeleton } from "../components/ui";
 import { dateTime } from "../utils/format";
 import "./learning.css";
+import { DriverParksEditor } from "./DriverParksEditor";
 
 const STATUS = { draft: "Черновик", published: "Опубликовано", archived: "В архиве" };
 const newStep = (): LearningStep => ({ speaker: "", text: "", options: ["", ""], correct: 0, explanation: "" });
@@ -31,6 +32,7 @@ export function LearningStudioPage() {
   return <div className="stack"><div className="page-head"><div><h1 className="page-title">Студия обучения</h1><p className="page-subtitle">Тесты, миссии и сценарии водителя</p></div><Link className="btn btn--secondary" to="/training">Открыть обучение</Link></div>
     <div className="row"><Button variant={tab === "content" ? "primary" : "secondary"} onClick={() => selectTab("content")}>Материалы</Button><Button variant={tab === "results" ? "primary" : "secondary"} onClick={() => selectTab("results")}>Результаты команды</Button></div>
     {tab === "results" ? <LearningResults key={resultKind ?? "all"} kind={resultKind} /> : <>
+      {(kind === "all" || kind === "simulator") && <DriverParksEditor />}
       <div className="training-filters"><label className="field"><span>Тип материала</span><select className="input" value={kind} onChange={(e) => setParams({ kind: e.target.value })}><option value="all">Все материалы</option>{Object.entries(LEARNING_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>{atLeast("head") && <div className="row"><Button onClick={() => setEditor("test")}>+ Тест</Button><Button onClick={() => setEditor("mission")}>+ Миссия</Button><Button onClick={() => setEditor("simulator")}>+ Симуляция</Button></div>}</div>
       {query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
       {!visible?.length && !query.isLoading && !query.isError && <EmptyState title="Материалов пока нет" hint="Создайте задание, добавьте шаги и настройте условия прохождения." />}

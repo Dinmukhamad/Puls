@@ -12,6 +12,7 @@ from app.api.v1 import (
     analytics,
     auth,
     cabinet,
+    driver,
     games,
     learning,
     progress,
@@ -34,6 +35,7 @@ api_router.include_router(admin_users.router)
 api_router.include_router(system.router)
 api_router.include_router(progress.router)
 api_router.include_router(analytics.router)
+api_router.include_router(driver.router)
 api_router.include_router(learning.router)
 api_router.include_router(games.router)
 api_router.include_router(wallet.router)

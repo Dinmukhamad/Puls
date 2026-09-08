@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "npm run build && node --test src/api/client.test.mjs src/pwa/service-worker.test.mjs src/utils/format.test.mjs src/navigation.test.mjs src/pages/operator-pages.test.mjs",
+    "test": "npm run build && node --test src/api/client.test.mjs src/pwa/service-worker.test.mjs src/utils/format.test.mjs src/navigation.test.mjs src/pages/operator-pages.test.mjs src/pages/driver-app.test.mjs",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {

@@ -11,6 +11,7 @@ from app.models.contest import (
     OperatorWeekMetric,
     OperatorWeekResult,
 )
+from app.models.driver import DriverProfile, DriverSettings
 from app.models.enums import (
     BadgeRule,
     MetricDirection,
@@ -38,6 +39,8 @@ __all__ = [
     "CoinAccount",
     "CoinTransaction",
     "ContestWeek",
+    "DriverProfile",
+    "DriverSettings",
     "GamificationSettings",
     "Group",
     "LearningAttempt",

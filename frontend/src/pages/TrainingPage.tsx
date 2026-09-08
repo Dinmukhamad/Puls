@@ -5,6 +5,7 @@ import { useAuth } from "../auth/AuthContext";
 import { Badge, Button, Card, EmptyState, ErrorState, Progress, RowsSkeleton, SegmentedControl } from "../components/ui";
 import { dateOnly } from "../utils/format";
 import "./learning.css";
+import { DriverEntry } from "./DriverEntry";
 
 export function TrainingPage() {
   const [params, setParams] = useSearchParams();
@@ -15,12 +16,14 @@ export function TrainingPage() {
   const kind = params.get("kind") ?? "all", state = params.get("state") ?? "all";
   const items = query.data ?? [];
   const completed = items.filter((item) => item.completed).length;
-  const next = items.find((item) => item.state === "in_progress") ?? items.find((item) => item.is_required && !item.completed) ?? items.find((item) => !item.completed);
-  const visible = items.filter((item) => (kind === "all" || kind === item.kind) && (state === "all" || (state === "passed" ? item.completed : state === item.state)));
+  const assignments = items.filter((item) => item.kind !== "simulator");
+  const next = assignments.find((item) => item.state === "in_progress") ?? assignments.find((item) => item.is_required && !item.completed) ?? assignments.find((item) => !item.completed);
+  const visible = assignments.filter((item) => (kind === "all" || kind === item.kind) && (state === "all" || (state === "passed" ? item.completed : state === item.state)));
   function update(key: string, value: string) { const next = new URLSearchParams(params); next.set(key, value); setParams(next); }
   return <div className="stack training-page">
     <div className="page-head"><div><h1 className="page-title">Обучение</h1><p className="page-subtitle">Знания, решения и практика — шаг за шагом</p></div>{atLeast("supervisor") && <Link className="btn btn--secondary" to="/admin/learning">Студия обучения</Link>}</div>
-    {query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
+    {(kind === "all" || kind === "simulator") && <DriverEntry />}
+    {kind !== "simulator" && <>{query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
     {query.data && <>
       <section className="training-hero"><div><span className="training-eyebrow">ВАШЕ РАЗВИТИЕ</span><h2>Следующий шаг<br />к уверенной работе.</h2><p>Проверяйте знания, разбирайте ситуации и проходите путь водителя.</p></div><div className="training-hero__progress"><strong>{items.length ? Math.round(completed / items.length * 100) : 0}<span>%</span></strong><span>Завершено {completed} из {items.length}</span><Progress value={items.length ? completed / items.length : 0} tone="xp" label="Общий прогресс обучения" /></div></section>
       {next && <Card title={next.state === "in_progress" ? "Продолжить обучение" : "Ваш следующий шаг"} subtitle={next.title} action={<Button variant="primary" disabled={start.isPending} onClick={() => start.mutate(next.id)}>{next.state === "in_progress" ? "Продолжить" : "Начать"}</Button>}><p className="secondary">{LEARNING_LABELS[next.kind]} · {next.minutes} мин · {next.answered ?? 0} из {next.step_count} шагов</p></Card>}
@@ -29,7 +32,7 @@ export function TrainingPage() {
       {!visible.length && <EmptyState title={items.length ? "Таких заданий пока нет" : "Обучение скоро появится"} hint={items.length ? "Выберите другой раздел или статус." : "Опубликованные руководителем тесты и сценарии появятся здесь."} />}
       <div className="training-grid">{visible.map((item) => <LearningCard key={item.id} item={item} pending={start.isPending} onStart={() => start.mutate(item.id)} />)}</div>
     </>}
-    {start.isError && <ErrorState error={start.error} />}
+    {start.isError && <ErrorState error={start.error} />}</>}
   </div>;
 }
 
