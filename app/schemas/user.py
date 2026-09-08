@@ -8,6 +8,7 @@ from string import ascii_letters, digits
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from app.core.config import settings
+from app.core.phone import normalize_phone
 from app.models.enums import Role
 from app.schemas.common import ORMModel
 
@@ -39,6 +40,7 @@ class UserOut(ORMModel):
     id: int
     login: str
     email: str | None = None
+    phone: str | None = None
     full_name: str
     role: Role
     is_active: bool
@@ -60,7 +62,16 @@ class PasswordMixin(BaseModel):
         return value
 
 
-class UserCreate(PasswordMixin):
+class PhoneMixin(BaseModel):
+    phone: str | None = Field(default=None, max_length=40)
+
+    @field_validator("phone")
+    @classmethod
+    def _normalize_phone(cls, value):
+        return normalize_phone(value)
+
+
+class UserCreate(PasswordMixin, PhoneMixin):
     login: str = Field(min_length=3, max_length=150)
     full_name: str = Field(min_length=3, max_length=255)
     email: EmailStr | None = None
@@ -74,7 +85,7 @@ class UserCreate(PasswordMixin):
         return value.strip() if isinstance(value, str) else value
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(PhoneMixin):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     full_name: str | None = Field(default=None, min_length=3, max_length=255)

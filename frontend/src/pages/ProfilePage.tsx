@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from "react";
+import { lazy, Suspense, useId, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { auth } from "../api/endpoints";
@@ -12,6 +12,8 @@ import { useToast } from "../components/Toast";
 import { PwaInstallCard } from "../pwa/PwaProvider";
 import { ROLE_LABELS, dateOnly } from "../utils/format";
 import "./profile.css";
+
+const TelegramCard = lazy(() => import("../components/TelegramCard").then((module) => ({ default: module.TelegramCard })));
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: (props: { size?: number }) => JSX.Element }[] = [
   { value: "system", label: "Система", icon: DisplayIcon },
@@ -29,6 +31,7 @@ export function ProfilePage() {
   const fields = [
     { label: "Логин", value: user.login },
     { label: "Роль", value: ROLE_LABELS[user.role] },
+    { label: "Телефон", value: user.phone || "Не указан · обратитесь к руководителю" },
     ...(user.email ? [{ label: "Электронная почта", value: user.email }] : []),
     ...(user.group ? [{ label: "Группа", value: user.group.name }] : []),
     ...(user.hired_on ? [{ label: "В компании с", value: dateOnly(user.hired_on) }] : []),
@@ -76,6 +79,7 @@ export function ProfilePage() {
               ))}
             </div>
       </Card>
+      {can("training") && <Suspense fallback={<Card title="Telegram для входа"><p role="status">Загрузка…</p></Card>}><TelegramCard /></Suspense>}
       <PwaInstallCard />
     </div>
     {loginOpen && <LoginSheet current={user.login} onClose={() => setLoginOpen(false)} />}

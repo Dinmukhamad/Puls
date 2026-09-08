@@ -8,12 +8,14 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import Request
-from sqlalchemy import update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import create_access_token, create_refresh_token
+from app.models.driver_auth import DriverDevice
 from app.models.session import LoginSession
+from app.models.user import User
 from app.schemas.user import Token
 
 
@@ -60,6 +62,9 @@ async def revoke_user_sessions(
     user_id: int,
     except_id: str | None = None,
 ) -> None:
+    # Общий порядок блокировок с подтверждением кода: сначала пользователь.
+    await session.scalar(select(User.id).where(User.id == user_id).with_for_update())
+    await session.execute(delete(DriverDevice).where(DriverDevice.user_id == user_id))
     conditions = [LoginSession.user_id == user_id, LoginSession.revoked_at.is_(None)]
     if except_id:
         conditions.append(LoginSession.id != except_id)

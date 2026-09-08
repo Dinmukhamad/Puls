@@ -1,33 +1,70 @@
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Header, Response
 from sqlalchemy import select
 
 from app.core.deps import CurrentUser, HeadUser, SessionDep, StaffUser
 from app.models.driver import DriverSettings
+from app.models.driver_auth import DriverDevice
 from app.models.user import User
 from app.schemas.driver import DriverAction, DriverParksInput
-from app.services import driver
+from app.schemas.telegram import DriverCode, DriverPhone
+from app.services import driver, driver_auth, telegram
 from app.services.rules import write_audit
 
 router = APIRouter(tags=["Driver Simulator"])
+DeviceToken = Annotated[str | None, Header(alias="X-Driver-Device", max_length=100)]
 
 
 @router.get("/learning/driver")
-async def state(session: SessionDep, user: CurrentUser):
-    return await driver.state(session, user.id)
+async def state(
+    session: SessionDep, user: CurrentUser, response: Response, device: DeviceToken = None
+):
+    response.headers["Cache-Control"] = "no-store"
+    return await driver.state(session, user.id, device)
 
 
 @router.post("/learning/driver/start")
-async def start(session: SessionDep, user: CurrentUser):
+async def start(session: SessionDep, user: CurrentUser, device: DeviceToken = None):
     await driver.start(session, user.id)
     await session.commit()
-    return await driver.state(session, user.id)
+    return await driver.state(session, user.id, device)
 
 
 @router.put("/learning/driver/action")
-async def action(session: SessionDep, user: CurrentUser, payload: DriverAction):
-    await driver.act(session, user.id, payload)
+async def action(
+    session: SessionDep, user: CurrentUser, payload: DriverAction, device: DeviceToken = None
+):
+    await driver.act(session, user.id, payload, device)
     await session.commit()
-    return await driver.state(session, user.id)
+    return await driver.state(session, user.id, device)
+
+
+@router.post("/learning/driver/code")
+async def send_code(
+    session: SessionDep, user: CurrentUser, payload: DriverPhone, device: DeviceToken = None
+):
+    await driver_auth.issue_code(session, user.id, device, payload.phone)
+    return await driver.state(session, user.id, device)
+
+
+@router.post("/learning/driver/verify")
+async def verify_code(
+    session: SessionDep, user: CurrentUser, payload: DriverCode, device: DeviceToken = None
+):
+    await driver_auth.verify_code(session, user.id, device, payload.code)
+    return await driver.state(session, user.id, device)
+
+
+@router.delete("/learning/driver/device")
+async def forget_device(session: SessionDep, user: CurrentUser, device: DeviceToken = None):
+    await telegram.lock_user(session, user.id)
+    hashed = driver_auth.device_hash(user.id, device)
+    record = await session.get(DriverDevice, hashed) if hashed else None
+    if record:
+        await session.delete(record)
+        await session.commit()
+    return await driver.state(session, user.id, device)
 
 
 @router.get("/admin/learning/driver-parks")

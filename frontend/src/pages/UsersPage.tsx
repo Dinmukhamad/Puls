@@ -104,6 +104,7 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
   const [fullName, setFullName] = useState(target?.full_name ?? "");
   const [login, setLogin] = useState("");
   const [email, setEmail] = useState(target?.email ?? "");
+  const [phone, setPhone] = useState(target?.phone ?? "");
   const [role, setRole] = useState<Role>(target?.role ?? "operator");
   const [groupId, setGroupId] = useState(target?.group ? String(target.group.id) : "");
   const [hiredOn, setHiredOn] = useState(target?.hired_on ?? "");
@@ -111,7 +112,7 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
   const [showPassword, setShowPassword] = useState(false);
   const save = useMutation({
     mutationFn: () => {
-      const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, role, group_id: groupId ? Number(groupId) : null, hired_on: hiredOn || null };
+      const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, phone: phone.trim() || null, role, group_id: groupId ? Number(groupId) : null, hired_on: hiredOn || null };
       return target ? team.updateUser(target.id, data) : team.createUser({ ...data, login: login.trim(), password });
     },
     onSuccess: () => {
@@ -133,6 +134,7 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
       <label className="field"><span className="field__label">ФИО</span><input className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required minLength={3} maxLength={255} /></label>
       {!target && <label className="field"><span className="field__label">Логин</span><input className="input" autoComplete="off" value={login} onChange={(e) => setLogin(e.target.value)} required minLength={3} maxLength={150} /></label>}
       <label className="field"><span className="field__label">Email · необязательно</span><input className="input" type="email" autoComplete="email" value={email} maxLength={255} onChange={(e) => setEmail(e.target.value)} /></label>
+      <label className="field"><span className="field__label">Телефон</span><input className="input" type="tel" autoComplete="tel" placeholder="+7 700 123 45 67" value={phone} maxLength={40} onChange={(e) => setPhone(e.target.value)} /><span className="field__note">Нужен для входа в Driver Simulator. Один номер — один сотрудник. После смены номера потребуется новый код из Telegram.</span></label>
       <div className="team-form-grid"><label className="field"><span className="field__label">Роль</span><select className="input" value={role} disabled={target?.id === actor?.id} onChange={(e) => setRole(e.target.value as Role)}>{roles.filter((r) => r !== "admin" || actor?.role === "admin").map((r) => <option value={r} key={r}>{ROLE_LABELS[r]}</option>)}</select></label>
         <label className="field"><span className="field__label">Группа</span><select className="input" value={groupId} onChange={(e) => setGroupId(e.target.value)}><option value="">Без группы</option>{groups.filter((g) => g.is_active || g.id === target?.group?.id).map((g) => <option key={g.id} value={g.id} disabled={!g.is_active}>{g.name}{g.is_active ? "" : " · архив"}</option>)}</select></label></div>
       <label className="field"><span className="field__label">Дата приёма · необязательно</span><input className="input" type="date" value={hiredOn} onChange={(e) => setHiredOn(e.target.value)} /></label>

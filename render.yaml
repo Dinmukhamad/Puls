@@ -34,6 +34,14 @@ services:
       # Схемой управляет Alembic, автосоздание таблиц выключено.
       - key: AUTO_CREATE_SCHEMA
         value: "false"
+      # Токен @puls_i_bot добавьте вручную в Environment сервиса API.
+      # Без токена обычный Puls работает, подтверждение Driver Simulator закрыто.
+      - key: TELEGRAM_BOT_USERNAME
+        value: puls_i_bot
+      - key: TELEGRAM_WEBHOOK_URL
+        value: https://gamification-api-lbtb.onrender.com/api/v1/auth/telegram/webhook
+      - key: DRIVER_DEVICE_DAYS
+        value: "30"
       # Справочники (показатели, номинации, бейджи, каталог) досоздаются
       # идемпотентно: уже настроенные записи не трогаются.
       - key: SEED_REFERENCE_DATA

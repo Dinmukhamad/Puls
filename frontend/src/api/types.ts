@@ -42,6 +42,7 @@ export interface GroupBrief {
 }
 
 export interface UserOut {
+  phone: string | null;
   id: number;
   login: string;
   email: string | null;

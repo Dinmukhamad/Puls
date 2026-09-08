@@ -65,6 +65,7 @@ export function IconButton({
  * -------------------------------------------------------------------------- */
 
 export function Card({
+  id,
   title,
   subtitle,
   action,
@@ -73,6 +74,7 @@ export function Card({
   variant = "standard",
   className = "",
 }: {
+  id?: string;
   title?: ReactNode;
   subtitle?: ReactNode;
   action?: ReactNode;
@@ -82,7 +84,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <section className={`card card--${variant} ${className}`.trim()}>
+    <section id={id} className={`card card--${variant} ${className}`.trim()}>
       {(title || action) && (
         <header className="card__head">
           <div className="card__titles">

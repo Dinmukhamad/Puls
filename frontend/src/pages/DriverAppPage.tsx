@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { driver, type DriverAction, type DriverPark, type DriverProfile } from "../api/driver";
+import { driver, type DriverAction, type DriverAuthentication, type DriverPark, type DriverProfile } from "../api/driver";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { SimulatorMap, type Position } from "../components/SimulatorMap";
@@ -26,10 +26,15 @@ export function driverSection(value: string | null): DriverSection {
 export function DriverAppPage() {
   const { user } = useAuth();
   const client = useQueryClient();
-  const query = useQuery({ queryKey: ["driver-profile"], queryFn: driver.state, refetchOnWindowFocus: false });
+  const query = useQuery({ queryKey: ["driver-profile"], queryFn: driver.state, refetchOnWindowFocus: "always", refetchInterval: 60000 });
   const [params, setParams] = useSearchParams();
   const [booting, setBooting] = useState(true);
   const [position, setPosition] = useState<Position | null>(null);
+  const [phone, setPhone] = useState("");
+  const saveState = (data: Awaited<ReturnType<typeof driver.state>>) => client.setQueryData(["driver-profile"], data);
+  const sendCode = useMutation({ mutationFn: driver.code, onSuccess: saveState });
+  const verify = useMutation({ mutationFn: driver.verify, onSuccess: saveState, onError: () => { void query.refetch(); } });
+  const forget = useMutation({ mutationFn: driver.forget, onSuccess: saveState });
   const action = useMutation({ mutationFn: driver.action, onSuccess: (data) => {
     client.setQueryData(["driver-profile"], data);
     if (data.profile?.stage === "offline") setParams({}, { replace: true });
@@ -60,13 +65,54 @@ export function DriverAppPage() {
   if (booting || query.isLoading) return <DriverSplash />;
   const profile = query.data?.profile;
   if (!profile) return <div className="driver-app"><DriverHeader /><div className="driver-content driver-content--center"><h1>Driver Simulator</h1><p>Запустите учебный профиль из раздела обучения.</p><Link className="driver-primary" to="/training?kind=simulator">Открыть обучение</Link></div></div>;
+  if (profile.stage === "phone" || profile.stage === "otp") return <div className="driver-app"><DriverHeader /><DriverLogin
+    stage={profile.stage} authentication={query.data!.authentication} parkName={profile.park?.name ?? ""}
+    phone={phone} onPhone={setPhone} busy={sendCode.isPending || verify.isPending || action.isPending}
+    error={verify.error || sendCode.error || action.error}
+    onSend={() => { verify.reset(); sendCode.mutate(phone || user?.phone || ""); }}
+    onVerify={(code) => { sendCode.reset(); verify.mutate(code); }}
+    onBack={() => { sendCode.reset(); verify.reset(); mutate({ action: "services" }); }}
+    onRefresh={() => query.refetch()}
+  /></div>;
   return <DriverScreen
     profile={profile} parks={query.data!.parks} fullName={user?.full_name ?? ""}
-    section={driverSection(params.get("section"))} position={position} busy={action.isPending}
+    section={driverSection(params.get("section"))} position={position} busy={action.isPending || forget.isPending}
     onSection={(section) => setParams(section === "orders" ? {} : { section })}
     onAction={(payload) => { action.reset(); mutate(payload); }}
-    error={action.error} onRefresh={() => query.refetch()}
+    error={action.error || forget.error} onRefresh={() => query.refetch()} onForget={() => forget.mutate()}
   />;
+}
+
+interface DriverLoginProps {
+  stage: "phone" | "otp"; authentication: DriverAuthentication; parkName: string;
+  phone: string; onPhone: (value: string) => void; busy: boolean; error?: unknown;
+  onSend: () => void; onVerify: (code: string) => void; onBack: () => void; onRefresh: () => void;
+}
+export function DriverLogin({ stage, authentication, parkName, phone, onPhone, busy, error, onSend, onVerify, onBack, onRefresh }: DriverLoginProps) {
+  const [code, setCode] = useState("");
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => { setCode(""); }, [authentication.code_expires_at]);
+  const seconds = Math.min(60, Math.max(0, Math.ceil(((authentication.next_send_at ? Date.parse(authentication.next_send_at) : 0) - now) / 1000)));
+  const expired = !!authentication.code_expires_at && Date.parse(authentication.code_expires_at) <= now;
+  const ready = authentication.phone_set && authentication.telegram_connected && authentication.telegram_configured;
+  function submit(event: FormEvent) { event.preventDefault(); if (!busy && ready) { if (stage === "otp") { if (/^\d{6}$/.test(code) && !expired) onVerify(code); } else onSend(); } }
+  return <main className="driver-auth">
+    <button className="driver-back" disabled={busy} onClick={onBack}>‹ Выбрать другой парк</button>
+    <div className="driver-auth__intro"><DriverMark /><p className="driver-muted">{parkName}</p><h1>{stage === "otp" ? "Код из Telegram" : "Ваш номер телефона"}</h1><p className="driver-muted">{stage === "otp" ? "Введите 6 цифр из личного сообщения бота. Код действует 5 минут." : "Укажите номер, который руководитель записал в вашем профиле Puls."}</p></div>
+    {!ready ? <section className="driver-card driver-auth__setup">
+      {!authentication.phone_set && <p>В профиле пока нет номера телефона. Попросите руководителя добавить его в карточку сотрудника.</p>}
+      {!authentication.telegram_configured ? <p>Бот ещё не подключён на сервере. Администратору нужно завершить настройку.</p> : !authentication.telegram_connected && <><p>Сначала подключите свой Telegram и запустите бота по личной ссылке.</p><Link className="driver-primary" to="/profile#telegram">Подключить Telegram</Link></>}
+      <button className="driver-secondary" onClick={onRefresh}>Проверить ещё раз</button>
+    </section> : <form className="driver-auth__form" onSubmit={submit}>
+      {stage === "phone" ? <label><span>Номер телефона</span><input type="tel" autoComplete="tel" placeholder="+7 700 123 45 67" required maxLength={40} value={phone} onChange={(event) => onPhone(event.target.value)} disabled={busy} /></label> : <label><span>Код подтверждения</span><input className="driver-auth__code" type="text" inputMode="numeric" autoComplete="one-time-code" placeholder="000000" pattern="[0-9]{6}" maxLength={6} required value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} disabled={busy} /></label>}
+      {expired && <p role="status">Срок действия кода закончился. Запросите новый.</p>}
+      <button className="driver-primary" type="submit" disabled={busy || (stage === "otp" ? code.length !== 6 || expired : !phone.trim() || seconds > 0)}>{busy ? "Подождите…" : stage === "otp" ? "Подтвердить и войти" : seconds ? `Новый код через ${seconds} с` : "Получить код в Telegram"}</button>
+      {stage === "otp" && <button className="driver-secondary" type="button" disabled={busy || seconds > 0} onClick={onSend}>{seconds ? `Отправить ещё раз через ${seconds} с` : "Отправить код ещё раз"}</button>}
+      <p className="driver-auth__note">Подтверждённый браузер запоминается на {authentication.remember_days} дней. После смены телефона, пароля или Telegram потребуется новый код.</p>
+    </form>}
+    {error instanceof Error && <p role="alert" className="driver-auth__error">{error.message}</p>}
+  </main>;
 }
 
 function DriverArrow({ size = 24 }: { size?: number }) {
@@ -88,9 +134,9 @@ export function DriverLoading() {
 interface ScreenProps {
   profile: DriverProfile; parks: DriverPark[]; fullName: string; section: DriverSection;
   position: Position | null; busy: boolean; error?: unknown;
-  onAction: (action: DriverAction) => void; onSection: (section: DriverSection) => void; onRefresh: () => void;
+  onAction: (action: DriverAction) => void; onSection: (section: DriverSection) => void; onRefresh: () => void; onForget?: () => void;
 }
-export function DriverScreen({ profile, parks, fullName, section, position, busy, error, onAction, onSection, onRefresh }: ScreenProps) {
+export function DriverScreen({ profile, parks, fullName, section, position, busy, error, onAction, onSection, onRefresh, onForget }: ScreenProps) {
   const offline = profile.stage === "offline";
   return <div className="driver-app">
     <DriverHeader />
@@ -112,8 +158,8 @@ export function DriverScreen({ profile, parks, fullName, section, position, busy
       {section === "results" && <div className="driver-section"><h1>Результаты</h1><div className="driver-card"><h2>Работа в приложении</h2><DriverRow title="Выполнено заказов" value="0" /><DriverRow title="Приоритет" value="0" /><DriverRow title="Время на линии" value="0 ч" /></div><div className="driver-card"><h2>Вход в приложение</h2><DriverRow title="Статус" value="Вход завершён" />{profile.last_login_at && <DriverRow title="Последний вход" value={dateTime(profile.last_login_at)} />}</div></div>}
       {section === "income" && <div className="driver-section"><h1>Доход</h1><div className="driver-card driver-money"><span>Учебный баланс</span><strong>0 ₸</strong></div><div className="driver-card"><DriverRow title="Доход от заказов" value="0 ₸" /><DriverRow title="Комиссия выбранного парка" value={`${profile.park?.commission ?? 0}%`} /></div><div className="driver-card"><h2>История операций</h2><p className="driver-muted">Операций пока нет</p></div></div>}
       {section === "messages" && <div className="driver-section"><h1>Сообщения</h1><div className="driver-card driver-empty"><InboxIcon size={36} /><h2>Сообщений пока нет</h2></div></div>}
-      {section === "profile" && <div className="driver-section"><h1>Профиль</h1><div className="driver-identity"><DriverMark /><div><h2>{fullName}</h2><p>Учебный профиль водителя</p></div></div><div className="driver-card"><DriverRow title="Состояние" value="Офлайн" /><DriverRow title="Сервис" value="Такси" /><DriverRow title="Парк" value={profile.park?.name ?? "—"} /><DriverRow title="Комиссия парка" value={`${profile.park?.commission ?? 0}%`} /><DriverRow title="Профиль создан" value={dateTime(profile.created_at)} /></div><div className="driver-card driver-menu"><button disabled={busy} onClick={() => onAction({ action: "services" })}><span>Мои сервисы и парк</span><ChevronRightIcon /></button><button onClick={() => onSection("learning")}><span><SparkIcon /> Обучение</span><ChevronRightIcon /></button><Link to="/training?kind=simulator"><span>Выйти из симулятора</span><ChevronRightIcon /></Link></div></div>}
-      {section === "learning" && <div className="driver-section"><button className="driver-back" onClick={() => onSection("profile")}>‹ Профиль</button><h1>Обучение</h1><div className="driver-card"><h2>Вход в приложение</h2><p>Запуск → Такси → выбор парка → загрузка профиля → карта.</p><DriverRow title="Статус" value="Вход завершён" /></div></div>}
+      {section === "profile" && <div className="driver-section"><h1>Профиль</h1><div className="driver-identity"><DriverMark /><div><h2>{fullName}</h2><p>Учебный профиль водителя</p></div></div><div className="driver-card"><DriverRow title="Состояние" value="Офлайн" /><DriverRow title="Сервис" value="Такси" /><DriverRow title="Парк" value={profile.park?.name ?? "—"} /><DriverRow title="Комиссия парка" value={`${profile.park?.commission ?? 0}%`} /><DriverRow title="Профиль создан" value={dateTime(profile.created_at)} /></div><div className="driver-card driver-menu"><button disabled={busy} onClick={() => onAction({ action: "services" })}><span>Мои сервисы и парк</span><ChevronRightIcon /></button><button onClick={() => onSection("learning")}><span><SparkIcon /> Обучение</span><ChevronRightIcon /></button>{onForget && <button disabled={busy} onClick={onForget}><span>Сбросить подтверждение этого браузера</span><ChevronRightIcon /></button>}<Link to="/training?kind=simulator"><span>Выйти из симулятора</span><ChevronRightIcon /></Link></div></div>}
+      {section === "learning" && <div className="driver-section"><button className="driver-back" onClick={() => onSection("profile")}>‹ Профиль</button><h1>Обучение</h1><div className="driver-card"><h2>Вход в приложение</h2><p>Запуск → Такси → выбор парка → номер и код из Telegram → загрузка профиля → карта.</p><DriverRow title="Статус" value="Вход завершён" /></div></div>}
     </main>}
     {!!error && <div className="driver-error"><ErrorState error={error} onRetry={profile.stage === "loading" ? () => onAction({ action: "enter" }) : onRefresh} /></div>}
     {offline && <nav className="driver-nav" aria-label="Разделы водительского приложения">{DRIVER_SECTIONS.map(({ id, title, Icon }) => <button key={id} className={section === id || (id === "profile" && section === "learning") ? "is-active" : undefined} aria-current={section === id || (id === "profile" && section === "learning") ? "page" : undefined} onClick={() => onSection(id)}><Icon size={22} /><span>{title}</span></button>)}</nav>}

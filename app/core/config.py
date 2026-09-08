@@ -5,7 +5,7 @@ import json
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     PASSWORD_MIN_LENGTH: int = 8
     # Единственный аккаунт разработчика; назначается на сервере, не через роли в UI.
     DEVELOPER_LOGIN: str = "admin"
+
+    # --- Telegram: только вход в Driver Simulator ---
+    TELEGRAM_BOT_TOKEN: SecretStr = SecretStr("")
+    TELEGRAM_BOT_USERNAME: str = ""
+    TELEGRAM_WEBHOOK_URL: str = ""
+    DRIVER_DEVICE_DAYS: int = Field(default=30, ge=1, le=90)
 
     # --- CORS ---
     #: Задаётся списком через запятую: "https://app.example.com,https://admin.example.com"

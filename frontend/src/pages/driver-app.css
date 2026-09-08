@@ -9,6 +9,20 @@
 .driver-app button,.driver-app a { -webkit-tap-highlight-color:transparent; }
 .driver-app button { font:inherit; cursor:pointer; }
 .driver-app button:disabled { cursor:default; }
+.driver-auth { width:100%; max-width:480px; margin:0 auto; padding:12px 24px calc(32px + env(safe-area-inset-bottom)); overflow:auto; display:flex; flex-direction:column; gap:24px; }
+.driver-auth__intro { display:flex; flex-direction:column; align-items:flex-start; gap:14px; }
+.driver-auth__intro h1 { font-size:30px; }
+.driver-auth__intro p { font-size:15px; }
+.driver-auth__form,.driver-auth__setup { display:flex; flex-direction:column; gap:16px; }
+.driver-auth__form label { display:flex; flex-direction:column; gap:8px; font-size:13px; color:var(--driver-muted); }
+.driver-auth__form input { width:100%; min-height:60px; background:var(--driver-surface); color:var(--driver-text); border:1px solid #494940; border-radius:16px; padding:16px; font:inherit; font-size:20px; }
+.driver-auth__form input::placeholder { color:#87877f; opacity:1; }
+.driver-auth__form .driver-auth__code { font-size:28px; letter-spacing:.32em; text-align:center; }
+.driver-auth .driver-primary { border:0; min-height:56px; }
+.driver-auth button:disabled { opacity:.5; }
+.driver-secondary { padding:12px 16px; border:1px solid #494940; border-radius:16px; background:none; color:var(--driver-text); min-height:48px; }
+.driver-auth__note { font-size:12px; color:var(--driver-muted); }
+.driver-auth__error { padding:14px 16px; border-radius:16px; background:#382321; color:#ffc9c3; font-size:14px; }
 .driver-app :focus-visible,#driver-parks :focus-visible { outline:3px solid #ffe128; outline-offset:4px; }
 .driver-app h1 { font-size:28px; line-height:1.2; letter-spacing:-.025em; margin:0; }
 .driver-app h2 { font-size:20px; line-height:1.3; margin:0; }

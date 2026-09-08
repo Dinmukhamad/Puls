@@ -22,7 +22,7 @@ export function DriverEntry() {
       {query.isLoading ? <RowsSkeleton rows={2} /> : query.isError ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : <>
         <div className="row"><Badge tone={unfinished ? "accent" : profile?.last_login_at ? "success" : "neutral"}>{unfinished ? "Вход не завершён" : profile ? "Вход пройден" : "Ещё не запускали"}</Badge></div>
         {profile?.last_login_at && <p className="secondary small">Последний вход: {dateTime(profile.last_login_at)}</p>}
-        {unfinished && <p>Сохранён этап: {profile.stage === "services" ? "Мои сервисы" : profile.stage === "cooperation" ? "Выбор парка" : "Загрузка профиля"}.</p>}
+        {unfinished && <p>Сохранён этап: {({ services: "Мои сервисы", cooperation: "Выбор парка", phone: "Номер телефона", otp: "Код из Telegram", loading: "Загрузка профиля", offline: "Вход завершён" })[profile.stage]}.</p>}
         {last && <p className="small">Последний результат: <Link to={`/simulator/attempts/${last.attempt_id}`}>{last.title} · {last.state === "passed" ? "Пройдено" : "Не пройдено"}{last.score !== null ? ` · ${last.score}%` : ""}</Link></p>}
         <div className="row">
           {unfinished && <Link className="btn btn--primary" to="/simulator">Продолжить вход</Link>}

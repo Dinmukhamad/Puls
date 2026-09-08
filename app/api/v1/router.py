@@ -19,12 +19,14 @@ from app.api.v1 import (
     rating,
     shop,
     system,
+    telegram,
     wallet,
 )
 
 api_router = APIRouter()
 api_router.include_router(access.router)
 api_router.include_router(auth.router)
+api_router.include_router(telegram.router)
 api_router.include_router(cabinet.router)
 api_router.include_router(rating.router)
 api_router.include_router(shop.router)

@@ -5,6 +5,7 @@ from app.db.base import utcnow
 from app.models.driver import DriverProfile, DriverSettings
 from app.models.learning import LearningAttempt, LearningContent
 from app.models.user import User
+from app.services import driver_auth
 
 # Начальные учебные варианты из предоставленного примера. После сохранения
 # в студии используются настройки администратора, включая количество парков.
@@ -32,7 +33,7 @@ def profile_data(profile):
     }
 
 
-async def state(session, user_id):
+async def state(session, user_id, device_token=None):
     last = await session.scalar(
         select(LearningAttempt)
         .join(LearningContent, LearningContent.id == LearningAttempt.content_id)
@@ -44,8 +45,19 @@ async def state(session, user_id):
         .order_by(LearningAttempt.finished_at.desc(), LearningAttempt.id.desc())
         .limit(1)
     )
+    authentication = await driver_auth.device_state(session, user_id, device_token)
+    profile = profile_data(await session.get(DriverProfile, user_id))
+    if (
+        profile
+        and profile["stage"] in ("phone", "loading", "offline")
+        and not authentication["verified"]
+    ):
+        profile["stage"] = "otp" if authentication["code_pending"] else "phone"
+    elif profile and profile["stage"] == "phone" and authentication["verified"]:
+        profile["stage"] = "loading"
     return {
-        "profile": profile_data(await session.get(DriverProfile, user_id)),
+        "profile": profile,
+        "authentication": authentication,
         "parks": await parks(session),
         "last_result": {
             "attempt_id": last.id,
@@ -71,7 +83,7 @@ async def start(session, user_id):
     return profile
 
 
-async def act(session, user_id, payload):
+async def act(session, user_id, payload, device_token=None):
     profile = await session.scalar(
         select(DriverProfile).where(DriverProfile.user_id == user_id).with_for_update()
     )
@@ -92,11 +104,13 @@ async def act(session, user_id, payload):
             raise ConflictError("Этот парк больше недоступен. Обновите список и выберите другой.")
         # Снимок сохраняет выбранные условия даже после редактирования справочника.
         profile.park = dict(park)
-        profile.stage = "loading"
+        verified = (await driver_auth.device_state(session, user_id, device_token))["verified"]
+        profile.stage = "loading" if verified else "phone"
     elif payload.action == "enter":
-        if profile.stage not in ("loading", "offline") or not profile.park:
+        await driver_auth.require_verified(session, user_id, device_token)
+        if profile.stage not in ("phone", "loading", "offline") or not profile.park:
             raise ConflictError("Сначала выберите вариант сотрудничества")
-        if profile.stage == "loading":
+        if profile.stage in ("phone", "loading"):
             profile.last_login_at = utcnow()
             profile.stage = "offline"
     await session.flush()

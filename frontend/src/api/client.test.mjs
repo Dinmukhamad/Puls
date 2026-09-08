@@ -23,6 +23,21 @@ const json = (value, status = 200) => Response.json(value, { status });
 const oldToken = { access_token: "old-access", refresh_token: "old-refresh" };
 const newToken = { access_token: "new-access", refresh_token: "new-refresh" };
 
+test("driver proof survives refresh and cannot override the Puls access token", async () => {
+  const api = await setup(); api.tokenStore.save(oldToken);
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    if (url.endsWith("/refresh")) return json(newToken);
+    requests.push(options.headers);
+    return options.headers.Authorization === "Bearer new-access" ? json({ ok: true }) : json({}, 401);
+  };
+  assert.deepEqual(await api.request("/driver", { headers: { "X-Driver-Device": "browser-proof", Authorization: "forged" } }), { ok: true });
+  assert.deepEqual(requests, [
+    { "X-Driver-Device": "browser-proof", Authorization: "Bearer old-access" },
+    { "X-Driver-Device": "browser-proof", Authorization: "Bearer new-access" },
+  ]);
+});
+
 test("section revocation refreshes permissions without clearing the login", async () => {
   const api = await setup(); api.tokenStore.save(oldToken);
   let notifications = 0;

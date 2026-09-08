@@ -22,10 +22,38 @@ async function component(path, overrides = {}) {
   new Function("require", "module", "exports", built.outputFiles[0].text)((name) => mocks[name] ?? require(name), module, module.exports);
   return module.exports;
 }
-const { DriverScreen, DriverSplash, DriverLoading, DRIVER_SECTIONS, driverSection } = await component("./DriverAppPage.tsx");
+const { DriverScreen, DriverSplash, DriverLoading, DriverLogin, DRIVER_SECTIONS, driverSection } = await component("./DriverAppPage.tsx");
 const parks = [{ id: "one", name: "Первый учебный парк", commission: 2.5 }, { id: "two", name: "Второй парк", commission: 0 }];
 const profile = { stage: "offline", service: "taxi", park: parks[1], created_at: "2026-09-07T12:00:00Z", last_login_at: "2026-09-07T12:02:00Z" };
 const base = { profile, parks, fullName: "Учебный оператор", section: "orders", position: null, busy: false, onAction: () => {}, onSection: () => {}, onRefresh: () => {} };
+const loginProps = { stage: "phone", parkName: "iTaxi", phone: "", busy: false,
+  authentication: { phone_set: true, telegram_connected: true, telegram_configured: true, remember_days: 30 },
+  onPhone() {}, onSend() {}, onVerify() {}, onBack() {}, onRefresh() {} };
+
+test("phone login asks for the employee number before showing the map", () => {
+  const html = renderToStaticMarkup(React.createElement(DriverLogin, loginProps));
+  assert.match(html, /iTaxi/);
+  assert.match(html, /type="tel" autoComplete="tel"/);
+  assert.match(html, /Получить код в Telegram/);
+  assert.match(html, /30 дней/);
+  assert.doesNotMatch(html, /driver-map|driver-nav|type="password"/);
+});
+
+test("unconfigured account explains the missing binding instead of accepting a code", () => {
+  const html = renderToStaticMarkup(React.createElement(DriverLogin, { ...loginProps, authentication: { ...loginProps.authentication, telegram_connected: false, phone_set: false } }));
+  assert.match(html, /руководителя/);
+  assert.match(html, /href="\/profile#telegram"/);
+  assert.doesNotMatch(html, /<input|driver-map|Подтвердить и войти/);
+});
+
+test("OTP input supports mobile autofill and shows server resend cooldown", () => {
+  const html = renderToStaticMarkup(React.createElement(DriverLogin, { ...loginProps, stage: "otp", authentication: { ...loginProps.authentication, next_send_at: new Date(Date.now() + 60000).toISOString(), code_expires_at: new Date(Date.now() + 300000).toISOString() } }));
+  assert.match(html, /inputMode="numeric" autoComplete="one-time-code"/);
+  assert.match(html, /pattern="\[0-9\]\{6\}"/);
+  assert.match(html, /Отправить ещё раз через 60 с/);
+  assert.match(html, /Подтвердить и войти/);
+  assert.doesNotMatch(html, /driver-map|driver-nav/);
+});
 const render = (patch = {}) => renderToStaticMarkup(React.createElement(DriverScreen, { ...base, ...patch }));
 function elements(node) {
   if (!React.isValidElement(node)) return [];

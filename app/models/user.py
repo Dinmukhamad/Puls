@@ -46,6 +46,7 @@ class User(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(primary_key=True)
     login: Mapped[str] = mapped_column(String(150), unique=True, index=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(16), unique=True, nullable=True)
     full_name: Mapped[str] = mapped_column(String(255), index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     role: Mapped[Role] = mapped_column(String(32), default=Role.OPERATOR, index=True)

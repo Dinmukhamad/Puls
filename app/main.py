@@ -16,6 +16,7 @@ from app.core.errors import register_exception_handlers
 from app.db.init_db import create_schema, seed_reference_data
 from app.db.session import SessionLocal, engine
 from app.scheduler import start_scheduler, stop_scheduler
+from app.services import telegram
 from app.services.rules import audit_ip
 
 logging.basicConfig(
@@ -43,6 +44,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if any(created.values()):
             logger.info("Справочники дополнены: %s", created)
 
+    try:
+        await telegram.configure_webhook()
+    except telegram.TelegramUnavailable:
+        logger.warning(
+            "Telegram webhook не настроен: проверьте параметры бота и доступность Telegram"
+        )
     start_scheduler()
     try:
         yield

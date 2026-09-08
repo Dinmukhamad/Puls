@@ -18,7 +18,9 @@ class DriverSettings(Base):
 class DriverProfile(Base, TimestampMixin):
     __tablename__ = "driver_profiles"
     __table_args__ = (
-        CheckConstraint("stage IN ('services', 'cooperation', 'loading', 'offline')", name="stage"),
+        CheckConstraint(
+            "stage IN ('services', 'cooperation', 'phone', 'loading', 'offline')", name="stage"
+        ),
     )
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True

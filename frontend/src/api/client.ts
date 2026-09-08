@@ -99,6 +99,7 @@ function notifyUnauthorized(): void {
 }
 
 interface RequestOptions {
+  headers?: Record<string, string>;
   method?: string;
   json?: unknown;
   form?: Record<string, string>;
@@ -146,7 +147,7 @@ async function refreshAccessToken(): Promise<boolean> {
 
 export async function request<T>(
   path: string,
-  { method = "GET", json, form, multipart, auth = true, signal }: RequestOptions = {},
+  { method = "GET", json, form, multipart, auth = true, signal, headers: customHeaders }: RequestOptions = {},
 ): Promise<T> {
   const version = sessionVersion;
   const ensureSession = () => {
@@ -154,7 +155,7 @@ export async function request<T>(
   };
   const send = async (): Promise<Response> => {
     ensureSession();
-    const headers: Record<string, string> = {};
+    const headers: Record<string, string> = { ...customHeaders };
     let body: BodyInit | undefined;
 
     if (multipart) {

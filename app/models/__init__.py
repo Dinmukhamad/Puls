@@ -12,6 +12,7 @@ from app.models.contest import (
     OperatorWeekResult,
 )
 from app.models.driver import DriverProfile, DriverSettings
+from app.models.driver_auth import DriverDevice, TelegramLink
 from app.models.enums import (
     BadgeRule,
     MetricDirection,
@@ -39,6 +40,7 @@ __all__ = [
     "CoinAccount",
     "CoinTransaction",
     "ContestWeek",
+    "DriverDevice",
     "DriverProfile",
     "DriverSettings",
     "GamificationSettings",
@@ -61,6 +63,7 @@ __all__ = [
     "ShopItem",
     "ShopRequest",
     "ShopRequestStatus",
+    "TelegramLink",
     "TxType",
     "User",
     "UserBadge",

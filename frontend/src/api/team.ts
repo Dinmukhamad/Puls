@@ -12,6 +12,7 @@ export interface TeamGroup {
 }
 
 export interface TeamUserInput {
+  phone: string | null;
   full_name: string;
   email: string | null;
   role: Role;

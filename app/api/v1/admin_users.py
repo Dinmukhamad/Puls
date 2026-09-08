@@ -44,6 +44,7 @@ from app.services import coins as coins_service
 from app.services import weekly as weekly_service
 from app.services.rules import write_audit
 from app.services.sessions import revoke_user_sessions
+from app.services.telegram import revoke_devices
 
 router = APIRouter(prefix="/admin", tags=["Пользователи и группы"])
 
@@ -248,6 +249,7 @@ async def create_user(session: SessionDep, actor: HeadUser, payload: UserCreate)
         login=payload.login,
         full_name=payload.full_name,
         email=payload.email,
+        phone=payload.phone,
         role=payload.role,
         group_id=payload.group_id,
         hired_on=payload.hired_on,
@@ -258,7 +260,7 @@ async def create_user(session: SessionDep, actor: HeadUser, payload: UserCreate)
         await session.flush()
     except IntegrityError as exc:
         await session.rollback()
-        raise ConflictError("Логин или email уже заняты") from exc
+        raise ConflictError("Логин, email или телефон уже заняты") from exc
 
     if user.role == Role.OPERATOR:
         await coins_service.get_account(session, user.id)
@@ -282,6 +284,9 @@ async def update_user(
     session: SessionDep, actor: HeadUser, user_id: int, payload: UserUpdate
 ) -> User:
     user = await _visible_user(session, actor, user_id)
+    # Та же блокировка пользователя, что при подтверждении и привязке Telegram.
+    # Смена номера не должна оставлять доверие, записанное параллельным запросом.
+    await session.refresh(user, with_for_update=True)
     protect_developer_account(actor, user)
     if user.role == Role.ADMIN and actor.role != Role.ADMIN:
         raise PermissionDeniedError("Учётную запись администратора изменяет только администратор")
@@ -303,6 +308,8 @@ async def update_user(
             raise ConflictError("Сначала переназначьте группы этого супервайзера")
 
     before = {field: getattr(user, field) for field in changes}
+    if "phone" in changes and changes["phone"] != user.phone:
+        await revoke_devices(session, user.id)
     for field, value in changes.items():
         setattr(user, field, value)
     if changes.get("is_active") is False:
@@ -321,7 +328,7 @@ async def update_user(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise ConflictError("Этот email уже используется другим сотрудником") from exc
+        raise ConflictError("Этот email или телефон уже используется другим сотрудником") from exc
     return await session.scalar(
         select(User)
         .options(selectinload(User.group))

@@ -1,13 +1,19 @@
+import secrets
+from datetime import timedelta
+
 import pytest
 from sqlalchemy import func, select
 
+from app.db.base import utcnow
 from app.models.access import AccessRule
 from app.models.coin import CoinTransaction
 from app.models.driver import DriverProfile
+from app.models.driver_auth import DriverDevice, TelegramLink
 from app.models.enums import Role
 from app.models.learning import LearningAttempt, LearningContent
 from app.models.progress import XpEntry
 from app.models.settings import AuditLog
+from app.services.driver_auth import device_hash
 from tests.conftest import auth, login, make_user
 
 BASE = "/api/v1/learning/driver"
@@ -18,8 +24,27 @@ async def act(client, headers, action, **extra):
     return await client.put(f"{BASE}/action", headers=headers, json={"action": action, **extra})
 
 
+async def confirmed_browser(session, user, headers):
+    """Эти тесты проверяют просмотр после входа; OTP проверен отдельным набором."""
+    user.phone = "+77001234567"
+    secret = secrets.token_urlsafe(32)
+    session.add(TelegramLink(user_id=user.id, chat_id=12345, version=1))
+    session.add(
+        DriverDevice(
+            secret_hash=device_hash(user.id, secret),
+            user_id=user.id,
+            phone=user.phone,
+            telegram_version=1,
+            valid_until=utcnow() + timedelta(days=30),
+        )
+    )
+    await session.commit()
+    headers["X-Driver-Device"] = secret
+
+
 async def test_login_resume_and_repeat_keep_own_educational_profile(client, session, operator):
     headers = auth(await login(client, operator.login))
+    await confirmed_browser(session, operator, headers)
     response = await client.get(BASE, headers=headers)
     assert response.status_code == 200
     assert response.json()["profile"] is None
@@ -60,7 +85,7 @@ async def test_login_rejects_skipped_stages_unknown_parks_and_driving_actions(cl
     headers = auth(await login(client, operator.login))
     assert (await act(client, headers, "enter")).status_code == 404
     await client.post(f"{BASE}/start", headers=headers)
-    assert (await act(client, headers, "enter")).status_code == 409
+    assert (await act(client, headers, "enter")).status_code == 403
     assert (await act(client, headers, "park", park_id="itaxi")).status_code == 409
     assert (await act(client, headers, "taxi")).status_code == 200
     assert (await act(client, headers, "park", park_id="missing")).status_code == 409
@@ -141,6 +166,7 @@ async def test_parks_are_editable_audited_and_preserve_selected_conditions(
     staff_headers = auth(await login(client, head.login))
     headers = auth(await login(client, operator.login))
     custom = [{"id": "test-park", "name": "Учебный парк", "commission": 3.5}]
+    await confirmed_browser(session, operator, headers)
     response = await client.put(ADMIN, headers=staff_headers, json={"parks": custom})
     assert response.status_code == 200, response.text
     assert (await client.get(BASE, headers=headers)).json()["parks"] == custom
