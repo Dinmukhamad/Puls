@@ -103,7 +103,7 @@ test("park sheet displays configured choices and sends the chosen ID", () => {
 
 test("map starts offline and offers the new order flow", () => {
   const html = render();
-  assert.match(html, /Карта учебного города/);
+  assert.match(html, /Карта появится после определения местоположения/);
   assert.match(html, /Офлайн/);
   assert.match(html, /class="driver-online"/);
   assert.doesNotMatch(html, /class="driver-online" disabled/);
@@ -121,7 +121,7 @@ test("every driver tab opens its own view, with a working return to orders", () 
     assert.equal(section, destination.id);
     const html = render({ section });
     if (section !== "orders") assert.match(html, new RegExp(`<h1>${destination.title}</h1>`));
-    else assert.match(html, /Карта учебного города/);
+    else assert.match(html, /Карта появится после определения местоположения/);
     assert.equal((html.match(/aria-current="page"/g) ?? []).length, 1);
     assert.match(html, /href="\/training\?kind=simulator"/);
   }

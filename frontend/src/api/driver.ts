@@ -1,3 +1,4 @@
+import type { GeoPoint, LocationFix } from "../utils/driverLocation";
 import { request } from "./client";
 import type { DriverShift, ShiftResult, SupportCase } from "./driverShift";
 
@@ -27,14 +28,14 @@ export type OrderStage = "searching" | "offer" | "pickup" | "waiting" | "trip" |
 export type OrderAction = "offer" | "accept" | "arrive" | "start_trip" | "finish" | "pay" | "cancel" | "missed";
 export interface DriverOrder {
   shift_id?: string | null;
-  details?: { service_fee: number; service_tax: number; waiting_fee: number; base_fare: number; offer_seconds: number; tariff: string; route_event: boolean; route_changed: boolean } | null;
+  details?: { pickup?: GeoPoint; service_fee?: number; service_tax?: number; waiting_fee?: number; base_fare?: number; offer_seconds?: number; tariff?: string; route_event?: boolean; route_changed?: boolean } | null;
   id: string; stage: OrderStage; origin: string; destination: string; payment: "cash" | "card";
   fare: number; commission: number; net: number; park: DriverPark; version: number;
   created_at: string; stage_started_at: string; finished_at: string | null; duration_seconds: number;
   events: { action: OrderAction; from: OrderStage; to: OrderStage; at: string; request_id: string }[];
 }
 export interface DriverOrderSummary { count: number; gross: number; commission: number; net: number }
-export interface OrderCreate { id: string; origin: string; destination: string }
+export interface OrderCreate { id: string; origin: string; destination: string; location: LocationFix; pickup: GeoPoint }
 export interface OrderCommand { id: string; action: OrderAction; request_id: string }
 export const orderActive = (order: DriverOrder | null | undefined) => !!order && order.stage !== "complete" && order.stage !== "cancelled";
 export interface DriverAuthentication {

@@ -1,7 +1,7 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 
 class DriverPark(BaseModel):
@@ -36,11 +36,24 @@ class DriverAction(BaseModel):
         return self
 
 
+class DriverGeoPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False, strict=True)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False, strict=True)
+
+
+class DriverLocation(DriverGeoPoint):
+    accuracy: float = Field(ge=0, le=100000, allow_inf_nan=False, strict=True)
+    captured_at: AwareDatetime
+
+
 class DriverOrderCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     id: UUID
     origin: str = Field(min_length=3, max_length=160)
     destination: str = Field(min_length=3, max_length=160)
+    location: DriverLocation | None = None
+    pickup: DriverGeoPoint | None = None
 
     @model_validator(mode="after")
     def different_addresses(self):

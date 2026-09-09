@@ -38,10 +38,103 @@ async def driver_setup(client, session, operator, monkeypatch):
     return headers, step
 
 
+def location_payload():
+    point = {"latitude": 43.2389, "longitude": 76.8897}
+    return {
+        "pickup": point,
+        "location": {**point, "accuracy": 10, "captured_at": driver_orders.utcnow().isoformat()},
+    }
+
+
 async def create(client, headers, **overrides):
     payload = {"id": str(uuid4()), "origin": "Учебная улица, 10", "destination": "Проспект, 25"}
+    payload.update(location_payload())
     payload.update(overrides)
     return await client.post(f"{BASE}/orders", headers=headers, json=payload)
+
+
+@pytest.mark.parametrize(
+    "problem", ["missing", "missing_pickup", "old", "future", "imprecise", "far", "uncertainty"]
+)
+async def test_new_order_requires_fresh_nearby_location(client, session, driver_setup, problem):
+    headers, _ = driver_setup
+    payload = location_payload()
+    if problem == "missing":
+        payload["location"] = None
+    elif problem == "missing_pickup":
+        payload["pickup"] = None
+    elif problem in ("old", "future"):
+        seconds = -31 if problem == "old" else 6
+        payload["location"]["captured_at"] = (
+            driver_orders.utcnow() + timedelta(seconds=seconds)
+        ).isoformat()
+    elif problem == "imprecise":
+        payload["location"]["accuracy"] = 201
+    elif problem == "far":
+        payload["pickup"] = {"latitude": 43.3, "longitude": 76.9}
+    else:
+        # 445 м + погрешность 100 м выходит за радиус подачи.
+        payload["pickup"] = {**payload["pickup"], "latitude": 43.2429}
+        payload["location"]["accuracy"] = 100
+    response = await create(client, headers, **payload)
+    assert response.status_code == 409, response.text
+    assert await session.scalar(select(func.count()).select_from(DriverOrder)) == 0
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("latitude", 91),
+        ("longitude", -181),
+        ("accuracy", -1),
+        ("latitude", True),
+        ("longitude", "76.9"),
+        ("captured_at", "2026-09-09T10:00:00"),
+    ],
+)
+async def test_location_rejects_invalid_coordinates_and_unzoned_time(
+    client, driver_setup, field, value
+):
+    headers, _ = driver_setup
+    payload = location_payload()
+    payload["location"][field] = value
+    assert (await create(client, headers, **payload)).status_code == 422
+
+
+async def test_pickup_is_persisted_without_location_history_and_retry_does_not_move_it(
+    client, session, driver_setup
+):
+    headers, step = driver_setup
+    payload = location_payload()
+    payload["pickup"] = {"latitude": 43.2409, "longitude": 76.8897}
+    order = (await create(client, headers, **payload)).json()["order"]
+    assert order["details"] == {"pickup": payload["pickup"]}
+    await step(order, "offer")  # The original fix is now stale.
+    retry = await create(client, headers, id=order["id"], **payload)
+    assert retry.status_code == 200, retry.text
+    assert retry.json()["order"]["details"]["pickup"] == payload["pickup"]
+    payload["pickup"] = {"latitude": 43.239, "longitude": 76.8897}
+    assert (await create(client, headers, id=order["id"], **payload)).status_code == 409
+    restored = (await client.get(BASE, headers=headers)).json()["order"]
+    assert restored["details"] == order["details"]
+    assert await session.scalar(select(func.count()).select_from(DriverOrder)) == 1
+
+
+def test_pickup_distance_accounts_for_accuracy_boundary_and_dateline():
+    from math import degrees
+
+    from app.core.errors import ConflictError
+    from app.schemas.driver import DriverGeoPoint, DriverLocation
+    from app.services.driver_location import validate_pickup
+
+    now = utcnow()
+    fix = DriverLocation(latitude=0, longitude=179.999, accuracy=10, captured_at=now)
+    nearby = DriverGeoPoint(latitude=0, longitude=-179.999)
+    assert validate_pickup(fix, nearby, now) == nearby.model_dump()
+    fix.longitude = 0
+    assert validate_pickup(fix, DriverGeoPoint(latitude=degrees(489 / 6371000), longitude=0), now)
+    with pytest.raises(ConflictError):
+        validate_pickup(fix, DriverGeoPoint(latitude=degrees(491 / 6371000), longitude=0), now)
 
 
 @pytest.mark.parametrize("payment", ["cash", "card"])

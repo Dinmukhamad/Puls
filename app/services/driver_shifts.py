@@ -193,7 +193,7 @@ def initial_data(config, mode):
             "auto_start": False,
             "destination_marker": True,
             "navigation": "internal",
-            "location": "virtual",
+            "location": "gps",
             "demand": True,
             "traffic": True,
             "bonus_zones": False,
@@ -516,7 +516,7 @@ async def perform_action(session, user_id, shift_id, payload, device):
         options = {
             "theme": ("dark", "light", "system"),
             "navigation": ("internal", "overview"),
-            "location": ("virtual", "gps"),
+            "location": ("gps",),
         }
         if key in options and value not in options[key]:
             raise DomainError("Выберите доступный вариант")

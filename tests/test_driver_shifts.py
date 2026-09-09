@@ -17,6 +17,7 @@ from app.schemas.driver_shift import DriverScenario
 from app.services import driver_orders, telegram
 from tests.conftest import auth, login, make_user
 from tests.test_driver import BASE, act, confirmed_browser
+from tests.test_driver_orders import location_payload
 
 
 @pytest.fixture
@@ -69,7 +70,12 @@ async def order(client, session, headers, *, route=False):
     response = await client.post(
         f"{BASE}/orders",
         headers=headers,
-        json={"id": str(uuid4()), "origin": "Абай, 10", "destination": "Достык, 25"},
+        json={
+            "id": str(uuid4()),
+            "origin": "Абай, 10",
+            "destination": "Достык, 25",
+            **location_payload(),
+        },
     )
     assert response.status_code == 200, response.text
     data = response.json()
@@ -266,7 +272,12 @@ async def test_offer_expiry_and_no_double_priority_penalty(client, session, setu
     created = await client.post(
         f"{BASE}/orders",
         headers=h,
-        json={"id": str(uuid4()), "origin": "Абай, 10", "destination": "Достык, 25"},
+        json={
+            "id": str(uuid4()),
+            "origin": "Абай, 10",
+            "destination": "Достык, 25",
+            **location_payload(),
+        },
     )
     record = await session.get(DriverOrder, created.json()["order"]["id"])
     record.stage = "offer"

@@ -1,3 +1,5 @@
+import { useDriverLocation } from "../hooks/useDriverLocation";
+import type { LocationState } from "../utils/driverLocation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -32,7 +34,6 @@ export function DriverAppPage() {
   const query = useQuery({ queryKey: ["driver-profile"], queryFn: driver.state, refetchOnWindowFocus: "always", refetchInterval: 60000 });
   const [params, setParams] = useSearchParams();
   const [booting, setBooting] = useState(true);
-  const [position, setPosition] = useState<Position | null>(null);
   const [phone, setPhone] = useState("");
   const saveState = (data: Awaited<ReturnType<typeof driver.state>>) => client.setQueryData(["driver-profile"], data);
   const sendCode = useMutation({ mutationFn: driver.code, onSuccess: saveState });
@@ -47,25 +48,13 @@ export function DriverAppPage() {
   } });
   const { mutate } = action;
   const stage = query.data?.profile?.stage;
+  const location = useDriverLocation(stage === "offline" && !query.data?.shift);
   useEffect(() => { const timer = window.setTimeout(() => setBooting(false), 1200); return () => window.clearTimeout(timer); }, []);
   useEffect(() => {
     if (stage !== "loading" || booting) return;
     const timer = window.setTimeout(() => mutate({ action: "enter" }), 1000);
     return () => window.clearTimeout(timer);
   }, [stage, booting, mutate]);
-  useEffect(() => {
-    // Вход не запрашивает новое разрешение. При уже выданном разрешении
-    // показываем текущую точку только в памяти открытого приложения.
-    if (stage !== "offline" || !navigator.permissions || !navigator.geolocation) return;
-    let disposed = false;
-    void navigator.permissions.query({ name: "geolocation" }).then((permission) => {
-      if (disposed || permission.state !== "granted") return;
-      navigator.geolocation.getCurrentPosition((value) => {
-        if (!disposed) setPosition({ latitude: value.coords.latitude, longitude: value.coords.longitude, accuracy: value.coords.accuracy });
-      }, () => {}, { enableHighAccuracy: false, maximumAge: 60000, timeout: 6000 });
-    }).catch(() => {});
-    return () => { disposed = true; setPosition(null); };
-  }, [stage]);
 
   if (query.isError && !query.data) return <div className="driver-app"><DriverHeader /><div className="driver-content driver-content--center"><ErrorState error={query.error} onRetry={() => query.refetch()} /></div></div>;
   if (booting || query.isLoading) return <DriverSplash />;
@@ -95,7 +84,7 @@ export function DriverAppPage() {
   />;
   return <DriverScreen
     profile={profile} parks={query.data!.parks} fullName={user?.full_name ?? ""}
-    section={driverSection(params.get("section"))} position={position} busy={action.isPending || forget.isPending || createOrder.isPending || orderAction.isPending}
+    section={driverSection(params.get("section"))} position={location.fix} location={location} busy={action.isPending || forget.isPending || createOrder.isPending || orderAction.isPending}
     orderState={query.data} orderFailed={createOrder.isError || orderAction.isError}
     onCreateOrder={(payload) => { orderAction.reset(); createOrder.mutate(payload); }}
     onOrderAction={(name) => {
@@ -161,12 +150,13 @@ export function DriverLoading() {
 
 interface ScreenProps {
   profile: DriverProfile; parks: DriverPark[]; fullName: string; section: DriverSection;
+  location?: LocationState & { retry: () => void };
   position: Position | null; busy: boolean; error?: unknown;
   onAction: (action: DriverAction) => void; onSection: (section: DriverSection) => void; onRefresh: () => void; onForget?: () => void;
   orderState?: Pick<DriverState, "order" | "order_summary" | "order_history" | "server_now">; orderFailed?: boolean;
   onCreateOrder?: (payload: OrderCreate) => void; onOrderAction?: (action: OrderAction) => void;
 }
-export function DriverScreen({ profile, parks, fullName, section, position, busy, error, onAction, onSection, onRefresh, onForget, orderState, orderFailed, onCreateOrder, onOrderAction }: ScreenProps) {
+export function DriverScreen({ profile, parks, fullName, section, position, location, busy, error, onAction, onSection, onRefresh, onForget, orderState, orderFailed, onCreateOrder, onOrderAction }: ScreenProps) {
   const offline = profile.stage === "offline";
   const summary = orderState?.order_summary ?? { count: 0, gross: 0, commission: 0, net: 0 };
   const active = orderActive(orderState?.order);
@@ -178,7 +168,7 @@ export function DriverScreen({ profile, parks, fullName, section, position, busy
       <h2>Мои сервисы</h2>
       <button className="driver-card driver-service" disabled={busy} onClick={() => onAction({ action: "taxi" })}><span className="driver-taxi"><DriverArrow /></span><span><strong>Такси</strong><small>Учебная работа с заказами</small></span><ChevronRightIcon /></button>
     </main> : <main className={`driver-content${section === "orders" ? " driver-content--orders" : ""}`}>
-      {section === "orders" && <DriverOrders order={orderState?.order} summary={summary} serverNow={orderState?.server_now} position={position} busy={busy} failed={orderFailed} onCreate={onCreateOrder} onAction={onOrderAction} onIncome={() => onSection("income")} />}
+      {section === "orders" && <DriverOrders order={orderState?.order} summary={summary} serverNow={orderState?.server_now} position={position} location={location} busy={busy} failed={orderFailed} onCreate={onCreateOrder} onAction={onOrderAction} onIncome={() => onSection("income")} />}
       {section === "results" && <div className="driver-section"><h1>Результаты</h1><div className="driver-card"><h2>Работа с заказами</h2><DriverRow title="Выполнено заказов" value={String(summary.count)} /><DriverRow title="Учебный доход" value={money(summary.net)} /><DriverRow title="Текущий заказ" value={active ? "В процессе" : "Нет активного заказа"} />{active && <button className="driver-primary" onClick={() => onSection("orders")}>Продолжить заказ</button>}</div><div className="driver-card"><h2>Последние поездки</h2><OrderHistory orders={orderState?.order_history ?? []} /></div><div className="driver-card"><h2>Вход в приложение</h2><DriverRow title="Статус" value="Вход завершён" />{profile.last_login_at && <DriverRow title="Последний вход" value={dateTime(profile.last_login_at)} />}</div></div>}
       {section === "income" && <div className="driver-section"><h1>Доход</h1><div className="driver-card driver-money"><span>Учебный баланс</span><strong>{money(summary.net)}</strong></div><div className="driver-card"><DriverRow title="Стоимость выполненных поездок" value={money(summary.gross)} /><DriverRow title="Комиссии парков" value={money(summary.commission)} /><DriverRow title="Доход после комиссии" value={money(summary.net)} /></div><div className="driver-card"><h2>История операций</h2><OrderHistory orders={orderState?.order_history ?? []} /></div><p className="driver-muted">Учебные суммы симулятора. Выплаты и списания настоящих денег не выполняются.</p></div>}
       {section === "messages" && <div className="driver-section"><h1>Сообщения</h1><div className="driver-card driver-empty"><InboxIcon size={36} /><h2>Сообщений пока нет</h2></div></div>}

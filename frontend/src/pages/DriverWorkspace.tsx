@@ -8,7 +8,7 @@ import { DriverProfileViews } from "./DriverProfileViews";
 import { DriverChats, DriverIntercity, DriverMoney } from "./DriverWorkViews";
 import { DCard, DForm, DInput, DRow, DToggle, type ShiftViewProps } from "./DriverShiftUI";
 import { CoinIcon, InboxIcon, TrophyIcon, UserIcon } from "../components/icons";
-import type { Position } from "../components/SimulatorMap";
+import { useDriverLocation } from "../hooks/useDriverLocation";
 import { dateTime } from "../utils/format";
 import "./driver-shift.css";
 
@@ -34,8 +34,7 @@ export function DriverWorkspace({ state, fullName, busy: parentBusy, error: pare
   const [exit, setExit] = useState(false);
   const [layers, setLayers] = useState(false);
   const [hint, setHint] = useState(false);
-  const [position, setPosition] = useState<Position | null>(null);
-  const [gpsError, setGpsError] = useState("");
+  const location = useDriverLocation(!shift.finished_at);
   const busy = parentBusy || mutation.isPending || support.isPending;
   const command = useRef<{ key: string; request_id: string }>();
   const act: ShiftAct = (action, values = {}) => {
@@ -53,18 +52,6 @@ export function DriverWorkspace({ state, fullName, busy: parentBusy, error: pare
     mutation.mutate({ id: shift.id, request_id: crypto.randomUUID(), action: "visit", values: { view, ...(detail ? { id: detail } : {}) } });
   }, [view, detail, shift.id, shift.finished_at, busy, mutation.mutate]);
   const prefs = shift.data.settings;
-  useEffect(() => {
-    if (prefs.location !== "gps" || shift.finished_at) { setPosition(null); setGpsError(""); return; }
-    let disposed = false;
-    const update = () => {
-      if (document.visibilityState === "hidden") return;
-      if (!navigator.geolocation) { setGpsError("Геопозиция недоступна. Используется учебная карта."); return; }
-      navigator.geolocation.getCurrentPosition(value => { if (!disposed) { setPosition({ latitude: value.coords.latitude, longitude: value.coords.longitude, accuracy: value.coords.accuracy }); setGpsError(""); } }, () => { if (!disposed) { setPosition(null); setGpsError("Нет доступа к геопозиции. Используется учебная карта."); } }, { enableHighAccuracy: false, maximumAge: 8000, timeout: 6000 });
-    };
-    update(); const timer = window.setInterval(update, 10000);
-    document.addEventListener("visibilitychange", update);
-    return () => { disposed = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", update); };
-  }, [prefs.location, shift.finished_at]);
   const [systemLight, setSystemLight] = useState(() => window.matchMedia("(prefers-color-scheme: light)").matches);
   useEffect(() => { const q = window.matchMedia("(prefers-color-scheme: light)"), change = () => setSystemLight(q.matches); q.addEventListener("change", change); return () => q.removeEventListener("change", change); }, []);
   const error = mutation.error || support.error || parentError;
@@ -73,10 +60,9 @@ export function DriverWorkspace({ state, fullName, busy: parentBusy, error: pare
   return <div className={`driver-app driver-workspace${prefs.theme === "light" || (prefs.theme === "system" && systemLight) ? " ds-light" : ""}${prefs.hide_income ? " ds-hide-income" : ""}`}>
     <header className="driver-header"><button className="driver-exit" onClick={() => setExit(true)}>‹ Puls</button><button className="ds-shift-name" onClick={() => go("shift-result")}>{shift.mode === "free" ? "Свободный режим" : "Учебная смена"} · {shift.data.completed}/{shift.config.target_orders}</button><span className="driver-environment">Учебный</span></header>
     <main ref={contentRef} className={`driver-content${view === "orders" ? " driver-content--orders ds-orders" : ""}`}>
-      {view === "orders" ? <><div className="ds-mapbar"><button onClick={() => go("priority")}>+{shift.data.priority} Приоритет</button><button onClick={() => setLayers(!layers)} aria-expanded={layers}>Слои карты</button><button onClick={() => go("work-modes")}>{({ all: "Все заказы", home: "Домой", business: "По делам", area: "По району" })[shift.data.work_mode] ?? "Все заказы"}</button></div>
-        {layers && <div className="ds-layer-panel">{[["demand", "Спрос"], ["traffic", "Пробки"], ["bonus_zones", "Бонусные зоны"], ["special_zones", "Специальные зоны"]].map(([key, title]) => <DToggle key={key} title={title} disabled={busy} checked={!!prefs[key as keyof typeof prefs]} onChange={() => act("setting", { key, value: !prefs[key as keyof typeof prefs] })} />)}</div>}
-        {gpsError && <p className="ds-inline-note">{gpsError}</p>}
-        <DriverOrders order={state.order?.shift_id === shift.id ? state.order : null} summary={{ count: shift.data.completed, gross: 0, commission: 0, net: shift.data.balance }} serverNow={state.server_now} position={position} busy={busy} failed={failed || mutation.isError} onCreate={create} onAction={orderAction} onIncome={() => go("money")} shift={shift} shiftAct={act} go={go} />
+      {view === "orders" ? <><div className="ds-mapbar"><button onClick={() => go("priority")}>+{shift.data.priority} Приоритет</button><button onClick={() => setLayers(!layers)} aria-expanded={layers}>Слои схемы</button><button onClick={() => go("work-modes")}>{({ all: "Все заказы", home: "Домой", business: "По делам", area: "По району" })[shift.data.work_mode] ?? "Все заказы"}</button></div>
+        {layers && <div className="ds-layer-panel"><p>Слои показаны в учебной схеме текущего заказа.</p>{[["demand", "Спрос"], ["traffic", "Пробки"], ["bonus_zones", "Бонусные зоны"], ["special_zones", "Специальные зоны"]].map(([key, title]) => <DToggle key={key} title={title} disabled={busy} checked={!!prefs[key as keyof typeof prefs]} onChange={() => act("setting", { key, value: !prefs[key as keyof typeof prefs] })} />)}</div>}
+        <DriverOrders order={state.order?.shift_id === shift.id ? state.order : null} summary={{ count: shift.data.completed, gross: 0, commission: 0, net: shift.data.balance }} serverNow={state.server_now} position={location.fix} location={location} busy={busy} failed={failed || mutation.isError} onCreate={create} onAction={orderAction} onIncome={() => go("money")} shift={shift} shiftAct={act} go={go} />
       </> : <div className="driver-section ds-section"><div className="ds-page-heading">{!shift.finished_at && (!SHIFT_TABS.some(x => x.id === view) || detail) && <button className="driver-back" onClick={() => go(shiftTab(view))}>‹ Назад</button>}<h1>{titles[view] ?? "Профиль"}</h1>{active && <button className="ds-resume-order" onClick={() => go("orders")}>Продолжить заказ →</button>}</div>
         {["money", "transaction"].includes(view) ? <DriverMoney {...viewProps} /> : ["chats", "support"].includes(view) ? <DriverChats {...viewProps} /> : view.startsWith("intercity") ? <DriverIntercity {...viewProps} /> : view === "shift-result" ? <ShiftReview {...viewProps} hint={hint} onHint={() => { setHint(true); act("hint"); }} /> : view === "work-modes" ? <DCard title="Заказы по пути"><DForm busy={busy} label="Сохранить режим" onSubmit={values => act("work_mode", values)}><label>Режим<select name="mode" defaultValue={shift.data.work_mode}><option value="all">Все заказы</option><option value="home">Домой</option><option value="business">По делам</option><option value="area">По району</option></select></label><DInput label="Адрес или район" name="address" value={shift.data.mode_address || "Алматы"} /></DForm><p>Выбранное направление будет предложено как точка Б следующего заказа.</p><button className="driver-secondary" onClick={() => go("orders")}>Вернуться на карту</button></DCard> : <DriverProfileViews {...viewProps} />}
         {view === "support" && support.data?.url && <DCard title="Ссылка на ваше обращение"><a className="driver-primary" href={support.data.url} target="_blank" rel="noreferrer">Открыть Telegram →</a><button className="driver-secondary" onClick={refresh}>Я вернулся · проверить результат</button></DCard>}

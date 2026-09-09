@@ -9,7 +9,7 @@ from sqlalchemy import func, select, update
 from app.core.errors import ConflictError, NotFoundError
 from app.db.base import utcnow
 from app.models.driver import DriverOrder, DriverProfile
-from app.services import driver_auth, driver_shifts
+from app.services import driver_auth, driver_location, driver_shifts
 
 DURATIONS = {"searching": 3, "pickup": 8, "waiting": 4, "trip": 38, "payment": 2}
 TRANSITIONS = {
@@ -122,9 +122,13 @@ async def create(session, user_id, payload, device):
             raise ConflictError("Создайте новый учебный заказ")
         if (existing.origin, existing.destination) != (payload.origin, payload.destination):
             raise ConflictError("Этот запрос уже использован для другого маршрута")
+        saved_pickup = (existing.details or {}).get("pickup")
+        if saved_pickup and (not payload.pickup or payload.pickup.model_dump() != saved_pickup):
+            raise ConflictError("Этот запрос уже использован для другой точки подачи")
         return  # Повтор после потери ответа не меняет выбранную оплату и этап.
     if await active_order(session, user_id):
         raise ConflictError("Сначала завершите или отмените текущий учебный заказ")
+    pickup = driver_location.validate_pickup(payload.location, payload.pickup, utcnow())
     shift = await driver_shifts.active(session, user_id, lock=True)
     if shift:
         driver_shifts.check_online(shift, shift.data)
@@ -136,10 +140,11 @@ async def create(session, user_id, payload, device):
             Decimal("1"), rounding=ROUND_HALF_UP
         )
     )
-    details = None
+    details = {"pickup": pickup}
     if shift:
         fee = driver_shifts.amount(fare, shift.config["service_percent"])
         details = {
+            "pickup": pickup,
             "service_fee": fee,
             "service_tax": driver_shifts.amount(fee, shift.config["service_tax_percent"]),
             "base_fare": fare,
