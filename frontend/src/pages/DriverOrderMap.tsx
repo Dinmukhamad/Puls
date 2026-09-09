@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { OrderStage } from "../api/driver";
+import type { DriverPreferences } from "../api/driverShift";
 
 type Point = [number, number];
 const approach: Point[] = [[105, 590], [250, 590], [250, 470]];
@@ -19,7 +20,7 @@ export function routePosition(points: Point[], progress: number) {
   return { x: points[0][0], y: points[0][1], angle: 0 };
 }
 
-export function DriverOrderMap({ stage, progress, origin, destination }: { stage: OrderStage; progress: number; origin: string; destination: string }) {
+export function DriverOrderMap({ stage, progress, origin, destination, preferences }: { stage: OrderStage; progress: number; origin: string; destination: string; preferences?: DriverPreferences }) {
   const [zoom, setZoom] = useState(1);
   const inJourney = ["trip", "payment", "complete"].includes(stage);
   const moving = stage === "pickup" || stage === "trip";
@@ -47,10 +48,10 @@ export function DriverOrderMap({ stage, progress, origin, destination }: { stage
         <path d={path(inJourney ? journey : approach)} stroke="#acfa56" strokeWidth="7" />
       </g>
       <g fill="#a5b0c9" fontSize="12" textAnchor="middle"><text x="330" y="458">Городской</text><text x="330" y="476">парк</text><text x="340" y="574">Центральный проспект</text><text x="115" y="335">Учебный квартал</text><text x="455" y="58">Деловой центр</text></g>
-      {([[250, 470, "А"], [510, 100, "Б"]] as const).map(([x, y, label]) => <g key={label} transform={`translate(${x} ${y})`}><circle r="8" fill="#151a2a" stroke="white" strokeWidth="4" /><rect x="-20" y="-62" width="40" height="42" rx="13" fill="white" stroke="#111827" strokeWidth="4" /><text y="-32" textAnchor="middle" fill="#111827" fontSize="25" fontWeight="750">{label}</text></g>)}
+      {([[250, 470, "А"], [510, 100, "Б"]] as const).filter(([, , label]) => label !== "Б" || preferences?.destination_marker !== false).map(([x, y, label]) => <g key={label} transform={`translate(${x} ${y})`}><circle r="8" fill="#151a2a" stroke="white" strokeWidth="4" /><rect x="-20" y="-62" width="40" height="42" rx="13" fill="white" stroke="#111827" strokeWidth="4" /><text y="-32" textAnchor="middle" fill="#111827" fontSize="25" fontWeight="750">{label}</text></g>)}
       <g transform={`translate(${car.x} ${car.y}) rotate(${car.angle})`} filter="url(#driver-car-shadow)"><circle r="34" fill="#ffe128" opacity=".12" /><path d="M0 -25L20 22L0 13L-20 22Z" fill="#ffe128" stroke="#101322" strokeWidth="4" strokeLinejoin="round" /></g>
     </svg>
-    <div className="driver-trip-map__instruction"><span>{moving ? near ? "⚑" : "↑" : "●"}</span><div><strong>{moving ? progress >= 1 ? "Вы прибыли" : distance : stage === "waiting" ? "Точка подачи" : stage === "searching" ? "Ищем заказ" : inJourney ? "Точка назначения" : "Маршрут заказа"}</strong><small>{moving ? inJourney ? "К точке назначения" : "К месту подачи" : "Учебная карта"}</small></div></div>
+    {preferences?.navigation !== "overview" && <div className="driver-trip-map__instruction"><span>{moving ? near ? "⚑" : progress > .35 && progress < .55 ? "↱" : "↑" : "●"}</span><div><strong>{moving ? progress >= 1 ? "Вы прибыли" : distance : stage === "waiting" ? "Точка подачи" : stage === "searching" ? "Ищем заказ" : inJourney ? "Точка назначения" : "Маршрут заказа"}</strong><small>{moving ? inJourney ? "К точке назначения" : "К месту подачи" : "Учебная карта"}</small></div></div>}{moving && <span className="ds-speed" aria-label="Учебное ограничение скорости 60">60</span>}
     <div className="driver-trip-map__tools"><button aria-label="Увеличить карту" disabled={zoom >= 1.6} onClick={() => setZoom(Math.min(1.6, zoom + .2))}>+</button><button aria-label="Уменьшить карту" disabled={zoom <= 1} onClick={() => setZoom(Math.max(1, zoom - .2))}>−</button><button aria-label="Показать весь маршрут" onClick={() => setZoom(1)}>⌖</button></div>
     <span className="driver-trip-map__caption">Виртуальный маршрут · время ×30</span>
   </div>;

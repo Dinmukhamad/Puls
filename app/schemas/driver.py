@@ -56,4 +56,4 @@ class DriverOrderCreate(BaseModel):
 class DriverOrderAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: UUID
-    action: Literal["offer", "accept", "arrive", "start_trip", "finish", "pay", "cancel"]
+    action: Literal["offer", "accept", "arrive", "start_trip", "finish", "pay", "cancel", "missed"]

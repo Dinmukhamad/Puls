@@ -152,27 +152,26 @@ test("profile can return to service selection or browse learning", () => {
   assert.equal(driverSection("online"), "orders");
 });
 
-test("entry offers resume only for unfinished login and a fresh launch after completion", async () => {
-  let current, lastResult;
+test("entry offers two modes, resumes the current shift and exposes the last result", async () => {
+  let current = { profile, parks };
   const { DriverEntry } = await component("./DriverEntry.tsx", {
-    "@tanstack/react-query": { useQuery: () => ({ data: { profile: current, parks, last_result: lastResult } }), useQueryClient: () => ({}), useMutation: () => ({}) },
+    "@tanstack/react-query": { useQuery: () => ({ data: current }), useQueryClient: () => ({}), useMutation: () => ({}) },
     "react-router-dom": { useNavigate: () => () => {}, Link: ({ to, children }) => React.createElement("a", { href: to }, children) },
   });
   const entry = () => renderToStaticMarkup(React.createElement(DriverEntry));
-  assert.match(entry(), /Ещё не запускали/);
-  current = { ...profile, stage: "cooperation", last_login_at: null };
-  assert.match(entry(), /Продолжить вход/);
-  assert.match(entry(), /Выбор парка/);
-  current = profile;
-  const completed = entry();
-  assert.match(completed, /Вход пройден/);
-  assert.match(completed, /Последний вход/);
-  assert.match(completed, /Начать симуляцию/);
-  assert.doesNotMatch(completed, /Продолжить вход|href="\/simulator"/);
-  lastResult = { attempt_id: 7, title: "Пройденный сценарий", state: "passed", score: 100 };
-  assert.match(entry(), /Последний результат/);
-  assert.match(entry(), /href="\/simulator\/attempts\/7"/);
-  assert.match(entry(), /100%/);
+  assert.match(entry(), /Свободный · без штрафов/);
+  assert.match(entry(), /Учебная смена · с оценкой/);
+  current.shift = { id: "shift", mode: "assessment", finished_at: null, config: { target_orders: 3 }, data: { completed: 1 } };
+  assert.match(entry(), /Продолжить смену/);
+  assert.match(entry(), /1\/3/);
+  assert.doesNotMatch(entry(), /Начать симуляцию/);
+  current.shift.finished_at = "2026-09-09T12:00:00Z";
+  current.shift_best = 95;
+  current.shift_history = [{ id: "shift", finished_at: current.shift.finished_at, result: { score: 90 } }];
+  assert.match(entry(), /Лучший результат: 95\/100/);
+  assert.match(entry(), /90\/100/);
+  assert.match(entry(), /Начать симуляцию/);
+  assert.match(entry(), /Открыть разбор/);
 });
 
 const { DriverOrders, orderTiming } = await component("./DriverOrders.tsx");

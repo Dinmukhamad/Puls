@@ -13,6 +13,7 @@ class DriverSettings(Base):
     __table_args__ = (CheckConstraint("id = 1", name="singleton"),)
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
     parks: Mapped[list] = mapped_column(JSON, default=list)
+    scenario: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class DriverProfile(Base, TimestampMixin):
@@ -46,6 +47,10 @@ class DriverOrder(Base):
         CheckConstraint("payment IN ('cash','card')", name="payment"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    shift_id: Mapped[str | None] = mapped_column(
+        ForeignKey("driver_shifts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     active_slot: Mapped[int | None] = mapped_column(nullable=True)
     stage: Mapped[str] = mapped_column(String(20))

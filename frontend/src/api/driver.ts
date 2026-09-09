@@ -1,4 +1,5 @@
 import { request } from "./client";
+import type { DriverShift, ShiftResult, SupportCase } from "./driverShift";
 
 export interface DriverPark { id: string; name: string; commission: number }
 export interface DriverProfile {
@@ -9,6 +10,10 @@ export interface DriverProfile {
   last_login_at: string | null;
 }
 export interface DriverState {
+  shift?: DriverShift | null;
+  shift_history?: { id: string; mode: string; finished_at: string; result: ShiftResult }[];
+  shift_best?: number | null;
+  support_cases?: SupportCase[];
   order: DriverOrder | null;
   order_summary: DriverOrderSummary;
   order_history: DriverOrder[];
@@ -19,8 +24,10 @@ export interface DriverState {
 }
 
 export type OrderStage = "searching" | "offer" | "pickup" | "waiting" | "trip" | "payment" | "complete" | "cancelled";
-export type OrderAction = "offer" | "accept" | "arrive" | "start_trip" | "finish" | "pay" | "cancel";
+export type OrderAction = "offer" | "accept" | "arrive" | "start_trip" | "finish" | "pay" | "cancel" | "missed";
 export interface DriverOrder {
+  shift_id?: string | null;
+  details?: { service_fee: number; service_tax: number; waiting_fee: number; base_fare: number; offer_seconds: number; tariff: string; route_event: boolean; route_changed: boolean } | null;
   id: string; stage: OrderStage; origin: string; destination: string; payment: "cash" | "card";
   fare: number; commission: number; net: number; park: DriverPark; version: number;
   created_at: string; stage_started_at: string; finished_at: string | null; duration_seconds: number;

@@ -37,11 +37,20 @@ class TelegramSender(BaseModel):
 
 
 class TelegramMessage(BaseModel):
+    message_id: int | None = None
     chat: TelegramChat
     sender: TelegramSender | None = Field(default=None, alias="from")
     text: str | None = Field(default=None, max_length=4096)
 
 
+class TelegramCallback(BaseModel):
+    id: str = Field(max_length=256)
+    sender: TelegramSender = Field(alias="from")
+    message: TelegramMessage | None = None
+    data: str | None = Field(default=None, max_length=64)
+
+
 class TelegramUpdate(BaseModel):
     update_id: int
     message: TelegramMessage | None = None
+    callback_query: TelegramCallback | None = None

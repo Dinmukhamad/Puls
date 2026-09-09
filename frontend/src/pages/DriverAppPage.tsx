@@ -12,6 +12,7 @@ import { dateTime } from "../utils/format";
 import "./simulator.css";
 import "./driver-app.css";
 import "./driver-orders.css";
+import { DriverWorkspace } from "./DriverWorkspace";
 
 export const DRIVER_SECTIONS = [
   { id: "orders", title: "Заказы", Icon: DriverArrow },
@@ -79,6 +80,19 @@ export function DriverAppPage() {
     onBack={() => { sendCode.reset(); verify.reset(); mutate({ action: "services" }); }}
     onRefresh={() => query.refetch()}
   /></div>;
+  if (profile.stage === "offline" && query.data?.shift) return <DriverWorkspace
+    state={query.data} fullName={user?.full_name ?? ""}
+    busy={action.isPending || createOrder.isPending || orderAction.isPending}
+    failed={createOrder.isError || orderAction.isError} error={action.error || createOrder.error || orderAction.error}
+    create={payload => { orderAction.reset(); createOrder.mutate(payload); }}
+    orderAction={name => {
+      const order = query.data?.order; if (!order) return;
+      const key = `${order.id}:${order.version}:${name}`;
+      if (lastCommand.current?.key !== key) lastCommand.current = { key, payload: { id: order.id, action: name, request_id: crypto.randomUUID() } };
+      createOrder.reset(); orderAction.mutate(lastCommand.current.payload);
+    }}
+    switchPark={() => mutate({ action: "services" })} refresh={() => { void query.refetch(); }}
+  />;
   return <DriverScreen
     profile={profile} parks={query.data!.parks} fullName={user?.full_name ?? ""}
     section={driverSection(params.get("section"))} position={position} busy={action.isPending || forget.isPending || createOrder.isPending || orderAction.isPending}

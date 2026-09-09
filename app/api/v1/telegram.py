@@ -5,7 +5,7 @@ from fastapi import APIRouter, Header, HTTPException, Response
 
 from app.core.deps import CurrentUser, SessionDep
 from app.schemas.telegram import TelegramPassword, TelegramUpdate
-from app.services import telegram
+from app.services import driver_support, telegram
 
 router = APIRouter(prefix="/auth/telegram", tags=["Telegram"])
 
@@ -44,4 +44,6 @@ async def webhook(
         or not hmac.compare_digest(secret.encode(), telegram.webhook_secret().encode())
     ):
         raise HTTPException(status_code=403, detail="Webhook не авторизован")
+    if payload.callback_query or (payload.message and " shift_" in (payload.message.text or "")):
+        return await driver_support.receive(session, payload)
     return await telegram.receive_start(session, payload.message) if payload.message else {}

@@ -5,7 +5,7 @@ from app.db.base import utcnow
 from app.models.driver import DriverProfile, DriverSettings
 from app.models.learning import LearningAttempt, LearningContent
 from app.models.user import User
-from app.services import driver_auth, driver_orders
+from app.services import driver_auth, driver_orders, driver_shifts
 
 # Начальные учебные варианты из предоставленного примера. После сохранения
 # в студии используются настройки администратора, включая количество парков.
@@ -18,7 +18,7 @@ DEFAULT_PARKS = [
 
 async def parks(session):
     config = await session.get(DriverSettings, 1)
-    return config.parks if config else DEFAULT_PARKS
+    return config.parks if config and config.parks else DEFAULT_PARKS
 
 
 def profile_data(profile):
@@ -57,6 +57,7 @@ async def state(session, user_id, device_token=None):
         profile["stage"] = "loading"
     return {
         **await driver_orders.state(session, user_id),
+        **await driver_shifts.state(session, user_id),
         "profile": profile,
         "authentication": authentication,
         "parks": await parks(session),

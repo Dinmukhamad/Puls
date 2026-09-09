@@ -13,6 +13,7 @@ from app.models.contest import (
 )
 from app.models.driver import DriverOrder, DriverProfile, DriverSettings
 from app.models.driver_auth import DriverDevice, TelegramLink
+from app.models.driver_shift import DriverShift, DriverSupportCase
 from app.models.enums import (
     BadgeRule,
     MetricDirection,
@@ -44,6 +45,8 @@ __all__ = [
     "DriverOrder",
     "DriverProfile",
     "DriverSettings",
+    "DriverShift",
+    "DriverSupportCase",
     "GamificationSettings",
     "Group",
     "LearningAttempt",

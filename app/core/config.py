@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     TELEGRAM_BOT_TOKEN: SecretStr = SecretStr("")
     TELEGRAM_BOT_USERNAME: str = ""
     TELEGRAM_WEBHOOK_URL: str = ""
+    DRIVER_APP_URL: str = "https://gamification-web.onrender.com/simulator"
     DRIVER_DEVICE_DAYS: int = Field(default=30, ge=1, le=90)
 
     # --- CORS ---

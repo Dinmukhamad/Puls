@@ -365,7 +365,7 @@ async def test_webhook_setup_verifies_bot_and_uses_secret_header(bot):
     method, payload = bot[1]
     assert method == "setWebhook" and payload["url"] == settings.TELEGRAM_WEBHOOK_URL
     assert payload["secret_token"] == telegram.webhook_secret()
-    assert payload["allowed_updates"] == ["message"]
+    assert payload["allowed_updates"] == ["message", "callback_query"]
 
 
 async def test_provider_transport_error_does_not_expose_bot_token(monkeypatch):

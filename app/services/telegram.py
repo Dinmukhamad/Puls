@@ -1,4 +1,4 @@
-"""Привязка личного чата Telegram и доставка кодов; без сценариев поддержки."""
+"""Привязка личного чата Telegram и доставка кодов."""
 
 import hashlib
 import hmac
@@ -90,7 +90,7 @@ async def configure_webhook():
         {
             "url": settings.TELEGRAM_WEBHOOK_URL,
             "secret_token": webhook_secret(),
-            "allowed_updates": ["message"],
+            "allowed_updates": ["message", "callback_query"],
             "max_connections": 5,
         },
     )
@@ -225,7 +225,10 @@ async def receive_start(session, message):
         else:
             reply = "Ссылка истекла или уже использована. Получите новую в профиле Puls."
     elif text.startswith("/help"):
-        reply = "Бот присылает коды для входа в Driver Simulator. Подключение — в профиле Puls."
+        reply = (
+            "Бот присылает коды входа и проводит учебный разбор обращения. "
+            "Подключение — в профиле Puls; обращение — Смена → Чаты → Поддержка."
+        )
     elif not text.startswith("/start"):
         return {}
     # Ответ Bot API внутри webhook: токен не попадает в ответ и не требуется
