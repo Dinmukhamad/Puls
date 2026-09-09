@@ -11,7 +11,7 @@ from app.models.contest import (
     OperatorWeekMetric,
     OperatorWeekResult,
 )
-from app.models.driver import DriverProfile, DriverSettings
+from app.models.driver import DriverOrder, DriverProfile, DriverSettings
 from app.models.driver_auth import DriverDevice, TelegramLink
 from app.models.enums import (
     BadgeRule,
@@ -41,6 +41,7 @@ __all__ = [
     "CoinTransaction",
     "ContestWeek",
     "DriverDevice",
+    "DriverOrder",
     "DriverProfile",
     "DriverSettings",
     "GamificationSettings",

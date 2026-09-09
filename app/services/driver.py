@@ -5,7 +5,7 @@ from app.db.base import utcnow
 from app.models.driver import DriverProfile, DriverSettings
 from app.models.learning import LearningAttempt, LearningContent
 from app.models.user import User
-from app.services import driver_auth
+from app.services import driver_auth, driver_orders
 
 # Начальные учебные варианты из предоставленного примера. После сохранения
 # в студии используются настройки администратора, включая количество парков.
@@ -56,6 +56,7 @@ async def state(session, user_id, device_token=None):
     elif profile and profile["stage"] == "phone" and authentication["verified"]:
         profile["stage"] = "loading"
     return {
+        **await driver_orders.state(session, user_id),
         "profile": profile,
         "authentication": authentication,
         "parks": await parks(session),
@@ -73,12 +74,15 @@ async def state(session, user_id, device_token=None):
 async def start(session, user_id):
     # Сериализация первого создания и повторных запусков одного аккаунта.
     await session.scalar(select(User.id).where(User.id == user_id).with_for_update())
-    profile = await session.get(DriverProfile, user_id)
+    profile = await session.scalar(
+        select(DriverProfile).where(DriverProfile.user_id == user_id).with_for_update()
+    )
     if profile is None:
         profile = DriverProfile(user_id=user_id, stage="services")
         session.add(profile)
     else:
-        profile.stage = "services"
+        if not await driver_orders.active_order(session, user_id):
+            profile.stage = "services"
     await session.flush()
     return profile
 
@@ -90,6 +94,8 @@ async def act(session, user_id, payload, device_token=None):
     if profile is None:
         raise NotFoundError("Сначала запустите Driver Simulator из обучения")
     if payload.action == "services":
+        if await driver_orders.active_order(session, user_id):
+            raise ConflictError("Сначала завершите или отмените текущий учебный заказ")
         profile.stage = "services"
     elif payload.action == "taxi":
         if profile.stage not in ("services", "cooperation"):

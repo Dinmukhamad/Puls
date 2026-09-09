@@ -1,15 +1,17 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Header, Response
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.deps import CurrentUser, HeadUser, SessionDep, StaffUser
 from app.models.driver import DriverSettings
 from app.models.driver_auth import DriverDevice
 from app.models.user import User
-from app.schemas.driver import DriverAction, DriverParksInput
+from app.schemas.driver import DriverAction, DriverOrderAction, DriverOrderCreate, DriverParksInput
 from app.schemas.telegram import DriverCode, DriverPhone
-from app.services import driver, driver_auth, telegram
+from app.services import driver, driver_auth, driver_orders, telegram
 from app.services.rules import write_audit
 
 router = APIRouter(tags=["Driver Simulator"])
@@ -45,6 +47,34 @@ async def send_code(
     session: SessionDep, user: CurrentUser, payload: DriverPhone, device: DeviceToken = None
 ):
     await driver_auth.issue_code(session, user.id, device, payload.phone)
+    return await driver.state(session, user.id, device)
+
+
+@router.post("/learning/driver/orders")
+async def create_order(
+    session: SessionDep, user: CurrentUser, payload: DriverOrderCreate, device: DeviceToken = None
+):
+    user_id = user.id
+    try:
+        await driver_orders.create(session, user_id, payload, device)
+    except IntegrityError:
+        # После гонки SQLite читаем победивший запрос или возвращаем 409.
+        await session.rollback()
+        await driver_orders.create(session, user_id, payload, device)
+    await session.commit()
+    return await driver.state(session, user_id, device)
+
+
+@router.put("/learning/driver/orders/{order_id}/action")
+async def order_action(
+    order_id: UUID,
+    session: SessionDep,
+    user: CurrentUser,
+    payload: DriverOrderAction,
+    device: DeviceToken = None,
+):
+    await driver_orders.act(session, user.id, order_id, payload, device)
+    await session.commit()
     return await driver.state(session, user.id, device)
 
 

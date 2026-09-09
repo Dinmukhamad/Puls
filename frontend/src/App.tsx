@@ -29,7 +29,6 @@ import { StoreAdminPage } from "./pages/StoreAdminPage";
 import { TrainingPage } from "./pages/TrainingPage";
 import { LearningPlayerPage } from "./pages/LearningPlayerPage";
 import { LearningStudioPage } from "./pages/LearningStudioPage";
-import { SimulatorPage } from "./pages/SimulatorPage";
 import { GamesPage } from "./pages/GamesPage";
 import { WalletPage } from "./pages/WalletPage";
 import { ReportsPage } from "./pages/ReportsPage";
@@ -37,6 +36,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 const AccessAdminPage = lazy(() => import("./pages/AccessAdminPage").then((module) => ({ default: module.AccessAdminPage })));
 const DriverAppPage = lazy(() => import("./pages/DriverAppPage").then((module) => ({ default: module.DriverAppPage })));
 const ProfilePage = lazy(() => import("./pages/ProfilePage").then((module) => ({ default: module.ProfilePage })));
+const SimulatorPage = lazy(() => import("./pages/SimulatorPage").then((module) => ({ default: module.SimulatorPage })));
 
 export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
@@ -59,7 +59,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/simulator" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense></SectionGuard>} />
-      <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><SimulatorPage /></SectionGuard>} />
+      <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><Suspense fallback={<Skeleton height={300} />}><SimulatorPage /></Suspense></SectionGuard>} />
       <Route element={<AppLayout />}>
         <Route index element={<Navigate to={access.home} replace />} />
         <Route path="/admin/access" element={atLeast("admin") ? <Suspense fallback={<Skeleton height={300} />}><AccessAdminPage /></Suspense> : <AccessPage />} />

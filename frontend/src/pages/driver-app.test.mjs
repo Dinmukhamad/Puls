@@ -101,16 +101,14 @@ test("park sheet displays configured choices and sends the chosen ID", () => {
   assert.deepEqual(selected, { action: "park", park_id: "one" });
 });
 
-test("map is offline with no active route or enabled driving action", () => {
+test("map starts offline and offers the new order flow", () => {
   const html = render();
   assert.match(html, /Карта учебного города/);
   assert.match(html, /Офлайн/);
-  assert.match(html, /class="driver-online" disabled=""/);
-  assert.match(html, /Сейчас доступны вход и просмотр разделов/);
+  assert.match(html, /class="driver-online"/);
+  assert.doesNotMatch(html, /class="driver-online" disabled/);
+  assert.match(html, /Один заказ от начала до конца/);
   assert.doesNotMatch(html, /Учебный маршрут:|Построить маршрут|Принять|Начать поездку|Проблема|app-sidebar|bottom-nav/);
-  const online = elements(DriverScreen(base)).find((item) => item.props.className === "driver-online");
-  assert.equal(online.props.disabled, true);
-  assert.equal(online.props.onClick, undefined);
 });
 
 test("every driver tab opens its own view, with a working return to orders", () => {
@@ -175,4 +173,49 @@ test("entry offers resume only for unfinished login and a fresh launch after com
   assert.match(entry(), /Последний результат/);
   assert.match(entry(), /href="\/simulator\/attempts\/7"/);
   assert.match(entry(), /100%/);
+});
+
+const { DriverOrders, orderTiming } = await component("./DriverOrders.tsx");
+const { routePosition } = await component("./DriverOrderMap.tsx");
+const order = { id: "qa-order", stage: "pickup", origin: "Первая улица, 7", destination: "Вторая улица, 10", payment: "cash", fare: 1960, commission: 39, net: 1921, park: parks[0], version: 2, events: [], created_at: "2026-09-09T10:00:00Z", stage_started_at: "2026-09-09T10:00:00", finished_at: null, duration_seconds: 8 };
+const orderHtml = (overrides = {}, now = "2026-09-09T10:00:00Z") => renderToStaticMarkup(React.createElement(DriverOrders, { position: null, busy: false, serverNow: now, order: { ...order, ...overrides }, onIncome() {} }));
+
+test("arrival and finishing wait for the simulated route, including restored UTC timestamps", () => {
+  assert.deepEqual(orderTiming(order, "2026-09-09T10:00:02Z", 2), { elapsed: 4, remaining: 4, progress: .5, ready: false });
+  assert.equal(orderTiming(order, "2026-09-09T09:59:00Z").progress, 0);
+  assert.equal(orderTiming(order, "2026-09-09T10:01:00Z").progress, 1);
+  assert.match(orderHtml(), /class="driver-order-action" disabled=""/);
+  assert.doesNotMatch(orderHtml({}, "2026-09-09T10:00:10Z"), /class="driver-order-action" disabled/);
+  assert.match(orderHtml({ stage: "trip", duration_seconds: 38 }), /Завершить поездку/);
+  assert.match(orderHtml({ stage: "trip", duration_seconds: 38 }), /class="driver-order-action" disabled=""/);
+});
+
+test("payment screens distinguish cash confirmation from automatic card payment", () => {
+  const cash = orderHtml({ stage: "payment", duration_seconds: 2 });
+  const card = orderHtml({ stage: "payment", payment: "card", duration_seconds: 2 });
+  assert.match(cash, /Деньги получены/);
+  assert.match(card, /Наличные с пассажира брать не нужно/);
+  assert.doesNotMatch(card, /Деньги получены/);
+  assert.doesNotMatch(cash + card, /Номер карты|CVV|Пополнить/);
+});
+
+test("completed orders expose receipt and repetition; active route hides unrelated navigation", () => {
+  const done = orderHtml({ stage: "complete", duration_seconds: 0 });
+  assert.match(done, /Заказ выполнен|Ваш учебный доход/);
+  assert.match(done, /Следующий заказ/);
+  assert.match(done, /Наличные получены/);
+  const html = render({ orderState: { order, order_summary: { count: 2, gross: 3920, commission: 78, net: 3842 }, order_history: [], server_now: "2026-09-09T10:00:00Z" } });
+  assert.doesNotMatch(html, /class="driver-nav"/);
+  assert.match(html, /Выйти из симулятора в Puls/);
+});
+
+test("custom address text is escaped and the car follows each route segment", () => {
+  const html = orderHtml({ stage: "offer", origin: '<img src=x onerror="bad()">', destination: "Назначение, 25" });
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&lt;img/);
+  assert.match(html, /Назначение, 25/);
+  const points = [[0, 0], [10, 0], [10, 10]];
+  assert.deepEqual(routePosition(points, .25), { x: 5, y: 0, angle: 90 });
+  assert.deepEqual(routePosition(points, .75), { x: 10, y: 5, angle: 180 });
+  assert.deepEqual(routePosition(points, 2), { x: 10, y: 10, angle: 180 });
 });

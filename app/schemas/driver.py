@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -33,3 +34,26 @@ class DriverAction(BaseModel):
         if (self.action == "park") != (self.park_id is not None):
             raise ValueError("Укажите парк только для действия выбора парка")
         return self
+
+
+class DriverOrderCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    id: UUID
+    origin: str = Field(min_length=3, max_length=160)
+    destination: str = Field(min_length=3, max_length=160)
+
+    @model_validator(mode="after")
+    def different_addresses(self):
+        self.origin = " ".join(self.origin.split())
+        self.destination = " ".join(self.destination.split())
+        if min(len(self.origin), len(self.destination)) < 3:
+            raise ValueError("Введите адреса подачи и назначения")
+        if self.origin.casefold() == self.destination.casefold():
+            raise ValueError("Адреса подачи и назначения должны отличаться")
+        return self
+
+
+class DriverOrderAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: UUID
+    action: Literal["offer", "accept", "arrive", "start_trip", "finish", "pay", "cancel"]
