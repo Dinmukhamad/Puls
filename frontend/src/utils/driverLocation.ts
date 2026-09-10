@@ -24,6 +24,7 @@ interface LocationEnvironment {
 // Каждый ответ принадлежит своему запросу и видимой сессии экрана. Поздние ответы
 // после ухода/отказа не могут восстановить разрешение или старые координаты.
 export function trackDriverLocation(emit: (state: LocationState) => void, env: LocationEnvironment) {
+  if (typeof env.navigator.geolocation?.watchPosition === "function") return watchDriverLocation(emit, env);
   let stopped = false, denied = false, pending = false, generation = 0;
   let fix: LocationFix | null = null, permission: PermissionStatus | undefined;
   const publish = (status: LocationState["status"], message: string) => emit({ fix, status, message });
@@ -64,4 +65,57 @@ export function trackDriverLocation(emit: (state: LocationState) => void, env: L
   }).catch(() => {});
   read(); const timer = env.interval(read, 10000);
   return { retry, stop: () => { stopped = true; generation++; env.clear(timer); env.document.removeEventListener("visibilitychange", visibility); permission?.removeEventListener("change", permissionChanged); } };
+}
+
+// Датчик может присылать позиции чаще; наружу выходит только последний отсчёт
+// раз в 10 секунд. Буфера пути нет. Первый точный отсчёт показываем сразу.
+function watchDriverLocation(emit: (state: LocationState) => void, env: LocationEnvironment) {
+  let stopped = false, denied = false, watch: number | undefined, generation = 0;
+  let refreshPending = false, refresh: (() => void) | undefined;
+  let latest: LocationFix | null = null, published: LocationFix | null = null, permission: PermissionStatus | undefined;
+  const publish = (status: LocationState["status"], message: string) => emit({ fix: published, status, message });
+  const clear = () => { generation++; if (watch !== undefined) env.navigator.geolocation.clearWatch(watch); watch = undefined; latest = null; published = null; refresh = undefined; refreshPending = false; };
+  const flush = () => {
+    if (stopped || env.document.visibilityState !== "visible" || denied) return;
+    if (latest && freshFix(latest, env.now())) { published = latest; publish("ready", "Местоположение обновляется каждые 10 секунд"); }
+    else if (published) { published = null; publish("unavailable", "Нет свежего сигнала GPS. Определяем местоположение…"); }
+  };
+  const start = () => {
+    if (stopped || denied || watch !== undefined || env.document.visibilityState !== "visible") return;
+    const token = ++generation;
+    publish("requesting", "Разрешите доступ к местоположению. Определяем вашу точку…");
+    const accept: PositionCallback = value => {
+      if (stopped || token !== generation || env.document.visibilityState !== "visible") return;
+      const next = { latitude: value.coords.latitude, longitude: value.coords.longitude, accuracy: value.coords.accuracy, captured_at: Number.isFinite(value.timestamp) ? new Date(value.timestamp).toISOString() : "" };
+      const accuracy = next.accuracy;
+      if (!freshFix(next, env.now())) { latest = null; published = null; publish("unavailable", accuracy > MAX_ACCURACY ? `Точность ±${Math.round(accuracy)} м. Включите точное местоположение.` : "Браузер вернул устаревшую геопозицию."); return; }
+      if (latest && Date.parse(next.captured_at) < Date.parse(latest.captured_at)) return;
+      latest = next;
+      if (!published) flush();
+    };
+    const reject: PositionErrorCallback = error => {
+      if (stopped || token !== generation || env.document.visibilityState !== "visible") return;
+      latest = null; published = null;
+      if (error.code === 1) { denied = true; clear(); }
+      publish(denied ? "denied" : "unavailable", denied ? "Доступ к местоположению отключён. Разрешите его в настройках сайта." : "Нет сигнала GPS. Проверьте геолокацию устройства.");
+    };
+    watch = env.navigator.geolocation.watchPosition(accept, reject, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+    refresh = () => {
+      // watchPosition может молчать у неподвижного устройства. Уточняем свежесть
+      // отдельным запросом, сохраняя прежнее правило публикации раз в 10 секунд.
+      if (refreshPending || typeof env.navigator.geolocation.getCurrentPosition !== "function" || (latest && env.now() - Date.parse(latest.captured_at) < 10000)) return;
+      refreshPending = true;
+      env.navigator.geolocation.getCurrentPosition(value => { if (token !== generation) return; refreshPending = false; accept(value); flush(); }, error => { if (token !== generation) return; refreshPending = false; reject(error); }, { enableHighAccuracy: true, maximumAge: 0, timeout: 8000 });
+    };
+  };
+  const retry = () => { if (!stopped) { denied = false; clear(); start(); } };
+  const visibility = () => { if (env.document.visibilityState === "visible") start(); else { clear(); publish("paused", "Геолокация приостановлена"); } };
+  const permissionChanged = () => {
+    if (permission?.state === "denied") { denied = true; clear(); publish("denied", "Доступ к местоположению отключён в настройках сайта."); }
+    else { denied = false; start(); }
+  };
+  env.document.addEventListener("visibilitychange", visibility);
+  void env.navigator.permissions?.query({ name: "geolocation" }).then(value => { if (stopped) return; permission = value; value.addEventListener("change", permissionChanged); if (value.state === "denied") permissionChanged(); }).catch(() => {});
+  start(); const timer = env.interval(() => { flush(); if (!stopped && !denied && env.document.visibilityState === "visible") refresh?.(); }, 10000);
+  return { retry, stop: () => { stopped = true; clear(); env.clear(timer); env.document.removeEventListener("visibilitychange", visibility); permission?.removeEventListener("change", permissionChanged); } };
 }

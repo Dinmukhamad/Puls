@@ -1,3 +1,4 @@
+import { DriverTripReviews } from "./DriverTripReviews";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { driver } from "../api/driver";
@@ -9,7 +10,7 @@ import { dateTime } from "../utils/format";
 export function DriverTeamResults() {
   const [page, setPage] = useState(1);
   const query = useQuery({ queryKey: ["driver-team-results", page], queryFn: () => driverShift.results(page) });
-  return <Card title="Driver Simulator · смены команды"><div className="stack">{query.isLoading ? <RowsSkeleton /> : query.isError ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : query.data?.items.length ? query.data.items.map(x => <details key={x.id}><summary>{x.full_name} · {x.finished_at ? x.result?.score == null ? "Свободная практика" : `${x.result.score}/100` : `В работе · ${x.completed} заказов`}</summary><p>{x.title} · {dateTime(x.created_at)}</p>{x.result?.checks.map(check => <p className="small" key={check.key}>{check.done ? "✓" : "○"} {check.title} · {check.path}</p>)}</details>) : <p className="secondary">Смены сотрудников появятся после запуска тренажёра.</p>}<div className="row"><Button disabled={page <= 1} onClick={() => setPage(page - 1)}>Назад</Button><span>{page}</span><Button disabled={page * 20 >= (query.data?.total ?? 0)} onClick={() => setPage(page + 1)}>Далее</Button></div></div></Card>;
+  return <Card title="Driver Simulator · смены команды"><div className="stack">{query.isLoading ? <RowsSkeleton /> : query.isError ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : query.data?.items.length ? query.data.items.map(x => <details key={x.id}><summary>{x.full_name} · {x.finished_at ? x.result?.score == null ? "Свободная практика" : `${x.result.score}/100` : `В работе · ${x.completed} заказов`}</summary><p>{x.title} · {dateTime(x.created_at)}</p><DriverTripReviews trips={x.result?.trips} />{x.result?.checks.map(check => <p className="small" key={check.key}>{check.done ? "✓" : "○"} {check.title} · {check.path}</p>)}</details>) : <p className="secondary">Смены сотрудников появятся после запуска тренажёра.</p>}<div className="row"><Button disabled={page <= 1} onClick={() => setPage(page - 1)}>Назад</Button><span>{page}</span><Button disabled={page * 20 >= (query.data?.total ?? 0)} onClick={() => setPage(page + 1)}>Далее</Button></div></div></Card>;
 }
 
 export function DriverScenarioEditor() {
@@ -27,9 +28,14 @@ function ScenarioForm({ initial, parks, readOnly }: { initial: DriverScenario; p
   const numbers: { key: keyof DriverScenario; title: string; max: number; min?: number; step?: number }[] = [
     { key: "target_orders", title: "Заказов за смену (например 3, 5 или 10)", max: 10, min: 1 },
     { key: "fare", title: "Базовая стоимость поездки, ₸", max: 100000, min: 100 },
+    { key: "fare_per_km", title: "Стоимость километра маршрута, ₸", max: 1000 },
+    { key: "arrival_radius", title: "Радиус прибытия в А и Б, метров", min: 30, max: 200 },
+    { key: "free_wait_seconds", title: "Бесплатное ожидание, секунд", min: 5, max: 900 },
+    { key: "boarding_seconds", title: "Через сколько секунд подходит пассажир", min: 5, max: 900 },
+    { key: "virtual_speed", title: "Скорость виртуального движения, м/с", min: 1, max: 100 },
     { key: "service_percent", title: "Комиссия сервиса, %", max: 40, step: .01 },
     { key: "service_tax_percent", title: "Налог с комиссии сервиса, %", max: 30, step: .01 },
-    { key: "wait_per_minute", title: "Платное ожидание, ₸ / учебная минута", max: 1000 },
+    { key: "wait_per_minute", title: "Платное ожидание, ₸ / полная минута", max: 1000 },
     { key: "initial_balance", title: "Начальный учебный баланс, ₸", max: 1000000 },
     { key: "initial_points", title: "Начальные баллы уровня", max: 1000000 },
     { key: "priority_base", title: "Начальный приоритет", max: 100 },
@@ -40,6 +46,7 @@ function ScenarioForm({ initial, parks, readOnly }: { initial: DriverScenario; p
   ];
   return <form className="stack" onSubmit={e => { e.preventDefault(); save.mutate(value); }}><p className="secondary small">Это учебные параметры, включая пример вопросов поддержки. Перед зачётом внесите ваш регламент. Комиссия парка задаётся выше.</p><fieldset className="learning-fieldset stack" disabled={readOnly || save.isPending}>
     <label className="field"><span>Название сценария</span><input className="input" required maxLength={100} value={value.title} onChange={e => edit("title", e.target.value)} /></label>
+    <label><input type="checkbox" checked={value.real_location_required} onChange={e => edit("real_location_required", e.target.checked)} /> Реальная геолокация обязательна в учебной смене</label><p className="secondary small">При включённом требовании оператор сможет прибыть и завершить заказ только по GPS. В свободной практике доступно виртуальное движение по построенному маршруту. Demo Mode администратора не даёт зачётных баллов.</p>
     <label className="field"><span>Парк по заданию</span><select className="input" value={value.required_park} onChange={e => edit("required_park", e.target.value)}>{parks.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
     <details><summary>Параметры заказов и оценки</summary><div className="learning-form-grid">{numbers.map(x => <label key={x.key} className="field"><span>{x.title}</span><input className="input" type="number" required min={x.min ?? 0} max={x.max} step={x.step ?? 1} value={Number(value[x.key])} onChange={e => edit(x.key, Number(e.target.value))} /></label>)}</div><div className="stack">{([["require_photo", "Обязательный фотоконтроль"], ["route_event", "Изменение адреса в первом заказе"], ["require_support", "Проблема с выплатой и Telegram-поддержка"], ["require_documents", "Проверка и подписание документов"]] as const).map(([key, title]) => <label key={key}><input type="checkbox" checked={value[key]} onChange={e => edit(key, e.target.checked)} /> {title}</label>)}</div></details>
     <details><summary>Уровни и преимущества</summary><div className="stack">{value.levels.map((x, i) => <div className="learning-form-grid" key={i}><label className="field"><span>Уровень {i + 1}</span><input className="input" required value={x.name} maxLength={50} onChange={e => edit("levels", value.levels.map((y, j) => i === j ? { ...y, name: e.target.value } : y))} /></label><label className="field"><span>От скольких баллов</span><input className="input" type="number" min={0} max={1000000} required value={x.threshold} onChange={e => edit("levels", value.levels.map((y, j) => i === j ? { ...y, threshold: Number(e.target.value) } : y))} /></label><label className="field"><span>Преимущества</span><input className="input" required maxLength={400} value={x.benefits} onChange={e => edit("levels", value.levels.map((y, j) => i === j ? { ...y, benefits: e.target.value } : y))} /></label><Button disabled={value.levels.length <= 1} onClick={() => edit("levels", value.levels.filter((_, j) => i !== j))}>Удалить уровень</Button></div>)}<Button disabled={value.levels.length >= 10} onClick={() => edit("levels", [...value.levels, { name: "Новый уровень", threshold: value.levels.at(-1)!.threshold + 1000, benefits: "Преимущества уровня" }])}>Добавить уровень</Button></div></details>

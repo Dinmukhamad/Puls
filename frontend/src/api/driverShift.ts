@@ -1,8 +1,10 @@
 import { request } from "./client";
 import { driverDeviceHeaders, type DriverState } from "./driver";
+import type { NavigationSpec } from "./driverNavigation";
 
 export interface SupportStep { question: string; options: string[]; correct: number; explanation: string }
 export interface DriverScenario {
+  real_location_required: boolean; arrival_radius: number; free_wait_seconds: number; boarding_seconds: number; fare_per_km: number; virtual_speed: number;
   title: string; required_park: string; target_orders: number; fare: number; service_percent: number; service_tax_percent: number;
   wait_per_minute: number; initial_balance: number; initial_points: number; priority_base: number; priority_complete: number;
   priority_missed: number; priority_cancelled: number; offer_seconds: number; require_photo: boolean; require_documents: boolean;
@@ -20,7 +22,7 @@ export interface LedgerEntry { id: string; title: string; amount: number; kind: 
 export interface DriverMessage { id: string; channel: string; title: string; text: string; at: string; amount?: number; transaction_id?: string }
 export interface DriverCar { id: string; brand: string; model: string; year: number; plate: string; status: string }
 export interface IntercityOffer { id: string; origin: string; destination: string; date?: string; from_time?: string; to_time?: string; seats?: number; type?: string; price: number; status: string }
-export interface ShiftResult { score: number | null; penalties: number; checks: { key: string; title: string; path: string; done: boolean; weight: number }[]; orders: number; target: number; seconds: number; errors: number; hints: number }
+export interface ShiftResult { trips?: { id: string; origin: string; destination: string; fare: number; payment: string; navigation: NavigationSpec }[]; score: number | null; penalties: number; checks: { key: string; title: string; path: string; done: boolean; weight: number }[]; orders: number; target: number; seconds: number; errors: number; hints: number }
 export interface DriverShift {
   id: string; mode: "free" | "assessment"; config: DriverScenario; version: number; created_at: string; finished_at: string | null; result: ShiftResult | null;
   events: { id: string; action: string; at: string; details: Record<string, unknown> }[];

@@ -1,8 +1,10 @@
 """Доменные исключения и их отображение в HTTP-ответы."""
+
 from __future__ import annotations
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm.exc import StaleDataError
 
 
 class DomainError(Exception):
@@ -51,6 +53,16 @@ class InsufficientCoinsError(DomainError):
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(StaleDataError)
+    async def _stale_state_handler(_: Request, exc: StaleDataError) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "code": "conflict",
+                "detail": "Заказ изменён в другом окне. Обновите данные.",
+            },
+        )
+
     @app.exception_handler(DomainError)
     async def _domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:
         body: dict[str, object] = {"code": exc.code, "detail": exc.message}

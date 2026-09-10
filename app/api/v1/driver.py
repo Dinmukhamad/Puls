@@ -17,14 +17,135 @@ from app.models.driver import DriverSettings
 from app.models.driver_auth import DriverDevice
 from app.models.driver_shift import DriverShift
 from app.models.user import User
-from app.schemas.driver import DriverAction, DriverOrderAction, DriverOrderCreate, DriverParksInput
+from app.schemas.driver import (
+    DriverAction,
+    DriverGeoPoint,
+    DriverOrderAction,
+    DriverOrderCreate,
+    DriverParksInput,
+)
+from app.schemas.driver_navigation import (
+    AddressSearch,
+    DemoControl,
+    DestinationChange,
+    PositionUpdate,
+    RoutePrepare,
+)
 from app.schemas.driver_shift import DriverScenario, ShiftAction, ShiftStart, SupportCreate
 from app.schemas.telegram import DriverCode, DriverPhone
-from app.services import driver, driver_auth, driver_orders, driver_shifts, driver_support, telegram
+from app.services import (
+    driver,
+    driver_auth,
+    driver_maps,
+    driver_navigation,
+    driver_orders,
+    driver_shifts,
+    driver_support,
+    telegram,
+)
 from app.services.rules import write_audit
 
 router = APIRouter(tags=["Driver Simulator"])
 DeviceToken = Annotated[str | None, Header(alias="X-Driver-Device", max_length=100)]
+
+
+@router.post("/learning/driver/maps/search")
+async def search_address(
+    session: SessionDep,
+    user: CurrentUser,
+    payload: AddressSearch,
+    response: Response,
+    device: DeviceToken = None,
+):
+    await driver_orders.require_profile(session, user.id, device)
+    response.headers["Cache-Control"] = "no-store"
+    return await driver_maps.search(session, payload)
+
+
+@router.post("/learning/driver/maps/reverse")
+async def reverse_address(
+    session: SessionDep,
+    user: CurrentUser,
+    payload: DriverGeoPoint,
+    response: Response,
+    device: DeviceToken = None,
+):
+    await driver_orders.require_profile(session, user.id, device)
+    response.headers["Cache-Control"] = "no-store"
+    return await driver_maps.reverse(session, payload)
+
+
+@router.post("/learning/driver/routes")
+async def prepare_route(
+    session: SessionDep,
+    user: CurrentUser,
+    payload: RoutePrepare,
+    response: Response,
+    device: DeviceToken = None,
+):
+    response.headers["Cache-Control"] = "no-store"
+    result = await driver_navigation.prepare(session, user.id, payload, device)
+    await session.commit()
+    return result
+
+
+async def owned_order(session, user_id, order_id, device):
+    from app.core.errors import NotFoundError
+    from app.models.driver import DriverOrder
+
+    await driver_orders.require_profile(session, user_id, device)
+    order = await session.scalar(
+        select(DriverOrder)
+        .where(DriverOrder.id == str(order_id), DriverOrder.user_id == user_id)
+        .with_for_update()
+    )
+    if not order:
+        raise NotFoundError("Учебный заказ не найден")
+    return order
+
+
+@router.post("/learning/driver/orders/{order_id}/position")
+async def update_position(
+    order_id: UUID,
+    session: SessionDep,
+    user: CurrentUser,
+    payload: PositionUpdate,
+    response: Response,
+    device: DeviceToken = None,
+):
+    response.headers["Cache-Control"] = "no-store"
+    order = await owned_order(session, user.id, order_id, device)
+    await driver_navigation.position(session, order, payload.location)
+    await session.commit()
+    return await driver.state(session, user.id, device)
+
+
+@router.post("/learning/driver/orders/{order_id}/demo")
+async def demo_control(
+    order_id: UUID,
+    session: SessionDep,
+    user: CurrentUser,
+    payload: DemoControl,
+    device: DeviceToken = None,
+):
+    order = await owned_order(session, user.id, order_id, device)
+    await driver_navigation.demo(session, order, user, payload)
+    await session.commit()
+    return await driver.state(session, user.id, device)
+
+
+@router.put("/learning/driver/orders/{order_id}/destination")
+async def change_destination(
+    order_id: UUID,
+    session: SessionDep,
+    user: CurrentUser,
+    payload: DestinationChange,
+    device: DeviceToken = None,
+):
+    order = await owned_order(session, user.id, order_id, device)
+    await driver_navigation.destination(session, order, payload)
+    await session.commit()
+    return await driver.state(session, user.id, device)
 
 
 @router.post("/learning/driver/shifts")

@@ -1,4 +1,5 @@
 """Конфигурация приложения (12-factor: всё через переменные окружения)."""
+
 from __future__ import annotations
 
 import json
@@ -44,6 +45,9 @@ class Settings(BaseSettings):
     TELEGRAM_WEBHOOK_URL: str = ""
     DRIVER_APP_URL: str = "https://gamification-web.onrender.com/simulator"
     DRIVER_DEVICE_DAYS: int = Field(default=30, ge=1, le=90)
+    # Поставщики заменяются настройками сервера, ключи в браузер не передаются.
+    DRIVER_ROUTING_URL: str = "https://routing.openstreetmap.de"
+    DRIVER_GEOCODING_URL: str = "https://photon.komoot.io"
 
     # --- CORS ---
     #: Задаётся списком через запятую: "https://app.example.com,https://admin.example.com"

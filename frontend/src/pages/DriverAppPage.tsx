@@ -1,7 +1,10 @@
 import { useDriverLocation } from "../hooks/useDriverLocation";
+import { useDriverLocationConsent } from "../hooks/useDriverLocationConsent";
+import { useDriverNavigation } from "../hooks/useDriverNavigation";
+import { DriverNavigationOrders } from "./DriverNavigationOrders";
 import type { LocationState } from "../utils/driverLocation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { driver, orderActive, type DriverAction, type DriverAuthentication, type DriverPark, type DriverProfile, type DriverState, type OrderAction, type OrderCommand, type OrderCreate } from "../api/driver";
 import { useAuth } from "../auth/AuthContext";
@@ -48,7 +51,9 @@ export function DriverAppPage() {
   } });
   const { mutate } = action;
   const stage = query.data?.profile?.stage;
-  const location = useDriverLocation(stage === "offline" && !query.data?.shift);
+  const [consent, setConsent] = useDriverLocationConsent(`profile:${user?.id ?? "guest"}`);
+  const location = useDriverLocation(consent === "enabled" && stage === "offline" && !query.data?.shift);
+  useDriverNavigation(query.data?.shift ? undefined : query.data, location);
   useEffect(() => { const timer = window.setTimeout(() => setBooting(false), 1200); return () => window.clearTimeout(timer); }, []);
   useEffect(() => {
     if (stage !== "loading" || booting) return;
@@ -83,6 +88,7 @@ export function DriverAppPage() {
     switchPark={() => mutate({ action: "services" })} refresh={() => { void query.refetch(); }}
   />;
   return <DriverScreen
+    navigation={query.data && !(orderActive(query.data.order) && !query.data.order?.details?.navigation) ? <DriverNavigationOrders state={query.data} location={location} consent={consent} allowLocation={() => setConsent("enabled")} declineLocation={() => setConsent("off")} busy={createOrder.isPending || action.isPending} create={payload => createOrder.mutate(payload)} go={view => setParams({ section: view === "money" ? "income" : view })} /> : undefined}
     profile={profile} parks={query.data!.parks} fullName={user?.full_name ?? ""}
     section={driverSection(params.get("section"))} position={location.fix} location={location} busy={action.isPending || forget.isPending || createOrder.isPending || orderAction.isPending}
     orderState={query.data} orderFailed={createOrder.isError || orderAction.isError}
@@ -149,6 +155,7 @@ export function DriverLoading() {
 }
 
 interface ScreenProps {
+  navigation?: ReactNode;
   profile: DriverProfile; parks: DriverPark[]; fullName: string; section: DriverSection;
   location?: LocationState & { retry: () => void };
   position: Position | null; busy: boolean; error?: unknown;
@@ -156,7 +163,7 @@ interface ScreenProps {
   orderState?: Pick<DriverState, "order" | "order_summary" | "order_history" | "server_now">; orderFailed?: boolean;
   onCreateOrder?: (payload: OrderCreate) => void; onOrderAction?: (action: OrderAction) => void;
 }
-export function DriverScreen({ profile, parks, fullName, section, position, location, busy, error, onAction, onSection, onRefresh, onForget, orderState, orderFailed, onCreateOrder, onOrderAction }: ScreenProps) {
+export function DriverScreen({ profile, parks, fullName, section, position, location, busy, error, onAction, onSection, onRefresh, onForget, orderState, orderFailed, onCreateOrder, onOrderAction, navigation }: ScreenProps) {
   const offline = profile.stage === "offline";
   const summary = orderState?.order_summary ?? { count: 0, gross: 0, commission: 0, net: 0 };
   const active = orderActive(orderState?.order);
@@ -167,8 +174,8 @@ export function DriverScreen({ profile, parks, fullName, section, position, loca
       <div className="driver-card driver-balance"><CoinIcon size={28} /><div><strong>{money(summary.net)}</strong><span>Учебный баланс</span></div></div>
       <h2>Мои сервисы</h2>
       <button className="driver-card driver-service" disabled={busy} onClick={() => onAction({ action: "taxi" })}><span className="driver-taxi"><DriverArrow /></span><span><strong>Такси</strong><small>Учебная работа с заказами</small></span><ChevronRightIcon /></button>
-    </main> : <main className={`driver-content${section === "orders" ? " driver-content--orders" : ""}`}>
-      {section === "orders" && <DriverOrders order={orderState?.order} summary={summary} serverNow={orderState?.server_now} position={position} location={location} busy={busy} failed={orderFailed} onCreate={onCreateOrder} onAction={onOrderAction} onIncome={() => onSection("income")} />}
+    </main> : <main className={`driver-content${section === "orders" ? navigation ? " dn-content" : " driver-content--orders" : ""}`}>
+      {section === "orders" && (navigation ?? <DriverOrders order={orderState?.order} summary={summary} serverNow={orderState?.server_now} position={position} location={location} busy={busy} failed={orderFailed} onCreate={onCreateOrder} onAction={onOrderAction} onIncome={() => onSection("income")} />)}
       {section === "results" && <div className="driver-section"><h1>Результаты</h1><div className="driver-card"><h2>Работа с заказами</h2><DriverRow title="Выполнено заказов" value={String(summary.count)} /><DriverRow title="Учебный доход" value={money(summary.net)} /><DriverRow title="Текущий заказ" value={active ? "В процессе" : "Нет активного заказа"} />{active && <button className="driver-primary" onClick={() => onSection("orders")}>Продолжить заказ</button>}</div><div className="driver-card"><h2>Последние поездки</h2><OrderHistory orders={orderState?.order_history ?? []} /></div><div className="driver-card"><h2>Вход в приложение</h2><DriverRow title="Статус" value="Вход завершён" />{profile.last_login_at && <DriverRow title="Последний вход" value={dateTime(profile.last_login_at)} />}</div></div>}
       {section === "income" && <div className="driver-section"><h1>Доход</h1><div className="driver-card driver-money"><span>Учебный баланс</span><strong>{money(summary.net)}</strong></div><div className="driver-card"><DriverRow title="Стоимость выполненных поездок" value={money(summary.gross)} /><DriverRow title="Комиссии парков" value={money(summary.commission)} /><DriverRow title="Доход после комиссии" value={money(summary.net)} /></div><div className="driver-card"><h2>История операций</h2><OrderHistory orders={orderState?.order_history ?? []} /></div><p className="driver-muted">Учебные суммы симулятора. Выплаты и списания настоящих денег не выполняются.</p></div>}
       {section === "messages" && <div className="driver-section"><h1>Сообщения</h1><div className="driver-card driver-empty"><InboxIcon size={36} /><h2>Сообщений пока нет</h2></div></div>}
@@ -176,7 +183,7 @@ export function DriverScreen({ profile, parks, fullName, section, position, loca
       {section === "learning" && <div className="driver-section"><button className="driver-back" onClick={() => onSection("profile")}>‹ Профиль</button><h1>Обучение</h1><div className="driver-card"><h2>Вход в приложение</h2><p>Запуск → Такси → выбор парка → номер и код из Telegram → загрузка профиля → карта.</p><DriverRow title="Статус" value="Вход завершён" /></div><div className="driver-card"><h2>Полный заказ</h2><p>Адреса → линия → принять заказ → на месте → начать поездку → завершить → подтвердить оплату.</p><button className="driver-primary" onClick={() => onSection("orders")}>{active ? "Продолжить заказ" : "Перейти к заказам"}</button></div></div>}
     </main>}
     {!!error && <div className="driver-error"><ErrorState error={error} onRetry={profile.stage === "loading" ? () => onAction({ action: "enter" }) : onRefresh} /></div>}
-    {offline && !(active && section === "orders") && <nav className="driver-nav" aria-label="Разделы водительского приложения">{DRIVER_SECTIONS.map(({ id, title, Icon }) => <button key={id} className={section === id || (id === "profile" && section === "learning") ? "is-active" : undefined} aria-current={section === id || (id === "profile" && section === "learning") ? "page" : undefined} onClick={() => onSection(id)}><Icon size={22} /><span>{title}</span></button>)}</nav>}
+    {offline && (navigation || !(active && section === "orders")) && <nav className="driver-nav" aria-label="Разделы водительского приложения">{DRIVER_SECTIONS.map(({ id, title, Icon }) => <button key={id} className={section === id || (id === "profile" && section === "learning") ? "is-active" : undefined} aria-current={section === id || (id === "profile" && section === "learning") ? "page" : undefined} onClick={() => onSection(id)}><Icon size={22} /><span>{title}</span></button>)}</nav>}
     {profile.stage === "cooperation" && <Sheet id="driver-parks" title="Выберите вариант сотрудничества" onClose={() => { if (!busy) onAction({ action: "services" }); }}>
       <div className="driver-park-list">{parks.map((park) => <button className="driver-park" disabled={busy} key={park.id} onClick={() => onAction({ action: "park", park_id: park.id })}><span><strong>{park.name}</strong><ChevronRightIcon /></span><small>Комиссия парка с заказа: {park.commission}%</small>{profile.park?.id === park.id && <em>Выбран при прошлом входе</em>}</button>)}</div>
       {!!error && <ErrorState error={error} onRetry={onRefresh} />}

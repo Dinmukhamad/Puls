@@ -54,6 +54,7 @@ class DriverOrderCreate(BaseModel):
     destination: str = Field(min_length=3, max_length=160)
     location: DriverLocation | None = None
     pickup: DriverGeoPoint | None = None
+    route_id: UUID | None = None
 
     @model_validator(mode="after")
     def different_addresses(self):
@@ -70,3 +71,4 @@ class DriverOrderAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: UUID
     action: Literal["offer", "accept", "arrive", "start_trip", "finish", "pay", "cancel", "missed"]
+    location: DriverLocation | None = None

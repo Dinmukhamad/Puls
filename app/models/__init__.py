@@ -13,6 +13,7 @@ from app.models.contest import (
 )
 from app.models.driver import DriverOrder, DriverProfile, DriverSettings
 from app.models.driver_auth import DriverDevice, TelegramLink
+from app.models.driver_navigation import DriverMapRate, DriverNavigation, DriverRouteDraft
 from app.models.driver_shift import DriverShift, DriverSupportCase
 from app.models.enums import (
     BadgeRule,
@@ -42,8 +43,11 @@ __all__ = [
     "CoinTransaction",
     "ContestWeek",
     "DriverDevice",
+    "DriverMapRate",
+    "DriverNavigation",
     "DriverOrder",
     "DriverProfile",
+    "DriverRouteDraft",
     "DriverSettings",
     "DriverShift",
     "DriverSupportCase",

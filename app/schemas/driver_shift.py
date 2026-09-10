@@ -38,6 +38,12 @@ class SupportStep(StrictModel):
 
 
 class DriverScenario(StrictModel):
+    real_location_required: bool = True
+    arrival_radius: int = Field(default=75, ge=30, le=200)
+    free_wait_seconds: int = Field(default=30, ge=5, le=900)
+    boarding_seconds: int = Field(default=30, ge=5, le=900)
+    fare_per_km: int = Field(default=80, ge=0, le=1000)
+    virtual_speed: int = Field(default=30, ge=1, le=100)
     title: str = Field(default="Смена в Алматы", min_length=1, max_length=100)
     required_park: str = Field(default="itaxi", max_length=64)
     target_orders: int = Field(default=3, ge=1, le=10)

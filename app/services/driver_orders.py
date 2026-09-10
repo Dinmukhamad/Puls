@@ -1,15 +1,14 @@
 """Серверная последовательность учебного заказа, без реальных платежей."""
 
-import secrets
+import secrets as secrets  # Shared random source for order creation.
 from datetime import UTC
-from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import func, select, update
 
 from app.core.errors import ConflictError, NotFoundError
 from app.db.base import utcnow
 from app.models.driver import DriverOrder, DriverProfile
-from app.services import driver_auth, driver_location, driver_shifts
+from app.services import driver_auth, driver_navigation, driver_shifts
 
 DURATIONS = {"searching": 3, "pickup": 8, "waiting": 4, "trip": 38, "payment": 2}
 TRANSITIONS = {
@@ -43,7 +42,9 @@ def order_data(order):
             "details",
         )
     } | {
-        "duration_seconds": (order.details or {}).get("offer_seconds", 0)
+        "duration_seconds": 0
+        if (order.details or {}).get("navigation")
+        else (order.details or {}).get("offer_seconds", 0)
         if order.stage == "offer"
         else DURATIONS.get(order.stage, 0),
         "net": order.fare
@@ -78,7 +79,11 @@ async def state(session, user_id):
         .order_by(DriverOrder.finished_at.desc(), DriverOrder.id.desc())
         .limit(20)
     )
+    from app.models.driver_navigation import DriverNavigation
+
+    navigation = await session.get(DriverNavigation, latest.id) if latest else None
     return {
+        "navigation": driver_navigation.public(latest, navigation),
         "order": order_data(latest) if latest else None,
         "order_summary": {
             "count": count,
@@ -122,63 +127,20 @@ async def create(session, user_id, payload, device):
             raise ConflictError("Создайте новый учебный заказ")
         if (existing.origin, existing.destination) != (payload.origin, payload.destination):
             raise ConflictError("Этот запрос уже использован для другого маршрута")
+        existing_route = (existing.details or {}).get("navigation", {}).get("route_id")
+        if existing_route and str(payload.route_id) != existing_route:
+            raise ConflictError("Этот запрос уже использован для другого маршрута")
         saved_pickup = (existing.details or {}).get("pickup")
-        if saved_pickup and (not payload.pickup or payload.pickup.model_dump() != saved_pickup):
+        if (
+            saved_pickup
+            and not existing_route
+            and (not payload.pickup or payload.pickup.model_dump() != saved_pickup)
+        ):
             raise ConflictError("Этот запрос уже использован для другой точки подачи")
         return  # Повтор после потери ответа не меняет выбранную оплату и этап.
     if await active_order(session, user_id):
         raise ConflictError("Сначала завершите или отмените текущий учебный заказ")
-    pickup = driver_location.validate_pickup(payload.location, payload.pickup, utcnow())
-    shift = await driver_shifts.active(session, user_id, lock=True)
-    if shift:
-        driver_shifts.check_online(shift, shift.data)
-        if not shift.data["online"]:
-            raise ConflictError("Сначала выйдите на линию")
-    fare = shift.config["fare"] if shift else 1960
-    commission = int(
-        (Decimal(fare) * Decimal(str(profile.park["commission"])) / 100).quantize(
-            Decimal("1"), rounding=ROUND_HALF_UP
-        )
-    )
-    details = {"pickup": pickup}
-    if shift:
-        fee = driver_shifts.amount(fare, shift.config["service_percent"])
-        details = {
-            "pickup": pickup,
-            "service_fee": fee,
-            "service_tax": driver_shifts.amount(fee, shift.config["service_tax_percent"]),
-            "base_fare": fare,
-            "waiting_fee": 0,
-            "offer_seconds": shift.config["offer_seconds"],
-            "tariff": shift.data["tariffs"][0],
-            "route_event": shift.config["route_event"] and shift.data["completed"] == 0,
-            "route_changed": False,
-        }
-        data = dict(shift.data)
-        data["correct_park"] = profile.park["id"] == shift.config["required_park"]
-        await driver_shifts.save(
-            session, shift, data, "order_created", payload.id, {"park": profile.park["id"]}
-        )
-    preference = shift.data["payment"] if shift else "any"
-    session.add(
-        DriverOrder(
-            id=str(payload.id),
-            user_id=user_id,
-            active_slot=1,
-            stage="searching",
-            origin=payload.origin,
-            destination=payload.destination,
-            payment=preference if preference != "any" else secrets.choice(("cash", "card")),
-            fare=fare,
-            commission=commission,
-            park=dict(profile.park),
-            version=0,
-            events=[],
-            shift_id=shift.id if shift else None,
-            details=details,
-        )
-    )
-    await session.flush()
+    return await driver_navigation.create(session, user_id, payload, profile, device)
 
 
 async def act(session, user_id, order_id, payload, device):
@@ -200,6 +162,8 @@ async def act(session, user_id, order_id, payload, device):
         if previous["action"] != payload.action:
             raise ConflictError("Этот запрос уже использован для другого действия")
         return
+    if (order.details or {}).get("navigation"):
+        return await driver_navigation.action(session, order, payload)
     started = (
         order.stage_started_at.replace(tzinfo=UTC)
         if order.stage_started_at.tzinfo is None

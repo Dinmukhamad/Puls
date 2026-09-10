@@ -84,3 +84,29 @@ test("the pickup boundary includes uncertainty and freshness, including points a
   assert.equal(freshFix(fix, now - 6000), false);
   assert.ok(distanceMeters({ latitude: 0, longitude: 179.999 }, { latitude: 0, longitude: -179.999 }) < 223);
 });
+
+test("continuous GPS emits first fix immediately then latest every 10s, and detaches when hidden or revoked", async () => {
+  let now = Date.now(), tick, id = 0;
+  const states = [], watches = [], cleared = [];
+  const document = new EventTarget(); document.visibilityState = "visible";
+  const permission = new EventTarget(); permission.state = "granted";
+  const tracker = trackDriverLocation(value => states.push(value), { document,
+    navigator: { permissions: { query: async () => permission }, geolocation: {
+      watchPosition: (...args) => { watches.push(args); return ++id; }, clearWatch: value => cleared.push(value),
+    } }, now: () => now, interval: cb => { tick = cb; return 1; }, clear: () => {},
+  });
+  await Promise.resolve();
+  const send = (n, latitude) => watches[n][0]({ coords: { ...point, latitude, accuracy: 10 }, timestamp: now });
+  send(0, 43.2); assert.equal(states.at(-1).fix.latitude, 43.2);
+  now += 1000; send(0, 43.21); send(0, 43.22);
+  assert.equal(states.at(-1).fix.latitude, 43.2);
+  now += 9000; tick(); assert.equal(states.at(-1).fix.latitude, 43.22);
+  document.visibilityState = "hidden"; document.dispatchEvent(new Event("visibilitychange"));
+  assert.deepEqual(cleared, [1]); assert.equal(states.at(-1).status, "paused");
+  send(0, 44); assert.equal(states.at(-1).fix, null);
+  document.visibilityState = "visible"; document.dispatchEvent(new Event("visibilitychange"));
+  send(1, 43.3); assert.equal(states.at(-1).status, "ready");
+  permission.state = "denied"; permission.dispatchEvent(new Event("change"));
+  send(1, 44); assert.equal(states.at(-1).status, "denied"); assert.deepEqual(cleared, [1,2]);
+  tracker.stop();
+});

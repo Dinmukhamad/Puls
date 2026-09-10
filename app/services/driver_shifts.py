@@ -57,7 +57,7 @@ VIEWS = {
     "work-modes",
 }
 CHECKS = [
-    ("orders", 15, "Выполнить заказы", "Заказы → Принять → На месте → Поездка → Оплата"),
+    ("orders", 15, "Выполнить заказы", "Заказы → Маршрут → На месте → Поездка → Завершение"),
     (
         "route",
         5,
@@ -347,9 +347,10 @@ def checked_result(shift, data):
     )
     return {
         "score": max(0, sum(x["weight"] for x in checks if x["done"]) - penalties)
-        if shift.mode == "assessment"
+        if shift.mode == "assessment" and not data.get("demo_used", False)
         else None,
         "checks": checks,
+        "trips": data.get("order_results", []),
         "penalties": penalties if shift.mode == "assessment" else 0,
         "orders": data["completed"],
         "target": config["target_orders"],
@@ -365,7 +366,7 @@ def checked_result(shift, data):
 def public(shift):
     if not shift:
         return None
-    config = deepcopy(shift.config)
+    config = DriverScenario.model_validate(shift.config).model_dump()
     config.pop("support_steps", None)
     data = deepcopy(shift.data)
     data.update(
@@ -748,6 +749,8 @@ async def perform_action(session, user_id, shift_id, payload, device):
             }
         )
     elif action == "route_change":
+        if order and (order.details or {}).get("navigation"):
+            raise ConflictError("Выберите новую точку Б и постройте маршрут в заказе")
         if not order or order.stage != "trip":
             raise ConflictError("Адрес можно изменить во время учебной поездки")
         destination = text(values.get("destination"), minimum=3)
@@ -804,6 +807,17 @@ async def record_order(session, order, action):
         data["priority"] = min(100, data["priority"] + config["priority_complete"])
         data["rating_votes"][4] += 1
         details = order.details or {}
+        if details.get("navigation"):
+            data.setdefault("order_results", []).append(
+                {
+                    "id": order.id,
+                    "origin": order.origin,
+                    "destination": order.destination,
+                    "fare": order.fare,
+                    "payment": order.payment,
+                    "navigation": deepcopy(details["navigation"]),
+                }
+            )
         ledger(
             data,
             "Доход от заказа",

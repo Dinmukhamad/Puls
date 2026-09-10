@@ -14,14 +14,16 @@ from app.models.driver_auth import TelegramLink
 from app.models.driver_shift import DriverSupportCase
 from app.models.enums import Role
 from app.schemas.driver_shift import DriverScenario
-from app.services import driver_orders, telegram
+from app.services import driver_maps, telegram
 from tests.conftest import auth, login, make_user
+from tests.driver_navigation_helpers import A, B, created, fake_route, fix, set_elapsed
+from tests.driver_navigation_helpers import step as order_step
 from tests.test_driver import BASE, act, confirmed_browser
-from tests.test_driver_orders import location_payload
 
 
 @pytest.fixture
 async def setup(client, session, operator, monkeypatch):
+    monkeypatch.setattr(driver_maps, "route", fake_route)
     headers = auth(await login(client, operator.login))
     await confirmed_browser(session, operator, headers)
     monkeypatch.setattr(settings, "TELEGRAM_BOT_TOKEN", SecretStr("fixture-token"))
@@ -67,44 +69,35 @@ async def photo(client, headers, shift):
 
 
 async def order(client, session, headers, *, route=False):
-    response = await client.post(
-        f"{BASE}/orders",
-        headers=headers,
-        json={
-            "id": str(uuid4()),
-            "origin": "Абай, 10",
-            "destination": "Достык, 25",
-            **location_payload(),
-        },
-    )
+    from app.models.driver_shift import DriverShift
+
+    state = (await client.get(BASE, headers=headers)).json()
+    shift = await session.get(DriverShift, state["shift"]["id"])
+    await session.refresh(shift)
+    # Fixed base fare isolates the existing commission/support accounting assertions.
+    shift.config = {**shift.config, "fare_per_km": 0}
+    await session.commit()
+    response, _ = await created(client, headers)
     assert response.status_code == 200, response.text
-    data = response.json()
-    for action in ("offer", "accept", "arrive", "start_trip", "finish", "pay"):
-        record = await session.get(DriverOrder, data["order"]["id"])
-        await session.refresh(record)
-        if action != "accept":
-            record.stage_started_at = utcnow() - timedelta(
-                seconds=driver_orders.DURATIONS.get(record.stage, 0) + 0.2
-            )
-            await session.commit()
+    data, target = response.json(), B
+    oid = data["order"]["id"]
+    for action in ("arrive", "start_trip", "finish"):
+        await set_elapsed(session, oid, 31, allow_movement=True)
         key = str(uuid4())
-        response = await client.put(
-            f"{BASE}/orders/{record.id}/action",
-            headers=headers,
-            json={"action": action, "request_id": key},
+        response = await order_step(
+            client, headers, oid, action, target if action == "finish" else A, request_id=key
         )
         assert response.status_code == 200, response.text
         data = response.json()
-        duplicate = await client.put(
-            f"{BASE}/orders/{record.id}/action",
-            headers=headers,
-            json={"action": action, "request_id": key},
-        )
+        duplicate = await order_step(client, headers, oid, action, request_id=key)
         assert duplicate.json()["order"] == data["order"]
         assert duplicate.json()["shift"] == data["shift"]
         if action == "start_trip" and route:
-            changed = await command(
-                client, headers, data["shift"], "route_change", destination="Новый адрес, 44"
+            target = {**B, "latitude": B["latitude"] + 0.002, "label": "Новый адрес, 44"}
+            changed = await client.put(
+                f"{BASE}/orders/{oid}/destination",
+                headers=headers,
+                json={"request_id": str(uuid4()), "destination": target, "location": fix()},
             )
             assert changed.status_code == 200, changed.text
     return data
@@ -269,17 +262,26 @@ async def test_offer_expiry_and_no_double_priority_penalty(client, session, setu
     s = await start(client, h)
     await photo(client, h, s)
     await command(client, h, s, "online")
-    created = await client.post(
-        f"{BASE}/orders",
-        headers=h,
-        json={
-            "id": str(uuid4()),
-            "origin": "Абай, 10",
-            "destination": "Достык, 25",
-            **location_payload(),
-        },
+    from app.models.driver_shift import DriverShift
+
+    shift = await session.get(DriverShift, s["id"])
+    record = DriverOrder(
+        id=str(uuid4()),
+        user_id=shift.user_id,
+        shift_id=shift.id,
+        active_slot=1,
+        stage="offer",
+        origin=A["label"],
+        destination=B["label"],
+        payment="cash",
+        fare=1960,
+        commission=39,
+        park={"id": "itaxi", "name": "iTaxi", "commission": 2},
+        details={"offer_seconds": 30},
+        version=0,
+        events=[],
     )
-    record = await session.get(DriverOrder, created.json()["order"]["id"])
+    session.add(record)
     record.stage = "offer"
     record.stage_started_at = utcnow() - timedelta(seconds=60)
     await session.commit()

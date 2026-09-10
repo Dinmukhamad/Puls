@@ -1,3 +1,5 @@
+"""Заказы с обязательным маршрутом и GPS; совместимость уже начатых старых заказов."""
+
 import asyncio
 from datetime import timedelta
 from uuid import uuid4
@@ -8,10 +10,20 @@ from sqlalchemy import func, select
 from app.db.base import utcnow
 from app.models.coin import CoinTransaction
 from app.models.driver import DriverOrder
-from app.models.enums import Role
+from app.models.driver_navigation import DriverNavigation, DriverRouteDraft
 from app.models.progress import XpEntry
-from app.services import driver_orders
+from app.services import driver_maps, driver_orders
 from tests.conftest import auth, login, make_user
+from tests.driver_navigation_helpers import (
+    A,
+    B,
+    created,
+    fake_route,
+    fix,
+    prepared,
+    set_elapsed,
+    step,
+)
 from tests.test_driver import BASE, act, confirmed_browser
 
 
@@ -23,62 +35,48 @@ async def driver_setup(client, session, operator, monkeypatch):
     await act(client, headers, "taxi")
     await act(client, headers, "park", park_id="itaxi")
     await act(client, headers, "enter")
-    now = [utcnow()]
-    monkeypatch.setattr(driver_orders, "utcnow", lambda: now[0])
-
-    async def step(order, action, *, advance=True, request_id=None):
-        if advance:
-            now[0] += timedelta(seconds=100)
-        return await client.put(
-            f"{BASE}/orders/{order['id']}/action",
-            headers=headers,
-            json={"action": action, "request_id": request_id or str(uuid4())},
-        )
-
-    return headers, step
+    monkeypatch.setattr(driver_maps, "route", fake_route)
+    return headers
 
 
-def location_payload():
-    point = {"latitude": 43.2389, "longitude": 76.8897}
-    return {
-        "pickup": point,
-        "location": {**point, "accuracy": 10, "captured_at": driver_orders.utcnow().isoformat()},
-    }
+async def test_route_is_mandatory_and_requires_verified_browser(client, driver_setup):
+    h = driver_setup
+    r = await client.post(
+        f"{BASE}/orders",
+        headers=h,
+        json={
+            "id": str(uuid4()),
+            "origin": A["label"],
+            "destination": B["label"],
+            "location": fix(),
+        },
+    )
+    assert r.status_code == 409
+    assert (
+        await prepared(client, {k: v for k, v in h.items() if k != "X-Driver-Device"})
+    ).status_code == 403
 
 
-async def create(client, headers, **overrides):
-    payload = {"id": str(uuid4()), "origin": "Учебная улица, 10", "destination": "Проспект, 25"}
-    payload.update(location_payload())
-    payload.update(overrides)
-    return await client.post(f"{BASE}/orders", headers=headers, json=payload)
-
-
-@pytest.mark.parametrize(
-    "problem", ["missing", "missing_pickup", "old", "future", "imprecise", "far", "uncertainty"]
-)
-async def test_new_order_requires_fresh_nearby_location(client, session, driver_setup, problem):
-    headers, _ = driver_setup
-    payload = location_payload()
+@pytest.mark.parametrize("problem", ["missing", "old", "future", "imprecise", "far", "uncertainty"])
+async def test_route_requires_fresh_nearby_location(client, session, driver_setup, problem):
+    location, a = fix(), A
     if problem == "missing":
-        payload["location"] = None
-    elif problem == "missing_pickup":
-        payload["pickup"] = None
+        location = None
     elif problem in ("old", "future"):
-        seconds = -31 if problem == "old" else 6
-        payload["location"]["captured_at"] = (
-            driver_orders.utcnow() + timedelta(seconds=seconds)
-        ).isoformat()
+        location = fix(now=utcnow() + timedelta(seconds=-31 if problem == "old" else 6))
     elif problem == "imprecise":
-        payload["location"]["accuracy"] = 201
+        location["accuracy"] = 201
     elif problem == "far":
-        payload["pickup"] = {"latitude": 43.3, "longitude": 76.9}
+        a = {**A, "latitude": 43.3}
     else:
-        # 445 м + погрешность 100 м выходит за радиус подачи.
-        payload["pickup"] = {**payload["pickup"], "latitude": 43.2429}
-        payload["location"]["accuracy"] = 100
-    response = await create(client, headers, **payload)
-    assert response.status_code == 409, response.text
-    assert await session.scalar(select(func.count()).select_from(DriverOrder)) == 0
+        a, location["accuracy"] = {**A, "latitude": A["latitude"] + 0.004}, 100
+    r = await client.post(
+        f"{BASE}/routes",
+        headers=driver_setup,
+        json={"pickup": a, "destination": B, "mode": "real", "location": location},
+    )
+    assert r.status_code == 409, r.text
+    assert await session.scalar(select(func.count()).select_from(DriverRouteDraft)) == 0
 
 
 @pytest.mark.parametrize(
@@ -92,32 +90,206 @@ async def test_new_order_requires_fresh_nearby_location(client, session, driver_
         ("captured_at", "2026-09-09T10:00:00"),
     ],
 )
-async def test_location_rejects_invalid_coordinates_and_unzoned_time(
-    client, driver_setup, field, value
-):
-    headers, _ = driver_setup
-    payload = location_payload()
-    payload["location"][field] = value
-    assert (await create(client, headers, **payload)).status_code == 422
+async def test_invalid_location(client, driver_setup, field, value):
+    assert (await prepared(client, driver_setup, location=fix(**{field: value}))).status_code == 422
 
 
-async def test_pickup_is_persisted_without_location_history_and_retry_does_not_move_it(
-    client, session, driver_setup
+async def test_routes_overlap_replace_expire_and_fail(
+    client, session, driver_setup, operator, monkeypatch
 ):
-    headers, step = driver_setup
-    payload = location_payload()
-    payload["pickup"] = {"latitude": 43.2409, "longitude": 76.8897}
-    order = (await create(client, headers, **payload)).json()["order"]
-    assert order["details"] == {"pickup": payload["pickup"]}
-    await step(order, "offer")  # The original fix is now stale.
-    retry = await create(client, headers, id=order["id"], **payload)
-    assert retry.status_code == 200, retry.text
-    assert retry.json()["order"]["details"]["pickup"] == payload["pickup"]
-    payload["pickup"] = {"latitude": 43.239, "longitude": 76.8897}
-    assert (await create(client, headers, id=order["id"], **payload)).status_code == 409
-    restored = (await client.get(BASE, headers=headers)).json()["order"]
-    assert restored["details"] == order["details"]
+    h = driver_setup
+    assert (await prepared(client, h, b={**A, "label": "Другой дом"})).status_code == 409
+    first, second = (await prepared(client, h)).json(), (await prepared(client, h)).json()
+    assert first["id"] != second["id"]
+    assert await session.scalar(select(func.count()).select_from(DriverRouteDraft)) == 1
+    p = {
+        "id": str(uuid4()),
+        "route_id": first["id"],
+        "origin": A["label"],
+        "destination": B["label"],
+        "location": fix(),
+    }
+    assert (await client.post(f"{BASE}/orders", headers=h, json=p)).status_code == 409
+    draft = await session.get(DriverRouteDraft, operator.id)
+    draft.expires_at = utcnow() - timedelta(seconds=1)
+    await session.commit()
+    p["route_id"] = second["id"]
+    assert (await client.post(f"{BASE}/orders", headers=h, json=p)).status_code == 409
+
+    async def unavailable(*args):
+        raise driver_maps.MapUnavailable("Нет маршрута")
+
+    monkeypatch.setattr(driver_maps, "route", unavailable)
+    assert (await prepared(client, h)).status_code == 503
+
+
+@pytest.mark.parametrize("payment", ["cash", "card"])
+async def test_full_gps_trip_retry_money_once_no_puls_rewards(
+    client, session, driver_setup, monkeypatch, payment
+):
+    h = driver_setup
+    monkeypatch.setattr(driver_orders.secrets, "choice", lambda _: payment)
+    coins = await session.scalar(select(func.count()).select_from(CoinTransaction))
+    r, p = await created(client, h)
+    assert r.status_code == 200, r.text
+    order = r.json()["order"]
+    assert order["stage"] == "pickup" and order["payment"] == payment
+    assert r.json()["navigation"]["can_arrive"]
+    assert (await client.post(f"{BASE}/orders", headers=h, json=p)).json()["order"] == order
+    assert (await created(client, h))[0].status_code == 409
+    assert (await act(client, h, "services")).status_code == 409
+    assert (await client.post(f"{BASE}/start", headers=h)).json()["order"] == order
+    for action, target, point in [
+        ("arrive", "waiting", A),
+        ("start_trip", "trip", A),
+        ("finish", "complete", B),
+    ]:
+        await set_elapsed(session, order["id"], 31, allow_movement=True)
+        key = str(uuid4())
+        r = await step(client, h, order["id"], action, point, request_id=key)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["order"]["stage"] == target
+        assert (await step(client, h, order["id"], action, point, request_id=key)).json()[
+            "order"
+        ] == data["order"]
+    assert data["order_summary"]["count"] == 1 and len(data["order_history"]) == 1
+    assert data["navigation"] is None
+    spec = data["order"]["details"]["navigation"]
+    assert spec["score"] == 100 and 800 < spec["actual_distance"] < 1000
+    assert await session.scalar(select(func.count()).select_from(DriverNavigation)) == 0
+    assert await session.scalar(select(func.count()).select_from(CoinTransaction)) == coins
+    assert await session.scalar(select(func.count()).select_from(XpEntry)) == 0
+    assert (await created(client, h))[0].status_code == 200
+
+
+async def test_arrival_waiting_finish_use_gps_not_elapsed_time(client, session, driver_setup):
+    h, pickup = driver_setup, {**A, "latitude": A["latitude"] + 0.003}
+    r, _ = await created(client, h, a=pickup, location=fix())
+    oid = r.json()["order"]["id"]
+    await set_elapsed(session, oid, 10000, allow_movement=True)
+    assert (await step(client, h, oid, "arrive")).status_code == 409
+    assert (await step(client, h, oid, "arrive", pickup)).status_code == 200
+    assert (await step(client, h, oid, "start_trip", pickup)).status_code == 409
+    await set_elapsed(session, oid, 31)
+    assert (await step(client, h, oid, "start_trip", pickup)).status_code == 200
+    await set_elapsed(session, oid, 10000, allow_movement=True)
+    assert (await step(client, h, oid, "finish", pickup)).status_code == 409
+    assert (
+        await step(
+            client, h, oid, "finish", B, location=fix(B, now=utcnow() - timedelta(seconds=31))
+        )
+    ).status_code == 409
+    assert (
+        await step(client, h, oid, "finish", B, location=fix(B, accuracy=80))
+    ).status_code == 409
+    assert (await step(client, h, oid, "finish", B)).status_code == 200
+
+
+async def test_gps_loss_and_cancel_preserve_stage_cleanup_position(client, session, driver_setup):
+    h = driver_setup
+    r, _ = await created(client, h)
+    oid = r.json()["order"]["id"]
+    r = await client.post(f"{BASE}/orders/{oid}/position", headers=h, json={"location": None})
+    assert r.json()["navigation"]["status"] == "GPS_LOST"
+    assert r.json()["navigation"]["current"]["latitude"] == A["latitude"]
+    assert not r.json()["navigation"]["can_arrive"]
+    assert (await step(client, h, oid, "arrive", location=None)).status_code == 409
+    r = await client.post(f"{BASE}/orders/{oid}/position", headers=h, json={"location": fix()})
+    assert r.json()["navigation"]["can_arrive"]
+    nav = await session.get(DriverNavigation, oid)
+    assert "history" not in nav.data and "positions" not in nav.data
+    r = await step(client, h, oid, "cancel")
+    assert r.json()["navigation"] is None and r.json()["order_summary"]["count"] == 0
+    assert (await created(client, h))[0].status_code == 200
+
+
+async def test_request_retry_keeps_pickup_payment_and_rejects_new_route(
+    client, driver_setup, monkeypatch
+):
+    h = driver_setup
+    r, p = await created(client, h)
+    order = r.json()["order"]
+    monkeypatch.setattr(driver_orders.secrets, "choice", lambda _: "card")
+    p["location"] = fix(B)
+    assert (await client.post(f"{BASE}/orders", headers=h, json=p)).json()["order"] == order
+    p["route_id"] = str(uuid4())
+    assert (await client.post(f"{BASE}/orders", headers=h, json=p)).status_code == 409
+    key = str(uuid4())
+    assert (await step(client, h, order["id"], "arrive", request_id=key)).status_code == 200
+    assert (await step(client, h, order["id"], "start_trip", request_id=key)).status_code == 409
+
+
+async def test_two_tabs_only_create_one_active_order(client, session, driver_setup):
+    route = (await prepared(client, driver_setup)).json()
+    p = {
+        "route_id": route["id"],
+        "origin": A["label"],
+        "destination": B["label"],
+        "location": fix(),
+    }
+    responses = await asyncio.gather(
+        *(
+            client.post(f"{BASE}/orders", headers=driver_setup, json={**p, "id": str(uuid4())})
+            for _ in range(2)
+        )
+    )
+    assert sorted(r.status_code for r in responses) == [200, 409]
     assert await session.scalar(select(func.count()).select_from(DriverOrder)) == 1
+
+
+async def test_orders_and_positions_are_private(client, session, driver_setup):
+    r, _ = await created(client, driver_setup)
+    oid = r.json()["order"]["id"]
+    other = await make_user(session, login="order-other")
+    h = auth(await login(client, other.login))
+    assert (await client.get(BASE, headers=h)).json()["order"] is None
+    assert (
+        await client.post(f"{BASE}/orders/{oid}/position", headers=h, json={"location": fix()})
+    ).status_code == 403
+    assert (await step(client, h, oid, "arrive")).status_code == 403
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"origin": " "},
+        {"destination": "ab"},
+        {"origin": "x" * 161},
+        {"origin": "Проспект, 25", "destination": " проспект,  25 "},
+        {"fare": 1},
+        {"payment": "cash"},
+        {"id": "bad"},
+    ],
+)
+async def test_route_validation_and_server_controlled_amounts(client, driver_setup, values):
+    p = {"id": str(uuid4()), "origin": A["label"], "destination": B["label"], **values}
+    assert (await client.post(f"{BASE}/orders", headers=driver_setup, json=p)).status_code == 422
+
+
+async def test_legacy_order_can_finish_after_update(client, session, driver_setup, operator):
+    order = DriverOrder(
+        id=str(uuid4()),
+        user_id=operator.id,
+        active_slot=1,
+        stage="pickup",
+        origin=A["label"],
+        destination=B["label"],
+        payment="card",
+        fare=1960,
+        commission=39,
+        park={"id": "itaxi", "name": "iTaxi", "commission": 2},
+        details={},
+        version=0,
+        events=[],
+    )
+    session.add(order)
+    await session.commit()
+    for action in ["arrive", "start_trip", "finish", "pay"]:
+        await set_elapsed(session, order.id, 100)
+        r = await step(client, driver_setup, order.id, action, location=None)
+        assert r.status_code == 200, r.text
+    assert r.json()["order"]["stage"] == "complete" and r.json()["order_summary"]["net"] == 1921
 
 
 def test_pickup_distance_accounts_for_accuracy_boundary_and_dateline():
@@ -135,166 +307,3 @@ def test_pickup_distance_accounts_for_accuracy_boundary_and_dateline():
     assert validate_pickup(fix, DriverGeoPoint(latitude=degrees(489 / 6371000), longitude=0), now)
     with pytest.raises(ConflictError):
         validate_pickup(fix, DriverGeoPoint(latitude=degrees(491 / 6371000), longitude=0), now)
-
-
-@pytest.mark.parametrize("payment", ["cash", "card"])
-async def test_full_order_both_payments_repeat_and_no_puls_rewards(
-    client,
-    session,
-    driver_setup,
-    monkeypatch,
-    payment,
-):
-    headers, step = driver_setup
-    monkeypatch.setattr(driver_orders.secrets, "choice", lambda options: payment)
-    coins_before = await session.scalar(select(func.count()).select_from(CoinTransaction))
-    created = await create(client, headers)
-    assert created.status_code == 200, created.text
-    order = created.json()["order"]
-    assert order["payment"] == payment
-    assert order["commission"] == 39 and order["net"] == 1921
-    assert (await create(client, headers)).status_code == 409
-    assert (await act(client, headers, "services")).status_code == 409
-    # Повторный запуск и перезагрузка не сбрасывают активную поездку.
-    resumed = (await client.post(f"{BASE}/start", headers=headers)).json()
-    assert resumed["profile"]["stage"] == "offline"
-    assert resumed["order"] == order
-    for action, stage in [
-        ("offer", "offer"),
-        ("accept", "pickup"),
-        ("arrive", "waiting"),
-        ("start_trip", "trip"),
-        ("finish", "payment"),
-        ("pay", "complete"),
-    ]:
-        key = str(uuid4())
-        response = await step(order, action, request_id=key)
-        assert response.status_code == 200, response.text
-        data = response.json()
-        assert data["order"]["stage"] == stage
-        assert data["order"]["payment"] == payment
-        assert data["order_summary"]["count"] == (1 if stage == "complete" else 0)
-        assert (await client.get(BASE, headers=headers)).json()["order"] == data["order"]
-        duplicate = await step(order, action, request_id=key, advance=False)
-        assert duplicate.status_code == 200
-        assert duplicate.json()["order"] == data["order"]
-    assert data["order_summary"] == {"count": 1, "gross": 1960, "commission": 39, "net": 1921}
-    assert len(data["order_history"]) == 1
-    assert len(data["order"]["events"]) == 6
-    assert await session.scalar(select(func.count()).select_from(CoinTransaction)) == coins_before
-    assert await session.scalar(select(func.count()).select_from(XpEntry)) == 0
-    second = await create(client, headers, origin="Другой адрес, 3")
-    assert second.status_code == 200
-    assert second.json()["order"]["id"] != order["id"]
-    assert second.json()["order_summary"]["count"] == 1
-
-
-async def test_order_request_retry_keeps_original_payment(client, driver_setup, monkeypatch):
-    headers, step = driver_setup
-    order_id = str(uuid4())
-    monkeypatch.setattr(driver_orders.secrets, "choice", lambda options: "cash")
-    first = (await create(client, headers, id=order_id)).json()["order"]
-    monkeypatch.setattr(driver_orders.secrets, "choice", lambda options: "card")
-    assert (await create(client, headers, id=order_id)).json()["order"] == first
-    assert (await create(client, headers, id=order_id, origin="Другой адрес")).status_code == 409
-    key = str(uuid4())
-    assert (await step(first, "offer", request_id=key)).status_code == 200
-    assert (await step(first, "accept", request_id=key)).status_code == 409
-
-
-async def test_cannot_skip_steps_or_arrive_before_route_end(client, driver_setup):
-    headers, step = driver_setup
-    order = (await create(client, headers)).json()["order"]
-    assert (await step(order, "offer", advance=False)).status_code == 409
-    for action in ("accept", "arrive", "start_trip", "finish", "pay"):
-        assert (await step(order, action, advance=False)).status_code == 409
-    await step(order, "offer")
-    await step(order, "accept")
-    assert (await step(order, "arrive", advance=False)).status_code == 409
-    await step(order, "arrive")
-    assert (await step(order, "start_trip", advance=False)).status_code == 409
-    await step(order, "start_trip")
-    assert (await step(order, "finish", advance=False)).status_code == 409
-    assert (await step(order, "cancel")).status_code == 409
-    await step(order, "finish")
-    assert (await step(order, "pay", advance=False)).status_code == 409
-
-
-async def test_cancel_has_no_income_and_releases_active_order(client, driver_setup):
-    headers, step = driver_setup
-    order = (await create(client, headers)).json()["order"]
-    await step(order, "offer")
-    await step(order, "accept")
-    response = await step(order, "cancel")
-    assert response.status_code == 200
-    assert response.json()["order"]["stage"] == "cancelled"
-    assert response.json()["order_summary"]["count"] == 0
-    assert response.json()["order_history"] == []
-    assert (await step(order, "arrive")).status_code == 409
-    assert (await create(client, headers)).status_code == 200
-
-
-async def test_two_tabs_can_only_create_one_active_order(client, session, driver_setup):
-    headers, _ = driver_setup
-    responses = await asyncio.gather(create(client, headers), create(client, headers))
-    assert sorted(response.status_code for response in responses) == [200, 409]
-    assert await session.scalar(select(func.count()).select_from(DriverOrder)) == 1
-
-
-@pytest.mark.parametrize(
-    "overrides",
-    [
-        {"origin": "  "},
-        {"destination": "ab"},
-        {"origin": "x" * 161},
-        {"origin": " Проспект,   25 ", "destination": "проспект, 25"},
-        {"payment": "cash"},
-        {"fare": 1},
-        {"id": "not-a-uuid"},
-    ],
-)
-async def test_route_validation_and_server_controlled_amounts(client, driver_setup, overrides):
-    headers, _ = driver_setup
-    assert (await create(client, headers, **overrides)).status_code == 422
-
-
-async def test_order_is_private_and_requires_confirmed_browser(client, session, driver_setup):
-    headers, step = driver_setup
-    order = (await create(client, headers)).json()["order"]
-    unverified = {k: v for k, v in headers.items() if k != "X-Driver-Device"}
-    assert (await create(client, unverified)).status_code == 403
-    other = await make_user(session, login="order-other", role=Role.OPERATOR)
-    other_headers = auth(await login(client, other.login))
-    # Различный номер и Telegram позволяют независимо подтвердить другой аккаунт.
-    other.phone = "+77001234568"
-    import secrets
-
-    from app.models.driver_auth import DriverDevice, TelegramLink
-    from app.services.driver_auth import device_hash
-
-    token = secrets.token_urlsafe(32)
-    session.add(TelegramLink(user_id=other.id, chat_id=987654, version=1))
-    session.add(
-        DriverDevice(
-            secret_hash=device_hash(other.id, token),
-            user_id=other.id,
-            phone=other.phone,
-            telegram_version=1,
-            valid_until=utcnow() + timedelta(days=30),
-        )
-    )
-    await session.commit()
-    other_headers["X-Driver-Device"] = token
-    await client.post(f"{BASE}/start", headers=other_headers)
-    await act(client, other_headers, "taxi")
-    await act(client, other_headers, "park", park_id="itaxi")
-    await act(client, other_headers, "enter")
-    assert (await client.get(BASE, headers=other_headers)).json()["order"] is None
-    assert (await create(client, other_headers, id=order["id"])).status_code == 409
-    response = await client.put(
-        f"{BASE}/orders/{order['id']}/action",
-        headers=other_headers,
-        json={"action": "offer", "request_id": str(uuid4())},
-    )
-    assert response.status_code == 404
-    assert await session.scalar(select(func.count()).select_from(DriverOrder)) == 1

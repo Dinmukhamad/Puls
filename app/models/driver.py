@@ -1,6 +1,7 @@
 """Учебный профиль водителя, настройки парков и сохраняемые заказы."""
 
 from datetime import datetime
+from typing import ClassVar
 
 from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -65,3 +66,5 @@ class DriverOrder(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     stage_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __mapper_args__: ClassVar[dict] = {"version_id_col": version, "version_id_generator": False}
