@@ -9,6 +9,14 @@
 @property --du-progress { syntax: "<number>"; inherits: true; initial-value: 0; }
 
 .driver-app {
+  /* Одна шкала времени на весь симулятор. Раньше длительностей было четырнадцать,
+     и каждое состояние переключалось со своей скоростью — отсюда ощущение щелчков. */
+  --du-tap: .14s;    /* отклик на нажатие */
+  --du-fast: .2s;    /* цвет, наведение, мелкие состояния */
+  --du-base: .3s;    /* раскрытие, сдвиги, вкладки */
+  --du-slow: .44s;   /* смена темы, экраны, дуги */
+  --du-ease: cubic-bezier(.32, .72, 0, 1);
+  --du-spring: cubic-bezier(.34, 1.32, .48, 1);
   --du-accent: var(--driver-yellow, #ffe128);
   --du-ink: #171710;
   --du-track: #ffffff1c;
@@ -24,13 +32,13 @@
   width: 100%; min-height: 54px; padding: 15px 20px; box-sizing: border-box;
   border: 0; border-radius: 18px; font: inherit; font-size: 16px; font-weight: 600; line-height: 1.25;
   text-align: center; text-decoration: none; cursor: pointer; -webkit-tap-highlight-color: transparent;
-  transition: background .18s ease, color .18s ease, border-color .18s ease, box-shadow .22s ease, transform .11s ease, opacity .18s ease;
+  transition: background var(--du-fast) ease, color var(--du-fast) ease, border-color var(--du-fast) ease, box-shadow var(--du-fast) ease, transform var(--du-tap) ease, opacity var(--du-fast) ease;
 }
 .du-btn:disabled { cursor: not-allowed; }
 .du-btn:not(:disabled):active { transform: scale(.977); }
 
 /* ── роль 1 · действие ────────────────────────────────────────────── */
-.du-act { display: grid; gap: 9px; transition: --du-progress .55s cubic-bezier(.4,0,.2,1); }
+.du-act { display: grid; gap: 9px; transition: --du-progress var(--du-slow) cubic-bezier(.4,0,.2,1); }
 .du-act__slot { position: relative; display: block; }
 .du-action { background: var(--du-accent); color: var(--du-ink); box-shadow: 0 6px 18px #0000004d; }
 .du-act[data-state="blocked"] .du-action { background: #35362f; color: #a8aa9e; box-shadow: none; }
@@ -45,7 +53,7 @@
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
-  transition: opacity .3s ease;
+  transition: opacity var(--du-base) ease;
 }
 .du-act[data-state="busy"] .du-act__ring { opacity: .35; }
 
@@ -89,7 +97,7 @@
 .ds-light .du-choice { background: #00000006; }
 .du-choice:not(:disabled):hover { background: #ffffff16; border-color: #7d7f71; }
 .du-choice:disabled { opacity: .45; }
-.du-choice__arrow { flex: none; transition: transform .22s ease; }
+.du-choice__arrow { flex: none; transition: transform var(--du-fast) ease; }
 .du-choice:not(:disabled):hover .du-choice__arrow { transform: translateX(4px); }
 
 /* компактный выбор в строку: «Моё местоположение · Найти адрес · На карте» */
@@ -98,7 +106,7 @@
   display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 9px 14px;
   border: 1px solid var(--du-line); border-radius: 999px; background: #ffffff08; color: inherit;
   font: inherit; font-size: 13px; font-weight: 550; cursor: pointer; -webkit-tap-highlight-color: transparent;
-  transition: background .18s ease, border-color .18s ease, transform .11s ease, color .18s ease;
+  transition: background var(--du-fast) ease, border-color var(--du-fast) ease, transform var(--du-tap) ease, color var(--du-fast) ease;
 }
 .du-chip:not(:disabled):hover { background: #ffffff18; border-color: #7d7f71; }
 .du-chip:not(:disabled):active { transform: scale(.96); }
@@ -123,7 +131,7 @@
 .du-info__chevron {
   flex: none; width: 8px; height: 8px; margin-right: 3px;
   border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
-  transform: rotate(45deg) translate(-2px, -2px); transition: transform .26s ease;
+  transform: rotate(45deg) translate(-2px, -2px); transition: transform var(--du-base) ease;
 }
 .du-info[data-open="true"] .du-info__chevron { transform: rotate(-135deg) translate(-2px, -2px); }
 .du-info__body {
@@ -140,7 +148,7 @@
   background: none; border: 0; color: var(--du-quiet); font-weight: 500; font-size: 14px;
   min-height: 44px; padding: 10px 14px; border-radius: 12px; width: 100%;
   text-decoration: underline; text-underline-offset: 4px; text-decoration-color: #ffffff33;
-  transition: color .18s ease, background .18s ease;
+  transition: color var(--du-fast) ease, background var(--du-fast) ease;
 }
 .du-cancel:not(:disabled):hover { color: #f0b3a6; background: #f0b3a60f; text-decoration-color: #f0b3a666; }
 .du-cancel:disabled { opacity: .45; }
@@ -160,16 +168,16 @@
 .du-legend span { display: block; margin-top: 3px; font-size: 12px; line-height: 1.5; }
 
 /* ── существующие кнопки приводим к тем же четырём ролям ──────────── */
-.driver-app .driver-primary { box-shadow: 0 6px 18px #0000003d; transition: background .18s ease, box-shadow .22s ease, transform .11s ease, opacity .18s ease; }
+.driver-app .driver-primary { box-shadow: 0 6px 18px #0000003d; transition: background var(--du-fast) ease, box-shadow var(--du-fast) ease, transform var(--du-tap) ease, opacity var(--du-fast) ease; }
 .driver-app .driver-primary:not(:disabled):active { transform: scale(.977); }
-.driver-app .driver-secondary { transition: background .18s ease, border-color .18s ease, transform .11s ease, opacity .18s ease; }
+.driver-app .driver-secondary { transition: background var(--du-fast) ease, border-color var(--du-fast) ease, transform var(--du-tap) ease, opacity var(--du-fast) ease; }
 .driver-app .driver-secondary:not(:disabled):hover { background: #ffffff12; border-color: #7d7f71; }
 .driver-app .driver-secondary:not(:disabled):active { transform: scale(.977); }
-.driver-app .driver-service, .driver-app .driver-park { transition: background .18s ease, transform .12s ease; }
+.driver-app .driver-service, .driver-app .driver-park { transition: background var(--du-fast) ease, transform var(--du-tap) ease; }
 .driver-app .driver-service:not(:disabled):active, .driver-app .driver-park:not(:disabled):active { transform: scale(.99); }
 
 /* Крупная кнопка этапа на устаревшем экране заказа получает то же кольцо. */
-.driver-order-action { transition: background .18s ease, box-shadow .22s ease, transform .11s ease, --du-progress .55s cubic-bezier(.4,0,.2,1); }
+.driver-order-action { transition: background var(--du-fast) ease, box-shadow var(--du-fast) ease, transform var(--du-tap) ease, --du-progress var(--du-slow) cubic-bezier(.4,0,.2,1); }
 .driver-order-action:not(:disabled) { animation: du-halo 2.6s ease-out infinite; }
 .driver-order-action:not(:disabled):active { transform: scale(.982); }
 .driver-order-action:disabled::after {
@@ -180,36 +188,36 @@
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
 }
-.driver-online { transition: background .18s ease, transform .11s ease, box-shadow .22s ease; }
+.driver-online { transition: background var(--du-fast) ease, transform var(--du-tap) ease, box-shadow var(--du-fast) ease; }
 .driver-online:not(:disabled) { animation: du-halo 2.8s ease-out infinite; }
 .driver-online:not(:disabled):active { transform: scale(.985); }
 
 /* нижняя навигация: активная вкладка получает жёлтую засечку и лёгкий подскок */
-.driver-nav button { position: relative; transition: color .2s ease, background .2s ease; }
+.driver-nav button { position: relative; transition: color var(--du-fast) ease, background var(--du-fast) ease; }
 .driver-nav button::before {
   content: ""; position: absolute; top: 1px; left: 50%; width: 24px; height: 3px; border-radius: 3px;
   background: var(--du-accent); opacity: 0; transform: translateX(-50%) scaleX(.3);
-  transition: transform .3s cubic-bezier(.34,1.4,.5,1), opacity .2s ease;
+  transition: transform var(--du-base) cubic-bezier(.34,1.4,.5,1), opacity var(--du-fast) ease;
 }
 .driver-nav .is-active::before { opacity: 1; transform: translateX(-50%) scaleX(1); }
 .driver-nav .is-active svg { animation: du-tab .36s cubic-bezier(.34,1.5,.5,1); }
 @keyframes du-tab { 0% { transform: none; } 45% { transform: translateY(-3px) scale(1.14); } 100% { transform: none; } }
 
 /* строки-переходы в смене и профиле: видно, что строка нажимается */
-.driver-workspace button.ds-row { position: relative; border-radius: 12px; transition: color .18s ease; }
+.driver-workspace button.ds-row { position: relative; border-radius: 12px; transition: color var(--du-fast) ease; }
 .driver-workspace button.ds-row::before {
   content: ""; position: absolute; inset: 0 -10px; border-radius: 12px;
-  background: #ffffff0d; opacity: 0; transition: opacity .18s ease;
+  background: #ffffff0d; opacity: 0; transition: opacity var(--du-fast) ease;
 }
 .ds-light .driver-workspace button.ds-row::before { background: #00000009; }
 .driver-workspace button.ds-row:hover::before { opacity: 1; }
 .driver-workspace button.ds-row > span { position: relative; }
-.driver-workspace button.ds-row b { transition: transform .22s ease; }
+.driver-workspace button.ds-row b { transition: transform var(--du-fast) ease; }
 .driver-workspace button.ds-row:hover b { transform: translateX(4px); }
-.ds-channel, .ds-trio button, .ds-stories button { transition: background .18s ease, transform .12s ease; border-radius: 14px; }
+.ds-channel, .ds-trio button, .ds-stories button { transition: background var(--du-fast) ease, transform var(--du-tap) ease; border-radius: 14px; }
 .ds-channel:hover, .ds-trio button:hover, .ds-stories button:hover { background: #ffffff0d; }
 .ds-trio button:active, .ds-channel:active, .ds-stories button:active { transform: scale(.98); }
-.ds-segments button { transition: background .22s ease, color .22s ease, transform .14s ease; }
+.ds-segments button { transition: background var(--du-fast) ease, color var(--du-fast) ease, transform var(--du-tap) ease; }
 .ds-segments button[aria-pressed="true"] { animation: du-seg .28s cubic-bezier(.34,1.4,.5,1); }
 @keyframes du-seg { 0% { transform: scale(.9); } 60% { transform: scale(1.03); } 100% { transform: none; } }
 
@@ -245,3 +253,49 @@
 .ds-light .du-reason[data-tone="blocked"] { color: #7a6512; }
 .ds-light .du-info__mark { border-color: #b28f0c; color: #8a6f08; }
 .ds-light .du-legend i[data-role="info"] { border-color: #c9c3a4; color: #8a6f08; }
+
+/* ── доводка: ничего не должно менять цвет рывком ─────────────────── */
+/* Состояния, которые раньше переключались мгновенно. */
+.du-reason, .du-reason::before { transition: color var(--du-fast) var(--du-ease), background-color var(--du-fast) var(--du-ease), border-color var(--du-fast) var(--du-ease); }
+.dp-row small, .dp-row > b, .dp-row strong { transition: color var(--du-fast) var(--du-ease); }
+.dp-status, .dp-check i { transition: background-color var(--du-base) var(--du-ease), color var(--du-base) var(--du-ease); }
+.dm-week i, .dm-week span, .dm-chart i, .dm-chart em, .dm-chart span, .dm-chart small {
+  transition: background-color var(--du-base) var(--du-ease), color var(--du-base) var(--du-ease), height var(--du-base) var(--du-ease);
+}
+.dp-gauge-fill { transition: stroke-dashoffset var(--du-slow) var(--du-ease), stroke var(--du-base) var(--du-ease); }
+.ds-toggle i, .ds-toggle i:before { transition: background-color var(--du-fast) var(--du-ease), transform var(--du-fast) var(--du-spring); }
+
+/* Смена темы: полсекунды всё приложение переливается, вместо мгновенной подмены палитры. */
+.ds-theming, .ds-theming *:not(.du-act__ring) {
+  transition: background-color var(--du-slow) var(--du-ease), color var(--du-slow) var(--du-ease),
+              border-color var(--du-slow) var(--du-ease), fill var(--du-slow) var(--du-ease),
+              stroke var(--du-slow) var(--du-ease), box-shadow var(--du-slow) var(--du-ease) !important;
+}
+
+/* Экран появляется сдвигом и проявлением — в ту же сторону, откуда его возвращает свайп. */
+@keyframes du-screen { from { opacity: 0; translate: 16px 0; } to { opacity: 1; translate: none; } }
+@keyframes du-rise { from { opacity: 0; translate: 0 9px; } to { opacity: 1; translate: none; } }
+.du-screen { display: flex; flex-direction: column; gap: inherit; min-width: 0; animation: du-screen var(--du-base) var(--du-ease) both; }
+/* Карточки внутри экрана проявляются каскадом. Перекрытия исключены: у них своя анимация. */
+.du-screen > *:not([class*="backdrop"]) { animation: du-rise var(--du-base) var(--du-ease) both; }
+.du-screen > *:nth-child(2) { animation-delay: 34ms; }
+.du-screen > *:nth-child(3) { animation-delay: 68ms; }
+.du-screen > *:nth-child(4) { animation-delay: 102ms; }
+.du-screen > *:nth-child(5) { animation-delay: 136ms; }
+.du-screen > *:nth-child(n+6) { animation-delay: 160ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ds-theming, .ds-theming * { transition-duration: 1ms !important; }
+  .du-screen, .du-screen > * { animation: none; }
+}
+
+/* Подложки шторок и диалогов уходят в размытие, а не просто темнеют. */
+.dm-sheet-backdrop, .dp-sheet-backdrop, .ds-dialog-backdrop, .dn-consent {
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+/* Сферы уровня медленно дышат — единственная декоративная анимация, и та бесконечная только здесь. */
+@keyframes du-orb { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-9px) scale(1.05); } }
+.dp-orbs i { animation: du-orb 6s ease-in-out infinite; }
+.dp-orbs i:nth-child(2) { animation-duration: 7.6s; animation-delay: -2.2s; }
+.dp-orbs i:nth-child(3) { animation-duration: 6.8s; animation-delay: -4.1s; }
+@media (prefers-reduced-motion: reduce) { .dp-orbs i { animation: none; } }

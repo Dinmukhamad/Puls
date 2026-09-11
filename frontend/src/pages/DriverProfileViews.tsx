@@ -573,5 +573,5 @@ export function DriverProfileViews(p: ShiftViewProps) {
   </>;
   })();
 
-  return <div className="dp-swipe" data-dragging={dragging} style={{ transform: offset ? `translateX(${offset}px)` : "none" } as CSSProperties}>{body}</div>;
+  return <div className="dp-swipe du-screen" key={view === "payment" ? "profile" : view} data-dragging={dragging} style={{ transform: offset ? `translateX(${offset}px)` : "none" } as CSSProperties}>{body}</div>;
 }

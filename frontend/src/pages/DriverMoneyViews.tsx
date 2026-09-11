@@ -71,6 +71,11 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
 }
 
 export function DriverMoney(p: ShiftViewProps) {
+  // Ключ по экрану заставляет анимацию появления проигрываться заново при переходе.
+  return <div className="du-screen" key={p.view}><MoneyScreen {...p} /></div>;
+}
+
+function MoneyScreen(p: ShiftViewProps) {
   const { shift, state, view, detail, go, act, busy } = p;
   const d = shift.data;
   const [sheet, setSheet] = useState<"topup" | "withdraw" | "more" | "period" | "card" | null>(null);

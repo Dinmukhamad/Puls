@@ -29,7 +29,7 @@
    жеста: постоянная создала бы систему координат и сломала position: fixed у шторок. */
 .dp-swipe {
   display: flex; flex-direction: column; gap: inherit; min-width: 0;
-  transition: transform .3s cubic-bezier(.32,.72,0,1);
+  transition: transform var(--du-base) cubic-bezier(.32,.72,0,1);
 }
 .dp-swipe[data-dragging="true"] { transition: none; background: var(--driver-bg); box-shadow: -16px 0 34px #0008; }
 
@@ -54,7 +54,7 @@
   display: grid; place-items: center; width: 44px; height: 44px; flex: none;
   border: 0; border-radius: 50%; background: var(--dp-tile); color: var(--driver-text);
   font-size: 22px; line-height: 1; cursor: pointer;
-  transition: background .18s ease, transform .11s ease;
+  transition: background var(--du-fast) ease, transform var(--du-tap) ease;
 }
 .dp-round { background: #3a3a38; color: #fff; font-size: 22px; }
 .dp-back:hover, .dp-round:hover { background: #ffffff1c; }
@@ -69,7 +69,7 @@
 .dp-row {
   display: flex; align-items: center; gap: 14px; width: 100%; min-height: 64px;
   padding: 14px 0; border: 0; background: none; color: var(--driver-text);
-  font: inherit; text-align: left; transition: opacity .18s ease;
+  font: inherit; text-align: left; transition: opacity var(--du-fast) ease;
 }
 button.dp-row { cursor: pointer; }
 button.dp-row:hover { opacity: .82; }
@@ -103,7 +103,7 @@ button.dp-row:hover { opacity: .82; }
 .dp-pill {
   flex: 0 1 auto; min-width: 0; min-height: 44px; padding: 11px 18px; border: 1px solid var(--dp-line);
   border-radius: 999px; background: none; color: var(--driver-text); font: inherit; font-size: 15px; cursor: pointer;
-  transition: background .18s ease, transform .11s ease;
+  transition: background var(--du-fast) ease, transform var(--du-tap) ease;
 }
 .dp-pill:hover { background: #ffffff12; }
 .dp-pill:active { transform: scale(.97); }
@@ -113,7 +113,7 @@ button.dp-row:hover { opacity: .82; }
 .dp-tiles button {
   position: relative; display: block; min-height: 128px; padding: 16px 14px; overflow: hidden;
   border: 0; border-radius: 18px; background: var(--dp-tile); color: var(--driver-text);
-  font: inherit; text-align: left; cursor: pointer; transition: filter .18s ease, transform .12s ease;
+  font: inherit; text-align: left; cursor: pointer; transition: filter var(--du-fast) ease, transform var(--du-tap) ease;
 }
 .dp-tiles button:hover { filter: brightness(1.14); }
 .dp-tiles button:active { transform: scale(.98); }
@@ -140,7 +140,7 @@ button.dp-row:hover { opacity: .82; }
   display: flex; align-items: center; gap: 11px; min-height: 52px; padding: 6px 0 12px;
   border: 0; border-bottom: 3px solid transparent; background: none;
   color: var(--driver-muted); font: inherit; font-size: 21px; font-weight: 600; cursor: pointer;
-  transition: color .2s ease, border-color .2s ease;
+  transition: color var(--du-fast) ease, border-color var(--du-fast) ease;
 }
 .dp-tabs button[aria-pressed="true"] { color: var(--driver-text); border-bottom-color: var(--driver-text); }
 .dp-tabs i { display: grid; place-items: center; width: 32px; height: 32px; flex: none; border-radius: 50%; font-style: normal; font-size: 15px; }
@@ -160,7 +160,7 @@ button.dp-row:hover { opacity: .82; }
   font-size: 24px; font-weight: 700; letter-spacing: -.02em; text-align: left; cursor: pointer;
 }
 .dp-group > button > span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.dp-group-chevron { flex: none; width: 11px; height: 11px; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: rotate(45deg) translate(-3px, -3px); transition: transform .26s ease; }
+.dp-group-chevron { flex: none; width: 11px; height: 11px; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: rotate(45deg) translate(-3px, -3px); transition: transform var(--du-base) ease; }
 .dp-group[data-open="true"] .dp-group-chevron { transform: rotate(-135deg) translate(-3px, -3px); }
 
 /* ── группы со шапкой-полосой ─────────────────────────────────────── */
@@ -188,7 +188,7 @@ button.dp-row:hover { opacity: .82; }
 .dp-gauge-value { font-size: 52px; font-weight: 700; fill: var(--driver-text); }
 .dp-gauge-edge { font-size: 15px; fill: var(--driver-muted); }
 .dp-gauge-track { stroke: var(--dp-tile); }
-.dp-gauge-fill { stroke: var(--dp-good); transition: stroke-dashoffset .6s cubic-bezier(.4,0,.2,1); }
+.dp-gauge-fill { stroke: var(--dp-good); transition: stroke-dashoffset var(--du-slow) cubic-bezier(.4,0,.2,1); }
 .dp-gauge-caption { display: grid; justify-items: center; gap: 4px; text-align: center; padding-bottom: 8px; }
 .dp-gauge-caption strong { font-size: 21px; font-weight: 650; }
 .dp-gauge-caption span { font-size: 16px; color: var(--driver-muted); }
@@ -222,7 +222,7 @@ button.dp-row:hover { opacity: .82; }
 .dp-progress-line { display: grid; gap: 8px; }
 .dp-progress-line > div { display: flex; justify-content: space-between; font-size: 19px; font-weight: 650; }
 .dp-progress-line i { display: block; height: 7px; border-radius: 5px; background: #ffffff2e; overflow: hidden; }
-.dp-progress-line i b { display: block; height: 100%; border-radius: 5px; background: var(--driver-yellow); transition: width .5s ease; }
+.dp-progress-line i b { display: block; height: 100%; border-radius: 5px; background: var(--driver-yellow); transition: width var(--du-slow) ease; }
 
 /* ── рейтинг ──────────────────────────────────────────────────────── */
 .dp-rating-hero { display: grid; justify-items: center; gap: 10px; padding: 34px 0 26px; }
@@ -247,7 +247,7 @@ button.dp-row:hover { opacity: .82; }
 
 /* ── нижняя закреплённая кнопка ───────────────────────────────────── */
 .dp-bottom { position: sticky; bottom: 0; padding: 14px 0 6px; background: linear-gradient(transparent, var(--driver-bg) 26%); }
-.dp-bottom-button { display: grid; place-items: center; box-sizing: border-box; text-decoration: none; width: 100%; min-height: 62px; border: 0; border-radius: 18px; background: var(--dp-bar); color: var(--driver-text); font: inherit; font-size: 17px; cursor: pointer; transition: filter .18s ease, transform .11s ease; }
+.dp-bottom-button { display: grid; place-items: center; box-sizing: border-box; text-decoration: none; width: 100%; min-height: 62px; border: 0; border-radius: 18px; background: var(--dp-bar); color: var(--driver-text); font: inherit; font-size: 17px; cursor: pointer; transition: filter var(--du-fast) ease, transform var(--du-tap) ease; }
 .dp-bottom-button:hover { filter: brightness(1.14); }
 .dp-bottom-button:active { transform: scale(.99); }
 .dp-bottom-button:disabled { opacity: .55; cursor: not-allowed; }
@@ -271,7 +271,7 @@ button.dp-row:hover { opacity: .82; }
 .dp-pick strong { display: block; font-size: 17px; font-weight: 450; overflow-wrap: anywhere; }
 .dp-pick small { display: block; margin-top: 3px; font-size: 14px; color: var(--driver-muted); }
 .dp-pick[data-locked="true"] strong { color: var(--driver-muted); }
-.dp-pick u { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--dp-bar); color: transparent; text-decoration: none; font-size: 17px; font-weight: 700; transition: background .2s ease, color .2s ease; }
+.dp-pick u { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--dp-bar); color: transparent; text-decoration: none; font-size: 17px; font-weight: 700; transition: background var(--du-fast) ease, color var(--du-fast) ease; }
 .dp-pick[aria-pressed="true"] u { background: var(--driver-yellow); color: #171710; }
 
 @media (max-width: 460px) {

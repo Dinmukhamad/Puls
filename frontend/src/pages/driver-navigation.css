@@ -65,9 +65,9 @@
 .driver-navigation-workspace .driver-primary:disabled { opacity:1; }
 
 /* ── шторка и роли кнопок внутри неё ──────────────────────────────── */
-.dn-sheet { transition: height .34s cubic-bezier(.32,.72,0,1); }
+.dn-sheet { transition: height var(--du-base) cubic-bezier(.32,.72,0,1); }
 .dn-sheet[data-drag="true"] { transition: none; }
-.dn-sheet-handle > span { transition: width .2s ease, background .2s ease; }
+.dn-sheet-handle > span { transition: width var(--du-fast) ease, background var(--du-fast) ease; }
 .dn-sheet-handle:hover > span { width: 52px; background: #aaaa; }
 
 .dn-confirm { display: grid; gap: 10px; padding: 16px; border: 1px solid #8d544966; border-radius: 16px; background: #f0b3a60a; }

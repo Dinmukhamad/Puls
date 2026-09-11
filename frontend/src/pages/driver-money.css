@@ -35,7 +35,7 @@
   min-height: 44px; padding: 10px 20px; border: 0; border-radius: 999px;
   background: var(--dm-support); color: var(--dm-support-ink);
   font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
-  transition: filter .18s ease, transform .11s ease;
+  transition: filter var(--du-fast) ease, transform var(--du-tap) ease;
 }
 .dm-support:not(:disabled):hover { filter: brightness(1.08); }
 .dm-support:not(:disabled):active { transform: scale(.97); }
@@ -48,7 +48,7 @@
   display: flex; align-items: center; gap: 14px; width: 100%; min-height: 76px;
   padding: 16px 18px; border: 0; border-radius: 18px; background: var(--dm-tile);
   color: var(--driver-text); font: inherit; text-align: left;
-  transition: filter .18s ease, transform .11s ease;
+  transition: filter var(--du-fast) ease, transform var(--du-tap) ease;
 }
 button.dm-tile { cursor: pointer; }
 button.dm-tile:hover { filter: brightness(1.12); }
@@ -78,7 +78,7 @@ button.dm-tile:active { transform: scale(.99); }
   display: grid; place-items: center; width: 48px; height: 48px; flex: none;
   border: 0; border-radius: 50%; background: none; color: var(--driver-text);
   font-size: 26px; line-height: 1; cursor: pointer; margin-left: -10px;
-  transition: background .18s ease, transform .11s ease;
+  transition: background var(--du-fast) ease, transform var(--du-tap) ease;
 }
 .dm-back:hover { background: #ffffff12; }
 .ds-light .dm-back:hover { background: #00000010; }
@@ -93,7 +93,7 @@ button.dm-tile:active { transform: scale(.99); }
 .dm-actions i {
   display: grid; place-items: center; width: 78px; height: 78px; border-radius: 50%;
   background: var(--dm-tile); font-style: normal; font-size: 30px; line-height: 1;
-  transition: filter .18s ease, transform .13s ease;
+  transition: filter var(--du-fast) ease, transform var(--du-tap) ease;
 }
 .dm-actions button:hover i { filter: brightness(1.18); }
 .dm-actions button:active i { transform: scale(.94); }
@@ -105,7 +105,7 @@ button.dm-tile:active { transform: scale(.99); }
 .dm-segments button {
   flex: 1; min-width: 0; min-height: 48px; padding: 12px 10px; border: 0; border-radius: 999px;
   background: none; color: var(--driver-muted); font: inherit; font-size: 16px; cursor: pointer;
-  transition: background .22s ease, color .22s ease;
+  transition: background var(--du-fast) ease, color var(--du-fast) ease;
 }
 .dm-segments button[aria-pressed="true"] { background: var(--driver-bg); color: var(--driver-text); }
 .ds-light .dm-segments button[aria-pressed="true"] { background: #fff; }
@@ -123,7 +123,7 @@ button.dm-tile:active { transform: scale(.99); }
   display: flex; align-items: center; gap: 14px; width: 100%; min-height: 72px;
   padding: 14px 12px; border: 0; border-radius: 16px; background: none;
   color: var(--driver-text); font: inherit; text-align: left; cursor: pointer;
-  transition: background .18s ease;
+  transition: background var(--du-fast) ease;
 }
 .dm-entry:hover { background: var(--dm-tile); }
 .dm-entry > div { flex: 1; min-width: 0; }
@@ -139,7 +139,7 @@ button.dm-tile:active { transform: scale(.99); }
 .dm-calendar {
   display: grid; place-items: center; width: 48px; height: 48px; flex: none;
   border: 0; border-radius: 50%; background: none; color: var(--driver-text); cursor: pointer;
-  transition: background .18s ease;
+  transition: background var(--du-fast) ease;
 }
 .dm-calendar:hover { background: #ffffff12; }
 .ds-light .dm-calendar:hover { background: #00000010; }
@@ -174,7 +174,7 @@ button.dm-tile:active { transform: scale(.99); }
 .dm-sheet-close {
   align-self: flex-end; display: grid; place-items: center; width: 68px; height: 68px; flex: none;
   margin: 0 6px 16px; border: 0; border-radius: 50%; background: #3a3a38; color: #fff;
-  font-size: 30px; line-height: 1; cursor: pointer; transition: background .18s ease, transform .12s ease;
+  font-size: 30px; line-height: 1; cursor: pointer; transition: background var(--du-fast) ease, transform var(--du-tap) ease;
 }
 .dm-sheet-close:hover { background: #4a4a47; }
 .dm-sheet-close:active { transform: scale(.93); }
@@ -191,7 +191,7 @@ button.dm-tile:active { transform: scale(.99); }
   display: flex; align-items: center; gap: 16px; width: 100%; min-height: 68px;
   padding: 16px 4px; border: 0; background: none; color: var(--driver-text);
   font: inherit; font-size: 17px; text-align: left; cursor: pointer;
-  transition: color .18s ease;
+  transition: color var(--du-fast) ease;
 }
 .dm-sheet-rows button + button { border-top: 1px solid var(--ds-line); }
 .dm-sheet-rows button > span:first-child { display: grid; place-items: center; width: 26px; flex: none; }
@@ -204,7 +204,7 @@ button.dm-tile:active { transform: scale(.99); }
 .dm-choice i {
   display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 50%;
   background: var(--dm-track); color: transparent; font-style: normal; font-size: 22px; font-weight: 700;
-  transition: background .2s ease, color .2s ease;
+  transition: background var(--du-fast) ease, color var(--du-fast) ease;
 }
 .dm-choice[aria-pressed="true"] i { background: var(--driver-yellow); color: #171710; }
 

@@ -538,7 +538,7 @@ test("centred screens keep a spacer so the title stays optically centred", () =>
 
 test("swipe wrapper stays untransformed until a drag starts", () => {
   const html = profileHtml("park");
-  assert.match(html, /class="dp-swipe" data-dragging="false" style="transform:none"/);
+  assert.match(html, /class="dp-swipe du-screen" data-dragging="false" style="transform:none"/);
   assert.doesNotMatch(html, /translateX/);
 });
 
@@ -567,4 +567,10 @@ test("the consent dialog only appears while the browser has not decided yet", ()
   assert.match(asking, /Разрешить использование геолокации/);
   const enabled = navigationHtml("searching", true, false, "cash", { consent: "enabled" });
   assert.doesNotMatch(enabled, /Разрешить использование геолокации/);
+});
+
+test("money and profile screens both animate in on a keyed wrapper", () => {
+  assert.match(profileHtml("park"), /class="dp-swipe du-screen"/);
+  assert.match(moneyHtml("balance"), /<div class="du-screen">/);
+  assert.match(moneyHtml("money"), /<div class="du-screen">/);
 });
