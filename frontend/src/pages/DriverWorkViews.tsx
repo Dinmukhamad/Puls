@@ -1,20 +1,8 @@
 import { useState } from "react";
 import { DCard, DForm, DInput, DRow, type ShiftViewProps } from "./DriverShiftUI";
-import { DAction, DCancel, DChoice, DExplain } from "./DriverButtons";
+import { DAction, DCancel, DChoice } from "./DriverButtons";
 import { money } from "./DriverOrders";
 import { dateTime } from "../utils/format";
-
-const statuses = { complete: "Завершена", pending: "В обработке", failed: "Не выполнена" };
-export function DriverMoney({ shift, detail, go, act, busy, view }: ShiftViewProps) {
-  const d = shift.data;
-  const [operation, setOperation] = useState<"topup" | "withdraw" | null>(null);
-  const entry = d.ledger.find(x => x.id === detail);
-  if (view === "transaction" && entry) return <DCard title={entry.title}><strong className="ds-big">{entry.amount > 0 ? "+" : ""}{money(entry.amount)}</strong><DRow title="Статус" value={statuses[entry.status]} /><DRow title="Время" value={dateTime(entry.at)} /><p>{entry.note}</p>{entry.order_id && <DRow title="Связано с заказом" value={entry.order_id.slice(0, 8)} />}<DRow title="Учебная поддержка" onClick={() => go("support")} /><DChoice arrow onClick={() => go("money")}>Все операции</DChoice></DCard>;
-  const income = d.ledger.filter(x => x.kind === "order");
-  return <><DCard title="Учебный баланс" className="ds-money"><strong className="ds-big">{d.settings.hide_income ? "••••" : money(d.balance)}</strong><DRow title="Доступно к выводу" value={d.settings.hide_income ? "••••" : money(d.available)} /><DRow title="Ожидает обработки" value={money(d.reserved)} /><div className="ds-segments"><button aria-pressed={operation === "topup"} onClick={() => setOperation("topup")}>Пополнить</button><button aria-pressed={operation === "withdraw"} onClick={() => setOperation("withdraw")}>Вывести</button></div><DExplain title="Что происходит с этими деньгами" real="пополнение и вывод идут через банк, деньги приходят на вашу карту." sim="суммы учебные: операция появится в истории со статусом, но настоящих переводов не делается." />{operation && <DForm key={operation} busy={busy} label={operation === "topup" ? "Пополнить учебный баланс" : "Запросить учебную выплату"} onSubmit={values => act("wallet", { ...values, kind: operation })}><DInput label="Сумма, ₸" name="amount" type="number" min={100} max={100000} value={1000} /></DForm>}<small>Настоящие деньги не списываются и не переводятся.</small></DCard>
-    <DCard title="Заказы в этой смене"><div className="ds-chart" aria-label="Доход по заказам">{income.length ? income.map((x, i) => <button key={x.id} onClick={() => go("transaction", x.id)}><span>{d.settings.hide_income ? "•••" : x.amount}</span><i style={{ height: `${Math.max(12, x.amount / Math.max(...income.map(y => y.amount)) * 90)}px` }} /><small>{i + 1}</small></button>) : <p>После первого заказа здесь появится доход.</p>}</div><DRow title="Выполнено" value={d.completed} /></DCard>
-    <DCard title="История транзакций">{d.ledger.length ? [...d.ledger].reverse().map(x => <DRow key={x.id} title={x.title} value={`${x.amount > 0 ? "+" : ""}${money(x.amount)}`} note={`${statuses[x.status]} · ${dateTime(x.at)}`} onClick={() => go("transaction", x.id)} />) : <p>Заказы, пополнения и выплаты появятся здесь. Нажмите операцию, чтобы разобраться в сумме и статусе.</p>}</DCard></>;
-}
 
 const channels = [["support", "Поддержка", "Разобрать учебное обращение в Telegram", "?"], ["park", "Таксопарк", "Условия сотрудничества и сообщения", "P"], ["balance", "Баланс", "Начисления и списания по смене", "₸"], ["warnings", "Важное", "Фотоконтроль и события задания", "!"], ["news", "Новости", "Что нового в учебном городе", "N"], ["bonuses", "Бонусы и тарифы", "Предложения для водителя", "+"], ["answers", "Ответы поддержки", "Результаты учебных обращений", "✓"]];
 export function DriverChats({ shift, state, view, detail, go, support, busy }: ShiftViewProps) {

@@ -315,3 +315,83 @@ test("chat shortcuts lead to the shift result and support preparation is explici
   assert.match(html, /Подготовить обращение в Telegram/);
   assert.doesNotMatch(html, /Продолжить в @puls_i_bot/);
 });
+
+const { DriverMoney, MONEY_VIEWS, weekBuckets, BALANCE_LIMIT } = await component("./DriverMoneyViews.tsx");
+const moneyData = { balance: 0, available: 0, reserved: 0, completed: 0, fuel: [], ledger: [], settings: { hide_income: false } };
+const moneyHtml = (view, data = {}, detail = "") => renderToStaticMarkup(React.createElement(DriverMoney, {
+  shift: { id: "shift", mode: "free", config: {}, data: { ...moneyData, ...data } },
+  state: { profile: { park: { name: "Jana Taxi" } } },
+  view, detail, fullName: "Учебный водитель", busy: false, act() {}, go() {}, switchPark() {}, support() {},
+}));
+
+test("money landing mirrors the park app: today, week strip, balance limit and park", () => {
+  const html = moneyHtml("money");
+  assert.match(html, /<h1>Деньги<\/h1>/);
+  assert.match(html, /Поддержка/);
+  assert.match(html, /Сегодня/);
+  assert.match(html, /Лимит баланса/);
+  assert.match(html, /Всё в порядке/);
+  assert.match(html, /Jana Taxi/);
+  assert.equal((html.match(/class="dm-week"/g) ?? []).length, 1);
+  assert.equal((html.match(/data-now="true"/g) ?? []).length, 1);
+  assert.equal((html.match(/<i><\/i>/g) ?? []).length, 7);
+});
+
+test("balance screen offers three round actions and splits finished from pending", () => {
+  const html = moneyHtml("balance");
+  assert.match(html, /Пополнить/);
+  assert.match(html, /Вывести/);
+  assert.match(html, /Ещё/);
+  assert.match(html, /История транзакций/);
+  assert.match(html, /aria-pressed="true"[^>]*>Завершенные/);
+  assert.match(html, /В процессе · 0/);
+  assert.match(html, /Тут пусто/);
+  const filled = moneyHtml("balance", { ledger: [
+    { id: "a", title: "Заказ", amount: 1200, kind: "order", order_id: null, status: "complete", at: "2026-09-11T07:00:00", note: "" },
+    { id: "b", title: "Выплата", amount: -500, kind: "payout", order_id: null, status: "pending", at: "2026-09-11T07:30:00", note: "" },
+  ] });
+  assert.match(filled, /В процессе · 1/);
+  assert.match(filled, /\+1\s200 ₸/);
+  assert.doesNotMatch(filled, /Тут пусто/);
+});
+
+test("payments and requisites keep the park layout without asking for card details", () => {
+  assert.match(moneyHtml("payments"), /Пока что тут ничего нет/);
+  assert.match(moneyHtml("payments", { fuel: [{ liters: 10, amount: 2450, at: "2026-09-11T07:00:00" }] }), /Заправка · 10 л/);
+  const cards = moneyHtml("requisites");
+  assert.match(cards, /Ваши реквизиты/);
+  assert.match(cards, /Добавить карту/);
+  assert.doesNotMatch(cards, /<input|Номер карты|CVV/);
+});
+
+test("earnings compares seven days and details income against spending", () => {
+  const html = moneyHtml("earnings");
+  assert.match(html, /Сравнение/);
+  assert.match(html, /Детализация/);
+  assert.match(html, /Нет данных о заработке/);
+  assert.equal((html.match(/class="dm-chart"/g) ?? []).length, 1);
+  assert.equal((html.match(/<em>0<\/em>/g) ?? []).length, 7);
+});
+
+test("hidden income masks every amount the money section prints", () => {
+  const html = moneyHtml("money", { balance: 4200, settings: { hide_income: true } });
+  assert.match(html, /••••/);
+  assert.doesNotMatch(html, /4\s200/);
+});
+
+test("week buckets place today last and separate income from spending", () => {
+  const now = new Date("2026-09-11T12:00:00Z").getTime();
+  const week = weekBuckets([
+    { amount: 1200, at: new Date(now - 1000).toISOString() },
+    { amount: -300, at: new Date(now - 2000).toISOString() },
+    { amount: 900, at: new Date(now - 3 * 86400000).toISOString() },
+  ], now);
+  assert.equal(week.length, 7);
+  assert.equal(week[6].now, true);
+  assert.equal(week[6].income, 1200);
+  assert.equal(week[6].spent, 300);
+  assert.equal(week[3].income, 900);
+  assert.equal(week[0].income, 0);
+  assert.ok(MONEY_VIEWS.includes("balance") && MONEY_VIEWS.includes("earnings"));
+  assert.ok(BALANCE_LIMIT < 0);
+});
