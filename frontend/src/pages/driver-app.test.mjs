@@ -230,12 +230,12 @@ test("custom address text is escaped and the car follows each route segment", ()
 const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
 const { DriverNavigationOrders } = await component("./DriverNavigationOrders.tsx");
 const navSpec = { mode: "real", pickup: { latitude: 43.2, longitude: 76.9, label: "Точка А" }, destination: { latitude: 43.21, longitude: 76.91, label: "Точка Б" }, planned_distance: 1900, planned_duration: 240, rules: { arrival_radius: 75, free_wait_seconds: 30 } };
-function navigationHtml(stage, available, allowed, payment = "cash") {
+function navigationHtml(stage, available, allowed, payment = "cash", override = {}) {
   const client = new QueryClient();
   const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(DriverNavigationOrders, {
     state: { order: { ...order, stage, payment, details: { navigation: navSpec } }, server_now: new Date().toISOString(), navigation: { gps_available: available, can_arrive: allowed, can_start: allowed, can_finish: allowed, arrival_radius: 75, distance_to_target: 1900, status: stage === "trip" ? "IN_RIDE" : "TO_PICKUP" } },
-    location: { status: available ? "ready" : "denied", fix: available ? { latitude: 43.2, longitude: 76.9, accuracy: 10, captured_at: new Date().toISOString() } : null, message: "Нет сигнала GPS", retry() {} },
-    consent: "enabled", allowLocation() {}, declineLocation() {}, busy: false, create() {}, go() {},
+    location: { status: available ? "ready" : "denied", fix: available ? { latitude: 43.2, longitude: 76.9, accuracy: 10, captured_at: new Date().toISOString() } : null, message: "Нет сигнала GPS", retry() {}, ...(override.location ?? {}) },
+    consent: "enabled", allowLocation() {}, declineLocation() {}, busy: false, create() {}, go() {}, ...override,
   })));
   client.clear();
   return html;
@@ -540,4 +540,31 @@ test("swipe wrapper stays untransformed until a drag starts", () => {
   const html = profileHtml("park");
   assert.match(html, /class="dp-swipe" data-dragging="false" style="transform:none"/);
   assert.doesNotMatch(html, /translateX/);
+});
+
+test("a stale fix with permission granted only refreshes, it does not beg again", () => {
+  const refreshing = navigationHtml("trip", false, true, "cash", { location: { status: "requesting", fix: null } });
+  assert.match(refreshing, /Обновляем геопозицию…/);
+  assert.doesNotMatch(refreshing, /Разрешите доступ к геолокации|Повторить запрос геолокации/);
+  const paused = navigationHtml("trip", false, true, "cash", { location: { status: "paused", fix: null } });
+  assert.match(paused, /Обновляем геопозицию…/);
+  assert.doesNotMatch(paused, /Как разрешить геолокацию\?/);
+});
+
+test("a real refusal still explains how to lift it", () => {
+  const denied = navigationHtml("trip", false, true);
+  assert.match(denied, /Разрешите доступ к геолокации/);
+  assert.match(denied, /Повторить запрос геолокации/);
+  assert.match(denied, /Как разрешить геолокацию\?/);
+  assert.doesNotMatch(denied, /Обновляем геопозицию…/);
+  const off = navigationHtml("trip", false, true, "cash", { consent: "off", location: { status: "requesting", fix: null } });
+  assert.match(off, /Геолокация выключена/);
+  assert.doesNotMatch(off, /Обновляем геопозицию…/);
+});
+
+test("the consent dialog only appears while the browser has not decided yet", () => {
+  const asking = navigationHtml("searching", true, false, "cash", { consent: "ask" });
+  assert.match(asking, /Разрешить использование геолокации/);
+  const enabled = navigationHtml("searching", true, false, "cash", { consent: "enabled" });
+  assert.doesNotMatch(enabled, /Разрешить использование геолокации/);
 });

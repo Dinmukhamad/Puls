@@ -71,6 +71,14 @@ export function DriverNavigationOrders({ state, location, consent, allowLocation
     readyPing.current = key;
     if (state.shift?.data.settings.vibration !== false) navigator.vibrate?.([35, 55, 35]);
   }, [canAct, order?.id, stage, state.shift?.data.settings.vibration]);
+  // Заказ закрыт — сразу берём свежий отсчёт, чтобы следующий не ждал очередного опроса.
+  const refreshed = useRef("");
+  useEffect(() => {
+    const key = `${order?.id}:${stage}`;
+    if (stage !== "complete" || refreshed.current === key) return;
+    refreshed.current = key;
+    location.retry();
+  }, [order?.id, stage]);
   function invalidateRoute() { prepare.reset(); creation.current = undefined; }
   function selectPoint(side: "А" | "Б", point: RoutePoint) { reverseGeneration.current++; if (side === "А") setA(point); else setB(point); invalidateRoute(); search.reset(); setQuery(""); }
   function myLocation() {
@@ -99,6 +107,10 @@ export function DriverNavigationOrders({ state, location, consent, allowLocation
   }
   const staleRoute = !!prepare.data && Date.parse(prepare.data.expires_at) <= now;
   const phase = picking ? `pick-${picking}` : changing ? "change" : active ? `stage-${stage}` : editing ? prepare.data ? "route" : "edit" : stage === "complete" ? "done" : "idle";
+  // Разрешение уже есть — значит нечего просить: отсчёт просто обновляется.
+  // Тревожный блок остаётся только для настоящего отказа или выключенной геолокации.
+  const geoBlocked = consent === "off" || location.status === "denied";
+  const waitingNote = <p className="dn-geo-wait" role="status">Обновляем геопозицию…</p>;
   const permissionInfo = <div className="dn-location-note" role="status">
     <strong>{consent === "off" ? "Геолокация выключена" : location.status === "denied" ? "Разрешите доступ к геолокации" : location.status === "requesting" ? "Определяем местоположение…" : "Нужно обновить местоположение"}</strong>
     <p>{consent === "off" ? "Включите геолокацию, чтобы начать реальную поездку." : location.status === "denied" ? "Браузер запретил доступ. Разрешите его по инструкции ниже и повторите запрос." : "Прибытие и завершение доступны только с актуальной геопозицией. Проверьте, включена ли геолокация на устройстве."}</p>
@@ -131,7 +143,7 @@ export function DriverNavigationOrders({ state, location, consent, allowLocation
         <h1>{statuses[!controlsReady ? "GPS_LOST" : nav?.status ?? "TO_PICKUP"] ?? "Поездка"}</h1><p className="dn-target">{stage === "pickup" || stage === "waiting" ? order!.origin : order!.destination}</p>
         {stage === "waiting" ? <div className="dn-route-meta"><strong>{clock(wait < (nav?.free_wait_seconds ?? 30) ? (nav?.free_wait_seconds ?? 30) - wait : wait - (nav?.free_wait_seconds ?? 30))}</strong><span>{wait < (nav?.free_wait_seconds ?? 30) ? "Бесплатное ожидание" : "Платное ожидание"}</span></div> : <div className="dn-route-meta"><strong>{distanceLabel(stage === "pickup" ? nav?.distance_to_target : nav?.projection?.remaining ?? nav?.distance_to_target)}</strong><span>{stage === "pickup" ? "до точки А" : nav?.projection ? minutes(nav.projection.eta) : "до точки Б"}</span></div>}
         {stage === "trip" && <progress className="dn-progress" value={nav?.projection?.progress ?? 0} max={1} aria-label="Прогресс маршрута" />}
-        {!controlsReady && permissionInfo}
+        {!controlsReady && (geoBlocked ? permissionInfo : waitingNote)}
         {nav?.message && controlsReady && <p className="dn-inline-message">{nav.message}</p>}
         {stage === "pickup" && <DAction
           label="Подтвердить прибытие" busy={busy} busyLabel="Подтверждаем…"
@@ -190,10 +202,10 @@ export function DriverNavigationOrders({ state, location, consent, allowLocation
         {staleRoute && <p role="status" className="dn-inline-message">Маршрут устарел. Нажмите «Изменить адреса или режим» и постройте его заново.</p>}
         <DAction label="Начать заказ" busy={busy} busyLabel="Принимаем заказ…"
           blocked={(mode === "real" && !fix) || staleRoute}
-          reason={staleRoute ? "Маршрут устарел — постройте его заново." : "Для реальной поездки нужна геопозиция."}
+          reason={staleRoute ? "Маршрут устарел — постройте его заново." : geoBlocked ? "Для реальной поездки нужна геопозиция." : "Определяем геопозицию — это займёт несколько секунд."}
           readyNote="Нажатие примет учебный заказ. Затем нужно доехать до точки А и подтвердить прибытие."
           onClick={startOrder} />
-        {mode === "real" && !fix && permissionInfo}
+        {mode === "real" && !fix && (geoBlocked ? permissionInfo : waitingNote)}
         <DChoice disabled={busy} onClick={() => { invalidateRoute(); setHeight(88); }}>Изменить адреса или режим</DChoice>
       </> : editing ? <>
         <p className="driver-order-eyebrow">Новый заказ</p><h1>Создание маршрута</h1>
@@ -213,16 +225,16 @@ export function DriverNavigationOrders({ state, location, consent, allowLocation
           <DChip icon="✛" disabled={busy} onClick={() => { pick("Б"); setHeight(24); }}>На карте</DChip>
         </div></div></div>
         {searchForm}
-        {mode === "real" && !fix && permissionInfo}
+        {mode === "real" && !fix && (geoBlocked ? permissionInfo : waitingNote)}
         {prepare.data ? <>
           <div className="dn-route-meta"><strong>{distanceLabel(prepare.data.route.distance)}</strong><span>{minutes(prepare.data.route.duration)}</span></div>
           <p>Учебная стоимость: {money(prepare.data.fare)}</p>
-          <DAction label="Начать заказ" busy={busy} busyLabel="Принимаем заказ…" blocked={(mode === "real" && !fix) || staleRoute} reason={staleRoute ? "Маршрут устарел — постройте его заново." : "Для реальной поездки нужна геопозиция."} readyNote="Нажатие примет учебный заказ." onClick={startOrder} />
+          <DAction label="Начать заказ" busy={busy} busyLabel="Принимаем заказ…" blocked={(mode === "real" && !fix) || staleRoute} reason={staleRoute ? "Маршрут устарел — постройте его заново." : geoBlocked ? "Для реальной поездки нужна геопозиция." : "Определяем геопозицию — это займёт несколько секунд."} readyNote="Нажатие примет учебный заказ." onClick={startOrder} />
         </> : <DAction label="Построить маршрут" busy={busy} busyLabel="Строим маршрут…"
           blocked={!a || !b || (mode === "real" && !fix)}
           progress={((a ? 1 : 0) + (b ? 1 : 0) + (mode !== "real" || fix ? 1 : 0)) / 3}
           meter={`${(a ? 1 : 0) + (b ? 1 : 0) + (mode !== "real" || fix ? 1 : 0)}/3`}
-          reason={!a ? "Укажите точку подачи А." : !b ? "Укажите точку назначения Б." : mode === "real" && !fix ? "Для реальной поездки нужна геопозиция." : "Готовим маршрут."}
+          reason={!a ? "Укажите точку подачи А." : !b ? "Укажите точку назначения Б." : mode === "real" && !fix ? geoBlocked ? "Для реальной поездки нужна геопозиция." : "Определяем геопозицию — это займёт несколько секунд." : "Готовим маршрут."}
           readyNote="Маршрут и учебная стоимость рассчитаются перед приёмом заказа."
           onClick={() => prepare.mutate()} />}
         <DCancel disabled={busy} onClick={() => { edit(false); setHeight(24); }}>Отменить создание заказа</DCancel>

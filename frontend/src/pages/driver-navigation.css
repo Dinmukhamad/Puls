@@ -92,3 +92,11 @@
 .dn-location-note .du-choice { min-height: 46px; font-size: 14px; }
 .dn-passenger .du-choice { min-height: 46px; font-size: 14px; }
 .dn-row > .du-choice { min-height: 46px; font-size: 14px; }
+
+/* Обычное обновление отсчёта — спокойная строка, а не просьба выдать разрешение. */
+.dn-geo-wait { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--dn-muted); }
+.dn-geo-wait::before {
+  content: ""; flex: none; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid currentColor; border-right-color: transparent; animation: du-spin .9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { .dn-geo-wait::before { animation: none; } }

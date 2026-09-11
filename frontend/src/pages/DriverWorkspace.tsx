@@ -40,7 +40,7 @@ export function DriverWorkspace({ state, fullName, busy: parentBusy, error: pare
   const [exit, setExit] = useState(false);
   const [layers, setLayers] = useState(false);
   const [hint, setHint] = useState(false);
-  const [consent, setConsent] = useDriverLocationConsent(shift.id);
+  const [consent, setConsent] = useDriverLocationConsent();
   const location = useDriverLocation(consent === "enabled" && !shift.finished_at);
   useDriverNavigation(state, location);
   const legacy = orderActive(state.order) && !state.order?.details?.navigation;

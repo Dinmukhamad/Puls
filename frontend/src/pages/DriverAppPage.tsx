@@ -52,7 +52,7 @@ export function DriverAppPage() {
   } });
   const { mutate } = action;
   const stage = query.data?.profile?.stage;
-  const [consent, setConsent] = useDriverLocationConsent(`profile:${user?.id ?? "guest"}`);
+  const [consent, setConsent] = useDriverLocationConsent();
   const location = useDriverLocation(consent === "enabled" && stage === "offline" && !query.data?.shift);
   useDriverNavigation(query.data?.shift ? undefined : query.data, location);
   useEffect(() => { const timer = window.setTimeout(() => setBooting(false), 1200); return () => window.clearTimeout(timer); }, []);
