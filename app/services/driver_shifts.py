@@ -51,6 +51,8 @@ VIEWS = {
     "payments",
     "requisites",
     "earnings",
+    "car",
+    "about",
     "intercity-history",
     "intercity-alerts",
     "level-history",

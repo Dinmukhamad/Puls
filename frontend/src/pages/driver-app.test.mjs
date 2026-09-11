@@ -395,3 +395,124 @@ test("week buckets place today last and separate income from spending", () => {
   assert.ok(MONEY_VIEWS.includes("balance") && MONEY_VIEWS.includes("earnings"));
   assert.ok(BALANCE_LIMIT < 0);
 });
+
+const { DriverProfileViews, PROFILE_VIEWS } = await component("./DriverProfileViews.tsx");
+const profileConfig = {
+  tariffs: [{ id: "econom", name: "Эконом", available: true, reason: "" }, { id: "comfort", name: "Комфорт", available: false, reason: "Машина не подходит" }],
+  levels: [{ name: "Новичок", threshold: 0, benefits: "Базовые условия" }, { name: "Мастер", threshold: 1000, benefits: "Доп. приоритет" }],
+  priority_base: 30, priority_complete: 5, priority_missed: 2, priority_cancelled: 3, target_orders: 3,
+  service_percent: 7, service_tax_percent: 12, wait_per_minute: 40,
+};
+const profileData = {
+  cars: [{ id: "c1", brand: "Audi", model: "RS 6", year: 2026, plate: "280XSH03", status: "available" }], car_id: "c1",
+  photo_status: "pending", photo_steps: [], tariffs: ["econom"], payment: "any", rating_votes: [0, 0, 0, 0, 4],
+  points: 0, priority: 30, completed: 0, missed: 0, cancelled: 0, available: 0, provider: null,
+  documents: [], promos: [], lessons: [], rentals: [], fuel: [], points_history: [], level_restored: false,
+  settings: { theme: "dark", hide_income: false, widgets: true, vibration: true, auto_arrive: false, auto_start: false },
+};
+const profileHtml = (view, data = {}, detail = "") => renderToStaticMarkup(React.createElement(DriverProfileViews, {
+  shift: { id: "shift-abc123", mode: "free", data: { ...profileData, ...data }, config: profileConfig },
+  state: { profile: { park: { name: "Jana Taxi", commission: 2 }, created_at: "2026-09-11T07:00:00" } },
+  view, detail, fullName: "Шерзад Учебный", busy: false, act() {}, go() {}, switchPark() {}, support() {},
+}));
+
+test("profile landing mirrors the park app: identity, stat tiles, park rows and vehicle", () => {
+  const html = profileHtml("profile");
+  assert.match(html, /Шерзад/);
+  assert.match(html, /Водитель/);
+  assert.match(html, /Сменить парк/);
+  assert.match(html, /Рейтинг/);
+  assert.match(html, /Баллы/);
+  assert.match(html, /Приоритет/);
+  assert.match(html, /Jana Taxi/);
+  assert.match(html, /1 из 2/);
+  assert.match(html, /Наличными или картой/);
+  assert.match(html, /Мой транспорт/);
+  assert.match(html, /class="dp-plate">280XSH03/);
+  assert.equal((html.match(/class="dp-tiles"/g) ?? []).length, 1);
+});
+
+test("tariffs gate on photo control and hide unavailable ones behind a group", () => {
+  const blocked = profileHtml("tariffs");
+  assert.match(blocked, /Курьер/);
+  assert.match(blocked, /Пройдите фотоконтроль машины/);
+  assert.match(blocked, /data-tone="danger"/);
+  assert.doesNotMatch(blocked, /ds-toggle/);
+  const ready = profileHtml("tariffs", { photo_status: "passed" });
+  assert.match(ready, /ds-toggle/);
+  assert.doesNotMatch(ready, /Пройдите фотоконтроль машины/);
+  assert.match(ready, /Недоступные тарифы и опции/);
+  assert.doesNotMatch(ready, /Машина не подходит/);
+});
+
+test("photo control lists every angle with its own status", () => {
+  const html = profileHtml("photo", { photo_steps: [0, 1] });
+  assert.match(html, /Блокирует работу/);
+  assert.match(html, /Автомобиль спереди/);
+  assert.match(html, /Селфи водителя/);
+  assert.equal((html.match(/Пройдено</g) ?? []).length, 2);
+  assert.match(html, /data-tone="danger">✕/);
+  const done = profileHtml("photo", { photo_status: "passed", photo_steps: [0, 1, 2, 3, 4] });
+  assert.match(done, /Проверка пройдена/);
+  assert.match(done, /Пройти фотоконтроль ещё раз/);
+});
+
+test("priority draws a gauge against the scenario maximum and splits earned from lost", () => {
+  const html = profileHtml("priority");
+  assert.match(html, /aria-label="Приоритет 30 из 45"/);
+  assert.match(html, /Полученные/);
+  assert.match(html, /Базовое значение/);
+  assert.match(html, /\+30/);
+  assert.match(html, /Снято/);
+  assert.match(html, /Без штрафа/);
+});
+
+test("levels show the next target with progress and the loyalty scale", () => {
+  const html = profileHtml("levels", { points: 400 });
+  assert.match(html, /Копите баллы и получите уровень/);
+  assert.match(html, /Мастер/);
+  assert.match(html, /data-theme="pro"/);
+  assert.match(html, /width:40%/);
+  const top = profileHtml("levels", { points: 5000 });
+  assert.match(top, /Ваш текущий уровень/);
+  assert.doesNotMatch(top, /Копите баллы и получите уровень/);
+});
+
+test("rating prints the average and a row per star bucket", () => {
+  const html = profileHtml("rating");
+  assert.match(html, /5\.00/);
+  assert.match(html, /Вы здесь/);
+  assert.match(html, /История/);
+  assert.equal((html.match(/dp-star-on/g) ?? []).length, 5 + 4 + 3 + 2 + 1);
+  assert.match(profileHtml("rating", { rating_votes: [0, 0, 0, 0, 0] }), /—/);
+});
+
+test("car detail keeps park-only actions visible but locked", () => {
+  const html = profileHtml("car", {}, "c1");
+  assert.match(html, /Audi RS 6/);
+  assert.match(html, /280XSH03/);
+  assert.match(html, /Брендинг/);
+  assert.match(html, /Нужно обратиться в ваш парк/);
+  assert.equal((html.match(/data-locked="true"/g) ?? []).length, 3);
+  assert.match(html, /Пройдено 0 из 5/);
+});
+
+test("preparation checklist points at the first unfinished step", () => {
+  const html = profileHtml("diagnostics");
+  assert.match(html, /Завершите подготовку к заказам/);
+  assert.match(html, /data-now="true"/);
+  assert.match(html, /Следующий шаг: пройдите фотоконтроль/);
+  const ready = profileHtml("diagnostics", { photo_status: "passed" });
+  assert.match(ready, /Перейти к заказам/);
+  assert.match(ready, /Всё готово/);
+});
+
+test("about screen leaves the simulator instead of pretending to log out", () => {
+  const html = profileHtml("about");
+  assert.match(html, /О вас/);
+  assert.match(html, /Jana Taxi/);
+  assert.match(html, /Карточка качества/);
+  assert.match(html, /href="\/training\?kind=simulator"/);
+  assert.doesNotMatch(html, /Выйти из аккаунта/);
+  assert.ok(PROFILE_VIEWS.includes("about") && PROFILE_VIEWS.includes("car"));
+});
