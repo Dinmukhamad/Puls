@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { DCard, DForm, DInput, DRow, DToggle, CarArt, type ShiftViewProps } from "./DriverShiftUI";
 import { DAction, DChoice, DExplain, DInfo } from "./DriverButtons";
 import { money } from "./DriverOrders";
 import { dateTime } from "../utils/format";
+import { useEdgeBack } from "../hooks/useEdgeBack";
 import "./driver-profile.css";
 
 /* Строение раздела повторяет приложение парка: карточка водителя с плитками, тарифы с
@@ -45,6 +46,7 @@ function Icon({ name }: { name: string }) {
     spark: <path d="m13 3-7 10h5l-1 8 7-10h-5z" />,
     chat: <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />,
     car: <><path d="M4 16h16M5 16v2m14-2v2" /><path d="M4.5 16 6 9.5A2 2 0 0 1 8 8h8a2 2 0 0 1 2 1.5L19.5 16" /></>,
+    back: <path d="M15 19 8 12l7-7" strokeWidth="2.2" />,
   };
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
@@ -86,6 +88,11 @@ export function DriverProfileViews(p: ShiftViewProps) {
   const paymentLabel = PAYMENTS.find(x => x.value === d.payment)?.title ?? "Наличными или картой";
   const problems = (photoDone ? 0 : 1) + (car && car.status === "available" ? 0 : 1) + (d.tariffs.length ? 0 : 1);
   const [sheet, setSheet] = useState<string | null>(null);
+  // Кнопка, жест и шеврон ведут в одно место: сначала закрываем шторку, потом уходим с экрана.
+  const backTo = ({ car: "cars", provider: "legal", documents: "legal" } as Record<string, string>)[view] ?? "profile";
+  const overlay = !!sheet || view === "payment";
+  const goBack = useCallback(() => { if (sheet) { setSheet(null); return; } go(backTo); }, [sheet, backTo, go]);
+  const { offset, dragging } = useEdgeBack(view === "profile" || overlay ? null : goBack);
   const [tariffTab, setTariffTab] = useState<"driver" | "courier">("driver");
   const [parkTab, setParkTab] = useState<"cars" | "offers" | "contacts">("contacts");
   const [unavailable, setUnavailable] = useState(false);
@@ -93,9 +100,12 @@ export function DriverProfileViews(p: ShiftViewProps) {
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
 
-  const back = (to: string) => <button className="dp-back" type="button" aria-label="Назад" onClick={() => go(to)}>←</button>;
-  const head = (title: string, to = "profile", action?: ReactNode) => <div className="dp-head dp-head--center">{back(to)}<h1>{title}</h1>{action ?? <span className="dp-spacer" />}</div>;
-  const bigHead = (title: string, to = "profile") => <><div className="dp-head">{back(to)}</div><h1 className="dp-title-big">{title}</h1></>;
+  const head = (title: string, big = false, action?: ReactNode) => <header className={`dp-head${big ? " dp-head--big" : " dp-head--center"}`}>
+    <button className="dp-back" type="button" aria-label="Назад" onClick={goBack}><Icon name="back" /></button>
+    <h1>{title}</h1>
+    {action ?? (big ? null : <span className="dp-spacer" />)}
+  </header>;
+  const bigHead = (title: string) => head(title, true);
   const row = (title: string, opts: { note?: string; tone?: string; value?: ReactNode; sub?: string; onClick?: () => void; icon?: string; locked?: boolean; right?: ReactNode } = {}) => {
     const body = <>
       {opts.icon && <span className="dp-row-icon"><Icon name={opts.icon} /></span>}
@@ -162,6 +172,7 @@ export function DriverProfileViews(p: ShiftViewProps) {
     </div>
   </>;
 
+  const body = (() => {
   if (view === "profile") return main;
 
   if (view === "payment") return <>{main}
@@ -265,7 +276,7 @@ export function DriverProfileViews(p: ShiftViewProps) {
     const gained = Math.max(0, Math.min(span, d.points - floor));
     return <>
       <div className="dp-level" data-theme={theme}>
-        {head("Уровень", "profile", <button className="dp-back" type="button" aria-label="О программе лояльности" onClick={() => setSheet("loyalty")}><Icon name="info" /></button>)}
+        {head("Уровень", false, <button className="dp-back" type="button" aria-label="О программе лояльности" onClick={() => setSheet("loyalty")}><Icon name="info" /></button>)}
         <p className="dp-level-lead">{next ? "Копите баллы и получите уровень" : "Ваш текущий уровень"}</p>
         <div className="dp-level-name">{next && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="3" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>}<strong>{target.name}</strong></div>
         <div className="dp-orbs" aria-hidden="true"><i /><i /><i /></div>
@@ -359,9 +370,9 @@ export function DriverProfileViews(p: ShiftViewProps) {
 
   if (view === "car") {
     const item = d.cars.find(x => x.id === detail) ?? car;
-    if (!item) return <>{head("Транспорт", "profile")}<p className="driver-muted">Автомобиль не найден.</p></>;
+    if (!item) return <>{head("Транспорт")}<p className="driver-muted">Автомобиль не найден.</p></>;
     return <>
-      {head(`${item.brand} ${item.model}`, "cars")}
+      {head(`${item.brand} ${item.model}`)}
       <div className="dp-car-hero"><span className="dp-plate">{item.plate}</span><CarArt color={item.id === d.car_id ? "#c2c6cc" : "#9aa0a8"} /></div>
       <div className="dp-card dp-card--flat">
         {row("Брендинг", { icon: "lock", note: "Нужно обратиться в ваш парк", locked: true })}
@@ -511,14 +522,14 @@ export function DriverProfileViews(p: ShiftViewProps) {
     <p className="driver-muted">Учебные документы: подпись демонстрирует процесс и не создаёт юридических обязательств.</p>
   </>;
 
-  if (view === "provider") return <>{head("Документооборот", "legal")}
+  if (view === "provider") return <>{head("Документооборот")}
     <div className="dp-sheet-group">{["Sapar", "ЦНТ", "Payda", "Бумажный документооборот"].map(value => <button className="dp-pick" type="button" key={value} aria-pressed={value === d.provider} disabled={busy} onClick={() => act("provider", { value })}>
       <div><strong>{value}</strong></div><u aria-hidden="true">✓</u>
     </button>)}</div>
     <DChoice arrow onClick={() => go("documents")}>Открыть документы</DChoice>
   </>;
 
-  if (view === "documents") return <>{head("Закрывающие документы", "legal")}
+  if (view === "documents") return <>{head("Закрывающие документы")}
     {d.documents.map(x => <DCard key={x.id} title={x.title}>
       <DRow title="Период" value={x.period} />
       <DRow title="Провайдер" value={d.provider ?? "Не выбран"} onClick={() => go("provider")} />
@@ -559,4 +570,7 @@ export function DriverProfileViews(p: ShiftViewProps) {
       <p>Регион, комиссии, тарифы и правила оценки определяются сценарием руководителя. В свободном режиме штрафы не применяются. В зачётной смене действия, подсказки и ошибки входят в итоговый разбор.</p>
     </DCard>
   </>;
+  })();
+
+  return <div className="dp-swipe" data-dragging={dragging} style={{ transform: offset ? `translateX(${offset}px)` : "none" } as CSSProperties}>{body}</div>;
 }

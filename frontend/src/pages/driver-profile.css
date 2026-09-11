@@ -25,16 +25,35 @@
   --dp-warn: #bd5a2c;
 }
 .ds-profile-section { gap: 14px; padding-top: 12px; }
+/* Экран едет за пальцем при свайпе от края. Трансформация ставится только на время
+   жеста: постоянная создала бы систему координат и сломала position: fixed у шторок. */
+.dp-swipe {
+  display: flex; flex-direction: column; gap: inherit; min-width: 0;
+  transition: transform .3s cubic-bezier(.32,.72,0,1);
+}
+.dp-swipe[data-dragging="true"] { transition: none; background: var(--driver-bg); box-shadow: -16px 0 34px #0008; }
 
 /* ── шапки экранов ────────────────────────────────────────────────── */
-.dp-head { display: flex; align-items: center; gap: 10px; min-height: 52px; }
-.dp-head h1 { flex: 1; min-width: 0; font-size: 33px; letter-spacing: -.03em; }
-.dp-head--center h1 { flex: 1; min-width: 0; font-size: 18px; font-weight: 600; text-align: center; letter-spacing: 0; overflow-wrap: anywhere; }
-.dp-head--center .dp-spacer { width: 48px; flex: none; }
+/* Шапка остаётся на месте при прокрутке: с низа длинного экрана иначе не выйти. */
+.dp-head {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 12px; min-height: 56px;
+  margin: -12px -18px 2px; padding: 8px 18px;
+  background: color-mix(in srgb, var(--driver-bg) 86%, transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+@supports not (backdrop-filter: blur(1px)) { .dp-head { background: var(--driver-bg); } }
+.dp-head h1 { flex: 1; min-width: 0; font-size: 27px; letter-spacing: -.03em; overflow-wrap: anywhere; }
+.dp-head--big { align-items: flex-start; padding-top: 10px; padding-bottom: 12px; }
+.dp-head--big .dp-back { margin-top: -2px; }
+.dp-head--center h1 { font-size: 18px; font-weight: 600; text-align: center; letter-spacing: 0; }
+.dp-head--center .dp-spacer { width: 44px; flex: none; }
+/* Блок уровня сам красит фон, липкая шапка поверх него читалась бы неверно. */
+.dp-level .dp-head { position: static; background: none; backdrop-filter: none; margin-top: 0; }
 .dp-back, .dp-round {
-  display: grid; place-items: center; width: 48px; height: 48px; flex: none;
-  border: 0; border-radius: 50%; background: none; color: var(--driver-text);
-  font-size: 25px; line-height: 1; cursor: pointer;
+  display: grid; place-items: center; width: 44px; height: 44px; flex: none;
+  border: 0; border-radius: 50%; background: var(--dp-tile); color: var(--driver-text);
+  font-size: 22px; line-height: 1; cursor: pointer;
   transition: background .18s ease, transform .11s ease;
 }
 .dp-round { background: #3a3a38; color: #fff; font-size: 22px; }
@@ -42,7 +61,6 @@
 .ds-light .dp-back:hover { background: #00000010; }
 .dp-back:active, .dp-round:active { transform: scale(.93); }
 .dp-back svg, .dp-round svg { width: 24px; height: 24px; }
-.dp-title-big { font-size: 33px; letter-spacing: -.03em; padding: 4px 2px 2px; }
 .dp-section-title { font-size: 24px; font-weight: 700; letter-spacing: -.02em; padding: 10px 4px 0; }
 
 /* ── карточки и строки ────────────────────────────────────────────── */
@@ -257,7 +275,7 @@ button.dp-row:hover { opacity: .82; }
 .dp-pick[aria-pressed="true"] u { background: var(--driver-yellow); color: #171710; }
 
 @media (max-width: 460px) {
-  .dp-head h1, .dp-title-big, .dp-identity h1 { font-size: 27px; }
+  .dp-head--big h1, .dp-identity h1 { font-size: 24px; }
   .dp-avatar-large { width: 60px; height: 60px; font-size: 21px; }
   .dp-brand strong { font-size: 20px; }
   .dp-pill { font-size: 14px; padding: 10px 14px; }
@@ -293,8 +311,8 @@ button.dp-row:hover { opacity: .82; }
 }
 @media (max-width: 380px) {
   .dp-head--center h1 { font-size: 16px; }
-  .dp-back, .dp-round, .dp-head--center .dp-spacer { width: 42px; height: 42px; }
-  .dp-head--center .dp-spacer { height: auto; }
+  .dp-back, .dp-round { width: 40px; height: 40px; }
+  .dp-head--center .dp-spacer { width: 40px; }
   .dp-tiles strong { font-size: 17px; }
   .dp-tiles span { font-size: 12px; }
   .dp-tiles svg { width: 44px; height: 44px; }
@@ -304,6 +322,7 @@ button.dp-row:hover { opacity: .82; }
 /* Блок уровня выходит в поля секции, поэтому отступы должны совпадать с ней. */
 @media (max-width: 360px) {
   .dp-level { margin: -10px -12px 0; padding: 8px 12px 20px; }
+  .dp-head { margin-left: -12px; margin-right: -12px; padding-left: 12px; padding-right: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .dp-back, .dp-round, .dp-pill, .dp-tiles button, .dp-group-chevron, .dp-gauge-fill, .dp-progress-line i b { transition: none; }

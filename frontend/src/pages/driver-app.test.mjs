@@ -516,3 +516,28 @@ test("about screen leaves the simulator instead of pretending to log out", () =>
   assert.doesNotMatch(html, /Выйти из аккаунта/);
   assert.ok(PROFILE_VIEWS.includes("about") && PROFILE_VIEWS.includes("car"));
 });
+
+test("back control is a real chevron button sharing one line with the title", () => {
+  const html = profileHtml("tariffs");
+  assert.match(html, /<header class="dp-head dp-head--big">/);
+  assert.match(html, /class="dp-back" type="button" aria-label="Назад"/);
+  assert.match(html, /aria-label="Назад"><svg/);
+  assert.doesNotMatch(html, /←|dp-title-big/);
+  assert.equal((html.match(/<header class="dp-head/g) ?? []).length, 1);
+  assert.match(html, /<header class="dp-head dp-head--big">.*?<h1>Тарифы и опции<\/h1>/s);
+});
+
+test("centred screens keep a spacer so the title stays optically centred", () => {
+  const html = profileHtml("rating");
+  assert.match(html, /<header class="dp-head dp-head--center">/);
+  assert.match(html, /<h1>Рейтинг<\/h1><span class="dp-spacer">/);
+  const levels = profileHtml("levels");
+  assert.match(levels, /aria-label="О программе лояльности"/);
+  assert.doesNotMatch(levels, /dp-spacer/);
+});
+
+test("swipe wrapper stays untransformed until a drag starts", () => {
+  const html = profileHtml("park");
+  assert.match(html, /class="dp-swipe" data-dragging="false" style="transform:none"/);
+  assert.doesNotMatch(html, /translateX/);
+});
