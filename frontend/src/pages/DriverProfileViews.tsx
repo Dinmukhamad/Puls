@@ -138,11 +138,10 @@ export function DriverProfileViews(p: ShiftViewProps) {
     <h2 className="dp-section-title">Мой транспорт</h2>
     {car ? <button className="dp-vehicle" type="button" onClick={() => go("car", car.id)}>
       <strong>{car.brand} {car.model} · 1 транспортное средство</strong>
-      <CarArt />
-      <span className="dp-plate">{car.plate}</span>
+      <span className="dp-vehicle-foot"><span className="dp-plate">{car.plate}</span><CarArt /></span>
     </button> : <div className="dp-card">{row("Автомобиль не выбран", { note: "Добавьте учебный автомобиль", onClick: () => go("cars") })}</div>}
     <div className="dp-card dp-card--flat">
-      {row("Диагностика", { icon: "camera", onClick: () => go("diagnostics"), right: problems ? <b style={{ color: "var(--dp-danger)" }}>{problems}</b> : undefined })}
+      {row("Диагностика", { icon: "camera", onClick: () => go("diagnostics"), right: problems ? <b className="dp-badge">{problems}</b> : undefined })}
       {row("Фотоконтроль", { icon: "shield", note: photoDone ? "Пройден" : "Нужна проверка", tone: photoDone ? undefined : "danger", onClick: () => go("photo") })}
       {row("Мои автомобили", { icon: "car", onClick: () => go("cars") })}
     </div>
@@ -287,10 +286,10 @@ export function DriverProfileViews(p: ShiftViewProps) {
       </div>
       <div className="dp-card dp-card--flat">{c.levels.map(x => row(x.name, { note: x.benefits, value: x === level ? "Текущий" : `От ${x.threshold.toLocaleString("ru")}` }))}</div>
       {sheet === "loyalty" && <Sheet title="О программе лояльности" onClose={() => setSheet(null)}>
-        <div className="dp-sheet-group" style={{ padding: "16px 18px" }}>
+        <div className="dp-sheet-group dp-sheet-text">
           <p><b>Получение баллов и уровней.</b> Баллы начисляются за выполненные учебные заказы. Чем больше баллов за смену, тем выше уровень и преимущества.</p>
         </div>
-        <div className="dp-sheet-group" style={{ padding: "16px 18px" }}>
+        <div className="dp-sheet-group dp-sheet-text">
           <p><b>Восстановление уровня.</b> Один раз за смену можно вернуть утраченный уровень — в реальной работе запасные баллы дают раз в календарный год.</p>
         </div>
         <div className="dp-sheet-group">{c.levels.map(x => row(x.name, { value: x.threshold.toLocaleString("ru") }))}</div>
@@ -340,14 +339,12 @@ export function DriverProfileViews(p: ShiftViewProps) {
   // ── транспорт ───────────────────────────────────────────────────────
   if (view === "cars") return <>
     {head("Транспорт")}
-    <button className="dp-vehicle" type="button" onClick={() => setSheet("car-add")} style={{ minHeight: 96 }}>
-      <strong>Добавить транспорт</strong>
-      <span className="dp-plate" style={{ marginTop: 12 }}>＋</span>
+    <button className="dp-add" type="button" onClick={() => setSheet("car-add")}>
+      <span>Добавить транспорт</span><i aria-hidden="true">+</i>
     </button>
     {d.cars.map(x => <button className="dp-vehicle" key={x.id} type="button" onClick={() => go("car", x.id)}>
-      <strong>{x.brand} {x.model} {x.id === d.car_id ? "· Основной" : ""}</strong>
-      <CarArt />
-      <span className="dp-plate">{x.plate}</span>
+      <strong>{x.brand} {x.model}{x.id === d.car_id ? " · Основной" : ""}</strong>
+      <span className="dp-vehicle-foot"><span className="dp-plate">{x.plate}</span><CarArt /></span>
     </button>)}
     {sheet === "car-add" && <Sheet title="Добавить автомобиль" onClose={() => setSheet(null)}>
       <DForm busy={busy} label="Добавить в учебный профиль" onSubmit={values => { act("car_add", values); setSheet(null); }}>
@@ -399,7 +396,7 @@ export function DriverProfileViews(p: ShiftViewProps) {
       <div className="dp-card dp-card--flat">{steps.map(x => <button className="dp-check" type="button" key={x.key} data-done={x.done} data-now={x === nextStep} onClick={() => go(x.to)}>
         <i aria-hidden="true">{x.done ? "✓" : x === nextStep ? "" : "·"}</i>
         <span>{x.title}</span>
-        {x === nextStep && <em style={{ fontStyle: "normal", color: "var(--driver-muted)" }}>›</em>}
+        {x === nextStep && <em className="dp-check-go" aria-hidden="true">›</em>}
       </button>)}</div>
       <div className="dp-bottom"><DAction label={nextStep ? "Далее" : "Перейти к заказам"} busy={busy} onClick={() => go(nextStep ? nextStep.to : "orders")} readyNote={nextStep ? `Следующий шаг: ${nextStep.title.toLowerCase()}.` : "Всё готово — можно выходить на линию."} /></div>
     </>;
@@ -446,7 +443,7 @@ export function DriverProfileViews(p: ShiftViewProps) {
       {row("Профиль создан", { value: state.profile ? dateTime(state.profile.created_at) : "—" })}
     </div>
     <DExplain real="здесь же меняется фотография профиля и настройки аккаунта." sim="учебный профиль берётся из Puls: имя и парк меняет руководитель." />
-    <div className="dp-bottom"><Link className="dp-bottom-button" to="/training?kind=simulator" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>Выйти из симулятора</Link></div>
+    <div className="dp-bottom"><Link className="dp-bottom-button" to="/training?kind=simulator">Выйти из симулятора</Link></div>
   </>;
 
   // ── остальные экраны профиля ────────────────────────────────────────
