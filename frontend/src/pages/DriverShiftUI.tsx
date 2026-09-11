@@ -1,6 +1,7 @@
 import type { FormEvent, ReactNode } from "react";
 import type { DriverShift, ShiftAct } from "../api/driverShift";
 import type { DriverState } from "../api/driver";
+import { DAction } from "./DriverButtons";
 
 export interface ShiftViewProps { shift: DriverShift; state: DriverState; view: string; detail: string; fullName: string; busy: boolean; act: ShiftAct; go: (view: string, detail?: string) => void; switchPark: () => void; support: () => void }
 export function DCard({ title, children, className = "" }: { title?: string; children: ReactNode; className?: string }) {
@@ -13,6 +14,9 @@ export function DRow({ title, value, note, onClick }: { title: string; value?: R
 export function DToggle({ title, checked, onChange, note, disabled }: { title: string; checked: boolean; onChange: () => void; note?: string; disabled?: boolean }) {
   return <label className="ds-toggle"><span>{title}{note && <small>{note}</small>}</span><input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} /><i aria-hidden="true" /></label>;
 }
+export function DRadio({ title, name, value, checked, onChange, note, disabled }: { title: string; name: string; value: string; checked: boolean; onChange: () => void; note?: string; disabled?: boolean }) {
+  return <label className="ds-radio"><input type="radio" name={name} value={value} checked={checked} onChange={onChange} disabled={disabled} /><span><strong>{title}</strong>{note && <small>{note}</small>}</span></label>;
+}
 export function DForm({ children, onSubmit, label, busy }: { children: ReactNode; onSubmit: (values: Record<string, unknown>) => void; label: string; busy: boolean }) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (busy) return;
@@ -23,7 +27,7 @@ export function DForm({ children, onSubmit, label, busy }: { children: ReactNode
     }
     onSubmit(values);
   }
-  return <form className="ds-form" onSubmit={submit}><fieldset disabled={busy}>{children}<button className="driver-primary" type="submit">{busy ? "Сохраняем…" : label}</button></fieldset></form>;
+  return <form className="ds-form" onSubmit={submit}><fieldset disabled={busy}>{children}<DAction type="submit" busy={busy} busyLabel="Сохраняем…" label={label} /></fieldset></form>;
 }
 export function DInput({ label, name, type = "text", value, min, max, placeholder }: { label: string; name: string; type?: string; value?: string | number; min?: number | string; max?: number | string; placeholder?: string }) {
   return <label>{label}<input name={name} type={type} defaultValue={value} min={min} max={max} maxLength={160} placeholder={placeholder} required /></label>;

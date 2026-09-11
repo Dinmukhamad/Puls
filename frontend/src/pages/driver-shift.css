@@ -3,6 +3,11 @@
 .ds-light .driver-nav button.is-active { color:#806700; }
 .ds-gps-point { position:absolute; left:12px; bottom:28px; padding:7px 10px; border-radius:10px; background:#141928dc; color:#fff; font-size:10px; }
 .driver-workspace button { color:inherit; }
+.driver-workspace button:not(:disabled):active { filter:brightness(.93); }
+.ds-radio { display:flex; align-items:center; gap:14px; min-height:56px; padding:12px 0; cursor:pointer; }
+.ds-radio input { width:22px; height:22px; flex:none; accent-color:var(--driver-yellow); }
+.ds-radio strong { font-size:15px; font-weight:600; }.ds-radio small { display:block; margin-top:4px; }
+.ds-radio:has(input:disabled) { opacity:.6; cursor:not-allowed; }
 .driver-workspace .driver-primary,.driver-workspace .driver-online,.driver-workspace .driver-order-action { color:#171710; border:0; }
 .driver-workspace .driver-header,.driver-workspace .driver-nav,.driver-workspace .driver-orders-panel { background:var(--driver-bg); }
 .driver-workspace .driver-header { border-bottom:1px solid var(--ds-line); min-height:52px; }

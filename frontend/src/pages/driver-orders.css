@@ -11,7 +11,9 @@
 .driver-order-status { color:var(--driver-yellow); background:#2d2911; border-radius:50%; width:36px; height:36px; flex:none; display:grid; place-items:center; }.driver-order-status.is-complete { color:#85edbb; background:#16372c; font-size:22px; }
 .driver-order-steps { display:flex; gap:5px; }.driver-order-steps>span { height:3px; flex:1; border-radius:3px; background:#33332d; }.driver-order-steps>.is-done { background:var(--driver-yellow); }
 .driver-route-form { display:flex; flex-direction:column; gap:18px; }.driver-route-form label { display:flex; flex-direction:column; gap:8px; font-size:13px; }.driver-route-form label>span { display:flex; align-items:center; gap:9px; }.driver-route-form label b { font-size:15px; color:var(--driver-yellow); }.driver-route-form input { width:100%; padding:16px; border:1px solid #4d4d45; background:#232320; color:#fff; font:inherit; font-size:16px; border-radius:16px; min-height:54px; }.driver-route-form input::placeholder { color:#999a90; }.driver-route-form p { font-size:12px; }.driver-route-form .driver-primary { border:0; }
-.driver-order-panel button:disabled { opacity:.48; }.driver-order-distance { display:flex; flex-direction:column; gap:4px; }.driver-order-distance>strong { font-size:27px; letter-spacing:-.03em; }.driver-order-distance>span { font-size:11px; color:var(--driver-muted); }
+.driver-order-panel button:disabled:not(.du-btn):not(.du-chip):not(.driver-order-action) { opacity:.48; }
+.driver-order-panel .driver-order-action:disabled { background:#35362f; color:#a8aa9e; }
+.driver-order-panel .driver-order-action:disabled>span { background:#1c1d19; color:#7d7f72; }.driver-order-distance { display:flex; flex-direction:column; gap:4px; }.driver-order-distance>strong { font-size:27px; letter-spacing:-.03em; }.driver-order-distance>span { font-size:11px; color:var(--driver-muted); }
 .driver-order-route { display:flex; flex-direction:column; gap:13px; padding:13px 0; border-top:1px solid #353530; border-bottom:1px solid #353530; }.driver-order-route>div { display:flex; align-items:center; gap:12px; min-width:0; }.driver-order-route b { width:29px; height:30px; display:grid; place-items:center; border:2px solid #f5f5f3; border-radius:10px; font-size:19px; flex:none; }.driver-order-route span { font-size:15px; line-height:1.4; overflow-wrap:anywhere; min-width:0; }
 .driver-order-passenger,.driver-order-payment { display:flex; align-items:center; justify-content:space-between; gap:14px; font-size:14px; }.driver-order-passenger strong { font-size:16px; }.driver-order-payment { background:#232320; border-radius:14px; padding:12px 14px; }.driver-order-payment strong { font-size:17px; white-space:nowrap; }
 .driver-order-action { display:flex; align-items:center; justify-content:center; position:relative; min-height:66px; padding:14px 20px 14px 72px; border:0; border-radius:40px; background:var(--driver-yellow); color:#101010; text-align:center; flex:none; }.driver-order-action>span { position:absolute; left:7px; top:7px; bottom:7px; aspect-ratio:1; display:grid; place-items:center; border-radius:50%; background:#080808; color:var(--driver-yellow); font-size:34px; line-height:1; }.driver-order-action strong { font-size:16px; }
@@ -44,3 +46,12 @@
 .driver-training-route { position:relative; height:360px; border-radius:16px; overflow:hidden; isolation:isolate; }.driver-training-route .driver-trip-map { position:absolute; inset:0; }.driver-training-route+p { font-size:12px; color:var(--driver-muted); line-height:1.5; }.ds-layer-panel>p { grid-column:1/-1; font-size:12px; color:var(--driver-muted); }
 
 .driver-map .sim-location>span { background:#4777ff; }
+
+/* Кнопка этапа и её причина — один блок, чтобы объяснение не отрывалось от кнопки. */
+.driver-order-act { display:flex; flex-direction:column; gap:9px; flex:none; }
+.driver-order-tools { align-items:center; }
+.driver-order-tools>* { flex:1 1 44%; min-width:0; }
+.driver-order-help__actions .du-choice { min-height:46px; font-size:14px; }
+.driver-order-help .du-choice { min-height:46px; font-size:14px; }
+.driver-order-panel .du-choice { min-height:46px; font-size:15px; }
+.ds-passenger-thread+.ds-form+.du-choice { margin-top:4px; }

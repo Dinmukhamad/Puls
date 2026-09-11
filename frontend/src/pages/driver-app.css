@@ -1,4 +1,6 @@
 .driver-app {
+  font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:16px; line-height:1.5; font-weight:400;
   --driver-bg:#080808; --driver-surface:#232320; --driver-text:#f5f5f3; --driver-muted:#aaa9a3; --driver-yellow:#ffe128;
   --sim-block:#30354d; --sim-road:#5e6489; --sim-water:#253d50; --sim-park:#2b4842;
   --text-primary:var(--driver-text); --text-secondary:var(--driver-muted); --surface-primary:#232320; --surface-elevated:#232320;
@@ -8,7 +10,9 @@
 }
 .driver-app button,.driver-app a { -webkit-tap-highlight-color:transparent; }
 .driver-app button { font:inherit; cursor:pointer; }
-.driver-app button:disabled { cursor:default; }
+.driver-app button:disabled { cursor:not-allowed; }
+.driver-app button:disabled:not(.du-btn):not(.du-chip):not(.driver-order-action) { opacity:.6; }
+.driver-app .driver-primary { font-weight:600; }
 .driver-auth { width:100%; max-width:480px; margin:0 auto; padding:12px 24px calc(32px + env(safe-area-inset-bottom)); overflow:auto; display:flex; flex-direction:column; gap:24px; }
 .driver-auth__intro { display:flex; flex-direction:column; align-items:flex-start; gap:14px; }
 .driver-auth__intro h1 { font-size:30px; }
@@ -18,8 +22,8 @@
 .driver-auth__form input { width:100%; min-height:60px; background:var(--driver-surface); color:var(--driver-text); border:1px solid #494940; border-radius:16px; padding:16px; font:inherit; font-size:20px; }
 .driver-auth__form input::placeholder { color:#87877f; opacity:1; }
 .driver-auth__form .driver-auth__code { font-size:28px; letter-spacing:.32em; text-align:center; }
-.driver-auth .driver-primary { border:0; min-height:56px; }
-.driver-auth button:disabled { opacity:.5; }
+.driver-auth .driver-primary,.driver-auth .du-action { border:0; min-height:56px; }
+.driver-auth button:disabled:not(.du-btn) { opacity:.5; }
 .driver-secondary { padding:12px 16px; border:1px solid #494940; border-radius:16px; background:none; color:var(--driver-text); min-height:48px; }
 .driver-auth__note { font-size:12px; color:var(--driver-muted); }
 .driver-auth__error { padding:14px 16px; border-radius:16px; background:#382321; color:#ffc9c3; font-size:14px; }
@@ -48,7 +52,7 @@
 .driver-taxi { width:52px; height:52px; display:grid; place-items:center; background:var(--driver-yellow); color:#151515; border-radius:17px; }
 .driver-content { flex:1; overflow:auto; min-height:0; }
 .driver-content--center { display:flex; align-items:center; justify-content:center; flex-direction:column; padding:24px; gap:20px; text-align:center; }
-.driver-primary { display:inline-flex; align-items:center; justify-content:center; border-radius:18px; padding:16px 22px; background:var(--driver-yellow); color:#151515; text-decoration:none; font-weight:650; }
+.driver-primary { display:inline-flex; align-items:center; justify-content:center; border:0; min-height:48px; border-radius:18px; padding:16px 22px; background:var(--driver-yellow); color:#151515; text-decoration:none; font-weight:600; }
 .driver-section { display:flex; flex-direction:column; gap:20px; padding:24px 18px 32px; width:100%; max-width:720px; margin:0 auto; }
 .driver-section>.driver-card { display:flex; flex-direction:column; gap:12px; }.driver-section h1 { margin-bottom:2px; }
 .driver-row { display:flex; justify-content:space-between; gap:20px; align-items:center; padding:13px 0; line-height:1.4; }

@@ -6,11 +6,11 @@
 .dn-sheet { position:absolute; inset:auto 0 0; height:var(--sheet-height); display:flex; flex-direction:column; background:var(--dn-bg); color:var(--driver-text,#f7f7f2); border-radius:26px 26px 0 0; box-shadow:0 -5px 30px #0003; z-index:800; overflow:hidden; }
 .dn-sheet-handle { display:flex; align-items:center; flex-direction:column; gap:4px; flex:none; width:100%; min-height:36px; padding:8px 16px 4px; touch-action:none; border:0; background:none; color:var(--dn-muted); }
 .dn-sheet-handle>span { width:40px; height:4px; border-radius:4px; background:#8888; }
-.dn-sheet-handle small { font-size:9px; line-height:1.1; }
+.dn-sheet-handle small { font-size:12px; line-height:1.2; }
 .dn-sheet-body { overflow:auto; overscroll-behavior:contain; min-height:0; display:flex; flex-direction:column; gap:14px; padding:8px 20px 24px; scrollbar-width:thin; }
 .dn-sheet-body>* { flex-shrink:0; }
 .dn-sheet-body h1 { font-size:23px; }
-.dn-sheet-body .driver-order-eyebrow { font-size:10px; letter-spacing:.06em; }
+.dn-sheet-body .driver-order-eyebrow { font-size:12px; letter-spacing:.02em; }
 .dn-sheet-body .driver-primary,.dn-sheet-body .driver-secondary { width:100%; min-height:46px; }
 .dn-sheet-body label { display:flex; flex-direction:column; gap:8px; font-size:12px; color:var(--dn-muted); }
 .dn-sheet-body input,.dn-sheet-body select { box-sizing:border-box; width:100%; min-width:0; padding:13px 12px; border:1px solid var(--dn-line); border-radius:12px; background:var(--dn-card); color:var(--driver-text,#f7f7f2); font:inherit; font-size:16px; }
@@ -21,13 +21,16 @@
 .dn-point>b { display:grid; place-items:center; width:30px; height:30px; border-radius:50%; background:var(--driver-yellow,#ffe128); color:#181910; flex:none; }
 .dn-point>div { flex:1; min-width:0; display:grid; gap:6px; }
 .dn-point span { font-size:11px; color:var(--dn-muted); }.dn-point strong,.dn-target { overflow-wrap:anywhere; font-size:14px; }
-.dn-text-button { border:0; background:none; color:inherit; font-size:12px!important; text-align:left; padding:9px 0; text-decoration:underline; text-underline-offset:3px; }
+.dn-text-button { border:0; background:none; color:inherit; min-height:44px; font-size:14px!important; text-align:left; padding:10px 0; text-decoration:underline; text-underline-offset:3px; }
 .dn-search { display:grid; gap:10px; }.dn-search-results { display:grid; border:1px solid var(--dn-line); border-radius:12px; overflow:hidden; }
 .dn-search-results>button { border:0; border-bottom:1px solid var(--dn-line); background:var(--dn-card); color:inherit; padding:15px; text-align:left; font-size:14px; }.dn-search-results>p { padding:12px; }
 .dn-route-meta { display:flex; align-items:baseline; gap:16px; }.dn-route-meta strong { font-size:27px; letter-spacing:-.03em; }.dn-route-meta span { font-size:13px; color:var(--dn-muted); }
 .dn-progress { width:100%; height:5px; accent-color:var(--driver-yellow,#ffe128); }
-.dn-order-details { border:1px solid var(--dn-line); border-radius:16px; padding:16px; font-size:13px; }.dn-order-details summary { cursor:pointer; font-size:14px; font-weight:650; }.dn-order-details p { margin-top:12px; }
-.dn-location-note { display:grid; gap:10px; border:1px solid #c3993466; background:#c3993410; border-radius:14px; padding:14px; font-size:12px; }.dn-inline-message,.dn-inline-error { border-left:3px solid #dfb43d; padding:10px 12px; font-size:13px; background:#dfb43d12; }
+.dn-order-details { border:1px solid var(--dn-line); border-radius:16px; padding:0 16px 16px; font-size:14px; }.dn-order-details:not([open]) { padding-bottom:0; }.dn-order-details summary { cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:48px; font-size:15px; font-weight:600; list-style:none; }.dn-order-details summary::-webkit-details-marker { display:none; }.dn-order-details summary::after { content:"+"; font-size:22px; font-weight:400; color:var(--dn-muted); }.dn-order-details[open] summary::after { content:"−"; }.dn-order-details p { margin-top:12px; }
+.dn-location-note { display:grid; gap:12px; border:1px solid #c3993466; background:#c3993410; border-radius:16px; padding:16px; font-size:14px; }.dn-inline-message,.dn-inline-error { border-left:3px solid #dfb43d; padding:10px 12px; font-size:14px; background:#dfb43d12; }
+.dn-help-button { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; min-height:44px; border:0; background:none; color:inherit; text-align:left; text-decoration:underline; text-underline-offset:3px; }
+.dn-action-help { font-size:14px; color:var(--dn-muted); }
+.dn-passenger { display:grid; gap:12px; }.dn-passenger p { margin:0; }
 .dn-map-controls { position:absolute; right:12px; top:12px; z-index:500; display:grid; gap:6px; max-width:130px; }.dn-map-controls button { border:0; border-radius:13px; box-shadow:0 2px 10px #0003; background:#fffffff0; color:#222; padding:10px 13px; min-height:44px; font-size:12px; }.dn-map-controls button:nth-child(-n+2) { width:44px; font-size:22px; justify-self:end; }
 .dn-attribution { position:absolute; left:8px; z-index:510; background:#fffffff0; border-radius:5px; padding:3px 5px; font-size:9px; color:#31352c; }.dn-attribution a { color:inherit; }
 .dn-map-note { position:absolute; top:12px; left:12px; max-width:200px; padding:8px; font-size:11px; z-index:520; background:#ffffffe8; color:#333; border-radius:8px; }
@@ -57,3 +60,35 @@
 .dn-sheet--collapsed .dn-route-meta strong { font-size:20px; line-height:1.1; }
 .dn-sheet--collapsed .dn-progress { display:none; }
 .driver-navigation-workspace .driver-primary:disabled { background:#3f4039; color:#b4b6aa; }
+.dn-sheet--collapsed { min-height:190px; max-height:88%; }
+.dn-sheet--collapsed .dn-sheet-body>.dn-action-help { display:none; }
+.driver-navigation-workspace .driver-primary:disabled { opacity:1; }
+
+/* ── шторка и роли кнопок внутри неё ──────────────────────────────── */
+.dn-sheet { transition: height .34s cubic-bezier(.32,.72,0,1); }
+.dn-sheet[data-drag="true"] { transition: none; }
+.dn-sheet-handle > span { transition: width .2s ease, background .2s ease; }
+.dn-sheet-handle:hover > span { width: 52px; background: #aaaa; }
+
+.dn-confirm { display: grid; gap: 10px; padding: 16px; border: 1px solid #8d544966; border-radius: 16px; background: #f0b3a60a; }
+.dn-confirm p { margin: 0; font-size: 14px; }
+
+/* Свёрнутая шторка оставляет только текущее действие: карта важнее списка кнопок. */
+.dn-sheet--collapsed .dn-sheet-body > .du-choice,
+.dn-sheet--collapsed .dn-sheet-body > .du-cancel,
+.dn-sheet--collapsed .dn-sheet-body > .du-info,
+.dn-sheet--collapsed .dn-sheet-body > .du-chips,
+.dn-sheet--collapsed .dn-sheet-body > .dn-confirm,
+.dn-sheet--collapsed .dn-sheet-body > .dn-point,
+.dn-sheet--collapsed .dn-sheet-body > .dn-mode,
+.dn-sheet--collapsed .dn-sheet-body > .dn-search { display: none; }
+.dn-sheet--collapsed .du-act { gap: 6px; }
+.dn-sheet--collapsed .du-act .du-action { min-height: 42px; padding: 10px 14px; font-size: 14px; }
+.dn-sheet--collapsed .du-act .du-reason { font-size: 12px; }
+.dn-sheet--collapsed .du-act .du-reason::before { display: none; }
+
+/* Причина под действием не должна отрывать кнопку от карты. */
+.dn-sheet-body > .du-act { margin-bottom: 2px; }
+.dn-location-note .du-choice { min-height: 46px; font-size: 14px; }
+.dn-passenger .du-choice { min-height: 46px; font-size: 14px; }
+.dn-row > .du-choice { min-height: 46px; font-size: 14px; }

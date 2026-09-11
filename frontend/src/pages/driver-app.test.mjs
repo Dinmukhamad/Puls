@@ -46,6 +46,14 @@ test("unconfigured account explains the missing binding instead of accepting a c
   assert.doesNotMatch(html, /<input|driver-map|Подтвердить и войти/);
 });
 
+test("country prefix alone cannot request an OTP; a complete phone can", () => {
+  const prefix = renderToStaticMarkup(React.createElement(DriverLogin, { ...loginProps, phone: "+7" }));
+  assert.match(prefix, /value="\+7"/);
+  assert.match(prefix, /type="submit" disabled=""/);
+  const full = renderToStaticMarkup(React.createElement(DriverLogin, { ...loginProps, phone: "+7 700 123 45 67" }));
+  assert.doesNotMatch(full, /type="submit" disabled/);
+});
+
 test("OTP input supports mobile autofill and shows server resend cooldown", () => {
   const html = renderToStaticMarkup(React.createElement(DriverLogin, { ...loginProps, stage: "otp", authentication: { ...loginProps.authentication, next_send_at: new Date(Date.now() + 60000).toISOString(), code_expires_at: new Date(Date.now() + 300000).toISOString() } }));
   assert.match(html, /inputMode="numeric" autoComplete="one-time-code"/);
@@ -217,4 +225,93 @@ test("custom address text is escaped and the car follows each route segment", ()
   assert.deepEqual(routePosition(points, .25), { x: 5, y: 0, angle: 90 });
   assert.deepEqual(routePosition(points, .75), { x: 10, y: 5, angle: 180 });
   assert.deepEqual(routePosition(points, 2), { x: 10, y: 10, angle: 180 });
+});
+
+const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
+const { DriverNavigationOrders } = await component("./DriverNavigationOrders.tsx");
+const navSpec = { mode: "real", pickup: { latitude: 43.2, longitude: 76.9, label: "Точка А" }, destination: { latitude: 43.21, longitude: 76.91, label: "Точка Б" }, planned_distance: 1900, planned_duration: 240, rules: { arrival_radius: 75, free_wait_seconds: 30 } };
+function navigationHtml(stage, available, allowed, payment = "cash") {
+  const client = new QueryClient();
+  const html = renderToStaticMarkup(React.createElement(QueryClientProvider, { client }, React.createElement(DriverNavigationOrders, {
+    state: { order: { ...order, stage, payment, details: { navigation: navSpec } }, server_now: new Date().toISOString(), navigation: { gps_available: available, can_arrive: allowed, can_start: allowed, can_finish: allowed, arrival_radius: 75, distance_to_target: 1900, status: stage === "trip" ? "IN_RIDE" : "TO_PICKUP" } },
+    location: { status: available ? "ready" : "denied", fix: available ? { latitude: 43.2, longitude: 76.9, accuracy: 10, captured_at: new Date().toISOString() } : null, message: "Нет сигнала GPS", retry() {} },
+    consent: "enabled", allowLocation() {}, declineLocation() {}, busy: false, create() {}, go() {},
+  })));
+  client.clear();
+  return html;
+}
+test("lost GPS blocks completion and offers instructions, not a fictitious settings action", () => {
+  const html = navigationHtml("trip", false, true);
+  assert.match(html, /class="du-act" data-state="blocked"/);
+  assert.match(html, /class="du-btn du-action" type="button" disabled=""/);
+  assert.match(html, /Сначала восстановите геолокацию/);
+  assert.match(html, /class="du-info" data-open="false"/);
+  assert.match(html, /Как разрешить геолокацию\?/);
+  assert.match(html, /aria-expanded="false" aria-controls="/);
+  assert.match(html, /Повторить запрос геолокации/);
+  assert.doesNotMatch(html, /Открыть настройки|До точки Б по прямой/);
+});
+test("arrival gates and explanations distinguish pickup from trip completion", () => {
+  const blocked = navigationHtml("pickup", true, false);
+  assert.match(blocked, /class="du-act" data-state="blocked"/);
+  assert.match(blocked, /class="du-btn du-action" type="button" disabled=""/);
+  assert.match(blocked, /Подойдите к точке А в радиус 75 м/);
+  const ready = navigationHtml("pickup", true, true);
+  assert.match(ready, /class="du-act" data-state="ready"/);
+  assert.doesNotMatch(ready, /du-action" type="button" disabled/);
+  assert.match(ready, /Нажатие начнёт ожидание пассажира/);
+  assert.match(navigationHtml("trip", true, false), /радиус 75 м/);
+  assert.match(navigationHtml("trip", true, true, "cash"), /Получите учебную оплату/);
+  assert.doesNotMatch(navigationHtml("trip", true, true, "card"), /Получите учебную оплату/);
+});
+test("a blocked action states its reason and draws the yellow readiness arc", () => {
+  const far = navigationHtml("pickup", true, false);
+  assert.match(far, /style="--du-progress:0"/);
+  assert.match(far, /<b>1,9 км<\/b>/);
+  assert.match(far, /class="du-reason" id="[^"]+" data-tone="blocked"/);
+  const ready = navigationHtml("pickup", true, true);
+  assert.match(ready, /style="--du-progress:1"/);
+  assert.match(ready, /data-tone="ready"/);
+});
+
+const { DAction, DChoice, DInfo, DCancel, approach, countdown } = await component("./DriverButtons.tsx");
+test("four button roles stay visually distinct and instructions never submit", () => {
+  const roles = renderToStaticMarkup(React.createElement(React.Fragment, null,
+    React.createElement(DAction, { label: "Подтвердить прибытие", onClick() {} }),
+    React.createElement(DChoice, { onClick() {}, children: "Выбрать на карте" }),
+    React.createElement(DInfo, { title: "Как разрешить геолокацию?", children: "Откройте разрешения браузера." }),
+    React.createElement(DCancel, { onClick() {}, children: "Отменить заказ" }),
+  ));
+  assert.match(roles, /class="du-btn du-action"/);
+  assert.match(roles, /class="du-btn du-choice"/);
+  assert.match(roles, /class="du-btn du-info__button"/);
+  assert.match(roles, /class="du-cancel"/);
+  assert.equal((roles.match(/type="button"/g) ?? []).length, 4);
+  assert.doesNotMatch(roles, /type="submit"/);
+  assert.equal(approach(1900, 75), 0);
+  assert.equal(approach(60, 75), 1);
+  assert.equal(approach(600 - (600 - 75) / 2, 75), .5);
+  assert.equal(countdown(15, 30), .5);
+  assert.equal(countdown(40, 30), 1);
+});
+const { DriverChats } = await component("./DriverWorkViews.tsx");
+const { DRadio } = await component("./DriverShiftUI.tsx");
+test("exclusive settings expose native radios in the same group", () => {
+  const html = renderToStaticMarkup(React.createElement(React.Fragment, null,
+    React.createElement(DRadio, { name: "payment", value: "cash", title: "Наличные", checked: true, onChange() {} }),
+    React.createElement(DRadio, { name: "payment", value: "card", title: "Карта", checked: false, onChange() {}, disabled: true }),
+  ));
+  assert.equal((html.match(/type="radio" name="payment"/g) ?? []).length, 2);
+  assert.equal((html.match(/checked=""/g) ?? []).length, 1);
+  assert.match(html, /disabled="" value="card"/);
+});
+test("chat shortcuts lead to the shift result and support preparation is explicitly labeled", () => {
+  let target;
+  const props = { shift: { data: { messages: [] } }, state: {}, view: "chats", detail: "", busy: false, go: (...args) => { target = args; }, support() {} };
+  const buttons = elements(DriverChats(props)).filter(x => x.type === "button");
+  buttons[2].props.onClick();
+  assert.deepEqual(target, ["shift-result", undefined]);
+  const html = renderToStaticMarkup(React.createElement(DriverChats, { ...props, view: "support" }));
+  assert.match(html, /Подготовить обращение в Telegram/);
+  assert.doesNotMatch(html, /Продолжить в @puls_i_bot/);
 });
