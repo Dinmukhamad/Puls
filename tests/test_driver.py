@@ -11,7 +11,6 @@ from app.models.driver import DriverProfile
 from app.models.driver_auth import DriverDevice, TelegramLink
 from app.models.enums import Role
 from app.models.learning import LearningAttempt, LearningContent
-from app.models.progress import XpEntry
 from app.models.settings import AuditLog
 from app.services.driver_auth import device_hash
 from tests.conftest import auth, login, make_user
@@ -77,7 +76,7 @@ async def test_login_resume_and_repeat_keep_own_educational_profile(client, sess
     assert repeated["last_login_at"] == entered["last_login_at"]
     assert await session.scalar(select(func.count()).select_from(DriverProfile)) == 1
     # Вход для ознакомления не создаёт попытки оценивания, деньги и XP.
-    for model in (LearningAttempt, CoinTransaction, XpEntry):
+    for model in (LearningAttempt, CoinTransaction):
         assert await session.scalar(select(func.count()).select_from(model)) == 0
 
 

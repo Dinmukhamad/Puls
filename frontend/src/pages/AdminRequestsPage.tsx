@@ -58,6 +58,8 @@ export function AdminRequestsPage() {
     void queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
     void queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
     void queryClient.invalidateQueries({ queryKey: ["wallet"] });
+    void queryClient.invalidateQueries({ queryKey: ["coin-progress"] });
+    void queryClient.invalidateQueries({ queryKey: ["badges"] });
     void queryClient.invalidateQueries({ queryKey: ["team-transactions"] });
     void queryClient.invalidateQueries({ queryKey: ["team-purchases"] });
   };

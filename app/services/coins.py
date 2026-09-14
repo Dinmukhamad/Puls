@@ -5,12 +5,13 @@
 в ``coin_transactions``. Любое изменение баланса проходит через
 :func:`post_transaction`, поэтому журнал всегда сходится с агрегатами счёта.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -18,6 +19,27 @@ from app.core.errors import ConflictError, InsufficientCoinsError, NotFoundError
 from app.models.coin import CoinTransaction
 from app.models.enums import TX_GROUPS, TxType
 from app.models.user import CoinAccount, User
+
+
+def earned_contribution():
+    """Purchases/refunds never grow progress; corrections can reverse an erroneous award."""
+    return case(
+        (CoinTransaction.tx_type == TxType.CORRECTION, CoinTransaction.amount),
+        (
+            (CoinTransaction.amount > 0) & (CoinTransaction.tx_type != TxType.PURCHASE_REFUND),
+            CoinTransaction.amount,
+        ),
+        else_=0,
+    )
+
+
+async def earned_total(session, user_id):
+    value = await session.scalar(
+        select(func.coalesce(func.sum(earned_contribution()), 0)).where(
+            CoinTransaction.user_id == user_id
+        )
+    )
+    return max(0, int(value or 0))
 
 
 @dataclass(slots=True)
@@ -77,6 +99,7 @@ async def post_transaction(
     idempotency_key: str | None = None,
     meta: dict[str, Any] | None = None,
     allow_negative_balance: bool = False,
+    evaluate_achievements: bool = True,
 ) -> CoinTransaction | None:
     """
     Проводит операцию с коинами и записывает её в журнал.
@@ -93,9 +116,7 @@ async def post_transaction(
 
     if idempotency_key:
         already = await session.scalar(
-            select(CoinTransaction.id).where(
-                CoinTransaction.idempotency_key == idempotency_key
-            )
+            select(CoinTransaction.id).where(CoinTransaction.idempotency_key == idempotency_key)
         )
         if already is not None:
             return None
@@ -129,6 +150,11 @@ async def post_transaction(
     )
     session.add(transaction)
     await session.flush()
+    account.total_earned = await earned_total(session, user_id)
+    if evaluate_achievements:
+        from app.services.badges import award_achievements
+
+        await award_achievements(session, user_id)
     return transaction
 
 
@@ -191,9 +217,7 @@ async def commit_reserve(
     return transaction
 
 
-async def earned_between(
-    session: AsyncSession, user_id: int, start: object, end: object
-) -> int:
+async def earned_between(session: AsyncSession, user_id: int, start: object, end: object) -> int:
     """Сумма начислений за период (используется для блока «за текущую неделю»)."""
     total = await session.scalar(
         select(func.coalesce(func.sum(CoinTransaction.amount), 0)).where(

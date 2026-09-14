@@ -11,7 +11,7 @@ import { Avatar, Button, Card, EmptyState, ErrorState, KPI, Pagination, Skeleton
 import { ROLE_LABELS, REQUEST_STATUS_LABELS, coins, dateOnly, dateTime, points, signed } from "../utils/format";
 import { UserArchive, UserEditor, UserStatus } from "./UsersPage";
 import { LearningResults } from "./LearningStudioPage";
-import { XpHistory, XpProgress } from "../components/XpProgress";
+import { CoinProgress } from "../components/CoinProgress";
 import "./team.css";
 
 export function UserDetailPage() {
@@ -19,7 +19,7 @@ export function UserDetailPage() {
   const { user: actor, atLeast } = useAuth();
   const [params, setParams] = useSearchParams();
   const { can } = useAccess();
-  const tabAllowed = (key: string) => ["xp", "coins", "purchases"].includes(key) ? can("motivation") : ["test", "mission", "simulator"].includes(key) ? can("learning_admin") : true;
+  const tabAllowed = (key: string) => ["progress", "coins", "purchases"].includes(key) ? can("motivation") : ["test", "mission", "simulator"].includes(key) ? can("learning_admin") : true;
   const requestedTab = params.get("tab") ?? "profile";
   const tab = tabAllowed(requestedTab) ? requestedTab : "profile";
   const page = Math.max(1, Number(params.get("page")) || 1);
@@ -42,8 +42,8 @@ export function UserDetailPage() {
     <Link className="secondary" to="/admin/users">← Пользователи</Link>
     <Card><div className="team-detail-hero"><Avatar name={data.full_name} id={id} size={64} /><div className="team-detail-hero__body"><h1 className="page-title">{data.full_name}</h1><div className="team-meta"><span>{ROLE_LABELS[data.role]}</span><span>{data.group?.name ?? "Без группы"}</span><UserStatus active={data.is_active} /></div></div>
       <div className="team-actions">{editable && <Button onClick={() => setEditor(true)}>Изменить</Button>}{editable && actor?.id !== id && <Button onClick={() => setArchive(true)}>{data.is_active ? "Архивировать" : "Восстановить"}</Button>}{manageCredentials && <Button onClick={() => setLoginEditor(true)}>Сменить логин</Button>}{manageCredentials && <Button onClick={() => setPassword(true)}>Сбросить пароль</Button>}</div></div></Card>
-    <nav className="team-section-nav" aria-label="Разделы карточки">{[["profile", "Профиль"], ["results", "Результаты"], ["coins", "Коины"], ["xp", "XP"], ["test", "Тесты"], ["mission", "Миссии"], ["simulator", "Симулятор"], ["purchases", "Покупки"]].filter(([key]) => tabAllowed(key)).map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
-    {tab === "xp" && <><XpProgress key={id} userId={id} showLevels /><XpHistory userId={id} page={page} onPage={(p) => setParams({ tab, page: String(p) })} /></>}
+    <nav className="team-section-nav" aria-label="Разделы карточки">{[["profile", "Профиль"], ["results", "Результаты"], ["coins", "Коины"], ["progress", "Прогресс"], ["test", "Тесты"], ["mission", "Миссии"], ["simulator", "Симулятор"], ["purchases", "Покупки"]].filter(([key]) => tabAllowed(key)).map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
+    {tab === "progress" && <CoinProgress key={id} userId={id} showDetails />}
     {(tab === "test" || tab === "mission" || tab === "simulator") && <LearningResults key={`${id}-${tab}`} userId={id} kind={tab} />}
     {tab === "profile" && <Card title="Личные данные"><dl className="team-definition-list"><dt>Логин</dt><dd>{data.login}</dd><dt>ID сотрудника</dt><dd>{id}</dd><dt>Телефон</dt><dd>{data.phone ?? "—"}</dd><dt>Email</dt><dd>{data.email ?? "—"}</dd><dt>Дата приёма</dt><dd>{data.hired_on ? dateOnly(data.hired_on) : "—"}</dd><dt>Группа</dt><dd>{data.group?.name ?? "Не назначена"}</dd></dl></Card>}
     {tab === "results" && <>{dashboard.isLoading && <Skeleton height={240} />}{dashboard.isError && <ErrorState error={dashboard.error} onRetry={() => dashboard.refetch()} />}{dashboard.data && <Card title="Результаты недели" subtitle={dashboard.data.week.week_label ?? "Текущий период"}><div className="kpi-grid"><KPI label="Баллы" value={points(dashboard.data.week.final_points)} /><KPI label="Место" value={dashboard.data.balance.rank ?? "—"} /><KPI label="Коины за неделю" value={coins(dashboard.data.balance.earned_this_week)} /><KPI label="Достижения" value={dashboard.data.badges_unlocked} /></div>{!dashboard.data.week.metrics.length && <EmptyState title="Показатели ещё не загружены" />}{dashboard.data.week.metrics.map((m) => <div className="team-metric-row" key={m.code}><span>{m.title}</span><span className="team-metric-row__value">{m.value == null ? "Нет данных" : `${points(m.value)} ${m.unit ?? ""}`}<span className="muted micro block">Цель {points(m.target)}</span></span></div>)}</Card>}</>}

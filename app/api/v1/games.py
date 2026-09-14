@@ -14,7 +14,6 @@ from app.schemas.common import Message, Page
 from app.schemas.games import RaffleInput, SpinInput, WheelInput
 from app.services.coins import post_transaction
 from app.services.learning import lock_learner
-from app.services.progress import grant_xp
 from app.services.rules import write_audit
 
 router = APIRouter(tags=["Игры и розыгрыши"])
@@ -24,15 +23,24 @@ def utc(value):
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
+def coin_segment(segment):
+    result = {key: value for key, value in segment.items() if key != "xp"}
+    if "XP" in result.get("title", "").upper():
+        result["title"] = (
+            str(result.get("coins", 0)) + " коинов" if result.get("coins") else "Без награды"
+        )
+    return result
+
+
 def config_data(config):
     return {
         "enabled": config.enabled if config else False,
         "daily_spins": config.daily_spins if config else 1,
-        "segments": config.segments
+        "segments": [coin_segment(item) for item in config.segments]
         if config
         else [
-            {"title": "В этот раз без награды", "weight": 1, "xp": 0, "coins": 0},
-            {"title": "10 XP", "weight": 1, "xp": 10, "coins": 0},
+            {"title": "В этот раз без награды", "weight": 1, "coins": 0},
+            {"title": "5 коинов", "weight": 1, "coins": 5},
         ],
     }
 
@@ -72,9 +80,7 @@ async def save_wheel(session: SessionDep, actor: HeadUser, payload: WheelInput):
     return config_data(config)
 
 
-async def reward(session, user_id: int, xp: int, coins: int, key: str, reason: str):
-    if xp:
-        await grant_xp(session, user_id=user_id, amount=xp, reason=reason, source="games", key=key)
+async def reward(session, user_id: int, coins: int, key: str, reason: str):
     if coins:
         await post_transaction(
             session,
@@ -90,8 +96,8 @@ def spin_data(item):
     return {
         "id": item.id,
         "segment": item.segment,
-        "reward": item.reward,
-        "segments": item.segments,
+        "reward": coin_segment(item.reward),
+        "segments": [coin_segment(segment) for segment in item.segments],
         "created_at": item.created_at,
     }
 
@@ -124,7 +130,7 @@ async def spin(session: SessionDep, user: CurrentUser, payload: SpinInput):
             chosen = index
             break
         target -= segment["weight"]
-    segment = config.segments[chosen]
+    segment = coin_segment(config.segments[chosen])
     item = WheelSpin(
         user_id=user.id,
         day=today,
@@ -135,9 +141,7 @@ async def spin(session: SessionDep, user: CurrentUser, payload: SpinInput):
     )
     session.add(item)
     await session.flush()
-    await reward(
-        session, user.id, segment["xp"], segment["coins"], key, f"Колесо WOW: {segment['title']}"
-    )
+    await reward(session, user.id, segment["coins"], key, f"Колесо WOW: {segment['title']}")
     session.add(
         Notification(
             user_id=user.id,
@@ -188,7 +192,6 @@ async def raffle_data(session, item, user_id):
         "prize": item.prize,
         "closes_at": utc(item.closes_at),
         "status": item.status,
-        "xp_reward": item.xp_reward,
         "coins_reward": item.coins_reward,
         "participants": count,
         "entered": entered,
@@ -306,7 +309,6 @@ async def draw(session: SessionDep, actor: HeadUser, raffle_id: int):
         await reward(
             session,
             item.winner_id,
-            item.xp_reward,
             item.coins_reward,
             f"raffle:{item.id}",
             f"Розыгрыш: {item.title}",

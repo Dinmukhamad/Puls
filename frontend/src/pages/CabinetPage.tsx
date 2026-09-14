@@ -63,23 +63,23 @@ function Hero({
   greetingName: string;
   balance: import("../api/types").BalanceBlock;
 }) {
-  const xp = useQuery({ queryKey: ["xp-summary", "me"], queryFn: () => progressApi.summary() });
+  const progress = useQuery({ queryKey: ["coin-progress", "me"], queryFn: () => progressApi.summary() });
   return (
     <section className="hero">
       <p className="hero__greeting">
         {greeting()}, {greetingName}
       </p>
 
-      {xp.isLoading && <Skeleton height={150} />}
-      {xp.isError && <ErrorState error={xp.error} onRetry={() => xp.refetch()} />}
-      {xp.data && <div className="level">
-        <Link className="level__title" to="/progress"><SparkIcon size={20} />{xp.data.current?.title ?? "Ваш путь в Puls"}</Link>
-        <div className="hero__balance"><span className="hero__amount">{coins(xp.data.total)}</span><span className="hero__xp-unit">XP</span></div>
-        <Progress value={xp.data.progress} tone="xp" label="Прогресс уровня XP" />
-        <p className="level__hint">{xp.data.next ? `${coins(xp.data.remaining)} XP до уровня «${xp.data.next.title}»` : xp.data.current ? "Высший уровень достигнут" : "Уровни ещё не настроены"}</p>
+      {progress.isLoading && <Skeleton height={150} />}
+      {progress.isError && <ErrorState error={progress.error} onRetry={() => progress.refetch()} />}
+      {progress.data && <div className="level">
+        <Link className="level__title" to="/progress"><SparkIcon size={20} />{progress.data.current?.title ?? "Ваш путь в Puls"}</Link>
+        <div className="hero__balance"><span className="hero__amount">{coins(progress.data.total)}</span><span className="hero__coin-unit">коинов заработано</span></div>
+        <Progress value={progress.data.progress} tone="accent" label="До следующего уровня" />
+        <p className="level__hint">{progress.data.next ? `${coins(progress.data.remaining)} коинов до уровня «${progress.data.next.title}»` : progress.data.current ? "Высший уровень достигнут" : "Уровни ещё не настроены"}</p>
       </div>}
       <div className="hero__stats">
-        <div className="hero__stat"><span className="hero__stat-label">Кошелёк</span><Link className="hero__stat-value" to="/wallet"><CoinIcon size={18} />{coins(balance.balance)}</Link></div>
+        <div className="hero__stat"><span className="hero__stat-label">Кошелёк</span><Link className="hero__stat-value" to="/wallet"><CoinIcon size={18} />{coins(balance.available)}</Link></div>
         <div className="hero__stat">
           <span className="hero__stat-label">Место</span>
           <span className="hero__stat-value">
@@ -114,6 +114,7 @@ function BadgesCard() {
               <div className="badge-card__text">
                 <span className="badge-card__title">{badge.title}</span>
                 <span className="badge-card__hint">{badge.hint || badge.description}</span>
+                {badge.coins_reward > 0 && <span className="badge-card__hint">{badge.unlocked ? badge.coins_awarded > 0 ? `Начислено: ${badge.coins_awarded} коинов` : "Достижение получено" : `Награда: ${badge.coins_reward} коинов один раз`}</span>}
                 {/* Заблокированный бейдж показывает критерий, а не серую заглушку. */}
                 {!badge.unlocked && badge.progress_target > 0 && (
                   <Progress value={badge.progress_percent / 100} size="s" />

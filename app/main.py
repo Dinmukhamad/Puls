@@ -44,6 +44,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         if any(created.values()):
             logger.info("Справочники дополнены: %s", created)
 
+    from app.services.progress import reconcile_existing_progress
+
+    async with SessionLocal() as session:
+        await reconcile_existing_progress(session)
+
     try:
         await telegram.configure_webhook()
     except telegram.TelegramUnavailable:

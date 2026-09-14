@@ -11,7 +11,6 @@ from app.db.base import utcnow
 from app.models.coin import CoinTransaction
 from app.models.driver import DriverOrder
 from app.models.driver_navigation import DriverNavigation, DriverRouteDraft
-from app.models.progress import XpEntry
 from app.services import driver_maps, driver_orders
 from tests.conftest import auth, login, make_user
 from tests.driver_navigation_helpers import (
@@ -159,7 +158,6 @@ async def test_full_gps_trip_retry_money_once_no_puls_rewards(
     assert spec["score"] == 100 and 800 < spec["actual_distance"] < 1000
     assert await session.scalar(select(func.count()).select_from(DriverNavigation)) == 0
     assert await session.scalar(select(func.count()).select_from(CoinTransaction)) == coins
-    assert await session.scalar(select(func.count()).select_from(XpEntry)) == 0
     assert (await created(client, h))[0].status_code == 200
 
 

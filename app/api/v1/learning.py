@@ -187,7 +187,6 @@ async def results(
             "answered": len(attempt.answers),
             "total": len(attempt.snapshot["steps"]),
             "score": attempt.score,
-            "awarded_xp": attempt.awarded_xp,
             "awarded_coins": attempt.awarded_coins,
             "finished_at": attempt.finished_at,
         }

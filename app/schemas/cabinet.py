@@ -1,4 +1,5 @@
 """Схемы личного кабинета оператора (п. 4.1)."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -58,9 +59,7 @@ class WeekMetricsBlock(BaseModel):
     coins_discipline_bonus: int = 0
     coins_nomination_bonus: int = 0
     coins_total: int = Field(default=0, description="Сколько коинов принесёт неделя")
-    is_final: bool = Field(
-        default=False, description="True - неделя закрыта, коины уже начислены"
-    )
+    is_final: bool = Field(default=False, description="True - неделя закрыта, коины уже начислены")
 
 
 class TransactionOut(ORMModel):
@@ -92,6 +91,10 @@ class BadgeOut(BaseModel):
     progress_target: float = 0.0
     progress_percent: float = 0.0
     hint: str = Field(default="", description="Чего не хватает до получения")
+    coins_reward: int = 0
+    coins_awarded: int = 0
+    category: str = "work"
+    action_url: str | None = None
 
 
 class NominationBrief(BaseModel):

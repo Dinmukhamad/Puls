@@ -623,10 +623,6 @@ a {
   color: var(--coin-color);
 }
 
-.kpi--xp .kpi__value {
-  color: var(--xp-color);
-}
-
 .kpi--accent .kpi__value {
   color: var(--accent-primary);
 }
@@ -687,9 +683,6 @@ a {
   transition: width var(--motion-slow) var(--ease-standard);
 }
 
-.progress--xp .progress__fill {
-  background: linear-gradient(90deg, var(--xp-color), #a58cff);
-}
 .progress--success .progress__fill {
   background: var(--status-success);
 }
@@ -1007,7 +1000,6 @@ select.input {
   background: var(--accent-tint);
   color: var(--accent-ink);
 }
-.badge--xp { color: var(--xp-text); background: var(--xp-tint); }
 .badge--coin { color: var(--gold-text); background: var(--coin-tint); }
 .badge--success {
   background: var(--status-success-tint);
@@ -1735,7 +1727,7 @@ select.input {
   box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.12);
 }
 
-.hero__xp-unit { color: var(--xp-text); font-size: var(--text-card-title); font-weight: 650; }
+.hero__coin-unit { color: var(--progress-text); font-size: var(--text-card-title); font-weight: 650; }
 
 .hero__caption {
   font-size: var(--text-caption);
@@ -2122,8 +2114,8 @@ select.input {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-xs);
-  background: var(--xp-tint);
-  color: var(--xp-color);
+  background: var(--progress-tint);
+  color: var(--progress-color);
   flex: none;
 }
 
@@ -2192,7 +2184,7 @@ select.input {
 }
 
 .product--ready .product__art {
-  background: linear-gradient(135deg, var(--accent-tint), var(--xp-tint));
+  background: linear-gradient(135deg, var(--accent-tint), var(--progress-tint));
   color: var(--accent-primary);
 }
 
@@ -2713,8 +2705,8 @@ select.input {
   gap: var(--sp-2);
   font-size: var(--text-card-title);
   font-weight: 620;
-  /* XP и уровни носят собственный акцент, отличный от цвета коинов. */
-  color: var(--xp-color);
+  /* Акцент названия уровня. */
+  color: var(--progress-color);
 }
 
 .level__step {

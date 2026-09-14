@@ -1,11 +1,8 @@
-import { useSearchParams } from "react-router-dom";
-import { XpHistory, XpProgress } from "../components/XpProgress";
+import { CoinProgress } from "../components/CoinProgress";
 
 export function ProgressPage() {
-  const [params, setParams] = useSearchParams();
-  const page = Math.max(1, Math.floor(Number(params.get("page")) || 1));
-  return <div className="stack"><div className="page-head"><div><h1 className="page-title">Опыт и уровни</h1><p className="page-subtitle">Опыт растёт за работу и обучение. Покупки в магазине не расходуют XP.</p></div></div>
-    <XpProgress showLevels />
-    <XpHistory page={page} onPage={(p) => setParams({ page: String(p) })} />
+  return <div className="stack coin-progress-page">
+    <header className="page-head"><div><h1 className="page-title">Мой прогресс</h1><p className="page-subtitle">Зарабатывайте коины, повышайте уровень и получайте достижения.</p></div></header>
+    <CoinProgress showDetails />
   </div>;
 }

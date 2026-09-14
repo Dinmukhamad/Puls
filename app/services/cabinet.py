@@ -1,4 +1,5 @@
 """Сборка данных личного кабинета оператора (п. 4.1)."""
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, time
@@ -125,9 +126,7 @@ async def week_block(
     return block
 
 
-async def _last_known_result(
-    session: AsyncSession, user_id: int
-) -> OperatorWeekResult | None:
+async def _last_known_result(session: AsyncSession, user_id: int) -> OperatorWeekResult | None:
     """Последний рассчитанный итог оператора по любой неделе."""
     return await session.scalar(
         select(OperatorWeekResult)
@@ -181,7 +180,7 @@ async def balance_block(
         reserved=account.reserved,
         available=account.available,
         earned_this_week=earned,
-        total_earned=account.total_earned,
+        total_earned=await coins_service.earned_total(session, user.id),
         total_spent=account.total_spent,
         rank=rank,
         participants=participants,
@@ -205,8 +204,7 @@ async def my_nominations(
         .where(NominationWinner.week_id == week.id, NominationWinner.user_id == user_id)
     )
     return [
-        NominationBrief(code=code, title=title, coins_awarded=coins)
-        for code, title, coins in rows
+        NominationBrief(code=code, title=title, coins_awarded=coins) for code, title, coins in rows
     ]
 
 

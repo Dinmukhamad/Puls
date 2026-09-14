@@ -1,4 +1,5 @@
 """Модели ORM. Импорт здесь регистрирует все таблицы в общей метадате."""
+
 from app.db.base import Base
 from app.models.access import AccessPolicy, AccessRule
 from app.models.badge import BadgeDefinition, UserBadge
@@ -26,7 +27,7 @@ from app.models.enums import (
 )
 from app.models.games import Raffle, RaffleEntry, WheelConfig, WheelSpin
 from app.models.learning import LearningAttempt, LearningAward, LearningContent
-from app.models.progress import Notification, XpAccount, XpEntry, XpLevel
+from app.models.progress import Notification, ProgressLevel
 from app.models.session import LoginSession
 from app.models.settings import AuditLog, GamificationSettings
 from app.models.shop import ShopItem, ShopRequest
@@ -65,6 +66,7 @@ __all__ = [
     "Notification",
     "OperatorWeekMetric",
     "OperatorWeekResult",
+    "ProgressLevel",
     "Raffle",
     "RaffleEntry",
     "Role",
@@ -78,7 +80,4 @@ __all__ = [
     "WeekStatus",
     "WheelConfig",
     "WheelSpin",
-    "XpAccount",
-    "XpEntry",
-    "XpLevel",
 ]

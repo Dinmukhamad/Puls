@@ -26,7 +26,8 @@ export type TxType =
   | "purchase_refund"
   | "correction"
   | "learning_reward"
-  | "game_reward";
+  | "game_reward"
+  | "achievement_reward";
 
 export interface Token {
   access_token: string;
@@ -138,6 +139,7 @@ export interface TransactionOut {
 }
 
 export interface BadgeOut {
+  coins_reward: number; coins_awarded: number; category: "level" | "work"; action_url: string | null;
   code: string;
   title: string;
   description: string | null;

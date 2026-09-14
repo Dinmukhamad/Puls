@@ -8,7 +8,6 @@ class WheelSegment(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     title: str = Field(min_length=1, max_length=100)
     weight: int = Field(ge=1, le=10000)
-    xp: int = Field(default=0, ge=0, le=10000)
     coins: int = Field(default=0, ge=0, le=1000)
 
 
@@ -31,7 +30,6 @@ class RaffleInput(BaseModel):
     prize: str = Field(min_length=1, max_length=180)
     closes_at: datetime
     status: Literal["draft", "published"] = "draft"
-    xp_reward: int = Field(default=0, ge=0, le=100000)
     coins_reward: int = Field(default=0, ge=0, le=10000)
 
     @model_validator(mode="after")

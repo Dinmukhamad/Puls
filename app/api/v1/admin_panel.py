@@ -19,7 +19,7 @@ from app.core.deps import (
     visible_users_filter,
 )
 from app.models.coin import CoinTransaction
-from app.models.enums import ShopRequestStatus
+from app.models.enums import ShopRequestStatus, TxType
 from app.models.shop import ShopRequest
 from app.models.user import User
 from app.schemas.admin import (
@@ -124,6 +124,7 @@ async def manual_coins(
         amount=payload.amount,
         reason=payload.reason,
         request_id=payload.request_id,
+        tx_type=TxType.CORRECTION if payload.correct_earnings else None,
     )
     await session.commit()
     item = TransactionOut.model_validate(transaction)

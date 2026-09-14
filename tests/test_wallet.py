@@ -7,7 +7,7 @@ from app.models.coin import CoinTransaction
 from app.models.enums import TxType
 from app.models.progress import Notification
 from app.models.user import CoinAccount
-from app.services.progress import grant_xp
+from app.services.coins import post_transaction
 from tests.conftest import auth, login, make_user
 from tests.test_learning import publish
 
@@ -35,6 +35,7 @@ async def test_wallet_date_totals_types_and_current_balance(client, session, ope
     account = await session.get(CoinAccount, operator.id)
     account.balance = balance
     account.reserved = 25
+    account.total_earned = 1130
     await session.commit()
     headers = auth(await login(client, operator.login))
     path = "/api/v1/me/wallet?date_from=2026-09-05&date_to=2026-09-05"
@@ -46,6 +47,7 @@ async def test_wallet_date_totals_types_and_current_balance(client, session, ope
         "reserved": 25,
         "available": 1085,
         "accounts": 1,
+        "earned_total": 1130,
         "awarded": 100,
         "spent": 40,
         "refunded": 20,
@@ -156,28 +158,28 @@ async def test_gratitude_retries_do_not_duplicate_coins(client, session, head, o
     assert await session.scalar(select(func.count(Notification.id))) == 1
 
 
-async def test_employee_xp_summary_is_scoped(client, session, supervisor, operator):
-    await grant_xp(
+async def test_employee_coin_progress_summary_is_scoped(client, session, supervisor, operator):
+    await post_transaction(
         session,
         user_id=operator.id,
         amount=600,
-        reason="Опыт сотрудника",
-        source="test",
-        key="employee-summary",
+        reason="Заработок сотрудника",
+        tx_type=TxType.MANUAL_CREDIT,
+        idempotency_key="employee-summary",
     )
     await session.commit()
     outsider = await make_user(session, login="xp-hidden-employee")
     headers = auth(await login(client, supervisor.login))
-    result = await client.get(f"/api/v1/admin/xp/users/{operator.id}", headers=headers)
+    result = await client.get(f"/api/v1/admin/progress/users/{operator.id}", headers=headers)
     assert result.status_code == 200, result.text
     assert result.json()["total"] == 600
     assert result.json()["current"]["title"] == "Специалист"
     assert (
-        await client.get(f"/api/v1/admin/xp/users/{outsider.id}", headers=headers)
+        await client.get(f"/api/v1/admin/progress/users/{outsider.id}", headers=headers)
     ).status_code == 404
     own = auth(await login(client, operator.login))
     assert (
-        await client.get(f"/api/v1/admin/xp/users/{operator.id}", headers=own)
+        await client.get(f"/api/v1/admin/progress/users/{operator.id}", headers=own)
     ).status_code == 403
 
 

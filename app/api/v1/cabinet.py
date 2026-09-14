@@ -1,4 +1,5 @@
 """Личный кабинет оператора (п. 4.1)."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -51,12 +52,8 @@ async def dashboard(
         week=await cabinet_service.week_block(session, user_id=user.id, week=week),
         badges_unlocked=unlocked,
         badges_total=total_badges,
-        my_nominations=await cabinet_service.my_nominations(
-            session, user_id=user.id, week=week
-        ),
-        pending_shop_requests=await cabinet_service.pending_requests_count(
-            session, user.id
-        ),
+        my_nominations=await cabinet_service.my_nominations(session, user_id=user.id, week=week),
+        pending_shop_requests=await cabinet_service.pending_requests_count(session, user.id),
     )
 
 
@@ -135,21 +132,7 @@ async def transactions(
 async def my_badges(session: SessionDep, user: CurrentUser) -> list[BadgeOut]:
     """Полученные и заблокированные бейджи с подсказкой, чего не хватает (п. 4.1.4)."""
     board = await badges_service.user_badge_board(session, user.id)
-    return [
-        BadgeOut(
-            code=progress.badge.code,
-            title=progress.badge.title,
-            description=progress.badge.description,
-            icon=progress.badge.icon,
-            unlocked=progress.unlocked,
-            awarded_at=award.awarded_at if award else None,
-            progress_current=progress.current,
-            progress_target=progress.target,
-            progress_percent=progress.percent,
-            hint=progress.hint,
-        )
-        for progress, award in board
-    ]
+    return [badges_service.badge_output(progress, award) for progress, award in board]
 
 
 @router.get(

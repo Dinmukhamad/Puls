@@ -2,7 +2,6 @@ from sqlalchemy import func, select
 
 from app.models.coin import CoinTransaction
 from app.models.learning import LearningAttempt
-from app.models.progress import XpEntry
 from tests.conftest import auth, login
 
 
@@ -11,7 +10,6 @@ def content(**changes):
         "kind": "test",
         "title": "Работа с обращением",
         "status": "published",
-        "xp_reward": 50,
         "coins_reward": 5,
         "pass_percent": 100,
         "steps": [
@@ -56,7 +54,7 @@ async def test_learning_hides_answers_resumes_and_awards_once(client, session, o
         result = await client.post(base + "/finish", headers=headers)
         assert result.status_code == 200, result.text
         assert result.json()["state"] == "passed"
-        assert result.json()["awarded_xp"] == 50
+        assert "awarded_xp" not in result.json()
         assert result.json()["content"]["steps"][0]["correct"] == 0
     assert (
         await client.put(base + "/answer", headers=headers, json={"step": 0, "answer": 1})
@@ -66,8 +64,7 @@ async def test_learning_hides_answers_resumes_and_awards_once(client, session, o
     base = f"/api/v1/learning/attempts/{retry['id']}"
     await client.put(base + "/answer", headers=headers, json={"step": 0, "answer": 0})
     result = (await client.post(base + "/finish", headers=headers)).json()
-    assert (result["awarded_xp"], result["awarded_coins"]) == (0, 0)
-    assert await session.scalar(select(func.count(XpEntry.id))) == 1
+    assert result["awarded_coins"] == 0
     assert await session.scalar(select(func.count(CoinTransaction.id))) == 1
 
 
@@ -82,7 +79,7 @@ async def test_learning_snapshot_survives_edits_and_archiving(client, operator, 
         headers=auth(await login(client, head.login)),
         json=content(
             status="archived",
-            xp_reward=999,
+            coins_reward=999,
             steps=[{"text": "Новый вопрос", "options": ["Нет", "Да"], "correct": 1}],
         ),
     )
@@ -90,7 +87,7 @@ async def test_learning_snapshot_survives_edits_and_archiving(client, operator, 
     base = f"/api/v1/learning/attempts/{attempt['id']}"
     await client.put(base + "/answer", headers=headers, json={"step": 0, "answer": 0})
     result = (await client.post(base + "/finish", headers=headers)).json()
-    assert result["state"] == "passed" and result["awarded_xp"] == 50
+    assert result["state"] == "passed" and result["awarded_coins"] == 5
     assert (
         await client.post(f"/api/v1/learning/{material['id']}/start", headers=headers)
     ).status_code == 404
@@ -137,7 +134,6 @@ async def test_learning_failed_attempt_does_not_award_and_honors_no_back(
     ).status_code == 409
     result = (await client.post(base + "/finish", headers=headers)).json()
     assert result["state"] == "failed" and result["score"] == 0
-    assert await session.scalar(select(func.count(XpEntry.id))) == 0
 
 
 async def test_simulator_state_machine_and_private_fields(client, head, operator):

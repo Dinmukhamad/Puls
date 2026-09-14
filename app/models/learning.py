@@ -22,7 +22,7 @@ class LearningContent(Base, TimestampMixin):
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     allow_back: Mapped[bool] = mapped_column(Boolean, default=True)
     pass_percent: Mapped[int] = mapped_column(Integer, default=80)
-    xp_reward: Mapped[int] = mapped_column(Integer, default=0)
+    legacy_reward: Mapped[int] = mapped_column("xp_reward", Integer, default=0)
     coins_reward: Mapped[int] = mapped_column(Integer, default=0)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     steps: Mapped[list] = mapped_column(JSON, default=list)
@@ -39,7 +39,7 @@ class LearningAttempt(Base, TimestampMixin):
     sim_stage: Mapped[str] = mapped_column(String(32), default="registration")
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     correct: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    awarded_xp: Mapped[int] = mapped_column(Integer, default=0)
+    legacy_awarded: Mapped[int] = mapped_column("awarded_xp", Integer, default=0)
     awarded_coins: Mapped[int] = mapped_column(Integer, default=0)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

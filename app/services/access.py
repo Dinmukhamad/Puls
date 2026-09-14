@@ -23,13 +23,13 @@ SECTIONS = (
     Section(
         "personal",
         "Личный кабинет и кошелёк",
-        "Собственные показатели и коины; для управленческих ролей также личный XP",
+        "Собственные показатели и коины; для управленческих ролей также личный прогресс",
         (Role.OPERATOR,),
     ),
     Section(
         "results",
         "Рейтинг и результаты",
-        "Рейтинг команды; для оператора также личный XP, опыт и уровни",
+        "Рейтинг команды; для оператора также личный прогресс, достижения и уровни",
         tuple(Role),
     ),
     Section(
@@ -64,7 +64,7 @@ SECTIONS = (
     Section(
         "motivation",
         "Управление мотивацией",
-        "Экономика команды, XP, товары, заявки и настройка игр",
+        "Экономика команды, уровни, товары, заявки и настройка игр",
         STAFF,
     ),
     Section(
@@ -194,7 +194,7 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
             return ("performance", "motivation")
         return ("performance",)
     if path.startswith(
-        ("/admin/wallet", "/admin/coins", "/admin/xp", "/admin/shop", "/admin/games")
+        ("/admin/wallet", "/admin/coins", "/admin/progress", "/admin/shop", "/admin/games")
     ):
         return ("motivation",)
     if path == "/games/wheel" and read:
@@ -203,11 +203,9 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
         return ("rewards",)
     if path in ("/me/balance", "/me/badges"):
         return ("personal", "rewards")
-    if path.startswith("/me/xp"):
+    if path.startswith("/me/progress"):
         if role == Role.OPERATOR:
-            # The cabinet still displays an XP summary, while the full history
-            # belongs to the operator's Results section.
-            return ("results",) if path.startswith("/me/xp/history") else ("personal", "results")
+            return ("personal", "results")
         return ("personal",)
     if path.startswith(("/me/dashboard", "/me/week", "/me/transactions", "/me/wallet")):
         return ("personal",)

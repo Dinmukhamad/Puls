@@ -45,9 +45,7 @@ async def test_role_defaults(client, session, role):
         assert allowed[section] is (role == Role.OPERATOR)
     assert allowed["team"] is (role != Role.OPERATOR)
     assert allowed["system"] is (role == Role.ADMIN)
-    for path in (
-        "/me/dashboard", "/me/wallet", "/me/xp", "/me/xp/history", "/learning", "/shop/items"
-    ):
+    for path in ("/me/dashboard", "/me/wallet", "/me/progress", "/learning", "/shop/items"):
         result = await client.get(f"/api/v1{path}", headers=headers)
         assert result.status_code == (200 if role == Role.OPERATOR else 403), result.text
     assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 200
@@ -57,7 +55,7 @@ async def test_role_defaults(client, session, role):
 @pytest.mark.parametrize(
     "personal,results", [(True, True), (True, False), (False, True), (False, False)]
 )
-async def test_operator_xp_moves_to_results_without_losing_cabinet_summary(
+async def test_operator_progress_is_available_from_results_and_cabinet(
     client, session, operator, personal, results
 ):
     _, admin_headers = await administrator(client, session)
@@ -73,10 +71,8 @@ async def test_operator_xp_moves_to_results_without_losing_cabinet_summary(
     )
     assert response.status_code == 200
     headers = auth(await login(client, operator.login))
-    summary = await client.get("/api/v1/me/xp", headers=headers)
-    history = await client.get("/api/v1/me/xp/history", headers=headers)
+    summary = await client.get("/api/v1/me/progress", headers=headers)
     assert summary.status_code == (200 if personal or results else 403)
-    assert history.status_code == (200 if results else 403)
 
 
 async def test_precedence_bulk_inherit_and_group_change(client, session, operator, supervisor):
@@ -231,7 +227,7 @@ async def test_revocation_blocks_direct_urls_but_preserves_scoped_lookups(client
         "/admin/operators",
         "/admin/learning",
         "/admin/wallet",
-        "/admin/xp",
+        "/admin/progress/levels",
         "/admin/operators/export",
     ):
         response = await client.get(f"/api/v1{path}", headers=headers)

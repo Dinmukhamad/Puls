@@ -22,7 +22,7 @@ import { AccessPage } from "./pages/AccessPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { SummaryPage } from "./pages/SummaryPage";
 import { ProgressPage } from "./pages/ProgressPage";
-import { XpAdminPage } from "./pages/XpAdminPage";
+import { LevelsAdminPage } from "./pages/LevelsAdminPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StoreAdminPage } from "./pages/StoreAdminPage";
@@ -80,8 +80,7 @@ export function App() {
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/admin/summary" element={<SummaryPage />} />
-        <Route path="/admin/xp" element={<XpAdminPage />} />
-        <Route path="/admin/levels" element={<XpAdminPage levelsOnly />} />
+        <Route path="/admin/levels" element={<LevelsAdminPage />} />
         <Route path="/admin/settings" element={<SettingsPage />} />
         <Route path="/admin/store" element={<StoreAdminPage />} />
         <Route path="/admin/users" element={<UsersPage />} />

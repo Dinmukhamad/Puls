@@ -44,11 +44,11 @@ const performance = (admin = false) => section("performance", "Производ�
   tab("/admin/settings?tab=rules", "Правила расчёта"), tab("/admin/settings?tab=nominations", "Номинации"), tab("/rating", "Рейтинг"),
 ], ["/admin/periods", "/rating", ...(admin ? [] : ["/admin/settings"])]);
 const motivation = (supervisor = false) => section("motivation", supervisor ? "Рейтинг и мотивация" : "Мотивация", StoreIcon, [
-  ...(supervisor ? [tab("/rating", "Рейтинг")] : []), tab("/admin/wallet", "Коины"), tab("/admin/xp", "XP"),
+  ...(supervisor ? [tab("/rating", "Рейтинг")] : []), tab("/admin/wallet", "Коины"),
   tab("/admin/levels", "Уровни"), tab("/admin/settings?tab=badges", "Достижения"),
   tab("/admin/store", "Товары магазина"), tab("/admin/requests", "Заказы и выдача"),
   tab("/admin/games?tab=wheel", "Колесо WOW"), tab("/admin/games?tab=raffles", "Розыгрыши"),
-], ["/admin/wallet", "/admin/xp", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
+], ["/admin/wallet", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
 const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summary", "Сводка"), ...personal]);
 
 /** Only major destinations enter the sidebar. Future modules extend tabs inside these sections. */
@@ -83,7 +83,7 @@ export function routeSection(pathname: string, search = "", role: Role = "operat
     ["training", ["/training", "/simulator"]], ["rewards", ["/shop", "/games"]],
     ["overview", ["/admin/summary"]], ["team", ["/admin/users", "/admin/groups", "/admin/operators"]],
     ["analytics", ["/analytics"]], ["performance", ["/admin/periods"]], ["learning_admin", ["/admin/learning"]],
-    ["motivation", ["/admin/wallet", "/admin/xp", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games"]],
+    ["motivation", ["/admin/wallet", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games"]],
     ["reports", ["/reports"]], ["system", ["/admin/audit"]],
   ];
   return routes.find(([, paths]) => paths.some(matches))?.[0];

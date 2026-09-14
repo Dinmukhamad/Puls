@@ -47,6 +47,7 @@ class ManualCoinsIn(BaseModel):
     amount: int = Field(description="Положительное - начисление, отрицательное - списание")
     reason: str = Field(min_length=1, max_length=500, description="Обязательный комментарий")
     request_id: str | None = Field(default=None, min_length=16, max_length=80)
+    correct_earnings: bool = Field(default=False, description="Исправление ошибочного начисления")
 
     @model_validator(mode="after")
     def _non_zero(self) -> ManualCoinsIn:
@@ -273,6 +274,7 @@ class BadgeOut(ORMModel):
     is_repeatable: bool
     is_active: bool
     sort_order: int
+    coins_reward: int
 
 
 class BadgeCreate(BaseModel):
@@ -285,6 +287,7 @@ class BadgeCreate(BaseModel):
     is_repeatable: bool = False
     is_active: bool = True
     sort_order: int = 100
+    coins_reward: int = Field(default=0, ge=0, le=10000)
 
 
 class BadgeUpdate(BaseModel):
@@ -296,3 +299,4 @@ class BadgeUpdate(BaseModel):
     is_repeatable: bool | None = None
     is_active: bool | None = None
     sort_order: int | None = None
+    coins_reward: int | None = Field(default=None, ge=0, le=10000)

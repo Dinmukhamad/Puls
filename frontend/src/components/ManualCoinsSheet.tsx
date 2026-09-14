@@ -17,6 +17,7 @@ export function ManualCoinsSheet({ operator, onClose }: { operator?: { user_id: 
   const [search, setSearch] = useState("");
   const [target, setTarget] = useState(operator);
   const [direction, setDirection] = useState<"credit" | "debit" | "gratitude">("credit");
+  const [correction, setCorrection] = useState(false);
   const [driverRef, setDriverRef] = useState("");
   const [amount, setAmount] = useState("10"); const [reason, setReason] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -25,9 +26,9 @@ export function ManualCoinsSheet({ operator, onClose }: { operator?: { user_id: 
   const save = useMutation({
     mutationFn: () => direction === "gratitude"
       ? admin.gratitude(target!.user_id, driverRef.trim(), requestId.current)
-      : admin.manualCoins(target!.user_id, Number(amount) * (direction === "credit" ? 1 : -1), reason.trim(), requestId.current),
+      : admin.manualCoins(target!.user_id, Number(amount) * (direction === "credit" ? 1 : -1), reason.trim(), requestId.current, correction),
     onSuccess: (tx) => {
-      for (const key of ["wallet", "admin-operators", "admin-summary", "dashboard", "transactions", "team-transactions", "team-dashboard", "notifications"]) void client.invalidateQueries({ queryKey: [key] });
+      for (const key of ["coin-progress", "badges", "wallet", "admin-operators", "admin-summary", "dashboard", "transactions", "team-transactions", "team-dashboard", "notifications"]) void client.invalidateQueries({ queryKey: [key] });
       toast.success(`${target!.full_name}: ${signed(tx.amount)} коинов. Баланс ${coins(tx.balance_after)}.`);
       onClose();
     },
@@ -47,6 +48,7 @@ export function ManualCoinsSheet({ operator, onClose }: { operator?: { user_id: 
           {people.isLoading && <Skeleton height={32} />}{people.isError && <ErrorState error={people.error} onRetry={() => people.refetch()} />}{people.data?.total === 0 && <p className="small secondary">Операторы не найдены. Измените запрос.</p>}{(people.data?.total ?? 0) > 100 && <p className="small secondary">Показаны первые 100 сотрудников. Уточните имя для поиска.</p>}</>}
         <SegmentedControl value={direction} onChange={setDirection} label="Направление операции" options={[{ value: "credit", label: "Начислить" }, { value: "debit", label: "Списать" }, { value: "gratitude", label: "Благодарность" }]} />
         {direction === "gratitude" ? <><p className="small secondary">Благодарность водителя: +{coins(rules.data?.driver_gratitude_bonus ?? 0)} коинов.</p><label className="field"><span className="field__label">Номер водителя или заявки · необязательно</span><input className="input" maxLength={64} value={driverRef} onChange={(e) => setDriverRef(e.target.value)} /></label></> : <><label className="field"><span className="field__label">Количество коинов</span><input className="input" type="number" inputMode="numeric" required min={1} max={rules.data?.manual_max_abs_amount} step={1} value={amount} onChange={(e) => setAmount(e.target.value)} /><span className="field__note">{rules.data && `От 1 до ${coins(rules.data.manual_max_abs_amount)} за одну операцию`}</span></label>
+        <label className="row"><input type="checkbox" checked={correction} onChange={event => setCorrection(event.target.checked)} />Исправление ошибочного начисления</label><p className="small secondary">{correction ? "Исправление изменит заработок для уровня и достижения за уровни." : direction === "debit" ? "Обычное списание уменьшит кошелёк. Уровень сохранится." : "Начисление прибавит коины в кошелёк и в прогресс уровня."}</p>
         <label className="field"><span className="field__label">Причина · обязательно</span><textarea className="input" rows={3} required minLength={rules.data?.manual_reason_min_length} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="За что начисляем или списываем коины" /><span className="field__note">{rules.data && `Не менее ${rules.data.manual_reason_min_length} символов`}</span></label></>}
       </fieldset>
       <p className="small secondary">Операция сохранится в истории с причиной, датой и вашим именем.</p>

@@ -91,10 +91,10 @@ export const admin = {
     request<Page<OperatorRowOut>>(`${V1}/admin/operators${buildQuery({ ...params })}`),
   exportPath: (weekId?: number) => `${V1}/admin/operators/export${buildQuery({ week_id: weekId })}`,
 
-  manualCoins: (userId: number, amount: number, reason: string, requestId?: string) =>
+  manualCoins: (userId: number, amount: number, reason: string, requestId?: string, correctEarnings = false) =>
     request<TransactionOut>(`${V1}/admin/coins/manual`, {
       method: "POST",
-      json: { user_id: userId, amount, reason, request_id: requestId },
+      json: { user_id: userId, amount, reason, request_id: requestId, correct_earnings: correctEarnings },
     }),
   gratitude: (userId: number, driverRef?: string, requestId?: string) =>
     request<TransactionOut>(`${V1}/admin/coins/gratitude`, {

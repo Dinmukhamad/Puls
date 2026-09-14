@@ -1,98 +1,94 @@
-"""Начисление опыта; общий журнал наград с идемпотентностью."""
+"""One progress scale: verified lifetime coin earnings, never the spendable balance."""
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ConflictError, DomainError, NotFoundError
-from app.models.progress import Notification, XpAccount, XpEntry, XpLevel
-from app.models.user import User
+from app.models.progress import ProgressLevel
+from app.services.coins import earned_total, get_account
 
-DEFAULT_XP_LEVELS = (("Новичок", 0), ("Специалист", 500), ("Профессионал", 1500), ("Эксперт", 3000))
+DEFAULT_LEVELS = (
+    ("Новичок", 0),
+    ("Первый результат", 100),
+    ("Специалист", 500),
+    ("Профессионал", 1500),
+    ("Эксперт", 3000),
+    ("Мастер", 5000),
+    ("Легенда Puls", 10000),
+)
 
 
-async def seed_xp_levels(session: AsyncSession):
-    # Заполняется только совершенно новый справочник. Изменённые администратором
-    # названия/пороги не восстанавливаются при перезапуске приложения.
-    if await session.scalar(select(XpLevel.id).limit(1)) is None:
-        session.add_all([XpLevel(title=title, min_xp=value) for title, value in DEFAULT_XP_LEVELS])
+async def seed_progress_levels(session):
+    if await session.scalar(select(ProgressLevel.id).limit(1)) is None:
+        session.add_all(
+            [ProgressLevel(title=title, min_coins=value) for title, value in DEFAULT_LEVELS]
+        )
         await session.flush()
 
 
-async def grant_xp(
-    session: AsyncSession,
-    *,
-    user_id: int,
-    amount: int,
-    reason: str,
-    source: str,
-    key: str,
-    author_id: int | None = None,
-) -> XpEntry | None:
-    if amount <= 0:
-        raise DomainError("Количество XP должно быть положительным")
-    if await session.get(User, user_id) is None:
-        raise NotFoundError("Сотрудник не найден")
-    dialect = session.get_bind().dialect.name
-    insert = sqlite_insert if dialect == "sqlite" else pg_insert
-    await session.execute(
-        insert(XpAccount)
-        .values(user_id=user_id, total=0)
-        .on_conflict_do_nothing(index_elements=["user_id"])
-    )
-    account = await session.scalar(
-        select(XpAccount)
-        .where(XpAccount.user_id == user_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
-    assert account is not None
-    previous = await session.scalar(select(XpEntry).where(XpEntry.idempotency_key == key))
-    if previous is not None:
-        if (previous.user_id, previous.amount, previous.reason, previous.source) != (
-            user_id,
-            amount,
-            reason,
-            source,
-        ):
-            raise ConflictError("Этот ключ запроса уже использован для другого начисления")
-        return None
-    account.total += amount
-    entry = XpEntry(
-        user_id=user_id,
-        amount=amount,
-        total_after=account.total,
-        reason=reason,
-        source=source,
-        idempotency_key=key,
-        author_id=author_id,
-    )
-    session.add(entry)
-    session.add(
-        Notification(
-            user_id=user_id, title=f"Получено {amount} XP", body=reason, kind="xp", link="/progress"
+async def reconcile_existing_progress(session):
+    """Preserve earned facts on rollout without paying old work a second time."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    from app.models.progress import ProgressBaseline
+    from app.models.user import User
+    from app.services.badges import award_achievements, latest_result_week
+
+    await seed_progress_levels(session)
+    insert = sqlite_insert if session.get_bind().dialect.name == "sqlite" else pg_insert
+    while True:
+        ids = list(
+            await session.scalars(
+                select(User.id)
+                .where(
+                    ~select(ProgressBaseline.user_id)
+                    .where(ProgressBaseline.user_id == User.id)
+                    .exists()
+                )
+                .order_by(User.id)
+                .limit(100)
+            )
         )
-    )
-    await session.flush()
-    return entry
+        if not ids:
+            break
+        for user_id in ids:
+            # Claim and reconcile within the same transaction, safe across worker restarts.
+            claimed = await session.scalar(
+                insert(ProgressBaseline)
+                .values(user_id=user_id)
+                .on_conflict_do_nothing()
+                .returning(ProgressBaseline.user_id)
+            )
+            if claimed is not None:
+                await award_achievements(
+                    session, user_id, await latest_result_week(session, user_id), pay_bonus=False
+                )
+        await session.commit()
 
 
-async def xp_summary(session: AsyncSession, user_id: int) -> dict:
-    total = await session.scalar(select(XpAccount.total).where(XpAccount.user_id == user_id)) or 0
+async def progress_summary(session, user_id):
+    from app.services.badges import badge_output, user_badge_board
+
+    total = await earned_total(session, user_id)
+    account = await get_account(session, user_id)
     levels = list(
         await session.scalars(
-            select(XpLevel).where(XpLevel.is_active.is_(True)).order_by(XpLevel.min_xp)
+            select(ProgressLevel)
+            .where(ProgressLevel.is_active.is_(True))
+            .order_by(ProgressLevel.min_coins)
         )
     )
-    current = next((item for item in reversed(levels) if total >= item.min_xp), None)
-    following = next((item for item in levels if item.min_xp > total), None)
-    floor = current.min_xp if current else 0
+    current = next((item for item in reversed(levels) if total >= item.min_coins), None)
+    following = next((item for item in levels if item.min_coins > total), None)
+    floor = current.min_coins if current else 0
+    board = await user_badge_board(session, user_id, coin_total=total, levels=levels)
     return {
         "total": total,
+        "available": account.available,
         "current": current,
         "next": following,
-        "remaining": max(0, following.min_xp - total) if following else 0,
-        "progress": (total - floor) / (following.min_xp - floor) if following else 1,
+        "level_number": levels.index(current) + 1 if current else 0,
+        "remaining": max(0, following.min_coins - total) if following else 0,
+        "progress": (total - floor) / (following.min_coins - floor) if following else 1,
         "levels": levels,
+        "achievements": [badge_output(progress, award) for progress, award in board],
     }

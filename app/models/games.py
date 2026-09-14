@@ -43,7 +43,7 @@ class Raffle(Base, TimestampMixin):
     prize: Mapped[str] = mapped_column(String(180))
     closes_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(20), default="draft", index=True)
-    xp_reward: Mapped[int] = mapped_column(Integer, default=0)
+    legacy_reward: Mapped[int] = mapped_column("xp_reward", Integer, default=0)
     coins_reward: Mapped[int] = mapped_column(Integer, default=0)
     winner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     drawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

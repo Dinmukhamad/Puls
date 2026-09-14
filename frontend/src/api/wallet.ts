@@ -4,7 +4,7 @@ import type { Page, TransactionOut } from "./types";
 export type WalletKind = "" | "accrual" | "writeoff" | "refund" | "purchase";
 export interface WalletTransaction extends TransactionOut { user_id: number; full_name: string }
 export interface WalletReport {
-  summary: { balance: number; reserved: number; available: number; awarded: number; spent: number; refunded: number; accounts: number };
+  summary: { balance: number; reserved: number; available: number; earned_total: number; awarded: number; spent: number; refunded: number; accounts: number };
   history: Page<WalletTransaction>;
 }
 export const walletApi = {

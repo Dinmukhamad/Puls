@@ -4,6 +4,7 @@
 Значения справочников соответствуют п. 3.2, 4.2.3 и 4.3.1 ТЗ; после первого
 запуска их можно менять через админ-панель.
 """
+
 from __future__ import annotations
 
 import logging
@@ -15,7 +16,6 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.guards import guard_statements
-from app.db.progress_guards import progress_guard_statements
 from app.db.session import engine
 from app.models import (
     BadgeDefinition,
@@ -25,7 +25,7 @@ from app.models import (
     User,
 )
 from app.models.enums import BadgeRule, MetricDirection, MetricKind, Role
-from app.services.progress import seed_xp_levels
+from app.services.progress import seed_progress_levels
 from app.services.rules import get_rules
 
 logger = logging.getLogger(__name__)
@@ -219,6 +219,16 @@ DEFAULT_SHOP_ITEMS: tuple[dict, ...] = (
 
 DEFAULT_BADGES: tuple[dict, ...] = (
     {
+        "code": "learning_three",
+        "title": "Учусь и применяю",
+        "description": "Успешно пройдите три разных учебных задания",
+        "icon": "star",
+        "rule_type": BadgeRule.LEARNING_COUNT,
+        "rule_params": {"gte": 3},
+        "coins_reward": 50,
+        "sort_order": 5,
+    },
+    {
         "code": "top3_week",
         "title": "Топ-3 недели",
         "description": "Попадание в тройку лидеров по итогам недели",
@@ -229,6 +239,7 @@ DEFAULT_BADGES: tuple[dict, ...] = (
     },
     {
         "code": "no_lateness_3w",
+        "coins_reward": 50,
         "title": "Без опозданий 3 недели",
         "description": "Три закрытые недели подряд без единого опоздания",
         "icon": "clock",
@@ -238,6 +249,7 @@ DEFAULT_BADGES: tuple[dict, ...] = (
     },
     {
         "code": "quality_star",
+        "coins_reward": 75,
         "title": "Звезда качества",
         "description": "Две недели подряд с качеством не ниже 95 %",
         "icon": "star",
@@ -286,8 +298,6 @@ async def create_schema() -> None:
         await conn.run_sync(Base.metadata.create_all)
         for statement in guard_statements(conn.dialect.name):
             await conn.execute(text(statement))
-        for statement in progress_guard_statements(conn.dialect.name):
-            await conn.execute(text(statement))
 
 
 async def seed_reference_data(session: AsyncSession) -> dict[str, int]:
@@ -296,7 +306,7 @@ async def seed_reference_data(session: AsyncSession) -> dict[str, int]:
 
     Возвращает количество созданных объектов по типам.
     """
-    await seed_xp_levels(session)
+    await seed_progress_levels(session)
     created = {
         "metrics": 0,
         "nominations": 0,

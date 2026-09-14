@@ -38,7 +38,7 @@ function PeriodWorkspace() {
   const closed = week?.status === "closed";
 
   const refresh = () => {
-    for (const key of ["periods", "period-preview", "weeks", "dashboard", "rating", "admin-summary", "admin-operators", "analytics"])
+    for (const key of ["periods", "period-preview", "weeks", "dashboard", "rating", "admin-summary", "admin-operators", "analytics", "coin-progress", "badges", "wallet"])
       void queryClient.invalidateQueries({ queryKey: [key] });
   };
   const selectWeek = (id?: number) => {

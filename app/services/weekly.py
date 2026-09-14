@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, NotFoundError
 from app.db.base import utcnow
+from app.models.coin import CoinTransaction
 from app.models.contest import (
     ContestWeek,
     MetricDefinition,
@@ -557,7 +558,15 @@ async def close_week(
     week.rules_snapshot = rules.as_snapshot()
     await session.flush()
 
+    bonus_query = (
+        select(func.coalesce(func.sum(CoinTransaction.amount), 0)).where(
+            CoinTransaction.week_id == week.id,
+            CoinTransaction.tx_type == TxType.ACHIEVEMENT_REWARD,
+        )
+    )
+    bonus_before = int(await session.scalar(bonus_query) or 0)
     badges_awarded = await badges_service.evaluate_for_week(session, week)
+    awarded += int(await session.scalar(bonus_query) or 0) - bonus_before
 
     return WeekCloseReport(
         week_id=week.id,
@@ -601,6 +610,7 @@ async def _post_week_transactions(
             created_by_id=actor_id,
             idempotency_key=f"{prefix}:{key}",
             meta={"week": week.label},
+            evaluate_achievements=False,
         )
         if tx is not None:
             total += amount

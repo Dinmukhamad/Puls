@@ -26,7 +26,7 @@ test("management roles do not have empty operator destinations", () => {
   }
 });
 
-test("operator XP has a single entry in results while the home keeps cabinet and wallet", () => {
+test("operator progress has a single entry in results while the home keeps cabinet and wallet", () => {
   const sections = nav.visibleNavigation("operator");
   assert.deepEqual(sections.find((item) => item.id === "home").tabs.map((item) => item.to), ["/cabinet", "/wallet"]);
   assert.deepEqual(sections.find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/progress"]);
@@ -35,7 +35,7 @@ test("operator XP has a single entry in results while the home keeps cabinet and
   assert.ok(sections.every((item) => item.tabs.every((item) => item.to !== "/rating?tab=progress")));
 });
 
-test("operator XP follows results access independently of cabinet access", () => {
+test("operator progress follows results access independently of cabinet access", () => {
   const allowed = { ...nav.defaultAccess("operator"), personal: false };
   assert.equal(nav.currentSection("operator", "/progress", "", allowed)?.id, "results");
   assert.deepEqual(nav.visibleNavigation("operator", allowed).find((item) => item.id === "results").tabs.map((item) => item.to), ["/rating?tab=board", "/progress"]);
@@ -96,7 +96,7 @@ test("every subsection activates its parent, including settings shared by domain
 });
 
 test("deep links and query filters retain the proper section", () => {
-  assert.equal(nav.currentSection("admin", "/admin/users/25", "?tab=xp")?.id, "team");
+  assert.equal(nav.currentSection("admin", "/admin/users/25", "?tab=progress")?.id, "team");
   assert.equal(nav.currentSection("operator", "/training/attempts/23")?.id, "training");
   assert.equal(nav.currentSection("head", "/profile")?.id, "profile");
   assert.equal(nav.currentSection("operator", "/admin/wallet"), undefined);

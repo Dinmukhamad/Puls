@@ -32,6 +32,7 @@ async def report(session, visibility, pagination, date_from, date_to, kind, user
                 func.coalesce(func.sum(CoinAccount.balance), 0),
                 func.coalesce(func.sum(CoinAccount.reserved), 0),
                 func.count(CoinAccount.user_id),
+                func.coalesce(func.sum(CoinAccount.total_earned), 0),
             )
             .join(User, User.id == CoinAccount.user_id)
             .where(*users)
@@ -138,6 +139,7 @@ async def report(session, visibility, pagination, date_from, date_to, kind, user
             reserved=account[1],
             available=account[0] - account[1],
             accounts=account[2],
+            earned_total=account[3],
             awarded=aggregate[0],
             spent=aggregate[1],
             refunded=aggregate[2],

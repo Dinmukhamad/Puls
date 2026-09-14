@@ -44,6 +44,7 @@ export function ShopPage() {
     void queryClient.invalidateQueries({ queryKey: ["my-requests"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     void queryClient.invalidateQueries({ queryKey: ["wallet"] });
+    void queryClient.invalidateQueries({ queryKey: ["coin-progress"] });
   };
 
   const buy = useMutation({

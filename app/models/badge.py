@@ -1,4 +1,5 @@
 """Бейджи и достижения оператора (п. 4.1.4)."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -44,6 +45,7 @@ class BadgeDefinition(Base, TimestampMixin):
     is_repeatable: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=100)
+    coins_reward: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     awards: Mapped[list[UserBadge]] = relationship(
         "UserBadge", back_populates="badge", cascade="all, delete-orphan"
@@ -73,3 +75,5 @@ class UserBadge(Base):
 
     user: Mapped[User] = relationship("User", back_populates="badges")
     badge: Mapped[BadgeDefinition] = relationship("BadgeDefinition", back_populates="awards")
+    award_key: Mapped[str | None] = mapped_column(String(160), unique=True, nullable=True)
+    coins_awarded: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

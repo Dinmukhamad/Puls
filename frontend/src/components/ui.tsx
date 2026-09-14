@@ -120,7 +120,7 @@ export function KPI({
   delta?: number | null;
   deltaLabel?: string;
   hint?: ReactNode;
-  tone?: "neutral" | "accent" | "coin" | "xp";
+  tone?: "neutral" | "accent" | "coin";
 }) {
   return (
     <div className={`kpi kpi--${tone}`}>
@@ -167,7 +167,7 @@ export function Progress({
 }: {
   /** Доля выполнения от 0 до 1. */
   value: number;
-  tone?: "accent" | "xp" | "success" | "warning" | "danger";
+  tone?: "accent" | "success" | "warning" | "danger";
   size?: "s" | "m" | "l";
   label?: string;
 }) {
@@ -190,7 +190,7 @@ export function Progress({
  * Метки состояний. Цвет всегда сопровождается текстом, часто значком.
  * -------------------------------------------------------------------------- */
 
-export type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info" | "xp" | "coin";
+export type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info" | "coin";
 
 export function Badge({
   tone = "neutral",

@@ -77,6 +77,10 @@ async def _save(
     # The entity and its audit record must commit atomically, including creates.
     try:
         await session.flush()
+        if entity_type == "badge":
+            from app.services.badges import reconcile_badge_definition
+
+            await reconcile_badge_definition(session, entity)
         await write_audit(
             session,
             actor_id=actor.id,
@@ -111,6 +115,8 @@ def _validate_metric(data: dict[str, Any]) -> None:
 
 
 async def _validate_badge(session: SessionDep, data: dict[str, Any]) -> None:
+    if str(data.get("code", "")).startswith("level_"):
+        raise DomainError("Коды level_ зарезервированы для достижений за уровни")
     params = data["rule_params"]
     rule = data["rule_type"]
     if rule in (
@@ -128,6 +134,14 @@ async def _validate_badge(session: SessionDep, data: dict[str, Any]) -> None:
         if not isinstance(metric, str):
             raise DomainError("Выберите показатель для достижения")
         await _metric_exists(session, metric)
+    if data.get("coins_reward", 0) and rule in (
+        BadgeRule.TOTAL_EARNED,
+        BadgeRule.TOP_RANK,
+        BadgeRule.NOMINATION_COUNT,
+    ):
+        raise DomainError(
+            "За этот результат коины уже начисляются. Дополнительная награда недоступна."
+        )
     keys = {
         BadgeRule.TOP_RANK: ("max_rank",),
         BadgeRule.ZERO_METRIC_STREAK: ("weeks",),
@@ -135,6 +149,7 @@ async def _validate_badge(session: SessionDep, data: dict[str, Any]) -> None:
         BadgeRule.METRIC_TOTAL: ("gte",),
         BadgeRule.TOTAL_EARNED: ("gte",),
         BadgeRule.NOMINATION_COUNT: ("gte",),
+        BadgeRule.LEARNING_COUNT: ("gte",),
     }[rule]
     for key in keys:
         if key not in params:
@@ -146,7 +161,10 @@ async def _validate_badge(session: SessionDep, data: dict[str, Any]) -> None:
             or not math.isfinite(value)
         ):
             raise DomainError("Порог достижения должен быть числом")
-        if value <= 0 or (key in ("weeks", "max_rank") and int(value) != value):
+        if value <= 0 or (
+            (key in ("weeks", "max_rank") or rule == BadgeRule.LEARNING_COUNT)
+            and int(value) != value
+        ):
             raise DomainError("Количество недель, место и порог должны быть положительными")
 
 

@@ -17,6 +17,7 @@ class WalletSummary(BaseModel):
     spent: int
     refunded: int
     accounts: int
+    earned_total: int
 
 
 class WalletReport(BaseModel):

@@ -60,8 +60,8 @@ test("operator cabinet no longer renders removed summaries or loads its old ledg
     "@tanstack/react-query": { useQuery: ({ queryKey }) => {
       queries.push(queryKey[0]);
       const data = {
-        dashboard: { full_name: "Оператор", balance: { balance: 10, rank: null, rank_delta: null }, week: { week_id: 1, metrics: [metric()] } },
-        "xp-summary": { total: 0, current: null, next: null, progress: 0 },
+        dashboard: { full_name: "Оператор", balance: { balance: 10, available: 10, rank: null, rank_delta: null }, week: { week_id: 1, metrics: [metric()] } },
+        "coin-progress": { total: 0, current: null, next: null, progress: 0 },
         badges: [],
       };
       return { data: data[queryKey[0]] };
@@ -70,10 +70,10 @@ test("operator cabinet no longer renders removed summaries or loads its old ledg
   const html = renderToStaticMarkup(React.createElement(CabinetPage));
   assert.match(html, /Показатели недели/);
   assert.doesNotMatch(html, /Быстрые действия|Начислено за неделю|Всего начислено|История операций|Ожидается за неделю|Итог недели|Итоговый балл|Баллы за показатели/);
-  assert.deepEqual(queries.sort(), ["badges", "dashboard", "xp-summary"]);
+  assert.deepEqual(queries.sort(), ["badges", "coin-progress", "dashboard"]);
 });
 
-test("old rating progress links lead to experience and levels", async () => {
+test("old rating progress links lead to coin progress and levels", async () => {
   const { RatingPage } = await component("./RatingPage.tsx", {
     "react-router-dom": {
       useSearchParams: () => [new URLSearchParams("tab=progress&week=42"), () => {}],
@@ -93,7 +93,7 @@ test("personal wallet ignores obsolete URL filters while the team wallet keeps t
     "@tanstack/react-query": { useQuery: (options) => {
       if (options.queryKey[0] === "wallet") {
         captured = options.queryKey[2];
-        return { data: { summary: { balance: 10, available: 10, reserved: 0, awarded: 10, spent: 0, refunded: 0 }, history: { total: 0, items: [] } } };
+        return { data: { summary: { balance: 10, available: 10, reserved: 0, earned_total: 10, awarded: 100, spent: 0, refunded: 0 }, history: { total: 0, items: [] } } };
       }
       return {};
     } },
@@ -101,7 +101,9 @@ test("personal wallet ignores obsolete URL filters while the team wallet keeps t
   let html = renderToStaticMarkup(React.createElement(WalletPage, { administrative }));
   assert.deepEqual(captured, { page: 2, kind: "", date_from: "", date_to: "", user_id: undefined });
   assert.doesNotMatch(html, /Фильтры|Начало периода|Конец периода|Тип операции|За выбранные даты|Измените фильтры/);
-  assert.match(html, /За всё время/);
+  assert.match(html, /Заработано за всё время/);
+  assert.doesNotMatch(html, /не число|NaN/);
+  assert.match(html, /Заработано за всё время<\/span><span class="kpi__value">10<\/span>/);
   administrative = true;
   html = renderToStaticMarkup(React.createElement(WalletPage, { administrative }));
   assert.deepEqual(captured, { page: 2, kind: "purchase", date_from: "2026-01-01", date_to: "2026-02-01", user_id: 37 });

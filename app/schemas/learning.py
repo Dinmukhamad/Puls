@@ -37,7 +37,6 @@ class ContentInput(BaseModel):
     deadline: datetime | None = None
     allow_back: bool = True
     pass_percent: int = Field(default=80, ge=1, le=100)
-    xp_reward: int = Field(default=0, ge=0, le=100000)
     coins_reward: int = Field(default=0, ge=0, le=10000)
     steps: list[LearningStep] = Field(min_length=1, max_length=100)
 

@@ -11,8 +11,8 @@ from app.models.enums import TxType
 from app.models.learning import LearningAttempt, LearningAward, LearningContent
 from app.models.progress import Notification
 from app.models.user import User
+from app.services.badges import award_achievements
 from app.services.coins import post_transaction
-from app.services.progress import grant_xp
 
 
 async def lock_learner(session: AsyncSession, user_id: int):
@@ -37,7 +37,6 @@ def content_data(content: LearningContent, *, editor: bool = False) -> dict:
         "deadline",
         "allow_back",
         "pass_percent",
-        "xp_reward",
         "coins_reward",
         "revision",
     )
@@ -50,6 +49,7 @@ def content_data(content: LearningContent, *, editor: bool = False) -> dict:
 
 def attempt_data(attempt: LearningAttempt) -> dict:
     snapshot = deepcopy(attempt.snapshot)
+    snapshot.pop("xp_reward", None)
     if attempt.state == "in_progress":
         for step in snapshot["steps"]:
             step.pop("correct", None)
@@ -63,7 +63,6 @@ def attempt_data(attempt: LearningAttempt) -> dict:
         "sim_stage": attempt.sim_stage,
         "score": attempt.score,
         "correct": attempt.correct,
-        "awarded_xp": attempt.awarded_xp,
         "awarded_coins": attempt.awarded_coins,
         "finished_at": attempt.finished_at,
     }
@@ -156,16 +155,6 @@ async def finish_attempt(session, user_id: int, attempt_id: int):
         )
         title = attempt.snapshot["title"]
         key = f"learning:{user_id}:{attempt.content_id}"
-        if xp := attempt.snapshot["xp_reward"]:
-            await grant_xp(
-                session,
-                user_id=user_id,
-                amount=xp,
-                reason=f"Обучение: {title}",
-                source="learning",
-                key=key,
-            )
-            attempt.awarded_xp = xp
         if coins := attempt.snapshot["coins_reward"]:
             await post_transaction(
                 session,
@@ -176,6 +165,8 @@ async def finish_attempt(session, user_id: int, attempt_id: int):
                 idempotency_key=key,
             )
             attempt.awarded_coins = coins
+        await session.flush()
+        await award_achievements(session, user_id)
         session.add(
             Notification(
                 user_id=user_id,

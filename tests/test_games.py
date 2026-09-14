@@ -5,7 +5,6 @@ from sqlalchemy import func, select
 
 from app.models.coin import CoinTransaction
 from app.models.games import Raffle, RaffleEntry, WheelSpin
-from app.models.progress import XpEntry
 from tests.conftest import auth, login
 
 
@@ -18,8 +17,8 @@ async def enable(client, head):
             "enabled": True,
             "daily_spins": 1,
             "segments": [
-                {"title": "Награда A", "weight": 1, "xp": 10, "coins": 5},
-                {"title": "Награда B", "weight": 1, "xp": 20, "coins": 5},
+                {"title": "Награда A", "weight": 1, "coins": 5},
+                {"title": "Награда B", "weight": 1, "coins": 5},
             ],
         },
     )
@@ -49,7 +48,6 @@ async def test_wheel_server_choice_idempotency_and_daily_limit(client, session, 
         )
     ).status_code == 422
     assert await session.scalar(select(func.count(WheelSpin.id))) == 1
-    assert await session.scalar(select(func.count(XpEntry.id))) == 1
     assert await session.scalar(select(func.count(CoinTransaction.id))) == 1
     assert (await client.get("/api/v1/games/wheel", headers=headers)).json()["used_today"] == 1
 
@@ -79,7 +77,6 @@ async def test_raffle_entry_draw_and_reward_are_once(client, session, operator, 
         "prize": "Кофе",
         "status": "published",
         "closes_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
-        "xp_reward": 25,
         "coins_reward": 10,
     }
     created = await client.post("/api/v1/admin/games/raffles", headers=admin, json=payload)
@@ -105,7 +102,6 @@ async def test_raffle_entry_draw_and_reward_are_once(client, session, operator, 
     result = (await client.post(draw_path, headers=admin)).json()
     assert result["winner_name"] == operator.full_name
     assert (await client.post(draw_path, headers=admin)).json() == result
-    assert await session.scalar(select(func.count(XpEntry.id))) == 1
     assert await session.scalar(select(func.count(CoinTransaction.id))) == 1
     public = (await client.get("/api/v1/games/raffles", headers=own)).json()
     assert public[0]["won"] is True

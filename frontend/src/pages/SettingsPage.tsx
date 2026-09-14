@@ -14,6 +14,7 @@ type Option = { value: string; label: string };
 type FieldSpec = { key: string; label: string; type?: "number" | "textarea" | "boolean" | "select"; hint?: string; required?: boolean; min?: number; step?: number | "any"; maxLength?: number; options?: Option[] };
 const directions: Option[] = [{ value: "higher_is_better", label: "Больше — лучше" }, { value: "lower_is_better", label: "Меньше — лучше" }];
 const badgeRules: Option[] = [
+  { value: "learning_count", label: "Пройти разные учебные задания" },
   { value: "top_rank", label: "Место в рейтинге" },
   { value: "zero_metric_streak", label: "Серия недель без нарушений" },
   { value: "metric_threshold_streak", label: "Серия недель выше порога" },
@@ -119,7 +120,7 @@ function DefinitionSection({ kind }: { kind: DefinitionKind }) {
     {items?.length === 0 && <EmptyState title="Записи не найдены" hint="Измените фильтры или добавьте новую запись." />}
     <div className="configuration-cards">{items?.map((row) => <Card key={row.id} title={row.title} subtitle={row.code} className="configuration-item" action={<Badge tone={row.is_active ? "success" : "neutral"}>{row.is_active ? "Активно" : "Неактивно"}</Badge>}>
       {row.description && <p className="configuration-description">{row.description}</p>}
-      <p className="configuration-rule-summary">{definitionSummary(kind, row)}</p>
+      <p className="configuration-rule-summary">{definitionSummary(kind, row)}</p>{kind === "badges" && <p className="small secondary">{Number(row.coins_reward) > 0 ? `${coins(Number(row.coins_reward))} коинов за первое получение` : "Без дополнительного начисления коинов"}</p>}
       {atLeast("head") && <div className="configuration-actions"><Button onClick={() => setEditor(row)}>Изменить</Button></div>}
     </Card>)}</div>
     {editor && <DefinitionEditor kind={kind} target={editor === "new" ? undefined : editor} onClose={() => setEditor(null)} />}
@@ -135,6 +136,7 @@ function definitionSummary(kind: DefinitionKind, row: Definition) {
   if (rule === "zero_metric_streak") return `${params.weeks ?? 3} недель подряд без нарушений`;
   if (rule === "metric_threshold_streak") return `Не ниже ${params.gte ?? 0} · ${params.weeks ?? 1} недель подряд`;
   if (rule === "total_earned") return `Заработать ${coins(Number(params.gte ?? 100))} коинов за всё время`;
+  if (rule === "learning_count") return `Пройти ${params.gte ?? 3} разных учебных заданий`;
   if (rule === "nomination_count") return `Получить ${params.gte ?? 1} номинаций`;
   return `Накопить ${params.gte ?? 1} по выбранному показателю`;
 }
@@ -143,7 +145,7 @@ function defaultDefinition(kind: DefinitionKind): DefinitionInput {
   const common = { code: "", title: "", description: "", is_active: true, sort_order: 100 };
   if (kind === "metrics") return { ...common, unit: "", kind: "positive", direction: "higher_is_better", target_value: 1, max_points: 20, penalty_per_unit: 0, allow_overachievement: false };
   if (kind === "nominations") return { ...common, metric_code: "", direction: "higher_is_better", require_zero: false, min_value: null, coins_reward: 5 };
-  return { ...common, icon: "", rule_type: "top_rank", rule_params: { max_rank: 3 }, is_repeatable: false };
+  return { ...common, icon: "", rule_type: "top_rank", rule_params: { max_rank: 3 }, coins_reward: 0, is_repeatable: false };
 }
 
 function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; target?: Definition; onClose: () => void }) {
@@ -171,8 +173,9 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
   if (kind === "badges") fields.push(
     { key: "icon", label: "Значок", maxLength: 64, hint: "Короткое обозначение или эмодзи, например 🏆." },
     { key: "rule_type", label: "Условие получения", type: "select", options: badgeRules },
-    { key: "is_repeatable", label: "Можно получать повторно", type: "boolean" },
+    { key: "is_repeatable", label: "Можно получать повторно", type: "boolean", hint: "Повторно выдаётся только достижение. Бонус коинов — один раз." },
   );
+  if (kind === "badges" && !["top_rank", "total_earned", "nomination_count"].includes(String(values.rule_type))) fields.push({ key: "coins_reward", label: "Коины за первое получение", type: "number", min: 0, required: true, hint: "Бонус входит в заработок для повышения уровня." });
   fields.push(...finalFields);
   const rawParams = values.rule_params;
   const ruleParams = typeof rawParams === "object" && rawParams ? rawParams : {};
@@ -182,7 +185,7 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
     if (["zero_metric_streak", "metric_threshold_streak", "metric_total"].includes(rule)) badgeFields.push({ key: "metric", label: "Показатель достижения", type: "select", required: true, options });
     if (rule === "top_rank") badgeFields.push({ key: "max_rank", label: "Место не ниже", type: "number", required: true, min: 1 });
     if (["zero_metric_streak", "metric_threshold_streak"].includes(rule)) badgeFields.push({ key: "weeks", label: "Недель подряд", type: "number", required: true, min: 1 });
-    if (["metric_threshold_streak", "metric_total", "total_earned", "nomination_count"].includes(rule)) badgeFields.push({ key: "gte", label: rule === "total_earned" ? "Заработать коинов" : rule === "nomination_count" ? "Получить номинаций" : "Значение не ниже", type: "number", required: true, min: .000001, step: ["nomination_count", "total_earned"].includes(rule) ? 1 : "any" });
+    if (["metric_threshold_streak", "metric_total", "total_earned", "nomination_count", "learning_count"].includes(rule)) badgeFields.push({ key: "gte", label: rule === "learning_count" ? "Разных заданий успешно пройти" : rule === "total_earned" ? "Заработать коинов" : rule === "nomination_count" ? "Получить номинаций" : "Значение не ниже", type: "number", required: true, min: .000001, step: ["nomination_count", "total_earned", "learning_count"].includes(rule) ? 1 : "any" });
   }
   const save = useMutation({ mutationFn: () => {
     const data = { ...values }; delete data.id;
@@ -192,6 +195,7 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
       if (["description", "unit", "icon"].includes(field.key) && !data[field.key]) data[field.key] = null;
     });
     if (kind === "badges") {
+      if (["top_rank", "total_earned", "nomination_count"].includes(String(data.rule_type))) data.coins_reward = 0;
       const params: Record<string, string | number> = {};
       badgeFields.forEach((f) => { params[f.key] = f.type === "number" ? Number(ruleParams[f.key] ?? badgeDefault(f.key, rule)) : String(ruleParams[f.key] ?? ""); });
       data.rule_params = params;
@@ -200,7 +204,8 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
   }, onSuccess: () => {
     void client.invalidateQueries({ queryKey: ["configuration", kind] });
     void client.invalidateQueries({ queryKey: ["dashboard"] });
-    void client.invalidateQueries({ queryKey: ["badges"] });
+    void client.invalidateQueries({ queryKey: ["badges"] }); void client.invalidateQueries({ queryKey: ["coin-progress"] });
+    if (kind === "badges") void client.invalidateQueries({ queryKey: ["wallet"] });
     void client.invalidateQueries({ queryKey: ["metrics"] });
     toast.success("Настройки сохранены"); onClose();
   } });
@@ -213,6 +218,7 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
   function submit(event: FormEvent) { event.preventDefault(); if (!save.isPending) save.mutate(); }
   return <Sheet title={target ? `Изменить: ${target.title}` : createTitles[kind]} size="l" onClose={() => { if (!save.isPending) onClose(); }} footer={<><Button disabled={save.isPending} onClick={onClose}>Отмена</Button><Button type="submit" form="configuration-definition" variant="primary" disabled={save.isPending || (kind !== "metrics" && !metrics.isSuccess)}>{save.isPending ? "Сохраняем…" : "Сохранить"}</Button></>}>
     <form id="configuration-definition" className="stack" onSubmit={submit}>
+      {kind === "badges" && <p className="muted">При сохранении проверяются подтверждённые результаты активных операторов. Первое выполненное условие открывает достижение и начисляет бонус. Полученные награды повторно не оплачиваются.</p>}
       {save.isError && <p role="alert" className="configuration-error">{configurationError(save.error)}</p>}
       {metrics.isError && <ErrorState error={new Error(configurationError(metrics.error))} onRetry={() => metrics.refetch()} />}
       <ConfigurationField spec={{ key: "code", label: "Постоянный код", required: true, maxLength: 64 }} value={values.code} disabled={!!target || save.isPending} onChange={(v) => change("code", v)} />

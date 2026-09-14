@@ -5,6 +5,7 @@
 параметры. Один и тот же расчёт используется и для выдачи бейджа, и для
 подсказки «сколько осталось» по заблокированным бейджам.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -19,8 +20,10 @@ from app.models.contest import (
     OperatorWeekMetric,
     OperatorWeekResult,
 )
-from app.models.enums import BadgeRule, WeekStatus
-from app.models.user import CoinAccount
+from app.models.enums import BadgeRule, TxType, WeekStatus
+from app.models.learning import LearningAward
+from app.models.progress import ProgressLevel
+from app.services.coins import earned_total
 
 
 @dataclass(slots=True)
@@ -32,6 +35,7 @@ class BadgeProgress:
     current: float
     target: float
     hint: str
+    coins_awarded: int = 0
 
     @property
     def percent(self) -> float:
@@ -108,7 +112,7 @@ async def _best_rank_reached(session: AsyncSession, user_id: int, max_rank: int)
 
 
 async def evaluate_badge(
-    session: AsyncSession, badge: BadgeDefinition, user_id: int
+    session: AsyncSession, badge: BadgeDefinition, user_id: int, *, coin_total: int | None = None
 ) -> BadgeProgress:
     """Считает прогресс оператора по одному бейджу."""
     params = badge.rule_params or {}
@@ -122,11 +126,7 @@ async def evaluate_badge(
             unlocked=unlocked,
             current=1.0 if unlocked else 0.0,
             target=1.0,
-            hint=(
-                "Получен"
-                if unlocked
-                else f"Займите место не ниже {max_rank} в рейтинге недели"
-            ),
+            hint=("Получен" if unlocked else f"Займите место не ниже {max_rank} в рейтинге недели"),
         )
 
     if rule == BadgeRule.ZERO_METRIC_STREAK:
@@ -184,18 +184,12 @@ async def evaluate_badge(
             unlocked=total >= target,
             current=total,
             target=target,
-            hint=(
-                "Получен"
-                if total >= target
-                else f"Накоплено {total:g} из {target:g}"
-            ),
+            hint=("Получен" if total >= target else f"Накоплено {total:g} из {target:g}"),
         )
 
     if rule == BadgeRule.TOTAL_EARNED:
         target = float(params.get("gte", 100))
-        earned = await session.scalar(
-            select(CoinAccount.total_earned).where(CoinAccount.user_id == user_id)
-        )
+        earned = await earned_total(session, user_id) if coin_total is None else coin_total
         earned = float(earned or 0)
         return BadgeProgress(
             badge=badge,
@@ -203,18 +197,32 @@ async def evaluate_badge(
             current=earned,
             target=target,
             hint=(
-                "Получен"
-                if earned >= target
-                else f"Заработайте ещё {int(target - earned)} коинов"
+                "Получен" if earned >= target else f"Заработайте ещё {int(target - earned)} коинов"
             ),
+        )
+
+    if rule == BadgeRule.LEARNING_COUNT:
+        target = int(params.get("gte", 3))
+        count = int(
+            await session.scalar(
+                select(func.count(LearningAward.id)).where(LearningAward.user_id == user_id)
+            )
+            or 0
+        )
+        return BadgeProgress(
+            badge=badge,
+            unlocked=count >= target,
+            current=float(count),
+            target=float(target),
+            hint="Получен" if count >= target else f"Пройдено разных заданий: {count} из {target}",
         )
 
     if rule == BadgeRule.NOMINATION_COUNT:
         target = float(params.get("gte", 1))
         count = await session.scalar(
-            select(func.count(NominationWinner.id)).where(
-                NominationWinner.user_id == user_id
-            )
+            select(func.count(NominationWinner.id))
+            .join(ContestWeek, ContestWeek.id == NominationWinner.week_id)
+            .where(NominationWinner.user_id == user_id, ContestWeek.status == WeekStatus.CLOSED)
         )
         count = float(count or 0)
         return BadgeProgress(
@@ -233,11 +241,16 @@ async def evaluate_badge(
 
 
 async def user_badge_board(
-    session: AsyncSession, user_id: int
+    session: AsyncSession,
+    user_id: int,
+    *,
+    coin_total: int | None = None,
+    levels: list[ProgressLevel] | None = None,
 ) -> list[tuple[BadgeProgress, UserBadge | None]]:
     """
     Доска достижений оператора: полученные и заблокированные бейджи с подсказками.
     """
+    total = await earned_total(session, user_id) if coin_total is None else coin_total
     definitions = list(
         await session.scalars(
             select(BadgeDefinition)
@@ -245,24 +258,184 @@ async def user_badge_board(
             .order_by(BadgeDefinition.sort_order, BadgeDefinition.id)
         )
     )
-    awards = list(
-        await session.scalars(select(UserBadge).where(UserBadge.user_id == user_id))
-    )
+    awards = list(await session.scalars(select(UserBadge).where(UserBadge.user_id == user_id)))
     latest_award: dict[int, UserBadge] = {}
+    bonuses: dict[int, int] = {}
     for award in awards:
+        bonuses[award.badge_id] = bonuses.get(award.badge_id, 0) + award.coins_awarded
         current = latest_award.get(award.badge_id)
         if current is None or award.awarded_at > current.awarded_at:
             latest_award[award.badge_id] = award
 
     board: list[tuple[BadgeProgress, UserBadge | None]] = []
     for definition in definitions:
-        progress = await evaluate_badge(session, definition, user_id)
+        progress = await evaluate_badge(session, definition, user_id, coin_total=total)
         award = latest_award.get(definition.id)
         if award is not None:
             progress.unlocked = True
             progress.hint = "Получен"
+        progress.coins_awarded = bonuses.get(definition.id, 0)
         board.append((progress, award))
+    if levels is None:
+        levels = list(
+            await session.scalars(
+                select(ProgressLevel)
+                .where(ProgressLevel.is_active.is_(True))
+                .order_by(ProgressLevel.min_coins)
+            )
+        )
+    for level in levels:
+        if level.min_coins <= 0:
+            continue
+        definition = BadgeDefinition(
+            code=f"level_{level.id}",
+            title=f"{level.min_coins:,} коинов заработано".replace(",", " "),
+            description=f"Достигнут уровень «{level.title}»",
+            icon="medal",
+            rule_type=BadgeRule.TOTAL_EARNED,
+            coins_reward=0,
+        )
+        board.append(
+            (
+                BadgeProgress(
+                    badge=definition,
+                    unlocked=total >= level.min_coins,
+                    current=float(total),
+                    target=float(level.min_coins),
+                    hint="Получен"
+                    if total >= level.min_coins
+                    else f"Заработайте ещё {level.min_coins - total} коинов",
+                ),
+                None,
+            )
+        )
     return board
+
+
+def badge_output(progress, award):
+    from app.schemas.cabinet import BadgeOut
+
+    badge = progress.badge
+    milestone = badge.code.startswith("level_")
+    return BadgeOut(
+        code=badge.code,
+        title=badge.title,
+        description=badge.description,
+        icon=badge.icon,
+        unlocked=progress.unlocked,
+        awarded_at=award.awarded_at if award else None,
+        progress_current=progress.current,
+        progress_target=progress.target,
+        progress_percent=100 if progress.unlocked else progress.percent,
+        hint=progress.hint,
+        coins_reward=badge.coins_reward or 0,
+        coins_awarded=progress.coins_awarded,
+        category="level" if milestone else "work",
+        action_url="/training"
+        if badge.rule_type == BadgeRule.LEARNING_COUNT
+        else "/progress"
+        if badge.rule_type == BadgeRule.TOTAL_EARNED
+        else "/cabinet",
+    )
+
+
+async def award_achievements(session, user_id, week_id=None, *, pay_bonus=True, definition_id=None):
+    """Award facts and the first bonus atomically; a repeated event never pays twice."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    from app.services.coins import get_account, post_transaction
+
+    await get_account(session, user_id, lock=True)
+    query = select(BadgeDefinition).where(BadgeDefinition.is_active.is_(True))
+    if definition_id is not None:
+        query = query.where(BadgeDefinition.id == definition_id)
+    definitions = list(
+        await session.scalars(query.order_by(BadgeDefinition.sort_order, BadgeDefinition.id))
+    )
+    existing = list(await session.scalars(select(UserBadge).where(UserBadge.user_id == user_id)))
+    insert = sqlite_insert if session.get_bind().dialect.name == "sqlite" else pg_insert
+    count = 0
+    for definition in definitions:
+        prior = [item for item in existing if item.badge_id == definition.id]
+        if prior and (not definition.is_repeatable or week_id is None):
+            continue
+        if definition.is_repeatable and any(item.week_id == week_id for item in prior):
+            continue
+        progress = await evaluate_badge(session, definition, user_id)
+        if not progress.unlocked:
+            continue
+        key = f"badge:{user_id}:{definition.id}:" + (
+            str(week_id) if definition.is_repeatable and week_id is not None else "once"
+        )
+        # Lifetime milestones and rank/nomination badges already have their own coin awards.
+        bonus = (
+            (definition.coins_reward or 0)
+            if pay_bonus
+            and not prior
+            and definition.rule_type
+            not in (
+                BadgeRule.TOTAL_EARNED,
+                BadgeRule.TOP_RANK,
+                BadgeRule.NOMINATION_COUNT,
+            )
+            else 0
+        )
+        awarded_id = await session.scalar(
+            insert(UserBadge)
+            .values(
+                user_id=user_id,
+                badge_id=definition.id,
+                week_id=week_id,
+                award_key=key,
+                coins_awarded=bonus,
+            )
+            .on_conflict_do_nothing()
+            .returning(UserBadge.id)
+        )
+        if awarded_id is None:
+            continue
+        if bonus:
+            await post_transaction(
+                session,
+                user_id=user_id,
+                amount=bonus,
+                tx_type=TxType.ACHIEVEMENT_REWARD,
+                reason=f"Достижение: {definition.title}",
+                idempotency_key=key,
+                week_id=week_id,
+                evaluate_achievements=False,
+            )
+        count += 1
+    await session.flush()
+    return count
+
+
+async def latest_result_week(session, user_id):
+    return await session.scalar(
+        select(ContestWeek.id)
+        .join(OperatorWeekResult, OperatorWeekResult.week_id == ContestWeek.id)
+        .where(OperatorWeekResult.user_id == user_id, ContestWeek.status == WeekStatus.CLOSED)
+        .order_by(ContestWeek.starts_on.desc())
+        .limit(1)
+    )
+
+
+async def reconcile_badge_definition(session, definition):
+    """Apply a saved rule to confirmed results, without paying previous awards again."""
+    from app.models.enums import Role
+    from app.models.user import User
+
+    if not definition.is_active:
+        return
+    users = await session.scalars(
+        select(User.id)
+        .where(User.is_active.is_(True), User.role == Role.OPERATOR)
+        .order_by(User.id)
+    )
+    for user_id in users:
+        week_id = await latest_result_week(session, user_id) if definition.is_repeatable else None
+        await award_achievements(session, user_id, week_id, definition_id=definition.id)
 
 
 async def evaluate_for_week(session: AsyncSession, week: ContestWeek) -> int:
@@ -272,41 +445,12 @@ async def evaluate_for_week(session: AsyncSession, week: ContestWeek) -> int:
     Вызывается после закрытия недели; повторный вызов не создаёт дубликатов
     благодаря уникальному ограничению (user, badge, week).
     """
-    definitions = list(
-        await session.scalars(
-            select(BadgeDefinition)
-            .where(BadgeDefinition.is_active.is_(True))
-            .order_by(BadgeDefinition.sort_order, BadgeDefinition.id)
-        )
-    )
-    if not definitions:
-        return 0
-
     participants = list(
         await session.scalars(
             select(OperatorWeekResult.user_id).where(OperatorWeekResult.week_id == week.id)
         )
     )
-    existing_rows = await session.execute(
-        select(UserBadge.user_id, UserBadge.badge_id).where(
-            UserBadge.user_id.in_(participants)
-        )
-    )
-    already: set[tuple[int, int]] = {tuple(row) for row in existing_rows}
-
     awarded = 0
     for user_id in participants:
-        for definition in definitions:
-            if not definition.is_repeatable and (user_id, definition.id) in already:
-                continue
-            progress = await evaluate_badge(session, definition, user_id)
-            if not progress.unlocked:
-                continue
-            session.add(
-                UserBadge(user_id=user_id, badge_id=definition.id, week_id=week.id)
-            )
-            already.add((user_id, definition.id))
-            awarded += 1
-
-    await session.flush()
+        awarded += await award_achievements(session, user_id, week.id)
     return awarded
