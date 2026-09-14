@@ -88,6 +88,25 @@ def catalog():
     return [asdict(item) for item in SECTIONS]
 
 
+def access_decisions(role, group_id, user_id, rules):
+    """One resolver for live authorization and the read-only editor preview."""
+    targets = [("all", "*"), ("role", str(role))]
+    if group_id is not None:
+        targets.append(("group", str(group_id)))
+    targets.append(("user", str(user_id)))
+    decisions = {}
+    for section in SECTIONS:
+        allowed, source = role in section.defaults, "default"
+        for kind, key in targets:
+            effect = rules.get((kind, key, section.code))
+            if effect:
+                allowed, source = effect == "allow", kind
+        if section.admin_only and role != Role.ADMIN:
+            allowed, source = False, "admin_only"
+        decisions[section.code] = {"allowed": allowed, "source": source}
+    return decisions
+
+
 async def effective_access(session: AsyncSession, user: User):
     targets = [("all", "*"), ("role", str(user.role))]
     if user.group_id is not None:
@@ -106,16 +125,7 @@ async def effective_access(session: AsyncSession, user: User):
         )
     )
     by_target = {(rule.target_type, rule.target_id, rule.section): rule.effect for rule in rules}
-    decisions = {}
-    for section in SECTIONS:
-        allowed, source = user.role in section.defaults, "default"
-        for kind, key in targets:
-            effect = by_target.get((kind, key, section.code))
-            if effect:
-                allowed, source = effect == "allow", kind
-        if section.admin_only and user.role != Role.ADMIN:
-            allowed, source = False, "admin_only"
-        decisions[section.code] = {"allowed": allowed, "source": source}
+    decisions = access_decisions(user.role, user.group_id, user.id, by_target)
     return {
         "allowed": {key: item["allowed"] for key, item in decisions.items()},
         "capabilities": {"manage_sessions": is_developer(user)},

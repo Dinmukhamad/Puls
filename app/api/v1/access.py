@@ -8,9 +8,10 @@ from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.models.access import AccessPolicy, AccessRule
 from app.models.enums import Role
 from app.models.user import Group, User
-from app.schemas.access import AccessUpdate
+from app.schemas.access import AccessPreview, AccessUpdate
 from app.schemas.common import Page
 from app.services.access import SECTION_BY_CODE, catalog, effective_access
+from app.services.access_preview import preview_access
 from app.services.rules import write_audit
 
 router = APIRouter(tags=["Доступ к разделам"])
@@ -156,8 +157,7 @@ async def inspect_user(session: SessionDep, _: AdminUser, user_id: int):
     }
 
 
-@router.put("/admin/access")
-async def save(session: SessionDep, actor: AdminUser, payload: AccessUpdate):
+async def validate_targets(session, payload: AccessPreview):
     if any(change.section not in SECTION_BY_CODE for change in payload.changes):
         raise DomainError("Неизвестный раздел. Обновите справочник доступа.")
     if payload.target_type == "role" and not set(payload.target_ids) <= {
@@ -181,6 +181,24 @@ async def save(session: SessionDep, actor: AdminUser, payload: AccessUpdate):
         )
         if found != len(payload.target_ids):
             raise NotFoundError("Один из выбранных получателей не найден")
+
+
+@router.post("/admin/access/preview")
+async def preview(session: SessionDep, _: AdminUser, payload: AccessPreview):
+    await validate_targets(session, payload)
+    revision = await session.scalar(select(AccessPolicy.revision).where(AccessPolicy.id == 1)) or 0
+    if revision != payload.revision:
+        raise ConflictError("Права изменены в другом окне. Загрузите актуальные правила.")
+    result = await preview_access(session, payload)
+    latest = await session.scalar(select(AccessPolicy.revision).where(AccessPolicy.id == 1)) or 0
+    if latest != revision:
+        raise ConflictError("Права изменены во время расчёта. Загрузите актуальные правила.")
+    return result
+
+
+@router.put("/admin/access")
+async def save(session: SessionDep, actor: AdminUser, payload: AccessUpdate):
+    await validate_targets(session, payload)
     # The revision update serializes concurrent writers and prevents silent overwrites.
     if session.get_bind().dialect.name == "sqlite":
         from sqlalchemy.dialects.sqlite import insert
