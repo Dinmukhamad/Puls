@@ -61,7 +61,7 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
     section("tests", "Тесты", InboxIcon, [tab("/admin/learning?kind=test", "Тесты")]),
     section("missions", "Миссии", TrophyIcon, [tab("/admin/learning?kind=mission", "Миссии")]),
     section("driver", "Driver Simulator", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training?kind=simulator", "Тестовый запуск")]),
-    section("learning_analytics", "Аналитика обучения", TrophyIcon, [tab("/admin/learning-analytics", "Результаты операторов")]),
+    section("learning_analytics", "Аналитика обучения", TrophyIcon, [tab("/admin/learning-analytics", "Результаты операторов"), tab("/admin/learning-analytics?view=driver", "Driver Simulator")]),
     {...ACCOUNT_SECTION, label: "Мой кабинет"},
   ],
   operator: [

@@ -11,6 +11,7 @@ import { Sheet } from "../components/Sheet";
 import { Badge, Button, Card, EmptyState, ErrorState, KPI, Pagination, RowsSkeleton } from "../components/ui";
 import { dateTime } from "../utils/format";
 import { ScenarioForm } from "./DriverScenarioEditor";
+import { DriverAnalyticsPage } from "./DriverAnalyticsPage";
 import "./training-tools.css";
 
 const STATES: Record<string, string> = { not_started: "Не начали", in_progress: "В процессе", passed: "Успешно", failed: "Не пройдено" };
@@ -46,11 +47,21 @@ export function TrainerHome() {
     <Card title="Рабочий день тренера"><p>Создайте операторов, подготовьте материалы и назначьте обучение. В аналитике видны прохождение, попытки и ошибки.</p><div className="training-home-links"><Link to="/admin/users">Создать оператора →</Link><Link to="/admin/learning">Подготовить обучение →</Link><Link to="/admin/learning-analytics">Проверить результаты →</Link></div></Card>
     {query.isPending && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
     {summary && <div className="kpi-grid"><KPI label="Назначено" value={summary.assigned ?? 0} /><KPI label="Не начали" value={summary.not_started ?? 0} /><KPI label="В процессе" value={summary.in_progress ?? 0} /><KPI label="Завершили" value={summary.completed ?? 0} /></div>}
+    <Card title="Driver Simulator"><p>Следите за выполненными заказами, текущими сменами и прогрессом новых операторов.</p><div className="training-home-links"><Link to="/admin/learning-analytics?view=driver">Аналитика Driver Simulator →</Link><Link to="/admin/learning?kind=simulator">Сценарии →</Link></div></Card>
     <Card title="Проверка перед публикацией"><p>Кнопка «Пройти как оператор» открывает тестовое прохождение. Оно не входит в рабочую статистику и не выдаёт коины.</p><Link to="/admin/learning?kind=simulator">Открыть сценарии Driver Simulator →</Link></Card>
   </div>;
 }
 
 export function TrainingAnalyticsPage() {
+  const [params] = useSearchParams();
+  const driverView = params.get("view") === "driver";
+  return <div className="stack"><nav className="driver-analytics-tabs" aria-label="Раздел аналитики">
+    <Link className={`btn btn--m ${driverView ? "btn--secondary" : "btn--primary"}`} aria-current={!driverView ? "page" : undefined} to="/admin/learning-analytics">Обучение и тесты</Link>
+    <Link className={`btn btn--m ${driverView ? "btn--primary" : "btn--secondary"}`} aria-current={driverView ? "page" : undefined} to="/admin/learning-analytics?view=driver">Driver Simulator</Link>
+  </nav>{driverView ? <DriverAnalyticsPage /> : <LearningAnalyticsReport />}</div>;
+}
+
+function LearningAnalyticsReport() {
   const [params, setParams] = useSearchParams(), [search, setSearch] = useState("");
   const filters = Object.fromEntries(["date_from", "date_to", "user_id", "content_id", "kind", "state"].map(key => [key, params.get(key) || undefined]));
   const page = Math.max(1, Number(params.get("page")) || 1);

@@ -1,7 +1,7 @@
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Query, Response
 from sqlalchemy import func, select
 
 from app.core.deps import (
@@ -23,6 +23,31 @@ from app.services import learning
 from app.services.rules import write_audit
 
 router = APIRouter(tags=["Обучение"])
+
+
+@router.get("/admin/learning-analytics/driver")
+async def driver_analytics(
+    session: SessionDep,
+    actor: LearningReader,
+    operator_ids: Annotated[list[int] | None, Query(max_length=500)] = None,
+    tenure: Literal["all", "new", "recent", "experienced", "unknown", "future"] = "all",
+    state: Literal["not_started", "in_progress", "completed"] | None = None,
+    activity: Literal["active", "inactive"] | None = None,
+    employment: Literal["all", "active", "inactive"] = "active",
+    target_orders: Annotated[int, Query(ge=1, le=100)] = 5,
+):
+    from app.services.driver_analytics import report
+
+    return await report(
+        session,
+        actor,
+        operator_ids=operator_ids,
+        tenure=tenure,
+        state=state,
+        activity=activity,
+        employment=employment,
+        target_orders=target_orders,
+    )
 
 
 @router.get("/learning")
