@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, PaginationDep, SessionDep
+from app.core.visibility import identity_filter, shop_request_output
 from app.models.coin import CoinTransaction
 from app.models.shop import ShopRequest
 from app.models.user import User
@@ -112,7 +113,7 @@ async def transactions(
     )
     rows = await session.execute(
         select(CoinTransaction, User.full_name)
-        .outerjoin(User, User.id == CoinTransaction.created_by_id)
+        .outerjoin(User, (User.id == CoinTransaction.created_by_id) & identity_filter(user))
         .where(*conditions)
         .order_by(CoinTransaction.created_at.desc(), CoinTransaction.id.desc())
         .offset(pagination.offset)
@@ -161,5 +162,5 @@ async def my_requests(
         .offset(pagination.offset)
         .limit(pagination.size)
     )
-    items = [ShopRequestOut.model_validate(row) for row in rows]
+    items = [shop_request_output(row, user) for row in rows]
     return Page.build(items, total, pagination.page, pagination.size)

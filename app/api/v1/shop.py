@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, status
 
 from app.core.deps import CurrentUser, SessionDep
+from app.core.visibility import shop_request_output
 from app.models.shop import ShopRequest
 from app.schemas.shop import (
     ShopCatalogOut,
@@ -74,7 +75,7 @@ async def create_request(
         session, user=user, item_id=payload.item_id, comment=payload.comment
     )
     await session.commit()
-    return await shop_service.get_request(session, request.id)
+    return shop_request_output(await shop_service.get_request(session, request.id), user)
 
 
 @router.post(
@@ -88,4 +89,4 @@ async def cancel_request(
     request = await shop_service.get_request(session, request_id)
     await shop_service.cancel_request(session, request=request, actor=user)
     await session.commit()
-    return await shop_service.get_request(session, request_id)
+    return shop_request_output(await shop_service.get_request(session, request_id), user)

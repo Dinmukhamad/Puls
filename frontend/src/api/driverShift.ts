@@ -24,6 +24,7 @@ export interface DriverCar { id: string; brand: string; model: string; year: num
 export interface IntercityOffer { id: string; origin: string; destination: string; date?: string; from_time?: string; to_time?: string; seats?: number; type?: string; price: number; status: string }
 export interface ShiftResult { trips?: { id: string; origin: string; destination: string; fare: number; payment: string; navigation: NavigationSpec }[]; score: number | null; penalties: number; checks: { key: string; title: string; path: string; done: boolean; weight: number }[]; orders: number; target: number; seconds: number; errors: number; hints: number }
 export interface DriverShift {
+  is_preview?: boolean; content_id?: number | null;
   id: string; mode: "free" | "assessment"; config: DriverScenario; version: number; created_at: string; finished_at: string | null; result: ShiftResult | null;
   events: { id: string; action: string; at: string; details: Record<string, unknown> }[];
   data: {
@@ -42,8 +43,8 @@ export interface SupportCase { id: string; topic: string; status: string; step: 
 export type ShiftActionName = "visit" | "setting" | "tariff" | "payment" | "car_add" | "car_select" | "photo_step" | "photo_submit" | "photo_restart" | "doc_sign" | "provider" | "wallet" | "promo" | "intercity_create" | "intercity_book" | "rental" | "refuel" | "learning" | "work_mode" | "online" | "offline" | "hint" | "finish" | "passenger" | "route_change" | "level_restore" | "intercity_cancel";
 export type ShiftAct = (action: ShiftActionName, values?: Record<string, unknown>) => void;
 export const driverShift = {
-  results: (page: number) => request<{ total: number; items: { id: string; full_name: string; title: string; mode: string; completed: number; created_at: string; finished_at: string | null; result: ShiftResult | null }[] }>(`/api/v1/admin/learning/driver-results?page=${page}&size=20`),
-  start: (json: { id: string; mode: "free" | "assessment" }) => request<DriverState>("/api/v1/learning/driver/shifts", { method: "POST", json, headers: driverDeviceHeaders() }),
+  results: (page: number, userId?: number) => request<{ total: number; items: { id: string; full_name: string; title: string; mode: string; completed: number; created_at: string; finished_at: string | null; result: ShiftResult | null }[] }>(`/api/v1/admin/learning/driver-results?page=${page}&size=20${userId ? `&user_id=${userId}` : ""}`),
+  start: (json: { id: string; mode: "free" | "assessment"; content_id?: number }) => request<DriverState>("/api/v1/learning/driver/shifts", { method: "POST", json, headers: driverDeviceHeaders() }),
   act: ({ id, ...json }: { id: string; request_id: string; action: ShiftActionName; values: Record<string, unknown> }) => request<DriverState>(`/api/v1/learning/driver/shifts/${id}/action`, { method: "PUT", json, headers: driverDeviceHeaders() }),
   support: ({ shift_id, ...json }: { shift_id: string; id: string; topic: "payment" | "passenger" | "account" }) => request<{ case: SupportCase; url: string | null }>(`/api/v1/learning/driver/shifts/${shift_id}/support`, { method: "POST", json, headers: driverDeviceHeaders() }),
   config: () => request<DriverScenario>("/api/v1/admin/learning/driver-scenario"),

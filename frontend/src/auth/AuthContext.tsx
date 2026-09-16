@@ -28,6 +28,7 @@ interface AuthState {
 
 const ROLE_LEVEL: Record<Role, number> = {
   operator: 0,
+  trainer: 0,
   supervisor: 1,
   head: 2,
   admin: 3,

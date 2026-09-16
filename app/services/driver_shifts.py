@@ -11,6 +11,9 @@ from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.db.base import utcnow
 from app.models.driver import DriverOrder, DriverProfile, DriverSettings
 from app.models.driver_shift import DriverShift, DriverSupportCase
+from app.models.enums import Role
+from app.models.learning import LearningContent
+from app.models.user import User
 from app.schemas.driver_shift import DriverScenario
 from app.services import driver_auth
 
@@ -269,24 +272,47 @@ def initial_data(config, mode):
 async def start(session, user_id, payload):
     old = await session.get(DriverShift, str(payload.id))
     if old:
-        if old.user_id != user_id or old.mode != payload.mode:
+        if (
+            old.user_id != user_id
+            or old.mode != payload.mode
+            or old.content_id != payload.content_id
+        ):
             raise ConflictError("Этот запрос уже использован")
         return old
     running = await active(session, user_id, lock=True)
     if running:
+        if running.content_id != payload.content_id:
+            raise ConflictError("Сначала завершите текущую смену перед другим сценарием")
         return running
     if await session.scalar(
         select(DriverOrder.id).where(DriverOrder.user_id == user_id, DriverOrder.active_slot == 1)
     ):
         raise ConflictError("Сначала завершите ранее начатый заказ")
     config = await configuration(session)
+    user = await session.get(User, user_id)
+    is_preview = user.role != Role.OPERATOR
+    if payload.content_id:
+        content = await session.get(LearningContent, payload.content_id)
+        if (
+            not content
+            or not content.driver_config
+            or (content.status != "published" and not is_preview)
+        ):
+            raise NotFoundError("Сценарий недоступен")
+        config = deepcopy(content.driver_config)
+        config["title"] = content.title
+    data = initial_data(config, payload.mode)
+    if payload.content_id:
+        data["training_pass_percent"] = content.pass_percent
     shift = DriverShift(
         id=str(payload.id),
         user_id=user_id,
         active_slot=1,
         mode=payload.mode,
+        content_id=payload.content_id,
+        is_preview=is_preview,
         config=config,
-        data=initial_data(config, payload.mode),
+        data=data,
         events=[],
         version=0,
     )
@@ -380,6 +406,8 @@ def public(shift):
     return {
         "id": shift.id,
         "mode": shift.mode,
+        "is_preview": shift.is_preview,
+        "content_id": shift.content_id,
         "config": config,
         "data": data,
         "version": shift.version,

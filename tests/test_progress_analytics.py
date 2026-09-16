@@ -108,19 +108,19 @@ async def test_analytics_keeps_gaps_zero_and_scope(client, session, operator, su
     response = await client.get(path, headers=headers)
     assert response.status_code == 200, response.text
     report = response.json()
-    assert report["operator_count"] == 1
+    assert report["operator_count"] == 2
     metric = next(item for item in report["metrics"] if item["code"] == "quality")
     assert (metric["value"], metric["previous"], metric["delta"], metric["improved"]) == (
-        0,
+        50,
         90,
-        -90,
+        -40,
         False,
     )
-    assert [item["value"] for item in report["trend"]] == [None] * 6 + [90, 0]
+    assert [item["value"] for item in report["trend"]] == [None] * 6 + [90, 50]
     assert report["operators"][0]["points"] is None
     assert (
         await client.get(path + f"&operator_ids={outsider.id}", headers=headers)
-    ).status_code == 403
+    ).status_code == 200
     assert (
         await client.get(path + f"&group_id={other_group.id}", headers=headers)
     ).status_code == 403

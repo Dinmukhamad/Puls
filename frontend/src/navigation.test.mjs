@@ -7,6 +7,22 @@ import { build } from "esbuild";
 const built = await build({ entryPoints: [fileURLToPath(new URL("./navigation.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false });
 const nav = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
 
+test("trainer navigation stays within learning even with explicit grants", () => {
+  const all = Object.fromEntries(Object.keys(nav.defaultAccess("admin")).map(key => [key, true]));
+  assert.deepEqual(nav.visibleNavigation("trainer", all).map(x => x.label), ["Главная", "Пользователи", "Обучение", "Тесты", "Миссии", "Driver Simulator", "Аналитика обучения", "Мой кабинет"]);
+  assert.equal(nav.visibleNavigation("trainer")[0].to, "/trainer");
+  for (const path of ["/admin/groups", "/admin/access", "/admin/sessions", "/admin/summary", "/progress", "/wallet", "/rating", "/analytics", "/shop", "/games"]) {
+    assert.equal(nav.canVisit("trainer", path, all, true), false, path);
+  }
+  for (const path of ["/admin/users/42", "/admin/learning", "/admin/learning-analytics", "/training", "/simulator", "/profile"]) {
+    assert.equal(nav.canVisit("trainer", path, all), true, path);
+  }
+  assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=test")?.id, "tests");
+  assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=mission")?.id, "missions");
+  assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=simulator")?.id, "driver");
+  assert.equal(nav.canVisit("operator", "/admin/users", all), false);
+});
+
 test("roles expose task-specific defaults with an account entry", () => {
   assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Награды", "Профиль"]);
   assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "Рейтинг и мотивация", "Профиль"]);

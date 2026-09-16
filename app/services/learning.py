@@ -7,7 +7,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ConflictError, DomainError, NotFoundError
-from app.models.enums import TxType
+from app.models.enums import Role, TxType
 from app.models.learning import LearningAttempt, LearningAward, LearningContent
 from app.models.progress import Notification
 from app.models.user import User
@@ -42,8 +42,10 @@ def content_data(content: LearningContent, *, editor: bool = False) -> dict:
     )
     result = {key: getattr(content, key) for key in fields}
     result["step_count"] = len(content.steps)
+    result["is_driver"] = bool(content.driver_config)
     if editor:
         result["steps"] = deepcopy(content.steps)
+        result["driver_config"] = deepcopy(content.driver_config)
     return result
 
 
@@ -65,6 +67,7 @@ def attempt_data(attempt: LearningAttempt) -> dict:
         "correct": attempt.correct,
         "awarded_coins": attempt.awarded_coins,
         "finished_at": attempt.finished_at,
+        "is_preview": attempt.is_preview,
     }
 
 
@@ -79,17 +82,22 @@ async def own_attempt(session: AsyncSession, user_id: int, attempt_id: int) -> L
     return attempt
 
 
-async def start_attempt(session: AsyncSession, user_id: int, content_id: int):
+async def start_attempt(session: AsyncSession, user_id: int, content_id: int, *, preview=False):
     await lock_learner(session, user_id)
     content = await session.get(LearningContent, content_id)
-    if content is None or content.status != "published":
+    user = await session.get(User, user_id)
+    preview = preview or user.role != Role.OPERATOR
+    if content is None or (content.status != "published" and not preview):
         raise NotFoundError("Учебный материал недоступен")
+    if content.driver_config:
+        raise DomainError("Откройте этот сценарий в Driver Simulator")
     active = await session.scalar(
         select(LearningAttempt)
         .where(
             LearningAttempt.user_id == user_id,
             LearningAttempt.content_id == content_id,
             LearningAttempt.state == "in_progress",
+            LearningAttempt.is_preview == preview,
         )
         .order_by(LearningAttempt.id.desc())
         .limit(1)
@@ -98,7 +106,9 @@ async def start_attempt(session: AsyncSession, user_id: int, content_id: int):
         return active
     snapshot = content_data(content, editor=True)
     snapshot["deadline"] = content.deadline.isoformat() if content.deadline else None
-    attempt = LearningAttempt(user_id=user_id, content_id=content.id, snapshot=snapshot)
+    attempt = LearningAttempt(
+        user_id=user_id, content_id=content.id, snapshot=snapshot, is_preview=preview
+    )
     session.add(attempt)
     await session.flush()
     return attempt
@@ -132,6 +142,8 @@ async def finish_attempt(session, user_id: int, attempt_id: int):
     attempt = await own_attempt(session, user_id, attempt_id)
     if attempt.state != "in_progress":
         return attempt
+    if (await session.get(User, user_id)).role != Role.OPERATOR:
+        attempt.is_preview = True
     steps = attempt.snapshot["steps"]
     if len(attempt.answers) != len(steps):
         raise DomainError("Ответьте на все вопросы перед завершением")
@@ -149,7 +161,7 @@ async def finish_attempt(session, user_id: int, attempt_id: int):
             LearningAward.user_id == user_id, LearningAward.content_id == attempt.content_id
         )
     )
-    if passed and awarded is None:
+    if passed and awarded is None and not attempt.is_preview:
         session.add(
             LearningAward(user_id=user_id, content_id=attempt.content_id, attempt_id=attempt.id)
         )

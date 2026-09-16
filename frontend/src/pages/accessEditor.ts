@@ -17,7 +17,7 @@ export function draftEffect(policy: AccessPolicy, kind: TargetType, ids: string[
   return next;
 }
 
-const sources = { default: "Роль по умолчанию", all: "Общее правило для всех", role: "Настройка роли", group: "Настройка группы", user: "Личное исключение", admin_only: "Ограничение администратора" };
+const sources = { default: "Роль по умолчанию", all: "Общее правило для всех", role: "Настройка роли", group: "Настройка группы", user: "Личное исключение", admin_only: "Ограничение администратора", role_limit: "Роль тренера: доступ ограничен обучением" };
 export function sourceDescription(value: AccessPreviewSection["sources"]) {
   const labels = Object.entries(value).filter(([, count]) => count).map(([key]) => sources[key as keyof typeof sources]);
   return labels.length === 1 ? `Источник: ${labels[0]}.` : `Источники: ${labels.join(", ")}.`;

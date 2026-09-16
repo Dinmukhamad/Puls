@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from string import ascii_letters, digits
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
@@ -47,6 +47,17 @@ class UserOut(ORMModel):
     is_developer: bool = False
     hired_on: date | None = None
     group: GroupBrief | None = None
+    created_at: datetime | None = None
+    can_manage_credentials: bool | None = None
+
+
+class TrainingUserOut(ORMModel):
+    id: int
+    login: str
+    full_name: str
+    role: Role
+    is_active: bool
+    created_at: datetime
 
 
 class PasswordMixin(BaseModel):

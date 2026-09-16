@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { learning, attemptPath, DIFFICULTY, LEARNING_LABELS, type LearningContent, type LearningKind } from "../api/learning";
 import { useAuth } from "../auth/AuthContext";
@@ -6,24 +6,32 @@ import { Badge, Button, Card, EmptyState, ErrorState, Progress, RowsSkeleton, Se
 import { dateOnly } from "../utils/format";
 import "./learning.css";
 import { DriverEntry } from "./DriverEntry";
+import { driverShift } from "../api/driverShift";
 
 export function TrainingPage() {
   const [params, setParams] = useSearchParams();
-  const { atLeast } = useAuth();
+  const { user, atLeast } = useAuth();
   const navigate = useNavigate();
   const query = useQuery({ queryKey: ["learning"], queryFn: learning.catalog });
-  const start = useMutation({ mutationFn: learning.start, onSuccess: (attempt) => navigate(attemptPath(attempt)) });
+  const client = useQueryClient();
+  const start = useMutation({ mutationFn: async (id: number) => {
+    const content = query.data?.find(item => item.id === id);
+    if (content?.is_driver) {
+      const data = await driverShift.start({ id: crypto.randomUUID(), mode: "assessment", content_id: id });
+      client.setQueryData(["driver-profile"], data); navigate("/simulator");
+    } else navigate(attemptPath(await learning.start(id)));
+  } });
   const kind = params.get("kind") ?? "all", state = params.get("state") ?? "all";
   const items = query.data ?? [];
   const completed = items.filter((item) => item.completed).length;
-  const assignments = items.filter((item) => item.kind !== "simulator");
+  const assignments = [...items].sort((a, b) => Number(!!b.assigned) - Number(!!a.assigned));
   const next = assignments.find((item) => item.state === "in_progress") ?? assignments.find((item) => item.is_required && !item.completed) ?? assignments.find((item) => !item.completed);
   const visible = assignments.filter((item) => (kind === "all" || kind === item.kind) && (state === "all" || (state === "passed" ? item.completed : state === item.state)));
   function update(key: string, value: string) { const next = new URLSearchParams(params); next.set(key, value); setParams(next); }
   return <div className="stack training-page">
-    <div className="page-head"><div><h1 className="page-title">Обучение</h1><p className="page-subtitle">Знания, решения и практика — шаг за шагом</p></div>{atLeast("supervisor") && <Link className="btn btn--secondary" to="/admin/learning">Студия обучения</Link>}</div>
+    <div className="page-head"><div><h1 className="page-title">Обучение</h1><p className="page-subtitle">{user?.role === "trainer" ? "Тестовые прохождения без наград и рабочей статистики" : "Знания, решения и практика — шаг за шагом"}</p></div>{(atLeast("supervisor") || user?.role === "trainer") && <Link className="btn btn--secondary" to="/admin/learning">Студия обучения</Link>}</div>
     {(kind === "all" || kind === "simulator") && <DriverEntry />}
-    {kind !== "simulator" && <>{query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
+    <>{query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
     {query.data && <>
       <section className="training-hero"><div><span className="training-eyebrow">ВАШЕ РАЗВИТИЕ</span><h2>Следующий шаг<br />к уверенной работе.</h2><p>Проверяйте знания, разбирайте ситуации и проходите путь водителя.</p></div><div className="training-hero__progress"><strong>{items.length ? Math.round(completed / items.length * 100) : 0}<span>%</span></strong><span>Завершено {completed} из {items.length}</span><Progress value={items.length ? completed / items.length : 0} tone="accent" label="Общий прогресс обучения" /></div></section>
       {next && <Card title={next.state === "in_progress" ? "Продолжить обучение" : "Ваш следующий шаг"} subtitle={next.title} action={<Button variant="primary" disabled={start.isPending} onClick={() => start.mutate(next.id)}>{next.state === "in_progress" ? "Продолжить" : "Начать"}</Button>}><p className="secondary">{LEARNING_LABELS[next.kind]} · {next.minutes} мин · {next.answered ?? 0} из {next.step_count} шагов</p></Card>}
@@ -32,7 +40,7 @@ export function TrainingPage() {
       {!visible.length && <EmptyState title={items.length ? "Таких заданий пока нет" : "Обучение скоро появится"} hint={items.length ? "Выберите другой раздел или статус." : "Опубликованные руководителем тесты и сценарии появятся здесь."} />}
       <div className="training-grid">{visible.map((item) => <LearningCard key={item.id} item={item} pending={start.isPending} onStart={() => start.mutate(item.id)} />)}</div>
     </>}
-    {start.isError && <ErrorState error={start.error} />}</>}
+    {start.isError && <ErrorState error={start.error} />}</>
   </div>;
 }
 

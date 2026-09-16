@@ -3,7 +3,14 @@ from typing import Literal
 from fastapi import APIRouter
 from sqlalchemy import delete, func, select, update
 
-from app.core.deps import AdminUser, CurrentUser, PaginationDep, SessionDep, visible_users_filter
+from app.core.deps import (
+    AdminUser,
+    CurrentUser,
+    DirectoryUser,
+    PaginationDep,
+    SessionDep,
+    visible_users_filter,
+)
 from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.models.access import AccessPolicy, AccessRule
 from app.models.enums import Role
@@ -39,7 +46,7 @@ async def mine(session: SessionDep, user: CurrentUser):
 @router.get("/lookups/users")
 async def user_options(
     session: SessionDep,
-    actor: CurrentUser,
+    actor: DirectoryUser,
     pagination: PaginationDep,
     search: str = "",
     role: Role | None = None,
@@ -67,7 +74,7 @@ async def user_options(
                 "user_id": row.id,
                 "full_name": row.full_name,
                 "role": row.role,
-                "group_name": row.name,
+                "group_name": row.name if actor.role != Role.TRAINER else None,
             }
             for row in rows
         ],

@@ -14,10 +14,10 @@ from app.core.developer import is_developer
 from app.core.errors import PermissionDeniedError
 from app.core.security import decode_token
 from app.db.session import get_session
-from app.models.enums import ROLE_LEVEL, Role
+from app.models.enums import ROLE_LEVEL, USER_VISIBILITY, Role
 from app.models.session import LoginSession
 from app.models.user import Group, User
-from app.services.access import effective_access, request_sections
+from app.services.access import effective_access, request_sections, trainer_path_allowed
 from app.services.sessions import is_valid
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -63,6 +63,8 @@ async def get_current_user(
     access = await effective_access(session, user)
     request.state.section_access = access
     path = request.url.path.removeprefix(settings.API_V1_PREFIX)
+    if user.role == Role.TRAINER and not trainer_path_allowed(path, request.method):
+        raise PermissionDeniedError("Роль тренера ограничена обучением", code="role_required")
     sections = request_sections(path, request.method, user.role)
     request.state.required_sections = sections
     if sections and not any(access["allowed"].get(code, False) for code in sections):
@@ -119,6 +121,24 @@ HeadUser = Annotated[User, Depends(require_head)]
 AdminUser = Annotated[User, Depends(require_admin)]
 
 
+class RequireAnyRole:
+    def __init__(self, *roles):
+        self.roles = roles
+
+    async def __call__(self, user: CurrentUser) -> User:
+        if user.role not in self.roles:
+            raise PermissionDeniedError("Недостаточно прав для этой операции", code="role_required")
+        return user
+
+
+DirectoryUser = Annotated[
+    User, Depends(RequireAnyRole(Role.TRAINER, Role.SUPERVISOR, Role.HEAD, Role.ADMIN))
+]
+UserCreator = Annotated[User, Depends(RequireAnyRole(Role.TRAINER, Role.HEAD, Role.ADMIN))]
+LearningReader = DirectoryUser
+LearningEditor = Annotated[User, Depends(RequireAnyRole(Role.TRAINER, Role.HEAD, Role.ADMIN))]
+
+
 async def supervised_group_ids(session: AsyncSession, actor: User) -> list[int]:
     """Идентификаторы групп, за которые отвечает супервайзер."""
     rows = await session.scalars(select(Group.id).where(Group.supervisor_id == actor.id))
@@ -127,19 +147,12 @@ async def supervised_group_ids(session: AsyncSession, actor: User) -> list[int]:
 
 async def visible_users_filter(session: AsyncSession, actor: User) -> ColumnElement[bool]:
     """
-    Условие SQL, ограничивающее выборку операторов зоной ответственности актора.
-
-    Руководитель и администратор видят всех; супервайзер - свои группы и себя;
-    оператор - только себя (п. 5 «Права доступа»).
+    Единая матрица видимости ролей. Оператор получает только свои личные данные.
+    Группы ограничивают операции управления отдельно от чтения справочника.
     """
-    if actor.has_role_at_least(Role.HEAD):
-        return User.id.is_not(None)
-    if actor.role == Role.SUPERVISOR:
-        group_ids = await supervised_group_ids(session, actor)
-        if not group_ids:
-            return User.id == actor.id
-        return (User.group_id.in_(group_ids)) | (User.id == actor.id)
-    return User.id == actor.id
+    if actor.role == Role.OPERATOR:
+        return User.id == actor.id
+    return User.role.in_(USER_VISIBILITY[Role(actor.role)])
 
 
 async def ensure_can_manage(session: AsyncSession, actor: User, target: User) -> None:
@@ -156,9 +169,18 @@ async def ensure_can_manage(session: AsyncSession, actor: User, target: User) ->
     raise PermissionDeniedError("Недостаточно прав для этой операции")
 
 
-async def ensure_can_manage_credentials(
-    session: AsyncSession, actor: User, target: User
-) -> None:
+async def managed_operators_filter(session: AsyncSession, actor: User) -> ColumnElement[bool]:
+    """Bulk writes keep the management scope even when directory reads are broader."""
+    if actor.role in (Role.ADMIN, Role.HEAD):
+        return User.role == Role.OPERATOR
+    if actor.role == Role.SUPERVISOR:
+        return (User.role == Role.OPERATOR) & User.group_id.in_(
+            await supervised_group_ids(session, actor)
+        )
+    return User.id.in_([])
+
+
+async def ensure_can_manage_credentials(session: AsyncSession, actor: User, target: User) -> None:
     """
     Право менять чужой логин и пароль.
 
@@ -183,6 +205,9 @@ async def ensure_can_manage_credentials(
 
     if actor.role == Role.ADMIN:
         return
+
+    if actor.role == Role.TRAINER:
+        raise PermissionDeniedError("Тренер не изменяет чужие учётные данные")
 
     if ROLE_LEVEL[Role(actor.role)] <= ROLE_LEVEL[Role(target.role)]:
         raise PermissionDeniedError(

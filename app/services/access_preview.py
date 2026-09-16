@@ -9,7 +9,15 @@ from app.models.enums import Role
 from app.models.user import User
 from app.services.access import SECTIONS, access_decisions
 
-PRIORITY = {"default": -1, "all": 0, "role": 1, "group": 2, "user": 3, "admin_only": -1}
+PRIORITY = {
+    "default": -1,
+    "all": 0,
+    "role": 1,
+    "group": 2,
+    "user": 3,
+    "admin_only": -1,
+    "role_limit": -1,
+}
 
 
 def switch_state(values):
@@ -54,7 +62,8 @@ async def preview_access(session, payload):
             populated = {str(user.group_id) for user in users}
             subjects.extend(
                 (role, int(key), -1)
-                for key in payload.target_ids if key not in populated
+                for key in payload.target_ids
+                if key not in populated
                 for role in Role
             )
     settings = [access_decisions(*subject, own_rules) for subject in subjects]
@@ -84,6 +93,7 @@ async def preview_access(session, payload):
                 for a, b in zip(current, future, strict=True)
             ),
             "exceptions": sum(PRIORITY[item[code]["source"]] > level for item in future),
-            "locked": section.admin_only and all(subject[0] != Role.ADMIN for subject in subjects),
+            "locked": (section.admin_only and all(subject[0] != Role.ADMIN for subject in subjects))
+            or all(item[code]["source"] == "role_limit" for item in settings),
         }
     return {"revision": payload.revision, "total": len(users), "sections": sections}

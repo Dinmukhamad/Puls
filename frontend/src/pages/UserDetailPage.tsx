@@ -11,15 +11,17 @@ import { Avatar, Button, Card, EmptyState, ErrorState, KPI, Pagination, Skeleton
 import { ROLE_LABELS, REQUEST_STATUS_LABELS, coins, dateOnly, dateTime, points, signed } from "../utils/format";
 import { UserArchive, UserEditor, UserStatus } from "./UsersPage";
 import { LearningResults } from "./LearningStudioPage";
+import { DriverTeamResults } from "./DriverScenarioEditor";
 import { CoinProgress } from "../components/CoinProgress";
 import "./team.css";
 
 export function UserDetailPage() {
   const id = Number(useParams().userId);
   const { user: actor, atLeast } = useAuth();
+  const trainer = actor?.role === "trainer";
   const [params, setParams] = useSearchParams();
   const { can } = useAccess();
-  const tabAllowed = (key: string) => ["progress", "coins", "purchases"].includes(key) ? can("motivation") : ["test", "mission", "simulator"].includes(key) ? can("learning_admin") : true;
+  const tabAllowed = (key: string) => trainer ? ["profile", "test", "mission", "simulator"].includes(key) : ["progress", "coins", "purchases"].includes(key) ? can("motivation") : ["test", "mission", "simulator"].includes(key) ? can("learning_admin") : true;
   const requestedTab = params.get("tab") ?? "profile";
   const tab = tabAllowed(requestedTab) ? requestedTab : "profile";
   const page = Math.max(1, Number(params.get("page")) || 1);
@@ -28,8 +30,8 @@ export function UserDetailPage() {
   const [password, setPassword] = useState(false);
   const [loginEditor, setLoginEditor] = useState(false);
   const user = useQuery({ queryKey: ["team-user", id], queryFn: () => team.user(id), enabled: Number.isInteger(id) && id > 0 });
-  const groups = useQuery({ queryKey: ["team-groups"], queryFn: team.groups });
-  const dashboard = useQuery({ queryKey: ["team-dashboard", id], queryFn: () => team.dashboard(id), enabled: user.isSuccess });
+  const groups = useQuery({ queryKey: ["team-groups"], queryFn: team.groups, enabled: !trainer });
+  const dashboard = useQuery({ queryKey: ["team-dashboard", id], queryFn: () => team.dashboard(id), enabled: user.isSuccess && !trainer && tab === "results" });
   const transactions = useQuery({ queryKey: ["team-transactions", id, page], queryFn: () => team.transactions(id, page), enabled: user.isSuccess && tab === "coins" });
   const purchases = useQuery({ queryKey: ["team-purchases", id, page], queryFn: () => team.purchases(id, page), enabled: user.isSuccess && tab === "purchases" });
   if (user.isLoading) return <Skeleton height={240} />;
@@ -40,12 +42,13 @@ export function UserDetailPage() {
   const manageCredentials = canManageCredentials(actor, data) && (!data.is_developer || Boolean(actor?.is_developer));
   return <div className="stack team-page">
     <Link className="secondary" to="/admin/users">← Пользователи</Link>
-    <Card><div className="team-detail-hero"><Avatar name={data.full_name} id={id} size={64} /><div className="team-detail-hero__body"><h1 className="page-title">{data.full_name}</h1><div className="team-meta"><span>{ROLE_LABELS[data.role]}</span><span>{data.group?.name ?? "Без группы"}</span><UserStatus active={data.is_active} /></div></div>
+    <Card><div className="team-detail-hero"><Avatar name={data.full_name} id={id} size={64} /><div className="team-detail-hero__body"><h1 className="page-title">{data.full_name}</h1><div className="team-meta"><span>{ROLE_LABELS[data.role]}</span>{!trainer && <span>{data.group?.name ?? "Без группы"}</span>}<UserStatus active={data.is_active} /></div></div>
       <div className="team-actions">{editable && <Button onClick={() => setEditor(true)}>Изменить</Button>}{editable && actor?.id !== id && <Button onClick={() => setArchive(true)}>{data.is_active ? "Архивировать" : "Восстановить"}</Button>}{manageCredentials && <Button onClick={() => setLoginEditor(true)}>Сменить логин</Button>}{manageCredentials && <Button onClick={() => setPassword(true)}>Сбросить пароль</Button>}</div></div></Card>
     <nav className="team-section-nav" aria-label="Разделы карточки">{[["profile", "Профиль"], ["results", "Результаты"], ["coins", "Коины"], ["progress", "Прогресс"], ["test", "Тесты"], ["mission", "Миссии"], ["simulator", "Симулятор"], ["purchases", "Покупки"]].filter(([key]) => tabAllowed(key)).map(([key, label]) => <Button key={key} variant={tab === key ? "primary" : "secondary"} aria-current={tab === key ? "page" : undefined} onClick={() => setParams({ tab: key })}>{label}</Button>)}</nav>
     {tab === "progress" && <CoinProgress key={id} userId={id} showDetails />}
+    {tab === "simulator" && <DriverTeamResults userId={id} />}
     {(tab === "test" || tab === "mission" || tab === "simulator") && <LearningResults key={`${id}-${tab}`} userId={id} kind={tab} />}
-    {tab === "profile" && <Card title="Личные данные"><dl className="team-definition-list"><dt>Логин</dt><dd>{data.login}</dd><dt>ID сотрудника</dt><dd>{id}</dd><dt>Телефон</dt><dd>{data.phone ?? "—"}</dd><dt>Email</dt><dd>{data.email ?? "—"}</dd><dt>Дата приёма</dt><dd>{data.hired_on ? dateOnly(data.hired_on) : "—"}</dd><dt>Группа</dt><dd>{data.group?.name ?? "Не назначена"}</dd></dl></Card>}
+    {tab === "profile" && <Card title="Личные данные"><dl className="team-definition-list"><dt>Логин</dt><dd>{data.login}</dd><dt>ID сотрудника</dt><dd>{id}</dd>{!trainer && <><dt>Телефон</dt><dd>{data.phone ?? "—"}</dd><dt>Email</dt><dd>{data.email ?? "—"}</dd><dt>Дата приёма</dt><dd>{data.hired_on ? dateOnly(data.hired_on) : "—"}</dd><dt>Группа</dt><dd>{data.group?.name ?? "Не назначена"}</dd></>}<dt>Создан</dt><dd>{data.created_at ? dateTime(data.created_at) : "—"}</dd></dl></Card>}
     {tab === "results" && <>{dashboard.isLoading && <Skeleton height={240} />}{dashboard.isError && <ErrorState error={dashboard.error} onRetry={() => dashboard.refetch()} />}{dashboard.data && <Card title="Результаты недели" subtitle={dashboard.data.week.week_label ?? "Текущий период"}><div className="kpi-grid"><KPI label="Баллы" value={points(dashboard.data.week.final_points)} /><KPI label="Место" value={dashboard.data.balance.rank ?? "—"} /><KPI label="Коины за неделю" value={coins(dashboard.data.balance.earned_this_week)} /><KPI label="Достижения" value={dashboard.data.badges_unlocked} /></div>{!dashboard.data.week.metrics.length && <EmptyState title="Показатели ещё не загружены" />}{dashboard.data.week.metrics.map((m) => <div className="team-metric-row" key={m.code}><span>{m.title}</span><span className="team-metric-row__value">{m.value == null ? "Нет данных" : `${points(m.value)} ${m.unit ?? ""}`}<span className="muted micro block">Цель {points(m.target)}</span></span></div>)}</Card>}</>}
     {tab === "coins" && <Card title="История коинов">{transactions.isLoading && <Skeleton height={180} />}{transactions.isError && <ErrorState error={transactions.error} onRetry={() => transactions.refetch()} />}{transactions.data?.items.length === 0 && <EmptyState title="Операций пока нет" />}{transactions.data?.items.map((tx) => <div className="team-timeline__row" key={tx.id}><div className="team-timeline__body"><strong>{tx.reason}</strong><span className="small secondary">{dateTime(tx.created_at)} · {tx.author_name ?? "Система"}</span></div><div className="team-timeline__amount"><strong>{signed(tx.amount)}</strong><span className="micro muted block">Баланс {coins(tx.balance_after)}</span></div></div>)}{transactions.data && <Pagination page={page} size={20} total={transactions.data.total} onChange={(p) => setParams({ tab, page: String(p) })} />}</Card>}
     {tab === "purchases" && <Card title="Покупки">{purchases.isLoading && <Skeleton height={180} />}{purchases.isError && <ErrorState error={purchases.error} onRetry={() => purchases.refetch()} />}{purchases.data?.items.length === 0 && <EmptyState title="Покупок пока нет" />}{purchases.data?.items.map((order) => <div className="team-timeline__row" key={order.id}><div className="team-timeline__body"><strong>{order.item.title}</strong><span className="small secondary">№{order.id} · {REQUEST_STATUS_LABELS[order.status]} · {dateTime(order.created_at)}</span>{order.decision_comment && <p>{order.decision_comment}</p>}</div><strong>{coins(order.price)} коинов</strong></div>)}{purchases.data && <Pagination page={page} size={20} total={purchases.data.total} onChange={(p) => setParams({ tab, page: String(p) })} />}</Card>}
@@ -56,7 +59,7 @@ export function UserDetailPage() {
   </div>;
 }
 
-const ROLE_ORDER: Record<Role, number> = { operator: 0, supervisor: 1, head: 2, admin: 3 };
+const ROLE_ORDER: Record<Role, number> = { operator: 0, trainer: 0, supervisor: 1, head: 2, admin: 3 };
 
 /**
  * Повторяет серверное правило: администратор меняет учётные данные любому,
@@ -67,6 +70,7 @@ const ROLE_ORDER: Record<Role, number> = { operator: 0, supervisor: 1, head: 2, 
  * супервайзер всё равно не откроет.
  */
 function canManageCredentials(actor: UserOut | null, target: UserOut): boolean {
+  if (target.can_manage_credentials !== undefined) return target.can_manage_credentials;
   if (!actor || actor.id === target.id) return false;
   if (actor.role === "admin") return true;
   return ROLE_ORDER[actor.role] > ROLE_ORDER[target.role];

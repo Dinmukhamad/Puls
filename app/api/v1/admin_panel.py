@@ -18,6 +18,7 @@ from app.core.deps import (
     ensure_can_manage,
     visible_users_filter,
 )
+from app.core.visibility import identity_filter, shop_request_output
 from app.models.coin import CoinTransaction
 from app.models.enums import ShopRequestStatus, TxType
 from app.models.shop import ShopRequest
@@ -211,7 +212,10 @@ async def all_transactions(
     author = User.__table__.alias("author")
     rows = await session.execute(
         select(CoinTransaction, author.c.full_name)
-        .outerjoin(author, author.c.id == CoinTransaction.created_by_id)
+        .outerjoin(
+            author,
+            (author.c.id == CoinTransaction.created_by_id) & identity_filter(actor, author.c),
+        )
         .where(*conditions)
         .order_by(CoinTransaction.created_at.desc(), CoinTransaction.id.desc())
         .offset(pagination.offset)
@@ -265,7 +269,7 @@ async def shop_requests(
         .offset(pagination.offset)
         .limit(pagination.size)
     )
-    items = [ShopRequestOut.model_validate(row) for row in rows]
+    items = [shop_request_output(row, actor) for row in rows]
     return Page.build(items, total, pagination.page, pagination.size)
 
 
@@ -283,7 +287,7 @@ async def approve(
         session, request=request, actor=actor, comment=payload.comment
     )
     await session.commit()
-    return await shop_service.get_request(session, request_id)
+    return shop_request_output(await shop_service.get_request(session, request_id), actor)
 
 
 @router.post(
@@ -301,7 +305,7 @@ async def reject(
         session, request=request, actor=actor, comment=payload.comment
     )
     await session.commit()
-    return await shop_service.get_request(session, request_id)
+    return shop_request_output(await shop_service.get_request(session, request_id), actor)
 
 
 @router.post(
@@ -318,7 +322,7 @@ async def fulfill(
         session, request=request, actor=actor, comment=payload.comment
     )
     await session.commit()
-    return await shop_service.get_request(session, request_id)
+    return shop_request_output(await shop_service.get_request(session, request_id), actor)
 
 
 @router.post(

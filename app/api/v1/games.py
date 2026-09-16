@@ -6,6 +6,7 @@ from sqlalchemy import func, select, text
 
 from app.core.deps import CurrentUser, HeadUser, PaginationDep, SessionDep, StaffUser
 from app.core.errors import ConflictError, DomainError, NotFoundError
+from app.core.visibility import can_identify
 from app.models.enums import TxType
 from app.models.games import Raffle, RaffleEntry, WheelConfig, WheelSpin
 from app.models.progress import Notification
@@ -185,6 +186,9 @@ async def raffle_data(session, item, user_id):
         is not None
     )
     winner = await session.get(User, item.winner_id) if item.winner_id else None
+    viewer = await session.get(User, user_id)
+    if not can_identify(viewer, winner):
+        winner = None
     return {
         "id": item.id,
         "title": item.title,

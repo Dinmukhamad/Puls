@@ -22,6 +22,7 @@ import { AccessPage } from "./pages/AccessPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { SummaryPage } from "./pages/SummaryPage";
 import { ProgressPage } from "./pages/ProgressPage";
+import { TrainerHome, TrainingAnalyticsPage } from "./pages/TrainingTools";
 import { LevelsAdminPage } from "./pages/LevelsAdminPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -77,6 +78,8 @@ export function App() {
         <Route path="/admin/games" element={<GamesPage administrative />} />
         <Route path="/training/attempts/:attemptId" element={<LearningPlayerPage />} />
         <Route path="/admin/learning" element={<LearningStudioPage />} />
+        <Route path="/trainer" element={<TrainerHome />} />
+        <Route path="/admin/learning-analytics" element={<TrainingAnalyticsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/admin/summary" element={<SummaryPage />} />

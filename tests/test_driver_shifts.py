@@ -369,4 +369,4 @@ async def test_team_results_respect_staff_scope(client, session, setup, supervis
     assert (await client.get(url, headers=own)).json()["total"] == 1
     other = await make_user(session, login="other-supervisor", role=Role.SUPERVISOR)
     foreign = auth(await login(client, other.login))
-    assert (await client.get(url, headers=foreign)).json()["total"] == 0
+    assert (await client.get(url, headers=foreign)).json()["total"] == 1

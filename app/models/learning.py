@@ -26,6 +26,7 @@ class LearningContent(Base, TimestampMixin):
     coins_reward: Mapped[int] = mapped_column(Integer, default=0)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     steps: Mapped[list] = mapped_column(JSON, default=list)
+    driver_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class LearningAttempt(Base, TimestampMixin):
@@ -42,6 +43,17 @@ class LearningAttempt(Base, TimestampMixin):
     legacy_awarded: Mapped[int] = mapped_column("awarded_xp", Integer, default=0)
     awarded_coins: Mapped[int] = mapped_column(Integer, default=0)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_preview: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
+
+class LearningAssignment(Base, TimestampMixin):
+    __tablename__ = "learning_assignments"
+    __table_args__ = (UniqueConstraint("user_id", "content_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    content_id: Mapped[int] = mapped_column(ForeignKey("learning_contents.id"), index=True)
+    assigned_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class LearningAward(Base):

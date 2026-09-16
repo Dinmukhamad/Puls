@@ -42,12 +42,16 @@ async def test_role_defaults(client, session, role):
     allowed = response.json()["allowed"]
     assert set(allowed) == {section.code for section in SECTIONS}
     for section in ("personal", "training", "rewards"):
-        assert allowed[section] is (role == Role.OPERATOR)
+        assert allowed[section] is (
+            role == Role.OPERATOR or (role == Role.TRAINER and section == "training")
+        )
     assert allowed["team"] is (role != Role.OPERATOR)
     assert allowed["system"] is (role == Role.ADMIN)
     for path in ("/me/dashboard", "/me/wallet", "/me/progress", "/learning", "/shop/items"):
         result = await client.get(f"/api/v1{path}", headers=headers)
-        assert result.status_code == (200 if role == Role.OPERATOR else 403), result.text
+        assert result.status_code == (
+            200 if role == Role.OPERATOR or (role == Role.TRAINER and path == "/learning") else 403
+        ), result.text
     assert (await client.get("/api/v1/auth/me", headers=headers)).status_code == 200
     assert (await client.get("/api/v1/me/sessions", headers=headers)).status_code == 403
 
@@ -168,7 +172,7 @@ async def test_granted_reads_keep_scope_and_writes_keep_role(client, session, op
     ).status_code == 200
     headers = auth(await login(client, operator.login))
     users = await client.get("/api/v1/admin/users", headers=headers)
-    assert [row["id"] for row in users.json()["items"]] == [operator.id]
+    assert users.status_code == 403
     groups = await client.get("/api/v1/admin/groups", headers=headers)
     assert [row["id"] for row in groups.json()] == [operator.group_id]
     assert (
@@ -191,7 +195,10 @@ async def test_granted_reads_keep_scope_and_writes_keep_role(client, session, op
         "/admin/operators/export",
     ):
         result = await client.get(f"/api/v1{path}", headers=headers)
-        assert result.status_code == 200, (path, result.text)
+        assert result.status_code == (403 if path == "/admin/learning" else 200), (
+            path,
+            result.text,
+        )
     for path in ("/admin/access", "/admin/audit", "/admin/sessions"):
         assert (await client.get(f"/api/v1{path}", headers=headers)).status_code == 403
     assert (

@@ -12,7 +12,7 @@ from zipfile import BadZipFile, ZipFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.deps import visible_users_filter
+from app.core.deps import managed_operators_filter
 from app.core.errors import DomainError, PermissionDeniedError
 from app.models.contest import ContestWeek, MetricDefinition
 from app.models.enums import Role
@@ -46,7 +46,7 @@ async def validate_values(session: AsyncSession, actor: User, values: list[Metri
         )
     }
     visible_ids = set(
-        await session.scalars(select(User.id).where(await visible_users_filter(session, actor)))
+        await session.scalars(select(User.id).where(await managed_operators_filter(session, actor)))
     )
     codes = set(
         await session.scalars(
@@ -215,7 +215,7 @@ async def preview_file(
     users = list(
         await session.scalars(
             select(User).where(
-                await visible_users_filter(session, actor),
+                await managed_operators_filter(session, actor),
                 User.role == Role.OPERATOR,
                 User.is_active.is_(True),
             )

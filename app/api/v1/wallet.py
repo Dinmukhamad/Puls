@@ -6,6 +6,7 @@ from sqlalchemy import case, func, select
 
 from app.core.deps import CurrentUser, PaginationDep, SessionDep, StaffUser, visible_users_filter
 from app.core.errors import DomainError, PermissionDeniedError
+from app.core.visibility import identity_filter
 from app.models.coin import CoinTransaction
 from app.models.enums import Role, TxType
 from app.models.user import CoinAccount, User
@@ -16,7 +17,7 @@ router = APIRouter(tags=["Кошелёк"])
 HistoryKind = Literal["accrual", "writeoff", "refund", "purchase"]
 
 
-async def report(session, visibility, pagination, date_from, date_to, kind, user_id=None):
+async def report(session, viewer, visibility, pagination, date_from, date_to, kind, user_id=None):
     if date_from and date_to and date_from > date_to:
         raise DomainError("Начало периода не может быть позже окончания")
     if date_to == date.max:
@@ -106,7 +107,10 @@ async def report(session, visibility, pagination, date_from, date_to, kind, user
     rows = await session.execute(
         select(CoinTransaction, User.full_name, author.c.full_name)
         .join(User, User.id == CoinTransaction.user_id)
-        .outerjoin(author, author.c.id == CoinTransaction.created_by_id)
+        .outerjoin(
+            author,
+            (author.c.id == CoinTransaction.created_by_id) & identity_filter(viewer, author.c),
+        )
         .where(*conditions)
         .order_by(CoinTransaction.created_at.desc(), CoinTransaction.id.desc())
         .offset(pagination.offset)
@@ -157,7 +161,7 @@ async def mine(
     date_to: date | None = None,
     kind: HistoryKind | None = None,
 ):
-    return await report(session, User.id == user.id, pagination, date_from, date_to, kind)
+    return await report(session, user, User.id == user.id, pagination, date_from, date_to, kind)
 
 
 @router.get("/admin/wallet", response_model=WalletReport)
@@ -171,4 +175,4 @@ async def team(
     user_id: Annotated[int | None, Query(gt=0)] = None,
 ):
     visibility = (await visible_users_filter(session, actor)) & (User.role == Role.OPERATOR)
-    return await report(session, visibility, pagination, date_from, date_to, kind, user_id)
+    return await report(session, actor, visibility, pagination, date_from, date_to, kind, user_id)

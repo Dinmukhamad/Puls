@@ -1,4 +1,5 @@
 """Турнирная таблица недели (п. 4.2)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,6 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.visibility import identity_filter
 from app.models.contest import (
     ContestWeek,
     NominationDefinition,
@@ -76,11 +78,12 @@ async def leaderboard(
     ``show_balance`` управляет видимостью чужого баланса: оператору по умолчанию
     показываются только имя, место и результат недели (п. 5 «Безопасность»).
     """
-    stmt = _base_query(week.id)
+    visibility = identity_filter(viewer)
+    stmt = _base_query(week.id).where(visibility)
     count_stmt = (
         select(func.count(OperatorWeekResult.id))
         .join(User, User.id == OperatorWeekResult.user_id)
-        .where(OperatorWeekResult.week_id == week.id)
+        .where(OperatorWeekResult.week_id == week.id, visibility)
     )
 
     if group_id is not None:
@@ -93,11 +96,15 @@ async def leaderboard(
 
     total = int(await session.scalar(count_stmt) or 0)
 
-    stmt = stmt.order_by(
-        OperatorWeekResult.rank.is_(None),
-        OperatorWeekResult.rank,
-        OperatorWeekResult.final_points.desc(),
-    ).offset(offset).limit(limit)
+    stmt = (
+        stmt.order_by(
+            OperatorWeekResult.rank.is_(None),
+            OperatorWeekResult.rank,
+            OperatorWeekResult.final_points.desc(),
+        )
+        .offset(offset)
+        .limit(limit)
+    )
 
     rows = await session.execute(stmt)
     result: list[RatingRow] = []
@@ -142,7 +149,9 @@ async def my_row(
     )
 
 
-async def nominations(session: AsyncSession, week: ContestWeek) -> list[NominationRow]:
+async def nominations(
+    session: AsyncSession, week: ContestWeek, viewer: User
+) -> list[NominationRow]:
     """Номинации недели с победителями; без победителя - с пустым слотом."""
     definitions = list(
         await session.scalars(
@@ -155,7 +164,7 @@ async def nominations(session: AsyncSession, week: ContestWeek) -> list[Nominati
         select(NominationWinner, User.full_name, Group.name)
         .join(User, User.id == NominationWinner.user_id)
         .outerjoin(Group, Group.id == User.group_id)
-        .where(NominationWinner.week_id == week.id)
+        .where(NominationWinner.week_id == week.id, identity_filter(viewer))
     )
     winner_map = {w.nomination_id: (w, name, group) for w, name, group in winners}
 
@@ -195,9 +204,7 @@ async def nominations(session: AsyncSession, week: ContestWeek) -> list[Nominati
 async def participants_count(session: AsyncSession, week_id: int) -> int:
     return int(
         await session.scalar(
-            select(func.count(OperatorWeekResult.id)).where(
-                OperatorWeekResult.week_id == week_id
-            )
+            select(func.count(OperatorWeekResult.id)).where(OperatorWeekResult.week_id == week_id)
         )
         or 0
     )

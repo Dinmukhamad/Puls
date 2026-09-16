@@ -2,7 +2,15 @@
 
 from datetime import datetime
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, utcnow
@@ -26,6 +34,10 @@ class DriverShift(Base):
     version: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_preview: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    content_id: Mapped[int | None] = mapped_column(
+        ForeignKey("learning_contents.id"), nullable=True, index=True
+    )
 
 
 class DriverSupportCase(Base):

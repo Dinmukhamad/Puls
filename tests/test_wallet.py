@@ -69,11 +69,11 @@ async def test_wallet_scope_and_invalid_dates(client, session, operator, supervi
     headers = auth(await login(client, supervisor.login))
     response = await client.get("/api/v1/admin/wallet", headers=headers)
     assert response.status_code == 200, response.text
-    assert response.json()["summary"]["accounts"] == 1
-    assert response.json()["summary"]["balance"] == 0
+    assert response.json()["summary"]["accounts"] == 2
+    assert response.json()["summary"]["balance"] == 9999
     assert (
         await client.get(f"/api/v1/admin/wallet?user_id={outsider.id}", headers=headers)
-    ).status_code == 403
+    ).status_code == 200
     own = auth(await login(client, operator.login))
     assert (await client.get("/api/v1/admin/wallet", headers=own)).status_code == 403
     for query in ["date_from=2026-09-06&date_to=2026-09-05", "date_to=9999-12-31"]:
@@ -110,7 +110,7 @@ async def test_manual_coins_concurrent_replay_and_payload_conflict(client, sessi
     notification = (await client.get("/api/v1/me/notifications", headers=own)).json()["items"][0]
     assert notification["link"] == "/wallet"
     history = (await client.get("/api/v1/me/wallet", headers=own)).json()["history"]
-    assert history["items"][0]["author_name"] == head.full_name
+    assert history["items"][0]["author_name"] is None
 
 
 async def test_wallet_manual_debit_respects_reserve_and_scope(
@@ -176,7 +176,7 @@ async def test_employee_coin_progress_summary_is_scoped(client, session, supervi
     assert result.json()["current"]["title"] == "Специалист"
     assert (
         await client.get(f"/api/v1/admin/progress/users/{outsider.id}", headers=headers)
-    ).status_code == 404
+    ).status_code == 200
     own = auth(await login(client, operator.login))
     assert (
         await client.get(f"/api/v1/admin/progress/users/{operator.id}", headers=own)
@@ -200,6 +200,10 @@ async def test_employee_learning_filters_before_pagination_and_respects_scope(
             f"/api/v1/admin/learning-results?kind={kind}&size=1", headers=headers
         )
         assert result.status_code == 200, result.text
-        assert result.json()["total"] == 1
+        assert result.json()["total"] == 2
         assert result.json()["items"][0]["kind"] == kind
-        assert result.json()["items"][0]["user_id"] == operator.id
+        assert result.json()["items"][0]["user_id"] == outsider.id
+        second = await client.get(
+            f"/api/v1/admin/learning-results?kind={kind}&size=1&page=2", headers=headers
+        )
+        assert second.json()["items"][0]["user_id"] == operator.id

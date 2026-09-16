@@ -9,7 +9,7 @@ export interface SectionDefinition { code: SectionCode; title: string; descripti
 export interface AccessState {
   capabilities: { manage_sessions: boolean };
   allowed: AccessMap;
-  decisions: Record<SectionCode, { allowed: boolean; source: TargetType | "default" | "admin_only" }>;
+  decisions: Record<SectionCode, { allowed: boolean; source: TargetType | "default" | "admin_only" | "role_limit" }>;
   revision: number;
   role: Role;
   group_id: number | null;
@@ -25,7 +25,7 @@ export interface AccessPreviewSection {
   effect: Effect | "mixed";
   has_override: boolean;
   original_override: boolean;
-  sources: Partial<Record<TargetType | "default" | "admin_only", number>>;
+  sources: Partial<Record<TargetType | "default" | "admin_only" | "role_limit", number>>;
   before_allowed: number;
   after_allowed: number;
   changed: number;

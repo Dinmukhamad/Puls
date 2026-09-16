@@ -12,18 +12,21 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.deps import (
+    DirectoryUser,
     HeadUser,
     PaginationDep,
     SessionDep,
     StaffUser,
+    UserCreator,
     ensure_can_manage_credentials,
     visible_users_filter,
 )
 from app.core.developer import protect_developer_account
 from app.core.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.core.security import hash_password
+from app.core.visibility import identity_filter, shop_request_output
 from app.models.coin import CoinTransaction
-from app.models.enums import Role
+from app.models.enums import USER_VISIBILITY, Role
 from app.models.shop import ShopRequest
 from app.models.user import Group, User
 from app.schemas.cabinet import DashboardOut, TransactionOut
@@ -35,6 +38,7 @@ from app.schemas.user import (
     GroupUpdate,
     LoginReset,
     PasswordReset,
+    TrainingUserOut,
     UserCreate,
     UserOut,
     UserUpdate,
@@ -47,6 +51,10 @@ from app.services.sessions import revoke_user_sessions
 from app.services.telegram import revoke_devices
 
 router = APIRouter(prefix="/admin", tags=["Пользователи и группы"])
+
+
+def user_output(actor, user):
+    return (TrainingUserOut if actor.role == Role.TRAINER else UserOut).model_validate(user)
 
 
 async def _visible_user(session: SessionDep, actor: User, user_id: int) -> User:
@@ -103,10 +111,12 @@ async def _group_out(session: SessionDep, group_id: int) -> GroupOut:
     return item
 
 
-@router.get("/users", response_model=Page[UserOut], summary="Список пользователей")
+@router.get(
+    "/users", response_model=Page[UserOut | TrainingUserOut], summary="Список пользователей"
+)
 async def list_users(
     session: SessionDep,
-    actor: StaffUser,
+    actor: DirectoryUser,
     pagination: PaginationDep,
     role: Role | None = None,
     group_id: int | None = None,
@@ -136,13 +146,23 @@ async def list_users(
         .offset(pagination.offset)
         .limit(pagination.size)
     )
-    items = [UserOut.model_validate(row) for row in rows]
+    items = [user_output(actor, row) for row in rows]
     return Page.build(items, total, pagination.page, pagination.size)
 
 
-@router.get("/users/{user_id}", response_model=UserOut, summary="Карточка сотрудника")
-async def get_user(session: SessionDep, actor: StaffUser, user_id: int) -> User:
-    return await _visible_user(session, actor, user_id)
+@router.get(
+    "/users/{user_id}", response_model=UserOut | TrainingUserOut, summary="Карточка сотрудника"
+)
+async def get_user(session: SessionDep, actor: DirectoryUser, user_id: int):
+    target = await _visible_user(session, actor, user_id)
+    item = user_output(actor, target)
+    if isinstance(item, UserOut):
+        try:
+            await ensure_can_manage_credentials(session, actor, target)
+            item.can_manage_credentials = True
+        except PermissionDeniedError:
+            item.can_manage_credentials = False
+    return item
 
 
 @router.get(
@@ -184,7 +204,7 @@ async def user_transactions(
     total = int(await session.scalar(select(func.count(CoinTransaction.id)).where(condition)) or 0)
     rows = await session.execute(
         select(CoinTransaction, User.full_name)
-        .outerjoin(User, User.id == CoinTransaction.created_by_id)
+        .outerjoin(User, (User.id == CoinTransaction.created_by_id) & identity_filter(actor))
         .where(condition)
         .order_by(CoinTransaction.created_at.desc(), CoinTransaction.id.desc())
         .offset(pagination.offset)
@@ -222,7 +242,7 @@ async def user_purchases(
         .limit(pagination.size)
     )
     return Page.build(
-        [ShopRequestOut.model_validate(row) for row in rows],
+        [shop_request_output(row, actor) for row in rows],
         total,
         pagination.page,
         pagination.size,
@@ -231,18 +251,20 @@ async def user_purchases(
 
 @router.post(
     "/users",
-    response_model=UserOut,
+    response_model=UserOut | TrainingUserOut,
     status_code=status.HTTP_201_CREATED,
     summary="Создать пользователя",
 )
-async def create_user(session: SessionDep, actor: HeadUser, payload: UserCreate) -> User:
+async def create_user(session: SessionDep, actor: UserCreator, payload: UserCreate):
     """Создаёт учётную запись и сразу открывает коин-счёт для операторов."""
     if payload.login == settings.DEVELOPER_LOGIN:
         raise PermissionDeniedError(
             "Аккаунт разработчика создаётся только при настройке сервера", code="developer_required"
         )
-    if payload.role == Role.ADMIN and actor.role != Role.ADMIN:
-        raise ConflictError("Роль администратора назначает только администратор")
+    if payload.role not in USER_VISIBILITY[Role(actor.role)]:
+        raise PermissionDeniedError("Вы не можете создавать пользователей с этой ролью")
+    if actor.role == Role.TRAINER and payload.group_id is not None:
+        raise PermissionDeniedError("Тренер не назначает группы")
     await _check_group(session, payload.group_id)
 
     user = User(
@@ -274,9 +296,10 @@ async def create_user(session: SessionDep, actor: HeadUser, payload: UserCreate)
         payload={"login": user.login, "role": str(user.role)},
     )
     await session.commit()
-    return await session.scalar(
+    created = await session.scalar(
         select(User).options(selectinload(User.group)).where(User.id == user.id)
     )
+    return user_output(actor, created)
 
 
 @router.patch("/users/{user_id}", response_model=UserOut, summary="Изменить пользователя")
@@ -292,8 +315,8 @@ async def update_user(
         raise PermissionDeniedError("Учётную запись администратора изменяет только администратор")
 
     changes = payload.model_dump(exclude_unset=True)
-    if changes.get("role") == Role.ADMIN and actor.role != Role.ADMIN:
-        raise ConflictError("Роль администратора назначает только администратор")
+    if "role" in changes and changes["role"] not in USER_VISIBILITY[Role(actor.role)]:
+        raise PermissionDeniedError("Вы не можете назначать эту роль")
     if user.id == actor.id and changes.get("is_active") is False:
         raise ConflictError("Нельзя отключить собственную учётную запись")
     if user.id == actor.id and "role" in changes and changes["role"] != actor.role:
@@ -348,9 +371,7 @@ async def reset_login(
     идентификатор пользователя не менялись, поэтому открытые входы остаются
     рабочими - сотрудник просто будет вводить новый логин в следующий раз.
     """
-    user = await session.get(User, user_id)
-    if user is None:
-        raise NotFoundError(f"Пользователь id={user_id} не найден")
+    user = await _visible_user(session, actor, user_id)
     protect_developer_account(actor, user)
     await ensure_can_manage_credentials(session, actor, user)
 
@@ -360,9 +381,7 @@ async def reset_login(
 
     # Вход чувствителен к регистру: пара «Ivan» и «ivan» ломала бы вход обоим.
     clash = await session.scalar(
-        select(User.id).where(
-            func.lower(User.login) == payload.login.lower(), User.id != user.id
-        )
+        select(User.id).where(func.lower(User.login) == payload.login.lower(), User.id != user.id)
     )
     if clash is not None:
         raise ConflictError("Такой логин уже занят")
@@ -396,9 +415,7 @@ async def reset_password(
     операторам, супервайзер - операторам своих групп. Все сеансы сотрудника
     завершаются: прежний пароль больше не действует.
     """
-    user = await session.get(User, user_id)
-    if user is None:
-        raise NotFoundError(f"Пользователь id={user_id} не найден")
+    user = await _visible_user(session, actor, user_id)
     protect_developer_account(actor, user)
     await ensure_can_manage_credentials(session, actor, user)
     user.hashed_password = hash_password(payload.password)

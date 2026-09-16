@@ -177,7 +177,7 @@ async def leaderboard(
                 value=n.value,
                 coins_awarded=n.coins_awarded,
             )
-            for n in await rating_service.nominations(session, week)
+            for n in await rating_service.nominations(session, week, user)
         ],
         rows=[_to_row(row) for row in rows],
         total=total,
@@ -189,7 +189,7 @@ async def leaderboard(
 
 @router.get("/nominations", response_model=list[NominationOut], summary="Номинации недели")
 async def nominations(
-    session: SessionDep, _: CurrentUser, week_id: int | None = None
+    session: SessionDep, user: CurrentUser, week_id: int | None = None
 ) -> list[NominationOut]:
     week = await weekly_service.resolve_week(session, week_id, prefer_ranked=True)
     if week is None:
@@ -205,5 +205,5 @@ async def nominations(
             value=n.value,
             coins_awarded=n.coins_awarded,
         )
-        for n in await rating_service.nominations(session, week)
+        for n in await rating_service.nominations(session, week, user)
     ]

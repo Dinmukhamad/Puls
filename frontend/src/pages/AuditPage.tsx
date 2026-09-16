@@ -29,7 +29,7 @@ function valueLabel(value: unknown): string {
   if (typeof value === "boolean") return value ? "Да" : "Нет";
   if (Array.isArray(value)) return value.map(valueLabel).join(", ");
   if (typeof value === "object") return Object.entries(value as Record<string, unknown>).map(([key, v]) => `${fields[key] ?? key.replaceAll("_", " ")}: ${valueLabel(v)}`).join("; ");
-  const labels: Record<string, string> = { operator: "Оператор", supervisor: "Супервайзер", head: "Руководитель", admin: "Администратор" };
+  const labels: Record<string, string> = { operator: "Оператор", trainer: "Тренер", supervisor: "Супервайзер", head: "Руководитель", admin: "Администратор" };
   return labels[String(value)] ?? String(value);
 }
 export function AuditPage() {

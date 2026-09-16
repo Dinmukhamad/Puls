@@ -1,7 +1,9 @@
+import { AssignmentEditor, DriverContentEditor } from "./TrainingTools";
+import { driverShift } from "../api/driverShift";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { learning, DIFFICULTY, LEARNING_LABELS, type ContentInput, type LearningContent, type LearningKind, type LearningStep } from "../api/learning";
+import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { learning, attemptPath, DIFFICULTY, LEARNING_LABELS, type ContentInput, type LearningContent, type LearningKind, type LearningStep } from "../api/learning";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
@@ -17,29 +19,42 @@ function initialContent(kind: LearningKind): ContentInput {
   return { kind, title: "", description: "", world: "Общее", difficulty: "basic", minutes: 10, status: "draft", is_required: false, deadline: null, allow_back: true, pass_percent: 80, coins_reward: 0, steps: [newStep()] };
 }
 function inputFrom(content: LearningContent): ContentInput {
-  const { kind, title, description, world, difficulty, minutes, status, is_required, deadline, allow_back, pass_percent, coins_reward, steps } = content;
-  return { kind, title, description, world, difficulty, minutes, status, is_required, deadline, allow_back, pass_percent, coins_reward, steps: structuredClone(steps ?? []) };
+  const { kind, title, description, world, difficulty, minutes, status, is_required, deadline, allow_back, pass_percent, coins_reward, steps, driver_config } = content;
+  return { kind, title, description, world, difficulty, minutes, status, is_required, deadline, allow_back, pass_percent, coins_reward, driver_config, steps: structuredClone(steps ?? []) };
 }
 
 export function LearningStudioPage() {
-  const { atLeast } = useAuth();
-  const [params, setParams] = useSearchParams();
+  const { user, atLeast } = useAuth();
+  const canEdit = user?.role === "trainer" || atLeast("head");
+  const [params, setParams] = useSearchParams(), navigate = useNavigate();
   const [editor, setEditor] = useState<LearningContent | LearningKind | null>(null);
+  const [assignment, setAssignment] = useState<LearningContent | null>(null);
+  const [driverEditor, setDriverEditor] = useState<LearningContent | "new" | null>(null);
   const query = useQuery({ queryKey: ["learning-definitions"], queryFn: learning.definitions });
   const kind = params.get("kind") ?? "all", tab = params.get("tab") ?? "content";
   const resultKind = ["test", "mission", "simulator"].includes(kind) ? kind as LearningKind : undefined;
   const selectTab = (tab: string) => { const next = new URLSearchParams(params); next.set("tab", tab); setParams(next); };
   const visible = query.data?.filter((item) => kind === "all" || item.kind === kind);
-  return <div className="stack"><div className="page-head"><div><h1 className="page-title">Студия обучения</h1><p className="page-subtitle">Тесты, миссии и сценарии водителя</p></div><Link className="btn btn--secondary" to="/training">Открыть обучение</Link></div>
-    <div className="row"><Button variant={tab === "content" ? "primary" : "secondary"} onClick={() => selectTab("content")}>Материалы</Button><Button variant={tab === "results" ? "primary" : "secondary"} onClick={() => selectTab("results")}>Результаты команды</Button></div>
+  const client = useQueryClient();
+  const preview = useMutation({ mutationFn: async (item: LearningContent) => {
+    if (item.is_driver) {
+      const data = await driverShift.start({ id: crypto.randomUUID(), mode: "assessment", content_id: item.id });
+      client.setQueryData(["driver-profile"], data); navigate("/simulator");
+    } else navigate(attemptPath(await learning.preview(item.id)));
+  } });
+  return <div className="stack"><div className="page-head"><div><h1 className="page-title">{kind === "test" ? "Тесты" : kind === "mission" ? "Учебные миссии" : kind === "simulator" ? "Driver Simulator" : "Студия обучения"}</h1><p className="page-subtitle">Материалы, назначения и результаты операторов</p></div><Link className="btn btn--secondary" to="/training">Пройти обучение</Link></div>
+    <div className="row"><Button variant={tab === "content" ? "primary" : "secondary"} onClick={() => selectTab("content")}>Материалы</Button><Button variant={tab === "results" ? "primary" : "secondary"} onClick={() => selectTab("results")}>Результаты команды</Button><Link to="/admin/learning-analytics">Аналитика обучения →</Link></div>
     {tab === "results" ? <>{(kind === "all" || kind === "simulator") && <DriverTeamResults />}<LearningResults key={resultKind ?? "all"} kind={resultKind} /></> : <>
-      {(kind === "all" || kind === "simulator") && <><DriverParksEditor /><DriverScenarioEditor /></>}
-      <div className="training-filters"><label className="field"><span>Тип материала</span><select className="input" value={kind} onChange={(e) => setParams({ kind: e.target.value })}><option value="all">Все материалы</option>{Object.entries(LEARNING_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>{atLeast("head") && <div className="row"><Button onClick={() => setEditor("test")}>+ Тест</Button><Button onClick={() => setEditor("mission")}>+ Миссия</Button><Button onClick={() => setEditor("simulator")}>+ Симуляция</Button></div>}</div>
+      {user?.role !== "trainer" && (kind === "all" || kind === "simulator") && <details><summary>Общие настройки Driver Simulator</summary><DriverParksEditor /><DriverScenarioEditor /></details>}
+      <div className="training-filters"><label className="field"><span>Тип материала</span><select className="input" value={kind} onChange={(e) => setParams({ kind: e.target.value })}><option value="all">Все материалы</option>{Object.entries(LEARNING_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>{canEdit && <div className="row"><Button onClick={() => setEditor("test")}>+ Тест</Button><Button onClick={() => setEditor("mission")}>+ Миссия</Button><Button onClick={() => setDriverEditor("new")}>+ Сценарий водителя</Button></div>}</div>
       {query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
-      {!visible?.length && !query.isLoading && !query.isError && <EmptyState title="Материалов пока нет" hint="Создайте задание, добавьте шаги и настройте условия прохождения." />}
-      <div className="training-grid">{visible?.map((item) => <Card key={item.id} title={item.title} subtitle={`${LEARNING_LABELS[item.kind]} · версия ${item.revision}`} action={<Badge tone={item.status === "published" ? "success" : "neutral"}>{STATUS[item.status]}</Badge>}><div className="stack stack--tight"><p>{item.description}</p><p className="secondary small">{item.step_count} шагов · {item.pass_percent}% для прохождения · {item.coins_reward} коинов</p><Button onClick={() => setEditor(item)}>{atLeast("head") ? "Открыть редактор" : "Просмотреть"}</Button></div></Card>)}</div>
+      {!visible?.length && !query.isLoading && !query.isError && <EmptyState title="Материалов пока нет" hint="Создайте задание, проверьте прохождение и назначьте операторам." />}
+      <div className="training-grid">{visible?.map((item) => <Card key={item.id} title={item.title} subtitle={`${LEARNING_LABELS[item.kind]} · версия ${item.revision}`} action={<Badge tone={item.status === "published" ? "success" : "neutral"}>{STATUS[item.status]}</Badge>}><div className="stack stack--tight"><p>{item.description}</p><p className="secondary small">{item.is_driver ? "Учебная смена" : `${item.step_count} шагов`} · {item.pass_percent}% для прохождения</p><Button onClick={() => item.is_driver && canEdit ? setDriverEditor(item) : setEditor(item)}>{canEdit ? "Открыть редактор" : "Просмотреть"}</Button><Button disabled={preview.isPending} onClick={() => preview.mutate(item)}>Пройти как оператор</Button>{canEdit && item.status === "published" && <Button variant="primary" onClick={() => setAssignment(item)}>Назначить операторам</Button>}</div></Card>)}</div>
     </>}
+    {preview.isError && <ErrorState error={preview.error} />}
     {editor && <ContentEditor target={typeof editor === "string" ? undefined : editor} kind={typeof editor === "string" ? editor : editor.kind} onClose={() => setEditor(null)} />}
+    {assignment && <AssignmentEditor content={assignment} onClose={() => setAssignment(null)} />}
+    {driverEditor && <DriverContentEditor content={driverEditor === "new" ? undefined : driverEditor} onClose={() => setDriverEditor(null)} />}
   </div>;
 }
 
@@ -49,7 +64,7 @@ function ContentEditor({ target, kind, onClose }: { target?: LearningContent; ki
   const [confirm, setConfirm] = useState(false);
   const [view, setView] = useState<"settings" | "steps">("settings");
   const formId = useId(); const toast = useToast(); const client = useQueryClient();
-  const { atLeast } = useAuth(); const readOnly = !atLeast("head");
+  const { user, atLeast } = useAuth(); const readOnly = user?.role !== "trainer" && !atLeast("head");
   const save = useMutation({ mutationFn: () => learning.save(value, target?.id), onSuccess: () => {
     void client.invalidateQueries({ queryKey: ["learning-definitions"] }); void client.invalidateQueries({ queryKey: ["learning"] });
     toast.success(value.status === "published" ? "Материал опубликован" : "Материал сохранён"); onClose();
@@ -67,7 +82,7 @@ function ContentEditor({ target, kind, onClose }: { target?: LearningContent; ki
         <label className="field"><span>Название</span><input className="input" maxLength={180} required value={value.title} onChange={(e) => update("title", e.target.value)} /></label>
         <label className="field"><span>Описание</span><textarea className="input" rows={3} maxLength={4000} value={value.description} onChange={(e) => update("description", e.target.value)} /></label>
         <div className="learning-form-grid"><label className="field"><span>Тема / мир</span><input className="input" required maxLength={80} value={value.world} onChange={(e) => update("world", e.target.value)} /></label><label className="field"><span>Сложность</span><select className="input" value={value.difficulty} onChange={(e) => update("difficulty", e.target.value as ContentInput["difficulty"])}>{Object.entries(DIFFICULTY).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        {([{ key: "minutes", label: "Ориентировочное время, мин", min: 1, max: 180 }, { key: "pass_percent", label: "Порог прохождения, %", min: 1, max: 100 }, { key: "coins_reward", label: "Награда в коинах", min: 0, max: 10000 }] as const).map((field) => <label className="field" key={field.key}><span>{field.label}</span><input className="input" type="number" required min={field.min} max={field.max} step={1} value={value[field.key]} onChange={(e) => update(field.key, Number(e.target.value))} /></label>)}
+        {([{ key: "minutes", label: "Ориентировочное время, мин", min: 1, max: 180 }, { key: "pass_percent", label: "Порог прохождения, %", min: 1, max: 100 }, { key: "coins_reward", label: "Награда в коинах", min: 0, max: 10000 }] as const).filter(field => user?.role !== "trainer" || field.key !== "coins_reward").map((field) => <label className="field" key={field.key}><span>{field.label}</span><input className="input" type="number" required min={field.min} max={field.max} step={1} value={value[field.key]} onChange={(e) => update(field.key, Number(e.target.value))} /></label>)}
         <label className="field"><span>Статус</span><select className="input" value={value.status} onChange={(e) => update("status", e.target.value as ContentInput["status"])}>{Object.entries(STATUS).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label className="field"><span>Пройти до (необязательно)</span><input className="input" type="date" value={value.deadline?.slice(0,10) ?? ""} onChange={(e) => update("deadline", e.target.value ? `${e.target.value}T23:59:59Z` : null)} /></label></div>
         <label className="learning-check"><input type="checkbox" checked={value.is_required} onChange={(e) => update("is_required", e.target.checked)} />Обязательное обучение</label><label className="learning-check"><input type="checkbox" checked={value.allow_back} onChange={(e) => update("allow_back", e.target.checked)} />Разрешить изменение предыдущих ответов</label>

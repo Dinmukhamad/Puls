@@ -161,7 +161,7 @@ async def test_manual_credit_appears_in_operator_history(
     history = await client.get("/api/v1/me/transactions", headers=auth(op_token))
     items = history.json()["items"]
     assert items[0]["reason"] == "Попадание на доску почёта"
-    assert items[0]["author_name"] == supervisor.full_name
+    assert items[0]["author_name"] is None
     assert items[0]["balance_after"] == 10
 
 
@@ -226,7 +226,7 @@ async def test_dashboard_shows_balance_rank_and_metrics(
     assert body["badges_total"] > 0
 
 
-async def test_rating_hides_other_balances_from_operator(
+async def test_rating_hides_other_identities_from_operator(
     client: AsyncClient, session: AsyncSession, operator: User
 ) -> None:
     rival = await make_user(session, login="op2", full_name="Оператор Второй")
@@ -238,7 +238,8 @@ async def test_rating_hides_other_balances_from_operator(
     rows = {row["user_id"]: row for row in body["rows"]}
     assert rows[operator.id]["is_me"] is True
     assert rows[operator.id]["balance"] is not None
-    assert rows[rival.id]["balance"] is None
+    assert rival.id not in rows
+    assert body["total"] == 1
     assert body["podium"][0]["medal"] == "gold"
     assert body["header"]["participants"] == 2
 

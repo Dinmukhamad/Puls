@@ -3,13 +3,15 @@ import re
 import secrets
 from datetime import timedelta
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 
 from app.core.config import settings
 from app.core.errors import ConflictError, DomainError, PermissionDeniedError
 from app.db.base import utcnow
 from app.models.driver import DriverProfile
 from app.models.driver_auth import DriverDevice, TelegramLink
+from app.models.driver_shift import DriverShift
+from app.models.enums import Role
 from app.models.user import User
 from app.services import telegram
 
@@ -34,6 +36,13 @@ async def device_state(session, user_id, token):
         and device.telegram_version == link.version
     )
     verified = bool(matches and telegram.future(device.valid_until))
+    preview = user.role != Role.OPERATOR and bool(
+        await session.scalar(
+            select(DriverShift.id)
+            .where(DriverShift.user_id == user_id, DriverShift.is_preview.is_(True))
+            .limit(1)
+        )
+    )
     pending = bool(
         matches
         and device.code_hash
@@ -41,7 +50,7 @@ async def device_state(session, user_id, token):
         and device.attempts < 5
     )
     return {
-        "verified": verified,
+        "verified": verified or preview,
         "valid_until": telegram.as_utc(device.valid_until) if verified else None,
         "phone_set": bool(user.phone),
         "telegram_connected": bool(link and link.chat_id),

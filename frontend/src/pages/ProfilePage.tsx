@@ -22,7 +22,7 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; icon: (props: { si
 ];
 
 export function ProfilePage() {
-  const { user, logout, atLeast } = useAuth();
+  const { user, logout } = useAuth();
   const { can, isDeveloper } = useAccess();
   const { preference, setPreference } = useTheme();
   const [securityOpen, setSecurityOpen] = useState(false);
@@ -40,7 +40,7 @@ export function ProfilePage() {
     <header className="page-head"><div><h1 className="page-title">Мой профиль</h1><p className="page-subtitle">Данные аккаунта и настройки Puls</p></div><Button icon={<LogoutIcon size={18} />} onClick={logout}>Выйти</Button></header>
     <Card className="profile-identity"><div className="profile-head"><Avatar name={user.full_name} id={user.id} size={56} /><div className="profile-head__text"><h2 className="profile-head__name">{user.full_name}</h2><p className="profile-head__meta">{isDeveloper ? "Разработчик Puls" : ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</p></div><Badge tone={user.is_active ? "success" : "neutral"} dot>{user.is_active ? "Активен" : "Отключён"}</Badge></div></Card>
     <div className="profile-settings-grid">
-      <Card title="Данные аккаунта" action={can("team") && atLeast("head") ? <Link to={`/admin/users/${user.id}`}>Изменить данные</Link> : undefined}>
+      <Card title="Данные аккаунта" action={can("team") && user.role === "admin" ? <Link to={`/admin/users/${user.id}`}>Изменить данные</Link> : undefined}>
         <dl className="profile-data-grid">{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>
         <div className="profile-account-actions">
           <Button onClick={() => setLoginOpen(true)}>Изменить логин</Button>

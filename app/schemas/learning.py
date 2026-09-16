@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.driver_shift import DriverScenario
+
 
 class LearningStep(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
@@ -39,6 +41,29 @@ class ContentInput(BaseModel):
     pass_percent: int = Field(default=80, ge=1, le=100)
     coins_reward: int = Field(default=0, ge=0, le=10000)
     steps: list[LearningStep] = Field(min_length=1, max_length=100)
+    driver_config: DriverScenario | None = None
+
+    @model_validator(mode="after")
+    def driver_kind(self):
+        if self.driver_config is not None and self.kind != "simulator":
+            raise ValueError("Сценарий водителя доступен только симулятору")
+        return self
+
+
+class AssignmentInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_ids: list[int] = Field(default_factory=list, max_length=500)
+    all_operators: bool = False
+    deadline: datetime | None = None
+
+    @model_validator(mode="after")
+    def targets(self):
+        if self.all_operators == bool(self.user_ids) or any(x <= 0 for x in self.user_ids):
+            raise ValueError("Выберите всех операторов или конкретных сотрудников")
+        if self.deadline and self.deadline.tzinfo is None:
+            raise ValueError("Укажите часовой пояс срока")
+        self.user_ids = list(dict.fromkeys(self.user_ids))
+        return self
 
 
 class AnswerInput(BaseModel):

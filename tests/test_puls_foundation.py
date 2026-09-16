@@ -210,7 +210,7 @@ async def test_head_cannot_edit_admin_and_supervisor_cannot_read_foreign_user(
         await client.patch(
             f"/api/v1/admin/users/{admin.id}", headers=headers, json={"full_name": "Changed"}
         )
-    ).status_code == 403
+    ).status_code == 404
     headers = auth(await login(client, supervisor.login))
     assert (await client.get(f"/api/v1/admin/users/{admin.id}", headers=headers)).status_code == 404
     detail = await client.get(f"/api/v1/admin/users/{operator.id}/dashboard", headers=headers)

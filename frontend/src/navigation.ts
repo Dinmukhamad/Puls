@@ -30,6 +30,7 @@ const staffLearning = (admin: boolean) => section("training", "Обучение"
   tab("/admin/learning?kind=mission", admin ? "Mission Studio" : "Миссии"),
   tab("/admin/learning?kind=simulator", admin ? "Driver Simulator Studio" : "Driver Simulator"),
   tab("/admin/learning?tab=results", "Результаты команды"),
+  tab("/admin/learning-analytics", "Аналитика обучения"),
 ]);
 const team = (admin = false, supervisor = false) => section("team", admin ? "Пользователи и структура" : "Команда", UsersIcon, [
   tab("/admin/users", admin ? "Пользователи" : "Операторы"), tab("/admin/groups", supervisor ? "Моя группа" : "Группы"),
@@ -53,6 +54,16 @@ const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summa
 
 /** Only major destinations enter the sidebar. Future modules extend tabs inside these sections. */
 export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
+  trainer: [
+    section("home", "Главная", HomeIcon, [tab("/trainer", "Учебная сводка")]),
+    section("team", "Пользователи", UsersIcon, [tab("/admin/users", "Операторы")]),
+    section("training", "Обучение", SparkIcon, [tab("/admin/learning", "Материалы"), tab("/training", "Пройти обучение")]),
+    section("tests", "Тесты", InboxIcon, [tab("/admin/learning?kind=test", "Тесты")]),
+    section("missions", "Миссии", TrophyIcon, [tab("/admin/learning?kind=mission", "Миссии")]),
+    section("driver", "Driver Simulator", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training?kind=simulator", "Тестовый запуск")]),
+    section("learning_analytics", "Аналитика обучения", TrophyIcon, [tab("/admin/learning-analytics", "Результаты операторов")]),
+    {...ACCOUNT_SECTION, label: "Мой кабинет"},
+  ],
   operator: [
     section("home", "Главная", HomeIcon, personal.filter((item) => item.to !== "/progress")),
     section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг"), tab("/progress", "Мой прогресс")]),
@@ -67,12 +78,14 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
 };
 
 export function defaultAccess(role: Role): AccessMap {
+  if (role === "trainer") return { team: true, training: true, learning_admin: true };
   const staff = role !== "operator";
   return { personal: !staff, results: true, training: !staff, rewards: !staff, overview: staff, team: staff, analytics: staff, performance: staff, learning_admin: staff, motivation: staff, reports: role === "head" || role === "admin", system: role === "admin" };
 }
 
 export function routeSection(pathname: string, search = "", role: Role = "operator"): SectionCode | "account" | "access" | "developer" | undefined {
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
+  if (pathname === "/trainer" || pathname === "/admin/learning-analytics") return "learning_admin";
   if (matches("/progress")) return role === "operator" ? "results" : "personal";
   if (["/sessions", "/admin/sessions"].some(matches)) return "developer";
   if (["/profile", "/notifications"].some(matches)) return "account";
@@ -92,6 +105,8 @@ export function routeSection(pathname: string, search = "", role: Role = "operat
 export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper = false): boolean {
   if (to === "/") return true;
   const [path, search = ""] = to.split("?");
+  if (role === "trainer" && !["/profile", "/notifications", "/trainer", "/admin/learning-analytics", "/admin/learning", "/training", "/simulator", "/admin/users"].some(p => path === p || path.startsWith(p + "/"))) return false;
+  if (role === "operator" && path.startsWith("/admin/users")) return false;
   const permission = routeSection(path, search, role);
   if (permission === "account") return true;
   if (permission === "developer") return role === "admin" && isDeveloper;
@@ -101,6 +116,10 @@ export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper
 }
 
 export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess(role), isDeveloper = false): readonly NavItem[] {
+  if (role === "trainer") return ROLE_NAVIGATION.trainer.flatMap(item => {
+    const tabs = item.tabs.filter(link => canVisit(role, link.to, allowed));
+    return tabs.length ? [{ ...item, tabs, to: tabs[0].to }] : [];
+  });
   const items = ROLE_NAVIGATION[role].map((item) => ({ ...item, tabs: [...item.tabs] }));
   // Extra grants also make sections discoverable to roles that did not originally have them.
   const additions = [
@@ -142,6 +161,10 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
 export function currentSection(role: Role, pathname: string, search = "", allowed: AccessMap = defaultAccess(role), isDeveloper = false): NavItem | undefined {
   if (!canVisit(role, `${pathname}${search}`, allowed, isDeveloper)) return undefined;
   const sections = visibleNavigation(role, allowed, isDeveloper);
+  if (role === "trainer" && ["/admin/learning", "/training", "/simulator"].some(p => pathname === p || pathname.startsWith(p + "/"))) {
+    const kind = new URLSearchParams(search).get("kind");
+    return sections.find(item => item.id === (kind === "test" ? "tests" : kind === "mission" ? "missions" : kind === "simulator" || pathname.startsWith("/simulator") ? "driver" : "training"));
+  }
   // Settings pages are hosted by their business domain, even on direct legacy links.
   if (pathname === "/admin/settings") {
     const selected = new URLSearchParams(search).get("tab");

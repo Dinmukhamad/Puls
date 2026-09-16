@@ -9,7 +9,13 @@ from typing import Annotated
 from fastapi import APIRouter, File, UploadFile, status
 from sqlalchemy import delete, select
 
-from app.core.deps import HeadUser, SessionDep, StaffUser, visible_users_filter
+from app.core.deps import (
+    HeadUser,
+    SessionDep,
+    StaffUser,
+    managed_operators_filter,
+    visible_users_filter,
+)
 from app.core.errors import ConflictError
 from app.models.contest import ContestWeek, OperatorWeekMetric, OperatorWeekResult
 from app.models.enums import WeekStatus
@@ -103,7 +109,7 @@ async def upload_metrics(
         )
 
     await import_service.validate_values(session, actor, payload.values)
-    visibility = await visible_users_filter(session, actor)
+    visibility = await managed_operators_filter(session, actor)
     visible_ids = select(User.id).where(visibility)
     if payload.replace:
         await session.execute(

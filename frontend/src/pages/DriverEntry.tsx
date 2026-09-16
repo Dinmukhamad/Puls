@@ -4,9 +4,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { driver, orderActive } from "../api/driver";
 import { driverShift } from "../api/driverShift";
 import { Badge, Button, Card, ErrorState, RowsSkeleton } from "../components/ui";
+import { useAuth } from "../auth/AuthContext";
 import { dateTime } from "../utils/format";
 
 export function DriverEntry() {
+  const { user } = useAuth();
   const query = useQuery({ queryKey: ["driver-profile"], queryFn: driver.state });
   const client = useQueryClient(), navigate = useNavigate();
   const [mode, setMode] = useState<"free" | "assessment">("free");
@@ -16,6 +18,7 @@ export function DriverEntry() {
   const legacyOrder = orderActive(data?.order) && !data?.order?.shift_id;
   const last = data?.shift_history?.[0];
   return <Card title="Driver Simulator" subtitle="Учебное приложение водителя · Алматы"><div className="stack">
+    {user?.role !== "operator" && <p>Тестовая проверка: прохождение не входит в статистику операторов и не выдаёт награды Puls.</p>}
     <p>Заказы, межгород, деньги, чаты и профиль связаны одной сменой. Пройдите заказ полностью, разберите обращение и проверьте результат.</p>
     {query.isLoading ? <RowsSkeleton rows={2} /> : query.isError ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : <>
       <div className="row"><Badge tone={unfinished ? "accent" : last ? "success" : "neutral"}>{unfinished ? "Есть незавершённая смена" : last ? "Готово к новой смене" : "Ещё не запускали"}</Badge>{data?.shift_best != null && <Badge tone="success">Лучший результат: {data.shift_best}/100</Badge>}</div>

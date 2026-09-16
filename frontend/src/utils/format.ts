@@ -97,6 +97,7 @@ export const WEEK_STATUS_LABELS: Record<string, string> = {
 
 export const ROLE_LABELS: Record<string, string> = {
   operator: "Оператор",
+  trainer: "Тренер",
   supervisor: "Супервайзер",
   head: "Руководитель",
   admin: "Администратор",

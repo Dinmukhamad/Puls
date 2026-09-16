@@ -8,14 +8,16 @@ from sqlalchemy.exc import IntegrityError
 from app.core.deps import (
     CurrentUser,
     HeadUser,
+    LearningEditor,
+    LearningReader,
     PaginationDep,
     SessionDep,
-    StaffUser,
     visible_users_filter,
 )
-from app.models.driver import DriverSettings
+from app.models.driver import DriverProfile, DriverSettings
 from app.models.driver_auth import DriverDevice
 from app.models.driver_shift import DriverShift
+from app.models.enums import Role
 from app.models.user import User
 from app.schemas.driver import (
     DriverAction,
@@ -162,6 +164,14 @@ async def start_shift(
             await driver_shifts.start(session, user_id, payload)
             if not existing:
                 await driver.start(session, user_id)
+                if user.role != Role.OPERATOR:
+                    shift = await driver_shifts.active(session, user_id)
+                    profile = await session.get(DriverProfile, user_id)
+                    choices = await driver.parks(session)
+                    profile.park = next(
+                        (p for p in choices if p["id"] == shift.config["required_park"]), choices[0]
+                    )
+                    profile.service, profile.stage = "taxi", "offline"
             await session.commit()
             break
         except IntegrityError:
@@ -172,8 +182,19 @@ async def start_shift(
 
 
 @router.get("/admin/learning/driver-results")
-async def shift_results(session: SessionDep, actor: StaffUser, pagination: PaginationDep):
-    conditions = [await visible_users_filter(session, actor)]
+async def shift_results(
+    session: SessionDep,
+    actor: LearningReader,
+    pagination: PaginationDep,
+    user_id: int | None = None,
+):
+    conditions = [
+        await visible_users_filter(session, actor),
+        User.role == Role.OPERATOR,
+        DriverShift.is_preview.is_(False),
+    ]
+    if user_id is not None:
+        conditions.append(User.id == user_id)
     total = await session.scalar(select(func.count(DriverShift.id)).join(User).where(*conditions))
     rows = await session.execute(
         select(DriverShift, User.full_name)
@@ -231,12 +252,12 @@ async def shift_support(
 
 
 @router.get("/admin/learning/driver-scenario")
-async def scenario(session: SessionDep, _: StaffUser):
+async def scenario(session: SessionDep, _: LearningReader):
     return await driver_shifts.configuration(session)
 
 
 @router.put("/admin/learning/driver-scenario")
-async def save_scenario(session: SessionDep, actor: HeadUser, payload: DriverScenario):
+async def save_scenario(session: SessionDep, actor: LearningEditor, payload: DriverScenario):
     from app.core.errors import DomainError
 
     if payload.required_park not in {p["id"] for p in await driver.parks(session)}:
@@ -340,7 +361,7 @@ async def forget_device(session: SessionDep, user: CurrentUser, device: DeviceTo
 
 
 @router.get("/admin/learning/driver-parks")
-async def parks(session: SessionDep, _: StaffUser):
+async def parks(session: SessionDep, _: LearningReader):
     return {"parks": await driver.parks(session)}
 
 

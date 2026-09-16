@@ -5,6 +5,7 @@
 супервайзер - операторам своих групп. Свои данные меняются только в профиле,
 с подтверждением паролем.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -40,8 +41,12 @@ async def team(session: AsyncSession) -> dict[str, User | Group]:
     session.add_all([sv_a, sv_b])
     await session.commit()
     return {
-        "admin": admin, "head": head, "sv_a": sv_a, "sv_b": sv_b,
-        "op_a": op_a, "op_b": op_b,
+        "admin": admin,
+        "head": head,
+        "sv_a": sv_a,
+        "sv_b": sv_b,
+        "op_a": op_a,
+        "op_b": op_b,
     }
 
 
@@ -53,8 +58,12 @@ async def team(session: AsyncSession) -> dict[str, User | Group]:
 @pytest.mark.parametrize(
     ("actor_key", "target"),
     [
-        ("admin", "op_a"), ("admin", "sv_a"), ("admin", "head"),
-        ("head", "sv_a"), ("head", "op_a"), ("head", "op_b"),
+        ("admin", "op_a"),
+        ("admin", "sv_a"),
+        ("admin", "head"),
+        ("head", "sv_a"),
+        ("head", "op_a"),
+        ("head", "op_b"),
         ("sv_a", "op_a"),
     ],
 )
@@ -121,7 +130,9 @@ async def test_forbidden_targets(
     for url in (password_url(team[target]), login_url(team[target])):
         payload = {"password": "новыйПароль1"} if url.endswith("password") else {"login": "any.new"}
         response = await client.post(url, headers=auth(token), json=payload)
-        assert response.status_code == 403, f"{why}: {url} -> {response.status_code}"
+        assert response.status_code == (
+            404 if target in ("head", "head2", "admin") else 403
+        ), f"{why}: {url} -> {response.status_code}"
 
 
 async def test_operator_cannot_touch_anyone(client: AsyncClient, team: dict) -> None:
@@ -149,8 +160,9 @@ async def test_own_credentials_go_through_the_profile(
     response = await client.post(
         password_url(actor), headers=auth(token), json={"password": "новыйПароль1"}
     )
-    assert response.status_code == 403
-    assert response.json()["code"] == "self_service_required"
+    assert response.status_code == (404 if actor_key == "head" else 403)
+    if actor_key != "head":
+        assert response.json()["code"] == "self_service_required"
 
     # Прежний пароль продолжает работать.
     still = await client.post(
@@ -164,9 +176,7 @@ async def test_own_credentials_go_through_the_profile(
 # --------------------------------------------------------------------------- #
 
 
-async def test_password_reset_ends_the_employee_sessions(
-    client: AsyncClient, team: dict
-) -> None:
+async def test_password_reset_ends_the_employee_sessions(client: AsyncClient, team: dict) -> None:
     """Прежний пароль больше не действует, поэтому открытые входы закрываются."""
     employee = await login(client, team["op_a"].login)
     assert (await client.get("/api/v1/auth/me", headers=auth(employee))).status_code == 200
@@ -180,9 +190,7 @@ async def test_password_reset_ends_the_employee_sessions(
     assert closed.status_code == 401
 
 
-async def test_login_reset_keeps_the_employee_signed_in(
-    client: AsyncClient, team: dict
-) -> None:
+async def test_login_reset_keeps_the_employee_signed_in(client: AsyncClient, team: dict) -> None:
     """Пароль и идентификатор не менялись, поэтому сеанс остаётся рабочим."""
     employee = await login(client, team["op_a"].login)
     boss = await login(client, team["head"].login)

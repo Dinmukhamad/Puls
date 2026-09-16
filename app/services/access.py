@@ -30,10 +30,13 @@ SECTIONS = (
         "results",
         "Рейтинг и результаты",
         "Рейтинг команды; для оператора также личный прогресс, достижения и уровни",
-        tuple(Role),
+        (Role.OPERATOR, *STAFF),
     ),
     Section(
-        "training", "Прохождение обучения", "Личные тесты, миссии и симулятор", (Role.OPERATOR,)
+        "training",
+        "Прохождение обучения",
+        "Личные тесты, миссии и симулятор",
+        (Role.OPERATOR, Role.TRAINER),
     ),
     Section(
         "rewards",
@@ -47,7 +50,12 @@ SECTIONS = (
         "Показатели команды и ситуации, требующие внимания",
         STAFF,
     ),
-    Section("team", "Команда и структура", "Сотрудники, группы и карточки сотрудников", STAFF),
+    Section(
+        "team",
+        "Команда и структура",
+        "Сотрудники, группы и карточки сотрудников",
+        (*STAFF, Role.TRAINER),
+    ),
     Section("analytics", "Аналитика", "Показатели, качество и сравнение команды", STAFF),
     Section(
         "performance",
@@ -59,7 +67,7 @@ SECTIONS = (
         "learning_admin",
         "Управление обучением",
         "Материалы, редакторы и результаты сотрудников",
-        STAFF,
+        (*STAFF, Role.TRAINER),
     ),
     Section(
         "motivation",
@@ -103,6 +111,8 @@ def access_decisions(role, group_id, user_id, rules):
                 allowed, source = effect == "allow", kind
         if section.admin_only and role != Role.ADMIN:
             allowed, source = False, "admin_only"
+        if role == Role.TRAINER and section.code not in ("team", "training", "learning_admin"):
+            allowed, source = False, "role_limit"
         decisions[section.code] = {"allowed": allowed, "source": source}
     return decisions
 
@@ -138,6 +148,8 @@ async def effective_access(session: AsyncSession, user: User):
 def request_sections(path: str, method: str, role: Role | None = None) -> tuple[str, ...]:
     """Alternative section permissions for an endpoint; supporting reference reads are explicit."""
     read = method in ("GET", "HEAD")
+    if path.startswith(("/admin/training", "/admin/learning-analytics")):
+        return ("learning_admin",)
     if path.startswith(
         (
             "/auth/",
@@ -210,3 +222,23 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
     if path.startswith(("/me/dashboard", "/me/week", "/me/transactions", "/me/wallet")):
         return ("personal",)
     return ()
+
+
+def trainer_path_allowed(path: str, method: str) -> bool:
+    """A role ceiling remains in force even after an explicit section grant."""
+    import re
+
+    if path.startswith(("/auth/", "/me/notifications", "/learning/")) or path in (
+        "/me/access",
+        "/learning",
+    ):
+        return True
+    if path == "/lookups/users":
+        return method in ("GET", "HEAD")
+    if path == "/admin/users":
+        return method in ("GET", "HEAD", "POST")
+    if re.fullmatch(r"/admin/users/\d+", path):
+        return method in ("GET", "HEAD")
+    if path in ("/admin/learning/driver-parks", "/admin/learning/driver-scenario"):
+        return method in ("GET", "HEAD")
+    return path.startswith(("/admin/learning", "/admin/training"))

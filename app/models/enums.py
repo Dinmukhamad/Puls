@@ -9,6 +9,7 @@ class Role(StrEnum):
     """Роли системы (п. 2 ТЗ)."""
 
     OPERATOR = "operator"  # Оператор
+    TRAINER = "trainer"  # Обучение, без административной иерархии
     SUPERVISOR = "supervisor"  # Супервайзер
     HEAD = "head"  # Руководитель
     ADMIN = "admin"  # Администратор системы
@@ -17,9 +18,18 @@ class Role(StrEnum):
 #: Иерархия прав: чем больше число, тем шире доступ.
 ROLE_LEVEL: dict[Role, int] = {
     Role.OPERATOR: 0,
+    Role.TRAINER: 0,
     Role.SUPERVISOR: 1,
     Role.HEAD: 2,
     Role.ADMIN: 3,
+}
+
+USER_VISIBILITY: dict[Role, tuple[Role, ...]] = {
+    Role.OPERATOR: (),
+    Role.TRAINER: (Role.OPERATOR,),
+    Role.SUPERVISOR: (Role.OPERATOR, Role.SUPERVISOR),
+    Role.HEAD: (Role.OPERATOR, Role.TRAINER, Role.SUPERVISOR),
+    Role.ADMIN: tuple(Role),
 }
 
 

@@ -168,6 +168,7 @@ class DriverScenario(StrictModel):
 class ShiftStart(StrictModel):
     id: UUID
     mode: Literal["free", "assessment"]
+    content_id: int | None = Field(default=None, gt=0)
 
 
 class ShiftAction(StrictModel):
