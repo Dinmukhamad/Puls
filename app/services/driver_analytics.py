@@ -1,7 +1,7 @@
 """Read-only operator progress, including users who have never opened the simulator."""
 
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -11,7 +11,8 @@ from app.models.driver import DriverOrder
 from app.models.driver_shift import DriverShift
 from app.models.enums import Role
 from app.models.user import User
-from app.services.driver_shifts import checked_result
+from app.services.driver_analytics_details import ERRORS, order_activity, session_summary, timestamp
+from app.services.driver_shifts import CHECKS
 
 
 async def report(
@@ -24,6 +25,7 @@ async def report(
     activity=None,
     employment="active",
     target_orders=5,
+    days=30,
 ):
     people = list(
         await session.scalars(
@@ -71,16 +73,16 @@ async def report(
     today = datetime.now(UTC).date()
     items = []
     for person in people:
-        days = (today - person.hired_on).days if person.hired_on else None
+        tenure_days = (today - person.hired_on).days if person.hired_on else None
         bucket = (
             "unknown"
-            if days is None
+            if tenure_days is None
             else "future"
-            if days < 0
+            if tenure_days < 0
             else "new"
-            if days <= 30
+            if tenure_days <= 30
             else "recent"
-            if days <= 90
+            if tenure_days <= 90
             else "experienced"
         )
         if operator_ids and person.id not in operator_ids:
@@ -121,7 +123,19 @@ async def report(
             continue
         if activity == "inactive" and active:
             continue
-        checks = checked_result(current, current.data)["checks"] if current else []
+        current_summary = session_summary(current) if current else None
+        checks = current_summary["checks"] if current_summary else []
+        summaries = [session_summary(s) for s in history]
+        last_at = max((s["last_activity_at"] for s in summaries), default=None)
+        if order:
+            last_at = max(last_at, order_activity(order))
+        attention = []
+        if current_summary and current_summary["errors"]:
+            attention.append("errors")
+        if current_summary and current_summary["passed"] is False:
+            attention.append("failed")
+        if active and last_at and datetime.now(UTC) - last_at > timedelta(hours=24):
+            attention.append("stale")
         items.append(
             {
                 "user_id": person.id,
@@ -129,7 +143,7 @@ async def report(
                 "login": person.login,
                 "is_active": person.is_active,
                 "hired_on": person.hired_on,
-                "tenure_days": days,
+                "tenure_days": tenure_days,
                 "state": progress,
                 "completed_orders": completed,
                 "sessions": len(history),
@@ -141,6 +155,12 @@ async def report(
                 "mode": current.mode if current else None,
                 "score": (current.result or {}).get("score") if current else None,
                 "checks": checks,
+                "errors": sum(s["errors"] for s in summaries),
+                "hints": sum(s["hints"] for s in summaries),
+                "last_activity_at": last_at,
+                "attention": attention,
+                "done_checks": current_summary["done_checks"] if current_summary else 0,
+                "required_checks": current_summary["required_checks"] if current_summary else 0,
             }
         )
     summary = {
@@ -152,10 +172,71 @@ async def report(
         completed_orders=sum(r["completed_orders"] for r in items),
         active=sum(r["active_shift"] for r in items),
     )
+    selected_ids = {row["user_id"] for row in items}
+    selected_shifts = [s for uid in selected_ids for s in shifts_by_user[uid]]
+    all_summaries = [session_summary(s) for s in selected_shifts]
+    scores = [s["score"] for s in all_summaries if s["finished_at"] and s["score"] is not None]
+    skills = []
+    for key, _, title, _ in CHECKS:
+        checks = [next((c for c in row["checks"] if c["key"] == key), None) for row in items]
+        skills.append(
+            {
+                "key": key,
+                "title": title,
+                "done": sum(bool(c and c["required"] and c["done"]) for c in checks),
+                "pending": sum(bool(c and c["required"] and not c["done"]) for c in checks),
+                "not_required": sum(bool(c and not c["required"]) for c in checks),
+                "not_started": sum(c is None for c in checks),
+            }
+        )
+    trend = {
+        (today - timedelta(days=offset)).isoformat(): {
+            "date": (today - timedelta(days=offset)).isoformat(),
+            "orders": 0,
+            "started": 0,
+            "finished": 0,
+        }
+        for offset in range(days - 1, -1, -1)
+    }
+    for s in selected_shifts:
+        for field, value in (("started", s.created_at), ("finished", s.finished_at)):
+            key = timestamp(value).date().isoformat() if value else None
+            if key in trend:
+                trend[key][field] += 1
+    completed_dates = await session.scalars(
+        select(DriverOrder.finished_at).where(
+            DriverOrder.shift_id.in_([s.id for s in selected_shifts]),
+            DriverOrder.user_id.in_(selected_ids),
+            DriverOrder.stage == "complete",
+            DriverOrder.finished_at
+            >= datetime.combine(today - timedelta(days=days - 1), datetime.min.time(), UTC),
+        )
+    )
+    for value in completed_dates:
+        key = timestamp(value).date().isoformat()
+        if key in trend:
+            trend[key]["orders"] += 1
     return {
         "items": items,
         "operators": options,
         "summary": summary,
         "target_orders": target_orders,
         "updated_at": datetime.now(UTC),
+        "skills": skills,
+        "activity": list(trend.values()),
+        "insights": {
+            "average_score": round(sum(scores) / len(scores), 1) if scores else None,
+            "scored_sessions": len(scores),
+            "sessions": len(selected_shifts),
+            "finished_sessions": sum(s.finished_at is not None for s in selected_shifts),
+            "needs_attention": sum(bool(r["attention"]) for r in items),
+            "error_breakdown": [
+                {
+                    "key": key,
+                    "title": title,
+                    "value": sum(s.data.get(key, 0) for s in selected_shifts),
+                }
+                for key, title in ERRORS.items()
+            ],
+        },
     }

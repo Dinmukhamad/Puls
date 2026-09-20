@@ -35,6 +35,7 @@ async def driver_analytics(
     activity: Literal["active", "inactive"] | None = None,
     employment: Literal["all", "active", "inactive"] = "active",
     target_orders: Annotated[int, Query(ge=1, le=100)] = 5,
+    days: Annotated[int, Query(ge=1, le=90)] = 30,
 ):
     from app.services.driver_analytics import report
 
@@ -47,7 +48,27 @@ async def driver_analytics(
         activity=activity,
         employment=employment,
         target_orders=target_orders,
+        days=days,
     )
+
+
+@router.get("/admin/learning-analytics/driver/operators/{user_id}")
+async def driver_participant(session: SessionDep, actor: LearningReader, user_id: int):
+    from app.services.driver_analytics_details import participant
+
+    return await participant(session, actor, user_id)
+
+
+@router.get("/admin/learning-analytics/driver/operators/{user_id}/shifts/{shift_id}")
+async def driver_journey(
+    session: SessionDep,
+    actor: LearningReader,
+    user_id: int,
+    shift_id: str,
+):
+    from app.services.driver_analytics_details import journey
+
+    return await journey(session, actor, user_id, shift_id)
 
 
 @router.get("/learning")

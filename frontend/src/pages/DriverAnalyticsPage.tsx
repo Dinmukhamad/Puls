@@ -1,99 +1,87 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { getDriverAnalytics, type DriverProgressState } from "../api/driverAnalytics";
+import { useSearchParams } from "react-router-dom";
+import { driverReportParams, getDriverAnalytics, type DriverAnalyticsReport, type DriverAnalyticsRow, type DriverProgressState } from "../api/driverAnalytics";
 import { Badge, Button, Card, EmptyState, ErrorState, KPI, Pagination, RowsSkeleton } from "../components/ui";
 import { dateTime } from "../utils/format";
+import { ATTENTION, CHECK_LABELS, SKILL_LABELS, STAGES, SkillDots, TrendChart, checkState, shortDate } from "./DriverAnalyticsCharts";
+import { DriverParticipantPage } from "./DriverParticipantPage";
 import "./driver-analytics.css";
 
-const STATES: Record<DriverProgressState, string> = {
-  not_started: "Не начинали", in_progress: "В процессе", completed: "Цель выполнена",
-};
-const STAGES: Record<string, string> = {
-  searching: "Поиск заказа", offer: "Выбор заказа", pickup: "Едет к пассажиру",
-  waiting: "Ожидает пассажира", trip: "Выполняет поездку", payment: "Принимает оплату",
-  photo: "Фотоконтроль", preparing: "Подготовка к работе", finished: "Смена завершена",
-  not_started: "Не начинал", complete: "Заказ завершён", cancelled: "Заказ отменён",
-};
+const STATES: Record<DriverProgressState, string> = { not_started: "Не начинали", in_progress: "В процессе", completed: "Цель выполнена" };
+const initials = (name: string) => name.split(" ").slice(0, 2).map(s => s[0]).join("");
 
 export function DriverAnalyticsPage() {
   const [params, setParams] = useSearchParams();
   const [search, setSearch] = useState("");
-  const query = useQuery({
-    queryKey: ["driver-analytics", [...params].filter(([key]) => key !== "page" && key !== "view").toString()],
-    queryFn: ({ signal }) => getDriverAnalytics(params, signal), refetchInterval: 30000,
-  });
-  const selected = params.getAll("operator_ids");
-  const data = query.data;
-  const page = Math.max(1, Number(params.get("page")) || 1);
-  const pages = Math.max(1, Math.ceil((data?.items.length ?? 0) / 20));
-  const currentPage = Math.min(page, pages);
-  const rows = data?.items.slice((currentPage - 1) * 20, currentPage * 20) ?? [];
-  function change(key: string, value: string) {
+  const [listSearch, setListSearch] = useState("");
+  const participant = Number(params.get("participant")) || null;
+  const filters = driverReportParams(params);
+  const query = useQuery({ queryKey: ["driver-analytics", filters.toString()], queryFn: ({ signal }) => getDriverAnalytics(filters, signal), enabled: !participant, refetchInterval: 30000 });
+  const selected = params.getAll("operator_ids"), data = query.data;
+  const tab = params.get("dashboard") ?? "overview";
+  function update(values: Record<string, string | null>, push = false) {
     const next = new URLSearchParams(params);
-    value ? next.set(key, value) : next.delete(key);
-    if (key !== "page") next.delete("page");
-    setParams(next, { replace: true });
+    for (const [key, value] of Object.entries(values)) value ? next.set(key, value) : next.delete(key);
+    if (!("page" in values)) next.delete("page");
+    setParams(next, { replace: !push });
   }
+  function openParticipant(id: number, skill?: string) { update({ participant: String(id), shift: null, focus_skill: skill ?? null }, true); }
   function toggle(id: string) {
-    const next = new URLSearchParams(params);
-    next.delete("operator_ids"); next.delete("page");
-    (selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
-      .forEach(value => next.append("operator_ids", value));
+    const next = new URLSearchParams(params); next.delete("operator_ids"); next.delete("page");
+    (selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]).forEach(value => next.append("operator_ids", value));
     setParams(next, { replace: true });
   }
-  const options = data?.operators.filter(person => `${person.full_name} ${person.login}`.toLocaleLowerCase("ru").includes(search.toLocaleLowerCase("ru"))) ?? [];
-  const total = data?.summary.total ?? 0;
-  const completed = data?.summary.completed ?? 0;
-  const started = data?.summary.in_progress ?? 0;
-  const passedPercent = total ? Math.round(completed / total * 100) : 0;
-  const completeAngle = total ? completed / total * 360 : 0;
-  const progressAngle = total ? (completed + started) / total * 360 : 0;
-  const maxOrders = Math.max(data?.target_orders ?? 5, ...rows.map(row => row.completed_orders));
+  const options = data?.operators.filter(p => `${p.full_name} ${p.login}`.toLocaleLowerCase("ru").includes(search.toLocaleLowerCase("ru"))) ?? [];
+  const skill = params.get("skill"), sort = params.get("sort") ?? "attention";
+  const people = (data?.items ?? []).filter(p => `${p.full_name} ${p.login}`.toLocaleLowerCase("ru").includes(listSearch.toLocaleLowerCase("ru")))
+    .filter(p => !skill || p.checks.some(c => c.key === skill && c.required && !c.done))
+    .sort((a, b) => (sort === "orders" ? b.completed_orders - a.completed_orders : sort === "name" ? 0 : sort === "recent" ? (Date.parse(b.last_activity_at ?? "") || 0) - (Date.parse(a.last_activity_at ?? "") || 0) : b.attention.length - a.attention.length) || a.full_name.localeCompare(b.full_name, "ru"));
+  const page = Math.min(Math.max(1, Number(params.get("page")) || 1), Math.max(1, Math.ceil(people.length / 12)));
+  const rows = people.slice((page - 1) * 12, page * 12);
+  if (participant) return <DriverParticipantPage key={participant} id={participant} selectedShift={params.get("shift")} focusCheck={params.get("focus_skill")} onBack={() => update({ participant: null, shift: null, focus_skill: null }, true)} onShift={id => update({ shift: id })} />;
   return <div className="stack driver-analytics">
-    <header className="page-head"><div><h1 className="page-title">Аналитика Driver Simulator</h1><p className="page-subtitle">От первого запуска до уверенной практики — прогресс каждого оператора</p></div><Button disabled={query.isFetching} onClick={() => query.refetch()}>{query.isFetching ? "Обновляем…" : "Обновить"}</Button></header>
-    <Card title="Кого сравниваем" subtitle="Все показатели и диаграммы учитывают выбранные фильтры.">
-      <div className="driver-analytics__filters">
-        <label className="field"><span>Стаж по дате приёма</span><select className="input" value={params.get("tenure") ?? "all"} onChange={e => change("tenure", e.target.value)}><option value="all">Любой стаж</option><option value="new">Новые · 0–30 дней</option><option value="recent">31–90 дней</option><option value="experienced">Более 90 дней</option><option value="unknown">Дата приёма не указана</option><option value="future">Ещё не приступили к работе</option></select></label>
-        <label className="field"><span>Прогресс</span><select className="input" value={params.get("state") ?? ""} onChange={e => change("state", e.target.value)}><option value="">Любой прогресс</option>{Object.entries(STATES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        <label className="field"><span>Текущая смена</span><select className="input" value={params.get("activity") ?? ""} onChange={e => change("activity", e.target.value)}><option value="">Все</option><option value="active">Есть незавершённая смена</option><option value="inactive">Нет текущей смены</option></select></label>
-        <label className="field"><span>Учётная запись</span><select className="input" value={params.get("employment") ?? "active"} onChange={e => change("employment", e.target.value)}><option value="active">Активные операторы</option><option value="inactive">Неактивные операторы</option><option value="all">Все операторы</option></select></label>
-        <label className="field"><span>Цель, выполненных заказов</span><select className="input" value={params.get("target_orders") ?? "5"} onChange={e => change("target_orders", e.target.value)}>{[1, 3, 5, 10, 20].map(value => <option key={value} value={value}>{value}</option>)}</select></label>
-        <Button onClick={() => { setParams({ view: "driver" }); setSearch(""); }}>Сбросить фильтры</Button>
-      </div>
-      <details className="driver-analytics__picker"><summary>Операторы · {selected.length ? `выбрано ${selected.length}` : "все"}</summary>
-        <label className="field"><span>Поиск по имени или логину</span><input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Найти оператора" /></label>
-        <div className="driver-analytics__selection">{selected.map(id => <Button key={id} size="s" onClick={() => toggle(id)}>{data?.operators.find(person => String(person.id) === id)?.full_name ?? `ID ${id}`} ×</Button>)}</div>
-        <div className="training-operator-picker">{options.map(person => <label key={person.id}><input type="checkbox" checked={selected.includes(String(person.id))} onChange={() => toggle(String(person.id))} /><span>{person.full_name} <span className="secondary">· {person.login}</span></span></label>)}</div>
-        {!options.length && <p className="secondary">Операторы не найдены.</p>}
-      </details>
-    </Card>
-    {query.isPending && <RowsSkeleton />}
-    {query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
+    <header className="da-dashboard-hero"><div><p className="da-eyebrow">ЦЕНТР ПОДГОТОВКИ · DRIVER SIMULATOR</p><h1 className="page-title">Пульс обучения</h1><p className="page-subtitle">Кто уже справляется, где нужна практика и что происходит прямо сейчас</p></div><div className="da-hero-actions"><span className="da-sync"><i /> Обновление каждые 30 сек.</span><Button disabled={query.isFetching} onClick={() => query.refetch()}>{query.isFetching ? "Обновляем…" : "Обновить данные"}</Button></div></header>
+    <Card className="da-filter-card"><details className="da-filter-panel"><summary><span><strong>Выбор команды</strong><small>{selected.length ? `Выбрано операторов: ${selected.length}` : "Все операторы"} · {params.get("tenure") && params.get("tenure") !== "all" ? "фильтр по стажу" : "любой стаж"} · цель {params.get("target_orders") ?? 5} заказов</small></span><span className="da-filter-toggle">Настроить фильтры</span></summary><div className="driver-analytics__filters">
+      <label className="field"><span>Стаж по дате приёма</span><select className="input" value={params.get("tenure") ?? "all"} onChange={e => update({ tenure: e.target.value })}><option value="all">Любой стаж</option><option value="new">Новые · 0–30 дней</option><option value="recent">31–90 дней</option><option value="experienced">Более 90 дней</option><option value="unknown">Дата приёма не указана</option><option value="future">Ещё не приступили</option></select></label>
+      <label className="field"><span>Прогресс</span><select className="input" value={params.get("state") ?? ""} onChange={e => update({ state: e.target.value })}><option value="">Любой прогресс</option>{Object.entries(STATES).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+      <label className="field"><span>Текущая смена</span><select className="input" value={params.get("activity") ?? ""} onChange={e => update({ activity: e.target.value })}><option value="">Все</option><option value="active">Незавершённая смена</option><option value="inactive">Нет текущей смены</option></select></label>
+      <label className="field"><span>Учётная запись</span><select className="input" value={params.get("employment") ?? "active"} onChange={e => update({ employment: e.target.value })}><option value="active">Активные операторы</option><option value="inactive">Неактивные операторы</option><option value="all">Все операторы</option></select></label>
+      <label className="field"><span>Цель, заказов</span><select className="input" value={params.get("target_orders") ?? "5"} onChange={e => update({ target_orders: e.target.value })}>{[1, 3, 5, 10, 20].map(v => <option key={v} value={v}>{v}</option>)}</select></label>
+      <Button onClick={() => { setParams({ view: "driver" }); setSearch(""); setListSearch(""); }}>Сбросить фильтры</Button>
+    </div><div className="driver-analytics__picker"><label className="field"><span>Выбрать несколько операторов</span><input className="input" placeholder="Поиск по имени или логину" value={search} onChange={e => setSearch(e.target.value)} /></label><div className="driver-analytics__selection">{selected.map(id => <Button key={id} size="s" onClick={() => toggle(id)}>{data?.operators.find(p => String(p.id) === id)?.full_name ?? `ID ${id}`} ×</Button>)}</div><div className="training-operator-picker">{options.map(p => <label key={p.id}><input type="checkbox" checked={selected.includes(String(p.id))} onChange={() => toggle(String(p.id))} />{p.full_name}<span className="secondary">{p.login}</span></label>)}</div>{!options.length && <p className="da-note">Операторы не найдены</p>}</div></details></Card>
+    <nav className="da-tabs da-dashboard-tabs" aria-label="Представление аналитики">{[["overview", "Обзор команды"], ["operators", "Участники"], ["matrix", "Матрица этапов"]].map(([key, title]) => <button type="button" key={key} aria-pressed={tab === key} onClick={() => update({ dashboard: key, skill: null })}>{title}{key === "operators" && data && <span>{data.summary.total}</span>}</button>)}</nav>
+    {query.isPending && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
     {data && <>
-      <div className="kpi-grid"><KPI label="Операторов в выборке" value={total} /><KPI label="Выполнили цель" value={completed} hint={`${passedPercent}% выборки · от ${data.target_orders} заказов`} /><KPI label="Незавершённых смен" value={data.summary.active} /><KPI label="Выполнено заказов" value={data.summary.completed_orders} /></div>
-      <div className="driver-analytics__charts">
-        <Card title="Прохождение симулятора" subtitle={`Цель: ${data.target_orders} выполненных заказов за всё время`}>
-          <div className="driver-analytics__distribution">
-            <div className="driver-analytics__donut" role="img" aria-label={`Цель выполнена: ${completed}. В процессе: ${started}. Не начинали: ${data.summary.not_started}.`} style={{ background: `conic-gradient(var(--da-success) 0deg ${completeAngle}deg, var(--da-progress) ${completeAngle}deg ${progressAngle}deg, var(--da-empty) ${progressAngle}deg 360deg)` }}><div><strong>{total ? `${passedPercent}%` : "—"}</strong><span>выполнили цель</span></div></div>
-            <ul className="driver-analytics__legend">{(Object.keys(STATES) as DriverProgressState[]).map(key => <li key={key}><span className={`driver-analytics__dot driver-analytics__dot--${key}`} />{STATES[key]}<strong>{data.summary[key]}</strong></li>)}</ul>
-          </div>
-        </Card>
-        <Card title="Заказы по операторам" subtitle="Операторы текущей страницы · число завершённых заказов">
-          <div className="driver-analytics__bars">{rows.map(row => <div className="driver-analytics__bar-row" key={row.user_id}><span title={row.full_name}>{row.full_name}</span><div className="driver-analytics__track" role="img" aria-label={`${row.full_name}: ${row.completed_orders} заказов, цель ${data.target_orders}`}><div style={{ width: `${row.completed_orders / maxOrders * 100}%` }} className={row.state === "completed" ? "is-completed" : ""} /></div><strong>{row.completed_orders}</strong></div>)}{!rows.length && <p className="secondary">Нет операторов по выбранным фильтрам.</p>}</div>
-        </Card>
-      </div>
-      <Card title="Прогресс операторов" subtitle={`Обновлено ${dateTime(data.updated_at)} · автообновление каждые 30 секунд`}>
-        <p className="secondary small">Цель считается по сумме заказов всех обычных и зачётных смен. Предпросмотры сотрудников и смены с деморежимом исключены. Выполнение цели по заказам не означает сдачу зачёта. Незавершённая смена не означает, что оператор сейчас онлайн.</p>
-        {!rows.length ? <EmptyState title="Нет операторов по выбранным фильтрам" hint="Сбросьте фильтры или выберите других операторов." /> : <div className="table-wrap"><table className="table driver-analytics__table"><thead><tr><th>Оператор / стаж</th><th>Выполненные заказы</th><th>Прогресс</th><th>Текущий процесс</th><th>Что прошёл</th></tr></thead><tbody>{rows.map(row => <tr key={row.user_id}>
-          <td data-label="Оператор / стаж"><Link to={`/admin/users/${row.user_id}?tab=simulator`}>{row.full_name}</Link><small>{row.login}{!row.is_active && " · неактивен"}</small><small>{row.tenure_days == null ? "Дата приёма не указана" : row.tenure_days < 0 ? "Ещё не приступил" : `Стаж: ${row.tenure_days} дн.`}</small></td>
-          <td data-label="Выполненные заказы"><strong>{row.completed_orders} / {data.target_orders}</strong><progress aria-label={`Прогресс ${row.full_name}`} value={Math.min(row.completed_orders, data.target_orders)} max={data.target_orders} /><small>Смен: {row.sessions}</small></td>
-          <td data-label="Прогресс"><Badge tone={row.state === "completed" ? "success" : "neutral"}>{STATES[row.state]}</Badge></td>
-          <td data-label="Текущий процесс"><strong>{row.active_shift ? "В процессе · " : ""}{STAGES[row.current_stage] ?? row.current_stage}</strong>{row.scenario && <small>{row.scenario}</small>}{row.sessions > 0 && <small>{row.active_shift ? "Текущая" : "Последняя"} смена: {row.session_orders} / {row.session_target} заказов · {row.mode === "assessment" ? "зачёт" : "практика"}</small>}</td>
-          <td data-label="Что прошёл">{row.checks.length ? <details><summary>Этапы: {row.checks.filter(check => check.done).length} / {row.checks.length}</summary><ul className="driver-analytics__checks">{row.checks.map(check => <li key={check.key}>{check.done ? "✓" : "○"} {check.title}</li>)}</ul><small>{row.active_shift ? "Текущая смена" : "Последняя смена"}{row.score != null ? ` · балл: ${row.score}` : ""}</small></details> : <span className="secondary">Ещё не начинал</span>}</td>
-        </tr>)}</tbody></table></div>}
-        <Pagination page={currentPage} size={20} total={data.items.length} onChange={value => change("page", String(value))} />
-      </Card>
+      {tab === "overview" ? <Overview data={data} days={params.get("days") ?? "30"} setDays={value => update({ days: value })} openParticipant={openParticipant} onState={state => update({ state, dashboard: "operators" })} onSkill={key => update({ skill: key, dashboard: "matrix" })} /> : <>
+        <div className="da-list-toolbar"><div><h2>{tab === "matrix" ? "Кто какие этапы освоил" : "Путь каждого участника"}</h2><p className="da-note">{tab === "matrix" ? "Текущая или последняя смена · нажмите на ячейку, чтобы открыть разбор" : "Выберите оператора, чтобы увидеть смены, заказы и последовательность действий"}</p></div><input aria-label="Поиск участника" className="input" placeholder="Имя или логин" value={listSearch} onChange={e => { setListSearch(e.target.value); update({ page: null }); }} /><select aria-label="Сортировка участников" className="input" value={sort} onChange={e => update({ sort: e.target.value })}><option value="attention">Сначала требующие разбора</option><option value="orders">По выполненным заказам</option><option value="recent">По последней активности</option><option value="name">По имени</option></select></div>
+        {skill && <div className="da-stage-filter"><span>Не выполнен этап: <strong>{SKILL_LABELS[skill]}</strong></span><Button size="s" onClick={() => update({ skill: null })}>Снять фильтр ×</Button></div>}
+        {!rows.length ? <EmptyState title="Участников по этим условиям нет" hint="Измените фильтры или поисковый запрос." /> : tab === "matrix" ? <Card><div className="da-matrix-legend">{Object.entries(CHECK_LABELS).map(([state, label]) => <span key={state}><i className={`da-cell da-cell--${state}`}>{state === "done" ? "✓" : state === "optional" ? "—" : "·"}</i>{label}</span>)}</div><div className="da-matrix-scroll" tabIndex={0} role="region" aria-label="Матрица этапов, доступна прокрутка"><table className="da-matrix"><thead><tr><th>Оператор</th>{Object.entries(SKILL_LABELS).map(([key, title]) => <th key={key}>{title}</th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.user_id}><th><button type="button" onClick={() => openParticipant(row.user_id)}>{row.full_name}<small>{row.done_checks}/{row.required_checks} этапов · {row.completed_orders} заказов</small></button></th>{Object.keys(SKILL_LABELS).map(key => { const state = checkState(row.checks.find(c => c.key === key)); return <td key={key}><button type="button" className={`da-cell da-cell--${state}`} title={`${row.full_name} · ${SKILL_LABELS[key]}: ${CHECK_LABELS[state]}`} aria-label={`${row.full_name} · ${SKILL_LABELS[key]}: ${CHECK_LABELS[state]}`} onClick={() => openParticipant(row.user_id, key)}>{state === "done" ? "✓" : state === "optional" ? "—" : state === "pending" ? "○" : "·"}</button></td>; })}</tr>)}</tbody></table></div></Card> : <div className="da-people-grid">{rows.map(row => <ParticipantCard key={row.user_id} row={row} target={data.target_orders} onOpen={() => openParticipant(row.user_id)} />)}</div>}
+        <Pagination page={page} size={12} total={people.length} onChange={value => update({ page: String(value) })} />
+      </>}
+      <footer className="da-report-footer"><span>Обновлено {dateTime(data.updated_at)}</span><details><summary>Как считаются показатели</summary><p>Прогресс и этапы — за всё время, график активности — за выбранные дни по UTC. Цель по заказам суммирует обычные и зачётные смены; она не равна сдаче зачёта. Этапы показывают текущую или последнюю смену. Предпросмотры и деморежим исключены. Незавершённая смена не означает присутствие онлайн. Стаж считается по дате приёма.</p></details></footer>
     </>}
   </div>;
+}
+
+function Overview({ data, days, setDays, openParticipant, onState, onSkill }: { data: DriverAnalyticsReport; days: string; setDays: (v: string) => void; openParticipant: (id: number) => void; onState: (s: string) => void; onSkill: (s: string) => void }) {
+  const total = data.summary.total, completed = data.summary.completed, progress = data.summary.in_progress;
+  const percent = total ? Math.round(completed / total * 100) : 0;
+  const completeAngle = total ? completed / total * 360 : 0, progressAngle = total ? (completed + progress) / total * 360 : 0;
+  const attention = data.items.filter(p => p.attention.length).sort((a, b) => b.attention.length - a.attention.length || a.full_name.localeCompare(b.full_name));
+  const errors = data.insights.error_breakdown, maxErrors = Math.max(1, ...errors.map(e => e.value));
+  return <>
+    <div className="kpi-grid da-kpis"><KPI label="Операторов" value={total} hint={`${data.summary.not_started} ещё не начинали`} /><KPI label="Выполнили цель" value={completed} hint={`${percent}% команды · от ${data.target_orders} заказов`} tone="accent" /><KPI label="Смены в процессе" value={data.summary.active} hint={`${data.summary.completed_orders} выполненных заказов всего`} /><KPI label="Нужен разбор" value={data.insights.needs_attention} hint="Ошибки, несданный зачёт или пауза > суток" tone={data.insights.needs_attention ? "accent" : "neutral"} /></div>
+    <div className="da-overview-top"><Card title="Ритм практики" subtitle="Выполненные заказы по дате оплаты и начатые смены · UTC" action={<select className="input da-period" aria-label="Период активности" value={days} onChange={e => setDays(e.target.value)}><option value="14">14 дней</option><option value="30">30 дней</option><option value="90">90 дней</option></select>}><TrendChart title="Активность команды" labels={data.activity.map(p => shortDate(p.date))} series={[{ name: "Выполненные заказы", type: "bar", values: data.activity.map(p => p.orders) }, { name: "Начатые смены", values: data.activity.map(p => p.started) }]} /><div className="da-chart-totals"><span><b>{data.activity.reduce((n, p) => n + p.orders, 0)}</b> заказов за период</span><span><b>{data.activity.reduce((n, p) => n + p.finished, 0)}</b> завершённых смен</span></div></Card>
+      <Card title="Прогресс команды" subtitle={`Цель — ${data.target_orders} выполненных заказов`}><div className="da-donut" role="img" aria-label={`Цель выполнили ${completed} из ${total}`} style={{ background: `conic-gradient(var(--da-success) 0deg ${completeAngle}deg, var(--da-progress) ${completeAngle}deg ${progressAngle}deg, var(--da-empty) ${progressAngle}deg 360deg)` }}><div><strong>{total ? `${percent}%` : "—"}</strong><span>выполнили цель</span></div></div><div className="da-distribution">{Object.entries(STATES).map(([key, label]) => <button key={key} type="button" onClick={() => onState(key)}><i className={`da-status-dot da-status-dot--${key}`} /><span>{label}</span><strong>{data.summary[key as DriverProgressState]}</strong><span>↗</span></button>)}</div></Card></div>
+    <div className="da-two-charts"><Card title="Освоение этапов" subtitle="Текущая или последняя смена · нажмите на этап для разбора участников"><div className="da-mastery">{data.skills.map(skill => { const eligible = skill.done + skill.pending, pct = eligible ? Math.round(skill.done / eligible * 100) : 0; return <button type="button" className="da-mastery__row" key={skill.key} onClick={() => onSkill(skill.key)} aria-label={`${skill.title}: выполнили ${skill.done} из ${eligible}, не выполнено ${skill.pending}`}><span>{SKILL_LABELS[skill.key]}</span><div className="da-mastery__track"><i style={{ width: `${pct}%` }} /></div><strong>{eligible ? `${pct}%` : "—"}</strong><small>{skill.pending ? `${skill.pending} не выполнили` : eligible ? `${skill.done} выполнили` : "нет попыток"}</small></button>; })}</div><p className="da-note">Процент среди тех, кому этап требуется. Не начавшие и необязательные этапы не входят в знаменатель.</p></Card><Card title="Ошибки и качество" subtitle="Итоги всех учебных смен выбранной команды"><div className="da-quality"><div><strong>{data.insights.average_score ?? "—"}<small>/ 100</small></strong><span>средний балл</span></div><p>{data.insights.scored_sessions} завершённых смен с оценкой<br />{data.insights.finished_sessions} завершённых смен всего</p></div><div className="da-error-bars">{errors.map(e => <div key={e.key}><span>{e.title}</span><strong>{e.value}</strong><div><i style={{ width: `${e.value / maxErrors * 100}%` }} /></div></div>)}</div></Card></div>
+    <Card title="На что обратить внимание" subtitle="Откройте участника, чтобы увидеть причину и фактические действия" action={<Badge tone={attention.length ? "warning" : "success"}>{attention.length} участников</Badge>}>
+      {attention.length ? <div className="da-attention-list">{attention.slice(0, 6).map(p => <button key={p.user_id} type="button" className="da-attention" onClick={() => openParticipant(p.user_id)}><span className="da-avatar da-avatar--small">{initials(p.full_name)}</span><span><strong>{p.full_name}</strong><small>{p.attention.map(a => ATTENTION[a]).join(" · ")}</small></span><span>{p.completed_orders} заказов</span><b>↗</b></button>)}</div> : <div className="da-calm"><span>✓</span><div><strong>{total ? "Нет смен, требующих разбора по этим условиям" : "Команда не выбрана"}</strong><p>Здесь появятся операторы с ошибками, несданным зачётом или длительной паузой в незавершённой смене.</p></div></div>}
+      {attention.length > 6 && <p className="da-note">Показаны первые 6. Все участники доступны на вкладке «Участники» с сортировкой по необходимости разбора.</p>}
+    </Card>
+  </>;
+}
+
+function ParticipantCard({ row, target, onOpen }: { row: DriverAnalyticsRow; target: number; onOpen: () => void }) {
+  return <article className="da-person-card"><div className="da-person-card__head"><span className="da-avatar da-avatar--small">{initials(row.full_name)}</span><div><h3>{row.full_name}</h3><small>{row.tenure_days == null ? "Стаж не указан" : row.tenure_days < 0 ? "Ещё не приступил" : `Стаж ${row.tenure_days} дн.`} · {row.login}</small></div></div><div className="da-person-card__status"><Badge tone={row.state === "completed" ? "success" : "neutral"}>{STATES[row.state]}</Badge>{row.attention.length > 0 && <span className="da-review-dot" title={row.attention.map(a => ATTENTION[a]).join(" · ")}>Нужен разбор</span>}</div><div className="da-person-card__orders"><strong>{row.completed_orders}<small> / {target}</small></strong><span>заказов выполнено</span><progress value={Math.min(row.completed_orders, target)} max={target} aria-label="Прогресс по заказам" /></div><div className="da-person-card__process"><i className={row.active_shift ? "is-active" : ""} /><span>{row.active_shift ? "В процессе · " : ""}{STAGES[row.current_stage] ?? row.current_stage}</span></div><SkillDots checks={row.checks} /><div className="da-person-card__meta"><span>{row.done_checks}/{row.required_checks} этапов</span><span>{row.sessions} смен</span><span>{row.errors} ошибок</span></div><Button block onClick={onOpen}>Открыть путь участника ↗</Button>{row.last_activity_at && <small className="da-last-seen">Последнее действие: {dateTime(row.last_activity_at)}</small>}</article>;
 }
