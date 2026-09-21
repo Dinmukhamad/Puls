@@ -6,7 +6,7 @@ import { cabinet, shop } from "../api/endpoints";
 import type { ShopItemForOperator, ShopRequestStatus } from "../api/types";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { AlertIcon, StoreIcon } from "../components/icons";
+import { AlertIcon } from "../components/icons";
 import {
   Badge,
   Button,
@@ -20,7 +20,7 @@ import {
   Skeleton,
   type Tone,
 } from "../components/ui";
-import { REQUEST_STATUS_LABELS, coins, dateTime } from "../utils/format";
+import { REQUEST_STATUS_LABELS, coins, dateTime, plural } from "../utils/format";
 
 const STATUS_TONE: Record<ShopRequestStatus, Tone> = {
   new: "accent",
@@ -30,11 +30,68 @@ const STATUS_TONE: Record<ShopRequestStatus, Tone> = {
   cancelled: "neutral",
 };
 
+
+export type ShopSort = "smart" | "cheap" | "expensive" | "closest";
+
+export interface ShopFilters {
+  search: string;
+  sort: ShopSort;
+  onlyReady: boolean;
+}
+
+/**
+ * Витрина делится по тому единственному, что оператору важно в первую
+ * очередь: можно купить прямо сейчас, копится или закрыто по другой
+ * причине. Категорий товара сервер не отдаёт, поэтому выдумывать их нельзя —
+ * деление берётся из настоящих полей can_buy и missing_coins.
+ *
+ * Порядок проверок здесь несущий. По blocked_reason судить нельзя: при
+ * нехватке коинов сервер сам кладёт туда строку «Нужно ещё N коинов», и
+ * копящееся уезжало в «недоступно» вместе с тем, что закрыто по-настоящему.
+ * Настоящая блокировка — это когда коинов хватает, а купить всё равно
+ * нельзя: кончился запас или выбран месячный лимит.
+ */
+export function shopGroup(item: ShopItemForOperator): "ready" | "saving" | "blocked" {
+  if (item.can_buy) return "ready";
+  if (item.missing_coins > 0) return "saving";
+  return "blocked";
+}
+
+export function filterShop(items: ShopItemForOperator[], f: ShopFilters): ShopItemForOperator[] {
+  const needle = f.search.trim().toLowerCase();
+  const rows = items.filter((item) => {
+    if (f.onlyReady && !item.can_buy) return false;
+    if (!needle) return true;
+    return `${item.title} ${item.description ?? ""}`.toLowerCase().includes(needle);
+  });
+  const order = { ready: 0, saving: 1, blocked: 2 } as const;
+  return rows.sort((a, b) => {
+    if (f.sort === "cheap") return a.price - b.price;
+    if (f.sort === "expensive") return b.price - a.price;
+    if (f.sort === "closest") {
+      // «Ближе всего» — сколько осталось добрать. Купленное сейчас считаем
+      // нулём, иначе доступное провалилось бы в конец списка.
+      const left = (x: ShopItemForOperator) => (x.can_buy ? 0 : x.missing_coins);
+      return left(a) - left(b);
+    }
+    // По умолчанию: сначала то, что можно взять, потом то, на что копится,
+    // и внутри группы — от дешёвого к дорогому. Порядок сортировки товара
+    // с сервера при этом сохраняется как последний признак.
+    const group = order[shopGroup(a)] - order[shopGroup(b)];
+    if (group !== 0) return group;
+    if (a.price !== b.price) return a.price - b.price;
+    return a.sort_order - b.sort_order;
+  });
+}
+
 export function ShopPage() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [chosen, setChosen] = useState<ShopItemForOperator | null>(null);
   const [comment, setComment] = useState("");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<ShopSort>("smart");
+  const [onlyReady, setOnlyReady] = useState(false);
 
   const catalog = useQuery({ queryKey: ["shop-catalog"], queryFn: shop.catalog });
   const myRequests = useQuery({ queryKey: ["my-requests"], queryFn: () => cabinet.myRequests() });
@@ -83,6 +140,20 @@ export function ShopPage() {
   if (catalog.isError) return <ErrorState error={catalog.error} onRetry={() => catalog.refetch()} />;
 
   const data = catalog.data!;
+  const reserved = data.balance - data.available;
+  const ready = data.items.filter((item) => item.can_buy);
+  const visible = filterShop(data.items, { search, sort, onlyReady });
+  // Группы показываются в порядке полезности. При явной сортировке по цене
+  // деление сохраняется: иначе «сначала дешёвые» смешало бы доступное с тем,
+  // на что ещё копить, и список снова стал бы нечитаемым.
+  const groups: [string, string, (n: number) => string, ShopItemForOperator[]][] = [
+    ["ready", "Можно взять сейчас", (n) => `${n} ${plural(n, "бонус", "бонуса", "бонусов")}`,
+      visible.filter((item) => shopGroup(item) === "ready")],
+    ["saving", "Копим", (n) => `${n} ${plural(n, "бонус", "бонуса", "бонусов")} по карману позже`,
+      visible.filter((item) => shopGroup(item) === "saving")],
+    ["blocked", "Сейчас недоступно", (n) => `${n} ${plural(n, "бонус", "бонуса", "бонусов")}`,
+      visible.filter((item) => shopGroup(item) === "blocked")],
+  ];
 
   return (
     <div className="stack">
@@ -95,34 +166,96 @@ export function ShopPage() {
         </div>
       </div>
 
+      {/* Показателей было два, и при пустом резерве они показывали одно и то
+          же число дважды. Остаток под заявками — редкий случай, поэтому он
+          и упоминается только когда есть. */}
       <div className="kpi-grid kpi-grid--2">
         <KPI
           label="Доступно к трате"
           value={coins(data.available)}
           tone="coin"
-          hint="Можно потратить прямо сейчас"
+          hint={
+            reserved > 0
+              ? `Ещё ${coins(reserved)} зарезервировано под заявки`
+              : "Коины не сгорают"
+          }
         />
         <KPI
-          label="Всего на балансе"
-          value={coins(data.balance)}
-          hint={
-            data.balance - data.available > 0
-              ? `${coins(data.balance - data.available)} зарезервировано под заявки`
-              : "Резерва нет"
-          }
+          label="Можно взять сейчас"
+          value={`${ready.length} из ${data.items.length}`}
+          hint={ready.length ? "Остальное копится" : "Пока копим на первый бонус"}
         />
       </div>
 
-      <div className="catalog">
-        {data.items.map((item) => (
-          <ProductCard
-            key={item.id}
-            item={item}
-            available={data.available}
-            onBuy={() => setChosen(item)}
-          />
-        ))}
-      </div>
+      <Card>
+        <div className="workflow-toolbar">
+          <label className="field" style={{ flex: "2 1 220px" }}>
+            <span className="field__label">Поиск</span>
+            <input
+              className="input"
+              type="search"
+              value={search}
+              placeholder="Название или описание бонуса"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span className="field__label">Порядок</span>
+            <select className="input" value={sort} onChange={(event) => setSort(event.target.value as ShopSort)}>
+              <option value="smart">Сначала доступные</option>
+              <option value="closest">Ближе всего к покупке</option>
+              <option value="cheap">Сначала дешёвые</option>
+              <option value="expensive">Сначала дорогие</option>
+            </select>
+          </label>
+          <label className="field" style={{ flex: "0 0 auto" }}>
+            <span className="field__label">Что показывать</span>
+            <button
+              type="button"
+              className={onlyReady ? "shop-toggle is-on" : "shop-toggle"}
+              aria-pressed={onlyReady}
+              onClick={() => setOnlyReady((on) => !on)}
+            >
+              Только доступные
+            </button>
+          </label>
+        </div>
+      </Card>
+
+      {visible.length === 0 ? (
+        <EmptyState
+          title={onlyReady ? "Пока нечего купить" : "Ничего не нашлось"}
+          hint={
+            onlyReady
+              ? "Снимите фильтр, чтобы посмотреть, на что копить."
+              : "Попробуйте другое слово — поиск идёт по названию и описанию."
+          }
+          action={
+            <Button onClick={() => { setSearch(""); setOnlyReady(false); }}>Показать все</Button>
+          }
+        />
+      ) : (
+        groups.map(([group, label, hint, items]) =>
+          items.length ? (
+            <section key={group} className="shop-group">
+              <header className="shop-group__head">
+                <h2 className="shop-group__title">{label}</h2>
+                <span className="shop-group__hint">{hint(items.length)}</span>
+              </header>
+              <div className="catalog">
+                {items.map((item) => (
+                  <ProductCard
+                    key={item.id}
+                    item={item}
+                    available={data.available}
+                    onBuy={() => setChosen(item)}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null,
+        )
+      )}
 
       <Card title="Мои заявки" padded={false}>
         {myRequests.isLoading && (
@@ -275,10 +408,10 @@ function ProductCard({
 
   return (
     <article className={item.can_buy ? "product product--ready" : "product"}>
-      <div className="product__art">
-        <StoreIcon size={28} />
-      </div>
-
+      {/* Блок с иконкой-заглушкой убран: девять одинаковых картинок съедали
+          по сто двадцать пикселей каждая и не сообщали ничего. Картинок
+          товара сервер не отдаёт, а рисовать вместо них один и тот же
+          значок — это занимать место, не давая взамен смысла. */}
       <h3 className="product__title">{item.title}</h3>
       <p className="product__text">{item.description}</p>
 

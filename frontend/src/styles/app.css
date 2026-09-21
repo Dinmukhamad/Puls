@@ -2720,3 +2720,26 @@ select.input {
   font-size: var(--text-caption);
   color: var(--text-secondary);
 }
+
+/* Витрина магазина делится на группы: что можно взять сейчас, на что копится
+   и что закрыто. Заголовок группы отвечает на вопрос, с которого оператор и
+   начинает — «что я могу купить прямо сейчас». */
+.shop-group { display: flex; flex-direction: column; gap: var(--sp-3); }
+.shop-group__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.shop-group__title { font-size: var(--text-card-title); font-weight: 650; letter-spacing: -.01em; }
+.shop-group__hint { font-size: var(--text-caption); color: var(--text-secondary); }
+
+/* Недоступное остаётся читаемым, но уходит на второй план: одинаковый вес
+   с доступным заставлял каждый раз перечитывать карточку, чтобы понять,
+   можно ли её взять. */
+.shop-group:not(:first-of-type) .product { background: var(--surface-secondary); box-shadow: none; }
+
+.shop-toggle {
+  min-height: var(--control-h, 40px); padding: 0 16px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--separator); background: var(--surface-primary);
+  color: var(--text-secondary); font: inherit; font-size: var(--text-caption); font-weight: 550;
+  transition: background var(--motion-fast, .14s), color var(--motion-fast, .14s), border-color var(--motion-fast, .14s);
+}
+.shop-toggle:hover { color: var(--text-primary); }
+.shop-toggle.is-on { background: var(--accent-tint); border-color: transparent; color: var(--accent-primary); font-weight: 650; }
+.shop-toggle:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
