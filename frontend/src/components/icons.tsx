@@ -154,6 +154,15 @@ export const SparkIcon = (p: IconProps) => (
   </Icon>
 );
 
+/* Колесо WOW: обод, спицы и стрелка сверху — узнаётся с одного взгляда
+   и не повторяет ни звезду обучения, ни витрину магазина. */
+export const WheelIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="13" r="8" />
+    <path d="M12 5v16M4 13h16M6.3 7.3l11.4 11.4M17.7 7.3 6.3 18.7" />
+  </Icon>
+);
+
 export const MedalIcon = (p: IconProps) => (
   <Icon {...p}>
     <circle cx="12" cy="14.5" r="5" />

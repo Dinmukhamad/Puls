@@ -24,7 +24,10 @@ test("trainer navigation stays within learning even with explicit grants", () =>
 });
 
 test("roles expose task-specific defaults with an account entry", () => {
-  assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Награды", "Профиль"]);
+  // «Колесо WOW» стоит отдельным пунктом, а не третьей вкладкой внутри
+  // «Наград»: это ежедневное действие на минуту, и прятать его вглубь
+  // значит каждый раз заставлять оператора вспоминать, где оно.
+  assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Колесо WOW", "Награды", "Профиль"]);
   assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "Рейтинг и мотивация", "Профиль"]);
   assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Производительность", "Обучение", "Мотивация", "Отчёты", "Профиль"]);
   assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Пользователи и структура", "Производительность", "Аналитика", "Обучение", "Мотивация", "Система", "Профиль"]);
@@ -122,9 +125,16 @@ test("deep links and query filters retain the proper section", () => {
   assert.equal(nav.currentTab(learning, "/admin/learning", "?tab=results&kind=simulator").label, "Результаты команды");
 });
 
-test("mobile bar shows all five operator sections and bounds larger role menus", () => {
+test("mobile bar keeps the wheel in reach and bounds larger role menus", () => {
+  // Разделов у оператора стало шесть, и панель перешла в режим «четыре плюс
+  // меню». Это осознанный размен: колесо остаётся на виду, а в скрытое меню
+  // уходят «Награды» и «Профиль». Проверка стережёт именно это — что
+  // вынесенный пункт не оказался спрятан тем же движением, которым его
+  // доставали из глубины.
   const operator = nav.mobileNavigation(nav.visibleNavigation("operator"));
-  assert.equal(operator.primary.length, 5); assert.equal(operator.overflow.length, 0);
+  assert.equal(operator.primary.length, 4);
+  assert.ok(operator.primary.some((item) => item.id === "wheel"), "колесо ушло в скрытое меню");
+  assert.deepEqual([...operator.primary, ...operator.overflow], nav.visibleNavigation("operator"));
   for (const role of ["supervisor", "head", "admin"]) {
     const menu = nav.mobileNavigation(nav.visibleNavigation(role));
     assert.equal(menu.primary.length, 4);

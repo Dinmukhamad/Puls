@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Role } from "./api/types";
 import type { AccessMap, SectionCode } from "./api/access";
-import { HomeIcon, InboxIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon } from "./components/icons";
+import { HomeIcon, InboxIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon, WheelIcon } from "./components/icons";
 
 export interface SectionTab { to: string; label: string }
 export interface NavItem {
@@ -68,7 +68,12 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
     section("home", "Главная", HomeIcon, personal.filter((item) => item.to !== "/progress")),
     section("results", "Результаты", TrophyIcon, [tab("/rating?tab=board", "Рейтинг"), tab("/progress", "Мой прогресс")]),
     section("training", "Обучение", SparkIcon, learningTabs),
-    section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=wheel", "Колесо WOW"), tab("/games?tab=raffles", "Розыгрыши")]),
+    // Колесо вынесено отдельным пунктом: это ежедневное действие на минуту,
+    // и третьей вкладкой внутри «Наград» его каждый раз приходилось искать.
+    // Право доступа прежнее — routeSection сопоставляет /games с разделом
+    // rewards, так что отдельный пункт ничего не открывает сверх былого.
+    section("wheel", "Колесо WOW", WheelIcon, [tab("/games?tab=wheel", "Колесо WOW")], ["/games"]),
+    section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=raffles", "Розыгрыши")]),
     ACCOUNT_SECTION,
   ],
   supervisor: [staffHome, team(false, true), analytics(true), staffLearning(false), motivation(true), ACCOUNT_SECTION],
@@ -164,6 +169,15 @@ export function currentSection(role: Role, pathname: string, search = "", allowe
   if (role === "trainer" && ["/admin/learning", "/training", "/simulator"].some(p => pathname === p || pathname.startsWith(p + "/"))) {
     const kind = new URLSearchParams(search).get("kind");
     return sections.find(item => item.id === (kind === "test" ? "tests" : kind === "mission" ? "missions" : kind === "simulator" || pathname.startsWith("/simulator") ? "driver" : "training"));
+  }
+  // «Колесо» и «Розыгрыши» живут на одном пути /games и различаются только
+  // вкладкой. Разделы сопоставляются по пути, поэтому без этой развилки
+  // открытие розыгрышей подсвечивало бы в меню «Колесо WOW». У ролей, где
+  // отдельного пункта колеса нет, ветка молча пропускается.
+  if (pathname === "/games") {
+    const wanted = new URLSearchParams(search).get("tab") === "raffles" ? "rewards" : "wheel";
+    const found = sections.find((item) => item.id === wanted);
+    if (found) return found;
   }
   // Settings pages are hosted by their business domain, even on direct legacy links.
   if (pathname === "/admin/settings") {
