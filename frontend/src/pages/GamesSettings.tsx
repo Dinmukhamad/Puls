@@ -15,11 +15,56 @@ export function WheelSettings() {
 function WheelEditor({initial}:{initial:WheelConfig}) {
   const {atLeast}=useAuth();const editable=atLeast("head");const client=useQueryClient();const toast=useToast();
   const [value,setValue]=useState(()=>({enabled:initial.enabled,daily_spins:initial.daily_spins,segments:structuredClone(initial.segments)}));
-  const save=useMutation({mutationFn:()=>games.configureWheel(value),onSuccess:()=>{void client.invalidateQueries({queryKey:["wheel"]});toast.success("Правила колеса сохранены");}});
+  const save=useMutation({mutationFn:()=>games.configureWheel(value),onSuccess:()=>{void client.invalidateQueries({queryKey:["wheel"]});toast.success("Правила сохранены");}});
   const total=value.segments.reduce((sum,item)=>sum+item.weight,0);
-  return <form className="stack" onSubmit={(e)=>{e.preventDefault();if(editable&&!save.isPending)save.mutate();}}><Card title="Правила колеса" subtitle="Участие бесплатное. Результат и начисление определяет сервер."><fieldset className="learning-fieldset stack" disabled={!editable||save.isPending}><label className="learning-check"><input type="checkbox" checked={value.enabled} onChange={(e)=>setValue({...value,enabled:e.target.checked})}/>Колесо доступно сотрудникам</label><label className="field"><span>Попыток на человека в день</span><input className="input" type="number" min={1} max={10} required value={value.daily_spins} onChange={(e)=>setValue({...value,daily_spins:Number(e.target.value)})}/></label><p className="secondary small">Вес задаёт относительную вероятность. Например, вес 2 вдвое вероятнее веса 1.</p></fieldset></Card>
-    <div className="training-grid">{value.segments.map((item,index)=><Card key={index} title={`Сектор ${index+1}`} subtitle={`Вероятность ${total>0?points(item.weight/total*100):"—"}%`}><fieldset className="learning-fieldset stack stack--tight" disabled={!editable||save.isPending}><label className="field"><span>Название результата</span><input className="input" required maxLength={100} value={item.title} onChange={(e)=>setValue({...value,segments:value.segments.map((row,i)=>i===index?{...row,title:e.target.value}:row)})}/></label>{([{key:"weight",label:"Вес",min:1,max:10000},{key:"coins",label:"Коины",min:0,max:1000}]as const).map((field)=><label className="field" key={field.key}><span>{field.label}</span><input type="number" className="input" required min={field.min} max={field.max} value={item[field.key]} onChange={(e)=>setValue({...value,segments:value.segments.map((row,i)=>i===index?{...row,[field.key]:Number(e.target.value)}:row)})}/></label>)}<Button variant="destructive" disabled={value.segments.length<=2} onClick={()=>setValue({...value,segments:value.segments.filter((_,i)=>i!==index)})}>Удалить сектор</Button></fieldset></Card>)}</div>
-    {editable&&<div className="row"><Button disabled={value.segments.length>=12||save.isPending} onClick={()=>setValue({...value,segments:[...value.segments,{title:"В этот раз без награды",weight:1,coins:0}]})}>Добавить сектор</Button><Button type="submit" variant="primary" disabled={save.isPending}>{save.isPending?"Сохраняем…":"Сохранить правила"}</Button></div>}{save.isError&&<ErrorState error={save.error}/>}</form>;
+  const patch=(index:number,field:"title"|"weight"|"coins",next:string|number)=>
+    setValue((state)=>({...state,segments:state.segments.map((row,i)=>i===index?{...row,[field]:next}:row)}));
+
+  return <form className="stack" onSubmit={(e)=>{e.preventDefault();if(editable&&!save.isPending)save.mutate();}}>
+    <Card title="Правила розыгрыша" subtitle="Участие бесплатное. Результат и начисление определяет сервер.">
+      <fieldset className="learning-fieldset stack" disabled={!editable||save.isPending}>
+        <label className="learning-check"><input type="checkbox" checked={value.enabled} onChange={(e)=>setValue({...value,enabled:e.target.checked})}/>Доступно сотрудникам</label>
+        <label className="field"><span>Попыток на человека в день</span><input className="input" type="number" min={1} max={10} required value={value.daily_spins} onChange={(e)=>setValue({...value,daily_spins:Number(e.target.value)})}/></label>
+      </fieldset>
+    </Card>
+
+    {/* Призы редактируются таблицей, а не восемью карточками в столбик:
+        в карточках на восемь призов уходила целая страница прокрутки, а
+        сравнить веса между собой — то, ради чего сюда и заходят, — было
+        нельзя, потому что рядом они не помещались. */}
+    <Card title="Призы" subtitle={`${value.segments.length} из 12 · общий вес ${total}`} padded={false}>
+      <div className="table-wrap table-wrap--responsive">
+        <table className="table prize-table">
+          <thead>
+            <tr>
+              <th style={{width:"46%"}}>Название приза</th>
+              <th className="num">Вес</th>
+              <th className="num">Коины</th>
+              <th className="num">Шанс</th>
+              <th aria-label="Действия" />
+            </tr>
+          </thead>
+          <tbody>
+            {value.segments.map((item,index)=>
+              <tr key={index}>
+                <td><input className="input" required maxLength={100} disabled={!editable||save.isPending} value={item.title} onChange={(e)=>patch(index,"title",e.target.value)} aria-label={`Название приза ${index+1}`}/></td>
+                <td className="num"><input className="input input--num" type="number" required min={1} max={10000} disabled={!editable||save.isPending} value={item.weight} onChange={(e)=>patch(index,"weight",Number(e.target.value))} aria-label={`Вес приза ${index+1}`}/></td>
+                <td className="num"><input className="input input--num" type="number" required min={0} max={1000} disabled={!editable||save.isPending} value={item.coins} onChange={(e)=>patch(index,"coins",Number(e.target.value))} aria-label={`Коины за приз ${index+1}`}/></td>
+                <td className="num prize-table__chance">{total>0?`${points(item.weight/total*100)}%`:"—"}</td>
+                <td>{editable&&<Button variant="destructive" disabled={value.segments.length<=2||save.isPending} onClick={()=>setValue({...value,segments:value.segments.filter((_,i)=>i!==index)})}>Удалить</Button>}</td>
+              </tr>)}
+          </tbody>
+        </table>
+      </div>
+      <p className="secondary small prize-table__hint">Вес задаёт относительную вероятность: вес 2 вдвое вероятнее веса 1. Шанс пересчитывается сразу и всегда даёт в сумме 100%.</p>
+    </Card>
+
+    {editable&&<div className="row">
+      <Button disabled={value.segments.length>=12||save.isPending} onClick={()=>setValue({...value,segments:[...value.segments,{title:"В этот раз без награды",weight:1,coins:0}]})}>Добавить приз</Button>
+      <Button type="submit" variant="primary" disabled={save.isPending}>{save.isPending?"Сохраняем…":"Сохранить правила"}</Button>
+    </div>}
+    {save.isError&&<ErrorState error={save.error}/>}
+  </form>;
 }
 
 export function Raffles({administrative}:{administrative:boolean}) {

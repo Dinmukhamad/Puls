@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -573,4 +574,45 @@ test("money and profile screens both animate in on a keyed wrapper", () => {
   assert.match(profileHtml("park"), /class="dp-swipe du-screen"/);
   assert.match(moneyHtml("balance"), /<div class="du-screen">/);
   assert.match(moneyHtml("money"), /<div class="du-screen">/);
+});
+
+const driverCss = Object.fromEntries(readdirSync(new URL(".", import.meta.url))
+  .filter(name => name.startsWith("driver-") && name.endsWith(".css"))
+  .map(name => [name, readFileSync(new URL("./" + name, import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")]));
+
+test("a modifier never sits above the class it modifies", () => {
+  // Специфичность одинаковая, побеждает правило ниже: модификатор над своим базовым
+  // классом молча теряет свойства. Так плитка баланса оказалась центрированной.
+  const offenders = [];
+  for (const [name, css] of Object.entries(driverCss)) {
+    for (const match of css.matchAll(/(\.[\w-]+?)--[\w-]+\s*\{/g)) {
+      // Базовый класс засчитываем только отдельным селектором: внутри .a .base
+      // специфичность выше, и перекрытие законно.
+      const bare = new RegExp("(?:^|[\n;{},])\s*\\" + match[1] + "\s*[,{]");
+      const base = bare.exec(css);
+      if (base && base.index > match.index) offenders.push(name + ": " + match[0].trim() + " перекрыт " + match[1]);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
+
+test("every card used as a button resets the browser border", () => {
+  // <button class="dm-card"> без border:0 рисуется с рамкой браузера.
+  const css = Object.values(driverCss).join("\n");
+  const sources = ["DriverMoneyViews.tsx", "DriverProfileViews.tsx"].map(name => readFileSync(new URL("./" + name, import.meta.url), "utf8"));
+  const missing = new Set();
+  for (const source of sources) {
+    for (const match of source.matchAll(/<button className="([\w\s-]+)"/g)) {
+      const classes = match[1].trim().split(/\s+/);
+      if (!classes.some(name => new RegExp("\." + name + "[^{]*\{[^}]*border\s*:").test(css))) missing.add(match[1]);
+    }
+  }
+  assert.deepEqual([...missing], []);
+});
+
+test("the balance tile justifies its row and keeps the park block below", () => {
+  const html = moneyHtml("money", { balance: 1775 });
+  assert.match(html, /class="dm-tile dm-tile--stack"/);
+  assert.match(html, /class="dm-tile__row"><strong>Баланс<\/strong><b>1\s775 ₸<\/b>/);
+  assert.match(html, /class="dm-tile__park"><small>Парк<\/small><strong>Jana Taxi<\/strong>/);
 });

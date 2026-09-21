@@ -1,5 +1,9 @@
-.wheel-layout { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(280px,1fr); gap:24px; }.wheel-card { text-align:center; }.wheel-card h2 { font-size:30px; letter-spacing:-.03em; margin:16px 0 8px; }.wheel-stage { width:min(100%,340px); aspect-ratio:1; position:relative; margin:36px auto; padding:12px; }.wheel-disc { width:100%; height:100%; border-radius:50%; border:8px solid var(--surface-primary); box-shadow:0 0 0 1px var(--separator),0 10px 40px var(--progress-tint); transition:transform 3s cubic-bezier(.14,.72,.13,1); position:relative; }.wheel-pointer { position:absolute; top:0; left:calc(50% - 11px); width:0; height:0; border-left:11px solid transparent; border-right:11px solid transparent; border-top:24px solid var(--text-primary); z-index:2; }.wheel-center { position:absolute; inset:calc(50% - 47px); width:94px; height:94px; display:flex; flex-direction:column; justify-content:center; background:var(--surface-primary); border-radius:50%; color:var(--text-primary); font-size:22px; font-weight:750; box-shadow:var(--shadow-card); }.wheel-center span { margin-top:4px; font-size:10px; letter-spacing:.2em; color:var(--text-secondary); }.wheel-number { position:absolute; left:50%; top:50%; color:white; font-size:19px; font-weight:650; transform:translate(-50%,-50%) rotate(var(--angle)) translateY(-105px); }.wheel-spin { min-width:220px; min-height:54px; margin-bottom:16px; }.wheel-legend { list-style:none; padding:0; margin:0; }.wheel-legend li { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--separator); }.wheel-legend li>span:nth-child(2) { flex:1; }.wheel-legend__dot { width:26px; height:26px; border-radius:50%; color:white; display:grid; place-items:center; font-size:12px; }.game-history { display:flex; justify-content:space-between; gap:12px; padding:14px 0; border-bottom:1px solid var(--separator); font-size:13px; }.game-history small { display:block; color:var(--text-secondary); margin-top:5px; }.wheel-result { border-color:var(--progress-color); }.raffle-prize { padding:28px 18px; border-radius:var(--radius-m); background:linear-gradient(135deg,var(--accent-tint),var(--progress-tint)); text-align:center; }.raffle-prize>span { font-size:42px; color:var(--accent-primary); }.raffle-prize h3 { font-size:22px; margin-top:12px; }.raffle-card { min-width:0; }
-@media(max-width:800px) { .wheel-layout { grid-template-columns:1fr; }.wheel-card h2 { font-size:26px; } }
+.wheel-layout { display:grid; grid-template-columns:1fr; gap:24px; }
+/* Лента получает всю ширину: в узкой колонке её преимущество — видеть
+   соседние призы — как раз и пропадает. Всё остальное уходит вниз в
+   две колонки. */
+.wheel-layout > .stack { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:24px; align-items:start; }.wheel-card { text-align:center; }.wheel-card h2 { font-size:30px; letter-spacing:-.03em; margin:16px 0 8px; }.wheel-stage { width:min(100%,340px); aspect-ratio:1; position:relative; margin:36px auto; padding:12px; }.wheel-disc { width:100%; height:100%; border-radius:50%; border:8px solid var(--surface-primary); box-shadow:0 0 0 1px var(--separator),0 10px 40px var(--progress-tint); transition:transform 3s cubic-bezier(.14,.72,.13,1); position:relative; }.wheel-pointer { position:absolute; top:0; left:calc(50% - 11px); width:0; height:0; border-left:11px solid transparent; border-right:11px solid transparent; border-top:24px solid var(--text-primary); z-index:2; }.wheel-center { position:absolute; inset:calc(50% - 47px); width:94px; height:94px; display:flex; flex-direction:column; justify-content:center; background:var(--surface-primary); border-radius:50%; color:var(--text-primary); font-size:22px; font-weight:750; box-shadow:var(--shadow-card); }.wheel-center span { margin-top:4px; font-size:10px; letter-spacing:.2em; color:var(--text-secondary); }.wheel-number { position:absolute; left:50%; top:50%; color:white; font-size:19px; font-weight:650; transform:translate(-50%,-50%) rotate(var(--angle)) translateY(-105px); }.wheel-spin { min-width:220px; min-height:54px; margin-bottom:16px; }.wheel-legend { list-style:none; padding:0; margin:0; }.wheel-legend li { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--separator); }.wheel-legend li>span:nth-child(2) { flex:1; }.wheel-legend__dot { width:26px; height:26px; border-radius:50%; color:white; display:grid; place-items:center; font-size:12px; }.game-history { display:flex; justify-content:space-between; gap:12px; padding:14px 0; border-bottom:1px solid var(--separator); font-size:13px; }.game-history small { display:block; color:var(--text-secondary); margin-top:5px; }.wheel-result { border-color:var(--progress-color); }.raffle-prize { padding:28px 18px; border-radius:var(--radius-m); background:linear-gradient(135deg,var(--accent-tint),var(--progress-tint)); text-align:center; }.raffle-prize>span { font-size:42px; color:var(--accent-primary); }.raffle-prize h3 { font-size:22px; margin-top:12px; }.raffle-card { min-width:0; }
+@media(max-width:800px) { .wheel-layout > .stack { grid-template-columns:1fr; }.wheel-card h2 { font-size:26px; } }
 @media(max-width:400px) { .wheel-stage { width:270px; max-width:100%; }.wheel-number { transform:translate(-50%,-50%) rotate(var(--angle)) translateY(-84px); } }
 @media(prefers-reduced-motion:reduce) { .wheel-disc { transition:none; } }
 
@@ -11,3 +15,22 @@
 .wheel-mute { background:none; border:0; padding:4px 8px; margin-top:4px; color:var(--text-secondary); font:inherit; font-size:12px; cursor:pointer; border-radius:var(--radius-s); }
 .wheel-mute:hover { color:var(--text-primary); }
 .wheel-mute:focus-visible { outline:2px solid var(--accent-primary); outline-offset:2px; }
+
+/* Лента призов. Заняла место круга: горизонтальная полоса показывает, что
+   было рядом и что почти выпало, и лучше живёт на телефоне — там колесо
+   съедало квадрат во весь экран.
+
+   Высота задана в пикселях, а не процентом: холст в grid-контейнере берёт
+   высоту из собственного атрибута, а подгонка размера этот атрибут
+   увеличивает — с процентом полоса разрасталась бы на каждом кадре. */
+.strip-stage { width: 100%; margin: 28px 0 24px; }
+.prize-strip { display: block; width: 100%; height: 168px; }
+@media (max-width: 640px) { .prize-strip { height: 140px; } }
+
+/* Таблица призов: поля прямо в ячейках, чтобы веса стояли в столбик и их
+   можно было сравнить взглядом — ради этого в настройки и заходят. */
+.prize-table td { vertical-align: middle; }
+.prize-table .input { width: 100%; min-width: 0; }
+.prize-table .input--num { width: 88px; text-align: right; font-variant-numeric: tabular-nums; }
+.prize-table__chance { font-variant-numeric: tabular-nums; color: var(--text-secondary); white-space: nowrap; }
+.prize-table__hint { padding: 12px 16px 16px; margin: 0; }

@@ -24,12 +24,6 @@
 /* ── заголовок раздела с кнопкой поддержки ────────────────────────── */
 .dm-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 2px 2px 6px; }
 .dm-head h1 { flex: 1; min-width: 0; font-size: 32px; letter-spacing: -.03em; }
-.dm-tile--stack { flex-direction: column; align-items: stretch; gap: 34px; padding: 18px; }
-.dm-tile__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-.dm-tile__row b { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
-.dm-tile__park { display: block; }
-.dm-tile__park small { display: block; font-size: 15px; color: var(--driver-muted); }
-.dm-tile__park strong { display: block; margin-top: 4px; font-size: 16px; font-weight: 400; color: var(--driver-muted); }
 .dm-support {
   display: inline-flex; align-items: center; gap: 8px; flex: none;
   min-height: 44px; padding: 10px 20px; border: 0; border-radius: 999px;
@@ -43,7 +37,7 @@
 .dm-support svg { width: 18px; height: 18px; }
 
 /* ── карточка и строки ────────────────────────────────────────────── */
-.dm-card { background: var(--dm-card); border-radius: 24px; padding: 12px; display: grid; gap: 10px; }
+.dm-card { border: 0; background: var(--dm-card); border-radius: 24px; padding: 12px; display: grid; gap: 10px; }
 .dm-tile {
   display: flex; align-items: center; gap: 14px; width: 100%; min-height: 76px;
   padding: 16px 18px; border: 0; border-radius: 18px; background: var(--dm-tile);
@@ -57,6 +51,15 @@ button.dm-tile:active { transform: scale(.99); }
 .dm-tile strong { display: block; font-size: 17px; font-weight: 550; overflow-wrap: anywhere; }
 .dm-tile small { display: block; margin-top: 3px; font-size: 14px; color: var(--driver-muted); }
 .dm-tile > b { font-size: 19px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Ниже базового класса, иначе .dm-tile возвращает align-items и gap обратно:
+   специфичность одинаковая, побеждает правило, объявленное последним. */
+.dm-tile--stack { flex-direction: column; align-items: stretch; justify-content: space-between; gap: 30px; padding: 18px; min-height: 132px; }
+.dm-tile__row { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; width: 100%; }
+.dm-tile__row strong { font-size: 19px; font-weight: 450; }
+.dm-tile__row b { font-size: 22px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dm-tile__park { display: block; }
+.dm-tile__park small { display: block; margin: 0; font-size: 15px; color: var(--driver-muted); }
+.dm-tile__park strong { display: block; margin-top: 3px; font-size: 16px; font-weight: 400; color: var(--driver-muted); overflow-wrap: anywhere; }
 .dm-mark { display: grid; place-items: center; width: 52px; height: 52px; flex: none; border-radius: 16px; background: var(--driver-bg); color: var(--driver-text); }
 .ds-light .dm-mark { background: #fff; }
 .dm-mark svg { width: 24px; height: 24px; }

@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "npm run build && node --test src/api/client.test.mjs src/pwa/service-worker.test.mjs src/pwa/updates.test.mjs src/pwa/install-card.test.mjs src/utils/format.test.mjs src/utils/driverLocation.test.mjs src/navigation.test.mjs src/pages/operator-pages.test.mjs src/pages/driver-app.test.mjs src/pages/access-editor.test.mjs src/pages/coin-progress.test.mjs src/pages/sessions-filters.test.mjs src/pages/wheel-canvas.test.mjs src/pages/shop-catalog.test.mjs",
+    "test": "npm run build && node --test src/api/client.test.mjs src/pwa/service-worker.test.mjs src/pwa/updates.test.mjs src/pwa/install-card.test.mjs src/utils/format.test.mjs src/utils/driverLocation.test.mjs src/navigation.test.mjs src/pages/operator-pages.test.mjs src/pages/driver-app.test.mjs src/pages/access-editor.test.mjs src/pages/coin-progress.test.mjs src/pages/sessions-filters.test.mjs src/pages/spin-physics.test.mjs src/pages/shop-catalog.test.mjs",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
