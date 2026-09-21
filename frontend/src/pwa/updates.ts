@@ -8,11 +8,10 @@ export interface UpdateState {
   blocked: string | null;
   checkedAt: string | null;
   installedAt: string | null;
-  unread: boolean;
 }
 export const INITIAL_UPDATE: UpdateState = {
   available: null, checking: false, applying: false, error: null, blocked: null,
-  checkedAt: null, installedAt: null, unread: false,
+  checkedAt: null, installedAt: null,
 };
 
 export interface UpdatePlatform {
@@ -43,12 +42,11 @@ export class UpdateManager {
   private stopped = false;
 
   constructor(readonly current: Release, private platform: UpdatePlatform, private emit: (state: UpdateState) => void) {
-    const previous = getRecord<{ buildId: string; at: string; changed: boolean }>(platform.storage, "puls.pwa.installed");
+    const previous = getRecord<{ buildId: string; at: string }>(platform.storage, "puls.pwa.installed");
     const same = previous?.buildId === current.buildId;
-    const record = same ? previous : { buildId: current.buildId, at: new Date().toISOString(), changed: !!previous };
+    const record = same ? previous : { buildId: current.buildId, at: new Date().toISOString() };
     save(platform.storage, "puls.pwa.installed", record);
-    this.state = { ...INITIAL_UPDATE, installedAt: record.at,
-      unread: record.changed && getRecord(platform.storage, "puls.pwa.seen") !== current.buildId };
+    this.state = { ...INITIAL_UPDATE, installedAt: record.at };
     this.emit(this.state);
   }
 
@@ -57,10 +55,6 @@ export class UpdateManager {
     this.state = { ...this.state, ...patch }; this.emit(this.state);
   }
   stop() { this.stopped = true; }
-  markSeen() { save(this.platform.storage, "puls.pwa.seen", this.current.buildId); this.set({ unread: false }); }
-  syncSeen() {
-    if (getRecord(this.platform.storage, "puls.pwa.seen") === this.current.buildId) this.set({ unread: false });
-  }
 
   async check(auto = false): Promise<void> {
     if (this.checking) return this.checking;

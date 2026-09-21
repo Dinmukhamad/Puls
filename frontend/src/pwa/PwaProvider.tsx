@@ -20,7 +20,6 @@ interface PwaState {
   update: UpdateState;
   checkUpdate: () => void;
   applyUpdate: () => void;
-  markSeen: () => void;
   installed: boolean;
   canInstall: boolean;
   installing: boolean;
@@ -114,11 +113,10 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     };
     const onOnline = () => check(false);
     const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) check(true); };
-    const onStorage = (event: StorageEvent) => { if (event.key === "puls.pwa.seen") manager.syncSeen(); };
     for (const event of ["pointerdown", "keydown", "touchstart", "wheel"]) document.addEventListener(event, interact, { passive: true, capture: true });
     document.addEventListener("input", edit, true); document.addEventListener("change", edit, true);
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("online", onOnline); window.addEventListener("pageshow", onPageShow); window.addEventListener("storage", onStorage);
+    window.addEventListener("online", onOnline); window.addEventListener("pageshow", onPageShow);
     navigator.serviceWorker?.addEventListener("controllerchange", workers.report);
     const startup = window.setTimeout(() => check(true), 1500);
     const interval = window.setInterval(() => check(false), 5 * 60 * 1000);
@@ -128,7 +126,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
       for (const event of ["pointerdown", "keydown", "touchstart", "wheel"]) document.removeEventListener(event, interact, true);
       document.removeEventListener("input", edit, true); document.removeEventListener("change", edit, true);
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("online", onOnline); window.removeEventListener("pageshow", onPageShow); window.removeEventListener("storage", onStorage);
+      window.removeEventListener("online", onOnline); window.removeEventListener("pageshow", onPageShow);
       navigator.serviceWorker?.removeEventListener("controllerchange", workers.report);
     };
   }, [queryClient]);
@@ -155,7 +153,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
 
   return (
     <PwaContext.Provider value={{ installed, canInstall: !installed && Boolean(installPrompt || isIOS()), installing, install, installError,
-      update, checkUpdate: () => { void updater.current?.check(); }, applyUpdate: () => { void updater.current?.apply(); }, markSeen: () => updater.current?.markSeen() }}>
+      update, checkUpdate: () => { void updater.current?.check(); }, applyUpdate: () => { void updater.current?.apply(); } }}>
       {children}
       {/* Установка открывается только по действию пользователя - это не всплывающее уведомление. */}
       {iosInstructions && (
@@ -174,25 +172,13 @@ export function PwaProvider({ children }: { children: ReactNode }) {
 
 export function PwaInstallCard() {
   const pwa = useContext(PwaContext);
+  const { user } = useAuth();
   if (!pwa) return null;
   return (
-    <Card id="app-updates" title="Приложение Puls" action={<PwaUpdateDot />}>
-      <div className="pwa-update">
-        <div className="pwa-version"><strong>Версия {CURRENT_RELEASE.version}</strong>{CURRENT_RELEASE.builtAt && <span>Выпущена {dateTime(CURRENT_RELEASE.builtAt)}</span>}</div>
-        {pwa.update.installedAt && <p className="secondary small">На этом устройстве с {dateTime(pwa.update.installedAt)}</p>}
-        <p className="pwa-update-status" role="status">{pwa.update.applying ? "Применяем обновление…" : pwa.update.checking ? "Проверяем и загружаем обновление…" : pwa.update.available ? "Доступно обновление Puls" : pwa.update.unread ? "Приложение обновлено" : pwa.update.checkedAt && !pwa.update.error ? "Установлена актуальная версия" : "Обновления проверяются автоматически"}</p>
-        {pwa.update.available && <><p className="secondary small">Обновление от {dateTime(pwa.update.available.builtAt)} · версия {pwa.update.available.version}</p><p className="secondary small">{pwa.update.blocked || "Применится при следующем открытии в подходящий момент. Можно обновить сейчас."}</p></>}
-        <div className="pwa-update-actions">
-          {pwa.update.available && <Button variant="primary" onClick={pwa.applyUpdate} disabled={pwa.update.applying || pwa.update.checking}>Обновить приложение</Button>}
-          <Button onClick={pwa.checkUpdate} disabled={pwa.update.checking || pwa.update.applying || !import.meta.env.PROD}>Проверить обновления</Button>
-        </div>
-        {pwa.update.error && <p className="pwa-error" role="alert">{pwa.update.error}</p>}
-        {pwa.update.checkedAt && <p className="secondary small">Последняя проверка: {dateTime(pwa.update.checkedAt)}</p>}
-        <details className="pwa-release-notes" onToggle={(event) => { if (event.currentTarget.open && !pwa.update.available) pwa.markSeen(); }}>
-          <summary>Что нового в версии {(pwa.update.available ?? CURRENT_RELEASE).version}</summary>
-          <ul>{(pwa.update.available ?? CURRENT_RELEASE).changes.map((line, index) => <li key={index}>{line}</li>)}</ul>
-        </details>
-      </div>
+    <Card id="app-updates" title="Приложение Puls">
+      {/* Состав выпуска — рабочий инструмент администратора. Остальным приложение
+          обновляется само при следующем заходе, просить их об этом незачем. */}
+      {user?.role === "admin" && <PwaReleaseDetails pwa={pwa} />}
       {pwa.installed ? <p className="secondary">Puls установлен на этом устройстве.</p> : pwa.canInstall ? (
         <><p className="secondary small">Открывайте Puls с экрана Домой в отдельном окне.</p><Button block onClick={() => void pwa.install()} disabled={pwa.installing} className="pwa-install-button">{pwa.installing ? "Открываем установку…" : "Установить Puls"}</Button></>
       ) : <p className="secondary small">Если браузер поддерживает установку, она будет доступна в его меню.</p>}
@@ -201,9 +187,23 @@ export function PwaInstallCard() {
   );
 }
 
-export function PwaUpdateDot() {
-  const pwa = useContext(PwaContext);
-  if (!pwa || (!pwa.update.available && !pwa.update.unread)) return null;
-  const label = pwa.update.available ? "Доступно обновление Puls" : "Puls обновлён — посмотрите, что нового";
-  return <span className="pwa-update-dot" role="img" aria-label={label} title={label} />;
+function PwaReleaseDetails({ pwa }: { pwa: PwaState }) {
+  return (
+    <div className="pwa-update">
+      <div className="pwa-version"><strong>Версия {CURRENT_RELEASE.version}</strong>{CURRENT_RELEASE.builtAt && <span>Выпущена {dateTime(CURRENT_RELEASE.builtAt)}</span>}</div>
+      {pwa.update.installedAt && <p className="secondary small">На этом устройстве с {dateTime(pwa.update.installedAt)}</p>}
+      <p className="pwa-update-status" role="status">{pwa.update.applying ? "Применяем обновление…" : pwa.update.checking ? "Проверяем и загружаем обновление…" : pwa.update.available ? "Доступно обновление Puls" : pwa.update.checkedAt && !pwa.update.error ? "Установлена актуальная версия" : "Обновления проверяются автоматически"}</p>
+      {pwa.update.available && <><p className="secondary small">Обновление от {dateTime(pwa.update.available.builtAt)} · версия {pwa.update.available.version}</p><p className="secondary small">{pwa.update.blocked || "Применится при следующем открытии в подходящий момент. Можно обновить сейчас."}</p></>}
+      <div className="pwa-update-actions">
+        {pwa.update.available && <Button variant="primary" onClick={pwa.applyUpdate} disabled={pwa.update.applying || pwa.update.checking}>Обновить приложение</Button>}
+        <Button onClick={pwa.checkUpdate} disabled={pwa.update.checking || pwa.update.applying || !import.meta.env.PROD}>Проверить обновления</Button>
+      </div>
+      {pwa.update.error && <p className="pwa-error" role="alert">{pwa.update.error}</p>}
+      {pwa.update.checkedAt && <p className="secondary small">Последняя проверка: {dateTime(pwa.update.checkedAt)}</p>}
+      <details className="pwa-release-notes">
+        <summary>Что нового в версии {(pwa.update.available ?? CURRENT_RELEASE).version}</summary>
+        <ul>{(pwa.update.available ?? CURRENT_RELEASE).changes.map((line, index) => <li key={index}>{line}</li>)}</ul>
+      </details>
+    </div>
+  );
 }

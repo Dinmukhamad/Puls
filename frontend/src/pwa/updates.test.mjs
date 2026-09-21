@@ -7,7 +7,7 @@ import { build } from "esbuild";
 const built = await build({ entryPoints: [fileURLToPath(new URL("./updates.ts", import.meta.url))], bundle: true, platform: "node", format: "cjs", write: false });
 const module = { exports: {} };
 new Function("require", "module", "exports", built.outputFiles[0].text)(createRequire(import.meta.url), module, module.exports);
-const { UpdateManager, updateBlockReason } = module.exports;
+const { INITIAL_UPDATE, UpdateManager, updateBlockReason } = module.exports;
 const current = { buildId: "a".repeat(20), version: "2.0.1", builtAt: "2026-09-08T00:00:00Z", changes: ["First"] };
 const newer = { ...current, buildId: "b".repeat(20), changes: ["Next"] };
 function memory() {
@@ -80,13 +80,14 @@ test("blocked storage prevents automatic reload loops but allows a user request"
   await manager.check(true); assert.equal(log.includes("reload"), false);
   await manager.apply(); assert.equal(log.includes("reload"), true);
 });
-test("updated indicator persists until the user reads changes", async () => {
+test("an applied update leaves nothing asking to update again", async () => {
   const { storage } = setup();
   const platform = setup({ storage, latest: async () => newer }).platform;
   const next = new UpdateManager(newer, platform, () => {});
-  assert.equal(next.state.unread, true);
-  next.markSeen(); assert.equal(next.state.unread, false);
-  assert.equal(new UpdateManager(newer, platform, () => {}).state.unread, false);
+  assert.deepEqual({ ...next.state, installedAt: null }, INITIAL_UPDATE);
+  await next.check();
+  assert.equal(next.state.available, null);
+  assert.equal(next.state.error, null);
 });
 test("concurrent checks are coalesced and unmount cancels application", async () => {
   let resolve, reads = 0;
