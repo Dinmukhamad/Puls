@@ -38,6 +38,7 @@ const AccessAdminPage = lazy(() => import("./pages/AccessAdminPage").then((modul
 const DriverAppPage = lazy(() => import("./pages/DriverAppPage").then((module) => ({ default: module.DriverAppPage })));
 const ProfilePage = lazy(() => import("./pages/ProfilePage").then((module) => ({ default: module.ProfilePage })));
 const SimulatorPage = lazy(() => import("./pages/SimulatorPage").then((module) => ({ default: module.SimulatorPage })));
+const WorkSitesPage = lazy(() => import("./pages/WorkSitesPage").then(module => ({ default: module.WorkSitesPage })));
 
 export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
@@ -59,6 +60,7 @@ export function App() {
 
   return (
     <Routes>
+      <Route path="/training/work-sites" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={300} /></div>}><WorkSitesPage /></Suspense></SectionGuard>} />
       <Route path="/simulator" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense></SectionGuard>} />
       <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><Suspense fallback={<Skeleton height={300} />}><SimulatorPage /></Suspense></SectionGuard>} />
       <Route element={<AppLayout />}>

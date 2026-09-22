@@ -12,6 +12,7 @@ from app.api.v1 import (
     analytics,
     auth,
     cabinet,
+    crm,
     driver,
     games,
     learning,
@@ -24,6 +25,7 @@ from app.api.v1 import (
 )
 
 api_router = APIRouter()
+api_router.include_router(crm.router)
 api_router.include_router(access.router)
 api_router.include_router(auth.router)
 api_router.include_router(telegram.router)

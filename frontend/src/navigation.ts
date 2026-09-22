@@ -23,7 +23,7 @@ export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
   tab("/profile", "Мои данные и настройки"), tab("/notifications", "Уведомления"),
 ]);
 const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс"), tab("/wallet", "Мои коины")];
-const learningTabs = [tab("/training", "Всё обучение"), tab("/training?kind=test", "Тесты"), tab("/training?kind=mission", "Миссии"), tab("/training?kind=simulator", "Driver Simulator")];
+const learningTabs = [tab("/training", "Всё обучение"), tab("/training?kind=test", "Тесты"), tab("/training?kind=mission", "Миссии"), tab("/training?kind=simulator", "Driver Simulator"), tab("/training/work-sites", "Рабочие сайты")];
 const staffLearning = (admin: boolean) => section("training", "Обучение", SparkIcon, [
   tab("/admin/learning", "Все материалы"),
   tab("/admin/learning?kind=test", "Тесты"),
@@ -31,6 +31,7 @@ const staffLearning = (admin: boolean) => section("training", "Обучение"
   tab("/admin/learning?kind=simulator", admin ? "Driver Simulator Studio" : "Driver Simulator"),
   tab("/admin/learning?tab=results", "Результаты команды"),
   tab("/admin/learning-analytics", "Аналитика обучения"),
+  tab("/training/work-sites", "Рабочие сайты"),
 ]);
 const team = (admin = false, supervisor = false) => section("team", admin ? "Пользователи и структура" : "Команда", UsersIcon, [
   tab("/admin/users", admin ? "Пользователи" : "Операторы"), tab("/admin/groups", supervisor ? "Моя группа" : "Группы"),
@@ -57,7 +58,7 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
   trainer: [
     section("home", "Главная", HomeIcon, [tab("/trainer", "Учебная сводка")]),
     section("team", "Пользователи", UsersIcon, [tab("/admin/users", "Операторы")]),
-    section("training", "Обучение", SparkIcon, [tab("/admin/learning", "Материалы"), tab("/training", "Пройти обучение")]),
+    section("training", "Обучение", SparkIcon, [tab("/admin/learning", "Материалы"), tab("/training", "Пройти обучение"), tab("/training/work-sites", "Рабочие сайты")]),
     section("tests", "Тесты", InboxIcon, [tab("/admin/learning?kind=test", "Тесты")]),
     section("missions", "Миссии", TrophyIcon, [tab("/admin/learning?kind=mission", "Миссии")]),
     section("driver", "Driver Simulator", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training?kind=simulator", "Тестовый запуск")]),
@@ -89,6 +90,7 @@ export function defaultAccess(role: Role): AccessMap {
 }
 
 export function routeSection(pathname: string, search = "", role: Role = "operator"): SectionCode | "account" | "access" | "developer" | undefined {
+  if (pathname === "/training/work-sites") return role === "operator" ? "training" : "learning_admin";
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   if (pathname === "/trainer" || pathname === "/admin/learning-analytics") return "learning_admin";
   if (matches("/progress")) return role === "operator" ? "results" : "personal";
@@ -195,8 +197,8 @@ export function currentTab(item: NavItem, pathname: string, search: string): Sec
   return candidates.map((link) => {
     const expected = new URLSearchParams(link.to.split("?")[1] ?? "");
     const entries = Array.from(expected.entries());
-    return { link, score: entries.every(([key, value]) => params.get(key) === value) ? entries.length + (expected.has("tab") ? 1 : 0) : -1 };
-  }).filter((candidate) => candidate.score >= 0).sort((a, b) => b.score - a.score)[0]?.link ?? candidates[0];
+    return { link, pathLength: link.to.split("?")[0].length, score: entries.every(([key, value]) => params.get(key) === value) ? entries.length + (expected.has("tab") ? 1 : 0) : -1 };
+  }).filter((candidate) => candidate.score >= 0).sort((a, b) => b.pathLength - a.pathLength || b.score - a.score)[0]?.link ?? candidates[0];
 }
 
 export function mobileNavigation(items: readonly NavItem[]) {
