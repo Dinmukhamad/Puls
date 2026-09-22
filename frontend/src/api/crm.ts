@@ -1,7 +1,8 @@
 import { buildQuery, downloadFile, request } from "./client";
 
 export interface CrmCategory { id: string; parent_id: string | null; label: string; hint: string; rules: string[]; disabled: boolean; custom: boolean }
-export interface CrmCatalog { parks: string[]; cities: string[]; categories: CrmCategory[] }
+export interface CrmInstruction { key: string; title: string; body: string; steps: string[]; revision: number }
+export interface CrmCatalog { parks: string[]; cities: string[]; categories: CrmCategory[]; instructions: Record<string, CrmInstruction> }
 export interface CrmInput {
   request_id: string; channel: string; phone: string; license_number: string; driver_id: string;
   contacted_at: string; park: string; city: string; category_ids: string[]; details: Record<string, string>;
@@ -15,6 +16,7 @@ export const CRM_STATUS: Record<string, string> = { recorded: "Зафиксир�
 export const CRM_FIELDS: Record<string, string> = { company: "Название компании", callback: "Номер для обратного звонка", service: "Предлагаемая услуга", employee: "Имя сотрудника", transaction: "Транзакция / РРН", conditions: "Условия работы", error_description: "Описание ошибки" };
 export const crm = {
   catalog: () => request<CrmCatalog>("/api/v1/learning/crm/catalog"),
+  instruction: ({ key, ...input }: CrmInstruction) => request<CrmInstruction>(`/api/v1/admin/learning/crm/instructions/${encodeURIComponent(key)}`, { method: "PUT", json: input }),
   list: (params: Record<string, unknown>) => request<{ items: CrmAppeal[]; total: number; page: number; size: number; counts: Record<string, number> }>(`/api/v1/learning/crm/appeals${buildQuery(params)}`),
   appeal: (id: number) => request<CrmAppeal>(`/api/v1/learning/crm/appeals/${id}`),
   create: (input: CrmInput, files: File[]) => {

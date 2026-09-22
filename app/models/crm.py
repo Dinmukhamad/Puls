@@ -26,6 +26,16 @@ class CrmCategory(Base):
     # Defaults are shipped with the application; additions are shared by all users.
 
 
+class CrmInstruction(Base):
+    __tablename__ = "crm_instructions"
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    title: Mapped[str] = mapped_column(String(180))
+    body: Mapped[str] = mapped_column(Text)
+    steps: Mapped[list] = mapped_column(JSON)
+    revision: Mapped[int] = mapped_column(default=1)
+    updated_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+
 class CrmAppeal(Base, TimestampMixin):
     __tablename__ = "crm_appeals"
     __table_args__ = (UniqueConstraint("author_id", "request_id"),)

@@ -1,0 +1,83 @@
+/* The dock is a sibling of the browser, outside its overflow clipping context. */
+.work-sites { padding-right:350px; }
+.pulsar-dock { position:fixed; right:20px; top:82px; bottom:20px; width:310px; z-index:30; display:flex; flex-direction:column; overflow:hidden; color:#35415d; background:#fff; border:1px solid #dddff0; border-radius:20px; box-shadow:0 14px 48px #49456c12,0 2px 8px #49456c06; }
+.pulsar-dock-header { display:flex; align-items:center; padding:16px 18px 8px; flex-shrink:0; }
+.pulsar-dock-header>div { display:grid; grid-template-columns:7px 1fr; column-gap:8px; align-items:center; flex:1; }
+.pulsar-dock-header strong { font-size:15px; color:#3c3b5e; letter-spacing:-.2px; }
+.pulsar-dock-header small { grid-column:2; font-size:10px; color:#9394ac; }
+.pulsar-online { width:6px; height:6px; border-radius:50%; background:#8bcbb8; }
+.pulsar-dock-header button { width:28px; height:28px; border:1px solid #ebeaf4; color:#8b88a6; border-radius:50%; background:#fafaff; font-size:18px; padding:0; }
+.pulsar-mobile-toggle { display:none; }
+.pulsar-portrait { flex-shrink:0; height:154px; display:flex; align-items:center; justify-content:center; background:radial-gradient(ellipse at 50% 55%,#f5f0ff 0,white 70%); }
+.pulsar-portrait .pulsar-face { display:block; width:190px; height:158px; overflow:visible; }
+.pulsar-portrait>div { display:none; }
+.pulsar-dock-scroll { padding:0 18px 16px; overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#d8d3ec transparent; min-height:0; }
+.pulsar-modes { display:flex; padding:3px; background:#f2f3fa; border-radius:9px; gap:4px; margin:4px 0 20px; }
+.pulsar-modes button { width:50%; background:transparent; border:0; color:#8b8da6; font-size:11px; border-radius:7px; padding:7px 2px; }
+.pulsar-modes button.is-active { background:#fff; color:#7460c0; box-shadow:0 1px 4px #5550650b; }
+.pulsar-eyebrow { color:#a29bb8; font-size:8px; letter-spacing:1px; line-height:1.5; }
+.pulsar-instruction h2,.pulsar-editor h2 { font-size:17px; line-height:1.35; letter-spacing:-.25px; color:#3c3d5d; margin:8px 0 11px; font-weight:600; overflow-wrap:anywhere; }
+.pulsar-context { color:#a4a3b9; font-size:9px; line-height:1.5; margin:0 0 13px; }
+.pulsar-body { white-space:pre-wrap; overflow-wrap:anywhere; background:#f5f6fc; color:#71728e; padding:13px 14px; margin:0 0 18px; border:1px solid #eff0f8; border-radius:10px; font-size:12px; line-height:1.7; }
+.pulsar-checklist-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 10px; font-size:11px; }
+.pulsar-checklist-heading strong { font-weight:500; color:#65617f; }
+.pulsar-checklist-heading span { color:#9f96bd; font-size:10px; }
+.pulsar-progress { height:4px; background:#f0edf9; overflow:hidden; border-radius:4px; }
+.pulsar-progress>span { display:block; height:100%; background:#ad99e5; transition:width .2s; border-radius:4px; }
+.pulsar-checklist>small { font-size:9px; color:#aaa5bc; display:block; margin:8px 0 10px; }
+.pulsar-checklist label { display:flex; gap:8px; align-items:start; padding:9px 0; cursor:pointer; border-bottom:1px solid #f3f2f8; }
+.pulsar-checklist input[type=checkbox] { position:absolute; opacity:0; width:20px; height:20px; margin:0; }
+.pulsar-checklist label>span { flex-shrink:0; display:grid; place-items:center; width:20px; height:20px; border:1px solid #eae5f5; background:#f9f7fd; border-radius:7px; font-size:10px; color:#a093be; }
+.pulsar-checklist input:focus-visible+span { outline:2px solid #a893e0; outline-offset:2px; }
+.pulsar-checklist p { margin:0; font-size:11px; color:#7f7c96; line-height:1.65; overflow-wrap:anywhere; }
+.pulsar-checklist .is-done>span { background:#ede8fa; color:#785cbb; border-color:#cdbfeb; }
+.pulsar-checklist .is-done p { color:#aaa3bb; text-decoration:line-through; }
+.pulsar-dock-footer { padding:12px 18px; border-top:1px solid #f0eef8; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-shrink:0; margin-top:auto; background:#fff; }
+.pulsar-dock-footer>span { color:#a19ab4; font-size:10px; text-align:center; width:100%; }
+.work-sites .pulsar-dock .crm-primary { background:#7b65d4; border-color:#7b65d4; border-radius:8px; font-size:11px; padding:9px 12px; }
+.work-sites .pulsar-dock .crm-primary:hover { background:#6c58c2; }
+.work-sites .pulsar-text-button { border:0; background:transparent; color:#9c90b5; padding:5px 0; font-size:11px; }
+.pulsar-edit-tools { margin-top:18px; padding-top:15px; border-top:1px solid #eeebf6; }
+.pulsar-edit-button { width:100%; border:1px solid #e0d8f0; border-radius:8px; background:#f9f7fd; color:#8c78b5; padding:9px; font-size:11px!important; }
+.pulsar-edit-tools label { display:block; color:#a39bb3; font-size:10px; margin-top:12px; }
+.work-sites .pulsar-edit-tools select { border:1px solid #e4dff0; border-radius:7px; font-size:10px; color:#8d7baf; margin-top:6px; width:100%; }
+.pulsar-muted { color:#aaa3b9; font-size:11px; line-height:1.6; }
+.pulsar-editor fieldset { border:0; padding:0; margin:0; min-width:0; }
+.pulsar-editor label { display:block; color:#7c7391; font-size:11px; margin:15px 0 0; }
+.work-sites .pulsar-editor input,.work-sites .pulsar-editor textarea { margin-top:6px; border-color:#dad1eb; border-radius:7px; color:#655878; padding:9px; font-size:12px; }
+.pulsar-editor-steps { margin:18px 0 10px; }
+.pulsar-editor-steps>strong { font-weight:500; color:#7b708f; font-size:12px; }
+.pulsar-editor-steps>div { display:flex; gap:7px; align-items:center; }
+.pulsar-editor-steps label { flex:1; min-width:0; }
+.pulsar-editor-steps button { background:transparent; border:0; font-size:19px; color:#b4a6c4; padding:2px; }
+.pulsar-editor-actions { position:sticky; bottom:-16px; background:white; border-top:1px solid #eee8f6; padding:14px 0; display:flex; gap:14px; margin-top:18px; }
+.crm-context-help { margin:10px 0 20px 162px; padding:11px 14px; background:#f6f8fe; border-left:2px solid #c7c5ed; }
+.crm-context-help .crm-help-link { margin:0; font-size:11px; line-height:1.6; }
+.crm-context-help p { font-size:11px; line-height:1.7; color:#8491ae; white-space:pre-wrap; margin:8px 0 0; }
+.pulsar-dock.is-compact { top:auto; bottom:20px; }
+.pulsar-dock.is-compact .pulsar-dock-scroll,.pulsar-dock.is-compact .pulsar-dock-footer { display:none; }
+.pulsar-dock.is-compact .pulsar-portrait { height:92px; justify-content:start; padding:0 12px 10px; }
+.pulsar-dock.is-compact .pulsar-face { width:100px; height:84px; }
+.pulsar-dock.is-compact .pulsar-portrait>div { display:block; }
+.pulsar-portrait>div p { color:#8980a4; font-size:12px; margin:4px 0; }
+@keyframes pulsar-float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-4px); } }
+@keyframes pulsar-blink { 0%,44%,48%,100% { transform:scaleY(1); } 46% { transform:scaleY(.12); } }
+.pulsar-floating { animation:pulsar-float 5s ease-in-out infinite; }
+.pulsar-eyes { transform-origin:121px 90px; animation:pulsar-blink 7s ease-in-out infinite; }
+@media(max-height:760px) and (min-width:1100px) { .pulsar-dock { top:18px; bottom:18px; } .pulsar-portrait { height:112px; } .pulsar-portrait .pulsar-face { height:115px; width:145px; } }
+@media(max-width:1099px) {
+  .work-sites { padding-right:0; padding-bottom:175px; }
+  .pulsar-dock,.pulsar-dock.is-compact { top:auto; bottom:12px; right:12px; width:310px; max-width:calc(100vw - 24px); max-height:calc(100dvh - 30px); border-radius:16px; }
+  .pulsar-collapse { display:none; }
+  .pulsar-mobile-toggle { display:block; }
+  .pulsar-portrait,.pulsar-dock.is-compact .pulsar-portrait { height:85px; justify-content:start; padding:0 10px 8px; }
+  .pulsar-portrait .pulsar-face,.pulsar-dock.is-compact .pulsar-face { width:90px; height:80px; }
+  .pulsar-portrait>div { display:block; }
+  .pulsar-portrait .pulsar-eyebrow { font-size:7px; }
+  .pulsar-dock .pulsar-dock-scroll,.pulsar-dock .pulsar-dock-footer { display:none; }
+  .pulsar-dock.is-open .pulsar-dock-scroll { display:block; }
+  .pulsar-dock.is-open .pulsar-dock-footer { display:flex; }
+  .pulsar-dock.is-open { height:calc(100dvh - 100px); max-height:720px; }
+}
+@media(max-width:700px) { .crm-context-help { margin-left:0; } .pulsar-dock,.pulsar-dock.is-compact { left:12px; right:12px; width:auto; } }
+@media(prefers-reduced-motion:reduce) { .pulsar-dock * { animation:none!important; transition:none!important; } }

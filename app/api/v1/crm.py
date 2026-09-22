@@ -7,14 +7,15 @@ from urllib.parse import quote
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import ValidationError
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, cast, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import undefer
 
-from app.core.deps import CurrentUser, LearningEditor, SessionDep
-from app.models.crm import CrmAppeal, CrmAttachment, CrmCategory
-from app.schemas.crm import AppealInput, CategoryInput, StatusInput
+from app.core.deps import CurrentUser, LearningEditor, LearningReader, SessionDep
+from app.models.crm import CrmAppeal, CrmAttachment, CrmCategory, CrmInstruction
+from app.schemas.crm import AppealInput, CategoryInput, InstructionInput, StatusInput
 from app.services.crm_catalog import CITIES, PARKS, category_id, default_categories
+from app.services.crm_instructions import default_instructions
 
 router = APIRouter(tags=["Учебная CRM"])
 PREFIX = "/learning/crm"
@@ -39,7 +40,49 @@ async def catalog(session):
 
 @router.get(PREFIX + "/catalog")
 async def get_catalog(session: SessionDep, user: CurrentUser):
-    return {"parks": PARKS, "cities": CITIES, "categories": await catalog(session)}
+    nodes = await catalog(session)
+    instructions = default_instructions(nodes)
+    for row in await session.scalars(select(CrmInstruction)):
+        if row.key in instructions:
+            instructions[row.key] = {
+                "key": row.key,
+                "title": row.title,
+                "body": row.body,
+                "steps": row.steps,
+                "revision": row.revision,
+            }
+    return {"parks": PARKS, "cities": CITIES, "categories": nodes, "instructions": instructions}
+
+
+@router.put("/admin/learning/crm/instructions/{key}")
+async def save_instruction(
+    key: str, body: InstructionInput, session: SessionDep, user: LearningReader
+):
+    # Unlike category/status administration, instructions are also editable by supervisors.
+    if key not in default_instructions(await catalog(session)):
+        raise HTTPException(404, "Инструкция не найдена")
+    values = body.model_dump(exclude={"revision"})
+    revision = body.revision + 1
+    if body.revision == 0:
+        session.add(CrmInstruction(key=key, **values, revision=revision, updated_by_id=user.id))
+    else:
+        result = await session.execute(
+            update(CrmInstruction)
+            .where(CrmInstruction.key == key, CrmInstruction.revision == body.revision)
+            .values(**values, revision=revision, updated_by_id=user.id)
+        )
+        if not result.rowcount:
+            raise HTTPException(
+                409, "Инструкцию уже изменили. Обновите её и повторите редактирование."
+            )
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            409, "Инструкцию уже изменили. Обновите её и повторите редактирование."
+        ) from None
+    return dict(key=key, **values, revision=revision)
 
 
 @router.post("/admin/learning/crm/categories", status_code=201)

@@ -53,3 +53,18 @@ class CategoryInput(BaseModel):
 
 class StatusInput(BaseModel):
     status: Literal["new", "in_progress", "closed"]
+
+
+class InstructionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    title: str = Field(min_length=1, max_length=180)
+    body: str = Field(min_length=1, max_length=6000)
+    steps: list[str] = Field(default_factory=list, max_length=12)
+    revision: int = Field(ge=0)
+
+    @field_validator("steps")
+    @classmethod
+    def valid_steps(cls, value):
+        if any(not step.strip() or len(step) > 600 for step in value):
+            raise ValueError("Каждый шаг должен содержать от 1 до 600 символов")
+        return [step.strip() for step in value]
