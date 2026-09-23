@@ -7,6 +7,7 @@ import { ErrorState, Skeleton } from "../../components/ui";
 import { Sheet } from "../../components/Sheet";
 import { PulsarFace } from "../crm/PulsarGuide";
 import { CityMap } from "./CityMap";
+import { DISTRICT_LEVEL_NAMES, MAX_DISTRICT_LEVEL, districtLevel } from "./cityLevels";
 import "../crm/pulsar.css";
 import "./city.css";
 import { DriverEntry } from "../DriverEntry";
@@ -35,9 +36,10 @@ export function CityPage() {
     {data.inspecting && <div className="city-viewing">Город оператора: <strong>{data.full_name}</strong><Link to="/admin/learning/city">← К участникам</Link></div>}
     <div className="city-profile-strip"><div className="city-level-mark">{data.level}</div><div className="city-level-copy"><strong>{data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города"}</strong><span>Уровень города {data.level} · {data.xp} XP</span><div className="city-meter" role="progressbar" aria-label="Опыт до следующего уровня города" aria-valuemin={0} aria-valuemax={data.level_target} aria-valuenow={data.level_progress}><span style={{width:`${data.level_progress/data.level_target*100}%`}} /></div></div><div className="city-profile-stat"><strong>{completed}<small> / {total}</small></strong><span>миссий пройдено</span></div>{!data.preview && <div className="city-profile-stat"><strong>{data.balance.toLocaleString("ru-RU")} <small>◈</small></strong><span>коинов в кошельке</span></div>}</div>
     {query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
-    <div className="city-layout"><CityMap districts={data.districts} missions={data.missions} selected={selected.id} onSelect={selectDistrict} />
+    <div className="city-layout"><CityMap districts={data.districts} missions={data.missions} selected={selected.id} onSelect={selectDistrict} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
       <aside className="city-mission" aria-live="polite">
         <div className="city-mission-top"><span className="city-eyebrow">{selected.name}</span><span className="city-state" data-state={mission?.state}>{selected.soon ? "СКОРО" : mission ? MISSION_STATES[mission.state] : "Нет заданий"}</span></div>
+        {(() => { const level = districtLevel(missions.filter(m => m.state === "completed").length, selected.soon); return <div className="city-building-level" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{selected.soon ? "Район строится и откроется позже" : level < MAX_DISTRICT_LEVEL ? "Каждая пройденная миссия района улучшает здание" : "Максимальный уровень — район стал легендой"}</small></div>; })()}
         {!data.inspecting && selected.id === "driver" && <button className="city-secondary" onClick={() => setDriverLaunch(true)}>Открыть автопарк →</button>}
         {!data.inspecting && selected.id === "crm" && <Link className="city-secondary" to="/training/work-sites">Открыть CRM · рабочие сайты →</Link>}
         {selected.soon ? <><h2>{selected.id === "dispatch" ? "Держать город в движении" : "Новый район. Новые возможности."}</h2><p className="city-copy">{selected.id === "dispatch" ? "Этот район откроется вместе с учебной диспетчерской." : "Миссии появятся после добавления Opteo и подготовки учебных сценариев."}</p><div className="city-guide"><PulsarFace /><p>А пока продолжим развивать автопарк и CRM-центр. Твой прогресс сохранится.</p></div><button className="city-action" disabled>Район строится</button></> : mission && <>

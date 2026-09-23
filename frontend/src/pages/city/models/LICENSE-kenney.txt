@@ -1,0 +1,6 @@
+Kenney City Kit — Commercial 2.1, Suburban 2.0, Industrial 2.0
+Created/distributed by Kenney (www.kenney.nl)
+License: Creative Commons Zero (CC0) — http://creativecommons.org/publicdomain/zero/1.0/
+You can use this content for personal, educational, and commercial purposes.
+
+city-models.glb bundles a selection of these models (textures embedded, meshopt-compressed).

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { CityDistrict, CityMission, DistrictId } from "../../api/city";
 import type { CityLabelInfo, CitySceneControl, CityView } from "./cityScene";
+import { districtLevel, grownDistricts } from "./cityLevels";
 
 const ICONS: Record<DistrictId, string> = { academy: "🎓", driver: "🚕", crm: "💬", dispatch: "📡", opteo: "🧭" };
 const COLORS: Record<DistrictId, string> = { academy: "#5b8def", driver: "#f0a23a", crm: "#7b5cff", dispatch: "#35b6a6", opteo: "#e86aa6" };
 
-export function CityMap({ districts, missions, selected, onSelect }: { districts: CityDistrict[]; missions: CityMission[]; selected: DistrictId; onSelect: (id: DistrictId) => void }) {
+/** `progressKey` remembers the levels this viewer has seen, so an upgrade is celebrated once. */
+export function CityMap({ districts, missions, selected, onSelect, progressKey }: { districts: CityDistrict[]; missions: CityMission[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string }) {
   const host = useRef<HTMLDivElement>(null);
   const control = useRef<CitySceneControl>();
   const view = useRef<CityView>();
@@ -17,22 +19,28 @@ export function CityMap({ districts, missions, selected, onSelect }: { districts
   const labels: CityLabelInfo[] = districts.map(d => {
     const own = missions.filter(m => m.district === d.id && m.enabled), done = missions.filter(m => m.district === d.id && m.state === "completed").length;
     const reward = own.some(m => m.state === "ready");
-    return { id: d.id, name: d.name, icon: ICONS[d.id], soon: d.soon, reward, status: d.soon ? "Скоро откроется" : done && done >= own.length ? "✓ Район освоен" : reward ? "✦ Забрать награду" : `${done} из ${Math.max(own.length, done)} миссий` };
+    return { id: d.id, name: d.name, icon: ICONS[d.id], soon: d.soon, reward, level: districtLevel(levels[d.id] ?? 0, d.soon), status: d.soon ? "Скоро откроется" : done && done >= own.length ? "✓ Район освоен" : reward ? "✦ Забрать награду" : `${done} из ${Math.max(own.length, done)} миссий` };
   });
   const labelsKey = JSON.stringify(labels), labelsRef = useRef(labels);
   labelsRef.current = labels;
   useEffect(() => {
     let cancelled = false;
     setFailed(false); setReady(false);
+    const current = Object.fromEntries(districts.map(d => [d.id, districtLevel(JSON.parse(levelKey)[d.id] ?? 0, d.soon)]));
+    let grown: DistrictId[] = [];
+    if (progressKey) {
+      try { grown = grownDistricts(JSON.parse(localStorage.getItem(progressKey) ?? "null"), current) as DistrictId[]; localStorage.setItem(progressKey, JSON.stringify(current)); } catch { /* Celebration is optional. */ }
+    }
     void import("./cityScene").then(({ createCityScene }) => {
       if (cancelled || !host.current) return;
       control.current = createCityScene(host.current, {
-        levels: JSON.parse(levelKey), selected: selectedRef.current, view: view.current, labels: labelsRef.current,
+        levels: JSON.parse(levelKey), selected: selectedRef.current, view: view.current, labels: labelsRef.current, grown,
         onSelect: id => selectRef.current(id), onView: value => { view.current = value; },
         onReady: () => { if (!cancelled) setReady(true); }, onLost: () => { if (!cancelled) setFailed(true); },
       });
     }).catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; control.current?.dispose(); control.current = undefined; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuilt only when mission progress changes
   }, [levelKey]);
   useEffect(() => { control.current?.select(selected); }, [selected]);
   useEffect(() => { control.current?.setLabels(JSON.parse(labelsKey)); }, [labelsKey]);
