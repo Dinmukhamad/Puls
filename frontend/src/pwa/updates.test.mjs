@@ -97,7 +97,7 @@ test("concurrent checks are coalesced and unmount cancels application", async ()
 });
 test("route, form, pending action and detached editor protection", () => {
   const doc = { querySelector: () => null, activeElement: null };
-  for (const path of ["/simulator", "/simulator/attempts/1", "/training/attempts/2", "/games", "/qr-access", "/training/work-sites"]) assert.ok(updateBlockReason(doc, path, false, new Set()));
+  for (const path of ["/simulator", "/simulator/attempts/1", "/training/attempts/2", "/games", "/qr-access", "/training/work-sites", "/training/city"]) assert.ok(updateBlockReason(doc, path, false, new Set()));
   assert.ok(updateBlockReason(doc, "/profile", true, new Set()));
   assert.ok(updateBlockReason({ ...doc, querySelector: () => ({}) }, "/admin/users", false, new Set()));
   const edited = new Set([{ isConnected: true }]);

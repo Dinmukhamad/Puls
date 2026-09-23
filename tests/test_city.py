@@ -225,3 +225,16 @@ async def test_city_respects_section_restrictions_and_does_not_open_crm(client, 
     await session.commit()
     assert (await client.get(BASE, headers=headers)).status_code == 403
     assert (await claim(client, headers, "driver_first")).status_code == 403
+
+
+async def test_active_order_is_in_progress_but_cannot_earn_a_completion_reward(
+    client, session, operator
+):
+    headers = auth(await login(client, operator.login))
+    await claim(client, headers, "welcome")
+    await order(session, operator.id, stage="pickup")
+    assert (await claim(client, headers, "driver_profile")).status_code == 200
+    data = (await client.get(BASE, headers=headers)).json()
+    first = next(m for m in data["missions"] if m["key"] == "driver_first")
+    assert first["state"] == "in_progress" and first["current"] == 0
+    assert (await claim(client, headers, "driver_first")).status_code == 409

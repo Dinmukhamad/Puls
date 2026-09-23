@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError
@@ -154,20 +154,30 @@ async def evidence(session, user_ids):
     )
     for uid, stage in profiles:
         result[uid]["profile"] = int(stage == "offline")
+        result[uid]["profile_started"] = int(stage != "services")
     orders = await session.execute(
-        select(DriverOrder.user_id, func.count())
+        select(
+            DriverOrder.user_id,
+            func.sum(
+                case(
+                    ((DriverOrder.stage == "complete") & DriverOrder.finished_at.is_not(None), 1),
+                    else_=0,
+                )
+            ),
+            func.sum(case((DriverOrder.stage.not_in(["complete", "cancelled"]), 1), else_=0)),
+        )
         .outerjoin(DriverShift, DriverShift.id == DriverOrder.shift_id)
         .where(
             DriverOrder.user_id.in_(user_ids),
-            DriverOrder.stage == "complete",
-            DriverOrder.finished_at.is_not(None),
             or_(DriverOrder.shift_id.is_(None), DriverShift.is_preview.is_(False)),
         )
         .group_by(DriverOrder.user_id)
     )
-    for uid, count in orders:
+    for uid, count, active in orders:
         result[uid]["orders"] = count
-        result[uid]["profile"] = 1
+        result[uid]["active_orders"] = active
+        if count or active:
+            result[uid]["profile"] = 1
     phone_ids = {n["id"] for n in default_categories() if "phone_change" in n["rules"]}
     appeals = await session.execute(
         select(
@@ -178,6 +188,7 @@ async def evidence(session, user_ids):
         result[uid]["appeals"] += 1
         result[uid]["phone"] += int(bool(phone_ids.intersection(categories)))
         result[uid]["closed"] += int(ticket and status == "closed")
+        result[uid]["tickets"] = result[uid].get("tickets", 0) + int(ticket)
     return result
 
 
@@ -190,6 +201,12 @@ def mission_rows(config, facts, awards):
         parent = definition["prerequisite"]
         locked = bool(parent and config["missions"][parent]["enabled"] and parent not in awards)
         count = shown["target"] if award else min(facts[condition], shown["target"])
+        activity_key = {
+            "orders": "active_orders",
+            "profile": "profile_started",
+            "closed": "tickets",
+        }.get(condition, "")
+        started = count or facts.get(activity_key, 0)
         state = (
             "completed"
             if award
@@ -200,7 +217,7 @@ def mission_rows(config, facts, awards):
             else "ready"
             if count >= shown["target"]
             else "in_progress"
-            if count
+            if started
             else "available"
         )
         rows.append(
