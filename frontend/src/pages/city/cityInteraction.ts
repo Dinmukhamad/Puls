@@ -1,59 +1,51 @@
-/** Horizontal dragging rotates; vertical touch gestures remain page scrolling. */
-export function bindCityDrag(host: HTMLElement, rotate: (radians: number) => void) {
-  let pointer: number | null = null, start = 0, last = 0, dragging = false;
-  function down(event: PointerEvent) {
-    if (pointer !== null || !event.isPrimary || event.button !== 0) return;
-    pointer = event.pointerId; start = last = event.clientX; dragging = false;
-    host.setPointerCapture(pointer);
-  }
-  function move(event: PointerEvent) {
-    if (event.pointerId !== pointer) return;
-    if (!dragging && Math.abs(event.clientX - start) < 6) return;
-    dragging = true; host.dataset.dragging = "true";
-    rotate(-(event.clientX - last) / Math.max(host.clientWidth, 240) * Math.PI * 2);
-    last = event.clientX;
-  }
-  function end(event: PointerEvent) {
-    if (event.pointerId !== pointer) return;
-    const id = pointer; pointer = null; dragging = false;
-    delete host.dataset.dragging;
-    if (host.hasPointerCapture(id)) host.releasePointerCapture(id);
-  }
-  function key(event: KeyboardEvent) {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault(); rotate(event.key === "ArrowLeft" ? -.15 : .15);
-  }
-  host.addEventListener("pointerdown", down);
-  host.addEventListener("pointermove", move);
-  host.addEventListener("pointerup", end);
-  host.addEventListener("pointercancel", end);
-  host.addEventListener("lostpointercapture", end);
-  host.addEventListener("keydown", key);
-  return () => {
-    if (pointer !== null && host.hasPointerCapture(pointer)) host.releasePointerCapture(pointer);
-    host.removeEventListener("pointerdown", down);
-    host.removeEventListener("pointermove", move);
-    host.removeEventListener("pointerup", end);
-    host.removeEventListener("pointercancel", end);
-    host.removeEventListener("lostpointercapture", end);
-    host.removeEventListener("keydown", key);
-    delete host.dataset.dragging;
-  };
+export interface CityAnchor { id: string; x: number; y: number; depth: number }
+export interface CityLabel { x: number; y: number; visible: boolean; anchorX: number; anchorY: number; moved: boolean }
+export interface CityLabelBounds { top: number; bottom: number; side: number }
+
+export const LABEL_STEM = 14;
+
+/**
+ * Each label sits right above its building. When labels collide the nearer building keeps its
+ * spot and the farther label is stacked above or below — sideways only as a last resort — so a
+ * label never wanders to the opposite side of the map.
+ */
+export function layoutCityLabels(anchors: CityAnchor[], w: number, h: number, size: { width: number; height: number }, bounds: CityLabelBounds = { top: 44, bottom: 58, side: 8 }): Record<string, CityLabel> {
+  return place(anchors, w, h, size, bounds, false) ?? place(anchors, w, h, size, bounds, true)!;
 }
 
-/** Keep labels attached to their projection, avoiding collisions at every angle. */
-export function placeCityPins(pins: { id: string; x: number; y: number }[], w: number, h: number) {
-  const width = w < 440 ? 112 : 124, gap = 6, height = 48;
-  const left = width / 2 + 8, right = w - left, top = 78, bottom = h - 64;
-  const placed: { x: number; y: number }[] = [], positions: Record<string, { x: number; y: number }> = {};
-  for (const pin of [...pins].sort((a, b) => a.y - b.y)) {
-    const x = Math.max(left, Math.min(right, pin.x)), y = Math.max(top, Math.min(bottom, pin.y));
-    const candidates = [{ x, y }];
-    for (let cy = top; cy <= bottom; cy += height + gap)
-      for (const cx of [x, left, (left + right) / 2, right]) candidates.push({ x: cx, y: cy });
-    candidates.sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y));
-    const position = candidates.find(p => placed.every(a => Math.abs(p.x - a.x) >= width + gap || Math.abs(p.y - a.y) >= height + gap)) ?? candidates[0];
-    positions[pin.id] = position; placed.push(position);
+/** With `columns` every label snaps to a fixed column, which always fits on narrow screens. */
+function place(anchors: CityAnchor[], w: number, h: number, size: { width: number; height: number }, bounds: CityLabelBounds, columns: boolean) {
+  const { width, height } = size, gap = 6;
+  const minX = bounds.side + width / 2, maxX = Math.max(minX, w - bounds.side - width / 2);
+  const minY = bounds.top + height / 2, maxY = Math.max(minY, h - bounds.bottom - height / 2);
+  const count = Math.max(1, Math.floor((maxX - minX) / (width + gap)) + 1);
+  const columnXs = count === 1 ? [(minX + maxX) / 2] : Array.from({ length: count }, (_, i) => minX + (maxX - minX) * i / (count - 1));
+  const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value));
+  const placed: { x: number; y: number }[] = [], result: Record<string, CityLabel> = {};
+  const free = (x: number, y: number) => placed.every(p => Math.abs(p.x - x) >= width + gap || Math.abs(p.y - y) >= height + gap);
+  for (const anchor of [...anchors].sort((a, b) => a.depth - b.depth)) {
+    const visible = anchor.x >= 0 && anchor.x <= w && anchor.y >= 0 && anchor.y <= h;
+    const baseX = clamp(anchor.x, minX, maxX), baseY = clamp(anchor.y - LABEL_STEM - height / 2, minY, maxY);
+    if (!visible) { result[anchor.id] = { x: baseX, y: baseY, visible, anchorX: anchor.x, anchorY: anchor.y, moved: false }; continue; }
+    let best: { x: number; y: number; cost: number } | null = null;
+    const consider = (x: number, y: number) => {
+      if (!free(x, y)) return;
+      const cost = Math.abs(y - baseY) + 2.4 * Math.abs(x - baseX) + (y > anchor.y ? 30 : 0);
+      if (!best || cost < best.cost) best = { x, y, cost };
+    };
+    if (columns) {
+      for (const x of columnXs) for (let y = minY; y <= maxY + .01; y += height + gap) consider(x, y);
+    } else {
+      for (const dy of [0, -1, 1, -2, 2, -3, 3, -4, 4, -5, 5]) for (const dx of [0, -.55, .55, -1.1, 1.1, -1.65, 1.65, -2.2, 2.2])
+        consider(clamp(baseX + dx * (width + gap), minX, maxX), clamp(baseY + dy * (height + gap), minY, maxY));
+      // Crowded screens: scan the whole map for the nearest free slot.
+      if (!best) for (let y = minY; y <= maxY; y += (height + gap) / 2) for (let x = minX; x <= maxX; x += (width + gap) / 4) consider(x, y);
+    }
+    const found = best as { x: number; y: number } | null;
+    if (!found && !columns) return null;
+    const spot = found ?? { x: baseX, y: baseY };
+    placed.push(spot);
+    result[anchor.id] = { x: spot.x, y: spot.y, visible, anchorX: anchor.x, anchorY: anchor.y, moved: Math.hypot(spot.x - anchor.x, spot.y + height / 2 + LABEL_STEM - anchor.y) > 3 };
   }
-  return positions;
+  return result;
 }

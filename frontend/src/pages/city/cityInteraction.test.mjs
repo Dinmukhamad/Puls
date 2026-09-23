@@ -5,53 +5,45 @@ import { fileURLToPath } from 'node:url';
 import * as THREE from 'three';
 
 const built = await build({entryPoints:[fileURLToPath(new URL('./cityInteraction.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
-const { bindCityDrag, placeCityPins } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const { layoutCityLabels, LABEL_STEM } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
-class Host extends EventTarget {
-  clientWidth = 320; dataset = {}; captured = new Set();
-  setPointerCapture(id) { this.captured.add(id); }
-  hasPointerCapture(id) { return this.captured.has(id); }
-  releasePointerCapture(id) { this.captured.delete(id); }
-  pointer(type,x,id=1,extra={}) { this.dispatchEvent(Object.assign(new Event(type),{clientX:x,pointerId:id,isPrimary:true,button:0,...extra})); }
+// Building tops of the five districts, as placed by the 3D scene.
+const tops=[[-5.6,3.6,.6],[-2.2,2.3,-5.4],[4.6,5.4,-2.8],[4.8,4.4,4.2],[-1.8,3.1,5.8]];
+
+function project(w,h,azimuth,polar,distance,target=[0,0,0]) {
+  const camera=new THREE.PerspectiveCamera(w<480?50:36,w/h,.5,200);
+  const offset=new THREE.Vector3().setFromSpherical(new THREE.Spherical(distance,polar,azimuth));
+  camera.position.set(...target).add(offset);camera.lookAt(new THREE.Vector3(...target));camera.updateMatrixWorld();camera.updateProjectionMatrix();
+  return tops.map(([x,y,z],i)=>{const v=new THREE.Vector3(x,y,z);const depth=camera.position.distanceTo(v);v.project(camera);return{id:String(i),x:(v.x*.5+.5)*w,y:(-v.y*.5+.5)*h,depth};});
 }
 
-test('mouse and touch drag can turn repeatedly past 360 degrees, then release outside the map',()=>{
-  for (const pointerType of ['mouse','touch']) {
-    const host=new Host(); let angle=0;
-    const dispose=bindCityDrag(host,delta=>angle+=delta);
-    host.pointer('pointerdown',0,1,{pointerType});
-    host.pointer('pointermove',4); assert.equal(angle,0);
-    for (let x=20;x<=960;x+=20) host.pointer('pointermove',x);
-    assert.ok(Math.abs(angle+6*Math.PI)<.00001); assert.equal(host.dataset.dragging,'true');
-    host.pointer('pointerup',960); host.pointer('pointermove',1200);
-    assert.ok(Math.abs(angle+6*Math.PI)<.00001); assert.equal(host.captured.size,0);
-    dispose(); host.pointer('pointerdown',0);host.pointer('pointermove',100);assert.equal(host.dataset.dragging,undefined);
-  }
-});
-
-test('cancelled touch, a second finger and secondary mouse buttons never leave a stuck drag',()=>{
-  const host=new Host();let angle=0;const dispose=bindCityDrag(host,d=>angle+=d);
-  host.pointer('pointerdown',0,1,{button:2});host.pointer('pointermove',100);assert.equal(angle,0);
-  host.pointer('pointerdown',0);host.pointer('pointerdown',10,2,{isPrimary:false});host.pointer('pointermove',100,2);assert.equal(angle,0);
-  host.pointer('pointercancel',0);host.pointer('pointermove',100);assert.equal(angle,0);
-  host.pointer('pointerdown',0);host.pointer('pointermove',100);assert.ok(angle<0);
-  host.pointer('lostpointercapture',100);const before=angle;host.pointer('pointermove',200);assert.equal(angle,before);
-  dispose();
-});
-
-test('all five district labels stay visible and separate through a full rotation on narrow and desktop maps',()=>{
-  const locations=[[-5,2],[-4,-4],[3,-1],[4,5],[-2,7]];
-  for(const [w,h] of [[280,395],[320,395],[390,395],[440,440],[760,560],[1100,560]]) {
-    const span=w<440?21.5:24,aspect=w/h;
-    const camera=new THREE.OrthographicCamera(-span/2,span/2,span/aspect/2,-span/aspect/2,.1,120);
-    for(let degree=0;degree<360;degree+=5) {
-      const angle=degree*Math.PI/180;camera.position.set(Math.sin(angle)*27,25,Math.cos(angle)*27);camera.lookAt(new THREE.Vector3(0,0,1.2));camera.updateMatrixWorld();
-      const pins=locations.map(([x,z],i)=>{const p=new THREE.Vector3(x,.35,z+1.6).project(camera);return{id:String(i),x:(p.x*.5+.5)*w,y:(-p.y*.5+.5)*h+18};});
-      const positions=Object.values(placeCityPins(pins,w,h)),width=w<440?112:124;
-      for(const p of positions){assert.ok(p.x-width/2>=0&&p.x+width/2<=w&&p.y-24>=0&&p.y+24<=h,`${w}px / ${degree}deg bounds`);}
-      for(let a=0;a<positions.length;a++)for(let b=a+1;b<positions.length;b++) {
-        assert.ok(Math.abs(positions[a].x-positions[b].x)>=width||Math.abs(positions[a].y-positions[b].y)>=48,`${w}px / ${degree}deg overlap ${a}/${b}`);
+test('labels stay inside the map, never overlap and stay close to their building at every angle, tilt and zoom',()=>{
+  for(const [w,h,size] of [[300,430,{width:148,height:44}],[390,430,{width:148,height:44}],[560,470,{width:176,height:50}],[760,580,{width:176,height:50}],[1100,580,{width:176,height:50}]]) {
+    for(const distance of [18,31,52]) for(const polar of [.25,.92,1.3]) for(let degree=0;degree<360;degree+=15) {
+      const anchors=project(w,h,degree*Math.PI/180,polar,distance);
+      const layout=layoutCityLabels(anchors,w,h,size),visible=Object.values(layout).filter(l=>l.visible);
+      const where=`${w}px d${distance} p${polar} ${degree}deg`;
+      for(const l of visible){
+        assert.ok(l.x-size.width/2>=0&&l.x+size.width/2<=w&&l.y-size.height/2>=0&&l.y+size.height/2<=h,`${where} bounds`);
+        if(l.anchorX>size.width&&l.anchorX<w-size.width) assert.ok(Math.abs(l.x-l.anchorX)<=size.width*1.7,`${where} drifted sideways`);
       }
+      for(let a=0;a<visible.length;a++)for(let b=a+1;b<visible.length;b++)
+        assert.ok(Math.abs(visible[a].x-visible[b].x)>=size.width||Math.abs(visible[a].y-visible[b].y)>=size.height,`${where} overlap ${a}/${b}`);
     }
   }
+});
+
+test('an uncrowded label sits directly above its building',()=>{
+  const layout=layoutCityLabels([{id:'a',x:400,y:300,depth:10}],800,600,{width:150,height:50});
+  assert.equal(layout.a.x,400);assert.equal(layout.a.y,300-LABEL_STEM-25);assert.equal(layout.a.moved,false);
+});
+
+test('the nearer building keeps its spot and the farther label moves up, not across the map',()=>{
+  const layout=layoutCityLabels([{id:'far',x:400,y:300,depth:30},{id:'near',x:410,y:305,depth:10}],800,600,{width:150,height:50});
+  assert.equal(layout.near.moved,false);assert.ok(layout.far.y<layout.near.y);assert.ok(Math.abs(layout.far.x-400)<1);
+});
+
+test('labels whose building leaves the screen are hidden instead of pinned to the edge',()=>{
+  const layout=layoutCityLabels([{id:'gone',x:-50,y:200,depth:10}],800,600,{width:150,height:50});
+  assert.equal(layout.gone.visible,false);
 });
