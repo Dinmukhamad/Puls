@@ -51,13 +51,13 @@ function DriverList({ onReset, ...shared }: Shared & { onReset: () => void }) {
   const filtered = !!(search || park || status || type || photo);
   const clear = () => { setDraft(""); setSearch(""); setPark(""); setStatus(""); setType(""); setPhoto(""); };
   return <section className="crm-panel drv-panel">
-    <div className="crm-panel-heading"><div><h2>☰ Учётные записи водителей</h2><p>Учебная база · {drivers.length} тестовых водителей · изменения видите только вы</p></div><button className="crm-secondary" onClick={() => { if (window.confirm("Вернуть всех учебных водителей в исходное состояние?")) { onReset(); clear(); } }}>⟲ Сбросить учебные данные</button></div>
+    <div className="crm-panel-heading"><div><h2>☰ Учётные записи водителей</h2><p>Учебная база · {drivers.length} тестовых водителей · изменения видите только вы</p></div><button className="crm-secondary" data-coach="drv-reset" onClick={() => { if (window.confirm("Вернуть всех учебных водителей в исходное состояние?")) { onReset(); clear(); } }}>⟲ Сбросить учебные данные</button></div>
     <form className="drv-filters" onSubmit={e => { e.preventDefault(); setSearch(draft); }}>
       <label><span>Парк</span><select value={park} onChange={e => setPark(e.target.value)}><option value="">—</option>{parks.map(p => <option key={p}>{p}</option>)}</select></label>
       <label><span>Статус</span><select value={status} onChange={e => setStatus(e.target.value)}><option value="">—</option>{["Свободен", "Занят", "Офлайн", "Нет данных"].map(s => <option key={s}>{s}</option>)}</select></label>
       <label><span>Тип занятости</span><select value={type} onChange={e => setType(e.target.value)}><option value="">—</option><option>Физлицо</option><option>СМЗ</option></select></label>
       <label><span>Фотоконтроль</span><select value={photo} onChange={e => setPhoto(e.target.value)}><option value="">—</option>{["Пройден", "Требуется", "Нет данных"].map(s => <option key={s}>{s}</option>)}</select></label>
-      <label className="drv-search"><span>Поиск</span><span className="drv-search-row"><input value={draft} onChange={e => setDraft(e.target.value)} placeholder="ФИО, телефон, аккаунт, авто, позывной или ссылка на водителя" /><button type="submit" aria-label="Найти">🔍</button></span></label>
+      <label className="drv-search" data-coach="drv-search"><span>Поиск</span><span className="drv-search-row"><input value={draft} onChange={e => setDraft(e.target.value)} placeholder="ФИО, телефон, аккаунт, авто, позывной или ссылка на водителя" /><button type="submit" aria-label="Найти">🔍</button></span></label>
       <div className="drv-filter-actions"><button type="submit" className="crm-primary">▼ Применить</button><button type="button" className="crm-secondary" disabled={!filtered && !draft} onClick={clear}>Сбросить</button><span>Найдено: <strong>{rows.length}</strong></span></div>
     </form>
     <p className="drv-tip">💡 Быстрее всего искать по ID из ссылки на водителя — это часть адреса между «/contractors/» и «/details». Можно вставить ссылку целиком.</p>
