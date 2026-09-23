@@ -9,7 +9,8 @@ from sqlalchemy import func, select
 from app.models.crm import CrmAppeal
 from app.models.enums import Role
 from app.services.crm_catalog import category_id
-from tests.conftest import auth, login, make_user
+from tests.conftest import auth, make_user
+from tests.conftest import login_with_work_sites as login
 
 pytestmark = pytest.mark.asyncio
 BASE = "/api/v1/learning/crm"

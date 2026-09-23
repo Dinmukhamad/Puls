@@ -9,7 +9,7 @@ const nav = await import(`data:text/javascript;base64,${Buffer.from(built.output
 
 test("trainer navigation stays within learning even with explicit grants", () => {
   const all = Object.fromEntries(Object.keys(nav.defaultAccess("admin")).map(key => [key, true]));
-  assert.deepEqual(nav.visibleNavigation("trainer", all).map(x => x.label), ["Главная", "Пользователи", "Обучение", "Driver Simulator", "Аналитика обучения", "Мой кабинет"]);
+  assert.deepEqual(nav.visibleNavigation("trainer", all).map(x => x.label), ["Главная", "Пользователи", "Обучение", "Driver Simulator", "Аналитика обучения", "QR-доступ", "Мой кабинет"]);
   assert.equal(nav.visibleNavigation("trainer")[0].to, "/trainer");
   for (const path of ["/admin/groups", "/admin/access", "/admin/sessions", "/admin/summary", "/progress", "/wallet", "/rating", "/analytics", "/shop", "/games"]) {
     assert.equal(nav.canVisit("trainer", path, all, true), false, path);
@@ -28,9 +28,9 @@ test("roles expose task-specific defaults with an account entry", () => {
   // «Наград»: это ежедневное действие на минуту, и прятать его вглубь
   // значит каждый раз заставлять оператора вспоминать, где оно.
   assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Колесо WOW", "Награды", "Профиль"]);
-  assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "Рейтинг и мотивация", "Профиль"]);
-  assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Производительность", "Обучение", "Мотивация", "Отчёты", "Профиль"]);
-  assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Пользователи и структура", "Производительность", "Аналитика", "Обучение", "Мотивация", "Система", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "Рейтинг и мотивация", "QR-доступ", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Производительность", "Обучение", "Мотивация", "Отчёты", "QR-доступ", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Пользователи и структура", "Производительность", "Аналитика", "Обучение", "Мотивация", "Система", "QR-доступ", "Профиль"]);
   assert.equal(nav.visibleNavigation("operator")[0].to, "/cabinet");
   assert.equal(nav.visibleNavigation("head")[0].to, "/admin/summary");
 });
@@ -96,7 +96,7 @@ test("grants add discoverable destinations and revocations remove every tab", ()
       }
     }
     const none = nav.visibleNavigation(role, {});
-    assert.deepEqual(none.map((item) => item.id), role === "admin" ? ["system", "profile"] : ["profile"]);
+    assert.deepEqual(none.map((item) => item.id), role === "admin" ? ["system", "qr_access", "profile"] : role === "operator" ? ["profile"] : ["qr_access", "profile"]);
     assert.equal(nav.canVisit(role, "/profile", {}), true);
     assert.equal(nav.canVisit(role, "/admin/access", {}), role === "admin");
   }
@@ -187,6 +187,17 @@ test("missions and tests have no navigation entry even with every permission gra
       assert.doesNotMatch(JSON.stringify(items), /kind=(test|mission)|Тесты|Миссии|Mission Studio/);
       assert.ok(items.some(x => x.tabs.some(t => t.to.includes("work-sites"))));
       assert.ok(items.some(x => x.tabs.some(t => t.to.includes("kind=simulator"))));
+    }
+  }
+});
+
+
+test("QR scanner is available to every non-operator and never granted to operators", () => {
+  const all = Object.fromEntries(Object.keys(nav.defaultAccess("admin")).map(key => [key, true]));
+  for (const role of ["operator", "trainer", "supervisor", "head", "admin"]) {
+    for (const allowed of [{}, all, nav.defaultAccess(role)]) {
+      assert.equal(nav.canVisit(role, "/qr-access", allowed), role !== "operator");
+      assert.equal(nav.visibleNavigation(role, allowed).some(x => x.to === "/qr-access"), role !== "operator");
     }
   }
 });

@@ -1,4 +1,5 @@
 """Общие фикстуры тестов: изолированная БД, клиент API и типовые пользователи."""
+
 from __future__ import annotations
 
 import os
@@ -110,6 +111,30 @@ async def login(client: AsyncClient, login_name: str, password: str = "password1
 
 def auth(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+async def login_with_work_sites(client: AsyncClient, login_name: str) -> str:
+    """CRM behavior tests use a real QR approval; access-boundary tests use plain login."""
+    token = await login(client, login_name)
+    headers = auth(token)
+    state = (await client.get("/api/v1/work-sites-access/status", headers=headers)).json()
+    if state.get("required"):
+        async with SessionLocal() as db:
+            from sqlalchemy import select
+
+            approver = await db.scalar(select(User).where(User.login == "crm-test-approver"))
+            if approver is None:
+                await make_user(db, login="crm-test-approver", role=Role.ADMIN)
+        staff = auth(await login(client, "crm-test-approver"))
+        issued = await client.post("/api/v1/work-sites-access/request", headers=headers)
+        assert issued.status_code == 200, issued.text
+        approved = await client.post(
+            "/api/v1/work-sites-access/approve",
+            headers=staff,
+            json={"payload": issued.json()["payload"]},
+        )
+        assert approved.status_code == 200, approved.text
+    return token
 
 
 @pytest.fixture

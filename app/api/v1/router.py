@@ -1,4 +1,5 @@
 """Сборка всех маршрутов версии v1."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter
@@ -22,9 +23,11 @@ from app.api.v1 import (
     system,
     telegram,
     wallet,
+    work_sites_access,
 )
 
 api_router = APIRouter()
+api_router.include_router(work_sites_access.router)
 api_router.include_router(crm.router)
 api_router.include_router(access.router)
 api_router.include_router(auth.router)

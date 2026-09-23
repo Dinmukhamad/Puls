@@ -148,6 +148,8 @@ async def effective_access(session: AsyncSession, user: User):
 def request_sections(path: str, method: str, role: Role | None = None) -> tuple[str, ...]:
     """Alternative section permissions for an endpoint; supporting reference reads are explicit."""
     read = method in ("GET", "HEAD")
+    if path in ("/work-sites-access/status", "/work-sites-access/request"):
+        return ("training",) if role == Role.OPERATOR else ()
     if path.startswith(("/admin/training", "/admin/learning-analytics")):
         return ("learning_admin",)
     if path.startswith(
@@ -230,7 +232,9 @@ def trainer_path_allowed(path: str, method: str) -> bool:
     """A role ceiling remains in force even after an explicit section grant."""
     import re
 
-    if path.startswith(("/auth/", "/me/notifications", "/learning/")) or path in (
+    if path.startswith(
+        ("/auth/", "/me/notifications", "/learning/", "/work-sites-access/")
+    ) or path in (
         "/me/access",
         "/learning",
     ):

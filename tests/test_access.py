@@ -307,6 +307,17 @@ async def test_every_business_endpoint_has_section_mapping():
         if not isinstance(route, APIRoute) or not route.path.startswith("/api/v1/"):
             continue
         path = route.path.removeprefix("/api/v1")
+        if path in (
+            "/work-sites-access/status",
+            "/work-sites-access/request",
+            "/work-sites-access/preview",
+            "/work-sites-access/approve",
+        ):
+            # QR approval is available to every non-operator, independently of
+            # configurable section grants. Operator requests still require training.
+            if path.endswith(("/status", "/request")):
+                assert request_sections(path, "POST", Role.OPERATOR) == ("training",)
+            continue
         if path.startswith(exempt):
             continue
         for method in route.methods:

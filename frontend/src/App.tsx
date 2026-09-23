@@ -39,6 +39,8 @@ const DriverAppPage = lazy(() => import("./pages/DriverAppPage").then((module) =
 const ProfilePage = lazy(() => import("./pages/ProfilePage").then((module) => ({ default: module.ProfilePage })));
 const SimulatorPage = lazy(() => import("./pages/SimulatorPage").then((module) => ({ default: module.SimulatorPage })));
 const WorkSitesPage = lazy(() => import("./pages/WorkSitesPage").then(module => ({ default: module.WorkSitesPage })));
+const WorkSitesGate = lazy(() => import("./pages/qr/WorkSitesGate").then(module => ({ default: module.WorkSitesGate })));
+const QrAccessPage = lazy(() => import("./pages/qr/QrAccessPage").then(module => ({ default: module.QrAccessPage })));
 
 export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
@@ -66,10 +68,11 @@ export function App() {
 
   return (
     <Routes>
-      <Route path="/training/work-sites" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={300} /></div>}><WorkSitesPage /></Suspense></SectionGuard>} />
+      <Route path="/training/work-sites" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={300} /></div>}><WorkSitesGate><WorkSitesPage /></WorkSitesGate></Suspense></SectionGuard>} />
       <Route path="/simulator" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense></SectionGuard>} />
       <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><Suspense fallback={<Skeleton height={300} />}><SimulatorPage /></Suspense></SectionGuard>} />
       <Route element={<AppLayout />}>
+        <Route path="/qr-access" element={<Suspense fallback={<Skeleton height={300} />}><QrAccessPage /></Suspense>} />
         <Route index element={<Navigate to={access.home} replace />} />
         <Route path="/admin/access" element={atLeast("admin") ? <Suspense fallback={<Skeleton height={300} />}><AccessAdminPage /></Suspense> : <AccessPage />} />
         <Route path="/reports" element={<ReportsPage />} />

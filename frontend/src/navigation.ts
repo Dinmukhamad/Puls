@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Role } from "./api/types";
 import type { AccessMap, SectionCode } from "./api/access";
-import { HomeIcon, InboxIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon, WheelIcon } from "./components/icons";
+import { HomeIcon, InboxIcon, QrIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon, WheelIcon } from "./components/icons";
 
 export interface SectionTab { to: string; label: string }
 export interface NavItem {
@@ -22,6 +22,7 @@ const section = (id: string, label: string, icon: NavItem["icon"], tabs: Section
 export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
   tab("/profile", "Мои данные и настройки"), tab("/notifications", "Уведомления"),
 ]);
+const QR_ACCESS_SECTION = section("qr_access", "QR-доступ", QrIcon, [tab("/qr-access", "Сканер QR")]);
 const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс"), tab("/wallet", "Мои коины")];
 const learningTabs = [tab("/training", "Всё обучение"), tab("/training?kind=simulator", "Driver Simulator"), tab("/training/work-sites", "Рабочие сайты")];
 const staffLearning = (admin: boolean) => section("training", "Обучение", SparkIcon, [
@@ -59,6 +60,7 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
     section("training", "Обучение", SparkIcon, [tab("/admin/learning", "Материалы"), tab("/training", "Пройти обучение"), tab("/training/work-sites", "Рабочие сайты")]),
     section("driver", "Driver Simulator", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training?kind=simulator", "Тестовый запуск")]),
     section("learning_analytics", "Аналитика обучения", TrophyIcon, [tab("/admin/learning-analytics", "Результаты операторов"), tab("/admin/learning-analytics?view=driver", "Driver Simulator")]),
+    QR_ACCESS_SECTION,
     {...ACCOUNT_SECTION, label: "Мой кабинет"},
   ],
   operator: [
@@ -73,10 +75,10 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
     section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=raffles", "Розыгрыши")]),
     ACCOUNT_SECTION,
   ],
-  supervisor: [staffHome, team(false, true), analytics(true), staffLearning(false), motivation(true), ACCOUNT_SECTION],
-  head: [staffHome, team(), analytics(), performance(), staffLearning(false), motivation(), section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")])],
+  supervisor: [staffHome, team(false, true), analytics(true), staffLearning(false), motivation(true), QR_ACCESS_SECTION, ACCOUNT_SECTION],
+  head: [staffHome, team(), analytics(), performance(), staffLearning(false), motivation(), section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")]), QR_ACCESS_SECTION],
   admin: [staffHome, team(true), performance(true), analytics(), staffLearning(true), motivation(),
-    section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии и устройства"), tab("/admin/audit", "Журнал аудита"), tab("/reports", "Отчёты и экспорт")])],
+    section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии и устройства"), tab("/admin/audit", "Журнал аудита"), tab("/reports", "Отчёты и экспорт")]), QR_ACCESS_SECTION],
 };
 
 export function defaultAccess(role: Role): AccessMap {
@@ -85,7 +87,8 @@ export function defaultAccess(role: Role): AccessMap {
   return { personal: !staff, results: true, training: !staff, rewards: !staff, overview: staff, team: staff, analytics: staff, performance: staff, learning_admin: staff, motivation: staff, reports: role === "head" || role === "admin", system: role === "admin" };
 }
 
-export function routeSection(pathname: string, search = "", role: Role = "operator"): SectionCode | "account" | "access" | "developer" | undefined {
+export function routeSection(pathname: string, search = "", role: Role = "operator"): SectionCode | "account" | "access" | "developer" | "qr_access" | undefined {
+  if (pathname === "/qr-access") return "qr_access";
   if (pathname === "/training/work-sites") return role === "operator" ? "training" : "learning_admin";
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   if (pathname === "/trainer" || pathname === "/admin/learning-analytics") return "learning_admin";
@@ -108,9 +111,10 @@ export function routeSection(pathname: string, search = "", role: Role = "operat
 export function canVisit(role: Role, to: string, allowed: AccessMap, isDeveloper = false): boolean {
   if (to === "/") return true;
   const [path, search = ""] = to.split("?");
-  if (role === "trainer" && !["/profile", "/notifications", "/trainer", "/admin/learning-analytics", "/admin/learning", "/training", "/simulator", "/admin/users"].some(p => path === p || path.startsWith(p + "/"))) return false;
+  if (role === "trainer" && !["/qr-access", "/profile", "/notifications", "/trainer", "/admin/learning-analytics", "/admin/learning", "/training", "/simulator", "/admin/users"].some(p => path === p || path.startsWith(p + "/"))) return false;
   if (role === "operator" && path.startsWith("/admin/users")) return false;
   const permission = routeSection(path, search, role);
+  if (permission === "qr_access") return role !== "operator";
   if (permission === "account") return true;
   if (permission === "developer") return role === "admin" && isDeveloper;
   if (permission === "access") return role === "admin";

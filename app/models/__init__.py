@@ -33,6 +33,7 @@ from app.models.session import LoginSession
 from app.models.settings import AuditLog, GamificationSettings
 from app.models.shop import ShopItem, ShopRequest
 from app.models.user import CoinAccount, Group, User
+from app.models.work_sites_access import WorkSitesAccess
 
 __all__ = [
     "AccessPolicy",
@@ -85,4 +86,5 @@ __all__ = [
     "WeekStatus",
     "WheelConfig",
     "WheelSpin",
+    "WorkSitesAccess",
 ]

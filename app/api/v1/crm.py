@@ -4,7 +4,7 @@ import re
 from pathlib import PurePath
 from urllib.parse import quote
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import ValidationError
 from sqlalchemy import String, cast, func, or_, select, update
@@ -12,12 +12,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import undefer
 
 from app.core.deps import CurrentUser, LearningEditor, LearningReader, SessionDep
+from app.core.work_sites import require_work_sites
 from app.models.crm import CrmAppeal, CrmAttachment, CrmCategory, CrmInstruction
 from app.schemas.crm import AppealInput, CategoryInput, InstructionInput, StatusInput
 from app.services.crm_catalog import CITIES, PARKS, category_id, default_categories
 from app.services.crm_instructions import default_instructions
 
-router = APIRouter(tags=["Учебная CRM"])
+router = APIRouter(tags=["Учебная CRM"], dependencies=[Depends(require_work_sites)])
 PREFIX = "/learning/crm"
 MAX_FILE = 2 * 1024 * 1024
 

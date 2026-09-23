@@ -122,8 +122,8 @@ export class UpdateManager {
 /** Любая незавершённая форма защищена, включая ещё не сохранённые поля вне form. */
 export function updateBlockReason(doc: Document, pathname: string, busy: boolean, edited: Set<Element>): string | null {
   if (busy) return "Дождитесь завершения текущего действия.";
-  if (/^\/(?:training\/attempts(?:\/|$)|simulator(?:\/|$)|games(?:\/|$))/.test(pathname)) {
-    return "Обновление будет применено после выхода из обучения, игры или симулятора.";
+  if (/^\/(?:training\/(?:attempts|work-sites)(?:\/|$)|qr-access(?:\/|$)|simulator(?:\/|$)|games(?:\/|$))/.test(pathname)) {
+    return "Обновление будет применено после выхода из текущего рабочего раздела.";
   }
   for (const element of edited) if (!element.isConnected) edited.delete(element);
   if (edited.size || doc.querySelector('[role="dialog"],form input:not([disabled]):not([readonly]),form textarea:not([disabled]):not([readonly]),form select:not([disabled]),[contenteditable="true"]')) {

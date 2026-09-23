@@ -32,7 +32,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   const role = query.data?.role ?? user?.role ?? "operator";
   const isDeveloper = query.data?.capabilities?.manage_sessions === true;
   const refresh = () => { void query.refetch(); };
-  return <AccessContext.Provider value={{ allowed, isDeveloper, can: (code) => allowed[code] === true, canPath: (to) => canVisit(role, to, allowed, isDeveloper), home: visibleNavigation(role, allowed, isDeveloper)[0]?.to ?? "/profile", loading: !!user && query.isPending, error: query.error, refresh }}>{children}</AccessContext.Provider>;
+  return <AccessContext.Provider value={{ allowed, isDeveloper, can: (code) => allowed[code] === true, canPath: (to) => canVisit(role, to, allowed, isDeveloper), home: visibleNavigation(role, allowed, isDeveloper).find(item => item.id !== "qr_access")?.to ?? "/profile", loading: !!user && query.isPending, error: query.error, refresh }}>{children}</AccessContext.Provider>;
 }
 
 export const useAccess = () => useContext(AccessContext);
