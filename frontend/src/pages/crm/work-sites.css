@@ -140,7 +140,6 @@
 .pulsar-guide p { font-size:12px; line-height:1.6; margin:5px 0 12px; max-width:920px; color:#7186aa; }
 .pulsar-guide-actions { display:flex; gap:15px; align-items:center; }
 .pulsar-guide-actions>button:not(.crm-primary) { padding:0; border:0; background:none; color:#7c8fb2; font-size:11px; }
-.work-sites[data-guide=contact] [data-tour=contact],.work-sites[data-guide=categories] [data-tour=categories],.work-sites[data-guide=evidence] [data-tour=evidence],.work-sites[data-guide=save] [data-tour=save] { outline:2px solid #8fa8ff; outline-offset:8px; border-radius:2px; }
 .work-sites:fullscreen { overflow:auto; }
 @media(min-width:1500px) { .crm-main { padding:25px 45px 0; } .crm-form-panel { margin-top:15px; } }
 @media(max-width:1050px) { .crm-main { padding:18px 18px 0; } .crm-layout { grid-template-columns:155px minmax(0,1fr); } .crm-fields { padding:24px; } .crm-field { grid-template-columns:120px minmax(0,1fr); gap:16px; } .crm-form-options,.crm-help-link,.crm-instructions { margin-left:136px; } .crm-overview>div { padding:14px; } }
