@@ -78,3 +78,25 @@ async def test_operator_cannot_edit_and_unknown_instruction_is_rejected(client, 
     assert (await client.get(BASE, headers=headers)).json()["instructions"]["guide:welcome"][
         "title"
     ] == "Добро пожаловать"
+
+
+async def test_driver_account_screens_have_editable_instructions(client, session, operator):
+    headers = auth(await login(client, operator.login))
+    instructions = (await client.get(BASE, headers=headers)).json()["instructions"]
+    for screen in ["list", "details", "smz", "limit", "car", "code"]:
+        assert instructions[f"drivers:{screen}"]["steps"], screen
+    assert "ИИН" in instructions["drivers:smz"]["body"]
+    assert "Позывной" in instructions["drivers:car"]["body"]
+    assert "500 000" in instructions["drivers:limit"]["body"]
+    staff = await make_user(session, login="drivers-trainer", role=Role.TRAINER)
+    staff_headers = auth(await login(client, staff.login))
+    body = {
+        "title": "СМЗ: памятка",
+        "body": "Адрес и ИИН",
+        "steps": ["Проверьте ИИН"],
+        "revision": 0,
+    }
+    response = await client.put(EDIT + "drivers:smz", headers=staff_headers, json=body)
+    assert response.status_code == 200, response.text
+    after = (await client.get(BASE, headers=headers)).json()["instructions"]["drivers:smz"]
+    assert after["title"] == "СМЗ: памятка"
