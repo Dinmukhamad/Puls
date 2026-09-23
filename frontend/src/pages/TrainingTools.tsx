@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { learning, LEARNING_LABELS, type LearningContent } from "../api/learning";
+import { learning, LEARNING_LABELS, VISIBLE_LEARNING_KINDS, learningKindFilter, visibleLearningFilters, type LearningContent } from "../api/learning";
 import { lookups, type UserOption } from "../api/access";
 import { buildQuery, downloadFile } from "../api/client";
 import { driver } from "../api/driver";
@@ -56,14 +56,14 @@ export function TrainingAnalyticsPage() {
   const [params] = useSearchParams();
   const driverView = params.get("view") === "driver";
   return <div className="stack"><nav className="driver-analytics-tabs" aria-label="Раздел аналитики">
-    <Link className={`btn btn--m ${driverView ? "btn--secondary" : "btn--primary"}`} aria-current={!driverView ? "page" : undefined} to="/admin/learning-analytics">Обучение и тесты</Link>
+    <Link className={`btn btn--m ${driverView ? "btn--secondary" : "btn--primary"}`} aria-current={!driverView ? "page" : undefined} to="/admin/learning-analytics">Прохождение материалов</Link>
     <Link className={`btn btn--m ${driverView ? "btn--primary" : "btn--secondary"}`} aria-current={driverView ? "page" : undefined} to="/admin/learning-analytics?view=driver">Driver Simulator</Link>
   </nav>{driverView ? <DriverAnalyticsPage /> : <LearningAnalyticsReport />}</div>;
 }
 
 function LearningAnalyticsReport() {
   const [params, setParams] = useSearchParams(), [search, setSearch] = useState("");
-  const filters = Object.fromEntries(["date_from", "date_to", "user_id", "content_id", "kind", "state"].map(key => [key, params.get(key) || undefined]));
+  const filters = visibleLearningFilters(Object.fromEntries(["date_from", "date_to", "user_id", "content_id", "state"].map(key => [key, params.get(key) || undefined])));
   const page = Math.max(1, Number(params.get("page")) || 1);
   const query = useQuery({ queryKey: ["training-analytics", filters], queryFn: () => learning.analytics(filters) });
   const people = useQuery({ queryKey: ["training-operator-options", search], queryFn: ({ signal }) => lookups.operators({ search, size: 50 }, signal) });
@@ -78,8 +78,8 @@ function LearningAnalyticsReport() {
       <label className="field"><span>По дату</span><input className="input" type="date" value={params.get("date_to") ?? ""} onChange={e => change("date_to", e.target.value)} /></label>
       <label className="field"><span>Поиск оператора</span><input className="input" value={search} onChange={e => setSearch(e.target.value)} /></label>
       <label className="field"><span>Оператор</span><select className="input" value={params.get("user_id") ?? ""} onChange={e => change("user_id", e.target.value)}><option value="">Все операторы</option>{params.get("user_id") && !people.data?.items.some(x => String(x.id) === params.get("user_id")) && <option value={params.get("user_id")!}>Выбранный оператор</option>}{people.data?.items.map(x => <option value={x.id} key={x.id}>{x.full_name}</option>)}</select></label>
-      <label className="field"><span>Тип</span><select className="input" value={params.get("kind") ?? ""} onChange={e => change("kind", e.target.value)}><option value="">Все типы</option>{Object.entries(LEARNING_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-      <label className="field"><span>Обучение / тест</span><select className="input" value={params.get("content_id") ?? ""} onChange={e => change("content_id", e.target.value)}><option value="">Все материалы</option>{contents.data?.map(x => <option value={x.id} key={x.id}>{x.title}</option>)}</select></label>
+      <label className="field"><span>Тип</span><select className="input" value={learningKindFilter(params.get("kind")) === "all" ? "" : "simulator"} onChange={e => change("kind", e.target.value)}><option value="">Все типы</option>{VISIBLE_LEARNING_KINDS.map(key => [key, LEARNING_LABELS[key]]).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+      <label className="field"><span>Материал обучения</span><select className="input" value={params.get("content_id") ?? ""} onChange={e => change("content_id", e.target.value)}><option value="">Все материалы</option>{contents.data?.map(x => <option value={x.id} key={x.id}>{x.title}</option>)}</select></label>
       <label className="field"><span>Статус</span><select className="input" value={params.get("state") ?? ""} onChange={e => change("state", e.target.value)}><option value="">Все статусы</option>{Object.entries(STATES).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label><Button onClick={() => { setParams({}); setSearch(""); }}>Сбросить</Button>
     </div><p className="secondary small">Период по UTC: даты назначения и начала попытки. Завершение — оконченная попытка, включая неуспешную. Успешность — доля успешных среди завершённых попыток.</p>
     {people.isError && <ErrorState error={people.error} />}{contents.isError && <ErrorState error={contents.error} />}</Card>

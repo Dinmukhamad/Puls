@@ -9,7 +9,7 @@ const nav = await import(`data:text/javascript;base64,${Buffer.from(built.output
 
 test("trainer navigation stays within learning even with explicit grants", () => {
   const all = Object.fromEntries(Object.keys(nav.defaultAccess("admin")).map(key => [key, true]));
-  assert.deepEqual(nav.visibleNavigation("trainer", all).map(x => x.label), ["Главная", "Пользователи", "Обучение", "Тесты", "Миссии", "Driver Simulator", "Аналитика обучения", "Мой кабинет"]);
+  assert.deepEqual(nav.visibleNavigation("trainer", all).map(x => x.label), ["Главная", "Пользователи", "Обучение", "Driver Simulator", "Аналитика обучения", "Мой кабинет"]);
   assert.equal(nav.visibleNavigation("trainer")[0].to, "/trainer");
   for (const path of ["/admin/groups", "/admin/access", "/admin/sessions", "/admin/summary", "/progress", "/wallet", "/rating", "/analytics", "/shop", "/games"]) {
     assert.equal(nav.canVisit("trainer", path, all, true), false, path);
@@ -17,8 +17,8 @@ test("trainer navigation stays within learning even with explicit grants", () =>
   for (const path of ["/admin/users/42", "/admin/learning", "/admin/learning-analytics", "/training", "/simulator", "/profile"]) {
     assert.equal(nav.canVisit("trainer", path, all), true, path);
   }
-  assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=test")?.id, "tests");
-  assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=mission")?.id, "missions");
+  assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=test")?.id, "training");
+  assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=mission")?.id, "training");
   assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=simulator")?.id, "driver");
   assert.equal(nav.canVisit("operator", "/admin/users", all), false);
 });
@@ -160,4 +160,33 @@ test("section switches preserve selected reporting periods and reset pagination"
   assert.equal(results.get("kind"), "simulator");
   const materials = to("/admin/learning?kind=test", "/admin/learning", "?tab=results&kind=simulator");
   assert.equal(materials.get("kind"), "test"); assert.equal(materials.has("tab"), false);
+});
+
+
+test("old installed launch URL resolves to an allowed home for every role and permission set", () => {
+  for (const role of ["operator", "trainer", "supervisor", "head", "admin"]) {
+    for (const allowed of [nav.defaultAccess(role), {}, { personal: true, learning_admin: true }]) {
+      const can = path => nav.canVisit(role, path, allowed);
+      const home = nav.visibleNavigation(role, allowed)[0]?.to ?? "/profile";
+      const redirect = nav.appEntryRedirect("/cabinet", home, can);
+      assert.equal(redirect, can("/cabinet") ? null : home, role);
+      assert.ok(can(redirect ?? "/cabinet"), role);
+      assert.equal(nav.appEntryRedirect("/profile", home, can), null);
+      assert.equal(nav.appEntryRedirect("/admin/access", home, can), null, "Other protected routes keep their access guard");
+      assert.equal(nav.appEntryRedirect("/training/attempts/123", home, can), can("/training") ? "/training" : home);
+      assert.equal(nav.appEntryRedirect("/simulator/attempts/123", home, can), null);
+    }
+  }
+});
+
+test("missions and tests have no navigation entry even with every permission granted", () => {
+  const all = Object.fromEntries(Object.keys(nav.defaultAccess("admin")).map(key => [key, true]));
+  for (const role of ["operator", "trainer", "supervisor", "head", "admin"]) {
+    for (const access of [nav.defaultAccess(role), all]) {
+      const items = nav.visibleNavigation(role, access, true);
+      assert.doesNotMatch(JSON.stringify(items), /kind=(test|mission)|Тесты|Миссии|Mission Studio/);
+      assert.ok(items.some(x => x.tabs.some(t => t.to.includes("work-sites"))));
+      assert.ok(items.some(x => x.tabs.some(t => t.to.includes("kind=simulator"))));
+    }
+  }
 });

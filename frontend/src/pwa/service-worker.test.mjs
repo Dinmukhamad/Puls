@@ -182,6 +182,7 @@ test("worker tells the app which release is actually installed", async () => {
 test("manifest points to correctly sized PNG icons and permits landscape", () => {
   const manifest = JSON.parse(readFileSync(new URL("../../dist/manifest.webmanifest", import.meta.url), "utf8"));
   assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.start_url, "/", "Installed launch must use the role-aware entry route");
   assert.equal(manifest.orientation, "any");
   assert.ok(manifest.icons.some((icon) => icon.purpose === "maskable"));
   for (const icon of manifest.icons) {

@@ -1,9 +1,10 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { lazy, Suspense } from "react";
 
 import { useAuth } from "./auth/AuthContext";
 import { useAccess } from "./auth/AccessContext";
 import { SectionGuard } from "./components/SectionGuard";
+import { appEntryRedirect } from "./navigation";
 import { LoginPage } from "./auth/LoginPage";
 import { AppLayout } from "./components/AppLayout";
 import { ErrorState, Skeleton } from "./components/ui";
@@ -28,7 +29,6 @@ import { NotificationsPage } from "./pages/NotificationsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StoreAdminPage } from "./pages/StoreAdminPage";
 import { TrainingPage } from "./pages/TrainingPage";
-import { LearningPlayerPage } from "./pages/LearningPlayerPage";
 import { LearningStudioPage } from "./pages/LearningStudioPage";
 import { GamesPage } from "./pages/GamesPage";
 import { WalletPage } from "./pages/WalletPage";
@@ -43,6 +43,7 @@ const WorkSitesPage = lazy(() => import("./pages/WorkSitesPage").then(module => 
 export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
   const access = useAccess();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -57,6 +58,11 @@ export function App() {
 
   if (access.loading) return <div className="boot"><Skeleton height={44} width={220} /></div>;
   if (access.error) return <div className="boot"><ErrorState error={access.error} onRetry={access.refresh} /></div>;
+
+  // Older installed apps keep /cabinet as their launch URL even after a manifest update.
+  // Resolve it through current access instead of granting staff operator-only permissions.
+  const entryRedirect = appEntryRedirect(location.pathname, access.home, access.canPath);
+  if (entryRedirect) return <Navigate to={entryRedirect} replace />;
 
   return (
     <Routes>
@@ -78,7 +84,6 @@ export function App() {
         <Route path="/training" element={<TrainingPage />} />
         <Route path="/games" element={<GamesPage />} />
         <Route path="/admin/games" element={<GamesPage administrative />} />
-        <Route path="/training/attempts/:attemptId" element={<LearningPlayerPage />} />
         <Route path="/admin/learning" element={<LearningStudioPage />} />
         <Route path="/trainer" element={<TrainerHome />} />
         <Route path="/admin/learning-analytics" element={<TrainingAnalyticsPage />} />

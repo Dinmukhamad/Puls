@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { learning, attemptPath, DIFFICULTY, LEARNING_LABELS, type LearningContent, type LearningKind } from "../api/learning";
+import { learning, learningKindFilter, VISIBLE_LEARNING_KINDS, attemptPath, DIFFICULTY, LEARNING_LABELS, type LearningContent } from "../api/learning";
 import { useAuth } from "../auth/AuthContext";
 import { Badge, Button, Card, EmptyState, ErrorState, Progress, RowsSkeleton, SegmentedControl } from "../components/ui";
 import { dateOnly } from "../utils/format";
@@ -21,7 +21,7 @@ export function TrainingPage() {
       client.setQueryData(["driver-profile"], data); navigate("/simulator");
     } else navigate(attemptPath(await learning.start(id)));
   } });
-  const kind = params.get("kind") ?? "all", state = params.get("state") ?? "all";
+  const kind = learningKindFilter(params.get("kind")), state = params.get("state") ?? "all";
   const items = query.data ?? [];
   const completed = items.filter((item) => item.completed).length;
   const assignments = [...items].sort((a, b) => Number(!!b.assigned) - Number(!!a.assigned));
@@ -36,8 +36,8 @@ export function TrainingPage() {
     {query.data && <>
       <section className="training-hero"><div><span className="training-eyebrow">ВАШЕ РАЗВИТИЕ</span><h2>Следующий шаг<br />к уверенной работе.</h2><p>Проверяйте знания, разбирайте ситуации и проходите путь водителя.</p></div><div className="training-hero__progress"><strong>{items.length ? Math.round(completed / items.length * 100) : 0}<span>%</span></strong><span>Завершено {completed} из {items.length}</span><Progress value={items.length ? completed / items.length : 0} tone="accent" label="Общий прогресс обучения" /></div></section>
       {next && <Card title={next.state === "in_progress" ? "Продолжить обучение" : "Ваш следующий шаг"} subtitle={next.title} action={<Button variant="primary" disabled={start.isPending} onClick={() => start.mutate(next.id)}>{next.state === "in_progress" ? "Продолжить" : "Начать"}</Button>}><p className="secondary">{LEARNING_LABELS[next.kind]} · {next.minutes} мин · {next.answered ?? 0} из {next.step_count} шагов</p></Card>}
-      <div className="training-categories">{(Object.keys(LEARNING_LABELS) as LearningKind[]).map((type) => <button className={`training-category training-category--${type}`} key={type} onClick={() => update("kind", type)} aria-pressed={kind === type}><span>{LEARNING_LABELS[type]}</span><strong>{items.filter((item) => item.kind === type && item.completed).length}<small> / {items.filter((item) => item.kind === type).length}</small></strong></button>)}</div>
-      <div className="training-filters"><label className="field"><span>Раздел</span><select className="input" value={kind} onChange={(e) => update("kind", e.target.value)}><option value="all">Всё обучение</option>{Object.entries(LEARNING_LABELS).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label><SegmentedControl label="Статус обучения" value={state} options={[{value:"all", label:"Все"},{value:"new",label:"Новые"},{value:"in_progress",label:"В процессе"},{value:"passed",label:"Пройденные"}]} onChange={(value) => update("state", value)} /></div>
+      <div className="training-categories">{VISIBLE_LEARNING_KINDS.map((type) => <button className={`training-category training-category--${type}`} key={type} onClick={() => update("kind", type)} aria-pressed={kind === type}><span>{LEARNING_LABELS[type]}</span><strong>{items.filter((item) => item.kind === type && item.completed).length}<small> / {items.filter((item) => item.kind === type).length}</small></strong></button>)}</div>
+      <div className="training-filters"><label className="field"><span>Раздел</span><select className="input" value={kind} onChange={(e) => update("kind", e.target.value)}><option value="all">Всё обучение</option>{VISIBLE_LEARNING_KINDS.map(key => [key, LEARNING_LABELS[key]]).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label><SegmentedControl label="Статус обучения" value={state} options={[{value:"all", label:"Все"},{value:"new",label:"Новые"},{value:"in_progress",label:"В процессе"},{value:"passed",label:"Пройденные"}]} onChange={(value) => update("state", value)} /></div>
       {!visible.length && <EmptyState title={items.length ? "Таких заданий пока нет" : "Обучение скоро появится"} hint={items.length ? "Выберите другой раздел или статус." : "Опубликованные руководителем тесты и сценарии появятся здесь."} />}
       <div className="training-grid">{visible.map((item) => <LearningCard key={item.id} item={item} pending={start.isPending} onStart={() => start.mutate(item.id)} />)}</div>
     </>}

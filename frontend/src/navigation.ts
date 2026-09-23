@@ -23,11 +23,9 @@ export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
   tab("/profile", "Мои данные и настройки"), tab("/notifications", "Уведомления"),
 ]);
 const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс"), tab("/wallet", "Мои коины")];
-const learningTabs = [tab("/training", "Всё обучение"), tab("/training?kind=test", "Тесты"), tab("/training?kind=mission", "Миссии"), tab("/training?kind=simulator", "Driver Simulator"), tab("/training/work-sites", "Рабочие сайты")];
+const learningTabs = [tab("/training", "Всё обучение"), tab("/training?kind=simulator", "Driver Simulator"), tab("/training/work-sites", "Рабочие сайты")];
 const staffLearning = (admin: boolean) => section("training", "Обучение", SparkIcon, [
   tab("/admin/learning", "Все материалы"),
-  tab("/admin/learning?kind=test", "Тесты"),
-  tab("/admin/learning?kind=mission", admin ? "Mission Studio" : "Миссии"),
   tab("/admin/learning?kind=simulator", admin ? "Driver Simulator Studio" : "Driver Simulator"),
   tab("/admin/learning?tab=results", "Результаты команды"),
   tab("/admin/learning-analytics", "Аналитика обучения"),
@@ -59,8 +57,6 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
     section("home", "Главная", HomeIcon, [tab("/trainer", "Учебная сводка")]),
     section("team", "Пользователи", UsersIcon, [tab("/admin/users", "Операторы")]),
     section("training", "Обучение", SparkIcon, [tab("/admin/learning", "Материалы"), tab("/training", "Пройти обучение"), tab("/training/work-sites", "Рабочие сайты")]),
-    section("tests", "Тесты", InboxIcon, [tab("/admin/learning?kind=test", "Тесты")]),
-    section("missions", "Миссии", TrophyIcon, [tab("/admin/learning?kind=mission", "Миссии")]),
     section("driver", "Driver Simulator", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training?kind=simulator", "Тестовый запуск")]),
     section("learning_analytics", "Аналитика обучения", TrophyIcon, [tab("/admin/learning-analytics", "Результаты операторов"), tab("/admin/learning-analytics?view=driver", "Driver Simulator")]),
     {...ACCOUNT_SECTION, label: "Мой кабинет"},
@@ -170,7 +166,7 @@ export function currentSection(role: Role, pathname: string, search = "", allowe
   const sections = visibleNavigation(role, allowed, isDeveloper);
   if (role === "trainer" && ["/admin/learning", "/training", "/simulator"].some(p => pathname === p || pathname.startsWith(p + "/"))) {
     const kind = new URLSearchParams(search).get("kind");
-    return sections.find(item => item.id === (kind === "test" ? "tests" : kind === "mission" ? "missions" : kind === "simulator" || pathname.startsWith("/simulator") ? "driver" : "training"));
+    return sections.find(item => item.id === (kind === "simulator" || pathname.startsWith("/simulator") ? "driver" : "training"));
   }
   // «Колесо» и «Розыгрыши» живут на одном пути /games и различаются только
   // вкладкой. Разделы сопоставляются по пути, поэтому без этой развилки
@@ -203,6 +199,13 @@ export function currentTab(item: NavItem, pathname: string, search: string): Sec
 
 export function mobileNavigation(items: readonly NavItem[]) {
   return items.length <= 5 ? { primary: items, overflow: [] } : { primary: items.slice(0, 4), overflow: items.slice(4) };
+}
+
+/** Migrate old app launch URLs after authentication and access have finished loading. */
+export function appEntryRedirect(pathname: string, home: string, canPath: (path: string) => boolean): string | null {
+  if (pathname === "/cabinet" && !canPath("/cabinet")) return home;
+  if (pathname.startsWith("/training/attempts/")) return canPath("/training") ? "/training" : home;
+  return null;
 }
 
 export function subsectionDestination(link: SectionTab, pathname: string, search: string): string {

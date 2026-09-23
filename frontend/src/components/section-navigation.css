@@ -7,3 +7,8 @@
 .section-navigation__account { display: flex; align-items: center; gap: var(--sp-3); padding-top: var(--sp-4); margin-top: var(--sp-4); border-top: 1px solid var(--separator); }
 .sidebar .nav-item__label { white-space: normal; line-height: 1.35; }
 @media (max-width: 767px) { .section-navigation { margin-bottom: var(--sp-4); } .section-navigation__tabs { margin-right: -2px; } }
+
+/* Keep mobile section labels inside their own touch targets. */
+@media (max-width: 767px) {
+  .tab__label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}

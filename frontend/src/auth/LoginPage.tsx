@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { AlertIcon, PulsMark } from "../components/icons";
@@ -7,6 +8,7 @@ import { useAuth } from "./AuthContext";
 
 export function LoginPage() {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +23,7 @@ export function LoginPage() {
     const slowTimer = window.setTimeout(() => setSlow(true), 4000);
     try {
       await login(loginName.trim(), password);
+      navigate("/", { replace: true });
     } catch (caught) {
       setError(
         caught instanceof ApiError ? caught.message : "Не удалось войти, повторите попытку",

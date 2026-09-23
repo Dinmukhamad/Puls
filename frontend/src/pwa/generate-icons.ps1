@@ -1,41 +1,77 @@
-# Deterministic native raster export of the same rounded P used by the SVG icons.
+# Reproducible vector and raster exports of the application's PulsMark.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 $iconDirectory = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\public\icons'))
 New-Item -ItemType Directory -Force -Path $iconDirectory | Out-Null
+$markPath = 'M112 274H178L204 202L246 320L283 176L313 274H400'
+$points = [System.Drawing.PointF[]]@(
+    [System.Drawing.PointF]::new(112,274), [System.Drawing.PointF]::new(178,274),
+    [System.Drawing.PointF]::new(204,202), [System.Drawing.PointF]::new(246,320),
+    [System.Drawing.PointF]::new(283,176), [System.Drawing.PointF]::new(313,274),
+    [System.Drawing.PointF]::new(400,274)
+)
 
-function Export-PulsIcon([int]$size, [string]$name, [bool]$maskable = $false) {
-    $bitmap = [System.Drawing.Bitmap]::new($size, $size)
-    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
-    $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-    $graphics.ScaleTransform($size / 512.0, $size / 512.0)
-    $blue = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml('#4F68FF'))
-    $background = [System.Drawing.Drawing2D.GraphicsPath]::new()
-    if ($maskable) { $background.AddRectangle([System.Drawing.RectangleF]::new(0, 0, 512, 512)) }
-    else {
-        $background.AddArc(0, 0, 208, 208, 180, 90)
-        $background.AddArc(304, 0, 208, 208, 270, 90)
-        $background.AddArc(304, 304, 208, 208, 0, 90)
-        $background.AddArc(0, 304, 208, 208, 90, 90)
-        $background.CloseFigure()
-    }
-    $graphics.FillPath($blue, $background)
-    $mark = [System.Drawing.Drawing2D.GraphicsPath]::new()
-    $mark.AddLine(182, 356, 182, 156)
-    $mark.AddLine(182, 156, 268, 156)
-    $mark.AddBezier(268, 156, 320, 156, 350, 184, 350, 228)
-    $mark.AddBezier(350, 228, 350, 272, 320, 300, 268, 300)
-    $mark.AddLine(268, 300, 234, 300)
-    $pen = [System.Drawing.Pen]::new([System.Drawing.Color]::White, 40)
-    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-    $graphics.DrawPath($pen, $mark)
-    $bitmap.Save((Join-Path $iconDirectory $name), [System.Drawing.Imaging.ImageFormat]::Png)
-    $pen.Dispose(); $mark.Dispose(); $background.Dispose(); $blue.Dispose(); $graphics.Dispose(); $bitmap.Dispose()
+function RoundedTile([int]$radius) {
+    $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
+    $diameter = $radius * 2
+    $path.AddArc(0,0,$diameter,$diameter,180,90)
+    $path.AddArc((512-$diameter),0,$diameter,$diameter,270,90)
+    $path.AddArc((512-$diameter),(512-$diameter),$diameter,$diameter,0,90)
+    $path.AddArc(0,(512-$diameter),$diameter,$diameter,90,90)
+    $path.CloseFigure()
+    return ,$path
 }
 
-Export-PulsIcon 192 'puls-192.png'
-Export-PulsIcon 512 'puls-512.png'
-Export-PulsIcon 512 'puls-maskable-512.png' $true
-Export-PulsIcon 180 'apple-touch-icon.png' $true
+function Export-PulsIcon([int]$size, [string]$name, [bool]$maskable = $false) {
+    # Supersampling keeps the pulse clear in small favicon sizes.
+    $scale = [Math]::Max(512, $size * 2)
+    $bitmap = [System.Drawing.Bitmap]::new($scale, $scale)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $graphics.ScaleTransform($scale / 512.0, $scale / 512.0)
+    $shape = RoundedTile 112
+    if (-not $maskable) { $graphics.SetClip($shape) }
+    $gradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+        [System.Drawing.Point]::new(0,0), [System.Drawing.Point]::new(512,512),
+        [System.Drawing.ColorTranslator]::FromHtml('#927AF5'),
+        [System.Drawing.ColorTranslator]::FromHtml('#435AF0'))
+    $graphics.FillRectangle($gradient,0,0,512,512)
+    $highlight = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(17,255,255,255))
+    $graphics.FillEllipse($highlight,-125,-230,700,590)
+    $shadow = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(35,49,35,133),30)
+    $pen = [System.Drawing.Pen]::new([System.Drawing.Color]::White,28)
+    foreach($stroke in @($shadow,$pen)) {
+        $stroke.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $stroke.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+        $stroke.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+    }
+    $graphics.TranslateTransform(0,5)
+    $graphics.DrawLines($shadow,$points)
+    $graphics.TranslateTransform(0,-5)
+    $graphics.DrawLines($pen,$points)
+    $output = [System.Drawing.Bitmap]::new($size,$size)
+    $resizer = [System.Drawing.Graphics]::FromImage($output)
+    $resizer.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $resizer.DrawImage($bitmap,0,0,$size,$size)
+    $output.Save((Join-Path $iconDirectory $name),[System.Drawing.Imaging.ImageFormat]::Png)
+    $resizer.Dispose(); $output.Dispose(); $pen.Dispose(); $shadow.Dispose(); $highlight.Dispose()
+    $gradient.Dispose(); $shape.Dispose(); $graphics.Dispose(); $bitmap.Dispose()
+}
+
+$svg = @"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="tile" x2="1" y2="1"><stop stop-color="#927AF5"/><stop offset="1" stop-color="#435AF0"/></linearGradient><clipPath id="clip"><rect width="512" height="512" rx="112"/></clipPath></defs><g clip-path="url(#clip)"><rect width="512" height="512" fill="url(#tile)"/><ellipse cx="225" cy="65" rx="350" ry="295" fill="#fff" opacity=".067"/><path d="$markPath" transform="translate(0 5)" fill="none" stroke="#312385" stroke-opacity=".137" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="$markPath" fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
+"@
+[System.IO.File]::WriteAllText((Join-Path $iconDirectory 'puls-light.svg'),$svg)
+[System.IO.File]::WriteAllText((Join-Path $iconDirectory '..\favicon.svg'),$svg)
+$dark = $svg.Replace('#927AF5','#34304E').Replace('#435AF0','#161C35').Replace('stroke="#fff"','stroke="#C1B5FF"')
+[System.IO.File]::WriteAllText((Join-Path $iconDirectory 'puls-dark.svg'),$dark)
+Export-PulsIcon 32 'puls-favicon-v2.png'
+Export-PulsIcon 192 'puls-app-192-v2.png'
+Export-PulsIcon 512 'puls-app-512-v2.png'
+Export-PulsIcon 512 'puls-maskable-v2.png' $true
+Export-PulsIcon 180 'apple-touch-icon-v2.png' $true
+# Preserve older installed manifests while they transition to the new asset URLs.
+Copy-Item (Join-Path $iconDirectory 'puls-app-192-v2.png') (Join-Path $iconDirectory 'puls-192.png')
+Copy-Item (Join-Path $iconDirectory 'puls-app-512-v2.png') (Join-Path $iconDirectory 'puls-512.png')
+Copy-Item (Join-Path $iconDirectory 'puls-maskable-v2.png') (Join-Path $iconDirectory 'puls-maskable-512.png')
+Copy-Item (Join-Path $iconDirectory 'apple-touch-icon-v2.png') (Join-Path $iconDirectory 'apple-touch-icon.png')
