@@ -13,6 +13,7 @@ from app.api.v1 import (
     analytics,
     auth,
     cabinet,
+    city,
     crm,
     driver,
     games,
@@ -27,6 +28,7 @@ from app.api.v1 import (
 )
 
 api_router = APIRouter()
+api_router.include_router(city.router)
 api_router.include_router(work_sites_access.router)
 api_router.include_router(crm.router)
 api_router.include_router(access.router)

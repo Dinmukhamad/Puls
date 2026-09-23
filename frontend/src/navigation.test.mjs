@@ -179,15 +179,25 @@ test("old installed launch URL resolves to an allowed home for every role and pe
   }
 });
 
-test("missions and tests have no navigation entry even with every permission granted", () => {
+test("legacy tests stay hidden while the new city missions are available", () => {
   const all = Object.fromEntries(Object.keys(nav.defaultAccess("admin")).map(key => [key, true]));
   for (const role of ["operator", "trainer", "supervisor", "head", "admin"]) {
     for (const access of [nav.defaultAccess(role), all]) {
       const items = nav.visibleNavigation(role, access, true);
-      assert.doesNotMatch(JSON.stringify(items), /kind=(test|mission)|Тесты|Миссии|Mission Studio/);
+      assert.doesNotMatch(JSON.stringify(items), /kind=(test|mission)|Тесты|Mission Studio/);
+      assert.ok(items.some(x => x.tabs.some(t => t.to === "/training/city")));
       assert.ok(items.some(x => x.tabs.some(t => t.to.includes("work-sites"))));
       assert.ok(items.some(x => x.tabs.some(t => t.to.includes("kind=simulator"))));
     }
+  }
+});
+
+test("city uses training for operators and learning administration for staff", () => {
+  assert.equal(nav.canVisit("operator", "/training/city", {training:true}), true);
+  assert.equal(nav.canVisit("operator", "/training/city", {learning_admin:true}), false);
+  for (const role of ["trainer","supervisor","head","admin"]) {
+    assert.equal(nav.canVisit(role, "/training/city", {learning_admin:true}), true);
+    assert.equal(nav.canVisit(role, "/training/city", {training:true}), false);
   }
 });
 

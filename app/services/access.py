@@ -148,6 +148,8 @@ async def effective_access(session: AsyncSession, user: User):
 def request_sections(path: str, method: str, role: Role | None = None) -> tuple[str, ...]:
     """Alternative section permissions for an endpoint; supporting reference reads are explicit."""
     read = method in ("GET", "HEAD")
+    if path == "/learning/city" or path.startswith("/learning/city/"):
+        return ("training",) if role == Role.OPERATOR else ("learning_admin",)
     if path in ("/work-sites-access/status", "/work-sites-access/request"):
         return ("training",) if role == Role.OPERATOR else ()
     if path.startswith(("/admin/training", "/admin/learning-analytics")):

@@ -24,8 +24,9 @@ export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
 ]);
 const QR_ACCESS_SECTION = section("qr_access", "QR-доступ", QrIcon, [tab("/qr-access", "Сканер QR")]);
 const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс"), tab("/wallet", "Мои коины")];
-const learningTabs = [tab("/training", "Всё обучение"), tab("/training?kind=simulator", "Driver Simulator"), tab("/training/work-sites", "Рабочие сайты")];
+const learningTabs = [tab("/training/city", "Мой город · миссии"), tab("/training", "Всё обучение"), tab("/training?kind=simulator", "Driver Simulator"), tab("/training/work-sites", "Рабочие сайты")];
 const staffLearning = (admin: boolean) => section("training", "Обучение", SparkIcon, [
+  tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"),
   tab("/admin/learning", "Все материалы"),
   tab("/admin/learning?kind=simulator", admin ? "Driver Simulator Studio" : "Driver Simulator"),
   tab("/admin/learning?tab=results", "Результаты команды"),
@@ -57,7 +58,7 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
   trainer: [
     section("home", "Главная", HomeIcon, [tab("/trainer", "Учебная сводка")]),
     section("team", "Пользователи", UsersIcon, [tab("/admin/users", "Операторы")]),
-    section("training", "Обучение", SparkIcon, [tab("/admin/learning", "Материалы"), tab("/training", "Пройти обучение"), tab("/training/work-sites", "Рабочие сайты")]),
+    section("training", "Обучение", SparkIcon, [tab("/admin/learning", "Материалы"), tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"), tab("/training", "Пройти обучение"), tab("/training/work-sites", "Рабочие сайты")]),
     section("driver", "Driver Simulator", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training?kind=simulator", "Тестовый запуск")]),
     section("learning_analytics", "Аналитика обучения", TrophyIcon, [tab("/admin/learning-analytics", "Результаты операторов"), tab("/admin/learning-analytics?view=driver", "Driver Simulator")]),
     QR_ACCESS_SECTION,
@@ -89,7 +90,7 @@ export function defaultAccess(role: Role): AccessMap {
 
 export function routeSection(pathname: string, search = "", role: Role = "operator"): SectionCode | "account" | "access" | "developer" | "qr_access" | undefined {
   if (pathname === "/qr-access") return "qr_access";
-  if (pathname === "/training/work-sites") return role === "operator" ? "training" : "learning_admin";
+  if (pathname === "/training/work-sites" || pathname === "/training/city") return role === "operator" ? "training" : "learning_admin";
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   if (pathname === "/trainer" || pathname === "/admin/learning-analytics") return "learning_admin";
   if (matches("/progress")) return role === "operator" ? "results" : "personal";

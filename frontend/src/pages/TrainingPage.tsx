@@ -30,6 +30,7 @@ export function TrainingPage() {
   function update(key: string, value: string) { const next = new URLSearchParams(params); next.set(key, value); setParams(next); }
   return <div className="stack training-page">
     <div className="page-head"><div><h1 className="page-title">Обучение</h1><p className="page-subtitle">{user?.role === "trainer" ? "Тестовые прохождения без наград и рабочей статистики" : "Знания, решения и практика — шаг за шагом"}</p></div>{(atLeast("supervisor") || user?.role === "trainer") && <Link className="btn btn--secondary" to="/admin/learning">Студия обучения</Link>}</div>
+    {kind === "all" && <Card title="Мой город" subtitle="Миссии, навыки и твой путь в Puls" action={<Link className="btn btn--primary" to="/training/city">Продолжить свой путь →</Link>}><p className="secondary">Развивай автопарк и CRM-центр: проходи реальные задания, получай опыт города и коины.</p></Card>}
     {(kind === "all" || kind === "simulator") && <DriverEntry />}
     {kind === "all" && <Card title="Рабочие сайты" subtitle="Практика в интерфейсах, с которыми работает оператор" action={<Link className="btn btn--primary" to="/training/work-sites">Открыть рабочие сайты →</Link>}><p className="secondary">CRM-система: создание обращений, категории и общая история. Диспетчерская и другие сайты появятся позже.</p></Card>}
     <>{query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
