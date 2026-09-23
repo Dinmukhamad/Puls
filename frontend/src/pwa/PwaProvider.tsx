@@ -175,7 +175,7 @@ export function PwaInstallCard() {
   const { user } = useAuth();
   if (!pwa) return null;
   return (
-    <Card id="app-updates" title="Приложение Puls" action={<img src="/icons/puls-app-192-v2.png" width={48} height={48} alt="" />}>
+    <Card id="app-updates" title="Приложение Puls" action={<img src="/icons/puls-app-192-v2.png" width={40} height={40} alt="" style={{ margin: "-8px 0", borderRadius: 10 }} />}>
       {/* Состав выпуска — рабочий инструмент администратора. Остальным приложение
           обновляется само при следующем заходе, просить их об этом незачем. */}
       {user?.role === "admin" && <PwaReleaseDetails pwa={pwa} />}

@@ -31,9 +31,9 @@
 .driver-app h1 { font-size:28px; line-height:1.2; letter-spacing:-.025em; margin:0; }
 .driver-app h2 { font-size:20px; line-height:1.3; margin:0; }
 .driver-app p { line-height:1.5; margin:0; }
-.driver-header { display:flex; align-items:center; justify-content:space-between; gap:12px; flex:none; padding:calc(12px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left)); min-height:60px; background:#080808; font-size:14px; font-weight:650; z-index:2; }
-.driver-exit { display:flex; align-items:center; min-height:36px; color:#aaa9a3; font-weight:500; text-decoration:none; }
-.driver-environment { color:#aaa9a3; font-size:11px; font-weight:400; }
+.driver-header { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:12px; flex:none; padding:calc(12px + env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 12px max(16px,env(safe-area-inset-left)); min-height:60px; background:#080808; font-size:14px; font-weight:650; z-index:2; }
+.driver-exit { display:flex; align-items:center; justify-self:start; min-height:44px; padding-inline:8px; margin-left:-8px; color:#aaa9a3; font-weight:500; text-decoration:none; }
+.driver-environment { justify-self:end; color:#aaa9a3; font-size:11px; font-weight:400; }
 .driver-splash { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; padding:24px 24px 12vh; text-align:center; }
 .driver-mark { display:grid; place-items:center; width:56px; height:56px; border-radius:18px; background:#685bff; color:white; flex:none; }
 .driver-mark svg { width:80%; height:80%; }

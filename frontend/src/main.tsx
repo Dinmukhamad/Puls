@@ -3,14 +3,15 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 
+// Global styles first: page styles imported by the app must be able to refine them.
+import "./styles/tokens.css";
+import "./styles/app.css";
 import { App } from "./App";
 import { AuthProvider } from "./auth/AuthContext";
 import { AccessProvider } from "./auth/AccessContext";
 import { ToastProvider } from "./components/Toast";
 import { ThemeProvider } from "./theme/ThemeContext";
 import { PwaProvider } from "./pwa/PwaProvider";
-import "./styles/tokens.css";
-import "./styles/app.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {

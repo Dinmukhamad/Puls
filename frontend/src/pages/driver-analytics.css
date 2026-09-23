@@ -134,7 +134,7 @@ button.da-cell { cursor:pointer; }
 .da-report-footer details { max-width:650px; }
 .da-report-footer summary { cursor:pointer; }
 .da-report-footer p { line-height:1.7; }
-.driver-analytics-tabs { display:flex; flex-wrap:wrap; gap:10px; }
+.driver-analytics-tabs { align-self:flex-start; }
 .da-back { display:flex; align-items:center; gap:16px; }
 .da-back > span { flex:1; font-size:11px; color:var(--text-secondary); }
 .da-person-hero { display:flex; align-items:center; gap:20px; padding:22px 0; }

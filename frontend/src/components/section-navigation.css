@@ -1,12 +1,18 @@
 .section-navigation { min-width: 0; margin-bottom: var(--sp-6); }
 .section-navigation__title { margin-bottom: var(--sp-3); font-size: var(--text-caption); font-weight: 600; color: var(--text-secondary); }
-.section-navigation__tabs { display: flex; align-items: center; gap: var(--sp-2); overflow-x: auto; max-width: 100%; padding: 4px 2px 8px; scrollbar-width: thin; }
-.section-navigation__tab { flex: 0 0 auto; padding: var(--sp-3) var(--sp-4); min-height: 44px; border-radius: var(--radius-m); color: var(--text-secondary); font-weight: 550; font-size: var(--text-caption); text-decoration: none; background: var(--surface-secondary); }
-.section-navigation__tab.is-active { color: var(--accent-primary); background: var(--accent-tint); box-shadow: inset 0 -2px 0 var(--accent-primary); }
+.section-navigation__tabs { display: flex; align-items: center; gap: var(--sp-2); overflow-x: auto; max-width: 100%; padding: 4px 0 8px; scrollbar-width: none; }
+.section-navigation__tabs::-webkit-scrollbar { display: none; }
+.section-navigation__tab { position: relative; display: inline-flex; align-items: center; flex: 0 0 auto; padding: 0 var(--sp-4); min-height: 44px; border-radius: var(--radius-m); color: var(--text-secondary); font-weight: 550; font-size: var(--text-caption); text-decoration: none; background: var(--surface-secondary); }
+.section-navigation__tab.is-active { color: var(--accent-primary); background: var(--accent-tint); }
+.section-navigation__tab.is-active::after { content: ""; position: absolute; left: var(--sp-4); right: var(--sp-4); bottom: 6px; height: 2px; border-radius: 2px; background: var(--accent-primary); }
 .section-navigation__tab:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .section-navigation__account { display: flex; align-items: center; gap: var(--sp-3); padding-top: var(--sp-4); margin-top: var(--sp-4); border-top: 1px solid var(--separator); }
 .sidebar .nav-item__label { white-space: normal; line-height: 1.35; }
-@media (max-width: 767px) { .section-navigation { margin-bottom: var(--sp-4); } .section-navigation__tabs { margin-right: -2px; } }
+@media (max-width: 767px) {
+  .section-navigation { margin-bottom: var(--sp-4); }
+  /* The strip runs to the screen edge and fades out, so it clearly scrolls. */
+  .section-navigation__tabs { margin-inline: calc(-1 * var(--sp-4)); padding-inline: var(--sp-4); scroll-padding-inline: var(--sp-4); mask-image: linear-gradient(90deg, #000 88%, transparent); }
+}
 
 /* Keep mobile section labels inside their own touch targets. */
 @media (max-width: 767px) {

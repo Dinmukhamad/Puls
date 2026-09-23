@@ -1,4 +1,4 @@
-.cabinet-page { width: 100%; max-width: 1080px; margin-inline: auto; }
+.cabinet-page { width: 100%; }
 .week-metric-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--sp-4); }
 .week-metric-group { min-width: 0; border: 1px solid var(--separator); border-radius: var(--radius-l); background: var(--surface-secondary); }
 .week-metric-group__summary { display: flex; align-items: center; gap: var(--sp-3); min-height: 76px; padding: var(--sp-4); cursor: pointer; list-style: none; border-radius: inherit; }

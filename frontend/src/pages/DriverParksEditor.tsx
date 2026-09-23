@@ -26,8 +26,8 @@ function ParksForm({ initial, readOnly }: { initial: DriverPark[]; readOnly: boo
     <p className="secondary small">Названия и комиссии используются только в учебном приложении. Выбранные ранее условия сохраняются в профиле до следующего выбора парка.</p>
     <fieldset className="learning-fieldset stack" disabled={readOnly || save.isPending}>
       {parks.map((park, index) => <div className="learning-form-grid" key={park.id}>
-        <label className="field"><span>Название парка {index + 1}</span><input className="input" required maxLength={100} value={park.name} onChange={(e) => update(parks.map((item, i) => i === index ? { ...item, name: e.target.value } : item))} /></label>
-        <label className="field"><span>Комиссия, %</span><input className="input" required type="number" min={0} max={100} step="any" value={park.commission} onChange={(e) => update(parks.map((item, i) => i === index ? { ...item, commission: Number(e.target.value) } : item))} /></label>
+        <label className="field"><span className="field__label">Название парка {index + 1}</span><input className="input" required maxLength={100} value={park.name} onChange={(e) => update(parks.map((item, i) => i === index ? { ...item, name: e.target.value } : item))} /></label>
+        <label className="field"><span className="field__label">Комиссия, %</span><input className="input" required type="number" min={0} max={100} step="any" value={park.commission} onChange={(e) => update(parks.map((item, i) => i === index ? { ...item, commission: Number(e.target.value) } : item))} /></label>
         {!readOnly && <Button disabled={parks.length === 1} onClick={() => update(parks.filter((item) => item.id !== park.id))}>Удалить парк {index + 1}</Button>}
       </div>)}
       {!readOnly && <div className="row"><Button disabled={parks.length >= 20} onClick={() => update([...parks, { id: crypto.randomUUID(), name: "", commission: 0 }])}>Добавить парк</Button><Button type="submit" variant="primary">{save.isPending ? "Сохраняем…" : "Сохранить парки"}</Button></div>}

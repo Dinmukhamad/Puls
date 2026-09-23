@@ -1,8 +1,7 @@
-.main__inner--profile { max-width: 1080px; }
-.profile-page { max-width: 1080px; margin-inline: auto; }
+.profile-page { width: 100%; }
 .profile-identity .profile-head { gap: var(--sp-4); }
-.profile-identity .profile-head__text { flex: 1; }
-.profile-identity .profile-head__name { margin: 0; overflow-wrap: anywhere; }
+.profile-identity .profile-head__text { flex: 1 1 180px; min-width: 0; }
+.profile-identity .profile-head__name { margin: 0; overflow-wrap: break-word; }
 .profile-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); align-items: stretch; }
 .profile-data-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-5) var(--sp-4); margin: 0; }
 .profile-data-grid dt { font-size: 12px; color: var(--text-secondary); margin-bottom: var(--sp-1); }
@@ -16,4 +15,5 @@
 
 /* Та же сетка, что и у данных выше: кнопки встают ровно под своими колонками. */
 .profile-account-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); margin-top: var(--sp-5); }
-@media (max-width: 380px) { .profile-account-actions { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .profile-account-actions { grid-template-columns: minmax(0, 1fr); } }
+.profile-settings-grid .card__body p { font-size: var(--text-caption); line-height: 1.55; }

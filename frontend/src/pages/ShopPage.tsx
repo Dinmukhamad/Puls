@@ -199,7 +199,7 @@ export function ShopPage() {
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
-          <label className="field">
+          <label className="field" style={{ flex: "1 1 240px" }}>
             <span className="field__label">Порядок</span>
             <select className="input" value={sort} onChange={(event) => setSort(event.target.value as ShopSort)}>
               <option value="smart">Сначала доступные</option>

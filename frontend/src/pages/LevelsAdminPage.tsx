@@ -36,9 +36,9 @@ function LevelEditor({ level, onClose, onSaved }: { level?: ProgressLevel; onClo
   } });
   return <Sheet title={level ? "Изменить уровень" : "Новый уровень"} onClose={() => { if (!save.isPending) onClose(); }} footer={<Button form="coin-level-form" type="submit" variant="primary" disabled={save.isPending}>{save.isPending ? "Сохраняем…" : "Сохранить уровень"}</Button>}>
     <form id="coin-level-form" className="stack" onSubmit={event => { event.preventDefault(); if (!save.isPending) save.mutate(); }}><fieldset className="learning-fieldset stack" disabled={save.isPending}>
-      <label className="field"><span>Название уровня</span><input className="input" required maxLength={120} value={title} onChange={event => setTitle(event.target.value)} /></label>
-      <label className="field"><span>Заработать коинов за всё время</span><input className="input" type="number" required min={0} max={100000000} step={1} disabled={starting} value={threshold} onChange={event => setThreshold(event.target.value)} /></label>
-      <label className="field"><span>Описание</span><textarea className="input" maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></label>
+      <label className="field"><span className="field__label">Название уровня</span><input className="input" required maxLength={120} value={title} onChange={event => setTitle(event.target.value)} /></label>
+      <label className="field"><span className="field__label">Заработать коинов за всё время</span><input className="input" type="number" required min={0} max={100000000} step={1} disabled={starting} value={threshold} onChange={event => setThreshold(event.target.value)} /></label>
+      <label className="field"><span className="field__label">Описание</span><textarea className="input" maxLength={2000} value={description} onChange={event => setDescription(event.target.value)} /></label>
       <label className="row"><input type="checkbox" checked={active} disabled={starting} onChange={event => setActive(event.target.checked)} />Уровень активен</label>
       <p className="small secondary">{starting ? "Стартовый уровень всегда активен и имеет порог 0." : `При достижении порога сотрудник получит уровень и достижение «${coins(Number(threshold))} коинов заработано».`}</p>
       <p className="small secondary">Настройка применяется ко всем существующим и будущим сотрудникам после сохранения.</p>

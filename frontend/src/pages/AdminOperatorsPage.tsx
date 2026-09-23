@@ -74,7 +74,7 @@ export function AdminOperatorsPage() {
           </span>
           <input
             className="input input--s"
-            style={{ width: 220 }}
+            style={{ flex: "1 1 220px", maxWidth: 320 }}
             placeholder="Найти оператора"
             value={search}
             aria-label="Поиск по ФИО"
@@ -179,7 +179,7 @@ export function AdminOperatorsPage() {
                           </span>
                         </span>
                       </td>
-                      <td className="muted">{row.group_name ?? "—"}</td>
+                      <td className="muted" style={{ whiteSpace: "nowrap" }}>{row.group_name ?? "—"}</td>
                       <td className="num">{points(row.points)}</td>
                       <td className="num">{coins(row.coins_week)}</td>
                       <td className="num">

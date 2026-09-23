@@ -12,7 +12,7 @@ import { Avatar, IconButton } from "./ui";
 import "./section-navigation.css";
 
 const COLLAPSE_KEY = "puls.sidebar.collapsed";
-const MOBILE_LABELS: Record<string, string> = { team: "Команда", performance: "Показатели", driver: "Симулятор" };
+const MOBILE_LABELS: Record<string, string> = { team: "Команда", performance: "Показатели", driver: "Симулятор", wheel: "Колесо" };
 function initialCollapsed(): boolean {
   try { const saved = localStorage.getItem(COLLAPSE_KEY); if (saved !== null) return saved === "1"; } catch { /* Optional preference. */ }
   return window.innerWidth < 1024;
@@ -21,6 +21,8 @@ function initialCollapsed(): boolean {
 export function AppLayout() {
   const { user } = useAuth(); const location = useLocation();
   const { allowed, isDeveloper } = useAccess();
+  // Keep the active subsection visible in the scrollable tab strip on phones.
+  useEffect(() => { document.querySelector(".section-navigation__tab.is-active")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [location.pathname]);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
   const [compactTabBar, setCompactTabBar] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -54,7 +56,7 @@ export function AppLayout() {
       {user && <Link to="/profile" className="sidebar__user" aria-label={`Профиль: ${user.full_name}`}><Avatar name={user.full_name} id={user.id} size={36} /><span className="sidebar__user-text"><span className="sidebar__user-name">{user.full_name}</span><span className="sidebar__user-role">{ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</span></span></Link>}
     </GlassSurface>
 
-    <main className="main"><div className={location.pathname === "/profile" ? "main__inner main__inner--profile" : "main__inner"}>
+    <main className="main"><div className="main__inner">
       {active && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p>{active.tabs.length > 1 && <nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav>}</div>}
       <SectionGuard><Outlet /></SectionGuard>
     </div></main>

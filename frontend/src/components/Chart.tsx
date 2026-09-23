@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { points } from "../utils/format";
 
@@ -22,6 +22,14 @@ export function Chart({ title, labels, series, target, unit, compact = false, lo
   const titleId = useId();
   const descriptionId = useId();
   const [focused, setFocused] = useState<string | null>(null);
+  // Draw in real pixels of the container: a fixed 760-wide viewBox shrinks text to 6px on phones.
+  const box = useRef<HTMLDivElement>(null), [measured, setMeasured] = useState(760);
+  useEffect(() => {
+    const el = box.current; if (!el) return;
+    const sync = () => { if (el.clientWidth) setMeasured(el.clientWidth); };
+    sync(); const observer = new ResizeObserver(sync); observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const observed = series.flatMap((item) => item.values.filter((value): value is number => value !== null && Number.isFinite(value)));
   const domain = target == null ? observed : [...observed, target];
   const low = domain.length ? Math.min(...domain) : 0;
@@ -29,9 +37,9 @@ export function Chart({ title, labels, series, target, unit, compact = false, lo
   const span = Math.max(high - low, Math.abs(high) * 0.08, 1);
   const min = low - span * 0.16;
   const max = high + span * 0.16;
-  const width = 760;
-  const height = compact ? 220 : 290;
-  const left = 62;
+  const width = Math.max(300, Math.min(measured, 1100));
+  const height = width < 520 ? (compact ? 200 : 230) : compact ? 220 : 290;
+  const left = width < 520 ? 48 : 62;
   const right = 22;
   const top = 24;
   const bottom = 40;
@@ -40,7 +48,7 @@ export function Chart({ title, labels, series, target, unit, compact = false, lo
   const readable = (value: number | null) => value === null ? "Нет данных" : `${points(value)}${unit ? ` ${unit}` : ""}`;
 
   return (
-    <div className="analytics-chart">
+    <div className="analytics-chart" ref={box}>
       {observed.length === 0 ? <div className="analytics-chart__empty">Нет наблюдений за выбранные недели</div> : (
         <svg viewBox={`0 0 ${width} ${height}`} role="group" aria-labelledby={titleId} aria-describedby={descriptionId}>
           <title id={titleId}>{title}</title>
@@ -57,7 +65,7 @@ export function Chart({ title, labels, series, target, unit, compact = false, lo
               <text x={width - right} y={y(target) - 8} textAnchor="end">Цель {points(target)}</text>
             </g>
           )}
-          {labels.map((label, index) => index % Math.ceil(labels.length / 8) === 0 || index === labels.length - 1 ? <text key={`${label}-${index}`} className="analytics-chart__label" x={x(index)} y={height - 14} textAnchor="middle" aria-hidden="true">{label.replace(/^\d{4}-/, "")}</text> : null)}
+          {labels.map((label, index) => index % Math.ceil(labels.length / (width < 520 ? 4 : 8)) === 0 || index === labels.length - 1 ? <text key={`${label}-${index}`} className="analytics-chart__label" x={x(index)} y={height - 14} textAnchor="middle" aria-hidden="true">{label.replace(/^\d{4}-/, "")}</text> : null)}
           {series.map((item, seriesIndex) => {
             let path = "";
             let connected = false;

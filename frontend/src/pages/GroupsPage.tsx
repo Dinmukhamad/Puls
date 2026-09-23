@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { team, teamError, type TeamGroup } from "../api/team";
 import { useAuth } from "../auth/AuthContext";
+import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Skeleton } from "../components/ui";
@@ -18,8 +19,8 @@ export function GroupsPage() {
   const filtered = groups.data?.filter((g) => `${g.name} ${g.code}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()) && (status === "all" || g.is_active === (status === "active")));
   return <div className="stack team-page">
     <div className="page-head"><div><h1 className="page-title">Группы</h1><p className="page-subtitle">Команды операторов и их супервайзеры</p></div>{atLeast("head") && <Button variant="primary" onClick={() => setEditor("new")}>Создать группу</Button>}</div>
-    <div className="team-filterbar"><label className="field team-search"><span className="field__label">Поиск</span><input className="input" type="search" placeholder="Название или код группы" value={search} onChange={(e) => setParams({ status, search: e.target.value }, { replace: true })} /></label>
-      <label className="field"><span className="field__label">Статус</span><select className="input" value={status} onChange={(e) => setParams({ search, status: e.target.value })}><option value="active">Активные</option><option value="archived">Архивные</option><option value="all">Все</option></select></label></div>
+    <GlassSurface variant="regular" className="team-filterbar"><label className="field team-search"><span className="field__label">Поиск</span><input className="input" type="search" placeholder="Название или код группы" value={search} onChange={(e) => setParams({ status, search: e.target.value }, { replace: true })} /></label>
+      <label className="field"><span className="field__label">Статус</span><select className="input" value={status} onChange={(e) => setParams({ search, status: e.target.value })}><option value="active">Активные</option><option value="archived">Архивные</option><option value="all">Все</option></select></label></GlassSurface>
     {groups.isLoading && <Skeleton height={200} />}{groups.isError && <ErrorState error={groups.error} onRetry={() => groups.refetch()} />}
     {filtered?.length === 0 && <EmptyState title="Группы не найдены" hint="Измените фильтры или создайте группу" />}
     <div className="team-group-grid">{filtered?.map((group) => <Card key={group.id} title={group.name} subtitle={group.code} className="team-group-card" action={<Badge tone={group.is_active ? "success" : "neutral"}>{group.is_active ? "Активна" : "Архив"}</Badge>}>
