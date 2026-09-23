@@ -132,7 +132,7 @@ test("every driver tab opens its own view, with a working return to orders", () 
     if (section !== "orders") assert.match(html, new RegExp(`<h1>${destination.title}</h1>`));
     else assert.match(html, /Карта появится после определения местоположения/);
     assert.equal((html.match(/aria-current="page"/g) ?? []).length, 1);
-    assert.match(html, /href="\/training\?kind=simulator"/);
+    assert.match(html, /href="\/training\/city\?district=driver"/);
   }
 });
 
@@ -513,7 +513,7 @@ test("about screen leaves the simulator instead of pretending to log out", () =>
   assert.match(html, /О вас/);
   assert.match(html, /Jana Taxi/);
   assert.match(html, /Карточка качества/);
-  assert.match(html, /href="\/training\?kind=simulator"/);
+  assert.match(html, /href="\/training\/city\?district=driver"/);
   assert.doesNotMatch(html, /Выйти из аккаунта/);
   assert.ok(PROFILE_VIEWS.includes("about") && PROFILE_VIEWS.includes("car"));
 });

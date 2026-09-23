@@ -24,14 +24,13 @@ export const ACCOUNT_SECTION = section("profile", "Профиль", UserIcon, [
 ]);
 const QR_ACCESS_SECTION = section("qr_access", "QR-доступ", QrIcon, [tab("/qr-access", "Сканер QR")]);
 const personal = [tab("/cabinet", "Мой кабинет"), tab("/progress", "Мой прогресс"), tab("/wallet", "Мои коины")];
-const learningTabs = [tab("/training/city", "Мой город · миссии"), tab("/training", "Всё обучение"), tab("/training?kind=simulator", "Driver Simulator"), tab("/training/work-sites", "Рабочие сайты")];
+const learningTabs = [tab("/training/city", "Мой город · миссии"), tab("/training", "Материалы")];
 const staffLearning = (admin: boolean) => section("training", "Обучение", SparkIcon, [
   tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"),
   tab("/admin/learning", "Все материалы"),
   tab("/admin/learning?kind=simulator", admin ? "Driver Simulator Studio" : "Driver Simulator"),
   tab("/admin/learning?tab=results", "Результаты команды"),
   tab("/admin/learning-analytics", "Аналитика обучения"),
-  tab("/training/work-sites", "Рабочие сайты"),
 ]);
 const team = (admin = false, supervisor = false) => section("team", admin ? "Пользователи и структура" : "Команда", UsersIcon, [
   tab("/admin/users", admin ? "Пользователи" : "Операторы"), tab("/admin/groups", supervisor ? "Моя группа" : "Группы"),
@@ -58,8 +57,8 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
   trainer: [
     section("home", "Главная", HomeIcon, [tab("/trainer", "Учебная сводка")]),
     section("team", "Пользователи", UsersIcon, [tab("/admin/users", "Операторы")]),
-    section("training", "Обучение", SparkIcon, [tab("/admin/learning", "Материалы"), tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"), tab("/training", "Пройти обучение"), tab("/training/work-sites", "Рабочие сайты")]),
-    section("driver", "Driver Simulator", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training?kind=simulator", "Тестовый запуск")]),
+    section("training", "Обучение", SparkIcon, [tab("/admin/learning", "Материалы"), tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"), tab("/training", "Пройти обучение")]),
+    section("driver", "Driver Simulator", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training/city?district=driver", "Тестовый запуск в городе")]),
     section("learning_analytics", "Аналитика обучения", TrophyIcon, [tab("/admin/learning-analytics", "Результаты операторов"), tab("/admin/learning-analytics?view=driver", "Driver Simulator")]),
     QR_ACCESS_SECTION,
     {...ACCOUNT_SECTION, label: "Мой кабинет"},
@@ -169,9 +168,10 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
 export function currentSection(role: Role, pathname: string, search = "", allowed: AccessMap = defaultAccess(role), isDeveloper = false): NavItem | undefined {
   if (!canVisit(role, `${pathname}${search}`, allowed, isDeveloper)) return undefined;
   const sections = visibleNavigation(role, allowed, isDeveloper);
+  if (pathname === "/training/work-sites") return sections.find(item => item.tabs.some(tab => tab.to === "/training/city"));
   if (role === "trainer" && ["/admin/learning", "/training", "/simulator"].some(p => pathname === p || pathname.startsWith(p + "/"))) {
     const kind = new URLSearchParams(search).get("kind");
-    return sections.find(item => item.id === (kind === "simulator" || pathname.startsWith("/simulator") ? "driver" : "training"));
+    return sections.find(item => item.id === (kind === "simulator" || pathname.startsWith("/simulator") || (pathname === "/training/city" && new URLSearchParams(search).get("district") === "driver") ? "driver" : "training"));
   }
   // «Колесо» и «Розыгрыши» живут на одном пути /games и различаются только
   // вкладкой. Разделы сопоставляются по пути, поэтому без этой развилки

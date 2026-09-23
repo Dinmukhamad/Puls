@@ -454,7 +454,7 @@ export function DriverProfileViews(p: ShiftViewProps) {
       {row("Профиль создан", { value: state.profile ? dateTime(state.profile.created_at) : "—" })}
     </div>
     <DExplain real="здесь же меняется фотография профиля и настройки аккаунта." sim="учебный профиль берётся из Puls: имя и парк меняет руководитель." />
-    <div className="dp-bottom"><Link className="dp-bottom-button" to="/training?kind=simulator">Выйти из симулятора</Link></div>
+    <div className="dp-bottom"><Link className="dp-bottom-button" to="/training/city?district=driver">Выйти из симулятора</Link></div>
   </>;
 
   // ── остальные экраны профиля ────────────────────────────────────────

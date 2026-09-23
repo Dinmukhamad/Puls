@@ -35,6 +35,18 @@ test("roles expose task-specific defaults with an account entry", () => {
   assert.equal(nav.visibleNavigation("head")[0].to, "/admin/summary");
 });
 
+test("city replaces duplicate simulator and work-site tabs without revoking their routes", () => {
+  for (const role of ["operator", "trainer", "supervisor", "head", "admin"]) {
+    const allowed = {...nav.defaultAccess(role), training:true};
+    const tabs=nav.visibleNavigation(role,allowed).flatMap(item=>item.tabs);
+    assert.ok(!tabs.some(t=>t.to==='/training/work-sites'||t.to==='/training?kind=simulator'||t.to==='/simulator'));
+    assert.ok(tabs.some(t=>t.to==='/training/city'));
+    assert.equal(nav.canVisit(role,'/training/work-sites',allowed),true);
+    assert.equal(nav.canVisit(role,'/simulator',allowed),true);
+    assert.equal(nav.currentSection(role,'/training/work-sites','',allowed)?.id,'training');
+  }
+});
+
 test("management roles do not have empty operator destinations", () => {
   for (const role of ["supervisor", "head", "admin"]) {
     const tabs = nav.visibleNavigation(role).flatMap((item) => item.tabs);
@@ -186,8 +198,8 @@ test("legacy tests stay hidden while the new city missions are available", () =>
       const items = nav.visibleNavigation(role, access, true);
       assert.doesNotMatch(JSON.stringify(items), /kind=(test|mission)|Тесты|Mission Studio/);
       assert.ok(items.some(x => x.tabs.some(t => t.to === "/training/city")));
-      assert.ok(items.some(x => x.tabs.some(t => t.to.includes("work-sites"))));
-      assert.ok(items.some(x => x.tabs.some(t => t.to.includes("kind=simulator"))));
+      assert.ok(items.every(x => x.tabs.every(t => !t.to.includes("work-sites"))));
+      if (role !== "operator") assert.ok(items.some(x => x.tabs.some(t => t.to.includes("kind=simulator"))));
     }
   }
 });

@@ -1,12 +1,13 @@
 import * as THREE from "three";
 import type { DistrictId } from "../../api/city";
+import { bindCityDrag, placeCityPins } from "./cityInteraction";
 interface CityLocation {id: DistrictId; x: number; z: number; soon?: boolean}
 const data: CityLocation[]=[{id:"academy",x:-5,z:2},{id:"driver",x:-4,z:-4},{id:"crm",x:3,z:-1},{id:"dispatch",x:4,z:5,soon:true},{id:"opteo",x:-2,z:7,soon:true}];
-export function createCityScene(host: HTMLDivElement, levels: Record<string,number>, onProject: (positions: Record<string,{x:number;y:number}>)=>void, onLost: ()=>void) {
+export function createCityScene(host: HTMLDivElement, levels: Record<string,number>, onProject: (positions: Record<string,{x:number;y:number}>)=>void, onLost: ()=>void, angle = .38, onAngle: (angle: number) => void = () => {}) {
  const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:"low-power"});
  renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.5));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.setClearColor(0,0);host.replaceChildren(renderer.domElement);
  const state={world:"city",completed:(levels.crm??0)>=2,view:"map"};
-const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-12,12,12,-12,.1,120);let yaw=.38;const target=new THREE.Vector3(0,0,1.2);let world=new THREE.Group();scene.add(world);
+const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-12,12,12,-12,.1,120);let yaw=angle;const target=new THREE.Vector3(0,0,1.2);let world=new THREE.Group();scene.add(world);
       scene.add(new THREE.HemisphereLight('#f6ecff','#776b99',2.4));const sun=new THREE.DirectionalLight('#fff5e1',3.3);sun.position.set(-9,18,12);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);sun.shadow.camera.left=-16;sun.shadow.camera.right=16;sun.shadow.camera.top=16;sun.shadow.camera.bottom=-16;sun.shadow.normalBias=.06;scene.add(sun);
       const mats=new Map<string, THREE.MeshStandardMaterial>();function material(color: string,emissive=false){const key=color+emissive;if(!mats.has(key))mats.set(key,new THREE.MeshStandardMaterial({color,roughness:.78,metalness:.05,...(emissive?{emissive:color,emissiveIntensity:.35}:{})}));return mats.get(key);}
       function mesh(geo: THREE.BufferGeometry,color: string,x: number,y: number,z: number,parent=world){const m=new THREE.Mesh(geo,material(color));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
@@ -58,17 +59,12 @@ const scene=new THREE.Scene(),camera=new THREE.OrthographicCamera(-12,12,12,-12,
   renderer.setSize(w,h,false);const aspect=w/h,span=w<440?21.5:24;
   camera.left=-span/2;camera.right=span/2;camera.top=span/aspect/2;camera.bottom=-span/aspect/2;
   camera.position.set(Math.sin(yaw)*27,25,Math.cos(yaw)*27);camera.lookAt(target);camera.updateProjectionMatrix();renderer.render(scene,camera);
-  const placed:{x:number;y:number}[]=[],positions:Record<string,{x:number;y:number}>={};
-  const mobile:Record<string,number>={academy:.21,driver:.46,crm:.77,dispatch:.77,opteo:.22};
-  const pins=data.map(d=>{const p=new THREE.Vector3(d.x,.35,d.z+1.6).project(camera);return {d,p,y:(-p.y*.5+.5)*h+18};}).sort((a,b)=>a.y-b.y);
-  const width=w<440?112:124,height=48;
-  for(const {d,p,y:py} of pins){const x=Math.max(width/2+8,Math.min(w-width/2-8,w<440?mobile[d.id]*w:(p.x*.5+.5)*w));let y=Math.max(78,Math.min(h-95,py));
-   for(let i=0;i<6;i++){const conflict=placed.find(a=>Math.abs(x-a.x)<width+5&&Math.abs(y-a.y)<height+5);if(!conflict)break;y=conflict.y+height+6;}
-   positions[d.id]={x,y};placed.push({x,y});
-  }
-  onProject(positions);
+  const pins=data.map(d=>{const p=new THREE.Vector3(d.x,.35,d.z+1.6).project(camera);return {id:d.id,x:(p.x*.5+.5)*w,y:(-p.y*.5+.5)*h+18};});
+  onProject(placeCityPins(pins,w,h));
  }
  const observer=new ResizeObserver(draw);observer.observe(host);makeWorld();
  const lost=(event:Event)=>{event.preventDefault();onLost();};renderer.domElement.addEventListener("webglcontextlost",lost);
- return {rotate(direction:number){yaw=Math.max(-.2,Math.min(.8,yaw+direction*.15));draw();},dispose(){observer.disconnect();renderer.domElement.removeEventListener("webglcontextlost",lost);scene.traverse(o=>{if(o instanceof THREE.Mesh)o.geometry.dispose();});mats.forEach(m=>m.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();}};
+ let frame=0;
+ const unbind=bindCityDrag(host,delta=>{yaw=(yaw+delta)%(Math.PI*2);onAngle(yaw);if(!frame)frame=requestAnimationFrame(()=>{frame=0;draw();});});
+ return {dispose(){unbind();cancelAnimationFrame(frame);observer.disconnect();renderer.domElement.removeEventListener("webglcontextlost",lost);scene.traverse(o=>{if(o instanceof THREE.Mesh)o.geometry.dispose();});mats.forEach(m=>m.dispose());renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();}};
 }
