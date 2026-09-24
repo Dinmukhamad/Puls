@@ -103,6 +103,17 @@ class MetricsBulkIn(BaseModel):
     )
 
 
+class DayMetricValueIn(MetricValueIn):
+    day: date
+
+
+class DayMetricsBulkIn(BaseModel):
+    """Дневные показатели для аналитики; баллы недели от них не меняются."""
+
+    values: list[DayMetricValueIn] = Field(min_length=1, max_length=100000)
+    source: str = Field(default="import", max_length=32)
+
+
 class WeekCloseReportOut(BaseModel):
     week_id: int
     week_label: str

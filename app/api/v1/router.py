@@ -7,6 +7,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     access,
     admin_config,
+    admin_days,
     admin_panel,
     admin_users,
     admin_weeks,
@@ -39,6 +40,7 @@ api_router.include_router(rating.router)
 api_router.include_router(shop.router)
 api_router.include_router(admin_panel.router)
 api_router.include_router(admin_weeks.router)
+api_router.include_router(admin_days.router)
 api_router.include_router(admin_config.router)
 api_router.include_router(admin_users.router)
 api_router.include_router(system.router)

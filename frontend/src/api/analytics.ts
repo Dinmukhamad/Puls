@@ -57,6 +57,11 @@ export interface AnalyticsOperator {
 
 export interface AnalyticsOut {
   week: WeekOut | null;
+  /** day, week or month: what the selected period and each trend point mean. */
+  grain: AnalyticsGrain;
+  period_label: string | null;
+  period_from: string | null;
+  period_to: string | null;
   metric_code: string | null;
   operator_count: number;
   operators_with_data: number;
@@ -70,8 +75,13 @@ export interface AnalyticsOut {
   methodology: string;
 }
 
+export type AnalyticsGrain = "day" | "week" | "month";
+
 export interface AnalyticsFilters {
   week_id?: number;
+  grain?: AnalyticsGrain;
+  date_from?: string;
+  date_to?: string;
   group_id?: number;
   metric_code?: string;
   operator_ids?: string;

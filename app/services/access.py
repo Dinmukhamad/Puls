@@ -193,7 +193,7 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
         if read and path.endswith(("/transactions", "/purchases")):
             return ("motivation",)
         return ("team",)
-    if path.startswith("/admin/weeks"):
+    if path.startswith(("/admin/weeks", "/admin/day-metrics")):
         return ("performance",)
     if path.startswith(("/admin/learning", "/admin/learning-results")):
         return ("learning_admin",)

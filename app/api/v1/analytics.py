@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from datetime import date
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 
@@ -20,6 +21,9 @@ async def summary(
     session: SessionDep,
     actor: StaffUser,
     week_id: Annotated[int | None, Query(gt=0)] = None,
+    grain: Literal["day", "week", "month"] = "week",
+    date_from: date | None = None,
+    date_to: date | None = None,
     group_id: Annotated[int | None, Query(gt=0)] = None,
     metric_code: Annotated[str | None, Query(max_length=64)] = None,
     operator_ids: Annotated[str | None, Query(max_length=100)] = None,
@@ -36,6 +40,9 @@ async def summary(
         session,
         actor,
         week_id=week_id,
+        grain=grain,
+        date_from=date_from,
+        date_to=date_to,
         group_id=group_id,
         metric_code=metric_code,
         operator_ids=ids,
@@ -47,6 +54,18 @@ async def my_trend(
     session: SessionDep,
     actor: CurrentUser,
     week_id: Annotated[int | None, Query(gt=0)] = None,
+    grain: Literal["day", "week", "month"] = "week",
+    date_from: date | None = None,
+    date_to: date | None = None,
     metric_code: Annotated[str | None, Query(max_length=64)] = None,
 ) -> AnalyticsOut:
-    return await report(session, actor, week_id=week_id, metric_code=metric_code, own=True)
+    return await report(
+        session,
+        actor,
+        week_id=week_id,
+        grain=grain,
+        date_from=date_from,
+        date_to=date_to,
+        metric_code=metric_code,
+        own=True,
+    )

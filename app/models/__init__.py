@@ -10,6 +10,7 @@ from app.models.contest import (
     MetricDefinition,
     NominationDefinition,
     NominationWinner,
+    OperatorDayMetric,
     OperatorWeekMetric,
     OperatorWeekResult,
 )
@@ -73,6 +74,7 @@ __all__ = [
     "NominationDefinition",
     "NominationWinner",
     "Notification",
+    "OperatorDayMetric",
     "OperatorWeekMetric",
     "OperatorWeekResult",
     "ProgressLevel",

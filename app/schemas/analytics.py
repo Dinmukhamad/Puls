@@ -1,4 +1,5 @@
 """Analytics over recorded weekly values; absent observations remain null."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -65,6 +66,11 @@ class AnalyticsOperator(BaseModel):
 
 class AnalyticsOut(BaseModel):
     week: WeekOut | None
+    #: day, week or month: what one point of the trend and the selected period mean.
+    grain: str = "week"
+    period_label: str | None = None
+    period_from: date | None = None
+    period_to: date | None = None
     metric_code: str | None
     operator_count: int
     operators_with_data: int

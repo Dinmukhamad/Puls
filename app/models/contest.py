@@ -1,4 +1,5 @@
 """Конкурсные недели, показатели, результаты и номинации."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -116,6 +117,23 @@ class OperatorWeekMetric(Base, TimestampMixin):
 
     week: Mapped[ContestWeek] = relationship("ContestWeek", back_populates="metrics")
     user: Mapped[User] = relationship("User")
+
+
+class OperatorDayMetric(Base, TimestampMixin):
+    """Значение показателя оператора за один день: для аналитики по дням и месяцам.
+
+    Баллы и коины считаются только по неделям, дневные значения на них не влияют.
+    """
+
+    __tablename__ = "operator_day_metrics"
+    __table_args__ = (UniqueConstraint("user_id", "day", "metric_code", name="uq_day_user_metric"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    metric_code: Mapped[str] = mapped_column(String(64), index=True)
+    value: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(32), default="import")
 
 
 class OperatorWeekResult(Base, TimestampMixin):

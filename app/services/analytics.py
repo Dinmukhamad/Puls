@@ -1,9 +1,11 @@
-"""Read-only, role-scoped weekly analytics from actual metrics and results."""
+"""Read-only, role-scoped analytics by day, week or month from actual metrics and results."""
 
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
+from itertools import pairwise
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +14,13 @@ from sqlalchemy.orm import selectinload
 from app.core.deps import supervised_group_ids, visible_users_filter
 from app.core.errors import DomainError, PermissionDeniedError
 from app.models.coin import CoinTransaction
-from app.models.contest import ContestWeek, MetricDefinition, OperatorWeekMetric, OperatorWeekResult
+from app.models.contest import (
+    ContestWeek,
+    MetricDefinition,
+    OperatorDayMetric,
+    OperatorWeekMetric,
+    OperatorWeekResult,
+)
 from app.models.enums import MetricDirection, Role, ShopRequestStatus
 from app.models.shop import ShopRequest
 from app.models.user import Group, User
@@ -25,6 +33,23 @@ from app.schemas.analytics import (
 )
 from app.schemas.rating import WeekOut
 from app.services.weekly import get_week
+
+MONTHS = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
+#: Longest ranges, so a page never asks for years of daily rows.
+MAX_DAYS, MAX_WEEKS, MAX_MONTHS = 31, 26, 24
+
+
+@dataclass(frozen=True)
+class Period:
+    start: date
+    end: date
+    label: str
+    week_id: int | None = None
+
+
+def month_start(day: date, shift: int = 0) -> date:
+    index = day.year * 12 + day.month - 1 + shift
+    return date(index // 12, index % 12 + 1, 1)
 
 
 def average(values: list[float | None]) -> float | None:
@@ -56,6 +81,9 @@ async def report(
     actor: User,
     *,
     week_id: int | None = None,
+    grain: str = "week",
+    date_from: date | None = None,
+    date_to: date | None = None,
     group_id: int | None = None,
     metric_code: str | None = None,
     operator_ids: list[int] | None = None,
@@ -100,43 +128,165 @@ async def report(
     chosen = definitions_by_code.get(metric_code or "quality") or (
         definitions[0] if definitions else None
     )
-    week = (
-        await get_week(session, week_id)
-        if week_id is not None
-        else await session.scalar(
-            select(ContestWeek).order_by(ContestWeek.starts_on.desc()).limit(1)
-        )
-    )
-    anchor = week.starts_on if week else date.today() - timedelta(days=date.today().weekday())
-    starts = [anchor - timedelta(weeks=offset) for offset in range(7, -1, -1)]
-    weeks = list(
-        await session.scalars(
-            select(ContestWeek).where(
-                ContestWeek.starts_on >= starts[0], ContestWeek.starts_on <= anchor
-            )
-        )
-    )
-    by_start = {item.starts_on: item for item in weeks}
-    week_ids = [item.id for item in weeks]
-    recorded: dict[tuple[int, int, str], float] = {}
-    if ids and week_ids:
+    if date_from and date_to and date_from > date_to:
+        raise DomainError("Начало периода позже конца", code="invalid_period")
+    recorded: dict[tuple[date, int, str], float] = {}
+
+    def keep(key: tuple[date, int, str], value: float | None) -> None:
+        if value is not None and math.isfinite(value):
+            recorded[key] = value
+
+    async def weekly_rows(first: date, last: date) -> list[tuple[ContestWeek, int, str, float]]:
+        if not ids:
+            return []
         rows = await session.execute(
             select(
-                OperatorWeekMetric.week_id,
+                ContestWeek,
                 OperatorWeekMetric.user_id,
                 OperatorWeekMetric.metric_code,
                 OperatorWeekMetric.value,
-            ).where(OperatorWeekMetric.week_id.in_(week_ids), OperatorWeekMetric.user_id.in_(ids))
+            )
+            .join(OperatorWeekMetric, OperatorWeekMetric.week_id == ContestWeek.id)
+            .where(
+                ContestWeek.starts_on >= first,
+                ContestWeek.starts_on <= last,
+                OperatorWeekMetric.user_id.in_(ids),
+            )
         )
-        for recorded_week, user_id, code, value in rows:
-            if value is not None and math.isfinite(value):
-                recorded[(recorded_week, user_id, code)] = value
+        return list(rows)
 
-    def observation(user_id: int, code: str, start: date) -> float | None:
-        period = by_start.get(start)
-        return recorded.get((period.id, user_id, code)) if period else None
+    async def daily_rows(first: date, last: date) -> list[tuple[date, int, str, float]]:
+        if not ids:
+            return []
+        rows = await session.execute(
+            select(
+                OperatorDayMetric.day,
+                OperatorDayMetric.user_id,
+                OperatorDayMetric.metric_code,
+                OperatorDayMetric.value,
+            ).where(
+                OperatorDayMetric.day >= first,
+                OperatorDayMetric.day <= last,
+                OperatorDayMetric.user_id.in_(ids),
+            )
+        )
+        return list(rows)
 
-    def observations(cohort: list[int], code: str, start: date) -> list[float | None]:
+    week: ContestWeek | None = None
+    if grain == "day":
+        last_day = (
+            date_to
+            or (
+                await session.scalar(
+                    select(func.max(OperatorDayMetric.day)).where(
+                        OperatorDayMetric.user_id.in_(ids)
+                    )
+                )
+                if ids
+                else None
+            )
+            or date.today()
+        )
+        first_day = date_from or last_day - timedelta(days=13)
+        if (last_day - first_day).days >= MAX_DAYS:
+            raise DomainError(
+                f"По дням можно смотреть не больше {MAX_DAYS} дней", code="period_too_long"
+            )
+        periods = [
+            Period(
+                first_day + timedelta(days=i),
+                first_day + timedelta(days=i),
+                f"{first_day + timedelta(days=i):%d.%m}",
+            )
+            for i in range((last_day - first_day).days + 1)
+        ]
+        for day, user_id, code, value in await daily_rows(first_day, last_day):
+            keep((day, user_id, code), value)
+    elif grain == "month":
+        latest = (
+            date_to or await session.scalar(select(func.max(ContestWeek.starts_on))) or date.today()
+        )
+        last_month = month_start(latest)
+        first_month = month_start(date_from) if date_from else month_start(last_month, -5)
+        count = (last_month.year - first_month.year) * 12 + last_month.month - first_month.month + 1
+        if count > MAX_MONTHS:
+            raise DomainError(
+                f"По месяцам можно смотреть не больше {MAX_MONTHS} месяцев", code="period_too_long"
+            )
+        months = [month_start(first_month, i) for i in range(count + 1)]
+        periods = [
+            Period(start, following - timedelta(days=1), f"{MONTHS[start.month - 1]} {start.year}")
+            for start, following in pairwise(months)
+        ]
+        # A month is the mean of its weekly values (weeks that start in it);
+        # daily values fill the months that have no weekly ones.
+        weekly: dict[tuple[date, int, str], list[float]] = {}
+        for item, user_id, code, value in await weekly_rows(periods[0].start, periods[-1].end):
+            weekly.setdefault((month_start(item.starts_on), user_id, code), []).append(value)
+        daily: dict[tuple[date, int, str], list[float]] = {}
+        for day, user_id, code, value in await daily_rows(periods[0].start, periods[-1].end):
+            daily.setdefault((month_start(day), user_id, code), []).append(value)
+        for key in daily.keys() | weekly.keys():
+            keep(key, average(weekly.get(key) or daily[key]))
+    else:
+        if date_from or date_to:
+            last_start = (date_to or date.today()) - timedelta(
+                days=(date_to or date.today()).weekday()
+            )
+            first_start = (
+                (date_from - timedelta(days=date_from.weekday()))
+                if date_from
+                else last_start - timedelta(weeks=7)
+            )
+            if (last_start - first_start).days // 7 + 1 > MAX_WEEKS:
+                raise DomainError(
+                    f"По неделям можно смотреть не больше {MAX_WEEKS} недель",
+                    code="period_too_long",
+                )
+            week = await session.scalar(
+                select(ContestWeek).where(ContestWeek.starts_on == last_start)
+            )
+        else:
+            week = (
+                await get_week(session, week_id)
+                if week_id is not None
+                else await session.scalar(
+                    select(ContestWeek).order_by(ContestWeek.starts_on.desc()).limit(1)
+                )
+            )
+            last_start = (
+                week.starts_on if week else date.today() - timedelta(days=date.today().weekday())
+            )
+            first_start = last_start - timedelta(weeks=7)
+        by_start: dict[date, int] = {}
+        for item, user_id, code, value in await weekly_rows(first_start, last_start):
+            by_start[item.starts_on] = item.id
+            keep((item.starts_on, user_id, code), value)
+        for item in await session.scalars(
+            select(ContestWeek).where(
+                ContestWeek.starts_on >= first_start, ContestWeek.starts_on <= last_start
+            )
+        ):
+            by_start[item.starts_on] = item.id
+        periods = []
+        for offset in range((last_start - first_start).days // 7 + 1):
+            start = first_start + timedelta(weeks=offset)
+            year, number, _ = start.isocalendar()
+            periods.append(
+                Period(
+                    start, start + timedelta(days=6), f"{year}-W{number:02d}", by_start.get(start)
+                )
+            )
+
+    starts = [period.start for period in periods]
+    anchor = starts[-1]
+    previous_start = starts[-2] if len(starts) > 1 else None
+    selected = periods[-1]
+
+    def observation(user_id: int, code: str, start: date | None) -> float | None:
+        return recorded.get((start, user_id, code)) if start else None
+
+    def observations(cohort: list[int], code: str, start: date | None) -> list[float | None]:
         return [observation(user_id, code, start) for user_id in cohort]
 
     pending = (
@@ -151,22 +301,33 @@ async def report(
         if ids
         else 0
     )
+    # Coins of a week are those posted for it; for days and months, those posted inside the period.
+    coin_period = (
+        CoinTransaction.week_id == week.id
+        if week
+        else CoinTransaction.created_at.between(
+            datetime.combine(selected.start, time.min, UTC),
+            datetime.combine(selected.end, time.max, UTC),
+        )
+    )
     awarded = (
         int(
             await session.scalar(
                 select(func.sum(CoinTransaction.amount)).where(
-                    CoinTransaction.user_id.in_(ids),
-                    CoinTransaction.week_id == week.id,
-                    CoinTransaction.amount > 0,
+                    CoinTransaction.user_id.in_(ids), coin_period, CoinTransaction.amount > 0
                 )
             )
             or 0
         )
-        if ids and week
+        if ids and (week or grain != "week")
         else 0
     )
     result = AnalyticsOut(
         week=WeekOut.model_validate(week) if week else None,
+        grain=grain,
+        period_label=selected.label,
+        period_from=selected.start,
+        period_to=selected.end,
         metric_code=chosen.code if chosen else None,
         operator_count=len(users),
         operators_with_data=0,
@@ -176,7 +337,7 @@ async def report(
     for metric in definitions:
         current_values = observations(ids, metric.code, anchor)
         value = average(current_values)
-        previous = average(observations(ids, metric.code, starts[-2]))
+        previous = average(observations(ids, metric.code, previous_start))
         delta, improved = change(value, previous, metric.direction)
         reported = sum(value is not None for value in current_values)
         result.metrics.append(
@@ -203,15 +364,13 @@ async def report(
     )
     if chosen is None:
         return result
-    for start in starts:
-        period = by_start.get(start)
-        year, number, _ = start.isocalendar()
-        values = observations(ids, chosen.code, start)
+    for period in periods:
+        values = observations(ids, chosen.code, period.start)
         result.trend.append(
             TrendPoint(
-                week_id=period.id if period else None,
-                label=f"{year}-W{number:02d}",
-                starts_on=start,
+                week_id=period.week_id,
+                label=period.label,
+                starts_on=period.start,
                 value=average(values),
                 reported=sum(value is not None for value in values),
             )
@@ -226,18 +385,19 @@ async def report(
                 )
             )
         }
-        if week and ids
+        if week and ids and grain == "week"
         else {}
     )
 
     def comparison(identifier: int, name: str, cohort: list[int]) -> ComparisonSeries:
         values = [average(observations(cohort, chosen.code, start)) for start in starts]
-        delta, improved = change(values[-1], values[-2], chosen.direction)
+        previous = values[-2] if len(values) > 1 else None
+        delta, improved = change(values[-1], previous, chosen.direction)
         return ComparisonSeries(
             id=identifier,
             name=name,
             value=values[-1],
-            previous=values[-2],
+            previous=previous,
             delta=delta,
             improved=improved,
             reported=sum(value is not None for value in observations(cohort, chosen.code, anchor)),
@@ -250,7 +410,7 @@ async def report(
     for user in users:
         values = {metric.code: observation(user.id, metric.code, anchor) for metric in definitions}
         value = values[chosen.code]
-        previous = observation(user.id, chosen.code, starts[-2])
+        previous = observation(user.id, chosen.code, previous_start)
         delta, improved = change(value, previous, chosen.direction)
         score = calculated.get(user.id)
         result.operators.append(

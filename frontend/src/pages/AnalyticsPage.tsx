@@ -3,7 +3,7 @@ import { useState } from "react";
 import { AccessLink as Link } from "../components/AccessLink";
 import { useSearchParams } from "react-router-dom";
 
-import { analytics, type AnalyticsOperator, type MetricSummary } from "../api/analytics";
+import { analytics, type AnalyticsGrain, type AnalyticsOperator, type MetricSummary } from "../api/analytics";
 import { rating } from "../api/endpoints";
 import { lookups } from "../api/access";
 
@@ -16,10 +16,28 @@ import "./analytics.css";
 
 const TABS = [{ value: "summary", label: "Сводка" }, { value: "operators", label: "Операторы" }, { value: "quality", label: "Качество" }];
 const positiveInt = (value: string | null) => value && /^\d+$/.test(value) && Number(value) > 0 ? Number(value) : undefined;
+const GRAINS: { value: AnalyticsGrain; label: string }[] = [{ value: "day", label: "Дни" }, { value: "week", label: "Недели" }, { value: "month", label: "Месяцы" }];
+/** Words for the selected step: the trend, the delta and the coverage hint follow it. */
+export const GRAIN_TEXT: Record<AnalyticsGrain, { trend: string; delta: string; period: string; matrix: string }> = {
+  day: { trend: "По дням выбранного диапазона", delta: "Изменение за день", period: "за день", matrix: "Матрица по дням" },
+  week: { trend: "По неделям до выбранного периода", delta: "Изменение за неделю", period: "за неделю", matrix: "Матрица по неделям" },
+  month: { trend: "По месяцам выбранного диапазона", delta: "Изменение за месяц", period: "за месяц", matrix: "Матрица по месяцам" },
+};
+const isDate = (value: string | null) => value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+const isMonth = (value: string | null) => value && /^\d{4}-\d{2}$/.test(value) ? value : undefined;
+const MAX_DAYS = 31;
 
 export function useAnalyticsReport(overview = false) {
   const [params, setParams] = useSearchParams();
-  const filters = { week_id: positiveInt(params.get("week_id")), group_id: positiveInt(params.get("group_id")), metric_code: params.get("metric") || undefined, operator_ids: params.get("operators") || undefined };
+  const grain = (GRAINS.some((item) => item.value === params.get("grain")) ? params.get("grain") : "week") as AnalyticsGrain;
+  // Days keep full dates in the URL, months keep "2026-08"; the API takes the first day of a month.
+  const from = grain === "month" ? isMonth(params.get("from")) : isDate(params.get("from"));
+  const to = grain === "month" ? isMonth(params.get("to")) : isDate(params.get("to"));
+  const filters = {
+    grain, week_id: grain === "week" && !from && !to ? positiveInt(params.get("week_id")) : undefined,
+    date_from: from && (grain === "month" ? `${from}-01` : from), date_to: to && (grain === "month" ? `${to}-01` : to),
+    group_id: positiveInt(params.get("group_id")), metric_code: params.get("metric") || undefined, operator_ids: params.get("operators") || undefined,
+  };
   const data = useQuery({ queryKey: ["analytics", overview ? "overview" : "report", filters], queryFn: ({ signal }) => overview ? analytics.overview(filters, signal) : analytics.summary(filters, signal) });
   const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks(100) });
   const groups = useQuery({ queryKey: ["lookup-groups"], queryFn: lookups.groups });
@@ -39,10 +57,23 @@ export function MetricDelta({ value, improved, unit }: { value: number | null; i
 
 export function ReportFilters({ report, metric = true }: { report: ReturnType<typeof useAnalyticsReport>; metric?: boolean }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const grain = report.filters.grain;
+  const from = report.params.get("from") ?? "", to = report.params.get("to") ?? "";
+  // A day range longer than a month is cut to its last 31 days instead of failing.
+  function setDays(nextFrom: string, nextTo: string) {
+    if (nextFrom && nextTo && (Date.parse(nextTo) - Date.parse(nextFrom)) / 864e5 >= MAX_DAYS) {
+      const start = new Date(Date.parse(nextTo) - (MAX_DAYS - 1) * 864e5).toISOString().slice(0, 10);
+      nextFrom = start;
+    }
+    report.update({ from: nextFrom || undefined, to: nextTo || undefined, page: undefined });
+  }
   const fields = <>
-    <label className="field"><span className="field__label">Период</span><select className="input" value={report.filters.week_id ?? ""} onChange={(event) => report.update({ week_id: event.target.value, page: undefined })}>
+    <div className="field analytics-grain"><span className="field__label">Шаг</span><SegmentedControl label="Шаг периода" options={GRAINS} value={grain} onChange={(value) => report.update({ grain: value === "week" ? undefined : value, week_id: undefined, from: undefined, to: undefined, page: undefined })} /></div>
+    {grain === "week" && <label className="field"><span className="field__label">Период</span><select className="input" value={report.filters.week_id ?? ""} onChange={(event) => report.update({ week_id: event.target.value, from: undefined, to: undefined, page: undefined })}>
       <option value="">Последняя неделя</option>{(report.weeks.data ?? []).map((week) => <option key={week.id} value={week.id}>{week.label} · {WEEK_STATUS_LABELS[week.status]}</option>)}
-    </select></label>
+    </select></label>}
+    {grain === "day" && <div className="analytics-range"><label className="field"><span className="field__label">С</span><input className="input" type="date" value={from} max={to || undefined} onChange={(event) => setDays(event.target.value, to)} /></label><label className="field"><span className="field__label">По · до {MAX_DAYS} дней</span><input className="input" type="date" value={to} min={from || undefined} onChange={(event) => setDays(from, event.target.value)} /></label></div>}
+    {grain === "month" && <div className="analytics-range"><label className="field"><span className="field__label">С месяца</span><input className="input" type="month" value={from} max={to || undefined} onChange={(event) => report.update({ from: event.target.value || undefined, page: undefined })} /></label><label className="field"><span className="field__label">По месяц</span><input className="input" type="month" value={to} min={from || undefined} onChange={(event) => report.update({ to: event.target.value || undefined, page: undefined })} /></label></div>}
     <label className="field"><span className="field__label">Группа</span><select className="input" value={report.filters.group_id ?? ""} onChange={(event) => report.update({ group_id: event.target.value, operators: undefined, group_compare: undefined, page: undefined })}>
       <option value="">Все доступные</option>{(report.groups.data ?? []).map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
     </select></label>
@@ -51,7 +82,7 @@ export function ReportFilters({ report, metric = true }: { report: ReturnType<ty
     </select></label>}
   </>;
   return <>
-    <GlassSurface className="analytics-filters" variant="regular"><div className="analytics-filters__desktop">{fields}</div><div className="analytics-filters__mobile"><span>{report.data.data?.week?.label ?? "Выбрать период"}</span><Button onClick={() => setMobileOpen(true)}>Фильтры</Button></div></GlassSurface>
+    <GlassSurface className="analytics-filters" variant="regular"><div className="analytics-filters__desktop">{fields}</div><div className="analytics-filters__mobile"><span>{report.data.data?.period_label ?? "Выбрать период"}</span><Button onClick={() => setMobileOpen(true)}>Фильтры</Button></div></GlassSurface>
     {mobileOpen && <Sheet onClose={() => setMobileOpen(false)} title="Фильтры аналитики"><div className="stack">{fields}<Button variant="primary" onClick={() => setMobileOpen(false)}>Показать</Button></div></Sheet>}
     {(report.weeks.isError || report.groups.isError) && <p role="status" className="analytics-muted">Не удалось загрузить часть фильтров. <button className="analytics-text-button" onClick={() => { void report.weeks.refetch(); void report.groups.refetch(); }}>Повторить</button></p>}
   </>;
@@ -91,7 +122,7 @@ export function AnalyticsPage() {
     {data.isLoading && <><KPISkeleton /><Card title="Динамика"><div className="analytics-loading" aria-label="Загрузка аналитики" /></Card></>}
     {data.isError && <ErrorState error={data.error} onRetry={() => void data.refetch()} />}
     {value && !data.isError && <>
-      {!value.week ? <EmptyState title="Периодов пока нет" hint="Загрузите показатели и выполните расчёт периода." action={<Link hideWhenDenied className="btn btn--primary" to="/admin/periods">Перейти к расчёту</Link>} /> : !metric ? <EmptyState title="Показатели не настроены" hint="Добавьте определения показателей в настройках системы." /> : <>
+      {value.grain === "week" && !value.week ? <EmptyState title="Периодов пока нет" hint="Загрузите показатели и выполните расчёт периода." action={<Link hideWhenDenied className="btn btn--primary" to="/admin/periods">Перейти к расчёту</Link>} /> : !metric ? <EmptyState title="Показатели не настроены" hint="Добавьте определения показателей в настройках системы." /> : <>
         <div className="kpi-grid">
           <KPI label={metric.title} value={points(metric.value)} unit={metric.unit ?? undefined} hint={<MetricDelta value={metric.delta} improved={metric.improved} unit={metric.unit} />} />
           <KPI label="Текущая цель" value={points(metric.target)} unit={metric.unit ?? undefined} hint={metric.direction === "higher_is_better" ? "↑ Больше — лучше" : "↓ Меньше — лучше"} />
@@ -99,15 +130,15 @@ export function AnalyticsPage() {
           <KPI label="Ниже цели" value={metric.below_target} hint="Среди операторов с данными" />
         </div>
         {tab === "summary" && <>
-          <Card title={`Динамика · ${metric.title}`} subtitle="Восемь календарных недель до выбранного периода"><Chart title={metric.title} labels={value.trend.map((item) => item.label)} series={[{ id: "team", name: "Команда", values: value.trend.map((item) => item.value) }]} target={metric.target} unit={metric.unit} /></Card>
+          <Card title={`Динамика · ${metric.title}`} subtitle={GRAIN_TEXT[value.grain].trend}><Chart title={metric.title} labels={value.trend.map((item) => item.label)} series={[{ id: "team", name: "Команда", values: value.trend.map((item) => item.value) }]} target={metric.target} unit={metric.unit} /></Card>
           <Card title="Сравнение" subtitle="Одинаковый показатель и период для всех участников"><div className="stack">{comparisonControls}{comparisons.length ? <Chart title={`Сравнение: ${metric.title}`} labels={value.trend.map((item) => item.label)} series={comparisons.map((item) => ({ id: String(item.id), name: item.name, values: item.values }))} target={metric.target} unit={metric.unit} /> : <EmptyState title="Выберите участников сравнения" hint="Можно сравнить до пяти групп или операторов." />}</div></Card>
           <div className="analytics-metric-grid">{value.metrics.filter((item) => item.code !== metric.code).map((item) => <button key={item.code} className="analytics-metric-card" onClick={() => update({ metric: item.code })}><span>{item.title}</span><strong>{points(item.value)} {item.unit}</strong><MetricDelta value={item.delta} improved={item.improved} unit={item.unit} /><span className="analytics-muted">Есть данные: {item.reported} из {item.total}</span></button>)}</div>
         </>}
         {tab !== "summary" && <>
-          {tab === "quality" && <Card title={`Покрытие · ${metric.title}`} subtitle="Доля действующих операторов с загруженным значением за неделю"><div className="stack"><Progress value={metric.coverage ?? 0} label={`Покрытие данных: ${metric.reported} из ${metric.total}`} /><p className="analytics-muted">Без данных: {metric.total - metric.reported}. Количество отдельных проверок качества в системе не хранится.</p></div></Card>}
+          {tab === "quality" && <Card title={`Покрытие · ${metric.title}`} subtitle={`Доля действующих операторов с загруженным значением ${GRAIN_TEXT[value.grain].period}`}><div className="stack"><Progress value={metric.coverage ?? 0} label={`Покрытие данных: ${metric.reported} из ${metric.total}`} /><p className="analytics-muted">Без данных: {metric.total - metric.reported}. Количество отдельных проверок качества в системе не хранится.</p></div></Card>}
           <div className="analytics-row-filters"><label className="field"><span className="field__label">Найти оператора</span><input className="input" type="search" placeholder="Имя сотрудника" value={search} onChange={(event) => update({ search: event.target.value, page: undefined })} /></label><label className="field"><span className="field__label">Показать</span><select className="input" value={status} onChange={(event) => update({ status: event.target.value, page: undefined })}><option value="all">Всех</option><option value="below">Ниже цели</option><option value="missing">Без данных</option></select></label></div>
-          {!filtered.length ? <EmptyState title={value.operators.length ? "Ничего не найдено" : "В выбранной группе нет действующих операторов"} hint={value.operators.length ? "Измените поиск или фильтр." : "Выберите другую группу или добавьте сотрудников."} /> : <Card title={tab === "quality" ? "Матрица по неделям" : "Показатели операторов"} subtitle={`${filtered.length} операторов · ${metric.title}`} padded={false}>
-            {tab === "quality" ? <QualityRows rows={rows} labels={value.trend.map((item) => item.label)} metric={metric} /> : <OperatorRows rows={rows} metric={metric} />}
+          {!filtered.length ? <EmptyState title={value.operators.length ? "Ничего не найдено" : "В выбранной группе нет действующих операторов"} hint={value.operators.length ? "Измените поиск или фильтр." : "Выберите другую группу или добавьте сотрудников."} /> : <Card title={tab === "quality" ? GRAIN_TEXT[value.grain].matrix : "Показатели операторов"} subtitle={`${filtered.length} операторов · ${metric.title}`} padded={false}>
+            {tab === "quality" ? <QualityRows rows={rows} labels={value.trend.map((item) => item.label)} metric={metric} /> : <OperatorRows rows={rows} metric={metric} grain={value.grain} />}
             <Pagination page={page} size={size} total={filtered.length} onChange={(next) => update({ page: String(next) })} />
           </Card>}
         </>}
@@ -117,8 +148,8 @@ export function AnalyticsPage() {
   </div>;
 }
 
-function OperatorRows({ rows, metric }: { rows: AnalyticsOperator[]; metric: MetricSummary }) {
-  return <><div className="analytics-desktop-table"><table className="table"><thead><tr><th scope="col">Оператор</th><th scope="col">Группа</th><th scope="col">Значение</th><th scope="col">Изменение за неделю</th><th scope="col">Цель</th><th scope="col">Баллы расчёта</th></tr></thead><tbody>{rows.map((row) => <tr key={row.user_id}><th scope="row"><Link to={`/admin/users/${row.user_id}`}>{row.full_name}</Link></th><td>{row.group_name ?? "Без группы"}</td><td>{points(row.value)} {row.value === null ? "" : metric.unit}</td><td><MetricDelta value={row.delta} improved={row.improved} unit={metric.unit} /></td><td><TargetState met={row.target_met} /></td><td>{points(row.points)}</td></tr>)}</tbody></table></div><div className="analytics-mobile-list">{rows.map((row) => <article key={row.user_id} className="analytics-operator-card"><Link to={`/admin/users/${row.user_id}`}>{row.full_name}</Link><span className="analytics-muted">{row.group_name ?? "Без группы"}</span><div className="analytics-operator-card__value"><strong>{points(row.value)} {row.value === null ? "" : metric.unit}</strong><TargetState met={row.target_met} /></div><MetricDelta value={row.delta} improved={row.improved} unit={metric.unit} /><span className="analytics-muted">Баллы расчёта: {points(row.points)}</span></article>)}</div></>;
+function OperatorRows({ rows, metric, grain }: { rows: AnalyticsOperator[]; metric: MetricSummary; grain: AnalyticsGrain }) {
+  return <><div className="analytics-desktop-table"><table className="table"><thead><tr><th scope="col">Оператор</th><th scope="col">Группа</th><th scope="col">Значение</th><th scope="col">{GRAIN_TEXT[grain].delta}</th><th scope="col">Цель</th>{grain === "week" && <th scope="col">Баллы расчёта</th>}</tr></thead><tbody>{rows.map((row) => <tr key={row.user_id}><th scope="row"><Link to={`/admin/users/${row.user_id}`}>{row.full_name}</Link></th><td>{row.group_name ?? "Без группы"}</td><td>{points(row.value)} {row.value === null ? "" : metric.unit}</td><td><MetricDelta value={row.delta} improved={row.improved} unit={metric.unit} /></td><td><TargetState met={row.target_met} /></td>{grain === "week" && <td>{points(row.points)}</td>}</tr>)}</tbody></table></div><div className="analytics-mobile-list">{rows.map((row) => <article key={row.user_id} className="analytics-operator-card"><Link to={`/admin/users/${row.user_id}`}>{row.full_name}</Link><span className="analytics-muted">{row.group_name ?? "Без группы"}</span><div className="analytics-operator-card__value"><strong>{points(row.value)} {row.value === null ? "" : metric.unit}</strong><TargetState met={row.target_met} /></div><MetricDelta value={row.delta} improved={row.improved} unit={metric.unit} />{grain === "week" && <span className="analytics-muted">Баллы расчёта: {points(row.points)}</span>}</article>)}</div></>;
 }
 
 function QualityRows({ rows, labels, metric }: { rows: AnalyticsOperator[]; labels: string[]; metric: MetricSummary }) {

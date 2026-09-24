@@ -9,6 +9,9 @@
     calls_per_hour  звонки / отработанные часы
     quality         средняя оценка проверяющих за неделю
 
+Каждый день месяца (включая неполные недели на краях) загружается и отдельно, для
+аналитики по дням и месяцам; норма дня — 8 ч × ставка. На баллы дневные значения не влияют.
+
 Недели не закрываются и коины не начисляются: скрипт только пересчитывает
 предварительный рейтинг. Закрывает неделю руководитель на сайте.
 
@@ -181,23 +184,31 @@ def main() -> int:
     names = set(daily) | set(quality)
     found = {name for name in names if name in operators}
     print(f"В отчётах {len(names)} человек, на сайте найдено {len(found)}.")
-    weeks = month_weeks(year, month)
-    plan = []
-    for days in weeks:
+    def day_values(days: list[date], norm_hours: float) -> list[dict]:
+        """Показатели операторов за набор дней: неделя (норма 40 ч) или один день (норма 8 ч)."""
         values = []
         for name in sorted(found):
             user = operators[name]
             hours = sum(daily[name][HOURS].get(d, 0) for d in days)
             if hours > 0:
                 rate = rates.get(name) or 1
-                values.append({"user_id": user, "metric_code": "hours_norm", "value": round(hours / (40 * rate) * 100, 1)})
+                values.append({"user_id": user, "metric_code": "hours_norm", "value": round(hours / (norm_hours * rate) * 100, 1)})
                 values.append({"user_id": user, "metric_code": "efficiency", "value": round(min(100, sum(daily[name][EFFECTIVE].get(d, 0) for d in days) / hours * 100), 1)})
                 values.append({"user_id": user, "metric_code": "calls_per_hour", "value": round(sum(daily[name][CALLS].get(d, 0) for d in days) / hours, 2)})
             marks = [score for d in days for score in quality[name].get(d, [])]
             if marks:
                 values.append({"user_id": user, "metric_code": "quality", "value": round(sum(marks) / len(marks), 1)})
+        return values
+
+    weeks = month_weeks(year, month)
+    plan = []
+    for days in weeks:
+        values = day_values(days, 40)
         plan.append((days, values))
         print(f"Неделя {days[0]:%d.%m}–{days[-1]:%d.%m}: {len({v['user_id'] for v in values})} операторов, {len(values)} значений")
+    month_days = [date(year, month, 1) + timedelta(days=i) for i in range(31) if (date(year, month, 1) + timedelta(days=i)).month == month]
+    daily_values = [dict(value, day=day.isoformat()) for day in month_days for value in day_values([day], 8)]
+    print(f"По дням: {len(daily_values)} значений за {len(month_days)} дней")
     missing = sorted(set(operators) - found)
     if missing:
         print(f"Операторов сайта без данных в отчётах: {len(missing)}")
@@ -214,6 +225,13 @@ def main() -> int:
     if by_code.get("hours_worked", {}).get("is_active"):
         api.call("PATCH", f"/admin/config/metrics/{by_code['hours_worked']['id']}", body={"is_active": False})
         print("Показатель hours_worked выключен: часы теперь считаются от нормы по ставке")
+
+    for start in range(0, len(daily_values), 5000):
+        status, answer = api.call("POST", "/admin/day-metrics", body={"values": daily_values[start:start + 5000], "source": "import"})
+        if status == 404:
+            print("Сайт ещё не умеет хранить дневные показатели — обновите его и запустите скрипт снова")
+            break
+        print(f"Дневные показатели: {answer.get('detail') if isinstance(answer, dict) else answer}")
 
     for days, values in plan:
         status, week = api.call("POST", "/admin/weeks", body={"any_day": days[0].isoformat()})
