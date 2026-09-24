@@ -168,8 +168,9 @@ test("entry offers two modes, resumes the current shift and exposes the last res
     "react-router-dom": { useNavigate: () => () => {}, Link: ({ to, children }) => React.createElement("a", { href: to }, children) },
   });
   const entry = () => renderToStaticMarkup(React.createElement(DriverEntry));
-  assert.match(entry(), /Свободный · без штрафов/);
-  assert.match(entry(), /Учебная смена · с оценкой/);
+  assert.match(entry(), /Свободный<\/strong><small>Без штрафов/);
+  assert.match(entry(), /С оценкой<\/strong>/);
+  assert.match(entry(), /role="radio" aria-checked="true"/);
   current.shift = { id: "shift", mode: "assessment", finished_at: null, config: { target_orders: 3 }, data: { completed: 1 } };
   assert.match(entry(), /Продолжить смену/);
   assert.match(entry(), /1\/3/);
@@ -615,4 +616,13 @@ test("the balance tile justifies its row and keeps the park block below", () => 
   assert.match(html, /class="dm-tile dm-tile--stack"/);
   assert.match(html, /class="dm-tile__row"><strong>Баланс<\/strong><b>1\s775 ₸<\/b>/);
   assert.match(html, /class="dm-tile__park"><small>Парк<\/small><strong>Jana Taxi<\/strong>/);
+});
+
+test('driver motion: numbers, finished-order celebration and the shift ring render without motion APIs', async () => {
+  const motion = await component("./DriverMotion.tsx");
+  const number = renderToStaticMarkup(React.createElement(motion.AnimatedNumber, { value: 1485 }));
+  assert.match(number, /1\s485/);
+  assert.match(renderToStaticMarkup(React.createElement(motion.ShiftRing, { done: 1, total: 3 })), /dx-ring__fill/);
+  assert.match(renderToStaticMarkup(React.createElement(motion.SuccessMark)), /<path/);
+  assert.match(renderToStaticMarkup(React.createElement(motion.TaxiScene)), /dx-scene__taxi/);
 });

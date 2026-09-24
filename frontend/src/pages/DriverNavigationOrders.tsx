@@ -4,6 +4,7 @@ import { driver, orderActive, type DriverState, type OrderAction, type OrderCrea
 import { driverNavigation, type RoutePoint, type TravelMode } from "../api/driverNavigation";
 import { useAuth } from "../auth/AuthContext";
 import { freshFix, pointOf, type GeoPoint, type LocationState } from "../utils/driverLocation";
+import { AnimatedNumber, Confetti, SuccessMark } from "./DriverMotion";
 import { DriverOrderSheet } from "./DriverOrderSheet";
 import { approach, countdown, DAction, DCancel, DChip, DChoice, DExplain, DInfo, DLegend } from "./DriverButtons";
 import { money } from "./DriverOrders";
@@ -240,7 +241,8 @@ export function DriverNavigationOrders({ state, location, consent, allowLocation
         <DCancel disabled={busy} onClick={() => { edit(false); setHeight(24); }}>Отменить создание заказа</DCancel>
       </> : <>
         {stage === "complete" && spec ? <>
-          <p className="driver-order-eyebrow">Заказ выполнен</p><h1>{money(order!.net)}</h1><p>Доход добавлен в учебный баланс</p>
+          <div className="dx-done" key={order!.id}><Confetti /><SuccessMark /></div>
+          <p className="driver-order-eyebrow">Заказ выполнен</p><h1 className="dx-done__sum">+<AnimatedNumber value={order!.net} format={n => money(Math.round(n))} duration={900} /></h1><p>Доход добавлен в учебный баланс</p>
           <details className="dn-order-details"><summary>Итог поездки{spec.score != null ? ` · ${spec.score}/100` : ""}</summary><p>А: {order!.origin}<br />Б: {order!.destination}</p><p>Маршрут: {distanceLabel(spec.planned_distance)}<br />Пройдено: {distanceLabel(spec.actual_distance)}</p><p>Поездка: {clock(spec.trip_seconds ?? 0)} · ожидание {clock(spec.wait_seconds ?? 0)}</p><p>Стоимость: {money(order!.fare)}<br />Комиссии: {money(order!.fare - order!.net)}</p>{spec.result?.map(x => <p key={x.key}>{x.done ? "✓" : "○"} {x.title} · {x.done ? x.weight : 0}/{x.weight}</p>)}{spec.mode !== "real" && <p>Симуляция движения не является результатом реальной поездки.</p>}</details>
           <DChoice arrow disabled={busy} onClick={() => go("money")}>Посмотреть «Деньги»</DChoice>
         </> : <><p className="driver-order-eyebrow">Driver Simulator</p><h1>{state.shift?.data.online ? "Вы на линии" : "Готовы к поездке?"}</h1><p className="driver-muted">Постройте маршрут от своей позиции или выбранной точки.</p></>}

@@ -19,6 +19,8 @@ import "./simulator.css";
 import "./driver-app.css";
 import "./driver-orders.css";
 import { DriverWorkspace } from "./DriverWorkspace";
+import { AnimatedNumber, TaxiScene } from "./DriverMotion";
+import "./driver-motion.css";
 
 export const DRIVER_SECTIONS = [
   { id: "orders", title: "Заказы", Icon: DriverArrow },
@@ -65,7 +67,12 @@ export function DriverAppPage() {
   if (query.isError && !query.data) return <div className="driver-app"><DriverHeader /><div className="driver-content driver-content--center"><ErrorState error={query.error} onRetry={() => query.refetch()} /></div></div>;
   if (booting || query.isLoading) return <DriverSplash />;
   const profile = query.data?.profile;
-  if (!profile) return <div className="driver-app"><DriverHeader /><div className="driver-content driver-content--center"><h1>Driver Simulator</h1><p>Откройте автопарк на карте и начните учебную смену.</p><Link className="driver-primary" to="/training/city?district=driver">Открыть автопарк</Link></div></div>;
+  if (!profile) return <div className="driver-app"><DriverHeader /><main className="driver-content dx-welcome">
+    <TaxiScene />
+    <div className="dx-welcome__text"><span className="dx-chip">Учебная смена · Алматы</span><h1>Driver Simulator</h1><p>Почувствуйте работу водителя изнутри: заказы, деньги, чаты и поддержка — как в настоящем приложении.</p></div>
+    <ol className="dx-steps">{["Откройте автопарк на карте города", "Выберите режим: свободный или с оценкой", "Выйдите на линию и выполните заказы"].map((text, i) => <li key={text} style={{ animationDelay: `${180 + i * 90}ms` }}><b>{i + 1}</b><span>{text}</span></li>)}</ol>
+    <Link className="driver-primary dx-cta" to="/training/city?district=driver">Открыть автопарк →</Link>
+  </main></div>;
   if (profile.stage === "phone" || profile.stage === "otp") return <div className="driver-app"><DriverHeader /><DriverLogin
     stage={profile.stage} authentication={query.data!.authentication} parkName={profile.park?.name ?? ""}
     phone={phone} onPhone={setPhone} busy={sendCode.isPending || verify.isPending || action.isPending}
@@ -156,7 +163,7 @@ function DriverHeader() {
   return <header className="driver-header"><Link to="/training/city?district=driver" className="driver-exit" aria-label="Выйти из симулятора в Puls">‹ Puls</Link><span>Driver Simulator</span><span className="driver-environment">Учебный</span></header>;
 }
 export function DriverSplash() {
-  return <div className="driver-app"><DriverHeader /><main className="driver-splash"><DriverMark /><h1>Driver Simulator</h1><p role="status">Загрузка профиля…</p></main></div>;
+  return <div className="driver-app"><DriverHeader /><main className="driver-splash"><TaxiScene compact /><h1>Driver Simulator</h1><p role="status">Загрузка профиля…</p><span className="dx-loader" aria-hidden="true"><i /><i /><i /></span></main></div>;
 }
 export function DriverLoading() {
   return <main className="driver-loading" aria-busy="true" aria-label="Загрузка водительского профиля"><div className="driver-loading__map" /><div className="driver-loading__panel"><div className="driver-skeleton driver-skeleton--short" /><div className="driver-skeleton" /><div className="driver-skeleton" /><div className="driver-skeleton driver-skeleton--button" /><p role="status">Загрузка профиля…</p></div><div className="driver-loading__nav" aria-hidden="true">{DRIVER_SECTIONS.map((item) => <span className="driver-skeleton" key={item.id} />)}</div></main>;
@@ -179,7 +186,7 @@ export function DriverScreen({ profile, parks, fullName, section, position, loca
     <DriverHeader />
     {profile.stage === "loading" ? <DriverLoading /> : !offline ? <main className="driver-services">
       <div className="driver-identity"><DriverMark /><div><h1>{fullName}</h1><p>Учебный профиль водителя</p></div></div>
-      <div className="driver-card driver-balance"><CoinIcon size={28} /><div><strong>{money(summary.net)}</strong><span>Учебный баланс</span></div></div>
+      <div className="driver-card driver-balance"><CoinIcon size={28} /><div><strong><AnimatedNumber value={summary.net} format={n => money(Math.round(n))} /></strong><span>Учебный баланс</span></div></div>
       <h2>Мои сервисы</h2>
       <button className="driver-card driver-service" disabled={busy} onClick={() => onAction({ action: "taxi" })}><span className="driver-taxi"><DriverArrow /></span><span><strong>Такси</strong><small>Учебная работа с заказами</small></span><ChevronRightIcon /></button>
     </main> : <main className={`driver-content${section === "orders" ? navigation ? " dn-content" : " driver-content--orders" : ""}`}>

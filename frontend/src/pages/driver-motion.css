@@ -1,0 +1,219 @@
+/* Driver Simulator · движение и мобильная версия.
+   Подключается последним: оживляет экраны приложения водителя и доводит вид на телефоне.
+   Всё анимированное выключается при «уменьшить движение». */
+
+.driver-app { --dx-yellow: var(--driver-yellow, #ffe128); --dx-ease: cubic-bezier(.32, .72, 0, 1); --dx-spring: cubic-bezier(.34, 1.45, .5, 1); }
+
+@keyframes dx-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes dx-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes dx-pop { 0% { opacity: 0; transform: scale(.6); } 60% { opacity: 1; transform: scale(1.08); } 100% { transform: none; } }
+@keyframes dx-shine { 0%, 62% { transform: translateX(-130%); } 100% { transform: translateX(130%); } }
+@keyframes dx-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+/* ── Шапка: имя смены в «таблетке» с кольцом выполненных заказов ─────────── */
+.driver-workspace .ds-shift-name { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 5px 12px 5px 7px; border-radius: 999px; background: #ffffff12; color: var(--driver-text); font-size: 12px !important; font-weight: 650; transition: background .2s ease, transform .15s ease; }
+.driver-workspace .ds-shift-name:hover { background: #ffffff1c; }
+.driver-workspace .ds-shift-name:active { transform: scale(.96); }
+.driver-workspace .ds-shift-name b { color: var(--dx-yellow); font-variant-numeric: tabular-nums; }
+.ds-light .ds-shift-name { background: #0000000d; }
+.ds-light .ds-shift-name b { color: #8a6f08; }
+.dx-ring { width: 22px; height: 22px; flex: none; transform: rotate(-90deg); }
+.dx-ring circle { fill: none; stroke: #ffffff26; stroke-width: 3; }
+.ds-light .dx-ring circle { stroke: #0000001f; }
+.dx-ring .dx-ring__fill { stroke: var(--dx-yellow); stroke-linecap: round; transition: stroke-dashoffset .9s var(--dx-spring); }
+.driver-environment { padding: 3px 9px; border: 1px solid #ffffff24; border-radius: 999px; }
+
+/* ── Нижнее меню: жёлтая «капля» переезжает к выбранной вкладке ─────────── */
+.driver-nav { --nav-pad: max(8px, env(safe-area-inset-left)); position: relative; gap: 0; }
+.driver-nav__blob {
+  position: absolute; top: 8px; left: var(--nav-pad); height: 52px; width: calc((100% - var(--nav-pad) * 2) / 5);
+  border-radius: 16px; background: color-mix(in srgb, var(--dx-yellow) 13%, transparent);
+  transform: translateX(calc(var(--tab-i, 0) * 100%)); transition: transform .5s var(--dx-spring); pointer-events: none;
+}
+.driver-nav button { z-index: 1; }
+.driver-nav button::before { display: none; }
+.driver-nav button:hover { background: none; }
+.driver-nav button:active svg { transform: scale(.86); }
+.driver-nav button svg { transition: transform .18s ease; }
+.driver-nav .is-active span { font-weight: 700; }
+
+/* ── Главная кнопка действия: блик пробегает, пока её можно нажать ──────── */
+.du-action { position: relative; overflow: hidden; }
+.du-act[data-state="ready"] .du-action::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 38%, #ffffff5c 50%, transparent 62%);
+  transform: translateX(-130%); animation: dx-shine 3.4s ease-in-out 1s infinite;
+}
+.du-act[data-state="ready"] .du-action { box-shadow: 0 8px 24px color-mix(in srgb, var(--dx-yellow) 30%, transparent); }
+.driver-primary { position: relative; overflow: hidden; transition: transform .15s ease, filter .15s ease; }
+.driver-primary:active { transform: scale(.97); }
+
+/* ── Панель заказа: каждый этап собирается каскадом снизу ─────────────── */
+.dn-sheet { transition: height .45s var(--dx-spring); box-shadow: 0 -10px 40px #0006; }
+.dn-sheet[data-drag="true"] { transition: none; }
+.dn-sheet-handle > span { width: 44px; height: 5px; transition: width .2s ease, background .2s ease; }
+.dn-sheet-handle:hover > span, .dn-sheet[data-drag="true"] .dn-sheet-handle > span { width: 56px; background: var(--dx-yellow); }
+.dn-sheet-body.du-enter { animation: dx-fade .2s ease both; }
+.dn-sheet-body.du-enter > * { animation: dx-rise .42s var(--dx-ease) both; }
+.dn-sheet-body.du-enter > *:nth-child(2) { animation-delay: 40ms; }
+.dn-sheet-body.du-enter > *:nth-child(3) { animation-delay: 80ms; }
+.dn-sheet-body.du-enter > *:nth-child(4) { animation-delay: 120ms; }
+.dn-sheet-body.du-enter > *:nth-child(5) { animation-delay: 160ms; }
+.dn-sheet-body.du-enter > *:nth-child(n+6) { animation-delay: 200ms; }
+.dn-progress { accent-color: var(--dx-yellow); transition: all .6s var(--dx-ease); }
+
+/* ── Экраны смены (деньги, чаты, профиль): появляются, карточки каскадом ─── */
+.ds-section { animation: dx-fade .25s ease both; }
+.ds-section > * { animation: dx-rise .45s var(--dx-ease) both; }
+.ds-section > *:nth-child(2) { animation-delay: 45ms; }
+.ds-section > *:nth-child(3) { animation-delay: 90ms; }
+.ds-section > *:nth-child(4) { animation-delay: 135ms; }
+.ds-section > *:nth-child(5) { animation-delay: 180ms; }
+.ds-section > *:nth-child(n+6) { animation-delay: 220ms; }
+.driver-card { transition: transform .18s ease, background-color .2s ease; }
+button.driver-card:active, .driver-card button:active { transform: scale(.985); }
+
+/* ── Числа: пока доезжают — чуть светятся ─────────────────────────────── */
+.dx-number { font-variant-numeric: tabular-nums; transition: text-shadow .4s ease; }
+.dx-number[data-changing="true"] { text-shadow: 0 0 18px color-mix(in srgb, var(--dx-yellow) 55%, transparent); }
+
+/* ── Заказ выполнен: галочка прорисовывается, летит салют, сумма «выпрыгивает» ─ */
+.dx-done { position: relative; display: grid; place-items: center; height: 76px; }
+.dx-success { width: 64px; height: 64px; }
+.dx-success circle { fill: color-mix(in srgb, var(--dx-yellow) 16%, transparent); stroke: var(--dx-yellow); stroke-width: 3; stroke-dasharray: 176; stroke-dashoffset: 176; animation: dx-draw .6s var(--dx-ease) forwards; }
+.dx-success path { fill: none; stroke: var(--dx-yellow); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 40; stroke-dashoffset: 40; animation: dx-draw .4s var(--dx-ease) .45s forwards; }
+@keyframes dx-draw { to { stroke-dashoffset: 0; } }
+.dx-done__sum { color: var(--dx-yellow); animation: dx-pop .6s var(--dx-spring) .3s both; }
+.ds-light .dx-done__sum { color: #8a6f08; }
+.dx-confetti { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 2; }
+.dx-confetti i { position: absolute; width: 8px; height: 12px; border-radius: 2px; background: var(--c); opacity: 0; animation: dx-burst 1.4s cubic-bezier(.1, .7, .3, 1) var(--d) forwards; }
+.dx-confetti i:nth-child(3n) { width: 6px; height: 6px; border-radius: 50%; }
+@keyframes dx-burst {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(.4) rotate(0); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y) + 70px)) scale(1) rotate(calc(var(--r) + 540deg)); }
+}
+
+/* ── Карта: машина «дышит» кольцом, точки А/Б падают с отскоком ────────── */
+.dn-map-car span { position: relative; display: block; }
+.dn-map-car::before { content: ""; position: absolute; inset: 2px; border-radius: 50%; background: color-mix(in srgb, var(--dx-yellow) 45%, transparent); animation: dx-halo 2.2s ease-out infinite; z-index: -1; }
+@keyframes dx-halo { from { transform: scale(.5); opacity: .9; } to { transform: scale(2.1); opacity: 0; } }
+.dn-map-pin span { animation: dx-drop .55s var(--dx-spring) both; }
+@keyframes dx-drop { from { opacity: 0; transform: translateY(-26px) scale(.7); } to { opacity: 1; transform: none; } }
+
+/* ── Сцена такси: небо, огни окон, бегущая разметка, покачивание машины ─── */
+.dx-scene { position: relative; width: 100%; height: 210px; overflow: hidden; border-radius: 28px; flex: none;
+  background: radial-gradient(120% 90% at 80% 0%, #2a2f55 0%, transparent 60%), linear-gradient(180deg, #151a33 0%, #0f1222 55%, #0a0a0a 100%); }
+.dx-scene--compact { width: min(300px, 80vw); height: 170px; }
+.dx-scene__sky i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: #fff; opacity: .7; animation: dx-twinkle 3s ease-in-out infinite; }
+.dx-scene__sky i:nth-child(1) { top: 16%; left: 12%; }
+.dx-scene__sky i:nth-child(2) { top: 26%; left: 38%; animation-delay: .8s; }
+.dx-scene__sky i:nth-child(3) { top: 12%; left: 64%; animation-delay: 1.6s; }
+.dx-scene__sky i:nth-child(4) { top: 30%; left: 86%; animation-delay: .4s; }
+.dx-scene__sky i:nth-child(5) { top: 8%; left: 90%; width: 26px; height: 26px; opacity: .9; background: radial-gradient(circle at 35% 35%, #fff6c9, #f5d76e 60%, transparent 62%); animation: none; }
+@keyframes dx-twinkle { 0%, 100% { opacity: .15; } 50% { opacity: .9; } }
+.dx-scene__city { position: absolute; left: 0; right: 0; bottom: 44px; width: 100%; height: 55%; }
+.dx-scene__city path { fill: #1d2340; }
+.dx-scene__window { fill: var(--dx-yellow); animation: dx-window 4s steps(2) infinite; }
+@keyframes dx-window { 0%, 100% { opacity: .9; } 50% { opacity: .25; } }
+.dx-scene__road { position: absolute; left: 0; right: 0; bottom: 0; height: 44px; background: #1b1b19; border-top: 2px solid #2c2c28; }
+.dx-scene__road span { position: absolute; left: 0; right: 0; top: 50%; height: 3px; margin-top: -1px;
+  background: repeating-linear-gradient(90deg, var(--dx-yellow) 0 26px, transparent 26px 52px); animation: dx-road .7s linear infinite; opacity: .8; }
+@keyframes dx-road { from { background-position: 0 0; } to { background-position: -52px 0; } }
+.dx-scene__taxi { position: absolute; left: 50%; bottom: 18px; width: 132px; margin-left: -66px; animation: dx-bob .5s ease-in-out infinite alternate; filter: drop-shadow(0 8px 10px #0008); }
+.dx-scene--compact .dx-scene__taxi { width: 112px; margin-left: -56px; }
+@keyframes dx-bob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+.dx-taxi-body { fill: var(--dx-yellow); }
+.dx-taxi-glass { fill: #2a3350; }
+.dx-taxi-sign { fill: #151515; }
+.dx-taxi-check { fill: #151515; opacity: .85; }
+.dx-taxi-light { fill: #fff8d0; filter: drop-shadow(0 0 6px #fff3a0); }
+.dx-wheel circle { fill: #151515; stroke: #3a3a36; stroke-width: 2; }
+.dx-wheel path { stroke: #6b6b64; stroke-width: 2; }
+.dx-wheel { animation: dx-spin .5s linear infinite; }
+@keyframes dx-spin { to { transform: rotate(360deg); } }
+
+/* ── Заставка ─────────────────────────────────────────────────────────── */
+.driver-splash { gap: 16px; }
+.driver-splash h1 { animation: dx-rise .5s var(--dx-ease) .1s both; }
+.driver-splash p { animation: dx-rise .5s var(--dx-ease) .2s both; }
+.dx-loader { display: flex; gap: 6px; }
+.dx-loader i { width: 8px; height: 8px; border-radius: 50%; background: var(--dx-yellow); animation: dx-dot 1s ease-in-out infinite; }
+.dx-loader i:nth-child(2) { animation-delay: .15s; }
+.dx-loader i:nth-child(3) { animation-delay: .3s; }
+@keyframes dx-dot { 0%, 100% { transform: translateY(0); opacity: .4; } 50% { transform: translateY(-7px); opacity: 1; } }
+
+/* ── Стартовый экран без профиля ──────────────────────────────────────── */
+.dx-welcome { display: flex; flex-direction: column; gap: 22px; width: 100%; max-width: 520px; margin: 0 auto; padding: 16px 20px calc(28px + env(safe-area-inset-bottom)); overflow: auto; }
+.dx-welcome .dx-scene { animation: dx-rise .6s var(--dx-ease) both; }
+.dx-welcome__text { display: flex; flex-direction: column; gap: 10px; animation: dx-rise .5s var(--dx-ease) .08s both; }
+.dx-welcome__text h1 { font-size: 32px; }
+.dx-welcome__text p { color: var(--driver-muted); font-size: 15px; }
+.dx-chip { align-self: flex-start; padding: 5px 11px; border-radius: 999px; background: color-mix(in srgb, var(--dx-yellow) 16%, transparent); color: var(--dx-yellow); font-size: 12px; font-weight: 650; }
+.dx-steps { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.dx-steps li { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 18px; background: var(--driver-surface); font-size: 15px; animation: dx-rise .5s var(--dx-ease) both; }
+.dx-steps b { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 50%; background: var(--dx-yellow); color: #151515; font-size: 14px; }
+.dx-cta { width: 100%; min-height: 58px; font-size: 17px; animation: dx-rise .5s var(--dx-ease) .45s both; }
+.dx-cta::after { content: ""; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 38%, #ffffff5c 50%, transparent 62%); transform: translateX(-130%); animation: dx-shine 3.4s ease-in-out 1.2s infinite; }
+
+/* ── Сервисы, парки, вход ─────────────────────────────────────────────── */
+.driver-services > * { animation: dx-rise .45s var(--dx-ease) both; }
+.driver-services > *:nth-child(2) { animation-delay: 60ms; }
+.driver-services > *:nth-child(3) { animation-delay: 120ms; }
+.driver-services > *:nth-child(n+4) { animation-delay: 180ms; }
+.driver-service { transition: transform .15s ease, background .2s ease; }
+.driver-service:active { transform: scale(.98); }
+.driver-taxi { animation: dx-float 3s ease-in-out infinite; box-shadow: 0 8px 22px color-mix(in srgb, var(--dx-yellow) 30%, transparent); }
+.driver-park { animation: dx-rise .42s var(--dx-ease) both; transition: transform .15s ease, background .2s ease; }
+.driver-park:nth-child(2) { animation-delay: 60ms; }
+.driver-park:nth-child(3) { animation-delay: 120ms; }
+.driver-park:nth-child(n+4) { animation-delay: 170ms; }
+.driver-park:not(:disabled):active { transform: scale(.98); }
+.driver-auth__intro, .driver-auth__form, .driver-auth__setup { animation: dx-rise .45s var(--dx-ease) both; }
+.driver-auth__form, .driver-auth__setup { animation-delay: 80ms; }
+/* Знак приложения водителя — жёлтый, как у такси, а не цвет Puls. */
+.driver-mark { background: var(--dx-yellow); color: #151515; box-shadow: 0 10px 26px color-mix(in srgb, var(--dx-yellow) 25%, transparent); }
+/* Сферы уровня — тёплое свечение вместо серых кругов. */
+.dp-orbs i { background: radial-gradient(circle at 34% 30%, color-mix(in srgb, var(--dx-yellow) 45%, transparent), color-mix(in srgb, var(--dx-yellow) 10%, transparent) 60%, transparent); }
+
+/* На широком экране меню собрано в колонку 650px — капля считает от неё. */
+@media (min-width: 768px) { .driver-nav { --nav-pad: calc((100% - min(650px, 100%)) / 2); } .driver-nav__blob { width: calc(min(650px, 100%) / 5); } }
+
+/* ── Мобильная версия ─────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .driver-header { min-height: 52px; padding-top: calc(8px + env(safe-area-inset-top)); padding-bottom: 8px; }
+  .driver-exit { font-size: 15px; }
+  .driver-nav { padding-top: 6px; }
+  .driver-nav__blob { top: 6px; }
+  .driver-nav button { font-size: 11px; gap: 4px; }
+  /* 16px в полях ввода: иначе iOS увеличивает страницу при фокусе. */
+  .driver-app input, .driver-app select, .driver-app textarea { font-size: max(16px, 1em); }
+  .dn-sheet { border-radius: 24px 24px 0 0; }
+  .dn-sheet-body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .ds-section { padding-left: 16px; padding-right: 16px; }
+}
+@media (max-width: 360px) {
+  .driver-environment { display: none; }
+  .driver-header { grid-template-columns: auto 1fr; }
+  .ds-shift-name { justify-self: end; }
+  .dx-scene { height: 180px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .driver-app *, .driver-app *::before, .driver-app *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; animation-delay: 0ms !important; }
+  .dx-confetti { display: none; }
+  .driver-nav__blob, .dn-sheet, .dx-ring .dx-ring__fill { transition: none; }
+}
+
+/* ── Окно «Автопарк» в городе: сцена такси и выбор режима карточками ─── */
+.dx-entry .dx-scene { height: 160px; border-radius: 20px; --dx-yellow: #ffe128; --dx-ease: cubic-bezier(.32, .72, 0, 1); --dx-spring: cubic-bezier(.34, 1.45, .5, 1); }
+.dx-modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.dx-mode { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 14px; border: 1.5px solid var(--separator); border-radius: 16px; background: var(--surface-primary); color: var(--text-primary); text-align: left; cursor: pointer; transition: border-color .2s ease, background .2s ease, transform .15s ease; }
+.dx-mode > span { font-size: 22px; line-height: 1; }
+.dx-mode strong { font-size: 15px; }
+.dx-mode small { color: var(--text-secondary); font-size: 12.5px; line-height: 1.45; }
+.dx-mode:hover { background: var(--surface-hover); }
+.dx-mode:active { transform: scale(.98); }
+.dx-mode[aria-checked="true"] { border-color: var(--accent-primary); background: var(--accent-tint); }
+.dx-mode:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+@media (max-width: 420px) { .dx-modes { grid-template-columns: 1fr; } }

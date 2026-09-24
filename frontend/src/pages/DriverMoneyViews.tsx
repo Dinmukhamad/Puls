@@ -5,6 +5,7 @@ import { money } from "./DriverOrders";
 import { dateTime } from "../utils/format";
 import type { LedgerEntry } from "../api/driverShift";
 import "./driver-money.css";
+import { AnimatedNumber } from "./DriverMotion";
 
 /* Строение раздела повторяет приложение парка: сводка за день, отдельный экран баланса
    с круглыми действиями, нижние шторки вместо форм посреди страницы, доход со сравнением
@@ -146,7 +147,7 @@ function MoneyScreen(p: ShiftViewProps) {
         </div>
         <button className="dm-calendar" type="button" aria-label="Выбрать период" onClick={() => setSheet("period")}><Glyph name="calendar" /></button>
       </div>
-      <div className="dm-hero"><span>Сегодня</span><strong>{sum(today.income)}</strong></div>
+      <div className="dm-hero"><span>Сегодня</span><strong><AnimatedNumber value={today.income} format={n => sum(Math.round(n))} /></strong></div>
       {earnTab === "compare" ? <div className="dm-chart">{week.map(day => <div key={day.from} data-now={day.now}>
         <em>{hidden ? "•" : day.income}</em>
         <i style={{ height: `${6 + Math.round(Math.min(1, day.income / Math.max(1, ...week.map(x => x.income))) * 44)}px` }} />
@@ -223,7 +224,7 @@ function MoneyScreen(p: ShiftViewProps) {
       <button className="dm-support" type="button" onClick={() => go("support")}><Glyph name="hand" />Поддержка</button>
     </div>
     <button className="dm-card dm-today" type="button" onClick={() => go("earnings")}>
-      <div><strong>{sum(today.income)}</strong><span>Сегодня</span></div>
+      <div><strong><AnimatedNumber value={today.income} format={n => sum(Math.round(n))} /></strong><span>Сегодня</span></div>
       <div className="dm-week">{week.map(day => <div key={day.from} data-now={day.now}><i /><span>{day.date.getDate()}</span></div>)}</div>
     </button>
     <div className="dm-card">

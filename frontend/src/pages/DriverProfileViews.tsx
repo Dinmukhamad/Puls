@@ -6,6 +6,7 @@ import { money } from "./DriverOrders";
 import { dateTime } from "../utils/format";
 import { useEdgeBack } from "../hooks/useEdgeBack";
 import "./driver-profile.css";
+import { AnimatedNumber } from "./DriverMotion";
 
 /* Строение раздела повторяет приложение парка: карточка водителя с плитками, тарифы с
    вкладками и свёрнутым блоком недоступного, фотоконтроль списком с группами, приоритет
@@ -134,9 +135,9 @@ export function DriverProfileViews(p: ShiftViewProps) {
       <div className="dp-tiles">
         <button type="button" onClick={() => go("rating")}><strong>{rating}</strong><span>Рейтинг</span>
           <svg viewBox="0 0 24 24" fill="#d8a32c" aria-hidden="true"><path d="m12 3 2.7 5.8 6.3.8-4.6 4.4 1.2 6.3L12 17.3 6.4 20.3l1.2-6.3L3 9.6l6.3-.8z" /></svg></button>
-        <button type="button" onClick={() => go("levels")}><strong>{d.points.toLocaleString("ru")}</strong><span>Баллы</span>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="#4a4a46" /></svg></button>
-        <button type="button" onClick={() => go("priority")}><strong>+{d.priority}</strong><span>Приоритет</span>
+        <button type="button" onClick={() => go("levels")}><strong><AnimatedNumber value={d.points} /></strong><span>Баллы</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="#e9b949" /><circle cx="12" cy="12" r="6" fill="none" stroke="#fff6" strokeWidth="1.5" /><path d="M12 8.2l1.1 2.3 2.5.3-1.8 1.7.5 2.5L12 13.8 9.7 15l.5-2.5-1.8-1.7 2.5-.3z" fill="#fff" /></svg></button>
+        <button type="button" onClick={() => go("priority")}><strong>+<AnimatedNumber value={d.priority} /></strong><span>Приоритет</span>
           <svg viewBox="0 0 24 24" fill="var(--driver-yellow)" aria-hidden="true"><path d="M12 2c1.6 4.4 3.6 6.4 8 8-4.4 1.6-6.4 3.6-8 8-1.6-4.4-3.6-6.4-8-8 4.4-1.6 6.4-3.6 8-8z" /></svg></button>
       </div>
       <div className="dp-card dp-card--flat">
