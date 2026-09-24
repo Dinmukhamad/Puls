@@ -28,5 +28,19 @@ test('a full-width target sends Pulsar above or below, and everything stays on s
 });
 
 test('every tour step has a target and a short explanation', () => {
-  for (const steps of Object.values(COACH_TOURS)) for (const step of steps) { assert.ok(step.target && step.title); assert.ok(step.text.length > 20 && step.text.length < 200, step.title); }
+  for (const steps of Object.values(COACH_TOURS)) for (const step of steps) { assert.ok(step.target && step.title); assert.ok(step.text.length > 20 && step.text.length < 200, step.title); if (step.autoClick) assert.ok(step.advanceWhen, step.title); }
+});
+
+test('the appeal tour asks for the city after the park and leaves the comment for the end', () => {
+  const steps = COACH_TOURS.appeals, at = (target) => steps.findIndex((step) => step.target === target);
+  assert.equal(at('[data-coach=city]'), at('[data-coach=park]') + 1);
+  assert.equal(steps[at('[data-coach=park]')].advanceWhen, '[data-coach=city]');
+  const lastCategory = Math.max(...steps.map((step, i) => step.target.startsWith('[data-coach=category-') ? i : -1));
+  assert.ok(steps.every((step, i) => !['[data-coach=comment]', '[data-coach=files]'].includes(step.target) || i > lastCategory));
+  assert.ok(!steps.some((step) => step.target === '[data-coach=ticket]'));
+});
+
+test('the drivers tour walks through the card, the car editor and the cash limit', () => {
+  const targets = COACH_TOURS.drivers.map((step) => step.target);
+  for (const anchor of ['drv-tiles', 'car-brand', 'car-model', 'car-callsign', 'limit-on']) assert.ok(targets.some((t) => t.includes(anchor)), anchor);
 });

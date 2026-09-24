@@ -12,7 +12,9 @@ export function CategorySelect({ nodes, value, onChange, optional = false }: { n
     if (!value[level]) break;
     parent = value[level];
   }
-  return <div className="crm-category-fields" data-tour="categories" data-coach="categories">{levels.map((options, index) => <label className="crm-field" key={index}><span>Категория {index + 1}{!optional && " *"}</span><select required={!optional} value={value[index] ?? ""} onChange={event => onChange([...value.slice(0, index), ...(event.target.value ? [event.target.value] : [])])}><option value="">{optional ? "На этом уровне" : "Выберите категорию"}</option>{options.map(node => <option key={node.id} value={node.id} disabled={node.disabled}>{node.label}{node.disabled ? " — недоступно" : ""}</option>)}</select></label>)}</div>;
+  // Pulsar reads which branch was chosen and whether the last level is reached from these attributes.
+  const label = (id?: string) => nodes.find(node => node.id === id)?.label ?? "";
+  return <div className="crm-category-fields" data-tour="categories" data-coach="categories" data-root={label(value[0])} data-complete={levels.length > 0 && value.length >= levels.length}>{levels.map((options, index) => <label className="crm-field" key={index} data-coach={`category-${index + 1}`} data-choice={label(value[index])}><span>Категория {index + 1}{!optional && " *"}</span><select required={!optional} value={value[index] ?? ""} onChange={event => onChange([...value.slice(0, index), ...(event.target.value ? [event.target.value] : [])])}><option value="">{optional ? "На этом уровне" : "Выберите категорию"}</option>{options.map(node => <option key={node.id} value={node.id} disabled={node.disabled}>{node.label}{node.disabled ? " — недоступно" : ""}</option>)}</select></label>)}</div>;
 }
 
 export function CrmCategories({ nodes }: { nodes: CrmCategory[] }) {

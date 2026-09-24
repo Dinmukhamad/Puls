@@ -22,10 +22,6 @@
 .coach-close:hover { background:#f7f7f7; }
 .coach-bubble strong { display:block; font-size:16.5px; line-height:1.3; margin-bottom:4px; }
 .coach-bubble p { margin:0 0 10px; color:#3b4262; }
-.coach-dots { display:flex; gap:4px; margin-bottom:10px; }
-.coach-dots span { flex:1; height:4px; border-radius:4px; background:#efeff0; }
-.coach-dots .is-done { background:#c9cbcf; }
-.coach-dots .is-current { background:#93979f; }
 .coach-actions { display:flex; justify-content:space-between; gap:10px; }
 .coach-back { border:0; background:transparent; color:#93979f; font-weight:600; font-size:13px; padding:8px 4px; cursor:pointer; }
 .coach-back:disabled { opacity:.35; cursor:default; }

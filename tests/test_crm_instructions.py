@@ -1,7 +1,7 @@
 import pytest
 
 from app.models.enums import Role
-from app.services.crm_catalog import category_id
+from app.services.crm_catalog import category_id, default_categories
 from tests.conftest import auth, make_user
 from tests.conftest import login_with_work_sites as login
 
@@ -100,3 +100,14 @@ async def test_driver_account_screens_have_editable_instructions(client, session
     assert response.status_code == 200, response.text
     after = (await client.get(BASE, headers=headers)).json()["instructions"]["drivers:smz"]
     assert after["title"] == "СМЗ: памятка"
+
+
+def test_car_change_request_is_available_for_training():
+    """Car change is a worked example in Pulsar's tour, so the category must be selectable."""
+    for driver_type in ("Обычный водитель", "Самозанятый водитель"):
+        path = ["Водитель", driver_type, "Запрос", "Таксопарк", "Обработка запросов/ООЗ"]
+        node = next(
+            n for n in default_categories() if n["id"] == category_id([*path, "Смена автомобиля"])
+        )
+        assert not node["disabled"]
+        assert "госномер" in node["hint"]
