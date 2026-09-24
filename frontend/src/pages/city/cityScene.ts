@@ -2,6 +2,11 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { createArchitecture, mergeStatic } from "./cityArchitecture";
+import maleUrl from "./models/operator-male.glb?url";
+import femaleUrl from "./models/operator-female.glb?url";
 import type { DistrictId } from "../../api/city";
 import { districtLevel } from "./cityLevels";
 import modelsUrl from "./models/city-models.glb?url";
@@ -18,7 +23,7 @@ export interface CitySceneOptions {
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
 }
 export interface CityMascot { gender: "male" | "female" | null; name: string }
-export interface CitySceneControl { setMascot: (mascot: CityMascot) => void; dispose: () => void; select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void; zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void }
+export interface CitySceneControl { focusMascot: () => void; setMascot: (mascot: CityMascot) => void; dispose: () => void; select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void; zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void }
 
 export const CITY_LOCATIONS: CityLocation[] = [
   { id: "academy", x: -17, z: 2, color: "#5b8def" },
@@ -27,16 +32,17 @@ export const CITY_LOCATIONS: CityLocation[] = [
   { id: "dispatch", x: 14.5, z: 12.5, color: "#35b6a6", soon: true },
   { id: "oktell", x: -5.5, z: 17.5, color: "#e86aa6", soon: true },
 ];
-export const DEFAULT_VIEW: CityView = { azimuth: .55, polar: .86, distance: 80, target: [0, 0, 2] };
+export const DEFAULT_VIEW: CityView = { azimuth: .55, polar: .86, distance: 96, target: [0, 0, 2] };
 /** District buildings are drawn in small units and scaled up to stand above the ordinary city blocks. */
-const DISTRICT_SCALE = 2.3, MIN_DISTANCE = 18, MAX_DISTANCE = 125, MIN_POLAR = .18, MAX_POLAR = 1.32, PAN_RADIUS = 24;
+const DISTRICT_SCALE = 2.3, MIN_DISTANCE = 18, MAX_DISTANCE = 160, MIN_POLAR = .18, MAX_POLAR = 1.32, PAN_RADIUS = 24;
 
 export function createCityScene(host: HTMLDivElement, options: CitySceneOptions): CitySceneControl {
   const { levels } = options;
   let disposed = false;
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+  const mobile = host.clientWidth < 600;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.4 : 1.75));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   renderer.setClearColor(0, 0); host.replaceChildren(renderer.domElement);
@@ -61,10 +67,13 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   }
   applyView(options.view ?? DEFAULT_VIEW);
 
-  scene.add(new THREE.HemisphereLight("#fdfbff", "#9bb39a", 2.1));
+  const room = new RoomEnvironment(), pmrem = new THREE.PMREMGenerator(renderer);
+  const environment = pmrem.fromScene(room, .04); scene.environment = environment.texture; scene.environmentIntensity = .4;
+  room.dispose(); pmrem.dispose();
+  scene.add(new THREE.HemisphereLight("#e6f3ff", "#6c8061", 1.1));
   const sun = new THREE.DirectionalLight("#fff3dc", 3.1);
-  sun.position.set(-30, 55, 25); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 140 }); sun.shadow.normalBias = .05; scene.add(sun);
+  sun.position.set(-30, 55, 25); sun.castShadow = true; sun.shadow.mapSize.set(mobile ? 1024 : 2048, mobile ? 1024 : 2048);
+  Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 140 }); sun.shadow.normalBias = .04; sun.shadow.bias = -.00015; sun.shadow.radius = 3; scene.add(sun);
 
   const materials = new Map<string, THREE.MeshStandardMaterial>();
   function material(color: string, extra: THREE.MeshStandardMaterialParameters = {}) {
@@ -73,7 +82,9 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     return materials.get(key)!;
   }
   const world = new THREE.Group(); scene.add(world);
-  function mesh(geometry: THREE.BufferGeometry, color: string, x: number, y: number, z: number, parent: THREE.Object3D = world, extra?: THREE.MeshStandardMaterialParameters) {
+  const architecture = createArchitecture();
+  const scenery = new THREE.Group(); world.add(scenery);
+  function mesh(geometry: THREE.BufferGeometry, color: string, x: number, y: number, z: number, parent: THREE.Object3D = scenery, extra?: THREE.MeshStandardMaterialParameters) {
     const m = new THREE.Mesh(geometry, material(color, extra)); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
   }
   const box = (w: number, h: number, d: number, c: string, x: number, y: number, z: number, p?: THREE.Object3D) => mesh(new THREE.BoxGeometry(w, h, d), c, x, y, z, p);
@@ -82,33 +93,35 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const tint = (color: string, amount: number) => "#" + new THREE.Color(color).lerp(new THREE.Color(amount > 0 ? "#ffffff" : "#1c1830"), Math.abs(amount)).getHexString();
 
   // Island, water and greenery.
-  const water = new THREE.Mesh(new THREE.CircleGeometry(320, 64), material("#8fd0e4", { roughness: .35 }));
-  water.rotation.x = -Math.PI / 2; water.position.y = -1.4; water.receiveShadow = true; world.add(water);
+  const water = new THREE.Mesh(new THREE.CircleGeometry(320, 64), material("#6dabab", { roughness: .25, metalness: .25 }));
+  water.rotation.x = -Math.PI / 2; water.position.y = -1.4; water.receiveShadow = true; scenery.add(water);
   mesh(new THREE.CylinderGeometry(35, 36.5, 1.8, 96), "#e9d7ad", 0, -.75, 0);
-  mesh(new THREE.CylinderGeometry(33.8, 35, .3, 96), "#a9d68f", 0, .05, 0);
-  function tree(x: number, z: number, s = 1, p: THREE.Object3D = world) {
+  mesh(new THREE.CylinderGeometry(33.8, 35, .3, 96), "#8ba67a", 0, .05, 0);
+  function tree(x: number, z: number, s = 1, p: THREE.Object3D = scenery) {
     cyl(.1 * s, .8 * s, "#8a6a55", x, .6 * s, z, p, 7);
-    const crown = mesh(new THREE.ConeGeometry(.55 * s, 1.3 * s, 9), "#5fae6e", x, 1.45 * s, z, p); crown.rotation.y = x;
-    mesh(new THREE.ConeGeometry(.42 * s, 1 * s, 9), "#78c282", x, 1.95 * s, z, p);
+    const crown = sphere(.58 * s, "#517b60", x, 1.35 * s, z, p); crown.scale.set(.95, 1.22, .9);
+    sphere(.43 * s, "#789465", x + .27 * s, 1.9 * s, z + .05 * s, p);
+    sphere(.4 * s, "#668c65", x - .28 * s, 1.66 * s, z - .1 * s, p);
   }
-  function roundTree(x: number, z: number, s = 1) { cyl(.09 * s, .7 * s, "#8a6a55", x, .55 * s, z, world, 7); sphere(.55 * s, "#6fbb77", x, 1.2 * s, z); }
+  function roundTree(x: number, z: number, s = 1) { cyl(.09 * s, .7 * s, "#8a6a55", x, .55 * s, z, scenery, 7); sphere(.55 * s, "#799363", x, 1.2 * s, z); }
   const rng = (seed: number) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const random = rng(7);
-  for (let i = 0; i < 150; i++) {
+  for (let i = 0; i < 90; i++) {
     const angle = random() * Math.PI * 2, radius = 27.8 + random() * 5.2, x = Math.cos(angle) * radius, z = Math.sin(angle) * radius;
     (i % 3 ? tree : roundTree)(x, z, 1.1 + random() * .8);
   }
 
   // Roads: a ring through every district and spokes to the central square.
-  const plaza = cyl(4.6, .12, "#efe7d6", 0, .25, 0, world, 64);
-  plaza.receiveShadow = true;
+  const plaza = cyl(4.6, .12, "#efe7d6", 0, .25, 0, scenery, 64);
+  plaza.receiveShadow = true; architecture.plaza(scenery);
   const ringRoad = new THREE.Mesh(new THREE.RingGeometry(24, 26, 160), material("#6d7385"));
-  ringRoad.rotation.x = -Math.PI / 2; ringRoad.position.y = .215; ringRoad.receiveShadow = true; world.add(ringRoad);
+  ringRoad.rotation.x = -Math.PI / 2; ringRoad.position.y = .215; ringRoad.receiveShadow = true; scenery.add(ringRoad);
   for (let i = 0; i < 110; i++) { const a = i / 110 * Math.PI * 2, dash = box(.14, .02, .7, "#f7f3e8", Math.cos(a) * 25, .23, Math.sin(a) * 25); dash.rotation.y = -a; dash.castShadow = false; }
   const roads: [number, number, number, number][] = [];
   function road(ax: number, az: number, bx: number, bz: number) {
     const dx = bx - ax, dz = bz - az, length = Math.hypot(dx, dz), angle = Math.atan2(dx, dz);
     roads.push([ax, az, bx, bz]);
+    const kerb = box(2.65, .08, length, "#e5dfcf", (ax + bx) / 2, .18, (az + bz) / 2); kerb.rotation.y = angle; kerb.castShadow = false;
     const r = box(2, .06, length, "#6d7385", (ax + bx) / 2, .23, (az + bz) / 2); r.rotation.y = angle; r.castShadow = false;
     for (let t = 1.2; t < length - .8; t += 2) { const dash = box(.14, .07, .8, "#f7f3e8", ax + dx * t / length, .245, az + dz * t / length); dash.rotation.y = angle; dash.castShadow = false; }
   }
@@ -156,13 +169,13 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   for (let gx = -24; gx <= 24; gx += 2.9) for (let gz = -24; gz <= 24; gz += 2.9) {
     const x = gx + (blockRandom() - .5) * 1.1, z = gz + (blockRandom() - .5) * 1.1, r = Math.hypot(x, z);
     const lot = { x, z, r, rotation: Math.atan2(x, z) + (blockRandom() < .5 ? 0 : Math.PI / 2), roll: blockRandom(), pick: blockRandom(), size: blockRandom() };
-    if (r < 6.6 || r > 22.6 || nearRoad(x, z, 2.3) || CITY_LOCATIONS.some(d => Math.hypot(d.x - x, d.z - z) < DISTRICT_SCALE * 3.2 + 1.2)) continue;
+    if (r < 6.6 || r > 22.6 || nearRoad(x, z, 1.8) || CITY_LOCATIONS.some(d => Math.hypot(d.x - x, d.z - z) < DISTRICT_SCALE * 2.7 + .55)) continue;
     lots.push(lot);
   }
   const walls = ["#f3e6d3", "#e9eef5", "#f6d9cf", "#dfe9dd", "#ece4f4", "#f4efe2"], roofs = ["#c7775d", "#8a6f9e", "#5f7f9c", "#a3685a"];
   function simpleBlocks() {
     for (const lot of lots) {
-      const g = new THREE.Group(); g.position.set(lot.x, .2, lot.z); g.rotation.y = lot.rotation; world.add(g);
+      const g = new THREE.Group(); g.position.set(lot.x, .2, lot.z); g.rotation.y = lot.rotation; scenery.add(g);
       if (lot.roll < .1) { tree(0, 0, 1.3, g); continue; }
       if (lot.roll < .45) {
         const w = 1.8 + lot.size * .6, h = 1.2 + lot.pick * .6;
@@ -183,18 +196,20 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     for (const lot of lots) {
       const list = lot.roll < .08 ? ["s-tree-large"] : lot.r > 17 ? (lot.roll < .8 ? HOUSES : OFFICES) : lot.roll > .88 ? TOWERS : lot.roll < .3 ? HOUSES : OFFICES;
       const name = list[Math.floor(lot.pick * list.length)];
-      if (name === "s-tree-large") { for (const [dx, dz] of [[-.6, -.4], [.6, .3], [0, .8]]) spawn(world, name, lot.x + dx, lot.z + dz, 3.4 + lot.size, lot.rotation); continue; }
-      spawn(world, name, lot.x, lot.z, 0, lot.rotation, .2, 2.6);
+      if (name === "s-tree-large") { for (const [dx, dz] of [[-.6, -.4], [.6, .3], [0, .8]]) spawn(scenery, name, lot.x + dx, lot.z + dz, 3.4 + lot.size, lot.rotation); continue; }
+      spawn(scenery, name, lot.x, lot.z, 0, lot.rotation, .2, 2.6);
     }
   }
 
   // Центр площади: робот Пульсар или оператор, которого выбрал пользователь, с табличкой имени.
   const mascotRoot = new THREE.Group(); mascotRoot.position.set(0, .3, 0); mascotRoot.scale.setScalar(2.4); world.add(mascotRoot);
-  cyl(.8, .35, "#dddee0", 0, .17, 0, mascotRoot, 32);
-  let figure = new THREE.Group(), wave: THREE.Object3D | null = null, nameTag: THREE.Sprite | null = null;
+  cyl(.91, .12, "#aa8752", 0, .04, 0, mascotRoot, 48);
+  cyl(.86, .23, "#324751", 0, .18, 0, mascotRoot, 48);
+  cyl(.81, .06, "#ede4cf", 0, .325, 0, mascotRoot, 48);
+  let figure = new THREE.Group(), nameTag: THREE.Sprite | null = null;
   function clearFigure() {
     figure.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
-    mascotRoot.remove(figure); figure = new THREE.Group(); mascotRoot.add(figure); wave = null;
+    mascotRoot.remove(figure); figure = new THREE.Group(); mascotRoot.add(figure);
   }
   function buildRobot() {
     const head = sphere(.55, "#b1b4b9", 0, 1.05, 0, figure); head.scale.set(1.1, .92, .8);
@@ -203,34 +218,60 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     cyl(.04, .32, "#b6b9be", 0, 1.6, 0, figure); sphere(.09, "#ffd976", 0, 1.8, 0, figure);
     sphere(.28, "#9a9ea6", 0, .52, 0, figure);
   }
+  let characterMixer: THREE.AnimationMixer | null = null;
+  let idleAction: THREE.AnimationAction | null = null;
+  let waveAction: THREE.AnimationAction | null = null;
+  let nextWave = 0, characterRequest = 0;
   function buildOperator(gender: "male" | "female") {
-    const skin = "#f1c6a0", hair = gender === "female" ? "#4a2c1d" : "#2d241f", shirt = gender === "female" ? "#e2687f" : "#3f78d8", pants = "#2f3442", dark = "#22242a";
-    for (const side of [-1, 1]) {
-      box(.17, .08, .3, dark, side * .12, .39, .04, figure);
-      cyl(.085, .42, gender === "female" ? skin : pants, side * .12, .62, 0, figure);
-    }
-    if (gender === "female") mesh(new THREE.CylinderGeometry(.2, .31, .32, 24), pants, 0, .8, 0, figure);
-    mesh(new THREE.CylinderGeometry(.2, .24, .52, 24), shirt, 0, 1.1, 0, figure);
-    box(.09, .06, .02, "#ffd21f", .1, 1.2, .225, figure);
-    const left = cyl(.06, .44, shirt, -.29, 1.07, 0, figure); left.rotation.z = .16;
-    sphere(.07, skin, -.33, .83, 0, figure);
-    // Правая рука приветственно машет: вращается вокруг плеча.
-    const shoulder = new THREE.Group(); shoulder.position.set(.26, 1.3, 0); figure.add(shoulder);
-    const arm = cyl(.06, .44, shirt, 0, .22, 0, shoulder); arm.rotation.z = 0; sphere(.075, skin, 0, .47, 0, shoulder);
-    shoulder.rotation.z = -.55; wave = shoulder;
-    cyl(.07, .1, skin, 0, 1.4, 0, figure);
-    sphere(.26, skin, 0, 1.62, 0, figure);
-    for (const side of [-1, 1]) sphere(.032, dark, side * .09, 1.65, .235, figure);
-    const cap = mesh(new THREE.SphereGeometry(.28, 20, 12, 0, Math.PI * 2, 0, Math.PI * .46), hair, 0, 1.62, -.01, figure); cap.rotation.x = -.18;
-    if (gender === "female") {
-      mesh(new THREE.CylinderGeometry(.25, .28, .46, 20, 1, true, Math.PI * .6, Math.PI * .8), hair, 0, 1.5, -.02, figure);
-      sphere(.12, hair, 0, 1.6, -.3, figure);
-    }
-    // Гарнитура оператора: дуга, амбушюры и микрофон.
-    const band = mesh(new THREE.TorusGeometry(.29, .025, 8, 28, Math.PI), dark, 0, 1.63, 0, figure); band.rotation.z = 0;
-    for (const side of [-1, 1]) { const cup = cyl(.08, .07, dark, side * .29, 1.62, 0, figure); cup.rotation.z = Math.PI / 2; }
-    const boom = cyl(.016, .26, dark, .2, 1.5, .15, figure); boom.rotation.set(Math.PI / 2.6, 0, .9);
-    sphere(.04, "#ffd21f", .09, 1.46, .25, figure);
+    const request = ++characterRequest;
+    const loader = new GLTFLoader();
+    loader.loadAsync(gender === "female" ? femaleUrl : maleUrl).then(gltf => {
+      if (disposed || request !== characterRequest) { disposeCharacter(gltf.scene); return; }
+      const model = gltf.scene;
+      const bounds = new THREE.Box3().setFromObject(model), size = bounds.getSize(new THREE.Vector3());
+      model.scale.setScalar(2.25 / size.y);
+      model.position.y = .36 - bounds.min.y * model.scale.x;
+      model.traverse(o => {
+        if (o instanceof THREE.Mesh) {
+          const original = o.geometry;
+          original.deleteAttribute('normal');
+          o.geometry = mergeVertices(original, .0001); o.geometry.computeVertexNormals(); original.dispose();
+          o.castShadow = o.receiveShadow = true;
+          for (const material of Array.isArray(o.material) ? o.material : [o.material]) {
+            if (material instanceof THREE.MeshStandardMaterial) {
+              material.roughness = .72;
+              if (['Red_Dark', 'Orange'].includes(material.name)) material.color.set('#36596a');
+              if (material.name === 'White') material.color.set('#e8e2d5');
+            }
+          }
+        }
+      });
+      const head = model.getObjectByName('Head');
+      if (head) {
+        const headset = new THREE.Group(); headset.position.set(0, .095, gender === 'male' ? -.03 : .005); head.add(headset);
+        const band = new THREE.Mesh(new THREE.TorusGeometry(.139, .014, 8, 32, Math.PI), new THREE.MeshStandardMaterial({color:'#28383f',roughness:.4})); headset.add(band);
+        for (const side of [-1, 1]) {
+          const ear = new THREE.Mesh(new THREE.CylinderGeometry(.046,.046,.035,16),band.material);ear.rotation.z=Math.PI/2;ear.position.x=side*.137;headset.add(ear);
+        }
+        const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(.145,-.025,.02),new THREE.Vector3(.13,-.08,.1),new THREE.Vector3(.04,-.095,.16)]);
+        const mic = new THREE.Mesh(new THREE.TubeGeometry(curve,12,.008,6,false),band.material);headset.add(mic);
+      }
+      figure.add(model);
+      characterMixer = new THREE.AnimationMixer(model);
+      const idle = gltf.animations.find(a => a.name === 'Idle_Neutral'), hello = gltf.animations.find(a => a.name === 'Wave');
+      if (idle) { idleAction = characterMixer.clipAction(idle); idleAction.play(); }
+      // Keep the resting pose even when the user has disabled motion.
+      characterMixer.update(0);
+      if (hello) { waveAction = characterMixer.clipAction(hello); waveAction.setLoop(THREE.LoopOnce, 1); waveAction.clampWhenFinished = false; }
+      nextWave = performance.now() + 2500;
+      characterMixer.addEventListener('finished', () => { waveAction?.fadeOut(.4); idleAction?.reset().fadeIn(.4).play(); });
+      host.dataset.character = gender;
+    }).catch(() => { if (!disposed && request === characterRequest) { buildRobot(); host.dataset.character = 'fallback'; } });
+  }
+  function disposeCharacter(root: THREE.Object3D) {
+    const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
+    root.traverse(o => { if (o instanceof THREE.Mesh) { geometries.add(o.geometry); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => materials.add(m)); } });
+    geometries.forEach(g => g.dispose()); materials.forEach(m => m.dispose());
   }
   function drawNameTag(name: string) {
     const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d");
@@ -245,10 +286,15 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
     if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); world.remove(nameTag); }
     nameTag = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthWrite: false }));
-    nameTag.scale.set(1.35 * width / 128, 1.35, 1); nameTag.position.set(0, 6.4, 0); nameTag.renderOrder = 5; world.add(nameTag);
+    nameTag.scale.set(1.35 * width / 128, 1.35, 1); nameTag.position.set(0, 7.4, 0); nameTag.renderOrder = 5; world.add(nameTag);
   }
+  let currentGender: CityMascot["gender"] | undefined;
   function setMascot(next: CityMascot) {
-    clearFigure();
+    if (currentGender === next.gender) { drawNameTag(next.name); return; }
+    currentGender = next.gender;
+    characterRequest++;
+    characterMixer?.stopAllAction(); characterMixer = null; idleAction = waveAction = null;
+    disposeCharacter(figure); clearFigure();
     if (next.gender) buildOperator(next.gender); else buildRobot();
     drawNameTag(next.name);
   }
@@ -267,175 +313,22 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     parent.add(copy);
   }
 
-  // Districts: five stages from a construction site to a landmark.
+  // Recognizable landmarks gain architectural detail over five levels.
   const pickables: THREE.Object3D[] = [];
   const anchors = new Map<DistrictId, THREE.Vector3>();
   const rings = new Map<DistrictId, THREE.Mesh>();
   const districtGroups = new Map<DistrictId, THREE.Group>();
-  const spinners: THREE.Object3D[] = [], sparkles: THREE.Points[] = [];
   const stages = new Map<DistrictId, number>(CITY_LOCATIONS.map(d => [d.id, districtLevel(levels[d.id] ?? 0, d.soon)]));
-  function windows(x: number, y: number, z: number, cols: number, rows: number, p: THREE.Object3D, side = false, dark = false) {
-    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
-      const lit = !dark && (i + j) % 3 === 0, color = dark ? "#3a3f4d" : lit ? "#fff1b8" : "#dfe9ff", glow = lit ? { emissive: "#ffcf66", emissiveIntensity: .5 } : undefined;
-      const m = side ? mesh(new THREE.BoxGeometry(.04, .3, .32), color, x, y + j * .52, z + i * .48, p, glow) : mesh(new THREE.BoxGeometry(.32, .3, .04), color, x + i * .48, y + j * .52, z, p, glow);
-      m.castShadow = false;
-    }
-  }
-  function scaffold(w: number, d: number, h: number, p: THREE.Object3D) {
-    const y = "#e8b33a";
-    for (const [x, z] of [[-w / 2 - .15, d / 2 + .15], [w / 2 + .15, d / 2 + .15], [w / 2 + .15, -d / 2 - .15], [-w / 2 - .15, -d / 2 - .15]]) box(.05, h, .05, y, x, h / 2, z, p);
-    for (let k = 1; k * .55 < h; k++) { box(w + .35, .03, .03, y, 0, k * .55, d / 2 + .15, p); box(.03, .03, d + .35, y, w / 2 + .15, k * .55, 0, p); box(w + .35, .025, .22, "#b88a4a", 0, k * .55 - .03, d / 2 + .25, p); }
-  }
-  function crane(p: THREE.Object3D, height = 4.4) {
-    const yellow = "#f2b632";
-    box(.18, height, .18, yellow, 1.6, height / 2 + .2, -1.3, p); box(3.4, .16, .16, yellow, .8, height + .2, -1.3, p);
-    box(.5, .35, .35, "#6d7385", 2.6, height, -1.3, p); box(.03, 1.3, .03, "#4a4f5e", -.6, height - .45, -1.3, p); box(.25, .25, .25, "#6d7385", -.6, height - 1.2, -1.3, p);
-  }
-  function siteDressing(p: THREE.Object3D) {
-    for (const [x, z] of [[-1.7, 1.6], [-1.1, 1.8], [1.7, 1.6], [1.1, 1.8]]) mesh(new THREE.ConeGeometry(.12, .34, 12), "#ff8a3d", x, .36, z, p);
-    for (let i = 0; i < 6; i++) box(.62, .26, .05, i % 2 ? "#ffffff" : "#ff5b5b", -1.55 + i * .62, .36, 2.15, p);
-  }
-  function lamp(x: number, z: number, p: THREE.Object3D) { cyl(.035, 1.1, "#6d7385", x, .75, z, p, 8); sphere(.1, "#fff3c4", x, 1.33, z, p).material = material("#fff3c4", { emissive: "#ffe08a", emissiveIntensity: .9 }); }
-  function parkedCar(x: number, z: number, color: string, rotation: number, p: THREE.Object3D) {
-    const g = new THREE.Group(); g.position.set(x, .22, z); g.rotation.y = rotation; p.add(g);
-    box(.34, .15, .62, color, 0, .08, 0, g); box(.3, .13, .32, "#39405a", 0, .2, -.03, g);
-  }
-  function fountain(x: number, z: number, p: THREE.Object3D) {
-    cyl(.55, .16, "#e7ecf2", x, .28, z, p, 24); cyl(.45, .05, "#8fd0e4", x, .37, z, p, 24).material = material("#8fd0e4", { emissive: "#5bc8ff", emissiveIntensity: .35, roughness: .2 });
-    cyl(.05, .45, "#e7ecf2", x, .58, z, p, 8); sphere(.09, "#bff0ff", x, .84, z, p).material = material("#bff0ff", { emissive: "#7fe0ff", emissiveIntensity: .7 });
-  }
-  function neonRing(radius: number, y: number, color: string, p: THREE.Object3D, tilt = 0) {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, .045, 8, 72), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .85, toneMapped: false }));
-    ring.rotation.x = Math.PI / 2 + tilt; ring.position.y = y; ring.userData.spinRing = true; p.add(ring); spinners.push(ring);
-  }
-  function gem(y: number, p: THREE.Object3D, color = "#ffd976") {
-    cyl(.045, .7, "#c9ccd6", 0, y - .45, 0, p, 8);
-    const g = mesh(new THREE.OctahedronGeometry(.34), color, 0, y, 0, p, { emissive: "#ffb300", emissiveIntensity: .9, metalness: .3, roughness: .25 });
-    g.userData.spin = true; spinners.push(g);
-  }
-  let glow: THREE.CanvasTexture | null = null;
-  function glowTexture() {
-    if (glow) return glow;
-    const canvas = document.createElement("canvas"); canvas.width = canvas.height = 64;
-    const ctx = canvas.getContext("2d")!, gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-    gradient.addColorStop(0, "rgba(255,255,255,1)"); gradient.addColorStop(.35, "rgba(255,230,150,.7)"); gradient.addColorStop(1, "rgba(255,200,80,0)");
-    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 64, 64);
-    return (glow = new THREE.CanvasTexture(canvas));
-  }
-  function addSparkles(d: CityLocation, height: number) {
-    const count = 34, positions = new Float32Array(count * 3), random = rng(d.id.length * 97);
-    for (let i = 0; i < count; i++) { const a = random() * Math.PI * 2, r = 3 + random() * 4; positions.set([d.x + Math.cos(a) * r, 1 + random() * height, d.z + Math.sin(a) * r], i * 3); }
-    const geometry = new THREE.BufferGeometry(); geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const points = new THREE.Points(geometry, new THREE.PointsMaterial({ color: "#ffd66b", map: glowTexture(), size: .9, transparent: true, opacity: .9, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
-    points.userData.base = positions.slice(); world.add(points); sparkles.push(points);
-  }
-
-  /** Main silhouette of each district; `bare` draws the unfinished concrete shell of stage 2. */
-  function mainBuilding(d: CityLocation, stage: number, body: THREE.Group, bare: boolean) {
-    const concrete = "#bdb8ae", wall = bare ? concrete : tint(d.color, .15), roof = bare ? "#a9a49a" : tint(d.color, -.35);
-    if (d.id === "academy") {
-      box(2.5, 1.7, 2, wall, 0, 1.05, 0, body);
-      if (!bare) { const r = mesh(new THREE.ConeGeometry(1.95, 1, 4), roof, 0, 2.4, 0, body); r.rotation.y = Math.PI / 4; }
-      else box(2.5, .12, 2, roof, 0, 1.95, 0, body);
-      if (!bare) { for (const x of [-.8, -.27, .27, .8]) cyl(.09, 1.4, "#ffffff", x, .9, 1.12, body, 12); box(2.3, .16, .5, "#ffffff", 0, 1.66, 1.12, body); box(.6, 1, .06, "#3e4a7a", 0, .7, 1.02, body); }
-      windows(-.95, .75, 1.01, 2, 2, body, false, bare); windows(.65, .75, 1.01, 2, 2, body, false, bare);
-      return 2.9;
-    }
-    if (d.id === "driver") {
-      box(2.9, 1.25, 1.8, wall, 0, .82, -.45, body); box(3.15, .2, 2.05, roof, 0, 1.55, -.45, body);
-      for (const x of [-.78, .78]) { box(1, .9, .05, bare ? "#55585f" : "#4a4f5e", x, .66, .47, body); if (!bare) for (let i = 0; i < 4; i++) box(1, .025, .07, "#8c92a3", x, .36 + i * .18, .5, body); }
-      if (!bare) { parkedCar(-.8, 1.4, "#ffd24d", 0, body); parkedCar(.8, 1.5, "#ffffff", 0, body); box(.08, 1.5, .08, "#6d7385", 1.85, .95, -.3, body); box(.7, .55, .12, "#ffd24d", 1.85, 1.7, -.3, body); }
-      return 1.9;
-    }
-    if (d.id === "crm") {
-      const high = bare ? 2.4 : stage === 3 ? 2.8 : stage === 4 ? 3.5 : 4.3;
-      box(2.3, high, 1.9, wall, 0, high / 2 + .2, 0, body); box(2.5, .18, 2.1, roof, 0, high + .3, 0, body);
-      windows(-.72, .8, .97, 4, Math.floor(high / .55) - 1, body, false, bare); windows(1.17, .8, -.6, 3, Math.floor(high / .55) - 1, body, true, bare);
-      if (!bare) { box(1.7, .5, 1.3, tint(d.color, .3), 0, high + .62, 0, body); box(.6, .75, .06, "#2f2a48", 0, .58, .97, body); box(1.1, .1, .45, tint(d.color, -.35), 0, 1.05, 1.15, body); }
-      return high + .9;
-    }
-    if (d.id === "dispatch") {
-      cyl(.72, 2.8, wall, 0, 1.6, 0, body, 10); cyl(1.25, .8, bare ? concrete : tint(d.color, .05), 0, 3.3, 0, body, 10); cyl(1.42, .18, roof, 0, 3.8, 0, body, 10);
-      box(2, .6, 1.5, wall, 0, .5, .4, body); return 4;
-    }
-    box(2.5, 1.4, 2, wall, 0, .9, 0, body); const dome = sphere(1.05, bare ? concrete : tint(d.color, .35), 0, 1.6, 0, body); dome.scale.set(1, .6, .85);
-    box(2.7, .16, 2.2, roof, 0, 1.65, 0, body); return 2.3;
-  }
-
-  function construction(d: CityLocation, body: THREE.Group) {
-    box(2.6, .14, 2.1, "#b7b2a8", 0, .27, 0, body);
-    for (const x of [-1.1, 0, 1.1]) for (const z of [-.85, .85]) box(.14, 1.3, .14, "#9aa0a8", x, .95, z, body);
-    box(2.5, .1, 2, "#9aa0a8", 0, 1.6, 0, body);
-    scaffold(2.5, 2, 1.8, body); crane(body, d.soon ? 4.6 : 3.8); siteDressing(body);
-    box(.8, .4, .5, "#d9dde4", -1.9, .45, -1.4, body);
-    return 2;
-  }
-
-  function expansion(d: CityLocation, stage: number, g: THREE.Group) {
-    lamp(-1.3, 2.3, g); lamp(1.3, 2.3, g);
-    spawn(g, "s-planter", -.6, 2.5, 1.5); spawn(g, "s-planter", .6, 2.5, 1.5);
-    if (d.id === "academy") {
-      spawn(g, "s-building-type-g", -2.35, -.5, 1.3, Math.PI / 2); spawn(g, "s-building-type-f", 2.35, -.5, 1.3, -Math.PI / 2);
-      spawn(g, "s-tree-large", -2.5, 1.7, 2.2); spawn(g, "s-tree-large", 2.5, 1.7, 2.2);
-      if (stage === 5) {
-        // Clock tower and an observatory behind the main hall.
-        box(.8, 3.6, .8, tint(d.color, .45), 0, 2, -1.9, g); box(.95, .15, .95, tint(d.color, -.35), 0, 3.85, -1.9, g);
-        const clock = cyl(.3, .06, "#fffbe8", 0, 3.2, -1.48, g, 24); clock.rotation.x = Math.PI / 2; clock.material = material("#fffbe8", { emissive: "#ffe9a0", emissiveIntensity: .8 });
-        mesh(new THREE.ConeGeometry(.62, .9, 4), tint(d.color, -.35), 0, 4.35, -1.9, g).rotation.y = Math.PI / 4;
-        const dome = sphere(.7, "#dff3ff", 2.3, 1.55, -1.7, g); dome.scale.y = .7; dome.material = material("#dff3ff", { emissive: "#8fd7ff", emissiveIntensity: .45, metalness: .4, roughness: .2 });
-        fountain(0, 2, g); neonRing(1.9, 3.2, "#7fb4ff", g); gem(5.1, g, "#bfe0ff");
-      }
-    } else if (d.id === "driver") {
-      spawn(g, "i-building-h", -2.1, -1.9, 1.5, 0); spawn(g, "i-building-i", 2.4, -1.9, 1.5, 0);
-      spawn(g, "i-shipping-container-a", 2.6, .9, .45, 0); spawn(g, "i-detail-tank", -2.5, .7, 1.2, Math.PI / 2);
-      parkedCar(-1.9, 1.9, "#ff6b6b", .3, g); parkedCar(2, 2, "#5b8def", -.3, g);
-      if (stage === 5) {
-        spawn(g, "i-solar-panel-portrait-group", -.6, -.45, .9, 0, 1.66); spawn(g, "i-solar-panel-portrait-group", .6, -.45, .9, 0, 1.66);
-        spawn(g, "i-windmill", -2.8, -.4, 1.6); spawn(g, "i-windmill", 2.9, -.3, 1.6);
-        // Glowing EV chargers and a canopy with an LED edge.
-        box(2.6, .08, 1, "#e7ecf2", 0, 1.5, 2.25, g); box(2.62, .05, .05, "#7fffe6", 0, 1.45, 2.76, g).material = material("#7fffe6", { emissive: "#39ffd8", emissiveIntensity: 1.3 });
-        for (const x of [-1, 0, 1]) { box(.08, 1.3, .08, "#c9ccd6", x, .85, 2.25, g); box(.18, .35, .12, "#39405a", x + .2, .45, 2.25, g); box(.12, .12, .02, "#7fffe6", x + .2, .52, 2.32, g).material = material("#7fffe6", { emissive: "#39ffd8", emissiveIntensity: 1.2 }); }
-        neonRing(2.1, 2.5, "#ffc861", g); gem(3.6, g);
-      }
-    } else if (d.id === "crm") {
-      spawn(g, "c-building-k", -2.45, -.4, 1.05, Math.PI / 2); spawn(g, "c-building-h", 2.35, -.5, 1.25, -Math.PI / 2);
-      parkedCar(-2.2, 1.9, "#ffd24d", .2, g); parkedCar(2.2, 1.9, "#ff6b6b", -.2, g);
-      if (stage === 5) {
-        spawn(g, "c-building-skyscraper-e", 0, -2.1, 1.25);
-        const top = 4.3 + .2;
-        const crown = box(1.9, .9, 1.5, "#bfe9ff", 0, top + 1.3, 0, g); crown.material = material("#bfe9ff", { emissive: "#7fd6ff", emissiveIntensity: .45, metalness: .5, roughness: .12, transparent: true, opacity: .9 });
-        box(2.32, .06, .06, "#7fffe6", 0, top - .1, .97, g).material = material("#7fffe6", { emissive: "#39ffd8", emissiveIntensity: 1.4 });
-        fountain(1.4, 2.1, g); neonRing(1.6, top + .9, "#b69cff", g, .15); gem(top + 2.5, g);
-        for (const [x, c] of [[-1.9, "#ff5b7a"], [-1.55, "#5b8def"]] as const) { cyl(.025, 1.6, "#c9ccd6", x, 1, 2.35, g, 6); box(.5, .28, .02, c, x + .26, 1.65, 2.35, g); }
-      }
-    }
-  }
-
   function building(d: CityLocation) {
     const stage = stages.get(d.id)!;
-    const g = new THREE.Group(); g.position.set(d.x, .2, d.z); g.scale.setScalar(DISTRICT_SCALE); g.rotation.y = Math.atan2(-d.x, -d.z); g.userData.district = d.id; world.add(g); districtGroups.set(d.id, g);
-    const radius = stage >= 4 ? 3.2 : 2.5;
-    cyl(radius, .3, stage <= 2 ? "#e4e2dc" : "#f4efe4", 0, .05, 0, g, 6);
-    const trim = stage <= 2 ? "#c9c6bd" : stage === 3 ? d.color : stage === 4 ? "#c7ccd6" : "#ffcf4d";
-    const rim = cyl(radius + .06, .12, trim, 0, -.05, 0, g, 6, ); rim.castShadow = false;
-    if (stage === 5) rim.material = material(trim, { emissive: "#ffb300", emissiveIntensity: .45, metalness: .5, roughness: .3 });
-    if (stage >= 4) { const inner = cyl(radius - .55, .02, tint(d.color, .7), 0, .21, 0, g, 6); inner.castShadow = false; }
-    const body = new THREE.Group(); g.add(body);
-    let height: number;
-    if (stage === 1) height = construction(d, body);
-    else if (stage === 2) { height = mainBuilding(d, stage, body, true); scaffold(2.7, 2.2, height, body); crane(body, height + 1.6); siteDressing(body); }
-    else { height = mainBuilding(d, stage, body, false); tree(-1.9, -.8, .55, g); tree(1.85, .9, .45, g); }
-    if (stage >= 4) expansion(d, stage, g);
-    if (stage === 5) addSparkles(d, height * DISTRICT_SCALE + 3);
-    for (let i = 0; i < 5; i++) { const star = mesh(new THREE.OctahedronGeometry(.16), i < stage ? "#ffcf4d" : "#d6d3cc", -.8 + i * .4, .45, radius - .35, g, i < stage ? { emissive: "#ffb300", emissiveIntensity: .45 } : undefined); star.rotation.z = .25; }
-    const ring = new THREE.Mesh(new THREE.TorusGeometry((radius + .45) * DISTRICT_SCALE, .2, 10, 96), new THREE.MeshBasicMaterial({ color: d.color, transparent: true, opacity: 0 }));
+    const { group: g, height } = architecture.landmark(d.id, stage, !!d.soon);
+    g.position.set(d.x, .2, d.z); g.scale.setScalar(DISTRICT_SCALE); g.rotation.y = Math.atan2(-d.x, -d.z);
+    g.userData.district = d.id; world.add(g); districtGroups.set(d.id, g);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(7, .11, 8, 96), new THREE.MeshBasicMaterial({ color: '#e9bf69', transparent: true, opacity: 0 }));
     ring.rotation.x = Math.PI / 2; ring.position.set(d.x, .45, d.z); world.add(ring); rings.set(d.id, ring);
-    // An invisible hit volume makes the whole district clickable, not only thin details.
-    const hit = new THREE.Mesh(new THREE.CylinderGeometry(radius * DISTRICT_SCALE, radius * DISTRICT_SCALE, 5 * DISTRICT_SCALE, 12), new THREE.MeshBasicMaterial({ visible: false }));
-    hit.position.set(d.x, 2.5 * DISTRICT_SCALE, d.z); hit.userData.district = d.id; world.add(hit); pickables.push(hit);
-        // Tall stage-5 additions (clock tower, skyscraper, wind turbines) must not hide the billboard.
-    const tallest = stage < 5 ? 0 : d.id === "academy" ? 5.6 : d.id === "crm" ? 5.6 : d.id === "driver" ? 3 : 0;
-    anchors.set(d.id, new THREE.Vector3(d.x, .2 + Math.max(height, tallest) * DISTRICT_SCALE + 1.2, d.z));
+    const hit = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, height * DISTRICT_SCALE, 12), new THREE.MeshBasicMaterial({ visible: false }));
+    hit.position.set(d.x, height * DISTRICT_SCALE / 2, d.z); hit.userData.district = d.id; world.add(hit); pickables.push(hit);
+    anchors.set(d.id, new THREE.Vector3(d.x, .2 + height * DISTRICT_SCALE + .7, d.z));
   }
   CITY_LOCATIONS.forEach(building);
 
@@ -447,14 +340,13 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     models = new Map(gltf.scenes.map(scene => [scene.name, scene]));
     modelBlocks();
     for (const slot of pending.splice(0)) spawn(slot.parent, slot.name, slot.x, slot.z, slot.scale, slot.rotation, slot.y, slot.fit);
-  }).catch(() => { if (!disposed) { pending.length = 0; simpleBlocks(); } }).finally(() => { modelsSettled = true; });
+    mergeStatic(scenery);
+  }).catch(() => { if (!disposed) { pending.length = 0; simpleBlocks(); mergeStatic(scenery); } }).finally(() => { modelsSettled = true; });
 
 
   // Little cars drive around the outer ring road.
-  const cars = ["#ff6b6b", "#ffd24d", "#5b8def"].map((color, i) => {
-    const car = new THREE.Group(); world.add(car);
-    car.scale.setScalar(2);
-    box(.42, .2, .75, color, 0, .08, 0, car); box(.36, .18, .38, "#39405a", 0, .26, -.04, car);
+  const cars = ["#e8c060", "#e8ede5", "#456e7c"].map((color, i) => {
+    const car = architecture.car(world, 0, 0, color); car.scale.setScalar(1.8); mergeStatic(car);
     return { car, t: i / 3 };
   });
   function moveCars(dt: number) {
@@ -472,12 +364,11 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const boards = new Map<DistrictId, { group: THREE.Group; canvas: HTMLCanvasElement; texture: THREE.CanvasTexture }>();
   for (const d of CITY_LOCATIONS) {
     const group = new THREE.Group(), anchor = anchors.get(d.id)!; group.position.copy(anchor); world.add(group);
-    for (const x of [-2.6, 2.6]) box(.22, 1.6, .22, "#5b6275", x, .8, 0, group);
-    box(9.6, 3.6, .3, "#3a3f52", 0, 3.3, -.2, group);
+
     const canvas = document.createElement("canvas"); canvas.width = 1024; canvas.height = 368;
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4;
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(9.2, 3.3), new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, side: THREE.DoubleSide }));
-    face.position.set(0, 3.3, 0); face.userData.district = d.id; group.add(face); pickables.push(face);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.5), new THREE.MeshBasicMaterial({ map: texture, transparent: true, toneMapped: false, side: THREE.DoubleSide }));
+    face.position.set(0, 1.5, 0); face.userData.district = d.id; group.add(face); pickables.push(face);
     boards.set(d.id, { group, canvas, texture });
   }
   function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -526,7 +417,6 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     while (azimuth - from.azimuth > Math.PI) azimuth -= Math.PI * 2;
     while (azimuth - from.azimuth < -Math.PI) azimuth += Math.PI * 2;
     tween = { from, to: { ...from, ...to, azimuth, polar: THREE.MathUtils.clamp(to.polar ?? from.polar, MIN_POLAR, MAX_POLAR), distance: THREE.MathUtils.clamp(to.distance ?? from.distance, MIN_DISTANCE, MAX_DISTANCE) }, start: performance.now(), duration: reduced ? 1 : duration };
-    autoRotate = false;
   }
   function stepTween(now: number) {
     if (!tween) return;
@@ -599,22 +489,25 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     }
   }
 
-  // Gentle idle spin until the first interaction.
-  let autoRotate = !reduced && !options.view && !(options.grown ?? []).length;
-  controls.addEventListener("start", () => { autoRotate = false; tween = null; host.dataset.dragging = "true"; });
+  // Direct manipulation takes priority over a camera transition.
+  controls.addEventListener("start", () => { tween = null; host.dataset.dragging = "true"; });
   controls.addEventListener("end", () => { delete host.dataset.dragging; options.onView(currentView()); });
   controls.addEventListener("change", () => {
     // Keep panning on the island.
     const t = controls.target, length = Math.hypot(t.x, t.z);
     if (length > PAN_RADIUS) { const shift = new THREE.Vector3(t.x, 0, t.z).multiplyScalar(PAN_RADIUS / length - 1); t.add(shift); camera.position.add(shift); }
-    t.y = 0;
+    t.y = THREE.MathUtils.clamp(t.y, 0, 5);
   });
 
-  let width = 0, height = 0;
+  let width = 0, height = 0, fitted = false;
+  let homeView = DEFAULT_VIEW;
   function resize() {
     width = host.clientWidth; height = host.clientHeight; if (!width || !height) return;
     renderer.setSize(width, height, false); camera.aspect = width / height;
-    camera.fov = width < 480 ? 50 : 36; camera.updateProjectionMatrix();
+    camera.fov = width < 480 ? 55 : 36; camera.updateProjectionMatrix();
+    homeView = { ...DEFAULT_VIEW, distance: Math.min(MAX_DISTANCE, Math.max(DEFAULT_VIEW.distance, 42 / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect))) };
+    if (!fitted && !options.view) applyView(homeView);
+    fitted = true;
   }
   drawBoards();
   const observer = new ResizeObserver(resize); observer.observe(host); resize();
@@ -624,10 +517,10 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   visibility.observe(host);
   function tick(now: number) {
     frame = 0; if (!visible || document.hidden) return;
+    if (mobile && now - last < 1000 / 30) { frame = requestAnimationFrame(tick); return; }
     const dt = Math.min(.05, (now - last) / 1000); last = now;
     if (!width || !height) resize();
     stepTween(now);
-    if (autoRotate) { spherical.setFromVector3(offset.copy(camera.position).sub(controls.target)); spherical.theta += dt * .12; camera.position.copy(controls.target).add(offset.setFromSpherical(spherical)); }
     controls.update();
     const pulse = reduced ? .5 : (Math.sin(now / 380) + 1) / 2;
     rings.forEach((ring, id) => {
@@ -637,17 +530,12 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     });
     if (!reduced) {
       moveCars(dt);
-      figure.rotation.y = Math.sin(now / 2400) * .45;
-      if (wave) wave.rotation.z = -.55 + Math.sin(now / 260) * .35;
-      for (const o of spinners) { if (o.userData.spinRing) o.rotation.z += dt * .9; else o.rotation.y += dt * 1.2; }
-      for (const points of sparkles) {
-        const base = points.userData.base as Float32Array, attr = points.geometry.getAttribute("position") as THREE.BufferAttribute;
-        for (let i = 0; i < attr.count; i++) attr.setY(i, base[i * 3 + 1] + Math.sin(now / 700 + i * 1.7) * .6);
-        attr.needsUpdate = true; (points.material as THREE.PointsMaterial).opacity = .55 + .35 * Math.sin(now / 400);
-      }
+      characterMixer?.update(dt);
+      if (characterMixer && waveAction && now >= nextWave) { idleAction?.fadeOut(.35); waveAction.reset().fadeIn(.35).play(); nextWave = now + 18000; }
+
     }
     stepGrowth(now, dt);
-    if (width && height && modelsSettled) { updateBoards(); renderer.render(scene, camera); if (!ready) { ready = true; options.onReady(); startGrowth(now); } }
+    if (width && height && modelsSettled) { updateBoards(); renderer.render(scene, camera); host.dataset.drawCalls = String(renderer.info.render.calls); host.dataset.triangles = String(renderer.info.render.triangles); if (!ready) { ready = true; options.onReady(); startGrowth(now); } }
     frame = requestAnimationFrame(tick);
   }
   const onVisible = () => { if (!document.hidden && !frame) { last = performance.now(); frame = requestAnimationFrame(tick); } };
@@ -664,15 +552,18 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     zoom(factor) { animateTo({ distance: currentView().distance * factor }, 320); },
     rotate(radians) { animateTo({ azimuth: currentView().azimuth + radians }, 420); },
     tilt(radians) { animateTo({ polar: currentView().polar + radians }, 320); },
-    reset() { animateTo(DEFAULT_VIEW, 700); },
+    reset() { animateTo(homeView, 700); },
+    focusMascot() { animateTo({ target: [0, 3, 0], azimuth: .12, polar: 1.12, distance: 22 }, 650); },
     dispose() {
       disposed = true; cancelAnimationFrame(frame); observer.disconnect(); visibility.disconnect(); controls.dispose();
       document.removeEventListener("visibilitychange", onVisible);
       renderer.domElement.removeEventListener("pointerdown", onDown); renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointermove", onHover); renderer.domElement.removeEventListener("pointerleave", onLeave);
       renderer.domElement.removeEventListener("webglcontextlost", lost);
-      scene.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); if (o.material instanceof THREE.MeshBasicMaterial) o.material.dispose(); } });
-      materials.forEach(m => m.dispose()); facadeMaterials.forEach(list => list[0].dispose()); facades.forEach(t => t.dispose()); boards.forEach(b => b.texture.dispose()); glow?.dispose(); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
+      const ownedMaterials = new Set<THREE.Material>();
+      scene.traverse(o => { if (o instanceof THREE.Mesh || o instanceof THREE.Points || o instanceof THREE.Sprite) { if ('geometry' in o) o.geometry.dispose(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => ownedMaterials.add(m)); } });
+      ownedMaterials.forEach(m => { Object.values(m).forEach(v => { if (v instanceof THREE.Texture) v.dispose(); }); m.dispose(); });
+      materials.forEach(m => m.dispose()); facadeMaterials.forEach(list => list[0].dispose()); facades.forEach(t => t.dispose()); boards.forEach(b => b.texture.dispose()); architecture.dispose(); environment.dispose(); characterRequest++; characterMixer?.stopAllAction(); disposeCharacter(figure); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
     },
   };
 }

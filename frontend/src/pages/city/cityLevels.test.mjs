@@ -11,7 +11,7 @@ test('each completed mission raises the building by one stage, up to five', () =
   assert.equal(DISTRICT_LEVEL_NAMES.length, MAX_DISTRICT_LEVEL);
 });
 
-test('districts that are not open yet stay a construction site', () => {
+test('districts that are not open yet stay at their initial stage', () => {
   assert.equal(districtLevel(4, true), 1);
 });
 

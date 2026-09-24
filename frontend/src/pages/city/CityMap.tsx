@@ -64,12 +64,9 @@ export function CityMap({ districts, missions, selected, onSelect, progressKey, 
     {!failed && ready && <span className="city-map-hint">Тяни — вращай · колесо или щипок — масштаб · правая кнопка или два пальца — сдвиг</span>}
     {!failed && <div className="city-map-tools">
       <div className="city-map-buttons" role="toolbar" aria-label="Управление картой" aria-orientation="vertical">
-        <button type="button" aria-label="Повернуть влево" onClick={() => control.current?.rotate(-Math.PI / 4)}>↺</button>
-        <button type="button" aria-label="Повернуть вправо" onClick={() => control.current?.rotate(Math.PI / 4)}>↻</button>
-        <button type="button" aria-label="Наклонить выше" onClick={() => control.current?.tilt(-.2)}>⤒</button>
-        <button type="button" aria-label="Наклонить ниже" onClick={() => control.current?.tilt(.2)}>⤓</button>
         <button type="button" aria-label="Приблизить" onClick={() => control.current?.zoom(.75)}>＋</button>
         <button type="button" aria-label="Отдалить" onClick={() => control.current?.zoom(1.33)}>－</button>
+        <button type="button" aria-label="Посмотреть помощника" onClick={() => control.current?.focusMascot()}>♙</button>
         <button type="button" aria-label="Исходный вид" onClick={() => control.current?.reset()}>⌂</button>
       </div>
     </div>}

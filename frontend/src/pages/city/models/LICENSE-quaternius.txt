@@ -1,0 +1,14 @@
+Operator characters: Quaternius, Ultimate Modular Men / Ultimate Modular Women.
+License: Creative Commons Zero (CC0 1.0 Universal).
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Official pack pages:
+https://quaternius.com/packs/ultimatemodularcharacters.html
+https://quaternius.com/packs/ultimatemodularwomen.html
+
+Original files: Individual Characters / glTF / Casual_2.gltf (men), Casual.gltf (women).
+Official download file IDs: 1Jn7kULNmrtqP8BUUL19h8MhbdOnwPFhv, 18b3WwlrwrFYWAM7BcnjWeIxKJyxAQiGh.
+Adaptation: keep Idle_Neutral and Wave animations, remove unused animation data,
+pack to self-contained GLB with scripts/prepare_city_characters.py.
+Clothing palette and an operator headset are applied by the scene at runtime.
+Free for personal, educational and commercial use. No remote runtime requests to the author.
