@@ -72,10 +72,16 @@
   /* Поверхности и текст                                              */
   /* ---------------------------------------------------------------- */
   --bg-primary: #f5f5f4;
-  --surface-primary: #ffffff;
-  --surface-secondary: #f0f0ef;
-  --surface-tertiary: #e7e7e5;
-  --surface-elevated: #ffffff;
+  /* Поверхности полупрозрачные, как в iOS: сквозь них проступает мягкий фон страницы. */
+  --surface-primary: rgba(255, 255, 255, 0.55);
+  --surface-secondary: rgba(20, 24, 32, 0.045);
+  --surface-tertiary: rgba(20, 24, 32, 0.08);
+  --surface-elevated: rgba(255, 255, 255, 0.8);
+  --surface-opaque: #ffffff;
+  --surface-highlight: rgba(255, 255, 255, 0.7);
+  --ambient-1: rgba(140, 178, 240, 0.62);
+  --ambient-2: rgba(226, 170, 222, 0.52);
+  --ambient-3: rgba(150, 214, 178, 0.5);
   --surface-hover: rgba(20, 24, 32, 0.035);
   --surface-pressed: rgba(20, 24, 32, 0.06);
 
@@ -216,10 +222,15 @@
     --gold-text: #f0c064;
 
     --bg-primary: #0b0c0e;
-    --surface-primary: #141518;
-    --surface-secondary: #1b1c20;
-    --surface-tertiary: #232429;
-    --surface-elevated: #232429;
+    --surface-primary: rgba(34, 35, 41, 0.58);
+    --surface-secondary: rgba(255, 255, 255, 0.05);
+    --surface-tertiary: rgba(255, 255, 255, 0.08);
+    --surface-elevated: rgba(44, 45, 52, 0.78);
+    --surface-opaque: #141518;
+    --surface-highlight: rgba(255, 255, 255, 0.08);
+    --ambient-1: rgba(70, 100, 170, 0.42);
+    --ambient-2: rgba(130, 70, 130, 0.32);
+    --ambient-3: rgba(50, 120, 95, 0.3);
     --surface-hover: rgba(255, 255, 255, 0.05);
     --surface-pressed: rgba(255, 255, 255, 0.08);
 
@@ -282,10 +293,15 @@
   --gold-text: #f0c064;
 
   --bg-primary: #0b0c0e;
-  --surface-primary: #141518;
-  --surface-secondary: #1b1c20;
-  --surface-tertiary: #232429;
-  --surface-elevated: #232429;
+  --surface-primary: rgba(34, 35, 41, 0.58);
+  --surface-secondary: rgba(255, 255, 255, 0.05);
+  --surface-tertiary: rgba(255, 255, 255, 0.08);
+  --surface-elevated: rgba(44, 45, 52, 0.78);
+  --surface-opaque: #141518;
+  --surface-highlight: rgba(255, 255, 255, 0.08);
+  --ambient-1: rgba(70, 100, 170, 0.42);
+  --ambient-2: rgba(130, 70, 130, 0.32);
+  --ambient-3: rgba(50, 120, 95, 0.3);
   --surface-hover: rgba(255, 255, 255, 0.05);
   --surface-pressed: rgba(255, 255, 255, 0.08);
 
