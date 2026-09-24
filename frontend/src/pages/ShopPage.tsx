@@ -92,7 +92,7 @@ const SHOP_ICONS: [RegExp, string, string][] = [
   [/коф|coffee/i, "☕", "#8b5e3c"],
   [/пицц|pizza/i, "🍕", "#e8743b"],
   [/обед|lunch|питан/i, "🍽️", "#3fa46a"],
-  [/розыгр|raffle|ticket|билет/i, "🎟️", "#7b5cff"],
+  [/розыгр|raffle|ticket|билет/i, "🎟️", "#f0522e"],
   [/звезд|star|бейдж/i, "⭐", "#f0a23a"],
   [/перерыв|break|отдых/i, "⏸️", "#35b6a6"],
   [/смен|shift|аукцион|доступ/i, "⏰", "#5b8def"],
@@ -104,7 +104,7 @@ const SHOP_ICONS: [RegExp, string, string][] = [
 export function shopIcon(item: { code: string; title: string; description?: string | null }): { icon: string; color: string } {
   const text = `${item.code} ${item.title} ${item.description ?? ""}`;
   const found = SHOP_ICONS.find(([pattern]) => pattern.test(text));
-  return found ? { icon: found[1], color: found[2] } : { icon: "🎁", color: "#7b5cff" };
+  return found ? { icon: found[1], color: found[2] } : { icon: "🎁", color: "#f0522e" };
 }
 
 export function ShopPage() {

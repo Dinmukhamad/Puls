@@ -33,8 +33,8 @@ function Export-PulsIcon([int]$size, [string]$name, [bool]$maskable = $false) {
     if (-not $maskable) { $graphics.SetClip($shape) }
     $gradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
         [System.Drawing.Point]::new(0,0), [System.Drawing.Point]::new(512,512),
-        [System.Drawing.ColorTranslator]::FromHtml('#927AF5'),
-        [System.Drawing.ColorTranslator]::FromHtml('#435AF0'))
+        [System.Drawing.ColorTranslator]::FromHtml('#FF7A45'),
+        [System.Drawing.ColorTranslator]::FromHtml('#E23D1C'))
     $graphics.FillRectangle($gradient,0,0,512,512)
     $highlight = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(17,255,255,255))
     $graphics.FillEllipse($highlight,-125,-230,700,590)
@@ -59,19 +59,19 @@ function Export-PulsIcon([int]$size, [string]$name, [bool]$maskable = $false) {
 }
 
 $svg = @"
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="tile" x2="1" y2="1"><stop stop-color="#927AF5"/><stop offset="1" stop-color="#435AF0"/></linearGradient><clipPath id="clip"><rect width="512" height="512" rx="112"/></clipPath></defs><g clip-path="url(#clip)"><rect width="512" height="512" fill="url(#tile)"/><ellipse cx="225" cy="65" rx="350" ry="295" fill="#fff" opacity=".067"/><path d="$markPath" transform="translate(0 5)" fill="none" stroke="#312385" stroke-opacity=".137" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="$markPath" fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="tile" x2="1" y2="1"><stop stop-color="#FF7A45"/><stop offset="1" stop-color="#E23D1C"/></linearGradient><clipPath id="clip"><rect width="512" height="512" rx="112"/></clipPath></defs><g clip-path="url(#clip)"><rect width="512" height="512" fill="url(#tile)"/><ellipse cx="225" cy="65" rx="350" ry="295" fill="#fff" opacity=".067"/><path d="$markPath" transform="translate(0 5)" fill="none" stroke="#7A1F0C" stroke-opacity=".137" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/><path d="$markPath" fill="none" stroke="#fff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/></g></svg>
 "@
 [System.IO.File]::WriteAllText((Join-Path $iconDirectory 'puls-light.svg'),$svg)
 [System.IO.File]::WriteAllText((Join-Path $iconDirectory '..\favicon.svg'),$svg)
-$dark = $svg.Replace('#927AF5','#34304E').Replace('#435AF0','#161C35').Replace('stroke="#fff"','stroke="#C1B5FF"')
+$dark = $svg.Replace('#FF7A45','#2A2C32').Replace('#E23D1C','#111214').Replace('stroke="#fff"','stroke="#FF7A55"')
 [System.IO.File]::WriteAllText((Join-Path $iconDirectory 'puls-dark.svg'),$dark)
-Export-PulsIcon 32 'puls-favicon-v2.png'
-Export-PulsIcon 192 'puls-app-192-v2.png'
-Export-PulsIcon 512 'puls-app-512-v2.png'
-Export-PulsIcon 512 'puls-maskable-v2.png' $true
-Export-PulsIcon 180 'apple-touch-icon-v2.png' $true
+Export-PulsIcon 32 'puls-favicon-v3.png'
+Export-PulsIcon 192 'puls-app-192-v3.png'
+Export-PulsIcon 512 'puls-app-512-v3.png'
+Export-PulsIcon 512 'puls-maskable-v3.png' $true
+Export-PulsIcon 180 'apple-touch-icon-v3.png' $true
 # Preserve older installed manifests while they transition to the new asset URLs.
-Copy-Item (Join-Path $iconDirectory 'puls-app-192-v2.png') (Join-Path $iconDirectory 'puls-192.png')
-Copy-Item (Join-Path $iconDirectory 'puls-app-512-v2.png') (Join-Path $iconDirectory 'puls-512.png')
-Copy-Item (Join-Path $iconDirectory 'puls-maskable-v2.png') (Join-Path $iconDirectory 'puls-maskable-512.png')
-Copy-Item (Join-Path $iconDirectory 'apple-touch-icon-v2.png') (Join-Path $iconDirectory 'apple-touch-icon.png')
+Copy-Item (Join-Path $iconDirectory 'puls-app-192-v3.png') (Join-Path $iconDirectory 'puls-192.png')
+Copy-Item (Join-Path $iconDirectory 'puls-app-512-v3.png') (Join-Path $iconDirectory 'puls-512.png')
+Copy-Item (Join-Path $iconDirectory 'puls-maskable-v3.png') (Join-Path $iconDirectory 'puls-maskable-512.png')
+Copy-Item (Join-Path $iconDirectory 'apple-touch-icon-v3.png') (Join-Path $iconDirectory 'apple-touch-icon.png')

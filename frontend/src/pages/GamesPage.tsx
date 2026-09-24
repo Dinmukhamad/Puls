@@ -10,7 +10,7 @@ import { PrizeStrip } from "./PrizeStrip";
 import "./games.css";
 import "./learning.css";
 
-const COLORS = ["#4f68ff","#7a5cfa","#278f78","#a57a26","#456cab","#7652bc","#34817c","#967640"];
+const COLORS = ["#e8431f","#2c2f36","#0f8a7f","#a8700c","#2f6fe4","#b8341a","#4a4e57","#0b7a71"];
 export function GamesPage({ administrative = false }: { administrative?: boolean }) {
   const [params, setParams] = useSearchParams(); const { atLeast } = useAuth();
   const tab = params.get("tab") === "raffles" ? "raffles" : "wheel";

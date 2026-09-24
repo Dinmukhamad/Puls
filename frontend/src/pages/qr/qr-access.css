@@ -1,13 +1,13 @@
 .qr-gate-page { width:min(600px,100%); margin:0 auto; padding:32px 20px max(32px,env(safe-area-inset-bottom)); }
 .qr-back { display:inline-flex; margin:0 0 24px; color:var(--text-secondary); font-size:14px; }
 .qr-gate-card,.qr-confirm-card { border:1px solid var(--border-strong); background:var(--surface-primary,var(--bg-secondary,#fff)); border-radius:28px; padding:32px; box-shadow:0 16px 60px #29204b0a; text-align:center; }
-.qr-gate-emblem { display:grid; place-items:center; width:72px; height:72px; border-radius:24px; margin:0 auto 22px; color:#8475df; background:#8475df17; }
+.qr-gate-emblem { display:grid; place-items:center; width:72px; height:72px; border-radius:24px; margin:0 auto 22px; color:var(--accent-primary); background:var(--accent-tint); }
 .qr-eyebrow { display:block; color:var(--text-tertiary); font-size:10px; font-weight:600; letter-spacing:1.2px; margin:16px 0 10px; }
 .qr-gate-card h1 { font-size:30px; line-height:1.2; letter-spacing:-.8px; margin:0 0 14px; }
 .qr-intro { color:var(--text-secondary); font-size:15px; line-height:1.7; margin:0; }
 .qr-gate-steps { text-align:left; padding:0; margin:30px 0; list-style:none; counter-reset:steps; }
 .qr-gate-steps li { display:flex; gap:12px; margin:16px 0; color:var(--text-secondary); font-size:14px; line-height:1.65; }
-.qr-gate-steps li::before { counter-increment:steps; content:counter(steps); display:grid; place-items:center; width:26px; height:26px; flex-shrink:0; background:#8475df17; color:#8475df; border-radius:9px; font-size:12px; font-weight:650; }
+.qr-gate-steps li::before { counter-increment:steps; content:counter(steps); display:grid; place-items:center; width:26px; height:26px; flex-shrink:0; background:var(--accent-tint); color:var(--accent-primary); border-radius:9px; font-size:12px; font-weight:650; }
 .qr-session-note { font-size:12px; line-height:1.7; color:var(--text-tertiary); margin:22px 0 0; text-align:center; }
 .qr-issued { margin:24px 0; display:flex; flex-direction:column; align-items:center; gap:10px; }
 .qr-image { display:block; max-width:100%; width:320px!important; height:auto!important; border:1px solid #e8eaf1; border-radius:16px; background:#fff; }
@@ -23,12 +23,12 @@
 .qr-approval-page { width:min(700px,100%); margin:0 auto; }
 .qr-camera { position:relative; overflow:hidden; height:clamp(280px,55dvh,520px); background:#10131d; border-radius:24px; color:white; }
 .qr-camera video { width:100%; height:100%; object-fit:cover; display:block; }
-.qr-camera-frame { position:absolute; width:min(65%,240px); aspect-ratio:1; top:45%; left:50%; transform:translate(-50%,-50%); border:3px solid #bbb0ff; border-radius:24px; box-shadow:0 0 0 1000px #080a1460; pointer-events:none; }
+.qr-camera-frame { position:absolute; width:min(65%,240px); aspect-ratio:1; top:45%; left:50%; transform:translate(-50%,-50%); border:3px solid var(--accent-bright); border-radius:24px; box-shadow:0 0 0 1000px #080a1460; pointer-events:none; }
 .qr-camera-hint { position:absolute; bottom:22px; left:16px; right:16px; text-align:center; font-size:13px; line-height:1.5; }
 .qr-camera-message { position:absolute; inset:0; background:#131521ec; padding:26px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; text-align:center; line-height:1.7; }
 .qr-confirm-card { display:flex; flex-direction:column; align-items:center; }
 .qr-confirm-card h2 { font-size:25px; line-height:1.3; margin:8px 0; overflow-wrap:anywhere; }
-.qr-recipient-info { padding:18px; border-radius:16px; margin:20px 0 4px; width:100%; background:#8475df0d; display:flex; flex-direction:column; gap:8px; font-size:14px; }
+.qr-recipient-info { padding:18px; border-radius:16px; margin:20px 0 4px; width:100%; background:var(--accent-tint); display:flex; flex-direction:column; gap:8px; font-size:14px; }
 .qr-recipient-info span,.qr-recipient-info small,.qr-recipient-info details { color:var(--text-secondary); line-height:1.6; }
 .qr-recipient-info details { font-size:12px; overflow-wrap:anywhere; }
 .qr-confirm-actions { display:flex; flex-direction:column; gap:10px; width:100%; margin-top:12px; }

@@ -623,6 +623,34 @@ a {
   color: var(--text-tertiary);
 }
 
+/* Цветная метка у подписи различает соседние показатели, не неся смысла статуса. */
+.kpi-grid > .kpi {
+  --kpi-mark: var(--accent-bright);
+}
+
+.kpi-grid > .kpi:nth-child(4n + 2) {
+  --kpi-mark: var(--accent-teal-bright);
+}
+
+.kpi-grid > .kpi:nth-child(4n + 3) {
+  --kpi-mark: var(--accent-blue);
+}
+
+.kpi-grid > .kpi:nth-child(4n + 4) {
+  --kpi-mark: var(--accent-amber-bright, var(--coin-color));
+}
+
+.kpi-grid > .kpi .kpi__label::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: var(--kpi-mark);
+  vertical-align: 0.05em;
+}
+
 .kpi--coin .kpi__value {
   color: var(--coin-color);
 }
@@ -683,7 +711,7 @@ a {
 .progress__fill {
   height: 100%;
   border-radius: var(--radius-pill);
-  background: var(--accent-primary);
+  background: var(--accent-bright);
   transition: width var(--motion-slow) var(--ease-standard);
 }
 
@@ -763,14 +791,18 @@ a {
 }
 
 .btn--primary {
-  background: var(--accent-primary);
-  color: var(--accent-on);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-fg);
 }
 
 @media (hover: hover) {
   .btn--primary:hover:not(:disabled) {
-    background: var(--puls-blue-hover);
+    background: var(--btn-primary-hover);
   }
+}
+
+.btn--primary:active:not(:disabled) {
+  background: var(--btn-primary-active);
 }
 
 .btn--secondary {
@@ -1782,6 +1814,11 @@ select.input {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+}
+
+/* Коины всегда золотые, даже когда сумма - ссылка на кошелёк. */
+a.hero__stat-value {
+  color: var(--gold-text);
 }
 
 .quick-actions {
