@@ -23,7 +23,7 @@ DISTRICTS = [
     {"id": "driver", "name": "Driver Simulator", "subtitle": "Путь водителя", "soon": False},
     {"id": "crm", "name": "CRM-центр", "subtitle": "На стороне водителя", "soon": False},
     {"id": "dispatch", "name": "Диспетчерская", "subtitle": "Следующая глава", "soon": True},
-    {"id": "opteo", "name": "Opteo", "subtitle": "Будущий район", "soon": True},
+    {"id": "oktell", "name": "Oktell", "subtitle": "Будущий район", "soon": True},
 ]
 # Conditions and destinations are server-owned. Editors can tune the curriculum,
 # but cannot inject arbitrary URLs or client-side completion rules.

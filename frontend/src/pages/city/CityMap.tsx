@@ -3,8 +3,8 @@ import type { CityDistrict, CityMission, DistrictId } from "../../api/city";
 import type { CityLabelInfo, CitySceneControl, CityView } from "./cityScene";
 import { districtLevel, grownDistricts } from "./cityLevels";
 
-const ICONS: Record<DistrictId, string> = { academy: "🎓", driver: "🚕", crm: "💬", dispatch: "📡", opteo: "🧭" };
-const COLORS: Record<DistrictId, string> = { academy: "#5b8def", driver: "#f0a23a", crm: "#7b5cff", dispatch: "#35b6a6", opteo: "#e86aa6" };
+const ICONS: Record<DistrictId, string> = { academy: "🎓", driver: "🚕", crm: "💬", dispatch: "📡", oktell: "🎧" };
+const COLORS: Record<DistrictId, string> = { academy: "#5b8def", driver: "#f0a23a", crm: "#7b5cff", dispatch: "#35b6a6", oktell: "#e86aa6" };
 
 /** `progressKey` remembers the levels this viewer has seen, so an upgrade is celebrated once. */
 export function CityMap({ districts, missions, selected, onSelect, progressKey }: { districts: CityDistrict[]; missions: CityMission[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string }) {

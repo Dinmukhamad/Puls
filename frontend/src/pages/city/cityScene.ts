@@ -22,7 +22,7 @@ export const CITY_LOCATIONS: CityLocation[] = [
   { id: "driver", x: -6.5, z: -16.5, color: "#f0a23a" },
   { id: "crm", x: 14, z: -9, color: "#7b5cff" },
   { id: "dispatch", x: 14.5, z: 12.5, color: "#35b6a6", soon: true },
-  { id: "opteo", x: -5.5, z: 17.5, color: "#e86aa6", soon: true },
+  { id: "oktell", x: -5.5, z: 17.5, color: "#e86aa6", soon: true },
 ];
 export const DEFAULT_VIEW: CityView = { azimuth: .55, polar: .86, distance: 80, target: [0, 0, 2] };
 /** District buildings are drawn in small units and scaled up to stand above the ordinary city blocks. */
