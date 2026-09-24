@@ -32,7 +32,7 @@ const staffLearning = (admin: boolean) => section("training", "Обучение"
   tab("/admin/learning?tab=results", "Результаты команды"),
   tab("/admin/learning-analytics", "Аналитика обучения"),
 ]);
-const team = (admin = false, supervisor = false) => section("team", admin ? "Пользователи и структура" : "Команда", UsersIcon, [
+const team = (admin = false, supervisor = false) => section("team", "Команда", UsersIcon, [
   tab("/admin/users", admin ? "Пользователи" : "Операторы"), tab("/admin/groups", supervisor ? "Моя группа" : "Группы"),
   tab("/admin/operators", "Показатели сотрудников"),
 ]);
@@ -40,11 +40,11 @@ const analytics = (supervisor = false) => section("analytics", "Аналитик
   tab("/analytics?tab=summary", "Сводка и сравнение"), tab("/analytics?tab=operators", "Операторы"), tab("/analytics?tab=quality", "Качество"),
   ...(supervisor ? [tab("/admin/periods", "Периоды"), tab("/admin/settings", "Правила и показатели")] : []),
 ]);
-const performance = (admin = false) => section("performance", "Производительность", InboxIcon, [
+const performance = (admin = false) => section("performance", "Показатели", InboxIcon, [
   tab("/admin/periods", "Расчёт и история периодов"), tab("/admin/settings?tab=metrics", "Рабочие метрики"),
   tab("/admin/settings?tab=rules", "Правила расчёта"), tab("/admin/settings?tab=nominations", "Номинации"), tab("/rating", "Рейтинг"),
 ], ["/admin/periods", "/rating", ...(admin ? [] : ["/admin/settings"])]);
-const motivation = (supervisor = false) => section("motivation", supervisor ? "Рейтинг и мотивация" : "Мотивация", StoreIcon, [
+const motivation = (supervisor = false) => section("motivation", "Мотивация", StoreIcon, [
   ...(supervisor ? [tab("/rating", "Рейтинг")] : []), tab("/admin/wallet", "Коины"),
   tab("/admin/levels", "Уровни"), tab("/admin/settings?tab=badges", "Достижения"),
   tab("/admin/store", "Товары магазина"), tab("/admin/requests", "Заказы и выдача"),
@@ -52,16 +52,17 @@ const motivation = (supervisor = false) => section("motivation", supervisor ? "�
 ], ["/admin/wallet", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
 const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summary", "Сводка"), ...personal]);
 
-/** Only major destinations enter the sidebar. Future modules extend tabs inside these sections. */
+/** Only major destinations enter the sidebar. Future modules extend tabs inside these sections.
+ * Section names are one or two short words and are the same on desktop and in the phone tab bar, so they must fit a tab. */
 export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
   trainer: [
     section("home", "Главная", HomeIcon, [tab("/trainer", "Учебная сводка")]),
-    section("team", "Пользователи", UsersIcon, [tab("/admin/users", "Операторы")]),
+    section("team", "Команда", UsersIcon, [tab("/admin/users", "Операторы")]),
     section("training", "Обучение", SparkIcon, [tab("/admin/learning", "Материалы"), tab("/admin/learning/city", "Миссии города"), tab("/training/city", "Город оператора"), tab("/training", "Пройти обучение")]),
-    section("driver", "Driver Simulator", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training/city?district=driver", "Тестовый запуск в городе")]),
-    section("learning_analytics", "Аналитика обучения", TrophyIcon, [tab("/admin/learning-analytics", "Результаты операторов"), tab("/admin/learning-analytics?view=driver", "Driver Simulator")]),
+    section("driver", "Симулятор", SparkIcon, [tab("/admin/learning?kind=simulator", "Сценарии"), tab("/training/city?district=driver", "Тестовый запуск в городе")]),
+    section("learning_analytics", "Аналитика", TrophyIcon, [tab("/admin/learning-analytics", "Результаты операторов"), tab("/admin/learning-analytics?view=driver", "Driver Simulator")]),
     QR_ACCESS_SECTION,
-    {...ACCOUNT_SECTION, label: "Мой кабинет"},
+    ACCOUNT_SECTION,
   ],
   operator: [
     section("home", "Главная", HomeIcon, personal.filter((item) => item.to !== "/progress")),
@@ -71,7 +72,7 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
     // и третьей вкладкой внутри «Наград» его каждый раз приходилось искать.
     // Право доступа прежнее — routeSection сопоставляет /games с разделом
     // rewards, так что отдельный пункт ничего не открывает сверх былого.
-    section("wheel", "Колесо WOW", WheelIcon, [tab("/games?tab=wheel", "Колесо WOW")], ["/games"]),
+    section("wheel", "Колесо", WheelIcon, [tab("/games?tab=wheel", "Колесо WOW")], ["/games"]),
     section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=raffles", "Розыгрыши")]),
     ACCOUNT_SECTION,
   ],
@@ -157,7 +158,7 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
     if (!tabs.length) return [];
     let { id, label } = item;
     if ((id === "performance" && !allowed.performance) || (id === "motivation" && !allowed.motivation)) { id = "results"; label = "Результаты"; }
-    if (id === "analytics" && !allowed.analytics) { id = "performance"; label = "Производительность"; }
+    if (id === "analytics" && !allowed.analytics) { id = "performance"; label = "Показатели"; }
     if (id === "motivation" && !allowed.results) label = "Мотивация";
     return [{ ...item, id, label, tabs, to: tabs[0].to, paths: Array.from(new Set(tabs.map((link) => link.to.split("?")[0]))) }];
   });

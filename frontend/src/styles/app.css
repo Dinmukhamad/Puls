@@ -143,6 +143,8 @@ a {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-glass);
+  /* Своя плоскость наложения: блик ниже содержимого, но выше фона. */
+  isolation: isolate;
 }
 
 /* Внутренний блик по верхней кромке даёт материалу толщину. */
@@ -152,6 +154,7 @@ a {
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
+  z-index: -1;
   background: linear-gradient(180deg, var(--glass-inner-highlight), transparent 42%);
 }
 
@@ -221,6 +224,7 @@ a {
   flex-direction: column;
   gap: var(--sp-4);
   z-index: 30;
+  border-color: var(--separator);
   transition: width var(--motion-normal) var(--ease-standard);
 }
 
@@ -2384,6 +2388,8 @@ select.input {
     justify-content: space-around;
     padding: 0 var(--sp-2);
     border-radius: var(--radius-2xl);
+    border-color: var(--separator);
+    box-shadow: var(--shadow-float);
     z-index: 60;
     transition: height var(--motion-normal) var(--ease-standard);
   }
@@ -2411,14 +2417,32 @@ select.input {
     min-width: 44px;
     min-height: 44px;
     border-radius: var(--radius-m);
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     font-size: 10px;
-    font-weight: 550;
+    font-weight: 600;
     transition: color var(--motion-fast) var(--ease-standard);
   }
 
   .tab.is-active {
     color: var(--accent-primary);
+  }
+
+  /* Активный раздел читается сразу: иконка стоит на мягкой брендовой плашке. */
+  .tab__icon {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 28px;
+    border-radius: 14px;
+    transition: background var(--motion-fast) var(--ease-standard);
+  }
+
+  .tab.is-active .tab__icon {
+    background: var(--accent-tint);
+  }
+
+  .tab.is-active .tab__label {
+    font-weight: 700;
   }
 
   .tab:active {

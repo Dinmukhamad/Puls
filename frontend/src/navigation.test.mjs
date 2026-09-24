@@ -9,7 +9,7 @@ const nav = await import(`data:text/javascript;base64,${Buffer.from(built.output
 
 test("trainer navigation stays within learning even with explicit grants", () => {
   const all = Object.fromEntries(Object.keys(nav.defaultAccess("admin")).map(key => [key, true]));
-  assert.deepEqual(nav.visibleNavigation("trainer", all).map(x => x.label), ["Главная", "Пользователи", "Обучение", "Driver Simulator", "Аналитика обучения", "QR-доступ", "Мой кабинет"]);
+  assert.deepEqual(nav.visibleNavigation("trainer", all).map(x => x.label), ["Главная", "Команда", "Обучение", "Симулятор", "Аналитика", "QR-доступ", "Профиль"]);
   assert.equal(nav.visibleNavigation("trainer")[0].to, "/trainer");
   for (const path of ["/admin/groups", "/admin/access", "/admin/sessions", "/admin/summary", "/progress", "/wallet", "/rating", "/analytics", "/shop", "/games"]) {
     assert.equal(nav.canVisit("trainer", path, all, true), false, path);
@@ -27,10 +27,10 @@ test("roles expose task-specific defaults with an account entry", () => {
   // «Колесо WOW» стоит отдельным пунктом, а не третьей вкладкой внутри
   // «Наград»: это ежедневное действие на минуту, и прятать его вглубь
   // значит каждый раз заставлять оператора вспоминать, где оно.
-  assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Колесо WOW", "Награды", "Профиль"]);
-  assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "Рейтинг и мотивация", "QR-доступ", "Профиль"]);
-  assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Производительность", "Обучение", "Мотивация", "Отчёты", "QR-доступ", "Профиль"]);
-  assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Пользователи и структура", "Производительность", "Аналитика", "Обучение", "Мотивация", "Система", "QR-доступ", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Колесо", "Награды", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "Мотивация", "QR-доступ", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Показатели", "Обучение", "Мотивация", "Отчёты", "QR-доступ", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Команда", "Показатели", "Аналитика", "Обучение", "Мотивация", "Система", "QR-доступ", "Профиль"]);
   assert.equal(nav.visibleNavigation("operator")[0].to, "/cabinet");
   assert.equal(nav.visibleNavigation("head")[0].to, "/admin/summary");
 });

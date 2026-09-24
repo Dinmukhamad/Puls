@@ -12,7 +12,6 @@ import { Avatar, IconButton } from "./ui";
 import "./section-navigation.css";
 
 const COLLAPSE_KEY = "puls.sidebar.collapsed";
-const MOBILE_LABELS: Record<string, string> = { team: "Команда", performance: "Показатели", driver: "Симулятор", wheel: "Колесо" };
 function initialCollapsed(): boolean {
   try { const saved = localStorage.getItem(COLLAPSE_KEY); if (saved !== null) return saved === "1"; } catch { /* Optional preference. */ }
   return window.innerWidth < 1024;
@@ -62,7 +61,7 @@ export function AppLayout() {
     </div></main>
 
     <GlassSurface as="nav" variant="prominent" className={compactTabBar ? "tabbar tabbar--compact" : "tabbar"} aria-label="Основные разделы, мобильное меню">
-      {primary.map((item) => <Link key={item.id} to={item.to} aria-label={item.label} aria-current={active?.id === item.id ? "page" : undefined} className={active?.id === item.id ? "tab is-active" : "tab"}><span className="tab__icon"><item.icon size={22} /></span><span className="tab__label">{MOBILE_LABELS[item.id] ?? item.label}</span></Link>)}
+      {primary.map((item) => <Link key={item.id} to={item.to} aria-label={item.label} aria-current={active?.id === item.id ? "page" : undefined} className={active?.id === item.id ? "tab is-active" : "tab"}><span className="tab__icon"><item.icon size={22} /></span><span className="tab__label">{item.label}</span></Link>)}
       {overflow.length > 0 && <button type="button" className={menuOpen || overflowActive ? "tab is-active" : "tab"} aria-label="Ещё разделы" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} onClick={() => setMenuOpen(true)}><span className="tab__icon"><MenuIcon size={22} /></span><span className="tab__label">Ещё</span></button>}
     </GlassSurface>
     {menuOpen && <Sheet id={menuId} title="Разделы Puls" onClose={closeMenu} size="s"><nav className="mobile-menu" aria-label="Все основные разделы">{items.map((item) => <Link key={item.id} to={item.to} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} onClick={closeMenu}><span className="nav-item__icon"><item.icon size={20} /></span><span>{item.label}</span></Link>)}</nav>{separateProfile && <Link to={ACCOUNT_SECTION.to} className="section-navigation__account" onClick={closeMenu}>{user && <Avatar name={user.full_name} id={user.id} size={32} />}<span>Мой профиль и настройки</span></Link>}</Sheet>}
