@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from string import ascii_letters, digits
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
@@ -11,6 +12,8 @@ from app.core.config import settings
 from app.core.phone import normalize_phone
 from app.models.enums import Role
 from app.schemas.common import ORMModel
+
+Gender = Literal["male", "female"]
 
 
 class Token(BaseModel):
@@ -49,6 +52,8 @@ class UserOut(ORMModel):
     group: GroupBrief | None = None
     created_at: datetime | None = None
     can_manage_credentials: bool | None = None
+    gender: Gender | None = None
+    guide_name: str | None = None
 
 
 class TrainingUserOut(ORMModel):
@@ -89,6 +94,7 @@ class UserCreate(PasswordMixin, PhoneMixin):
     role: Role = Role.OPERATOR
     group_id: int | None = Field(default=None, gt=0)
     hired_on: date | None = None
+    gender: Gender | None = None
 
     @field_validator("login", "full_name", mode="before")
     @classmethod
@@ -105,6 +111,7 @@ class UserUpdate(PhoneMixin):
     group_id: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
     hired_on: date | None = None
+    gender: Gender | None = None
 
     @model_validator(mode="after")
     def _required_fields_not_null(self) -> UserUpdate:
@@ -112,6 +119,29 @@ class UserUpdate(PhoneMixin):
             if name in self.model_fields_set and getattr(self, name) is None:
                 raise ValueError("ФИО, роль и статус не могут быть пустыми")
         return self
+
+
+class GuideUpdate(BaseModel):
+    """Свой помощник: пол фигуры в городе и имя вместо «Пульсар»."""
+
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    gender: Gender | None = None
+    guide_name: str | None = Field(default=None, max_length=40)
+
+    @field_validator("guide_name")
+    @classmethod
+    def _clean_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = " ".join(value.split())
+        if not value:
+            return None
+        if len(value) < 2:
+            raise ValueError("Имя помощника — хотя бы две буквы")
+        if not all(char.isalpha() or char in " -'" for char in value):
+            raise ValueError("В имени помощника можно использовать только буквы, пробел и дефис")
+        return value
 
 
 class PasswordChange(PasswordMixin):

@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { team, teamError, type TeamGroup, type TeamUserInput } from "../api/team";
-import type { Role, UserOut } from "../api/types";
+import type { Gender, Role, UserOut } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
@@ -113,11 +113,12 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
   const [role, setRole] = useState<Role>(target?.role ?? "operator");
   const [groupId, setGroupId] = useState(target?.group ? String(target.group.id) : "");
   const [hiredOn, setHiredOn] = useState(target?.hired_on ?? "");
+  const [gender, setGender] = useState<Gender | "">(target?.gender ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const save = useMutation({
     mutationFn: () => {
-      const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, phone: phone.trim() || null, role: trainer ? "operator" : role, group_id: !trainer && groupId ? Number(groupId) : null, hired_on: hiredOn || null };
+      const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, phone: phone.trim() || null, role: trainer ? "operator" : role, group_id: !trainer && groupId ? Number(groupId) : null, hired_on: hiredOn || null, ...(gender ? { gender } : {}) };
       return target ? team.updateUser(target.id, data) : team.createUser({ ...data, login: login.trim(), password });
     },
     onSuccess: () => {
@@ -137,6 +138,7 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
       {save.isError && <p role="alert" className="team-form-error">{teamError(save.error)}</p>}
       {!groupsReady && <p role="status" className="muted">Дождитесь загрузки групп. При ошибке закройте форму и повторите загрузку.</p>}
       <label className="field"><span className="field__label">ФИО</span><input className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required minLength={3} maxLength={255} /></label>
+      <fieldset className="field team-gender"><legend className="field__label">Пол{target ? "" : " · для фигуры в учебном городе"}</legend><div className="segmented" role="radiogroup">{([["female", "Женский"], ["male", "Мужской"]] as const).map(([value, label]) => <label key={value} className={gender === value ? "segmented__item is-active" : "segmented__item"}><input type="radio" name="team-gender" value={value} checked={gender === value} required={!target} onChange={() => setGender(value)} />{label}</label>)}</div></fieldset>
       {!target && <label className="field"><span className="field__label">Логин</span><input className="input" autoComplete="off" value={login} onChange={(e) => setLogin(e.target.value)} required minLength={3} maxLength={150} /></label>}
       <label className="field"><span className="field__label">Email · необязательно</span><input className="input" type="email" autoComplete="email" value={email} maxLength={255} onChange={(e) => setEmail(e.target.value)} /></label>
       <label className="field"><span className="field__label">Телефон</span><input className="input" type="tel" autoComplete="tel" placeholder="+7 700 123 45 67" value={phone} maxLength={40} onChange={(e) => setPhone(e.target.value)} /><span className="field__note">Нужен для входа в Driver Simulator. Один номер — один сотрудник. После смены номера потребуется новый код из Telegram.</span></label>

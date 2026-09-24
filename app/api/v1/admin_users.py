@@ -275,6 +275,7 @@ async def create_user(session: SessionDep, actor: UserCreator, payload: UserCrea
         role=payload.role,
         group_id=payload.group_id,
         hired_on=payload.hired_on,
+        gender=payload.gender,
         hashed_password=hash_password(payload.password),
     )
     session.add(user)

@@ -1,4 +1,5 @@
 """Пользователи, группы и коин-счета."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -56,6 +57,10 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     hired_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Пол задаётся при создании и выбирает фигуру оператора в центре учебного города.
+    gender: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    # Имя, которое оператор дал своему помощнику; заменяет «Пульсар» в подсказках.
+    guide_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     group: Mapped[Group | None] = relationship(
         "Group", foreign_keys=[group_id], back_populates="members"

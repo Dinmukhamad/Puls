@@ -8,6 +8,7 @@ import { CrmAppealList } from "./crm/CrmAppealList";
 import { CrmAppealDetail } from "./crm/CrmAppealDetail";
 import { CrmCategories } from "./crm/CrmCategories";
 import { PulsarGuide } from "./crm/PulsarGuide";
+import { useGuide } from "../guide";
 import { PulsarCoach } from "./crm/PulsarCoach";
 import { COACH_TOURS, type CoachTourId } from "./crm/coachTours";
 import "./crm/coach.css";
@@ -23,6 +24,7 @@ export function WorkSitesPage() {
   const catalog = useQuery({ queryKey: ["crm-catalog"], queryFn: crm.catalog, refetchInterval: 30000 });
   const editor = ["trainer", "head", "admin"].includes(user?.role ?? "");
   const [dirty, setDirty] = useState(false), [copy, setCopy] = useState<CrmAppeal>(), [formKey, setFormKey] = useState(0), [notice, setNotice] = useState("");
+  const guide = useGuide();
   const [coach, setCoach] = useState<CoachTourId | null>(null);
   const [forward, setForward] = useState("");
   const [selection, setSelection] = useState<string[]>([]), [helpRequest, setHelpRequest] = useState(0);
@@ -60,7 +62,7 @@ export function WorkSitesPage() {
   }, [catalog.data, sectionTour]); // eslint-disable-line react-hooks/exhaustive-deps
   const exit = () => { if (!dirty || window.confirm("В обращении есть несохранённые изменения. Вернуться в город?")) navigate("/training/city?district=crm"); };
   return <div className={`work-sites${coach ? " is-coaching" : ""}`} ref={shell}>
-    <header className="work-sites-heading"><button onClick={exit}>← Мой город</button><h1>Рабочие сайты</h1><span className="work-sites-training">Учебная среда</span><button className="work-sites-guide-button" onClick={() => startCoach(view === "drivers" ? "drivers" : "appeals")}>✦ Помощь Пульсара</button></header>
+    <header className="work-sites-heading"><button onClick={exit}>← Мой город</button><h1>Рабочие сайты</h1><span className="work-sites-training">Учебная среда</span><button className="work-sites-guide-button" onClick={() => startCoach(view === "drivers" ? "drivers" : "appeals")}>✦ {guide.text("Помощь Пульсара")}</button></header>
     <div className="work-browser"><nav className="work-browser-tabs" aria-label="Рабочие сайты"><button className="is-active" aria-current="page" onClick={() => {}}> <span className="crm-favicon">i</span> CRM-система <span className="work-tab-dot" /></button><button disabled title="Будет доступна позже">▧ Диспетчерская <small>Скоро</small></button><button disabled title="Новые рабочие сайты появятся позже">＋ Другие сайты</button></nav>
     <div className="work-browser-address"><button aria-label="Назад к обращениям" disabled={view === "list" && !id} onClick={() => { if (dirty && !window.confirm("Покинуть форму без сохранения?")) return; setForward(params.toString()); go("", true); }}>←</button><button aria-label="Вперёд" disabled={!forward || view !== "list" || !!id} onClick={() => { go(forward); setForward(""); }}>→</button><button aria-label="Обновить данные CRM" onClick={() => { client.invalidateQueries({ queryKey: ["crm-catalog"] }); client.invalidateQueries({ queryKey: ["crm-appeals"] }); client.invalidateQueries({ queryKey: ["crm-appeal"] }); setNotice("Данные обновляются. Введённые поля сохранены в форме."); }}>⟳</button><div className="work-address-text"><span aria-hidden="true">▣</span><span>{view === "drivers" ? `crm.training / водители / учётные записи${currentDriver ? ` / ${currentDriver.id}${driverScreen && driverScreen !== "details" ? ` / ${driverScreen}` : ""}` : ""}` : `crm.training / обращения${view === "create" ? " / создать" : view === "categories" ? " / категории" : id ? ` / ${id}` : ""}`}</span><small>Учебная копия</small></div><button aria-label="Развернуть окно" onClick={() => { const action = document.fullscreenElement ? document.exitFullscreen() : shell.current?.requestFullscreen(); action?.catch(() => setNotice("Полноэкранный режим недоступен в этом браузере.")); }}>⛶</button></div>
     <div className="crm-app"><header className="crm-header"><button className="crm-logo" onClick={() => go("")}>iTaxi</button><span>CRM-система</span><div className="crm-account"><span className="crm-avatar">{user?.full_name.split(" ").filter(Boolean).slice(0, 2).map(word => word[0]).join("")}</span><strong>{user?.full_name}</strong></div></header>

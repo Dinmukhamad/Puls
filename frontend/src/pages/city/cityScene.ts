@@ -13,9 +13,12 @@ export interface CitySceneOptions {
   levels: Record<string, number>; selected: DistrictId; view?: CityView; labels: CityLabelInfo[];
   /** Districts that levelled up since the last visit: they grow in with a burst of confetti. */
   grown?: DistrictId[];
+  /** Фигура в центре площади: робот Пульсар или оператор выбранного пола с именем помощника. */
+  mascot?: CityMascot;
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
 }
-export interface CitySceneControl { dispose: () => void; select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void; zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void }
+export interface CityMascot { gender: "male" | "female" | null; name: string }
+export interface CitySceneControl { setMascot: (mascot: CityMascot) => void; dispose: () => void; select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void; zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void }
 
 export const CITY_LOCATIONS: CityLocation[] = [
   { id: "academy", x: -17, z: 2, color: "#5b8def" },
@@ -185,14 +188,71 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     }
   }
 
-  // Pulsar statue in the square.
-  const bot = new THREE.Group(); bot.position.set(0, .3, 0); bot.scale.setScalar(2.4); world.add(bot);
-  cyl(.8, .35, "#dddee0", 0, .17, 0, bot, 32);
-  const head = sphere(.55, "#b1b4b9", 0, 1.05, 0, bot); head.scale.set(1.1, .92, .8);
-  const face = sphere(.42, "#22242a", 0, 1.08, .26, bot); face.scale.set(1, .64, .35);
-  sphere(.08, "#9ff5ea", -.16, 1.12, .4, bot); sphere(.08, "#9ff5ea", .16, 1.12, .4, bot);
-  cyl(.04, .32, "#b6b9be", 0, 1.6, 0, bot); sphere(.09, "#ffd976", 0, 1.8, 0, bot);
-  sphere(.28, "#9a9ea6", 0, .52, 0, bot);
+  // Центр площади: робот Пульсар или оператор, которого выбрал пользователь, с табличкой имени.
+  const mascotRoot = new THREE.Group(); mascotRoot.position.set(0, .3, 0); mascotRoot.scale.setScalar(2.4); world.add(mascotRoot);
+  cyl(.8, .35, "#dddee0", 0, .17, 0, mascotRoot, 32);
+  let figure = new THREE.Group(), wave: THREE.Object3D | null = null, nameTag: THREE.Sprite | null = null;
+  function clearFigure() {
+    figure.traverse(o => { if (o instanceof THREE.Mesh) o.geometry.dispose(); });
+    mascotRoot.remove(figure); figure = new THREE.Group(); mascotRoot.add(figure); wave = null;
+  }
+  function buildRobot() {
+    const head = sphere(.55, "#b1b4b9", 0, 1.05, 0, figure); head.scale.set(1.1, .92, .8);
+    const face = sphere(.42, "#22242a", 0, 1.08, .26, figure); face.scale.set(1, .64, .35);
+    sphere(.08, "#9ff5ea", -.16, 1.12, .4, figure); sphere(.08, "#9ff5ea", .16, 1.12, .4, figure);
+    cyl(.04, .32, "#b6b9be", 0, 1.6, 0, figure); sphere(.09, "#ffd976", 0, 1.8, 0, figure);
+    sphere(.28, "#9a9ea6", 0, .52, 0, figure);
+  }
+  function buildOperator(gender: "male" | "female") {
+    const skin = "#f1c6a0", hair = gender === "female" ? "#4a2c1d" : "#2d241f", shirt = gender === "female" ? "#e2687f" : "#3f78d8", pants = "#2f3442", dark = "#22242a";
+    for (const side of [-1, 1]) {
+      box(.17, .08, .3, dark, side * .12, .39, .04, figure);
+      cyl(.085, .42, gender === "female" ? skin : pants, side * .12, .62, 0, figure);
+    }
+    if (gender === "female") mesh(new THREE.CylinderGeometry(.2, .31, .32, 24), pants, 0, .8, 0, figure);
+    mesh(new THREE.CylinderGeometry(.2, .24, .52, 24), shirt, 0, 1.1, 0, figure);
+    box(.09, .06, .02, "#ffd21f", .1, 1.2, .225, figure);
+    const left = cyl(.06, .44, shirt, -.29, 1.07, 0, figure); left.rotation.z = .16;
+    sphere(.07, skin, -.33, .83, 0, figure);
+    // Правая рука приветственно машет: вращается вокруг плеча.
+    const shoulder = new THREE.Group(); shoulder.position.set(.26, 1.3, 0); figure.add(shoulder);
+    const arm = cyl(.06, .44, shirt, 0, .22, 0, shoulder); arm.rotation.z = 0; sphere(.075, skin, 0, .47, 0, shoulder);
+    shoulder.rotation.z = -.55; wave = shoulder;
+    cyl(.07, .1, skin, 0, 1.4, 0, figure);
+    sphere(.26, skin, 0, 1.62, 0, figure);
+    for (const side of [-1, 1]) sphere(.032, dark, side * .09, 1.65, .235, figure);
+    const cap = mesh(new THREE.SphereGeometry(.28, 20, 12, 0, Math.PI * 2, 0, Math.PI * .46), hair, 0, 1.62, -.01, figure); cap.rotation.x = -.18;
+    if (gender === "female") {
+      mesh(new THREE.CylinderGeometry(.25, .28, .46, 20, 1, true, Math.PI * .6, Math.PI * .8), hair, 0, 1.5, -.02, figure);
+      sphere(.12, hair, 0, 1.6, -.3, figure);
+    }
+    // Гарнитура оператора: дуга, амбушюры и микрофон.
+    const band = mesh(new THREE.TorusGeometry(.29, .025, 8, 28, Math.PI), dark, 0, 1.63, 0, figure); band.rotation.z = 0;
+    for (const side of [-1, 1]) { const cup = cyl(.08, .07, dark, side * .29, 1.62, 0, figure); cup.rotation.z = Math.PI / 2; }
+    const boom = cyl(.016, .26, dark, .2, 1.5, .15, figure); boom.rotation.set(Math.PI / 2.6, 0, .9);
+    sphere(.04, "#ffd21f", .09, 1.46, .25, figure);
+  }
+  function drawNameTag(name: string) {
+    const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.font = "700 60px system-ui, -apple-system, Segoe UI, sans-serif";
+    const width = Math.min(900, Math.ceil(ctx.measureText(name).width) + 150);
+    canvas.width = width; canvas.height = 128;
+    ctx.font = "700 60px system-ui, -apple-system, Segoe UI, sans-serif";
+    ctx.fillStyle = "#17191eea"; ctx.beginPath(); ctx.roundRect(4, 14, width - 8, 100, 50); ctx.fill();
+    ctx.fillStyle = "#ffd21f"; ctx.beginPath(); ctx.arc(62, 64, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#ffffff"; ctx.textBaseline = "middle"; ctx.fillText(name, 96, 66);
+    const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+    if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); world.remove(nameTag); }
+    nameTag = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthWrite: false }));
+    nameTag.scale.set(1.35 * width / 128, 1.35, 1); nameTag.position.set(0, 6.4, 0); nameTag.renderOrder = 5; world.add(nameTag);
+  }
+  function setMascot(next: CityMascot) {
+    clearFigure();
+    if (next.gender) buildOperator(next.gender); else buildRobot();
+    drawNameTag(next.name);
+  }
+  setMascot(options.mascot ?? { gender: null, name: "Пульсар" });
 
   // Kenney models (CC0) are cloned on demand; a slot with fit > 0 is scaled to that footprint.
   let models: Map<string, THREE.Object3D> | null = null;
@@ -577,6 +637,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     });
     if (!reduced) {
       moveCars(dt);
+      figure.rotation.y = Math.sin(now / 2400) * .45;
+      if (wave) wave.rotation.z = -.55 + Math.sin(now / 260) * .35;
       for (const o of spinners) { if (o.userData.spinRing) o.rotation.z += dt * .9; else o.rotation.y += dt * 1.2; }
       for (const points of sparkles) {
         const base = points.userData.base as Float32Array, attr = points.geometry.getAttribute("position") as THREE.BufferAttribute;
@@ -596,6 +658,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   renderer.domElement.addEventListener("webglcontextlost", lost);
 
   return {
+    setMascot,
     select(id) { if (id === selected) return; selected = id; drawBoards(); focus(id); },
     setLabels(next) { labels = next; drawBoards(); },
     zoom(factor) { animateTo({ distance: currentView().distance * factor }, 320); },
@@ -609,7 +672,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       renderer.domElement.removeEventListener("pointermove", onHover); renderer.domElement.removeEventListener("pointerleave", onLeave);
       renderer.domElement.removeEventListener("webglcontextlost", lost);
       scene.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); if (o.material instanceof THREE.MeshBasicMaterial) o.material.dispose(); } });
-      materials.forEach(m => m.dispose()); facadeMaterials.forEach(list => list[0].dispose()); facades.forEach(t => t.dispose()); boards.forEach(b => b.texture.dispose()); glow?.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
+      materials.forEach(m => m.dispose()); facadeMaterials.forEach(list => list[0].dispose()); facades.forEach(t => t.dispose()); boards.forEach(b => b.texture.dispose()); glow?.dispose(); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
     },
   };
 }

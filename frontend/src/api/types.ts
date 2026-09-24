@@ -55,7 +55,13 @@ export interface UserOut {
   is_developer: boolean;
   hired_on: string | null;
   group: GroupBrief | null;
+  /** Фигура оператора в центре учебного города. */
+  gender?: Gender | null;
+  /** Имя, которое оператор дал помощнику вместо «Пульсар». */
+  guide_name?: string | null;
 }
+
+export type Gender = "male" | "female";
 
 export interface Page<T> {
   items: T[];

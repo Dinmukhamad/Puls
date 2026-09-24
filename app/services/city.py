@@ -262,6 +262,8 @@ async def dashboard(session, user, *, inspecting=False):
         "revision": config["revision"],
         "user_id": user.id,
         "full_name": user.full_name,
+        "gender": user.gender,
+        "guide_name": user.guide_name,
         "preview": not operator,
         "inspecting": inspecting,
         "can_claim": operator and not inspecting,

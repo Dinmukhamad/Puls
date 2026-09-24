@@ -1,5 +1,5 @@
 import { ApiError, buildQuery, request } from "./client";
-import type { DashboardOut, Page, Role, ShopRequestOut, TransactionOut, UserBrief, UserOut } from "./types";
+import type { Gender, DashboardOut, Page, Role, ShopRequestOut, TransactionOut, UserBrief, UserOut } from "./types";
 
 export interface TeamGroup {
   id: number;
@@ -18,6 +18,7 @@ export interface TeamUserInput {
   role: Role;
   group_id: number | null;
   hired_on: string | null;
+  gender?: Gender | null;
 }
 
 export interface TeamUserCreate extends TeamUserInput {

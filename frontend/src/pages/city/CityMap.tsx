@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { CityDistrict, CityMission, DistrictId } from "../../api/city";
-import type { CityLabelInfo, CitySceneControl, CityView } from "./cityScene";
+import type { CityMascot, CityLabelInfo, CitySceneControl, CityView } from "./cityScene";
 import { districtLevel, grownDistricts } from "./cityLevels";
 
 const ICONS: Record<DistrictId, string> = { academy: "🎓", driver: "🚕", crm: "💬", dispatch: "📡", oktell: "🎧" };
 const COLORS: Record<DistrictId, string> = { academy: "#5b8def", driver: "#f0a23a", crm: "#7b5cff", dispatch: "#35b6a6", oktell: "#e86aa6" };
 
 /** `progressKey` remembers the levels this viewer has seen, so an upgrade is celebrated once. */
-export function CityMap({ districts, missions, selected, onSelect, progressKey }: { districts: CityDistrict[]; missions: CityMission[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string }) {
+export function CityMap({ districts, missions, selected, onSelect, progressKey, mascot }: { districts: CityDistrict[]; missions: CityMission[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot }) {
+  const mascotRef = useRef(mascot); mascotRef.current = mascot;
   const host = useRef<HTMLDivElement>(null);
   const control = useRef<CitySceneControl>();
   const view = useRef<CityView>();
@@ -34,7 +35,7 @@ export function CityMap({ districts, missions, selected, onSelect, progressKey }
     void import("./cityScene").then(({ createCityScene }) => {
       if (cancelled || !host.current) return;
       control.current = createCityScene(host.current, {
-        levels: JSON.parse(levelKey), selected: selectedRef.current, view: view.current, labels: labelsRef.current, grown,
+        levels: JSON.parse(levelKey), selected: selectedRef.current, view: view.current, labels: labelsRef.current, grown, mascot: mascotRef.current,
         onSelect: id => selectRef.current(id), onView: value => { view.current = value; },
         onReady: () => { if (!cancelled) setReady(true); }, onLost: () => { if (!cancelled) setFailed(true); },
       });
@@ -43,6 +44,7 @@ export function CityMap({ districts, missions, selected, onSelect, progressKey }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuilt only when mission progress changes
   }, [levelKey]);
   useEffect(() => { control.current?.select(selected); }, [selected]);
+  useEffect(() => { if (mascot) control.current?.setMascot(mascot); }, [mascot?.gender, mascot?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setLabels(JSON.parse(labelsKey)); }, [labelsKey]);
   function key(event: KeyboardEvent) {
     const c = control.current; if (!c) return;

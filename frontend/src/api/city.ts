@@ -5,7 +5,7 @@ export type MissionState = "available" | "in_progress" | "ready" | "locked" | "c
 export interface MissionDefinition { title: string; description: string; pulsar: string; target: number; xp: number; coins: number; enabled: boolean; prerequisite: string | null }
 export interface CityMission extends MissionDefinition { key: string; district: DistrictId; objective: string; path: string; current: number; state: MissionState; claimed_at: string | null }
 export interface CityDistrict { id: DistrictId; name: string; subtitle: string; soon: boolean }
-export interface CityData { revision: number; user_id: number; full_name: string; preview: boolean; inspecting: boolean; can_claim: boolean; districts: CityDistrict[]; missions: CityMission[]; xp: number; level: number; level_progress: number; level_target: number; balance: number }
+export interface CityData { revision: number; user_id: number; full_name: string; gender?: "male" | "female" | null; guide_name?: string | null; preview: boolean; inspecting: boolean; can_claim: boolean; districts: CityDistrict[]; missions: CityMission[]; xp: number; level: number; level_progress: number; level_target: number; balance: number }
 export interface CitySettings { revision: number; missions: Record<string, MissionDefinition> }
 export interface CityReward { already_claimed: boolean; title: string; xp: number; coins: number }
 export interface CityParticipant { user_id: number; full_name: string; login: string; completed: number; total: number; ready: number; xp: number; level: number; orders: number; appeals: number; missions: Pick<CityMission, "key" | "title" | "state" | "current" | "target">[] }

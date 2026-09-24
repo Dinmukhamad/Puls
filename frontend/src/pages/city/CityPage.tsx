@@ -11,6 +11,8 @@ import { DISTRICT_LEVEL_NAMES, MAX_DISTRICT_LEVEL, districtLevel } from "./cityL
 import "../crm/pulsar.css";
 import "./city.css";
 import { DriverEntry } from "../DriverEntry";
+import { CityGuideSetup, GUIDE_AVATAR } from "./CityGuideSetup";
+import { DEFAULT_GUIDE, guideName, guideText } from "../../guide";
 
 export function CityPage() {
   const { user } = useAuth(), client = useQueryClient();
@@ -31,12 +33,15 @@ export function CityPage() {
   function selectMission(key: string) { const p = new URLSearchParams(params); p.set("mission", key); setParams(p, {replace:true}); claim.reset(); }
   const parent = data.missions.find(m => m.key === mission?.prerequisite);
   const actionable = mission && !["locked", "unavailable"].includes(mission.state);
+  // В чужом городе — фигура и помощник того оператора, в своём — свои.
+  const mascot = data.inspecting ? { gender: data.gender ?? null, name: data.guide_name || DEFAULT_GUIDE } : { gender: user?.gender ?? null, name: guideName(user) };
   return <div className="city-page">
     <header className="city-heading"><div><span className="city-eyebrow">МИССИИ / ГОРОД НАВЫКОВ</span><h1>Мой город</h1><p>{data.preview ? "Предпросмотр для сотрудника · без наград" : `${data.full_name.split(" ")[0]}, каждый навык меняет твой город.`}</p></div><div className="city-heading-actions">{user?.role !== "operator" && <Link className="city-secondary" to="/admin/learning/city">Управление миссиями</Link>}<Link className="city-secondary" to="/training">Обучение →</Link></div></header>
     {data.inspecting && <div className="city-viewing">Город оператора: <strong>{data.full_name}</strong><Link to="/admin/learning/city">← К участникам</Link></div>}
     <div className="city-profile-strip"><div className="city-level-mark">{data.level}</div><div className="city-level-copy"><strong>{data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города"}</strong><span>Уровень города {data.level} · {data.xp} XP</span><div className="city-meter" role="progressbar" aria-label="Опыт до следующего уровня города" aria-valuemin={0} aria-valuemax={data.level_target} aria-valuenow={data.level_progress}><span style={{width:`${data.level_progress/data.level_target*100}%`}} /></div></div><div className="city-profile-stat"><strong>{completed}<small> / {total}</small></strong><span>миссий пройдено</span></div>{!data.preview && <div className="city-profile-stat"><strong>{data.balance.toLocaleString("ru-RU")} <small>◈</small></strong><span>коинов в кошельке</span></div>}</div>
+    {!data.inspecting && <CityGuideSetup />}
     {query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
-    <div className="city-layout"><CityMap districts={data.districts} missions={data.missions} selected={selected.id} onSelect={selectDistrict} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+    <div className="city-layout"><CityMap mascot={mascot} districts={data.districts} missions={data.missions} selected={selected.id} onSelect={selectDistrict} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
       <aside className="city-mission" aria-live="polite">
         <div className="city-mission-top"><span className="city-eyebrow">{selected.name}</span><span className="city-state" data-state={mission?.state}>{selected.soon ? "СКОРО" : mission ? MISSION_STATES[mission.state] : "Нет заданий"}</span></div>
         {(() => { const level = districtLevel(missions.filter(m => m.state === "completed").length, selected.soon); return <div className="city-building-level" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{selected.soon ? "Район строится и откроется позже" : level < MAX_DISTRICT_LEVEL ? "Каждая пройденная миссия района улучшает здание" : "Максимальный уровень — район стал легендой"}</small></div>; })()}
@@ -48,7 +53,7 @@ export function CityPage() {
           <div className="city-objective"><span>{mission.objective}</span><strong>{mission.current} / {mission.target}</strong><div className="city-meter"><span style={{width:`${mission.current/mission.target*100}%`}} /></div></div>
           {mission.state === "locked" && <p className="city-prerequisite">Сначала завершите «{parent?.title}» и получите награду.</p>}
           <div className="city-rewards"><span>✦ {mission.xp} XP</span>{mission.coins > 0 && <span>◈ {mission.coins} коинов</span>}<span>{mission.state === "completed" ? "Получено" : "За прохождение"}</span></div>
-          <div className="city-guide"><PulsarFace /><p>{mission.pulsar}</p></div>
+          <div className="city-guide">{mascot.gender ? <span className="city-guide-avatar" aria-hidden="true">{GUIDE_AVATAR[mascot.gender]}</span> : <PulsarFace />}<p><b>{mascot.name}:</b> {guideText(mission.pulsar, mascot.name)}</p></div>
           {claim.isError && <p className="city-error" role="alert">{claim.error.message}</p>}
           {mission.state === "ready" && data.can_claim ? <button className="city-action" disabled={claim.isPending} onClick={() => claim.mutate(mission.key)}>{claim.isPending ? "Проверяем результат…" : mission.key === "welcome" ? "Начать свой путь →" : "Завершить и получить награду →"}</button> : actionable && mission.key !== "welcome" && !data.inspecting ? selected.id === "driver" ? <button className="city-action" onClick={() => setDriverLaunch(true)}>{mission.state === "completed" ? "Вернуться к практике →" : "Перейти к заданию →"}</button> : <Link className="city-action" to={mission.path}>{mission.state === "completed" ? "Вернуться к практике →" : "Перейти к заданию →"}</Link> : <button className="city-action" disabled>{mission.state === "unavailable" ? "Миссия на паузе" : data.inspecting ? "Просмотр прогресса" : data.preview ? "Предпросмотр без наград" : mission.state === "completed" ? "Миссия пройдена" : "Завершите предыдущую миссию"}</button>}
           <p className="city-fine">{selected.id === "crm" ? "Рабочие сайты открываются оператору через QR." : "Завершённые ранее действия тоже учитываются."}</p>

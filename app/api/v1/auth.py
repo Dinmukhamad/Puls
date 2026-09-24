@@ -24,7 +24,14 @@ from app.core.security import (
 from app.models.session import LoginSession
 from app.models.user import User
 from app.schemas.common import Message
-from app.schemas.user import LoginChange, PasswordChange, RefreshRequest, Token, UserOut
+from app.schemas.user import (
+    GuideUpdate,
+    LoginChange,
+    PasswordChange,
+    RefreshRequest,
+    Token,
+    UserOut,
+)
 from app.services.rules import write_audit
 from app.services.sessions import (
     is_valid,
@@ -106,6 +113,21 @@ async def me(session: SessionDep, user: CurrentUser) -> User:
         select(User).options(selectinload(User.group)).where(User.id == user.id)
     )
     return loaded or user
+
+
+@router.put("/guide", response_model=UserOut, summary="Свой помощник в учебном городе")
+async def update_guide(session: SessionDep, user: CurrentUser, payload: GuideUpdate) -> User:
+    """
+    Оператор выбирает фигуру в центре города (если пол ещё не указан при создании)
+    и даёт помощнику имя. Имя заменяет «Пульсар» во всех подсказках этого оператора.
+    """
+    changes = payload.model_dump(exclude_unset=True)
+    if "gender" in changes and changes["gender"] is not None:
+        user.gender = changes["gender"]
+    if "guide_name" in changes:
+        user.guide_name = changes["guide_name"]
+    await session.commit()
+    return await me(session, user)
 
 
 @router.post("/username", response_model=UserOut, summary="Сменить свой логин")

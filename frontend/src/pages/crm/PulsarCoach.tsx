@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { useGuide } from "../../guide";
 import { PulsarFace } from "./PulsarGuide";
 import { coachLayout, type CoachStep } from "./coachTours";
 
 export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (finished: boolean) => void }) {
+  const guide = useGuide();
   const [index, setIndex] = useState(0), [missing, setMissing] = useState(false), [flying, setFlying] = useState(true);
   const mascotRef = useRef<HTMLDivElement>(null), bubbleRef = useRef<HTMLDivElement>(null), handRef = useRef<HTMLDivElement>(null), spotRef = useRef<HTMLDivElement>(null);
   const step = steps[index], last = index === steps.length - 1;
@@ -67,10 +69,10 @@ export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (
     <div ref={spotRef} className="coach-spot" aria-hidden="true" />
     <div ref={handRef} className="coach-hand" aria-hidden="true"><span>👈</span>{step.action && <small>{step.action}</small>}</div>
     <div ref={mascotRef} className="coach-mascot" aria-hidden="true"><PulsarFace mood={last ? "cheer" : index === 0 ? "wave" : "point"} /></div>
-    <div ref={bubbleRef} className="coach-bubble" role="dialog" aria-live="polite" aria-label={`Пульсар: ${step.title}`}>
+    <div ref={bubbleRef} className="coach-bubble" role="dialog" aria-live="polite" aria-label={`${guide.name}: ${guide.text(step.title)}`}>
       <div className="coach-bubble-top"><span className="coach-count">Шаг {Math.max(1, visited.length)}</span><button className="coach-close" aria-label="Закрыть подсказки" onClick={() => onClose(false)}>✕</button></div>
-      <strong>{step.title}</strong>
-      <p>{missing ? "Этого элемента сейчас нет на экране. Нажми «Дальше», и я покажу следующее." : step.text}</p>
+      <strong>{guide.text(step.title)}</strong>
+      <p>{missing ? "Этого элемента сейчас нет на экране. Нажми «Дальше», и я покажу следующее." : guide.text(step.text)}</p>
       <div className="coach-actions">
         <button className="coach-back" disabled={index === 0} onClick={() => move(-1)}>← Назад</button>
         <button className="coach-next" autoFocus onClick={next}>{last ? "Готово ✓" : step.autoClick && !missing ? "Открыть за меня →" : step.advanceWhen && !missing ? "Пропустить →" : "Дальше →"}</button>

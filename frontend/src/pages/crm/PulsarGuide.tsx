@@ -1,3 +1,4 @@
+import { useGuide } from "../../guide";
 import { useEffect, useId, useRef, useState } from "react";
 import { selectedCategories, type CrmCatalog, type CrmInstruction } from "../../api/crm";
 import { CrmInstructionEditor } from "./CrmInstructionEditor";
@@ -8,7 +9,7 @@ export type PulsarMood = "idle" | "wave" | "point" | "cheer";
 
 export function PulsarFace({ mood = "idle" }: { mood?: PulsarMood }) {
   const id = useId().replace(/:/g, "");
-  return <svg className="pulsar-face" data-mood={mood} viewBox="0 0 240 200" role="img" aria-label="Пульсар — космический помощник">
+  return <svg className="pulsar-face" data-mood={mood} viewBox="0 0 240 200" role="img" aria-label="Помощник — космический наставник">
     <defs>
       <linearGradient id={`${id}-shell`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#fff"/><stop offset=".48" stopColor="#f8f8f8"/><stop offset="1" stopColor="#c8cacf"/></linearGradient>
       <linearGradient id={`${id}-purple`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#bfc2c7"/><stop offset="1" stopColor="#8e929a"/></linearGradient>
@@ -50,6 +51,7 @@ export function PulsarGuide({ catalog, screen, categoryIds, step, editor, openRe
   catalog?: CrmCatalog; screen?: string; categoryIds: string[]; step: number | null; editor: boolean; openRequest: number;
   onStart: () => void; onNext: () => void; onPrevious: () => void; onClose: () => void;
 }) {
+  const guide = useGuide();
   const [compact, setCompact] = useState(false), [mobileOpen, setMobileOpen] = useState(false);
   const [manualKey, setManualKey] = useState("");
   const [editing, setEditing] = useState<CrmInstruction | null>(null);
@@ -80,22 +82,22 @@ export function PulsarGuide({ catalog, screen, categoryIds, step, editor, openRe
   const speech = finished ? "Отлично! Все шаги выполнены — можно сохранять." : tour ? phrases[GUIDE_STEPS[tourStep].target] : manualKey ? "Вы смотрите другую инструкцию." : screen ? "Подсказка для этого экрана:" : categoryIds.length ? "Для этой категории у меня есть инструкция:" : "Выберите категорию в форме — я подскажу, что делать.";
   const open = () => { setCompact(false); setMobileOpen(true); setUnread(false); };
   const categoryPath = (id: string) => { const labels: string[] = []; let node = catalog?.categories.find(n => n.id === id); while (node) { labels.unshift(node.label); const parent = node.parent_id; node = catalog?.categories.find(n => n.id === parent); } return labels.join(" › "); };
-  return <aside className={`pulsar-dock${compact ? " is-compact" : ""}${mobileOpen ? " is-open" : ""}${attention ? " is-attention" : ""}`} aria-label="Пульсар — инструкции" data-instruction={key}>
+  return <aside className={`pulsar-dock${compact ? " is-compact" : ""}${mobileOpen ? " is-open" : ""}${attention ? " is-attention" : ""}`} aria-label={guide.text("Пульсар — инструкции")} data-instruction={key}>
     <header className="pulsar-hero">
-      <div className="pulsar-hero-top"><span className="pulsar-name"><span className="pulsar-online"/>Пульсар<small>ваш наставник</small></span>{tour && <span className="pulsar-step-pill">Шаг {tourStep + 1} из {GUIDE_STEPS.length}</span>}
-        <button className="pulsar-collapse" aria-label={compact ? "Развернуть Пульсара" : "Свернуть Пульсара"} onClick={() => compact ? open() : setCompact(true)}>{compact ? "↗" : "−"}</button>
-        <button className="pulsar-mobile-toggle" aria-label={mobileOpen ? "Свернуть инструкцию" : "Открыть инструкцию Пульсара"} aria-expanded={mobileOpen} onClick={() => mobileOpen ? setMobileOpen(false) : open()}>{mobileOpen ? "⌄" : "⌃"}</button></div>
+      <div className="pulsar-hero-top"><span className="pulsar-name"><span className="pulsar-online"/>{guide.name}<small>ваш наставник</small></span>{tour && <span className="pulsar-step-pill">Шаг {tourStep + 1} из {GUIDE_STEPS.length}</span>}
+        <button className="pulsar-collapse" aria-label={guide.text(compact ? "Развернуть Пульсара" : "Свернуть Пульсара")} onClick={() => compact ? open() : setCompact(true)}>{compact ? "↗" : "−"}</button>
+        <button className="pulsar-mobile-toggle" aria-label={guide.text(mobileOpen ? "Свернуть инструкцию" : "Открыть инструкцию Пульсара")} aria-expanded={mobileOpen} onClick={() => mobileOpen ? setMobileOpen(false) : open()}>{mobileOpen ? "⌄" : "⌃"}</button></div>
       <div className="pulsar-stage">
-        <button className="pulsar-avatar" onClick={open} aria-label="Открыть подсказку Пульсара" tabIndex={folded ? 0 : -1}><PulsarFace mood={mood} />{unread && folded && <span className="pulsar-badge" aria-label="Новая подсказка">!</span>}</button>
-        <div className="pulsar-bubble" aria-live="polite"><p className="pulsar-speech">{speech}</p><strong>{current?.title ?? "Открываю инструкции…"}</strong></div>
+        <button className="pulsar-avatar" onClick={open} aria-label={guide.text("Открыть подсказку Пульсара")} tabIndex={folded ? 0 : -1}><PulsarFace mood={mood} />{unread && folded && <span className="pulsar-badge" aria-label="Новая подсказка">!</span>}</button>
+        <div className="pulsar-bubble" aria-live="polite"><p className="pulsar-speech">{speech}</p><strong>{current?.title ? guide.text(current.title) : "Открываю инструкции…"}</strong></div>
       </div>
       {tour && <ol className="pulsar-dots" aria-label="Прогресс знакомства">{GUIDE_STEPS.map((s, i) => <li key={s.target} className={i < tourStep ? "is-done" : i === tourStep ? "is-current" : ""}/>)}</ol>}
     </header>
     <div className="pulsar-dock-scroll">
       {editing ? <CrmInstructionEditor key={`${editing.key}:${editing.revision}`} instruction={editing} onClose={() => setEditing(null)} /> : <>
         <div className="pulsar-modes" role="tablist"><button role="tab" aria-selected={!tour && !manualKey} className={!tour && !manualKey ? "is-active" : ""} onClick={() => { setManualKey(""); onClose(); }}>📋 По обращению</button><button role="tab" aria-selected={tour} className={tour ? "is-active" : ""} onClick={() => { setManualKey(""); onStart(); }}>🚀 Первые шаги</button></div>
-        {current ? <><div className="pulsar-instruction">{!tour && !manualKey && context.length > 0 && <p className="pulsar-context">{context.map(n => n.label).join(" › ")}</p>}<p className="pulsar-body">{current.body}</p></div>
-          {total > 0 && <div className={`pulsar-checklist${finished ? " is-finished" : ""}`}><div className="pulsar-checklist-heading"><strong>Что сделать</strong><span>{checked.length} из {total}</span></div><div className="pulsar-progress" role="progressbar" aria-label="Отмеченные шаги памятки" aria-valuenow={checked.length} aria-valuemin={0} aria-valuemax={total}><span style={{ width: `${percent}%` }}/></div>{current.steps.map((text, index) => <label key={index} className={checked.includes(index) ? "is-done" : ""}><input type="checkbox" checked={checked.includes(index)} onChange={() => setChecked(previous => previous.includes(index) ? previous.filter(n => n !== index) : [...previous, index])}/><span>{checked.includes(index) ? "✓" : index + 1}</span><p>{text}</p></label>)}<small>Нажимайте на шаг, когда выполните его</small></div>}
+        {current ? <><div className="pulsar-instruction">{!tour && !manualKey && context.length > 0 && <p className="pulsar-context">{context.map(n => n.label).join(" › ")}</p>}<p className="pulsar-body">{guide.text(current.body)}</p></div>
+          {total > 0 && <div className={`pulsar-checklist${finished ? " is-finished" : ""}`}><div className="pulsar-checklist-heading"><strong>Что сделать</strong><span>{checked.length} из {total}</span></div><div className="pulsar-progress" role="progressbar" aria-label="Отмеченные шаги памятки" aria-valuenow={checked.length} aria-valuemin={0} aria-valuemax={total}><span style={{ width: `${percent}%` }}/></div>{current.steps.map((text, index) => <label key={index} className={checked.includes(index) ? "is-done" : ""}><input type="checkbox" checked={checked.includes(index)} onChange={() => setChecked(previous => previous.includes(index) ? previous.filter(n => n !== index) : [...previous, index])}/><span>{checked.includes(index) ? "✓" : index + 1}</span><p>{guide.text(text)}</p></label>)}<small>Нажимайте на шаг, когда выполните его</small></div>}
           {editor && <div className="pulsar-edit-tools"><button className="pulsar-edit-button" onClick={() => { setEditing(current); open(); }}>✎ Изменить текст этой подсказки</button><label>Открыть другую инструкцию<select value={key} onChange={e => setManualKey(e.target.value)}><optgroup label="Знакомство с CRM">{GUIDE_STEPS.map(s => { const item = catalog?.instructions?.[`guide:${s.target}`]; return item && <option key={item.key} value={item.key}>{item.title}</option>; })}</optgroup><optgroup label="Учётные записи водителей">{Object.values(catalog?.instructions ?? {}).filter(item => item.key.startsWith("drivers:")).map(item => <option key={item.key} value={item.key}>{item.title}</option>)}</optgroup><optgroup label="Категории обращений">{catalog?.categories.filter(n => !n.disabled).map(n => <option key={n.id} value={`category:${n.id}`}>{categoryPath(n.id)}</option>)}</optgroup></select></label></div>}
         </> : <p className="pulsar-muted">Загружаем инструкции. При ошибке используйте обновление данных CRM.</p>}
       </>}
