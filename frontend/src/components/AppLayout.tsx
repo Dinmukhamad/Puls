@@ -32,6 +32,8 @@ export function AppLayout() {
   const activeTab = active ? currentTab(active, location.pathname, location.search) : undefined;
   const { primary, overflow } = mobileNavigation(items);
   const separateProfile = !items.some((item) => item.id === "profile");
+  // «Мой город» занимает весь экран: меню сжимается до плавающих карточек поверх карты.
+  const immersive = location.pathname === "/training/city";
   const overflowActive = overflow.some((item) => item.id === active?.id) || (separateProfile && active?.id === "profile");
 
   useEffect(() => { try { localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0"); } catch { /* Optional preference. */ } }, [collapsed]);
@@ -46,17 +48,20 @@ export function AppLayout() {
     window.addEventListener("scroll", onScroll, { passive: true }); return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  return <div className={collapsed ? "shell shell--collapsed" : "shell"}>
+  const userLink = user && <Link to="/profile" className="sidebar__user" aria-label={`Профиль: ${user.full_name}`}><Avatar name={user.full_name} id={user.id} size={36} /><span className="sidebar__user-text"><span className="sidebar__user-name">{user.full_name}</span><span className="sidebar__user-role">{ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</span></span></Link>;
+
+  return <div className={`shell${collapsed ? " shell--collapsed" : ""}${immersive ? " shell--immersive" : ""}`}>
     <GlassSurface as="aside" variant="regular" className="sidebar">
       <div className="sidebar__brand"><span className="sidebar__mark"><PulsMark /></span><span className="sidebar__name">Puls</span><IconButton label={collapsed ? "Развернуть меню" : "Свернуть меню"} className="sidebar__toggle" aria-expanded={!collapsed} onClick={() => setCollapsed((value) => !value)}><ChevronLeftIcon size={18} /></IconButton></div>
       <nav className="sidebar__nav" aria-label="Основные разделы">
         {items.map((item) => <Link key={item.id} to={item.to} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}><span className="nav-item__icon"><item.icon size={20} /></span><span className="nav-item__label">{item.label}</span></Link>)}
       </nav>
-      {user && <Link to="/profile" className="sidebar__user" aria-label={`Профиль: ${user.full_name}`}><Avatar name={user.full_name} id={user.id} size={36} /><span className="sidebar__user-text"><span className="sidebar__user-name">{user.full_name}</span><span className="sidebar__user-role">{ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</span></span></Link>}
+      {!immersive && userLink}
     </GlassSurface>
+    {immersive && userLink && <GlassSurface variant="regular" className="sidebar-user-card">{userLink}</GlassSurface>}
 
     <main className="main"><div className="main__inner">
-      {active && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p>{active.tabs.length > 1 && <nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav>}</div>}
+      {active && !immersive && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p>{active.tabs.length > 1 && <nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav>}</div>}
       <SectionGuard><Outlet /></SectionGuard>
     </div></main>
 

@@ -422,6 +422,42 @@ a {
   margin: 0 auto;
 }
 
+/* «Мой город» во весь экран: карта лежит под меню, меню — две плавающие карточки. */
+.shell.shell--immersive .main {
+  padding: 0;
+}
+
+.shell--immersive .sidebar {
+  bottom: auto;
+  max-height: calc(100vh - var(--sidebar-inset) * 3 - 68px - var(--safe-top) - var(--safe-bottom));
+  max-height: calc(100dvh - var(--sidebar-inset) * 3 - 68px - var(--safe-top) - var(--safe-bottom));
+}
+
+.sidebar-user-card {
+  position: fixed;
+  left: calc(var(--sidebar-inset) + var(--safe-left));
+  bottom: calc(var(--sidebar-inset) + var(--safe-bottom));
+  width: var(--sidebar-width);
+  padding: var(--sp-2);
+  border-radius: var(--radius-xl);
+  border-color: var(--separator);
+  z-index: 30;
+  transition: width var(--motion-normal) var(--ease-standard);
+}
+
+.shell--collapsed .sidebar-user-card {
+  width: var(--sidebar-collapsed);
+}
+
+.shell--collapsed .sidebar-user-card .sidebar__user {
+  justify-content: center;
+}
+
+body:has(.shell--immersive) {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* --- нижняя навигация телефона --- */
 
 .tabbar {
@@ -2375,7 +2411,8 @@ a.hero__stat-value {
 
 /* Телефон: сайдбар уходит, появляется плавающая нижняя навигация. */
 @media (max-width: 767px) {
-  .sidebar {
+  .sidebar,
+  .sidebar-user-card {
     display: none;
   }
 

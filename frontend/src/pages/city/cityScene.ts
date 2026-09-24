@@ -3,15 +3,16 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { createArchitecture, mergeStatic } from "./cityArchitecture";
+import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { createArchitecture } from "./cityArchitecture";
 import maleUrl from "./models/operator-male.glb?url";
 import femaleUrl from "./models/operator-female.glb?url";
 import type { DistrictId } from "../../api/city";
 import { districtLevel } from "./cityLevels";
+import { BANK, CITY_LOCATIONS, DISTRICT_SCALE, HORIZON, OUTER_RING, PLAZA, PROMENADE, QUAY, RING_ROAD, SKYLINE_ANGLE, angularDistance, avenueAngles, crosswalks, innerRoads, islandLots, lampSpots, mainlandLots, parkingLots, rng, sampleRoute, trafficRoutes, treeSpots, type CityLocation, type Route } from "./cityLayout";
 import modelsUrl from "./models/city-models.glb?url";
+import vehiclesUrl from "./models/vehicles.glb?url";
 
-interface CityLocation { id: DistrictId; x: number; z: number; color: string; soon?: boolean }
 export interface CityView { azimuth: number; polar: number; distance: number; target: [number, number, number] }
 export interface CityLabelInfo { id: DistrictId; name: string; status: string; icon: string; soon: boolean; reward: boolean; level: number }
 export interface CitySceneOptions {
@@ -20,36 +21,44 @@ export interface CitySceneOptions {
   grown?: DistrictId[];
   /** Фигура в центре площади: робот Пульсар или оператор выбранного пола с именем помощника. */
   mascot?: CityMascot;
+  /** The part of the screen the panels leave free; the city is centred there. */
+  frame?: HTMLElement;
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
 }
 export interface CityMascot { gender: "male" | "female" | null; name: string }
 export interface CitySceneControl { focusMascot: () => void; setMascot: (mascot: CityMascot) => void; dispose: () => void; select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void; zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void }
 
-export const CITY_LOCATIONS: CityLocation[] = [
-  { id: "academy", x: -17, z: 2, color: "#5b8def" },
-  { id: "driver", x: -6.5, z: -16.5, color: "#f0a23a" },
-  { id: "crm", x: 14, z: -9, color: "#7b5cff" },
-  { id: "dispatch", x: 14.5, z: 12.5, color: "#35b6a6", soon: true },
-  { id: "oktell", x: -5.5, z: 17.5, color: "#e86aa6", soon: true },
-];
-export const DEFAULT_VIEW: CityView = { azimuth: .55, polar: .86, distance: 96, target: [0, 0, 2] };
-/** District buildings are drawn in small units and scaled up to stand above the ordinary city blocks. */
-const DISTRICT_SCALE = 2.3, MIN_DISTANCE = 18, MAX_DISTANCE = 160, MIN_POLAR = .18, MAX_POLAR = 1.32, PAN_RADIUS = 24;
+/** The default view looks over the depot at the CRM centre on the left and the academy on the right. */
+export const DEFAULT_VIEW: CityView = { azimuth: -2.62, polar: .95, distance: 90, target: [0, 0, 1] };
+const MIN_DISTANCE = 18, MAX_DISTANCE = 140, MIN_POLAR = .18, MAX_POLAR = 1.3, PAN_RADIUS = 40;
+/** Car Kit vehicles are 1.5 units wide; this makes them fit a one-unit lane. */
+const CAR_SCALE = .5;
+const HOUSES = ["s-building-type-a", "s-building-type-b", "s-building-type-c", "s-building-type-d", "s-building-type-f", "s-building-type-g", "s-building-type-h", "s-building-type-k", "s-building-type-m", "s-building-type-p", "s-building-type-q", "s-building-type-t"];
+const OFFICES = ["c-building-a", "c-building-c", "c-building-d", "c-building-f", "c-building-g", "c-building-h", "c-building-m", "c-building-n"];
+/** Offices light enough to repeat along the mainland rows. */
+const LIGHT_OFFICES = ["c-building-a", "c-building-c", "c-building-d", "c-building-f", "c-building-g", "c-building-h"];
+const TOWERS = ["c-building-skyscraper-a", "c-building-skyscraper-b", "c-building-skyscraper-c", "c-building-skyscraper-d"];
+const INDUSTRY = ["i-building-g", "i-building-h", "i-building-i", "i-building-g", "i-water-tower", "i-building-h"];
+const TRAFFIC = ["taxi", "sedan", "taxi", "suv", "hatchback-sports", "van", "sedan", "delivery", "taxi", "police", "truck", "ambulance"];
+const PARKED = [["taxi", "delivery", "van", "taxi", "truck", "suv"], ["sedan", "suv", "hatchback-sports", "taxi", "police", "sedan"], ["truck", "delivery", "van", "truck"]];
+type Slots = Map<string, { matrix: THREE.Matrix4; fit: number }[]>;
 
 export function createCityScene(host: HTMLDivElement, options: CitySceneOptions): CitySceneControl {
   const { levels } = options;
   let disposed = false;
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Phones and weak machines get fewer rows of buildings, fewer cars and a smaller shadow map.
+  const lite = Math.min(window.innerWidth, window.innerHeight) < 600 || (navigator.hardwareConcurrency ?? 8) <= 4;
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
+  // Phones draw at most 30 frames a second.
   const mobile = host.clientWidth < 600;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.4 : 1.75));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   renderer.setClearColor(0, 0); host.replaceChildren(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog("#dff1f7", 150, 300);
-  const camera = new THREE.PerspectiveCamera(36, 1, 1, 500);
+  scene.fog = new THREE.Fog("#d6e9ef", 118, 330);
+  const camera = new THREE.PerspectiveCamera(36, 1, 1, 800);
   const controls = new OrbitControls(camera, renderer.domElement);
   Object.assign(controls, { enableDamping: true, dampingFactor: .09, minDistance: MIN_DISTANCE, maxDistance: MAX_DISTANCE, minPolarAngle: MIN_POLAR, maxPolarAngle: MAX_POLAR, screenSpacePanning: false, rotateSpeed: .75, zoomSpeed: .9, panSpeed: .8, zoomToCursor: true });
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
@@ -65,117 +74,171 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     spherical.setFromVector3(offset.copy(camera.position).sub(controls.target));
     return { azimuth: spherical.theta, polar: spherical.phi, distance: spherical.radius, target: [controls.target.x, controls.target.y, controls.target.z] };
   }
-  applyView(options.view ?? DEFAULT_VIEW);
 
   const room = new RoomEnvironment(), pmrem = new THREE.PMREMGenerator(renderer);
   const environment = pmrem.fromScene(room, .04); scene.environment = environment.texture; scene.environmentIntensity = .4;
   room.dispose(); pmrem.dispose();
-  scene.add(new THREE.HemisphereLight("#e6f3ff", "#6c8061", 1.1));
+  scene.add(new THREE.HemisphereLight("#e6f3ff", "#6c8061", 1.25));
   const sun = new THREE.DirectionalLight("#fff3dc", 3.1);
-  sun.position.set(-30, 55, 25); sun.castShadow = true; sun.shadow.mapSize.set(mobile ? 1024 : 2048, mobile ? 1024 : 2048);
-  Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 140 }); sun.shadow.normalBias = .04; sun.shadow.bias = -.00015; sun.shadow.radius = 3; scene.add(sun);
+  sun.position.set(-34, 58, 26); sun.castShadow = true; sun.shadow.mapSize.setScalar(lite ? 1024 : 2048);
+  Object.assign(sun.shadow.camera, { left: -46, right: 46, top: 46, bottom: -46, near: 1, far: 160 }); sun.shadow.normalBias = .04; sun.shadow.bias = -.00015; sun.shadow.radius = 3; scene.add(sun);
 
   const materials = new Map<string, THREE.MeshStandardMaterial>();
+  const disposables: { dispose: () => void }[] = [];
   function material(color: string, extra: THREE.MeshStandardMaterialParameters = {}) {
     const key = color + JSON.stringify(extra);
     if (!materials.has(key)) materials.set(key, new THREE.MeshStandardMaterial({ color, roughness: .72, metalness: .04, ...extra }));
     return materials.get(key)!;
   }
   const world = new THREE.Group(); scene.add(world);
-  const architecture = createArchitecture();
-  const scenery = new THREE.Group(); world.add(scenery);
-  function mesh(geometry: THREE.BufferGeometry, color: string, x: number, y: number, z: number, parent: THREE.Object3D = scenery, extra?: THREE.MeshStandardMaterialParameters) {
+  function mesh(geometry: THREE.BufferGeometry, color: string, x: number, y: number, z: number, parent: THREE.Object3D = world, extra?: THREE.MeshStandardMaterialParameters) {
     const m = new THREE.Mesh(geometry, material(color, extra)); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
   }
-  const box = (w: number, h: number, d: number, c: string, x: number, y: number, z: number, p?: THREE.Object3D) => mesh(new THREE.BoxGeometry(w, h, d), c, x, y, z, p);
+  const box = (w: number, h: number, d: number, c: string, x: number, y: number, z: number, p?: THREE.Object3D) => { const m = mesh(new THREE.BoxGeometry(w, h, d), c, x, y, z, p); if (Math.min(w, h, d) < .07) m.castShadow = false; return m; };
   const cyl = (r: number, h: number, c: string, x: number, y: number, z: number, p?: THREE.Object3D, n = 32) => mesh(new THREE.CylinderGeometry(r, r, h, n), c, x, y, z, p);
   const sphere = (r: number, c: string, x: number, y: number, z: number, p?: THREE.Object3D) => mesh(new THREE.SphereGeometry(r, 18, 14), c, x, y, z, p);
   const tint = (color: string, amount: number) => "#" + new THREE.Color(color).lerp(new THREE.Color(amount > 0 ? "#ffffff" : "#1c1830"), Math.abs(amount)).getHexString();
-
-  // Island, water and greenery.
-  const water = new THREE.Mesh(new THREE.CircleGeometry(320, 64), material("#6dabab", { roughness: .25, metalness: .25 }));
-  water.rotation.x = -Math.PI / 2; water.position.y = -1.4; water.receiveShadow = true; scenery.add(water);
-  mesh(new THREE.CylinderGeometry(35, 36.5, 1.8, 96), "#e9d7ad", 0, -.75, 0);
-  mesh(new THREE.CylinderGeometry(33.8, 35, .3, 96), "#8ba67a", 0, .05, 0);
-  function tree(x: number, z: number, s = 1, p: THREE.Object3D = scenery) {
-    cyl(.1 * s, .8 * s, "#8a6a55", x, .6 * s, z, p, 7);
-    const crown = sphere(.58 * s, "#517b60", x, 1.35 * s, z, p); crown.scale.set(.95, 1.22, .9);
-    sphere(.43 * s, "#789465", x + .27 * s, 1.9 * s, z + .05 * s, p);
-    sphere(.4 * s, "#668c65", x - .28 * s, 1.66 * s, z - .1 * s, p);
+  /** A flat ring or disc lying on the ground at height `y`. */
+  const flat = (geometry: THREE.BufferGeometry, color: string, y: number, extra?: THREE.MeshStandardMaterialParameters) => { const m = mesh(geometry, color, 0, y, 0, world, extra); m.rotation.x = -Math.PI / 2; m.castShadow = false; return m; };
+  const canvasTexture = (width: number, height: number, draw: (ctx: CanvasRenderingContext2D) => void) => {
+    const canvas = document.createElement("canvas"); canvas.width = width; canvas.height = height; draw(canvas.getContext("2d")!);
+    const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; disposables.push(texture); return texture;
+  };
+  /** One draw call for many copies: `transforms` places each copy, `colors` tints it. */
+  function instanced(geometry: THREE.BufferGeometry, mat: THREE.Material | THREE.Material[], transforms: THREE.Matrix4[], { shadow = false, receive = true, colors }: { shadow?: boolean; receive?: boolean; colors?: THREE.Color[] } = {}) {
+    const m = new THREE.InstancedMesh(geometry, mat, Math.max(1, transforms.length));
+    transforms.forEach((t, i) => { m.setMatrixAt(i, t); if (colors) m.setColorAt(i, colors[i % colors.length]); });
+    m.count = transforms.length; m.castShadow = shadow; m.receiveShadow = receive; world.add(m); return m;
   }
-  function roundTree(x: number, z: number, s = 1) { cyl(.09 * s, .7 * s, "#8a6a55", x, .55 * s, z, scenery, 7); sphere(.55 * s, "#799363", x, 1.2 * s, z); }
-  const rng = (seed: number) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const random = rng(7);
-  for (let i = 0; i < 90; i++) {
-    const angle = random() * Math.PI * 2, radius = 27.8 + random() * 5.2, x = Math.cos(angle) * radius, z = Math.sin(angle) * radius;
-    (i % 3 ? tree : roundTree)(x, z, 1.1 + random() * .8);
-  }
+  const place = (x: number, y: number, z: number, rotation = 0, sx = 1, sy = sx, sz = sx) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation), new THREE.Vector3(sx, sy, sz));
+  const push = <T>(map: Map<string, T[]>, key: string, value: T) => { if (!map.has(key)) map.set(key, []); map.get(key)!.push(value); };
 
-  // Roads: a ring through every district and spokes to the central square.
-  const plaza = cyl(4.6, .12, "#efe7d6", 0, .25, 0, scenery, 64);
-  plaza.receiveShadow = true; architecture.plaza(scenery);
-  const ringRoad = new THREE.Mesh(new THREE.RingGeometry(24, 26, 160), material("#6d7385"));
-  ringRoad.rotation.x = -Math.PI / 2; ringRoad.position.y = .215; ringRoad.receiveShadow = true; scenery.add(ringRoad);
-  for (let i = 0; i < 110; i++) { const a = i / 110 * Math.PI * 2, dash = box(.14, .02, .7, "#f7f3e8", Math.cos(a) * 25, .23, Math.sin(a) * 25); dash.rotation.y = -a; dash.castShadow = false; }
-  const roads: [number, number, number, number][] = [];
+  // Island with a stone quay, the canal and the mainland beyond it.
+  const waves = canvasTexture(256, 256, ctx => {
+    ctx.fillStyle = "#d3e3e8"; ctx.fillRect(0, 0, 256, 256);
+    const random = rng(5); ctx.lineCap = "round";
+    for (let i = 0; i < 70; i++) {
+      const x = random() * 256, y = random() * 256, w = 10 + random() * 26;
+      ctx.strokeStyle = random() < .7 ? "#ffffff" : "#b9ced5"; ctx.lineWidth = 1.5 + random() * 2;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + w / 2, y - 3, x + w, y); ctx.stroke();
+    }
+  });
+  waves.wrapS = waves.wrapT = THREE.RepeatWrapping; waves.repeat.set(9, 9);
+  const waterMaterial = new THREE.MeshStandardMaterial({ color: "#6dabab", roughness: .25, metalness: .25, map: waves }); disposables.push(waterMaterial);
+  const water = new THREE.Mesh(new THREE.RingGeometry(QUAY - .6, BANK + .6, 180, 1), waterMaterial);
+  water.rotation.x = -Math.PI / 2; water.position.y = -1.25; water.receiveShadow = true; world.add(water);
+  mesh(new THREE.CylinderGeometry(QUAY, QUAY + .25, 1.9, 140), "#d4cab6", 0, -.8, 0);
+  mesh(new THREE.CylinderGeometry(QUAY - .32, QUAY - .32, .3, 140), "#8ba67a", 0, .05, 0).castShadow = false;
+  flat(new THREE.RingGeometry(PROMENADE - .5, PROMENADE + .5, 180, 1), "#eadfc8", .215);
+  const bank = new THREE.Mesh(new THREE.CylinderGeometry(BANK, BANK, 1.9, 180, 1, true), material("#d4cab6", { side: THREE.BackSide }));
+  bank.position.y = -.75; bank.receiveShadow = true; world.add(bank);
+  flat(new THREE.RingGeometry(BANK, 720, 200, 1), "#86a174", .2);
+  flat(new THREE.RingGeometry(BANK, BANK + 1, 200, 1), "#eadfc8", .21);
+
+  // Roads: the plaza, two ring roads, streets to the districts and avenues over the canal.
+  const ROAD = "#6d7385", streets = new THREE.Group(); world.add(streets);
+  const architecture = createArchitecture();
+  const plaza = cyl(PLAZA, .12, "#efe7d6", 0, .25, 0, world, 64); plaza.castShadow = false; architecture.plaza(world);
+  for (const r of [RING_ROAD, OUTER_RING]) flat(new THREE.RingGeometry(r - 1, r + 1, r > 40 ? 240 : 160, 1), ROAD, .215);
+  const marks: THREE.Matrix4[] = [];
+  for (const [radius, count] of [[RING_ROAD, 110], [OUTER_RING, 150]] as const) for (let i = 0; i < count; i++) { const a = i / count * Math.PI * 2; marks.push(place(Math.cos(a) * radius, .225, Math.sin(a) * radius, -a, .14, .02, .72)); }
   function road(ax: number, az: number, bx: number, bz: number) {
     const dx = bx - ax, dz = bz - az, length = Math.hypot(dx, dz), angle = Math.atan2(dx, dz);
-    roads.push([ax, az, bx, bz]);
-    const kerb = box(2.65, .08, length, "#e5dfcf", (ax + bx) / 2, .18, (az + bz) / 2); kerb.rotation.y = angle; kerb.castShadow = false;
-    const r = box(2, .06, length, "#6d7385", (ax + bx) / 2, .23, (az + bz) / 2); r.rotation.y = angle; r.castShadow = false;
-    for (let t = 1.2; t < length - .8; t += 2) { const dash = box(.14, .07, .8, "#f7f3e8", ax + dx * t / length, .245, az + dz * t / length); dash.rotation.y = angle; dash.castShadow = false; }
+    const kerb = box(2.65, .08, length, "#e5dfcf", (ax + bx) / 2, .18, (az + bz) / 2, streets); kerb.rotation.y = angle; kerb.castShadow = false;
+    const r = box(2, .06, length, ROAD, (ax + bx) / 2, .23, (az + bz) / 2, streets); r.rotation.y = angle; r.castShadow = false;
+    for (let t = 1.2; t < length - .8; t += 2.2) marks.push(place(ax + dx * t / length, .265, az + dz * t / length, angle, .14, .02, .8));
   }
-  const edge = DISTRICT_SCALE * 2.7;
-  CITY_LOCATIONS.forEach(a => {
-    const r = Math.hypot(a.x, a.z), ux = a.x / r, uz = a.z / r;
-    road(ux * 4.6, uz * 4.6, ux * (r - edge), uz * (r - edge));
-    road(ux * (r + edge), uz * (r + edge), ux * 24, uz * 24);
-  });
-  // A cross street through the blocks between neighbouring districts.
-  CITY_LOCATIONS.forEach((a, i) => {
-    const b = CITY_LOCATIONS[(i + 1) % CITY_LOCATIONS.length], mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2, r = Math.hypot(mx, mz);
-    road(mx / r * 4.6, mz / r * 4.6, mx / r * 24, mz / r * 24);
-  });
+  for (const [ax, az, bx, bz] of innerRoads()) road(ax, az, bx, bz);
+  for (const a of avenueAngles()) {
+    const c = Math.cos(a), s = Math.sin(a), along = Math.atan2(c, s);
+    road(c * 26, s * 26, c * (QUAY - .2), s * (QUAY - .2));
+    road(c * (BANK + .2), s * (BANK + .2), c * HORIZON, s * HORIZON);
+    // Stone arch bridge over the canal; the deck carries the avenue.
+    const bridge = new THREE.Group(), mid = (QUAY + BANK) / 2, span = BANK - QUAY + 1.4;
+    bridge.position.set(c * mid, 0, s * mid); bridge.rotation.y = along; streets.add(bridge);
+    box(2.3, .3, span, ROAD, 0, .11, 0, bridge).castShadow = false;
+    for (const side of [-1, 1]) box(.24, .42, span, "#e8e1d2", side * 1.27, .36, 0, bridge);
+    for (let t = -span / 2 + .8; t < span / 2 - .4; t += 2.2) marks.push(place(c * (mid + t), .265, s * (mid + t), along, .14, .02, .8));
+    const arch = new THREE.Shape();
+    arch.moveTo(-span / 2, 0); arch.lineTo(span / 2, 0); arch.lineTo(span / 2, -1.95); arch.lineTo(2.56, -1.95);
+    arch.absarc(0, -2.95, 2.75, .372, Math.PI - .372, false); arch.lineTo(-span / 2, -1.95); arch.closePath();
+    const wall = new THREE.ExtrudeGeometry(arch, { depth: 2.44, bevelEnabled: false }); wall.rotateY(-Math.PI / 2); wall.translate(1.22, -.04, 0);
+    mesh(wall, "#dcd3c1", 0, 0, 0, bridge);
+  }
+  // Zebra crossings where streets meet the plaza and the ring roads.
+  for (const w of crosswalks()) for (let k = -2; k <= 2; k++) marks.push(place(w.x + Math.cos(w.angle) * k * .4, .268, w.z - Math.sin(w.angle) * k * .4, w.angle, .24, .02, .95));
 
-  // Ordinary city blocks fill the space between the districts: Kenney models once they load, simple shapes if they cannot.
-  const nearRoad = (x: number, z: number, pad: number) => roads.some(([ax, az, bx, bz]) => {
-    const dx = bx - ax, dz = bz - az, t = THREE.MathUtils.clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1);
-    return Math.hypot(x - ax - dx * t, z - az - dz * t) < pad;
-  });
-  function facadeTexture(floors: number, glass: boolean) {
-    const canvas = document.createElement("canvas"); canvas.width = 64; canvas.height = 64 * floors;
-    const ctx = canvas.getContext("2d")!;
-    ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    for (let f = 0; f < floors; f++) for (let c = 0; c < 3; c++) {
-      ctx.fillStyle = (f * 3 + c) % 7 === 0 ? "#ffe9a8" : glass ? "#8fb3dc" : "#9aabc4";
-      ctx.fillRect(6 + c * 19, f * 64 + 14, 14, 30);
-    }
-    const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; return texture;
+  // Car parks with painted stalls; the cars themselves arrive with the vehicle models.
+  const parking = parkingLots();
+  for (const lot of parking) {
+    const pad = box(lot.depth + .4, .05, lot.length + .4, "#7c8292", lot.x, .225, lot.z, streets); pad.rotation.y = lot.angle; pad.castShadow = false;
+    for (const stall of lot.stalls) for (const side of [-.55, .55]) marks.push(place(stall.x + Math.sin(lot.angle) * side, .255, stall.z + Math.cos(lot.angle) * side, stall.rotation, .05, .02, 1.5));
   }
-  const facades = new Map<string, THREE.CanvasTexture>(), facadeMaterials = new Map<string, THREE.Material[]>();
+  const unit = new THREE.BoxGeometry(1, 1, 1);
+  instanced(unit, material("#f7f3e8", { roughness: .9 }), marks);
+  mergeStatic(streets);
+
+  // Street lamps: a pole and a warm glowing lamp.
+  const lamps = lampSpots().map(p => place(p.x, .2, p.z));
+  const pole = new THREE.CylinderGeometry(.035, .05, 1.3, 6); pole.translate(0, .65, 0);
+  const bulb = new THREE.SphereGeometry(.11, 10, 8); bulb.translate(0, 1.36, 0);
+  instanced(pole, material("#5f6678"), lamps);
+  instanced(bulb, material("#fff3c4", { emissive: "#ffe08a", emissiveIntensity: .9 }), lamps);
+
+  // Trees: two kinds of low-poly trees, each tinted a little differently.
+  function treeGeometry(round: boolean) {
+    const paint = (g: THREE.BufferGeometry, color: string) => {
+      const c = new THREE.Color(color), part = g.index ? g.toNonIndexed() : g, n = part.getAttribute("position").count, colors = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) colors.set([c.r, c.g, c.b], i * 3);
+      part.setAttribute("color", new THREE.BufferAttribute(colors, 3)); part.deleteAttribute("uv"); return part;
+    };
+    const trunk = new THREE.CylinderGeometry(.08, .11, .8, 6); trunk.translate(0, .4, 0);
+    const parts = [paint(trunk, "#8a6a55")];
+    if (round) { const crown = new THREE.IcosahedronGeometry(.62, 1); crown.translate(0, 1.3, 0); parts.push(paint(crown, "#799363")); }
+    else { const low = new THREE.ConeGeometry(.6, 1.3, 8); low.translate(0, 1.3, 0); const high = new THREE.ConeGeometry(.44, 1, 8); high.translate(0, 1.9, 0); parts.push(paint(low, "#517b60"), paint(high, "#789465")); }
+    const merged = mergeGeometries(parts)!; parts.forEach(p => p.dispose()); return merged;
+  }
+  const { lots: outskirts, parks } = mainlandLots(lite);
+  const treeTint = ["#ffffff", "#eaf6e2", "#f7ffe8", "#dfeed7", "#fff6dc"].map(c => new THREE.Color(c));
+  const treeMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, flatShading: true }); disposables.push(treeMaterial);
+  const trees = treeSpots(lite, parks), coneTree = treeGeometry(false), roundTree = treeGeometry(true);
+  // Only trees on the island are inside the sun's shadow map, so only they cast shadows.
+  for (const round of [false, true]) for (const island of [true, false]) {
+    const list = trees.filter(t => t.round === round && (Math.hypot(t.x, t.z) < QUAY) === island);
+    instanced(round ? roundTree : coneTree, treeMaterial, list.map(t => place(t.x, .2, t.z, t.x * 3.1, t.scale)), { shadow: island && !lite, colors: list.map((_, i) => treeTint[(i * 7) % treeTint.length]) });
+  }
+  // Soft round shadows ground the far buildings and trees that the sun's shadow map does not reach.
+  const blob = canvasTexture(64, 64, ctx => { const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 32); g.addColorStop(0, "rgba(0,0,0,.55)"); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64); });
+  const blobMaterial = new THREE.MeshBasicMaterial({ map: blob, color: "#23402c", transparent: true, depthWrite: false, opacity: .5 }); disposables.push(blobMaterial);
+  const blobPlane = new THREE.PlaneGeometry(1, 1); blobPlane.rotateX(-Math.PI / 2);
+  instanced(blobPlane, blobMaterial, [...outskirts.map(l => place(l.x, .209, l.z, l.rotation, l.width * 1.25)), ...trees.filter(t => Math.hypot(t.x, t.z) > QUAY).map(t => place(t.x, .209, t.z, 0, 1.5 * t.scale))], { receive: false });
+
+  // Ordinary blocks inside the ring: Kenney models once they load, simple shapes if they cannot.
+  const lots = islandLots();
+  function facadeTexture(floors: number, glass: boolean) {
+    return canvasTexture(64, 64 * floors, ctx => {
+      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, 64, 64 * floors);
+      for (let f = 0; f < floors; f++) for (let c = 0; c < 3; c++) { ctx.fillStyle = (f * 3 + c) % 7 === 0 ? "#ffe9a8" : glass ? "#8fb3dc" : "#9aabc4"; ctx.fillRect(6 + c * 19, f * 64 + 14, 14, 30); }
+    });
+  }
+  const facadeMaterials = new Map<string, THREE.Material[]>();
   function facadeMaterial(color: string, floors: number, glass: boolean) {
     const key = `${color}:${floors}:${glass}`;
     if (!facadeMaterials.has(key)) {
-      const textureKey = `${floors}:${glass}`;
-      if (!facades.has(textureKey)) facades.set(textureKey, facadeTexture(floors, glass));
-      const side = new THREE.MeshStandardMaterial({ color, map: facades.get(textureKey), roughness: glass ? .35 : .8, metalness: glass ? .2 : .02 });
-      const top = material(tint(color, -.12));
-      facadeMaterials.set(key, [side, side, top, top, side, side]);
+      const side = new THREE.MeshStandardMaterial({ color, map: facadeTexture(floors, glass), roughness: glass ? .35 : .8, metalness: glass ? .2 : .02 }), top = material(tint(color, -.12));
+      disposables.push(side); facadeMaterials.set(key, [side, side, top, top, side, side]);
     }
     return facadeMaterials.get(key)!;
   }
-  const blockRandom = rng(21);
-  const lots: { x: number; z: number; r: number; rotation: number; roll: number; pick: number; size: number }[] = [];
-  for (let gx = -24; gx <= 24; gx += 2.9) for (let gz = -24; gz <= 24; gz += 2.9) {
-    const x = gx + (blockRandom() - .5) * 1.1, z = gz + (blockRandom() - .5) * 1.1, r = Math.hypot(x, z);
-    const lot = { x, z, r, rotation: Math.atan2(x, z) + (blockRandom() < .5 ? 0 : Math.PI / 2), roll: blockRandom(), pick: blockRandom(), size: blockRandom() };
-    if (r < 6.6 || r > 22.6 || nearRoad(x, z, 1.8) || CITY_LOCATIONS.some(d => Math.hypot(d.x - x, d.z - z) < DISTRICT_SCALE * 2.7 + .55)) continue;
-    lots.push(lot);
+  function tree(x: number, z: number, s: number, p: THREE.Object3D) {
+    cyl(.1 * s, .8 * s, "#8a6a55", x, .6 * s, z, p, 7);
+    const crown = mesh(new THREE.ConeGeometry(.55 * s, 1.3 * s, 9), "#5fae6e", x, 1.45 * s, z, p); crown.rotation.y = x;
+    mesh(new THREE.ConeGeometry(.42 * s, 1 * s, 9), "#78c282", x, 1.95 * s, z, p);
   }
   const walls = ["#f3e6d3", "#e9eef5", "#f6d9cf", "#dfe9dd", "#ece4f4", "#f4efe2"], roofs = ["#c7775d", "#8a6f9e", "#5f7f9c", "#a3685a"];
   function simpleBlocks() {
     for (const lot of lots) {
-      const g = new THREE.Group(); g.position.set(lot.x, .2, lot.z); g.rotation.y = lot.rotation; scenery.add(g);
+      const g = new THREE.Group(); g.position.set(lot.x, .2, lot.z); g.rotation.y = lot.rotation; world.add(g);
       if (lot.roll < .1) { tree(0, 0, 1.3, g); continue; }
       if (lot.roll < .45) {
         const w = 1.8 + lot.size * .6, h = 1.2 + lot.pick * .6;
@@ -189,16 +252,21 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       }
     }
   }
-  const HOUSES = ["s-building-type-a", "s-building-type-b", "s-building-type-c", "s-building-type-d", "s-building-type-f", "s-building-type-g", "s-building-type-h", "s-building-type-k", "s-building-type-m", "s-building-type-p", "s-building-type-q", "s-building-type-t"];
-  const OFFICES = ["c-building-a", "c-building-c", "c-building-d", "c-building-f", "c-building-g", "c-building-h", "c-building-m", "c-building-n"];
-  const TOWERS = ["c-building-skyscraper-a", "c-building-skyscraper-b", "c-building-skyscraper-c", "c-building-skyscraper-d"];
-  function modelBlocks() {
-    for (const lot of lots) {
-      const list = lot.roll < .08 ? ["s-tree-large"] : lot.r > 17 ? (lot.roll < .8 ? HOUSES : OFFICES) : lot.roll > .88 ? TOWERS : lot.roll < .3 ? HOUSES : OFFICES;
-      const name = list[Math.floor(lot.pick * list.length)];
-      if (name === "s-tree-large") { for (const [dx, dz] of [[-.6, -.4], [.6, .3], [0, .8]]) spawn(scenery, name, lot.x + dx, lot.z + dz, 3.4 + lot.size, lot.rotation); continue; }
-      spawn(scenery, name, lot.x, lot.z, 0, lot.rotation, .2, 2.6);
-    }
+  // Far blocks and the skyline are plain boxes with painted windows: four heights, tinted per building.
+  const BLOCKS = [{ floors: 4, height: 3, glass: false }, { floors: 7, height: 5.2, glass: false }, { floors: 11, height: 8.4, glass: true }, { floors: 18, height: 13.6, glass: true }];
+  function blockKind(lot: { zone: string; pick: number; x: number; z: number }) {
+    if (lot.zone !== "towers") return lot.pick < .55 ? 0 : lot.pick < .9 ? 1 : 2;
+    return angularDistance(Math.atan2(lot.z, lot.x), SKYLINE_ANGLE) < .75 ? (lot.pick < .4 ? 2 : 3) : (lot.pick < .5 ? 1 : 2);
+  }
+  const block = new THREE.BoxGeometry(1, 1, 1); block.translate(0, .5, 0);
+  function plainBlocks(list: typeof outskirts) {
+    BLOCKS.forEach((kind, index) => {
+      const own = list.filter(l => blockKind(l) === index); if (!own.length) return;
+      const top = new THREE.MeshStandardMaterial({ color: "#9aa3ad", roughness: .85 }), side = new THREE.MeshStandardMaterial({ color: "#ffffff", map: facadeTexture(kind.floors, kind.glass), roughness: kind.glass ? .4 : .85, metalness: kind.glass ? .15 : 0 });
+      disposables.push(top, side);
+      const palette = (kind.glass ? ["#b8cbe3", "#a9c4d8", "#c4c9e6", "#d5dde8"] : walls).map(c => new THREE.Color(c));
+      instanced(block, [side, side, top, top, side, side], own.map(l => { const w = Math.min(l.width, kind.glass ? 3.4 : 3.8) * (.82 + l.size * .18); return place(l.x, .2, l.z, l.rotation, w, kind.height * (.9 + l.size * .2), w * (.8 + l.pick * .2)); }), { colors: own.map((_, i) => palette[(i * 5) % palette.length]) });
+    });
   }
 
   // Центр площади: робот Пульсар или оператор, которого выбрал пользователь, с табличкой имени.
@@ -300,17 +368,65 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   }
   setMascot(options.mascot ?? { gender: null, name: "Пульсар" });
 
-  // Kenney models (CC0) are cloned on demand; a slot with fit > 0 is scaled to that footprint.
+  // Kenney models (CC0): district details are cloned, the ordinary blocks are drawn as instances.
   let models: Map<string, THREE.Object3D> | null = null;
-  const pending: { parent: THREE.Object3D; name: string; x: number; z: number; scale: number; rotation: number; y: number; fit: number }[] = [];
-  function spawn(parent: THREE.Object3D, name: string, x: number, z: number, scale: number, rotation = 0, y = 0, fit = 0) {
-    if (!models) { pending.push({ parent, name, x, z, scale, rotation, y, fit }); return; }
-    const source = models.get(name); if (!source) return;
-    const copy = source.clone(true);
-    if (fit) { const size = new THREE.Box3().setFromObject(source).getSize(new THREE.Vector3()); scale = Math.min(2.5, fit / Math.max(size.x, size.z)); }
-    copy.position.set(x, y, z); copy.rotation.y = rotation; copy.scale.setScalar(scale);
-    copy.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = true; o.receiveShadow = true; } });
-    parent.add(copy);
+  /**
+   * Static parts built from many small meshes (district buildings, the mascot) are merged per material:
+   * a construction site is dozens of boxes but only a dozen draw calls. `keep` marks animated parts.
+   */
+  function mergeStatic(root: THREE.Object3D, keep: (o: THREE.Object3D) => boolean = () => false) {
+    root.updateMatrixWorld(true);
+    const inverse = root.matrixWorld.clone().invert(), groups = new Map<string, { material: THREE.Material; shadow: boolean; parts: THREE.BufferGeometry[]; meshes: THREE.Mesh[] }>();
+    root.traverse(o => {
+      if (!(o instanceof THREE.Mesh) || o instanceof THREE.InstancedMesh || !(o.material instanceof THREE.MeshStandardMaterial)) return;
+      for (let p: THREE.Object3D | null = o; p && p !== root; p = p.parent) if (keep(p)) return;
+      const key = o.material.uuid + (o.castShadow ? ":shadow" : "");
+      if (!groups.has(key)) groups.set(key, { material: o.material, shadow: o.castShadow, parts: [], meshes: [] });
+      const part = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse, o.matrixWorld));
+      part.deleteAttribute("uv"); groups.get(key)!.parts.push(part); groups.get(key)!.meshes.push(o);
+    });
+    groups.forEach(({ material: mat, shadow, parts, meshes }) => {
+      const merged = meshes.length > 1 ? mergeGeometries(parts) : null; parts.forEach(p => p.dispose());
+      if (!merged) return;
+      for (const m of meshes) { m.parent?.remove(m); m.geometry.dispose(); }
+      const m = new THREE.Mesh(merged, mat); m.castShadow = shadow; m.receiveShadow = true; root.add(m);
+    });
+  }
+  /** Parts of a model with their matrices inside it, centred on the footprint and scaled to `fit` units. */
+  function modelParts(source: THREE.Object3D, fit = 0) {
+    source.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(source), size = bounds.getSize(new THREE.Vector3()), center = bounds.getCenter(new THREE.Vector3());
+    const scale = fit ? Math.min(2.8, fit / Math.max(size.x, size.z)) : 1, base = new THREE.Matrix4().makeScale(scale, scale, scale).multiply(new THREE.Matrix4().makeTranslation(-center.x, -bounds.min.y, -center.z));
+    const parts: { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[]; matrix: THREE.Matrix4 }[] = [];
+    source.traverse(o => { if (o instanceof THREE.Mesh) parts.push({ geometry: o.geometry, material: o.material, matrix: base.clone().multiply(o.matrixWorld) }); });
+    return parts;
+  }
+  /** Instances of catalogue models: `slots` lists where the copies of each model stand and the footprint they fill. */
+  function drawModels(catalogue: Map<string, THREE.Object3D>, slots: Slots, shadow: boolean) {
+    slots.forEach((list, name) => {
+      const source = catalogue.get(name); if (!source) return;
+      const byFit = new Map<string, THREE.Matrix4[]>();
+      for (const slot of list) push(byFit, String(slot.fit), slot.matrix);
+      byFit.forEach((matrices, fit) => { for (const part of modelParts(source, Number(fit))) instanced(part.geometry, part.material, matrices.map(m => m.clone().multiply(part.matrix)), { shadow }); });
+    });
+  }
+  function modelBlocks(catalogue: Map<string, THREE.Object3D>) {
+    const island: Slots = new Map();
+    for (const lot of lots) {
+      const list = lot.roll < .08 ? ["s-tree-large"] : lot.r > 17 ? (lot.roll < .8 ? HOUSES : OFFICES) : lot.roll > .88 ? TOWERS : lot.roll < .3 ? HOUSES : OFFICES;
+      const name = list[Math.floor(lot.pick * list.length)];
+      if (name === "s-tree-large") { for (const [dx, dz] of [[-.6, -.4], [.6, .3], [0, .8]]) push(island, name, { matrix: place(lot.x + dx, .2, lot.z + dz, lot.rotation, 3.4 + lot.size), fit: 0 }); continue; }
+      push(island, name, { matrix: place(lot.x, .2, lot.z, lot.rotation), fit: 2.6 });
+    }
+    drawModels(catalogue, island, true);
+    // The mainland rows that the default view shows get detailed models; phones keep the nearest one.
+    const detailed = new Set(outskirts.filter(l => (l.zone === "houses" || l.zone === "industry") && l.r < (lite ? 50 : 92))), mainland: Slots = new Map();
+    for (const lot of detailed) {
+      const list = lot.zone === "industry" ? INDUSTRY : lot.roll < .8 ? HOUSES : LIGHT_OFFICES;
+      push(mainland, list[Math.floor(lot.pick * list.length)], { matrix: place(lot.x, .2, lot.z, lot.rotation), fit: Math.round(lot.width * 2) / 2 });
+    }
+    drawModels(catalogue, mainland, false);
+    plainBlocks(outskirts.filter(l => !detailed.has(l)));
   }
 
   // Recognizable landmarks gain architectural detail over five levels.
@@ -332,31 +448,67 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   }
   CITY_LOCATIONS.forEach(building);
 
-  // One compressed file with all models; the city stays usable if it cannot be loaded.
-  let modelsSettled = false;
-  const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
-  loader.loadAsync(modelsUrl).then(gltf => {
-    if (disposed) return;
-    models = new Map(gltf.scenes.map(scene => [scene.name, scene]));
-    modelBlocks();
-    for (const slot of pending.splice(0)) spawn(slot.parent, slot.name, slot.x, slot.z, slot.scale, slot.rotation, slot.y, slot.fit);
-    mergeStatic(scenery);
-  }).catch(() => { if (!disposed) { pending.length = 0; simpleBlocks(); mergeStatic(scenery); } }).finally(() => { modelsSettled = true; });
 
-
-  // Little cars drive around the outer ring road.
-  const cars = ["#e8c060", "#e8ede5", "#456e7c"].map((color, i) => {
-    const car = architecture.car(world, 0, 0, color); car.scale.setScalar(1.8); mergeStatic(car);
-    return { car, t: i / 3 };
-  });
-  function moveCars(dt: number) {
-    for (const item of cars) {
-      item.t = (item.t + dt * .012) % 1;
-      const a = item.t * Math.PI * 2, r = 24.6;
-      item.car.position.set(Math.cos(a) * r, .26, Math.sin(a) * r); item.car.rotation.y = -a;
-    }
+  // Traffic, boats on the canal and parked cars. Until the vehicle models arrive, and if they cannot load, toy cars stand in.
+  interface Mover { route: Route; s: number; speed: number; mesh: THREE.InstancedMesh; index: number; base: THREE.Matrix4; boat: boolean }
+  const movers: Mover[] = [], trafficMeshes: THREE.InstancedMesh[] = [];
+  let carShadows: THREE.InstancedMesh | null = null;
+  const plans = trafficRoutes(lite), roadY = (x: number, z: number) => { const r = Math.hypot(x, z); return Math.abs(r - RING_ROAD) < 1.05 || Math.abs(r - OUTER_RING) < 1.05 ? .215 : .26; };
+  const toy = new THREE.Group(), boat = new THREE.Group();
+  {
+    const body = new THREE.BoxGeometry(1.4, .6, 2.6); body.translate(0, .45, 0);
+    const cabin = new THREE.BoxGeometry(1.2, .5, 1.3); cabin.translate(0, .98, -.15);
+    toy.add(new THREE.Mesh(mergeGeometries([body, cabin])!, material("#ffd24d"))); body.dispose(); cabin.dispose();
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(1, .36, 2.1), material("#ffffff")); hull.position.y = .18;
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.02, .08, 2.12), material("#3f78d8")); stripe.position.y = .3;
+    const top = new THREE.Mesh(new THREE.BoxGeometry(.6, .34, .7), material("#f4efe4")); top.position.set(0, .53, -.25);
+    boat.add(hull, stripe, top);
   }
-  moveCars(0);
+  function buildTraffic(catalogue: Map<string, THREE.Object3D> | null) {
+    for (const m of trafficMeshes) { world.remove(m); m.dispose(); }
+    trafficMeshes.length = 0; movers.length = 0;
+    const slots = new Map<string, { plan: typeof plans[number]; offset: number }[]>();
+    let n = 0;
+    // Loops start at different phases, so cars are spread over the map from the first frame.
+    plans.forEach((plan, i) => { for (let k = 0; k < plan.cars; k++) push(slots, plan.boats ? "boat" : catalogue ? TRAFFIC[n++ % TRAFFIC.length] : "toy", { plan, offset: (k / plan.cars + i * .618) % 1 }); });
+    slots.forEach((list, name) => {
+      const source = name === "boat" ? boat : name === "toy" ? toy : catalogue?.get(name); if (!source) return;
+      modelParts(source).forEach((part, partIndex) => {
+        const m = instanced(part.geometry, part.material, list.map(() => new THREE.Matrix4()), { receive: false });
+        m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); trafficMeshes.push(m);
+        m.userData.firstBase = partIndex === 0 ? part.matrix : null;
+        list.forEach((slot, index) => movers.push({ route: slot.plan.route, s: slot.offset * slot.plan.route.length, speed: slot.plan.speed, mesh: m, index, base: part.matrix, boat: name === "boat" }));
+      });
+    });
+    carShadows?.dispose(); if (carShadows) world.remove(carShadows);
+    carShadows = instanced(blobPlane, blobMaterial, movers.filter(item => !item.boat).map(() => new THREE.Matrix4()), { receive: false });
+    carShadows.frustumCulled = false; carShadows.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    moveTraffic(0, 0);
+  }
+  const moverMatrix = new THREE.Matrix4(), moverPosition = new THREE.Vector3(), moverScale = new THREE.Vector3(), moverTurn = new THREE.Quaternion(), yAxis = new THREE.Vector3(0, 1, 0);
+  function moveTraffic(dt: number, now: number) {
+    let shadow = 0;
+    for (const item of movers) {
+      item.s = (item.s + item.speed * dt) % item.route.length;
+      const p = sampleRoute(item.route, item.s);
+      moverPosition.set(p.x, item.boat ? -1.36 + Math.sin(now / 600 + item.s) * .04 : roadY(p.x, p.z), p.z);
+      moverTurn.setFromAxisAngle(yAxis, p.heading); moverScale.setScalar(p.hidden ? 0 : item.boat ? .75 : CAR_SCALE);
+      item.mesh.setMatrixAt(item.index, moverMatrix.compose(moverPosition, moverTurn, moverScale).multiply(item.base));
+      // One shadow per car: its first part only, and none for boats.
+      if (!item.boat && item.base === item.mesh.userData.firstBase && carShadows) { moverScale.set(p.hidden ? 0 : .95, 1, p.hidden ? 0 : 1.7); moverPosition.y += .012; carShadows.setMatrixAt(shadow++, moverMatrix.compose(moverPosition, moverTurn, moverScale)); }
+    }
+    for (const m of trafficMeshes) m.instanceMatrix.needsUpdate = true;
+    if (carShadows) carShadows.instanceMatrix.needsUpdate = true;
+  }
+  function parkedVehicles(catalogue: Map<string, THREE.Object3D>) {
+    const random = rng(11), slots: Slots = new Map();
+    parking.forEach((lot, i) => lot.stalls.forEach((stall, k) => {
+      if (random() < (i === 2 ? .5 : .35) || (lite && i === 2)) return;
+      const list = PARKED[i]; push(slots, list[(k * 7 + i) % list.length], { matrix: place(stall.x, .25, stall.z, stall.rotation, CAR_SCALE), fit: 0 });
+    }));
+    drawModels(catalogue, slots, false);
+  }
+  buildTraffic(null);
 
   let selected = options.selected, hovered: DistrictId | null = null;
   // Billboards on the roofs carry the district names and always turn towards the camera.
@@ -364,7 +516,6 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const boards = new Map<DistrictId, { group: THREE.Group; canvas: HTMLCanvasElement; texture: THREE.CanvasTexture }>();
   for (const d of CITY_LOCATIONS) {
     const group = new THREE.Group(), anchor = anchors.get(d.id)!; group.position.copy(anchor); world.add(group);
-
     const canvas = document.createElement("canvas"); canvas.width = 1024; canvas.height = 368;
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4;
     const face = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.5), new THREE.MeshBasicMaterial({ map: texture, transparent: true, toneMapped: false, side: THREE.DoubleSide }));
@@ -382,22 +533,18 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   function drawBoards() {
     for (const d of CITY_LOCATIONS) {
       const board = boards.get(d.id)!, info = labels.find(l => l.id === d.id), ctx = board.canvas.getContext("2d")!;
-      const active = d.id === selected, soon = info?.soon ?? !!d.soon, accent = soon ? "#8d93a0" : d.color;
+      const active = d.id === selected, soon = info?.soon ?? !!d.soon;
       ctx.clearRect(0, 0, 1024, 368);
-      roundRect(ctx, 8, 8, 1008, 352, 44); ctx.fillStyle = active ? accent : soon ? "#f1f1ee" : "#ffffff"; ctx.fill();
-      ctx.lineWidth = 14; ctx.strokeStyle = active ? "#ffffff" : accent; ctx.stroke();
-      ctx.fillStyle = active ? "#ffffff33" : tint(accent, .82); ctx.beginPath(); ctx.arc(170, 184, 118, 0, Math.PI * 2); ctx.fill();
-      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "130px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif"; ctx.fillStyle = "#000"; ctx.fillText(info?.icon ?? "", 170, 192);
-      ctx.textAlign = "left"; ctx.fillStyle = active ? "#ffffff" : "#1d2a3a";
+      roundRect(ctx, 10, 10, 1004, 348, 50); ctx.fillStyle = active ? d.color : "#ffffff"; ctx.fill();
+      ctx.lineWidth = 16; ctx.strokeStyle = active ? "#ffffff" : "#1d2230"; ctx.stroke();
+      roundRect(ctx, 56, 80, 208, 208, 46); ctx.fillStyle = active ? "#ffffff38" : "#eef1f5"; ctx.fill();
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = "124px 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif"; ctx.fillStyle = "#000"; ctx.fillText(info?.icon ?? "", 160, 192);
+      ctx.textAlign = "left"; ctx.fillStyle = active ? "#ffffff" : "#161a24";
       const name = info?.name ?? d.id;
-      let size = 96; do { ctx.font = `800 ${size}px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif`; size -= 4; } while (size > 60 && ctx.measureText(name).width > 670);
-      ctx.fillText(fitText(ctx, name, 670), 320, 140);
-      const level = info?.level ?? 1;
-      ctx.font = "44px system-ui,sans-serif"; ctx.textAlign = "right";
-      for (let i = 0; i < 5; i++) { ctx.fillStyle = i < level ? (active ? "#fff4c2" : "#f2b400") : active ? "#ffffff55" : "#d9d6cf"; ctx.fillText("★", 990 - (4 - i) * 44, 58); }
-      ctx.textAlign = "left";
-      ctx.font = "600 58px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif"; ctx.fillStyle = active ? "#ffffffe6" : info?.reward ? "#b7791f" : "#5b6778";
-      ctx.fillText(fitText(ctx, info?.status ?? "", 700), 322, 250);
+      let size = 100; do { ctx.font = `800 ${size}px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif`; size -= 4; } while (size > 60 && ctx.measureText(name).width > 680);
+      ctx.fillText(fitText(ctx, name, 680), 304, 150);
+      ctx.font = "600 60px system-ui,-apple-system,'Segoe UI',Roboto,sans-serif"; ctx.fillStyle = active ? "#ffffffe6" : info?.reward ? "#b7791f" : soon ? "#7b8494" : "#4c5767";
+      ctx.fillText(fitText(ctx, info?.status ?? "", 680), 306, 256);
       board.texture.needsUpdate = true;
     }
   }
@@ -493,24 +640,51 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   controls.addEventListener("start", () => { tween = null; host.dataset.dragging = "true"; });
   controls.addEventListener("end", () => { delete host.dataset.dragging; options.onView(currentView()); });
   controls.addEventListener("change", () => {
-    // Keep panning on the island.
+    // Keep panning over the city.
     const t = controls.target, length = Math.hypot(t.x, t.z);
     if (length > PAN_RADIUS) { const shift = new THREE.Vector3(t.x, 0, t.z).multiplyScalar(PAN_RADIUS / length - 1); t.add(shift); camera.position.add(shift); }
-    t.y = THREE.MathUtils.clamp(t.y, 0, 5);
+    t.y = 0;
   });
 
-  let width = 0, height = 0, fitted = false;
-  let homeView = DEFAULT_VIEW;
+  // The canvas fills the screen; the city is centred in the free frame between the panels.
+  let width = 0, height = 0;
+  const frameRect = () => { const f = options.frame?.getBoundingClientRect(); return f && f.width > 60 && f.height > 60 ? f : null; };
   function resize() {
     width = host.clientWidth; height = host.clientHeight; if (!width || !height) return;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.4 : lite ? 1.5 : 1.75, Math.sqrt(3.4e6 / (width * height))));
     renderer.setSize(width, height, false); camera.aspect = width / height;
-    camera.fov = width < 480 ? 55 : 36; camera.updateProjectionMatrix();
-    homeView = { ...DEFAULT_VIEW, distance: Math.min(MAX_DISTANCE, Math.max(DEFAULT_VIEW.distance, 42 / (Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect))) };
-    if (!fitted && !options.view) applyView(homeView);
-    fitted = true;
+    camera.fov = width < 480 ? 50 : 36;
+    const f = frameRect(), bounds = host.getBoundingClientRect();
+    if (f) camera.setViewOffset(width, height, bounds.left + width / 2 - (f.left + f.right) / 2, bounds.top + height / 2 - (f.top + f.bottom) / 2, width, height);
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+  }
+  /** Default view sized so the ring road fills the free frame, whatever the screen. */
+  function defaultView(): CityView {
+    const f = frameRect(); if (!f || !height) return DEFAULT_VIEW;
+    const perPixel = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / height;
+    return { ...DEFAULT_VIEW, distance: THREE.MathUtils.clamp(Math.max(52 / (perPixel * f.width), 38 / (perPixel * f.height)), 62, 125) };
   }
   drawBoards();
-  const observer = new ResizeObserver(resize); observer.observe(host); resize();
+  const observer = new ResizeObserver(resize); observer.observe(host); if (options.frame) observer.observe(options.frame); resize();
+  applyView(options.view ?? defaultView());
+
+  // One compressed file with the city blocks and one with vehicles; the city stays usable if either fails.
+  let modelsSettled = false;
+  const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
+  const loaded: THREE.Object3D[] = [];
+  loader.loadAsync(modelsUrl).then(gltf => {
+    if (disposed) return;
+    loaded.push(...gltf.scenes);
+    models = new Map(gltf.scenes.map(s => [s.name, s]));
+    modelBlocks(models);
+  }).catch(() => { if (!disposed) { simpleBlocks(); plainBlocks(outskirts); } }).finally(() => { modelsSettled = true; });
+  loader.loadAsync(vehiclesUrl).then(gltf => {
+    if (disposed) return;
+    loaded.push(...gltf.scenes);
+    const catalogue = new Map<string, THREE.Object3D>(gltf.scenes.map(s => [s.name, s]));
+    buildTraffic(catalogue); parkedVehicles(catalogue);
+  }).catch(() => { /* Toy cars keep driving. */ });
 
   let frame = 0, last = performance.now(), visible = true, ready = false;
   const visibility = new IntersectionObserver(entries => { visible = entries.some(e => e.isIntersecting); if (visible && !frame) frame = requestAnimationFrame(tick); });
@@ -529,10 +703,10 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       ring.scale.setScalar(id === selected ? 1 + pulse * .04 : 1);
     });
     if (!reduced) {
-      moveCars(dt);
+      moveTraffic(dt, now);
+      waves.offset.set(waves.offset.x + dt * .01, waves.offset.y + dt * .004);
       characterMixer?.update(dt);
       if (characterMixer && waveAction && now >= nextWave) { idleAction?.fadeOut(.35); waveAction.reset().fadeIn(.35).play(); nextWave = now + 18000; }
-
     }
     stepGrowth(now, dt);
     if (width && height && modelsSettled) { updateBoards(); renderer.render(scene, camera); host.dataset.drawCalls = String(renderer.info.render.calls); host.dataset.triangles = String(renderer.info.render.triangles); if (!ready) { ready = true; options.onReady(); startGrowth(now); } }
@@ -552,18 +726,18 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     zoom(factor) { animateTo({ distance: currentView().distance * factor }, 320); },
     rotate(radians) { animateTo({ azimuth: currentView().azimuth + radians }, 420); },
     tilt(radians) { animateTo({ polar: currentView().polar + radians }, 320); },
-    reset() { animateTo(homeView, 700); },
-    focusMascot() { animateTo({ target: [0, 3, 0], azimuth: .12, polar: 1.12, distance: 22 }, 650); },
+    reset() { animateTo(defaultView(), 700); },
+    focusMascot() { animateTo({ target: [0, 3, 0], azimuth: currentView().azimuth, polar: 1.12, distance: 22 }, 650); },
     dispose() {
       disposed = true; cancelAnimationFrame(frame); observer.disconnect(); visibility.disconnect(); controls.dispose();
       document.removeEventListener("visibilitychange", onVisible);
       renderer.domElement.removeEventListener("pointerdown", onDown); renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointermove", onHover); renderer.domElement.removeEventListener("pointerleave", onLeave);
       renderer.domElement.removeEventListener("webglcontextlost", lost);
-      const ownedMaterials = new Set<THREE.Material>();
-      scene.traverse(o => { if (o instanceof THREE.Mesh || o instanceof THREE.Points || o instanceof THREE.Sprite) { if ('geometry' in o) o.geometry.dispose(); (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => ownedMaterials.add(m)); } });
-      ownedMaterials.forEach(m => { Object.values(m).forEach(v => { if (v instanceof THREE.Texture) v.dispose(); }); m.dispose(); });
-      materials.forEach(m => m.dispose()); facadeMaterials.forEach(list => list[0].dispose()); facades.forEach(t => t.dispose()); boards.forEach(b => b.texture.dispose()); architecture.dispose(); environment.dispose(); characterRequest++; characterMixer?.stopAllAction(); disposeCharacter(figure); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
+      scene.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); if (o.material instanceof THREE.MeshBasicMaterial) o.material.dispose(); } if (o instanceof THREE.InstancedMesh) o.dispose(); });
+      for (const root of [...loaded, toy, boat]) root.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); for (const m of [o.material].flat() as THREE.MeshStandardMaterial[]) { m.map?.dispose(); m.dispose(); } } });
+      unit.dispose(); block.dispose(); blobPlane.dispose(); pole.dispose(); bulb.dispose();
+      materials.forEach(m => m.dispose()); disposables.forEach(d => d.dispose()); boards.forEach(b => b.texture.dispose()); architecture.dispose(); environment.dispose(); characterRequest++; characterMixer?.stopAllAction(); disposeCharacter(figure); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
     },
   };
 }
