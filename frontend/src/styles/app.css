@@ -623,34 +623,6 @@ a {
   color: var(--text-tertiary);
 }
 
-/* Цветная метка у подписи различает соседние показатели, не неся смысла статуса. */
-.kpi-grid > .kpi {
-  --kpi-mark: var(--accent-bright);
-}
-
-.kpi-grid > .kpi:nth-child(4n + 2) {
-  --kpi-mark: var(--accent-teal-bright);
-}
-
-.kpi-grid > .kpi:nth-child(4n + 3) {
-  --kpi-mark: var(--accent-blue);
-}
-
-.kpi-grid > .kpi:nth-child(4n + 4) {
-  --kpi-mark: var(--accent-amber-bright, var(--coin-color));
-}
-
-.kpi-grid > .kpi .kpi__label::before {
-  content: "";
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: 7px;
-  border-radius: 50%;
-  background: var(--kpi-mark);
-  vertical-align: 0.05em;
-}
-
 .kpi--coin .kpi__value {
   color: var(--coin-color);
 }
@@ -1213,7 +1185,7 @@ select.input {
   padding: 1px var(--sp-2);
   border-radius: var(--radius-pill);
   background: var(--accent-primary);
-  color: #fff;
+  color: var(--accent-on);
   font-size: 10px;
   font-weight: 650;
   text-transform: uppercase;

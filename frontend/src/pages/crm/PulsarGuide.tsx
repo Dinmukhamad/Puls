@@ -10,30 +10,30 @@ export function PulsarFace({ mood = "idle" }: { mood?: PulsarMood }) {
   const id = useId().replace(/:/g, "");
   return <svg className="pulsar-face" data-mood={mood} viewBox="0 0 240 200" role="img" aria-label="Пульсар — космический помощник">
     <defs>
-      <linearGradient id={`${id}-shell`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#fff"/><stop offset=".48" stopColor="#fff4f1"/><stop offset="1" stopColor="#efb5a8"/></linearGradient>
-      <linearGradient id={`${id}-purple`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#ff9d87"/><stop offset="1" stopColor="#d86950"/></linearGradient>
+      <linearGradient id={`${id}-shell`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#fff"/><stop offset=".48" stopColor="#f8f8f8"/><stop offset="1" stopColor="#c8cacf"/></linearGradient>
+      <linearGradient id={`${id}-purple`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#bfc2c7"/><stop offset="1" stopColor="#8e929a"/></linearGradient>
       <linearGradient id={`${id}-glass`} x1="0" y1="0" x2="0" y2="1"><stop stopColor="#354276"/><stop offset="1" stopColor="#172344"/></linearGradient>
-      <radialGradient id={`${id}-halo`}><stop stopColor="#ffd6cd" stopOpacity=".65"/><stop offset="1" stopColor="#fff7f5" stopOpacity="0"/></radialGradient>
+      <radialGradient id={`${id}-halo`}><stop stopColor="#e4e6e8" stopOpacity=".65"/><stop offset="1" stopColor="#fafafa" stopOpacity="0"/></radialGradient>
     </defs>
     <ellipse className="pulsar-halo" cx="120" cy="104" rx="103" ry="85" fill={`url(#${id}-halo)`}/>
-    <g className="pulsar-stars" fill="#e6a394"><path d="m38 58 3-8 3 8 8 3-8 3-3 8-3-8-8-3Z"/><path d="m197 105 2-6 2 6 6 2-6 2-2 6-2-6-6-2Z"/><circle cx="181" cy="39" r="2.5"/><circle cx="60" cy="134" r="2"/></g>
-    <ellipse className="pulsar-shadow" cx="120" cy="183" rx="40" ry="6" fill="#ebc5bd" opacity=".4"/>
+    <g className="pulsar-stars" fill="#b9bcc1"><path d="m38 58 3-8 3 8 8 3-8 3-3 8-3-8-8-3Z"/><path d="m197 105 2-6 2 6 6 2-6 2-2 6-2-6-6-2Z"/><circle cx="181" cy="39" r="2.5"/><circle cx="60" cy="134" r="2"/></g>
+    <ellipse className="pulsar-shadow" cx="120" cy="183" rx="40" ry="6" fill="#d1d3d7" opacity=".4"/>
     <g className="pulsar-floating">
-      <path d="M120 48V32" stroke="#e99683" strokeWidth="5" strokeLinecap="round"/><path className="pulsar-antenna" d="m120 14 4 8 9 2-7 6 1 9-7-4-8 4 2-9-7-6 9-2Z" fill={`url(#${id}-purple)`}/>
+      <path d="M120 48V32" stroke="#b2b5ba" strokeWidth="5" strokeLinecap="round"/><path className="pulsar-antenna" d="m120 14 4 8 9 2-7 6 1 9-7-4-8 4 2-9-7-6 9-2Z" fill={`url(#${id}-purple)`}/>
       <path className="pulsar-arm-left" d="M71 95C51 84 49 111 64 121" fill="none" stroke={`url(#${id}-shell)`} strokeWidth="16" strokeLinecap="round"/>
       <path className="pulsar-arm-right" d="M168 93c21-18 32 1 18 19" fill="none" stroke={`url(#${id}-shell)`} strokeWidth="16" strokeLinecap="round"/>
-      <path d="M91 126c-7 12-4 31 9 41l9-10h22l9 10c14-10 17-29 9-41" fill={`url(#${id}-shell)`} stroke="#f6d5cd" strokeWidth="1.5"/>
+      <path d="M91 126c-7 12-4 31 9 41l9-10h22l9 10c14-10 17-29 9-41" fill={`url(#${id}-shell)`} stroke="#e0e1e3" strokeWidth="1.5"/>
       <path d="M100 146q20 12 40 0v9q-20 13-40 0Z" fill={`url(#${id}-purple)`}/>
-      <rect x="111" y="135" width="18" height="13" rx="5" fill="#ed8770"/><path d="m115 142 3-3 3 5 4-5" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round"/>
-      <rect x="64" y="46" width="113" height="88" rx="39" fill={`url(#${id}-shell)`} stroke="#f2d5ce" strokeWidth="1.5"/>
+      <rect x="111" y="135" width="18" height="13" rx="5" fill="#aaadb3"/><path d="m115 142 3-3 3 5 4-5" fill="none" stroke="white" strokeWidth="1.6" strokeLinecap="round"/>
+      <rect x="64" y="46" width="113" height="88" rx="39" fill={`url(#${id}-shell)`} stroke="#dedfe2" strokeWidth="1.5"/>
       <path d="M81 62q17-12 35-8" fill="none" stroke="white" strokeWidth="5" strokeLinecap="round" opacity=".9"/>
       <rect x="77" y="64" width="87" height="55" rx="23" fill={`url(#${id}-glass)`}/>
       <path d="M90 72h49" stroke="#6675aa" strokeWidth="3" strokeLinecap="round" opacity=".4"/>
       <g className="pulsar-eyes" fill="#a5f3e9"><rect x="94" y="82" width="10" height="15" rx="5"/><rect x="138" y="82" width="10" height="15" rx="5"/></g>
       <g className="pulsar-eyes-happy" opacity="0" fill="none" stroke="#a5f3e9" strokeWidth="4" strokeLinecap="round"><path d="M93 92q6-9 12 0"/><path d="M137 92q6-9 12 0"/></g>
-      <ellipse cx="89" cy="103" rx="6" ry="3" fill="#f6a998" opacity=".65"/><ellipse cx="153" cy="103" rx="6" ry="3" fill="#f6a998" opacity=".65"/>
+      <ellipse cx="89" cy="103" rx="6" ry="3" fill="#c4c6ca" opacity=".65"/><ellipse cx="153" cy="103" rx="6" ry="3" fill="#c4c6ca" opacity=".65"/>
       <path d="M113 102q8 8 16 0" stroke="#c5fff4" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-      <path d="M65 129c-24 20 122 37 126-6" fill="none" stroke="#e9a99b" strokeWidth="2" opacity=".65"/><circle cx="185" cy="135" r="4" fill="#e49280"/>
+      <path d="M65 129c-24 20 122 37 126-6" fill="none" stroke="#bec1c6" strokeWidth="2" opacity=".65"/><circle cx="185" cy="135" r="4" fill="#adb0b7"/>
     </g>
   </svg>;
 }

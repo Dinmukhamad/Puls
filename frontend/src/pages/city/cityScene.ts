@@ -187,12 +187,12 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
 
   // Pulsar statue in the square.
   const bot = new THREE.Group(); bot.position.set(0, .3, 0); bot.scale.setScalar(2.4); world.add(bot);
-  cyl(.8, .35, "#eed5cf", 0, .17, 0, bot, 32);
-  const head = sphere(.55, "#e39887", 0, 1.05, 0, bot); head.scale.set(1.1, .92, .8);
+  cyl(.8, .35, "#dddee0", 0, .17, 0, bot, 32);
+  const head = sphere(.55, "#b1b4b9", 0, 1.05, 0, bot); head.scale.set(1.1, .92, .8);
   const face = sphere(.42, "#22242a", 0, 1.08, .26, bot); face.scale.set(1, .64, .35);
   sphere(.08, "#9ff5ea", -.16, 1.12, .4, bot); sphere(.08, "#9ff5ea", .16, 1.12, .4, bot);
-  cyl(.04, .32, "#dda497", 0, 1.6, 0, bot); sphere(.09, "#ffd976", 0, 1.8, 0, bot);
-  sphere(.28, "#cc8474", 0, .52, 0, bot);
+  cyl(.04, .32, "#b6b9be", 0, 1.6, 0, bot); sphere(.09, "#ffd976", 0, 1.8, 0, bot);
+  sphere(.28, "#9a9ea6", 0, .52, 0, bot);
 
   // Kenney models (CC0) are cloned on demand; a slot with fit > 0 is scaled to that footprint.
   let models: Map<string, THREE.Object3D> | null = null;

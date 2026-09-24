@@ -13,48 +13,32 @@
   color-scheme: light;
 
   /* ---------------------------------------------------------------- */
-  /* Бренд: графит и коралл                                           */
+  /* Бренд: графит                                                    */
   /* ---------------------------------------------------------------- */
   /*
-   * Графит - главные кнопки и заголовки. Коралл - всё, что выделяет:
-   * ссылки, активные пункты, переключатели, прогресс, логотип.
-   * --accent-primary тёмнее яркого коралла, чтобы текст проходил WCAG
-   * на белом; --accent-bright идёт на заливки, полосы и значки.
+   * Монохромная гамма: кнопки, ссылки, активные пункты и прогресс - один
+   * графитовый цвет. Цветными остаются только смысловые сигналы: статусы
+   * и золото коинов.
    */
   --graphite: #17191e;
-  --coral: #f0522e;
 
-  --accent-primary: #d23c1b;
-  --accent-bright: var(--coral);
-  --accent-secondary: #2c2f36;
+  --accent-primary: var(--graphite);
+  --accent-bright: var(--graphite);
+  --accent-secondary: #6a6c72;
   --accent-on: #ffffff;
-  /* Мягкая подложка бренда: активный пункт меню, выделение своей строки. */
-  --accent-tint: rgba(240, 82, 46, 0.1);
-  --accent-tint-strong: rgba(240, 82, 46, 0.16);
-  --accent-ink: #a8301a;
+  --text-on-accent: #ffffff;
+  /* Мягкая подложка: активный пункт меню, выделение своей строки. */
+  --accent-tint: rgba(23, 25, 30, 0.07);
+  --accent-tint-strong: rgba(23, 25, 30, 0.12);
+  --accent-ink: var(--graphite);
 
-  /* Главная кнопка графитовая: коралл остаётся для выделения. */
   --btn-primary-bg: var(--graphite);
   --btn-primary-hover: #2a2d34;
   --btn-primary-active: #3a3e46;
   --btn-primary-fg: #ffffff;
 
-  /*
-   * Дополнительные акценты для разнообразия там, где рядом стоят равные
-   * по смыслу блоки: карточки показателей, линии графиков, виды обучения,
-   * аватары. Смысловых статусов они не заменяют.
-   */
-  --accent-teal: #0b8a80;
-  --accent-teal-bright: #14b3a5;
-  --accent-teal-tint: rgba(20, 179, 165, 0.12);
-  --accent-blue: #2f6fe4;
-  --accent-blue-tint: rgba(47, 111, 228, 0.12);
-  --accent-amber: #b7790a;
-  --accent-amber-bright: #f4b844;
-  --accent-amber-tint: rgba(244, 184, 68, 0.16);
-
-  --gradient-brand: linear-gradient(135deg, #ff7a45 0%, #e8431f 100%);
-  --gradient-cool: linear-gradient(135deg, #14b3a5 0%, #2f6fe4 100%);
+  --gradient-brand: linear-gradient(135deg, #3a3e46 0%, #17191e 100%);
+  --gradient-cool: linear-gradient(135deg, #4a4e57 0%, #17191e 100%);
 
   /* ---------------------------------------------------------------- */
   /* Функциональные цвета                                             */
@@ -76,9 +60,9 @@
   --status-info-tint: rgba(66, 165, 255, 0.12);
 
   /* Цвета прогресса и наград. */
-  --progress-color: var(--coral);
-  --progress-text: #b8341a;
-  --progress-tint: rgba(240, 82, 46, 0.12);
+  --progress-color: var(--graphite);
+  --progress-text: var(--graphite);
+  --progress-tint: rgba(23, 25, 30, 0.08);
   --coin-color: #f4b844;
   --coin-tint: rgba(244, 184, 68, 0.16);
   /* Читаемый на светлом фоне вариант золота для текста и значков. */
@@ -202,23 +186,19 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --accent-primary: #ff6a4a;
-  --accent-bright: #ff6a4a;
-  --accent-secondary: #c9ccd3;
-  --accent-tint: rgba(255, 106, 74, 0.18);
-  --accent-tint-strong: rgba(255, 106, 74, 0.28);
-  --accent-ink: #ffb4a2;
+    --accent-primary: #f4f4f5;
+  --accent-bright: #f4f4f5;
+  --accent-secondary: #a9abb1;
+  --accent-on: #111214;
+  --text-on-accent: #111214;
+  --accent-tint: rgba(255, 255, 255, 0.08);
+  --accent-tint-strong: rgba(255, 255, 255, 0.14);
+  --accent-ink: #f4f4f5;
   --btn-primary-bg: #f4f4f5;
   --btn-primary-hover: #e2e3e6;
   --btn-primary-active: #d0d2d6;
   --btn-primary-fg: #111214;
-  --accent-teal: #3fd1c2;
-  --accent-teal-bright: #3fd1c2;
-  --accent-teal-tint: rgba(63, 209, 194, 0.16);
-  --accent-blue: #7aa7ff;
-  --accent-blue-tint: rgba(122, 167, 255, 0.16);
-  --accent-amber: #f5c86f;
-  --accent-amber-tint: rgba(244, 184, 68, 0.2);
+  --gradient-brand: linear-gradient(135deg, #4a4e57 0%, #2a2c32 100%);
 
     --status-success-text: #4dd6ae;
     --status-warning-text: #f5c86f;
@@ -229,8 +209,9 @@
     --status-warning-tint: rgba(242, 184, 75, 0.18);
     --status-danger-tint: rgba(255, 93, 108, 0.18);
     --status-info-tint: rgba(66, 165, 255, 0.16);
-    --progress-tint: rgba(255, 106, 74, 0.22);
-  --progress-text: #ff9a80;
+    --progress-tint: rgba(255, 255, 255, 0.12);
+  --progress-color: #f4f4f5;
+  --progress-text: #f4f4f5;
     --coin-tint: rgba(244, 184, 68, 0.2);
     --gold-text: #f0c064;
 
@@ -271,23 +252,19 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --accent-primary: #ff6a4a;
-  --accent-bright: #ff6a4a;
-  --accent-secondary: #c9ccd3;
-  --accent-tint: rgba(255, 106, 74, 0.18);
-  --accent-tint-strong: rgba(255, 106, 74, 0.28);
-  --accent-ink: #ffb4a2;
+  --accent-primary: #f4f4f5;
+  --accent-bright: #f4f4f5;
+  --accent-secondary: #a9abb1;
+  --accent-on: #111214;
+  --text-on-accent: #111214;
+  --accent-tint: rgba(255, 255, 255, 0.08);
+  --accent-tint-strong: rgba(255, 255, 255, 0.14);
+  --accent-ink: #f4f4f5;
   --btn-primary-bg: #f4f4f5;
   --btn-primary-hover: #e2e3e6;
   --btn-primary-active: #d0d2d6;
   --btn-primary-fg: #111214;
-  --accent-teal: #3fd1c2;
-  --accent-teal-bright: #3fd1c2;
-  --accent-teal-tint: rgba(63, 209, 194, 0.16);
-  --accent-blue: #7aa7ff;
-  --accent-blue-tint: rgba(122, 167, 255, 0.16);
-  --accent-amber: #f5c86f;
-  --accent-amber-tint: rgba(244, 184, 68, 0.2);
+  --gradient-brand: linear-gradient(135deg, #4a4e57 0%, #2a2c32 100%);
 
   --status-success-text: #4dd6ae;
   --status-warning-text: #f5c86f;
@@ -298,8 +275,9 @@
   --status-warning-tint: rgba(242, 184, 75, 0.18);
   --status-danger-tint: rgba(255, 93, 108, 0.18);
   --status-info-tint: rgba(66, 165, 255, 0.16);
-  --progress-tint: rgba(255, 106, 74, 0.22);
-  --progress-text: #ff9a80;
+  --progress-tint: rgba(255, 255, 255, 0.12);
+  --progress-color: #f4f4f5;
+  --progress-text: #f4f4f5;
   --coin-tint: rgba(244, 184, 68, 0.2);
   --gold-text: #f0c064;
 

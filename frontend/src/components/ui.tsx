@@ -429,12 +429,12 @@ export function Pagination({
  * -------------------------------------------------------------------------- */
 
 const AVATAR_GRADIENTS = [
-  "linear-gradient(135deg,#ff7a45,#e8431f)",
-  "linear-gradient(135deg,#14b3a5,#2f6fe4)",
+  "linear-gradient(135deg,#3a3e46,#17191e)",
+  "linear-gradient(135deg,#5a5e67,#2a2d34)",
   "linear-gradient(135deg,#6b7280,#3a3e46)",
-  "linear-gradient(135deg,#28c798,#14b3a5)",
-  "linear-gradient(135deg,#f4b844,#f07d24)",
-  "linear-gradient(135deg,#5b8cff,#2f6fe4)",
+  "linear-gradient(135deg,#4a4e57,#1f2126)",
+  "linear-gradient(135deg,#7a7f88,#4a4e57)",
+  "linear-gradient(135deg,#2a2d34,#0f1013)",
 ];
 
 export function Avatar({

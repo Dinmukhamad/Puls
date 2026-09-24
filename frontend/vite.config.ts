@@ -16,8 +16,8 @@ const PUBLIC_ASSETS = [
   "/manifest.webmanifest", "/offline.html", "/favicon.svg",
   "/icons/puls-light.svg", "/icons/puls-dark.svg", "/icons/puls-192.png",
   "/icons/puls-512.png", "/icons/puls-maskable-512.png", "/icons/apple-touch-icon.png",
-  "/icons/puls-app-192-v3.png", "/icons/puls-app-512-v3.png", "/icons/puls-maskable-v3.png",
-  "/icons/apple-touch-icon-v3.png", "/icons/puls-favicon-v3.png",
+  "/icons/puls-app-192-v4.png", "/icons/puls-app-512-v4.png", "/icons/puls-maskable-v4.png",
+  "/icons/apple-touch-icon-v4.png", "/icons/puls-favicon-v4.png",
 ];
 
 /** The worker changes whenever shipped content changes, including public files. */

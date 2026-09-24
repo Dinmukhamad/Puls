@@ -1,10 +1,10 @@
 /* The dock is a sibling of the browser, outside its overflow clipping context. */
-.work-sites { padding-right:370px; --pulsar-violet:#e06c52; --pulsar-deep:#5a271b; --pulsar-ink:#23294a; }
-.pulsar-dock { position:fixed; right:18px; top:74px; bottom:18px; width:340px; z-index:30; display:flex; flex-direction:column; overflow:hidden; color:var(--pulsar-ink); background:#fff; border:2px solid #f5b9ab; border-radius:22px; box-shadow:0 18px 50px #a0442f33,0 3px 10px #a0442f1a; font-size:14px; transition:box-shadow .3s; }
+.work-sites { padding-right:370px; --pulsar-violet:#93979f; --pulsar-deep:#37393e; --pulsar-ink:#23294a; }
+.pulsar-dock { position:fixed; right:18px; top:74px; bottom:18px; width:340px; z-index:30; display:flex; flex-direction:column; overflow:hidden; color:var(--pulsar-ink); background:#fff; border:2px solid #cdcfd3; border-radius:22px; box-shadow:0 18px 50px #61656e33,0 3px 10px #61656e1a; font-size:14px; transition:box-shadow .3s; }
 .pulsar-dock.is-attention { animation:pulsar-ring 1.6s ease-out; }
 
 /* Hero: Pulsar speaks from a starry panel so he stands out from the pale CRM. */
-.pulsar-hero { flex-shrink:0; position:relative; color:#fff; padding:12px 14px 14px; background:radial-gradient(circle at 18% 22%,#ffffff55 0 1px,transparent 2px),radial-gradient(circle at 94% 62%,#ffffff66 0 1px,transparent 2px),radial-gradient(circle at 62% 78%,#ffffff40 0 1px,transparent 2px),radial-gradient(circle at 12% 88%,#ffffff40 0 1px,transparent 2px),linear-gradient(155deg,#c7381a 0,#e8492a 50%,#ff7a4d 100%); }
+.pulsar-hero { flex-shrink:0; position:relative; color:#fff; padding:12px 14px 14px; background:radial-gradient(circle at 18% 22%,#ffffff55 0 1px,transparent 2px),radial-gradient(circle at 94% 62%,#ffffff66 0 1px,transparent 2px),radial-gradient(circle at 62% 78%,#ffffff40 0 1px,transparent 2px),radial-gradient(circle at 12% 88%,#ffffff40 0 1px,transparent 2px),linear-gradient(155deg,#0f1013 0,#23252b 50%,#3a3e46 100%); }
 .pulsar-hero-top { display:flex; align-items:center; gap:8px; }
 .pulsar-name { display:flex; align-items:baseline; gap:7px; flex:1; min-width:0; font-weight:700; font-size:16px; letter-spacing:-.2px; }
 .pulsar-name small { font-weight:400; font-size:12px; opacity:.75; }
@@ -17,77 +17,77 @@
 .pulsar-avatar { position:relative; border:0; padding:0; background:none; cursor:default!important; }
 .pulsar-avatar .pulsar-face { display:block; width:104px; height:88px; overflow:visible; }
 .pulsar-badge { position:absolute; top:4px; right:6px; display:grid; place-items:center; width:22px; height:22px; border-radius:50%; background:#ff5a7a; color:#fff; font-weight:800; font-size:13px; border:2px solid #fff; animation:pulsar-badge 1s ease-in-out infinite; }
-.pulsar-bubble { position:relative; background:#fff; color:var(--pulsar-ink); border-radius:16px 16px 16px 4px; padding:10px 12px 11px; box-shadow:0 6px 18px #3a130a40; }
+.pulsar-bubble { position:relative; background:#fff; color:var(--pulsar-ink); border-radius:16px 16px 16px 4px; padding:10px 12px 11px; box-shadow:0 6px 18px #20212440; }
 .pulsar-bubble::before { content:""; position:absolute; left:-9px; bottom:12px; border:9px solid transparent; border-right-color:#fff; border-left:0; }
-.pulsar-speech { margin:0 0 5px; font-size:12.5px; line-height:1.4; color:#d45e43; font-weight:600; }
+.pulsar-speech { margin:0 0 5px; font-size:12.5px; line-height:1.4; color:#858992; font-weight:600; }
 .pulsar-bubble strong { display:block; font-size:15.5px; line-height:1.3; letter-spacing:-.2px; overflow-wrap:anywhere; }
 .pulsar-dock.is-attention .pulsar-bubble { animation:pulsar-pop .5s cubic-bezier(.3,1.6,.5,1); }
 .pulsar-dots { display:flex; gap:6px; list-style:none; margin:12px 0 0; padding:0; }
 .pulsar-dots li { flex:1; height:6px; border-radius:6px; background:#ffffff33; transition:background .3s; }
-.pulsar-dots li.is-done { background:#ffa996; }
+.pulsar-dots li.is-done { background:#c7c9ce; }
 .pulsar-dots li.is-current { background:#fff; box-shadow:0 0 10px #fff9; }
 
 /* Content */
-.pulsar-dock-scroll { padding:14px 16px 24px; mask-image:linear-gradient(#000 calc(100% - 28px),transparent); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#f2cec6 transparent; min-height:0; }
-.pulsar-modes { display:flex; padding:4px; background:#fcf0ed; border-radius:12px; gap:4px; margin:0 0 14px; }
+.pulsar-dock-scroll { padding:14px 16px 24px; mask-image:linear-gradient(#000 calc(100% - 28px),transparent); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:#dadbde transparent; min-height:0; }
+.pulsar-modes { display:flex; padding:4px; background:#f4f4f5; border-radius:12px; gap:4px; margin:0 0 14px; }
 .pulsar-modes button { width:50%; background:transparent; border:0; color:#6c6690; font-size:12.5px; border-radius:9px; padding:8px 4px; }
-.pulsar-modes button.is-active { background:#fff; color:#c74e33; font-weight:700; box-shadow:0 2px 6px #c74e331f; }
+.pulsar-modes button.is-active { background:#fff; color:#767a84; font-weight:700; box-shadow:0 2px 6px #767a841f; }
 .pulsar-eyebrow { color:#7b72a3; font-size:11px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; }
 .pulsar-editor h2 { font-size:17px; line-height:1.35; letter-spacing:-.25px; color:var(--pulsar-ink); margin:8px 0 11px; font-weight:700; overflow-wrap:anywhere; }
-.pulsar-context { display:inline-block; color:#c74e33; background:#feeeea; border-radius:8px; padding:4px 9px; font-size:12px; font-weight:600; line-height:1.45; margin:0 0 10px; }
-.pulsar-body { white-space:pre-wrap; overflow-wrap:anywhere; background:#fff7f5; color:#2f3553; padding:12px 14px; margin:0 0 16px; border-left:4px solid var(--pulsar-violet); border-radius:4px 12px 12px 4px; font-size:14px; line-height:1.6; }
+.pulsar-context { display:inline-block; color:#767a84; background:#f3f4f5; border-radius:8px; padding:4px 9px; font-size:12px; font-weight:600; line-height:1.45; margin:0 0 10px; }
+.pulsar-body { white-space:pre-wrap; overflow-wrap:anywhere; background:#fafafa; color:#2f3553; padding:12px 14px; margin:0 0 16px; border-left:4px solid var(--pulsar-violet); border-radius:4px 12px 12px 4px; font-size:14px; line-height:1.6; }
 .pulsar-checklist-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 8px; }
 .pulsar-checklist-heading strong { font-size:14.5px; color:var(--pulsar-ink); }
-.pulsar-checklist-heading span { color:#c74e33; background:#feeeea; font-weight:700; border-radius:20px; padding:2px 9px; font-size:12px; }
-.pulsar-progress { height:7px; background:#f9edea; overflow:hidden; border-radius:7px; margin-bottom:10px; }
-.pulsar-progress>span { display:block; height:100%; background:linear-gradient(90deg,#ff8d74,#d45e43); transition:width .3s; border-radius:7px; }
+.pulsar-checklist-heading span { color:#767a84; background:#f3f4f5; font-weight:700; border-radius:20px; padding:2px 9px; font-size:12px; }
+.pulsar-progress { height:7px; background:#f1f1f2; overflow:hidden; border-radius:7px; margin-bottom:10px; }
+.pulsar-progress>span { display:block; height:100%; background:linear-gradient(90deg,#b5b8be,#858992); transition:width .3s; border-radius:7px; }
 .pulsar-checklist.is-finished .pulsar-progress>span { background:linear-gradient(90deg,#4fd1a0,#2aa876); }
 .pulsar-checklist.is-finished .pulsar-checklist-heading span { color:#1f8a60; background:#dff7ec; }
-.pulsar-checklist label { position:relative; display:flex; gap:10px; align-items:start; padding:10px 11px; margin-bottom:7px; cursor:pointer; border:1px solid #f7e6e2; border-radius:12px; background:#fff; transition:background .15s,border-color .15s; }
-.pulsar-checklist label:hover { background:#fff9f8; border-color:#f5cbc1; }
+.pulsar-checklist label { position:relative; display:flex; gap:10px; align-items:start; padding:10px 11px; margin-bottom:7px; cursor:pointer; border:1px solid #ebecee; border-radius:12px; background:#fff; transition:background .15s,border-color .15s; }
+.pulsar-checklist label:hover { background:#fbfbfc; border-color:#d9dadd; }
 .pulsar-checklist input[type=checkbox] { position:absolute; opacity:0; width:1px; height:1px; margin:0; }
-.pulsar-checklist label>span { flex-shrink:0; display:grid; place-items:center; width:26px; height:26px; border-radius:50%; background:#feeeea; color:#c74e33; font-size:13px; font-weight:700; transition:background .2s; }
-.pulsar-checklist input:focus-visible+span { outline:3px solid #ff8d74; outline-offset:2px; }
+.pulsar-checklist label>span { flex-shrink:0; display:grid; place-items:center; width:26px; height:26px; border-radius:50%; background:#f3f4f5; color:#767a84; font-size:13px; font-weight:700; transition:background .2s; }
+.pulsar-checklist input:focus-visible+span { outline:3px solid #b5b8be; outline-offset:2px; }
 .pulsar-checklist p { margin:3px 0 0; font-size:13.5px; color:#2f3553; line-height:1.5; overflow-wrap:anywhere; }
 .pulsar-checklist .is-done { background:#f3fbf7; border-color:#c8ecd9; }
 .pulsar-checklist .is-done>span { background:#2fb57f; color:#fff; }
 .pulsar-checklist .is-done p { color:#8a93a6; text-decoration:line-through; }
 .pulsar-checklist>small { font-size:12px; color:#8c86a8; display:block; margin:4px 2px 0; }
-.pulsar-dock-footer { padding:12px 16px; border-top:1px solid #f9edea; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-shrink:0; margin-top:auto; background:#fff; }
-.work-sites .pulsar-next { flex:1; border:0; border-radius:12px; padding:12px 16px; color:#fff; font-weight:700; font-size:14px; background:linear-gradient(135deg,#ff8469,#cf5539); box-shadow:0 6px 16px #cf553940; transition:transform .15s,box-shadow .15s; }
-.work-sites .pulsar-next:hover { transform:translateY(-1px); box-shadow:0 8px 20px #cf553955; }
+.pulsar-dock-footer { padding:12px 16px; border-top:1px solid #f1f1f2; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-shrink:0; margin-top:auto; background:#fff; }
+.work-sites .pulsar-next { flex:1; border:0; border-radius:12px; padding:12px 16px; color:#fff; font-weight:700; font-size:14px; background:linear-gradient(135deg,#afb2b8,#7d828b); box-shadow:0 6px 16px #7d828b40; transition:transform .15s,box-shadow .15s; }
+.work-sites .pulsar-next:hover { transform:translateY(-1px); box-shadow:0 8px 20px #7d828b55; }
 .work-sites .pulsar-dock .crm-primary { background:var(--pulsar-violet); border-color:var(--pulsar-violet); border-radius:10px; font-size:13px; padding:10px 14px; }
-.work-sites .pulsar-text-button { border:0; background:transparent; color:#d45e43; padding:6px 2px; font-size:13px; font-weight:600; }
+.work-sites .pulsar-text-button { border:0; background:transparent; color:#858992; padding:6px 2px; font-size:13px; font-weight:600; }
 .work-sites .pulsar-restart { width:100%; padding:8px; border-radius:10px; }
-.work-sites .pulsar-restart:hover { background:#fef3f0; }
-.pulsar-edit-tools { margin-top:16px; padding-top:14px; border-top:1px dashed #f5dbd5; }
-.pulsar-edit-button { width:100%; border:1px solid #f7d1c9; border-radius:10px; background:#fff6f4; color:#c74e33; padding:10px; font-size:13px!important; font-weight:600; }
+.work-sites .pulsar-restart:hover { background:#f7f7f7; }
+.pulsar-edit-tools { margin-top:16px; padding-top:14px; border-top:1px dashed #e3e4e7; }
+.pulsar-edit-button { width:100%; border:1px solid #dedfe2; border-radius:10px; background:#f9f9fa; color:#767a84; padding:10px; font-size:13px!important; font-weight:600; }
 .pulsar-edit-tools label { display:block; color:#6c6690; font-size:12px; margin-top:12px; }
-.work-sites .pulsar-edit-tools select { border:1px solid #f2d7d1; border-radius:8px; font-size:12.5px; color:#653b32; margin-top:6px; width:100%; }
+.work-sites .pulsar-edit-tools select { border:1px solid #e0e1e3; border-radius:8px; font-size:12.5px; color:#474a50; margin-top:6px; width:100%; }
 .pulsar-muted { color:#7b7596; font-size:13px; line-height:1.6; }
 .pulsar-editor fieldset { border:0; padding:0; margin:0; min-width:0; }
 .pulsar-editor label { display:block; color:#4d4670; font-size:13px; margin:15px 0 0; }
-.work-sites .pulsar-editor input,.work-sites .pulsar-editor textarea { margin-top:6px; border-color:#efcfc8; border-radius:8px; color:#2f3553; padding:9px; font-size:13.5px; }
+.work-sites .pulsar-editor input,.work-sites .pulsar-editor textarea { margin-top:6px; border-color:#d9dbde; border-radius:8px; color:#2f3553; padding:9px; font-size:13.5px; }
 .pulsar-editor-steps { margin:18px 0 10px; }
 .pulsar-editor-steps>strong { color:var(--pulsar-ink); font-size:14px; }
 .pulsar-editor-steps>div { display:flex; gap:7px; align-items:center; }
 .pulsar-editor-steps label { flex:1; min-width:0; }
-.pulsar-editor-steps button { background:transparent; border:0; font-size:20px; color:#c0968c; padding:2px; }
-.pulsar-editor-actions { position:sticky; bottom:-16px; background:white; border-top:1px solid #f6ebe8; padding:14px 0; display:flex; gap:14px; margin-top:18px; }
+.pulsar-editor-steps button { background:transparent; border:0; font-size:20px; color:#a1a4ab; padding:2px; }
+.pulsar-editor-actions { position:sticky; bottom:-16px; background:white; border-top:1px solid #eeeff0; padding:14px 0; display:flex; gap:14px; margin-top:18px; }
 
 /* Header button that calls Pulsar back. */
-.work-sites-heading .work-sites-guide-button { color:#fff!important; font-weight:700; padding:8px 16px!important; border-radius:20px; background:linear-gradient(135deg,#ff8469,#cf5539)!important; box-shadow:0 4px 12px #cf553940; }
+.work-sites-heading .work-sites-guide-button { color:#fff!important; font-weight:700; padding:8px 16px!important; border-radius:20px; background:linear-gradient(135deg,#afb2b8,#7d828b)!important; box-shadow:0 4px 12px #7d828b40; }
 
 /* Inline tip in the form: a small Pulsar card next to the chosen category. */
-.crm-context-help { display:grid; grid-template-columns:44px minmax(0,1fr); gap:10px; align-items:start; margin:10px 0 20px 162px; padding:12px 14px; background:#fff4f2; border:1px solid #fad7cf; border-left:4px solid var(--pulsar-violet); border-radius:6px 12px 12px 6px; }
+.crm-context-help { display:grid; grid-template-columns:44px minmax(0,1fr); gap:10px; align-items:start; margin:10px 0 20px 162px; padding:12px 14px; background:#f8f8f9; border:1px solid #e3e4e6; border-left:4px solid var(--pulsar-violet); border-radius:6px 12px 12px 6px; }
 .crm-context-help .pulsar-face { width:44px; height:40px; }
-.crm-context-help .crm-help-link { margin:0; font-size:13px!important; font-weight:700; color:#c74e33; line-height:1.45; }
+.crm-context-help .crm-help-link { margin:0; font-size:13px!important; font-weight:700; color:#767a84; line-height:1.45; }
 .crm-context-help .crm-help-link:hover { text-decoration:underline; }
 .crm-context-help p { font-size:12.5px; line-height:1.6; color:#3f4666; white-space:pre-wrap; margin:6px 0 0; }
 
 /* Tour: the field Pulsar talks about glows and carries a label. */
 .work-sites[data-guide=contact] [data-tour=contact],.work-sites[data-guide=categories] [data-tour=categories],.work-sites[data-guide=evidence] [data-tour=evidence],.work-sites[data-guide=save] [data-tour=save] { position:relative; outline:3px solid var(--pulsar-violet); outline-offset:10px; border-radius:6px; animation:pulsar-target 1.8s ease-in-out infinite; scroll-margin:90px; }
-.work-sites[data-guide=contact] [data-tour=contact]::before,.work-sites[data-guide=categories] [data-tour=categories]::before,.work-sites[data-guide=evidence] [data-tour=evidence]::before,.work-sites[data-guide=save] [data-tour=save]::before { content:var(--pulsar-label,"✦ Пульсар: смотрите сюда"); position:absolute; z-index:3; left:-10px; top:-44px; max-width:calc(100% + 20px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:5px 12px; border-radius:10px 10px 10px 2px; background:var(--pulsar-violet); color:#fff; font-size:12.5px; font-weight:700; box-shadow:0 4px 12px #cf553940; pointer-events:none; }
+.work-sites[data-guide=contact] [data-tour=contact]::before,.work-sites[data-guide=categories] [data-tour=categories]::before,.work-sites[data-guide=evidence] [data-tour=evidence]::before,.work-sites[data-guide=save] [data-tour=save]::before { content:var(--pulsar-label,"✦ Пульсар: смотрите сюда"); position:absolute; z-index:3; left:-10px; top:-44px; max-width:calc(100% + 20px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:5px 12px; border-radius:10px 10px 10px 2px; background:var(--pulsar-violet); color:#fff; font-size:12.5px; font-weight:700; box-shadow:0 4px 12px #7d828b40; pointer-events:none; }
 
 /* Compact mode on desktop: only Pulsar and his bubble stay on screen. */
 .pulsar-dock.is-compact { top:auto; bottom:18px; }
@@ -118,10 +118,10 @@
 @keyframes pulsar-hop { 0%,100% { transform:translateY(0); } 40% { transform:translateY(-12px); } 60% { transform:translateY(-10px); } }
 @keyframes pulsar-jump { 0%,100% { transform:translateY(0) scale(1); } 35% { transform:translateY(-10px) scale(1.06); } 70% { transform:translateY(0) scale(.97); } }
 @keyframes pulsar-pop { 0% { transform:scale(.85); opacity:.3; } 100% { transform:scale(1); opacity:1; } }
-@keyframes pulsar-ring { 0% { box-shadow:0 0 0 0 #ff7f62aa,0 18px 50px #a0442f33; } 100% { box-shadow:0 0 0 22px #ff7f6200,0 18px 50px #a0442f33; } }
+@keyframes pulsar-ring { 0% { box-shadow:0 0 0 0 #acafb5aa,0 18px 50px #61656e33; } 100% { box-shadow:0 0 0 22px #acafb500,0 18px 50px #61656e33; } }
 @keyframes pulsar-online { 0%,100% { box-shadow:0 0 0 3px #5ef2b833; } 50% { box-shadow:0 0 0 6px #5ef2b811; } }
 @keyframes pulsar-badge { 0%,100% { transform:scale(1); } 50% { transform:scale(1.18); } }
-@keyframes pulsar-target { 0%,100% { box-shadow:0 0 0 10px #e06c5214; } 50% { box-shadow:0 0 0 18px #e06c522b; } }
+@keyframes pulsar-target { 0%,100% { box-shadow:0 0 0 10px #93979f14; } 50% { box-shadow:0 0 0 18px #93979f2b; } }
 
 @media(max-height:760px) and (min-width:1100px) { .pulsar-dock { top:14px; bottom:14px; } .pulsar-avatar .pulsar-face { width:84px; height:72px; } .pulsar-stage { grid-template-columns:84px minmax(0,1fr); } }
 @media(max-width:1099px) {
