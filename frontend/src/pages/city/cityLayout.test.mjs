@@ -87,6 +87,8 @@ test('district islands fit the lagoon, clear of the plaza, the ring road and the
       if (along > 0) assert.ok(across > ISLET + ROAD_HALF + .3, 'a cross street passes by the island');
     }
     for (const e of city.CITY_LOCATIONS) if (e !== d) assert.ok(Math.hypot(d.x - e.x, d.z - e.z) > ISLET * 2 + 1, 'water between islands');
+    // Corners of the landmark plinth (5.7 × 5.3 units before scaling) stay on the island.
+    for (const x of [-2.85, 2.85]) for (const z of [-2.65, 2.65]) assert.ok(Math.hypot(x, z) * city.DISTRICT_SCALE < ISLET - .2, `${d.id} overhangs its island`);
   }
   for (const [ax, az, bx, bz] of city.bridgeSpans()) {
     const mid = { x: (ax + bx) / 2, z: (az + bz) / 2 };

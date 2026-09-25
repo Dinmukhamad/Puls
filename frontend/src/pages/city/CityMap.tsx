@@ -16,6 +16,8 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   const selectRef = useRef(onSelect), selectedRef = useRef(selected);
   selectRef.current = onSelect; selectedRef.current = selected;
   const [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
+  const [traffic, setTraffic] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const trafficRef = useRef(traffic); trafficRef.current = traffic;
   const levels = Object.fromEntries(districts.map(d => [d.id, missions.filter(m => m.district === d.id && m.state === "completed").length]));
   const levelKey = JSON.stringify(levels);
   const labelsKey = JSON.stringify(labels), labelsRef = useRef(labels);
@@ -35,6 +37,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
         onSelect: id => selectRef.current(id), onView: value => { view.current = value; },
         onReady: () => { if (!cancelled) setReady(true); }, onLost: () => { if (!cancelled) setFailed(true); },
       });
+      control.current.setTraffic(trafficRef.current);
     }).catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; control.current?.dispose(); control.current = undefined; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuilt only when mission progress changes
@@ -42,6 +45,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   useEffect(() => { control.current?.select(selected); }, [selected]);
   useEffect(() => { if (mascot) control.current?.setMascot(mascot); }, [mascot?.gender, mascot?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setLabels(JSON.parse(labelsKey)); }, [labelsKey]);
+  useEffect(() => { control.current?.setTraffic(traffic); }, [traffic]);
   function key(event: KeyboardEvent) {
     const c = control.current; if (!c) return;
     const actions: Record<string, () => void> = { ArrowLeft: () => c.rotate(-.35), ArrowRight: () => c.rotate(.35), ArrowUp: () => c.tilt(-.15), ArrowDown: () => c.tilt(.15), "+": () => c.zoom(.8), "=": () => c.zoom(.8), "-": () => c.zoom(1.25), "0": () => c.reset() };
@@ -56,6 +60,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     {live && <span className="city-map-hint">Тяни — вращай · колесо или щипок — масштаб · правая кнопка или два пальца — сдвиг</span>}
     {!failed && <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="vertical">
       <button type="button" aria-label="Посмотреть помощника" onClick={() => control.current?.focusMascot()}>♙</button>
+      <button type="button" aria-label={traffic ? "Приостановить движение транспорта" : "Включить движение транспорта"} title={traffic ? "Пауза движения" : "Движение транспорта"} aria-pressed={!traffic} onClick={() => setTraffic(value => !value)}>{traffic ? "Ⅱ" : "▶"}</button>
       <button type="button" aria-label="Приблизить" onClick={() => control.current?.zoom(.75)}>＋</button>
       <button type="button" aria-label="Отдалить" onClick={() => control.current?.zoom(1.33)}>－</button>
       <button type="button" aria-label="Исходный вид" onClick={() => control.current?.reset()}>⌂</button>

@@ -4,6 +4,7 @@ import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { createArchitecture } from "./cityArchitecture";
+import { createTaxiModel } from "./cityTraffic";
 import maleUrl from "./models/operator-male.glb?url";
 import femaleUrl from "./models/operator-female.glb?url";
 import type { DistrictId } from "../../api/city";
@@ -25,7 +26,7 @@ export interface CitySceneOptions {
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
 }
 export interface CityMascot { gender: "male" | "female" | null; name: string }
-export interface CitySceneControl { focusMascot: () => void; setMascot: (mascot: CityMascot) => void; dispose: () => void; select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void; zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void }
+export interface CitySceneControl { focusMascot: () => void; setMascot: (mascot: CityMascot) => void; setTraffic: (enabled: boolean) => void; dispose: () => void; select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void; zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void }
 
 /** The default view looks over the depot at the CRM centre on the left and the academy on the right. */
 export const DEFAULT_VIEW: CityView = { azimuth: -2.62, polar: .95, distance: 90, target: [0, 0, 1] };
@@ -36,7 +37,7 @@ const HOUSES = ["s-building-type-a", "s-building-type-b", "s-building-type-c", "
 /** Offices light enough to repeat along the mainland rows. */
 const LIGHT_OFFICES = ["c-building-a", "c-building-c", "c-building-d", "c-building-f", "c-building-g", "c-building-h"];
 const INDUSTRY = ["i-building-g", "i-building-h", "i-building-i", "i-building-g", "i-water-tower", "i-building-h"];
-const TRAFFIC = ["taxi", "sedan", "taxi", "suv", "hatchback-sports", "van", "sedan", "delivery", "taxi", "police", "truck", "ambulance"];
+const TRAFFIC = ["taxi", "sedan", "taxi", "suv", "taxi", "van", "taxi", "delivery", "taxi", "hatchback-sports"];
 const PARKED = [["taxi", "delivery", "van", "taxi", "truck", "suv"], ["sedan", "suv", "hatchback-sports", "taxi", "police", "sedan"], ["truck", "delivery", "van", "truck"]];
 type Slots = Map<string, { matrix: THREE.Matrix4; fit: number }[]>;
 
@@ -44,6 +45,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const { levels } = options;
   let disposed = false;
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let trafficEnabled = !reduced;
   // Phones and weak machines get fewer rows of buildings, fewer cars and a smaller shadow map.
   const lite = Math.min(window.innerWidth, window.innerHeight) < 600 || (navigator.hardwareConcurrency ?? 8) <= 4;
   // Laptops with two GPUs get the fast one; on sharp screens the pixel density already smooths edges.
@@ -446,16 +448,14 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   CITY_LOCATIONS.forEach(building);
 
 
-  // Traffic, boats on the canal and parked cars. Until the vehicle models arrive, and if they cannot load, toy cars stand in.
-  interface Mover { route: Route; s: number; speed: number; mesh: THREE.InstancedMesh; index: number; base: THREE.Matrix4; boat: boolean }
+  // Each vehicle has one route position and several batched visual parts.
+  // Locally generated taxis remain available even if the optional vehicle catalogue cannot load.
+  interface Mover { route: Route; s: number; speed: number; parts: { mesh: THREE.InstancedMesh; index: number; base: THREE.Matrix4 }[]; boat: boolean }
   const movers: Mover[] = [], trafficMeshes: THREE.InstancedMesh[] = [];
   let carShadows: THREE.InstancedMesh | null = null;
   const plans = trafficRoutes(lite), roadY = (x: number, z: number) => { const r = Math.hypot(x, z); return Math.abs(r - RING_ROAD) < 1.05 || Math.abs(r - OUTER_RING) < 1.05 ? .215 : .26; };
-  const toy = new THREE.Group(), boat = new THREE.Group();
+  const taxi = createTaxiModel(), boat = new THREE.Group();
   {
-    const body = new THREE.BoxGeometry(1.4, .6, 2.6); body.translate(0, .45, 0);
-    const cabin = new THREE.BoxGeometry(1.2, .5, 1.3); cabin.translate(0, .98, -.15);
-    toy.add(new THREE.Mesh(mergeGeometries([body, cabin])!, material("#ffd24d"))); body.dispose(); cabin.dispose();
     const hull = new THREE.Mesh(new THREE.BoxGeometry(1, .36, 2.1), material("#ffffff")); hull.position.y = .18;
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.02, .08, 2.12), material("#3f78d8")); stripe.position.y = .3;
     const top = new THREE.Mesh(new THREE.BoxGeometry(.6, .34, .7), material("#f4efe4")); top.position.set(0, .53, -.25);
@@ -467,14 +467,20 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     const slots = new Map<string, { plan: typeof plans[number]; offset: number }[]>();
     let n = 0;
     // Loops start at different phases, so cars are spread over the map from the first frame.
-    plans.forEach((plan, i) => { for (let k = 0; k < plan.cars; k++) push(slots, plan.boats ? "boat" : catalogue ? TRAFFIC[n++ % TRAFFIC.length] : "toy", { plan, offset: (k / plan.cars + i * .618) % 1 }); });
+    plans.forEach((plan, i) => {
+      const onMainRing = !plan.boats && plan.route.points.every(p => Math.abs(Math.hypot(p.x, p.z) - RING_ROAD) < 1);
+      const count = onMainRing ? (lite ? 8 : 12) : plan.cars;
+      for (let k = 0; k < count; k++) push(slots, plan.boats ? "boat" : !catalogue || (onMainRing && k % 4 !== 3) ? "taxi" : TRAFFIC[n++ % TRAFFIC.length], { plan, offset: (k / count + i * .618) % 1 });
+    });
     slots.forEach((list, name) => {
-      const source = name === "boat" ? boat : name === "toy" ? toy : catalogue?.get(name); if (!source) return;
-      modelParts(source).forEach((part, partIndex) => {
-        const m = instanced(part.geometry, part.material, list.map(() => new THREE.Matrix4()), { receive: false });
+      const source = name === "boat" ? boat : name === "taxi" ? taxi : catalogue?.get(name) ?? taxi;
+      const vehicles: Mover[] = list.map(slot => ({ route: slot.plan.route, s: slot.offset * slot.plan.route.length, speed: slot.plan.speed, parts: [], boat: name === "boat" }));
+      movers.push(...vehicles);
+      modelParts(source).forEach(part => {
+        const m = instanced(part.geometry, part.material, list.map(() => new THREE.Matrix4()), { receive: true });
+        m.name = `city-traffic-${name}`;
         m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); trafficMeshes.push(m);
-        m.userData.firstBase = partIndex === 0 ? part.matrix : null;
-        list.forEach((slot, index) => movers.push({ route: slot.plan.route, s: slot.offset * slot.plan.route.length, speed: slot.plan.speed, mesh: m, index, base: part.matrix, boat: name === "boat" }));
+        vehicles.forEach((vehicle, index) => vehicle.parts.push({ mesh: m, index, base: part.matrix }));
       });
     });
     carShadows?.dispose(); if (carShadows) world.remove(carShadows);
@@ -490,9 +496,9 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       const p = sampleRoute(item.route, item.s);
       moverPosition.set(p.x, item.boat ? -1.36 + Math.sin(now / 600 + item.s) * .04 : roadY(p.x, p.z), p.z);
       moverTurn.setFromAxisAngle(yAxis, p.heading); moverScale.setScalar(p.hidden ? 0 : item.boat ? .75 : CAR_SCALE);
-      item.mesh.setMatrixAt(item.index, moverMatrix.compose(moverPosition, moverTurn, moverScale).multiply(item.base));
-      // One shadow per car: its first part only, and none for boats.
-      if (!item.boat && item.base === item.mesh.userData.firstBase && carShadows) { moverScale.set(p.hidden ? 0 : .95, 1, p.hidden ? 0 : 1.7); moverPosition.y += .012; carShadows.setMatrixAt(shadow++, moverMatrix.compose(moverPosition, moverTurn, moverScale)); }
+      for (const part of item.parts) part.mesh.setMatrixAt(part.index, moverMatrix.compose(moverPosition, moverTurn, moverScale).multiply(part.base));
+      // Exactly one contact shadow per car: moving cars stay out of the baked sun shadows.
+      if (!item.boat && carShadows) { moverScale.set(p.hidden ? 0 : .95, 1, p.hidden ? 0 : 1.7); moverPosition.y += .012; carShadows.setMatrixAt(shadow++, moverMatrix.compose(moverPosition, moverTurn, moverScale)); }
     }
     for (const m of trafficMeshes) m.instanceMatrix.needsUpdate = true;
     if (carShadows) carShadows.instanceMatrix.needsUpdate = true;
@@ -668,22 +674,35 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const observer = new ResizeObserver(resize); observer.observe(host); if (options.frame) observer.observe(options.frame); resize();
   applyView(options.view ?? defaultView());
 
-  // One compressed file with the city blocks and one with vehicles; the city stays usable if either fails.
+  function disposeModel(root: THREE.Object3D) {
+    const geometries = new Set<THREE.BufferGeometry>(), mats = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
+    root.traverse(o => {
+      if (!(o instanceof THREE.Mesh)) return;
+      geometries.add(o.geometry);
+      for (const mat of [o.material].flat()) {
+        mats.add(mat);
+        for (const value of Object.values(mat)) if (value instanceof THREE.Texture) textures.add(value);
+      }
+      if (o instanceof THREE.InstancedMesh) o.dispose();
+    });
+    textures.forEach(t => t.dispose()); geometries.forEach(g => g.dispose()); mats.forEach(m => m.dispose());
+  }  // One compressed file with the city blocks and one with vehicles; the city stays usable if either fails.
   let modelsSettled = false;
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
   const loaded: THREE.Object3D[] = [];
   loader.loadAsync(modelsUrl).then(gltf => {
-    if (disposed) return;
+    if (disposed) { gltf.scenes.forEach(disposeModel); return; }
     loaded.push(...gltf.scenes);
     models = new Map(gltf.scenes.map(s => [s.name, s]));
     modelBlocks(models);
   }).catch(() => { if (!disposed) plainBlocks(outskirts); }).finally(() => { modelsSettled = true; bakeShadows(); });
   loader.loadAsync(vehiclesUrl).then(gltf => {
-    if (disposed) return;
+    if (disposed) { gltf.scenes.forEach(disposeModel); return; }
     loaded.push(...gltf.scenes);
     const catalogue = new Map<string, THREE.Object3D>(gltf.scenes.map(s => [s.name, s]));
+    catalogue.set("taxi", taxi);
     buildTraffic(catalogue); parkedVehicles(catalogue); bakeShadows();
-  }).catch(() => { /* Toy cars keep driving. */ });
+  }).catch(() => { /* Local taxis keep driving. */ });
 
   let frame = 0, last = performance.now(), visible = true, ready = false;
   const visibility = new IntersectionObserver(entries => { visible = entries.some(e => e.isIntersecting); if (visible && !frame) frame = requestAnimationFrame(tick); });
@@ -703,7 +722,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     frame = 0; if (!visible || document.hidden) return;
     if (mobile && now - last < 1000 / 30) { frame = requestAnimationFrame(tick); return; }
     if (ready && now - last < 1000) adapt(now - last);
-    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    const elapsed = Math.min(.2, (now - last) / 1000), dt = Math.min(.05, elapsed); last = now;
     if (!width || !height) resize();
     stepTween(now);
     controls.update();
@@ -713,8 +732,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       m.opacity = id === selected ? .55 + pulse * .4 : id === hovered ? .45 : 0;
       ring.scale.setScalar(id === selected ? 1 + pulse * .04 : 1);
     });
+    if (trafficEnabled) moveTraffic(elapsed, now);
     if (!reduced) {
-      moveTraffic(dt, now);
       waves.offset.set(waves.offset.x + dt * .01, waves.offset.y + dt * .004);
       characterMixer?.update(dt);
       if (characterMixer && waveAction && now >= nextWave) { idleAction?.fadeOut(.35); waveAction.reset().fadeIn(.35).play(); nextWave = now + 18000; }
@@ -738,6 +757,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     rotate(radians) { animateTo({ azimuth: currentView().azimuth + radians }, 420); },
     tilt(radians) { animateTo({ polar: currentView().polar + radians }, 320); },
     reset() { animateTo(defaultView(), 700); },
+    setTraffic(enabled) { trafficEnabled = enabled; },
     focusMascot() { animateTo({ target: [0, 3, 0], azimuth: currentView().azimuth, polar: 1.12, distance: 22 }, 650); },
     dispose() {
       disposed = true; cancelAnimationFrame(frame); observer.disconnect(); visibility.disconnect(); controls.dispose();
@@ -745,10 +765,9 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       renderer.domElement.removeEventListener("pointerdown", onDown); renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointermove", onHover); renderer.domElement.removeEventListener("pointerleave", onLeave);
       renderer.domElement.removeEventListener("webglcontextlost", lost);
-      scene.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); if (o.material instanceof THREE.MeshBasicMaterial) o.material.dispose(); } if (o instanceof THREE.InstancedMesh) o.dispose(); });
-      for (const root of [...loaded, toy, boat]) root.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); for (const m of [o.material].flat() as THREE.MeshStandardMaterial[]) { m.map?.dispose(); m.dispose(); } } });
+      for (const root of [scene, ...loaded, taxi, boat]) disposeModel(root);
       unit.dispose(); block.dispose(); blobPlane.dispose(); pole.dispose(); bulb.dispose();
-      materials.forEach(m => m.dispose()); disposables.forEach(d => d.dispose()); boards.forEach(b => b.texture.dispose()); architecture.dispose(); characterRequest++; characterMixer?.stopAllAction(); disposeCharacter(figure); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
+      materials.forEach(m => m.dispose()); disposables.forEach(d => d.dispose()); boards.forEach(b => b.texture.dispose()); architecture.dispose(); sun.shadow.dispose(); characterRequest++; characterMixer?.stopAllAction(); disposeCharacter(figure); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
     },
   };
 }
