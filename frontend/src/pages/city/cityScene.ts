@@ -5,6 +5,7 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { createArchitecture } from "./cityArchitecture";
 import { createTaxiModel } from "./cityTraffic";
+import { createCinematicLook } from "./cityLook";
 import maleUrl from "./models/operator-male.glb?url";
 import femaleUrl from "./models/operator-female.glb?url";
 import type { DistrictId } from "../../api/city";
@@ -26,6 +27,8 @@ export interface CitySceneOptions {
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
   /** The browser gave the WebGL context back after a loss: the city draws again. */
   onRestored?: () => void;
+  /** "cinematic": the trial game look (ambient occlusion, glow, tilt-shift, grading). */
+  look?: "cinematic";
 }
 export interface CityMascot { gender: "male" | "female" | null; name: string }
 export interface CitySceneControl { focusMascot: () => void; setMascot: (mascot: CityMascot) => void; setTraffic: (enabled: boolean) => void; dispose: () => void; select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void; zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void }
@@ -66,6 +69,9 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog("#d6e9ef", 118, 330);
   const camera = new THREE.PerspectiveCamera(36, 1, 1, 800);
+  const look = options.look === "cinematic" ? createCinematicLook(renderer, scene, camera, lite) : null;
+  /** Labels and the name tag: drawn after the effects, so they stay sharp and unblurred. */
+  const OVERLAY = 1; camera.layers.enable(OVERLAY);
   const controls = new OrbitControls(camera, renderer.domElement);
   Object.assign(controls, { enableDamping: true, dampingFactor: .09, minDistance: MIN_DISTANCE, maxDistance: MAX_DISTANCE, minPolarAngle: MIN_POLAR, maxPolarAngle: MAX_POLAR, screenSpacePanning: false, rotateSpeed: .75, zoomSpeed: .9, panSpeed: .8, zoomToCursor: true });
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
@@ -368,7 +374,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
     if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); world.remove(nameTag); }
     nameTag = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthWrite: false }));
-    nameTag.scale.set(1.35 * width / 128, 1.35, 1); nameTag.position.set(0, 7.4, 0); nameTag.renderOrder = 5; world.add(nameTag);
+    nameTag.scale.set(1.35 * width / 128, 1.35, 1); nameTag.position.set(0, 7.4, 0); nameTag.renderOrder = 5; nameTag.layers.set(OVERLAY); world.add(nameTag);
   }
   let currentGender: CityMascot["gender"] | undefined;
   function setMascot(next: CityMascot) {
@@ -531,6 +537,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4;
     const face = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.5), new THREE.MeshBasicMaterial({ map: texture, transparent: true, toneMapped: false, side: THREE.DoubleSide }));
     face.position.set(0, 1.5, 0); face.userData.district = d.id; group.add(face); pickables.push(face);
+    group.traverse(o => o.layers.set(OVERLAY));
     boards.set(d.id, { group, canvas, texture });
   }
   function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -588,7 +595,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     animateTo({ target: [d.x * .85, 0, d.z * .85], azimuth: Math.atan2(-d.x, -d.z), distance: Math.min(currentView().distance, 52) });
   }
 
-  const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
+  const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(); raycaster.layers.enableAll();
   function pick(event: PointerEvent): DistrictId | null {
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
@@ -666,7 +673,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   function resize() {
     width = host.clientWidth; height = host.clientHeight; if (!width || !height) return;
     renderer.setPixelRatio(pixelRatio(quality));
-    renderer.setSize(width, height, false); camera.aspect = width / height;
+    renderer.setSize(width, height, false); look?.setSize(width, height, renderer.getPixelRatio()); camera.aspect = width / height;
     camera.fov = width < 480 ? 50 : 36;
     const f = frameRect(), bounds = host.getBoundingClientRect();
     if (f) camera.setViewOffset(width, height, bounds.left + width / 2 - (f.left + f.right) / 2, bounds.top + height / 2 - (f.top + f.bottom) / 2, width, height);
@@ -736,6 +743,13 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     } else calm = 0;
     host.dataset.quality = quality.toFixed(2);
   }
+  /** The city through the effects, then the labels on top of it, sharp and at full brightness. */
+  function renderLook(pipeline: NonNullable<typeof look>) {
+    camera.layers.disable(OVERLAY); pipeline.render();
+    camera.layers.set(OVERLAY); renderer.setRenderTarget(null); renderer.autoClear = false; renderer.clearDepth();
+    renderer.render(scene, camera);
+    renderer.autoClear = true; camera.layers.enable(0);
+  }
   function tick(now: number) {
     frame = 0; if (!visible || document.hidden) return;
     // A little slack keeps the throttle on every second vsync instead of slipping to every third.
@@ -762,7 +776,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       if (characterMixer && waveAction && now >= nextWave) { idleAction?.fadeOut(.35); waveAction.reset().fadeIn(.35).play(); nextWave = now + 18000; }
     }
     stepGrowth(now, dt);
-    if (width && height && modelsSettled) { updateBoards(); if (bakeFrames > 0) { bakeFrames--; renderer.shadowMap.needsUpdate = true; } renderer.render(scene, camera); host.dataset.drawCalls = String(renderer.info.render.calls); host.dataset.triangles = String(renderer.info.render.triangles); if (!ready) { ready = true; options.onReady(); startGrowth(now); } }
+    if (width && height && modelsSettled) { updateBoards(); if (bakeFrames > 0) { bakeFrames--; renderer.shadowMap.needsUpdate = true; look?.tune(scene); } if (look) renderLook(look); else renderer.render(scene, camera); host.dataset.drawCalls = String(renderer.info.render.calls); host.dataset.triangles = String(renderer.info.render.triangles); if (!ready) { ready = true; options.onReady(); startGrowth(now); } }
     frame = requestAnimationFrame(tick);
   }
   const onVisible = () => { spent = frames = 0; if (!document.hidden && !frame) { last = performance.now(); frame = requestAnimationFrame(tick); } };
@@ -793,7 +807,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       renderer.domElement.removeEventListener("webglcontextlost", lost); renderer.domElement.removeEventListener("webglcontextrestored", restored);
       for (const root of [scene, ...loaded, taxi, boat]) disposeModel(root);
       unit.dispose(); block.dispose(); blobPlane.dispose(); pole.dispose(); bulb.dispose();
-      materials.forEach(m => m.dispose()); disposables.forEach(d => d.dispose()); boards.forEach(b => b.texture.dispose()); architecture.dispose(); sun.shadow.dispose(); characterRequest++; characterMixer?.stopAllAction(); disposeCharacter(figure); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
+      materials.forEach(m => m.dispose()); disposables.forEach(d => d.dispose()); boards.forEach(b => b.texture.dispose()); architecture.dispose(); sun.shadow.dispose(); look?.dispose(); characterRequest++; characterMixer?.stopAllAction(); disposeCharacter(figure); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
     },
   };
 }

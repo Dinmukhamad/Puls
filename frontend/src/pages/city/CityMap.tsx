@@ -37,6 +37,8 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
         onSelect: id => selectRef.current(id), onView: value => { view.current = value; },
         onReady: () => { if (!cancelled) setReady(true); }, onLost: () => { if (!cancelled) setFailed(true); },
         onRestored: () => { if (!cancelled) setFailed(false); },
+        // Trial "game" look for comparison: /training/city?look=new
+        look: new URLSearchParams(window.location.search).get("look") === "new" ? "cinematic" : undefined,
       });
       control.current.setTraffic(trafficRef.current);
     }).catch(() => { if (!cancelled) setFailed(true); });
