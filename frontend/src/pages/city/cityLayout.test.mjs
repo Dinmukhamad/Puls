@@ -77,6 +77,23 @@ test('buildings and trees stay off the roads, out of the canal and off the car p
   assert.ok(city.mainlandLots(true).lots.length < lots.length, 'phones get fewer rows');
 });
 
+test('district islands fit the lagoon, clear of the plaza, the ring road and the avenues', () => {
+  const { ISLET, PLAZA_ISLAND, LAGOON } = city;
+  for (const d of city.CITY_LOCATIONS) {
+    assert.ok(radius(d) - ISLET > PLAZA_ISLAND + 1.5, 'a bridge leads from the plaza');
+    assert.ok(radius(d) + ISLET < LAGOON, 'the island stays inside the lagoon');
+    for (const a of city.avenueAngles()) {
+      const across = Math.abs(-d.x * Math.sin(a) + d.z * Math.cos(a)), along = d.x * Math.cos(a) + d.z * Math.sin(a);
+      if (along > 0) assert.ok(across > ISLET + ROAD_HALF + .3, 'a cross street passes by the island');
+    }
+    for (const e of city.CITY_LOCATIONS) if (e !== d) assert.ok(Math.hypot(d.x - e.x, d.z - e.z) > ISLET * 2 + 1, 'water between islands');
+  }
+  for (const [ax, az, bx, bz] of city.bridgeSpans()) {
+    const mid = { x: (ax + bx) / 2, z: (az + bz) / 2 };
+    assert.ok(radius(mid) > PLAZA_ISLAND && radius(mid) < LAGOON && city.CITY_LOCATIONS.every((d) => Math.hypot(d.x - mid.x, d.z - mid.z) > ISLET), 'a bridge spans water');
+  }
+});
+
 test('car parks sit on land between the roads and every stall is inside its lot', () => {
   for (const lot of city.parkingLots()) {
     assert.ok(lot.stalls.length >= 12);
@@ -90,5 +107,5 @@ test('car parks sit on land between the roads and every stall is inside its lot'
 test('lamps and crossings line the streets without blocking them', () => {
   for (const lamp of city.lampSpots()) assert.ok(!onRoad(lamp, .2), `lamp on a road at ${lamp.x.toFixed(1)}, ${lamp.z.toFixed(1)}`);
   const crossings = city.crosswalks();
-  assert.equal(crossings.length, city.radialAngles().length * 2 + city.avenueAngles().length * 3);
+  assert.equal(crossings.length, city.radialAngles().length + city.avenueAngles().length * 3);
 });

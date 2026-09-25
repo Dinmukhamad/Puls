@@ -22,7 +22,8 @@ export function createArchitecture() {
   }
   function box(p:THREE.Object3D,w:number,h:number,d:number,c:string,x:number,y:number,z:number,r=.045) {
     const radius=Math.min(r,w/4,h/4,d/4),key=`box:${w}:${h}:${d}:${radius}`;
-    return mesh(p,cached(key,()=>new RoundedBoxGeometry(w,h,d,2,radius)),c,x,y,z);
+    // Rounding thin parts (pavers, trims, rails) costs hundreds of triangles and is not visible.
+    return mesh(p,cached(key,()=>radius<.03?new THREE.BoxGeometry(w,h,d):new RoundedBoxGeometry(w,h,d,2,radius)),c,x,y,z);
   }
   function cyl(p:THREE.Object3D,r:number,h:number,c:string,x:number,y:number,z:number,top=r) {
     return mesh(p,cached(`cyl:${r}:${h}:${top}`,()=>new THREE.CylinderGeometry(top,r,h,32)),c,x,y,z);
