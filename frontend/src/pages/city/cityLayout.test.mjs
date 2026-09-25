@@ -19,6 +19,36 @@ test('avenues leave between neighbouring districts and run in order around the c
   for (const a of angles) for (const d of city.CITY_LOCATIONS) assert.ok(city.angularDistance(a, Math.atan2(d.z, d.x)) > .5, 'an avenue must not run into a district');
 });
 
+test('each landscaped landmark fits its own plot and leaves the ring and cross streets open', () => {
+  for (const d of city.CITY_LOCATIONS) {
+    const outline = city.districtOutline(d);
+    for (let i = 0; i < outline.length; i++) {
+      const a = outline[i], b = outline[(i + 1) % outline.length];
+      for (let t = 0; t <= 1; t += .05) {
+        const p = { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
+        assert.ok(radius(p) < RING_ROAD - ROAD_HALF - .1, `${d.id} clips the ring road`);
+        assert.ok(avenueGap(p) >= 1.325, `${d.id} clips the pavement of a cross street`);
+        assert.ok(radius(p) > city.PLAZA + .5, `${d.id} clips the plaza`);
+        for (const other of city.CITY_LOCATIONS) if (other !== d) assert.ok(!city.insideDistrictIsland(p, other, .1), 'plots must remain separate');
+      }
+    }
+    for (const x of [-2.85, 2.85]) for (const z of [-2.65, 2.65]) {
+      assert.ok(city.insideDistrictIsland(city.districtPoint(d, { x: x * city.DISTRICT_SCALE, z: z * city.DISTRICT_SCALE }), d), `${d.id} architecture overhangs its plot`);
+    }
+  }
+});
+
+test('ordinary building footprints leave the new district plots and every inner road clear', () => {
+  const lots = city.islandLots(), clearance = city.ORDINARY_LOT_CLEARANCE;
+  assert.ok(lots.length > 0, 'the centre still has ordinary city buildings');
+  for (const lot of lots) {
+    assert.ok(lot.r + clearance < RING_ROAD - ROAD_HALF, 'ordinary roof over the ring road');
+    assert.ok(lot.r - clearance > city.PLAZA, 'ordinary roof over the plaza');
+    assert.ok(!city.nearRoad(lot.x, lot.z, city.innerRoads(), 1.325 + clearance), 'ordinary roof over a street pavement');
+    for (const d of city.CITY_LOCATIONS) assert.ok(!city.insideDistrictIsland(lot, d, clearance), 'ordinary roof inside a district plot');
+  }
+});
+
 test('every traffic loop is closed and smooth, with no jumps outside the hidden legs', () => {
   for (const plan of city.trafficRoutes()) {
     const { points, hidden } = plan.route;

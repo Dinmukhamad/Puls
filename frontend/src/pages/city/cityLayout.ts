@@ -14,14 +14,43 @@ export interface Point { x: number; z: number }
 export type Road = readonly [number, number, number, number];
 
 export const CITY_LOCATIONS: CityLocation[] = [
-  { id: "academy", x: -17, z: 2, color: "#5b8def" },
-  { id: "driver", x: -6.5, z: -16.5, color: "#f0a23a" },
-  { id: "crm", x: 14, z: -9, color: "#7b5cff" },
-  { id: "dispatch", x: 14.5, z: 12.5, color: "#35b6a6", soon: true },
-  { id: "oktell", x: -5.5, z: 17.5, color: "#e86aa6", soon: true },
+  { id: "academy", x: -16.907, z: 1.777, color: "#5b8def" },
+  { id: "driver", x: -6.914, z: -15.531, color: "#f0a23a" },
+  { id: "crm", x: 12.633, z: -11.375, color: "#7b5cff" },
+  { id: "dispatch", x: 14.722, z: 8.5, color: "#35b6a6", soon: true },
+  { id: "oktell", x: -3.535, z: 16.628, color: "#e86aa6", soon: true },
 ];
 /** District buildings are drawn in small units and scaled up to stand above the ordinary city blocks. */
-export const DISTRICT_SCALE = 2.3;
+export const DISTRICT_SCALE = 2;
+/** Elevation above the city ground. The entrance faces the central plaza (local +z). */
+export const DISTRICT_ISLAND_HEIGHT = .48;
+/** End of the entrance steps, kept clear of the access street. */
+export const DISTRICT_ISLAND_ENTRY = 8.9;
+/** Five independent landscaped plots; their narrowed forecourts leave the cross streets open. */
+export const DISTRICT_ISLAND_OUTLINE: readonly Point[] = [
+  { x: -6.35, z: -5.9 }, { x: 6.35, z: -5.9 },
+  { x: 6.35, z: 5.9 }, { x: 3.5, z: 8 },
+  { x: -3.5, z: 8 }, { x: -6.35, z: 5.9 },
+];
+export function districtPoint(d: Point, local: Point): Point {
+  const a = Math.atan2(-d.x, -d.z), c = Math.cos(a), s = Math.sin(a);
+  return { x: d.x + c * local.x + s * local.z, z: d.z - s * local.x + c * local.z };
+}
+export function districtOutline(d: Point): Point[] { return DISTRICT_ISLAND_OUTLINE.map(p => districtPoint(d, p)); }
+/** Includes a circular footprint around ordinary homes, so their corners cannot clip the new plots. */
+export function insideDistrictIsland(p: Point, d: Point, pad = 0) {
+  const points = districtOutline(d);
+  let positive = false, negative = false;
+  points.forEach((a, i) => {
+    const b = points[(i + 1) % points.length], cross = (b.x - a.x) * (p.z - a.z) - (b.z - a.z) * (p.x - a.x);
+    if (cross > 1e-7) positive = true;
+    if (cross < -1e-7) negative = true;
+  });
+  return !(positive && negative) || points.some((a, i) => {
+    const b = points[(i + 1) % points.length];
+    return segmentDistance(p.x, p.z, [a.x, a.z, b.x, b.z]) < pad;
+  });
+}
 export const PLAZA = 4.6;
 /** Centre line of the inner ring road; every road is two lanes, one unit each. */
 export const RING_ROAD = 25;
@@ -57,10 +86,10 @@ export function radialAngles() { return [...CITY_LOCATIONS.map(angleOf), ...aven
 
 /** Streets inside the ring road: a spoke to every district and a cross street between neighbours. */
 export function innerRoads(): Road[] {
-  const edge = DISTRICT_SCALE * 2.7, roads: Road[] = [];
+  const roads: Road[] = [];
   for (const d of CITY_LOCATIONS) {
     const r = Math.hypot(d.x, d.z), ux = d.x / r, uz = d.z / r;
-    roads.push([ux * PLAZA, uz * PLAZA, ux * (r - edge), uz * (r - edge)], [ux * (r + edge), uz * (r + edge), ux * 24, uz * 24]);
+    roads.push([ux * PLAZA, uz * PLAZA, ux * (r - DISTRICT_ISLAND_ENTRY), uz * (r - DISTRICT_ISLAND_ENTRY)], [ux * (r + 5.9), uz * (r + 5.9), ux * 24, uz * 24]);
   }
   for (const a of avenueAngles()) roads.push([Math.cos(a) * PLAZA, Math.sin(a) * PLAZA, Math.cos(a) * 24, Math.sin(a) * 24]);
   return roads;
@@ -70,13 +99,15 @@ export function avenues(): Road[] { return avenueAngles().map(a => [Math.cos(a) 
 const clearOfAvenues = (p: Point, pad: number) => { const r = Math.hypot(p.x, p.z), a = Math.atan2(p.z, p.x); return avenueAngles().every(b => Math.cos(a - b) <= 0 || r * Math.abs(Math.sin(a - b)) >= pad); };
 
 export interface Lot { x: number; z: number; r: number; rotation: number; roll: number; pick: number; size: number }
+/** Circumradius of the largest 2.65-unit ordinary building, including its roof. */
+export const ORDINARY_LOT_CLEARANCE = 1.9;
 /** Ordinary blocks between the districts inside the ring road. */
 export function islandLots(): Lot[] {
   const roads = innerRoads(), random = rng(21), lots: Lot[] = [];
   for (let gx = -24; gx <= 24; gx += 2.9) for (let gz = -24; gz <= 24; gz += 2.9) {
     const x = gx + (random() - .5) * 1.1, z = gz + (random() - .5) * 1.1, r = Math.hypot(x, z);
     const lot = { x, z, r, rotation: Math.atan2(x, z) + (random() < .5 ? 0 : Math.PI / 2), roll: random(), pick: random(), size: random() };
-    if (r < 6.6 || r > 22.6 || nearRoad(x, z, roads, 1.8) || CITY_LOCATIONS.some(d => Math.hypot(d.x - x, d.z - z) < DISTRICT_SCALE * 2.7 + .55)) continue;
+    if (r < PLAZA + ORDINARY_LOT_CLEARANCE || r > RING_ROAD - ROAD_HALF - ORDINARY_LOT_CLEARANCE || nearRoad(x, z, roads, 1.325 + ORDINARY_LOT_CLEARANCE) || CITY_LOCATIONS.some(d => insideDistrictIsland(lot, d, ORDINARY_LOT_CLEARANCE))) continue;
     lots.push(lot);
   }
   return lots;
