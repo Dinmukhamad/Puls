@@ -8,7 +8,7 @@ export interface ChartSeries {
   values: (number | null)[];
 }
 
-/** Weekly observations with explicit gaps and an equivalent readable table. */
+/** Period observations with explicit gaps and an equivalent readable table. */
 export function Chart({ title, labels, series, target, unit, compact = false, lowerAtTop = false, integerAxis = false }: {
   title: string;
   labels: string[];
@@ -49,10 +49,10 @@ export function Chart({ title, labels, series, target, unit, compact = false, lo
 
   return (
     <div className="analytics-chart" ref={box}>
-      {observed.length === 0 ? <div className="analytics-chart__empty">Нет наблюдений за выбранные недели</div> : (
+      {observed.length === 0 ? <div className="analytics-chart__empty">Нет наблюдений за выбранные периоды</div> : (
         <svg viewBox={`0 0 ${width} ${height}`} role="group" aria-labelledby={titleId} aria-describedby={descriptionId}>
           <title id={titleId}>{title}</title>
-          <desc id={descriptionId}>Недельные значения. Пропуски разрывают линию. Ниже доступна таблица данных.</desc>
+          <desc id={descriptionId}>Значения по периодам. Пропуски разрывают линию. Ниже доступна таблица данных.</desc>
           {[low, (low + high) / 2, high].map((value) => integerAxis ? Math.round(value) : value).filter((value, index, values) => values.indexOf(value) === index).map((value) => (
             <g key={value} className="analytics-chart__grid" aria-hidden="true">
               <line x1={left} x2={width - right} y1={y(value)} y2={y(value)} />
@@ -95,7 +95,7 @@ export function Chart({ title, labels, series, target, unit, compact = false, lo
       <details className="analytics-data-table">
         <summary>Таблица данных графика</summary>
         <div className="analytics-table-scroll" tabIndex={0} role="region" aria-label="Данные графика, прокрутка по горизонтали">
-          <table className="table"><caption className="sr-only">{title}</caption><thead><tr><th scope="col">Неделя</th>{series.map((item) => <th key={item.id} scope="col">{item.name}</th>)}</tr></thead><tbody>
+          <table className="table"><caption className="sr-only">{title}</caption><thead><tr><th scope="col">Период</th>{series.map((item) => <th key={item.id} scope="col">{item.name}</th>)}</tr></thead><tbody>
             {labels.map((label, index) => <tr key={`${label}-${index}`}><th scope="row">{label}</th>{series.map((item) => <td key={item.id}>{readable(item.values[index] ?? null)}</td>)}</tr>)}
           </tbody></table>
         </div>

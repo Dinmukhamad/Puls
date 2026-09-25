@@ -16,6 +16,9 @@ export interface MetricSummary {
   total: number;
   coverage: number | null;
   below_target: number;
+  description: string | null;
+  penalty_per_unit: number;
+  trend: (number | null)[];
 }
 
 export interface TrendPoint {
@@ -53,6 +56,8 @@ export interface AnalyticsOperator {
   missing_metrics: string[];
   values: Record<string, number | null>;
   trend: (number | null)[];
+  previous_values: Record<string, number | null>;
+  trends: Record<string, (number | null)[]>;
 }
 
 export interface AnalyticsOut {
@@ -67,6 +72,7 @@ export interface AnalyticsOut {
   operators_with_data: number;
   pending_requests: number;
   coins_awarded: number;
+  lateness_metric_code: string;
   metrics: MetricSummary[];
   trend: TrendPoint[];
   groups: ComparisonSeries[];

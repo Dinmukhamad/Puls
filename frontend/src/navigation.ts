@@ -37,7 +37,7 @@ const team = (admin = false, supervisor = false) => section("team", "Коман�
   tab("/admin/operators", "Показатели сотрудников"),
 ]);
 const analytics = (supervisor = false) => section("analytics", "Аналитика", TrophyIcon, [
-  tab("/analytics?tab=summary", "Сводка и сравнение"), tab("/analytics?tab=operators", "Операторы"), tab("/analytics?tab=quality", "Качество"),
+  tab("/analytics?tab=summary", "Обзор команды"), tab("/analytics?tab=operators", "Операторы"), tab("/analytics?tab=quality", "Все показатели"),
   ...(supervisor ? [tab("/admin/periods", "Периоды"), tab("/admin/settings", "Правила и показатели")] : []),
 ]);
 const performance = (admin = false) => section("performance", "Показатели", InboxIcon, [
@@ -220,7 +220,7 @@ export function subsectionDestination(link: SectionTab, pathname: string, search
   const source = new URLSearchParams(search); const destination = new URLSearchParams(targetSearch ?? "");
   const shared: Record<string, string[]> = {
     "/rating": ["week", "count", "search"],
-    "/analytics": ["week_id", "group_id", "metric", "operators", "compare", "group_compare", "search", "status"],
+    "/analytics": ["week_id", "grain", "from", "to", "group_id", "metric", "operators", "compare", "group_compare", "search", "status"],
     "/training": ["state"],
     "/admin/learning": destination.has("tab") ? ["kind"] : [],
   };

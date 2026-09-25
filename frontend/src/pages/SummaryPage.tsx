@@ -6,6 +6,7 @@ import { Chart } from "../components/Chart";
 import { Badge, Card, EmptyState, ErrorState, KPI, KPISkeleton } from "../components/ui";
 import { coins, points, WEEK_STATUS_LABELS } from "../utils/format";
 import { MetricDelta, ReportFilters, useAnalyticsReport } from "./AnalyticsPage";
+import { teamInsights } from "./analyticsInsights";
 import "./analytics.css";
 
 export function SummaryPage() {
@@ -15,9 +16,10 @@ export function SummaryPage() {
   const metric = data?.metrics.find((item) => item.code === data.metric_code);
   // Links to the full report keep the chosen step and period.
   const period = ["grain", "from", "to", "week_id"].filter((key) => report.params.get(key)).map((key) => `${key}=${encodeURIComponent(report.params.get(key)!)}`).join("&");
+  const needingAttention = data ? teamInsights(data).filter(p => p.issues.length).length : 0;
   const attention = data ? [
     { count: data.operator_count - data.operators_with_data, title: "Операторы без показателей", text: `За выбранный период (${data.period_label ?? "—"}) не загружено ни одного показателя.`, href: "/admin/periods" },
-    { count: metric?.below_target ?? 0, title: "Нужна поддержка", text: `${metric?.title ?? "Показатель"}: результат ниже текущей цели.`, href: `/analytics?tab=operators&status=below${period ? `&${period}` : ""}${report.filters.group_id ? `&group_id=${report.filters.group_id}` : ""}` },
+    { count: needingAttention, title: "Операторы требуют внимания", text: "Есть отклонения от рабочих целей или нарушения дисциплины.", href: `/analytics?tab=operators&status=attention${period ? `&${period}` : ""}${report.filters.group_id ? `&group_id=${report.filters.group_id}` : ""}` },
     { count: data.pending_requests, title: "Заявки ожидают решения", text: "Покупки сотрудников вашей команды.", href: "/admin/requests" },
   ].filter((item) => item.count > 0 && canPath(item.href)) : [];
 
