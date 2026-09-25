@@ -18,11 +18,12 @@ export type Road = readonly [number, number, number, number];
 export const DISTRICT_RING = 15.8;
 const onRing = (x: number, z: number) => { const a = Math.atan2(z, x); return { x: Math.cos(a) * DISTRICT_RING, z: Math.sin(a) * DISTRICT_RING }; };
 export const CITY_LOCATIONS: CityLocation[] = [
-  { id: "academy", ...onRing(-17, 2), color: "#5b8def" },
+  // Neighbours are at least 70° apart, so every cross-street bridge passes half a unit clear of the islands.
+  { id: "academy", ...onRing(-15.79, .51), color: "#5b8def" },
   { id: "driver", ...onRing(-6.5, -16.5), color: "#f0a23a" },
   { id: "crm", ...onRing(14, -9), color: "#7b5cff" },
-  { id: "dispatch", ...onRing(14.5, 12.5), color: "#35b6a6", soon: true },
-  { id: "oktell", ...onRing(-5.5, 17.5), color: "#e86aa6", soon: true },
+  { id: "dispatch", ...onRing(12.53, 9.63), color: "#35b6a6", soon: true },
+  { id: "oktell", ...onRing(-4.85, 15.04), color: "#e86aa6", soon: true },
 ];
 /** District buildings are drawn in small units and scaled up to stand above the ordinary city blocks. */
 export const DISTRICT_SCALE = 1.75;

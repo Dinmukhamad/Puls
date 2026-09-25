@@ -48,8 +48,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   let trafficEnabled = !reduced;
   // Phones and weak machines get fewer rows of buildings, fewer cars and a smaller shadow map.
   const lite = Math.min(window.innerWidth, window.innerHeight) < 600 || (navigator.hardwareConcurrency ?? 8) <= 4;
-  // Laptops with two GPUs get the fast one; on sharp screens the pixel density already smooths edges.
-  const renderer = new THREE.WebGLRenderer({ antialias: window.devicePixelRatio < 2, alpha: true, powerPreference: lite ? "low-power" : "high-performance" });
+  // Laptops with two GPUs get the fast one.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: lite ? "low-power" : "high-performance" });
   // Phones draw at most 30 frames a second.
   const mobile = host.clientWidth < 600;
   // The sun and the buildings stand still, so the shadow map is drawn once and again only when the
@@ -118,15 +118,6 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   }
   const place = (x: number, y: number, z: number, rotation = 0, sx = 1, sy = sx, sz = sx) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rotation), new THREE.Vector3(sx, sy, sz));
   const push = <T>(map: Map<string, T[]>, key: string, value: T) => { if (!map.has(key)) map.set(key, []); map.get(key)!.push(value); };
-  /**
-   * One of four quarters of the city around the plaza. Copies spread over the whole ring are drawn per
-   * quarter, so a zoomed-in camera skips the quarters behind it; more slices would cost more draw calls
-   * than they save in the default view, which shows the whole city.
-   */
-  const sector = (x: number, z: number) => Math.floor((Math.atan2(z, x) + Math.PI) / (Math.PI * 2) * 4) % 4;
-  function bySector<T>(items: T[], at: (item: T) => { x: number; z: number }) {
-    const groups = new Map<string, T[]>(); for (const item of items) { const p = at(item); push(groups, String(sector(p.x, p.z)), item); } return [...groups.values()];
-  }
 
   // Island with a stone quay, the canal and the mainland beyond it.
   const waves = canvasTexture(256, 256, ctx => {
@@ -149,14 +140,17 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     if (inner) shape.holes.push(new THREE.Path().absarc(0, 0, inner, 0, Math.PI * 2, true));
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: 1.95, bevelEnabled: false, curveSegments: Math.round(outer * 4) });
     geometry.rotateX(-Math.PI / 2); geometry.translate(x, .2 - 1.95, z);
-    const m = new THREE.Mesh(geometry, [grass, stone]); m.receiveShadow = true; world.add(m);
+    const m = new THREE.Mesh(geometry, [grass, stone]); m.castShadow = m.receiveShadow = true; world.add(m);
     for (const [r0, r1] of inner ? [[outer - .32, outer], [inner, inner + .32]] : [[outer - .32, outer]]) {
       const rim = flat(new THREE.RingGeometry(r0, r1, Math.round(outer * 5), 1), "#eadfc8", .205); rim.position.set(x, .205, z);
     }
   }
   land(QUAY, LAGOON); land(PLAZA_ISLAND, 0);
   for (const d of CITY_LOCATIONS) land(ISLET, 0, d.x, d.z);
-  const lagoon = new THREE.Mesh(new THREE.RingGeometry(PLAZA_ISLAND - .3, LAGOON + .3, 160, 1), waterMaterial);
+  // Ring UVs span the ring's own diameter; rescale them so the waves match the canal's.
+  const lagoonGeometry = new THREE.RingGeometry(PLAZA_ISLAND - .3, LAGOON + .3, 160, 1), lagoonUv = lagoonGeometry.getAttribute("uv"), uvScale = (LAGOON + .3) / (BANK + .6);
+  for (let i = 0; i < lagoonUv.count; i++) lagoonUv.setXY(i, .5 + (lagoonUv.getX(i) - .5) * uvScale, .5 + (lagoonUv.getY(i) - .5) * uvScale);
+  const lagoon = new THREE.Mesh(lagoonGeometry, waterMaterial);
   lagoon.rotation.x = -Math.PI / 2; lagoon.position.y = -1.25; lagoon.receiveShadow = true; world.add(lagoon);
   flat(new THREE.RingGeometry(PROMENADE - .5, PROMENADE + .5, 180, 1), "#eadfc8", .215);
   const bank = new THREE.Mesh(new THREE.CylinderGeometry(BANK, BANK, 1.9, 180, 1, true), material("#d4cab6", { side: THREE.BackSide }));
@@ -183,7 +177,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     const dx = bx - ax, dz = bz - az, length = Math.hypot(dx, dz), angle = Math.atan2(dx, dz), span = new THREE.Group();
     span.position.set((ax + bx) / 2, 0, (az + bz) / 2); span.rotation.y = angle; streets.add(span);
     box(2.75, .34, length, "#dcd3c1", 0, .01, 0, span);
-    for (const side of [-1, 1]) box(.16, .3, length, "#e8e1d2", side * 1.3, .36, 0, span);
+    // Railings stop at the shore, the deck reaches a little onto the land.
+    for (const side of [-1, 1]) box(.16, .3, length - .6, "#e8e1d2", side * 1.3, .36, 0, span);
     const piers = Math.floor(length / 3.4);
     for (let i = 1; i <= piers; i++) box(2.1, 1.4, .5, "#cfc5b1", 0, -.86, -length / 2 + i * length / (piers + 1), span);
   }
@@ -220,7 +215,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const lamps = lampSpots().map(p => place(p.x, .2, p.z));
   const pole = new THREE.CylinderGeometry(.035, .05, 1.3, 6); pole.translate(0, .65, 0);
   const bulb = new THREE.SphereGeometry(.11, 10, 8); bulb.translate(0, 1.36, 0);
-  instanced(pole, material("#5f6678"), lamps);
+  instanced(pole, material("#5f6678"), lamps, { shadow: true });
   instanced(bulb, material("#fff3c4", { emissive: "#ffe08a", emissiveIntensity: .9 }), lamps);
 
   // Trees: two kinds of low-poly trees, each tinted a little differently.
@@ -240,7 +235,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const treeTint = ["#ffffff", "#eaf6e2", "#f7ffe8", "#dfeed7", "#fff6dc"].map(c => new THREE.Color(c));
   const treeMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, flatShading: true }); disposables.push(treeMaterial);
   const trees = treeSpots(lite, parks), coneTree = treeGeometry(false), roundTree = treeGeometry(true);
-  for (const round of [false, true]) for (const list of bySector(trees.filter(t => t.round === round), t => t)) {
+  for (const round of [false, true]) { const list = trees.filter(t => t.round === round);
     instanced(round ? roundTree : coneTree, treeMaterial, list.map(t => place(t.x, .2, t.z, t.x * 3.1, t.scale)), { shadow: true, colors: list.map((_, i) => treeTint[(i * 7) % treeTint.length]) });
   }
   // Soft round shadows ground the far buildings and trees that the sun's shadow map does not reach.
@@ -249,7 +244,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const blobPlane = new THREE.PlaneGeometry(1, 1); blobPlane.rotateX(-Math.PI / 2);
   const far = (p: { x: number; z: number }) => Math.hypot(p.x, p.z) > SHADOW_REACH;
   const blobs = [...outskirts.filter(far).map(l => place(l.x, .209, l.z, l.rotation, l.width * 1.25)), ...trees.filter(far).map(t => place(t.x, .209, t.z, 0, 1.5 * t.scale))];
-  for (const list of bySector(blobs, m => ({ x: m.elements[12], z: m.elements[14] }))) instanced(blobPlane, blobMaterial, list, { receive: false });
+  instanced(blobPlane, blobMaterial, blobs, { receive: false });
 
   function facadeTexture(floors: number, glass: boolean) {
     return canvasTexture(64, 64 * floors, ctx => {
@@ -271,7 +266,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       const top = new THREE.MeshStandardMaterial({ color: "#9aa3ad", roughness: .85 }), side = new THREE.MeshStandardMaterial({ color: "#ffffff", map: facadeTexture(kind.floors, kind.glass), roughness: kind.glass ? .4 : .85, metalness: kind.glass ? .15 : 0 });
       disposables.push(top, side);
       const palette = (kind.glass ? ["#b8cbe3", "#a9c4d8", "#c4c9e6", "#d5dde8"] : walls).map(c => new THREE.Color(c));
-      for (const own of bySector(kindLots, l => l)) instanced(block, [side, side, top, top, side, side], own.map(l => { const w = Math.min(l.width, kind.glass ? 3.4 : 3.8) * (.82 + l.size * .18); return place(l.x, .2, l.z, l.rotation, w, kind.height * (.9 + l.size * .2), w * (.8 + l.pick * .2)); }), { shadow: true, colors: own.map((_, i) => palette[(i * 5) % palette.length]) });
+      const own = kindLots; instanced(block, [side, side, top, top, side, side], own.map(l => { const w = Math.min(l.width, kind.glass ? 3.4 : 3.8) * (.82 + l.size * .18); return place(l.x, .2, l.z, l.rotation, w, kind.height * (.9 + l.size * .2), w * (.8 + l.pick * .2)); }), { shadow: true, colors: own.map((_, i) => palette[(i * 5) % palette.length]) });
     });
   }
 
@@ -341,7 +336,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       nextWave = performance.now() + 2500;
       characterMixer.addEventListener('finished', () => { waveAction?.fadeOut(.4); idleAction?.reset().fadeIn(.4).play(); });
       host.dataset.character = gender;
-    }).catch(() => { if (!disposed && request === characterRequest) { buildRobot(); host.dataset.character = 'fallback'; } });
+    }).catch(() => { if (!disposed && request === characterRequest) { buildRobot(); bakeShadows(); host.dataset.character = 'fallback'; } });
   }
   function disposeCharacter(root: THREE.Object3D) {
     const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
@@ -371,7 +366,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     characterMixer?.stopAllAction(); characterMixer = null; idleAction = waveAction = null;
     disposeCharacter(figure); clearFigure();
     if (next.gender) buildOperator(next.gender); else buildRobot();
-    drawNameTag(next.name);
+    // The robot stands still and casts into the baked map; a new figure needs a new bake.
+    bakeShadows(); drawNameTag(next.name);
   }
   setMascot(options.mascot ?? { gender: null, name: "Пульсар" });
 
@@ -413,8 +409,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     slots.forEach((list, name) => {
       const source = catalogue.get(name); if (!source) return;
       const byFit = new Map<string, THREE.Matrix4[]>();
-      for (const slot of list) push(byFit, `${slot.fit}:${sector(slot.matrix.elements[12], slot.matrix.elements[14])}`, slot.matrix);
-      byFit.forEach((matrices, key) => { for (const part of modelParts(source, Number(key.split(":")[0]))) instanced(part.geometry, part.material, matrices.map(m => m.clone().multiply(part.matrix)), { shadow }); });
+      for (const slot of list) push(byFit, String(slot.fit), slot.matrix);
+      byFit.forEach((matrices, fit) => { for (const part of modelParts(source, Number(fit))) instanced(part.geometry, part.material, matrices.map(m => m.clone().multiply(part.matrix)), { shadow }); });
     });
   }
   function modelBlocks(catalogue: Map<string, THREE.Object3D>) {
@@ -442,7 +438,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     const ring = new THREE.Mesh(new THREE.TorusGeometry(ISLET - .15, .11, 8, 96), new THREE.MeshBasicMaterial({ color: '#e9bf69', transparent: true, opacity: 0 }));
     ring.rotation.x = Math.PI / 2; ring.position.set(d.x, .45, d.z); world.add(ring); rings.set(d.id, ring);
     const hit = new THREE.Mesh(new THREE.CylinderGeometry(ISLET, ISLET, height * DISTRICT_SCALE, 12), new THREE.MeshBasicMaterial({ visible: false }));
-    hit.position.set(d.x, height * DISTRICT_SCALE / 2, d.z); hit.userData.district = d.id; world.add(hit); pickables.push(hit);
+    hit.position.set(d.x, .2 + height * DISTRICT_SCALE / 2, d.z); hit.userData.district = d.id; world.add(hit); pickables.push(hit);
     anchors.set(d.id, new THREE.Vector3(d.x, .2 + height * DISTRICT_SCALE + .7, d.z));
   }
   CITY_LOCATIONS.forEach(building);
@@ -623,7 +619,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       const item = growth[i], k = THREE.MathUtils.clamp((now - item.start) / 1300, 0, 1);
       // Ease-out with a small overshoot, like a building popping into place.
       const e = k === 1 ? 1 : 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
-      item.group.scale.y = DISTRICT_SCALE * Math.max(.02, e); bakeShadows();
+      item.group.scale.y = DISTRICT_SCALE * Math.max(.02, e); if (now >= item.start) bakeShadows();
       if (k === 1) growth.splice(i, 1);
     }
     if (confetti && now >= confetti.start) {
@@ -656,7 +652,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const frameRect = () => { const f = options.frame?.getBoundingClientRect(); return f && f.width > 60 && f.height > 60 ? f : null; };
   function resize() {
     width = host.clientWidth; height = host.clientHeight; if (!width || !height) return;
-    renderer.setPixelRatio(Math.max(.6, quality * Math.min(window.devicePixelRatio, mobile ? 1.4 : lite ? 1.5 : 1.75, Math.sqrt(3.4e6 / (width * height)))));
+    renderer.setPixelRatio(Math.max(.5, quality * Math.min(window.devicePixelRatio, mobile ? 1.4 : lite ? 1.5 : 1.75, Math.sqrt(3.4e6 / (width * height)))));
     renderer.setSize(width, height, false); camera.aspect = width / height;
     camera.fov = width < 480 ? 50 : 36;
     const f = frameRect(), bounds = host.getBoundingClientRect();
@@ -707,21 +703,32 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   let frame = 0, last = performance.now(), visible = true, ready = false;
   const visibility = new IntersectionObserver(entries => { visible = entries.some(e => e.isIntersecting); if (visible && !frame) frame = requestAnimationFrame(tick); });
   visibility.observe(host);
-  // Frame times over the last second decide whether to draw fewer pixels.
-  const budget = mobile ? 1000 / 30 : 1000 / 60;
-  let spent = 0, frames = 0, calm = 0;
-  function adapt(elapsed: number) {
-    spent += elapsed; frames++;
+  // Frame times over the last second decide whether to draw fewer pixels. If drawing fewer pixels does
+  // not make frames faster, the limit is not the GPU (a 30 Hz battery saver, a busy CPU): the step is
+  // undone and that pace becomes the budget, so quality is not lowered for nothing.
+  const nominal = mobile ? 1000 / 30 : 1000 / 60;
+  let budget = nominal, spent = 0, frames = 0, calm = 0, before = 0;
+  function adapt(gap: number) {
+    spent += gap; frames++;
     if (spent < 1000) return;
     const average = spent / frames; spent = frames = 0;
-    if (average > budget * 1.45 && quality > .55) { quality = Math.max(.55, quality - .15); calm = 0; resize(); }
-    else if (average < budget * 1.12 && quality < 1 && ++calm >= 3) { quality = Math.min(1, quality + .1); calm = 0; resize(); }
+    if (before) {
+      const helped = average < before * .92; before = 0;
+      if (!helped) { quality = Math.min(1, quality + .15); budget = Math.max(nominal, average); calm = 0; resize(); host.dataset.quality = quality.toFixed(2); return; }
+    }
+    if (average > budget * 1.45 && quality > .55) { before = average; quality = Math.max(.55, quality - .15); calm = 0; resize(); }
+    else if (average < budget * 1.12) { if (quality < 1 && ++calm >= 3) { quality = Math.min(1, quality + .1); calm = 0; resize(); } }
+    else calm = 0;
     host.dataset.quality = quality.toFixed(2);
   }
   function tick(now: number) {
     frame = 0; if (!visible || document.hidden) return;
-    if (mobile && now - last < 1000 / 30) { frame = requestAnimationFrame(tick); return; }
-    if (ready && now - last < 1000) adapt(now - last);
+    // A little slack keeps the throttle on every second vsync instead of slipping to every third.
+    if (mobile && now - last < 1000 / 30 - 3) { frame = requestAnimationFrame(tick); return; }
+    // Pauses and one-off hitches (shader compiles, shadow bakes, a growing district) do not count.
+    const gap = now - last;
+    if (gap > 250) spent = frames = 0;
+    else if (ready && bakeFrames === 0 && !growth.length) adapt(gap);
     const elapsed = Math.min(.2, (now - last) / 1000), dt = Math.min(.05, elapsed); last = now;
     if (!width || !height) resize();
     stepTween(now);
@@ -730,7 +737,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     rings.forEach((ring, id) => {
       const m = ring.material as THREE.MeshBasicMaterial;
       m.opacity = id === selected ? .55 + pulse * .4 : id === hovered ? .45 : 0;
-      ring.scale.setScalar(id === selected ? 1 + pulse * .04 : 1);
+      // The ring hugs the island's edge: it pulses in brightness, barely in size.
+      ring.scale.setScalar(id === selected ? 1 + pulse * .01 : 1);
     });
     if (trafficEnabled) moveTraffic(elapsed, now);
     if (!reduced) {
@@ -742,12 +750,15 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     if (width && height && modelsSettled) { updateBoards(); if (bakeFrames > 0) { bakeFrames--; renderer.shadowMap.needsUpdate = true; } renderer.render(scene, camera); host.dataset.drawCalls = String(renderer.info.render.calls); host.dataset.triangles = String(renderer.info.render.triangles); if (!ready) { ready = true; options.onReady(); startGrowth(now); } }
     frame = requestAnimationFrame(tick);
   }
-  const onVisible = () => { if (!document.hidden && !frame) { last = performance.now(); frame = requestAnimationFrame(tick); } };
+  const onVisible = () => { spent = frames = 0; if (!document.hidden && !frame) { last = performance.now(); frame = requestAnimationFrame(tick); } };
   document.addEventListener("visibilitychange", onVisible);
   frame = requestAnimationFrame(tick);
 
   const lost = (event: Event) => { event.preventDefault(); options.onLost(); };
+  // A restored context starts with an empty shadow map, which would shade the whole city.
+  const restored = () => bakeShadows();
   renderer.domElement.addEventListener("webglcontextlost", lost);
+  renderer.domElement.addEventListener("webglcontextrestored", restored);
 
   return {
     setMascot,
@@ -764,7 +775,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       document.removeEventListener("visibilitychange", onVisible);
       renderer.domElement.removeEventListener("pointerdown", onDown); renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointermove", onHover); renderer.domElement.removeEventListener("pointerleave", onLeave);
-      renderer.domElement.removeEventListener("webglcontextlost", lost);
+      renderer.domElement.removeEventListener("webglcontextlost", lost); renderer.domElement.removeEventListener("webglcontextrestored", restored);
       for (const root of [scene, ...loaded, taxi, boat]) disposeModel(root);
       unit.dispose(); block.dispose(); blobPlane.dispose(); pole.dispose(); bulb.dispose();
       materials.forEach(m => m.dispose()); disposables.forEach(d => d.dispose()); boards.forEach(b => b.texture.dispose()); architecture.dispose(); sun.shadow.dispose(); characterRequest++; characterMixer?.stopAllAction(); disposeCharacter(figure); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;

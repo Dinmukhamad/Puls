@@ -84,7 +84,8 @@ test('district islands fit the lagoon, clear of the plaza, the ring road and the
     assert.ok(radius(d) + ISLET < LAGOON, 'the island stays inside the lagoon');
     for (const a of city.avenueAngles()) {
       const across = Math.abs(-d.x * Math.sin(a) + d.z * Math.cos(a)), along = d.x * Math.cos(a) + d.z * Math.sin(a);
-      if (along > 0) assert.ok(across > ISLET + ROAD_HALF + .3, 'a cross street passes by the island');
+      // 1.38 is the half-width of the bridge deck with its railings.
+      if (along > 0) assert.ok(across > ISLET + 1.38 + .4, `a cross-street bridge passes ${(across - ISLET - 1.38).toFixed(2)} from the ${d.id} island`);
     }
     for (const e of city.CITY_LOCATIONS) if (e !== d) assert.ok(Math.hypot(d.x - e.x, d.z - e.z) > ISLET * 2 + 1, 'water between islands');
     // Corners of the landmark plinth (5.7 × 5.3 units before scaling) stay on the island.
