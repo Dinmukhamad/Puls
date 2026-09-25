@@ -21,7 +21,7 @@ from app.models.contest import (
     OperatorWeekMetric,
     OperatorWeekResult,
 )
-from app.models.enums import MetricDirection, Role, ShopRequestStatus
+from app.models.enums import MetricDirection, Role, ShopRequestStatus, WeekStatus
 from app.models.shop import ShopRequest
 from app.models.user import Group, User
 from app.schemas.analytics import (
@@ -32,6 +32,7 @@ from app.schemas.analytics import (
     TrendPoint,
 )
 from app.schemas.rating import WeekOut
+from app.services.rules import get_rules
 from app.services.weekly import get_week
 
 MONTHS = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
@@ -322,6 +323,7 @@ async def report(
         if ids and (week or grain != "week")
         else 0
     )
+    rules = await get_rules(session)
     result = AnalyticsOut(
         week=WeekOut.model_validate(week) if week else None,
         grain=grain,
@@ -333,7 +335,14 @@ async def report(
         operators_with_data=0,
         pending_requests=pending,
         coins_awarded=awarded,
+        lateness_metric_code=rules.lateness_metric_code,
     )
+    if grain == "month":
+        result.methodology += (
+            " Месячные значения — среднее загруженных недель, начинающихся в месяце; "
+            "если недельных значений нет — среднее дней. В том числе опоздания: "
+            "это среднее за исходный период, а не число событий за весь месяц."
+        )
     for metric in definitions:
         current_values = observations(ids, metric.code, anchor)
         value = average(current_values)
@@ -356,6 +365,9 @@ async def report(
                 total=len(users),
                 coverage=reported / len(users) if users else None,
                 below_target=sum(at_target(value, metric) is False for value in current_values),
+                description=metric.description,
+                penalty_per_unit=metric.penalty_per_unit,
+                trend=[average(observations(ids, metric.code, start)) for start in starts],
             )
         )
     result.operators_with_data = sum(
@@ -385,7 +397,10 @@ async def report(
                 )
             )
         }
-        if week and ids and grain == "week"
+        if week
+        and ids
+        and grain == "week"
+        and week.status in (WeekStatus.CALCULATED, WeekStatus.CLOSED)
         else {}
     )
 
@@ -429,6 +444,14 @@ async def report(
                 missing_metrics=[code for code, value in values.items() if value is None],
                 values=values,
                 trend=[observation(user.id, chosen.code, start) for start in starts],
+                previous_values={
+                    metric.code: observation(user.id, metric.code, previous_start)
+                    for metric in definitions
+                },
+                trends={
+                    metric.code: [observation(user.id, metric.code, start) for start in starts]
+                    for metric in definitions
+                },
             )
         )
         group_key = user.group_id or 0

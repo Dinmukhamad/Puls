@@ -25,6 +25,9 @@ class MetricSummary(BaseModel):
     total: int
     coverage: float | None
     below_target: int
+    description: str | None = None
+    penalty_per_unit: float = 0
+    trend: list[float | None] = Field(default_factory=list)
 
 
 class TrendPoint(BaseModel):
@@ -62,6 +65,8 @@ class AnalyticsOperator(BaseModel):
     missing_metrics: list[str]
     values: dict[str, float | None]
     trend: list[float | None]
+    previous_values: dict[str, float | None] = Field(default_factory=dict)
+    trends: dict[str, list[float | None]] = Field(default_factory=dict)
 
 
 class AnalyticsOut(BaseModel):
@@ -76,6 +81,7 @@ class AnalyticsOut(BaseModel):
     operators_with_data: int
     pending_requests: int
     coins_awarded: int
+    lateness_metric_code: str = "lateness"
     metrics: list[MetricSummary] = Field(default_factory=list)
     trend: list[TrendPoint] = Field(default_factory=list)
     groups: list[ComparisonSeries] = Field(default_factory=list)
