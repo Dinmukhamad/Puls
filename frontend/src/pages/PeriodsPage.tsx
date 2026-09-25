@@ -7,6 +7,7 @@ import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, KPI, Skeleton } from "../components/ui";
 import { coins, points, periodLabel, WEEK_STATUS_LABELS } from "../utils/format";
+import { ReportsUpload } from "./ReportsUpload";
 import "./workflow.css";
 
 const steps = ["Файл", "Проверка", "Предпросмотр", "Расчёт", "Публикация"];
@@ -79,6 +80,7 @@ function PeriodWorkspace() {
   return <div className="stack">
     <div className="page-head"><div><h1 className="page-title">Расчёт периода</h1>
       <p className="page-subtitle">Загрузите показатели, проверьте результат и опубликуйте итоги недели</p></div></div>
+    {canImport && <ReportsUpload />}
     <Card title="Отчётная неделя">
       <div className="workflow-toolbar">
         <label className="field"><span className="field__label">Период</span>

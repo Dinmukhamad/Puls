@@ -33,3 +33,20 @@ export const periods = {
   calculate: (id: number) => request<PeriodPreview>(`${base}/${id}/recalculate`, { method: "POST" }),
   publish: (id: number) => request<CloseReport>(`${base}/${id}/close`, { method: "POST" }),
 };
+
+export interface ReportsResult {
+  month: string; matched: number; matched_names: string[]; unmatched: string[];
+  without_data: number; day_values: number; detail: string | null;
+  files: { filename: string; kind: "team" | "quality" | "unknown"; people: number }[];
+  weeks: { label: string; starts_on: string; ends_on: string; status: string; operators: number }[];
+}
+const reportsForm = (files: File[], month: string) => {
+  const multipart = new FormData();
+  for (const file of files) multipart.append("files", file);
+  if (month) multipart.append("month", month);
+  return multipart;
+};
+export const reports = {
+  inspect: (files: File[], month: string) => request<ReportsResult>("/api/v1/admin/day-metrics/reports/preview", { method: "POST", multipart: reportsForm(files, month) }),
+  save: (files: File[], month: string) => request<ReportsResult>("/api/v1/admin/day-metrics/reports", { method: "POST", multipart: reportsForm(files, month) }),
+};
