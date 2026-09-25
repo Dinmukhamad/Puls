@@ -78,6 +78,10 @@ export function createCinematicLook(renderer: THREE.WebGLRenderer, scene: THREE.
 
   return {
     tune,
+    hasAO: !!ao,
+    /** The expensive effects can be switched off one by one while frames run slow. */
+    setAO(on: boolean) { if (ao) ao.enabled = on; },
+    setBloom(on: boolean) { bloom.enabled = on; },
     setSize(width: number, height: number, ratio: number) {
       composer.setPixelRatio(ratio); composer.setSize(width, height);
       const w = width * ratio, h = height * ratio;

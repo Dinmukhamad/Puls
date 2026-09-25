@@ -666,8 +666,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
 
   // The canvas fills the screen; the city is centred in the free frame between the panels.
   let width = 0, height = 0;
-  /** Share of the full pixel density: lowered while frames run slow, raised again once they recover. */
-  let quality = 1;
+  /** Share of the full pixel density: the last thing lowered while frames run slow, and at most by 20 %. */
+  let quality = 1, capped = false;
   const pixelRatio = (q: number) => Math.max(.5, q * Math.min(window.devicePixelRatio, mobile ? 1.4 : lite ? 1.5 : 1.75, Math.sqrt(3.4e6 / (Math.max(1, width) * Math.max(1, height)))));
   const frameRect = () => { const f = options.frame?.getBoundingClientRect(); return f && f.width > 60 && f.height > 60 ? f : null; };
   function resize() {
@@ -723,25 +723,28 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   let frame = 0, last = performance.now(), visible = true, ready = false;
   const visibility = new IntersectionObserver(entries => { visible = entries.some(e => e.isIntersecting); if (visible && !frame) { last = performance.now(); spent = frames = 0; frame = requestAnimationFrame(tick); } });
   visibility.observe(host);
-  // Frame times over the last second decide whether to draw fewer pixels: below about 40 frames a second
-  // (20 on phones) quality steps down, and it steps back up after three smooth seconds, but not to a level
-  // that was too slow in the last 30 seconds, so a struggling GPU does not flicker between two sharpnesses.
-  // A browser cap such as a 30 fps battery saver also lowers it (saving battery); it recovers once lifted.
-  const budget = mobile ? 1000 / 30 : 1000 / 60;
-  let spent = 0, frames = 0, calm = 0, ceiling = 1.01, retry = 0;
+  // Frame times over the last second decide how much to spend. Below about 40 frames a second (20 on
+  // phones) the scene gives up one thing at a time, cheapest-to-lose first: corner shading, then the glow,
+  // then 60 frames a second (it draws 30, which keeps every frame sharp), and only then pixels, by 10 % and
+  // 20 %. After three smooth seconds it takes one back, but not a step that was too slow in the last 30 s.
+  type Step = "ao" | "bloom" | "fps" | "ratio90" | "ratio80";
+  const steps: Step[] = [...(look?.hasAO ? ["ao" as const] : []), ...(look ? ["bloom" as const] : []), ...(mobile ? [] : ["fps" as const]), "ratio90", "ratio80"];
+  let level = 0, spent = 0, frames = 0, calm = 0, ceiling = -1, retry = 0;
+  const given = (step: Step) => { const i = steps.indexOf(step); return i >= 0 && i < level; };
+  function applyLevel() {
+    look?.setAO(!given("ao")); look?.setBloom(!given("bloom")); capped = given("fps");
+    const next = given("ratio80") ? .8 : given("ratio90") ? .9 : 1;
+    if (next !== quality) { quality = next; resize(); }
+    host.dataset.quality = `${level}/${steps.length}`;
+  }
   function adapt(gap: number, now: number) {
     spent += gap; frames++;
     if (spent < 1000) return;
-    const average = spent / frames, lower = Math.max(.55, quality - .15); spent = frames = 0;
-    if (now > retry) ceiling = 1.01;
-    if (average > budget * 1.45) {
-      // A step that cannot change the pixel ratio (already at its floor) is not taken.
-      calm = 0; if (pixelRatio(lower) < pixelRatio(quality) - .01) { ceiling = quality; retry = now + 30000; quality = lower; resize(); }
-    } else if (average < budget * 1.12) {
-      const higher = Math.min(1, quality + .1);
-      if (quality < 1 && higher < ceiling - .001 && ++calm >= 3) { quality = higher; calm = 0; resize(); }
-    } else calm = 0;
-    host.dataset.quality = quality.toFixed(2);
+    const average = spent / frames, budget = mobile || capped ? 1000 / 30 : 1000 / 60; spent = frames = 0;
+    if (now > retry) ceiling = -1;
+    if (average > budget * 1.45) { calm = 0; if (level < steps.length) { ceiling = level; retry = now + 30000; level++; applyLevel(); } }
+    else if (average < budget * 1.12) { if (level > 0 && level - 1 > ceiling && ++calm >= 3) { level--; calm = 0; applyLevel(); } }
+    else calm = 0;
   }
   /** The city through the effects, then the labels on top of it, sharp and at full brightness. */
   function renderLook(pipeline: NonNullable<typeof look>) {
@@ -753,7 +756,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   function tick(now: number) {
     frame = 0; if (!visible || document.hidden) return;
     // A little slack keeps the throttle on every second vsync instead of slipping to every third.
-    if (mobile && now - last < 1000 / 30 - 3) { frame = requestAnimationFrame(tick); return; }
+    if ((mobile || capped) && now - last < 1000 / 30 - 3) { frame = requestAnimationFrame(tick); return; }
     // Pauses and one-off hitches (shader compiles, shadow bakes, a growing district) do not count.
     const gap = now - last;
     if (gap > 1000) spent = frames = 0;
