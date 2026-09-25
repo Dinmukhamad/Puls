@@ -36,6 +36,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
         levels: JSON.parse(levelKey), selected: selectedRef.current, view: view.current, labels: labelsRef.current, grown, mascot: mascotRef.current, frame: frame.current ?? undefined,
         onSelect: id => selectRef.current(id), onView: value => { view.current = value; },
         onReady: () => { if (!cancelled) setReady(true); }, onLost: () => { if (!cancelled) setFailed(true); },
+        onRestored: () => { if (!cancelled) setFailed(false); },
       });
       control.current.setTraffic(trafficRef.current);
     }).catch(() => { if (!cancelled) setFailed(true); });

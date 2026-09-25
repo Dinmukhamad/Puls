@@ -24,6 +24,8 @@ export interface CitySceneOptions {
   /** The part of the screen the panels leave free; the city is centred there. */
   frame?: HTMLElement;
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
+  /** The browser gave the WebGL context back after a loss: the city draws again. */
+  onRestored?: () => void;
 }
 export interface CityMascot { gender: "male" | "female" | null; name: string }
 export interface CitySceneControl { focusMascot: () => void; setMascot: (mascot: CityMascot) => void; setTraffic: (enabled: boolean) => void; dispose: () => void; select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void; zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void }
@@ -154,7 +156,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   lagoon.rotation.x = -Math.PI / 2; lagoon.position.y = -1.25; lagoon.receiveShadow = true; world.add(lagoon);
   flat(new THREE.RingGeometry(PROMENADE - .5, PROMENADE + .5, 180, 1), "#eadfc8", .215);
   const bank = new THREE.Mesh(new THREE.CylinderGeometry(BANK, BANK, 1.9, 180, 1, true), material("#d4cab6", { side: THREE.BackSide }));
-  bank.position.y = -.75; bank.receiveShadow = true; world.add(bank);
+  bank.position.y = -.75; bank.castShadow = bank.receiveShadow = true; world.add(bank);
   flat(new THREE.RingGeometry(BANK, 720, 200, 1), "#86a174", .2);
   flat(new THREE.RingGeometry(BANK, BANK + 1, 200, 1), "#eadfc8", .21);
 
@@ -177,8 +179,16 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     const dx = bx - ax, dz = bz - az, length = Math.hypot(dx, dz), angle = Math.atan2(dx, dz), span = new THREE.Group();
     span.position.set((ax + bx) / 2, 0, (az + bz) / 2); span.rotation.y = angle; streets.add(span);
     box(2.75, .34, length, "#dcd3c1", 0, .01, 0, span);
-    // Railings stop at the shore, the deck reaches a little onto the land.
-    for (const side of [-1, 1]) box(.16, .3, length - .6, "#e8e1d2", side * 1.3, .36, 0, span);
+    // The deck reaches .3 onto the land; railings, 1.3 off the centre line, stop where the curved shore
+    // meets them: a little farther in on the round plaza and islands, a little sooner at the lagoon shore.
+    const trim = (x: number, z: number) => {
+      const r = Math.hypot(x, z), island = CITY_LOCATIONS.some(d => Math.hypot(d.x - x, d.z - z) < ISLET + .45);
+      const shore = r < PLAZA_ISLAND + 1 ? PLAZA_ISLAND : island ? ISLET : -LAGOON;
+      const bend = Math.abs(shore) - Math.sqrt(shore * shore - 1.3 * 1.3);
+      return shore > 0 ? .3 - bend : .3 + bend;
+    };
+    const ta = trim(ax, az), tb = trim(bx, bz);
+    for (const side of [-1, 1]) box(.16, .3, length - ta - tb, "#e8e1d2", side * 1.3, .36, (ta - tb) / 2, span);
     const piers = Math.floor(length / 3.4);
     for (let i = 1; i <= piers; i++) box(2.1, 1.4, .5, "#cfc5b1", 0, -.86, -length / 2 + i * length / (piers + 1), span);
   }
@@ -327,6 +337,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
         const mic = new THREE.Mesh(new THREE.TubeGeometry(curve,12,.008,6,false),band.material);headset.add(mic);
       }
       figure.add(model);
+      // Its first frames compile new shaders; bake frames also keep them out of the quality measurement.
+      bakeShadows();
       characterMixer = new THREE.AnimationMixer(model);
       const idle = gltf.animations.find(a => a.name === 'Idle_Neutral'), hello = gltf.animations.find(a => a.name === 'Wave');
       if (idle) { idleAction = characterMixer.clipAction(idle); idleAction.play(); }
@@ -435,7 +447,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     const { group: g, height } = architecture.landmark(d.id, stage, !!d.soon);
     g.position.set(d.x, .2, d.z); g.scale.setScalar(DISTRICT_SCALE); g.rotation.y = Math.atan2(-d.x, -d.z);
     g.userData.district = d.id; world.add(g); districtGroups.set(d.id, g);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(ISLET - .15, .11, 8, 96), new THREE.MeshBasicMaterial({ color: '#e9bf69', transparent: true, opacity: 0 }));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(ISLET - .19, .11, 8, 96), new THREE.MeshBasicMaterial({ color: '#e9bf69', transparent: true, opacity: 0 }));
     ring.rotation.x = Math.PI / 2; ring.position.set(d.x, .45, d.z); world.add(ring); rings.set(d.id, ring);
     const hit = new THREE.Mesh(new THREE.CylinderGeometry(ISLET, ISLET, height * DISTRICT_SCALE, 12), new THREE.MeshBasicMaterial({ visible: false }));
     hit.position.set(d.x, .2 + height * DISTRICT_SCALE / 2, d.z); hit.userData.district = d.id; world.add(hit); pickables.push(hit);
@@ -649,10 +661,11 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   let width = 0, height = 0;
   /** Share of the full pixel density: lowered while frames run slow, raised again once they recover. */
   let quality = 1;
+  const pixelRatio = (q: number) => Math.max(.5, q * Math.min(window.devicePixelRatio, mobile ? 1.4 : lite ? 1.5 : 1.75, Math.sqrt(3.4e6 / (Math.max(1, width) * Math.max(1, height)))));
   const frameRect = () => { const f = options.frame?.getBoundingClientRect(); return f && f.width > 60 && f.height > 60 ? f : null; };
   function resize() {
     width = host.clientWidth; height = host.clientHeight; if (!width || !height) return;
-    renderer.setPixelRatio(Math.max(.5, quality * Math.min(window.devicePixelRatio, mobile ? 1.4 : lite ? 1.5 : 1.75, Math.sqrt(3.4e6 / (width * height)))));
+    renderer.setPixelRatio(pixelRatio(quality));
     renderer.setSize(width, height, false); camera.aspect = width / height;
     camera.fov = width < 480 ? 50 : 36;
     const f = frameRect(), bounds = host.getBoundingClientRect();
@@ -701,24 +714,26 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   }).catch(() => { /* Local taxis keep driving. */ });
 
   let frame = 0, last = performance.now(), visible = true, ready = false;
-  const visibility = new IntersectionObserver(entries => { visible = entries.some(e => e.isIntersecting); if (visible && !frame) frame = requestAnimationFrame(tick); });
+  const visibility = new IntersectionObserver(entries => { visible = entries.some(e => e.isIntersecting); if (visible && !frame) { last = performance.now(); spent = frames = 0; frame = requestAnimationFrame(tick); } });
   visibility.observe(host);
-  // Frame times over the last second decide whether to draw fewer pixels. If drawing fewer pixels does
-  // not make frames faster, the limit is not the GPU (a 30 Hz battery saver, a busy CPU): the step is
-  // undone and that pace becomes the budget, so quality is not lowered for nothing.
-  const nominal = mobile ? 1000 / 30 : 1000 / 60;
-  let budget = nominal, spent = 0, frames = 0, calm = 0, before = 0;
-  function adapt(gap: number) {
+  // Frame times over the last second decide whether to draw fewer pixels: below about 40 frames a second
+  // (20 on phones) quality steps down, and it steps back up after three smooth seconds, but not to a level
+  // that was too slow in the last 30 seconds, so a struggling GPU does not flicker between two sharpnesses.
+  // A browser cap such as a 30 fps battery saver also lowers it (saving battery); it recovers once lifted.
+  const budget = mobile ? 1000 / 30 : 1000 / 60;
+  let spent = 0, frames = 0, calm = 0, ceiling = 1.01, retry = 0;
+  function adapt(gap: number, now: number) {
     spent += gap; frames++;
     if (spent < 1000) return;
-    const average = spent / frames; spent = frames = 0;
-    if (before) {
-      const helped = average < before * .92; before = 0;
-      if (!helped) { quality = Math.min(1, quality + .15); budget = Math.max(nominal, average); calm = 0; resize(); host.dataset.quality = quality.toFixed(2); return; }
-    }
-    if (average > budget * 1.45 && quality > .55) { before = average; quality = Math.max(.55, quality - .15); calm = 0; resize(); }
-    else if (average < budget * 1.12) { if (quality < 1 && ++calm >= 3) { quality = Math.min(1, quality + .1); calm = 0; resize(); } }
-    else calm = 0;
+    const average = spent / frames, lower = Math.max(.55, quality - .15); spent = frames = 0;
+    if (now > retry) ceiling = 1.01;
+    if (average > budget * 1.45) {
+      // A step that cannot change the pixel ratio (already at its floor) is not taken.
+      calm = 0; if (pixelRatio(lower) < pixelRatio(quality) - .01) { ceiling = quality; retry = now + 30000; quality = lower; resize(); }
+    } else if (average < budget * 1.12) {
+      const higher = Math.min(1, quality + .1);
+      if (quality < 1 && higher < ceiling - .001 && ++calm >= 3) { quality = higher; calm = 0; resize(); }
+    } else calm = 0;
     host.dataset.quality = quality.toFixed(2);
   }
   function tick(now: number) {
@@ -727,8 +742,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     if (mobile && now - last < 1000 / 30 - 3) { frame = requestAnimationFrame(tick); return; }
     // Pauses and one-off hitches (shader compiles, shadow bakes, a growing district) do not count.
     const gap = now - last;
-    if (gap > 250) spent = frames = 0;
-    else if (ready && bakeFrames === 0 && !growth.length) adapt(gap);
+    if (gap > 1000) spent = frames = 0;
+    else if (ready && bakeFrames === 0 && !growth.length && !(gap > 250 && frames > 3 && gap > 4 * spent / frames)) adapt(gap, now);
     const elapsed = Math.min(.2, (now - last) / 1000), dt = Math.min(.05, elapsed); last = now;
     if (!width || !height) resize();
     stepTween(now);
@@ -756,7 +771,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
 
   const lost = (event: Event) => { event.preventDefault(); options.onLost(); };
   // A restored context starts with an empty shadow map, which would shade the whole city.
-  const restored = () => bakeShadows();
+  const restored = () => { bakeShadows(); options.onRestored?.(); };
   renderer.domElement.addEventListener("webglcontextlost", lost);
   renderer.domElement.addEventListener("webglcontextrestored", restored);
 
