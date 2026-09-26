@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { CityDistrict, CityMission, DistrictId } from "../../api/city";
 import type { CityMascot, CityLabelInfo, CitySceneControl, CityView } from "./cityScene";
 import { districtLevel, grownDistricts } from "./cityLevels";
+import { useAuth } from "../../auth/AuthContext";
 
 /**
  * The 3D city fills the whole screen behind the glass panels. `.city-frame` marks the part the panels
@@ -12,6 +13,8 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
   const host = useRef<HTMLDivElement>(null), frame = useRef<HTMLDivElement>(null);
   const control = useRef<CitySceneControl>();
+  // City v3 (docs/CITY_V3_TZ.md) opens with ?city=v3; the ×4 world, the WebGL2 switch and the stats overlay are for staff.
+  const { atLeast } = useAuth(), staff = atLeast("supervisor");
   const view = useRef<CityView>();
   const selectRef = useRef(onSelect), selectedRef = useRef(selected);
   selectRef.current = onSelect; selectedRef.current = selected;
@@ -30,9 +33,15 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     if (progressKey) {
       try { grown = grownDistricts(JSON.parse(localStorage.getItem(progressKey) ?? "null"), current) as DistrictId[]; localStorage.setItem(progressKey, JSON.stringify(current)); } catch { /* Celebration is optional. */ }
     }
-    void import("./cityScene").then(({ createCityScene }) => {
+    const query = new URLSearchParams(window.location.search), v3 = query.get("city") === "v3";
+    const engine = v3
+      ? import("../../city3d").then(m => (el: HTMLDivElement, o: Parameters<typeof m.createCity>[1]) => m.createCity(el, {
+        ...o, world: staff && query.get("world") === "x4" ? "x4" : "v1", forceWebGL: query.get("backend") === "webgl", stats: staff && query.get("stats") === "1",
+      }))
+      : import("./cityScene").then(m => m.createCityScene);
+    void engine.then(createScene => {
       if (cancelled || !host.current) return;
-      control.current = createCityScene(host.current, {
+      control.current = createScene(host.current, {
         levels: JSON.parse(levelKey), selected: selectedRef.current, view: view.current, labels: labelsRef.current, grown, mascot: mascotRef.current, frame: frame.current ?? undefined,
         onSelect: id => selectRef.current(id), onView: value => { view.current = value; },
         onReady: () => { if (!cancelled) setReady(true); }, onLost: () => { if (!cancelled) setFailed(true); },

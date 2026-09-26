@@ -24,6 +24,7 @@ from app.api.v1 import (
     shop,
     system,
     telegram,
+    telemetry,
     wallet,
     work_sites_access,
 )
@@ -50,3 +51,4 @@ api_router.include_router(driver.router)
 api_router.include_router(learning.router)
 api_router.include_router(games.router)
 api_router.include_router(wallet.router)
+api_router.include_router(telemetry.router)
