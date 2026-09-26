@@ -13,8 +13,8 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
   const host = useRef<HTMLDivElement>(null), frame = useRef<HTMLDivElement>(null);
   const control = useRef<CitySceneControl>();
-  // City v3 (docs/CITY_V3_TZ.md) is the default; ?city=v2 opens the previous city. The ×4 world, the WebGL2
-  // switch and the stats overlay are for staff.
+  // City v3 (docs/CITY_V3_TZ.md) is the default, with the full map of ten islands (?world=v1: the five-island
+  // layout; ?city=v2: the previous city). The stats overlay is for staff.
   const { atLeast } = useAuth(), staff = atLeast("supervisor");
   const view = useRef<CityView>();
   const selectRef = useRef(onSelect), selectedRef = useRef(selected);
@@ -37,7 +37,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     const query = new URLSearchParams(window.location.search), v3 = query.get("city") !== "v2";
     const engine = v3
       ? import("../../city3d").then(m => (el: HTMLDivElement, o: Parameters<typeof m.createCity>[1]) => m.createCity(el, {
-        ...o, world: staff && query.get("world") === "x4" ? "x4" : "v1", forceWebGL: query.get("backend") === "webgl", stats: staff && query.get("stats") === "1",
+        ...o, world: query.get("world") === "v1" ? "v1" : "x4", forceWebGL: query.get("backend") === "webgl", stats: staff && query.get("stats") === "1",
       }))
       : import("./cityScene").then(m => m.createCityScene);
     void engine.then(createScene => {
