@@ -42,18 +42,18 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   const mobile = host.clientWidth < 600;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const world = generateWorld(options.world === "x4" ? WORLD_X4 : WORLD_V1);
-  let disposed = false, parts: Parts | null = null;
+  let disposed = false, parts: Parts | null = null, forceWebGL = !!options.forceWebGL, everReady = false;
   // Calls before the city is up; replayed in order afterwards.
   const pending: ((p: Parts) => void)[] = [];
   let selected = options.selected, labels = options.labels, mascot = options.mascot ?? { gender: null, name: "Пульсар" }, trafficOn = !reducedMotion;
   const when = (fn: (p: Parts) => void) => { if (parts) fn(parts); else pending.push(fn); };
 
-  const canvas = document.createElement("canvas"); canvas.className = "c3-canvas";
-  const overlay = document.createElement("div"); overlay.className = "c3-overlay";
-  host.replaceChildren(canvas, overlay);
-
   async function start() {
-    const handle = await createRenderer(canvas, { forceWebGL: options.forceWebGL, mobile });
+    // A fresh canvas each start: a canvas that held a WebGPU context cannot take a WebGL2 one (fallback, restore).
+    const canvas = document.createElement("canvas"); canvas.className = "c3-canvas";
+    const overlay = document.createElement("div"); overlay.className = "c3-overlay";
+    host.replaceChildren(canvas, overlay);
+    const handle = await createRenderer(canvas, { forceWebGL, mobile });
     if (disposed) { handle.dispose(); return; }
     const { renderer, backend } = handle;
     const scene = new THREE.Scene(), camera = createCamera(world.radius);
@@ -103,14 +103,18 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
         post.render();
         stats.endFrame();
         if (!ready && !loading) {
-          ready = true; stats.markFirstFrame(); options.onProgress?.(1); options.onReady();
+          ready = true; everReady = true; stats.markFirstFrame(); options.onProgress?.(1); options.onReady();
           const grown = districts.startGrowth(), d = grown ? world.districts.find(item => item.id === grown) : null;
           if (d) rig.focus(d.x, d.z, 48);
         }
       },
     });
 
-    handle.onLost(() => options.onLost());
+    // WebGPU that fails while the city is starting (driver or browser bugs) is retried once on WebGL2.
+    handle.onLost(() => {
+      if (!everReady && !forceWebGL && !disposed) { forceWebGL = true; teardown(); void start().catch(() => options.onLost()); return; }
+      options.onLost();
+    });
     handle.onRestored(() => { if (!disposed) { teardown(); void start().then(() => options.onRestored?.()); } });
 
     parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, observer };
