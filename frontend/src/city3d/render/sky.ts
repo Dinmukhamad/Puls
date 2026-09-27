@@ -4,7 +4,7 @@
  * ground fill (HemisphereLight) and one warm sun about 35° high, from the old city's direction, so shadows
  * fall towards the viewer's lower left. The sun's shadow map is static: drawn once and again on
  * ctx.requestShadowUpdate() (engine/renderer.ts setStaticShadows). There is no scene.environment: its even
- * light fills the shade and the shadows disappear; the water reads the sky from `gradient` instead.
+ * light fills the shade and the shadows disappear.
  */
 import * as THREE from "three/webgpu";
 import { Fn, dot, float, max, mix, pow, positionWorldDirection, smoothstep, uniform, type ShaderNodeObject } from "three/tsl";
@@ -21,7 +21,7 @@ export interface Sky {
   /** Unit vector towards the sun and its colour × intensity, for the water's glint. */
   sunDirection: ShaderNodeObject<THREE.UniformNode<THREE.Vector3>>;
   sunColor: ShaderNodeObject<THREE.UniformNode<THREE.Color>>;
-  /** Moves the sun for a time of day (a stage 3 stub: the colours stay the day's). */
+  /** Daylight or moonlight, with matching sky, fog and fill colours. */
   setTimeOfDay(hours: number): void;
   dispose(): void;
 }
@@ -76,13 +76,21 @@ export function createSky(ctx: CityContext): Sky {
   const azimuth0 = Math.atan2(SUN_POSITION.z, SUN_POSITION.x), elevation0 = Math.asin(SUN_POSITION.y / SUN_POSITION.length());
   const peak = elevation0 / Math.sin(Math.PI * (DEFAULT_HOURS - 6) / 12), noon = new THREE.Color(SUN), dusk = new THREE.Color("#ffb070");
   function setTimeOfDay(hours: number) {
+    hours = Number.isFinite(hours) ? ((hours % 24) + 24) % 24 : DEFAULT_HOURS;
+    const night = hours < 6 || hours >= 18;
     // Up at 6, highest at noon, down at 18; the sun turns 15° an hour around the city.
     const elevation = peak * Math.sin(Math.PI * (hours - 6) / 12), azimuth = azimuth0 - (hours - DEFAULT_HOURS) * Math.PI / 12;
-    const direction = new THREE.Vector3(Math.cos(azimuth) * Math.cos(elevation), Math.sin(Math.max(elevation, -.1)), Math.sin(azimuth) * Math.cos(elevation)).normalize();
+    const altitude = night ? Math.max(.45, Math.abs(elevation)) : Math.max(elevation, .04);
+    const direction = new THREE.Vector3(Math.cos(azimuth) * Math.cos(altitude), Math.sin(altitude), Math.sin(azimuth) * Math.cos(altitude)).normalize();
     const day = THREE.MathUtils.clamp(elevation / .35, 0, 1);
     sun.position.copy(direction).multiplyScalar(distance);
-    sun.color.copy(dusk).lerp(noon, day); sun.intensity = SUN_INTENSITY * THREE.MathUtils.smoothstep(elevation, -.02, .12);
-    hemisphere.intensity = .35 + .8 * THREE.MathUtils.smoothstep(elevation, -.15, .3);
+    if (night) sun.color.set("#bfd3ff"); else sun.color.copy(dusk).lerp(noon, day);
+    sun.intensity = night ? 1.15 : SUN_INTENSITY * THREE.MathUtils.smoothstep(elevation, -.02, .12);
+    hemisphere.color.set(night ? "#a6c8ef" : "#d9ebff");
+    hemisphere.groundColor.set(night ? "#303d51" : "#71805c");
+    hemisphere.intensity = night ? .8 : .35 + .8 * THREE.MathUtils.smoothstep(elevation, -.15, .3);
+    horizon.value.set(night ? "#172946" : HORIZON); zenith.value.set(night ? "#071121" : ZENITH);
+    (scene.fog as THREE.Fog).color.copy(horizon.value);
     sunDirection.value.copy(direction); sunColor.value.copy(sun.color).multiplyScalar(sun.intensity);
     sun.updateMatrixWorld();
     ctx.requestShadowUpdate();

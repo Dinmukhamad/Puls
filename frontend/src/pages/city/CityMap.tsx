@@ -13,10 +13,10 @@ import { useAuth } from "../../auth/AuthContext";
  * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
  * seen, so an upgrade is celebrated once.
  */
-export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot, pilot = false, inspect = false, forceWebGL = false }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; pilot?: boolean; inspect?: boolean; forceWebGL?: boolean }) {
+export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot, pilot = false, inspect = false, forceWebGL = false, focusRequest = 0 }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; pilot?: boolean; inspect?: boolean; forceWebGL?: boolean; focusRequest?: number }) {
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
   const host = useRef<HTMLDivElement>(null), frame = useRef<HTMLDivElement>(null);
-  const control = useRef<CitySceneControl>();
+  const control = useRef<CitySceneControl & { setTimeOfDay?: (mode: TimeOfDay) => void }>();
   // City v3 (docs/CITY_V3_TZ.md) is the default, with the full map of ten islands (?world=v1: the five-island
   // layout; ?city=v2: the previous city). The stats overlay is for staff.
   const { atLeast } = useAuth(), staff = atLeast("supervisor");
@@ -33,7 +33,9 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   selectRef.current = onSelect; selectedRef.current = selected;
   const [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0), [report, setReport] = useState<PilotReport | null>(null);
-  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>("day");
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(() => {
+    try { return localStorage.getItem("puls.city.time-of-day") === "night" ? "night" : "day"; } catch { return "day"; }
+  });
   const timeRef = useRef(timeOfDay); timeRef.current = timeOfDay;
   const [traffic, setTraffic] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const trafficRef = useRef(traffic); trafficRef.current = traffic;
@@ -59,7 +61,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
       : legacy
         ? import("./cityScene").then(module => module.createCityScene)
         : import("../../city3d").then(module => (el, options) => module.createCity(el, {
-          ...options, world, forceWebGL: webGL, stats: showStats,
+          ...options, world, forceWebGL: webGL, stats: showStats, timeOfDay: timeRef.current,
         }));
     void engine.then(createScene => {
       if (cancelled || !host.current) return;
@@ -76,8 +78,11 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     return () => { cancelled = true; control.current?.dispose(); control.current = undefined; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mission state and engine settings recreate the scene; labels/selection update in place
   }, [levelKey, sceneKey, pilot, legacy, world, webGL, showStats, look, attempt, inspect]);
-  useEffect(() => { if (pilot) (control.current as PilotControl | undefined)?.setTimeOfDay(timeOfDay); }, [timeOfDay, pilot]);
-  useEffect(() => { control.current?.select(selected); }, [selected]);
+  useEffect(() => {
+    control.current?.setTimeOfDay?.(timeOfDay);
+    try { localStorage.setItem("puls.city.time-of-day", timeOfDay); } catch { /* Scene controls also work without storage. */ }
+  }, [timeOfDay]);
+  useEffect(() => { control.current?.select(selected); }, [selected, focusRequest]);
   useEffect(() => { if (mascot) control.current?.setMascot(mascot); }, [mascot?.gender, mascot?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setLabels(JSON.parse(labelsKey)); }, [labelsKey]);
   useEffect(() => { control.current?.setTraffic(traffic); }, [traffic]);
@@ -94,8 +99,9 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>3D-карта недоступна на этом устройстве</strong><small>Выбирай районы на панели навыков — миссии работают как обычно.</small>{pilot && <button type="button" className="city-secondary" onClick={() => setAttempt(value => value + 1)}>Повторить через WebGL2</button>}</div>}
     {live && <span className="city-map-hint">Тяни — вращай · колесо или щипок — масштаб · правая кнопка или два пальца — сдвиг</span>}
     {!failed && <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="vertical">
+      {!pilot && !legacy && <button type="button" className="city-time-toggle" aria-label={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} title={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} aria-pressed={timeOfDay === "night"} onClick={() => setTimeOfDay(value => value === "day" ? "night" : "day")}><span aria-hidden="true">{timeOfDay === "day" ? "☀" : "☾"}</span><small>{timeOfDay === "day" ? "День" : "Ночь"}</small></button>}
       <button type="button" aria-label="Посмотреть помощника" onClick={() => control.current?.focusMascot()}>♙</button>
-      <button type="button" aria-label={traffic ? "Приостановить движение транспорта" : "Включить движение транспорта"} title={traffic ? "Пауза движения" : "Движение транспорта"} aria-pressed={!traffic} onClick={() => setTraffic(value => !value)}>{traffic ? "Ⅱ" : "▶"}</button>
+      <button type="button" aria-label={traffic ? "Приостановить движение" : "Включить движение"} title={traffic ? "Пауза движения" : "Возобновить движение"} aria-pressed={!traffic} onClick={() => setTraffic(value => !value)}>{traffic ? "Ⅱ" : "▶"}</button>
       <button type="button" aria-label="Приблизить" onClick={() => control.current?.zoom(.75)}>＋</button>
       <button type="button" aria-label="Отдалить" onClick={() => control.current?.zoom(1.33)}>－</button>
       <button type="button" aria-label="Исходный вид" onClick={() => control.current?.reset()}>⌂</button>

@@ -110,6 +110,7 @@ export function createLabels(ctx: CityContext, { anchors, mascotAnchor, onSelect
   resize?.observe(overlay);
 
   const view = new THREE.Vector3(), order = [...items];
+  let selectedItem: Item | undefined;
   /** Projects every anchor; nearer labels stack on top, labels behind the camera or far off-screen hide. */
   function update() {
     const { camera } = ctx;
@@ -130,7 +131,8 @@ export function createLabels(ctx: CityContext, { anchors, mascotAnchor, onSelect
       const transform = `translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0) translate(-50%,${align}%) scale(${(units * pixels / px).toFixed(3)})`;
       if (transform !== item.transform) { item.transform = transform; item.el.style.transform = transform; }
     }
-    order.sort((a, b) => b.depth - a.depth);
+    // The chosen district remains readable/clickable even if a nearer reserved island projects over it.
+    order.sort((a, b) => a === b ? 0 : a === selectedItem ? 1 : b === selectedItem ? -1 : b.depth - a.depth);
     order.forEach((item, i) => { if (item.z !== i + 1) { item.z = i + 1; item.el.style.zIndex = String(i + 1); } });
   }
   // The camera may move after the frame callbacks: project again then, so labels never trail it by a frame.
@@ -138,7 +140,7 @@ export function createLabels(ctx: CityContext, { anchors, mascotAnchor, onSelect
 
   return {
     setLabels,
-    setSelected(id) { boards.forEach((board, key) => { if (board.item.el instanceof HTMLButtonElement) board.item.el.setAttribute("aria-pressed", String(key === id)); }); },
+    setSelected(id) { selectedItem = boards.get(id)?.item; boards.forEach((board, key) => { if (board.item.el instanceof HTMLButtonElement) board.item.el.setAttribute("aria-pressed", String(key === id)); }); update(); },
     setMascotName(name) { if (tag) { tag.text.textContent = name; tag.item.el.style.display = name ? "" : "none"; } },
     dispose() {
       offFrame(); offCamera(); resize?.disconnect(); layer.remove();

@@ -15,6 +15,11 @@ const MIN_DISTANCE = 18, MAX_DISTANCE = 140, MIN_POLAR = .18, MAX_POLAR = 1.3, P
 const DAMPING = .09;
 const { clamp, degToRad } = THREE.MathUtils;
 
+/** Three-quarter entrance view: the plaza stays beside the landmark, never on its sightline. */
+export function districtFocusView(x: number, z: number, distance = 52): CityView {
+  return { target: [x, 2.5, z], azimuth: Math.atan2(-x, -z) + .62, polar: .92, distance: clamp(distance, 38, 60) };
+}
+
 export interface CameraRigOptions {
   /** The canvas the controls listen on. */
   dom: HTMLElement;
@@ -39,7 +44,7 @@ export interface CameraRig {
   /** Steps the flight and the controls; returns true if the camera moved since the last call. */
   update(now: number): boolean;
   animateTo(to: Partial<CityView>, duration?: number): void;
-  /** Flies to a district at (x, z), looking at it from the plaza, where its entrance faces. */
+  /** Flies to a district at (x, z), showing its entrance from the side of the plaza. */
   focus(x: number, z: number, distance?: number): void;
   /** Flies to a point keeping the direction; `polar` defaults to the current tilt. */
   focusPoint(target: CityView["target"], distance: number, polar?: number): void;
@@ -140,7 +145,7 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
       return result;
     },
     focus(x, z, distance = 52) {
-      animateTo({ target: [x * .85, 0, z * .85], azimuth: Math.atan2(-x, -z), distance: Math.min(currentView().distance, distance) });
+      animateTo(districtFocusView(x, z, distance));
     },
     focusPoint(target, distance, polar) { animateTo({ target, distance, ...(polar === undefined ? {} : { polar }) }); },
     zoom(factor) { animateTo({ distance: currentView().distance * factor }, 320); },

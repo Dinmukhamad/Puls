@@ -4,7 +4,7 @@
  * - WORLD_X4 is the target city: ten district islands on two lagoon rings (the five current districts
  *   and five reserved "Скоро" islands on the cross streets between them), a larger lagoon, and a
  *   mainland built up in bands (houses, blocks, towers, suburbs) with an industrial quarter and a port,
- *   out to a horizon twice as far. It has about four times the area and the buildings of v1.
+ *   out to a horizon about twice as far. It has about four times the area and the buildings of v1.
  */
 import type { WorldSpec, Zone } from "./types";
 
@@ -65,14 +65,16 @@ const rows = (zone: Zone, step: number, from: number, count: number, gap: number
 /*
  * X4 keeps v1's proportions around every road: the green belt (ring road → promenade 9.1, quay +1.1,
  * canal 8.4 wide), rows starting 4.6 past a ring road and ending 6.4 before the next, and tree rows 2.6
- * either side of the mainland ring roads. Ring 1 islands sit on the cross streets 30 out: 19.3 from the
- * ring 0 islands (15.4 needed for water between them) and 3.3 inside the lagoon shore.
+ * either side of the mainland ring roads. Districts have generous water frontage: the main ring is 27
+ * out, future islands alternate between them at 48. The coast and every mainland band move together by
+ * 20 units, preserving roads, canal width and parking clearances instead of stretching the buildings.
  */
+const COAST_SHIFT = 20;
 export const WORLD_X4: CitySpec = {
   name: "x4",
   seed: 2026,
   plaza: 4.6, plazaIslet: 6.5, islet: 7.2, districtScale: 1.75,
-  lagoonRings: [{ radius: 15.8 }, { radius: 30 }],
+  lagoonRings: [{ radius: 27 }, { radius: 48 }],
   districts: [
     ...DISTRICTS,
     { id: "future-1", angleDeg: between(ACADEMY, DRIVER), ring: 1, color: "#8f9bb3", soon: true },
@@ -81,9 +83,9 @@ export const WORLD_X4: CitySpec = {
     { id: "future-4", angleDeg: between(DISPATCH, OKTELL), ring: 1, color: "#86b07a", soon: true },
     { id: "future-5", angleDeg: between(OKTELL, ACADEMY), ring: 1, color: "#b98fb8", soon: true },
   ],
-  lagoon: 40.5,
-  roadRings: [42.2, 79.2, 118, 170, 226],
-  promenade: 51.3, quay: 52.4, bank: 60.8,
+  lagoon: 40.5 + COAST_SHIFT,
+  roadRings: [42.2, 79.2, 118, 170, 226].map(radius => radius + COAST_SHIFT),
+  promenade: 51.3 + COAST_SHIFT, quay: 52.4 + COAST_SHIFT, bank: 60.8 + COAST_SHIFT,
   mainland: [
     // Detailed houses along the canal (industry and the port take their sectors).
     ...rows("houses", 3.5, 64.8, 2, 4), { radius: 72.8, zone: "houses", step: 3.6 },
@@ -94,18 +96,18 @@ export const WORLD_X4: CitySpec = {
     { radius: 146.5, zone: "towers", step: 7 }, { radius: 154.5, zone: "towers", step: 7.5 }, { radius: 162.4, zone: "blocks", step: 5 },
     // Suburbs: small houses with gardens out to the fog.
     ...rows("suburb", 7, 176, 7, 7), ...rows("suburb", 7, 232.6, 8, 7),
-  ],
-  horizon: 300,
+  ].map(row => ({ ...row, radius: row.radius + COAST_SHIFT })) as WorldSpec["mainland"],
+  horizon: 300 + COAST_SHIFT,
   skylineAngle: 1.2,
   sectors: [
-    { zone: "industry", angleDeg: DRIVER, halfWidth: .5, from: 0, to: 118 },
+    { zone: "industry", angleDeg: DRIVER, halfWidth: .5, from: 0, to: 118 + COAST_SHIFT },
     // Cranes, warehouses and containers from the canal bank inland, in front of the default view.
-    { zone: "port", angleDeg: CRM, halfWidth: .6, from: 0, to: 118 },
+    { zone: "port", angleDeg: CRM, halfWidth: .6, from: 0, to: 118 + COAST_SHIFT },
   ],
   parking: [
     { angleDeg: DRIVER, radius: 47.4, length: 10, depth: 5.2 }, { angleDeg: CRM, radius: 47.4, length: 7.8, depth: 5.2 },
     { angleDeg: DRIVER, radius: 68.8, length: 14.3, depth: 9 }, { angleDeg: CRM, radius: 68.8, length: 14.3, depth: 9 },
     { angleDeg: 90, radius: 99.2, length: 12, depth: 5.2 }, { angleDeg: 195.7, radius: 99.2, length: 12, depth: 5.2 },
-  ],
+  ].map(lot => ({ ...lot, radius: lot.radius + COAST_SHIFT })),
   districtAvenuesFrom: 1,
 };

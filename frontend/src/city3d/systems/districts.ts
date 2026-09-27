@@ -21,6 +21,15 @@ const RING_COLOR = "#e9bf69", RING_Y = .45;
 /** Growth starts half a second after startGrowth() and takes 1.3 s; confetti bursts at 1.3 s and falls for 3.2 s. */
 const GROW_DELAY = 500, GROW_TIME = 1300, CONFETTI_DELAY = 1300, CONFETTI_LIFE = 3.2, CONFETTI_COUNT = 160;
 const CONFETTI_COLORS = ["#ffcf4d", "#ff6b9a", "#7b5cff", "#5bd6ff", "#6be38a"];
+/** Warm occupied windows; emissive surfaces add no lights or extra shadow passes. */
+const WINDOW_EMISSION = "#ffd9a0", WINDOW_INTENSITY = .65;
+type GlazingMaterial = THREE.MeshStandardMaterial | THREE.MeshStandardNodeMaterial;
+
+/** The architecture kit reserves this finish for glazing; opaque roofs use its matte finish. */
+function isLandmarkGlass(material: THREE.MeshStandardMaterial) {
+  return !material.map && (material.userData.districtGlass === true ||
+    Math.abs(material.metalness - .35) < 1e-6 && Math.abs(material.roughness - .24) < 1e-6);
+}
 
 /** Islands reserved for districts the server does not have yet ("Скоро"): not selectable. */
 export const isFutureDistrict = (id: string) => id.startsWith("future-");
@@ -39,6 +48,8 @@ export interface Districts {
   anchors: Map<string, THREE.Vector3>;
   select(id: string): void;
   hover(id: string | null): void;
+  /** Toggles only the landmarks' glazing, including buildings that are still growing. */
+  setNight(night: boolean): void;
   /** Grows the `grown` districts in; returns the first one (for the camera to fly to) or null. */
   startGrowth(): string | null;
   dispose(): void;
@@ -64,6 +75,13 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   const { spec } = ctx.world, scale = spec.districtScale;
   const root = new THREE.Group(); root.name = "city-districts"; ctx.scene.add(root);
   const architecture = createArchitecture();
+  const glazing = new Set<GlazingMaterial>();
+  let night = false;
+  function registerGlazing(material: GlazingMaterial) {
+    material.name = "city-district-glass"; material.userData.districtGlass = true;
+    material.emissive.set(WINDOW_EMISSION); material.emissiveIntensity = night ? WINDOW_INTENSITY : 0;
+    glazing.add(material);
+  }
   const pickables: THREE.Object3D[] = [], anchors = new Map<string, THREE.Vector3>();
   const landmarks = new Map<string, THREE.Group>(), rings = new Map<string, THREE.Mesh>();
   const ringGeometry = new THREE.TorusGeometry(spec.islet - .19, .11, 8, 96);
@@ -78,6 +96,13 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   for (const d of ctx.world.districts) {
     if (isFutureDistrict(d.id)) { anchors.set(d.id, new THREE.Vector3(d.x, GROUND + site!.height * scale + LABEL_LIFT, d.z)); continue; }
     const { group, height } = architecture.landmark(d.id as DistrictId, districtLevel(levels[d.id] ?? 0, d.soon), d.soon);
+    // Register the shared kit material before a growth animation retains any unmerged meshes.
+    group.traverse(object => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+      const material = mesh.material as THREE.MeshStandardMaterial;
+      if (isLandmarkGlass(material)) registerGlazing(material);
+    });
     // Facing the plaza, where the district's entrance and the camera's "look at it" view are.
     group.position.set(d.x, GROUND, d.z); group.scale.setScalar(scale); group.rotation.y = facing(d.x, d.z);
     group.userData.district = d.id; root.add(group); landmarks.set(d.id, group);
@@ -94,7 +119,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   // Grown districts wait flat, so they do not pop down when the growth starts.
   const growing = ctx.reducedMotion ? [] : grown.filter(id => landmarks.has(id));
   for (const id of growing) landmarks.get(id)!.scale.y = scale * .02;
-  mergeLandmarks([...landmarks].filter(([id]) => !growing.includes(id)).map(([, group]) => group), root);
+  mergeLandmarks([...landmarks].filter(([id]) => !growing.includes(id)).map(([, group]) => group), root, registerGlazing);
   const growth: { group: THREE.Group; start: number }[] = [];
   let confetti: Confetti | null = null, started = false;
 
@@ -112,7 +137,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
       item.group.scale.y = scale * Math.max(.02, e);
       if (now >= item.start) ctx.requestShadowUpdate();
       // Grown, it joins the others' few draw calls.
-      if (k === 1) { growth.splice(i, 1); mergeLandmarks([item.group], root); }
+      if (k === 1) { growth.splice(i, 1); mergeLandmarks([item.group], root, registerGlazing); }
     }
     if (confetti && !confetti.step(dt, now)) { confetti.dispose(); confetti = null; }
   });
@@ -121,6 +146,11 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
     pickables, anchors,
     select(id) { selected = id; },
     hover(id) { hovered = id; },
+    setNight(value) {
+      if (night === value) return;
+      night = value;
+      glazing.forEach(material => { material.emissiveIntensity = night ? WINDOW_INTENSITY : 0; });
+    },
     startGrowth() {
       if (started || !growing.length) return null;
       started = true;
@@ -134,7 +164,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
       offFrame(); confetti?.dispose(); confetti = null;
       root.removeFromParent();
       // Landmarks hold their own sign textures and merged geometries; the kit frees only what it cached.
-      disposeTree(root); architecture.dispose();
+      disposeTree(root); architecture.dispose(); glazing.clear();
     },
   };
 }
@@ -152,7 +182,7 @@ export function paintGeometry(geometry: THREE.BufferGeometry, color: THREE.Color
  * colours, so parts differ only by finish (matte, glass, metal) or by a painted sign. All districts
  * together take about ten draw calls instead of a dozen each.
  */
-function mergeLandmarks(groups: THREE.Object3D[], parent: THREE.Object3D) {
+function mergeLandmarks(groups: THREE.Object3D[], parent: THREE.Object3D, registerGlazing: (material: GlazingMaterial) => void) {
   const buckets = new Map<string, { material: THREE.Material; parts: THREE.BufferGeometry[] }>(), local = new THREE.Matrix4();
   parent.updateMatrixWorld(true);
   const inverse = parent.matrixWorld.clone().invert();
@@ -162,8 +192,13 @@ function mergeLandmarks(groups: THREE.Object3D[], parent: THREE.Object3D) {
       if (!mesh.isMesh || Array.isArray(mesh.material)) return;
       const geometry = mesh.geometry.clone().applyMatrix4(local.multiplyMatrices(inverse, mesh.matrixWorld));
       mesh.geometry.dispose();
-      const key = source.map ? source.uuid : `${source.metalness}:${source.roughness}`;
-      if (!buckets.has(key)) buckets.set(key, { material: source.map ? source : new THREE.MeshStandardNodeMaterial({ vertexColors: true, metalness: source.metalness, roughness: source.roughness }), parts: [] });
+      const glass = isLandmarkGlass(source);
+      const key = source.map ? source.uuid : `${glass ? "glass:" : ""}${source.metalness}:${source.roughness}`;
+      if (!buckets.has(key)) {
+        const material = source.map ? source : new THREE.MeshStandardNodeMaterial({ vertexColors: true, metalness: source.metalness, roughness: source.roughness });
+        if (glass) registerGlazing(material);
+        buckets.set(key, { material, parts: [] });
+      }
       buckets.get(key)!.parts.push(source.map ? geometry : paintGeometry(geometry, source.color));
     });
     group.removeFromParent();

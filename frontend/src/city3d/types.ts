@@ -7,6 +7,7 @@ import type { DistrictId } from "../api/city";
 export interface CityView { azimuth: number; polar: number; distance: number; target: [number, number, number] }
 export interface CityLabelInfo { id: DistrictId; name: string; status: string; icon: string; soon: boolean; reward: boolean; level: number }
 export interface CityMascot { gender: "male" | "female" | null; name: string }
+export type TimeOfDay = "day" | "night";
 
 export interface CityOptions {
   levels: Record<string, number>; selected: DistrictId; view?: CityView; labels: CityLabelInfo[];
@@ -21,6 +22,7 @@ export interface CityOptions {
   forceWebGL?: boolean;
   /** Show the stats overlay (`?stats=1`, staff only). */
   stats?: boolean;
+  timeOfDay?: TimeOfDay;
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
   onRestored?: () => void;
   /** Loading progress, 0…1, for the loading screen. */
@@ -28,6 +30,7 @@ export interface CityOptions {
 }
 
 export interface CityControl {
+  setTimeOfDay(mode: TimeOfDay): void;
   focusMascot: () => void; setMascot: (mascot: CityMascot) => void; setTraffic: (enabled: boolean) => void;
   select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void;
   zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void;

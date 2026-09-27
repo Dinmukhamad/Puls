@@ -7,7 +7,7 @@
 import * as THREE from "three/webgpu";
 import type { DistrictId } from "../api/city";
 import type { CityContext } from "./engine/context";
-import type { CityControl, CityLabelInfo, CityMascot, CityOptions } from "./types";
+import type { CityControl, CityLabelInfo, CityMascot, CityOptions, TimeOfDay } from "./types";
 import { createRenderer, pixelRatio, requestShadowRedraw, type RendererHandle } from "./engine/renderer";
 import { createLoop, type Loop } from "./engine/loop";
 import { createCamera, createCameraRig, type CameraRig } from "./engine/camera";
@@ -26,6 +26,7 @@ import { createDistricts, type Districts } from "./systems/districts";
 import { createMascot, type Mascot } from "./systems/mascot";
 import { createLabels, type Labels } from "./systems/labels";
 import { createTraffic, type Traffic } from "./systems/traffic";
+import { createCrowd, type Crowd } from "./systems/crowd";
 import "./city3d.css";
 
 /** Static shadows are redrawn only once the camera has rested this long: culling changes casters while it moves. */
@@ -34,7 +35,7 @@ const LOD_FILES = ["city/v1/city-models.glb", "city/v1/vehicles.glb"].map(path =
 
 interface Parts {
   handle: RendererHandle; quality: QualityControl; stats: Stats; loop: Loop; rig: CameraRig; picker: Picker; post: Post;
-  sky: Sky; terrain: Terrain; water: Water; districts: Districts; mascot: Mascot; labels: Labels; traffic: Traffic;
+  sky: Sky; terrain: Terrain; water: Water; districts: Districts; mascot: Mascot; labels: Labels; traffic: Traffic; crowd: Crowd;
   catalogue?: Catalogue; pools?: InstancePools; observer: ResizeObserver;
 }
 
@@ -46,7 +47,18 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   // Calls before the city is up; replayed in order afterwards.
   const pending: ((p: Parts) => void)[] = [];
   let selected = options.selected, labels = options.labels, mascot = options.mascot ?? { gender: null, name: "Пульсар" }, trafficOn = !reducedMotion;
+  let timeOfDay: TimeOfDay = options.timeOfDay ?? "day";
   const when = (fn: (p: Parts) => void) => { if (parts) fn(parts); else pending.push(fn); };
+  const daylight = (p: Parts) => {
+    const night = timeOfDay === "night";
+    p.sky.setTimeOfDay(night ? 22 : 10.5); p.water.setNight(night); p.districts.setNight(night);
+    host.dataset.timeOfDay = timeOfDay;
+  };
+  function focusDistrict(id: DistrictId) {
+    selected = id;
+    when(p => { p.districts.select(id); p.labels.setSelected(id); const d = world.districts.find(item => item.id === id); if (d) p.rig.focus(d.x, d.z); });
+  }
+  const choose = (id: DistrictId) => { focusDistrict(id); options.onSelect(id); };
 
   async function start() {
     // A fresh canvas each start: a canvas that held a WebGPU context cannot take a WebGL2 one (fallback, restore).
@@ -56,6 +68,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const handle = await createRenderer(canvas, { forceWebGL, mobile });
     if (disposed) { handle.dispose(); return; }
     const { renderer, backend } = handle;
+    host.dataset.backend = backend === "webgpu" ? "WebGPU" : "WebGL2";
     const scene = new THREE.Scene(), camera = createCamera(world.radius);
     let loading = true, shadowWanted = false, lastMove = 0;
     const quality = createQuality({ backend, mobile, gpu: handle.gpu, busy: () => loading });
@@ -72,13 +85,14 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     };
 
     const sky = createSky(ctx); sun = sky.sun;
-    const terrain = createTerrain(ctx), water = createWater(ctx, sky);
+    const terrain = createTerrain(ctx), water = createWater(ctx);
     const districts = createDistricts(ctx, { levels: options.levels, grown: options.grown });
     const mascotSystem = createMascot(ctx, mascot);
     const traffic = createTraffic(ctx);
-    const labelLayer = createLabels(ctx, { anchors: districts.anchors, mascotAnchor: mascotSystem.nameAnchor, onSelect: id => options.onSelect(id) });
+    const crowd = createCrowd(ctx);
+    const labelLayer = createLabels(ctx, { anchors: districts.anchors, mascotAnchor: mascotSystem.nameAnchor, onSelect: choose });
     const rig = createCameraRig(camera, { dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], frame: options.frame, view: options.view, reducedMotion, onView: options.onView });
-    const picker = createPicker(canvas, camera, () => districts.pickables, { onPick: id => options.onSelect(id as DistrictId), onHover: id => districts.hover(id) });
+    const picker = createPicker(canvas, camera, () => districts.pickables, { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) });
     const post = createPost(ctx);
     const stats = createStats({ renderer, backend, host, visible: !!options.stats, quality, userIdKnown: true, gpu: handle.gpu, extra: () => { const s = parts?.pools?.stats(); return s ? `copies ${s.drawn}/${s.copies} · pools ${s.drawCalls} calls` : "loading models"; } });
 
@@ -117,9 +131,9 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     });
     handle.onRestored(() => { if (!disposed) { teardown(); void start().then(() => options.onRestored?.()); } });
 
-    parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, observer };
+    parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, crowd, observer };
     labelLayer.setLabels(labels); labelLayer.setSelected(selected); labelLayer.setMascotName(mascot.name);
-    districts.select(selected); traffic.setEnabled(trafficOn);
+    districts.select(selected); traffic.setEnabled(trafficOn); crowd.setEnabled(trafficOn); daylight(parts);
     pending.splice(0).forEach(fn => fn(parts!));
     options.onProgress?.(.3);
 
@@ -138,25 +152,23 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   function teardown() {
     const p = parts; parts = null; if (!p) return;
     p.loop.dispose(); p.observer.disconnect(); p.picker.dispose(); p.rig.dispose(); p.stats.dispose(); p.quality.dispose();
-    p.labels.dispose(); p.traffic.dispose(); p.mascot.dispose(); p.districts.dispose(); p.pools?.dispose(); p.catalogue?.dispose();
+    p.labels.dispose(); p.crowd.dispose(); p.traffic.dispose(); p.mascot.dispose(); p.districts.dispose(); p.pools?.dispose(); p.catalogue?.dispose();
     p.water.dispose(); p.terrain.dispose(); p.sky.dispose(); p.post.dispose(); p.handle.dispose();
   }
 
   void start().catch(() => { if (!disposed) options.onLost(); });
 
   return {
-    focusMascot: () => when(p => p.rig.focusPoint([p.mascot.focusPoint.x, p.mascot.focusPoint.y, p.mascot.focusPoint.z], 22, 1.12)),
+    focusMascot: () => when(p => p.rig.focusPoint([p.mascot.focusPoint.x, p.mascot.focusPoint.y, p.mascot.focusPoint.z], 18, 1.05)),
+    setTimeOfDay(mode) { timeOfDay = mode; when(daylight); },
     setMascot(next: CityMascot) { mascot = next; when(p => { p.mascot.setMascot(next); p.labels.setMascotName(next.name); }); },
-    setTraffic(enabled: boolean) { trafficOn = enabled; when(p => p.traffic.setEnabled(enabled)); },
-    select(id: DistrictId) {
-      if (id === selected) return; selected = id;
-      when(p => { p.districts.select(id); p.labels.setSelected(id); const d = world.districts.find(item => item.id === id); if (d) p.rig.focus(d.x, d.z); });
-    },
+    setTraffic(enabled: boolean) { trafficOn = enabled; when(p => { p.traffic.setEnabled(enabled); p.crowd.setEnabled(enabled); }); },
+    select: focusDistrict,
     setLabels(next: CityLabelInfo[]) { labels = next; when(p => p.labels.setLabels(next)); },
     zoom: factor => when(p => p.rig.zoom(factor)),
     rotate: radians => when(p => p.rig.rotate(radians)),
     tilt: radians => when(p => p.rig.tilt(radians)),
     reset: () => when(p => p.rig.reset()),
-    dispose() { disposed = true; pending.length = 0; teardown(); host.replaceChildren(); },
+    dispose() { disposed = true; pending.length = 0; teardown(); host.replaceChildren(); delete host.dataset.backend; delete host.dataset.timeOfDay; },
   };
 }

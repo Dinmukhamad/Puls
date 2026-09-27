@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // plain paths; the operator glTF cannot load in Node, which exercises the robot fallback.
 const dir = fileURLToPath(new URL('.', import.meta.url));
 const built = await build({
-  stdin: { contents: ['districts', 'traffic', 'mascot'].map(f => `export * from './${f}.ts';`).join('\n') + '\nexport * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: dir },
+  stdin: { contents: ['districts', 'traffic', 'mascot'].map(f => `export * from './${f}.ts';`).join('\n') + '\nexport * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * from "../engine/camera.ts"; export * as THREE from "three/webgpu";', resolveDir: dir },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
   plugins: [{ name: 'url', setup(b) {
     b.onResolve({ filter: /\?url$/ }, a => ({ path: a.path, namespace: 'url' }));
@@ -200,9 +200,10 @@ test('every loop gets its cars and the canal its boats; each drawn car has one b
 
 test('traffic draws only what the camera sees within the far LOD distance', () => {
   const ctx = fakeContext(worlds.x4), traffic = city.createTraffic(ctx);
-  ctx.look(0, 90, 60, 0, 0, 0); ctx.frame(1 / 60, 0);
+  const ring = worlds.x4.spec.roadRings[0];
+  ctx.look(0, ring * 2.1, ring * 1.4, 0, 0, 0); ctx.frame(1 / 60, 0);
   const near = drawn(ctx).cars;
-  ctx.look(0, 90, 60, 0, 200, 60); ctx.frame(1 / 60, 20);
+  ctx.look(0, ring * 2.1, ring * 1.4, 0, ring * 4, ring * 1.4); ctx.frame(1 / 60, 20);
   assert.equal(drawn(ctx).cars, 0, 'looking at the sky');
   ctx.look(0, 2000, 1); ctx.frame(1 / 60, 40);
   assert.equal(drawn(ctx).cars, 0, 'everything beyond the far LOD distance');
@@ -261,7 +262,9 @@ test('the mascot: the robot on its pedestal by default, the robot again when the
   assert.equal(figure.children.length, 1);
   assert.equal(ctx.renderer.domElement.dataset.character, 'robot');
   assert.ok(ctx.shadowRequests >= 1, 'the pedestal is baked into the static shadows');
-  assert.ok(mascot.focusPoint.y > 0 && mascot.nameAnchor.y > 7);
+  const bounds = new THREE.Box3().setFromObject(ctx.scene.getObjectByName('city-mascot'));
+  assert.ok(bounds.max.y < 3.2 && bounds.max.x - bounds.min.x < 2, 'the assistant and its pedestal have a human scale');
+  assert.ok(mascot.focusPoint.y > 1 && mascot.focusPoint.y < 2 && mascot.nameAnchor.y > bounds.max.y && mascot.nameAnchor.y < 3.5);
   mascot.setMascot({ gender: 'female', name: 'Аня' });
   assert.equal(figure.children.length, 0);
   mascot.setMascot({ gender: 'male', name: 'Олег' });
@@ -274,4 +277,29 @@ test('the mascot: the robot on its pedestal by default, the robot again when the
   assert.equal(ctx.scene.children.length, 0);
   assert.equal(ctx.listeners, 0);
   assert.equal(ctx.renderer.domElement.dataset.character, undefined);
+});
+
+test('district focus keeps the central assistant beside the building instead of in its foreground', () => {
+  for (const world of Object.values(worlds)) for (const district of world.districts.slice(0, 5)) {
+    for (const requested of [18, 48, 52, 200]) {
+      const view = city.districtFocusView(district.x, district.z, requested);
+      assert.ok(view.distance >= 38 && view.distance <= 60, 'focus remains usable after an extreme user zoom');
+      assert.deepEqual(view.target, [district.x, 2.5, district.z]);
+      const camera = city.createCamera(world.radius);
+      camera.aspect = 16 / 9; camera.updateProjectionMatrix();
+      camera.position.fromArray(view.target).add(new THREE.Vector3().setFromSpherical(new THREE.Spherical(view.distance, view.polar, view.azimuth)));
+      camera.lookAt(new THREE.Vector3(...view.target)); camera.updateMatrixWorld();
+      // Compare screen-space bounds of a conservative 10x10 footprint building against a 2x3.2 mascot.
+      const projectedX = (centerX, centerZ, half, height) => {
+        const values = [];
+        for (const x of [-half, half]) for (const z of [-half, half]) for (const y of [.3, height]) {
+          values.push(new THREE.Vector3(centerX + x, y, centerZ + z).project(camera).x);
+        }
+        return [Math.min(...values), Math.max(...values)];
+      };
+      const landmark = projectedX(district.x, district.z, 5, 12);
+      const assistant = projectedX(0, 0, 1, 3.2);
+      assert.ok(assistant[1] < landmark[0] || assistant[0] > landmark[1], `${world.spec.name}/${district.id} mascot overlaps the focused landmark at ${requested}`);
+    }
+  }
 });

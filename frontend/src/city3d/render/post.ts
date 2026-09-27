@@ -7,12 +7,15 @@
  * TRAA come with the content of stage 3.
  */
 import * as THREE from "three/webgpu";
-import { mix, mrt, normalView, output, pass, renderOutput, vec4, type ShaderNodeObject } from "three/tsl";
+import { mix, pass, renderOutput, vec4, type ShaderNodeObject } from "three/tsl";
 import { ao } from "three/examples/jsm/tsl/display/GTAONode.js";
 import { bloom } from "three/examples/jsm/tsl/display/BloomNode.js";
 import { smaa } from "three/examples/jsm/tsl/display/SMAANode.js";
 import { fxaa } from "three/examples/jsm/tsl/display/FXAANode.js";
 import type { CityContext } from "../engine/context";
+
+// GTAONode r180 supports null to reconstruct normals from depth; @types omits that overload.
+const depthAO = ao as (depth: THREE.Node, normal: THREE.Node | null, camera: THREE.PerspectiveCamera) => ReturnType<typeof ao>;
 
 export type Antialias = "smaa" | "fxaa" | "none";
 export interface PostOptions {
@@ -44,11 +47,14 @@ export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
     if (!next) return;
     const nodes: THREE.Node[] = [], targets: THREE.RenderTarget[] = [];
     const scenePass = pass(scene, camera); nodes.push(scenePass);
-    if (q.ao) scenePass.setMRT(mrt({ output, normal: normalView }));
     let color = scenePass.getTextureNode("output") as unknown as ShaderNodeObject<THREE.Node>;
     if (q.ao) {
       // Corner shading of the old trial look (radius 1.6 units, blended at 85%), at half resolution.
-      const occlusion = ao(scenePass.getTextureNode("depth"), scenePass.getTextureNode("normal"), camera);
+      // Reconstruct normals from depth. In r180 the background's WebGPU pipeline
+      // can retain two MRT attachments after adaptive quality disables AO, while
+      // the new pass has only one, invalidating every frame. A single colour
+      // attachment throughout keeps quality changes valid and saves a normal buffer.
+      const occlusion = depthAO(scenePass.getTextureNode("depth"), null, camera);
       occlusion.resolutionScale = .5;
       occlusion.radius.value = 1.4; occlusion.thickness.value = 2; occlusion.distanceExponent.value = 1.4; occlusion.scale.value = 1.1; occlusion.samples.value = 12;
       nodes.push(occlusion);
@@ -56,8 +62,8 @@ export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
       color = vec4(texel.rgb.mul(mix(1, occlusion.getTextureNode().r, .85)), texel.a);
     }
     if (q.bloom) {
-      // Only what shines brighter than white glows: lamp bulbs, lit windows at night.
-      const glow = bloom(color, .32, .55, .92); nodes.push(glow);
+      // Glow is emitted light: extract it before occlusion dims the scene.
+      const glow = bloom(scenePass.getTextureNode("output"), .32, .55, .92); nodes.push(glow);
       color = color.add(glow);
     }
     const post = new THREE.PostProcessing(renderer);

@@ -1,22 +1,17 @@
 /**
- * Water (TZ §6.5, quality "sky" of stage 1): one TSL material for the lagoon and the canal. Two layers
- * of procedural noise scroll in different directions and bend the normal (no texture files); a Fresnel
- * term mixes the water's own colour towards the sky it reflects (the sky's gradient, evaluated in the
- * reflected direction, so no environment map is needed); the sun leaves a glint. The colour darkens from
- * the shallows at the quays towards the middle: a depth tint without transparency. The surface lies at
- * y = -1.25, receives shadows, and its waves stop with prefers-reduced-motion, as in the old city.
+ * The pilot's turquoise water on the main city's lagoon and canal. Analytic ripples and a shore-depth
+ * attribute provide colour variation in one material, with no reflection render pass. Night switches
+ * to a deep blue palette. The surface stays at y=-1.25 beneath the existing quays and bridges.
  */
 import * as THREE from "three/webgpu";
-import { attribute, cameraPosition, cameraViewMatrix, color, dot, float, max, mix, mx_noise_vec3, normalize, pow, positionWorld, reflect, uniform, vec2, vec3, vec4 } from "three/tsl";
+import { attribute, color, float, mix, positionWorld, uniform } from "three/tsl";
 import type { CityContext } from "../engine/context";
 import type { WorldData } from "../world/types";
-import type { Sky } from "./sky";
 
-export interface Water { mesh: THREE.Mesh; dispose(): void }
+export interface Water { mesh: THREE.Mesh; setNight(night: boolean): void; dispose(): void }
 
 /** The water level; the land tops are at 0.2 and the quay walls reach down to -1.75. */
 export const WATER_Y = -1.25;
-const SHALLOW = "#63a6a3", DEEP = "#2b6970";
 /** Shallow water fades into deep over this distance from the shore. */
 const SHELF = 4.5;
 
@@ -54,33 +49,18 @@ function waterGeometry(world: WorldData) {
   return g;
 }
 
-export function createWater(ctx: CityContext, sky?: Sky): Water {
-  const time = uniform(0);
-  const material = new THREE.MeshStandardNodeMaterial({ roughness: .6, metalness: 0 });
-
-  // Two noise layers, large slow swell and small quick ripples, drifting in different directions.
-  const p = positionWorld.xz;
-  const swell = mx_noise_vec3(p.mul(.21).add(vec2(time.mul(.04), time.mul(.016))));
-  const ripple = mx_noise_vec3(p.mul(1.7).sub(vec2(time.mul(.05), time.mul(.12))));
-  const slope = swell.xy.mul(.13).add(ripple.xy.mul(.1));
-  const normal = normalize(vec3(slope.x.negate(), float(1), slope.y.negate()));
-
-  const toCamera = normalize(cameraPosition.sub(positionWorld));
-  const facing = max(dot(normal, toCamera), float(0));
-  const fresnel = float(.02).add(float(.98).mul(pow(float(1).sub(facing), float(5))));
-  const reflected = reflect(toCamera.negate(), normal);
-  // Reflections never look below the horizon: the waves would show the fog colour in the water.
-  const skyDirection = normalize(vec3(reflected.x, max(reflected.y, float(.03)), reflected.z));
-  const skyColor = sky ? sky.gradient(skyDirection) : mix(color("#d6e9ef"), color("#86bfe4"), skyDirection.y);
-  const sunDirection = sky?.sunDirection ?? uniform(new THREE.Vector3(-52, 46, 34).normalize());
-  const sunColor = sky?.sunColor ?? uniform(new THREE.Color("#ffe4bd").multiplyScalar(3.3));
-  const glint = pow(max(dot(reflected, sunDirection), float(0)), float(320)).mul(2.2);
-
-  const depth = attribute("shore", "float");
-  material.colorNode = vec4(mix(color(SHALLOW), color(DEEP), depth).mul(float(1).sub(fresnel)), 1);
-  material.emissiveNode = skyColor.mul(fresnel.mul(.85)).add(sunColor.mul(glint));
-  // normalNode is in view space.
-  material.normalNode = normalize(cameraViewMatrix.mul(vec4(normal, 0)).xyz);
+export function createWater(ctx: CityContext): Water {
+  const time = uniform(0), night = uniform(0);
+  const material = new THREE.MeshStandardNodeMaterial({ roughness: .32, metalness: .18 });
+  // The pilot's turquoise palette and calm analytic ripples, following every shore instead of one island.
+  const p = positionWorld;
+  const ripple = p.x.mul(.85).add(p.z.mul(1.6)).add(time.mul(.7)).sin()
+    .mul(p.z.mul(.66).sub(time.mul(.4)).sin()).mul(.5).add(.5);
+  const coast = float(1).sub(attribute("shore", "float"));
+  const day = mix(color("#167f9e"), color("#67cfc4"), coast.mul(.58).add(ripple.mul(.08)));
+  const evening = mix(color("#142c4b"), color("#39768c"), coast.mul(.6).add(ripple.mul(.05)));
+  material.colorNode = mix(day, evening, night);
+  material.emissive.set("#0b263b"); material.emissiveIntensity = .25;
 
   const mesh = new THREE.Mesh(waterGeometry(ctx.world), material);
   mesh.name = "city-water"; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false;
@@ -89,6 +69,7 @@ export function createWater(ctx: CityContext, sky?: Sky): Water {
 
   return {
     mesh,
+    setNight(value) { night.value = value ? 1 : 0; },
     dispose() { offFrame(); ctx.scene.remove(mesh); mesh.geometry.dispose(); material.dispose(); },
   };
 }

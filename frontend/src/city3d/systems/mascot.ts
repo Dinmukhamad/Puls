@@ -13,13 +13,13 @@ import type { CityContext } from "../engine/context";
 import type { CityMascot } from "../types";
 import { disposeTree, paintGeometry } from "./districts";
 
-/** The pedestal stands on the plaza disc; the figure is modelled 2.4 times smaller than it stands. */
-const ROOT_Y = .3, ROOT_SCALE = 2.4;
+/** A person is 2.25 units tall, comparable to the walkers, standing on a low .35-unit plinth. */
+const ROOT_Y = .3, ROOT_SCALE = 1;
 const FIRST_WAVE = 2500, WAVE_EVERY = 18000;
 
 export interface Mascot {
   setMascot(mascot: CityMascot): void;
-  /** Where "look at the assistant" flies the camera (the old focusMascot: this target, distance 22, polar 1.12). */
+  /** Where "look at the assistant" flies the camera (distance 18, polar 1.05). */
   focusPoint: THREE.Vector3;
   /** The name tag's anchor above the head. */
   nameAnchor: THREE.Vector3;
@@ -159,8 +159,8 @@ export function createMascot(ctx: CityContext, initial: CityMascot = { gender: n
 
   return {
     setMascot,
-    focusPoint: new THREE.Vector3(0, 3, 0),
-    nameAnchor: new THREE.Vector3(0, 7.4, 0),
+    focusPoint: new THREE.Vector3(0, 1.65, 0),
+    nameAnchor: new THREE.Vector3(0, 3.15, 0),
     movers: [figure],
     dispose() {
       disposed = true; offFrame(); clear();

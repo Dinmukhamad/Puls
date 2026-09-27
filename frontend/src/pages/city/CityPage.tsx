@@ -28,6 +28,7 @@ export function CityPage() {
   const [guideEditing, setGuideEditing] = useState(false);
   // На телефоне панель миссии — шторка над нижним меню: свёрнута до заголовка и кнопки.
   const [expanded, setExpanded] = useState(false);
+  const [focusRequest, requestFocus] = useState(0);
   const claim = useMutation({ mutationFn: (key: string) => city.claim(key, query.data!.revision), onSuccess: async result => { setReward(result); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   if (!query.data) return <div className="city-immersive city-immersive--empty">
     {query.isError ? <div className="city-empty-card glass glass--prominent"><ErrorState error={query.error} onRetry={() => query.refetch()} /></div> : <div className="city-loading" role="status"><span>Загружаем город…</span></div>}
@@ -38,7 +39,7 @@ export function CityPage() {
   const mission = missions.find(m => m.key === params.get("mission")) ?? nextMission(missions);
   const completed = data.missions.filter(m => m.state === "completed").length;
   const total = data.missions.filter(m => m.enabled || m.state === "completed").length;
-  function selectDistrict(id: DistrictId) { const p = new URLSearchParams(params); p.set("district", id); p.delete("mission"); setParams(p, {replace:true}); claim.reset(); }
+  function selectDistrict(id: DistrictId) { const p = new URLSearchParams(params); p.set("district", id); p.delete("mission"); setParams(p, {replace:true}); requestFocus(value => value + 1); claim.reset(); }
   function selectMission(key: string) { const p = new URLSearchParams(params); p.set("mission", key); setParams(p, {replace:true}); claim.reset(); }
   const parent = data.missions.find(m => m.key === mission?.prerequisite);
   const actionable = mission && !["locked", "unavailable"].includes(mission.state);
@@ -50,7 +51,7 @@ export function CityPage() {
   const level = districtLevel(missions.filter(m => m.state === "completed").length, selected.soon);
   function togglePilot() { const p = new URLSearchParams(params); if (pilot) p.delete("city"); else { p.set("city", "pilot"); p.set("district", "crm"); p.delete("mission"); } p.delete("backend"); setParams(p, { replace: true }); }
   return <div className={`city-immersive${pilot ? " city-immersive--pilot" : ""}`}>
-    <CityMap pilot={pilot} inspect={user?.role !== "operator"} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} onSelect={selectDistrict} progressKey={!pilot && !data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+    <CityMap pilot={pilot} inspect={user?.role !== "operator"} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} progressKey={!pilot && !data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
     <header className="city-hud glass glass--regular">
       <div className="city-hud__level">

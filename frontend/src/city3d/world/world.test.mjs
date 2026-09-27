@@ -239,7 +239,10 @@ test('x4: ten district islands on two rings, four times the city, and no empty c
   const plan = gen.cityPlan(WORLD_X4);
   assert.equal(X4.districts.length, 10);
   assert.deepEqual(X4.districts.slice(0, 5).map((d) => d.id), V1.districts.map((d) => d.id));
-  X4.districts.slice(0, 5).forEach((d, i) => { close(d.x, V1.districts[i].x, 'inner districts stay'); close(d.z, V1.districts[i].z, 'inner districts stay'); });
+  X4.districts.slice(0, 5).forEach((d, i) => {
+    close(Math.atan2(d.z, d.x), Math.atan2(V1.districts[i].z, V1.districts[i].x), 'familiar district direction stays');
+    assert.ok(radius(d) >= radius(V1.districts[i]) * 1.65, 'main islands have room around the central plaza');
+  });
   const future = WORLD_X4.districts.filter((d) => d.ring === 1);
   assert.deepEqual(future.map((d) => d.id), ['future-1', 'future-2', 'future-3', 'future-4', 'future-5']);
   assert.ok(future.every((d) => d.soon));
@@ -258,6 +261,20 @@ test('x4: ten district islands on two rings, four times the city, and no empty c
     const inside = X4.placements.filter((p) => { const r = radius(p), a = (Math.atan2(p.z, p.x) + Math.PI * 2) % (Math.PI * 2); return r >= from && r < from + 40 && a >= sector * Math.PI / 6 && a < (sector + 1) * Math.PI / 6; });
     assert.ok(inside.filter((p) => BUILDINGS.has(p.kind)).length >= 5, `sector ${sector * 30}° at ${from.toFixed(0)}…${(from + 40).toFixed(0)} is empty`);
   }
+});
+
+test('x4: spacious water corridors separate every main and reserved island without scaling landmarks', () => {
+  assert.equal(WORLD_X4.islet, WORLD_V1.islet);
+  assert.equal(WORLD_X4.districtScale, WORLD_V1.districtScale);
+  for (const d of X4.districts) {
+    assert.ok(radius(d) - WORLD_X4.islet - WORLD_X4.plazaIslet >= 12, `${d.id} crowds the plaza`);
+    assert.ok(WORLD_X4.lagoon - radius(d) - WORLD_X4.islet >= 5, `${d.id} crowds the shore`);
+    for (const e of X4.districts) if (d !== e) {
+      assert.ok(Math.hypot(d.x - e.x, d.z - e.z) - WORLD_X4.islet * 2 >= 14, `${d.id}/${e.id} have too little open water`);
+    }
+  }
+  close(WORLD_X4.bank - WORLD_X4.quay, WORLD_V1.bank - WORLD_V1.quay, 'canal width stays navigable');
+  close(WORLD_X4.promenade - WORLD_X4.roadRings[0], WORLD_V1.promenade - WORLD_V1.roadRings[0], 'green belt keeps the original road clearance');
 });
 
 test('generation is fast', () => {
