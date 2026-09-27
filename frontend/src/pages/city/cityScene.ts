@@ -2,16 +2,15 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { createArchitecture } from "./cityArchitecture";
 import { createTaxiModel } from "./cityTraffic";
-import { createDistrictIslands } from "./cityIslands";
+import { createCinematicLook } from "./cityLook";
 import maleUrl from "./models/operator-male.glb?url";
 import femaleUrl from "./models/operator-female.glb?url";
 import type { DistrictId } from "../../api/city";
 import { districtLevel } from "./cityLevels";
-import { BANK, CITY_LOCATIONS, DISTRICT_ISLAND_HEIGHT, DISTRICT_ISLAND_OUTLINE, DISTRICT_SCALE, HORIZON, OUTER_RING, PLAZA, PROMENADE, QUAY, RING_ROAD, SKYLINE_ANGLE, angularDistance, avenueAngles, crosswalks, innerRoads, islandLots, lampSpots, mainlandLots, parkingLots, rng, sampleRoute, trafficRoutes, treeSpots, type CityLocation, type Route } from "./cityLayout";
+import { BANK, CITY_LOCATIONS, DISTRICT_SCALE, HORIZON, ISLET, LAGOON, OUTER_RING, PLAZA, PLAZA_ISLAND, PROMENADE, QUAY, RING_ROAD, SKYLINE_ANGLE, angularDistance, avenueAngles, bridgeSpans, crosswalks, innerRoads, lampSpots, mainlandLots, parkingLots, rng, sampleRoute, trafficRoutes, treeSpots, type CityLocation, type Route } from "./cityLayout";
 import modelsUrl from "./models/city-models.glb?url";
 import vehiclesUrl from "./models/vehicles.glb?url";
 
@@ -26,6 +25,10 @@ export interface CitySceneOptions {
   /** The part of the screen the panels leave free; the city is centred there. */
   frame?: HTMLElement;
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
+  /** The browser gave the WebGL context back after a loss: the city draws again. */
+  onRestored?: () => void;
+  /** "cinematic": the trial game look (ambient occlusion, glow, tilt-shift, grading). */
+  look?: "cinematic";
 }
 export interface CityMascot { gender: "male" | "female" | null; name: string }
 export interface CitySceneControl { focusMascot: () => void; setMascot: (mascot: CityMascot) => void; setTraffic: (enabled: boolean) => void; dispose: () => void; select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void; zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void }
@@ -36,10 +39,8 @@ const MIN_DISTANCE = 18, MAX_DISTANCE = 140, MIN_POLAR = .18, MAX_POLAR = 1.3, P
 /** Car Kit vehicles are 1.5 units wide; this makes them fit a one-unit lane. */
 const CAR_SCALE = .5;
 const HOUSES = ["s-building-type-a", "s-building-type-b", "s-building-type-c", "s-building-type-d", "s-building-type-f", "s-building-type-g", "s-building-type-h", "s-building-type-k", "s-building-type-m", "s-building-type-p", "s-building-type-q", "s-building-type-t"];
-const OFFICES = ["c-building-a", "c-building-c", "c-building-d", "c-building-f", "c-building-g", "c-building-h", "c-building-m", "c-building-n"];
 /** Offices light enough to repeat along the mainland rows. */
 const LIGHT_OFFICES = ["c-building-a", "c-building-c", "c-building-d", "c-building-f", "c-building-g", "c-building-h"];
-const TOWERS = ["c-building-skyscraper-a", "c-building-skyscraper-b", "c-building-skyscraper-c", "c-building-skyscraper-d"];
 const INDUSTRY = ["i-building-g", "i-building-h", "i-building-i", "i-building-g", "i-water-tower", "i-building-h"];
 const TRAFFIC = ["taxi", "sedan", "taxi", "suv", "taxi", "van", "taxi", "delivery", "taxi", "hatchback-sports"];
 const PARKED = [["taxi", "delivery", "van", "taxi", "truck", "suv"], ["sedan", "suv", "hatchback-sports", "taxi", "police", "sedan"], ["truck", "delivery", "van", "truck"]];
@@ -52,16 +53,25 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   let trafficEnabled = !reduced;
   // Phones and weak machines get fewer rows of buildings, fewer cars and a smaller shadow map.
   const lite = Math.min(window.innerWidth, window.innerHeight) < 600 || (navigator.hardwareConcurrency ?? 8) <= 4;
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
+  // Laptops with two GPUs get the fast one.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: lite ? "low-power" : "high-performance" });
   // Phones draw at most 30 frames a second.
   const mobile = host.clientWidth < 600;
-  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  // The sun and the buildings stand still, so the shadow map is drawn once and again only when the
+  // city changes (models arrive, a district grows). Moving cars keep their soft blob shadows.
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate = false;
+  // A change is baked over the next few frames: the first frames also compile materials and upload models.
+  let bakeFrames = 0;
+  const bakeShadows = () => { bakeFrames = 8; };
+  renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
   renderer.setClearColor(0, 0); host.replaceChildren(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog("#d6e9ef", 118, 330);
   const camera = new THREE.PerspectiveCamera(36, 1, 1, 800);
+  const look = options.look === "cinematic" ? createCinematicLook(renderer, scene, camera, lite) : null;
+  /** Labels and the name tag: drawn after the effects, so they stay sharp and unblurred. */
+  const OVERLAY = 1; camera.layers.enable(OVERLAY);
   const controls = new OrbitControls(camera, renderer.domElement);
   Object.assign(controls, { enableDamping: true, dampingFactor: .09, minDistance: MIN_DISTANCE, maxDistance: MAX_DISTANCE, minPolarAngle: MIN_POLAR, maxPolarAngle: MAX_POLAR, screenSpacePanning: false, rotateSpeed: .75, zoomSpeed: .9, panSpeed: .8, zoomToCursor: true });
   controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
@@ -78,16 +88,15 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     return { azimuth: spherical.theta, polar: spherical.phi, distance: spherical.radius, target: [controls.target.x, controls.target.y, controls.target.z] };
   }
 
-  const room = new RoomEnvironment(), pmrem = new THREE.PMREMGenerator(renderer);
-  const environment = pmrem.fromScene(room, .04); scene.environment = environment.texture; scene.environmentIntensity = .28;
-  room.dispose(); pmrem.dispose();
-  // A low, warm sun gives the landmarks a lit face and a readable, directional shadow.
-  // One shadow-casting light covers the playable island; distant scenery keeps cheap contact shadows.
-  scene.add(new THREE.HemisphereLight("#c9e6ff", "#71825a", .8));
-  const sun = new THREE.DirectionalLight("#fff0ce", 3.6);
-  sun.name = "city-afternoon-sun";
-  sun.position.set(-32, 42, -28); sun.castShadow = true; sun.shadow.mapSize.setScalar(lite ? 1024 : 2048);
-  Object.assign(sun.shadow.camera, { left: -43, right: 43, top: 43, bottom: -43, near: 1, far: 140 }); sun.shadow.normalBias = .025; sun.shadow.bias = -.0001; sun.shadow.radius = 2; scene.add(sun);
+  // A warm late-morning sun, low enough for long shadows; the sky and the grass fill the shade softly.
+  // No environment map: its studio light fills the shade so evenly that the shadows disappear.
+  scene.add(new THREE.HemisphereLight("#d9ebff", "#71805c", 1.15));
+  const sun = new THREE.DirectionalLight("#ffe4bd", 3.3);
+  sun.position.set(-52, 46, 34); sun.castShadow = true;
+  sun.shadow.mapSize.setScalar(lite || renderer.capabilities.maxTextureSize < 4096 ? 2048 : 4096);
+  Object.assign(sun.shadow.camera, { left: -78, right: 78, top: 78, bottom: -78, near: 1, far: 220 }); sun.shadow.normalBias = .05; sun.shadow.bias = -.0002; scene.add(sun);
+  /** Everything nearer than this lies inside the sun's shadow map; farther things get blob shadows. */
+  const SHADOW_REACH = 70;
 
   const materials = new Map<string, THREE.MeshStandardMaterial>();
   const disposables: { dispose: () => void }[] = [];
@@ -103,7 +112,6 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const box = (w: number, h: number, d: number, c: string, x: number, y: number, z: number, p?: THREE.Object3D) => { const m = mesh(new THREE.BoxGeometry(w, h, d), c, x, y, z, p); if (Math.min(w, h, d) < .07) m.castShadow = false; return m; };
   const cyl = (r: number, h: number, c: string, x: number, y: number, z: number, p?: THREE.Object3D, n = 32) => mesh(new THREE.CylinderGeometry(r, r, h, n), c, x, y, z, p);
   const sphere = (r: number, c: string, x: number, y: number, z: number, p?: THREE.Object3D) => mesh(new THREE.SphereGeometry(r, 18, 14), c, x, y, z, p);
-  const tint = (color: string, amount: number) => "#" + new THREE.Color(color).lerp(new THREE.Color(amount > 0 ? "#ffffff" : "#1c1830"), Math.abs(amount)).getHexString();
   /** A flat ring or disc lying on the ground at height `y`. */
   const flat = (geometry: THREE.BufferGeometry, color: string, y: number, extra?: THREE.MeshStandardMaterialParameters) => { const m = mesh(geometry, color, 0, y, 0, world, extra); m.rotation.x = -Math.PI / 2; m.castShadow = false; return m; };
   const canvasTexture = (width: number, height: number, draw: (ctx: CanvasRenderingContext2D) => void) => {
@@ -133,11 +141,28 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const waterMaterial = new THREE.MeshStandardMaterial({ color: "#6dabab", roughness: .25, metalness: .25, map: waves }); disposables.push(waterMaterial);
   const water = new THREE.Mesh(new THREE.RingGeometry(QUAY - .6, BANK + .6, 180, 1), waterMaterial);
   water.rotation.x = -Math.PI / 2; water.position.y = -1.25; water.receiveShadow = true; world.add(water);
-  mesh(new THREE.CylinderGeometry(QUAY, QUAY + .25, 1.9, 140), "#d4cab6", 0, -.8, 0);
-  mesh(new THREE.CylinderGeometry(QUAY - .32, QUAY - .32, .3, 140), "#8ba67a", 0, .05, 0).castShadow = false;
+  // Land with stone quay walls: the ring around the lagoon, the plaza islet and one island per district.
+  const grass = material("#8ba67a"), stone = material("#d4cab6");
+  function land(outer: number, inner: number, x = 0, z = 0) {
+    const shape = new THREE.Shape().absarc(0, 0, outer, 0, Math.PI * 2, false);
+    if (inner) shape.holes.push(new THREE.Path().absarc(0, 0, inner, 0, Math.PI * 2, true));
+    const geometry = new THREE.ExtrudeGeometry(shape, { depth: 1.95, bevelEnabled: false, curveSegments: Math.round(outer * 4) });
+    geometry.rotateX(-Math.PI / 2); geometry.translate(x, .2 - 1.95, z);
+    const m = new THREE.Mesh(geometry, [grass, stone]); m.castShadow = m.receiveShadow = true; world.add(m);
+    for (const [r0, r1] of inner ? [[outer - .32, outer], [inner, inner + .32]] : [[outer - .32, outer]]) {
+      const rim = flat(new THREE.RingGeometry(r0, r1, Math.round(outer * 5), 1), "#eadfc8", .205); rim.position.set(x, .205, z);
+    }
+  }
+  land(QUAY, LAGOON); land(PLAZA_ISLAND, 0);
+  for (const d of CITY_LOCATIONS) land(ISLET, 0, d.x, d.z);
+  // Ring UVs span the ring's own diameter; rescale them so the waves match the canal's.
+  const lagoonGeometry = new THREE.RingGeometry(PLAZA_ISLAND - .3, LAGOON + .3, 160, 1), lagoonUv = lagoonGeometry.getAttribute("uv"), uvScale = (LAGOON + .3) / (BANK + .6);
+  for (let i = 0; i < lagoonUv.count; i++) lagoonUv.setXY(i, .5 + (lagoonUv.getX(i) - .5) * uvScale, .5 + (lagoonUv.getY(i) - .5) * uvScale);
+  const lagoon = new THREE.Mesh(lagoonGeometry, waterMaterial);
+  lagoon.rotation.x = -Math.PI / 2; lagoon.position.y = -1.25; lagoon.receiveShadow = true; world.add(lagoon);
   flat(new THREE.RingGeometry(PROMENADE - .5, PROMENADE + .5, 180, 1), "#eadfc8", .215);
   const bank = new THREE.Mesh(new THREE.CylinderGeometry(BANK, BANK, 1.9, 180, 1, true), material("#d4cab6", { side: THREE.BackSide }));
-  bank.position.y = -.75; bank.receiveShadow = true; world.add(bank);
+  bank.position.y = -.75; bank.castShadow = bank.receiveShadow = true; world.add(bank);
   flat(new THREE.RingGeometry(BANK, 720, 200, 1), "#86a174", .2);
   flat(new THREE.RingGeometry(BANK, BANK + 1, 200, 1), "#eadfc8", .21);
 
@@ -155,6 +180,24 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     for (let t = 1.2; t < length - .8; t += 2.2) marks.push(place(ax + dx * t / length, .265, az + dz * t / length, angle, .14, .02, .8));
   }
   for (const [ax, az, bx, bz] of innerRoads()) road(ax, az, bx, bz);
+  // Bridges over the lagoon: a deck under the street, railings and piers down to the water.
+  for (const [ax, az, bx, bz] of bridgeSpans()) {
+    const dx = bx - ax, dz = bz - az, length = Math.hypot(dx, dz), angle = Math.atan2(dx, dz), span = new THREE.Group();
+    span.position.set((ax + bx) / 2, 0, (az + bz) / 2); span.rotation.y = angle; streets.add(span);
+    box(2.75, .34, length, "#dcd3c1", 0, .01, 0, span);
+    // The deck reaches .3 onto the land; railings, 1.3 off the centre line, stop where the curved shore
+    // meets them: a little farther in on the round plaza and islands, a little sooner at the lagoon shore.
+    const trim = (x: number, z: number) => {
+      const r = Math.hypot(x, z), island = CITY_LOCATIONS.some(d => Math.hypot(d.x - x, d.z - z) < ISLET + .45);
+      const shore = r < PLAZA_ISLAND + 1 ? PLAZA_ISLAND : island ? ISLET : -LAGOON;
+      const bend = Math.abs(shore) - Math.sqrt(shore * shore - 1.3 * 1.3);
+      return shore > 0 ? .3 - bend : .3 + bend;
+    };
+    const ta = trim(ax, az), tb = trim(bx, bz);
+    for (const side of [-1, 1]) box(.16, .3, length - ta - tb, "#e8e1d2", side * 1.3, .36, (ta - tb) / 2, span);
+    const piers = Math.floor(length / 3.4);
+    for (let i = 1; i <= piers; i++) box(2.1, 1.4, .5, "#cfc5b1", 0, -.86, -length / 2 + i * length / (piers + 1), span);
+  }
   for (const a of avenueAngles()) {
     const c = Math.cos(a), s = Math.sin(a), along = Math.atan2(c, s);
     road(c * 26, s * 26, c * (QUAY - .2), s * (QUAY - .2));
@@ -188,7 +231,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const lamps = lampSpots().map(p => place(p.x, .2, p.z));
   const pole = new THREE.CylinderGeometry(.035, .05, 1.3, 6); pole.translate(0, .65, 0);
   const bulb = new THREE.SphereGeometry(.11, 10, 8); bulb.translate(0, 1.36, 0);
-  instanced(pole, material("#5f6678"), lamps);
+  instanced(pole, material("#5f6678"), lamps, { shadow: true });
   instanced(bulb, material("#fff3c4", { emissive: "#ffe08a", emissiveIntensity: .9 }), lamps);
 
   // Trees: two kinds of low-poly trees, each tinted a little differently.
@@ -208,56 +251,24 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const treeTint = ["#ffffff", "#eaf6e2", "#f7ffe8", "#dfeed7", "#fff6dc"].map(c => new THREE.Color(c));
   const treeMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .85, flatShading: true }); disposables.push(treeMaterial);
   const trees = treeSpots(lite, parks), coneTree = treeGeometry(false), roundTree = treeGeometry(true);
-  // Only trees on the island are inside the sun's shadow map, so only they cast shadows.
-  for (const round of [false, true]) for (const island of [true, false]) {
-    const list = trees.filter(t => t.round === round && (Math.hypot(t.x, t.z) < QUAY) === island);
-    instanced(round ? roundTree : coneTree, treeMaterial, list.map(t => place(t.x, .2, t.z, t.x * 3.1, t.scale)), { shadow: island && !lite, colors: list.map((_, i) => treeTint[(i * 7) % treeTint.length]) });
+  for (const round of [false, true]) { const list = trees.filter(t => t.round === round);
+    instanced(round ? roundTree : coneTree, treeMaterial, list.map(t => place(t.x, .2, t.z, t.x * 3.1, t.scale)), { shadow: true, colors: list.map((_, i) => treeTint[(i * 7) % treeTint.length]) });
   }
   // Soft round shadows ground the far buildings and trees that the sun's shadow map does not reach.
   const blob = canvasTexture(64, 64, ctx => { const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 32); g.addColorStop(0, "rgba(0,0,0,.55)"); g.addColorStop(1, "rgba(0,0,0,0)"); ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64); });
   const blobMaterial = new THREE.MeshBasicMaterial({ map: blob, color: "#23402c", transparent: true, depthWrite: false, opacity: .5 }); disposables.push(blobMaterial);
   const blobPlane = new THREE.PlaneGeometry(1, 1); blobPlane.rotateX(-Math.PI / 2);
-  instanced(blobPlane, blobMaterial, [...outskirts.map(l => place(l.x, .209, l.z, l.rotation, l.width * 1.25)), ...trees.filter(t => Math.hypot(t.x, t.z) > QUAY).map(t => place(t.x, .209, t.z, 0, 1.5 * t.scale))], { receive: false });
+  const far = (p: { x: number; z: number }) => Math.hypot(p.x, p.z) > SHADOW_REACH;
+  const blobs = [...outskirts.filter(far).map(l => place(l.x, .209, l.z, l.rotation, l.width * 1.25)), ...trees.filter(far).map(t => place(t.x, .209, t.z, 0, 1.5 * t.scale))];
+  instanced(blobPlane, blobMaterial, blobs, { receive: false });
 
-  // Ordinary blocks inside the ring: Kenney models once they load, simple shapes if they cannot.
-  const lots = islandLots();
   function facadeTexture(floors: number, glass: boolean) {
     return canvasTexture(64, 64 * floors, ctx => {
       ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, 64, 64 * floors);
       for (let f = 0; f < floors; f++) for (let c = 0; c < 3; c++) { ctx.fillStyle = (f * 3 + c) % 7 === 0 ? "#ffe9a8" : glass ? "#8fb3dc" : "#9aabc4"; ctx.fillRect(6 + c * 19, f * 64 + 14, 14, 30); }
     });
   }
-  const facadeMaterials = new Map<string, THREE.Material[]>();
-  function facadeMaterial(color: string, floors: number, glass: boolean) {
-    const key = `${color}:${floors}:${glass}`;
-    if (!facadeMaterials.has(key)) {
-      const side = new THREE.MeshStandardMaterial({ color, map: facadeTexture(floors, glass), roughness: glass ? .35 : .8, metalness: glass ? .2 : .02 }), top = material(tint(color, -.12));
-      disposables.push(side); facadeMaterials.set(key, [side, side, top, top, side, side]);
-    }
-    return facadeMaterials.get(key)!;
-  }
-  function tree(x: number, z: number, s: number, p: THREE.Object3D) {
-    cyl(.1 * s, .8 * s, "#8a6a55", x, .6 * s, z, p, 7);
-    const crown = mesh(new THREE.ConeGeometry(.55 * s, 1.3 * s, 9), "#5fae6e", x, 1.45 * s, z, p); crown.rotation.y = x;
-    mesh(new THREE.ConeGeometry(.42 * s, 1 * s, 9), "#78c282", x, 1.95 * s, z, p);
-  }
-  const walls = ["#f3e6d3", "#e9eef5", "#f6d9cf", "#dfe9dd", "#ece4f4", "#f4efe2"], roofs = ["#c7775d", "#8a6f9e", "#5f7f9c", "#a3685a"];
-  function simpleBlocks() {
-    for (const lot of lots) {
-      const g = new THREE.Group(); g.position.set(lot.x, .2, lot.z); g.rotation.y = lot.rotation; world.add(g);
-      if (lot.roll < .1) { tree(0, 0, 1.3, g); continue; }
-      if (lot.roll < .45) {
-        const w = 1.8 + lot.size * .6, h = 1.2 + lot.pick * .6;
-        box(w, h, w * .9, walls[Math.floor(lot.pick * walls.length)], 0, h / 2, 0, g);
-        const roof = mesh(new THREE.ConeGeometry(w * .78, .9, 4), roofs[Math.floor(lot.size * roofs.length)], 0, h + .45, 0, g); roof.rotation.y = Math.PI / 4;
-      } else {
-        const glass = lot.roll > .8, floors = glass ? 7 + Math.floor(lot.size * 4) : 3 + Math.floor(lot.size * 4), h = floors * .75, w = glass ? 2.1 : 2.5;
-        const color = glass ? ["#b8cbe3", "#a9c4d8", "#c4c9e6"][Math.floor(lot.pick * 3)] : walls[Math.floor(lot.pick * walls.length)];
-        const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), facadeMaterial(color, floors, glass)); body.position.y = h / 2; body.castShadow = body.receiveShadow = true; g.add(body);
-        box(w + .15, .15, w + .15, tint(color, -.25), 0, h + .07, 0, g);
-      }
-    }
-  }
+  const walls = ["#f3e6d3", "#e9eef5", "#f6d9cf", "#dfe9dd", "#ece4f4", "#f4efe2"];
   // Far blocks and the skyline are plain boxes with painted windows: four heights, tinted per building.
   const BLOCKS = [{ floors: 4, height: 3, glass: false }, { floors: 7, height: 5.2, glass: false }, { floors: 11, height: 8.4, glass: true }, { floors: 18, height: 13.6, glass: true }];
   function blockKind(lot: { zone: string; pick: number; x: number; z: number }) {
@@ -267,11 +278,11 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const block = new THREE.BoxGeometry(1, 1, 1); block.translate(0, .5, 0);
   function plainBlocks(list: typeof outskirts) {
     BLOCKS.forEach((kind, index) => {
-      const own = list.filter(l => blockKind(l) === index); if (!own.length) return;
+      const kindLots = list.filter(l => blockKind(l) === index); if (!kindLots.length) return;
       const top = new THREE.MeshStandardMaterial({ color: "#9aa3ad", roughness: .85 }), side = new THREE.MeshStandardMaterial({ color: "#ffffff", map: facadeTexture(kind.floors, kind.glass), roughness: kind.glass ? .4 : .85, metalness: kind.glass ? .15 : 0 });
       disposables.push(top, side);
       const palette = (kind.glass ? ["#b8cbe3", "#a9c4d8", "#c4c9e6", "#d5dde8"] : walls).map(c => new THREE.Color(c));
-      instanced(block, [side, side, top, top, side, side], own.map(l => { const w = Math.min(l.width, kind.glass ? 3.4 : 3.8) * (.82 + l.size * .18); return place(l.x, .2, l.z, l.rotation, w, kind.height * (.9 + l.size * .2), w * (.8 + l.pick * .2)); }), { colors: own.map((_, i) => palette[(i * 5) % palette.length]) });
+      const own = kindLots; instanced(block, [side, side, top, top, side, side], own.map(l => { const w = Math.min(l.width, kind.glass ? 3.4 : 3.8) * (.82 + l.size * .18); return place(l.x, .2, l.z, l.rotation, w, kind.height * (.9 + l.size * .2), w * (.8 + l.pick * .2)); }), { shadow: true, colors: own.map((_, i) => palette[(i * 5) % palette.length]) });
     });
   }
 
@@ -310,7 +321,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
           const original = o.geometry;
           original.deleteAttribute('normal');
           o.geometry = mergeVertices(original, .0001); o.geometry.computeVertexNormals(); original.dispose();
-          o.castShadow = o.receiveShadow = true;
+          // The operator moves, so it stays out of the baked shadow map.
+          o.castShadow = false; o.receiveShadow = true;
           for (const material of Array.isArray(o.material) ? o.material : [o.material]) {
             if (material instanceof THREE.MeshStandardMaterial) {
               material.roughness = .72;
@@ -331,6 +343,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
         const mic = new THREE.Mesh(new THREE.TubeGeometry(curve,12,.008,6,false),band.material);headset.add(mic);
       }
       figure.add(model);
+      // Its first frames compile new shaders; bake frames also keep them out of the quality measurement.
+      bakeShadows();
       characterMixer = new THREE.AnimationMixer(model);
       const idle = gltf.animations.find(a => a.name === 'Idle_Neutral'), hello = gltf.animations.find(a => a.name === 'Wave');
       if (idle) { idleAction = characterMixer.clipAction(idle); idleAction.play(); }
@@ -340,7 +354,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       nextWave = performance.now() + 2500;
       characterMixer.addEventListener('finished', () => { waveAction?.fadeOut(.4); idleAction?.reset().fadeIn(.4).play(); });
       host.dataset.character = gender;
-    }).catch(() => { if (!disposed && request === characterRequest) { buildRobot(); host.dataset.character = 'fallback'; } });
+    }).catch(() => { if (!disposed && request === characterRequest) { buildRobot(); bakeShadows(); host.dataset.character = 'fallback'; } });
   }
   function disposeCharacter(root: THREE.Object3D) {
     const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>();
@@ -360,7 +374,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
     if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); world.remove(nameTag); }
     nameTag = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthWrite: false }));
-    nameTag.scale.set(1.35 * width / 128, 1.35, 1); nameTag.position.set(0, 7.4, 0); nameTag.renderOrder = 5; world.add(nameTag);
+    nameTag.scale.set(1.35 * width / 128, 1.35, 1); nameTag.position.set(0, 7.4, 0); nameTag.renderOrder = 5; nameTag.layers.set(OVERLAY); world.add(nameTag);
   }
   let currentGender: CityMascot["gender"] | undefined;
   function setMascot(next: CityMascot) {
@@ -370,7 +384,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     characterMixer?.stopAllAction(); characterMixer = null; idleAction = waveAction = null;
     disposeCharacter(figure); clearFigure();
     if (next.gender) buildOperator(next.gender); else buildRobot();
-    drawNameTag(next.name);
+    // The robot stands still and casts into the baked map; a new figure needs a new bake.
+    bakeShadows(); drawNameTag(next.name);
   }
   setMascot(options.mascot ?? { gender: null, name: "Пульсар" });
 
@@ -417,21 +432,13 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     });
   }
   function modelBlocks(catalogue: Map<string, THREE.Object3D>) {
-    const island: Slots = new Map();
-    for (const lot of lots) {
-      const list = lot.roll < .08 ? ["s-tree-large"] : lot.r > 17 ? (lot.roll < .8 ? HOUSES : OFFICES) : lot.roll > .88 ? TOWERS : lot.roll < .3 ? HOUSES : OFFICES;
-      const name = list[Math.floor(lot.pick * list.length)];
-      if (name === "s-tree-large") { for (const [dx, dz] of [[-.6, -.4], [.6, .3], [0, .8]]) push(island, name, { matrix: place(lot.x + dx, .2, lot.z + dz, lot.rotation, 3.4 + lot.size), fit: 0 }); continue; }
-      push(island, name, { matrix: place(lot.x, .2, lot.z, lot.rotation), fit: 2.6 });
-    }
-    drawModels(catalogue, island, true);
     // The mainland rows that the default view shows get detailed models; phones keep the nearest one.
-    const detailed = new Set(outskirts.filter(l => (l.zone === "houses" || l.zone === "industry") && l.r < (lite ? 50 : 92))), mainland: Slots = new Map();
+    const detailed = new Set(outskirts.filter(l => (l.zone === "houses" || l.zone === "industry") && l.r < (lite ? 50 : 60))), mainland: Slots = new Map();
     for (const lot of detailed) {
       const list = lot.zone === "industry" ? INDUSTRY : lot.roll < .8 ? HOUSES : LIGHT_OFFICES;
       push(mainland, list[Math.floor(lot.pick * list.length)], { matrix: place(lot.x, .2, lot.z, lot.rotation), fit: Math.round(lot.width * 2) / 2 });
     }
-    drawModels(catalogue, mainland, false);
+    drawModels(catalogue, mainland, true);
     plainBlocks(outskirts.filter(l => !detailed.has(l)));
   }
 
@@ -441,22 +448,16 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const rings = new Map<DistrictId, THREE.Mesh>();
   const districtGroups = new Map<DistrictId, THREE.Group>();
   const stages = new Map<DistrictId, number>(CITY_LOCATIONS.map(d => [d.id, districtLevel(levels[d.id] ?? 0, d.soon)]));
-  world.add(createDistrictIslands());
   function building(d: CityLocation) {
     const stage = stages.get(d.id)!;
     const { group: g, height } = architecture.landmark(d.id, stage, !!d.soon);
-    g.position.set(d.x, .2 + DISTRICT_ISLAND_HEIGHT, d.z); g.scale.setScalar(DISTRICT_SCALE); g.rotation.y = Math.atan2(-d.x, -d.z);
+    g.position.set(d.x, .2, d.z); g.scale.setScalar(DISTRICT_SCALE); g.rotation.y = Math.atan2(-d.x, -d.z);
     g.userData.district = d.id; world.add(g); districtGroups.set(d.id, g);
-    const outline = new THREE.CurvePath<THREE.Vector3>();
-    DISTRICT_ISLAND_OUTLINE.forEach((p, i) => {
-      const next = DISTRICT_ISLAND_OUTLINE[(i + 1) % DISTRICT_ISLAND_OUTLINE.length];
-      outline.add(new THREE.LineCurve3(new THREE.Vector3(p.x, 0, p.z), new THREE.Vector3(next.x, 0, next.z)));
-    });
-    const ring = new THREE.Mesh(new THREE.TubeGeometry(outline, 100, .075, 6, true), new THREE.MeshBasicMaterial({ color: d.color, transparent: true, opacity: 0 }));
-    ring.rotation.y = g.rotation.y; ring.position.set(d.x, .32 + DISTRICT_ISLAND_HEIGHT, d.z); world.add(ring); rings.set(d.id, ring);
-    const hit = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, height * DISTRICT_SCALE, 12), new THREE.MeshBasicMaterial({ visible: false }));
-    hit.position.set(d.x, .2 + DISTRICT_ISLAND_HEIGHT + height * DISTRICT_SCALE / 2, d.z); hit.userData.district = d.id; world.add(hit); pickables.push(hit);
-    anchors.set(d.id, new THREE.Vector3(d.x, .2 + DISTRICT_ISLAND_HEIGHT + height * DISTRICT_SCALE + .7, d.z));
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(ISLET - .19, .11, 8, 96), new THREE.MeshBasicMaterial({ color: '#e9bf69', transparent: true, opacity: 0 }));
+    ring.rotation.x = Math.PI / 2; ring.position.set(d.x, .45, d.z); world.add(ring); rings.set(d.id, ring);
+    const hit = new THREE.Mesh(new THREE.CylinderGeometry(ISLET, ISLET, height * DISTRICT_SCALE, 12), new THREE.MeshBasicMaterial({ visible: false }));
+    hit.position.set(d.x, .2 + height * DISTRICT_SCALE / 2, d.z); hit.userData.district = d.id; world.add(hit); pickables.push(hit);
+    anchors.set(d.id, new THREE.Vector3(d.x, .2 + height * DISTRICT_SCALE + .7, d.z));
   }
   CITY_LOCATIONS.forEach(building);
 
@@ -490,7 +491,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       const vehicles: Mover[] = list.map(slot => ({ route: slot.plan.route, s: slot.offset * slot.plan.route.length, speed: slot.plan.speed, parts: [], boat: name === "boat" }));
       movers.push(...vehicles);
       modelParts(source).forEach(part => {
-        const m = instanced(part.geometry, part.material, list.map(() => new THREE.Matrix4()), { shadow: name !== "boat", receive: true });
+        const m = instanced(part.geometry, part.material, list.map(() => new THREE.Matrix4()), { receive: true });
         m.name = `city-traffic-${name}`;
         m.frustumCulled = false; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); trafficMeshes.push(m);
         vehicles.forEach((vehicle, index) => vehicle.parts.push({ mesh: m, index, base: part.matrix }));
@@ -510,7 +511,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       moverPosition.set(p.x, item.boat ? -1.36 + Math.sin(now / 600 + item.s) * .04 : roadY(p.x, p.z), p.z);
       moverTurn.setFromAxisAngle(yAxis, p.heading); moverScale.setScalar(p.hidden ? 0 : item.boat ? .75 : CAR_SCALE);
       for (const part of item.parts) part.mesh.setMatrixAt(part.index, moverMatrix.compose(moverPosition, moverTurn, moverScale).multiply(part.base));
-      // Exactly one contact shadow per car, complementing its directional sun shadow.
+      // Exactly one contact shadow per car: moving cars stay out of the baked sun shadows.
       if (!item.boat && carShadows) { moverScale.set(p.hidden ? 0 : .95, 1, p.hidden ? 0 : 1.7); moverPosition.y += .012; carShadows.setMatrixAt(shadow++, moverMatrix.compose(moverPosition, moverTurn, moverScale)); }
     }
     for (const m of trafficMeshes) m.instanceMatrix.needsUpdate = true;
@@ -522,7 +523,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       if (random() < (i === 2 ? .5 : .35) || (lite && i === 2)) return;
       const list = PARKED[i]; push(slots, list[(k * 7 + i) % list.length], { matrix: place(stall.x, .25, stall.z, stall.rotation, CAR_SCALE), fit: 0 });
     }));
-    drawModels(catalogue, slots, false);
+    drawModels(catalogue, slots, true);
   }
   buildTraffic(null);
 
@@ -536,6 +537,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; texture.anisotropy = 4;
     const face = new THREE.Mesh(new THREE.PlaneGeometry(7, 2.5), new THREE.MeshBasicMaterial({ map: texture, transparent: true, toneMapped: false, side: THREE.DoubleSide }));
     face.position.set(0, 1.5, 0); face.userData.district = d.id; group.add(face); pickables.push(face);
+    group.traverse(o => o.layers.set(OVERLAY));
     boards.set(d.id, { group, canvas, texture });
   }
   function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -593,7 +595,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     animateTo({ target: [d.x * .85, 0, d.z * .85], azimuth: Math.atan2(-d.x, -d.z), distance: Math.min(currentView().distance, 52) });
   }
 
-  const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
+  const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(); raycaster.layers.enableAll();
   function pick(event: PointerEvent): DistrictId | null {
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
@@ -636,7 +638,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       const item = growth[i], k = THREE.MathUtils.clamp((now - item.start) / 1300, 0, 1);
       // Ease-out with a small overshoot, like a building popping into place.
       const e = k === 1 ? 1 : 1 + 2.2 * Math.pow(k - 1, 3) + 1.2 * Math.pow(k - 1, 2);
-      item.group.scale.y = DISTRICT_SCALE * Math.max(.02, e);
+      item.group.scale.y = DISTRICT_SCALE * Math.max(.02, e); if (now >= item.start) bakeShadows();
       if (k === 1) growth.splice(i, 1);
     }
     if (confetti && now >= confetti.start) {
@@ -664,11 +666,14 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
 
   // The canvas fills the screen; the city is centred in the free frame between the panels.
   let width = 0, height = 0;
+  /** Share of the full pixel density: the last thing lowered while frames run slow, and at most by 20 %. */
+  let quality = 1, capped = false;
+  const pixelRatio = (q: number) => Math.max(.5, q * Math.min(window.devicePixelRatio, mobile ? 1.4 : lite ? 1.5 : 1.75, Math.sqrt(3.4e6 / (Math.max(1, width) * Math.max(1, height)))));
   const frameRect = () => { const f = options.frame?.getBoundingClientRect(); return f && f.width > 60 && f.height > 60 ? f : null; };
   function resize() {
     width = host.clientWidth; height = host.clientHeight; if (!width || !height) return;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.4 : lite ? 1.5 : 1.75, Math.sqrt(3.4e6 / (width * height))));
-    renderer.setSize(width, height, false); camera.aspect = width / height;
+    renderer.setPixelRatio(pixelRatio(quality));
+    renderer.setSize(width, height, false); look?.setSize(width, height, renderer.getPixelRatio()); camera.aspect = width / height;
     camera.fov = width < 480 ? 50 : 36;
     const f = frameRect(), bounds = host.getBoundingClientRect();
     if (f) camera.setViewOffset(width, height, bounds.left + width / 2 - (f.left + f.right) / 2, bounds.top + height / 2 - (f.top + f.bottom) / 2, width, height);
@@ -685,7 +690,6 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
   const observer = new ResizeObserver(resize); observer.observe(host); if (options.frame) observer.observe(options.frame); resize();
   applyView(options.view ?? defaultView());
 
-  // One compressed file with the city blocks and one with vehicles; the city stays usable if either fails.
   function disposeModel(root: THREE.Object3D) {
     const geometries = new Set<THREE.BufferGeometry>(), mats = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
     root.traverse(o => {
@@ -698,7 +702,7 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       if (o instanceof THREE.InstancedMesh) o.dispose();
     });
     textures.forEach(t => t.dispose()); geometries.forEach(g => g.dispose()); mats.forEach(m => m.dispose());
-  }
+  }  // One compressed file with the city blocks and one with vehicles; the city stays usable if either fails.
   let modelsSettled = false;
   const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
   const loaded: THREE.Object3D[] = [];
@@ -707,21 +711,56 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     loaded.push(...gltf.scenes);
     models = new Map(gltf.scenes.map(s => [s.name, s]));
     modelBlocks(models);
-  }).catch(() => { if (!disposed) { simpleBlocks(); plainBlocks(outskirts); } }).finally(() => { modelsSettled = true; });
+  }).catch(() => { if (!disposed) plainBlocks(outskirts); }).finally(() => { modelsSettled = true; bakeShadows(); });
   loader.loadAsync(vehiclesUrl).then(gltf => {
     if (disposed) { gltf.scenes.forEach(disposeModel); return; }
     loaded.push(...gltf.scenes);
     const catalogue = new Map<string, THREE.Object3D>(gltf.scenes.map(s => [s.name, s]));
     catalogue.set("taxi", taxi);
-    buildTraffic(catalogue); parkedVehicles(catalogue);
+    buildTraffic(catalogue); parkedVehicles(catalogue); bakeShadows();
   }).catch(() => { /* Local taxis keep driving. */ });
 
   let frame = 0, last = performance.now(), visible = true, ready = false;
-  const visibility = new IntersectionObserver(entries => { visible = entries.some(e => e.isIntersecting); if (visible && !frame) frame = requestAnimationFrame(tick); });
+  const visibility = new IntersectionObserver(entries => { visible = entries.some(e => e.isIntersecting); if (visible && !frame) { last = performance.now(); spent = frames = 0; frame = requestAnimationFrame(tick); } });
   visibility.observe(host);
+  // Frame times over the last second decide how much to spend. Below about 40 frames a second (20 on
+  // phones) the scene gives up one thing at a time, cheapest-to-lose first: corner shading, then the glow,
+  // then 60 frames a second (it draws 30, which keeps every frame sharp), and only then pixels, by 10 % and
+  // 20 %. After three smooth seconds it takes one back, but not a step that was too slow in the last 30 s.
+  type Step = "ao" | "bloom" | "fps" | "ratio90" | "ratio80";
+  const steps: Step[] = [...(look?.hasAO ? ["ao" as const] : []), ...(look ? ["bloom" as const] : []), ...(mobile ? [] : ["fps" as const]), "ratio90", "ratio80"];
+  let level = 0, spent = 0, frames = 0, calm = 0, ceiling = -1, retry = 0;
+  const given = (step: Step) => { const i = steps.indexOf(step); return i >= 0 && i < level; };
+  function applyLevel() {
+    look?.setAO(!given("ao")); look?.setBloom(!given("bloom")); capped = given("fps");
+    const next = given("ratio80") ? .8 : given("ratio90") ? .9 : 1;
+    if (next !== quality) { quality = next; resize(); }
+    host.dataset.quality = `${level}/${steps.length}`;
+  }
+  function adapt(gap: number, now: number) {
+    spent += gap; frames++;
+    if (spent < 1000) return;
+    const average = spent / frames, budget = mobile || capped ? 1000 / 30 : 1000 / 60; spent = frames = 0;
+    if (now > retry) ceiling = -1;
+    if (average > budget * 1.45) { calm = 0; if (level < steps.length) { ceiling = level; retry = now + 30000; level++; applyLevel(); } }
+    else if (average < budget * 1.12) { if (level > 0 && level - 1 > ceiling && ++calm >= 3) { level--; calm = 0; applyLevel(); } }
+    else calm = 0;
+  }
+  /** The city through the effects, then the labels on top of it, sharp and at full brightness. */
+  function renderLook(pipeline: NonNullable<typeof look>) {
+    camera.layers.disable(OVERLAY); pipeline.render();
+    camera.layers.set(OVERLAY); renderer.setRenderTarget(null); renderer.autoClear = false; renderer.clearDepth();
+    renderer.render(scene, camera);
+    renderer.autoClear = true; camera.layers.enable(0);
+  }
   function tick(now: number) {
     frame = 0; if (!visible || document.hidden) return;
-    if (mobile && now - last < 1000 / 30) { frame = requestAnimationFrame(tick); return; }
+    // A little slack keeps the throttle on every second vsync instead of slipping to every third.
+    if ((mobile || capped) && now - last < 1000 / 30 - 3) { frame = requestAnimationFrame(tick); return; }
+    // Pauses and one-off hitches (shader compiles, shadow bakes, a growing district) do not count.
+    const gap = now - last;
+    if (gap > 1000) spent = frames = 0;
+    else if (ready && bakeFrames === 0 && !growth.length && !(gap > 250 && frames > 3 && gap > 4 * spent / frames)) adapt(gap, now);
     const elapsed = Math.min(.2, (now - last) / 1000), dt = Math.min(.05, elapsed); last = now;
     if (!width || !height) resize();
     stepTween(now);
@@ -730,7 +769,8 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
     rings.forEach((ring, id) => {
       const m = ring.material as THREE.MeshBasicMaterial;
       m.opacity = id === selected ? .55 + pulse * .4 : id === hovered ? .45 : 0;
-      ring.scale.setScalar(id === selected ? 1 + pulse * .04 : 1);
+      // The ring hugs the island's edge: it pulses in brightness, barely in size.
+      ring.scale.setScalar(id === selected ? 1 + pulse * .01 : 1);
     });
     if (trafficEnabled) moveTraffic(elapsed, now);
     if (!reduced) {
@@ -739,35 +779,38 @@ export function createCityScene(host: HTMLDivElement, options: CitySceneOptions)
       if (characterMixer && waveAction && now >= nextWave) { idleAction?.fadeOut(.35); waveAction.reset().fadeIn(.35).play(); nextWave = now + 18000; }
     }
     stepGrowth(now, dt);
-    if (width && height && modelsSettled) { updateBoards(); renderer.render(scene, camera); host.dataset.drawCalls = String(renderer.info.render.calls); host.dataset.triangles = String(renderer.info.render.triangles); if (!ready) { ready = true; options.onReady(); startGrowth(now); } }
+    if (width && height && modelsSettled) { updateBoards(); if (bakeFrames > 0) { bakeFrames--; renderer.shadowMap.needsUpdate = true; look?.tune(scene); } if (look) renderLook(look); else renderer.render(scene, camera); host.dataset.drawCalls = String(renderer.info.render.calls); host.dataset.triangles = String(renderer.info.render.triangles); if (!ready) { ready = true; options.onReady(); startGrowth(now); } }
     frame = requestAnimationFrame(tick);
   }
-  const onVisible = () => { if (!document.hidden && !frame) { last = performance.now(); frame = requestAnimationFrame(tick); } };
+  const onVisible = () => { spent = frames = 0; if (!document.hidden && !frame) { last = performance.now(); frame = requestAnimationFrame(tick); } };
   document.addEventListener("visibilitychange", onVisible);
   frame = requestAnimationFrame(tick);
 
   const lost = (event: Event) => { event.preventDefault(); options.onLost(); };
+  // A restored context starts with an empty shadow map, which would shade the whole city.
+  const restored = () => { bakeShadows(); options.onRestored?.(); };
   renderer.domElement.addEventListener("webglcontextlost", lost);
+  renderer.domElement.addEventListener("webglcontextrestored", restored);
 
   return {
     setMascot,
-    setTraffic(enabled) { trafficEnabled = enabled; },
     select(id) { if (id === selected) return; selected = id; drawBoards(); focus(id); },
     setLabels(next) { labels = next; drawBoards(); },
     zoom(factor) { animateTo({ distance: currentView().distance * factor }, 320); },
     rotate(radians) { animateTo({ azimuth: currentView().azimuth + radians }, 420); },
     tilt(radians) { animateTo({ polar: currentView().polar + radians }, 320); },
     reset() { animateTo(defaultView(), 700); },
+    setTraffic(enabled) { trafficEnabled = enabled; },
     focusMascot() { animateTo({ target: [0, 3, 0], azimuth: currentView().azimuth, polar: 1.12, distance: 22 }, 650); },
     dispose() {
       disposed = true; cancelAnimationFrame(frame); observer.disconnect(); visibility.disconnect(); controls.dispose();
       document.removeEventListener("visibilitychange", onVisible);
       renderer.domElement.removeEventListener("pointerdown", onDown); renderer.domElement.removeEventListener("pointerup", onUp);
       renderer.domElement.removeEventListener("pointermove", onHover); renderer.domElement.removeEventListener("pointerleave", onLeave);
-      renderer.domElement.removeEventListener("webglcontextlost", lost);
+      renderer.domElement.removeEventListener("webglcontextlost", lost); renderer.domElement.removeEventListener("webglcontextrestored", restored);
       for (const root of [scene, ...loaded, taxi, boat]) disposeModel(root);
       unit.dispose(); block.dispose(); blobPlane.dispose(); pole.dispose(); bulb.dispose();
-      materials.forEach(m => m.dispose()); disposables.forEach(d => d.dispose()); boards.forEach(b => b.texture.dispose()); architecture.dispose(); environment.dispose(); sun.shadow.dispose(); characterRequest++; characterMixer?.stopAllAction(); disposeCharacter(figure); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
+      materials.forEach(m => m.dispose()); disposables.forEach(d => d.dispose()); boards.forEach(b => b.texture.dispose()); architecture.dispose(); sun.shadow.dispose(); look?.dispose(); characterRequest++; characterMixer?.stopAllAction(); disposeCharacter(figure); if (nameTag) { (nameTag.material as THREE.SpriteMaterial).map?.dispose(); (nameTag.material as THREE.SpriteMaterial).dispose(); } renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); delete host.dataset.dragging;
     },
   };
 }

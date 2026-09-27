@@ -4,54 +4,32 @@ import type { DistrictId } from "../../api/city";
  * Plan of the training city, in scene units, without any three.js: where the roads, bridges, lots,
  * trees, lamps and parking go, and the lanes cars follow. The scene only turns this plan into meshes.
  *
- * The city is round: a central plaza, a ring road through the districts, a green belt with a
- * promenade on the quay, a canal, and the mainland with its own ring road. Avenues leave the island
- * over bridges between neighbouring districts.
+ * The city is round: a central plaza on its own islet, the district landmarks on small islands in an
+ * inner lagoon, bridges from the plaza to every island and on to the ring road, a green belt with a
+ * promenade on the quay, a canal, and the mainland with its own ring road. Avenues leave the city over
+ * bridges between neighbouring districts.
  */
 
 export interface CityLocation { id: DistrictId; x: number; z: number; color: string; soon?: boolean }
 export interface Point { x: number; z: number }
 export type Road = readonly [number, number, number, number];
 
+/** District islands stand on one circle in the lagoon, each in its own direction from the plaza. */
+export const DISTRICT_RING = 15.8;
+const onRing = (x: number, z: number) => { const a = Math.atan2(z, x); return { x: Math.cos(a) * DISTRICT_RING, z: Math.sin(a) * DISTRICT_RING }; };
 export const CITY_LOCATIONS: CityLocation[] = [
-  { id: "academy", x: -16.907, z: 1.777, color: "#5b8def" },
-  { id: "driver", x: -6.914, z: -15.531, color: "#f0a23a" },
-  { id: "crm", x: 12.633, z: -11.375, color: "#7b5cff" },
-  { id: "dispatch", x: 14.722, z: 8.5, color: "#35b6a6", soon: true },
-  { id: "oktell", x: -3.535, z: 16.628, color: "#e86aa6", soon: true },
+  // Neighbours are at least 70° apart, so every cross-street bridge passes half a unit clear of the islands.
+  { id: "academy", ...onRing(-15.79, .51), color: "#5b8def" },
+  { id: "driver", ...onRing(-6.5, -16.5), color: "#f0a23a" },
+  { id: "crm", ...onRing(14, -9), color: "#7b5cff" },
+  { id: "dispatch", ...onRing(12.53, 9.63), color: "#35b6a6", soon: true },
+  { id: "oktell", ...onRing(-4.85, 15.04), color: "#e86aa6", soon: true },
 ];
 /** District buildings are drawn in small units and scaled up to stand above the ordinary city blocks. */
-export const DISTRICT_SCALE = 2;
-/** Elevation above the city ground. The entrance faces the central plaza (local +z). */
-export const DISTRICT_ISLAND_HEIGHT = .48;
-/** End of the entrance steps, kept clear of the access street. */
-export const DISTRICT_ISLAND_ENTRY = 8.9;
-/** Five independent landscaped plots; their narrowed forecourts leave the cross streets open. */
-export const DISTRICT_ISLAND_OUTLINE: readonly Point[] = [
-  { x: -6.35, z: -5.9 }, { x: 6.35, z: -5.9 },
-  { x: 6.35, z: 5.9 }, { x: 3.5, z: 8 },
-  { x: -3.5, z: 8 }, { x: -6.35, z: 5.9 },
-];
-export function districtPoint(d: Point, local: Point): Point {
-  const a = Math.atan2(-d.x, -d.z), c = Math.cos(a), s = Math.sin(a);
-  return { x: d.x + c * local.x + s * local.z, z: d.z - s * local.x + c * local.z };
-}
-export function districtOutline(d: Point): Point[] { return DISTRICT_ISLAND_OUTLINE.map(p => districtPoint(d, p)); }
-/** Includes a circular footprint around ordinary homes, so their corners cannot clip the new plots. */
-export function insideDistrictIsland(p: Point, d: Point, pad = 0) {
-  const points = districtOutline(d);
-  let positive = false, negative = false;
-  points.forEach((a, i) => {
-    const b = points[(i + 1) % points.length], cross = (b.x - a.x) * (p.z - a.z) - (b.z - a.z) * (p.x - a.x);
-    if (cross > 1e-7) positive = true;
-    if (cross < -1e-7) negative = true;
-  });
-  return !(positive && negative) || points.some((a, i) => {
-    const b = points[(i + 1) % points.length];
-    return segmentDistance(p.x, p.z, [a.x, a.z, b.x, b.z]) < pad;
-  });
-}
+export const DISTRICT_SCALE = 1.75;
 export const PLAZA = 4.6;
+/** Radius of every district island, of the plaza islet and the outer shore of the lagoon. */
+export const ISLET = 7.2, PLAZA_ISLAND = 6.5, LAGOON = 23.3;
 /** Centre line of the inner ring road; every road is two lanes, one unit each. */
 export const RING_ROAD = 25;
 export const ROAD_HALF = 1;
@@ -86,10 +64,10 @@ export function radialAngles() { return [...CITY_LOCATIONS.map(angleOf), ...aven
 
 /** Streets inside the ring road: a spoke to every district and a cross street between neighbours. */
 export function innerRoads(): Road[] {
-  const roads: Road[] = [];
+  const edge = ISLET, roads: Road[] = [];
   for (const d of CITY_LOCATIONS) {
     const r = Math.hypot(d.x, d.z), ux = d.x / r, uz = d.z / r;
-    roads.push([ux * PLAZA, uz * PLAZA, ux * (r - DISTRICT_ISLAND_ENTRY), uz * (r - DISTRICT_ISLAND_ENTRY)], [ux * (r + 5.9), uz * (r + 5.9), ux * 24, uz * 24]);
+    roads.push([ux * PLAZA, uz * PLAZA, ux * (r - edge), uz * (r - edge)], [ux * (r + edge), uz * (r + edge), ux * 24, uz * 24]);
   }
   for (const a of avenueAngles()) roads.push([Math.cos(a) * PLAZA, Math.sin(a) * PLAZA, Math.cos(a) * 24, Math.sin(a) * 24]);
   return roads;
@@ -99,18 +77,16 @@ export function avenues(): Road[] { return avenueAngles().map(a => [Math.cos(a) 
 const clearOfAvenues = (p: Point, pad: number) => { const r = Math.hypot(p.x, p.z), a = Math.atan2(p.z, p.x); return avenueAngles().every(b => Math.cos(a - b) <= 0 || r * Math.abs(Math.sin(a - b)) >= pad); };
 
 export interface Lot { x: number; z: number; r: number; rotation: number; roll: number; pick: number; size: number }
-/** Circumradius of the largest 2.65-unit ordinary building, including its roof. */
-export const ORDINARY_LOT_CLEARANCE = 1.9;
-/** Ordinary blocks between the districts inside the ring road. */
-export function islandLots(): Lot[] {
-  const roads = innerRoads(), random = rng(21), lots: Lot[] = [];
-  for (let gx = -24; gx <= 24; gx += 2.9) for (let gz = -24; gz <= 24; gz += 2.9) {
-    const x = gx + (random() - .5) * 1.1, z = gz + (random() - .5) * 1.1, r = Math.hypot(x, z);
-    const lot = { x, z, r, rotation: Math.atan2(x, z) + (random() < .5 ? 0 : Math.PI / 2), roll: random(), pick: random(), size: random() };
-    if (r < PLAZA + ORDINARY_LOT_CLEARANCE || r > RING_ROAD - ROAD_HALF - ORDINARY_LOT_CLEARANCE || nearRoad(x, z, roads, 1.325 + ORDINARY_LOT_CLEARANCE) || CITY_LOCATIONS.some(d => insideDistrictIsland(lot, d, ORDINARY_LOT_CLEARANCE))) continue;
-    lots.push(lot);
+
+/** Parts of the inner streets that cross the lagoon: they are carried by bridges. */
+export function bridgeSpans(): Road[] {
+  const spans: Road[] = [], along = (a: number, from: number, to: number) => [Math.cos(a) * from, Math.sin(a) * from, Math.cos(a) * to, Math.sin(a) * to] as const;
+  for (const d of CITY_LOCATIONS) {
+    const a = angleOf(d), r = Math.hypot(d.x, d.z);
+    spans.push(along(a, PLAZA_ISLAND - .3, r - ISLET + .3), along(a, r + ISLET - .3, LAGOON + .3));
   }
-  return lots;
+  for (const a of avenueAngles()) spans.push(along(a, PLAZA_ISLAND - .3, LAGOON + .3));
+  return spans.filter(([ax, az, bx, bz]) => Math.hypot(bx - ax, bz - az) > .7);
 }
 
 export interface ParkingLot { x: number; z: number; angle: number; length: number; depth: number; stalls: (Point & { rotation: number })[] }
@@ -164,7 +140,7 @@ export function mainlandLots(lite = false) {
 }
 
 export interface TreeSpot extends Point { scale: number; round: boolean }
-/** Trees on the green belt, along the canal bank, the outer ring and the avenues, and in the parks. */
+/** Trees on the plaza islet and the green belt, along the canal bank, the outer ring and the avenues, and in the parks. */
 export function treeSpots(lite: boolean, parks: Point[]): TreeSpot[] {
   const random = rng(7), trees: TreeSpot[] = [], parking = parkingLots();
   // `pad` keeps the whole crown, not only the trunk, off the avenue.
@@ -173,6 +149,9 @@ export function treeSpots(lite: boolean, parks: Point[]): TreeSpot[] {
     if (onLand && offRings && clearOfAvenues(p, pad) && !parking.some(lot => insideParking(p, lot, .7))) trees.push({ ...p, scale, round: random() < .35 });
   };
   for (let i = 0; i < (lite ? 120 : 190); i++) add(polar(27.3 + random() * 5.7, random() * Math.PI * 2), 1.1 + random() * .8);
+  // A small tree between every two streets on the plaza islet.
+  const radials = radialAngles().sort((a, b) => a - b);
+  radials.forEach((a, i) => { const next = radials[(i + 1) % radials.length] + (i === radials.length - 1 ? Math.PI * 2 : 0); trees.push({ ...polar(5.65, (a + next) / 2), scale: .7, round: true }); });
   for (const [radius, step] of [[45.3, 3.2], [59.4, 3.8], [64.6, 4]] as const) {
     const count = Math.floor(2 * Math.PI * radius / step);
     for (let i = 0; i < count; i++) if (random() > .12) add(polar(radius + (random() - .5) * .5, (i + random() * .3) / count * Math.PI * 2), 1.2 + random() * .7);
@@ -198,10 +177,10 @@ export function lampSpots(): Point[] {
 }
 
 export interface Crosswalk extends Point { angle: number }
-/** Zebra crossings where streets meet the plaza and the ring roads; `angle` is the direction of the street. */
+/** Zebra crossings where streets leave the plaza and cross the ring roads; `angle` is the direction of the street. */
 export function crosswalks(): Crosswalk[] {
   const list: Crosswalk[] = [], at = (r: number, a: number) => ({ ...polar(r, a), angle: Math.atan2(Math.cos(a), Math.sin(a)) });
-  for (const a of radialAngles()) list.push(at(PLAZA + 1.2, a), at(22.9, a));
+  for (const a of radialAngles()) list.push(at(PLAZA + 1.2, a));
   for (const a of avenueAngles()) list.push(at(27.1, a), at(OUTER_RING - 2.1, a), at(OUTER_RING + 2.1, a));
   return list;
 }

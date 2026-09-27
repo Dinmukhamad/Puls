@@ -1,0 +1,268 @@
+{
+  "version": "v1",
+  "generated": "2026-09-26",
+  "files": {
+    "city-models.glb": {
+      "bytes": 1142604,
+      "materials": 3,
+      "models": {
+        "c-building-a": {
+          "lod0": 1252,
+          "lod1": 814,
+          "lod2": 12
+        },
+        "c-building-c": {
+          "lod0": 1195,
+          "lod1": 753,
+          "lod2": 12
+        },
+        "c-building-d": {
+          "lod0": 1100,
+          "lod1": 753,
+          "lod2": 12
+        },
+        "c-building-f": {
+          "lod0": 1794,
+          "lod1": 1208,
+          "lod2": 12
+        },
+        "c-building-g": {
+          "lod0": 2006,
+          "lod1": 1266,
+          "lod2": 12
+        },
+        "c-building-h": {
+          "lod0": 1512,
+          "lod1": 983,
+          "lod2": 12
+        },
+        "c-building-j": {
+          "lod0": 5246,
+          "lod1": 3763,
+          "lod2": 12
+        },
+        "c-building-k": {
+          "lod0": 2960,
+          "lod1": 1765,
+          "lod2": 12
+        },
+        "c-building-m": {
+          "lod0": 3740,
+          "lod1": 2666,
+          "lod2": 12
+        },
+        "c-building-n": {
+          "lod0": 4350,
+          "lod1": 3084,
+          "lod2": 12
+        },
+        "c-building-skyscraper-a": {
+          "lod0": 1292,
+          "lod1": 764,
+          "lod2": 12
+        },
+        "c-building-skyscraper-b": {
+          "lod0": 1592,
+          "lod1": 878,
+          "lod2": 12
+        },
+        "c-building-skyscraper-c": {
+          "lod0": 1704,
+          "lod1": 982,
+          "lod2": 12
+        },
+        "c-building-skyscraper-d": {
+          "lod0": 1892,
+          "lod1": 983,
+          "lod2": 12
+        },
+        "c-building-skyscraper-e": {
+          "lod0": 1156,
+          "lod1": 764,
+          "lod2": 12
+        },
+        "i-building-g": {
+          "lod0": 1242,
+          "lod1": 761,
+          "lod2": 12
+        },
+        "i-building-h": {
+          "lod0": 698,
+          "lod1": 414,
+          "lod2": 12
+        },
+        "i-building-i": {
+          "lod0": 798,
+          "lod1": 396,
+          "lod2": 12
+        },
+        "i-detail-tank": {
+          "lod0": 310,
+          "lod1": 200,
+          "lod2": 12
+        },
+        "i-shipping-container-a": {
+          "lod0": 402,
+          "lod1": 252,
+          "lod2": 12
+        },
+        "i-shipping-container-b": {
+          "lod0": 402,
+          "lod1": 192,
+          "lod2": 12
+        },
+        "i-shipping-container-c": {
+          "lod0": 402,
+          "lod1": 252,
+          "lod2": 12
+        },
+        "i-solar-panel-landscape-group": {
+          "lod0": 976,
+          "lod1": 530,
+          "lod2": 12
+        },
+        "i-solar-panel-portrait-group": {
+          "lod0": 976,
+          "lod1": 530,
+          "lod2": 12
+        },
+        "i-water-tower": {
+          "lod0": 968,
+          "lod1": 666,
+          "lod2": 96
+        },
+        "i-windmill": {
+          "lod0": 456,
+          "lod1": 218,
+          "lod2": 68
+        },
+        "s-building-type-a": {
+          "lod0": 1174,
+          "lod1": 714,
+          "lod2": 12
+        },
+        "s-building-type-b": {
+          "lod0": 1748,
+          "lod1": 921,
+          "lod2": 12
+        },
+        "s-building-type-c": {
+          "lod0": 1196,
+          "lod1": 735,
+          "lod2": 12
+        },
+        "s-building-type-d": {
+          "lod0": 1757,
+          "lod1": 984,
+          "lod2": 12
+        },
+        "s-building-type-f": {
+          "lod0": 1616,
+          "lod1": 1067,
+          "lod2": 12
+        },
+        "s-building-type-g": {
+          "lod0": 1067,
+          "lod1": 639,
+          "lod2": 12
+        },
+        "s-building-type-h": {
+          "lod0": 770,
+          "lod1": 498,
+          "lod2": 12
+        },
+        "s-building-type-k": {
+          "lod0": 1024,
+          "lod1": 593,
+          "lod2": 12
+        },
+        "s-building-type-m": {
+          "lod0": 1112,
+          "lod1": 641,
+          "lod2": 12
+        },
+        "s-building-type-p": {
+          "lod0": 1282,
+          "lod1": 886,
+          "lod2": 12
+        },
+        "s-building-type-q": {
+          "lod0": 1140,
+          "lod1": 752,
+          "lod2": 12
+        },
+        "s-building-type-t": {
+          "lod0": 2062,
+          "lod1": 1163,
+          "lod2": 12
+        },
+        "s-planter": {
+          "lod0": 204,
+          "lod1": 86,
+          "lod2": 20
+        },
+        "s-tree-large": {
+          "lod0": 42,
+          "lod1": 20,
+          "lod2": 12
+        },
+        "s-tree-small": {
+          "lod0": 42,
+          "lod1": 22,
+          "lod2": 12
+        }
+      }
+    },
+    "vehicles.glb": {
+      "bytes": 405904,
+      "materials": 1,
+      "models": {
+        "sedan": {
+          "lod0": 2032,
+          "lod1": 1214,
+          "lod2": 280
+        },
+        "taxi": {
+          "lod0": 2072,
+          "lod1": 1212,
+          "lod2": 12
+        },
+        "suv": {
+          "lod0": 2474,
+          "lod1": 1276,
+          "lod2": 352
+        },
+        "van": {
+          "lod0": 2082,
+          "lod1": 1102,
+          "lod2": 12
+        },
+        "delivery": {
+          "lod0": 2476,
+          "lod1": 1188,
+          "lod2": 12
+        },
+        "truck": {
+          "lod0": 2082,
+          "lod1": 1074,
+          "lod2": 12
+        },
+        "hatchback-sports": {
+          "lod0": 2088,
+          "lod1": 1108,
+          "lod2": 12
+        },
+        "ambulance": {
+          "lod0": 2804,
+          "lod1": 1516,
+          "lod2": 12
+        },
+        "police": {
+          "lod0": 2304,
+          "lod1": 1318,
+          "lod2": 12
+        }
+      }
+    }
+  }
+}

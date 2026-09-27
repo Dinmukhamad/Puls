@@ -34,6 +34,7 @@ from app.models.progress import Notification, ProgressLevel
 from app.models.session import LoginSession
 from app.models.settings import AuditLog, GamificationSettings
 from app.models.shop import ShopItem, ShopRequest
+from app.models.telemetry import CityPerfReport
 from app.models.user import CoinAccount, Group, User
 from app.models.work_sites_access import WorkSitesAccess
 
@@ -45,6 +46,7 @@ __all__ = [
     "BadgeRule",
     "Base",
     "CityAward",
+    "CityPerfReport",
     "CitySettings",
     "CoinAccount",
     "CoinTransaction",

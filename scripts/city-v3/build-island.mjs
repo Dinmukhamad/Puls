@@ -7,7 +7,7 @@
 import * as THREE from '../../frontend/node_modules/three/build/three.module.js';
 import { GLTFExporter } from '../../frontend/node_modules/three/examples/jsm/exporters/GLTFExporter.js';
 import { mergeGeometries, mergeVertices } from '../../frontend/node_modules/three/examples/jsm/utils/BufferGeometryUtils.js';
-import { MeshoptEncoder } from '../../frontend/node_modules/meshoptimizer/meshopt_encoder.module.js';
+import { MeshoptEncoder } from '../../frontend/node_modules/meshoptimizer-pilot/meshopt_encoder.module.js';
 import { MeshoptDecoder } from '../../frontend/node_modules/three/examples/jsm/libs/meshopt_decoder.module.js';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';

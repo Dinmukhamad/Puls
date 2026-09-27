@@ -11,7 +11,7 @@ node scripts/city-v3/build-island.mjs
 node scripts/city-v3/verify-island.mjs
 ```
 
-Dependencies: the frontend's pinned Three.js version and `meshoptimizer@0.22.0`
+Dependencies: the frontend's pinned Three.js version and `meshoptimizer@0.22.0` (installed as the `meshoptimizer-pilot` alias)
 (authoring only). The runtime decoder is the one already bundled with Three.js:
 
 ```ts
