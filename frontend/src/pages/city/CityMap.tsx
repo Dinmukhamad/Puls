@@ -2,13 +2,16 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { CityDistrict, CityMission, DistrictId } from "../../api/city";
 import type { CityMascot, CityLabelInfo, CitySceneControl, CityView } from "./cityScene";
 import { districtLevel, grownDistricts } from "./cityLevels";
+import { PilotTools } from "../../cityPilot/PilotTools";
+import type { PilotControl, PilotReport, TimeOfDay } from "../../cityPilot";
+import "../../cityPilot/pilot.css";
 
 /**
  * The 3D city fills the whole screen behind the glass panels. `.city-frame` marks the part the panels
  * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
  * seen, so an upgrade is celebrated once.
  */
-export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot }) {
+export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot, pilot = false, inspect = false, forceWebGL = false }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; pilot?: boolean; inspect?: boolean; forceWebGL?: boolean }) {
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
   const host = useRef<HTMLDivElement>(null), frame = useRef<HTMLDivElement>(null);
   const control = useRef<CitySceneControl>();
@@ -16,6 +19,9 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   const selectRef = useRef(onSelect), selectedRef = useRef(selected);
   selectRef.current = onSelect; selectedRef.current = selected;
   const [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0), [report, setReport] = useState<PilotReport | null>(null);
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>("day");
+  const timeRef = useRef(timeOfDay); timeRef.current = timeOfDay;
   const [traffic, setTraffic] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const trafficRef = useRef(traffic); trafficRef.current = traffic;
   const levels = Object.fromEntries(districts.map(d => [d.id, missions.filter(m => m.district === d.id && m.state === "completed").length]));
@@ -24,24 +30,28 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   labelsRef.current = labels;
   useEffect(() => {
     let cancelled = false;
-    setFailed(false); setReady(false);
+    setFailed(false); setReady(false); setReport(null);
     const current = Object.fromEntries(districts.map(d => [d.id, districtLevel(JSON.parse(levelKey)[d.id] ?? 0, d.soon)]));
     let grown: DistrictId[] = [];
     if (progressKey) {
       try { grown = grownDistricts(JSON.parse(localStorage.getItem(progressKey) ?? "null"), current) as DistrictId[]; localStorage.setItem(progressKey, JSON.stringify(current)); } catch { /* Celebration is optional. */ }
     }
-    void import("./cityScene").then(({ createCityScene }) => {
+    const factory = pilot ? import("../../cityPilot").then(module => module.createCity) : import("./cityScene").then(module => module.createCityScene);
+    void factory.then(createCityScene => {
       if (cancelled || !host.current) return;
       control.current = createCityScene(host.current, {
         levels: JSON.parse(levelKey), selected: selectedRef.current, view: view.current, labels: labelsRef.current, grown, mascot: mascotRef.current, frame: frame.current ?? undefined,
         onSelect: id => selectRef.current(id), onView: value => { view.current = value; },
         onReady: () => { if (!cancelled) setReady(true); }, onLost: () => { if (!cancelled) setFailed(true); },
+        ...(pilot ? { forceWebGL: forceWebGL || attempt > 0, timeOfDay: timeRef.current, onStats: (value: PilotReport) => { if (!cancelled && inspect) setReport(value); } } : {}),
       });
       control.current.setTraffic(trafficRef.current);
     }).catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; control.current?.dispose(); control.current = undefined; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuilt only when mission progress changes
-  }, [levelKey]);
+  }, [levelKey, pilot, forceWebGL, attempt, inspect]);
+  useEffect(() => { view.current = undefined; }, [pilot]);
+  useEffect(() => { if (pilot) (control.current as PilotControl | undefined)?.setTimeOfDay(timeOfDay); }, [timeOfDay, pilot]);
   useEffect(() => { control.current?.select(selected); }, [selected]);
   useEffect(() => { if (mascot) control.current?.setMascot(mascot); }, [mascot?.gender, mascot?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setLabels(JSON.parse(labelsKey)); }, [labelsKey]);
@@ -52,11 +62,11 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     const action = actions[event.key]; if (action) { event.preventDefault(); action(); }
   }
   const live = !failed && ready;
-  return <section className={`city-world${failed ? " city-world--fallback" : ""}${live ? " is-ready" : ""}`} aria-label="Карта твоего города">
+  return <section className={`city-world${pilot ? " city-world--pilot" : ""}${failed ? " city-world--fallback" : ""}${live ? " is-ready" : ""}`} aria-label="Карта твоего города">
     <div ref={host} className="city-scene" tabIndex={failed ? -1 : 0} role="application" aria-label="3D-карта города. Стрелки — вращать и наклонять, плюс и минус — масштаб, ноль — исходный вид." onKeyDown={key} />
     <div ref={frame} className="city-frame" aria-hidden="true" />
     {!failed && !ready && <div className="city-loading" role="status"><span>Строим твой город…</span></div>}
-    {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>3D-карта недоступна на этом устройстве</strong><small>Выбирай районы на панели навыков — миссии работают как обычно.</small></div>}
+    {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>3D-карта недоступна на этом устройстве</strong><small>Выбирай районы на панели навыков — миссии работают как обычно.</small>{pilot && <button type="button" className="city-secondary" onClick={() => setAttempt(value => value + 1)}>Повторить через WebGL2</button>}</div>}
     {live && <span className="city-map-hint">Тяни — вращай · колесо или щипок — масштаб · правая кнопка или два пальца — сдвиг</span>}
     {!failed && <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="vertical">
       <button type="button" aria-label="Посмотреть помощника" onClick={() => control.current?.focusMascot()}>♙</button>
@@ -65,5 +75,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
       <button type="button" aria-label="Отдалить" onClick={() => control.current?.zoom(1.33)}>－</button>
       <button type="button" aria-label="Исходный вид" onClick={() => control.current?.reset()}>⌂</button>
     </div>}
+    {pilot && !failed && <PilotTools night={timeOfDay === "night"} onTime={setTimeOfDay} report={report} inspect={inspect} onBenchmark={(mode, seconds) => (control.current as PilotControl | undefined)?.startBenchmark(mode, seconds)} />}
   </section>;
 }
+

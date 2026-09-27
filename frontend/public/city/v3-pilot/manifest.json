@@ -1,0 +1,61 @@
+{
+  "name": "Puls CRM Harbour — City V3 pilot",
+  "asset": "/city/v3-pilot/crm-island.glb",
+  "version": 1,
+  "licence": "Original project artwork; no external art assets",
+  "generatedBy": "node scripts/city-v3/build-island.mjs",
+  "bytes": 810244,
+  "uncompressedBytes": 2753672,
+  "compression": "EXT_meshopt_compression",
+  "meshes": 17,
+  "materials": 17,
+  "vertices": 83983,
+  "triangles": 63550,
+  "sourceObjects": 943,
+  "bounds": {
+    "min": [
+      -18.020000457763672,
+      -2.559999942779541,
+      -18.020000457763672
+    ],
+    "max": [
+      18.020000457763672,
+      9.66108512878418,
+      23.924999237060547
+    ]
+  },
+  "anchors": {
+    "label": [
+      0,
+      10.1,
+      -2
+    ],
+    "entrance": [
+      0,
+      0.55,
+      3.8
+    ],
+    "buildingCenter": [
+      0,
+      0,
+      -2
+    ]
+  },
+  "routes": {
+    "taxiRadius": 13.8,
+    "taxiSurfaceY": 0.11,
+    "pedestrianRadius": 10.4,
+    "pedestrianSurfaceY": 0.083
+  },
+  "waterLevel": -0.65,
+  "nightMaterials": [
+    "city-night-glass",
+    "city-night-lights"
+  ],
+  "notes": [
+    "No texture downloads. Geometry is merged offline per material.",
+    "Static architectural pilot; five progression stages are not claimed.",
+    "Ambient vertex shading is artistic, not a physically baked lightmap.",
+    "Bridge extends to +Z; water and moving actors are supplied by the application."
+  ]
+}

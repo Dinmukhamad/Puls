@@ -20,6 +20,7 @@ import { DEFAULT_GUIDE, guideName, guideText } from "../../guide";
 export function CityPage() {
   const { user } = useAuth(), client = useQueryClient();
   const [params, setParams] = useSearchParams();
+  const pilot = params.get("city") === "pilot";
   const operatorId = user?.role !== "operator" && /^\d+$/.test(params.get("operator") ?? "") ? Number(params.get("operator")) : null;
   const query = useQuery({ queryKey: ["city", operatorId ?? "self"], queryFn: () => operatorId ? city.operator(operatorId) : city.own(), refetchInterval: 15000, refetchOnWindowFocus: true });
   const [reward, setReward] = useState<CityReward | null>(null);
@@ -32,7 +33,7 @@ export function CityPage() {
     {query.isError ? <div className="city-empty-card glass glass--prominent"><ErrorState error={query.error} onRetry={() => query.refetch()} /></div> : <div className="city-loading" role="status"><span>Загружаем город…</span></div>}
   </div>;
   const data = query.data;
-  const selected = data.districts.find(d => d.id === params.get("district")) ?? data.districts.find(d => d.id === nextMission(data.missions)?.district) ?? data.districts[0];
+  const selected = data.districts.find(d => d.id === params.get("district")) ?? (pilot ? data.districts.find(d => d.id === "crm") : undefined) ?? data.districts.find(d => d.id === nextMission(data.missions)?.district) ?? data.districts[0];
   const missions = data.missions.filter(m => m.district === selected.id);
   const mission = missions.find(m => m.key === params.get("mission")) ?? nextMission(missions);
   const completed = data.missions.filter(m => m.state === "completed").length;
@@ -47,8 +48,9 @@ export function CityPage() {
   const needsGuide = !data.inspecting && !!user && (!user.gender || !user.guide_name);
   const rank = data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города";
   const level = districtLevel(missions.filter(m => m.state === "completed").length, selected.soon);
-  return <div className="city-immersive">
-    <CityMap mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} onSelect={selectDistrict} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+  function togglePilot() { const p = new URLSearchParams(params); if (pilot) p.delete("city"); else { p.set("city", "pilot"); p.set("district", "crm"); p.delete("mission"); } p.delete("backend"); setParams(p, { replace: true }); }
+  return <div className={`city-immersive${pilot ? " city-immersive--pilot" : ""}`}>
+    <CityMap pilot={pilot} inspect={user?.role !== "operator"} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} onSelect={selectDistrict} progressKey={!pilot && !data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
     <header className="city-hud glass glass--regular">
       <div className="city-hud__level">
@@ -61,6 +63,7 @@ export function CityPage() {
       <div className="city-hud__stat"><strong>{completed}<small> / {total}</small></strong><span className="city-hud__label">миссий пройдено</span></div>
       {!data.preview && <div className="city-hud__coins"><span className="city-coin" aria-hidden="true">◈</span><span className="city-hud__stat"><strong>{data.balance.toLocaleString("ru-RU")}</strong><span className="city-hud__label">коинов в кошельке</span></span></div>}
       <nav className="city-hud__links" aria-label="Обучение">
+        {(pilot || user?.role !== "operator") && <button type="button" className="city-pilot-switch" onClick={togglePilot}>{pilot ? "← Город" : "Новый остров"}</button>}
         {user?.role !== "operator" && <Link to="/admin/learning/city" aria-label="Управление миссиями"><span aria-hidden="true">⚙︎</span><span className="city-hud__wide">Миссии</span></Link>}
         <Link to="/training" aria-label="Материалы обучения"><span aria-hidden="true">📚</span><span className="city-hud__wide">Материалы</span></Link>
       </nav>
@@ -131,3 +134,4 @@ function CitySkills({ labels, selected, onSelect }: { labels: CityLabelInfo[]; s
     </div>
   </nav>;
 }
+
