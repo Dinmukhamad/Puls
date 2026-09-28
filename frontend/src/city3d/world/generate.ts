@@ -16,6 +16,7 @@ import type { ParkingLot, Placement, PlacementKind, Point, Road, Route, RoutePla
 import type { CitySpec, ParkingSpec } from "./worldSpec";
 import { insideRect, layoutComplexes, type ComplexLayout } from "./complexes";
 import { insidePlot, plotSpots } from "./plots";
+import { pickSites, type Site } from "./sites";
 import { fbm, reliefHeight } from "./relief";
 
 /** Every road is two lanes, one unit each; cars keep to the right, half a unit from the centre line. */
@@ -404,7 +405,14 @@ export function generateWorld(spec: WorldSpec): WorldData {
   for (const lot of lots) placements.push(...(lot.zone === "suburb" ? cottage(lot, gardens) : [building(lot, s.skylineAngle)]));
   trees.forEach((t, i) => placements.push({ kind: t.round ? "tree-round" : "tree-cone", variant: i, x: t.x, z: t.z, rotation: t.x * 3.1, scale: t.scale, width: 0 }));
   for (const p of lampSpots(plan)) placements.push({ kind: "lamp", variant: 0, x: p.x, z: p.z, rotation: 0, scale: 1, width: 0 });
-  placements.push(...parkedCars(plan), ...layout.placements, ...hillForest(plan));
+  // The group city's quarters are drawn by stage (world/sites.ts), not with the rest of the city.
+  const chosen = s.sites ? pickSites(layout.complexes, s.sites) : [], siteOf = new Map(chosen.map((complex, k) => [complex, k]));
+  const sites: Site[] = chosen.map((complex, k) => ({ ...layout.complexes[complex], key: `site-${k}`, complex, placements: [], surfaces: [] }));
+  const citySurfaces: Surface[] = [];
+  placements.push(...parkedCars(plan));
+  for (const p of layout.placements) { const k = p.site === undefined ? undefined : siteOf.get(p.site); if (k === undefined) placements.push(p); else sites[k].placements.push(p); }
+  for (const f of layout.surfaces) { const k = f.site === undefined ? undefined : siteOf.get(f.site); if (k === undefined) citySurfaces.push(f); else sites[k].surfaces.push(f); }
+  placements.push(...hillForest(plan));
   return {
     spec,
     districts: plan.districts.map(({ id, x, z, color, soon }) => ({ id, x, z, color, soon })),
@@ -413,7 +421,7 @@ export function generateWorld(spec: WorldSpec): WorldData {
     roads: { rings: [...s.roadRings], ...roadsOf(plan), crosswalks: crosswalks(plan), parking: [...plan.parking, ...layout.parking] },
     placements,
     parks,
-    complexes: layout.complexes, surfaces: [...gardens, ...layout.surfaces], walks: layout.walks, alleys: layout.alleys, plots,
+    complexes: layout.complexes, surfaces: [...gardens, ...citySurfaces], walks: layout.walks, alleys: layout.alleys, plots, sites,
     routes: trafficRoutes(plan),
     radius: s.horizon,
   };

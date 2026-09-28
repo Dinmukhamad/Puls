@@ -51,7 +51,8 @@ export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
       if (list) list.push(o); else cells.set(key, [o]);
     }
   };
-  for (const p of world.placements) {
+  // The group city's quarters count as built: walkers keep off their buildings at every stage.
+  for (const p of [...world.placements, ...(world.sites ?? []).flatMap(site => site.placements)]) {
     // Roofs, roof gardens and towers on their podiums stand over footprints the walkers already keep off.
     if ((p.lift ?? 0) > .5 && !p.kind.startsWith('tree-')) continue;
     if (p.kind === 'section' || p.kind === 'glass-tower') {

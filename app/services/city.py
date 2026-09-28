@@ -255,6 +255,9 @@ def mission_rows(config, facts, awards):
 
 
 async def dashboard(session, user, *, inspecting=False):
+    # The group city counts from this module's evidence, so it is imported here.
+    from app.services.city_group import group_city
+
     config = await settings(session)
     operator = user.role == Role.OPERATOR
     facts = (
@@ -307,6 +310,7 @@ async def dashboard(session, user, *, inspecting=False):
         "plots": plot_rows(rows, builds),
         "buildings": list(BUILDINGS.values()),
         "can_build": operator and not inspecting,
+        "group": await group_city(session, user),
     }
 
 

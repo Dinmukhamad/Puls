@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { city, MISSION_STATES, type CitySettings } from "../../api/city";
+import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CitySettings, type PointKind } from "../../api/city";
 import { useAuth } from "../../auth/AuthContext";
 import { ErrorState, Skeleton } from "../../components/ui";
 import "./city.css";
@@ -9,11 +9,11 @@ import "./city.css";
 export function CityAdminPage() {
   const { user } = useAuth();
   const canEdit = ["trainer", "head", "admin"].includes(user?.role ?? "");
-  const [tab, setTab] = useState<"participants"|"settings">("participants");
+  const [tab, setTab] = useState<"participants"|"groups"|"settings">("participants");
   const settings = useQuery({ queryKey:["city-settings"], queryFn:city.settings, enabled:tab === "settings", refetchOnWindowFocus:false });
   return <div className="city-page city-admin"><header className="city-heading"><div><span className="city-eyebrow">СТУДИЯ ОБУЧЕНИЯ</span><h1>Миссии города</h1><p>Настраивайте маршрут и следите за реальным прогрессом.</p></div><Link className="city-secondary" to="/training/city">Открыть город →</Link></header>
-    <nav className="city-admin-tabs" aria-label="Управление городом"><button className="city-secondary" aria-pressed={tab==='participants'} onClick={()=>setTab('participants')}>Прогресс операторов</button><button className="city-secondary" aria-pressed={tab==='settings'} onClick={()=>setTab('settings')}>{canEdit?'Настроить миссии':'Условия миссий'}</button></nav>
-    {tab==='participants'?<Participants />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
+    <nav className="city-admin-tabs" aria-label="Управление городом"><button className="city-secondary" aria-pressed={tab==='participants'} onClick={()=>setTab('participants')}>Прогресс операторов</button><button className="city-secondary" aria-pressed={tab==='groups'} onClick={()=>setTab('groups')}>Города групп</button><button className="city-secondary" aria-pressed={tab==='settings'} onClick={()=>setTab('settings')}>{canEdit?'Настроить миссии':'Условия миссий'}</button></nav>
+    {tab==='participants'?<Participants />:tab==='groups'?<Groups />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
   </div>;
 }
 
@@ -27,6 +27,26 @@ function Participants() {
     {query.data&&!query.data.items.length&&<p className="secondary">По этому запросу операторов нет.</p>}
     {query.data&&query.data.total>query.data.size&&<div className="city-admin-controls"><button className="city-secondary" disabled={page===1} onClick={()=>setPage(p=>p-1)}>← Назад</button><span>Страница {page} из {Math.ceil(query.data.total/query.data.size)}</span><button className="city-secondary" disabled={page*query.data.size>=query.data.total} onClick={()=>setPage(p=>p+1)}>Далее →</button></div>}
   </>;
+}
+
+/** Staff only: every visible group's quarters with points, and each member's contribution. Operators never see this. */
+function Groups() {
+  const query=useQuery({queryKey:['city-groups'],queryFn:city.groups,refetchInterval:30000});
+  const kinds=Object.keys(POINT_KINDS) as PointKind[];
+  if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
+  if(!query.data)return <Skeleton height={250}/>;
+  return <div className="city-groups">
+    <p className="city-admin-warning">Операторы видят только стадии кварталов своей группы и свои очки. Очки: {kinds.map(k=>`${POINT_KINDS[k]} — ${query.data.points[k]}`).join("; ")}.</p>
+    {!query.data.items.length&&<p className="secondary">Нет групп, закреплённых за вами.</p>}
+    {query.data.items.map(g=><article className="city-group-card" key={g.id}>
+      <header><h3>{g.name}</h3><span>{g.total} очков · {g.members.length} операторов</span></header>
+      <ol className="city-group-card__projects">{g.projects.map(p=><li key={p.key}><span>{p.name}</span><small>{SITE_STAGES[p.stage]} · {p.points} / {p.cost}</small><div className="city-meter"><span style={{width:`${p.points/p.cost*100}%`}}/></div></li>)}</ol>
+      <div className="city-group-card__table" role="table" aria-label={`Вклад операторов: ${g.name}`}>
+        <div role="row"><span role="columnheader">Оператор</span>{kinds.map(k=><span role="columnheader" key={k}>{POINT_KINDS[k]}</span>)}<span role="columnheader">Очки</span></div>
+        {g.members.map(m=><div role="row" key={m.user_id}><span role="cell"><Link to={`/training/city?operator=${m.user_id}`}>{m.full_name}</Link></span>{kinds.map(k=><span role="cell" key={k}>{m[k]}</span>)}<span role="cell"><b>{m.points}</b></span></div>)}
+      </div>
+    </article>)}
+  </div>;
 }
 
 function MissionEditor({initial,canEdit}:{initial:CitySettings;canEdit:boolean}) {

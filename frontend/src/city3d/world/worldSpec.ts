@@ -8,6 +8,7 @@
  */
 import type { WorldSpec, Zone } from "./types";
 import type { PlotSpec } from "./plots";
+import type { SiteSpec } from "./sites";
 
 /** A sector where one zone takes over the mainland rows whose radius is in [from, to). */
 export interface ZoneSector { zone: Zone; angleDeg: number; halfWidth: number; from: number; to: number }
@@ -30,6 +31,8 @@ export interface CitySpec extends WorldSpec {
   alleys?: number[];
   /** The operator's building plots on the green belt (world/plots.ts). */
   plots?: PlotSpec;
+  /** The group city's quarters among the complexes (world/sites.ts). */
+  sites?: SiteSpec;
 }
 
 /**
@@ -143,4 +146,6 @@ export const WORLD_X4: CitySpec = {
   alleys: [144 + COAST_SHIFT],
   // Four plots on the belt behind every open district, clear of its street and car park.
   plots: { districts: ["academy", "driver", "crm"], offsets: [-.23, -.13, .13, .23] },
+  // Six quarters across the canal that a group builds together, the first in the default view (docs/CITY_GROUP.md).
+  sites: { count: 6, within: 76.6 + COAST_SHIFT + 1, facing: 1.05 },
 };

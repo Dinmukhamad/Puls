@@ -14,8 +14,11 @@ const { ROAD_HALF, BRIDGE_HALF, WORLD_V1, WORLD_X4 } = gen;
 
 // The first call runs cold, as it does when the city opens.
 const started = performance.now();
-const X4 = gen.generateWorld(WORLD_X4);
+const RAW_X4 = gen.generateWorld(WORLD_X4);
 const coldMs = performance.now() - started;
+// The group city's quarters are drawn by stage; the tests below describe the city with every quarter built.
+const built = (world) => ({ ...world, placements: [...world.placements, ...world.sites.flatMap((s) => s.placements)], surfaces: [...world.surfaces, ...world.sites.flatMap((s) => s.surfaces)] });
+const X4 = built(RAW_X4);
 const V1 = gen.generateWorld(WORLD_V1);
 const WORLDS = [V1, X4];
 
@@ -190,7 +193,8 @@ forWorlds('placements are well formed and on land', (world, spec) => {
 });
 
 forWorlds('the world is the same for the same seed and differs for another', (world, spec) => {
-  assert.deepEqual(gen.generateWorld(spec), world);
+  const again = gen.generateWorld(spec);
+  assert.deepEqual(world === X4 ? built(again) : again, world);
   const other = gen.generateWorld({ ...spec, seed: spec.seed + 1 });
   assert.notDeepEqual(other.placements, world.placements);
   assert.deepEqual(other.roads.streets, world.roads.streets);

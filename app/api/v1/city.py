@@ -7,7 +7,7 @@ from app.models.city import CityAward
 from app.models.enums import Role
 from app.models.user import User
 from app.schemas.city import BuildInput, ClaimInput, SettingsInput
-from app.services import city
+from app.services import city, city_group
 
 router = APIRouter(tags=["Мой город"])
 
@@ -36,6 +36,11 @@ async def settings(session: SessionDep, user: LearningReader):
 @router.put("/admin/learning/city/settings")
 async def configure(body: SettingsInput, session: SessionDep, user: LearningEditor):
     return await city.save_settings(session, user, body)
+
+
+@router.get("/admin/learning/city/groups")
+async def groups(session: SessionDep, user: LearningReader):
+    return await city_group.groups_overview(session, user)
 
 
 @router.get("/admin/learning/city/operators/{user_id}")

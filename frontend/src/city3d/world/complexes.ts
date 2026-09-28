@@ -146,8 +146,14 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
     for (let k = 0; k < count; k++) {
       // Pulled in by the bulge of the straight outer wall, so its corners stay inside the band.
       const bulge = rout - Math.sqrt(rout * rout - length * length / 4), depth = rout - rin - bulge, a = start + (k * (length + gap) + length / 2) / rin;
-      if (band.office && isBusiness(a)) office(band, frameAt(rin + depth / 2, a), length, depth, a);
+      // Everything a quarter lays out carries its number, so the group city can build it up (world/sites.ts).
+      const placements = out.placements.length, surfaces = out.surfaces.length, business = !!band.office && isBusiness(a);
+      if (business) office(band, frameAt(rin + depth / 2, a), length, depth, a);
       else complex(band, frameAt(rin + depth / 2, a), length, depth);
+      const site = out.complexes.length - 1;
+      out.complexes[site].business = business;
+      for (let i = placements; i < out.placements.length; i++) out.placements[i].site = site;
+      for (let i = surfaces; i < out.surfaces.length; i++) out.surfaces[i].site = site;
       if (k < count - 1) driveway(band, start + ((k + 1) * (length + gap) - gap / 2) / rin);
     }
   }

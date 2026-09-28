@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { city, MISSION_STATES, nextMission, type BuildingKey, type CityBuilt, type CityData, type CityReward, type DistrictId } from "../../api/city";
+import { city, MISSION_STATES, nextMission, POINT_KINDS, SITE_STAGES, type BuildingKey, type CityBuilt, type CityData, type CityGroup, type CityReward, type DistrictId, type PointKind } from "../../api/city";
 import { useAuth } from "../../auth/AuthContext";
 import { ErrorState } from "../../components/ui";
 import { Sheet } from "../../components/Sheet";
@@ -31,6 +31,7 @@ export function CityPage() {
   const [focusRequest, requestFocus] = useState(0);
   const [plotKey, setPlotKey] = useState<string | null>(null), [built, setBuilt] = useState<CityBuilt | null>(null);
   const [plotFocus, setPlotFocus] = useState<{ key: string; at: number }>();
+  const [groupOpen, setGroupOpen] = useState(false), [siteFocus, setSiteFocus] = useState<{ key: string; at: number }>();
   const build = useMutation({ mutationFn: ({ plot, item }: { plot: string; item: BuildingKey }) => city.build(plot, item), onSuccess: async result => { setPlotKey(null); setBuilt(result); setPlotFocus({ key: result.plot, at: Date.now() }); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   const claim = useMutation({ mutationFn: (key: string) => city.claim(key, query.data!.revision), onSuccess: async result => { setReward(result); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   if (!query.data) return <div className="city-immersive city-immersive--empty">
@@ -57,7 +58,7 @@ export function CityPage() {
   function openPlot(key: string) { build.reset(); setPlotKey(key); }
   function togglePilot() { const p = new URLSearchParams(params); if (pilot) p.delete("city"); else { p.set("city", "pilot"); p.set("district", "crm"); p.delete("mission"); } p.delete("backend"); setParams(p, { replace: true }); }
   return <div className={`city-immersive${pilot ? " city-immersive--pilot" : ""}`}>
-    <CityMap pilot={pilot} inspect={user?.role !== "operator"} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} progressKey={!pilot && !data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+    <CityMap pilot={pilot} inspect={user?.role !== "operator"} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} progressKey={!pilot && !data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
     <header className="city-hud glass glass--regular">
       <div className="city-hud__level">
@@ -71,6 +72,7 @@ export function CityPage() {
       {!data.preview && <div className="city-hud__coins"><span className="city-coin" aria-hidden="true">◈</span><span className="city-hud__stat"><strong>{data.balance.toLocaleString("ru-RU")}</strong><span className="city-hud__label">коинов в кошельке</span></span></div>}
       <nav className="city-hud__links" aria-label="Обучение">
         {(pilot || user?.role !== "operator") && <button type="button" className="city-pilot-switch" onClick={togglePilot}>{pilot ? "← Город" : "Новый остров"}</button>}
+        {data.group && <button type="button" className="city-group-button" onClick={() => setGroupOpen(true)} aria-label={`Город группы: ${data.group.name}`}><span aria-hidden="true">🏗️</span><span className="city-hud__wide">Группа</span></button>}
         {user?.role !== "operator" && <Link to="/admin/learning/city" aria-label="Управление миссиями"><span aria-hidden="true">⚙︎</span><span className="city-hud__wide">Миссии</span></Link>}
         <Link to="/training" aria-label="Материалы обучения"><span aria-hidden="true">📚</span><span className="city-hud__wide">Материалы</span></Link>
       </nav>
@@ -126,6 +128,7 @@ export function CityPage() {
     {reward && <Sheet title={reward.already_claimed ? "Эта награда уже получена" : "Миссия пройдена"} onClose={() => setReward(null)} size="s"><div className="city-celebration"><div className="city-medal" aria-hidden="true">✦</div><h2>{reward.title}</h2><p>{reward.already_claimed ? "Прогресс сохранён. Повторное начисление не требуется." : "Твой город стал немного больше. Следующая миссия уже ждёт."}</p><div className="city-rewards"><span>+{reward.xp} XP</span>{reward.coins>0&&<span>+{reward.coins} коинов</span>}</div><button className="city-action" onClick={()=>setReward(null)}>Вернуться в город →</button></div></Sheet>}
     {plotKey && <Sheet title={`Участок · ${data.districts.find(d => d.id === data.plots.find(p => p.key === plotKey)?.district)?.name ?? "район"}`} onClose={() => setPlotKey(null)}><CityCatalogue data={data} pending={build.isPending} error={build.isError ? build.error.message : null} onBuild={item => build.mutate({ plot: plotKey, item })} /></Sheet>}
     {built && <Sheet title="Построено!" onClose={() => setBuilt(null)} size="s"><div className="city-celebration"><div className="city-medal" aria-hidden="true">{data.buildings.find(b => b.key === built.item)?.icon ?? "🏗️"}</div><h2>{built.name}</h2><p>Постройка уже стоит в твоём районе. Каждый новый участок делает город твоим.</p><div className="city-rewards"><span>−{built.price} коинов</span><span>Осталось {built.balance.toLocaleString("ru-RU")}</span></div><button className="city-action" onClick={() => setBuilt(null)}>Смотреть город →</button></div></Sheet>}
+    {groupOpen && data.group && <Sheet title={`Город группы · ${data.group.name}`} onClose={() => setGroupOpen(false)}><CityGroupPanel group={data.group} own={!data.inspecting} onShow={key => { setGroupOpen(false); setSiteFocus({ key, at: Date.now() }); }} /></Sheet>}
     {driverLaunch && <Sheet title="Автопарк · Driver Simulator" onClose={() => setDriverLaunch(false)}><DriverEntry /></Sheet>}
   </div>;
 }
@@ -172,5 +175,30 @@ function CityCatalogue({ data, pending, error, onBuild }: { data: CityData; pend
         <button type="button" className="city-action" disabled={pending || missing > 0} onClick={() => onBuild(b.key)} aria-label={`Построить «${b.name}» за ${b.price} коинов`}>{missing > 0 ? `Не хватает ${missing}` : `◈ ${b.price}`}</button>
       </li>;
     })}</ul>
+  </div>;
+}
+
+const STAGE_STEPS = ["foundation", "frame", "floors", "done"] as const;
+/** The group's quarters by stage, and the viewer's own points: never another operator's. */
+function CityGroupPanel({ group, own, onShow }: { group: CityGroup; own: boolean; onShow: (key: string) => void }) {
+  const built = group.projects.filter(p => p.stage === "done").length;
+  return <div className="city-group">
+    <p className="city-group__lead">Операторы группы строят эти кварталы вместе: каждая миссия, заказ и обращение двигает стройку. Видно только общий результат — чужие показатели скрыты.</p>
+    <ol className="city-group__projects">{group.projects.map(p => {
+      const step = STAGE_STEPS.indexOf(p.stage as typeof STAGE_STEPS[number]);
+      return <li key={p.key} data-stage={p.stage}>
+        <button type="button" onClick={() => onShow(p.key)} aria-label={`${p.name}: ${SITE_STAGES[p.stage]}. Показать на карте`}>
+          <span className="city-group__icon" aria-hidden="true">{p.stage === "done" ? "🏙️" : p.stage === "planned" ? "📐" : "🏗️"}</span>
+          <span className="city-group__name"><strong>{p.name}</strong><small>{SITE_STAGES[p.stage]}</small></span>
+          <span className="city-group__steps" aria-hidden="true">{STAGE_STEPS.map((s, i) => <i key={s} data-on={i <= step || undefined} />)}</span>
+        </button>
+      </li>;
+    })}</ol>
+    <p className="city-fine">Построено {built} из {group.projects.length}.{group.small ? " В группе меньше трёх человек, поэтому стадия строящегося квартала скрыта: видны только готовые." : ""}</p>
+    <div className="city-group__mine">
+      <div className="city-plots__head"><strong>{own ? "Твой вклад" : "Вклад оператора"}</strong><span>{group.mine.points} очков</span></div>
+      <ul>{(Object.keys(POINT_KINDS) as PointKind[]).map(k => <li key={k}><span>{POINT_KINDS[k]}</span><span>{group.mine[k]} × {group.points[k]}</span></li>)}</ul>
+      {own && <small>Эти цифры видишь только ты и твои руководители.</small>}
+    </div>
   </div>;
 }

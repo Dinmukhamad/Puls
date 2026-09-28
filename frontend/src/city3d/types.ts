@@ -4,12 +4,15 @@
  */
 import type { DistrictId } from "../api/city";
 import type { BuildingKey } from "./world/plots";
+import type { SiteStage } from "./world/sites";
 
 export interface CityView { azimuth: number; polar: number; distance: number; target: [number, number, number] }
 export interface CityLabelInfo { id: DistrictId; name: string; status: string; icon: string; soon: boolean; reward: boolean; level: number }
 export interface CityMascot { gender: "male" | "female" | null; name: string }
 export type TimeOfDay = "day" | "night";
 /** An operator's plot as the server reports it (api/city.ts CityPlot). */
+/** A group quarter as the server reports it; no list at all means no group, and every quarter stands built. */
+export interface CitySiteInfo { key: string; name: string; stage: SiteStage }
 export interface CityPlotInfo { key: string; unlocked: boolean; item: BuildingKey | null }
 
 export interface CityOptions {
@@ -29,6 +32,9 @@ export interface CityOptions {
   /** The operator's plots; `onPlot` (only when the viewer may build) opens the catalogue for an empty open plot. */
   plots?: CityPlotInfo[];
   onPlot?: (key: string) => void;
+  /** The group city's quarters (null: no group); `onSite` opens the group panel from the sign over the one being built. */
+  sites?: CitySiteInfo[] | null;
+  onSite?: (key: string) => void;
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
   onRestored?: () => void;
   /** Loading progress, 0…1, for the loading screen. */
@@ -42,6 +48,8 @@ export interface CityControl {
   setPlots: (plots: CityPlotInfo[]) => void;
   /** Flies to a plot, e.g. to show what was just built there. */
   focusPlot: (key: string) => void;
+  setSites: (sites: CitySiteInfo[] | null) => void;
+  focusSite: (key: string) => void;
   zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void;
   dispose: () => void;
 }

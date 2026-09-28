@@ -15,7 +15,7 @@ from app.models.enums import Role
 from app.models.user import CoinAccount
 from app.services.city import default_missions
 from app.services.crm_catalog import default_categories
-from tests.conftest import auth, login, make_user
+from tests.conftest import auth, login, make_group, make_user
 
 pytestmark = pytest.mark.asyncio
 BASE = "/api/v1/learning/city"
@@ -318,3 +318,76 @@ async def test_staff_cannot_build_and_see_operator_plots_read_only(client, sessi
     assert denied.status_code == 403
     view = (await client.get(f"{ADMIN}/operators/{operator.id}", headers=headers)).json()
     assert len(view["plots"]) == 12 and not view["can_build"]
+
+
+async def test_group_city_shows_stages_and_only_own_points(client, session, operator):
+    from app.services.city_group import PROJECTS
+
+    sv = await make_user(session, login="sv-group", role=Role.SUPERVISOR)
+    other_sv = await make_user(session, login="sv-other", role=Role.SUPERVISOR)
+    group = await make_group(session, code="GC", supervisor_id=sv.id)
+    await make_group(session, code="GX", supervisor_id=other_sv.id)
+    mates = [await make_user(session, login=f"mate{i}", group_id=group.id) for i in range(2)]
+    operator.group_id = group.id
+    await session.commit()
+    for mate in mates:
+        for _ in range(10):
+            await appeal(session, mate.id)  # 30 points each
+    headers = auth(await login(client, operator.login))
+    city = (await client.get(BASE, headers=headers)).json()
+    group_city = city["group"]
+    assert group_city["name"] == "Группа GC" and not group_city["small"]
+    # 60 points of 150: the first quarter is at its frame, the rest planned; no numbers leak.
+    assert [p["stage"] for p in group_city["projects"]] == ["frame"] + ["planned"] * 5
+    assert all(set(p) == {"key", "name", "stage"} for p in group_city["projects"])
+    assert group_city["mine"]["points"] == 0
+    assert "mate0" not in str(group_city) and "Оператор" not in str(group_city["projects"])
+    # The operator's own work counts for the group and shows as their own points.
+    assert (await claim(client, headers, "welcome")).status_code == 200
+    for _ in range(30):
+        await appeal(session, operator.id)
+    group_city = (await client.get(BASE, headers=headers)).json()["group"]
+    assert group_city["mine"]["points"] == 20 + 90
+    assert [p["stage"] for p in group_city["projects"]][:2] == ["done", "foundation"]
+    assert len(PROJECTS) == 6
+    # Operators cannot read the breakdown; supervisors see only their own groups.
+    assert (await client.get(ADMIN + "/groups", headers=headers)).status_code == 403
+    staff = auth(await login(client, sv.login))
+    overview = (await client.get(ADMIN + "/groups", headers=staff)).json()
+    assert [g["name"] for g in overview["items"]] == ["Группа GC"]
+    members = {m["user_id"]: m["points"] for m in overview["items"][0]["members"]}
+    assert members == {operator.id: 110, mates[0].id: 30, mates[1].id: 30}
+    assert overview["items"][0]["projects"][1] == {
+        "key": "site-1",
+        "name": PROJECTS[1]["name"],
+        "stage": "foundation",
+        "points": 20,
+        "cost": 300,
+    }
+    head = await make_user(session, login="head-group", role=Role.HEAD)
+    everyone = (
+        await client.get(ADMIN + "/groups", headers=auth(await login(client, head.login)))
+    ).json()
+    assert {g["name"] for g in everyone["items"]} == {"Группа GC", "Группа GX"}
+
+
+async def test_small_group_hides_the_quarter_being_built(client, session, operator):
+    group = await make_group(session, code="G2")
+    mate = await make_user(session, login="solo-mate", group_id=group.id)
+    operator.group_id = group.id
+    await session.commit()
+    for _ in range(40):
+        await appeal(session, mate.id)  # 120 of 150 points
+    city = (await client.get(BASE, headers=auth(await login(client, operator.login)))).json()
+    assert city["group"]["small"]
+    assert [p["stage"] for p in city["group"]["projects"]][:2] == ["foundation", "planned"]
+
+
+async def test_no_group_or_staff_preview_has_no_group_city(client, session, operator):
+    assert (await client.get(BASE, headers=auth(await login(client, operator.login)))).json()[
+        "group"
+    ] is None
+    trainer = await make_user(session, login="trainer-group", role=Role.TRAINER)
+    assert (await client.get(BASE, headers=auth(await login(client, trainer.login)))).json()[
+        "group"
+    ] is None

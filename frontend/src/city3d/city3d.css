@@ -35,3 +35,8 @@ div.c3-label{cursor:default}
 .c3-plot small{font-size:13px;font-weight:700}
 .c3-plot:hover{background:#268a4e}
 .c3-plot:focus-visible{outline:3px solid var(--accent-primary,#3f78d8);outline-offset:2px}
+/* The sign over the group quarter being built (systems/sites.ts). */
+.c3-site{position:absolute;left:0;top:0;display:flex;align-items:center;gap:10px;padding:8px 16px 8px 10px;border:2px solid #fff;border-radius:14px;background:rgba(28,36,52,.9);color:#fff;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;text-align:left;box-shadow:0 6px 18px rgba(10,20,40,.35);transform-origin:50% 100%;pointer-events:auto;cursor:pointer;white-space:nowrap;visibility:hidden;-webkit-tap-highlight-color:transparent}
+.c3-site>span:first-child{font-size:24px}.c3-site>span:last-child{display:grid;gap:3px}
+.c3-site strong{font-size:15px;font-weight:750}.c3-site small{font-size:12px;color:#ffd978;font-weight:650}
+.c3-site:focus-visible{outline:3px solid var(--accent-primary,#3f78d8);outline-offset:2px}
