@@ -131,6 +131,15 @@ function flowerbed(detail: boolean) {
 /** A rounded shrub; copies get shades of green. */
 const bush = (detail: boolean) => merge([ball(.34, 0, .26, 0, "#6f9a57", detail ? 1 : 0).scale(1, .82, 1), ...(detail ? [ball(.22, .2, .22, .1, "#7fa864"), ball(.2, -.18, .2, -.08, "#648e4e")] : [])]);
 
+/** A clipped hedge piece 1.05 long (pieces stand end to end along a path), with a lighter top. */
+const hedge = () => merge([cube(1.05, .3, .32, 0, 0, 0, "#557f46"), cube(1.02, .06, .3, 0, .3, 0, "#6c9657")]);
+
+/** A young tree in a square concrete planter, for the paving round the complexes. */
+function planter(detail: boolean) {
+  return merge([cube(.5, .3, .5, 0, 0, 0, "#b9b5ad"), cube(.44, .03, .44, 0, .3, 0, "#5f4a3a"), paint(new THREE.CylinderGeometry(.03, .04, .6, 5).translate(0, .6, 0), "#7b5a44"),
+    ball(.3, 0, 1.02, 0, "#6f9a57", detail ? 1 : 0), ...(detail ? [ball(.2, .12, 1.2, .05, "#83ad66")] : [])]);
+}
+
 /** A birch: a slim white trunk with dark marks and a light, tall crown. */
 function birch(far: boolean) {
   const parts = [paint(new THREE.CylinderGeometry(.045, .065, 1.7, far ? 4 : 6).translate(0, .85, 0), "#efeae0")];
@@ -148,7 +157,7 @@ function oak(far: boolean) {
   return merge(parts);
 }
 
-export type FurnitureKind = "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush";
+export type FurnitureKind = "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush" | "hedge" | "planter";
 /** The near and far geometry of a courtyard model; far is null where it is too small to see at LOD2. */
 export function furnitureGeometry(kind: FurnitureKind): [THREE.BufferGeometry, THREE.BufferGeometry | null] {
   switch (kind) {
@@ -162,15 +171,55 @@ export function furnitureGeometry(kind: FurnitureKind): [THREE.BufferGeometry, T
     case "gazebo": return [gazebo(), null];
     case "flowerbed": return [flowerbed(true), flowerbed(false)];
     case "bush": return [bush(true), bush(false)];
+    case "hedge": return [hedge(), null];
+    case "planter": return [planter(true), planter(false)];
   }
 }
 export function treeKindGeometry(kind: "birch" | "oak", far: boolean) { return kind === "birch" ? birch(far) : oak(far); }
 
-/** The section box: unit x and z, 0…1 high, walls white and the roof grey by vertex colour; its bottom is never seen. */
-export function sectionGeometry() {
-  const g = new THREE.BoxGeometry(1, 1, 1).translate(0, .5, 0), colors = new Float32Array(24 * 3), roof = new THREE.Color("#a3a8ae");
-  for (let i = 0; i < 24; i++) colors.set(Math.floor(i / 4) === 2 ? [roof.r, roof.g, roof.b] : [1, 1, 1], i * 3);
-  g.setAttribute("color", new THREE.BufferAttribute(colors, 3)); g.deleteAttribute("uv");
-  const index = Array.from(g.index!.array); g.setIndex([...index.slice(0, 18), ...index.slice(24)]); g.clearGroups();
+/** The vertex attribute that tells the section material what a face is (SECTION_PARTS). */
+export const SECTION_PART = "sectionPart";
+/** Section faces: the facade with windows, white trim (balcony slabs, parapet, canopy), roof, balcony glass, plain walls. */
+export const SECTION_PARTS = { facade: 0, trim: 1, roof: 2, glass: 3, plain: 4 } as const;
+
+/** A box standing on y (its bottom), every face one part except its top and bottom, which may have their own. */
+function partBox(w: number, h: number, d: number, x: number, y: number, z: number, part: number, top = part, bottom = part) {
+  const g = new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z).toNonIndexed();
+  g.deleteAttribute("uv");
+  // BoxGeometry faces: +x, -x, +y, -y, +z, -z, six vertices each once unindexed.
+  const parts = new Float32Array(36).map((_, i) => { const face = Math.floor(i / 6); return face === 2 ? top : face === 3 ? bottom : part; });
+  g.setAttribute(SECTION_PART, new THREE.BufferAttribute(parts, 1));
   return g;
+}
+
+/**
+ * A section of `floors` in unit space (x and z in ±0.5, y 0…1); copies are scaled to their width, depth and
+ * floors × 0.75. Detail 2: a balcony on every floor of both long fronts (a white slab, a glass rail), a
+ * canopy over the ground floor, a parapet and a stair and lift house on the roof. Detail 1: the same with
+ * bare slabs, no rails. Detail 0: the plain box, the same for every height. Sizes are in world units at a width of
+ * 3.2 and a depth of 2.4; the bottom is closed, so a section over an arch is solid from below.
+ */
+export function sectionGeometry(floors: number, detail: 0 | 1 | 2) {
+  const P = SECTION_PARTS, height = floors * .75, y = (units: number) => units / height, z = (units: number) => units / 2.4, x = (units: number) => units / 3.2;
+  const parts = [partBox(1, 1, 1, 0, 0, 0, P.facade, P.roof, P.plain)];
+  if (detail >= 1) {
+    const rim = y(.28), thick = z(.08);
+    parts.push(partBox(1, rim, thick, 0, 1, .5 - thick / 2, P.trim), partBox(1, rim, thick, 0, 1, -.5 + thick / 2, P.trim));
+    parts.push(partBox(x(.08), rim, 1 - 2 * thick, .5 - x(.04), 1, 0, P.trim), partBox(x(.08), rim, 1 - 2 * thick, -.5 + x(.04), 1, 0, P.trim));
+    parts.push(partBox(x(.75), y(.7), z(.9), x(.35), 1, 0, P.plain, P.roof));
+  }
+  if (detail >= 1) {
+    const slab = y(.06), rail = y(.26), out = z(.15), glass = z(.02);
+    for (const side of [-1, 1]) {
+      // The canopy over the doors, a little deeper than the balconies.
+      parts.push(partBox(1, slab, z(.26), 0, 1 / floors - slab, side * (.5 + z(.13)), P.trim));
+      for (let k = 1; k < floors; k++) {
+        const base = k / floors;
+        parts.push(partBox(.98, slab, out, 0, base, side * (.5 + out / 2), P.trim));
+        if (detail === 2) parts.push(partBox(.98, rail, glass, 0, base + slab, side * (.5 + out - glass / 2), P.glass));
+      }
+    }
+  }
+  const merged = mergeGeometries(parts)!; parts.forEach(g => g.dispose());
+  return merged;
 }

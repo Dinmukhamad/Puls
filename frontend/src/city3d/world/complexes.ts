@@ -19,8 +19,8 @@ import type { Complex, ParkingLot, Placement, PlacementKind, Point, Surface, Sur
 const TAU = Math.PI * 2;
 /** Sections are about this wide along the facade: three windows a floor. */
 export const SECTION_WIDTH = 3.2;
-/** Floors of the section classes; the catalogue draws a floor .75 high. */
-export const SECTION_FLOORS = [5, 7, 9, 12, 16];
+/** Floors of the section classes, each FLOOR high. */
+export const SECTION_FLOORS = [5, 7, 9, 12, 16], FLOOR = .75;
 /** Outside a complex: paving this far from the walls, walkers .6 out, lamps 1.35 out (clear of the walkers). */
 export const OUTSIDE = 1.6;
 const WALK_OUT = .6, LAMP_OUT = 1.35;
@@ -111,7 +111,8 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
 
   function complex(band: ComplexBand, f: Frame, length: number, depth: number) {
     const w = band.wing, grid = band.yard === "grid", hu = length / 2, hv = depth / 2, yu = hu - w, yv = hv - w;
-    const [front, sides, back] = band.floors, tint = Math.floor(random() * 8), accent = tint + 3 + Math.floor(random() * 3);
+    // A light shade for the complex, a deep one (catalogue shades 8…11) for the towers on the corners of its far wing.
+    const [front, sides, back] = band.floors, tint = Math.floor(random() * 8), accent = 8 + Math.floor(random() * 4);
     patch("walk", f, -hu - OUTSIDE, hu + OUTSIDE, -hv - OUTSIDE, hv + OUTSIDE);
     // The far wing runs the whole length, its corner sections a class higher; the canal wing has the arch.
     wing(f, hv - w / 2, -hu, hu, true, w, [], 0, (i, n) => i === 0 || i === n - 1 ? [Math.min(SECTION_FLOORS.length - 1, back + 1), accent] : [back, tint]);
@@ -121,6 +122,12 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
     // Lamps along both long sides outside.
     const spans = Math.max(1, Math.round((length - 5) / 8));
     for (const side of [-1, 1]) for (let k = 0; k <= spans; k++) put("lamp", f, -hu + 2.5 + k * (length - 5) / spans, side * (hv + LAMP_OUT), 0);
+    // Between the lamps, young trees in planters; two more flank the arch.
+    for (const side of [-1, 1]) for (let k = 0; k < spans; k++) {
+      const u = -hu + 2.5 + (k + .5) * (length - 5) / spans;
+      if (side > 0 || Math.abs(u) > GATE / 2 + 1) put("planter", f, u, side * (hv + LAMP_OUT), random() * TAU, { width: .6 });
+    }
+    for (const side of [-1, 1]) put("planter", f, side * (GATE / 2 + .5), -hv - LAMP_OUT, 0, { width: .6 });
 
     const cu = yu - CELLS_IN, cv = yv - CELLS_IN;
     if (!grid) {
@@ -144,6 +151,12 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
     for (const g of gaps) { pieces.push([a, g - opening / 2]); a = g + opening / 2; }
     pieces.push([a, to]);
     const d = alongU ? dir(f, 1, 0) : dir(f, 0, 1);
+    // The floors over every opening, from two floors up: the wing reads as one building with an arch through it.
+    for (const g of gaps) {
+      const [variant, tint] = style(0, 1);
+      if (SECTION_FLOORS[variant] < 4) continue;
+      out.placements.push({ kind: "section", variant, ...(alongU ? at(f, g, fixed) : at(f, fixed, g)), rotation: along(d), scale: 1, width: opening + .04, depth, tint, lift: 2 * FLOOR });
+    }
     for (const [p0, p1] of pieces) {
       const span = p1 - p0; if (span < 1.2) continue;
       const n = Math.max(1, Math.round(span / SECTION_WIDTH)), width = span / n;
@@ -189,6 +202,11 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
       const r = Math.min(2.2, Math.max(1.2, Math.min(lu, lv) * .28));
       patch("plaza", f, u0 + .15, u1 - .15, cv - .35, cv + .35); patch("plaza", f, cu - .35, cu + .35, v0 + .15, v1 - .15);
       disc("plaza", f, cu, cv, r);
+      // Clipped hedges line the paths from the plaza out to the walk.
+      for (const side of [-1, 1]) {
+        hedges(f, u0 + .5, cu - r - .25, cv + side * .62, true); hedges(f, cu + r + .25, u1 - .5, cv + side * .62, true);
+        hedges(f, v0 + .5, cv - r - .25, cu + side * .62, false); hedges(f, cv + r + .25, v1 - .5, cu + side * .62, false);
+      }
       put("flowerbed", f, cu, cv, random() * TAU, { width: 1.1 });
       for (let k = 0; k < 4; k++) { const q = Math.PI / 4 + k * Math.PI / 2; put("bench", f, cu + Math.cos(q) * (r - .35), cv + Math.sin(q) * (r - .35), facing(dir(f, -Math.cos(q), -Math.sin(q))), { width: .8 }); }
       const qu = (r + lu / 2) / 2 + .1, qv = (r + lv / 2) / 2;
@@ -208,6 +226,7 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
         patch("plaza", f, u0 + .15, u1 - .15, cv - .35, cv + .35);
         put("bench", f, cu - lu * .2, cv - .72, facing(V), { width: .8 });
         put("bench", f, cu + lu * .2, cv + .72, facing(back(V)), { width: .8 });
+        hedges(f, cu - lu * .2 + .8, u1 - .5, cv - .62, true); hedges(f, u0 + .5, cu + lu * .2 - .8, cv + .62, true);
       }
       const rows = lv > 7 ? 3 : 2, cols = Math.max(2, Math.round(lu / 2.6));
       for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
@@ -218,6 +237,14 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
       }
       lamp();
     }
+  }
+
+  /** A row of hedge pieces from s0 to s1 along u (or v) at `fixed`. */
+  function hedges(f: Frame, s0: number, s1: number, fixed: number, alongU: boolean) {
+    const n = Math.floor((s1 - s0) / 1.05);
+    if (n < 1) return;
+    const step = (s1 - s0) / n, d = alongU ? dir(f, 1, 0) : dir(f, 0, 1);
+    for (let k = 0; k < n; k++) { const s = s0 + step * (k + .5); put("hedge", f, alongU ? s : fixed, alongU ? fixed : s, along(d), { width: .5 }); }
   }
 
   /** A driveway at angle `a` from the canal-side walk out to the next ring road, with a row of parked cars. */

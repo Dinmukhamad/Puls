@@ -21,7 +21,7 @@ const WORLDS = [V1, X4];
 const radius = (p) => Math.hypot(p.x, p.z);
 const same = (a, b) => gen.angularDistance(a, b) < 1e-6;
 const BUILDINGS = new Set(['house', 'office', 'industry', 'block', 'tower', 'port', 'section']), TREES = new Set(['tree-cone', 'tree-round', 'tree-birch', 'tree-oak']);
-const FURNITURE = ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush'];
+const FURNITURE = ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush', 'hedge', 'planter'];
 const KINDS = [...BUILDINGS, ...TREES, 'lamp', 'car-parked', ...FURNITURE];
 const ofKind = (world, kinds) => world.placements.filter((p) => kinds.has(p.kind));
 const segments = (world) => [...world.roads.streets, ...world.roads.bridges.map((b) => b.road)];

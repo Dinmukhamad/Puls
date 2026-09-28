@@ -90,17 +90,27 @@ test('blocks, towers and port sheds light their windows at night; trees, lamp po
   catalogue.dispose();
 });
 
-test('residential sections are one lit model for every height; yard furniture and the new trees are one pool each and stay dark', () => {
+test('residential sections: balconies near, one plain box far for every height, arches raised; yard furniture and new trees stay dark', () => {
   const catalogue = city.createCatalogue(new Map(), city.createNight()), matrix = new THREE.Matrix4(), size = new THREE.Vector3();
   const at = (kind, extra = {}) => catalogue.resolve({ kind, variant: 0, x: 3, z: 4, rotation: .5, scale: 1, width: 0, ...extra }, matrix);
   const heights = [0, 1, 2, 3, 4].map(variant => { const model = at('section', { variant, width: 3.2, depth: 2.2 }); matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), size); return { model, height: size.y, width: size.x, depth: size.z }; });
-  assert.equal(new Set(heights.map(h => h.model)).size, 1, 'one model, one draw call for every section');
+  assert.equal(new Set(heights.map(h => h.model)).size, 5, 'a model per height');
+  assert.equal(new Set(heights.map(h => h.model.lods[2].parts)).size, 1, 'far away every height is the same plain box (one pool)');
   assert.ok(heights.every((h, i) => i === 0 || h.height > heights[i - 1].height), 'the classes rise');
   assert.ok(Math.abs(heights[0].width - 3.2) < 1e-6 && Math.abs(heights[0].depth - 2.2) < 1e-6, 'the footprint is the placement');
-  const section = heights[0].model;
-  assert.ok(section.lods[0].parts[0].material.emissiveNode && section.lods[0].parts[0].material.colorNode, 'a painted facade with night windows');
-  assert.ok(section.lods.every(level => level === section.lods[0]) && section.tints.length >= 8, 'the same box at every distance, in shades');
-  for (const kind of ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush', 'tree-birch', 'tree-oak']) {
+  const count = (level) => level.parts[0].geometry.getAttribute('position').count;
+  for (const { model } of heights) {
+    assert.ok(count(model.lods[0]) > count(model.lods[1]) && count(model.lods[1]) > count(model.lods[2]), 'balconies near, a roof house farther, a box far');
+    assert.ok(model.lods[0].parts[0].geometry.getAttribute('sectionPart'), 'faces are marked facade, trim, roof, glass or plain');
+  }
+  const section = heights[0].model, material = section.lods[0].parts[0].material;
+  assert.ok(material.emissiveNode && material.colorNode && section.tints.length >= 12, 'a painted facade with night windows, in shades');
+  assert.ok(heights[4].model.lods[0].parts[0].geometry.getAttribute('position').count < 3000, 'the tallest section stays light');
+  // Over an arch: raised two floors, as tall as the rest of its wing.
+  const arch = at('section', { variant: 1, width: 3, depth: 2.2, lift: 1.5 }), place = new THREE.Vector3();
+  matrix.decompose(place, new THREE.Quaternion(), size);
+  assert.ok(arch !== heights[1].model && Math.abs(place.y - (.2 + 1.5)) < 1e-6 && Math.abs(place.y + size.y - (.2 + 7 * .75)) < 1e-6, 'the arch floors meet the roof of the wing');
+  for (const kind of ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush', 'hedge', 'planter', 'tree-birch', 'tree-oak']) {
     const model = at(kind);
     assert.ok(model, kind);
     assert.equal(model.lods[0].parts.length, 1, `${kind} is one merged part`);

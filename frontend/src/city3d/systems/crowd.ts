@@ -16,7 +16,7 @@ const WALK_CLEARANCE = .45;
 /** Walkers in the whole city, on a computer and on a phone. */
 const BUDGET = { desktop: 100, mobile: 56 };
 /** Courtyard furniture the walkers keep clear of, by its footprint (`width`). */
-const FURNITURE = new Set(['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed']);
+const FURNITURE = new Set(['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'hedge', 'planter']);
 const GROUND_Y = .225;
 
 export interface CrowdRoute extends Route {
