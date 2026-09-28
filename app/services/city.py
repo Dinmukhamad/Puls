@@ -6,7 +6,7 @@ from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError
-from app.models.city import CityAward, CitySettings
+from app.models.city import CityAward, CityBuild, CitySettings
 from app.models.crm import CrmAppeal
 from app.models.driver import DriverOrder, DriverProfile
 from app.models.driver_shift import DriverShift
@@ -35,6 +35,25 @@ TEMPLATES = {
     "crm_first": ("crm", "appeals", "/training/work-sites?view=create", "Сохранённые обращения"),
     "crm_phone": ("crm", "phone", "/training/work-sites?view=create", "Обращения «Смена номера»"),
     "crm_closed": ("crm", "closed", "/training/work-sites", "Тикеты, закрытые сотрудником"),
+}
+
+# Plots of the operator's own district: four on the green belt behind every open district island.
+# A district's plots open once its first mission reward is claimed (the Academy's with the welcome).
+PLOT_DISTRICTS = ("academy", "driver", "crm")
+PLOTS = [{"key": f"{d}-{i}", "district": d} for d in PLOT_DISTRICTS for i in range(4)]
+# Server-owned prices: the client sends only the plot and the building, never the amount.
+BUILDINGS = {
+    key: {"key": key, "name": name, "description": text, "icon": icon, "price": price}
+    for key, name, text, icon, price in [
+        ("garden", "Сквер", "Газон, деревья и лавочки для прогулок.", "🌳", 40),
+        ("gazebo", "Беседка в саду", "Беседка среди кустов и клумб.", "🌷", 50),
+        ("playground", "Детская площадка", "Горка, качели и песочница.", "🛝", 60),
+        ("sports", "Спортплощадка", "Баскетбольный корт с двумя кольцами.", "🏀", 70),
+        ("fountain", "Площадь с фонтаном", "Мощёная площадь, фонтан и скамейки.", "⛲", 90),
+        ("cottage", "Коттедж", "Дом с садом и дорожкой к улице.", "🏡", 120),
+        ("house", "Жилой дом", "Четырёхэтажный дом с цветниками.", "🏠", 200),
+        ("tower", "Стеклянная башня", "Бизнес-башня — гордость района.", "🏙️", 350),
+    ]
 }
 
 
@@ -253,10 +272,19 @@ async def dashboard(session, user, *, inspecting=False):
     )
     rows = mission_rows(config, facts, awards)
     xp = sum(a.xp for a in awards.values())
-    balance = (
-        await session.scalar(select(CoinAccount.balance).where(CoinAccount.user_id == user.id))
+    account = (
+        await session.scalar(select(CoinAccount).where(CoinAccount.user_id == user.id))
         if operator
         else None
+    )
+    balance = account.balance if account else 0
+    builds = (
+        {
+            b.plot_key: b
+            for b in await session.scalars(select(CityBuild).where(CityBuild.user_id == user.id))
+        }
+        if operator
+        else {}
     )
     return {
         "revision": config["revision"],
@@ -273,7 +301,77 @@ async def dashboard(session, user, *, inspecting=False):
         "level": xp // 300 + 1,
         "level_progress": xp % 300,
         "level_target": 300,
-        "balance": balance or 0,
+        "balance": balance,
+        # Coins reserved for shop requests cannot pay for a building.
+        "available": account.available if account else 0,
+        "plots": plot_rows(rows, builds),
+        "buildings": list(BUILDINGS.values()),
+        "can_build": operator and not inspecting,
+    }
+
+
+def plot_rows(missions, builds):
+    open_districts = {m["district"] for m in missions if m["state"] == "completed"}
+    return [
+        {
+            **plot,
+            "unlocked": plot["district"] in open_districts or plot["key"] in builds,
+            "item": builds[plot["key"]].item_key if plot["key"] in builds else None,
+        }
+        for plot in PLOTS
+    ]
+
+
+async def build(session, user, plot_key, item_key):
+    """Pays for a building on one of the operator's own open plots, once per plot."""
+    if user.role != Role.OPERATOR:
+        raise PermissionDeniedError("В предварительном просмотре строить нельзя")
+    plot = next((p for p in PLOTS if p["key"] == plot_key), None)
+    item = BUILDINGS.get(item_key)
+    if not plot or not item:
+        raise NotFoundError("Участок или постройка не найдены")
+    await lock_learner(session, user.id)
+    existing = await session.get(CityBuild, (user.id, plot_key), populate_existing=True)
+    if existing:
+        raise ConflictError("Этот участок уже застроен")
+    config = await settings(session)
+    facts = (await evidence(session, [user.id]))[user.id]
+    awards = {
+        a.mission_key: a
+        for a in await session.scalars(select(CityAward).where(CityAward.user_id == user.id))
+    }
+    rows = plot_rows(mission_rows(config, facts, awards), {})
+    if not next(p for p in rows if p["key"] == plot_key)["unlocked"]:
+        raise ConflictError("Участок откроется после первой миссии района")
+    transaction = await post_transaction(
+        session,
+        user_id=user.id,
+        amount=-item["price"],
+        tx_type=TxType.CITY_BUILD,
+        reason=f"Мой город: {item['name']}",
+        idempotency_key=f"city-build:{user.id}:{plot_key}",
+        meta={"plot": plot_key, "item": item_key},
+    )
+    if transaction is None:
+        raise ConflictError("Этот участок уже оплачен")
+    session.add(
+        CityBuild(user_id=user.id, plot_key=plot_key, item_key=item_key, price=item["price"])
+    )
+    await write_audit(
+        session,
+        actor_id=user.id,
+        action="city.build",
+        entity_type="city_plot",
+        entity_id=plot_key,
+        payload={"item": item_key, "price": item["price"]},
+    )
+    await session.commit()
+    return {
+        "plot": plot_key,
+        "item": item_key,
+        "name": item["name"],
+        "price": item["price"],
+        "balance": transaction.balance_after,
     }
 
 

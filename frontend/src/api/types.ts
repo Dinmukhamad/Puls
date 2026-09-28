@@ -27,7 +27,8 @@ export type TxType =
   | "correction"
   | "learning_reward"
   | "game_reward"
-  | "achievement_reward";
+  | "achievement_reward"
+  | "city_build";
 
 export interface Token {
   access_token: string;

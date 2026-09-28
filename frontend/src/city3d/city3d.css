@@ -27,3 +27,11 @@ div.c3-label{cursor:default}
 .city-map-tools .city-time-toggle{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;height:46px;border-bottom:1px solid var(--separator)}
 .city-time-toggle small{font-size:9px;line-height:1;font-weight:650}
 .city-map-tools .city-time-toggle[aria-pressed=true]{background:#172946;color:#d9eaff}
+
+/* Markers over the operator's open, empty plots (systems/plots.ts): a green pin that opens the catalogue. */
+.c3-plots{position:absolute;inset:0;pointer-events:none}
+.c3-plot{position:absolute;left:0;top:0;display:flex;align-items:center;gap:6px;height:36px;padding:0 14px 0 8px;border:2px solid #fff;border-radius:18px;background:#2f9e5b;color:#fff;font:700 14px/1 system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 4px 14px rgba(20,40,30,.35);transform-origin:50% 100%;pointer-events:auto;cursor:pointer;white-space:nowrap;visibility:hidden;-webkit-tap-highlight-color:transparent}
+.c3-plot span{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:rgba(255,255,255,.25);font-size:16px}
+.c3-plot small{font-size:13px;font-weight:700}
+.c3-plot:hover{background:#268a4e}
+.c3-plot:focus-visible{outline:3px solid var(--accent-primary,#3f78d8);outline-offset:2px}

@@ -79,6 +79,7 @@ export const TX_LABELS: Record<string, string> = {
   learning_reward: "Обучение",
   achievement_reward: "Достижение",
   game_reward: "Игровая награда",
+  city_build: "Постройка в городе",
 };
 
 export const REQUEST_STATUS_LABELS: Record<string, string> = {

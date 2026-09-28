@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { CityDistrict, CityMission, DistrictId } from "../../api/city";
+import type { CityDistrict, CityMission, CityPlot, DistrictId } from "../../api/city";
 import type { CityMascot, CityLabelInfo, CitySceneControl, CitySceneOptions, CityView } from "./cityScene";
 import { districtLevel, grownDistricts } from "./cityLevels";
 import { PilotTools } from "../../cityPilot/PilotTools";
@@ -13,10 +13,15 @@ import { useAuth } from "../../auth/AuthContext";
  * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
  * seen, so an upgrade is celebrated once.
  */
-export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot, pilot = false, inspect = false, forceWebGL = false, focusRequest = 0 }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; pilot?: boolean; inspect?: boolean; forceWebGL?: boolean; focusRequest?: number }) {
+export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot, pilot = false, inspect = false, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; pilot?: boolean; inspect?: boolean; forceWebGL?: boolean; focusRequest?: number;
+  /** The operator's plots; `onPlot` (when the viewer may build) opens the catalogue; `plotFocus` flies to a plot when it changes. */
+  plots?: CityPlot[]; onPlot?: (key: string) => void; plotFocus?: { key: string; at: number } }) {
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
   const host = useRef<HTMLDivElement>(null), frame = useRef<HTMLDivElement>(null);
-  const control = useRef<CitySceneControl & { setTimeOfDay?: (mode: TimeOfDay) => void }>();
+  const control = useRef<CitySceneControl & { setTimeOfDay?: (mode: TimeOfDay) => void; setPlots?: (plots: CityPlot[]) => void; focusPlot?: (key: string) => void }>();
+  const plotsKey = JSON.stringify(plots.map(p => [p.key, p.unlocked, p.item])), plotsRef = useRef(plots), plotRef = useRef(onPlot);
+  plotsRef.current = plots; plotRef.current = onPlot;
+  const canBuild = !!onPlot;
   // City v3 (docs/CITY_V3_TZ.md) is the default, with the full map of ten islands (?world=v1: the five-island
   // layout; ?city=v2: the previous city). The stats overlay is for staff.
   const { atLeast } = useAuth(), staff = atLeast("supervisor");
@@ -62,6 +67,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
         ? import("./cityScene").then(module => module.createCityScene)
         : import("../../city3d").then(module => (el, options) => module.createCity(el, {
           ...options, world, forceWebGL: webGL, stats: showStats, timeOfDay: timeRef.current,
+          plots: plotsRef.current, onPlot: canBuild ? key => { if (!cancelled) plotRef.current?.(key); } : undefined,
         }));
     void engine.then(createScene => {
       if (cancelled || !host.current) return;
@@ -77,7 +83,9 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     }).catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; control.current?.dispose(); control.current = undefined; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mission state and engine settings recreate the scene; labels/selection update in place
-  }, [levelKey, sceneKey, pilot, legacy, world, webGL, showStats, look, attempt, inspect]);
+  }, [levelKey, sceneKey, pilot, legacy, world, webGL, showStats, look, attempt, inspect, canBuild]);
+  useEffect(() => { control.current?.setPlots?.(JSON.parse(plotsKey).map(([key, unlocked, item]: [string, boolean, CityPlot["item"]]) => ({ key, unlocked, item }))); }, [plotsKey]);
+  useEffect(() => { if (plotFocus) control.current?.focusPlot?.(plotFocus.key); }, [plotFocus?.key, plotFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     control.current?.setTimeOfDay?.(timeOfDay);
     try { localStorage.setItem("puls.city.time-of-day", timeOfDay); } catch { /* Scene controls also work without storage. */ }

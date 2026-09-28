@@ -42,3 +42,8 @@ class SettingsInput(BaseModel):
 class ClaimInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     revision: int = Field(ge=0)
+
+
+class BuildInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    item: str = Field(min_length=1, max_length=40)

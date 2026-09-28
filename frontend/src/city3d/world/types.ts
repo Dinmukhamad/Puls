@@ -2,6 +2,7 @@
  * Plain data describing the city, with no three.js (TZ §4). `generate(spec)` turns a WorldSpec into
  * WorldData; the renderer and systems only read WorldData. Units: 1 = one road lane.
  */
+import type { Plot } from "./plots";
 
 export interface Point { x: number; z: number }
 /** A straight road or bridge centre line: [ax, az, bx, bz]. */
@@ -113,6 +114,8 @@ export interface WorldData {
   alleys: { radius: number; from: number; to: number }[];
   surfaces: Surface[];
   walks: Point[][];
+  /** The operator's building plots (world/plots.ts); what stands on them comes from the server. */
+  plots: Plot[];
   routes: RoutePlan[];
   /** Radius of everything that is drawn. */
   radius: number;

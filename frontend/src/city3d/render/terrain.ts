@@ -8,7 +8,7 @@
  */
 import * as THREE from "three/webgpu";
 import type { CityContext } from "../engine/context";
-import type { Road, SurfaceKind, WorldData } from "../world/types";
+import type { Road, Surface, SurfaceKind, WorldData } from "../world/types";
 
 const GRASS = "#8ba67a", GROUND = "#86a174", STONE = "#d4cab6", RIM = "#eadfc8", ROAD = "#6d7385", KERB = "#e5dfcf", MARK = "#f7f3e8";
 const DECK = "#dcd3c1", RAIL = "#e8e1d2", PIER = "#cfc5b1", PAD = "#7c8292", PLAZA = "#efe7d6", FLOOR = "#56766f", PARK = "#7f9f6a";
@@ -144,9 +144,19 @@ function land(world: WorldData, flat: Mesher, solid: Mesher) {
   for (const park of world.parks) ring(flat, 0, 2.2, TOP + .003, park.x, park.z);
 }
 
+/** Ground patches that change while the city is open (the operator's plots): one mesh in the terrain's colours. */
+export function createPatches(surfaces: readonly Surface[]): THREE.Mesh {
+  const flat = new Mesher();
+  paint(surfaces, flat);
+  const mesh = new THREE.Mesh(flat.build(), new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .8, metalness: .04 }));
+  mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.name = "city-patches";
+  return mesh;
+}
+
 /** The paving, lawns, playgrounds and courts of the residential complexes. */
-function yards(world: WorldData, flat: Mesher) {
-  for (const s of world.surfaces) {
+function yards(world: WorldData, flat: Mesher) { paint(world.surfaces, flat); }
+function paint(surfaces: readonly Surface[], flat: Mesher) {
+  for (const s of surfaces) {
     const [color, lift] = SURFACES[s.kind];
     flat.color(color);
     if (s.round) ring(flat, 0, s.length / 2, TOP + lift, s.x, s.z);

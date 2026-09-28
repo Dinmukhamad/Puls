@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { city, MISSION_STATES, nextMission, type CityReward, type DistrictId } from "../../api/city";
+import { city, MISSION_STATES, nextMission, type BuildingKey, type CityBuilt, type CityData, type CityReward, type DistrictId } from "../../api/city";
 import { useAuth } from "../../auth/AuthContext";
 import { ErrorState } from "../../components/ui";
 import { Sheet } from "../../components/Sheet";
@@ -29,6 +29,9 @@ export function CityPage() {
   // На телефоне панель миссии — шторка над нижним меню: свёрнута до заголовка и кнопки.
   const [expanded, setExpanded] = useState(false);
   const [focusRequest, requestFocus] = useState(0);
+  const [plotKey, setPlotKey] = useState<string | null>(null), [built, setBuilt] = useState<CityBuilt | null>(null);
+  const [plotFocus, setPlotFocus] = useState<{ key: string; at: number }>();
+  const build = useMutation({ mutationFn: ({ plot, item }: { plot: string; item: BuildingKey }) => city.build(plot, item), onSuccess: async result => { setPlotKey(null); setBuilt(result); setPlotFocus({ key: result.plot, at: Date.now() }); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   const claim = useMutation({ mutationFn: (key: string) => city.claim(key, query.data!.revision), onSuccess: async result => { setReward(result); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   if (!query.data) return <div className="city-immersive city-immersive--empty">
     {query.isError ? <div className="city-empty-card glass glass--prominent"><ErrorState error={query.error} onRetry={() => query.refetch()} /></div> : <div className="city-loading" role="status"><span>Загружаем город…</span></div>}
@@ -49,9 +52,12 @@ export function CityPage() {
   const needsGuide = !data.inspecting && !!user && (!user.gender || !user.guide_name);
   const rank = data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города";
   const level = districtLevel(missions.filter(m => m.state === "completed").length, selected.soon);
+  const districtPlots = data.plots.filter(p => p.district === selected.id);
+  const freePlot = districtPlots.find(p => p.unlocked && !p.item);
+  function openPlot(key: string) { build.reset(); setPlotKey(key); }
   function togglePilot() { const p = new URLSearchParams(params); if (pilot) p.delete("city"); else { p.set("city", "pilot"); p.set("district", "crm"); p.delete("mission"); } p.delete("backend"); setParams(p, { replace: true }); }
   return <div className={`city-immersive${pilot ? " city-immersive--pilot" : ""}`}>
-    <CityMap pilot={pilot} inspect={user?.role !== "operator"} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} progressKey={!pilot && !data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+    <CityMap pilot={pilot} inspect={user?.role !== "operator"} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} progressKey={!pilot && !data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
     <header className="city-hud glass glass--regular">
       <div className="city-hud__level">
@@ -84,6 +90,7 @@ export function CityPage() {
       <div className="city-mission__body" id="city-mission-body" aria-live="polite">
         <div className="city-mission-top"><span className="city-eyebrow">{selected.name}</span><span className="city-state" data-state={mission?.state}>{selected.soon ? "СКОРО" : mission ? MISSION_STATES[mission.state] : "Нет заданий"}</span></div>
         <div className="city-building-level city-extra" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{selected.soon ? "Район строится и откроется позже" : level < MAX_DISTRICT_LEVEL ? "Каждая пройденная миссия района улучшает здание" : "Максимальный уровень — район стал легендой"}</small></div>
+        {districtPlots.length > 0 && <CityPlotsSummary plots={districtPlots} buildings={data.buildings} canBuild={data.can_build} onShow={key => setPlotFocus({ key, at: Date.now() })} onBuild={freePlot && data.can_build ? () => { setPlotFocus({ key: freePlot.key, at: Date.now() }); openPlot(freePlot.key); } : undefined} />}
         {!data.inspecting && selected.id === "driver" && <button className="city-secondary city-extra" onClick={() => setDriverLaunch(true)}>Открыть автопарк →</button>}
         {!data.inspecting && selected.id === "crm" && <Link className="city-secondary city-extra" to="/training/work-sites">Открыть CRM · рабочие сайты →</Link>}
         {selected.soon ? <>
@@ -117,6 +124,8 @@ export function CityPage() {
     <CitySkills labels={labels} selected={selected.id} onSelect={selectDistrict} />
 
     {reward && <Sheet title={reward.already_claimed ? "Эта награда уже получена" : "Миссия пройдена"} onClose={() => setReward(null)} size="s"><div className="city-celebration"><div className="city-medal" aria-hidden="true">✦</div><h2>{reward.title}</h2><p>{reward.already_claimed ? "Прогресс сохранён. Повторное начисление не требуется." : "Твой город стал немного больше. Следующая миссия уже ждёт."}</p><div className="city-rewards"><span>+{reward.xp} XP</span>{reward.coins>0&&<span>+{reward.coins} коинов</span>}</div><button className="city-action" onClick={()=>setReward(null)}>Вернуться в город →</button></div></Sheet>}
+    {plotKey && <Sheet title={`Участок · ${data.districts.find(d => d.id === data.plots.find(p => p.key === plotKey)?.district)?.name ?? "район"}`} onClose={() => setPlotKey(null)}><CityCatalogue data={data} pending={build.isPending} error={build.isError ? build.error.message : null} onBuild={item => build.mutate({ plot: plotKey, item })} /></Sheet>}
+    {built && <Sheet title="Построено!" onClose={() => setBuilt(null)} size="s"><div className="city-celebration"><div className="city-medal" aria-hidden="true">{data.buildings.find(b => b.key === built.item)?.icon ?? "🏗️"}</div><h2>{built.name}</h2><p>Постройка уже стоит в твоём районе. Каждый новый участок делает город твоим.</p><div className="city-rewards"><span>−{built.price} коинов</span><span>Осталось {built.balance.toLocaleString("ru-RU")}</span></div><button className="city-action" onClick={() => setBuilt(null)}>Смотреть город →</button></div></Sheet>}
     {driverLaunch && <Sheet title="Автопарк · Driver Simulator" onClose={() => setDriverLaunch(false)}><DriverEntry /></Sheet>}
   </div>;
 }
@@ -136,3 +145,32 @@ function CitySkills({ labels, selected, onSelect }: { labels: CityLabelInfo[]; s
   </nav>;
 }
 
+
+/** The district's plots in the mission panel: how many are built, and the way to the next free one. */
+function CityPlotsSummary({ plots, buildings, canBuild, onShow, onBuild }: { plots: CityData["plots"]; buildings: CityData["buildings"]; canBuild: boolean; onShow: (key: string) => void; onBuild?: () => void }) {
+  const built = plots.filter(p => p.item), open = plots.some(p => p.unlocked);
+  return <div className="city-plots city-extra">
+    <div className="city-plots__head"><strong>Участки района</strong><span>{built.length} из {plots.length} застроено</span></div>
+    <div className="city-plots__list">{plots.map(p => {
+      const b = buildings.find(item => item.key === p.item);
+      return <button type="button" key={p.key} data-state={p.item ? "built" : p.unlocked ? "open" : "locked"} onClick={() => onShow(p.key)} aria-label={b ? `Участок: ${b.name}` : p.unlocked ? "Свободный участок" : "Участок закрыт"} title={b?.name ?? (p.unlocked ? "Свободный участок" : "Откроется после первой миссии района")}>{b ? b.icon : p.unlocked ? "＋" : "🔒"}</button>;
+    })}</div>
+    {!open ? <small>Участки откроются после первой пройденной миссии района.</small> : onBuild ? <button type="button" className="city-secondary" onClick={onBuild}>Построить на свободном участке →</button> : canBuild ? <small>Все участки района застроены.</small> : null}
+  </div>;
+}
+
+/** What can be built on a plot, with the price in coins from the common wallet. */
+function CityCatalogue({ data, pending, error, onBuild }: { data: CityData; pending: boolean; error: string | null; onBuild: (item: BuildingKey) => void }) {
+  return <div className="city-catalogue">
+    <p className="city-catalogue__balance">Можно потратить <strong>◈ {data.available.toLocaleString("ru-RU")}</strong> {data.available < data.balance ? "(часть коинов в резерве по заявкам магазина)" : "коинов"}. Постройка остаётся на участке навсегда.</p>
+    {error && <p className="city-error" role="alert">{error}</p>}
+    <ul>{data.buildings.map(b => {
+      const missing = b.price - data.available;
+      return <li key={b.key}>
+        <span className="city-catalogue__icon" aria-hidden="true">{b.icon}</span>
+        <span className="city-catalogue__text"><strong>{b.name}</strong><small>{b.description}</small></span>
+        <button type="button" className="city-action" disabled={pending || missing > 0} onClick={() => onBuild(b.key)} aria-label={`Построить «${b.name}» за ${b.price} коинов`}>{missing > 0 ? `Не хватает ${missing}` : `◈ ${b.price}`}</button>
+      </li>;
+    })}</ul>
+  </div>;
+}

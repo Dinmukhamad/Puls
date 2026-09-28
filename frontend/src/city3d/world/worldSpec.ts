@@ -7,6 +7,7 @@
  *   out to a horizon about twice as far. It has about four times the area and the buildings of v1.
  */
 import type { WorldSpec, Zone } from "./types";
+import type { PlotSpec } from "./plots";
 
 /** A sector where one zone takes over the mainland rows whose radius is in [from, to). */
 export interface ZoneSector { zone: Zone; angleDeg: number; halfWidth: number; from: number; to: number }
@@ -27,6 +28,8 @@ export interface CitySpec extends WorldSpec {
   businessAngle?: number;
   /** Ring alleys between bands. */
   alleys?: number[];
+  /** The operator's building plots on the green belt (world/plots.ts). */
+  plots?: PlotSpec;
 }
 
 /**
@@ -138,4 +141,6 @@ export const WORLD_X4: CitySpec = {
   ].map(band => ({ ...band, from: band.from + COAST_SHIFT, to: band.to + COAST_SHIFT })) as ComplexBand[],
   businessAngle: 1.2,
   alleys: [144 + COAST_SHIFT],
+  // Four plots on the belt behind every open district, clear of its street and car park.
+  plots: { districts: ["academy", "driver", "crm"], offsets: [-.23, -.13, .13, .23] },
 };

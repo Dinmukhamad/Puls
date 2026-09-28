@@ -25,3 +25,16 @@ class CityAward(Base):
     xp: Mapped[int]
     coins: Mapped[int]
     claimed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class CityBuild(Base):
+    """A building an operator bought for a plot of their own district: paid once, kept."""
+
+    __tablename__ = "city_builds"
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    plot_key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    item_key: Mapped[str] = mapped_column(String(40))
+    price: Mapped[int]
+    built_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

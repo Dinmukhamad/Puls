@@ -15,6 +15,7 @@
 import type { ParkingLot, Placement, PlacementKind, Point, Road, Route, RoutePlan, Surface, WorldData, WorldSpec, Zone } from "./types";
 import type { CitySpec, ParkingSpec } from "./worldSpec";
 import { insideRect, layoutComplexes, type ComplexLayout } from "./complexes";
+import { insidePlot, plotSpots } from "./plots";
 import { fbm, reliefHeight } from "./relief";
 
 /** Every road is two lanes, one unit each; cars keep to the right, half a unit from the centre line. */
@@ -388,8 +389,11 @@ export function generateWorld(spec: WorldSpec): WorldData {
       if (list) list.push(rect); else cells.set(key, [rect]);
     }
   }
+  // The operator's plots on the green belt stay empty for what the operator builds there (world/plots.ts).
+  const plots = s.plots ? plotSpots(s.plots, new Map(plan.districts.map(d => [d.id, d.angle])), s.roadRings[0] + 2.3, s.promenade - 1.1) : [];
   const keep = (p: Point, pad: number) => {
     const r = Math.hypot(p.x, p.z);
+    if (plots.some(plot => insidePlot(p, plot, pad))) return false;
     return r < near[0] - pad || r > near[1] + pad || !(cells.get(Math.floor(p.x / CELL) * 4099 + Math.floor(p.z / CELL)) ?? []).some(rect => insideRect(p, rect, pad));
   };
   const lots = mainland.lots.filter(lot => !((lot.zone === "houses" || lot.zone === "blocks" || lot.zone === "towers") && inBand(lot.r)) && keep(lot, lot.width / 2 + .5));
@@ -409,7 +413,7 @@ export function generateWorld(spec: WorldSpec): WorldData {
     roads: { rings: [...s.roadRings], ...roadsOf(plan), crosswalks: crosswalks(plan), parking: [...plan.parking, ...layout.parking] },
     placements,
     parks,
-    complexes: layout.complexes, surfaces: [...gardens, ...layout.surfaces], walks: layout.walks, alleys: layout.alleys,
+    complexes: layout.complexes, surfaces: [...gardens, ...layout.surfaces], walks: layout.walks, alleys: layout.alleys, plots,
     routes: trafficRoutes(plan),
     radius: s.horizon,
   };

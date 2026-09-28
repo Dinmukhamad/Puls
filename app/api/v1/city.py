@@ -6,7 +6,7 @@ from app.core.errors import NotFoundError
 from app.models.city import CityAward
 from app.models.enums import Role
 from app.models.user import User
-from app.schemas.city import ClaimInput, SettingsInput
+from app.schemas.city import BuildInput, ClaimInput, SettingsInput
 from app.services import city
 
 router = APIRouter(tags=["Мой город"])
@@ -21,6 +21,11 @@ async def own_city(session: SessionDep, user: CurrentUser, response: Response):
 @router.post("/learning/city/missions/{key}/claim")
 async def claim(key: str, body: ClaimInput, session: SessionDep, user: CurrentUser):
     return await city.claim(session, user, key, body.revision)
+
+
+@router.post("/learning/city/plots/{plot}/build")
+async def build(plot: str, body: BuildInput, session: SessionDep, user: CurrentUser):
+    return await city.build(session, user, plot, body.item)
 
 
 @router.get("/admin/learning/city/settings")

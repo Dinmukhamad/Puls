@@ -3,11 +3,14 @@
  * `CityMap.tsx` switches engines without changes to the page (TZ §9.1). `onProgress` is new.
  */
 import type { DistrictId } from "../api/city";
+import type { BuildingKey } from "./world/plots";
 
 export interface CityView { azimuth: number; polar: number; distance: number; target: [number, number, number] }
 export interface CityLabelInfo { id: DistrictId; name: string; status: string; icon: string; soon: boolean; reward: boolean; level: number }
 export interface CityMascot { gender: "male" | "female" | null; name: string }
 export type TimeOfDay = "day" | "night";
+/** An operator's plot as the server reports it (api/city.ts CityPlot). */
+export interface CityPlotInfo { key: string; unlocked: boolean; item: BuildingKey | null }
 
 export interface CityOptions {
   levels: Record<string, number>; selected: DistrictId; view?: CityView; labels: CityLabelInfo[];
@@ -23,6 +26,9 @@ export interface CityOptions {
   /** Show the stats overlay (`?stats=1`, staff only). */
   stats?: boolean;
   timeOfDay?: TimeOfDay;
+  /** The operator's plots; `onPlot` (only when the viewer may build) opens the catalogue for an empty open plot. */
+  plots?: CityPlotInfo[];
+  onPlot?: (key: string) => void;
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
   onRestored?: () => void;
   /** Loading progress, 0…1, for the loading screen. */
@@ -33,6 +39,9 @@ export interface CityControl {
   setTimeOfDay(mode: TimeOfDay): void;
   focusMascot: () => void; setMascot: (mascot: CityMascot) => void; setTraffic: (enabled: boolean) => void;
   select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void;
+  setPlots: (plots: CityPlotInfo[]) => void;
+  /** Flies to a plot, e.g. to show what was just built there. */
+  focusPlot: (key: string) => void;
   zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void;
   dispose: () => void;
 }

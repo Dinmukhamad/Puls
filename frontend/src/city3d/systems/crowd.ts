@@ -63,6 +63,11 @@ export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
       : FURNITURE.has(p.kind) ? Math.max(.3, p.width * .5) : Math.max(.7, p.width * .72);
     file({ x: p.x, z: p.z, radius }, radius + 1);
   }
+  // The operator's plots, built up or not: what the operator builds there arrives after the routes.
+  for (const plot of world.plots ?? []) {
+    const h = plot.size / 2;
+    file({ x: plot.x, z: plot.z, radius: 0, box: { cos: Math.cos(plot.rotation), sin: Math.sin(plot.rotation), hw: h, hd: h } }, h * Math.SQRT2 + 1);
+  }
   const blocked = (p: Point, margin: number) => (cells.get(Math.floor(p.x / CELL) * 4099 + Math.floor(p.z / CELL)) ?? []).some(o => {
     const dx = p.x - o.x, dz = p.z - o.z;
     // A section turns its +x along cos/sin: across the facade is its local z. Distance to the box, round its corners.

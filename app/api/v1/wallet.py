@@ -8,7 +8,7 @@ from app.core.deps import CurrentUser, PaginationDep, SessionDep, StaffUser, vis
 from app.core.errors import DomainError, PermissionDeniedError
 from app.core.visibility import identity_filter
 from app.models.coin import CoinTransaction
-from app.models.enums import Role, TxType
+from app.models.enums import TX_GROUPS, Role, TxType
 from app.models.user import CoinAccount, User
 from app.schemas.common import Page
 from app.schemas.wallet import WalletReport, WalletSummary, WalletTransaction
@@ -94,7 +94,7 @@ async def report(session, viewer, visibility, pagination, date_from, date_to, ki
     elif kind == "refund":
         conditions.append(CoinTransaction.tx_type == TxType.PURCHASE_REFUND)
     elif kind == "purchase":
-        conditions.append(CoinTransaction.tx_type == TxType.PURCHASE)
+        conditions.append(CoinTransaction.tx_type.in_(TX_GROUPS["purchase"]))
     total = int(
         await session.scalar(
             select(func.count(CoinTransaction.id))

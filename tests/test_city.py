@@ -238,3 +238,83 @@ async def test_active_order_is_in_progress_but_cannot_earn_a_completion_reward(
     first = next(m for m in data["missions"] if m["key"] == "driver_first")
     assert first["state"] == "in_progress" and first["current"] == 0
     assert (await claim(client, headers, "driver_first")).status_code == 409
+
+
+async def fund(session, user_id, amount):
+    from app.models.enums import TxType
+    from app.services.coins import post_transaction
+
+    await post_transaction(
+        session, user_id=user_id, amount=amount, tx_type=TxType.MANUAL_CREDIT, reason="Тест"
+    )
+    await session.commit()
+
+
+async def test_operator_builds_on_open_plots_with_coins_once(client, operator, session):
+    headers = auth(await login(client, operator.login))
+    build = lambda plot, item: client.post(  # noqa: E731
+        f"{BASE}/plots/{plot}/build", headers=headers, json={"item": item}
+    )
+    city = (await client.get(BASE, headers=headers)).json()
+    assert len(city["plots"]) == 12 and not any(p["unlocked"] for p in city["plots"])
+    assert {b["key"] for b in city["buildings"]} >= {"garden", "tower"} and city["can_build"]
+    # Locked until the district's first mission is claimed.
+    assert (await build("academy-0", "garden")).status_code == 409
+    assert (await claim(client, headers, "welcome")).status_code == 200
+    city = (await client.get(BASE, headers=headers)).json()
+    assert {p["key"] for p in city["plots"] if p["unlocked"]} == {f"academy-{i}" for i in range(4)}
+    # No coins yet: nothing is written.
+    poor = await build("academy-0", "garden")
+    assert poor.status_code == 409 and poor.json()["code"] == "insufficient_coins"
+    await fund(session, operator.id, 100)
+    assert (await build("academy-0", "nothing")).status_code == 404
+    assert (await build("nowhere", "garden")).status_code == 404
+    forged = await client.post(
+        f"{BASE}/plots/academy-0/build", headers=headers, json={"item": "garden", "price": 1}
+    )
+    assert forged.status_code == 422
+    done = await build("academy-0", "garden")
+    assert done.status_code == 200 and done.json()["balance"] == 60
+    assert (await build("academy-0", "fountain")).status_code == 409
+    assert (await build("academy-1", "fountain")).status_code == 409  # 90 > 60
+    city = (await client.get(BASE, headers=headers)).json()
+    assert city["balance"] == 60
+    assert next(p for p in city["plots"] if p["key"] == "academy-0")["item"] == "garden"
+    spent = await session.scalar(
+        select(func.sum(CoinTransaction.amount)).where(
+            CoinTransaction.user_id == operator.id, CoinTransaction.tx_type == "city_build"
+        )
+    )
+    assert spent == -40
+
+
+async def test_concurrent_builds_pay_once(client, operator, session):
+    headers = auth(await login(client, operator.login))
+    assert (await claim(client, headers, "welcome")).status_code == 200
+    await fund(session, operator.id, 500)
+    results = await asyncio.gather(
+        *[
+            client.post(f"{BASE}/plots/academy-2/build", headers=headers, json={"item": "house"})
+            for _ in range(3)
+        ]
+    )
+    assert sorted(r.status_code for r in results) == [200, 409, 409]
+    account = await session.scalar(
+        select(CoinAccount)
+        .where(CoinAccount.user_id == operator.id)
+        .execution_options(populate_existing=True)
+    )
+    assert account.balance == 300
+
+
+async def test_staff_cannot_build_and_see_operator_plots_read_only(client, session, operator):
+    staff = await make_user(session, login="trainer-build", role=Role.TRAINER)
+    headers = auth(await login(client, staff.login))
+    own = (await client.get(BASE, headers=headers)).json()
+    assert not own["can_build"]
+    denied = await client.post(
+        f"{BASE}/plots/academy-0/build", headers=headers, json={"item": "garden"}
+    )
+    assert denied.status_code == 403
+    view = (await client.get(f"{ADMIN}/operators/{operator.id}", headers=headers)).json()
+    assert len(view["plots"]) == 12 and not view["can_build"]

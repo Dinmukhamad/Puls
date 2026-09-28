@@ -147,3 +147,18 @@
 }
 @media(max-width:380px){.city-hud__xp>span{font-size:11px}.city-hud{gap:8px}.city-guide-setup__figures{grid-template-columns:1fr}}
 @media(prefers-reduced-motion:reduce){.city-meter>span{transition:none}.city-immersive .pulsar-floating,.city-immersive .pulsar-stars,.city-immersive .pulsar-shadow{animation:none!important}.city-guide-setup,.city-loading span{animation:none}.city-map-hint{animation:none;display:none}.city-skill{transition:none}}
+/* Plots of the district (mission panel) and the building catalogue (sheet). */
+.city-plots{display:grid;gap:8px;padding:10px 12px;border-radius:14px;background:var(--city-glass-soft);border:1px solid var(--separator)}
+.city-plots__head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px}.city-plots__head span{color:var(--text-secondary);font-size:11px}
+.city-plots__list{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.city-plots__list button{display:grid;place-items:center;height:40px;border-radius:10px;border:1px solid var(--separator);background:var(--surface-primary);font-size:19px;cursor:pointer;color:var(--text-secondary)}
+.city-plots__list button[data-state=open]{border:2px dashed #2f9e5b;color:#2f9e5b;font-weight:700}
+.city-plots__list button[data-state=locked]{opacity:.55;font-size:15px}
+.city-plots small{font-size:10.5px;line-height:1.4;color:var(--text-secondary)}
+.city-catalogue{display:grid;gap:12px}
+.city-catalogue__balance{margin:0;font-size:13px;color:var(--text-secondary);line-height:1.5}.city-catalogue__balance strong{color:var(--text-primary)}
+.city-catalogue ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.city-catalogue li{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;border:1px solid var(--separator);background:var(--city-soft)}
+.city-catalogue__icon{display:grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--surface-primary);font-size:24px}
+.city-catalogue__text{display:grid;gap:3px;min-width:0}.city-catalogue__text strong{font-size:14px}.city-catalogue__text small{font-size:12px;color:var(--text-secondary);line-height:1.4}
+.city-catalogue .city-action{min-height:40px;width:auto;padding:0 14px;font-size:13px;white-space:nowrap}
