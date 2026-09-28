@@ -27,6 +27,7 @@ import { createMascot, type Mascot } from "./systems/mascot";
 import { createLabels, type Labels } from "./systems/labels";
 import { createTraffic, type Traffic } from "./systems/traffic";
 import { createCrowd, type Crowd } from "./systems/crowd";
+import { createNight, type Night } from "./render/night";
 import "./city3d.css";
 
 /** Static shadows are redrawn only once the camera has rested this long: culling changes casters while it moves. */
@@ -36,7 +37,7 @@ const LOD_FILES = ["city/v1/city-models.glb", "city/v1/vehicles.glb"].map(path =
 interface Parts {
   handle: RendererHandle; quality: QualityControl; stats: Stats; loop: Loop; rig: CameraRig; picker: Picker; post: Post;
   sky: Sky; terrain: Terrain; water: Water; districts: Districts; mascot: Mascot; labels: Labels; traffic: Traffic; crowd: Crowd;
-  catalogue?: Catalogue; pools?: InstancePools; observer: ResizeObserver;
+  catalogue?: Catalogue; pools?: InstancePools; observer: ResizeObserver; night: Night;
 }
 
 export function createCity(host: HTMLDivElement, options: CityOptions): CityControl {
@@ -52,6 +53,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   const daylight = (p: Parts) => {
     const night = timeOfDay === "night";
     p.sky.setTimeOfDay(night ? 22 : 10.5); p.water.setNight(night); p.districts.setNight(night);
+    p.night.set(night, reducedMotion);
     host.dataset.timeOfDay = timeOfDay;
   };
   function focusDistrict(id: DistrictId) {
@@ -75,8 +77,9 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
 
     const frameCallbacks = new Set<(dt: number, now: number) => void>(), moveCallbacks = new Set<() => void>();
     let sun: THREE.DirectionalLight | null = null;
+    const night = createNight(timeOfDay === "night");
     const ctx: CityContext = {
-      renderer, backend, scene, camera, world, mobile, reducedMotion, overlay,
+      renderer, backend, scene, camera, world, mobile, reducedMotion, overlay, night,
       get quality() { return quality.settings; },
       onFrame(cb) { frameCallbacks.add(cb); return () => frameCallbacks.delete(cb); },
       onCameraMove(cb) { moveCallbacks.add(cb); return () => moveCallbacks.delete(cb); },
@@ -112,6 +115,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       render(dt, now) {
         stats.beginFrame();
         if (rig.update(now)) { lastMove = now; moveCallbacks.forEach(cb => cb()); }
+        night.step(dt);
         frameCallbacks.forEach(cb => cb(dt, now));
         if (shadowWanted && sun && now - lastMove > SHADOW_REST_MS) { shadowWanted = false; requestShadowRedraw(sun); }
         post.render();
@@ -131,7 +135,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     });
     handle.onRestored(() => { if (!disposed) { teardown(); void start().then(() => options.onRestored?.()); } });
 
-    parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, crowd, observer };
+    parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, crowd, observer, night };
     labelLayer.setLabels(labels); labelLayer.setSelected(selected); labelLayer.setMascotName(mascot.name);
     districts.select(selected); traffic.setEnabled(trafficOn); crowd.setEnabled(trafficOn); daylight(parts);
     pending.splice(0).forEach(fn => fn(parts!));

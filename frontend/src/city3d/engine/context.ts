@@ -5,6 +5,7 @@
 import type * as THREE from "three/webgpu";
 import type { WorldData } from "../world/types";
 import type { QualitySettings } from "./qualityTypes";
+import type { Night } from "../render/night";
 
 export interface CityContext {
   renderer: THREE.WebGPURenderer;
@@ -26,4 +27,6 @@ export interface CityContext {
   requestShadowUpdate(): void;
   /** The HTML layer above the canvas, for labels (TZ §9.2). */
   overlay: HTMLElement;
+  /** Night level 0…1 for every light: TSL `night.level` in materials, `night.level.value` on the CPU. */
+  night: Night;
 }
