@@ -79,7 +79,7 @@ export interface Placement {
 }
 
 /** What a courtyard patch is paved with: walks, lawns, playground rubber, sand, sports courts, their lines, driveways. */
-export type SurfaceKind = "walk" | "lawn" | "plaza" | "play" | "play-blue" | "sand" | "court" | "court-orange" | "line" | "asphalt";
+export type SurfaceKind = "walk" | "lawn" | "plaza" | "play" | "play-blue" | "sand" | "court" | "court-orange" | "line" | "asphalt" | "slab";
 /** A flat patch on the ground: `length` along the direction `angle` (atan2(dx, dz)), `width` across; a disc when `round`. */
 export interface Surface { kind: SurfaceKind; x: number; z: number; angle: number; length: number; width: number; round?: boolean; site?: number }
 /** A residential complex: its buildings stand round a courtyard of `length` × `depth`, the length along `angle`. */

@@ -46,7 +46,7 @@ export function siteLayout(site: Site, stage: SiteStage): { placements: Placemen
   if (stage === "planned") return { placements, surfaces };
   const buildings = site.placements.filter(p => BUILDINGS.has(p.kind) && (p.lift ?? 0) < .5);
   // Slabs under every building.
-  for (const p of buildings) surfaces.push({ kind: "asphalt", x: p.x, z: p.z, angle: p.rotation + Math.PI / 2, length: p.width || 2.6, width: p.depth ?? 2.4 });
+  for (const p of buildings) surfaces.push({ kind: "slab", x: p.x, z: p.z, angle: p.rotation + Math.PI / 2, length: p.width || 2.6, width: p.depth ?? 2.4 });
   if (stage === "foundation") return { placements, surfaces };
   for (const p of buildings) {
     const tall = p.kind === "glass-tower" ? p.variant + 2 : p.kind === "cottage" ? 0 : p.variant;

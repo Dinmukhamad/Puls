@@ -19,6 +19,8 @@ const DECK = "#dcd3c1", RAIL = "#e8e1d2", PIER = "#cfc5b1", PAD = "#7c8292", PLA
 const SURFACES: Record<SurfaceKind, [string, number]> = {
   walk: ["#e2dbcc", .006], lawn: ["#8fb672", .012], asphalt: ["#737a8a", .012], plaza: ["#d7cdb9", .018], sand: ["#e9d6a3", .018],
   play: ["#d8795a", .018], "play-blue": ["#6f9fd4", .018], court: ["#5d9c60", .018], "court-orange": ["#c9694b", .018], line: ["#f6f3ea", .024],
+  // Foundation slabs of the group city's quarters, over their sand (world/sites.ts).
+  slab: ["#9aa1aa", .022],
 };
 /** Land top, quay wall foot, water floor. */
 const TOP = .2, FOOT = -1.75, BED = -1.7;
