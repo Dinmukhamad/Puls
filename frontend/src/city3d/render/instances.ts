@@ -50,20 +50,22 @@ interface Pool { parts: ModelPart[]; meshes: THREE.InstancedMesh[]; matrices: TH
 
 export function createInstancePools(ctx: CityContext, catalogue: Catalogue, placements: readonly Placement[]): InstancePools {
   // Resolve every placement to a model and a copy transform.
-  const resolved: { model: CatalogueModel; matrix: THREE.Matrix4 }[] = [];
+  const resolved: { model: CatalogueModel; matrix: THREE.Matrix4; tint?: number }[] = [];
   for (const placement of placements) {
     const matrix = new THREE.Matrix4(), model = catalogue.resolve(placement, matrix);
-    if (model) resolved.push({ model, matrix });
+    if (model) resolved.push({ model, matrix, tint: placement.tint });
   }
   const n = resolved.length, models: CatalogueModel[] = [], modelIndex = new Map<CatalogueModel, number>();
   const modelOf = new Uint16Array(n), matrices = new Float32Array(n * 16), tints = new Float32Array(n * 3).fill(1), copies = createCopies(n);
   const perModel: number[] = [], center = new THREE.Vector3(), size = new THREE.Vector3();
-  resolved.forEach(({ model, matrix }, i) => {
+  resolved.forEach(({ model, matrix, tint }, i) => {
     let m = modelIndex.get(model);
     if (m === undefined) { m = models.length; models.push(model); modelIndex.set(model, m); perModel.push(0); }
     const k = perModel[m]++;
     modelOf[i] = m; matrix.toArray(matrices, i * 16);
-    if (model.tints?.length) model.tints[(k * (model.tintStep ?? 1)) % model.tints.length].toArray(tints, i * 3);
+    // A placement may pick its shade (every section of a complex alike); otherwise copies take turns.
+    const shades = model.tints?.length ?? 0, shade = tint ?? k * (model.tintStep ?? 1);
+    if (shades) model.tints![((shade % shades) + shades) % shades].toArray(tints, i * 3);
     // Bounding sphere of the copy, for the cell boxes and the LOD distance.
     model.bounds.getCenter(center).applyMatrix4(matrix); model.bounds.getSize(size);
     copies.x[i] = center.x; copies.y[i] = center.y; copies.z[i] = center.z;

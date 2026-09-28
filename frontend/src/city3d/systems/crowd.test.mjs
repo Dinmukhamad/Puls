@@ -34,7 +34,7 @@ function context({ mobile=false, reducedMotion=false }={}) {
 test('population has a fixed rendering budget, pauses without a jump, respects reduced motion, and frees its resources', () => {
   for (const mobile of [false,true]) {
     const ctx=context({mobile,reducedMotion:true}), crowd=city.createCrowd(ctx), group=ctx.scene.getObjectByName('city-crowd');
-    assert.ok(group.userData.population > 0 && group.userData.population <= (mobile?40:60));
+    assert.ok(group.userData.population > (mobile?40:60) && group.userData.population <= (mobile?56:100), `population ${group.userData.population}`);
     const batches=group.children.filter(m=>m.isInstancedMesh); assert.ok(batches.length <= 11);
     assert.ok(batches.every(m=>!m.castShadow));
     const matrices=()=>Array.from(group.getObjectByName('walker-jackets').instanceMatrix.array);

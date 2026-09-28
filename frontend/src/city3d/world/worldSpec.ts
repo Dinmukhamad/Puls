@@ -21,7 +21,16 @@ export interface CitySpec extends WorldSpec {
   parking?: ParkingSpec[];
   /** From this ring road outwards, avenues also run along every district direction (x4). */
   districtAvenuesFrom?: number;
+  /** Bands where residential complexes with courtyards replace the rows of houses and blocks. */
+  complexes?: ComplexBand[];
 }
+
+/**
+ * A band [from, to] of residential complexes: `length` along the ring (about), `gap` between two for a driveway
+ * with parked cars, `wing` the depth of the buildings, and the floors class (world/complexes.ts) of the wings on
+ * the canal side, the ends and the far side, lower towards the water.
+ */
+export interface ComplexBand { from: number; to: number; length: number; gap: number; wing: number; floors: [front: number, sides: number, back: number]; yard: "row" | "grid" }
 
 /** Direction of a point from the plaza, degrees: the old layout placed the districts by points. */
 const deg = (x: number, z: number) => Math.atan2(z, x) * 180 / Math.PI;
@@ -110,4 +119,10 @@ export const WORLD_X4: CitySpec = {
     { angleDeg: 90, radius: 99.2, length: 12, depth: 5.2 }, { angleDeg: 195.7, radius: 99.2, length: 12, depth: 5.2 },
   ].map(lot => ({ ...lot, radius: lot.radius + COAST_SHIFT })),
   districtAvenuesFrom: 1,
+  // Across the canal: low complexes with a courtyard each; beyond the first mainland ring road, tall ones with big yards.
+  // The bands keep the tree rows along the canal bank and the ring roads, with a walk between.
+  complexes: [
+    { from: 64.4, to: 76.6, length: 28, gap: 6.4, wing: 2, floors: [0, 1, 2], yard: "row" },
+    { from: 83.6, to: 113.8, length: 32, gap: 7.2, wing: 2.6, floors: [2, 3, 4], yard: "grid" },
+  ].map(band => ({ ...band, from: band.from + COAST_SHIFT, to: band.to + COAST_SHIFT })) as ComplexBand[],
 };

@@ -8,11 +8,13 @@
  * the same materials and draw calls, nothing drawn or computed on the CPU per frame.
  */
 import * as THREE from "three/webgpu";
-import { attribute, clamp, color, dot, floor, fwidth, max, mix, normalGeometry, normalLocal, positionGeometry, positionLocal, positionWorld, smoothstep, step, texture, uv, varying, vec2, vec3, type ShaderNodeObject } from "three/tsl";
+import { attribute, clamp, color, dot, float, floor, fwidth, max, mix, normalGeometry, normalLocal, normalWorld, positionGeometry, positionLocal, positionWorld, smoothstep, step, texture, uv, varying, vec2, vec3, type ShaderNodeObject } from "three/tsl";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Placement, PlacementKind } from "../world/types";
 import { createNight, type Night } from "../render/night";
 import { loadModels, type Model, type ModelPart } from "./loader";
+import { furnitureGeometry, sectionGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
+import { SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
 import modelsUrl from "../../pages/city/models/city-models.glb?url";
 import vehiclesUrl from "../../pages/city/models/vehicles.glb?url";
 
@@ -53,6 +55,11 @@ const GROUND = .2, PAD = .25;
 const BLOCKS = [{ floors: 4, height: 3, glass: false }, { floors: 7, height: 5.2, glass: false }, { floors: 11, height: 8.4, glass: true }, { floors: 18, height: 13.6, glass: true }];
 const WALLS = ["#f3e6d3", "#e9eef5", "#f6d9cf", "#dfe9dd", "#ece4f4", "#f4efe2"], GLASS = ["#b8cbe3", "#a9c4d8", "#c4c9e6", "#d5dde8"];
 const TREE_TINTS = ["#ffffff", "#eaf6e2", "#f7ffe8", "#dfeed7", "#fff6dc"];
+/** Residential sections: warm and cool pastels; a complex takes one, the corner towers of its far wing another. */
+const SECTION_TINTS = ["#f4e7d6", "#e8eef4", "#f5dcd0", "#e0ebdf", "#ede6f3", "#f3efe4", "#f0d9bd", "#dfe7ef", "#e9c9b4", "#cfd9c9", "#d8c4d9", "#f1e1c6"];
+/** Section floors and window columns in world units (a section of SECTION_WIDTH has three columns). */
+const SECTION_FLOOR = .75, SECTION_PANE = SECTION_WIDTH / 3;
+const FURNITURE: FurnitureKind[] = ["bench", "slide", "swings", "climber", "sandbox", "goal", "hoop", "gazebo", "flowerbed", "bush"];
 /** Proxy colours when a model's texture cannot be read: [walls, roof]. */
 const FALLBACK: Record<string, [string, string]> = { s: ["#eadccb", "#b86b52"], c: ["#cfd6de", "#8e99a6"], i: ["#cdc8bd", "#8b8f95"], car: ["#d9cf6a", "#5b6068"] };
 
@@ -137,6 +144,25 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     return add(procedural(`tree-${round ? "round" : "cone"}`, [near, near, far], { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 7 }));
   };
   const trees = { cone: tree(false), round: tree(true) };
+  const moreTrees = Object.fromEntries((["birch", "oak"] as const).map(kind => {
+    const near: LodLevel = { parts: [{ geometry: own(treeKindGeometry(kind, false)), material: treeMaterial, castShadow: true }] };
+    const far: LodLevel = { parts: [{ geometry: own(treeKindGeometry(kind, true)), material: treeMaterial, castShadow: true }] };
+    return [kind, add(procedural(`tree-${kind}`, [near, near, far], { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 3 }))];
+  })) as Record<"birch" | "oak", CatalogueModel>;
+
+  // Residential sections: one box model for every height, drawn with a facade in world units (sectionFacade).
+  const sectionMaterial = own(new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .82, metalness: 0 }));
+  sectionFacade(sectionMaterial, nightLevel);
+  const sectionLevel: LodLevel = { parts: [{ geometry: own(sectionGeometry()), material: sectionMaterial, castShadow: true }] };
+  const section = add({ id: "section", lods: [sectionLevel, sectionLevel, sectionLevel], bounds: new THREE.Box3(new THREE.Vector3(-.5, 0, -.5), new THREE.Vector3(.5, 1, .5)), base: new THREE.Matrix4(), tints: SECTION_TINTS.map(c => new THREE.Color(c)), tintStep: 5 });
+  // Courtyard furniture: one material, one pool each; small pieces are not drawn beyond LOD1.
+  const furnitureMaterial = own(new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .78, metalness: .05 }));
+  const furniture = Object.fromEntries(FURNITURE.map(kind => {
+    const [nearGeometry, farGeometry] = furnitureGeometry(kind);
+    const near: LodLevel = { parts: [{ geometry: own(nearGeometry), material: kind === "bush" ? treeMaterial : furnitureMaterial, castShadow: true }] };
+    const far: LodLevel | null = farGeometry ? { parts: [{ geometry: own(farGeometry), material: kind === "bush" ? treeMaterial : furnitureMaterial, castShadow: true }] } : null;
+    return [kind, add(procedural(kind, [near, near, far], kind === "bush" ? { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 2 } : {}))];
+  })) as Record<FurnitureKind, CatalogueModel>;
 
   const poleMaterial = own(new THREE.MeshStandardNodeMaterial({ color: "#5f6678", roughness: .72, metalness: .04 }));
   // Plain light-grey glass in the day; a warm glow × the night level, well above the bloom threshold at night.
@@ -188,6 +214,17 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
         out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
         return model;
       }
+      case "tree-birch": case "tree-oak":
+        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
+        return moreTrees[kind === "tree-birch" ? "birch" : "oak"];
+      case "section": {
+        const floors = SECTION_FLOORS[Math.min(SECTION_FLOORS.length - 1, Math.max(0, p.variant))];
+        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || SECTION_WIDTH, floors * SECTION_FLOOR, p.depth ?? 2.4));
+        return section;
+      }
+      case "bench": case "slide": case "swings": case "climber": case "sandbox": case "goal": case "hoop": case "gazebo": case "flowerbed": case "bush":
+        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
+        return furniture[kind];
       case "lamp": out.compose(place.set(p.x, GROUND, p.z), turn.identity(), size.setScalar(1)); return lamp;
       case "car-parked": {
         // The generator numbers stalls k * 7 + lot: the lot picks the old list, the number a car in it.
@@ -458,6 +495,27 @@ function proxyGlow(level: Node): Node {
   const light = mix(windowLight(h, share).mul(stagger(h, level)), color(WARM_LOW).mul(share.mul(WINDOW_GLOW * .8)).mul(level), clamp(max(fwidth(u), fwidth(v)).sub(.5), 0, 1));
   return light.mul(pulse(u, ...PANE_U)).mul(pulse(v, ...PANE_V));
 }
+/**
+ * Residential sections: the facade is drawn in world units, so every section of a wing shows one continuous
+ * front whatever its width and height: windows in columns of SECTION_PANE on every floor of SECTION_FLOOR, a
+ * balcony under every other column, and a stone ground floor with doors. The copy's tint (instance colour)
+ * shades the walls; the roof is grey by vertex colour. At night each window has a seed of its own from its
+ * place on the wall, so neighbouring sections never repeat one pattern of lit windows.
+ */
+function sectionFacade(material: THREE.MeshStandardNodeMaterial, level: Node) {
+  const n = normalWorld.normalize(), wall = step(n.y.abs(), .5);
+  const d = n.xz.div(max(n.xz.length(), 1e-6)), u = dot(positionWorld.xz, vec2(d.y.negate(), d.x)).div(SECTION_PANE), v = positionWorld.y.sub(GROUND).div(SECTION_FLOOR);
+  const upper = step(1, v).mul(wall), ground = step(v, 1).mul(wall);
+  const pane = pulse(u, .24, .76).mul(pulse(v, .3, .8)).mul(upper);
+  const balcony = pulse(u.mul(.5), .06, .46).mul(pulse(v, .12, .27)).mul(upper);
+  const door = pulse(u.div(3), .44, .56).mul(pulse(v, 0, .78)).mul(ground);
+  const shop = pulse(u, .12, .88).mul(pulse(v, .25, .75)).mul(ground).mul(float(1).sub(door));
+  material.colorNode = mix(mix(mix(mix(mix(vec3(1, 1, 1), color("#d2cabd"), ground.mul(.85)), color("#9fb4c9"), pane), color("#e4ddd2"), balcony.mul(.9)), color("#6e5647"), door), color("#a9bfd0"), shop.mul(.7));
+  const plane = wallSeed(), h = hash(vec2(floor(u).add(plane.mul(17.3)), floor(v).add(plane.mul(5.1))));
+  // Homes are darker than offices at night: about 40% of their windows are lit.
+  material.emissiveNode = windowLight(h, litShare(hash(vec2(plane, 91.7))).mul(.65)).mul(pane.add(shop.mul(.6))).mul(stagger(h, level));
+}
+
 /** Port sheds: one row of high windows along the marked walls, in model units, seeded by the copy. */
 function portGlow(level: Node): Node {
   const n = normalGeometry, p = positionGeometry, copy = copySeed();

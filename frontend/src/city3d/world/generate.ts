@@ -14,6 +14,7 @@
  */
 import type { ParkingLot, Placement, PlacementKind, Point, Road, Route, RoutePlan, WorldData, WorldSpec, Zone } from "./types";
 import type { CitySpec, ParkingSpec } from "./worldSpec";
+import { insideRect, layoutComplexes, type ComplexLayout } from "./complexes";
 
 /** Every road is two lanes, one unit each; cars keep to the right, half a unit from the centre line. */
 export const ROAD_HALF = 1, LANE = .5;
@@ -68,6 +69,22 @@ function clearOfAvenues(plan: CityPlan, p: Point, pad: number) {
     if (along > (v.ring ? plan.spec.roadRings[v.ring] - pad : 0) && Math.abs(p.z * v.ux - p.x * v.uz) < pad) return false;
   }
   return true;
+}
+
+/**
+ * Directions [angle, half width] that residential complexes between radii r0 and r1 must leave free: the
+ * avenues that reach those radii (2.6 either side at r0, where it is the widest angle), the zone sectors
+ * with their wide lots, and the car parks.
+ */
+function blockedForComplexes(plan: CityPlan, r0: number, r1: number): [number, number][] {
+  const s = plan.spec, list: [number, number][] = [], pad = ROAD_HALF + 1.6;
+  for (const v of plan.avenues) if (!v.ring || s.roadRings[v.ring] < r1) list.push([v.angle, Math.asin(Math.min(1, pad / r0))]);
+  for (const z of s.sectors ?? []) if (r1 >= z.from - 2 && r0 < z.to + 2) list.push([z.angleDeg * DEG, z.halfWidth + (z.zone === "port" ? 4.5 : 3) / r0]);
+  for (const lot of plan.parking) {
+    const r = Math.hypot(lot.x, lot.z), reach = Math.hypot(lot.length, lot.depth) / 2 + 1.6;
+    if (r + reach > r0 && r - reach < r1) list.push([Math.atan2(lot.z, lot.x), Math.asin(Math.min(1, reach / r))]);
+  }
+  return list;
 }
 
 /** Avenues from the inner ring road cross the canal on an arch bridge; the others start beyond it. */
@@ -157,10 +174,11 @@ export function mainlandLots(plan: CityPlan) {
 
 export interface TreeSpot extends Point { scale: number; round: boolean }
 /** Trees on the plaza islet and the green belt, along the canal bank, the ring roads and the avenues, in parks and gardens. */
-export function treeSpots(plan: CityPlan, parks: Point[], lots: Lot[]): TreeSpot[] {
+export function treeSpots(plan: CityPlan, parks: Point[], lots: Lot[], keep: (p: Point, pad: number) => boolean = () => true): TreeSpot[] {
   const s = plan.spec, random = stream(s.seed, -26), trees: TreeSpot[] = [];
   // `pad` keeps the whole crown, not only the trunk, off the avenue.
   const add = (p: Point, scale: number, pad = 2.4) => {
+    if (!keep(p, .8)) return;
     const r = Math.hypot(p.x, p.z), onLand = r > s.lagoon + .6 && (r < s.quay - .6 || r > s.bank + .8) && r < s.horizon - 2;
     if (!onLand) return;
     for (const ring of s.roadRings) if (Math.abs(r - ring) <= 1.8) return;
@@ -317,21 +335,36 @@ function parkedCars(plan: CityPlan): Placement[] {
 }
 
 export function generateWorld(spec: WorldSpec): WorldData {
-  const plan = cityPlan(spec), s = plan.spec, { lots, parks } = mainlandLots(plan);
-  const trees = treeSpots(plan, parks, lots);
+  const plan = cityPlan(spec), s = plan.spec, mainland = mainlandLots(plan);
+  // Residential complexes take over their bands: the rows of houses and blocks there go, and so does
+  // anything else that would stand in a complex, its driveways or its squares.
+  const bands = s.complexes ?? [];
+  const layout: ComplexLayout = bands.length ? layoutComplexes(bands, stream(s.seed, -40), (r0, r1) => blockedForComplexes(plan, r0, r1), s.roadRings)
+    : { complexes: [], placements: [], surfaces: [], walks: [], parking: [], keepOut: [] };
+  const inBand = (r: number) => bands.some(b => r > b.from - 3 && r < b.to + 3);
+  // Everything kept out lies between the canal-side walk of the first band and the ring road past the last.
+  const near = bands.length ? [Math.min(...bands.map(b => b.from)) - 4, Math.max(...bands.map(b => b.to)) + 6] : [0, 0];
+  const keep = (p: Point, pad: number) => {
+    const r = Math.hypot(p.x, p.z);
+    return r < near[0] - pad || r > near[1] + pad || !layout.keepOut.some(rect => insideRect(p, rect, pad));
+  };
+  const lots = mainland.lots.filter(lot => !((lot.zone === "houses" || lot.zone === "blocks") && inBand(lot.r)) && keep(lot, lot.width / 2 + .5));
+  const parks = mainland.parks.filter(p => !inBand(Math.hypot(p.x, p.z)) && keep(p, 2.4));
+  const trees = treeSpots(plan, parks, lots, keep);
   const placements: Placement[] = [];
   for (const lot of lots) placements.push(building(lot, s.skylineAngle));
   trees.forEach((t, i) => placements.push({ kind: t.round ? "tree-round" : "tree-cone", variant: i, x: t.x, z: t.z, rotation: t.x * 3.1, scale: t.scale, width: 0 }));
   for (const p of lampSpots(plan)) placements.push({ kind: "lamp", variant: 0, x: p.x, z: p.z, rotation: 0, scale: 1, width: 0 });
-  placements.push(...parkedCars(plan));
+  placements.push(...parkedCars(plan), ...layout.placements);
   return {
     spec,
     districts: plan.districts.map(({ id, x, z, color, soon }) => ({ id, x, z, color, soon })),
     land: { annuli: [{ inner: s.lagoon, outer: s.quay }, { inner: s.bank, outer: s.horizon }], islets: [{ x: 0, z: 0, r: s.plazaIslet }, ...plan.districts.map(d => ({ x: d.x, z: d.z, r: s.islet }))] },
     water: { annuli: [{ inner: s.plazaIslet, outer: s.lagoon }, { inner: s.quay, outer: s.bank }] },
-    roads: { rings: [...s.roadRings], ...roadsOf(plan), crosswalks: crosswalks(plan), parking: plan.parking },
+    roads: { rings: [...s.roadRings], ...roadsOf(plan), crosswalks: crosswalks(plan), parking: [...plan.parking, ...layout.parking] },
     placements,
     parks,
+    complexes: layout.complexes, surfaces: layout.surfaces, walks: layout.walks,
     routes: trafficRoutes(plan),
     radius: s.horizon,
   };

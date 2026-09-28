@@ -49,15 +49,32 @@ export interface WorldSpec {
  * - house / office / industry: Kenney models fitted to `width` (detailed rows near the canal);
  * - block / tower: plain mid-rise and high-rise blocks, `scale` = height multiplier (0.9…1.1);
  * - port: cranes, warehouses, containers (x4 world);
- * - tree-cone / tree-round: `scale` = tree size; lamp: street lamp; car-parked: `rotation` faces the aisle.
+ * - tree-cone / tree-round / tree-birch / tree-oak: `scale` = tree size; lamp: street lamp; car-parked: `rotation` faces the aisle;
+ * - section: one section of a residential complex, `width` along its facade, `depth` across, `variant` its floors class;
+ * - courtyard furniture (bench, slide, swings, climber, sandbox, goal, hoop, gazebo, flowerbed, bush): `rotation` turns
+ *   its front (+z) where it faces; `width` is its footprint for the walkers to keep clear of.
  */
-export type PlacementKind = "house" | "office" | "industry" | "block" | "tower" | "port" | "tree-cone" | "tree-round" | "lamp" | "car-parked";
+export type PlacementKind = "house" | "office" | "industry" | "block" | "tower" | "port" | "tree-cone" | "tree-round" | "tree-birch" | "tree-oak" | "lamp" | "car-parked"
+  | "section" | "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush";
 
 /**
  * One copy of a catalogue model. `variant` is a seeded integer ≥ 0 that picks a model within the kind
  * (the catalogue takes it modulo its list length); `width` is the footprint to fit (0 = natural size).
  */
-export interface Placement { kind: PlacementKind; variant: number; x: number; z: number; rotation: number; scale: number; width: number }
+export interface Placement {
+  kind: PlacementKind; variant: number; x: number; z: number; rotation: number; scale: number; width: number;
+  /** Sections: the depth of the building across its facade. */
+  depth?: number;
+  /** Picks the model's shade, so every section of a complex shares one colour (otherwise copies alternate). */
+  tint?: number;
+}
+
+/** What a courtyard patch is paved with: walks, lawns, playground rubber, sand, sports courts, their lines, driveways. */
+export type SurfaceKind = "walk" | "lawn" | "plaza" | "play" | "play-blue" | "sand" | "court" | "court-orange" | "line" | "asphalt";
+/** A flat patch on the ground: `length` along the direction `angle` (atan2(dx, dz)), `width` across; a disc when `round`. */
+export interface Surface { kind: SurfaceKind; x: number; z: number; angle: number; length: number; width: number; round?: boolean }
+/** A residential complex: its buildings stand round a courtyard of `length` × `depth`, the length along `angle`. */
+export interface Complex { x: number; z: number; angle: number; length: number; depth: number }
 
 export interface Route { points: Point[]; hidden: boolean[]; distance: number[]; length: number }
 export interface RoutePlan { route: Route; cars: number; speed: number; boats?: boolean }
@@ -85,6 +102,10 @@ export interface WorldData {
   placements: Placement[];
   /** Parks on the mainland (Points), used for grass patches. */
   parks: Point[];
+  /** Residential complexes near the islands, the patches of their yards and driveways, and closed loops for walkers. */
+  complexes: Complex[];
+  surfaces: Surface[];
+  walks: Point[][];
   routes: RoutePlan[];
   /** Radius of everything that is drawn. */
   radius: number;

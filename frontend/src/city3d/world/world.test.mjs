@@ -20,8 +20,9 @@ const WORLDS = [V1, X4];
 
 const radius = (p) => Math.hypot(p.x, p.z);
 const same = (a, b) => gen.angularDistance(a, b) < 1e-6;
-const BUILDINGS = new Set(['house', 'office', 'industry', 'block', 'tower', 'port']), TREES = new Set(['tree-cone', 'tree-round']);
-const KINDS = [...BUILDINGS, ...TREES, 'lamp', 'car-parked'];
+const BUILDINGS = new Set(['house', 'office', 'industry', 'block', 'tower', 'port', 'section']), TREES = new Set(['tree-cone', 'tree-round', 'tree-birch', 'tree-oak']);
+const FURNITURE = ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush'];
+const KINDS = [...BUILDINGS, ...TREES, 'lamp', 'car-parked', ...FURNITURE];
 const ofKind = (world, kinds) => world.placements.filter((p) => kinds.has(p.kind));
 const segments = (world) => [...world.roads.streets, ...world.roads.bridges.map((b) => b.road)];
 const onRoad = (world, p, pad = 0) => world.roads.rings.some((R) => Math.abs(radius(p) - R) <= ROAD_HALF + pad) || segments(world).some((road) => gen.segmentDistance(p.x, p.z, road) <= ROAD_HALF + pad);
@@ -252,7 +253,9 @@ test('x4: ten district islands on two rings, four times the city, and no empty c
   const ratio = X4.placements.length / V1.placements.length, buildings = ofKind(X4, BUILDINGS).length / ofKind(V1, BUILDINGS).length;
   assert.ok(ratio >= 3.5, `x4 has ${ratio.toFixed(2)}× v1's placements`);
   assert.ok(buildings >= 3.5, `x4 has ${buildings.toFixed(2)}× v1's buildings`);
-  for (const k of KINDS) assert.ok(X4.placements.some((p) => p.kind === k), `x4 has no ${k}`);
+  // The canal houses (and their offices) are residential complexes in x4.
+  for (const k of KINDS.filter((kind) => kind !== 'office')) assert.ok(X4.placements.some((p) => p.kind === k), `x4 has no ${k}`);
+  assert.ok(X4.complexes.length >= 16 && X4.walks.length === 2 * X4.complexes.length, `x4 has ${X4.complexes.length} complexes`);
   assert.ok(new Set(WORLD_X4.mainland.map((row) => row.zone)).size >= 4 && WORLD_X4.sectors.some((z) => z.zone === 'industry') && WORLD_X4.sectors.some((z) => z.zone === 'port'));
   assert.ok(ofKind(X4, new Set(['port'])).some((p) => radius(p) < WORLD_X4.bank + 6), 'the port reaches the water');
   // Every 30° sector, in every 40-unit band from the canal to the fog, has buildings.
@@ -284,4 +287,75 @@ test('generation is fast', () => {
   const counts = (world) => `${world.placements.length} placements, ${world.routes.length} loops, ${world.routes.reduce((n, r) => n + r.cars, 0)} cars`;
   console.log(`# x4 generation: ${coldMs.toFixed(1)} ms cold, ${median.toFixed(1)} ms warm (median of 5); v1 ${counts(V1)}; x4 ${counts(X4)}`);
   assert.ok(median < 60, `x4 takes ${median.toFixed(1)} ms`);
+});
+
+/** The corners of a section's footprint (its +x turned along its rotation). */
+const corners = (p) => { const c = Math.cos(p.rotation), s = Math.sin(p.rotation), hw = p.width / 2, hd = p.depth / 2; return [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => ({ x: p.x + c * hw * a + s * hd * b, z: p.z - s * hw * a + c * hd * b })); };
+/** Is p inside a complex's footprint grown by pad (its length along `angle`, as terrain marks)? */
+const inComplex = (p, c, pad = 0) => { const ux = Math.sin(c.angle), uz = Math.cos(c.angle), dx = p.x - c.x, dz = p.z - c.z; return Math.abs(dx * ux + dz * uz) <= c.length / 2 + pad && Math.abs(dz * ux - dx * uz) <= c.depth / 2 + pad; };
+
+test('x4: residential complexes fill their bands between the avenues, clear of roads, sectors, car parks and each other', () => {
+  const plan = gen.cityPlan(WORLD_X4), sections = X4.placements.filter((p) => p.kind === 'section'), streets = segments(X4);
+  assert.equal(V1.complexes.length, 0, 'v1 keeps its rows of houses');
+  for (const band of WORLD_X4.complexes) assert.ok(X4.complexes.some((c) => radius(c) > band.from && radius(c) < band.to), `band ${band.from}…${band.to} is empty`);
+  for (const p of sections) {
+    assert.ok(p.width > 2.2 && p.width < 4.4 && p.depth >= 2 && p.depth <= 2.6 && p.variant >= 0 && p.variant <= 4, 'a section is a normal building');
+    for (const q of corners(p)) {
+      const r = radius(q), band = WORLD_X4.complexes.find((b) => r > b.from - .05 && r < b.to + .05);
+      assert.ok(band, `a section corner at r ${r.toFixed(2)} is outside every band`);
+      for (const road of streets) assert.ok(gen.segmentDistance(q.x, q.z, road) > ROAD_HALF + 1, `a section on a street at ${q.x.toFixed(1)}, ${q.z.toFixed(1)}`);
+      for (const R of X4.roads.rings) assert.ok(Math.abs(r - R) > ROAD_HALF + 1, 'a section on a ring road');
+      const a = Math.atan2(q.z, q.x);
+      for (const z of WORLD_X4.sectors) assert.ok(gen.angularDistance(a, z.angleDeg * Math.PI / 180) > z.halfWidth || r > z.to, `a section in the ${z.zone} sector`);
+      for (const lot of X4.roads.parking) assert.ok(!gen.insideParking(q, lot), 'a section on a car park');
+    }
+  }
+  // Complexes do not touch: each one's paving (1.6 round it) stays off the others.
+  const paving = (d) => corners({ x: d.x, z: d.z, rotation: Math.atan2(-Math.cos(d.angle), Math.sin(d.angle)), width: d.length + 3.2, depth: d.depth + 3.2 });
+  for (const c of X4.complexes) for (const d of X4.complexes) if (c !== d) assert.ok(!inComplex(d, c) && paving(d).every((q) => !inComplex(q, c, 1.6)), 'two complexes overlap');
+  // Each complex keeps 2.6 from every avenue that reaches it.
+  for (const c of X4.complexes) for (const q of paving({ ...c, length: c.length - 3.2 + .01, depth: c.depth - 3.2 + .01 })) for (const v of plan.avenues) {
+    const along = q.x * v.ux + q.z * v.uz;
+    if (along > (v.ring ? WORLD_X4.roadRings[v.ring] : 0)) assert.ok(Math.abs(q.z * v.ux - q.x * v.uz) > ROAD_HALF + 1.5, 'a complex on an avenue');
+  }
+});
+
+test('x4: every complex rings a courtyard with an arch, playground or court, benches, lamps and trees', () => {
+  const kinds = (c) => X4.placements.filter((p) => inComplex(p, c, -.1)).map((p) => p.kind);
+  for (const c of X4.complexes) {
+    const inside = kinds(c), count = (k) => inside.filter((kind) => kind === k).length;
+    assert.ok(count('section') >= 10, `a complex of ${count('section')} sections`);
+    assert.ok(count('bench') >= 3 && count('lamp') >= 2 && inside.filter((k) => k.startsWith('tree-')).length >= 2, `a bare yard: ${[...new Set(inside)].join(', ')}`);
+    assert.ok(count('slide') + count('goal') + count('hoop') >= 1, 'a yard to play in');
+    assert.ok(new Set(inside.filter((k) => k.startsWith('tree-'))).size >= 2 || inside.filter((k) => k.startsWith('tree-')).length < 4, 'trees of more than one kind');
+  }
+  // Four kinds of tree and every piece of the playgrounds are in the city.
+  for (const kind of ['tree-birch', 'tree-oak', 'slide', 'swings', 'sandbox', 'climber', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush']) assert.ok(X4.placements.some((p) => p.kind === kind), kind);
+  // Yard patches stay within their complex's paving.
+  for (const s of X4.surfaces) assert.ok(X4.complexes.some((c) => inComplex(s, c, 1.7)) || s.kind === 'lawn' || s.kind === 'plaza', `a ${s.kind} patch outside every complex`);
+  assert.ok(['walk', 'lawn', 'plaza', 'play', 'court', 'line'].every((k) => X4.surfaces.some((s) => s.kind === k)));
+});
+
+test('x4: driveways between complexes are car parks out to the ring road; walks are closed loops off the buildings', () => {
+  const driveways = X4.roads.parking.slice(gen.cityPlan(WORLD_X4).parking.length);
+  assert.ok(driveways.length >= 10);
+  for (const lot of driveways) {
+    const r0 = radius(lot) - lot.length / 2, r1 = radius(lot) + lot.length / 2;
+    assert.ok(X4.roads.rings.some((R) => Math.abs(r1 + ROAD_HALF - R) < .01), 'a driveway reaches the ring road');
+    assert.ok(r0 > WORLD_X4.bank, 'a driveway stays on the mainland');
+    for (const c of X4.complexes) assert.ok(!inComplex(lot, c, -.5), 'a driveway through a complex');
+  }
+  const sections = X4.placements.filter((p) => p.kind === 'section');
+  for (const walk of X4.walks) {
+    assert.ok(walk.length > 20);
+    for (let i = 0; i < walk.length; i++) {
+      const a = walk[i], b = walk[(i + 1) % walk.length];
+      assert.ok(Math.hypot(b.x - a.x, b.z - a.z) < .6, 'a walk jumps');
+      for (const p of sections) {
+        const c = Math.cos(p.rotation), s = Math.sin(p.rotation), dx = a.x - p.x, dz = a.z - p.z;
+        const out = Math.hypot(Math.max(0, Math.abs(dx * c - dz * s) - p.width / 2), Math.max(0, Math.abs(dx * s + dz * c) - p.depth / 2));
+        assert.ok(out > .5, 'a walk runs into a building');
+      }
+    }
+  }
 });

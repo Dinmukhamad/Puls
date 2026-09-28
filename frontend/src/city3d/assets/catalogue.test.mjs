@@ -89,3 +89,25 @@ test('blocks, towers and port sheds light their windows at night; trees, lamp po
   assert.ok(marks[2].every(v => v === 0) && marks[3].every(v => v === 0), 'container yards stay dark');
   catalogue.dispose();
 });
+
+test('residential sections are one lit model for every height; yard furniture and the new trees are one pool each and stay dark', () => {
+  const catalogue = city.createCatalogue(new Map(), city.createNight()), matrix = new THREE.Matrix4(), size = new THREE.Vector3();
+  const at = (kind, extra = {}) => catalogue.resolve({ kind, variant: 0, x: 3, z: 4, rotation: .5, scale: 1, width: 0, ...extra }, matrix);
+  const heights = [0, 1, 2, 3, 4].map(variant => { const model = at('section', { variant, width: 3.2, depth: 2.2 }); matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), size); return { model, height: size.y, width: size.x, depth: size.z }; });
+  assert.equal(new Set(heights.map(h => h.model)).size, 1, 'one model, one draw call for every section');
+  assert.ok(heights.every((h, i) => i === 0 || h.height > heights[i - 1].height), 'the classes rise');
+  assert.ok(Math.abs(heights[0].width - 3.2) < 1e-6 && Math.abs(heights[0].depth - 2.2) < 1e-6, 'the footprint is the placement');
+  const section = heights[0].model;
+  assert.ok(section.lods[0].parts[0].material.emissiveNode && section.lods[0].parts[0].material.colorNode, 'a painted facade with night windows');
+  assert.ok(section.lods.every(level => level === section.lods[0]) && section.tints.length >= 8, 'the same box at every distance, in shades');
+  for (const kind of ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush', 'tree-birch', 'tree-oak']) {
+    const model = at(kind);
+    assert.ok(model, kind);
+    assert.equal(model.lods[0].parts.length, 1, `${kind} is one merged part`);
+    assert.equal(model.lods[0].parts[0].material.emissiveNode, null, `${kind} does not glow`);
+    assert.ok(model.lods[0].parts[0].geometry.getAttribute('position').count < 3000, `${kind} is light`);
+  }
+  assert.equal(at('bench').lods[2], null, 'benches are not drawn far away');
+  assert.ok(at('tree-oak').lods[2], 'trees keep a far version');
+  catalogue.dispose();
+});

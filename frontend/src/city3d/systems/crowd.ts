@@ -11,6 +11,12 @@ const TAU = Math.PI * 2;
 const PERSON_SCALE = .75;
 const LANE = .14;
 const CLEARANCE = .5;
+/** Walks round the courtyards run .55 from the walls: a little less clearance than the open quays. */
+const WALK_CLEARANCE = .45;
+/** Walkers in the whole city, on a computer and on a phone. */
+const BUDGET = { desktop: 100, mobile: 56 };
+/** Courtyard furniture the walkers keep clear of, by its footprint (`width`). */
+const FURNITURE = new Set(['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed']);
 const GROUND_Y = .225;
 
 export interface CrowdRoute extends Route {
@@ -37,10 +43,30 @@ function clearOfLandmark(p: Point, world: WorldData, margin: number) {
 /** Build routes once from actual land/roads, so changing world radii never strands residents in water. */
 export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
   const roads = [...world.roads.streets, ...world.roads.bridges.map(bridge => bridge.road)];
-  const obstacles = world.placements.map(p => ({
-    x: p.x, z: p.z,
-    radius: p.kind === 'lamp' ? .16 : p.kind.startsWith('tree-') ? .25 * p.scale : p.kind === 'car-parked' ? .95 : Math.max(.7, p.width * .72),
-  }));
+  // Round obstacles, and the sections of the complexes as boxes, filed in a grid of 4-unit cells by their reach.
+  const CELL = 4, cells = new Map<number, Obstacle[]>();
+  const file = (o: Obstacle, reach: number) => {
+    for (let i = Math.floor((o.x - reach) / CELL); i <= Math.floor((o.x + reach) / CELL); i++) for (let j = Math.floor((o.z - reach) / CELL); j <= Math.floor((o.z + reach) / CELL); j++) {
+      const key = i * 4099 + j, list = cells.get(key);
+      if (list) list.push(o); else cells.set(key, [o]);
+    }
+  };
+  for (const p of world.placements) {
+    if (p.kind === 'section') {
+      const hw = p.width / 2, hd = (p.depth ?? 2.4) / 2;
+      file({ x: p.x, z: p.z, radius: 0, box: { cos: Math.cos(p.rotation), sin: Math.sin(p.rotation), hw, hd } }, Math.hypot(hw, hd) + 1);
+      continue;
+    }
+    const radius = p.kind === 'lamp' ? .16 : p.kind.startsWith('tree-') ? .25 * p.scale : p.kind === 'car-parked' ? .95 : p.kind === 'bush' ? .3 * p.scale
+      : FURNITURE.has(p.kind) ? Math.max(.3, p.width * .5) : Math.max(.7, p.width * .72);
+    file({ x: p.x, z: p.z, radius }, radius + 1);
+  }
+  const blocked = (p: Point, margin: number) => (cells.get(Math.floor(p.x / CELL) * 4099 + Math.floor(p.z / CELL)) ?? []).some(o => {
+    const dx = p.x - o.x, dz = p.z - o.z;
+    // A section turns its +x along cos/sin: across the facade is its local z. Distance to the box, round its corners.
+    if (o.box) return Math.hypot(Math.max(0, Math.abs(dx * o.box.cos - dz * o.box.sin) - o.box.hw), Math.max(0, Math.abs(dx * o.box.sin + dz * o.box.cos) - o.box.hd)) < margin;
+    return Math.abs(dx) < o.radius + margin && Math.abs(dz) < o.radius + margin && Math.hypot(dx, dz) < o.radius + margin;
+  });
   const clear = (p: Point, margin = CLEARANCE) => {
     const radius = Math.hypot(p.x, p.z);
     if (!world.land.islets.some(island => Math.hypot(p.x - island.x, p.z - island.z) <= island.r - margin)
@@ -49,9 +75,7 @@ export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
     if (roads.some(road => segmentDistance(p.x, p.z, road) < 1.35 + margin)) return false;
     if (world.roads.parking.some(lot => insideParking(p, lot, margin + .2))) return false;
     if (!clearOfLandmark(p, world, margin)) return false;
-    return !obstacles.some(obstacle => Math.abs(obstacle.x - p.x) < obstacle.radius + margin
-      && Math.abs(obstacle.z - p.z) < obstacle.radius + margin
-      && Math.hypot(obstacle.x - p.x, obstacle.z - p.z) < obstacle.radius + margin);
+    return !blocked(p, margin);
   };
 
   const result: CrowdRoute[] = [];
@@ -98,8 +122,18 @@ export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
       result.push({ ...circle, start, end, points, distance, length: distance[points.length], hidden: points.map(() => false) });
     }
   }
+  // Round the courtyards and the outside of the residential complexes: one way round, dropped if anything stands on it.
+  for (const walk of world.walks ?? []) {
+    if (walk.length < 8 || walk.some(point => !clear(point, WALK_CLEARANCE))) continue;
+    const distance = [0];
+    for (let k = 0; k < walk.length; k++) { const a = walk[k], b = walk[(k + 1) % walk.length]; distance.push(distance[k] + Math.hypot(b.x - a.x, b.z - a.z)); }
+    const cx = walk.reduce((s, p) => s + p.x, 0) / walk.length, cz = walk.reduce((s, p) => s + p.z, 0) / walk.length;
+    result.push({ district: null, cx, cz, radius: 0, start: 0, end: 0, points: walk, distance, length: distance[walk.length], hidden: walk.map(() => false) });
+  }
   return result;
 }
+
+interface Obstacle { x: number; z: number; radius: number; box?: { cos: number; sin: number; hw: number; hd: number } }
 
 /** Distance-based sampling keeps speed identical on long promenades and small island paths. */
 export function sampleCrowdRoute(route: CrowdRoute, distance: number) {
@@ -135,10 +169,15 @@ export interface Crowd { setEnabled(enabled: boolean): void; dispose(): void }
 export function createCrowd(ctx: CityContext): Crowd {
   const routes = createCrowdRoutes(ctx.world);
   const people: { route: CrowdRoute; offset: number; speed: number }[] = [];
-  const perRoute = routes.map(() => 0), capacity = routes.map(route => Math.max(1, Math.min(8, Math.floor(route.length / 2.5))));
-  for (let round = 0; round < 8 && people.length < (ctx.mobile ? 40 : 60); round++) {
-    routes.forEach((route, index) => { if (round < capacity[index] && people.length < (ctx.mobile ? 40 : 60)) { perRoute[index]++; people.push({ route, offset: round, speed: .39 + index % 3 * .025 }); } });
+  // Walkers in proportion to how long each walk is (up to 8 on one), within the budget; every island keeps one.
+  const budget = ctx.mobile ? BUDGET.mobile : BUDGET.desktop, capacity = routes.map(route => Math.max(1, Math.min(8, Math.floor(route.length / 2.5))));
+  const share = Math.min(1, budget / Math.max(1, capacity.reduce((sum, c) => sum + c, 0)));
+  const perRoute = capacity.map((c, index) => Math.max(routes[index].district ? 1 : 0, Math.round(c * share)));
+  for (let excess = perRoute.reduce((sum, n) => sum + n, 0) - budget; excess > 0; excess--) {
+    let most = 0; perRoute.forEach((n, index) => { if (n > perRoute[most]) most = index; });
+    perRoute[most]--;
   }
+  routes.forEach((route, index) => { for (let k = 0; k < perRoute[index]; k++) people.push({ route, offset: k, speed: .39 + index % 3 * .025 }); });
   for (const person of people) {
     const index = routes.indexOf(person.route);
     person.offset = ((person.offset / perRoute[index] + (ctx.world.spec.seed % 97) / 97) % 1) * person.route.length;

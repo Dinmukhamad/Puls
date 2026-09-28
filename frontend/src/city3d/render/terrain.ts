@@ -8,10 +8,18 @@
  */
 import * as THREE from "three/webgpu";
 import type { CityContext } from "../engine/context";
-import type { Road, WorldData } from "../world/types";
+import type { Road, SurfaceKind, WorldData } from "../world/types";
 
 const GRASS = "#8ba67a", GROUND = "#86a174", STONE = "#d4cab6", RIM = "#eadfc8", ROAD = "#6d7385", KERB = "#e5dfcf", MARK = "#f7f3e8";
 const DECK = "#dcd3c1", RAIL = "#e8e1d2", PIER = "#cfc5b1", PAD = "#7c8292", PLAZA = "#efe7d6", FLOOR = "#56766f", PARK = "#7f9f6a";
+/**
+ * Courtyard patches (world/complexes.ts): colour and height over the land. Walks go under everything, lawns
+ * on them, paths, playgrounds and courts on the lawns, court lines on top, each a few thousandths higher.
+ */
+const SURFACES: Record<SurfaceKind, [string, number]> = {
+  walk: ["#e2dbcc", .006], lawn: ["#8fb672", .012], asphalt: ["#737a8a", .012], plaza: ["#d7cdb9", .018], sand: ["#e9d6a3", .018],
+  play: ["#d8795a", .018], "play-blue": ["#6f9fd4", .018], court: ["#5d9c60", .018], "court-orange": ["#c9694b", .018], line: ["#f6f3ea", .024],
+};
 /** Land top, quay wall foot, water floor. */
 const TOP = .2, FOOT = -1.75, BED = -1.7;
 
@@ -90,6 +98,7 @@ export function createTerrain(ctx: CityContext): Terrain {
   const world = ctx.world, flat = new Mesher(), solid = new Mesher();
   land(world, flat, solid);
   roads(world, flat, solid);
+  yards(world, flat);
   const material = new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .8, metalness: .04 });
   const group = new THREE.Group(); group.name = "city-terrain";
   const ground = new THREE.Mesh(flat.build(), material), structures = new THREE.Mesh(solid.build(), material);
@@ -133,6 +142,16 @@ function land(world: WorldData, flat: Mesher, solid: Mesher) {
   flat.color(RIM); ring(flat, spec.promenade - .5, spec.promenade + .5, TOP + .015);
   flat.color(PARK);
   for (const park of world.parks) ring(flat, 0, 2.2, TOP + .003, park.x, park.z);
+}
+
+/** The paving, lawns, playgrounds and courts of the residential complexes. */
+function yards(world: WorldData, flat: Mesher) {
+  for (const s of world.surfaces) {
+    const [color, lift] = SURFACES[s.kind];
+    flat.color(color);
+    if (s.round) ring(flat, 0, s.length / 2, TOP + lift, s.x, s.z);
+    else mark(flat, s.x, s.z, s.angle, s.width, s.length, TOP + lift);
+  }
 }
 
 /** Ring roads, streets, bridges, crossings and car parks. */
