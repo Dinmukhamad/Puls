@@ -5,10 +5,10 @@ import { fileURLToPath } from 'node:url';
 
 // Exercise the real architectural kit and merged node materials, without a GPU.
 const bundle = await build({
-  stdin: { contents: 'export * from "./districts.ts"; export * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: 'export * from "./districts.ts"; export * from "../render/night.ts"; export * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
 });
-const { THREE, createDistricts, generateWorld, WORLD_X4 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
+const { THREE, createDistricts, createNight, generateWorld, WORLD_X4 } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
 const noop = () => {};
 const context2d = new Proxy({}, { get: (_, key) => key === 'measureText' ? () => ({ width: 0 }) : noop, set: () => true });
 globalThis.document ??= { createElement: () => ({ width: 0, height: 0, getContext: () => context2d }) };
@@ -16,7 +16,7 @@ globalThis.document ??= { createElement: () => ({ width: 0, height: 0, getContex
 function context() {
   const frames = new Set();
   return {
-    world: generateWorld(WORLD_X4), scene: new THREE.Scene(), reducedMotion: false,
+    world: generateWorld(WORLD_X4), scene: new THREE.Scene(), reducedMotion: false, night: createNight(),
     onFrame(callback) { frames.add(callback); return () => frames.delete(callback); },
     requestShadowUpdate: noop,
     frame(now) { frames.forEach(callback => callback(1 / 60, now)); },
@@ -32,7 +32,7 @@ const windows = root => materials(root).filter(material => material.userData.dis
 const geometryCount = root => { let total = 0; root.traverse(object => { if (object.isMesh) total++; }); return total; };
 const levels = { academy: 5, driver: 5, crm: 5, dispatch: 5, oktell: 5 };
 
-test('night lights landmark glazing without illuminating opaque surfaces or construction sites', () => {
+test('setNight lights landmark glazing only: opaque surfaces and construction sites keep their emissive', () => {
   const ctx = context(), districts = createDistricts(ctx, { levels });
   const glass = windows(ctx.scene);
   assert.equal(glass.length, 1, 'completed landmarks keep a shared glass draw-call bucket');
@@ -51,7 +51,7 @@ test('night lights landmark glazing without illuminating opaque surfaces or cons
   ctx.scene.traverse = () => { throw new Error('setNight should not walk the scene'); };
   districts.setNight(true); districts.setNight(true);
   ctx.scene.traverse = originalTraverse;
-  assert.ok(glass[0].emissiveIntensity > 0 && glass[0].emissiveIntensity < 1);
+  assert.ok(glass[0].emissiveIntensity > .8 && glass[0].emissiveIntensity < 1.5, 'bright enough for the night bloom, not blown out');
   assert.ok(glass[0].emissive.r > glass[0].emissive.g && glass[0].emissive.g > glass[0].emissive.b, 'warm window light');
   assert.equal(glass[0].color.getHex(), daylightColor, 'surface colour survives the toggle');
   assert.equal(geometryCount(ctx.scene), before, 'night adds no geometry');
@@ -96,4 +96,35 @@ test('growing windows follow night/day and the completed merge preserves the cur
   for (const material of mergedGlass) assert.equal(material.emissiveIntensity, 0);
   const disposed = new Set(); mergedGlass.forEach(material => material.addEventListener('dispose', () => disposed.add(material)));
   districts.dispose(); assert.equal(disposed.size, mergedGlass.length); assert.equal(ctx.listeners, 0);
+});
+
+test('at night floodlights wash every island and a ring of lights circles the plaza: instanced, additive, none by day', () => {
+  const ctx = context(), districts = createDistricts(ctx, { levels });
+  const fixtures = ctx.scene.getObjectByName('city-district-floodlights'), pools = ctx.scene.getObjectByName('city-district-light-pools');
+  const islands = ctx.world.districts.length;
+  assert.ok(fixtures.isInstancedMesh && pools.isInstancedMesh, 'one draw call per kind');
+  assert.equal(fixtures.count, islands * 4 + 16 + 24, 'four floodlights an island, 16 on the pedestal, 24 round the plaza');
+  assert.equal(pools.count, islands * 4 + 1 + 24);
+  for (const mesh of [fixtures, pools]) {
+    assert.equal(mesh.material.blending, THREE.AdditiveBlending); assert.equal(mesh.material.depthWrite, false);
+    assert.equal(mesh.castShadow, false);
+  }
+  ctx.frame(0);
+  assert.deepEqual([fixtures.visible, pools.visible], [false, false], 'the day draws none of them');
+  ctx.night.set(true, true); ctx.frame(16);
+  assert.deepEqual([fixtures.visible, pools.visible], [true, true]);
+  const matrix = new THREE.Matrix4(), p = new THREE.Vector3();
+  for (let i = 0; i < islands * 4; i++) {
+    const d = ctx.world.districts[Math.floor(i / 4)], r = Math.hypot(p.setFromMatrixPosition((fixtures.getMatrixAt(i, matrix), matrix)).x - d.x, p.z - d.z);
+    assert.ok(r > 5 && r < ctx.world.spec.islet - .5, `floodlight ${i} stands on its island, off the plot`);
+  }
+  // The uplight rides on the opaque finishes' emissive node; glass keeps the switched emissive colour.
+  const opaque = materials(ctx.scene).filter(material => material.isMeshStandardNodeMaterial && !material.userData.districtGlass && !material.map);
+  assert.ok(opaque.length >= 2 && opaque.every(material => material.emissiveNode), 'walls get the floodlights\' wash');
+  assert.ok(windows(ctx.scene).every(material => !material.emissiveNode));
+  let lights = 0; ctx.scene.traverse(object => { if (object.isLight) lights++; });
+  assert.equal(lights, 0, 'no light sources');
+  ctx.night.set(false, true); ctx.frame(32);
+  assert.deepEqual([fixtures.visible, pools.visible], [false, false]);
+  districts.dispose(); assert.equal(ctx.scene.children.length, 0); assert.equal(ctx.listeners, 0);
 });

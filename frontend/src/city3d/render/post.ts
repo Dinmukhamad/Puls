@@ -3,8 +3,9 @@
  * occlusion (GTAO at half resolution, quality `ao`), a glow on lamps and windows (quality `bloom`) and
  * antialiasing, since the renderer draws without MSAA: SMAA, FXAA on "low", none on screens of twice the
  * density or more, where edges are already fine and a full-screen pass costs the most. With nothing on,
- * render() is a plain renderer.render(): no extra render target, no extra pass. Tilt-shift, grading and
- * TRAA come with the content of stage 3.
+ * render() is a plain renderer.render(): no extra render target, no extra pass. At night (TZ §6.7) the
+ * glow grows stronger and takes dimmer lights with ctx.night.level; tiers without bloom keep it off, and
+ * the lights read by their own emissive colours. Tilt-shift, grading and TRAA come with the content of stage 3.
  */
 import * as THREE from "three/webgpu";
 import { mix, pass, renderOutput, vec4, type ShaderNodeObject } from "three/tsl";
@@ -32,7 +33,10 @@ export interface Post {
   dispose(): void;
 }
 
-interface Pipeline { post: THREE.PostProcessing; nodes: THREE.Node[]; targets: THREE.RenderTarget[]; key: string }
+interface Pipeline { post: THREE.PostProcessing; nodes: THREE.Node[]; targets: THREE.RenderTarget[]; key: string; glow: ReturnType<typeof bloom> | null }
+
+/** Bloom strength and threshold by day and at full night: at night windows, lamps and headlights glow clearly. */
+export const BLOOM_DAY = { strength: .32, threshold: .92 }, BLOOM_NIGHT = { strength: .9, threshold: .6 };
 
 export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
   const { renderer, scene, camera } = ctx;
@@ -46,6 +50,7 @@ export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
     teardown(); key = next;
     if (!next) return;
     const nodes: THREE.Node[] = [], targets: THREE.RenderTarget[] = [];
+    let glow: Pipeline["glow"] = null;
     const scenePass = pass(scene, camera); nodes.push(scenePass);
     let color = scenePass.getTextureNode("output") as unknown as ShaderNodeObject<THREE.Node>;
     if (q.ao) {
@@ -63,7 +68,7 @@ export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
     }
     if (q.bloom) {
       // Glow is emitted light: extract it before occlusion dims the scene.
-      const glow = bloom(scenePass.getTextureNode("output"), .32, .55, .92); nodes.push(glow);
+      glow = bloom(scenePass.getTextureNode("output"), BLOOM_DAY.strength, .55, BLOOM_DAY.threshold); nodes.push(glow);
       color = color.add(glow);
     }
     const post = new THREE.PostProcessing(renderer);
@@ -78,7 +83,17 @@ export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
       const node = fxaa(renderOutput(color)); nodes.push(node); post.outputNode = node;
       rttTarget(node, targets);
     } else post.outputNode = color;
-    pipeline = { post, nodes, targets, key: next };
+    pipeline = { post, nodes, targets, key: next, glow };
+    bloomLevel = NaN;
+  }
+  /** Follows the night level before each frame: two uniform writes while it changes, nothing otherwise. */
+  let bloomLevel = NaN;
+  function nightBloom() {
+    const glow = pipeline?.glow, level = ctx.night.level.value as number;
+    if (!glow || level === bloomLevel) return;
+    bloomLevel = level;
+    glow.strength.value = THREE.MathUtils.lerp(BLOOM_DAY.strength, BLOOM_NIGHT.strength, level);
+    glow.threshold.value = THREE.MathUtils.lerp(BLOOM_DAY.threshold, BLOOM_NIGHT.threshold, level);
   }
   function teardown() {
     if (!pipeline) return;
@@ -92,7 +107,7 @@ export function createPost(ctx: CityContext, options: PostOptions = {}): Post {
   const offQuality = ctx.onQuality(build);
 
   return {
-    render() { if (pipeline) pipeline.post.render(); else renderer.render(scene, camera); },
+    render() { if (pipeline) { nightBloom(); pipeline.post.render(); } else renderer.render(scene, camera); },
     setSize() { build(); },
     get effects() { return key; },
     dispose() { offQuality(); teardown(); key = ""; },

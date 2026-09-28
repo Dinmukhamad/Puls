@@ -5,9 +5,12 @@
  * fall towards the viewer's lower left. The sun's shadow map is static: drawn once and again on
  * ctx.requestShadowUpdate() (engine/renderer.ts setStaticShadows). There is no scene.environment: its even
  * light fills the shade and the shadows disappear.
+ *
+ * At night (TZ §6.7) the dome turns deep blue with a warm glow of the city's lights along the horizon,
+ * twinkling stars and a moon: all in the one background shader, faded in by ctx.night.level.
  */
 import * as THREE from "three/webgpu";
-import { Fn, dot, float, max, mix, pow, positionWorldDirection, smoothstep, uniform, type ShaderNodeObject } from "three/tsl";
+import { Fn, If, color, dot, exp, float, floor, fract, max, mix, normalize, pow, positionWorldDirection, smoothstep, step, time, uniform, vec3, type ShaderNodeObject } from "three/tsl";
 import type { CityContext } from "../engine/context";
 import type { QualitySettings } from "../engine/qualityTypes";
 import { requestShadowRedraw, setStaticShadows } from "../engine/renderer";
@@ -34,21 +37,69 @@ export const DEFAULT_HOURS = 10.5;
 /** The shadow map covers at most this far from the plaza: beyond, the fog and the LOD take over. */
 const SHADOW_REACH = 130;
 
+/**
+ * Night: a deep blue dome and fog, and a warm band of city light (light pollution) rising just above the
+ * horizon line, where it starts from nothing, so the fogged land still meets the sky without a seam and
+ * whatever stands above the horizon shows as a dark silhouette on the glow.
+ */
+const NIGHT_HORIZON = "#15203f", NIGHT_ZENITH = "#030813", CITY_GLOW = "#6a4524", MOON_LIGHT = "#9fb8ee";
+/**
+ * The moon disc sits low over the skyline, a little right of the default view: the camera tilts at most to
+ * a few degrees above the horizon (MAX_POLAR), so a higher moon would never be seen. The moonlight keeps
+ * the sun's higher path.
+ */
+const MOON_AZIMUTH = 1.19, MOON_ELEVATION = .045, MOON_RADIUS = .0125;
+/** Stars: cells of about 5 px at 1440 × 900, a star in every 36th of them. */
+const STAR_GRID = 260, STAR_SHARE = .028;
+
+/** Hash without sine (D. Hoskins): 0…1 from a vec3, the same on every GPU and both backends, negative cells too. */
+function hash3(p: Vec3Node): Vec3Node {
+  const p3 = fract(p.mul(.1031)), q = p3.add(dot(p3, p3.zyx.add(31.32)));
+  return fract(q.x.add(q.y).mul(q.z));
+}
+
 export function createSky(ctx: CityContext): Sky {
   const { scene, world } = ctx;
   const horizon = uniform(new THREE.Color(HORIZON)), zenith = uniform(new THREE.Color(ZENITH));
   const sunDirection = uniform(SUN_POSITION.clone().normalize()), sunColor = uniform(new THREE.Color(SUN).multiplyScalar(SUN_INTENSITY));
+  // Black by day, so the day's dome stays exactly as it was; `nightSky` 1 swaps the sun's disc for the moon and stars.
+  const cityGlow = uniform(new THREE.Color(0)), nightSky = uniform(0);
+  const nightFade = nightSky.mul(ctx.night.level);
 
   // Brighter towards the horizon, deeper blue overhead; below the horizon the fog colour, like the ground far away.
   const gradient = Fn(([direction]: [Vec3Node]) => {
     const up = max(direction.y, float(0));
-    return mix(horizon, zenith, smoothstep(0, .55, pow(up, .8)));
+    return mix(horizon, zenith, smoothstep(0, .55, pow(up, .8))).add(cityGlow.mul(smoothstep(0, .012, up)).mul(exp(up.mul(-22))));
+  }) as unknown as (direction: Vec3Node) => Vec3Node;
+  /** Twinkling stars, one at a random point of a few grid cells, fewer and dimmer down in the city's glow. */
+  const starField = Fn(([direction]: [Vec3Node]) => {
+    const p = direction.mul(STAR_GRID), cell = floor(p), h = hash3(cell);
+    const jitter = vec3(hash3(cell.add(17.3)), hash3(cell.add(41.9)), hash3(cell.add(73.1)));
+    const d = p.sub(normalize(cell.add(jitter.mul(.6).add(.2))).mul(STAR_GRID)).length();
+    const bright = max(h.sub(1 - STAR_SHARE).div(STAR_SHARE), float(0)), size = mix(.14, .34, bright);
+    const twinkle = ctx.reducedMotion ? float(1) : time.mul(h.mul(3).add(1.2)).add(h.mul(173)).sin().mul(.3).add(.8);
+    const shine = step(1 - STAR_SHARE, h).mul(float(1).sub(smoothstep(0, size, d))).mul(pow(bright, float(3)).mul(2.4).add(.35));
+    return mix(color("#bcd0ff"), color("#fff0d6"), jitter.x).mul(shine).mul(twinkle).mul(smoothstep(.008, .09, direction.y));
+  }) as unknown as (direction: Vec3Node) => Vec3Node;
+  const moon = uniform(new THREE.Vector3(Math.cos(MOON_ELEVATION) * Math.cos(MOON_AZIMUTH), Math.sin(MOON_ELEVATION), Math.cos(MOON_ELEVATION) * Math.sin(MOON_AZIMUTH)));
+  /** A pale disc with soft grey seas and a faint halo of moonlight around it. */
+  const moonDisc = Fn(([direction]: [Vec3Node]) => {
+    const toward = max(dot(direction, moon), float(0)), angle = float(1).sub(toward).mul(2).max(0).sqrt();
+    const local = direction.sub(moon).div(MOON_RADIUS);
+    const seas = local.x.mul(3.1).add(local.z.mul(2.3)).add(1.7).sin().mul(local.y.mul(3.4).sub(local.x.mul(1.4)).sin()).mul(.14).add(.86);
+    const disc = float(1).sub(smoothstep(MOON_RADIUS * .88, MOON_RADIUS, angle)).mul(seas).mul(2.2);
+    // The halo fades into the horizon haze instead of stopping at the night branch below.
+    const halo = pow(toward, float(2600)).mul(.3).add(pow(toward, float(180)).mul(.05)).mul(smoothstep(-.03, .005, direction.y));
+    return color("#fff3de").mul(disc).add(color(MOON_LIGHT).mul(halo));
   }) as unknown as (direction: Vec3Node) => Vec3Node;
   const background = Fn(() => {
     const direction = positionWorldDirection, toward = max(dot(direction, sunDirection), float(0));
-    // A small white-hot disc and a warm glow around it.
+    // A small white-hot disc and a warm glow around it; at night the moonlight has no disc of its own.
     const disc = smoothstep(.99955, .9998, toward).mul(8), glow = pow(toward, float(48)).mul(.35).add(pow(toward, float(6)).mul(.08));
-    return gradient(direction).add(sunColor.mul(disc.add(glow).div(SUN_INTENSITY)));
+    const sky = gradient(direction).add(sunColor.mul(disc.add(glow).div(SUN_INTENSITY)).mul(float(1).sub(nightSky))).toVar();
+    // The dome is shaded behind the whole frame: stars and moon only where they can show, and not by day.
+    If(nightFade.greaterThan(0).and(direction.y.greaterThan(-.03)), () => { sky.addAssign(starField(direction).add(moonDisc(direction)).mul(nightFade)); });
+    return sky;
   })();
   const sceneNodes = scene as THREE.Scene & { backgroundNode: THREE.Node | null };
   sceneNodes.backgroundNode = background;
@@ -84,12 +135,15 @@ export function createSky(ctx: CityContext): Sky {
     const direction = new THREE.Vector3(Math.cos(azimuth) * Math.cos(altitude), Math.sin(altitude), Math.sin(azimuth) * Math.cos(altitude)).normalize();
     const day = THREE.MathUtils.clamp(elevation / .35, 0, 1);
     sun.position.copy(direction).multiplyScalar(distance);
-    if (night) sun.color.set("#bfd3ff"); else sun.color.copy(dusk).lerp(noon, day);
-    sun.intensity = night ? 1.15 : SUN_INTENSITY * THREE.MathUtils.smoothstep(elevation, -.02, .12);
-    hemisphere.color.set(night ? "#a6c8ef" : "#d9ebff");
-    hemisphere.groundColor.set(night ? "#303d51" : "#71805c");
-    hemisphere.intensity = night ? .8 : .35 + .8 * THREE.MathUtils.smoothstep(elevation, -.15, .3);
-    horizon.value.set(night ? "#172946" : HORIZON); zenith.value.set(night ? "#071121" : ZENITH);
+    // Moonlight: dim and cool, the sky fill dimmer still, so the lamps and windows carry the night while
+    // islands, roads and roofs still read.
+    if (night) sun.color.set(MOON_LIGHT); else sun.color.copy(dusk).lerp(noon, day);
+    sun.intensity = night ? .8 : SUN_INTENSITY * THREE.MathUtils.smoothstep(elevation, -.02, .12);
+    hemisphere.color.set(night ? "#8eaee6" : "#d9ebff");
+    hemisphere.groundColor.set(night ? "#262f44" : "#71805c");
+    hemisphere.intensity = night ? .55 : .35 + .8 * THREE.MathUtils.smoothstep(elevation, -.15, .3);
+    horizon.value.set(night ? NIGHT_HORIZON : HORIZON); zenith.value.set(night ? NIGHT_ZENITH : ZENITH);
+    cityGlow.value.set(night ? CITY_GLOW : 0x000000); nightSky.value = night ? 1 : 0;
     (scene.fog as THREE.Fog).color.copy(horizon.value);
     sunDirection.value.copy(direction); sunColor.value.copy(sun.color).multiplyScalar(sun.intensity);
     sun.updateMatrixWorld();

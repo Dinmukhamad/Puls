@@ -4,10 +4,14 @@
  * plain blocks, trees, lamps and the port are procedural. LOD1/LOD2 models called "<scene>__lod1" and
  * "<scene>__lod2" are used when a loaded file has them; otherwise LOD1 is LOD0 and LOD2 is a box proxy in
  * the model's own colours. All proxies share two parts, so every far building together is two draw calls.
+ * At night the windows of every building light up (TZ §6.7): emissive nodes scaled by the night level, in
+ * the same materials and draw calls, nothing drawn or computed on the CPU per frame.
  */
 import * as THREE from "three/webgpu";
+import { attribute, clamp, color, dot, floor, fwidth, max, mix, normalGeometry, normalLocal, positionGeometry, positionLocal, positionWorld, smoothstep, step, texture, uv, varying, vec2, vec3, type ShaderNodeObject } from "three/tsl";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Placement, PlacementKind } from "../world/types";
+import { createNight, type Night } from "../render/night";
 import { loadModels, type Model, type ModelPart } from "./loader";
 import modelsUrl from "../../pages/city/models/city-models.glb?url";
 import vehiclesUrl from "../../pages/city/models/vehicles.glb?url";
@@ -60,8 +64,8 @@ export async function loadCatalogueModels(lodUrls: string[] = []) {
   return models;
 }
 
-/** Takes ownership of `models`: they are disposed with the catalogue. */
-export function createCatalogue(models: Map<string, Model>): Catalogue {
+/** Takes ownership of `models`: they are disposed with the catalogue. Windows glow with `night.level` (ctx.night). */
+export function createCatalogue(models: Map<string, Model>, night: Night = createNight()): Catalogue {
   const owned = { geometries: new Set<THREE.BufferGeometry>(), materials: new Set<THREE.Material>(), textures: new Set<THREE.Texture>() };
   const own = <T extends THREE.BufferGeometry | THREE.Material | THREE.Texture>(item: T): T => {
     if ((item as THREE.Texture).isTexture) owned.textures.add(item as THREE.Texture);
@@ -74,14 +78,29 @@ export function createCatalogue(models: Map<string, Model>): Catalogue {
     for (const value of Object.values(part.material)) if (value instanceof THREE.Texture) own(value);
   }
 
-  const proxy = proxyParts(own);
+  const nightLevel = night.level as unknown as Node;
+  // Far buildings get a window grid on their proxy walls; parked cars keep plain boxes (same geometries).
+  const proxy = proxyParts(own, proxyGlow(nightLevel)), plainProxy = proxy.map(part => ({ ...part, material: proxy[1].material }));
   const pixels = new Map<unknown, ImageData | null>();
   const catalogueModels: CatalogueModel[] = [];
   const add = (model: CatalogueModel) => { catalogueModels.push(model); return model; };
 
+  // One lit node copy of each kit material (the kits share one colour map each), used by the parts whose glass
+  // is marked; a part without readable pixels or glass keeps the kit material.
+  const kenneyLight = kenneyGlow(nightLevel), litKits = new Map<THREE.Material, THREE.MeshStandardNodeMaterial>();
+  function lightWindows(parts: ModelPart[]) {
+    for (const part of parts) {
+      const kit = part.material as THREE.MeshStandardMaterial;
+      if ((kit as unknown as THREE.NodeMaterial).isNodeMaterial || !kit.isMeshStandardMaterial || !kit.map || !markWindows(part.geometry, kit.map, pixels)) continue;
+      let lit = litKits.get(kit);
+      if (!lit) { lit = own(nodeCopy(kit)); lit.emissiveNode = kenneyLight; litKits.set(kit, lit); }
+      part.material = lit;
+    }
+  }
+
   /** A loaded model with its LOD files, or the fallbacks; a name listed twice is one model drawn twice as often. */
   const byName = new Map<string, CatalogueModel | null>();
-  function kenney(name: string, colours: [string, string]) {
+  function kenney(name: string, colours: [string, string], windows = true) {
     if (byName.has(name)) return byName.get(name)!;
     const source = models.get(name);
     byName.set(name, null);
@@ -91,7 +110,8 @@ export function createCatalogue(models: Map<string, Model>): Catalogue {
     // A generated LOD2 that is only the bounding box (12 triangles) takes one texel's colour, often a dark
     // window; the proxy here averages the walls and the roof, so far buildings keep their real colours.
     const boxOnly = !lod2?.parts.length || lod2.parts.every(part => (part.geometry.index?.count ?? part.geometry.attributes.position.count) <= 36);
-    const level2: LodLevel = boxOnly ? { parts: proxy, ...proxyLevel(source, colours, pixels) } : { parts: lod2!.parts };
+    if (windows) for (const model of [source, lod1, boxOnly ? null : lod2]) if (model) lightWindows(model.parts);
+    const level2: LodLevel = boxOnly ? { parts: windows ? proxy : plainProxy, ...proxyLevel(source, colours, pixels) } : { parts: lod2!.parts };
     const model = add({ id: name, lods: [level0, lod1?.parts.length ? { parts: lod1.parts } : level0, level2], bounds: source.bounds.clone(), base: footprint(source.bounds) });
     byName.set(name, model);
     return model;
@@ -99,11 +119,13 @@ export function createCatalogue(models: Map<string, Model>): Catalogue {
   const list = (names: string[], colours: [string, string]) => names.map(name => kenney(name, colours)).filter((m): m is CatalogueModel => !!m);
   const houses = list(HOUSES, FALLBACK.s), offices = list(LIGHT_OFFICES, FALLBACK.c), industry = list(INDUSTRY, FALLBACK.i);
   const cars = new Map<string, CatalogueModel>();
-  for (const name of new Set(PARKED.flat())) { const car = kenney(name, FALLBACK.car); if (car) cars.set(name, car); }
+  for (const name of new Set(PARKED.flat())) { const car = kenney(name, FALLBACK.car, false); if (car) cars.set(name, car); }
 
   const blocks = BLOCKS.map((kind, index) => {
     const geometry = own(blockGeometry(kind.floors));
-    const material = own(new THREE.MeshStandardNodeMaterial({ map: own(facadeTexture(kind.floors, kind.glass)), vertexColors: true, roughness: kind.glass ? .4 : .85, metalness: kind.glass ? .15 : 0 }));
+    const map = own(facadeTexture(kind.floors, kind.glass));
+    const material = own(new THREE.MeshStandardNodeMaterial({ map, vertexColors: true, roughness: kind.glass ? .4 : .85, metalness: kind.glass ? .15 : 0 }));
+    material.emissiveNode = blockGlow(map, kind.floors, nightLevel);
     const level: LodLevel = { parts: [{ geometry, material, castShadow: true }] };
     return add({ id: `block-${index}`, lods: [level, level, level], bounds: new THREE.Box3(new THREE.Vector3(-.5, 0, -.5), new THREE.Vector3(.5, 1, .5)), base: new THREE.Matrix4(), tints: (kind.glass ? GLASS : WALLS).map(c => new THREE.Color(c)), tintStep: 5 });
   });
@@ -117,16 +139,20 @@ export function createCatalogue(models: Map<string, Model>): Catalogue {
   const trees = { cone: tree(false), round: tree(true) };
 
   const poleMaterial = own(new THREE.MeshStandardNodeMaterial({ color: "#5f6678", roughness: .72, metalness: .04 }));
-  // Warm and brighter than white, so the bloom picks the lamps up when it is on.
-  const bulbMaterial = own(new THREE.MeshStandardNodeMaterial({ color: "#fff3c4", emissive: "#ffe08a", emissiveIntensity: 1.6, roughness: .72 }));
+  // Plain light-grey glass in the day; a warm glow × the night level, well above the bloom threshold at night.
+  const bulbMaterial = own(new THREE.MeshStandardNodeMaterial({ name: "lamp-bulb", color: "#dfe4ea", roughness: .3, metalness: .05 }));
+  bulbMaterial.emissiveNode = color("#ffcf85").mul(nightLevel).mul(3.2);
+  // Pole and conical shade are one geometry (one draw call); the bulb hangs under the shade, its centre 1.35
+  // above the foot (render/lampLights.ts puts the halos there). About 120 triangles near, 46 at LOD1.
   const lampLevel = (detail: boolean): LodLevel => ({ parts: [
-    { geometry: own(new THREE.CylinderGeometry(.035, .05, 1.3, detail ? 6 : 4).translate(0, .65, 0)), material: poleMaterial, castShadow: true },
-    { geometry: own(detail ? new THREE.SphereGeometry(.11, 10, 8).translate(0, 1.36, 0) : new THREE.IcosahedronGeometry(.11, 0).translate(0, 1.36, 0)), material: bulbMaterial, castShadow: false },
+    { geometry: own(merge([new THREE.CylinderGeometry(.035, .05, 1.45, detail ? 6 : 4).translate(0, .725, 0), new THREE.ConeGeometry(.17, .12, detail ? 8 : 5, 1, true).translate(0, 1.44, 0)])), material: poleMaterial, castShadow: true },
+    { geometry: own(detail ? new THREE.SphereGeometry(.09, 8, 6).translate(0, 1.35, 0) : new THREE.IcosahedronGeometry(.09, 0).translate(0, 1.35, 0)), material: bulbMaterial, castShadow: false },
   ] });
   // Lamps are thinner than a pixel beyond the LOD1 distance.
   const lamp = add(procedural("lamp", [lampLevel(true), lampLevel(false), null]));
 
   const portMaterial = own(new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .8, metalness: .08 }));
+  portMaterial.emissiveNode = portGlow(nightLevel);
   const port = PORT.map((build, index) => { const level: LodLevel = { parts: [{ geometry: own(build(index)), material: portMaterial, castShadow: true }] }; return add(procedural(`port-${index}`, [level, level, level])); });
 
   const place = new THREE.Vector3(), turn = new THREE.Quaternion(), size = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), extent = new THREE.Vector3();
@@ -198,13 +224,15 @@ function footprint(bounds: THREE.Box3) {
   return new THREE.Matrix4().makeTranslation(-center.x, -bounds.min.y, -center.z);
 }
 
-/** Walls and roof of a unit box (x, z in ±0.5, y in 0…1), shared by every proxy with per-copy colours. */
-function proxyParts(own: <T extends THREE.BufferGeometry | THREE.Material>(item: T) => T): ModelPart[] {
+/** Walls and roof of a unit box (x, z in ±0.5, y in 0…1), shared by every proxy with per-copy colours; the walls glow with `glow`. */
+function proxyParts(own: <T extends THREE.BufferGeometry | THREE.Material>(item: T) => T, glow: Node): ModelPart[] {
   const material = own(new THREE.MeshStandardNodeMaterial({ roughness: .85, metalness: 0 }));
+  const walls = own(new THREE.MeshStandardNodeMaterial({ roughness: .85, metalness: 0 }));
+  walls.emissiveNode = glow;
   const box = new THREE.BoxGeometry(1, 1, 1).translate(0, .5, 0), index = box.index!.array;
   // BoxGeometry faces: +x, -x, +y, -y, +z, -z, six indices each; the bottom is never seen.
   const faces = (list: number[]) => { const g = box.clone(); g.setIndex(list.flatMap(f => Array.from(index.slice(f * 6, f * 6 + 6)))); g.clearGroups(); g.deleteAttribute("uv"); return own(g); };
-  const parts = [{ geometry: faces([0, 1, 4, 5]), material, castShadow: true }, { geometry: faces([2]), material, castShadow: true }];
+  const parts = [{ geometry: faces([0, 1, 4, 5]), material: walls, castShadow: true }, { geometry: faces([2]), material, castShadow: true }];
   box.dispose();
   return parts;
 }
@@ -312,10 +340,15 @@ function treeGeometry(round: boolean, far: boolean) {
   return merge(parts);
 }
 
-const box = (w: number, h: number, d: number, x: number, y: number, z: number, color: string) => paint(new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z), color);
+/** A painted box; `windows` 1 marks shed walls for the night windows (every port piece has the attribute, so they merge). */
+function box(w: number, h: number, d: number, x: number, y: number, z: number, color: string, windows = 0) {
+  const part = paint(new THREE.BoxGeometry(w, h, d).translate(x, y + h / 2, z), color);
+  part.setAttribute(WINDOW, new THREE.BufferAttribute(new Float32Array(part.getAttribute("position").count).fill(windows), 1));
+  return part;
+}
 /** Port pieces, about 6.5 units across so they fit a double lot: warehouses, a gantry crane, container yards. */
 const PORT: ((seed: number) => THREE.BufferGeometry)[] = [
-  () => merge([box(6.2, 2.2, 3.8, 0, 0, 0, "#cfc6b6"), box(6.4, .35, 4, 0, 2.2, 0, "#8f5f4c"), box(5.6, .3, 2.6, 0, 2.55, 0, "#a06a53"),
+  () => merge([box(6.2, 2.2, 3.8, 0, 0, 0, "#cfc6b6", 1), box(6.4, .35, 4, 0, 2.2, 0, "#8f5f4c"), box(5.6, .3, 2.6, 0, 2.55, 0, "#a06a53"),
     ...[-2, 0, 2].map(x => box(1.3, 1.5, .08, x, 0, 1.92, "#6b7380"))]),
   () => {
     const legs = [[-1.5, -1.2], [1.5, -1.2], [-1.5, 1.2], [1.5, 1.2]].map(([x, z]) => box(.26, 5, .26, x, 0, z, "#d9a13b"));
@@ -323,7 +356,7 @@ const PORT: ((seed: number) => THREE.BufferGeometry)[] = [
       box(3.4, .45, .5, 0, 5, -1.2, "#d9a13b"), box(3.4, .45, .5, 0, 5, 1.2, "#d9a13b"), box(.9, .7, .9, 0, 4.3, 2.2, "#e8e3d8"), box(.06, 1.8, .06, 0, 3.2, 3.6, "#3d4148")]);
   },
   seed => containers(seed), seed => containers(seed),
-  () => merge([box(6.4, 2.8, 3, 0, 0, -.4, "#b9c2c9"), box(6.6, .3, 3.2, 0, 2.8, -.4, "#6f7d88"), box(1.6, 1.8, .08, -1.8, 0, 1.12, "#5a626d"), box(1.6, 1.8, .08, 1.8, 0, 1.12, "#5a626d")]),
+  () => merge([box(6.4, 2.8, 3, 0, 0, -.4, "#b9c2c9", 1), box(6.6, .3, 3.2, 0, 2.8, -.4, "#6f7d88"), box(1.6, 1.8, .08, -1.8, 0, 1.12, "#5a626d"), box(1.6, 1.8, .08, 1.8, 0, 1.12, "#5a626d")]),
 ];
 /** A yard of stacked containers, 1 to 3 high, in seeded colours. */
 function containers(seed: number) {
@@ -335,4 +368,155 @@ function containers(seed: number) {
     for (let level = 0; level < height; level++) parts.push(box(2.6, .62, 1.05, col * 3.1 - 1.55, level * .64, row * 1.25 - 1.25, colours[Math.floor(random() * colours.length)]));
   }
   return merge(parts);
+}
+
+// Night windows (TZ §6.7). Every light is an emissive node times the night level: no rebuild when the mode
+// switches, and nothing is added in the day (emissive 0). Seeds never use the instance index: it is the
+// copy's slot in its pool, which changes whenever the pools refill, so lit windows would jump around.
+
+type Node = ShaderNodeObject<THREE.Node>;
+/** Kenney parts: 0 off the glass, a random 0 < w ≤ 1 per window on it. Port pieces: 1 on shed walls. */
+const WINDOW = "windowSeed";
+/** Share of lit windows per building (per wall for blocks): from a sleepy one to an all-awake one, ~60% on average. */
+const LIT_SHARE: [number, number] = [.4, .85];
+/** Warm shades of lit windows; brighter than white, so the bloom picks them up when it is on. */
+const WARM_LOW = "#ffd48a", WARM_HIGH = "#fff1c9", WINDOW_GLOW = 1.2;
+/**
+ * Far proxies: the window grid in world units, the part of a cell a window takes (across, up) and the lit share
+ * against a near building. Tuned so a box gives off about as much light as the Kenney model it replaces (houses
+ * have few windows): a grid of 0.7 × 0.62 made buildings about 5 times brighter when they turned into boxes.
+ */
+const FLOOR_HEIGHT = .95, COLUMN_WIDTH = 1.3, PANE_U: [number, number] = [.36, .64], PANE_V: [number, number] = [.35, .65], PROXY_LIT = .55;
+
+/** Hash without sine (D. Hoskins): 0…1 from a vec2, the same on every GPU and both backends. */
+function hash(p: Node): Node {
+  const p3 = vec3(p.x, p.y, p.x).mul(.1031).fract();
+  const q = p3.add(dot(p3, p3.yzx.add(33.33)));
+  return q.x.add(q.y).mul(q.z).fract();
+}
+const litShare = (seed: Node) => mix(LIT_SHARE[0], LIT_SHARE[1], seed);
+/** One window at full night: on when its hash is under the share, in a shade and brightness of its own. */
+function windowLight(h: Node, share: Node): Node {
+  return mix(color(WARM_LOW), color(WARM_HIGH), h.mul(7.31).fract()).mul(step(h, share)).mul(h.mul(3.17).fract().mul(.4).add(.6)).mul(WINDOW_GLOW);
+}
+/** The night level for one window: windows switch on one by one while the level eases in, not all at once (TZ §6.7); 0 by day, 1 at night. */
+function stagger(h: Node, level: Node): Node {
+  const start = h.mul(5.31).fract().mul(.65);
+  return smoothstep(start, start.add(.3), level);
+}
+/** Box-filtered pulse train, 1 on a…b of every unit of x: the share of the pixel a window covers, so far grids average instead of shimmering. */
+function pulse(x: Node, a: number, b: number): Node {
+  const w = max(fwidth(x), 1e-4), ramp = (t: Node) => floor(t).mul(b - a).add(clamp(t.fract().sub(a), 0, b - a));
+  return ramp(x.add(w.mul(.5))).sub(ramp(x.sub(w.mul(.5)))).div(w);
+}
+
+/**
+ * Vertex stage only: the copy's origin. Fitted copies only move, turn about y and scale evenly, and three's
+ * instanced normal is R·n / s, so s = |n| / |normal| and R turns n.xz onto normal.xz (as complex numbers).
+ * Every vertex of a copy gets the same point, wherever the copy sits in its pool.
+ */
+function copyOrigin(): Node {
+  const n = normalGeometry, m = normalLocal, p = positionGeometry;
+  const scale = n.length().div(max(m.length(), 1e-6));
+  const a = n.xz.div(max(n.xz.length(), 1e-6)), b = m.xz.div(max(m.xz.length(), 1e-6));
+  const re = dot(a, b), im = a.x.mul(b.y).sub(a.y.mul(b.x));
+  return positionLocal.xz.sub(vec2(p.x.mul(re).sub(p.z.mul(im)), p.x.mul(im).add(p.z.mul(re))).mul(scale));
+}
+/** A whole number 0…1023 per copy (half-unit cells of its origin), exact in the fragment stage. */
+const copySeed = () => varying(floor(hash(floor(copyOrigin().mul(2).add(.5))).mul(1024))).add(.5).floor();
+/**
+ * A whole number 0…1023, the same on every vertex of a flat wall of an unevenly scaled box (blocks, proxies),
+ * from its plane (offset along the normal), its direction and its width (the instanced normal is R·n / width).
+ */
+function wallSeed(): Node {
+  const m = normalLocal, dir = m.xz.div(max(m.xz.length(), 1e-6));
+  const plane = floor(dot(positionLocal.xz, dir).mul(4).add(.5)).add(floor(m.length().reciprocal().mul(16).add(.5)).mul(131));
+  return varying(floor(hash(vec2(plane, floor(dir.x.mul(64).add(.5)).add(floor(dir.y.mul(64).add(.5)).mul(129)))).mul(1024))).add(.5).floor();
+}
+
+/** Kenney windows: the marked glass, one hash per window and copy, computed per vertex. */
+function kenneyGlow(level: Node): Node {
+  const w = attribute(WINDOW, "float"), building = hash(floor(copyOrigin().mul(2).add(.5)));
+  const h = hash(vec2(w.mul(97.3).add(building.mul(419.1)), w.mul(41.9).add(building.mul(263.7))));
+  return varying(windowLight(h, litShare(building)).mul(step(1e-3, w)).mul(stagger(h, level)));
+}
+/** Block facades: the painted panes (three a floor, see facadeTexture) glow, at random per wall and pane. */
+function blockGlow(map: THREE.Texture, floors: number, level: Node): Node {
+  const texel = texture(map, uv());
+  // Blue-grey glass on white walls, and the warm pane of every seventh window; the roof band is plain.
+  const glass = max(smoothstep(.04, .12, texel.b.sub(texel.r)), step(.9, texel.r).mul(step(texel.b, .8)));
+  const wall = wallSeed(), pane = floor(vec2(uv().x.mul(64).sub(3.5).div(19), uv().y.mul(floors + 1)));
+  const h = hash(pane.add(vec2(wall.mul(17.3), wall.mul(5.1))));
+  return windowLight(h, litShare(hash(vec2(wall, 91.7)))).mul(glass).mul(stagger(h, level));
+}
+/** Far proxies: a window grid in world units on the walls (the roof is another material). */
+function proxyGlow(level: Node): Node {
+  const wall = wallSeed(), dir = varying(normalLocal.xz.div(max(normalLocal.xz.length(), 1e-6)));
+  const u = dot(positionWorld.xz, vec2(dir.y.negate(), dir.x)).div(COLUMN_WIDTH), v = positionWorld.y.sub(GROUND).div(FLOOR_HEIGHT);
+  const h = hash(floor(vec2(u, v)).add(vec2(wall.mul(17.3), wall.mul(5.1)))), share = litShare(hash(vec2(wall, 91.7))).mul(PROXY_LIT);
+  // Where a pixel spans several windows it shows their average light, not one window's.
+  const light = mix(windowLight(h, share).mul(stagger(h, level)), color(WARM_LOW).mul(share.mul(WINDOW_GLOW * .8)).mul(level), clamp(max(fwidth(u), fwidth(v)).sub(.5), 0, 1));
+  return light.mul(pulse(u, ...PANE_U)).mul(pulse(v, ...PANE_V));
+}
+/** Port sheds: one row of high windows along the marked walls, in model units, seeded by the copy. */
+function portGlow(level: Node): Node {
+  const n = normalGeometry, p = positionGeometry, copy = copySeed();
+  const u = dot(p.xz, vec2(n.z.negate(), n.x)).div(.7), v = p.y.sub(1.2).div(.6);
+  const h = hash(vec2(floor(u).add(n.x.mul(37)).add(n.z.mul(71)), copy));
+  const mask = attribute(WINDOW, "float").mul(step(n.y.abs(), .5)).mul(step(0, v)).mul(step(v, 1)).mul(pulse(u, .2, .8)).mul(pulse(v, .2, .8));
+  return windowLight(h, litShare(hash(vec2(copy, 91.7)))).mul(mask).mul(stagger(h, level));
+}
+
+/** A node copy of a loaded material, made the way the renderer converts one, so the day look stays the same. */
+function nodeCopy(source: THREE.MeshStandardMaterial) {
+  const material = new THREE.MeshStandardNodeMaterial(), from = source as unknown as Record<string, unknown>, to = material as unknown as Record<string, unknown>;
+  for (const key in from) if (key !== "uuid" && key !== "type" && key !== "_listeners") to[key] = from[key];
+  return material;
+}
+
+/**
+ * Marks the glass of a Kenney part (WINDOW): the kits paint glass with the light-blue ramp of their colour
+ * map. Upright glass triangles that share corners form a window, whose random value comes from its centre,
+ * so its LOD1 copy agrees. False when the pixels cannot be read or the part has no glass.
+ */
+function markWindows(geometry: THREE.BufferGeometry, map: THREE.Texture, cache: Map<unknown, ImageData | null>): boolean {
+  if (geometry.hasAttribute(WINDOW)) return true;
+  const position = geometry.getAttribute("position"), uvs = geometry.getAttribute("uv"), image = uvs ? texturePixels(map, cache) : null;
+  if (!image || !uvs) return false;
+  map.updateMatrix();
+  const n = position.count, count = geometry.index ? geometry.index.count : n, at = (k: number) => geometry.index ? geometry.index.getX(k) : k;
+  const parent = Int32Array.from({ length: n }, (_, i) => i), glass = new Uint8Array(n);
+  const find = (i: number): number => { while (parent[i] !== i) i = parent[i] = parent[parent[i]]; return i; };
+  const join = (i: number, j: number) => { parent[find(i)] = find(j); };
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), at2 = new THREE.Vector2();
+  let found = false;
+  for (let k = 0; k + 2 < count; k += 3) {
+    const i = at(k), j = at(k + 1), l = at(k + 2);
+    // The texel first: most triangles are not glass, and it is the cheaper test.
+    at2.set((uvs.getX(i) + uvs.getX(j) + uvs.getX(l)) / 3, (uvs.getY(i) + uvs.getY(j) + uvs.getY(l)) / 3);
+    map.transformUv(at2);
+    const x = Math.min(image.width - 1, Math.floor(at2.x * image.width)), y = Math.min(image.height - 1, Math.floor(at2.y * image.height)), o = (y * image.width + x) * 4;
+    const red = image.data[o], green = image.data[o + 1], blue = image.data[o + 2];
+    if (green - red < 16 || blue - green < 16 || blue < 140) continue;
+    a.fromBufferAttribute(position, i); b.fromBufferAttribute(position, j); c.fromBufferAttribute(position, l);
+    const normal = b.sub(a).cross(c.sub(a)), length = normal.length();
+    // Skylights and flat sheets stay dark: lit glass is upright.
+    if (!length || Math.abs(normal.y) > .5 * length) continue;
+    glass[i] = glass[j] = glass[l] = 1; join(i, j); join(j, l); found = true;
+  }
+  if (!found) return false;
+  // Corners at one place (split vertices) belong to one window.
+  const corners = new Map<string, number>(), boxes = new Map<number, THREE.Box3>();
+  for (let v = 0; v < n; v++) if (glass[v]) {
+    const key = `${Math.round(position.getX(v) * 1e4)},${Math.round(position.getY(v) * 1e4)},${Math.round(position.getZ(v) * 1e4)}`, first = corners.get(key);
+    if (first === undefined) corners.set(key, v); else join(v, first);
+  }
+  for (let v = 0; v < n; v++) if (glass[v]) { const root = find(v); if (!boxes.has(root)) boxes.set(root, new THREE.Box3()); boxes.get(root)!.expandByPoint(a.fromBufferAttribute(position, v)); }
+  const seeds = new Float32Array(n);
+  for (let v = 0; v < n; v++) if (glass[v]) {
+    boxes.get(find(v))!.getCenter(a);
+    seeds[v] = .002 + .998 * fract(Math.sin(Math.round(a.x * 100) * 12.9898 + Math.round(a.y * 100) * 78.233 + Math.round(a.z * 100) * 37.719) * 43758.5453);
+  }
+  geometry.setAttribute(WINDOW, new THREE.BufferAttribute(seeds, 1));
+  return true;
 }

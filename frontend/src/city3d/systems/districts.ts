@@ -4,8 +4,14 @@
  * missions; the reserved "future-*" islands share one instanced construction site. A ring inside the island
  * lights up on hover and pulses while selected; invisible cylinders take the picking rays; a district that
  * levelled up grows in under a burst of confetti.
+ *
+ * At night (TZ §6.7) the windows light up, warm floodlights on every island wash its building from below
+ * and a ring of small lights circles the plaza's pedestal. The light is faked, as for the street lamps:
+ * glowing fixtures and additive pools on the ground (two instanced draw calls, hidden in the day) and an
+ * uplight in the landmarks' own emissive, all scaled by ctx.night.level.
  */
 import * as THREE from "three/webgpu";
+import { color, exp, float, normalWorld, positionWorld, rangeFogFactor, smoothstep, uv, vertexColor, type ShaderNodeObject } from "three/tsl";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { DistrictId } from "../../api/city";
 import { createArchitecture } from "../../pages/city/cityArchitecture";
@@ -22,8 +28,17 @@ const RING_COLOR = "#e9bf69", RING_Y = .45;
 const GROW_DELAY = 500, GROW_TIME = 1300, CONFETTI_DELAY = 1300, CONFETTI_LIFE = 3.2, CONFETTI_COUNT = 160;
 const CONFETTI_COLORS = ["#ffcf4d", "#ff6b9a", "#7b5cff", "#5bd6ff", "#6be38a"];
 /** Warm occupied windows; emissive surfaces add no lights or extra shadow passes. */
-const WINDOW_EMISSION = "#ffd9a0", WINDOW_INTENSITY = .65;
+const WINDOW_EMISSION = "#ffd9a0", WINDOW_INTENSITY = .85;
 type GlazingMaterial = THREE.MeshStandardMaterial | THREE.MeshStandardNodeMaterial;
+type Level = CityContext["night"]["level"];
+
+/** Floodlights in a landmark's frame, world units from its centre (+z faces the plaza, the plot is ±5 × ±4.6): two flank the entrance, one lights each side. */
+const FLOODLIGHTS: [number, number][] = [[-2.5, 5.55], [2.5, 5.55], [-5.85, -.9], [5.85, -.9]];
+const FLOOD = "#ffc88a", FIXTURE_GLOW = 2.4, POOL_STRENGTH = .6;
+/** The uplight on the walls: strongest at the plinth, half as strong WASH_HEIGHT × ln 2 higher up. */
+const WASH = "#ffcf96", WASH_STRENGTH = .42, WASH_HEIGHT = 2.2;
+/** The pedestal of systems/mascot.ts (radius 0.86, its dark band 0.37…0.6 high) on the plaza paving (0.31). */
+const PEDESTAL_R = .88, PEDESTAL_Y = .48, PEDESTAL_LIGHTS = 16, PLAZA_Y = .31, PLAZA_LIGHTS = 24;
 
 /** The architecture kit reserves this finish for glazing; opaque roofs use its matte finish. */
 function isLandmarkGlass(material: THREE.MeshStandardMaterial) {
@@ -82,6 +97,9 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
     material.emissive.set(WINDOW_EMISSION); material.emissiveIntensity = night ? WINDOW_INTENSITY : 0;
     glazing.add(material);
   }
+  // Opaque landmark finishes get the floodlights' uplight; it is 0 in the day.
+  const wash = uplight(ctx.night.level);
+  const finish = (material: THREE.MeshStandardNodeMaterial) => { material.emissiveNode = wash; };
   const pickables: THREE.Object3D[] = [], anchors = new Map<string, THREE.Vector3>();
   const landmarks = new Map<string, THREE.Group>(), rings = new Map<string, THREE.Mesh>();
   const ringGeometry = new THREE.TorusGeometry(spec.islet - .19, .11, 8, 96);
@@ -91,7 +109,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   const futures = ctx.world.districts.filter(d => isFutureDistrict(d.id));
   const site = futures.length ? constructionSite(futures.map(d => new THREE.Matrix4().compose(
     new THREE.Vector3(d.x, GROUND, d.z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), facing(d.x, d.z)), new THREE.Vector3(scale, scale, scale)))) : null;
-  if (site) root.add(site.mesh);
+  if (site) { finish(site.mesh.material as THREE.MeshStandardNodeMaterial); root.add(site.mesh); }
 
   for (const d of ctx.world.districts) {
     if (isFutureDistrict(d.id)) { anchors.set(d.id, new THREE.Vector3(d.x, GROUND + site!.height * scale + LABEL_LIFT, d.z)); continue; }
@@ -119,12 +137,14 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   // Grown districts wait flat, so they do not pop down when the growth starts.
   const growing = ctx.reducedMotion ? [] : grown.filter(id => landmarks.has(id));
   for (const id of growing) landmarks.get(id)!.scale.y = scale * .02;
-  mergeLandmarks([...landmarks].filter(([id]) => !growing.includes(id)).map(([, group]) => group), root, registerGlazing);
+  mergeLandmarks([...landmarks].filter(([id]) => !growing.includes(id)).map(([, group]) => group), root, registerGlazing, finish);
+  const lights = nightLights(ctx, ctx.world.districts.map(d => ({ x: d.x, z: d.z, facing: facing(d.x, d.z) })));
   const growth: { group: THREE.Group; start: number }[] = [];
   let confetti: Confetti | null = null, started = false;
 
   let selected: string | null = null, hovered: string | null = null;
   const offFrame = ctx.onFrame((dt, now) => {
+    lights.show();
     const pulse = ctx.reducedMotion ? .5 : (Math.sin(now / 380) + 1) / 2;
     rings.forEach((ring, id) => {
       const opacity = id === selected ? .55 + pulse * .4 : id === hovered ? .45 : 0;
@@ -137,7 +157,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
       item.group.scale.y = scale * Math.max(.02, e);
       if (now >= item.start) ctx.requestShadowUpdate();
       // Grown, it joins the others' few draw calls.
-      if (k === 1) { growth.splice(i, 1); mergeLandmarks([item.group], root, registerGlazing); }
+      if (k === 1) { growth.splice(i, 1); mergeLandmarks([item.group], root, registerGlazing, finish); }
     }
     if (confetti && !confetti.step(dt, now)) { confetti.dispose(); confetti = null; }
   });
@@ -161,7 +181,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
       return first.id;
     },
     dispose() {
-      offFrame(); confetti?.dispose(); confetti = null;
+      offFrame(); confetti?.dispose(); confetti = null; lights.dispose();
       root.removeFromParent();
       // Landmarks hold their own sign textures and merged geometries; the kit frees only what it cached.
       disposeTree(root); architecture.dispose(); glazing.clear();
@@ -182,7 +202,7 @@ export function paintGeometry(geometry: THREE.BufferGeometry, color: THREE.Color
  * colours, so parts differ only by finish (matte, glass, metal) or by a painted sign. All districts
  * together take about ten draw calls instead of a dozen each.
  */
-function mergeLandmarks(groups: THREE.Object3D[], parent: THREE.Object3D, registerGlazing: (material: GlazingMaterial) => void) {
+function mergeLandmarks(groups: THREE.Object3D[], parent: THREE.Object3D, registerGlazing: (material: GlazingMaterial) => void, finish: (material: THREE.MeshStandardNodeMaterial) => void) {
   const buckets = new Map<string, { material: THREE.Material; parts: THREE.BufferGeometry[] }>(), local = new THREE.Matrix4();
   parent.updateMatrixWorld(true);
   const inverse = parent.matrixWorld.clone().invert();
@@ -196,7 +216,7 @@ function mergeLandmarks(groups: THREE.Object3D[], parent: THREE.Object3D, regist
       const key = source.map ? source.uuid : `${glass ? "glass:" : ""}${source.metalness}:${source.roughness}`;
       if (!buckets.has(key)) {
         const material = source.map ? source : new THREE.MeshStandardNodeMaterial({ vertexColors: true, metalness: source.metalness, roughness: source.roughness });
-        if (glass) registerGlazing(material);
+        if (glass) registerGlazing(material); else if (!source.map) finish(material as THREE.MeshStandardNodeMaterial);
         buckets.set(key, { material, parts: [] });
       }
       buckets.get(key)!.parts.push(source.map ? geometry : paintGeometry(geometry, source.color));
@@ -211,6 +231,77 @@ function mergeLandmarks(groups: THREE.Object3D[], parent: THREE.Object3D, regist
     }
     if (merged) parts.forEach(g => g.dispose());
   });
+}
+
+/**
+ * Floodlight on the walls, as emissive: the surface's own colour, warm, on walls only (not roofs), fading
+ * with height above the island. Uniform around the building: light bounced off the pools and the plinth.
+ */
+function uplight(level: Level) {
+  const height = positionWorld.y.sub(GROUND).max(0), walls = float(1).sub(normalWorld.y.abs());
+  return vertexColor().xyz.mul(color(WASH)).mul(exp(height.div(-WASH_HEIGHT))).mul(walls).mul(level).mul(WASH_STRENGTH);
+}
+
+/**
+ * Glowing fixtures (floodlights, the pedestal's and the plaza's small lights) and the warm pools they cast,
+ * as two additive InstancedMeshes; like the street lamps' pools they take no fog colour but fade with it.
+ */
+function nightLights(ctx: CityContext, islands: { x: number; z: number; facing: number }[]) {
+  const level = ctx.night.level, fog = ctx.scene.fog instanceof THREE.Fog ? ctx.scene.fog : null;
+  const clear = fog ? rangeFogFactor(float(fog.near), float(fog.far)).oneMinus() : float(1);
+  const glowMaterial = () => new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+  const fixtureMaterial = glowMaterial();
+  fixtureMaterial.colorNode = color(FLOOD).mul(FIXTURE_GLOW);
+  fixtureMaterial.opacityNode = level.mul(clear);
+  const poolMaterial = glowMaterial();
+  const falloff = smoothstep(0, 1, uv().sub(.5).length().mul(2).oneMinus()) as ShaderNodeObject<THREE.Node>;
+  poolMaterial.colorNode = color(FLOOD);
+  poolMaterial.opacityNode = falloff.mul(falloff).mul(level).mul(clear).mul(POOL_STRENGTH);
+  poolMaterial.polygonOffset = true; poolMaterial.polygonOffsetFactor = -2; poolMaterial.polygonOffsetUnits = -2;
+
+  const fixtures: THREE.Matrix4[] = [], pools: [THREE.Matrix4, number][] = [];
+  const up = new THREE.Vector3(0, 1, 0), turn = new THREE.Quaternion(), spot = new THREE.Vector3();
+  const at = (x: number, y: number, z: number, sx: number, sy: number, sz: number, angle = 0) =>
+    new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), turn.setFromAxisAngle(up, angle), new THREE.Vector3(sx, sy, sz));
+  for (const island of islands) for (const [lx, lz] of FLOODLIGHTS) {
+    spot.set(lx, 0, lz).applyAxisAngle(up, island.facing);
+    fixtures.push(at(island.x + spot.x, GROUND + .08, island.z + spot.z, .2, .12, .2));
+    // A pool along the wall it lights, wider than deep; the plinth hides the part that reaches under it.
+    const front = Math.abs(lz) > Math.abs(lx);
+    pools.push([at(island.x + spot.x * .96, GROUND + .015, island.z + spot.z * .96, front ? 2.6 : 1.7, 1, front ? 1.7 : 2.6, island.facing), 1]);
+  }
+  for (let i = 0; i < PEDESTAL_LIGHTS; i++) {
+    const a = i / PEDESTAL_LIGHTS * Math.PI * 2;
+    fixtures.push(at(Math.cos(a) * PEDESTAL_R, PEDESTAL_Y, Math.sin(a) * PEDESTAL_R, .05, .05, .05));
+  }
+  // Lights set in the paving round the plaza's edge, each with a small pool, so the ring reads from afar.
+  const plaza = ctx.world.spec.plaza - .3;
+  for (let i = 0; i < PLAZA_LIGHTS; i++) {
+    const a = (i + .5) / PLAZA_LIGHTS * Math.PI * 2, x = Math.cos(a) * plaza, z = Math.sin(a) * plaza;
+    fixtures.push(at(x, PLAZA_Y, z, .09, .025, .09));
+    pools.push([at(x, PLAZA_Y + .01, z, .75, 1, .75), .7]);
+  }
+  // The pedestal's glow on the paving around it, dimmer than a floodlight.
+  pools.push([at(0, PLAZA_Y + .01, 0, 2.6, 1, 2.6), .65]);
+
+  const fixtureMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), fixtureMaterial, fixtures.length);
+  fixtures.forEach((m, i) => fixtureMesh.setMatrixAt(i, m));
+  const poolMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2), poolMaterial, pools.length);
+  const shade = new THREE.Color();
+  pools.forEach(([m, k], i) => { poolMesh.setMatrixAt(i, m); poolMesh.setColorAt(i, shade.setScalar(k)); });
+  const meshes = [fixtureMesh, poolMesh];
+  fixtureMesh.name = "city-district-floodlights"; poolMesh.name = "city-district-light-pools";
+  for (const mesh of meshes) {
+    mesh.matrixAutoUpdate = false; mesh.castShadow = mesh.receiveShadow = false;
+    mesh.computeBoundingSphere(); ctx.scene.add(mesh);
+  }
+  // Nothing is drawn in the day: one check a frame, no allocation.
+  const show = () => { fixtureMesh.visible = poolMesh.visible = (level.value as number) > 0; };
+  show();
+  return {
+    show,
+    dispose() { for (const mesh of meshes) { ctx.scene.remove(mesh); mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose(); mesh.dispose(); } },
+  };
 }
 
 /**

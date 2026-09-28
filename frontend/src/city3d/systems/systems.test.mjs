@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // plain paths; the operator glTF cannot load in Node, which exercises the robot fallback.
 const dir = fileURLToPath(new URL('.', import.meta.url));
 const built = await build({
-  stdin: { contents: ['districts', 'traffic', 'mascot'].map(f => `export * from './${f}.ts';`).join('\n') + '\nexport * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * from "../engine/camera.ts"; export * as THREE from "three/webgpu";', resolveDir: dir },
+  stdin: { contents: ['districts', 'traffic', 'mascot'].map(f => `export * from './${f}.ts';`).join('\n') + '\nexport * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * from "../render/night.ts"; export * from "../engine/camera.ts"; export * as THREE from "three/webgpu";', resolveDir: dir },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
   plugins: [{ name: 'url', setup(b) {
     b.onResolve({ filter: /\?url$/ }, a => ({ path: a.path, namespace: 'url' }));
@@ -29,7 +29,7 @@ function fakeContext(world, { reducedMotion = false, crowd = 1, far = 250 } = {}
   const frames = new Set(), moves = new Set(), qualities = new Set();
   const camera = new THREE.PerspectiveCamera(36, 16 / 9, 1, 2000);
   const ctx = {
-    backend: 'webgpu', mobile: false, reducedMotion, world, scene: new THREE.Scene(), camera, overlay: null,
+    backend: 'webgpu', mobile: false, reducedMotion, world, scene: new THREE.Scene(), camera, overlay: null, night: city.createNight(),
     renderer: { domElement: { dataset: {} } },
     quality: { tier: 'high', resolution: 1, fps: 60, dynamicShadowSize: 2048, staticShadowSize: 4096, ao: true, bloom: true, tiltShift: true, waterReflections: 'ssr', lodDistances: [40, 120, far], crowd },
     shadowRequests: 0,
@@ -254,6 +254,53 @@ test('catalogue cars join the loops, unknown names drive as taxis, and the catal
   assert.deepEqual([...resources].filter(([r, disposed]) => !disposed && !catalogue.includes(r)).map(([r]) => r.type), []);
   assert.equal(ctx.scene.children.length, 0);
   assert.equal(ctx.listeners, 0);
+});
+
+test('at night every drawn car shows lamps and a beam ahead of it and boats their lights; in the day nothing extra is drawn', () => {
+  const ctx = fakeContext(worlds.v1, { far: 1e4 }), traffic = city.createTraffic(ctx);
+  const lamps = ctx.scene.getObjectByName('city-traffic-lamps'), beams = ctx.scene.getObjectByName('city-traffic-beams');
+  const boats = ctx.scene.getObjectByName('city-traffic-boat-lights'), blobs = ctx.scene.getObjectByName('city-traffic-shadows');
+  const night = [lamps, beams, boats];
+  ctx.frame(1 / 60, 0);
+  assert.deepEqual(night.map(m => m.visible), [false, false, false], 'the day draws no lights');
+  assert.equal(lamps.count, 0);
+  ctx.night.set(true, true); ctx.frame(1 / 60, 16);
+  assert.deepEqual(night.map(m => m.visible), [true, true, true]);
+  assert.ok(lamps.count > 20 && lamps.count === blobs.count && beams.count === lamps.count && beams.instanceMatrix === lamps.instanceMatrix, 'one lamp set and one beam per drawn car');
+  assert.ok(boats.count >= 2 && boats.material === lamps.material && !ctx.scene.getObjectByName('city-traffic').children.includes(boats), 'boat lights share the boats\' matrices, not the shadow casters');
+  // The headlights (warm white vertices, at +z of the lamp frame) lead the way: the car moves towards them.
+  const colors = lamps.geometry.getAttribute('color'), positions = lamps.geometry.getAttribute('position'), head = new THREE.Vector3();
+  let heads = 0;
+  for (let i = 0; i < colors.count; i++) if (colors.getZ(i) > 1) { head.add(new THREE.Vector3().fromBufferAttribute(positions, i)); heads++; }
+  head.divideScalar(heads);
+  assert.ok(head.z > .45 && Math.abs(head.x) < .01 && heads === 72, 'two headlight boxes at the front');
+  const at = i => new THREE.Vector3().setFromMatrixPosition(matrixAt(lamps.instanceMatrix.array, i));
+  const before = Array.from({ length: lamps.count }, (_, i) => [at(i), head.clone().applyMatrix4(matrixAt(lamps.instanceMatrix.array, i))]);
+  ctx.frame(.05, 66);
+  let ahead = 0;
+  for (let i = 0; i < lamps.count; i++) {
+    const now = at(i), [was, front] = before.reduce((best, pair) => pair[0].distanceTo(now) < best[0].distanceTo(now) ? pair : best);
+    if (was.distanceTo(now) > .5) continue;
+    if (now.clone().sub(was).dot(front.clone().sub(was)) > 0) ahead++;
+    assert.ok(Math.abs(was.y - .215) < 1e-6 || Math.abs(was.y - .26) < 1e-6, 'the lamp frame stands on the road');
+  }
+  assert.ok(ahead > lamps.count * .9, `${ahead} of ${lamps.count} cars drive towards their headlights`);
+  ctx.night.set(false, true); ctx.frame(1 / 60, 82);
+  assert.deepEqual(night.map(m => m.visible), [false, false, false]);
+  const resources = watchResources(ctx.scene);
+  traffic.dispose();
+  assert.deepEqual([...resources].filter(([, disposed]) => !disposed).map(([r]) => r.type), []);
+  assert.equal(ctx.scene.children.length, 0);
+});
+
+test('lights come on with the night even while the traffic stands still', () => {
+  const ctx = fakeContext(worlds.v1, { reducedMotion: true, far: 1e4 }), traffic = city.createTraffic(ctx);
+  const lamps = ctx.scene.getObjectByName('city-traffic-lamps');
+  ctx.frame(.05, 0); ctx.frame(.05, 50);
+  assert.equal(lamps.count, 0);
+  ctx.night.set(true); ctx.night.step(.1); ctx.frame(.05, 100);
+  assert.ok(lamps.visible && lamps.count > 20);
+  traffic.dispose();
 });
 
 test('the mascot: the robot on its pedestal by default, the robot again when the operator cannot load', async () => {

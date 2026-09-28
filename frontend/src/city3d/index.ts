@@ -28,6 +28,7 @@ import { createLabels, type Labels } from "./systems/labels";
 import { createTraffic, type Traffic } from "./systems/traffic";
 import { createCrowd, type Crowd } from "./systems/crowd";
 import { createNight, type Night } from "./render/night";
+import { createLampLights, type LampLights } from "./render/lampLights";
 import "./city3d.css";
 
 /** Static shadows are redrawn only once the camera has rested this long: culling changes casters while it moves. */
@@ -37,7 +38,7 @@ const LOD_FILES = ["city/v1/city-models.glb", "city/v1/vehicles.glb"].map(path =
 interface Parts {
   handle: RendererHandle; quality: QualityControl; stats: Stats; loop: Loop; rig: CameraRig; picker: Picker; post: Post;
   sky: Sky; terrain: Terrain; water: Water; districts: Districts; mascot: Mascot; labels: Labels; traffic: Traffic; crowd: Crowd;
-  catalogue?: Catalogue; pools?: InstancePools; observer: ResizeObserver; night: Night;
+  catalogue?: Catalogue; pools?: InstancePools; observer: ResizeObserver; night: Night; lamps: LampLights;
 }
 
 export function createCity(host: HTMLDivElement, options: CityOptions): CityControl {
@@ -89,6 +90,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
 
     const sky = createSky(ctx); sun = sky.sun;
     const terrain = createTerrain(ctx), water = createWater(ctx);
+    const lamps = createLampLights(ctx);
     const districts = createDistricts(ctx, { levels: options.levels, grown: options.grown });
     const mascotSystem = createMascot(ctx, mascot);
     const traffic = createTraffic(ctx);
@@ -135,7 +137,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     });
     handle.onRestored(() => { if (!disposed) { teardown(); void start().then(() => options.onRestored?.()); } });
 
-    parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, crowd, observer, night };
+    parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, crowd, observer, night, lamps };
     labelLayer.setLabels(labels); labelLayer.setSelected(selected); labelLayer.setMascotName(mascot.name);
     districts.select(selected); traffic.setEnabled(trafficOn); crowd.setEnabled(trafficOn); daylight(parts);
     pending.splice(0).forEach(fn => fn(parts!));
@@ -145,7 +147,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     try {
       const models = await loadCatalogueModels(LOD_FILES);
       if (disposed || !parts) return;
-      const catalogue = createCatalogue(models);
+      const catalogue = createCatalogue(models, night);
       parts.catalogue = catalogue;
       parts.pools = createInstancePools(ctx, catalogue, world.placements);
       traffic.setVehicles(models);
@@ -157,7 +159,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const p = parts; parts = null; if (!p) return;
     p.loop.dispose(); p.observer.disconnect(); p.picker.dispose(); p.rig.dispose(); p.stats.dispose(); p.quality.dispose();
     p.labels.dispose(); p.crowd.dispose(); p.traffic.dispose(); p.mascot.dispose(); p.districts.dispose(); p.pools?.dispose(); p.catalogue?.dispose();
-    p.water.dispose(); p.terrain.dispose(); p.sky.dispose(); p.post.dispose(); p.handle.dispose();
+    p.lamps.dispose(); p.water.dispose(); p.terrain.dispose(); p.sky.dispose(); p.post.dispose(); p.handle.dispose();
   }
 
   void start().catch(() => { if (!disposed) options.onLost(); });
