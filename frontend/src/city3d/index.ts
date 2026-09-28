@@ -96,7 +96,12 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const traffic = createTraffic(ctx);
     const crowd = createCrowd(ctx);
     const labelLayer = createLabels(ctx, { anchors: districts.anchors, mascotAnchor: mascotSystem.nameAnchor, onSelect: choose });
-    const rig = createCameraRig(camera, { dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], frame: options.frame, view: options.view, reducedMotion, onView: options.onView });
+    // The view may go out to the outer ring road; the shadow map follows it there.
+    const rig = createCameraRig(camera, {
+      dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], reach: world.spec.roadRings[world.spec.roadRings.length - 1],
+      frame: options.frame, view: options.view, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2]); options.onView(view); },
+    });
+    sky.followView(rig.currentView().target[0], rig.currentView().target[2]);
     const picker = createPicker(canvas, camera, () => districts.pickables, { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) });
     const post = createPost(ctx);
     const stats = createStats({ renderer, backend, host, visible: !!options.stats, quality, userIdKnown: true, gpu: handle.gpu, extra: () => { const s = parts?.pools?.stats(); return s ? `copies ${s.drawn}/${s.copies} · pools ${s.drawCalls} calls` : "loading models"; } });

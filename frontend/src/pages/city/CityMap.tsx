@@ -87,17 +87,20 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   useEffect(() => { control.current?.setLabels(JSON.parse(labelsKey)); }, [labelsKey]);
   useEffect(() => { control.current?.setTraffic(traffic); }, [traffic]);
   function key(event: KeyboardEvent) {
-    const c = control.current; if (!c) return;
+    // The v3 city reads its keys itself (moving, turning and tilting while held) and marks them handled.
+    const c = control.current; if (!c || event.nativeEvent.defaultPrevented) return;
     const actions: Record<string, () => void> = { ArrowLeft: () => c.rotate(-.35), ArrowRight: () => c.rotate(.35), ArrowUp: () => c.tilt(-.15), ArrowDown: () => c.tilt(.15), "+": () => c.zoom(.8), "=": () => c.zoom(.8), "-": () => c.zoom(1.25), "0": () => c.reset() };
     const action = actions[event.key]; if (action) { event.preventDefault(); action(); }
   }
   const live = !failed && ready;
+  // The v3 city moves like a map (city3d/engine/camera.ts); the old city and the pilot orbit.
+  const mapControls = !pilot && !legacy;
   return <section className={`city-world${pilot ? " city-world--pilot" : ""}${failed ? " city-world--fallback" : ""}${live ? " is-ready" : ""}`} aria-label="Карта твоего города">
-    <div ref={host} className="city-scene" tabIndex={failed ? -1 : 0} role="application" aria-label="3D-карта города. Стрелки — вращать и наклонять, плюс и минус — масштаб, ноль — исходный вид." onKeyDown={key} />
+    <div ref={host} className="city-scene" tabIndex={failed ? -1 : 0} role="application" aria-label={mapControls ? "3D-карта города. Стрелки или W, A, S, D — двигаться, Q и E — поворот, R и F — наклон, плюс и минус — масштаб, ноль — исходный вид." : "3D-карта города. Стрелки — вращать и наклонять, плюс и минус — масштаб, ноль — исходный вид."} onKeyDown={key} />
     <div ref={frame} className="city-frame" aria-hidden="true" />
     {!failed && !ready && <div className="city-loading" role="status"><span>Строим твой город…</span></div>}
     {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>3D-карта недоступна на этом устройстве</strong><small>Выбирай районы на панели навыков — миссии работают как обычно.</small>{pilot && <button type="button" className="city-secondary" onClick={() => setAttempt(value => value + 1)}>Повторить через WebGL2</button>}</div>}
-    {live && <span className="city-map-hint">Тяни — вращай · колесо или щипок — масштаб · правая кнопка или два пальца — сдвиг</span>}
+    {live && <span className="city-map-hint">{mapControls ? "Тяни — двигай город · правая кнопка или Shift — поворот и наклон · колесо — масштаб · WASD, Q/E — с клавиатуры" : "Тяни — вращай · колесо или щипок — масштаб · правая кнопка или два пальца — сдвиг"}</span>}
     {!failed && <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="vertical">
       {!pilot && !legacy && <button type="button" className="city-time-toggle" aria-label={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} title={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} aria-pressed={timeOfDay === "night"} onClick={() => setTimeOfDay(value => value === "day" ? "night" : "day")}><span aria-hidden="true">{timeOfDay === "day" ? "☀" : "☾"}</span><small>{timeOfDay === "day" ? "День" : "Ночь"}</small></button>}
       <button type="button" aria-label="Посмотреть помощника" onClick={() => control.current?.focusMascot()}>♙</button>

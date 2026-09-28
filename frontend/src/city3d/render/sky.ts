@@ -26,6 +26,8 @@ export interface Sky {
   sunColor: ShaderNodeObject<THREE.UniformNode<THREE.Color>>;
   /** Daylight or moonlight, with matching sky, fog and fill colours. */
   setTimeOfDay(hours: number): void;
+  /** Centres the shadow map near the view's centre (x, z) once the view has moved a third of its reach away. */
+  followView(x: number, z: number): void;
   dispose(): void;
 }
 
@@ -113,6 +115,12 @@ export function createSky(ctx: CityContext): Sky {
   sun.castShadow = true;
   Object.assign(sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: Math.max(1, distance - reach * 1.5), far: distance + reach * 1.5 });
   scene.add(hemisphere, sun);
+  // The shadow map covers a square around `shadowCentre`: the plaza, until the view goes farther out.
+  const shadowCentre = new THREE.Vector3(), towardsSun = new THREE.Vector3();
+  function aimSun() {
+    sun.position.copy(towardsSun).multiplyScalar(distance).add(shadowCentre); sun.target.position.copy(shadowCentre);
+    sun.updateMatrixWorld(); sun.target.updateMatrixWorld();
+  }
 
   /** Map size from quality; the bias follows the texel size, so bigger maps keep crisp contact shadows. */
   function shadowSize(q: QualitySettings) {
@@ -134,7 +142,7 @@ export function createSky(ctx: CityContext): Sky {
     const altitude = night ? Math.max(.45, Math.abs(elevation)) : Math.max(elevation, .04);
     const direction = new THREE.Vector3(Math.cos(azimuth) * Math.cos(altitude), Math.sin(altitude), Math.sin(azimuth) * Math.cos(altitude)).normalize();
     const day = THREE.MathUtils.clamp(elevation / .35, 0, 1);
-    sun.position.copy(direction).multiplyScalar(distance);
+    towardsSun.copy(direction); aimSun();
     // Moonlight: dim and cool, the sky fill dimmer still, so the lamps and windows carry the night while
     // islands, roads and roofs still read.
     if (night) sun.color.set(MOON_LIGHT); else sun.color.copy(dusk).lerp(noon, day);
@@ -146,13 +154,20 @@ export function createSky(ctx: CityContext): Sky {
     cityGlow.value.set(night ? CITY_GLOW : 0x000000); nightSky.value = night ? 1 : 0;
     (scene.fog as THREE.Fog).color.copy(horizon.value);
     sunDirection.value.copy(direction); sunColor.value.copy(sun.color).multiplyScalar(sun.intensity);
-    sun.updateMatrixWorld();
     ctx.requestShadowUpdate();
   }
   setTimeOfDay(DEFAULT_HOURS);
 
+  function followView(x: number, z: number) {
+    const step = reach / 3;
+    if (Math.hypot(x - shadowCentre.x, z - shadowCentre.z) < step) return;
+    // Whole steps, so small moves around a spot never redraw the map.
+    shadowCentre.set(Math.round(x / step) * step, 0, Math.round(z / step) * step);
+    aimSun(); ctx.requestShadowUpdate();
+  }
+
   return {
-    sun, hemisphere, gradient, sunDirection, sunColor, setTimeOfDay,
+    sun, hemisphere, gradient, sunDirection, sunColor, setTimeOfDay, followView,
     dispose() {
       offQuality();
       scene.remove(hemisphere, sun);
