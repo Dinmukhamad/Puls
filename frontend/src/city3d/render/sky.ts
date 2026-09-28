@@ -11,6 +11,7 @@
  */
 import * as THREE from "three/webgpu";
 import { Fn, If, color, dot, exp, float, floor, fract, max, mix, normalize, pow, positionWorldDirection, smoothstep, step, time, uniform, vec3, type ShaderNodeObject } from "three/tsl";
+import { FOG_END } from "../world/relief";
 import type { CityContext } from "../engine/context";
 import type { QualitySettings } from "../engine/qualityTypes";
 import { requestShadowRedraw, setStaticShadows } from "../engine/renderer";
@@ -106,7 +107,7 @@ export function createSky(ctx: CityContext): Sky {
   const sceneNodes = scene as THREE.Scene & { backgroundNode: THREE.Node | null };
   sceneNodes.backgroundNode = background;
   // The fog matches the horizon, so land and sky meet without a seam; it scales with the world (v1: 118…330).
-  scene.fog = new THREE.Fog(HORIZON, world.radius * .79, world.radius * 2.2);
+  scene.fog = new THREE.Fog(HORIZON, world.radius * .79, world.radius * FOG_END);
 
   // A warm late-morning sun, low enough for long shadows; the sky and the grass fill the shade softly.
   const hemisphere = new THREE.HemisphereLight("#d9ebff", "#71805c", 1.15);

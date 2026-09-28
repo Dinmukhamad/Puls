@@ -15,6 +15,7 @@
 import type { ParkingLot, Placement, PlacementKind, Point, Road, Route, RoutePlan, WorldData, WorldSpec, Zone } from "./types";
 import type { CitySpec, ParkingSpec } from "./worldSpec";
 import { insideRect, layoutComplexes, type ComplexLayout } from "./complexes";
+import { fbm, reliefHeight } from "./relief";
 
 /** Every road is two lanes, one unit each; cars keep to the right, half a unit from the centre line. */
 export const ROAD_HALF = 1, LANE = .5;
@@ -334,6 +335,18 @@ function parkedCars(plan: CityPlan): Placement[] {
   return cars;
 }
 
+/** Forests on the hills past the horizon: clumps of mostly spruce, standing on the relief (lift), none up on the rock. */
+function hillForest(plan: CityPlan): Placement[] {
+  const s = plan.spec, random = stream(s.seed, -52), trees: Placement[] = [], count = Math.round(TAU * s.horizon / .6);
+  for (let k = 0; k < count; k++) {
+    const a = random() * TAU, r = s.horizon + 4 + Math.pow(random(), 1.3) * 230, p = polar(r, a), spruce = random() < .7, scale = 1.6 + random() * 1.4;
+    const lift = reliefHeight(p.x, p.z, s.horizon);
+    if (lift > 40 || fbm(p.x / 38 + 5, p.z / 38 - 2, 2) < .47) continue;
+    trees.push({ kind: spruce ? "tree-cone" : "tree-round", variant: k, x: p.x, z: p.z, rotation: a * 7.3, scale, width: 0, lift });
+  }
+  return trees;
+}
+
 export function generateWorld(spec: WorldSpec): WorldData {
   const plan = cityPlan(spec), s = plan.spec, mainland = mainlandLots(plan);
   // Residential complexes take over their bands: the rows of houses and blocks there go, and so does
@@ -365,7 +378,7 @@ export function generateWorld(spec: WorldSpec): WorldData {
   for (const lot of lots) placements.push(building(lot, s.skylineAngle));
   trees.forEach((t, i) => placements.push({ kind: t.round ? "tree-round" : "tree-cone", variant: i, x: t.x, z: t.z, rotation: t.x * 3.1, scale: t.scale, width: 0 }));
   for (const p of lampSpots(plan)) placements.push({ kind: "lamp", variant: 0, x: p.x, z: p.z, rotation: 0, scale: 1, width: 0 });
-  placements.push(...parkedCars(plan), ...layout.placements);
+  placements.push(...parkedCars(plan), ...layout.placements, ...hillForest(plan));
   return {
     spec,
     districts: plan.districts.map(({ id, x, z, color, soon }) => ({ id, x, z, color, soon })),

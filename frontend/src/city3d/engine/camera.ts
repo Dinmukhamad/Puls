@@ -6,6 +6,7 @@
  * the default view is fitted into the free frame between the panels, and the view stays over the city.
  */
 import * as THREE from "three/webgpu";
+import { RELIEF_END } from "../world/relief";
 import type { CityView } from "../types";
 
 /** The default view looks over the depot at the CRM centre on the left and the academy on the right. */
@@ -123,7 +124,8 @@ export interface CameraRig {
 /** A camera for a world of this radius: far enough to see the horizon from the farthest zoom. */
 export function createCamera(radius: number) {
   const scale = Math.max(1, radius / V1_RADIUS);
-  return new THREE.PerspectiveCamera(36, 1, 1, Math.max(800, 2 * radius + MAX_DISTANCE * scale));
+  // Far enough for the mountains round the city (world/relief.ts), which fade into the fog before it.
+  return new THREE.PerspectiveCamera(36, 1, 1, Math.max(800, 2 * radius + MAX_DISTANCE * scale, radius * RELIEF_END + MAX_DISTANCE * scale));
 }
 
 interface Grip { id: number; x: number; y: number; lastX: number; lastY: number; startX: number; startY: number }

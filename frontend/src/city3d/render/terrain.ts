@@ -116,8 +116,8 @@ export function createTerrain(ctx: CityContext): Terrain {
 function land(world: WorldData, flat: Mesher, solid: Mesher) {
   const { spec } = world, water = world.water.annuli, near = (a: number, b: number) => Math.abs(a - b) < .75;
   const wet = (r: number) => water.some(w => near(w.inner, r) || near(w.outer, r));
-  // Everything fades into the fog long before this; the edge must never show.
-  const far = Math.max(720, world.radius * 3.2);
+  // The flat land ends at the horizon, where the hills and mountains of render/mountains.ts begin.
+  const far = world.spec.horizon;
   const annuli = [...world.land.annuli].sort((a, b) => a.inner - b.inner);
   annuli.forEach((a, i) => {
     const last = i === annuli.length - 1, inner = wet(a.inner), outer = wet(a.outer);

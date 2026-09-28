@@ -68,7 +68,7 @@ export interface Placement {
   depth?: number;
   /** Picks the model's shade, so every section of a complex shares one colour (otherwise copies alternate). */
   tint?: number;
-  /** Sections: raised this far over the ground, the floors over an arch. */
+  /** Raised this far over the ground: the floors over an arch, towers on their podium, trees on the hills. */
   lift?: number;
 }
 

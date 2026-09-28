@@ -227,7 +227,7 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
       case "port": { const model = pick(port, p.variant)!; fitted(model, p, GROUND, out); return model; }
       case "tree-cone": case "tree-round": {
         const model = kind === "tree-round" ? trees.round : trees.cone;
-        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
+        out.compose(place.set(p.x, GROUND + (p.lift ?? 0), p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
         return model;
       }
       case "tree-birch": case "tree-oak":

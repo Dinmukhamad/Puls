@@ -14,6 +14,7 @@ import type { CityContext } from "../engine/context";
 import type { Placement } from "../world/types";
 import type { ModelPart } from "../assets/loader";
 import type { Catalogue, CatalogueModel } from "../assets/catalogue";
+import { FOG_END } from "../world/relief";
 import { buildGrid, createCopies, createSelector, select, shouldUpdate, type Pose, type View } from "./cells";
 
 /**
@@ -103,7 +104,7 @@ export function createInstancePools(ctx: CityContext, catalogue: Catalogue, plac
   const camera = ctx.camera, frustum = new THREE.Frustum(), projection = new THREE.Matrix4(), planes = new Float32Array(24);
   // LOD2 proxies are 12-triangle boxes: they stay until the fog swallows them (sky.ts: fog ends at 2.2 × radius),
   // so the map never shows empty ground; the quality's last distance only limits LOD1.
-  const fogFar = ctx.world.radius * 2.2;
+  const fogFar = ctx.world.radius * FOG_END;
   const distancesFor = (d: readonly number[]) => [d[0], d[1], Math.max(d[2], fogFar)] as [number, number, number];
   const view: View = { x: 0, y: 0, z: 0, planes, margin: CULL_MARGIN, distances: distancesFor(ctx.quality.lodDistances) };
   const white = new THREE.Color(1, 1, 1);

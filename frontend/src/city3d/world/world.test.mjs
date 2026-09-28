@@ -8,6 +8,7 @@ const load = async (contents) => {
   return import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 };
 const gen = await load(`export * from './generate.ts'; export * from './worldSpec.ts';`);
+const reliefModule = await load(`export * from './relief.ts';`);
 const old = await load(`export * from '../../pages/city/cityLayout.ts';`);
 const { ROAD_HALF, BRIDGE_HALF, WORLD_V1, WORLD_X4 } = gen;
 
@@ -182,7 +183,8 @@ forWorlds('placements are well formed and on land', (world, spec) => {
     assert.ok(KINDS.includes(p.kind), p.kind);
     assert.ok([p.x, p.z, p.rotation, p.scale, p.width].every(Number.isFinite) && Number.isInteger(p.variant) && p.variant >= 0 && p.scale > 0 && p.width >= 0);
     const r = radius(p), onIslet = world.land.islets.some((i) => Math.hypot(p.x - i.x, p.z - i.z) < i.r);
-    if (p.kind !== 'lamp') assert.ok(onIslet || world.land.annuli.some((a) => r > a.inner && r < a.outer), `${p.kind} in the water at ${p.x.toFixed(1)}, ${p.z.toFixed(1)}`);
+    // Lamps may stand on bridges; the forests stand on the hills past the horizon.
+    if (p.kind !== 'lamp' && !(p.lift && r > spec.horizon)) assert.ok(onIslet || world.land.annuli.some((a) => r > a.inner && r < a.outer), `${p.kind} in the water at ${p.x.toFixed(1)}, ${p.z.toFixed(1)}`);
   }
   assert.ok(world.radius >= spec.horizon);
 });
@@ -215,7 +217,8 @@ test('v1 reproduces the old city: districts, roads, lots, trees, lamps, car park
   each(buildings, lots, 'lot', ['x', 'z', 'rotation']);
   buildings.forEach((b, i) => { assert.equal(b.kind, kind(lots[i])); if (b.kind !== 'block' && b.kind !== 'tower') close(b.width, lots[i].width, 'lot width'); });
   each(V1.parks, parks, 'park', ['x', 'z']);
-  const trees = old.treeSpots(false, parks), mine = ofKind(V1, TREES);
+  // The forests on the hills past the horizon are new; the city's own trees are the old ones.
+  const trees = old.treeSpots(false, parks), mine = ofKind(V1, TREES).filter((p) => !p.lift);
   each(mine, trees, 'tree', ['x', 'z', 'scale']);
   mine.forEach((t, i) => assert.equal(t.kind, trees[i].round ? 'tree-round' : 'tree-cone'));
   each(ofKind(V1, new Set(['lamp'])), old.lampSpots(), 'lamp', ['x', 'z']);
@@ -368,5 +371,21 @@ test('x4: driveways between complexes are car parks out to the ring road; walks 
         assert.ok(out > .5, 'a walk runs into a building');
       }
     }
+  }
+});
+
+test('hills and mountains rise past the horizon, and the forests stand on them', () => {
+  const relief = reliefModule;
+  for (const world of WORLDS) {
+    const start = world.spec.horizon;
+    assert.equal(relief.reliefHeight(start * .99, 0, start), 0, 'the city stays flat');
+    const heights = Array.from({ length: 72 }, (_, i) => { const a = i / 72 * Math.PI * 2; return [1.05, 1.3, 1.9, 2.6, 3].map((k) => relief.reliefHeight(Math.cos(a) * start * k, Math.sin(a) * start * k, start)); });
+    assert.ok(heights.every(([near]) => near >= 0 && near < 20), 'gentle hills just past the horizon');
+    assert.ok(Math.max(...heights.map((h) => Math.max(h[2], h[3], h[4]))) > 80, 'mountains farther out');
+    for (const tree of world.placements.filter((p) => p.lift && p.kind.startsWith('tree-'))) {
+      assert.ok(Math.hypot(tree.x, tree.z) > start && tree.lift < 41, 'a forest tree off the hills');
+      assert.ok(Math.abs(tree.lift - relief.reliefHeight(tree.x, tree.z, start)) < 1e-9, 'a forest tree floats or sinks');
+    }
+    assert.ok(world.placements.filter((p) => p.lift && p.kind.startsWith('tree-')).length > 200, 'forests on the hills');
   }
 });
