@@ -206,7 +206,8 @@ export function createTraffic(ctx: CityContext, { vehicles }: TrafficOptions = {
   const roadY = (x: number, z: number) => { const r = Math.hypot(x, z); for (const ring of rings) if (Math.abs(r - ring) < 1.05) return RING_Y; return STREET_Y; };
   /** Moves the vehicles by `dt` and packs the visible ones into the instance buffers. */
   function place(dt: number) {
-    const { camera } = ctx, far = ctx.quality.lodDistances[2];
+    // Farther from a high camera: zoomed out, the cars on the streets it looks down on stay in the picture.
+    const { camera } = ctx, far = ctx.quality.lodDistances[2] + Math.min(450, Math.max(0, camera.position.y - 40) * 1.5);
     camera.updateMatrixWorld();
     frustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse), camera.coordinateSystem, camera.reversedDepth);
     const blobArray = shadows!.instanceMatrix.array as Float32Array, lampArray = lamps.instanceMatrix.array as Float32Array;

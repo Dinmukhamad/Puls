@@ -27,8 +27,10 @@ export interface Sky {
   sunColor: ShaderNodeObject<THREE.UniformNode<THREE.Color>>;
   /** Daylight or moonlight, with matching sky, fog and fill colours. */
   setTimeOfDay(hours: number): void;
-  /** Centres the shadow map near the view's centre (x, z) once the view has moved a third of its reach away. */
-  followView(x: number, z: number): void;
+  /** Centres the shadow map near the view's centre (x, z) once the view has moved a third of its reach away, and sizes it to the view distance. */
+  followView(x: number, z: number, viewDistance?: number): void;
+  /** Moves the fog out with the camera's distance from the view's centre. */
+  setViewDistance(viewDistance: number): void;
   dispose(): void;
 }
 
@@ -112,9 +114,15 @@ export function createSky(ctx: CityContext): Sky {
   // A warm late-morning sun, low enough for long shadows; the sky and the grass fill the shade softly.
   const hemisphere = new THREE.HemisphereLight("#d9ebff", "#71805c", 1.15);
   const sun = new THREE.DirectionalLight(SUN, SUN_INTENSITY);
-  const reach = Math.min(world.radius, SHADOW_REACH), distance = reach + 60;
+  // The map covers a square of ±reach: SHADOW_REACH at first, then as much as the view shows (followView).
+  let reach = Math.min(world.radius, SHADOW_REACH), distance = reach + 60;
   sun.castShadow = true;
-  Object.assign(sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: Math.max(1, distance - reach * 1.5), far: distance + reach * 1.5 });
+  const frameShadow = () => {
+    distance = reach + 80;
+    Object.assign(sun.shadow.camera, { left: -reach, right: reach, top: reach, bottom: -reach, near: Math.max(1, distance - reach * 1.5), far: distance + reach * 1.5 });
+    sun.shadow.camera.updateProjectionMatrix();
+  };
+  frameShadow();
   scene.add(hemisphere, sun);
   // The shadow map covers a square around `shadowCentre`: the plaza, until the view goes farther out.
   const shadowCentre = new THREE.Vector3(), towardsSun = new THREE.Vector3();
@@ -159,16 +167,26 @@ export function createSky(ctx: CityContext): Sky {
   }
   setTimeOfDay(DEFAULT_HOURS);
 
-  function followView(x: number, z: number) {
+  function followView(x: number, z: number, viewDistance = 0) {
+    // As much as the view shows, in steps of 30% so zooming a little does not redraw: crisp close by, the whole city from afar.
+    const wanted = Math.min(world.radius * 1.05, Math.max(SHADOW_REACH * .55, viewDistance * 1.3)), level = Math.pow(1.3, Math.round(Math.log(wanted) / Math.log(1.3)));
+    const resized = viewDistance > 0 && Math.abs(level - reach) > 1e-6;
+    if (resized) { reach = level; frameShadow(); shadowSize(ctx.quality); }
     const step = reach / 3;
-    if (Math.hypot(x - shadowCentre.x, z - shadowCentre.z) < step) return;
+    if (!resized && Math.hypot(x - shadowCentre.x, z - shadowCentre.z) < step) return;
     // Whole steps, so small moves around a spot never redraw the map.
     shadowCentre.set(Math.round(x / step) * step, 0, Math.round(z / step) * step);
     aimSun(); ctx.requestShadowUpdate();
   }
+  /** Fog counts from the view, not the plaza: zoomed out, the city stays clear and only the distance beyond it fades. */
+  const fog = scene.fog as THREE.Fog, fogNear = fog.near, fogFar = fog.far;
+  function setViewDistance(viewDistance: number) {
+    const extra = Math.max(0, viewDistance - 110);
+    fog.near = fogNear + extra; fog.far = fogFar + extra;
+  }
 
   return {
-    sun, hemisphere, gradient, sunDirection, sunColor, setTimeOfDay, followView,
+    sun, hemisphere, gradient, sunDirection, sunColor, setTimeOfDay, followView, setViewDistance,
     dispose() {
       offQuality();
       scene.remove(hemisphere, sun);

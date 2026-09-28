@@ -8,12 +8,14 @@ import * as THREE from "three/webgpu";
 import type { CityContext } from "../engine/context";
 import { fbm, RELIEF_END, reliefHeight } from "../world/relief";
 
-const TOP = .2, SEGMENTS = 360, RINGS = 72;
+const TOP = .2;
 const MEADOW = new THREE.Color("#86a174"), FOREST = new THREE.Color("#5c7c52"), ROCK = new THREE.Color("#8e8a83"), SNOW = new THREE.Color("#eef2f5");
 
 export interface Mountains { mesh: THREE.Mesh; dispose(): void }
 
 export function createMountains(ctx: CityContext): Mountains {
+  // Phones and weak GPUs get a third of the triangles: the ranges are far away and fogged anyway.
+  const light = ctx.mobile || ctx.quality.tier === "low", SEGMENTS = light ? 200 : 360, RINGS = light ? 44 : 72;
   const start = ctx.world.spec.horizon, end = ctx.world.radius * RELIEF_END, positions: number[] = [], indices: number[] = [];
   // Rings closer together near the city, where the hills are seen from near by.
   for (let k = 0; k <= RINGS; k++) {

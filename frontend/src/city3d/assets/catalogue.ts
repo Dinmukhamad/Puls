@@ -184,7 +184,11 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     const [nearGeometry, farGeometry] = furnitureGeometry(kind);
     const near: LodLevel = { parts: [{ geometry: own(nearGeometry), material: (kind === "bush" || kind === "hedge") ? treeMaterial : furnitureMaterial, castShadow: true }] };
     const far: LodLevel | null = farGeometry ? { parts: [{ geometry: own(farGeometry), material: (kind === "bush" || kind === "hedge") ? treeMaterial : furnitureMaterial, castShadow: true }] } : null;
-    return [kind, add(procedural(kind, [near, near, far], (kind === "bush" || kind === "hedge") ? { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 2 } : {}))];
+    const model = add(procedural(kind, [near, near, far], (kind === "bush" || kind === "hedge") ? { tints: TREE_TINTS.map(c => new THREE.Color(c)), tintStep: 2 } : {}));
+    // Pieces too small for a far version of their own become a box in their own colours, drawn with the far buildings,
+    // so a yard never empties when the camera moves away.
+    if (!far) model.lods[2] = { parts: plainProxy, ...vertexColourProxy(nearGeometry) };
+    return [kind, model];
   })) as Record<FurnitureKind, CatalogueModel>;
 
   const poleMaterial = own(new THREE.MeshStandardNodeMaterial({ color: "#5f6678", roughness: .72, metalness: .04 }));
@@ -198,7 +202,9 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     { geometry: own(detail ? new THREE.SphereGeometry(.09, 8, 6).translate(0, 1.35, 0) : new THREE.IcosahedronGeometry(.09, 0).translate(0, 1.35, 0)), material: bulbMaterial, castShadow: false },
   ] });
   // Lamps are thinner than a pixel beyond the LOD1 distance.
+  // Far away a lamp is a slim grey box, drawn with every other far proxy.
   const lamp = add(procedural("lamp", [lampLevel(true), lampLevel(false), null]));
+  lamp.lods[2] = { parts: plainProxy, matrix: new THREE.Matrix4().compose(new THREE.Vector3(0, 0, 0), new THREE.Quaternion(), new THREE.Vector3(.12, 1.45, .12)), colors: [new THREE.Color("#5f6678"), new THREE.Color("#dfe4ea")] };
 
   const portMaterial = own(new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .8, metalness: .08 }));
   portMaterial.emissiveNode = portGlow(nightLevel);
@@ -310,6 +316,24 @@ function proxyLevel(model: Model, fallback: [string, string], cache: Map<unknown
   const center = model.bounds.getCenter(new THREE.Vector3()), size = model.bounds.getSize(new THREE.Vector3()).multiplyScalar(.95);
   const matrix = new THREE.Matrix4().compose(new THREE.Vector3(center.x, model.bounds.min.y, center.z), new THREE.Quaternion(), size);
   return { matrix, colors: averageColours(model, cache) ?? fallback.map(c => new THREE.Color(c)) };
+}
+
+/** A far proxy for a painted procedural model: its bounds, 5% in, and the area-weighted vertex colours of its sides and top. */
+function vertexColourProxy(geometry: THREE.BufferGeometry): Pick<LodLevel, "matrix" | "colors"> {
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox!, center = bounds.getCenter(new THREE.Vector3()), size = bounds.getSize(new THREE.Vector3()).multiplyScalar(.95);
+  const position = geometry.getAttribute("position"), colour = geometry.getAttribute("color"), sums = [[0, 0, 0, 0], [0, 0, 0, 0]];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), count = geometry.index ? geometry.index.count : position.count, at = (k: number) => geometry.index ? geometry.index.getX(k) : k;
+  for (let k = 0; colour && k + 2 < count; k += 3) {
+    const i = at(k), j = at(k + 1), l = at(k + 2);
+    a.fromBufferAttribute(position, i); b.fromBufferAttribute(position, j); c.fromBufferAttribute(position, l);
+    const normal = b.sub(a).cross(c.sub(a)), area = normal.length() / 2;
+    if (!area) continue;
+    const sum = sums[normal.y > area ? 1 : 0];
+    sum[0] += colour.getX(i) * area; sum[1] += colour.getY(i) * area; sum[2] += colour.getZ(i) * area; sum[3] += area;
+  }
+  const colors = sums.map(([r, g, bl, w]) => w ? new THREE.Color(r / w, g / w, bl / w) : new THREE.Color("#8a8f96"));
+  return { matrix: new THREE.Matrix4().compose(new THREE.Vector3(center.x, bounds.min.y, center.z), new THREE.Quaternion(), size), colors };
 }
 
 /** Area-weighted texture colour of the up-facing (roof) and other (wall) triangles; null without pixels. */

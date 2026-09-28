@@ -51,3 +51,20 @@ test('water covers the expanded lagoon/canal and changing night keeps one geomet
   geometry.addEventListener('dispose', () => { geometryFreed = true; }); material.addEventListener('dispose', () => { materialFreed = true; });
   water.dispose(); assert.ok(geometryFreed && materialFreed); assert.equal(ctx.listeners, 0); assert.equal(ctx.scene.children.length, 0);
 });
+
+test('the shadow map covers what the view shows and the fog moves out with the camera', () => {
+  const ctx = context(), sky = city.createSky(ctx), shadow = sky.sun.shadow.camera, fog = ctx.scene.fog;
+  const span = () => shadow.right - shadow.left;
+  sky.followView(0, 0, 40); const close = span();
+  sky.followView(0, 0, 300); const far = span();
+  assert.ok(close < 200 && far > close * 3, `close ${close.toFixed(0)}, far ${far.toFixed(0)}`);
+  assert.ok(far <= ctx.world.radius * 2.2, 'never more than the city');
+  const requests = ctx.requests; sky.followView(0, 0, 305);
+  assert.equal(ctx.requests, requests, 'zooming a little does not redraw the map');
+  const near0 = fog.near, far0 = fog.far;
+  sky.setViewDistance(300);
+  assert.ok(fog.near > near0 + 150 && fog.far > far0 + 150, 'zoomed out, the city stays out of the fog');
+  sky.setViewDistance(60);
+  assert.equal(fog.near, near0); assert.equal(fog.far, far0);
+  sky.dispose();
+});

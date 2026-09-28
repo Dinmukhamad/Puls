@@ -119,7 +119,11 @@ test('residential sections: balconies near, one plain box far for every height, 
     assert.equal(model.lods[0].parts[0].material.emissiveNode, null, `${kind} does not glow`);
     assert.ok(model.lods[0].parts[0].geometry.getAttribute('position').count < 3000, `${kind} is light`);
   }
-  assert.equal(at('bench').lods[2], null, 'benches are not drawn far away');
+  // Far away small pieces become boxes in their own colours, all drawn with the far buildings' shared parts.
+  const far = at('bench').lods[2], house = at('block', { variant: 0, width: 3 });
+  assert.ok(far && far.matrix && far.colors.length === 2, 'a bench stays visible far away');
+  for (const kind of ['slide', 'swings', 'goal', 'hoop', 'gazebo', 'hedge', 'lamp']) assert.ok(at(kind).lods[2]?.parts === far.parts, `${kind} shares the far proxy`);
+  void house;
   // Offices: a lit glass model per height, podiums and towers alike, raised onto their podium by `lift`.
   const towers = [0, 1, 2, 3, 4, 5].map(variant => at('glass-tower', { variant, width: 8, depth: 6 }));
   assert.equal(new Set(towers).size, 6);

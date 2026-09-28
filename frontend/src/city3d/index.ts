@@ -100,9 +100,9 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     // The view may go out to the outer ring road; the shadow map follows it there.
     const rig = createCameraRig(camera, {
       dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], reach: world.spec.roadRings[world.spec.roadRings.length - 1],
-      frame: options.frame, view: options.view, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2]); options.onView(view); },
+      frame: options.frame, view: options.view, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2], view.distance); options.onView(view); },
     });
-    sky.followView(rig.currentView().target[0], rig.currentView().target[2]);
+    const first = rig.currentView(); sky.followView(first.target[0], first.target[2], first.distance); sky.setViewDistance(first.distance);
     const picker = createPicker(canvas, camera, () => districts.pickables, { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) });
     const post = createPost(ctx);
     const stats = createStats({ renderer, backend, host, visible: !!options.stats, quality, userIdKnown: true, gpu: handle.gpu, extra: () => { const s = parts?.pools?.stats(); return s ? `copies ${s.drawn}/${s.copies} · pools ${s.drawCalls} calls` : "loading models"; } });
@@ -122,7 +122,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       onGap: (gap, now) => quality.frame(gap, now),
       render(dt, now) {
         stats.beginFrame();
-        if (rig.update(now)) { lastMove = now; moveCallbacks.forEach(cb => cb()); }
+        if (rig.update(now)) { lastMove = now; sky.setViewDistance(rig.currentView().distance); moveCallbacks.forEach(cb => cb()); }
         night.step(dt);
         frameCallbacks.forEach(cb => cb(dt, now));
         if (shadowWanted && sun && now - lastMove > SHADOW_REST_MS) { shadowWanted = false; requestShadowRedraw(sun); }
@@ -157,6 +157,10 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       parts.catalogue = catalogue;
       parts.pools = createInstancePools(ctx, catalogue, world.placements);
       traffic.setVehicles(models);
+      // Every pool, near and far, has its shaders built before the city shows, so coming closer never
+      // stalls or pops (at most 8 s; the renderer builds whatever is left on first use).
+      await Promise.race([renderer.compileAsync(scene, camera).catch(() => undefined), new Promise(done => setTimeout(done, 8000))]);
+      if (disposed || !parts) return;
     } catch { /* The city still shows terrain, landmarks and taxis. */ }
     loading = false; shadowWanted = true;
   }

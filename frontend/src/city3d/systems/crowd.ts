@@ -325,7 +325,8 @@ export function createCrowd(ctx: CityContext): Crowd {
     const { camera } = ctx;
     camera.updateMatrixWorld();
     frustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse), camera.coordinateSystem, camera.reversedDepth);
-    const far = Math.max(120, ctx.quality.lodDistances[2]), share = Math.max(0, Math.min(1, density));
+    // Farther from a high camera, as for the cars: walkers stay in the picture when zoomed out.
+    const far = Math.max(120, ctx.quality.lodDistances[2]) + Math.min(450, Math.max(0, camera.position.y - 40) * 1.5), share = Math.max(0, Math.min(1, density));
     let slot = 0;
     for (let index = 0; index < count; index++) {
       if (Math.floor((index + 1) * share) === Math.floor(index * share)) continue;
