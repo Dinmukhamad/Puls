@@ -12,7 +12,7 @@
  * Lagoon bridges reach 0.3 onto the land at both ends, canal arch bridges 0.7 (the avenue stops 0.2 short
  * of the quay and the bank).
  */
-import type { ParkingLot, Placement, PlacementKind, Point, Road, Route, RoutePlan, WorldData, WorldSpec, Zone } from "./types";
+import type { ParkingLot, Placement, PlacementKind, Point, Road, Route, RoutePlan, Surface, WorldData, WorldSpec, Zone } from "./types";
 import type { CitySpec, ParkingSpec } from "./worldSpec";
 import { insideRect, layoutComplexes, type ComplexLayout } from "./complexes";
 import { fbm, reliefHeight } from "./relief";
@@ -347,6 +347,27 @@ function hillForest(plan: CityPlan): Placement[] {
   return trees;
 }
 
+/** Wall shades (catalogue SECTION_TINTS) and roof shades of the garden suburb: white, cream, pastels and brick; slate, tile, brown, zinc. */
+const COTTAGE_TINTS = [0, 1, 2, 3, 5, 6, 9, 10, 11, 13], COTTAGE_ROOFS = [0, 1, 1, 2, 3, 4];
+/**
+ * A house of the garden suburb on a suburban lot: one or two floors under a gabled roof whose ridge runs either
+ * way, in a garden lawn with a paved path to its door. Built from the same procedural pieces as the complexes,
+ * so windows and roofs read from any distance (the Kenney houses there turned into bare boxes far away).
+ */
+function cottage(lot: Lot, surfaces: Surface[]): Placement[] {
+  const floors = lot.size < .4 ? 1 : 2, width = lot.width * (.85 + lot.size * .35), depth = 2.1 + lot.roll * .7, turned = lot.pick > .55;
+  const x = { x: Math.cos(lot.rotation), z: -Math.sin(lot.rotation) }, front = { x: Math.sin(lot.rotation), z: Math.cos(lot.rotation) };
+  const span = turned ? depth : width, pick = <T>(list: T[], v: number) => list[Math.floor(v * list.length) % list.length];
+  // The garden round the house and the path from the door.
+  surfaces.push({ kind: "lawn", x: lot.x, z: lot.z, angle: Math.atan2(x.x, x.z), length: width + 2.6, width: depth + 2.8 });
+  surfaces.push({ kind: "plaza", x: lot.x + front.x * (depth / 2 + .7), z: lot.z + front.z * (depth / 2 + .7), angle: Math.atan2(front.x, front.z), length: 1.4, width: .6 });
+  return [
+    { kind: "cottage", variant: floors - 1, x: lot.x, z: lot.z, rotation: lot.rotation, scale: 1, width, depth, tint: pick(COTTAGE_TINTS, (lot.pick * 7.13) % 1) },
+    { kind: "roof", variant: 0, x: lot.x, z: lot.z, rotation: lot.rotation + (turned ? Math.PI / 2 : 0), scale: Math.min(1.5, span * .42), width: span + .3,
+      depth: (turned ? width : depth) + .3, tint: pick(COTTAGE_ROOFS, (lot.size * 5.71) % 1), lift: floors * .75 },
+  ];
+}
+
 export function generateWorld(spec: WorldSpec): WorldData {
   const plan = cityPlan(spec), s = plan.spec, mainland = mainlandLots(plan);
   // Residential complexes take over their bands: the rows of houses and blocks there go, and so does
@@ -375,7 +396,8 @@ export function generateWorld(spec: WorldSpec): WorldData {
   const parks = mainland.parks.filter(p => !inBand(Math.hypot(p.x, p.z)) && keep(p, 2.4));
   const trees = treeSpots(plan, parks, lots, keep);
   const placements: Placement[] = [];
-  for (const lot of lots) placements.push(building(lot, s.skylineAngle));
+  const gardens: Surface[] = [];
+  for (const lot of lots) placements.push(...(lot.zone === "suburb" ? cottage(lot, gardens) : [building(lot, s.skylineAngle)]));
   trees.forEach((t, i) => placements.push({ kind: t.round ? "tree-round" : "tree-cone", variant: i, x: t.x, z: t.z, rotation: t.x * 3.1, scale: t.scale, width: 0 }));
   for (const p of lampSpots(plan)) placements.push({ kind: "lamp", variant: 0, x: p.x, z: p.z, rotation: 0, scale: 1, width: 0 });
   placements.push(...parkedCars(plan), ...layout.placements, ...hillForest(plan));
@@ -387,7 +409,7 @@ export function generateWorld(spec: WorldSpec): WorldData {
     roads: { rings: [...s.roadRings], ...roadsOf(plan), crosswalks: crosswalks(plan), parking: [...plan.parking, ...layout.parking] },
     placements,
     parks,
-    complexes: layout.complexes, surfaces: layout.surfaces, walks: layout.walks, alleys: layout.alleys,
+    complexes: layout.complexes, surfaces: [...gardens, ...layout.surfaces], walks: layout.walks, alleys: layout.alleys,
     routes: trafficRoutes(plan),
     radius: s.horizon,
   };

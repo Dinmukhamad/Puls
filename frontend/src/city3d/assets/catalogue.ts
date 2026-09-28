@@ -172,6 +172,8 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const officeTints = OFFICE_TINTS.map(c => new THREE.Color(c)), officePart = (geometry: THREE.BufferGeometry): LodLevel => ({ parts: [{ geometry: own(geometry), material: officeMaterial, castShadow: true }] });
   const plainOffice = officePart(officeGeometry(1, 0));
   const glassTowers = OFFICE_FLOORS.map(floors => add({ id: `office-${floors}`, lods: [officePart(officeGeometry(floors, 2)), officePart(officeGeometry(floors, 1)), plainOffice], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: officeTints, tintStep: 3 }));
+  // Cottages of the garden suburb: the plain section box (one pool with every far section) under a gabled roof.
+  const cottage = add({ id: "cottage", lods: [plainSection, plainSection, plainSection], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 });
   // Gabled townhouse roofs: one prism, its ridge along the depth so the gable faces the street.
   const roofMaterial = own(new THREE.MeshStandardNodeMaterial({ roughness: .8, metalness: 0 }));
   const roofLevel: LodLevel = { parts: [{ geometry: own(gableGeometry()), material: roofMaterial, castShadow: true }] };
@@ -246,6 +248,9 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
       case "tree-birch": case "tree-oak":
         out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
         return moreTrees[kind === "tree-birch" ? "birch" : "oak"];
+      case "cottage":
+        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 3, (p.variant ? 2 : 1) * SECTION_FLOOR, p.depth ?? 2.4));
+        return cottage;
       case "roof":
         out.compose(place.set(p.x, GROUND + (p.lift ?? 0), p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 2.6, p.scale || 1, p.depth ?? 2.4));
         return roof;

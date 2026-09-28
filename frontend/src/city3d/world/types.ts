@@ -51,13 +51,14 @@ export interface WorldSpec {
  * - port: cranes, warehouses, containers (x4 world);
  * - tree-cone / tree-round / tree-birch / tree-oak: `scale` = tree size; lamp: street lamp; car-parked: `rotation` faces the aisle;
  * - section: one section of a residential complex, `width` along its facade, `depth` across, `variant` its floors class;
+ * - cottage: a detached house of the garden suburb, `variant` 0 or 1 for one or two floors, sized like a section;
  * - roof: a gabled roof on a townhouse, `width` along the ridge's gable front, `depth` along the ridge, `scale` its height, `lift` the eaves;
  * - glass-tower: an office building or podium of a business quarter, sized like a section (OFFICE_FLOORS classes);
  * - courtyard furniture (bench, slide, swings, climber, sandbox, goal, hoop, gazebo, flowerbed, bush, hedge, planter): `rotation` turns
  *   its front (+z) where it faces; `width` is its footprint for the walkers to keep clear of.
  */
 export type PlacementKind = "house" | "office" | "industry" | "block" | "tower" | "port" | "tree-cone" | "tree-round" | "tree-birch" | "tree-oak" | "lamp" | "car-parked"
-  | "section" | "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush" | "hedge" | "planter" | "glass-tower" | "fountain" | "roof";
+  | "section" | "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush" | "hedge" | "planter" | "glass-tower" | "fountain" | "roof" | "cottage";
 
 /**
  * One copy of a catalogue model. `variant` is a seeded integer ≥ 0 that picks a model within the kind
