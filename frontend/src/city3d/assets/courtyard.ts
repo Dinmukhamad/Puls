@@ -260,3 +260,18 @@ export function officeGeometry(floors: number, detail: 0 | 1 | 2) {
   const merged = mergeGeometries(parts)!; parts.forEach(g => g.dispose());
   return merged;
 }
+
+/**
+ * A gabled roof in unit space: x ±0.5 (the eaves), z ±0.5 (the ridge runs along z, so the gables face ±z), y 0…1
+ * (the ridge); copies are scaled to the house's width, depth and roof height. Slopes and gables, no bottom.
+ */
+export function gableGeometry() {
+  const p = [-.5, 0, -.5, .5, 0, -.5, 0, 1, -.5, -.5, 0, .5, .5, 0, .5, 0, 1, .5];
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(p, 3));
+  // Gables (front and back) and the two slopes.
+  geometry.setIndex([0, 2, 1, 3, 4, 5, 0, 3, 5, 0, 5, 2, 1, 2, 5, 1, 5, 4]);
+  const flat = geometry.toNonIndexed(); geometry.dispose();
+  flat.computeVertexNormals();
+  return flat;
+}

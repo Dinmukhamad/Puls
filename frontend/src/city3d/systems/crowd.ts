@@ -52,6 +52,8 @@ export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
     }
   };
   for (const p of world.placements) {
+    // Roofs, roof gardens and towers on their podiums stand over footprints the walkers already keep off.
+    if ((p.lift ?? 0) > .5 && !p.kind.startsWith('tree-')) continue;
     if (p.kind === 'section' || p.kind === 'glass-tower') {
       const hw = p.width / 2, hd = (p.depth ?? 2.4) / 2;
       file({ x: p.x, z: p.z, radius: 0, box: { cos: Math.cos(p.rotation), sin: Math.sin(p.rotation), hw, hd } }, Math.hypot(hw, hd) + 1);

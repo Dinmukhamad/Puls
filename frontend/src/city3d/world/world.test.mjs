@@ -23,7 +23,7 @@ const radius = (p) => Math.hypot(p.x, p.z);
 const same = (a, b) => gen.angularDistance(a, b) < 1e-6;
 const BUILDINGS = new Set(['house', 'office', 'industry', 'block', 'tower', 'port', 'section', 'glass-tower']), TREES = new Set(['tree-cone', 'tree-round', 'tree-birch', 'tree-oak']);
 const FURNITURE = ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush', 'hedge', 'planter', 'fountain'];
-const KINDS = [...BUILDINGS, ...TREES, 'lamp', 'car-parked', ...FURNITURE];
+const KINDS = [...BUILDINGS, ...TREES, 'lamp', 'car-parked', 'roof', ...FURNITURE];
 const ofKind = (world, kinds) => world.placements.filter((p) => kinds.has(p.kind));
 const segments = (world) => [...world.roads.streets, ...world.roads.bridges.map((b) => b.road)];
 const onRoad = (world, p, pad = 0) => world.roads.rings.some((R) => Math.abs(radius(p) - R) <= ROAD_HALF + pad) || segments(world).some((road) => gen.segmentDistance(p.x, p.z, road) <= ROAD_HALF + pad);
@@ -306,7 +306,7 @@ test('x4: residential complexes fill their bands between the avenues, clear of r
   assert.equal(V1.complexes.length, 0, 'v1 keeps its rows of houses');
   for (const band of WORLD_X4.complexes) assert.ok(X4.complexes.some((c) => radius(c) > band.from && radius(c) < band.to), `band ${band.from}…${band.to} is empty`);
   for (const p of sections) {
-    if (p.kind === 'section') assert.ok(p.width > 2.2 && p.width < 4.4 && p.depth >= 2 && p.depth <= 2.6 && p.variant >= 0 && p.variant <= 4, 'a section is a normal building');
+    if (p.kind === 'section') assert.ok(p.width > 2 && p.width < 5.6 && p.depth >= 2 && p.depth <= 2.6 && p.variant >= 0 && p.variant <= 6, `a section is a normal building: ${p.width.toFixed(2)} × ${p.depth}, class ${p.variant}`);
     else assert.ok(p.width > 3 && p.depth > 2.5 && p.variant >= 0 && p.variant <= 5, 'an office is a normal building');
     for (const q of corners(p)) {
       const r = radius(q), band = WORLD_X4.complexes.find((b) => r > b.from - .05 && r < b.to + .05);

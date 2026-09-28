@@ -26,14 +26,17 @@ const TAU = Math.PI * 2;
 /** Sections are about this wide along the facade: three windows a floor. */
 export const SECTION_WIDTH = 3.2;
 /** Floors of the section classes, each FLOOR high. */
-export const SECTION_FLOORS = [5, 7, 9, 12, 16], FLOOR = .75;
+export const SECTION_FLOORS = [3, 4, 5, 7, 9, 12, 16], FLOOR = .75;
+/**
+ * Section shades (assets/catalogue.ts SECTION_TINTS): townhouses in brick and render colours, houses in render or
+ * brick, towers light or in the two green shades that plant their balconies.
+ */
+const ROW_TINTS = [2, 4, 5, 6, 7, 9, 10, 11], HOUSE_TINTS = [0, 1, 2, 3, 4, 6, 7], TOWER_TINTS = [0, 1, 3, 8, 12, 13];
 /** Outside a complex: paving this far from the walls, walkers .6 out, lamps 1.35 out (clear of the walkers). */
 export const OUTSIDE = 1.6;
 const WALK_OUT = .6, LAMP_OUT = 1.35;
 /** Inside: walkers .55 from the walls, the yard's cells from 1.1 in. */
 const WALK_IN = .55, CELLS_IN = 1.1;
-/** The arch in the canal-side wing and the passages through the ends of big complexes. */
-const GATE = 3, PASSAGE = 2.4;
 /** Office towers: floors of each class, OFFICE_FLOOR high. */
 export const OFFICE_FLOORS = [3, 8, 12, 18, 26, 34], OFFICE_FLOOR = .9;
 /** Stalls of the driveway car parks: 1.1 apart, as in the other car parks. */
@@ -149,25 +152,46 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
     }
   }
 
+  /**
+   * A residential quarter after the open blocks of ZILART, Copenhagen and Amsterdam: separate buildings round a
+   * yard instead of one wall, each with its own height, colour and roof, green gaps between them. Along the
+   * front (towards the canal) a row of narrow townhouses in brick and render shades with gabled roofs; at the
+   * ends mid-rise houses; at the back a longer house with a garden on its roof and, at one end, a slim tower,
+   * sometimes with planted balconies (Bosco Verticale). Heights step up from the front to the back.
+   */
   function complex(band: ComplexBand, f: Frame, length: number, depth: number) {
     const w = band.wing, grid = band.yard === "grid", hu = length / 2, hv = depth / 2, yu = hu - w, yv = hv - w;
-    // A light shade for the complex, a deep one (catalogue shades 8…11) for the towers on the corners of its far wing.
-    const [front, sides, back] = band.floors, tint = Math.floor(random() * 8), accent = 8 + Math.floor(random() * 4);
+    const [front, sides, back] = band.floors, top = SECTION_FLOORS.length - 1;
     patch("walk", f, -hu - OUTSIDE, hu + OUTSIDE, -hv - OUTSIDE, hv + OUTSIDE);
-    // The far wing runs the whole length, its corner sections a class higher; the canal wing has the arch.
-    wing(f, hv - w / 2, -hu, hu, true, w, [], 0, (i, n) => i === 0 || i === n - 1 ? [Math.min(SECTION_FLOORS.length - 1, back + 1), accent] : [back, tint]);
-    wing(f, -hv + w / 2, -hu, hu, true, w, [0], GATE, () => [front, tint]);
-    for (const side of [-1, 1]) wing(f, side * (hu - w / 2), -yv, yv, false, w, grid ? [0] : [], PASSAGE, () => [sides, tint]);
+    // Front: townhouses, 2.3–2.9 wide each, in runs of 2–4 with gaps; every house its own shade and gable.
+    const row = pieces(-hu, hu, 5.5, 10, 1.8, 3);
+    gapTrees(f, row, -hv + w / 2, true, w);
+    for (const [a, b] of row) {
+      const n = Math.max(2, Math.round((b - a) / 2.6)), unit = (b - a) / n;
+      for (let i = 0; i < n; i++) {
+        const u = a + unit * (i + .5), variant = Math.min(top, front + (random() < .35 ? 1 : 0)), height = SECTION_FLOORS[variant] * FLOOR;
+        out.placements.push({ kind: "section", variant, ...at(f, u, -hv + w / 2), rotation: along(dir(f, 1, 0)), scale: 1, width: unit + .02, depth: w, tint: pick(ROW_TINTS) });
+        out.placements.push({ kind: "roof", variant: 0, ...at(f, u, -hv + w / 2), rotation: along(dir(f, 1, 0)), scale: Math.min(1.5, unit * .5), width: unit + .12, depth: w + .3, tint: pick([0, 1, 2, 3, 4]), lift: height });
+      }
+    }
+    // Ends: one house each, mid-rise, over the middle of the side (open corners).
+    for (const side of [-1, 1]) {
+      const span = Math.min(2 * yv - 2.4, Math.max(5, yv * 1.2));
+      house(f, side * (hu - w / 2), -span / 2, span / 2, false, w, Math.min(top, sides + (random() < .4 ? 1 : 0)), pick(HOUSE_TINTS));
+      gapTrees(f, [[-yv - 1, -span / 2], [span / 2, yv + 1]], side * (hu - w / 2), false, w);
+    }
+    // Back: a long house and a slim tower at one end, with a green gap between them.
+    const towerAtEnd = random() < .5 ? -1 : 1, towerLength = Math.min(5.2, length * .2), gap = 2.4;
+    const [b0, b1] = towerAtEnd < 0 ? [-hu + towerLength + gap, hu - 1.2] : [-hu + 1.2, hu - towerLength - gap];
+    const houses = pieces(b0, b1, 7, 14, 2, 3.2), towerU = towerAtEnd * (hu - towerLength / 2);
+    for (const [a, b] of houses) house(f, hv - w / 2, a, b, true, w, Math.min(top, back + (random() < .3 ? -1 : 0)), pick(HOUSE_TINTS), true);
+    gapTrees(f, towerAtEnd < 0 ? [[-hu, -hu + towerLength], ...houses] : [...houses, [hu - towerLength, hu]], hv - w / 2, true, w);
+    out.placements.push({ kind: "section", variant: Math.min(top, back + 2), ...at(f, towerU, hv - w / 2), rotation: along(dir(f, 1, 0)), scale: 1, width: towerLength, depth: w, tint: pick(TOWER_TINTS) });
     out.walks.push(loop(f, yu - WALK_IN, yv - WALK_IN), loop(f, hu + WALK_OUT, hv + WALK_OUT));
-    // Lamps along both long sides outside.
+    // Lamps along both long sides outside, young trees in planters between them.
     const spans = Math.max(1, Math.round((length - 5) / 8));
     for (const side of [-1, 1]) for (let k = 0; k <= spans; k++) put("lamp", f, -hu + 2.5 + k * (length - 5) / spans, side * (hv + LAMP_OUT), 0);
-    // Between the lamps, young trees in planters; two more flank the arch.
-    for (const side of [-1, 1]) for (let k = 0; k < spans; k++) {
-      const u = -hu + 2.5 + (k + .5) * (length - 5) / spans;
-      if (side > 0 || Math.abs(u) > GATE / 2 + 1) put("planter", f, u, side * (hv + LAMP_OUT), random() * TAU, { width: .6 });
-    }
-    for (const side of [-1, 1]) put("planter", f, side * (GATE / 2 + .5), -hv - LAMP_OUT, 0, { width: .6 });
+    for (const side of [-1, 1]) for (let k = 0; k < spans; k++) put("planter", f, -hu + 2.5 + (k + .5) * (length - 5) / spans, side * (hv + LAMP_OUT), random() * TAU, { width: .6 });
 
     const cu = yu - CELLS_IN, cv = yv - CELLS_IN;
     if (!grid) {
@@ -247,26 +271,39 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
     out.keepOut.push({ x: f.cx, z: f.cz, ux: f.tx, uz: f.tz, halfLength: hu + OUTSIDE + .3, halfWidth: hv + OUTSIDE + .3 });
   }
 
-  /** A wing from `from` to `to` along u (or v) at `fixed`, cut by openings of `opening` at `gaps`, in sections. */
-  function wing(f: Frame, fixed: number, from: number, to: number, alongU: boolean, depth: number, gaps: number[], opening: number, style: (i: number, n: number) => [number, number]) {
-    const pieces: [number, number][] = [];
-    let a = from;
-    for (const g of gaps) { pieces.push([a, g - opening / 2]); a = g + opening / 2; }
-    pieces.push([a, to]);
-    const d = alongU ? dir(f, 1, 0) : dir(f, 0, 1);
-    // The floors over every opening, from two floors up: the wing reads as one building with an arch through it.
-    for (const g of gaps) {
-      const [variant, tint] = style(0, 1);
-      if (SECTION_FLOORS[variant] < 4) continue;
-      out.placements.push({ kind: "section", variant, ...(alongU ? at(f, g, fixed) : at(f, fixed, g)), rotation: along(d), scale: 1, width: opening + .04, depth, tint, lift: 2 * FLOOR });
+  /** A tree on a patch of lawn in every gap wider than 1.4 between the buildings `list` (sorted) along u (or v) at `fixed`. */
+  function gapTrees(f: Frame, list: [number, number][], fixed: number, alongU: boolean, depth: number) {
+    for (let k = 1; k < list.length; k++) {
+      const a = list[k - 1][1], b = list[k][0], s = (a + b) / 2;
+      if (b - a < 1.4) continue;
+      if (alongU) patch("lawn", f, a + .1, b - .1, fixed - depth / 2, fixed + depth / 2); else patch("lawn", f, fixed - depth / 2, fixed + depth / 2, a + .1, b - .1);
+      tree(f, alongU ? s : fixed, alongU ? fixed : s, 1.15);
+      if (b - a > 2.6) put("bush", f, alongU ? s + .8 : fixed + .5, alongU ? fixed + .5 : s + .8, random() * TAU, { scale: .8, width: .6 });
     }
-    for (const [p0, p1] of pieces) {
-      const span = p1 - p0; if (span < 1.2) continue;
-      const n = Math.max(1, Math.round(span / SECTION_WIDTH)), width = span / n;
-      for (let i = 0; i < n; i++) {
-        const s = p0 + width * (i + .5), [variant, tint] = style(i, n);
-        out.placements.push({ kind: "section", variant, ...(alongU ? at(f, s, fixed) : at(f, fixed, s)), rotation: along(d), scale: 1, width: width + .02, depth, tint });
-      }
+  }
+  /** Splits an edge from `from` to `to` into buildings `min`…`max` long with gaps of `gapMin`…`gapMax`. */
+  function pieces(from: number, to: number, min: number, max: number, gapMin: number, gapMax: number): [number, number][] {
+    const list: [number, number][] = [];
+    let a = from;
+    while (to - a >= min) {
+      let span = min + random() * (max - min);
+      if (to - a - span < min + gapMin) span = to - a;
+      list.push([a, a + span]);
+      a += span + gapMin + random() * (gapMax - gapMin);
+    }
+    return list;
+  }
+  /**
+   * A mid-rise house from `from` to `to` along u (or v) at `fixed`: sections of about SECTION_WIDTH in one shade;
+   * `garden` puts young trees on its flat roof. 
+   */
+  function house(f: Frame, fixed: number, from: number, to: number, alongU: boolean, depth: number, variant: number, tint: number, garden = false) {
+    const span = to - from, n = Math.max(1, Math.round(span / SECTION_WIDTH)), width = span / n, d = alongU ? dir(f, 1, 0) : dir(f, 0, 1), roof = SECTION_FLOORS[variant] * FLOOR;
+    for (let i = 0; i < n; i++) {
+      const s = from + width * (i + .5), p = alongU ? at(f, s, fixed) : at(f, fixed, s);
+      out.placements.push({ kind: "section", variant, ...p, rotation: along(d), scale: 1, width: width + .02, depth, tint });
+      // Roof garden: a planter beside each section's stair house.
+      if (garden && SECTION_FLOORS[variant] <= 9) { const q = s - width * .25; put("planter", f, alongU ? q : fixed, alongU ? fixed : q, random() * TAU, { width: .6, lift: roof, scale: 1.1 }); }
     }
   }
 

@@ -93,8 +93,8 @@ test('blocks, towers and port sheds light their windows at night; trees, lamp po
 test('residential sections: balconies near, one plain box far for every height, arches raised; yard furniture and new trees stay dark', () => {
   const catalogue = city.createCatalogue(new Map(), city.createNight()), matrix = new THREE.Matrix4(), size = new THREE.Vector3();
   const at = (kind, extra = {}) => catalogue.resolve({ kind, variant: 0, x: 3, z: 4, rotation: .5, scale: 1, width: 0, ...extra }, matrix);
-  const heights = [0, 1, 2, 3, 4].map(variant => { const model = at('section', { variant, width: 3.2, depth: 2.2 }); matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), size); return { model, height: size.y, width: size.x, depth: size.z }; });
-  assert.equal(new Set(heights.map(h => h.model)).size, 5, 'a model per height');
+  const heights = [0, 1, 2, 3, 4, 5, 6].map(variant => { const model = at('section', { variant, width: 3.2, depth: 2.2 }); matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), size); return { model, height: size.y, width: size.x, depth: size.z }; });
+  assert.equal(new Set(heights.map(h => h.model)).size, 7, 'a model per height');
   assert.equal(new Set(heights.map(h => h.model.lods[2].parts)).size, 1, 'far away every height is the same plain box (one pool)');
   assert.ok(heights.every((h, i) => i === 0 || h.height > heights[i - 1].height), 'the classes rise');
   assert.ok(Math.abs(heights[0].width - 3.2) < 1e-6 && Math.abs(heights[0].depth - 2.2) < 1e-6, 'the footprint is the placement');
@@ -105,11 +105,13 @@ test('residential sections: balconies near, one plain box far for every height, 
   }
   const section = heights[0].model, material = section.lods[0].parts[0].material;
   assert.ok(material.emissiveNode && material.colorNode && section.tints.length >= 12, 'a painted facade with night windows, in shades');
-  assert.ok(heights[4].model.lods[0].parts[0].geometry.getAttribute('position').count < 3000, 'the tallest section stays light');
+  assert.ok(heights[6].model.lods[0].parts[0].geometry.getAttribute('position').count < 3000, 'the tallest section stays light');
   // Over an arch: raised two floors, as tall as the rest of its wing.
   const arch = at('section', { variant: 1, width: 3, depth: 2.2, lift: 1.5 }), place = new THREE.Vector3();
   matrix.decompose(place, new THREE.Quaternion(), size);
-  assert.ok(arch !== heights[1].model && Math.abs(place.y - (.2 + 1.5)) < 1e-6 && Math.abs(place.y + size.y - (.2 + 7 * .75)) < 1e-6, 'the arch floors meet the roof of the wing');
+  assert.ok(arch !== heights[1].model && Math.abs(place.y - (.2 + 1.5)) < 1e-6 && Math.abs(place.y + size.y - (.2 + 4 * .75)) < 1e-6, 'the arch floors meet the roof of the wing');
+  const gable = at('roof', { width: 2.6, depth: 2.4, scale: 1.2, lift: 3 }); matrix.decompose(place, new THREE.Quaternion(), size);
+  assert.ok(gable && gable.lods[0].parts[0].geometry.getAttribute('position').count === 18 && Math.abs(place.y - 3.2) < 1e-6 && Math.abs(size.y - 1.2) < 1e-6, 'a gabled roof sits on its house');
   for (const kind of ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush', 'hedge', 'planter', 'fountain', 'tree-birch', 'tree-oak']) {
     const model = at(kind);
     assert.ok(model, kind);

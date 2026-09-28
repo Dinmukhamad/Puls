@@ -8,12 +8,12 @@
  * the same materials and draw calls, nothing drawn or computed on the CPU per frame.
  */
 import * as THREE from "three/webgpu";
-import { attribute, clamp, color, dot, float, floor, fwidth, max, mix, normalGeometry, normalLocal, normalWorld, positionGeometry, positionLocal, positionWorld, smoothstep, step, texture, uv, varying, vec2, vec3, type ShaderNodeObject } from "three/tsl";
+import { attribute, clamp, color, dot, float, floor, fwidth, max, mix, varyingProperty, normalGeometry, normalLocal, normalWorld, positionGeometry, positionLocal, positionWorld, smoothstep, step, texture, uv, varying, vec2, vec3, type ShaderNodeObject } from "three/tsl";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Placement, PlacementKind } from "../world/types";
 import { createNight, type Night } from "../render/night";
 import { loadModels, type Model, type ModelPart } from "./loader";
-import { furnitureGeometry, officeGeometry, SECTION_PART, SECTION_PARTS, sectionGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
+import { furnitureGeometry, gableGeometry, officeGeometry, SECTION_PART, SECTION_PARTS, sectionGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
 import { OFFICE_FLOOR, OFFICE_FLOORS, SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
 import modelsUrl from "../../pages/city/models/city-models.glb?url";
 import vehiclesUrl from "../../pages/city/models/vehicles.glb?url";
@@ -56,10 +56,13 @@ const BLOCKS = [{ floors: 4, height: 3, glass: false }, { floors: 7, height: 5.2
 const WALLS = ["#f3e6d3", "#e9eef5", "#f6d9cf", "#dfe9dd", "#ece4f4", "#f4efe2"], GLASS = ["#b8cbe3", "#a9c4d8", "#c4c9e6", "#d5dde8"];
 const TREE_TINTS = ["#ffffff", "#eaf6e2", "#f7ffe8", "#dfeed7", "#fff6dc"];
 /**
- * Residential sections: eight light shades for the complexes (white, pearl, sand, cool grey…) and four deeper
- * ones for the corner towers (terracotta, graphite, warm stone, sage); world/complexes.ts picks them by index.
+ * Residential walls, picked by index in world/complexes.ts: renders (0 white, 1 pearl, 2 cream, 3 light grey),
+ * bricks (4 red, 5 terracotta, 6 sand, 7 brown), accents (8 graphite, 9 peach, 10 blue-grey, 11 warm stone) and two
+ * greens (12 sage, 13 mint) whose towers get planted balconies (sectionFacade tells them by their green cast).
  */
-const SECTION_TINTS = ["#f7f5f0", "#eceae6", "#f3e8da", "#e5e9ed", "#efe2d0", "#f6eee4", "#dde3e7", "#f0ebe2", "#cf9476", "#8f969e", "#bca68b", "#a3b3a8"];
+const SECTION_TINTS = ["#f6f4ef", "#ece8e1", "#efe2cc", "#e2e7ea", "#c7765a", "#d49a6e", "#dcc09a", "#9d7b66", "#8c939b", "#e3c3a0", "#b7c6d4", "#c9b8a2", "#a9bda8", "#e2efdf"];
+/** Townhouse roofs: slate, terracotta, brown, dark grey, zinc. */
+const ROOF_TINTS = ["#5d646c", "#b0654a", "#7a5a48", "#454b52", "#9aa3aa"];
 /** Section floors and window columns in world units (a section of SECTION_WIDTH has three columns). */
 const SECTION_FLOOR = .75, SECTION_PANE = SECTION_WIDTH / 3;
 /** Office glass: white, cool, warm and green-grey tints over the glass colours of officeFacade. */
@@ -169,6 +172,10 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const officeTints = OFFICE_TINTS.map(c => new THREE.Color(c)), officePart = (geometry: THREE.BufferGeometry): LodLevel => ({ parts: [{ geometry: own(geometry), material: officeMaterial, castShadow: true }] });
   const plainOffice = officePart(officeGeometry(1, 0));
   const glassTowers = OFFICE_FLOORS.map(floors => add({ id: `office-${floors}`, lods: [officePart(officeGeometry(floors, 2)), officePart(officeGeometry(floors, 1)), plainOffice], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: officeTints, tintStep: 3 }));
+  // Gabled townhouse roofs: one prism, its ridge along the depth so the gable faces the street.
+  const roofMaterial = own(new THREE.MeshStandardNodeMaterial({ roughness: .8, metalness: 0 }));
+  const roofLevel: LodLevel = { parts: [{ geometry: own(gableGeometry()), material: roofMaterial, castShadow: true }] };
+  const roof = add({ id: "roof", lods: [roofLevel, roofLevel, roofLevel], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: ROOF_TINTS.map(c => new THREE.Color(c)), tintStep: 2 });
   // The floors over an arch: a plain box raised over the opening.
   const arch = add({ id: "section-arch", lods: [plainSection, plainSection, plainSection], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 });
   // Courtyard furniture: one material, one pool each; small pieces are not drawn beyond LOD1.
@@ -233,6 +240,9 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
       case "tree-birch": case "tree-oak":
         out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
         return moreTrees[kind === "tree-birch" ? "birch" : "oak"];
+      case "roof":
+        out.compose(place.set(p.x, GROUND + (p.lift ?? 0), p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 2.6, p.scale || 1, p.depth ?? 2.4));
+        return roof;
       case "glass-tower": {
         const index = Math.min(OFFICE_FLOORS.length - 1, Math.max(0, p.variant)), lift = p.lift ?? 0;
         out.compose(place.set(p.x, GROUND + lift, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 8, OFFICE_FLOORS[index] * OFFICE_FLOOR - lift, p.depth ?? 6));
@@ -244,7 +254,7 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
         return lift > 0 ? arch : sections[index];
       }
       case "bench": case "slide": case "swings": case "climber": case "sandbox": case "goal": case "hoop": case "gazebo": case "flowerbed": case "bush": case "hedge": case "planter": case "fountain":
-        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
+        out.compose(place.set(p.x, GROUND + (p.lift ?? 0), p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
         return furniture[kind];
       case "lamp": out.compose(place.set(p.x, GROUND, p.z), turn.identity(), size.setScalar(1)); return lamp;
       case "car-parked": {
@@ -541,9 +551,15 @@ function sectionFacade(material: THREE.MeshStandardNodeMaterial, level: Node) {
   facade = mix(facade, accent, columns.add(base).min(1).mul(.85));
   facade = mix(mix(facade, color("#5d636b"), frame), color("#8ea8bf"), pane);
   facade = mix(mix(facade, color("#4c4038"), door), color("#9cb6c9"), shop.mul(.85));
-  // Trim is white, glass rails a pale blue-grey, the roof dark grey, plain walls (roof houses, arch soffits) light stone.
-  material.colorNode = facade.mul(is(P.facade)).add(color("#f4f3ef").mul(is(P.trim))).add(color("#7d838a").mul(is(P.roof)))
-    .add(color("#b4c6d2").mul(is(P.glass))).add(color("#d9d5cd").mul(is(P.plain)));
+  // The copy's shade (instance colour) is for the walls: glass, frames, doors, trim and roofs keep their own colours,
+  // so they are divided by it here, before the renderer multiplies it back in.
+  const shade = varyingProperty("vec3", "vInstanceColor"), keep = (c: Node) => c.div(max(shade, vec3(.04)));
+  const wallShare = mix(float(1), float(0), pane.add(frame).add(door).add(shop).min(1));
+  const walls = mix(keep(facade), facade, wallShare);
+  // Glass rails, or planted boxes on the balconies of the green towers (their shade has a green cast).
+  const green = step(.035, shade.y.sub(max(shade.x, shade.z))), leaves = mix(color("#5f8a4e"), color("#86ad63"), hash(floor(positionWorld.xz.mul(2.5))));
+  material.colorNode = walls.mul(is(P.facade)).add(keep(color("#f4f3ef")).mul(is(P.trim))).add(keep(color("#7d838a")).mul(is(P.roof)))
+    .add(keep(mix(color("#b4c6d2"), leaves, green)).mul(is(P.glass))).add(keep(color("#d9d5cd")).mul(is(P.plain)));
   material.roughnessNode = float(.82).sub(is(P.glass).mul(.5));
   const h = hash(vec2(floor(u).add(plane.mul(17.3)), floor(v).add(plane.mul(5.1))));
   // Homes are darker than offices at night: about 40% of their windows are lit.
