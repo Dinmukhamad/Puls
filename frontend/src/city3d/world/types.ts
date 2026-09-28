@@ -51,11 +51,12 @@ export interface WorldSpec {
  * - port: cranes, warehouses, containers (x4 world);
  * - tree-cone / tree-round / tree-birch / tree-oak: `scale` = tree size; lamp: street lamp; car-parked: `rotation` faces the aisle;
  * - section: one section of a residential complex, `width` along its facade, `depth` across, `variant` its floors class;
+ * - glass-tower: an office building or podium of a business quarter, sized like a section (OFFICE_FLOORS classes);
  * - courtyard furniture (bench, slide, swings, climber, sandbox, goal, hoop, gazebo, flowerbed, bush, hedge, planter): `rotation` turns
  *   its front (+z) where it faces; `width` is its footprint for the walkers to keep clear of.
  */
 export type PlacementKind = "house" | "office" | "industry" | "block" | "tower" | "port" | "tree-cone" | "tree-round" | "tree-birch" | "tree-oak" | "lamp" | "car-parked"
-  | "section" | "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush" | "hedge" | "planter";
+  | "section" | "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush" | "hedge" | "planter" | "glass-tower" | "fountain";
 
 /**
  * One copy of a catalogue model. `variant` is a seeded integer ≥ 0 that picks a model within the kind
@@ -104,8 +105,10 @@ export interface WorldData {
   placements: Placement[];
   /** Parks on the mainland (Points), used for grass patches. */
   parks: Point[];
-  /** Residential complexes near the islands, the patches of their yards and driveways, and closed loops for walkers. */
+  /** Residential complexes and business quarters, the patches of their yards and plazas, and closed loops for walkers. */
   complexes: Complex[];
+  /** Ring alleys between the bands: arcs of `radius` from `from` to `to` radians, clear of the avenues. */
+  alleys: { radius: number; from: number; to: number }[];
   surfaces: Surface[];
   walks: Point[][];
   routes: RoutePlan[];

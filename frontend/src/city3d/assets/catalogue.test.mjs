@@ -110,7 +110,7 @@ test('residential sections: balconies near, one plain box far for every height, 
   const arch = at('section', { variant: 1, width: 3, depth: 2.2, lift: 1.5 }), place = new THREE.Vector3();
   matrix.decompose(place, new THREE.Quaternion(), size);
   assert.ok(arch !== heights[1].model && Math.abs(place.y - (.2 + 1.5)) < 1e-6 && Math.abs(place.y + size.y - (.2 + 7 * .75)) < 1e-6, 'the arch floors meet the roof of the wing');
-  for (const kind of ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush', 'hedge', 'planter', 'tree-birch', 'tree-oak']) {
+  for (const kind of ['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'bush', 'hedge', 'planter', 'fountain', 'tree-birch', 'tree-oak']) {
     const model = at(kind);
     assert.ok(model, kind);
     assert.equal(model.lods[0].parts.length, 1, `${kind} is one merged part`);
@@ -118,6 +118,13 @@ test('residential sections: balconies near, one plain box far for every height, 
     assert.ok(model.lods[0].parts[0].geometry.getAttribute('position').count < 3000, `${kind} is light`);
   }
   assert.equal(at('bench').lods[2], null, 'benches are not drawn far away');
+  // Offices: a lit glass model per height, podiums and towers alike, raised onto their podium by `lift`.
+  const towers = [0, 1, 2, 3, 4, 5].map(variant => at('glass-tower', { variant, width: 8, depth: 6 }));
+  assert.equal(new Set(towers).size, 6);
+  assert.ok(towers.every(model => model.lods[0].parts[0].material.emissiveNode && model.lods[0].parts[0].geometry.getAttribute('sectionPart')));
+  assert.ok(towers[0].lods[0].parts[0].material !== section.lods[0].parts[0].material, 'offices have a glass facade of their own');
+  const raised = new THREE.Vector3(); at('glass-tower', { variant: 4, width: 8, depth: 6, lift: 2.7 }); matrix.decompose(raised, new THREE.Quaternion(), size);
+  assert.ok(Math.abs(raised.y - 2.9) < 1e-6 && Math.abs(raised.y + size.y - (.2 + 26 * .9)) < 1e-6, 'a tower on its podium reaches its own height');
   assert.ok(at('tree-oak').lods[2], 'trees keep a far version');
   catalogue.dispose();
 });

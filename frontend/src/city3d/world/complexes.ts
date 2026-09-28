@@ -10,6 +10,12 @@
  * yard and the walk round the outside; between two complexes a driveway with parked cars runs out to the
  * ring road, and a stretch too short for a complex becomes a small square.
  *
+ * Business quarters take the half of the city facing `business.angle` (the skyline): glass towers on a
+ * podium at the back of the plot, lower by the water and higher out towards the skyline; in front, a plaza
+ * with a fountain on a promenade lined by an alley of trees, benches and lamps, lawns with flower beds and
+ * hedges, a cross alley on deep plots. Both halves share the paving, the trees, the lamps and the driveways,
+ * so they read as one city. Ring alleys (tree-lined walks with benches) run between bands.
+ *
  * Every complex lies inside its band and clear of the directions `blocked` returns (avenues, zone sectors,
  * car parks), and each straight complex is pulled in so its outer corners stay inside the curved band.
  */
@@ -28,6 +34,8 @@ const WALK_OUT = .6, LAMP_OUT = 1.35;
 const WALK_IN = .55, CELLS_IN = 1.1;
 /** The arch in the canal-side wing and the passages through the ends of big complexes. */
 const GATE = 3, PASSAGE = 2.4;
+/** Office towers: floors of each class, OFFICE_FLOOR high. */
+export const OFFICE_FLOORS = [3, 8, 12, 18, 26, 34], OFFICE_FLOOR = .9;
 /** Stalls of the driveway car parks: 1.1 apart, as in the other car parks. */
 const STALL = 1.1;
 const TREES: PlacementKind[] = ["tree-round", "tree-oak", "tree-birch", "tree-cone"];
@@ -47,6 +55,8 @@ export interface ComplexLayout {
   parking: ParkingLot[];
   /** Where the rows of houses, blocks, parks and trees must now stay out. */
   keepOut: Rect[];
+  /** Ring alleys: arcs of `radius` from `from` to `to` (radians). */
+  alleys: { radius: number; from: number; to: number }[];
 }
 
 /** A local frame: u along the ring (t), v outwards (n), from the centre (cx, cz). */
@@ -62,8 +72,9 @@ const along = (d: Point) => Math.atan2(-d.z, d.x), facing = (d: Point) => Math.a
  * Lays out the complexes of every band. `blocked` lists the directions [angle, half width] that something
  * crosses between two radii (the band with its outside walk); `rings` are the ring roads the driveways reach.
  */
-export function layoutComplexes(bands: readonly ComplexBand[], random: () => number, blocked: (r0: number, r1: number) => [number, number][], rings: readonly number[]): ComplexLayout {
-  const out: ComplexLayout = { complexes: [], placements: [], surfaces: [], walks: [], parking: [], keepOut: [] };
+export function layoutComplexes(bands: readonly ComplexBand[], random: () => number, blocked: (r0: number, r1: number) => [number, number][], rings: readonly number[],
+  options: { business?: { angle: number }; alleys?: readonly number[] } = {}): ComplexLayout {
+  const out: ComplexLayout = { complexes: [], placements: [], surfaces: [], walks: [], parking: [], keepOut: [], alleys: [] };
   const pick = <T>(items: readonly T[]) => items[Math.floor(random() * items.length) % items.length];
   const put = (kind: PlacementKind, f: Frame, u: number, v: number, rotation: number, extra: Partial<Placement> = {}) =>
     out.placements.push({ kind, variant: Math.floor(random() * 1e4), ...at(f, u, v), rotation, scale: 1, width: 0, ...extra });
@@ -77,20 +88,48 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
   };
   const tree = (f: Frame, u: number, v: number, size = 1) => put(pick(TREES), f, u, v, random() * TAU, { scale: size * (.8 + random() * .4) });
 
-  for (const band of bands) {
-    // The blocked directions as sorted, merged spans in [0, 2π) (split where they cross 0); the runs between them are open.
+  // The business half of the city faces options.business.angle.
+  const isBusiness = (a: number) => !!options.business && Math.abs(Math.atan2(Math.sin(a - options.business.angle), Math.cos(a - options.business.angle))) < Math.PI / 2;
+  for (const band of bands) for (const [a0, a1] of openRuns(band.from - OUTSIDE, band.to + OUTSIDE)) fillRun(band, a0, a1);
+  for (const radius of options.alleys ?? []) for (const [a0, a1] of openRuns(radius - 2, radius + 2)) alley(radius, a0, a1);
+  return out;
+
+  /** The open runs of directions between two radii: the blocked directions as sorted, merged spans in [0, 2π), and the gaps between. */
+  function openRuns(r0: number, r1: number): [number, number][] {
     const spans: [number, number][] = [];
-    for (const [angle, half] of blocked(band.from - OUTSIDE, band.to + OUTSIDE)) {
+    for (const [angle, half] of blocked(r0, r1)) {
       const start = ((angle - half) % TAU + TAU) % TAU, end = start + 2 * half;
       if (end > TAU) spans.push([start, TAU], [0, end - TAU]); else spans.push([start, end]);
     }
     spans.sort((a, b) => a[0] - b[0]);
     const merged: [number, number][] = [];
     for (const span of spans) { const last = merged[merged.length - 1]; if (last && span[0] <= last[1]) last[1] = Math.max(last[1], span[1]); else merged.push([...span]); }
-    if (!merged.length) { fillRun(band, 0, TAU); continue; }
-    merged.forEach(([, end], i) => { const next = merged[(i + 1) % merged.length][0] + (i === merged.length - 1 ? TAU : 0); if (next - end > 1e-6) fillRun(band, end, next); });
+    if (!merged.length) return [[0, TAU]];
+    const runs: [number, number][] = [];
+    merged.forEach(([, end], i) => { const next = merged[(i + 1) % merged.length][0] + (i === merged.length - 1 ? TAU : 0); if (next - end > 1e-6) runs.push([end, next]); });
+    return runs;
   }
-  return out;
+
+  /** A ring alley at `radius` from a0 to a1: a paved walk between two rows of trees, benches facing it, lamps. */
+  function alley(radius: number, a0: number, a1: number) {
+    const arc = (a1 - a0) * radius;
+    if (arc < 6) return;
+    // One kind of tree the whole way, for a proper alley: every 2.6 on both sides, a bench or a lamp in some gaps.
+    const kind = pick(["tree-round", "tree-oak"] as PlacementKind[]), trees = Math.floor((arc - 1) / 2.6);
+    for (let k = 0; k < trees; k++) {
+      const f = frameAt(radius, a0 + (.5 + (k + .5) * (arc - 1) / trees) / radius);
+      for (const side of [-1, 1]) put(kind, f, 0, side * 1.7, random() * TAU, { scale: 1.05 + random() * .2 });
+      if (k % 3 === 1) put("bench", f, 0, (k % 2 ? 1 : -1) * 1.15, facing(dir(f, 0, k % 2 ? -1 : 1)), { width: .8 });
+      if (k % 3 === 2) put("lamp", f, 0, (k % 2 ? -1 : 1) * 1.25, 0);
+    }
+    // The walk itself, in pieces of about two units of arc, and lawn under the trees.
+    const pieces = Math.ceil(arc / 2);
+    for (let k = 0; k < pieces; k++) {
+      const f = frameAt(radius, a0 + (k + .5) * arc / pieces / radius), half = arc / pieces / 2 + .05;
+      patch("lawn", f, -half, half, -2.3, 2.3); patch("plaza", f, -half, half, -.85, .85);
+    }
+    out.alleys.push({ radius, from: a0, to: a1 });
+  }
 
   /** Complexes with driveways between them along one open run, or a square if none fits. */
   function fillRun(band: ComplexBand, a0: number, a1: number) {
@@ -103,8 +142,9 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
     const length = lengthOf(count), start = a0 + .8 / rin;
     for (let k = 0; k < count; k++) {
       // Pulled in by the bulge of the straight outer wall, so its corners stay inside the band.
-      const bulge = rout - Math.sqrt(rout * rout - length * length / 4), depth = rout - rin - bulge;
-      complex(band, frameAt(rin + depth / 2, start + (k * (length + gap) + length / 2) / rin), length, depth);
+      const bulge = rout - Math.sqrt(rout * rout - length * length / 4), depth = rout - rin - bulge, a = start + (k * (length + gap) + length / 2) / rin;
+      if (band.office && isBusiness(a)) office(band, frameAt(rin + depth / 2, a), length, depth, a);
+      else complex(band, frameAt(rin + depth / 2, a), length, depth);
       if (k < count - 1) driveway(band, start + ((k + 1) * (length + gap) - gap / 2) / rin);
     }
   }
@@ -139,6 +179,69 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
       for (let i = kinds.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [kinds[i], kinds[j]] = [kinds[j], kinds[i]]; }
       yard(kinds[0], f, -cu, -path / 2, -cv, -path / 2); yard(kinds[1], f, path / 2, cu, -cv, -path / 2);
       yard(kinds[2], f, -cu, -path / 2, path / 2, cv); yard(kinds[3], f, path / 2, cu, path / 2, cv);
+    }
+    out.complexes.push({ x: f.cx, z: f.cz, angle: Math.atan2(f.tx, f.tz), length, depth });
+    out.keepOut.push({ x: f.cx, z: f.cz, ux: f.tx, uz: f.tz, halfLength: hu + OUTSIDE + .3, halfWidth: hv + OUTSIDE + .3 });
+  }
+
+  /**
+   * A business quarter: glass offices at the back of the plot (towers on a podium where the band has one,
+   * slabs by the water), a promenade with an alley of trees and a fountain in front, and on deep plots a
+   * cross alley to the entrance with lawns, flower beds and hedges in the quarters it leaves.
+   */
+  function office(band: ComplexBand, f: Frame, length: number, depth: number, angle: number) {
+    const hu = length / 2, hv = depth / 2, spec = band.office!, tint = Math.floor(random() * 4);
+    patch("walk", f, -hu - OUTSIDE, hu + OUTSIDE, -hv - OUTSIDE, hv + OUTSIDE);
+    // Towers rise towards the skyline: the top class at its direction, the lowest at the edge of the half.
+    const off = options.business ? Math.abs(Math.atan2(Math.sin(angle - options.business.angle), Math.cos(angle - options.business.angle))) / (Math.PI / 2) : 0;
+    const [low, high] = spec.towers, top = Math.max(low, Math.round(high - (high - low) * off));
+    const back = Math.min(depth * .42, 11), front = hv - back, lift = spec.podium ? OFFICE_FLOORS[0] * OFFICE_FLOOR : 0, U = dir(f, 1, 0);
+    if (spec.podium) put("glass-tower", f, 0, hv - back / 2, along(U), { variant: 0, width: length - 2, depth: back, tint });
+    const count = length >= 26 ? 2 : 1, width = Math.min(10, (length - 4) / count - 2), deep = Math.min(back - 1.2, 9.5);
+    for (let k = 0; k < count; k++) {
+      const u = count === 2 ? (k ? 1 : -1) * length / 4 + (random() - .5) : 0, variant = Math.max(1, top - (k % 2));
+      put("glass-tower", f, u, hv - back / 2 + (spec.podium ? (random() - .5) * .6 : 0), along(U), { variant, width, depth: deep, tint, lift });
+    }
+    out.walks.push(loop(f, hu + WALK_OUT, hv + WALK_OUT));
+    const spans = Math.max(1, Math.round((length - 5) / 8));
+    for (let k = 0; k <= spans; k++) put("lamp", f, -hu + 2.5 + k * (length - 5) / spans, -hv - LAMP_OUT, 0);
+
+    // The promenade across the front, a fountain in the middle, an alley of one kind of tree along both sides.
+    const v0 = -hv, v1 = front - .7, vp = (v0 + v1) / 2, kind = pick(["tree-round", "tree-oak", "tree-birch"] as PlacementKind[]);
+    patch("plaza", f, -hu, hu, vp - 1.2, vp + 1.2);
+    for (const side of [-1, 1]) if (Math.abs(side * 1.9) + .6 < (v1 - v0) / 2 + .6) patch("lawn", f, -hu + .3, hu - .3, vp + (side > 0 ? 1.25 : -2.55), vp + (side > 0 ? 2.55 : -1.25));
+    disc("plaza", f, 0, vp, 2.2);
+    put("fountain", f, 0, vp, 0, { width: 1.9 });
+    const trees = Math.max(2, Math.floor((length - 2) / 2.6));
+    for (let k = 0; k < trees; k++) {
+      const u = -hu + 1 + (k + .5) * (length - 2) / trees;
+      if (Math.abs(u) < 2.8) continue;
+      for (const side of [-1, 1]) {
+        const v = vp + side * 1.9;
+        if (v > v0 + .5 && v < v1) put(kind, f, u, v, random() * TAU, { scale: 1 + random() * .2 });
+      }
+      if (k % 2 === 0) put("bench", f, u + 1.3, vp + (k % 4 ? 1.35 : -1.35), facing(dir(f, 0, k % 4 ? -1 : 1)), { width: .8 });
+      else if (k % 4 === 1) put("lamp", f, u + 1.3, vp + 1.35, 0);
+    }
+    // Walkers stroll the promenade on both sides of the fountain.
+    for (const side of [-1, 1]) {
+      const g = { ...f, ...(({ x, z }) => ({ cx: x, cz: z }))(at(f, side * (hu / 2 + 1.3), vp)) };
+      if (hu / 2 - 2.2 > 1.5) out.walks.push(loop(g, hu / 2 - 2.2, .75, .5));
+    }
+    // Deep plots: a cross alley from the promenade to the entrance, and gardens in the quarters beside it.
+    if (v1 - (vp + 2.6) > 4) {
+      patch("plaza", f, -1, 1, vp + 1.2, v1 + .7);
+      for (let v = vp + 3.4; v < v1 - .4; v += 2.6) for (const side of [-1, 1]) put(kind, f, side * 1.75, v, random() * TAU, { scale: 1 + random() * .2 });
+      for (const side of [-1, 1]) {
+        const u0 = side > 0 ? 2.8 : -hu + .5, u1 = side > 0 ? hu - .5 : -2.8, q0 = vp + 2.8, q1 = v1 - .3;
+        if (u1 - u0 < 3 || q1 - q0 < 2.5) continue;
+        patch("lawn", f, u0, u1, q0, q1);
+        const cu = (u0 + u1) / 2, cq = (q0 + q1) / 2;
+        put("flowerbed", f, cu, cq, random() * TAU, { width: 1.1 });
+        for (const s of [-1, 1]) put("bench", f, cu + s * 1.25, cq, facing(dir(f, -s, 0)), { width: .8 });
+        hedges(f, u0 + .4, u1 - .4, q1 - .3, true);
+        for (const s of [-1, 1]) tree(f, cu + s * (u1 - u0) * .32, cq + (q1 - q0) * .25 * (random() < .5 ? 1 : -1), 1.1);
+      }
     }
     out.complexes.push({ x: f.cx, z: f.cz, angle: Math.atan2(f.tx, f.tz), length, depth });
     out.keepOut.push({ x: f.cx, z: f.cz, ux: f.tx, uz: f.tz, halfLength: hu + OUTSIDE + .3, halfWidth: hv + OUTSIDE + .3 });
@@ -250,8 +353,8 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
   /** A driveway at angle `a` from the canal-side walk out to the next ring road, with a row of parked cars. */
   function driveway(band: ComplexBand, a: number) {
     const r0 = band.from - OUTSIDE, outer = rings.find(ring => ring > band.to) ?? band.to + OUTSIDE + 1, inner = [...rings].reverse().find(ring => ring < band.from);
-    // Big bands run through from ring road to ring road.
-    const from = inner !== undefined && band.from - inner < 6 ? inner + 1 : r0, to = outer - 1, depth = band.gap - 2 * OUTSIDE;
+    // Out to the ring road next to the band, or to the band's edge where an alley runs instead.
+    const from = inner !== undefined && band.from - inner < 6 ? inner + 1 : r0, to = outer - band.to < 6 ? outer - 1 : band.to + OUTSIDE, depth = band.gap - 2 * OUTSIDE;
     const n = { x: Math.cos(a), z: Math.sin(a) }, t = { x: -Math.sin(a), z: Math.cos(a) }, mid = (from + to) / 2, length = to - from;
     const side = random() < .5 ? -1 : 1, stalls: ParkingLot["stalls"] = [];
     // One row nosed towards the lot's side, one stall wide at a time.
@@ -270,8 +373,11 @@ export function layoutComplexes(bands: readonly ComplexBand[], random: () => num
     if (depth < 4) return;
     const f = frameAt(band.from + depth / 2, a), hu = length / 2, hv = depth / 2;
     patch("lawn", f, -hu, hu, -hv, hv);
+    // In the business half a square is a paved plaza round a fountain.
+    const plaza = !!band.office && isBusiness(a) && Math.min(hu, hv) > 2.6;
+    if (plaza) disc("plaza", f, 0, 0, Math.min(hu, hv, 4) - .4);
     patch("plaza", f, -hu, hu, -.4, .4);
-    put("flowerbed", f, 0, 0, random() * TAU, { width: 1.1 });
+    if (plaza) put("fountain", f, 0, 0, 0, { width: 1.9 }); else put("flowerbed", f, 0, 0, random() * TAU, { width: 1.1 });
     for (const side of [-1, 1]) {
       put("bench", f, side * Math.min(hu - .8, 2.2), -.8, facing(dir(f, 0, 1)), { width: .8 });
       put("bench", f, side * Math.min(hu - .8, 2.2), .8, facing(dir(f, 0, -1)), { width: .8 });

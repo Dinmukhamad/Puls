@@ -13,8 +13,8 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Placement, PlacementKind } from "../world/types";
 import { createNight, type Night } from "../render/night";
 import { loadModels, type Model, type ModelPart } from "./loader";
-import { furnitureGeometry, SECTION_PART, SECTION_PARTS, sectionGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
-import { SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
+import { furnitureGeometry, officeGeometry, SECTION_PART, SECTION_PARTS, sectionGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
+import { OFFICE_FLOOR, OFFICE_FLOORS, SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
 import modelsUrl from "../../pages/city/models/city-models.glb?url";
 import vehiclesUrl from "../../pages/city/models/vehicles.glb?url";
 
@@ -62,7 +62,9 @@ const TREE_TINTS = ["#ffffff", "#eaf6e2", "#f7ffe8", "#dfeed7", "#fff6dc"];
 const SECTION_TINTS = ["#f7f5f0", "#eceae6", "#f3e8da", "#e5e9ed", "#efe2d0", "#f6eee4", "#dde3e7", "#f0ebe2", "#cf9476", "#8f969e", "#bca68b", "#a3b3a8"];
 /** Section floors and window columns in world units (a section of SECTION_WIDTH has three columns). */
 const SECTION_FLOOR = .75, SECTION_PANE = SECTION_WIDTH / 3;
-const FURNITURE: FurnitureKind[] = ["bench", "slide", "swings", "climber", "sandbox", "goal", "hoop", "gazebo", "flowerbed", "bush", "hedge", "planter"];
+/** Office glass: white, cool, warm and green-grey tints over the glass colours of officeFacade. */
+const OFFICE_TINTS = ["#ffffff", "#eef3f8", "#f5f2ec", "#e9f1ee"];
+const FURNITURE: FurnitureKind[] = ["bench", "slide", "swings", "climber", "sandbox", "goal", "hoop", "gazebo", "flowerbed", "bush", "hedge", "planter", "fountain"];
 /** Proxy colours when a model's texture cannot be read: [walls, roof]. */
 const FALLBACK: Record<string, [string, string]> = { s: ["#eadccb", "#b86b52"], c: ["#cfd6de", "#8e99a6"], i: ["#cdc8bd", "#8b8f95"], car: ["#d9cf6a", "#5b6068"] };
 
@@ -161,6 +163,12 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const sectionPart = (geometry: THREE.BufferGeometry): LodLevel => ({ parts: [{ geometry: own(geometry), material: sectionMaterial, castShadow: true }] });
   const plainSection = sectionPart(sectionGeometry(1, 0));
   const sections = SECTION_FLOORS.map(floors => add({ id: `section-${floors}`, lods: [sectionPart(sectionGeometry(floors, 2)), sectionPart(sectionGeometry(floors, 1)), plainSection], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 }));
+  // Office towers and podiums of the business quarters: glass curtain walls (officeFacade), one model per height.
+  const officeMaterial = own(new THREE.MeshStandardNodeMaterial({ roughness: .5, metalness: 0 }));
+  officeFacade(officeMaterial, nightLevel);
+  const officeTints = OFFICE_TINTS.map(c => new THREE.Color(c)), officePart = (geometry: THREE.BufferGeometry): LodLevel => ({ parts: [{ geometry: own(geometry), material: officeMaterial, castShadow: true }] });
+  const plainOffice = officePart(officeGeometry(1, 0));
+  const glassTowers = OFFICE_FLOORS.map(floors => add({ id: `office-${floors}`, lods: [officePart(officeGeometry(floors, 2)), officePart(officeGeometry(floors, 1)), plainOffice], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: officeTints, tintStep: 3 }));
   // The floors over an arch: a plain box raised over the opening.
   const arch = add({ id: "section-arch", lods: [plainSection, plainSection, plainSection], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 });
   // Courtyard furniture: one material, one pool each; small pieces are not drawn beyond LOD1.
@@ -225,12 +233,17 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
       case "tree-birch": case "tree-oak":
         out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
         return moreTrees[kind === "tree-birch" ? "birch" : "oak"];
+      case "glass-tower": {
+        const index = Math.min(OFFICE_FLOORS.length - 1, Math.max(0, p.variant)), lift = p.lift ?? 0;
+        out.compose(place.set(p.x, GROUND + lift, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 8, OFFICE_FLOORS[index] * OFFICE_FLOOR - lift, p.depth ?? 6));
+        return glassTowers[index];
+      }
       case "section": {
         const index = Math.min(SECTION_FLOORS.length - 1, Math.max(0, p.variant)), lift = p.lift ?? 0;
         out.compose(place.set(p.x, GROUND + lift, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || SECTION_WIDTH, SECTION_FLOORS[index] * SECTION_FLOOR - lift, p.depth ?? 2.4));
         return lift > 0 ? arch : sections[index];
       }
-      case "bench": case "slide": case "swings": case "climber": case "sandbox": case "goal": case "hoop": case "gazebo": case "flowerbed": case "bush": case "hedge": case "planter":
+      case "bench": case "slide": case "swings": case "climber": case "sandbox": case "goal": case "hoop": case "gazebo": case "flowerbed": case "bush": case "hedge": case "planter": case "fountain":
         out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
         return furniture[kind];
       case "lamp": out.compose(place.set(p.x, GROUND, p.z), turn.identity(), size.setScalar(1)); return lamp;
@@ -535,6 +548,31 @@ function sectionFacade(material: THREE.MeshStandardNodeMaterial, level: Node) {
   const h = hash(vec2(floor(u).add(plane.mul(17.3)), floor(v).add(plane.mul(5.1))));
   // Homes are darker than offices at night: about 40% of their windows are lit.
   material.emissiveNode = windowLight(h, litShare(hash(vec2(plane, 91.7))).mul(.65)).mul(pane.add(shop.mul(.6))).mul(stagger(h, level));
+}
+
+/**
+ * Office glass in world units: a curtain wall of panes one unit wide and a floor (OFFICE_FLOOR) high between
+ * mullions, with a spandrel band at every floor and a bright lobby at the ground. Each wall picks its glass
+ * (blue, teal, bronze or silver) and light or dark mullions; panes vary a little, like real reflections. At
+ * night offices light more of their panes than homes, in a cooler white.
+ */
+function officeFacade(material: THREE.MeshStandardNodeMaterial, level: Node) {
+  const P = SECTION_PARTS, part = attribute(SECTION_PART, "float"), is = (k: number) => step(part.sub(k).abs(), .5);
+  const n = normalWorld.normalize(), wall = step(n.y.abs(), .5).mul(is(P.facade));
+  const d = n.xz.div(max(n.xz.length(), 1e-6)), u = dot(positionWorld.xz, vec2(d.y.negate(), d.x)), v = positionWorld.y.sub(GROUND).div(OFFICE_FLOOR);
+  const plane = wallSeed(), pick = hash(vec2(plane, 23.9)), frames = hash(vec2(plane, 61.3));
+  // Glass reads light, as it does reflecting a bright sky (there is no environment map to reflect).
+  const tone = mix(mix(color("#8fb3d6"), color("#8cc0c2"), step(.3, pick)), mix(color("#c2b49c"), color("#b3c0cc"), step(.8, pick)), step(.55, pick));
+  const mullion = mix(color("#eef1f4"), color("#4a525b"), step(.72, frames));
+  const pane = pulse(u, .05, .95).mul(pulse(v, .22, 1)).mul(wall), lobby = step(v, 1).mul(wall), cell = hash(floor(vec2(u, v)).add(plane.mul(7.7)));
+  // Panes vary a little, and the glass brightens up the tower like a sky reflection.
+  const glass = tone.mul(cell.mul(.16).add(.9)).mul(v.mul(.012).add(.92).min(1.15));
+  let facade: Node = mix(mullion, glass, pane);
+  facade = mix(facade, mix(color("#a6c2d6"), color("#3a3f45"), pulse(u.div(6), .44, .56).mul(pulse(v, 0, .8))), lobby.mul(pulse(u, .05, .95)));
+  material.colorNode = facade.mul(is(P.facade)).add(mullion.mul(is(P.trim))).add(color("#6e757d").mul(is(P.roof))).add(color("#c9ccd0").mul(is(P.plain)));
+  material.roughnessNode = mix(float(.72), float(.22), pane);
+  const h = hash(vec2(floor(u).add(plane.mul(17.3)), floor(v).add(plane.mul(5.1))));
+  material.emissiveNode = windowLight(h, litShare(hash(vec2(plane, 91.7))).mul(.85)).mul(vec3(.62, .7, .85)).mul(pane.add(lobby.mul(.5))).mul(stagger(h, level));
 }
 
 /** Port sheds: one row of high windows along the marked walls, in model units, seeded by the copy. */

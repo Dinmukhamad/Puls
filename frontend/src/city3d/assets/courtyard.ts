@@ -140,6 +140,17 @@ function planter(detail: boolean) {
     ball(.3, 0, 1.02, 0, "#6f9a57", detail ? 1 : 0), ...(detail ? [ball(.2, .12, 1.2, .05, "#83ad66")] : [])]);
 }
 
+/** A round fountain: a stone basin with water, a column with a bowl, and jets of spray. */
+function fountain(detail: boolean) {
+  const sides = detail ? 20 : 10, parts = [
+    paint(new THREE.CylinderGeometry(.95, 1, .32, sides).translate(0, .16, 0), "#cfc8bb"), paint(new THREE.CylinderGeometry(.84, .84, .04, sides).translate(0, .3, 0), "#6fb3d8"),
+    paint(new THREE.CylinderGeometry(.12, .16, .62, 8).translate(0, .62, 0), "#d8d2c6"), paint(new THREE.CylinderGeometry(.38, .26, .1, 12).translate(0, .95, 0), "#d8d2c6"),
+    paint(new THREE.ConeGeometry(.08, .45, 6).translate(0, 1.22, 0), "#e3f2fa"),
+  ];
+  if (detail) for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; parts.push(paint(new THREE.ConeGeometry(.05, .3, 5).translate(Math.cos(a) * .55, .45, Math.sin(a) * .55), "#dcedf6")); }
+  return merge(parts);
+}
+
 /** A birch: a slim white trunk with dark marks and a light, tall crown. */
 function birch(far: boolean) {
   const parts = [paint(new THREE.CylinderGeometry(.045, .065, 1.7, far ? 4 : 6).translate(0, .85, 0), "#efeae0")];
@@ -157,7 +168,7 @@ function oak(far: boolean) {
   return merge(parts);
 }
 
-export type FurnitureKind = "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush" | "hedge" | "planter";
+export type FurnitureKind = "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush" | "hedge" | "planter" | "fountain";
 /** The near and far geometry of a courtyard model; far is null where it is too small to see at LOD2. */
 export function furnitureGeometry(kind: FurnitureKind): [THREE.BufferGeometry, THREE.BufferGeometry | null] {
   switch (kind) {
@@ -173,6 +184,7 @@ export function furnitureGeometry(kind: FurnitureKind): [THREE.BufferGeometry, T
     case "bush": return [bush(true), bush(false)];
     case "hedge": return [hedge(), null];
     case "planter": return [planter(true), planter(false)];
+    case "fountain": return [fountain(true), fountain(false)];
   }
 }
 export function treeKindGeometry(kind: "birch" | "oak", far: boolean) { return kind === "birch" ? birch(far) : oak(far); }
@@ -219,6 +231,31 @@ export function sectionGeometry(floors: number, detail: 0 | 1 | 2) {
         if (detail === 2) parts.push(partBox(.98, rail, glass, 0, base + slab, side * (.5 + out - glass / 2), P.glass));
       }
     }
+  }
+  const merged = mergeGeometries(parts)!; parts.forEach(g => g.dispose());
+  return merged;
+}
+
+/**
+ * An office tower (or podium) of `floors` in unit space, scaled to its width, depth and floors × 0.9 like a
+ * section. Detail 2: slim fins up the four corners, a glass crown band under a parapet, a canopy over the
+ * lobby on both long fronts and plant on the roof. Detail 1: parapet and roof plant. Detail 0: the plain box.
+ * Sizes are in world units at a nominal 9 × 7 footprint.
+ */
+export function officeGeometry(floors: number, detail: 0 | 1 | 2) {
+  const P = SECTION_PARTS, height = floors * .9, y = (units: number) => units / height, z = (units: number) => units / 7, x = (units: number) => units / 9;
+  const parts = [partBox(1, 1, 1, 0, 0, 0, P.facade, P.roof, P.plain)];
+  if (detail >= 1) {
+    const rim = y(.45), tz = z(.12), tx = x(.12);
+    parts.push(partBox(1, rim, tz, 0, 1, .5 - tz / 2, P.trim), partBox(1, rim, tz, 0, 1, -.5 + tz / 2, P.trim));
+    parts.push(partBox(tx, rim, 1 - 2 * tz, .5 - tx / 2, 1, 0, P.trim), partBox(tx, rim, 1 - 2 * tz, -.5 + tx / 2, 1, 0, P.trim));
+    parts.push(partBox(x(3), y(1.1), z(2.6), x(-1.2), 1, z(.4), P.plain, P.roof), partBox(x(1.6), y(.7), z(1.6), x(2.4), 1, z(-1), P.plain, P.roof));
+  }
+  if (detail === 2) {
+    const fin = x(.22), finZ = z(.22);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) parts.push(partBox(fin, 1, finZ, sx * (.5 + fin / 2 - x(.05)), 0, sz * (.5 + finZ / 2 - z(.05)), P.trim));
+    if (floors > 4) for (const side of [-1, 1]) parts.push(partBox(1.01, y(.22), z(.08), 0, 1 - y(.9), side * (.5 + z(.04)), P.trim));
+    for (const side of [-1, 1]) parts.push(partBox(.5, y(.1), z(1.1), 0, 1 / floors, side * (.5 + z(.55)), P.trim));
   }
   const merged = mergeGeometries(parts)!; parts.forEach(g => g.dispose());
   return merged;

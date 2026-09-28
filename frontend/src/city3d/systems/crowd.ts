@@ -16,7 +16,7 @@ const WALK_CLEARANCE = .45;
 /** Walkers in the whole city, on a computer and on a phone. */
 const BUDGET = { desktop: 100, mobile: 56 };
 /** Courtyard furniture the walkers keep clear of, by its footprint (`width`). */
-const FURNITURE = new Set(['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'hedge', 'planter']);
+const FURNITURE = new Set(['bench', 'slide', 'swings', 'climber', 'sandbox', 'goal', 'hoop', 'gazebo', 'flowerbed', 'hedge', 'planter', 'fountain']);
 const GROUND_Y = .225;
 
 export interface CrowdRoute extends Route {
@@ -52,7 +52,7 @@ export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
     }
   };
   for (const p of world.placements) {
-    if (p.kind === 'section') {
+    if (p.kind === 'section' || p.kind === 'glass-tower') {
       const hw = p.width / 2, hd = (p.depth ?? 2.4) / 2;
       file({ x: p.x, z: p.z, radius: 0, box: { cos: Math.cos(p.rotation), sin: Math.sin(p.rotation), hw, hd } }, Math.hypot(hw, hd) + 1);
       continue;
@@ -82,6 +82,8 @@ export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
   const circles = [
     ...world.districts.filter(d => !d.id.startsWith('future-')).map(d => ({ district: d.id, cx: d.x, cz: d.z, radius: world.spec.islet - .72 })),
     { district: null, cx: 0, cz: 0, radius: world.spec.promenade },
+    // The ring alleys between the outer bands; the walk breaks where avenues cross them.
+    ...[...new Set((world.alleys ?? []).map(alley => alley.radius))].map(radius => ({ district: null, cx: 0, cz: 0, radius })),
   ];
   for (const circle of circles) {
     if (circle.radius <= 1) continue;
@@ -172,7 +174,10 @@ export function createCrowd(ctx: CityContext): Crowd {
   // Walkers in proportion to how long each walk is (up to 8 on one), within the budget; every island keeps one.
   const budget = ctx.mobile ? BUDGET.mobile : BUDGET.desktop, capacity = routes.map(route => Math.max(1, Math.min(8, Math.floor(route.length / 2.5))));
   const share = Math.min(1, budget / Math.max(1, capacity.reduce((sum, c) => sum + c, 0)));
-  const perRoute = capacity.map((c, index) => Math.max(routes[index].district ? 1 : 0, Math.round(c * share)));
+  // Whole walkers by largest remainder, so many short walks still get their share between them.
+  const exact = capacity.map(c => c * share), perRoute = exact.map((e, index) => Math.max(routes[index].district ? 1 : 0, Math.floor(e)));
+  const order = exact.map((_, index) => index).sort((a, b) => (exact[b] - Math.floor(exact[b])) - (exact[a] - Math.floor(exact[a])) || a - b);
+  for (let k = 0, left = budget - perRoute.reduce((sum, n) => sum + n, 0); k < order.length && left > 0; k++) if (perRoute[order[k]] < capacity[order[k]]) { perRoute[order[k]]++; left--; }
   for (let excess = perRoute.reduce((sum, n) => sum + n, 0) - budget; excess > 0; excess--) {
     let most = 0; perRoute.forEach((n, index) => { if (n > perRoute[most]) most = index; });
     perRoute[most]--;

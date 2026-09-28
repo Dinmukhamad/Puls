@@ -339,16 +339,26 @@ export function generateWorld(spec: WorldSpec): WorldData {
   // Residential complexes take over their bands: the rows of houses and blocks there go, and so does
   // anything else that would stand in a complex, its driveways or its squares.
   const bands = s.complexes ?? [];
-  const layout: ComplexLayout = bands.length ? layoutComplexes(bands, stream(s.seed, -40), (r0, r1) => blockedForComplexes(plan, r0, r1), s.roadRings)
-    : { complexes: [], placements: [], surfaces: [], walks: [], parking: [], keepOut: [] };
+  const layout: ComplexLayout = bands.length ? layoutComplexes(bands, stream(s.seed, -40), (r0, r1) => blockedForComplexes(plan, r0, r1), s.roadRings,
+      { business: s.businessAngle === undefined ? undefined : { angle: s.businessAngle }, alleys: s.alleys })
+    : { complexes: [], placements: [], surfaces: [], walks: [], parking: [], keepOut: [], alleys: [] };
   const inBand = (r: number) => bands.some(b => r > b.from - 3 && r < b.to + 3);
   // Everything kept out lies between the canal-side walk of the first band and the ring road past the last.
   const near = bands.length ? [Math.min(...bands.map(b => b.from)) - 4, Math.max(...bands.map(b => b.to)) + 6] : [0, 0];
+  // The rects filed in a grid of 16-unit cells by their reach (pads stay under 3), so a point checks only its cell.
+  const cells = new Map<number, typeof layout.keepOut>(), CELL = 16;
+  for (const rect of layout.keepOut) {
+    const reach = Math.hypot(rect.halfLength, rect.halfWidth) + 3;
+    for (let i = Math.floor((rect.x - reach) / CELL); i <= Math.floor((rect.x + reach) / CELL); i++) for (let j = Math.floor((rect.z - reach) / CELL); j <= Math.floor((rect.z + reach) / CELL); j++) {
+      const key = i * 4099 + j, list = cells.get(key);
+      if (list) list.push(rect); else cells.set(key, [rect]);
+    }
+  }
   const keep = (p: Point, pad: number) => {
     const r = Math.hypot(p.x, p.z);
-    return r < near[0] - pad || r > near[1] + pad || !layout.keepOut.some(rect => insideRect(p, rect, pad));
+    return r < near[0] - pad || r > near[1] + pad || !(cells.get(Math.floor(p.x / CELL) * 4099 + Math.floor(p.z / CELL)) ?? []).some(rect => insideRect(p, rect, pad));
   };
-  const lots = mainland.lots.filter(lot => !((lot.zone === "houses" || lot.zone === "blocks") && inBand(lot.r)) && keep(lot, lot.width / 2 + .5));
+  const lots = mainland.lots.filter(lot => !((lot.zone === "houses" || lot.zone === "blocks" || lot.zone === "towers") && inBand(lot.r)) && keep(lot, lot.width / 2 + .5));
   const parks = mainland.parks.filter(p => !inBand(Math.hypot(p.x, p.z)) && keep(p, 2.4));
   const trees = treeSpots(plan, parks, lots, keep);
   const placements: Placement[] = [];
@@ -364,7 +374,7 @@ export function generateWorld(spec: WorldSpec): WorldData {
     roads: { rings: [...s.roadRings], ...roadsOf(plan), crosswalks: crosswalks(plan), parking: [...plan.parking, ...layout.parking] },
     placements,
     parks,
-    complexes: layout.complexes, surfaces: layout.surfaces, walks: layout.walks,
+    complexes: layout.complexes, surfaces: layout.surfaces, walks: layout.walks, alleys: layout.alleys,
     routes: trafficRoutes(plan),
     radius: s.horizon,
   };

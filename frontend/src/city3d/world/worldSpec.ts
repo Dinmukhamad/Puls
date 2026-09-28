@@ -23,6 +23,10 @@ export interface CitySpec extends WorldSpec {
   districtAvenuesFrom?: number;
   /** Bands where residential complexes with courtyards replace the rows of houses and blocks. */
   complexes?: ComplexBand[];
+  /** The business half of those bands faces this direction (radians); the other half is residential. */
+  businessAngle?: number;
+  /** Ring alleys between bands. */
+  alleys?: number[];
 }
 
 /**
@@ -30,7 +34,11 @@ export interface CitySpec extends WorldSpec {
  * with parked cars, `wing` the depth of the buildings, and the floors class (world/complexes.ts) of the wings on
  * the canal side, the ends and the far side, lower towards the water.
  */
-export interface ComplexBand { from: number; to: number; length: number; gap: number; wing: number; floors: [front: number, sides: number, back: number]; yard: "row" | "grid" }
+export interface ComplexBand {
+  from: number; to: number; length: number; gap: number; wing: number; floors: [front: number, sides: number, back: number]; yard: "row" | "grid";
+  /** In the business half: podium floors (0 for none) and the tower classes (world/complexes.ts OFFICE_FLOORS), lowest to highest. */
+  office?: { podium: number; towers: [number, number] };
+}
 
 /** Direction of a point from the plaza, degrees: the old layout placed the districts by points. */
 const deg = (x: number, z: number) => Math.atan2(z, x) * 180 / Math.PI;
@@ -96,7 +104,7 @@ export const WORLD_X4: CitySpec = {
   roadRings: [42.2, 79.2, 118, 170, 226].map(radius => radius + COAST_SHIFT),
   promenade: 51.3 + COAST_SHIFT, quay: 52.4 + COAST_SHIFT, bank: 60.8 + COAST_SHIFT,
   mainland: [
-    // Detailed houses along the canal (industry and the port take their sectors).
+    // Detailed houses along the canal (the port takes its sector; complexes take the bands).
     ...rows("houses", 3.5, 64.8, 2, 4), { radius: 72.8, zone: "houses", step: 3.6 },
     // Mid-rise blocks between the first two mainland ring roads.
     ...rows("blocks", 4, 83.8, 2, 4.4), ...rows("blocks", 4.2, 92.6, 2, 4.4), { radius: 101.6, zone: "blocks", step: 4.4 }, { radius: 106.4, zone: "blocks", step: 4.6 }, { radius: 111.4, zone: "blocks", step: 4.8 },
@@ -109,7 +117,6 @@ export const WORLD_X4: CitySpec = {
   horizon: 300 + COAST_SHIFT,
   skylineAngle: 1.2,
   sectors: [
-    { zone: "industry", angleDeg: DRIVER, halfWidth: .5, from: 0, to: 118 + COAST_SHIFT },
     // Cranes, warehouses and containers from the canal bank inland, in front of the default view.
     { zone: "port", angleDeg: CRM, halfWidth: .6, from: 0, to: 118 + COAST_SHIFT },
   ],
@@ -121,8 +128,14 @@ export const WORLD_X4: CitySpec = {
   districtAvenuesFrom: 1,
   // Across the canal: low complexes with a courtyard each; beyond the first mainland ring road, tall ones with big yards.
   // The bands keep the tree rows along the canal bank and the ring roads, with a walk between.
+  // Half the city is business quarters (towards the skyline), half residential; beyond the second mainland
+  // ring road two rows of each with a ring alley between them.
   complexes: [
-    { from: 64.4, to: 76.6, length: 28, gap: 6.4, wing: 2, floors: [0, 1, 2], yard: "row" },
-    { from: 83.6, to: 113.8, length: 32, gap: 7.2, wing: 2.6, floors: [2, 3, 4], yard: "grid" },
+    { from: 64.4, to: 76.6, length: 28, gap: 6.4, wing: 2, floors: [0, 1, 2], yard: "row", office: { podium: 0, towers: [1, 2] } },
+    { from: 83.6, to: 113.8, length: 32, gap: 7.2, wing: 2.6, floors: [2, 3, 4], yard: "grid", office: { podium: 1, towers: [2, 4] } },
+    { from: 121.6, to: 140, length: 32, gap: 7.2, wing: 2.6, floors: [2, 3, 4], yard: "grid", office: { podium: 1, towers: [3, 5] } },
+    { from: 148, to: 166.4, length: 32, gap: 7.2, wing: 2.6, floors: [3, 4, 4], yard: "grid", office: { podium: 1, towers: [3, 5] } },
   ].map(band => ({ ...band, from: band.from + COAST_SHIFT, to: band.to + COAST_SHIFT })) as ComplexBand[],
+  businessAngle: 1.2,
+  alleys: [144 + COAST_SHIFT],
 };
