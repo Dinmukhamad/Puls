@@ -43,9 +43,14 @@ const KEYS: Record<string, KeyAction> = {
 const SHIFT_KEYS: Record<string, KeyAction> = { ArrowLeft: "turnLeft", ArrowRight: "turnRight", ArrowUp: "raise", ArrowDown: "lower" };
 const RESET_KEYS = new Set(["Digit0", "Numpad0", "Home"]);
 
-/** Three-quarter entrance view: the plaza stays beside the landmark, never on its sightline. */
+/** The yaw that turns a district's landmark at (x, z) so its front (+z) faces out to the city, away from the plaza. */
+export function districtFacing(x: number, z: number) {
+  return Math.atan2(x, z);
+}
+
+/** Three-quarter entrance view from the city side: the plaza stays beside the landmark, never on its sightline. */
 export function districtFocusView(x: number, z: number, distance = 52): CityView {
-  return { target: [x, 2.5, z], azimuth: Math.atan2(-x, -z) + .62, polar: .92, distance: clamp(distance, 38, 60) };
+  return { target: [x, 2.5, z], azimuth: districtFacing(x, z) + 1, polar: .92, distance: clamp(distance, 38, 60) };
 }
 
 /**

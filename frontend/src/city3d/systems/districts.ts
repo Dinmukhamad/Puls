@@ -17,6 +17,7 @@ import type { DistrictId } from "../../api/city";
 import { createArchitecture } from "../../pages/city/cityArchitecture";
 import { districtLevel } from "../../pages/city/cityLevels";
 import type { CityContext } from "../engine/context";
+import { districtFacing } from "../engine/camera";
 
 /** Top of the land, as in the old city. */
 export const GROUND = .2;
@@ -32,7 +33,7 @@ const WINDOW_EMISSION = "#ffd9a0", WINDOW_INTENSITY = .85;
 type GlazingMaterial = THREE.MeshStandardMaterial | THREE.MeshStandardNodeMaterial;
 type Level = CityContext["night"]["level"];
 
-/** Floodlights in a landmark's frame, world units from its centre (+z faces the plaza, the plot is ±5 × ±4.6): two flank the entrance, one lights each side. */
+/** Floodlights in a landmark's frame, world units from its centre (+z faces out to the city, the plot is ±5 × ±4.6): two flank the entrance, one lights each side. */
 const FLOODLIGHTS: [number, number][] = [[-2.5, 5.55], [2.5, 5.55], [-5.85, -.9], [5.85, -.9]];
 const FLOOD = "#ffc88a", FIXTURE_GLOW = 2.4, POOL_STRENGTH = .6;
 /** The uplight on the walls: strongest at the plinth, half as strong WASH_HEIGHT × ln 2 higher up. */
@@ -104,7 +105,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
   const landmarks = new Map<string, THREE.Group>(), rings = new Map<string, THREE.Mesh>();
   const ringGeometry = new THREE.TorusGeometry(spec.islet - .19, .11, 8, 96);
   const hitGeometry = new THREE.CylinderGeometry(1, 1, 1, 12), hitMaterial = new THREE.MeshBasicNodeMaterial();
-  const facing = (x: number, z: number) => Math.atan2(-x, -z);
+  const facing = districtFacing;
 
   const futures = ctx.world.districts.filter(d => isFutureDistrict(d.id));
   const site = futures.length ? constructionSite(futures.map(d => new THREE.Matrix4().compose(
@@ -121,7 +122,7 @@ export function createDistricts(ctx: CityContext, { levels, grown = [] }: Distri
       const material = mesh.material as THREE.MeshStandardMaterial;
       if (isLandmarkGlass(material)) registerGlazing(material);
     });
-    // Facing the plaza, where the district's entrance and the camera's "look at it" view are.
+    // Facing out to the city, where the district's entrance and the camera's "look at it" view are.
     group.position.set(d.x, GROUND, d.z); group.scale.setScalar(scale); group.rotation.y = facing(d.x, d.z);
     group.userData.district = d.id; root.add(group); landmarks.set(d.id, group);
     const top = height * scale;

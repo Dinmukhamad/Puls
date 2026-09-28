@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import type { CityContext } from '../engine/context';
 import { insideParking, segmentDistance } from '../world/generate';
 import type { Point, Route, WorldData } from '../world/types';
+import { districtFacing } from '../engine/camera';
 
 const TAU = Math.PI * 2;
 const PERSON_SCALE = .75;
@@ -22,7 +23,7 @@ function clearOfLandmark(p: Point, world: WorldData, margin: number) {
   for (const d of world.districts) {
     const dx = p.x - d.x, dz = p.z - d.z;
     if (Math.hypot(dx, dz) > world.spec.islet + margin) continue;
-    const yaw = Math.atan2(-d.x, -d.z), c = Math.cos(yaw), s = Math.sin(yaw);
+    const yaw = districtFacing(d.x, d.z), c = Math.cos(yaw), s = Math.sin(yaw);
     const x = dx * c - dz * s, z = dx * s + dz * c;
     // Landmark base is 5.7 by 5.3, with front steps reaching local z=3.
     if (Math.abs(x) < 2.9 * world.spec.districtScale + margin && Math.abs(z) < 3 * world.spec.districtScale + margin) return false;

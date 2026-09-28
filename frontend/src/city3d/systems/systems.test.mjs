@@ -79,13 +79,13 @@ test('every island gets its building, a label anchor above it and, unless reserv
   }
 });
 
-test('landmarks face the plaza at the world scale and share draw calls; reserved islands share one instanced site', () => {
+test('landmarks face out to the city at the world scale and share draw calls; reserved islands share one instanced site', () => {
   const ctx = fakeContext(worlds.x4), districts = city.createDistricts(ctx, { levels: { crm: 2 }, grown: ['crm'] });
   const root = ctx.scene.getObjectByName('city-districts');
   // A growing landmark keeps its own group; the others are merged per kit material.
   const crm = root.children.find(o => o.isGroup && o.userData.district === 'crm');
   const front = new THREE.Vector3(0, 0, 1).applyQuaternion(crm.quaternion);
-  assert.ok(front.dot(new THREE.Vector3(-crm.position.x, 0, -crm.position.z).normalize()) > .999, 'faces the plaza');
+  assert.ok(front.dot(new THREE.Vector3(crm.position.x, 0, crm.position.z).normalize()) > .999, 'faces out to the city, away from the plaza');
   assert.equal(crm.scale.x, worlds.x4.spec.districtScale);
   const merged = root.children.filter(o => o.isMesh && !o.isInstancedMesh && o.visible && o.geometry.type !== 'TorusGeometry');
   assert.ok(merged.length >= 4 && merged.length <= 12, `${merged.length} draw calls for four landmarks`);
