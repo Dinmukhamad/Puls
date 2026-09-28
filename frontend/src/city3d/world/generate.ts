@@ -409,10 +409,17 @@ export function generateWorld(spec: WorldSpec): WorldData {
   const chosen = s.sites ? pickSites(layout.complexes, s.sites) : [], siteOf = new Map(chosen.map((complex, k) => [complex, k]));
   const sites: Site[] = chosen.map((complex, k) => ({ ...layout.complexes[complex], key: `site-${k}`, complex, placements: [], surfaces: [] }));
   const citySurfaces: Surface[] = [];
-  placements.push(...parkedCars(plan));
+  const cars = parkedCars(plan);
+  placements.push(...cars);
   for (const p of layout.placements) { const k = p.site === undefined ? undefined : siteOf.get(p.site); if (k === undefined) placements.push(p); else sites[k].placements.push(p); }
   for (const f of layout.surfaces) { const k = f.site === undefined ? undefined : siteOf.get(f.site); if (k === undefined) citySurfaces.push(f); else sites[k].surfaces.push(f); }
   placements.push(...hillForest(plan));
+  // Where the daily situations wait (world/types.ts questSpots): a taxi at the depot's car park, a car at the
+  // CRM centre's, and the guide in the middle of the plaza.
+  const stall = (lot: ParkingLot | undefined) => lot && cars.filter(car => insideParking(car, lot, .2))
+    .sort((a, b) => Math.hypot(a.x - lot.x, a.z - lot.z) - Math.hypot(b.x - lot.x, b.z - lot.z))[0];
+  const questSpots = [stall(plan.parking[0]), stall(plan.parking[1]), { x: 0, z: 0 }]
+    .filter((p): p is Point => !!p).map(p => ({ x: p.x, z: p.z }));
   return {
     spec,
     districts: plan.districts.map(({ id, x, z, color, soon }) => ({ id, x, z, color, soon })),
@@ -421,7 +428,7 @@ export function generateWorld(spec: WorldSpec): WorldData {
     roads: { rings: [...s.roadRings], ...roadsOf(plan), crosswalks: crosswalks(plan), parking: [...plan.parking, ...layout.parking] },
     placements,
     parks,
-    complexes: layout.complexes, surfaces: [...gardens, ...citySurfaces], walks: layout.walks, alleys: layout.alleys, plots, sites,
+    complexes: layout.complexes, surfaces: [...gardens, ...citySurfaces], walks: layout.walks, alleys: layout.alleys, plots, sites, questSpots,
     routes: trafficRoutes(plan),
     radius: s.horizon,
   };

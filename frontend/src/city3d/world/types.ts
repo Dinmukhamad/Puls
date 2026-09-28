@@ -121,6 +121,8 @@ export interface WorldData {
   plots: Plot[];
   /** The group city's quarters (world/sites.ts), drawn by the stage the server reports. */
   sites: Site[];
+  /** Where the daily situations of the map wait, one per slot: the depot's taxi, a car at the CRM centre, the guide. */
+  questSpots: Point[];
   routes: RoutePlan[];
   /** Radius of everything that is drawn. */
   radius: number;

@@ -43,3 +43,14 @@ test('a quarter is drawn only by its stages, and every stage stays on its lot an
     for (const { placements, surfaces } of layouts.slice(0, 4)) for (const p of [...placements, ...surfaces]) assert.ok(inSite(p, site, 1.7), `${site.key}: ${p.kind} on the lot`);
   }
 });
+
+test('the daily situations wait at a car of each district car park and at the guide, in both cities', () => {
+  const givers = [...readFileSync(new URL('../../../../app/services/city_quests.py', import.meta.url), 'utf8').match(/GIVERS = \(([^)]*)\)/)[1].matchAll(/"(\w+)"/g)].map((m) => m[1]);
+  for (const world of [X4, V1]) {
+    assert.equal(world.questSpots.length, givers.length);
+    const cars = world.placements.filter((p) => p.kind === 'car-parked');
+    for (const spot of world.questSpots.slice(0, 2)) assert.ok(cars.some((car) => car.x === spot.x && car.z === spot.z), 'a parked car');
+    for (const [i, lot] of world.roads.parking.slice(0, 2).entries()) assert.ok(Math.hypot(world.questSpots[i].x - lot.x, world.questSpots[i].z - lot.z) < lot.length / 2 + 1, `spot ${i} in its car park`);
+    assert.deepEqual(world.questSpots[2], { x: 0, z: 0 });
+  }
+});

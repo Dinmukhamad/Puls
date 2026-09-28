@@ -181,5 +181,19 @@
 .city-group-card__projects{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
 .city-group-card__projects li{display:grid;gap:4px;font-size:13px}.city-group-card__projects small{color:var(--text-secondary);font-size:11.5px}
 .city-group-card__table{display:grid;overflow-x:auto;font-size:12.5px}
-.city-group-card__table>div{display:grid;grid-template-columns:minmax(150px,2fr) repeat(6,minmax(70px,1fr));gap:8px;padding:7px 0;border-bottom:1px solid var(--separator);align-items:center}
+.city-group-card__table>div{display:grid;grid-template-columns:minmax(150px,2fr) repeat(7,minmax(70px,1fr));gap:8px;padding:7px 0;border-bottom:1px solid var(--separator);align-items:center}
 .city-group-card__table>div:first-child{font-weight:650;color:var(--text-secondary);font-size:11.5px}
+/* A daily situation (sheet) and the HUD button with open ones. */
+.city-group-button[data-open]{border-color:#e0a800;background:color-mix(in srgb,#ffc21a 22%,var(--surface-primary))}
+.city-quest{display:grid;gap:14px}
+.city-quest__who{display:flex;align-items:center;gap:12px}.city-quest__who>span:first-child{display:grid;place-items:center;width:46px;height:46px;border-radius:14px;background:#fff3c4;font-size:24px}
+.city-quest__who>span:last-child{display:grid;gap:2px}.city-quest__who strong{font-size:15px}.city-quest__who small{font-size:12px;color:var(--text-secondary)}
+.city-quest__text{margin:0;font-size:15px;line-height:1.55}
+.city-quest__options{display:grid;gap:8px}
+.city-quest__options button{min-height:46px;padding:10px 14px;border-radius:12px;border:1px solid var(--border-strong);background:var(--surface-primary);color:var(--text-primary);font:inherit;font-size:14px;text-align:left;cursor:pointer}
+.city-quest__options button:disabled{cursor:default}
+.city-quest__options button[data-state=right]{border:2px solid #2f9e5b;background:color-mix(in srgb,#2f9e5b 12%,var(--surface-primary))}
+.city-quest__options button[data-state=wrong]{border:2px solid #d0533c;background:color-mix(in srgb,#d0533c 10%,var(--surface-primary))}
+.city-quest__result{display:grid;gap:8px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,#d0533c 8%,var(--surface-primary))}
+.city-quest__result[data-correct]{background:color-mix(in srgb,#2f9e5b 12%,var(--surface-primary))}
+.city-quest__result p{margin:0;font-size:13px;line-height:1.5;color:var(--text-secondary)}.city-quest__result small{font-size:12px;color:var(--text-secondary)}

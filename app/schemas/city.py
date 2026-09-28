@@ -47,3 +47,8 @@ class ClaimInput(BaseModel):
 class BuildInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     item: str = Field(min_length=1, max_length=40)
+
+
+class QuestAnswer(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    answer: int = Field(ge=0, le=5)

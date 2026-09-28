@@ -7,14 +7,14 @@ group's quarters and their own points, never another operator's; staff see the b
 
 from sqlalchemy import func, select
 
-from app.models.city import CityAward
+from app.models.city import CityAward, CityQuest
 from app.models.enums import Role
 from app.models.learning import LearningAward
 from app.models.user import Group, User
 from app.services.city import evidence
 
 # Points for every piece of work, as the operator's guide explains them.
-POINTS = {"missions": 20, "materials": 10, "orders": 3, "appeals": 3, "closed": 5}
+POINTS = {"missions": 20, "materials": 10, "quests": 5, "orders": 3, "appeals": 3, "closed": 5}
 # The quarters, built one after another; `cost` is the points each one takes.
 PROJECTS = [
     {"key": f"site-{i}", "name": name, "cost": cost}
@@ -56,11 +56,21 @@ async def contributions(session, user_ids):
             )
         ).all()
     )
+    quests = dict(
+        (
+            await session.execute(
+                select(CityQuest.user_id, func.count())
+                .where(CityQuest.user_id.in_(ids), CityQuest.correct.is_(True))
+                .group_by(CityQuest.user_id)
+            )
+        ).all()
+    )
     result = {}
     for uid in ids:
         parts = {
             "missions": missions.get(uid, 0),
             "materials": materials.get(uid, 0),
+            "quests": quests.get(uid, 0),
             "orders": int(facts[uid]["orders"] or 0),
             "appeals": facts[uid]["appeals"],
             "closed": facts[uid]["closed"],

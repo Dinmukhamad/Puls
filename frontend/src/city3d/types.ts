@@ -13,6 +13,8 @@ export type TimeOfDay = "day" | "night";
 /** An operator's plot as the server reports it (api/city.ts CityPlot). */
 /** A group quarter as the server reports it; no list at all means no group, and every quarter stands built. */
 export interface CitySiteInfo { key: string; name: string; stage: SiteStage }
+/** A daily situation as the server reports it (api/city.ts CityQuest): only whether it waits on the map matters here. */
+export interface CityQuestInfo { slot: number; giver: string; answered: boolean }
 export interface CityPlotInfo { key: string; unlocked: boolean; item: BuildingKey | null }
 
 export interface CityOptions {
@@ -35,6 +37,9 @@ export interface CityOptions {
   /** The group city's quarters (null: no group); `onSite` opens the group panel from the sign over the one being built. */
   sites?: CitySiteInfo[] | null;
   onSite?: (key: string) => void;
+  /** Today's situations; `onQuest` (only for the operator themself) opens one from its "!" on the map. */
+  quests?: CityQuestInfo[];
+  onQuest?: (slot: number) => void;
   onSelect: (id: DistrictId) => void; onView: (view: CityView) => void; onReady: () => void; onLost: () => void;
   onRestored?: () => void;
   /** Loading progress, 0…1, for the loading screen. */
@@ -50,6 +55,8 @@ export interface CityControl {
   focusPlot: (key: string) => void;
   setSites: (sites: CitySiteInfo[] | null) => void;
   focusSite: (key: string) => void;
+  setQuests: (quests: CityQuestInfo[]) => void;
+  focusQuest: (slot: number) => void;
   zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void;
   dispose: () => void;
 }

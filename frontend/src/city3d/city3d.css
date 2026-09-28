@@ -40,3 +40,10 @@ div.c3-label{cursor:default}
 .c3-site>span:first-child{font-size:24px}.c3-site>span:last-child{display:grid;gap:3px}
 .c3-site strong{font-size:15px;font-weight:750}.c3-site small{font-size:12px;color:#ffd978;font-weight:650}
 .c3-site:focus-visible{outline:3px solid var(--accent-primary,#3f78d8);outline-offset:2px}
+/* The daily situations (systems/quests.ts): a yellow "!" bubble that bobs over its car or the guide. */
+.c3-quest{position:absolute;left:0;top:0;width:44px;height:52px;padding:0;border:0;background:none;transform-origin:50% 100%;pointer-events:auto;cursor:pointer;visibility:hidden;-webkit-tap-highlight-color:transparent}
+.c3-quest span{display:grid;place-items:center;width:44px;height:44px;border:3px solid #fff;border-radius:50%;background:#ffc21a;color:#3b2a00;font:900 26px/1 system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 6px 16px rgba(60,40,0,.4);animation:c3-quest-bob 1.4s ease-in-out infinite}
+.c3-quest span::after{content:"";position:absolute;left:50%;bottom:-2px;width:0;height:0;margin-left:-7px;border:7px solid transparent;border-top:9px solid #fff;border-bottom:0}
+.c3-quest:focus-visible span{outline:3px solid var(--accent-primary,#3f78d8);outline-offset:2px}
+@keyframes c3-quest-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){.c3-quest span{animation:none}}

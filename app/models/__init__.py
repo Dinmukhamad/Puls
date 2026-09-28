@@ -3,7 +3,7 @@
 from app.db.base import Base
 from app.models.access import AccessPolicy, AccessRule
 from app.models.badge import BadgeDefinition, UserBadge
-from app.models.city import CityAward, CityBuild, CitySettings
+from app.models.city import CityAward, CityBuild, CityQuest, CitySettings
 from app.models.coin import CoinTransaction
 from app.models.contest import (
     ContestWeek,
@@ -48,6 +48,7 @@ __all__ = [
     "CityAward",
     "CityBuild",
     "CityPerfReport",
+    "CityQuest",
     "CitySettings",
     "CoinAccount",
     "CoinTransaction",

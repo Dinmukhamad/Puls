@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { CityDistrict, CityGroup, CityMission, CityPlot, DistrictId } from "../../api/city";
+import type { CityDistrict, CityGroup, CityMission, CityPlot, CityQuest, DistrictId } from "../../api/city";
 import type { CityMascot, CityLabelInfo, CitySceneControl, CitySceneOptions, CityView } from "./cityScene";
 import { districtLevel, grownDistricts } from "./cityLevels";
 import { PilotTools } from "../../cityPilot/PilotTools";
@@ -13,14 +13,19 @@ import { useAuth } from "../../auth/AuthContext";
  * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
  * seen, so an upgrade is celebrated once.
  */
-export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot, pilot = false, inspect = false, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; pilot?: boolean; inspect?: boolean; forceWebGL?: boolean; focusRequest?: number;
+export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot, pilot = false, inspect = false, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; pilot?: boolean; inspect?: boolean; forceWebGL?: boolean; focusRequest?: number;
   /** The operator's plots; `onPlot` (when the viewer may build) opens the catalogue; `plotFocus` flies to a plot when it changes. */
   plots?: CityPlot[]; onPlot?: (key: string) => void; plotFocus?: { key: string; at: number };
   /** The group's quarters (null: no group, all built); `onSite` opens the group panel; `siteFocus` flies to a quarter. */
-  sites?: CityGroup["projects"] | null; onSite?: (key: string) => void; siteFocus?: { key: string; at: number } }) {
+  sites?: CityGroup["projects"] | null; onSite?: (key: string) => void; siteFocus?: { key: string; at: number };
+  /** Today's situations; `onQuest` (the operator themself) opens one from its "!"; `questFocus` flies to one. */
+  quests?: CityQuest[]; onQuest?: (slot: number) => void; questFocus?: { slot: number; at: number } }) {
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
   const host = useRef<HTMLDivElement>(null), frame = useRef<HTMLDivElement>(null);
-  const control = useRef<CitySceneControl & { setTimeOfDay?: (mode: TimeOfDay) => void; setPlots?: (plots: CityPlot[]) => void; focusPlot?: (key: string) => void; setSites?: (sites: CityGroup["projects"] | null) => void; focusSite?: (key: string) => void }>();
+  const control = useRef<CitySceneControl & { setTimeOfDay?: (mode: TimeOfDay) => void; setPlots?: (plots: CityPlot[]) => void; focusPlot?: (key: string) => void; setSites?: (sites: CityGroup["projects"] | null) => void; focusSite?: (key: string) => void; setQuests?: (quests: CityQuest[]) => void; focusQuest?: (slot: number) => void }>();
+  const questsKey = JSON.stringify(quests.map(q => ({ slot: q.slot, giver: q.giver, answered: q.answered }))), questsRef = useRef(quests), questRef = useRef(onQuest);
+  questsRef.current = quests; questRef.current = onQuest;
+  const canQuest = !!onQuest;
   const sitesKey = JSON.stringify(sites), sitesRef = useRef(sites), siteRef = useRef(onSite);
   sitesRef.current = sites; siteRef.current = onSite;
   const plotsKey = JSON.stringify(plots.map(p => [p.key, p.unlocked, p.item])), plotsRef = useRef(plots), plotRef = useRef(onPlot);
@@ -73,6 +78,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
           ...options, world, forceWebGL: webGL, stats: showStats, timeOfDay: timeRef.current,
           plots: plotsRef.current, onPlot: canBuild ? key => { if (!cancelled) plotRef.current?.(key); } : undefined,
           sites: sitesRef.current, onSite: key => { if (!cancelled) siteRef.current?.(key); },
+          quests: questsRef.current, onQuest: canQuest ? slot => { if (!cancelled) questRef.current?.(slot); } : undefined,
         }));
     void engine.then(createScene => {
       if (cancelled || !host.current) return;
@@ -88,7 +94,9 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     }).catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; control.current?.dispose(); control.current = undefined; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- mission state and engine settings recreate the scene; labels/selection update in place
-  }, [levelKey, sceneKey, pilot, legacy, world, webGL, showStats, look, attempt, inspect, canBuild]);
+  }, [levelKey, sceneKey, pilot, legacy, world, webGL, showStats, look, attempt, inspect, canBuild, canQuest]);
+  useEffect(() => { control.current?.setQuests?.(JSON.parse(questsKey)); }, [questsKey]);
+  useEffect(() => { if (questFocus) control.current?.focusQuest?.(questFocus.slot); }, [questFocus?.slot, questFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setPlots?.(JSON.parse(plotsKey).map(([key, unlocked, item]: [string, boolean, CityPlot["item"]]) => ({ key, unlocked, item }))); }, [plotsKey]);
   useEffect(() => { control.current?.setSites?.(JSON.parse(sitesKey)); }, [sitesKey]);
   useEffect(() => { if (siteFocus) control.current?.focusSite?.(siteFocus.key); }, [siteFocus?.key, siteFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps

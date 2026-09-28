@@ -6,8 +6,8 @@ from app.core.errors import NotFoundError
 from app.models.city import CityAward
 from app.models.enums import Role
 from app.models.user import User
-from app.schemas.city import BuildInput, ClaimInput, SettingsInput
-from app.services import city, city_group
+from app.schemas.city import BuildInput, ClaimInput, QuestAnswer, SettingsInput
+from app.services import city, city_group, city_quests
 
 router = APIRouter(tags=["Мой город"])
 
@@ -36,6 +36,11 @@ async def settings(session: SessionDep, user: LearningReader):
 @router.put("/admin/learning/city/settings")
 async def configure(body: SettingsInput, session: SessionDep, user: LearningEditor):
     return await city.save_settings(session, user, body)
+
+
+@router.post("/learning/city/quests/{slot}/answer")
+async def answer_quest(slot: int, body: QuestAnswer, session: SessionDep, user: CurrentUser):
+    return await city_quests.answer(session, user, slot, body.answer)
 
 
 @router.get("/admin/learning/city/groups")

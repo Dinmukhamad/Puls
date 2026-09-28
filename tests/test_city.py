@@ -391,3 +391,154 @@ async def test_no_group_or_staff_preview_has_no_group_city(client, session, oper
     assert (await client.get(BASE, headers=auth(await login(client, trainer.login)))).json()[
         "group"
     ] is None
+
+
+async def quest_rows(session, user_id):
+    from app.models.city import CityQuest
+
+    return list(
+        await session.scalars(
+            select(CityQuest)
+            .where(CityQuest.user_id == user_id)
+            .order_by(CityQuest.slot)
+            .execution_options(populate_existing=True)
+        )
+    )
+
+
+async def test_daily_quests_are_dealt_once_and_hide_answers(client, session, operator):
+    headers = auth(await login(client, operator.login))
+    first = (await client.get(BASE, headers=headers)).json()["quests"]
+    assert len(first["items"]) == 3 and first["coins"] == 10
+    assert all(q["right"] is None and q["explanation"] is None for q in first["items"])
+    assert [q["giver"] for q in first["items"]] == ["driver", "client", "guide"]
+    again = (await client.get(BASE, headers=headers)).json()["quests"]
+    assert again == first
+    rows = await quest_rows(session, operator.id)
+    assert len(rows) == 3 and all(r.snapshot["source"] == "bank" for r in rows)
+    # A right answer pays once; the answer, the right option and why are shown after.
+    right = rows[0].snapshot["correct"]
+    done = await client.post(f"{BASE}/quests/0/answer", headers=headers, json={"answer": right})
+    assert done.status_code == 200
+    assert done.json()["correct"] and done.json()["coins"] == 10 and done.json()["explanation"]
+    assert (
+        await client.post(f"{BASE}/quests/0/answer", headers=headers, json={"answer": right})
+    ).status_code == 409
+    wrong = (rows[1].snapshot["correct"] + 1) % len(rows[1].snapshot["options"])
+    miss = (
+        await client.post(f"{BASE}/quests/1/answer", headers=headers, json={"answer": wrong})
+    ).json()
+    assert (
+        miss["correct"] is False
+        and miss["coins"] == 0
+        and miss["right"] == rows[1].snapshot["correct"]
+    )
+    assert (
+        await client.post(f"{BASE}/quests/7/answer", headers=headers, json={"answer": 0})
+    ).status_code == 404
+    assert (
+        await client.post(f"{BASE}/quests/2/answer", headers=headers, json={"answer": 9})
+    ).status_code == 422
+    city = (await client.get(BASE, headers=headers)).json()
+    assert city["balance"] == 10
+    assert city["quests"]["items"][0]["answered"] and city["quests"]["items"][2]["right"] is None
+
+
+async def test_quests_review_passed_materials_and_count_for_the_group(client, session, operator):
+    from app.models.learning import LearningAttempt, LearningAward, LearningContent
+
+    group = await make_group(session, code="GQ")
+    operator.group_id = group.id
+    content = LearningContent(
+        kind="test",
+        title="Смена номера",
+        status="published",
+        steps=[
+            {
+                "speaker": "Водитель",
+                "text": f"Вопрос {i}",
+                "options": ["А", "Б", "В"],
+                "correct": 2,
+                "explanation": "Так",
+            }
+            for i in range(4)
+        ],
+    )
+    session.add(content)
+    await session.flush()
+    attempt = LearningAttempt(
+        user_id=operator.id, content_id=content.id, snapshot={}, state="passed"
+    )
+    session.add(attempt)
+    await session.flush()
+    session.add(LearningAward(user_id=operator.id, content_id=content.id, attempt_id=attempt.id))
+    await session.commit()
+    headers = auth(await login(client, operator.login))
+    items = (await client.get(BASE, headers=headers)).json()["quests"]["items"]
+    assert all(q["title"] == "Смена номера" for q in items)
+    rows = await quest_rows(session, operator.id)
+    assert all(r.snapshot["options"][r.snapshot["correct"]] == "В" for r in rows)
+    for row in rows:
+        await client.post(
+            f"{BASE}/quests/{row.slot}/answer",
+            headers=headers,
+            json={"answer": row.snapshot["correct"]},
+        )
+    mine = (await client.get(BASE, headers=headers)).json()["group"]["mine"]
+    assert mine["quests"] == 3 and mine["materials"] == 1 and mine["points"] == 3 * 5 + 10
+
+
+async def test_concurrent_answers_pay_once_and_staff_never_deal(client, session, operator):
+    headers = auth(await login(client, operator.login))
+    await client.get(BASE, headers=headers)
+    row = (await quest_rows(session, operator.id))[0]
+    results = await asyncio.gather(
+        *[
+            client.post(
+                f"{BASE}/quests/0/answer", headers=headers, json={"answer": row.snapshot["correct"]}
+            )
+            for _ in range(3)
+        ]
+    )
+    assert sorted(r.status_code for r in results) == [200, 409, 409]
+    rewards = await session.scalar(
+        select(func.count())
+        .select_from(CoinTransaction)
+        .where(CoinTransaction.user_id == operator.id)
+    )
+    assert rewards == 1
+    trainer = await make_user(session, login="trainer-quest", role=Role.TRAINER)
+    staff = auth(await login(client, trainer.login))
+    assert (await client.get(BASE, headers=staff)).json()["quests"] is None
+    assert (
+        await client.post(f"{BASE}/quests/0/answer", headers=staff, json={"answer": 0})
+    ).status_code == 403
+    # Looking at an operator's city does not deal their day.
+    other = await make_user(session, login="op-unseen")
+    view = (await client.get(f"{ADMIN}/operators/{other.id}", headers=staff)).json()
+    assert view["quests"]["items"] == [] and await quest_rows(session, other.id) == []
+
+
+async def test_deal_places_speakers_by_their_spot_and_shuffles_options():
+    from datetime import date
+
+    from app.services.city_quests import bank_questions, deal
+
+    for uid in range(1, 40):
+        picks = deal(uid, date(2026, 9, 29), [], bank_questions())
+        assert len(picks) == 3 and len({q["ref"] for q in picks}) == 3
+        speakers = [q["speaker"] for q in picks]
+        if "Водитель" in speakers:
+            assert speakers[0] == "Водитель"
+        if "Клиент" in speakers:
+            assert speakers[1] == "Клиент" or (
+                speakers[0] == "Клиент" and "Водитель" not in speakers
+            )
+        assert deal(uid, date(2026, 9, 29), [], bank_questions()) == picks
+    # The right answer is not always in the same place.
+    places = {
+        q["correct"]
+        for uid in range(1, 40)
+        for q in deal(uid, date(2026, 9, 29), [], bank_questions())
+    }
+    assert len(places) == 3

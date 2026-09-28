@@ -7,7 +7,7 @@
 import * as THREE from "three/webgpu";
 import type { DistrictId } from "../api/city";
 import type { CityContext } from "./engine/context";
-import type { CityControl, CityLabelInfo, CityMascot, CityOptions, CityPlotInfo, CitySiteInfo, TimeOfDay } from "./types";
+import type { CityControl, CityLabelInfo, CityMascot, CityOptions, CityPlotInfo, CityQuestInfo, CitySiteInfo, TimeOfDay } from "./types";
 import { createRenderer, pixelRatio, requestShadowRedraw, type RendererHandle } from "./engine/renderer";
 import { createLoop, type Loop } from "./engine/loop";
 import { createCamera, createCameraRig, type CameraRig } from "./engine/camera";
@@ -32,6 +32,7 @@ import { createLampLights, type LampLights } from "./render/lampLights";
 import { createMountains, type Mountains } from "./render/mountains";
 import { createPlots, type Plots } from "./systems/plots";
 import { createSites, type Sites } from "./systems/sites";
+import { createQuests, type Quests } from "./systems/quests";
 import "./city3d.css";
 
 /** Static shadows are redrawn only once the camera has rested this long: culling changes casters while it moves. */
@@ -41,7 +42,7 @@ const LOD_FILES = ["city/v1/city-models.glb", "city/v1/vehicles.glb"].map(path =
 interface Parts {
   handle: RendererHandle; quality: QualityControl; stats: Stats; loop: Loop; rig: CameraRig; picker: Picker; post: Post;
   sky: Sky; terrain: Terrain; water: Water; districts: Districts; mascot: Mascot; labels: Labels; traffic: Traffic; crowd: Crowd;
-  catalogue?: Catalogue; pools?: InstancePools; observer: ResizeObserver; night: Night; lamps: LampLights; mountains: Mountains; plots: Plots; sites: Sites;
+  catalogue?: Catalogue; pools?: InstancePools; observer: ResizeObserver; night: Night; lamps: LampLights; mountains: Mountains; plots: Plots; sites: Sites; quests: Quests;
 }
 
 export function createCity(host: HTMLDivElement, options: CityOptions): CityControl {
@@ -52,7 +53,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   // Calls before the city is up; replayed in order afterwards.
   const pending: ((p: Parts) => void)[] = [];
   let selected = options.selected, labels = options.labels, mascot = options.mascot ?? { gender: null, name: "Пульсар" }, trafficOn = !reducedMotion;
-  let timeOfDay: TimeOfDay = options.timeOfDay ?? "day", plotStates: CityPlotInfo[] = options.plots ?? [], siteStates: CitySiteInfo[] | null = options.sites ?? null;
+  let timeOfDay: TimeOfDay = options.timeOfDay ?? "day", plotStates: CityPlotInfo[] = options.plots ?? [], siteStates: CitySiteInfo[] | null = options.sites ?? null, questStates: CityQuestInfo[] = options.quests ?? [];
   const when = (fn: (p: Parts) => void) => { if (parts) fn(parts); else pending.push(fn); };
   const daylight = (p: Parts) => {
     const night = timeOfDay === "night";
@@ -100,6 +101,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const crowd = createCrowd(ctx);
     const plots = createPlots(ctx, { states: plotStates, onPick: options.onPlot });
     const sites = createSites(ctx, { states: siteStates, onPick: options.onSite });
+    const quests = createQuests(ctx, { states: questStates, onPick: options.onQuest });
     const labelLayer = createLabels(ctx, { anchors: districts.anchors, mascotAnchor: mascotSystem.nameAnchor, onSelect: choose });
     // The view may go out to the outer ring road; the shadow map follows it there.
     const rig = createCameraRig(camera, {
@@ -147,7 +149,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     });
     handle.onRestored(() => { if (!disposed) { teardown(); void start().then(() => options.onRestored?.()); } });
 
-    parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, crowd, observer, night, lamps, mountains, plots, sites };
+    parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, crowd, observer, night, lamps, mountains, plots, sites, quests };
     labelLayer.setLabels(labels); labelLayer.setSelected(selected); labelLayer.setMascotName(mascot.name);
     districts.select(selected); traffic.setEnabled(trafficOn); crowd.setEnabled(trafficOn); daylight(parts);
     pending.splice(0).forEach(fn => fn(parts!));
@@ -173,7 +175,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   function teardown() {
     const p = parts; parts = null; if (!p) return;
     p.loop.dispose(); p.observer.disconnect(); p.picker.dispose(); p.rig.dispose(); p.stats.dispose(); p.quality.dispose();
-    p.labels.dispose(); p.plots.dispose(); p.sites.dispose(); p.crowd.dispose(); p.traffic.dispose(); p.mascot.dispose(); p.districts.dispose(); p.pools?.dispose(); p.catalogue?.dispose();
+    p.labels.dispose(); p.plots.dispose(); p.sites.dispose(); p.quests.dispose(); p.crowd.dispose(); p.traffic.dispose(); p.mascot.dispose(); p.districts.dispose(); p.pools?.dispose(); p.catalogue?.dispose();
     p.lamps.dispose(); p.mountains.dispose(); p.water.dispose(); p.terrain.dispose(); p.sky.dispose(); p.post.dispose(); p.handle.dispose();
   }
 
@@ -190,6 +192,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     focusPlot: key => when(p => { const plot = p.plots.find(key); if (plot) p.rig.focusPoint([plot.x, 1, plot.z], 30, .95); }),
     setSites(next) { siteStates = next; when(p => p.sites.set(next)); },
     focusSite: key => when(p => { const site = p.sites.find(key); if (site) p.rig.focusPoint([site.x, 2, site.z], 55, .9); }),
+    setQuests(next) { questStates = next; when(p => p.quests.set(next)); },
+    focusQuest: slot => when(p => { const spot = p.quests.spot(slot); if (spot) p.rig.focusPoint([spot.x, 1, spot.z], 26, 1.0); }),
     zoom: factor => when(p => p.rig.zoom(factor)),
     rotate: radians => when(p => p.rig.rotate(radians)),
     tilt: radians => when(p => p.rig.tilt(radians)),
