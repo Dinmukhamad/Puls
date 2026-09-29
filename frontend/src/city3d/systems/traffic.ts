@@ -11,7 +11,7 @@
  */
 import * as THREE from "three/webgpu";
 import { attribute, float, rangeFogFactor, saturate, smoothstep, uv } from "three/tsl";
-import { createTaxiModel } from "../../pages/city/cityTraffic";
+import { createTaxiModel } from "../assets/taxi";
 import type { Model } from "../assets/loader";
 import type { CityContext } from "../engine/context";
 import { sampleRoute } from "../world/generate";

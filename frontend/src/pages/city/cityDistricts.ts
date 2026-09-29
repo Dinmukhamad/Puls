@@ -1,6 +1,6 @@
 import type { CityDistrict, CityMission, DistrictId } from "../../api/city";
 import { districtLevel } from "./cityLevels";
-import type { CityLabelInfo } from "./cityScene";
+import type { CityLabelInfo } from "../../city3d/types";
 
 export const DISTRICT_ICONS: Record<DistrictId, string> = { academy: "🎓", driver: "🚕", crm: "💬", dispatch: "📡", oktell: "🎧" };
 export const DISTRICT_COLORS: Record<DistrictId, string> = { academy: "#5b8def", driver: "#f0a23a", crm: "#7b5cff", dispatch: "#35b6a6", oktell: "#e86aa6" };

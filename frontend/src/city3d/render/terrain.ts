@@ -1,5 +1,5 @@
 /**
- * The ground of the city, ported from the old cityScene.ts and driven by WorldData: land rings and islets
+ * The ground of the city, driven by WorldData: land rings and islets
  * with stone quay walls and beige rims, the ground out to the fog, the lagoon and canal floor, ring roads
  * with lane marks, streets, lagoon bridges with railings trimmed to the curved shore and piers, stone arch
  * bridges over the canal, zebra crossings and car parks. Everything is painted with vertex colours and

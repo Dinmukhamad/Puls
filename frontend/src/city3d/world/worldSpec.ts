@@ -1,6 +1,6 @@
 /**
  * The two cities as data (TZ §4.1); world/generate.ts turns either into WorldData.
- * - WORLD_V1 is the current training city of `pages/city/cityLayout.ts`, unit for unit.
+ * - WORLD_V1 is the first training city, five islands (`?world=v1`).
  * - WORLD_X4 is the target city: ten district islands on two lagoon rings (the five current districts
  *   and five reserved "Скоро" islands on the cross streets between them), a larger lagoon, and a
  *   mainland built up in bands (houses, blocks, towers, suburbs) with an industrial quarter and a port,

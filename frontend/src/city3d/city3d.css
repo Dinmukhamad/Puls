@@ -1,5 +1,5 @@
-/* City v3 (src/city3d). Labels are HTML over the canvas (TZ §9.2) and repeat the old canvas boards of
-   pages/city/cityScene.ts: fixed colours, since the site's dark theme does not reach the city (§9.3.10).
+/* The city (src/city3d). Labels are HTML over the canvas (TZ §9.2), in the old boards' fixed colours,
+   since the site's dark theme does not reach the city (§9.3.10).
    systems/labels.ts moves them with `transform` only; sizes here are the board at CSS scale 1. */
 
 .c3-overlay{position:absolute;inset:0;overflow:hidden;pointer-events:none}

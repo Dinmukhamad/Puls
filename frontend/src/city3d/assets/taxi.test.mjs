@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { Box3, Vector3 } from 'three';
 
-const built = await build({ entryPoints: [fileURLToPath(new URL('./cityTraffic.ts', import.meta.url))], bundle: true, platform: 'node', format: 'esm', write: false });
+const built = await build({ entryPoints: [fileURLToPath(new URL('./taxi.ts', import.meta.url))], bundle: true, platform: 'node', format: 'esm', write: false });
 const { createTaxiModel } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const dispose = (taxi) => taxi.children.forEach(part => { part.geometry.dispose(); part.material.dispose(); });
 

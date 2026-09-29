@@ -22,7 +22,7 @@ test('both self-contained operator models have a usable rig, idle and greeting w
 });
 
 test('every landmark level remains finite and batches facade detail into a small number of meshes',async()=>{
-  const source=await build({entryPoints:[fileURLToPath(new URL('./cityArchitecture.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
+  const source=await build({entryPoints:[fileURLToPath(new URL('../../city3d/assets/landmarks.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
   const {createArchitecture}=await import(`data:text/javascript;base64,${Buffer.from(source.outputFiles[0].text).toString('base64')}`);
   const previous=globalThis.document;
   globalThis.document={createElement:()=>({getContext:()=>({fillRect(){},fillText(){}})})};

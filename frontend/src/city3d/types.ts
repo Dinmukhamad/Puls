@@ -1,6 +1,5 @@
 /**
- * Public contract of the city v3 scene. It matches the old `pages/city/cityScene.ts` API, so
- * `CityMap.tsx` switches engines without changes to the page (TZ §9.1). `onProgress` is new.
+ * Public contract of the city scene for `pages/city/CityMap.tsx` (TZ §9.1).
  */
 import type { DistrictId } from "../api/city";
 import type { BuildingKey } from "./world/plots";

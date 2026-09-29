@@ -71,8 +71,6 @@ export default defineConfig(({ command }) => ({
   // release.ts подставит запасной вариант с buildId "development".
   define: {
     ...(command === "build" ? { __PULS_RELEASE__: JSON.stringify(releaseTemplate) } : {}),
-    // Version the lazily fetched model without precaching it for every site visitor.
-    "import.meta.env.PULS_CITY_ASSET": JSON.stringify(createHash("sha256").update(readFileSync(new URL("./public/city/v3-pilot/crm-island.glb", import.meta.url))).digest("hex").slice(0, 16)),
   },
   plugins: [react(), pulsPwa()],
   server: {

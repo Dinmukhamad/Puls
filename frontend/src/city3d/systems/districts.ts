@@ -1,5 +1,5 @@
 /**
- * District landmarks (TZ §5.5), stage 1: the old city's procedural buildings (pages/city/cityArchitecture.ts)
+ * District landmarks (TZ §5.5), stage 1: the procedural buildings of assets/landmarks.ts
  * stand on their islands until the Blender models of stage 3 replace them. Five stages by completed
  * missions; the reserved "future-*" islands share one instanced construction site. A ring inside the island
  * lights up on hover and pulses while selected; invisible cylinders take the picking rays; a district that
@@ -14,7 +14,7 @@ import * as THREE from "three/webgpu";
 import { color, exp, float, normalWorld, positionWorld, rangeFogFactor, smoothstep, uv, vertexColor, type ShaderNodeObject } from "three/tsl";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { DistrictId } from "../../api/city";
-import { createArchitecture } from "../../pages/city/cityArchitecture";
+import { createArchitecture } from "../assets/landmarks";
 import { districtLevel } from "../../pages/city/cityLevels";
 import type { CityContext } from "../engine/context";
 import { districtFacing } from "../engine/camera";

@@ -1,5 +1,5 @@
 /**
- * The pilot's turquoise water on the main city's lagoon and canal. Analytic ripples and a shore-depth
+ * Turquoise water on the city's lagoon and canal. Analytic ripples and a shore-depth
  * attribute provide colour variation in one material, with no reflection render pass. Night switches
  * to a deep blue palette, and the lamps, windows and bridges along the shores mirror in it as warm
  * streaks (a noise term × ctx.night.level in the emissive, no extra pass). The surface stays at y=-1.25
@@ -63,7 +63,7 @@ function waterGeometry(world: WorldData) {
 export function createWater(ctx: CityContext): Water {
   const time = uniform(0), night = uniform(0);
   const material = new THREE.MeshStandardNodeMaterial({ roughness: .32, metalness: .18 });
-  // The pilot's turquoise palette and calm analytic ripples, following every shore instead of one island.
+  // A turquoise palette and calm analytic ripples, following every shore.
   const p = positionWorld;
   const ripple = p.x.mul(.85).add(p.z.mul(1.6)).add(time.mul(.7)).sin()
     .mul(p.z.mul(.66).sub(time.mul(.4)).sin()).mul(.5).add(.5);

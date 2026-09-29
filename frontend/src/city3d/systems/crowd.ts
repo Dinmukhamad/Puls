@@ -1,4 +1,4 @@
-/** A bounded, instanced walking population for the main city; no pilot/runtime dependency. */
+/** A bounded, instanced walking population for the city. */
 import * as THREE from 'three/webgpu';
 import { saturate, uv } from 'three/tsl';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';

@@ -9,7 +9,6 @@ const load = async (contents) => {
 };
 const gen = await load(`export * from './generate.ts'; export * from './worldSpec.ts';`);
 const reliefModule = await load(`export * from './relief.ts';`);
-const old = await load(`export * from '../../pages/city/cityLayout.ts';`);
 const { ROAD_HALF, BRIDGE_HALF, WORLD_V1, WORLD_X4 } = gen;
 
 // The first call runs cold, as it does when the city opens.
@@ -198,50 +197,6 @@ forWorlds('the world is the same for the same seed and differs for another', (wo
   const other = gen.generateWorld({ ...spec, seed: spec.seed + 1 });
   assert.notDeepEqual(other.placements, world.placements);
   assert.deepEqual(other.roads.streets, world.roads.streets);
-});
-
-test('v1 reproduces the old city: districts, roads, lots, trees, lamps, car parks and traffic', () => {
-  const plan = gen.cityPlan(WORLD_V1), each = (a, b, name, fields) => { assert.equal(a.length, b.length, `${name} count`); a.forEach((x, i) => fields.forEach((f) => close(x[f], b[i][f], `${name} ${i} ${f}`))); };
-  each(V1.districts, old.CITY_LOCATIONS, 'district', ['x', 'z']);
-  V1.districts.forEach((d, i) => { const o = old.CITY_LOCATIONS[i]; assert.equal(d.id, o.id); assert.equal(d.color, o.color); assert.equal(d.soon, !!o.soon); });
-  plan.avenues.forEach((v, i) => close(v.angle, old.avenueAngles()[i], 'avenue'));
-  plan.radials.forEach((a, i) => close(a, old.radialAngles()[i], 'radial'));
-  for (const name of ['PLAZA', 'ISLET', 'LAGOON', 'QUAY', 'BANK', 'PROMENADE', 'HORIZON', 'SKYLINE_ANGLE', 'DISTRICT_SCALE']) assert.ok(Object.values(WORLD_V1).includes(old[name]), name);
-  assert.deepEqual(WORLD_V1.roadRings, [old.RING_ROAD, old.OUTER_RING]);
-  // Lagoon bridges are the old spans; streets and bridges together cover the old streets and avenues.
-  const key = (r) => r.map((v) => v.toFixed(6)).join(), lagoon = V1.roads.bridges.filter((b) => !b.canal).map((b) => key(b.road)).sort();
-  assert.deepEqual(lagoon, old.bridgeSpans().map(key).sort());
-  const covered = segments(V1);
-  for (const [ax, az, bx, bz] of [...old.innerRoads(), ...old.avenues()]) for (let t = 0; t <= 1; t += .01) {
-    const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
-    assert.ok(covered.some((road) => gen.segmentDistance(x, z, road) < 1e-6), `old street not covered at ${x.toFixed(1)}, ${z.toFixed(1)}`);
-  }
-  const { lots, parks } = old.mainlandLots(), kind = (l) => (l.zone === 'industry' ? 'industry' : l.zone === 'houses' ? (l.roll < .8 ? 'house' : 'office') : l.zone === 'blocks' ? 'block' : 'tower');
-  const buildings = ofKind(V1, BUILDINGS);
-  each(buildings, lots, 'lot', ['x', 'z', 'rotation']);
-  buildings.forEach((b, i) => { assert.equal(b.kind, kind(lots[i])); if (b.kind !== 'block' && b.kind !== 'tower') close(b.width, lots[i].width, 'lot width'); });
-  each(V1.parks, parks, 'park', ['x', 'z']);
-  // The forests on the hills past the horizon are new; the city's own trees are the old ones.
-  const trees = old.treeSpots(false, parks), mine = ofKind(V1, TREES).filter((p) => !p.lift);
-  each(mine, trees, 'tree', ['x', 'z', 'scale']);
-  mine.forEach((t, i) => assert.equal(t.kind, trees[i].round ? 'tree-round' : 'tree-cone'));
-  each(ofKind(V1, new Set(['lamp'])), old.lampSpots(), 'lamp', ['x', 'z']);
-  each(V1.roads.crosswalks, old.crosswalks(), 'crosswalk', ['x', 'z', 'angle']);
-  const parking = old.parkingLots();
-  each(V1.roads.parking, parking, 'car park', ['x', 'z', 'angle', 'length', 'depth']);
-  V1.roads.parking.forEach((lot, i) => each(lot.stalls, parking[i].stalls, 'stall', ['x', 'z', 'rotation']));
-  // The old scene parked a car on a stall unless rng(11) said it stays free.
-  const random = old.rng(11), parked = [];
-  parking.forEach((lot, i) => lot.stalls.forEach((stall) => { if (!(random() < (i === 2 ? .5 : .35))) parked.push(stall); }));
-  each(ofKind(V1, new Set(['car-parked'])), parked, 'parked car', ['x', 'z', 'rotation']);
-  const routes = old.trafficRoutes();
-  assert.equal(V1.routes.length, routes.length);
-  V1.routes.forEach((plan, i) => {
-    const o = routes[i];
-    assert.equal(plan.cars, o.cars); assert.equal(plan.speed, o.speed); assert.equal(!!plan.boats, !!o.boats);
-    assert.deepEqual(plan.route.hidden, o.route.hidden);
-    each(plan.route.points, o.route.points, `route ${i} point`, ['x', 'z']);
-  });
 });
 
 test('x4: ten district islands on two rings, four times the city, and no empty corner of the map', () => {

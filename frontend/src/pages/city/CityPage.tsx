@@ -9,7 +9,7 @@ import { PulsarFace } from "../crm/PulsarGuide";
 import { CityMap } from "./CityMap";
 import { DISTRICT_LEVEL_NAMES, MAX_DISTRICT_LEVEL, districtLevel } from "./cityLevels";
 import { DISTRICT_COLORS, districtLabels } from "./cityDistricts";
-import type { CityLabelInfo } from "./cityScene";
+import type { CityLabelInfo } from "../../city3d/types";
 import "../crm/pulsar.css";
 import "./city.css";
 import { DriverEntry } from "../DriverEntry";
@@ -20,7 +20,6 @@ import { DEFAULT_GUIDE, guideName, guideText } from "../../guide";
 export function CityPage() {
   const { user } = useAuth(), client = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const pilot = params.get("city") === "pilot";
   const operatorId = user?.role !== "operator" && /^\d+$/.test(params.get("operator") ?? "") ? Number(params.get("operator")) : null;
   const query = useQuery({ queryKey: ["city", operatorId ?? "self"], queryFn: () => operatorId ? city.operator(operatorId) : city.own(), refetchInterval: 15000, refetchOnWindowFocus: true });
   const [reward, setReward] = useState<CityReward | null>(null);
@@ -40,7 +39,7 @@ export function CityPage() {
     {query.isError ? <div className="city-empty-card glass glass--prominent"><ErrorState error={query.error} onRetry={() => query.refetch()} /></div> : <div className="city-loading" role="status"><span>Загружаем город…</span></div>}
   </div>;
   const data = query.data;
-  const selected = data.districts.find(d => d.id === params.get("district")) ?? (pilot ? data.districts.find(d => d.id === "crm") : undefined) ?? data.districts.find(d => d.id === nextMission(data.missions)?.district) ?? data.districts[0];
+  const selected = data.districts.find(d => d.id === params.get("district")) ?? data.districts.find(d => d.id === nextMission(data.missions)?.district) ?? data.districts[0];
   const missions = data.missions.filter(m => m.district === selected.id);
   const mission = missions.find(m => m.key === params.get("mission")) ?? nextMission(missions);
   const completed = data.missions.filter(m => m.state === "completed").length;
@@ -58,9 +57,8 @@ export function CityPage() {
   const districtPlots = data.plots.filter(p => p.district === selected.id);
   const freePlot = districtPlots.find(p => p.unlocked && !p.item);
   function openPlot(key: string) { build.reset(); setPlotKey(key); }
-  function togglePilot() { const p = new URLSearchParams(params); if (pilot) p.delete("city"); else { p.set("city", "pilot"); p.set("district", "crm"); p.delete("mission"); } p.delete("backend"); setParams(p, { replace: true }); }
-  return <div className={`city-immersive${pilot ? " city-immersive--pilot" : ""}`}>
-    <CityMap pilot={pilot} inspect={user?.role !== "operator"} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} progressKey={!pilot && !data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+  return <div className="city-immersive">
+    <CityMap forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
     <header className="city-hud glass glass--regular">
       <div className="city-hud__level">
@@ -73,7 +71,6 @@ export function CityPage() {
       <div className="city-hud__stat"><strong>{completed}<small> / {total}</small></strong><span className="city-hud__label">миссий пройдено</span></div>
       {!data.preview && <div className="city-hud__coins"><span className="city-coin" aria-hidden="true">◈</span><span className="city-hud__stat"><strong>{data.balance.toLocaleString("ru-RU")}</strong><span className="city-hud__label">коинов в кошельке</span></span></div>}
       <nav className="city-hud__links" aria-label="Обучение">
-        {(pilot || user?.role !== "operator") && <button type="button" className="city-pilot-switch" onClick={togglePilot}>{pilot ? "← Город" : "Новый остров"}</button>}
         {data.quests && data.quests.items.length > 0 && <button type="button" className="city-group-button" data-open={data.quests.items.some(q => !q.answered) || undefined} onClick={() => { const next = data.quests!.items.find(q => !q.answered) ?? data.quests!.items[0]; answer.reset(); setQuestSlot(next.slot); if (!next.answered) setQuestFocus({ slot: next.slot, at: Date.now() }); }} aria-label={`Задания дня: выполнено ${data.quests.items.filter(q => q.answered).length} из ${data.quests.items.length}`}><span aria-hidden="true">❗</span><span className="city-hud__wide">Задания</span> {data.quests.items.filter(q => q.answered).length}/{data.quests.items.length}</button>}
         {data.group && <button type="button" className="city-group-button" onClick={() => setGroupOpen(true)} aria-label={`Город группы: ${data.group.name}`}><span aria-hidden="true">🏗️</span><span className="city-hud__wide">Группа</span></button>}
         {user?.role !== "operator" && <Link to="/admin/learning/city" aria-label="Управление миссиями"><span aria-hidden="true">⚙︎</span><span className="city-hud__wide">Миссии</span></Link>}

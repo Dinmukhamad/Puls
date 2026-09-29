@@ -1,7 +1,6 @@
 /**
- * World generator (TZ §4.2): turns a WorldSpec into WorldData, with no three.js. It is the logic of
- * `pages/city/cityLayout.ts` with every constant taken from the spec, so WORLD_V1 gives the old city unit
- * for unit, and deterministic for a given spec.seed.
+ * World generator (TZ §4.2): turns a WorldSpec into WorldData, with no three.js, deterministic for a
+ * given spec.seed. WORLD_V1 is the first training city (five islands), WORLD_X4 the city of today.
  *
  * The city is round: the plaza on its islet, district islands on one or more lagoon rings, a street from
  * the plaza past every island (bridges over the water) to the inner ring road, cross streets between

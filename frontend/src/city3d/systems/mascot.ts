@@ -1,5 +1,5 @@
 /**
- * The assistant on the plaza (TZ §5.6, §7.3), ported from the old cityScene.ts: a pedestal with the robot
+ * The assistant on the plaza (TZ §5.6, §7.3): a pedestal with the robot
  * Пульсар, or the operator the user chose (Quaternius glTF with its skeleton) who idles, waves every 18 s
  * and wears a headset. The pedestal is static; the figure is a mover: it stays out of the static shadow map
  * and casts into the dynamic one, so `movers` lists it. Its name tag is an HTML label (labels.ts).
