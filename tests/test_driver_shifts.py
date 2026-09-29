@@ -126,7 +126,11 @@ async def test_shift_gates_snapshot_photo_retry_and_ownership(client, session, s
     assert again.json()["shift"]["data"]["photo_status"] == "in_progress"
     over = await command(client, headers, shift, "photo_step", step=PHOTO_STEPS)
     assert over.status_code == 400
-    await command(client, headers, shift, "photo_submit")
+    first = (await command(client, headers, shift, "photo_submit")).json()["shift"]["data"]
+    # Повтор после потерянного ответа не дублирует сообщение о результате.
+    second = (await command(client, headers, shift, "photo_submit")).json()["shift"]["data"]
+    assert second["photo_status"] == "passed"
+    assert len(second["messages"]) == len(first["messages"])
     # Пройденную проверку не сбросить случайным кадром — только «Пройти ещё раз».
     assert (await command(client, headers, shift, "photo_step", step=0)).status_code == 409
     assert (await command(client, headers, shift, "online")).json()["shift"]["data"]["online"]

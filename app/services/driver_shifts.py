@@ -607,6 +607,8 @@ async def perform_action(session, user_id, shift_id, payload, device):
         if step not in data["photo_steps"]:
             data["photo_steps"].append(step)
         data["photo_status"] = "in_progress"
+    elif action == "photo_submit" and data["photo_status"] == "passed":
+        pass  # повторная отправка после потерянного ответа не дублирует сообщение о результате
     elif action == "photo_submit":
         if sorted(data["photo_steps"]) != list(range(PHOTO_STEPS)):
             raise ConflictError(f"Сначала сделайте все {PHOTO_STEPS} фото проверки")

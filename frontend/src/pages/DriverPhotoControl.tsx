@@ -241,6 +241,8 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
     if (reviewed < REVIEW.length) { const timer = window.setTimeout(() => setReviewed(n => n + 1), reduced() ? 0 : 620); return () => window.clearTimeout(timer); }
     if (passed) setStage("result");
   }, [stage, reviewed, passed]);
+  // Ответ потерялся, но обновление смены принесло «пройдено» — показываем результат, а не повтор.
+  useEffect(() => { if (stage === "summary" && passed) setStage("result"); }, [stage, passed]);
   useEffect(() => {
     if (stage !== "checking" || passed || queued || busy || !(sawBusy.current || silent)) return;
     setSilent(false); setStage("summary"); setError("Фото не отправились. Проверьте связь и отправьте ещё раз.");
@@ -361,7 +363,7 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
     if (retake) { const back = retake; setRetake(null); setShot(null); if (back === "summary") setStage("summary"); else close(); return; }
     setError(null); setSilent(false); setSaving(shot.step); setQueued({ action: "photo_step", values: { step: shot.step } });
   }
-  function send() { setError(null); setSilent(false); setUploaded(0); setStage("sending"); }
+  function send() { setError(null); setSilent(false); if (passed) { setStage("result"); return; } setUploaded(0); setStage("sending"); }
 
   const photo = (index: number, className: string, wide = true) => images[index]
     ? <img className={className} src={images[index]} alt="" />
@@ -422,7 +424,7 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
       <dl className="pc-faq">
         <dt>«Где пройти фотоконтроль?»</dt><dd>Профиль → Фотоконтроль или Диагностика → нужная проверка. Проверки, без которых нельзя работать, стоят в группе «Блокирует работу».</dd>
         <dt>«Можно загрузить фото из галереи?»</dt><dd>Нет: снимать нужно камерой в приложении. Старые фото, скриншоты и снимки с экрана не принимаются.</dd>
-        <dt>«Фотоконтроль не прошёл»</dt><dd>Причина приходит в чат приложения. Исправьте замечание и переснимите — иногда только часть фото.</dd>
+        <dt>«Фотоконтроль не прошёл»</dt><dd>Причина приходит в чат «Предупреждения». Исправьте замечание и переснимите — иногда только часть фото.</dd>
         <dt>«Сколько ждать проверку?»</dt><dd>Обычно 5–15 минут. После успешной проверки доступ к заказам открывается сразу.</dd>
         <dt>«Данные в СТС не совпадают»</dt><dd>Карточку машины исправляет парк: сверьте госномер, марку, цвет и год выпуска.</dd>
         <dt>«Камера не открывается»</dt><dd>Разрешите приложению доступ к камере, перезапустите его или телефон, обновите приложение.</dd>
@@ -583,7 +585,7 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
       {stage === "result" && <div className="pc-panel pc-result">
         <div className="dx-done pc-result-mark"><SuccessMark /><Confetti /></div>
         <h2>Фотоконтроль пройден</h2>
-        <p className="pc-lead">Доступ к заказам открыт{car ? `: ${car.brand} ${car.model} · ${car.plate}` : ""}. Уведомление о результате пришло в Чаты → «Важное».</p>
+        <p className="pc-lead">Доступ к заказам открыт{car ? `: ${car.brand} ${car.model} · ${car.plate}` : ""}. Уведомление о результате пришло в Чаты → «Предупреждения».</p>
         <div className="pc-panel-foot">
           <button type="button" className="pc-primary" data-autofocus onClick={() => { close(); go("orders"); }}>Перейти к заказам</button>
           <button type="button" className="pc-secondary" onClick={close}>Готово</button>
@@ -604,7 +606,7 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
 function operatorNote(stage: Stage | null, step: PhotoStep | undefined, retake: boolean, count: number): { title: string; body: [string, string][] } | null {
   if (stage === "tips") return { title: "Водитель открыл фотоконтроль", body: [
     ["Когда это бывает", "После смены машины или её данных в парке, по сроку — обычно раз в 10 дней, или по запросу службы качества. Пройти можно заранее."],
-    ["Что на экране", "Сетка из 9 плиток с подписями. Плитка открывает камеру с рамкой нужного ракурса."],
+    ["Что на экране", "Советы перед съёмкой и кнопка «Открыть камеру». Дальше — камера с рамкой нужного ракурса, всего 9 фото."],
     ["Что сказать водителю", "Найдите светлое место, протрите номер, уберите вещи из салона и приготовьте оригинал техпаспорта."],
   ] };
   if (stage === "camera" && step) return { title: `${retake ? "Пересъёмка" : `Фото ${count + 1} из ${COUNT}`}: ${step.title}`, body: [
@@ -618,7 +620,7 @@ function operatorNote(stage: Stage | null, step: PhotoStep | undefined, retake: 
   ] };
   if (stage === "sending" || stage === "checking") return { title: "«Смотрим ваши фото»", body: [
     ["Сколько ждать", "Обычно 5–15 минут. Проверяет автоматика, в спорных случаях — сотрудник."],
-    ["Где результат", "Придёт в чат приложения. Если не прошёл — будет указано, какие фото переснять."],
+    ["Где результат", "Придёт в чат «Предупреждения». Если не прошёл — будет указано, какие фото переснять."],
     ["Что сказать водителю", "Дождитесь уведомления. Если доступ был закрыт, он откроется сразу после успешной проверки."],
   ] };
   if (stage === "result") return { title: "Проверка пройдена", body: [
