@@ -138,14 +138,20 @@ test('the right button, or Shift with the left, turns and tilts around the view 
 
 test('the two mouse schemes: "map" drags with the left button, "orbit" (as before) turns with it and moves with the right', () => {
   const { mouseGesture, fingerGesture } = city;
-  assert.equal(mouseGesture('map', 0, false), 'drag');
-  assert.equal(mouseGesture('map', 2, false), 'turn');
-  assert.equal(mouseGesture('map', 1, false), 'turn');
-  assert.equal(mouseGesture('map', 0, true), 'turn');
-  assert.equal(mouseGesture('orbit', 0, false), 'turn');
-  assert.equal(mouseGesture('orbit', 2, false), 'drag');
-  assert.equal(mouseGesture('orbit', 0, true), 'drag', 'Shift with the left button moves, as OrbitControls did');
-  assert.equal(mouseGesture('orbit', 1, false), 'dolly');
+  assert.equal(mouseGesture('map', 0), 'drag');
+  assert.equal(mouseGesture('map', 2), 'turn');
+  assert.equal(mouseGesture('map', 1), 'turn');
+  assert.equal(mouseGesture('map', 0, { shiftKey: true }), 'turn');
+  assert.equal(mouseGesture('map', 0, { altKey: true }), 'turn');
+  assert.equal(mouseGesture('orbit', 0), 'turn');
+  assert.equal(mouseGesture('orbit', 2), 'drag');
+  // As OrbitControls: Shift, Ctrl or Cmd swap the buttons, Alt changes nothing.
+  for (const key of ['shiftKey', 'ctrlKey', 'metaKey']) {
+    assert.equal(mouseGesture('orbit', 0, { [key]: true }), 'drag', `${key} + left moves`);
+    assert.equal(mouseGesture('orbit', 2, { [key]: true }), 'turn', `${key} + right turns`);
+  }
+  assert.equal(mouseGesture('orbit', 0, { altKey: true }), 'turn');
+  assert.equal(mouseGesture('orbit', 1), 'dolly');
   assert.equal(fingerGesture('map'), 'drag');
   assert.equal(fingerGesture('orbit'), 'turn');
 });
@@ -173,10 +179,33 @@ test('"orbit": a left drag turns around the view centre, a right drag grabs the 
   dom.dispatchEvent(mouse('pointerdown', 800, 450, { button: 1 }));
   dom.dispatchEvent(mouse('pointermove', 800, 350, { button: 1 }));
   const closer = rig.currentView().distance;
-  assert.ok(closer < far, `dragging up with the middle button comes closer: ${closer} < ${far}`);
+  near(far / closer, 1 / Math.pow(.95, .9), 1e-6, 'dragging up 100 px comes closer at the old OrbitControls rate');
   dom.dispatchEvent(mouse('pointermove', 800, 650, { button: 1 }));
   assert.ok(rig.currentView().distance > far, 'dragging down goes away');
   dom.dispatchEvent(mouse('pointerup', 800, 650, { button: 1 }));
+  rig.dispose();
+});
+
+test('"orbit": two fingers sliding up together move the city instead of tilting', () => {
+  const { dom, rig } = setup({ controls: 'orbit' });
+  const before = rig.currentView();
+  gesture(dom, [[1, [700, 600, 700, 400]], [2, [900, 600, 900, 400]]]);
+  dom.dispatchEvent(pointer('pointerup', 1, 700, 400)); dom.dispatchEvent(pointer('pointerup', 2, 900, 400));
+  const after = rig.currentView();
+  near(after.polar, before.polar, 1e-9, 'no tilt');
+  assert.notDeepEqual(after.target, before.target, 'the city moved');
+  rig.dispose();
+});
+
+test('a zoom anchored in the sky zooms around the view centre instead of dragging the view across the city', () => {
+  const { dom, rig } = setup({ controls: 'orbit', view: { polar: 1.3, distance: 90, target: [0, 0, 1], azimuth: 0 } });
+  const before = rig.currentView();
+  dom.dispatchEvent(mouse('pointerdown', 800, 20, { button: 1 }));
+  dom.dispatchEvent(mouse('pointermove', 800, 220, { button: 1 }));
+  dom.dispatchEvent(mouse('pointerup', 800, 220, { button: 1 }));
+  const after = rig.currentView();
+  assert.ok(after.distance > before.distance);
+  assert.deepEqual(after.target, before.target, 'the centre stays put');
   rig.dispose();
 });
 

@@ -22,8 +22,8 @@ export const MIN_DISTANCE = 18, MAX_DISTANCE = 140, MIN_POLAR = .18, MAX_POLAR =
 export const TAP_SLOP = 6;
 /** Mouse turning, radians per canvas height of drag (OrbitControls' 2π at rotateSpeed .75). */
 const TURN = 2 * Math.PI * .75;
-/** Dragging with the middle button ("orbit") zooms e-fold per this share of the canvas height; down moves away. */
-const DOLLY = 2.2;
+/** Dragging with the middle button ("orbit") zooms as OrbitControls did: 0.95^(zoomSpeed .9 × px / 100). Down moves away. */
+const DOLLY = -Math.log(.95) * .9 * .01;
 /** Two fingers sliding up or down together tilt this many radians per canvas height. */
 const TOUCH_TILT = 2.4;
 /** A twist turns the map only once it passes this angle, so a pinch that only zooms does not wobble. */
@@ -94,14 +94,19 @@ export interface Point { x: number; y: number }
 export type ControlScheme = "orbit" | "map";
 type Gesture = "drag" | "turn" | "dolly";
 
-/** What a mouse press starts: `button` is MouseEvent.button, `modified` is Shift, Ctrl, Cmd or Alt held. */
-export function mouseGesture(scheme: ControlScheme, button: number, modified: boolean): Gesture {
-  if (scheme === "map") return button === 0 && !modified ? "drag" : "turn";
-  if (button === 2 || (button === 0 && modified)) return "drag";
-  return button === 1 ? "dolly" : "turn";
+export interface Modifiers { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean }
+/**
+ * What a mouse press starts; `button` is MouseEvent.button. "orbit" reads the modifiers as OrbitControls
+ * did: Shift, Ctrl or Cmd swap the left and right buttons, Alt changes nothing. "map" turns with any of them.
+ */
+export function mouseGesture(scheme: ControlScheme, button: number, keys: Modifiers = {}): Gesture {
+  if (scheme === "map") return button === 0 && !(keys.shiftKey || keys.ctrlKey || keys.metaKey || keys.altKey) ? "drag" : "turn";
+  if (button === 1) return "dolly";
+  const swapped = !!(keys.shiftKey || keys.ctrlKey || keys.metaKey);
+  return (button === 2) !== swapped ? "drag" : "turn";
 }
 /** What one finger does: the same as a left-button drag. */
-export const fingerGesture = (scheme: ControlScheme): Gesture => mouseGesture(scheme, 0, false);
+export const fingerGesture = (scheme: ControlScheme): Gesture => mouseGesture(scheme, 0);
 
 export interface CameraRigOptions {
   /** The canvas: drags, pinches and taps start on it. */
@@ -223,9 +228,10 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   }
   /** Sets the distance keeping the ground under `at` where it was (the view's centre without `at`). */
   function zoomAround(at: Point | null, nextDistance: number) {
-    if (at) ground(at.x, at.y, grabbed);
+    // Only real ground anchors the zoom: a point in the sky or past the reach would drag the view across the city.
+    const anchored = !!at && ground(at.x, at.y, grabbed);
     distance = clamp(nextDistance, MIN_DISTANCE, maxDistance); place();
-    if (at) { ground(at.x, at.y, under); target.x += grabbed.x - under.x; target.z += grabbed.z - under.z; keepInside(); place(); }
+    if (anchored && at) { ground(at.x, at.y, under); target.x += grabbed.x - under.x; target.z += grabbed.z - under.z; keepInside(); place(); }
   }
   const fingers = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   /**
@@ -275,6 +281,8 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   // Pointers: one drags the ground, turns or zooms as the scheme says (mouseGesture), two pinch or tilt.
   const grips = new Map<number, Grip>();
   let mode: "none" | Gesture | "two" | "pinch" | "tilt" = "none", travelled = 0, twisted = 0, twisting = false;
+  // The scheme a gesture started with: switching mid-gesture takes effect from the next one.
+  let gestureScheme: ControlScheme = scheme;
   const samples: { time: number; x: number; z: number }[] = [];
   const glide = new THREE.Vector2();
   let gliding = false;
@@ -298,9 +306,10 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
     if (event.pointerType === "mouse") {
       // A click focuses the map, so the keys work straight after it.
       if (document.activeElement !== host) host.focus?.({ preventScroll: true });
-      mode = mouseGesture(scheme, event.button, event.shiftKey || event.ctrlKey || event.metaKey || event.altKey);
+      mode = mouseGesture(scheme, event.button, event);
     } else if (grips.size === 1) mode = fingerGesture(scheme);
     else { mode = "two"; restartGrips(); }
+    if (grips.size === 1) gestureScheme = scheme;
     travelled = 0; twisted = 0; twisting = false; samples.length = 0;
     host.dataset.dragging = "true";
   };
@@ -322,9 +331,8 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
       place();
     } else if (mode === "dolly") {
       // Up brings the camera closer to where the press started, down takes it away, as the wheel does.
-      const h = height || dom.clientHeight || 1;
       travelled = Math.max(travelled, Math.hypot(grip.x - grip.startX, grip.y - grip.startY));
-      zoomAround({ x: grip.startX, y: grip.startY }, distance * Math.exp(DOLLY * (grip.y - grip.lastY) / h));
+      zoomAround({ x: grip.startX, y: grip.startY }, distance * Math.exp(DOLLY * (grip.y - grip.lastY)));
     } else if (grips.size === 2) {
       const [a, b] = pair(), pa = pointsOf(a), pb = pointsOf(b);
       travelled = TAP_SLOP;
@@ -332,7 +340,8 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
         // Undecided until a finger has moved enough to tell a tilt from a pinch; then the whole movement counts.
         const kind = classifyTwoFingers(pa.start, pb.start, pa.now, pb.now);
         if (!kind) return;
-        mode = kind;
+        // "orbit" tilts with one finger; two fingers zoom and move the city there, as DOLLY_PAN did.
+        mode = gestureScheme === "orbit" ? "pinch" : kind;
         pa.last = pa.start; pb.last = pb.start;
       }
       if (mode === "tilt") {
@@ -354,7 +363,7 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
     grips.delete(event.pointerId);
     if (grips.size === 1) {
       // One finger left of a pinch: it carries on from where it is, without a jump, as one finger does.
-      mode = fingerGesture(scheme); restartGrips(); samples.length = 0; travelled = TAP_SLOP;
+      mode = fingerGesture(gestureScheme); restartGrips(); samples.length = 0; travelled = TAP_SLOP;
       return;
     }
     if (grips.size) return;
