@@ -127,7 +127,8 @@ async def update_guide(session: SessionDep, user: CurrentUser, payload: GuideUpd
         user.gender = changes["gender"]
     if "guide_name" in changes:
         user.guide_name = changes["guide_name"]
-    if changes.get("city_controls") is not None:
+    # Явный null сбрасывает выбор камеры: город снова спросит при входе.
+    if "city_controls" in changes:
         user.city_controls = changes["city_controls"]
     await session.commit()
     return await me(session, user)

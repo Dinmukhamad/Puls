@@ -197,6 +197,15 @@ test('"orbit": two fingers sliding up together move the city instead of tilting'
   rig.dispose();
 });
 
+test('"orbit": two fingers twisting do not turn the map, as before', () => {
+  const { dom, rig } = setup({ controls: 'orbit' });
+  const before = rig.currentView();
+  gesture(dom, [[1, [700, 450, 700, 350]], [2, [900, 450, 900, 550]]]);
+  dom.dispatchEvent(pointer('pointerup', 1, 700, 350)); dom.dispatchEvent(pointer('pointerup', 2, 900, 550));
+  near(rig.currentView().azimuth, before.azimuth, 1e-9, 'no twist in orbit');
+  rig.dispose();
+});
+
 test('a zoom anchored in the sky zooms around the view centre instead of dragging the view across the city', () => {
   const { dom, rig } = setup({ controls: 'orbit', view: { polar: 1.3, distance: 90, target: [0, 0, 1], azimuth: 0 } });
   const before = rig.currentView();

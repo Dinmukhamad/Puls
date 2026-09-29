@@ -74,3 +74,6 @@ async def test_operator_chooses_how_the_city_camera_moves(client, operator):
     assert back.json()["city_controls"] == "orbit" and back.json()["guide_name"] == "Арман"
     wrong = await client.put(f"{API}/auth/guide", headers=headers, json={"city_controls": "fly"})
     assert wrong.status_code == 422
+    # An explicit null clears the choice, so the city asks again on the next visit.
+    reset = await client.put(f"{API}/auth/guide", headers=headers, json={"city_controls": None})
+    assert reset.json()["city_controls"] is None and reset.json()["guide_name"] == "Арман"

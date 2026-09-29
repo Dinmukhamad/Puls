@@ -2,11 +2,12 @@
  * The city camera rig, with two mouse schemes the operator picks on entering the city:
  * - "map": a drag grabs the ground and slides it with the pointer, gliding on after a flick; the right
  *   or middle button (or Shift, Ctrl, Alt + drag) turns and tilts the view;
- * - "orbit", as the city worked before: a drag turns and tilts the view, the right button (or a modifier
- *   + drag) grabs the ground and slides it, dragging with the middle button zooms.
- * In both the wheel and a pinch zoom towards the pointer; two fingers twist to turn and slide up or down
- * together to tilt; one finger does what a left-button drag does. WASD or the arrows move, Q/E turn,
- * R/F tilt. Flights (district focus, buttons) ease in between, the default view is fitted into the free
+ * - "orbit", as the city worked before (OrbitControls): a left drag turns and tilts, the right button
+ *   grabs the ground and slides it, Shift, Ctrl or Cmd swap the two buttons, dragging with the middle
+ *   button zooms; two fingers zoom and move the city, never twist or tilt.
+ * In both the wheel and a pinch zoom towards the pointer, and one finger does what a left-button drag
+ * does. In "map" two fingers also twist to turn and slide up or down together to tilt. WASD or the
+ * arrows move, Q/E turn, R/F tilt. Flights (district focus, buttons) ease in between, the default view is fitted into the free
  * frame between the panels, and the view stays over the city.
  */
 import * as THREE from "three/webgpu";
@@ -251,7 +252,8 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
     twisted += twist;
     if (!twisting && Math.abs(twisted) > TWIST_START) twisting = true;
     distance = clamp(distance / spread, MIN_DISTANCE, maxDistance);
-    if (twisting) azimuth += twist;
+    // "orbit" never twisted with two fingers (OrbitControls DOLLY_PAN): they only zoom and move there.
+    if (twisting && gestureScheme !== "orbit") azimuth += twist;
     place();
     // Then the ground that was under the fingers is slid back under them.
     ground(a1.x, a1.y, ha); ground(b1.x, b1.y, hb);
@@ -340,7 +342,7 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
         // Undecided until a finger has moved enough to tell a tilt from a pinch; then the whole movement counts.
         const kind = classifyTwoFingers(pa.start, pb.start, pa.now, pb.now);
         if (!kind) return;
-        // "orbit" tilts with one finger; two fingers zoom and move the city there, as DOLLY_PAN did.
+        // "orbit" tilts with one finger; two fingers only zoom and move the city there, as DOLLY_PAN did.
         mode = gestureScheme === "orbit" ? "pinch" : kind;
         pa.last = pa.start; pb.last = pb.start;
       }
