@@ -257,7 +257,8 @@ button.pc-shot:active .pc-shot-pic { transform: scale(.97); }
 .pc-example-miss b { color: #ffb4a6; }
 
 /* панели: советы, сетка снимков, отправка, результат */
-.pc-panel { display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; overflow: auto; box-sizing: border-box; padding: calc(20px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom)); animation: du-drop .32s var(--pc-ease) both; }
+.pc-panel { display: flex; flex-direction: column; gap: 14px; height: 100%; min-height: 0; overflow: auto; box-sizing: border-box; padding: calc(20px + env(safe-area-inset-top)) 20px calc(20px + env(safe-area-inset-bottom)); animation: du-drop .32s var(--pc-ease) backwards; }
+/* backwards, а не both: застывший transform сделал бы панель опорой для крестика, и он уезжал бы при прокрутке. */
 .pc-panel h2 { font-size: 26px; letter-spacing: -.02em; margin: 0; }
 .pc-panel .pc-close { position: absolute; top: calc(12px + env(safe-area-inset-top)); right: 14px; z-index: 2; }
 .pc-lead { font-size: 15px; color: #c9c9c2; margin: 0; }
