@@ -13,6 +13,7 @@ import type {
   TransactionOut,
   UserOut,
   WeekOut,
+  CityControls,
   Gender,
 } from "./types";
 
@@ -30,7 +31,7 @@ export const auth = {
     }),
   me: () => request<UserOut>(`${V1}/auth/me`),
   /** Свой помощник: фигура в городе и имя вместо «Пульсар». */
-  guide: (json: { gender?: Gender; guide_name?: string | null }) => request<UserOut>(`${V1}/auth/guide`, { method: "PUT", json }),
+  guide: (json: { gender?: Gender; guide_name?: string | null; city_controls?: CityControls }) => request<UserOut>(`${V1}/auth/guide`, { method: "PUT", json }),
   changeLogin: (login: string, currentPassword: string) =>
     request<UserOut>(`${V1}/auth/username`, {
       method: "POST",

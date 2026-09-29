@@ -120,12 +120,15 @@ async def update_guide(session: SessionDep, user: CurrentUser, payload: GuideUpd
     """
     Оператор выбирает фигуру в центре города (если пол ещё не указан при создании)
     и даёт помощнику имя. Имя заменяет «Пульсар» во всех подсказках этого оператора.
+    Здесь же сохраняется, как оператору удобнее двигать камеру в городе.
     """
     changes = payload.model_dump(exclude_unset=True)
     if "gender" in changes and changes["gender"] is not None:
         user.gender = changes["gender"]
     if "guide_name" in changes:
         user.guide_name = changes["guide_name"]
+    if changes.get("city_controls") is not None:
+        user.city_controls = changes["city_controls"]
     await session.commit()
     return await me(session, user)
 

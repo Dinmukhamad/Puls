@@ -58,3 +58,19 @@ async def test_operator_names_the_guide_and_picks_a_figure(client, operator):
         assert response.status_code == 422, wrong
     cleared = await client.put(f"{API}/auth/guide", headers=headers, json={"guide_name": "   "})
     assert cleared.json()["guide_name"] is None
+
+
+async def test_operator_chooses_how_the_city_camera_moves(client, operator):
+    headers = auth(await login(client, operator.login))
+    me = (await client.get(f"{API}/auth/me", headers=headers)).json()
+    assert me["city_controls"] is None, "the city asks on the first visit"
+    saved = await client.put(f"{API}/auth/guide", headers=headers, json={"city_controls": "map"})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["city_controls"] == "map"
+    # The guide's name and the camera are saved separately: one does not reset the other.
+    named = await client.put(f"{API}/auth/guide", headers=headers, json={"guide_name": "Арман"})
+    assert named.json()["city_controls"] == "map"
+    back = await client.put(f"{API}/auth/guide", headers=headers, json={"city_controls": "orbit"})
+    assert back.json()["city_controls"] == "orbit" and back.json()["guide_name"] == "Арман"
+    wrong = await client.put(f"{API}/auth/guide", headers=headers, json={"city_controls": "fly"})
+    assert wrong.status_code == 422

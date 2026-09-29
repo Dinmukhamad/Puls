@@ -136,6 +136,67 @@ test('the right button, or Shift with the left, turns and tilts around the view 
   }
 });
 
+test('the two mouse schemes: "map" drags with the left button, "orbit" (as before) turns with it and moves with the right', () => {
+  const { mouseGesture, fingerGesture } = city;
+  assert.equal(mouseGesture('map', 0, false), 'drag');
+  assert.equal(mouseGesture('map', 2, false), 'turn');
+  assert.equal(mouseGesture('map', 1, false), 'turn');
+  assert.equal(mouseGesture('map', 0, true), 'turn');
+  assert.equal(mouseGesture('orbit', 0, false), 'turn');
+  assert.equal(mouseGesture('orbit', 2, false), 'drag');
+  assert.equal(mouseGesture('orbit', 0, true), 'drag', 'Shift with the left button moves, as OrbitControls did');
+  assert.equal(mouseGesture('orbit', 1, false), 'dolly');
+  assert.equal(fingerGesture('map'), 'drag');
+  assert.equal(fingerGesture('orbit'), 'turn');
+});
+
+test('"orbit": a left drag turns around the view centre, a right drag grabs the ground, the middle button zooms', () => {
+  const { dom, camera, rig } = setup({ controls: 'orbit' });
+  const before = rig.currentView();
+  dom.dispatchEvent(mouse('pointerdown', 800, 450));
+  dom.dispatchEvent(mouse('pointermove', 900, 450));
+  dom.dispatchEvent(mouse('pointerup', 900, 450));
+  const turned = rig.currentView();
+  near(turned.azimuth, before.azimuth - 2 * Math.PI * .75 * 100 / H, 1e-9, 'a left drag turns');
+  assert.deepEqual(turned.target, before.target, 'and does not move the city');
+  const grabbed = groundAt(camera, 800, 500);
+  dom.dispatchEvent(mouse('pointerdown', 800, 500, { button: 2 }));
+  for (let i = 1; i <= 10; i++) { clock += 16; dom.dispatchEvent(mouse('pointermove', 800 - 20 * i, 500 + 10 * i, { button: 2 })); }
+  const at = screenOf(camera, grabbed), moved = rig.currentView();
+  near(at.x, 600, .5, 'the ground under the pointer follows a right drag (x)'); near(at.y, 600, .5, '(y)');
+  assert.equal(moved.azimuth, turned.azimuth); assert.equal(moved.polar, turned.polar);
+  dom.dispatchEvent(mouse('pointerup', 600, 600, { button: 2 }));
+  const wheelDown = new Event('mousedown', { cancelable: true }); Object.assign(wheelDown, { button: 1 });
+  dom.dispatchEvent(wheelDown);
+  assert.equal(wheelDown.defaultPrevented, true, 'the middle button does not start autoscroll');
+  const far = rig.currentView().distance;
+  dom.dispatchEvent(mouse('pointerdown', 800, 450, { button: 1 }));
+  dom.dispatchEvent(mouse('pointermove', 800, 350, { button: 1 }));
+  const closer = rig.currentView().distance;
+  assert.ok(closer < far, `dragging up with the middle button comes closer: ${closer} < ${far}`);
+  dom.dispatchEvent(mouse('pointermove', 800, 650, { button: 1 }));
+  assert.ok(rig.currentView().distance > far, 'dragging down goes away');
+  dom.dispatchEvent(mouse('pointerup', 800, 650, { button: 1 }));
+  rig.dispose();
+});
+
+test('"orbit": one finger turns; setControls switches the scheme for the next gesture', () => {
+  const { dom, rig } = setup({ controls: 'orbit' });
+  const before = rig.currentView();
+  gesture(dom, [[1, [800, 450, 900, 450]]]);
+  dom.dispatchEvent(pointer('pointerup', 1, 900, 450));
+  assert.ok(rig.currentView().azimuth < before.azimuth, 'one finger turns the view');
+  assert.deepEqual(rig.currentView().target, before.target);
+  rig.setControls('map');
+  const turned = rig.currentView();
+  dom.dispatchEvent(mouse('pointerdown', 800, 450));
+  dom.dispatchEvent(mouse('pointermove', 700, 450));
+  dom.dispatchEvent(mouse('pointerup', 700, 450));
+  assert.equal(rig.currentView().azimuth, turned.azimuth, 'after switching to "map" the left drag no longer turns');
+  assert.notDeepEqual(rig.currentView().target, turned.target, 'it moves the city');
+  rig.dispose();
+});
+
 test('two fingers: a pinch keeps the ground under each finger, even in a tilted view', () => {
   const { dom, camera, rig } = setup();
   const before = rig.currentView(), underA = groundAt(camera, 700, 380), underB = groundAt(camera, 900, 520);

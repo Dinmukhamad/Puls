@@ -60,9 +60,13 @@ export interface UserOut {
   gender?: Gender | null;
   /** Имя, которое оператор дал помощнику вместо «Пульсар». */
   guide_name?: string | null;
+  /** Как оператор двигает камеру в городе; null — ещё не выбрал, город спросит при входе. */
+  city_controls?: CityControls | null;
 }
 
 export type Gender = "male" | "female";
+/** «orbit» — как раньше: тянуть вращает, правая кнопка двигает. «map» — как карту: тянуть двигает, правая кнопка поворачивает. */
+export type CityControls = "orbit" | "map";
 
 export interface Page<T> {
   items: T[];

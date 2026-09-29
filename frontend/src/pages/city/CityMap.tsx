@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CityDistrict, CityGroup, CityMission, CityPlot, CityQuest, DistrictId } from "../../api/city";
-import type { CityControl, CityLabelInfo, CityMascot, CityView, TimeOfDay } from "../../city3d/types";
+import type { CityControl, CityControlScheme, CityLabelInfo, CityMascot, CityView, TimeOfDay } from "../../city3d/types";
+import { CONTROL_SCHEMES } from "./cityControls";
 import { districtLevel, grownDistricts } from "./cityLevels";
 import { useAuth } from "../../auth/AuthContext";
 
@@ -10,13 +11,15 @@ import { useAuth } from "../../auth/AuthContext";
  * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
  * seen, so an upgrade is celebrated once.
  */
-export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
+export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
   /** The operator's plots; `onPlot` (when the viewer may build) opens the catalogue; `plotFocus` flies to a plot when it changes. */
   plots?: CityPlot[]; onPlot?: (key: string) => void; plotFocus?: { key: string; at: number };
   /** The group's quarters (null: no group, all built); `onSite` opens the group panel; `siteFocus` flies to a quarter. */
   sites?: CityGroup["projects"] | null; onSite?: (key: string) => void; siteFocus?: { key: string; at: number };
   /** Today's situations; `onQuest` (the operator themself) opens one from its "!"; `questFocus` flies to one. */
-  quests?: CityQuest[]; onQuest?: (slot: number) => void; questFocus?: { slot: number; at: number } }) {
+  quests?: CityQuest[]; onQuest?: (slot: number) => void; questFocus?: { slot: number; at: number };
+  /** How the mouse moves the camera (the operator's choice); `onControls` opens the choice from the map tools. */
+  controls?: CityControlScheme; onControls?: () => void }) {
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
   const host = useRef<HTMLDivElement>(null), frame = useRef<HTMLDivElement>(null);
   const control = useRef<CityControl>();
@@ -45,6 +48,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     try { return localStorage.getItem("puls.city.time-of-day") === "night" ? "night" : "day"; } catch { return "day"; }
   });
   const timeRef = useRef(timeOfDay); timeRef.current = timeOfDay;
+  const controlsRef = useRef(controls); controlsRef.current = controls;
   const [traffic, setTraffic] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const trafficRef = useRef(traffic); trafficRef.current = traffic;
   const levels = Object.fromEntries(districts.map(d => [d.id, missions.filter(m => m.district === d.id && m.state === "completed").length]));
@@ -64,7 +68,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     void import("../../city3d").then(({ createCity }) => {
       if (cancelled || !host.current) return;
       control.current = createCity(host.current, {
-        world, forceWebGL: webGL, stats: showStats, timeOfDay: timeRef.current,
+        world, forceWebGL: webGL, stats: showStats, timeOfDay: timeRef.current, controls: controlsRef.current,
         plots: plotsRef.current, onPlot: canBuild ? key => { if (!cancelled) plotRef.current?.(key); } : undefined,
         sites: sitesRef.current, onSite: key => { if (!cancelled) siteRef.current?.(key); },
         quests: questsRef.current, onQuest: canQuest ? slot => { if (!cancelled) questRef.current?.(slot); } : undefined,
@@ -92,6 +96,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   useEffect(() => { if (mascot) control.current?.setMascot(mascot); }, [mascot?.gender, mascot?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setLabels(JSON.parse(labelsKey)); }, [labelsKey]);
   useEffect(() => { control.current?.setTraffic(traffic); }, [traffic]);
+  useEffect(() => { control.current?.setControls(controls); }, [controls]);
   function key(event: KeyboardEvent) {
     // The v3 city reads its keys itself (moving, turning and tilting while held) and marks them handled.
     const c = control.current; if (!c || event.nativeEvent.defaultPrevented) return;
@@ -99,16 +104,20 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
     const action = actions[event.key]; if (action) { event.preventDefault(); action(); }
   }
   const live = !failed && ready;
-  // The city moves like a map (city3d/engine/camera.ts).
+  // The mouse moves the camera as the operator chose (city3d/engine/camera.ts mouseGesture).
+  const mouse = controls === "orbit" ? "Мышь: тянуть — вращать, правая кнопка — двигать город, колесо — масштаб." : "Мышь: тянуть — двигать город, правая кнопка — поворот и наклон, колесо — масштаб.";
   return <section className={`city-world${failed ? " city-world--fallback" : ""}${live ? " is-ready" : ""}`} aria-label="Карта твоего города">
-    <div ref={host} className="city-scene" tabIndex={failed ? -1 : 0} role="application" aria-label="3D-карта города. Стрелки или W, A, S, D — двигаться, Q и E — поворот, R и F — наклон, плюс и минус — масштаб, ноль — исходный вид." onKeyDown={key} />
+    <div ref={host} className="city-scene" tabIndex={failed ? -1 : 0} role="application" aria-label={`3D-карта города. ${mouse} Стрелки или W, A, S, D — двигаться, Q и E — поворот, R и F — наклон, плюс и минус — масштаб, ноль — исходный вид.`} onKeyDown={key} />
     <div ref={frame} className="city-frame" aria-hidden="true" />
     {!failed && !ready && <div className="city-loading" role="status"><span>Строим твой город…</span></div>}
     {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>3D-карта недоступна на этом устройстве</strong><small>Выбирай районы на панели навыков — миссии работают как обычно.</small></div>}
-    {live && <span className="city-map-hint">Тяни — двигай город · правая кнопка или Shift — поворот и наклон · колесо — масштаб · WASD, Q/E — с клавиатуры</span>}
+    {live && <span className="city-map-hint" key={controls}>{CONTROL_SCHEMES[controls].hint}</span>}
     {!failed && <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="vertical">
       <button type="button" className="city-time-toggle" aria-label={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} title={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} aria-pressed={timeOfDay === "night"} onClick={() => setTimeOfDay(value => value === "day" ? "night" : "day")}><span aria-hidden="true">{timeOfDay === "day" ? "☀" : "☾"}</span><small>{timeOfDay === "day" ? "День" : "Ночь"}</small></button>
       <button type="button" aria-label="Посмотреть помощника" onClick={() => control.current?.focusMascot()}>♙</button>
+      {onControls && <button type="button" className="city-controls-button" aria-label={`Управление камерой: ${CONTROL_SCHEMES[controls].title.toLowerCase()}`} title="Управление камерой" onClick={onControls}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="6" /><path d="M12 3v6M6.5 9h11" /><circle cx="12" cy="6.5" r=".9" /></svg>
+      </button>}
       <button type="button" aria-label={traffic ? "Приостановить движение" : "Включить движение"} title={traffic ? "Пауза движения" : "Возобновить движение"} aria-pressed={!traffic} onClick={() => setTraffic(value => !value)}>{traffic ? "Ⅱ" : "▶"}</button>
       <button type="button" aria-label="Приблизить" onClick={() => control.current?.zoom(.75)}>＋</button>
       <button type="button" aria-label="Отдалить" onClick={() => control.current?.zoom(1.33)}>－</button>

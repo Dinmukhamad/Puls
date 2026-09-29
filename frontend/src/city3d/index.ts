@@ -10,7 +10,7 @@ import type { CityContext } from "./engine/context";
 import type { CityControl, CityLabelInfo, CityMascot, CityOptions, CityPlotInfo, CityQuestInfo, CitySiteInfo, TimeOfDay } from "./types";
 import { createRenderer, pixelRatio, requestShadowRedraw, type RendererHandle } from "./engine/renderer";
 import { createLoop, type Loop } from "./engine/loop";
-import { createCamera, createCameraRig, type CameraRig } from "./engine/camera";
+import { createCamera, createCameraRig, type CameraRig, type ControlScheme } from "./engine/camera";
 import { createPicker, type Picker } from "./engine/input";
 import { createQuality, type QualityControl } from "./engine/quality";
 import { createStats, type Stats } from "./engine/stats";
@@ -54,6 +54,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   const pending: ((p: Parts) => void)[] = [];
   let selected = options.selected, labels = options.labels, mascot = options.mascot ?? { gender: null, name: "Пульсар" }, trafficOn = !reducedMotion;
   let timeOfDay: TimeOfDay = options.timeOfDay ?? "day", plotStates: CityPlotInfo[] = options.plots ?? [], siteStates: CitySiteInfo[] | null = options.sites ?? null, questStates: CityQuestInfo[] = options.quests ?? [];
+  let controls: ControlScheme = options.controls ?? "orbit";
   const when = (fn: (p: Parts) => void) => { if (parts) fn(parts); else pending.push(fn); };
   const daylight = (p: Parts) => {
     const night = timeOfDay === "night";
@@ -106,7 +107,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     // The view may go out to the outer ring road; the shadow map follows it there.
     const rig = createCameraRig(camera, {
       dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], reach: world.spec.roadRings[world.spec.roadRings.length - 1],
-      frame: options.frame, view: options.view, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2], view.distance); options.onView(view); },
+      frame: options.frame, view: options.view, controls, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2], view.distance); options.onView(view); },
     });
     const first = rig.currentView(); sky.followView(first.target[0], first.target[2], first.distance); sky.setViewDistance(first.distance);
     const picker = createPicker(canvas, camera, () => districts.pickables, { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) });
@@ -198,6 +199,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     rotate: radians => when(p => p.rig.rotate(radians)),
     tilt: radians => when(p => p.rig.tilt(radians)),
     reset: () => when(p => p.rig.reset()),
+    setControls(next) { controls = next; when(p => p.rig.setControls(next)); },
     dispose() { disposed = true; pending.length = 0; teardown(); host.replaceChildren(); delete host.dataset.backend; delete host.dataset.timeOfDay; },
   };
 }

@@ -14,6 +14,8 @@ from app.models.enums import Role
 from app.schemas.common import ORMModel
 
 Gender = Literal["male", "female"]
+# Схема камеры в городе: "orbit" — тянуть вращает, правая кнопка двигает; "map" — наоборот.
+CityControls = Literal["orbit", "map"]
 
 
 class Token(BaseModel):
@@ -54,6 +56,7 @@ class UserOut(ORMModel):
     can_manage_credentials: bool | None = None
     gender: Gender | None = None
     guide_name: str | None = None
+    city_controls: CityControls | None = None
 
 
 class TrainingUserOut(ORMModel):
@@ -128,6 +131,7 @@ class GuideUpdate(BaseModel):
 
     gender: Gender | None = None
     guide_name: str | None = Field(default=None, max_length=40)
+    city_controls: CityControls | None = None
 
     @field_validator("guide_name")
     @classmethod

@@ -205,3 +205,30 @@
 .city-situations__actions{display:flex;gap:8px;align-items:end}
 .city-situations__options{border:0;padding:0;margin:0;display:grid;gap:8px}
 .city-situations__option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}
+
+/* Выбор управления камерой: две карточки с мышью. Жёлтая кнопка — «двигать город», синяя — «вращать». */
+.city-controls-setup{display:grid;gap:14px;padding:18px 20px;border-radius:22px;animation:city-rise .45s cubic-bezier(.32,.72,0,1) both}
+.city-controls-setup__head h2{margin:0;font-size:18px;line-height:1.25}.city-controls-setup__head p{margin:4px 0 0;font-size:13px;line-height:1.45;color:var(--text-secondary)}
+.city-controls-options{display:grid;grid-template-columns:1fr;gap:8px}
+.city-controls-option{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:16px;border:1.5px solid var(--separator);background:var(--city-glass-soft);color:var(--text-primary);font:inherit;text-align:left;cursor:pointer;transition:border-color .2s ease,background .2s ease,transform .15s ease}
+.city-controls-option:hover{border-color:color-mix(in srgb,var(--accent-primary) 50%,var(--separator))}.city-controls-option:active{transform:scale(.985)}
+.city-controls-option[aria-checked=true]{border-color:var(--accent-primary);background:var(--accent-tint-strong)}
+.city-controls-option:focus-visible{outline:2px solid var(--accent-primary);outline-offset:2px}
+.city-controls-option__text{display:grid;gap:2px;min-width:0}.city-controls-option__text strong{font-size:14.5px}.city-controls-option__text strong small{margin-left:6px;font-size:12px;font-weight:500;color:var(--text-secondary)}
+.city-controls-option__text em{font-style:normal;font-size:11.5px;line-height:1.4;color:var(--text-secondary);margin-top:2px}
+.city-controls-keys{display:grid;gap:3px;margin-top:5px;font-size:12.5px;line-height:1.35}
+.city-controls-keys kbd{display:inline-block;min-width:34px;margin-right:4px;padding:1px 6px;border-radius:6px;border:1px solid var(--separator);background:var(--surface-primary);font:inherit;font-size:11px;font-weight:700;text-align:center}
+.city-controls-keys kbd[data-role=move]{background:#ffd21f;border-color:#e0b400;color:#2b2200}.city-controls-keys kbd[data-role=turn]{background:#4f8dff;border-color:#3a74e0;color:#fff}
+.city-controls-mouse{flex:none;width:46px;height:64px;margin-top:2px}
+.city-controls-mouse__body{fill:var(--surface-primary);stroke:var(--text-secondary);stroke-width:2.2}
+.city-controls-mouse__split{fill:none;stroke:var(--text-secondary);stroke-width:1.6}
+.city-controls-mouse__wheel{fill:var(--text-secondary);opacity:.55}
+.city-controls-mouse__button[data-role=move]{fill:#ffd21f}.city-controls-mouse__button[data-role=turn]{fill:#4f8dff}
+.city-controls-mouse__button{animation:city-controls-press 2.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.city-controls-mouse__button[data-side=right]{animation-delay:1.2s}
+@keyframes city-controls-press{0%,100%{opacity:.45;transform:none}20%,40%{opacity:1;transform:translateY(1.5px)}60%{opacity:.45;transform:none}}
+.city-map-tools .city-controls-button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;vertical-align:middle}.city-map-tools .city-controls-button circle{fill:currentColor;stroke:none}
+@media(max-width:560px){.city-controls-setup{padding:16px;gap:12px}.city-controls-setup__head h2{font-size:16px}.city-controls-setup__head p{font-size:12px}.city-controls-option{padding:10px 12px}.city-controls-mouse{width:36px;height:50px}.city-controls-option__text strong small{display:block;margin:2px 0 0}}
+@media(prefers-reduced-motion:reduce){.city-controls-setup{animation:none}.city-controls-mouse__button{animation:none;opacity:1}}
+/* На телефоне кнопок мыши нет: карточка показывает только, что делает палец. */
+@media(hover:none) and (pointer:coarse){.city-controls-keys,.city-controls-mouse{display:none}.city-controls-option__text em{margin-top:4px;font-size:13px;color:var(--text-primary)}}

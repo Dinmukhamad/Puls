@@ -61,6 +61,9 @@ class User(Base, TimestampMixin):
     gender: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # Имя, которое оператор дал своему помощнику; заменяет «Пульсар» в подсказках.
     guide_name: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Как оператор двигает камеру в городе: "orbit" — как раньше, "map" — как карту.
+    # Пусто — ещё не выбрал, город спросит при входе.
+    city_controls: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
     group: Mapped[Group | None] = relationship(
         "Group", foreign_keys=[group_id], back_populates="members"

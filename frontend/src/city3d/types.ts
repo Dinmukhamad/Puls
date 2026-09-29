@@ -9,6 +9,8 @@ export interface CityView { azimuth: number; polar: number; distance: number; ta
 export interface CityLabelInfo { id: DistrictId; name: string; status: string; icon: string; soon: boolean; reward: boolean; level: number }
 export interface CityMascot { gender: "male" | "female" | null; name: string }
 export type TimeOfDay = "day" | "night";
+/** How the mouse and one finger move the camera: "orbit" — as before (drag turns, right button moves), "map" — like a map. */
+export type CityControlScheme = "orbit" | "map";
 /** An operator's plot as the server reports it (api/city.ts CityPlot). */
 /** A group quarter as the server reports it; no list at all means no group, and every quarter stands built. */
 export interface CitySiteInfo { key: string; name: string; stage: SiteStage }
@@ -30,6 +32,8 @@ export interface CityOptions {
   /** Show the stats overlay (`?stats=1`, staff only). */
   stats?: boolean;
   timeOfDay?: TimeOfDay;
+  /** The camera scheme the operator chose; "orbit" if not given. */
+  controls?: CityControlScheme;
   /** The operator's plots; `onPlot` (only when the viewer may build) opens the catalogue for an empty open plot. */
   plots?: CityPlotInfo[];
   onPlot?: (key: string) => void;
@@ -57,5 +61,6 @@ export interface CityControl {
   setQuests: (quests: CityQuestInfo[]) => void;
   focusQuest: (slot: number) => void;
   zoom: (factor: number) => void; rotate: (radians: number) => void; tilt: (radians: number) => void; reset: () => void;
+  setControls: (scheme: CityControlScheme) => void;
   dispose: () => void;
 }
