@@ -7,6 +7,8 @@ import { dateTime } from "../utils/format";
 import { useEdgeBack } from "../hooks/useEdgeBack";
 import "./driver-profile.css";
 import { AnimatedNumber } from "./DriverMotion";
+import { DriverPhotoControl, PHOTO_STEPS } from "./DriverPhotoControl";
+import { orderActive } from "../api/driver";
 
 /* Строение раздела повторяет приложение парка: карточка водителя с плитками, тарифы с
    вкладками и свёрнутым блоком недоступного, фотоконтроль списком с группами, приоритет
@@ -24,7 +26,6 @@ const PAYMENTS = [
   { value: "card", title: "Картой", note: "Оплата подтверждается автоматически" },
   { value: "cash", title: "Наличными", note: "Подтверждайте получение после поездки" },
 ];
-const PHOTO_STEPS = ["Автомобиль спереди", "Автомобиль сбоку", "Чистота салона", "Учебный документ", "Селфи водителя"];
 const lessons = [
   { id: "tariffs", title: "Тарифы и условия", text: "Перед выходом на линию проверьте доступные тарифы в профиле. Причина ограничения указана рядом с тарифом. Смена автомобиля может потребовать нового фотоконтроля." },
   { id: "standards", title: "Стандарты поездки", text: "Подтвердите прибытие у точки А, дождитесь пассажира и сверяйте адрес Б. Изменение маршрута оформляется в активном заказе. При оплате наличными подтвердите получение." },
@@ -90,14 +91,15 @@ export function DriverProfileViews(p: ShiftViewProps) {
   const problems = (photoDone ? 0 : 1) + (car && car.status === "available" ? 0 : 1) + (d.tariffs.length ? 0 : 1);
   const [sheet, setSheet] = useState<string | null>(null);
   // Кнопка, жест и шеврон ведут в одно место: сначала закрываем шторку, потом уходим с экрана.
-  const backTo = ({ car: "cars", provider: "legal", documents: "legal" } as Record<string, string>)[view] ?? "profile";
-  const overlay = !!sheet || view === "payment";
+  // Открытая проверка фотоконтроля возвращает к списку проверок, а не в профиль.
+  const backTo = view === "photo" && detail ? "photo" : ({ car: "cars", provider: "legal", documents: "legal" } as Record<string, string>)[view] ?? "profile";
+  const [photoOverlay, setPhotoOverlay] = useState(false);
+  const overlay = !!sheet || view === "payment" || photoOverlay;
   const goBack = useCallback(() => { if (sheet) { setSheet(null); return; } go(backTo); }, [sheet, backTo, go]);
   const { offset, dragging } = useEdgeBack(view === "profile" || overlay ? null : goBack);
   const [tariffTab, setTariffTab] = useState<"driver" | "courier">("driver");
   const [parkTab, setParkTab] = useState<"cars" | "offers" | "contacts">("contacts");
   const [unavailable, setUnavailable] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
 
@@ -377,7 +379,7 @@ export function DriverProfileViews(p: ShiftViewProps) {
       <div className="dp-car-hero"><span className="dp-plate">{item.plate}</span><CarArt color={item.id === d.car_id ? "#c2c6cc" : "#9aa0a8"} /></div>
       <div className="dp-card dp-card--flat">
         {row("Брендинг", { icon: "lock", note: "Нужно обратиться в ваш парк", locked: true })}
-        {row("Фотоконтроль", { icon: "camera", note: `Пройдено ${d.photo_steps.length} из ${PHOTO_STEPS.length}`, onClick: () => go("photo") })}
+        {row("Фотоконтроль", { icon: "camera", note: photoDone ? "Пройден" : `Снято ${Math.min(d.photo_steps.length, PHOTO_STEPS.length)} из ${PHOTO_STEPS.length} фото`, tone: photoDone ? undefined : "danger", onClick: () => go("photo", "car") })}
       </div>
       <h2 className="dp-section-title">Информация о машине</h2>
       <div className="dp-card dp-card--flat">
@@ -395,7 +397,7 @@ export function DriverProfileViews(p: ShiftViewProps) {
   // ── подготовка к заказам ────────────────────────────────────────────
   if (view === "diagnostics") {
     const steps = [
-      { key: "photo", title: "Пройдите фотоконтроль", done: photoDone, to: "photo" },
+      { key: "photo", title: "Пройдите фотоконтроль", done: photoDone, to: "photo", detail: "car" },
       { key: "car", title: "Заполните информацию о машине", done: !!car && car.status === "available", to: "cars" },
       { key: "tariffs", title: "Включите хотя бы один тариф", done: !!d.tariffs.length, to: "tariffs" },
       { key: "payment", title: "Выберите способ оплаты", done: true, to: "payment" },
@@ -405,42 +407,18 @@ export function DriverProfileViews(p: ShiftViewProps) {
       {bigHead("Завершите подготовку к заказам")}
       <button className="dp-help-link" type="button" onClick={() => go("license")}>Помощь <span aria-hidden="true">›</span></button>
       <p className="driver-muted">Совсем скоро вы сможете выйти на линию и получить первые заказы.</p>
-      <div className="dp-card dp-card--flat">{steps.map(x => <button className="dp-check" type="button" key={x.key} data-done={x.done} data-now={x === nextStep} onClick={() => go(x.to)}>
+      <div className="dp-card dp-card--flat">{steps.map(x => <button className="dp-check" type="button" key={x.key} data-done={x.done} data-now={x === nextStep} onClick={() => go(x.to, x.detail)}>
         <i aria-hidden="true">{x.done ? "✓" : x === nextStep ? "" : "·"}</i>
         <span>{x.title}</span>
         {x === nextStep && <em className="dp-check-go" aria-hidden="true">›</em>}
       </button>)}</div>
-      <div className="dp-bottom"><DAction label={nextStep ? "Далее" : "Перейти к заказам"} busy={busy} onClick={() => go(nextStep ? nextStep.to : "orders")} readyNote={nextStep ? `Следующий шаг: ${nextStep.title.toLowerCase()}.` : "Всё готово — можно выходить на линию."} /></div>
+      <div className="dp-bottom"><DAction label={nextStep ? "Далее" : "Перейти к заказам"} busy={busy} onClick={() => nextStep ? go(nextStep.to, nextStep.detail) : go("orders")} readyNote={nextStep ? `Следующий шаг: ${nextStep.title.toLowerCase()}.` : "Всё готово — можно выходить на линию."} /></div>
     </>;
   }
 
   // ── фотоконтроль ────────────────────────────────────────────────────
-  if (view === "photo") {
-    const index = d.photo_steps.length;
-    return <>
-      {head("Фотоконтроль")}
-      <div className="dp-bar">{photoDone ? "Проверка пройдена" : "Блокирует работу"}</div>
-      <div className="dp-card dp-card--flat">{PHOTO_STEPS.map((title, i) => <div className="dp-row" key={title}>
-        <span className="dp-status" data-tone={i < index ? "done" : i === index && !photoDone ? "danger" : "idle"}>{i < index ? "✓" : i === index && !photoDone ? "✕" : i + 1}</span>
-        <div><strong>{title}</strong><small data-tone={i < index ? undefined : i === index && !photoDone ? "danger" : undefined}>{i < index ? "Пройдено" : i === index && !photoDone ? "Не пройдено" : "Ожидает"}</small></div>
-      </div>)}</div>
-      {photoDone ? <>
-        <DChoice arrow onClick={() => go("orders")}>Перейти к заказам</DChoice>
-        <DChoice disabled={busy} onClick={() => act("photo_restart")}>Пройти фотоконтроль ещё раз</DChoice>
-      </> : index < PHOTO_STEPS.length ? <>
-        <h2 className="dp-section-title">{PHOTO_STEPS[index]}</h2>
-        <div className="ds-photo-frame">{preview ? <img src={preview} alt="Учебный снимок" /> : <span className="driver-muted">Снимок появится здесь</span>}</div>
-        <label className="driver-secondary ds-file">Сделать снимок<input type="file" accept="image/*" capture="environment" onChange={event => {
-          const file = event.target.files?.[0]; if (!file) return;
-          const reader = new FileReader(); reader.onload = () => setPreview(String(reader.result)); reader.readAsDataURL(file);
-        }} /></label>
-        <DAction label={preview ? "Снимок подходит · Далее" : "Использовать учебный пример"} busy={busy}
-          onClick={() => { act("photo_step", { step: index }); setPreview(null); }}
-          readyNote={preview ? `Ракурс ${index + 1} из ${PHOTO_STEPS.length} будет засчитан.` : "Камера не нужна: пример засчитается как этот ракурс."} />
-      </> : <DAction label="Отправить учебную проверку" busy={busy} busyLabel="Отправляем…" onClick={() => act("photo_submit")} readyNote="Пять ракурсов готовы. Проверка пройдёт мгновенно, снимки на сервер не уходят." />}
-      <DExplain real="фотоконтроль проверяет человек или автоматика, до результата заказы не приходят." sim="снимки остаются в браузере и не загружаются: проверка засчитывается сразу." />
-    </>;
-  }
+  if (view === "photo") return <DriverPhotoControl shift={shift} busy={busy} act={act} go={go} detail={detail} head={head} onOverlay={setPhotoOverlay}
+    orderActive={orderActive(state.order) && state.order?.shift_id === shift.id} />;
 
   // ── о вас ───────────────────────────────────────────────────────────
   if (view === "about") return <>
@@ -574,5 +552,5 @@ export function DriverProfileViews(p: ShiftViewProps) {
   </>;
   })();
 
-  return <div className="dp-swipe du-screen" key={view === "payment" ? "profile" : view} data-dragging={dragging} style={{ transform: offset ? `translateX(${offset}px)` : "none" } as CSSProperties}>{body}</div>;
+  return <div className="dp-swipe du-screen" key={view === "payment" ? "profile" : view === "photo" ? `photo:${detail}` : view} data-dragging={dragging} style={{ transform: offset ? `translateX(${offset}px)` : "none" } as CSSProperties}>{body}</div>;
 }

@@ -17,6 +17,10 @@ from app.models.user import User
 from app.schemas.driver_shift import DriverScenario
 from app.services import driver_auth
 
+# Фотоконтроль машины и СТС: четыре стороны машины, два ряда сидений, открытый багажник
+# и обе стороны техпаспорта. Кадры снимаются в любом порядке, как плитки в приложении.
+PHOTO_STEPS = 9
+
 VIEWS = {
     "orders",
     "intercity",
@@ -597,14 +601,15 @@ async def perform_action(session, user_id, shift_id, payload, device):
         data["photo_status"], data["photo_steps"] = "required", []
         data["online"] = False
     elif action == "photo_step":
-        step = integer(values.get("step"), 0, 4)
-        if step != len(data["photo_steps"]):
-            raise ConflictError("Снимайте ракурсы по порядку")
-        data["photo_steps"].append(step)
+        if data["photo_status"] == "passed":
+            raise ConflictError("Фотоконтроль уже пройден")
+        step = integer(values.get("step"), 0, PHOTO_STEPS - 1)
+        if step not in data["photo_steps"]:
+            data["photo_steps"].append(step)
         data["photo_status"] = "in_progress"
     elif action == "photo_submit":
-        if data["photo_steps"] != list(range(5)):
-            raise ConflictError("Сначала пройдите пять ракурсов проверки")
+        if sorted(data["photo_steps"]) != list(range(PHOTO_STEPS)):
+            raise ConflictError(f"Сначала сделайте все {PHOTO_STEPS} фото проверки")
         data["photo_status"] = "passed"
         for car in data["cars"]:
             if car["id"] == data["car_id"]:
@@ -614,7 +619,7 @@ async def perform_action(session, user_id, shift_id, payload, device):
                 "id": str(uuid4()),
                 "channel": "warnings",
                 "title": "Фотоконтроль пройден",
-                "text": "Учебный автомобиль допущен к заказам.",
+                "text": "Фото машины и СТС приняты. Доступ к заказам открыт.",
                 "at": utcnow().isoformat(),
             }
         )

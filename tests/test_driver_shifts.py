@@ -15,6 +15,7 @@ from app.models.driver_shift import DriverSupportCase
 from app.models.enums import Role
 from app.schemas.driver_shift import DriverScenario
 from app.services import driver_maps, telegram
+from app.services.driver_shifts import PHOTO_STEPS
 from tests.conftest import auth, login, make_user
 from tests.driver_navigation_helpers import A, B, created, fake_route, fix, set_elapsed
 from tests.driver_navigation_helpers import step as order_step
@@ -63,7 +64,7 @@ async def command(client, headers, shift, action, *, request_id=None, **values):
 
 
 async def photo(client, headers, shift):
-    for step in range(5):
+    for step in range(PHOTO_STEPS):
         assert (await command(client, headers, shift, "photo_step", step=step)).status_code == 200
     assert (await command(client, headers, shift, "photo_submit")).status_code == 200
 
@@ -117,9 +118,17 @@ async def test_shift_gates_snapshot_photo_retry_and_ownership(client, session, s
     assert (
         await command(client, headers, shift, "photo_step", request_id=key, step=1)
     ).status_code == 409
-    for step in range(1, 5):
+    # Плитки снимаются в любом порядке, повторный кадр не дублируется.
+    for step in reversed(range(1, PHOTO_STEPS)):
         await command(client, headers, shift, "photo_step", step=step)
+    again = await command(client, headers, shift, "photo_step", step=3)
+    assert sorted(again.json()["shift"]["data"]["photo_steps"]) == list(range(PHOTO_STEPS))
+    assert again.json()["shift"]["data"]["photo_status"] == "in_progress"
+    over = await command(client, headers, shift, "photo_step", step=PHOTO_STEPS)
+    assert over.status_code == 400
     await command(client, headers, shift, "photo_submit")
+    # Пройденную проверку не сбросить случайным кадром — только «Пройти ещё раз».
+    assert (await command(client, headers, shift, "photo_step", step=0)).status_code == 409
     assert (await command(client, headers, shift, "online")).json()["shift"]["data"]["online"]
     other = await make_user(session, login="other")
     other_headers = auth(await login(client, other.login))

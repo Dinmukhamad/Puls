@@ -5,6 +5,7 @@ from app.db.base import utcnow
 from app.models.driver_navigation import DriverNavigation
 from app.models.enums import Role
 from app.services import driver_maps
+from app.services.driver_shifts import PHOTO_STEPS
 from tests.driver_navigation_helpers import A, B, created, fix, prepared, set_elapsed, step
 from tests.test_driver import BASE
 from tests.test_driver_orders import driver_setup as _driver_setup
@@ -73,7 +74,7 @@ async def test_admin_demo_never_counts_as_assessment(
     await session.commit()
     h = driver_setup
     shift = await start(client, h)
-    for i in range(5):
+    for i in range(PHOTO_STEPS):
         await command(client, h, shift, "photo_step", step=i)
     await command(client, h, shift, "photo_submit")
     await command(client, h, shift, "online")

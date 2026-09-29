@@ -447,16 +447,45 @@ test("tariffs gate on photo control and hide unavailable ones behind a group", (
   assert.doesNotMatch(ready, /Машина не подходит/);
 });
 
-test("photo control lists every angle with its own status", () => {
-  const html = profileHtml("photo", { photo_steps: [0, 1] });
+test("photo control list groups checks like the driver app", () => {
+  const html = profileHtml("photo");
+  assert.match(html, /Нет доступа к заказам/);
   assert.match(html, /Блокирует работу/);
-  assert.match(html, /Автомобиль спереди/);
-  assert.match(html, /Селфи водителя/);
-  assert.equal((html.match(/Пройдено</g) ?? []).length, 2);
-  assert.match(html, /data-tone="danger">✕/);
-  const done = profileHtml("photo", { photo_status: "passed", photo_steps: [0, 1, 2, 3, 4] });
-  assert.match(done, /Проверка пройдена/);
-  assert.match(done, /Пройти фотоконтроль ещё раз/);
+  assert.match(html, /Фотоконтроль машины и СТС/);
+  assert.match(html, /Не пройдено/);
+  assert.match(html, /Пройденные проверки/);
+  assert.match(html, /Проверка селфи/);
+  assert.doesNotMatch(html, /class="pc-overlay"/);
+  const started = profileHtml("photo", { photo_status: "in_progress", photo_steps: [0, 4] });
+  assert.match(started, /Снято 2 из 9/);
+  const done = profileHtml("photo", { photo_status: "passed" });
+  assert.match(done, /Доступ к заказам открыт/);
+  assert.match(done, /Следующая проверка через 10 дней/);
+  assert.doesNotMatch(done, /Блокирует работу/);
+});
+
+test("photo check shows a captioned tile per shot and gates sending until all are taken", async () => {
+  const { PHOTO_STEPS } = await component("./DriverPhotoControl.tsx");
+  assert.equal(PHOTO_STEPS.length, 9);
+  const html = profileHtml("photo", { photo_status: "in_progress", photo_steps: [0, 1] }, "car");
+  for (const step of PHOTO_STEPS) assert.ok(html.includes(step.title), step.title);
+  assert.match(html, /Машина спереди/);
+  assert.match(html, /Открытый багажник/);
+  assert.match(html, /Свидетельство ТС \(обратная сторона\)/);
+  assert.equal((html.match(/data-status="done"/g) ?? []).length, 2);
+  assert.equal((html.match(/data-status="next"/g) ?? []).length, 1);
+  assert.match(html, /Осталось снять 7 из 9/);
+  assert.match(html, /280 XSH/);
+  // Кадры снимаются в любом порядке: следующей подсвечивается первая пустая плитка.
+  const gaps = profileHtml("photo", { photo_status: "in_progress", photo_steps: [1, 2] }, "car");
+  assert.match(gaps, /class="pc-shot" data-status="next" aria-label="Машина спереди/);
+  const ready = profileHtml("photo", { photo_status: "in_progress", photo_steps: [8, 7, 6, 5, 4, 3, 2, 1, 0] }, "car");
+  assert.doesNotMatch(ready, /Осталось снять/);
+  assert.match(ready, /Перед отправкой можно переснять любой кадр/);
+  const passed = profileHtml("photo", { photo_status: "passed", photo_steps: [0, 1, 2, 3, 4] }, "car");
+  assert.equal((passed.match(/data-status="done"/g) ?? []).length, 9);
+  assert.match(passed, /Пройти фотоконтроль ещё раз/);
+  assert.match(passed, /Перейти к заказам/);
 });
 
 test("priority draws a gauge against the scenario maximum and splits earned from lost", () => {
@@ -496,7 +525,7 @@ test("car detail keeps park-only actions visible but locked", () => {
   assert.match(html, /Брендинг/);
   assert.match(html, /Нужно обратиться в ваш парк/);
   assert.equal((html.match(/data-locked="true"/g) ?? []).length, 3);
-  assert.match(html, /Пройдено 0 из 5/);
+  assert.match(html, /Снято 0 из 9 фото/);
 });
 
 test("preparation checklist points at the first unfinished step", () => {
