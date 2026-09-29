@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CitySettings, type PointKind } from "../../api/city";
+import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CityEconomy, type CitySettings, type PointKind } from "../../api/city";
 import { useAuth } from "../../auth/AuthContext";
 import { ErrorState, Skeleton } from "../../components/ui";
 import "./city.css";
@@ -9,11 +9,11 @@ import "./city.css";
 export function CityAdminPage() {
   const { user } = useAuth();
   const canEdit = ["trainer", "head", "admin"].includes(user?.role ?? "");
-  const [tab, setTab] = useState<"participants"|"groups"|"settings">("participants");
+  const [tab, setTab] = useState<"participants"|"groups"|"economy"|"settings">("participants");
   const settings = useQuery({ queryKey:["city-settings"], queryFn:city.settings, enabled:tab === "settings", refetchOnWindowFocus:false });
   return <div className="city-page city-admin"><header className="city-heading"><div><span className="city-eyebrow">СТУДИЯ ОБУЧЕНИЯ</span><h1>Миссии города</h1><p>Настраивайте маршрут и следите за реальным прогрессом.</p></div><Link className="city-secondary" to="/training/city">Открыть город →</Link></header>
-    <nav className="city-admin-tabs" aria-label="Управление городом"><button className="city-secondary" aria-pressed={tab==='participants'} onClick={()=>setTab('participants')}>Прогресс операторов</button><button className="city-secondary" aria-pressed={tab==='groups'} onClick={()=>setTab('groups')}>Города групп</button><button className="city-secondary" aria-pressed={tab==='settings'} onClick={()=>setTab('settings')}>{canEdit?'Настроить миссии':'Условия миссий'}</button></nav>
-    {tab==='participants'?<Participants />:tab==='groups'?<Groups />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
+    <nav className="city-admin-tabs" aria-label="Управление городом"><button className="city-secondary" aria-pressed={tab==='participants'} onClick={()=>setTab('participants')}>Прогресс операторов</button><button className="city-secondary" aria-pressed={tab==='groups'} onClick={()=>setTab('groups')}>Города групп</button><button className="city-secondary" aria-pressed={tab==='economy'} onClick={()=>setTab('economy')}>Экономика игры</button><button className="city-secondary" aria-pressed={tab==='settings'} onClick={()=>setTab('settings')}>{canEdit?'Настроить миссии':'Условия миссий'}</button></nav>
+    {tab==='participants'?<Participants />:tab==='groups'?<Groups />:tab==='economy'?<Economy />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
   </div>;
 }
 
@@ -47,6 +47,35 @@ function Groups() {
       </div>
     </article>)}
   </div>;
+}
+
+/** The game's numbers: head and admin edit them, trainers and supervisors read them. */
+function Economy() {
+  const client=useQueryClient();
+  const query=useQuery({queryKey:['city-economy'],queryFn:city.economy,refetchOnWindowFocus:false});
+  const [draft,setDraft]=useState<CityEconomy|null>(null),[saved,setSaved]=useState(false);
+  useEffect(()=>{if(query.data)setDraft(structuredClone(query.data));},[query.data]);
+  const mutation=useMutation({mutationFn:city.saveEconomy,onSuccess:async data=>{setSaved(true);client.setQueryData(['city-economy'],{...query.data,...data});await client.invalidateQueries({queryKey:['city']});await client.invalidateQueries({queryKey:['city-groups']});}});
+  if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
+  if(!draft)return <Skeleton height={350}/>;
+  const canEdit=!!draft.can_edit;
+  const change=(patch:Partial<CityEconomy>)=>{setSaved(false);setDraft(d=>d&&({...d,...patch}));};
+  const number=(value:string)=>Math.max(0,Math.round(Number(value)||0));
+  return <form className="city-admin-edit city-economy" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
+    <p className="city-admin-warning">Цены и награда за задание действуют для новых покупок и ответов: уже построенное остаётся по цене покупки. Очки и стоимость кварталов пересчитывают город группы сразу, стадии кварталов могут сдвинуться.{canEdit?'':' Менять настройки могут руководитель и администратор.'}</p>
+    <fieldset disabled={!canEdit||mutation.isPending}>
+      <h3>Цены построек, коинов</h3>
+      <div className="city-economy__grid">{(draft.catalogue??[]).map(b=><label className="field" key={b.key}><span className="field__label">{b.icon} {b.name}</span><input className="input" type="number" min={1} max={100000} required value={draft.prices[b.key]} onChange={e=>change({prices:{...draft.prices,[b.key]:number(e.target.value)}})}/></label>)}</div>
+      <h3>Очки для города группы</h3>
+      <div className="city-economy__grid">{(Object.keys(POINT_KINDS) as PointKind[]).map(k=><label className="field" key={k}><span className="field__label">{POINT_KINDS[k]}</span><input className="input" type="number" min={0} max={1000} required value={draft.points[k]} onChange={e=>change({points:{...draft.points,[k]:number(e.target.value)}})}/></label>)}</div>
+      <h3>Кварталы группы, по очереди</h3>
+      <div className="city-economy__projects">{draft.projects.map((p,i)=><div key={p.key} className="city-editor-fields"><label className="field"><span className="field__label">Название квартала {i+1}</span><input className="input" minLength={3} maxLength={60} required value={p.name} onChange={e=>change({projects:draft.projects.map(q=>q.key===p.key?{...q,name:e.target.value}:q)})}/></label><label className="field"><span className="field__label">Стоимость, очков</span><input className="input" type="number" min={10} max={1000000} required value={p.cost} onChange={e=>change({projects:draft.projects.map(q=>q.key===p.key?{...q,cost:number(e.target.value)}:q)})}/></label></div>)}</div>
+      <h3>Задания дня</h3>
+      <div className="city-economy__grid"><label className="field"><span className="field__label">Коинов за верный ответ</span><input className="input" type="number" min={0} max={1000} required value={draft.quest_coins} onChange={e=>change({quest_coins:number(e.target.value)})}/></label></div>
+      {canEdit&&<button className="city-action" type="submit">{mutation.isPending?'Сохраняем…':'Сохранить настройки'}</button>}
+    </fieldset>
+    {saved&&<p role="status">Настройки игры сохранены.</p>}{mutation.isError&&<ErrorState error={mutation.error}/>}
+  </form>;
 }
 
 function MissionEditor({initial,canEdit}:{initial:CitySettings;canEdit:boolean}) {

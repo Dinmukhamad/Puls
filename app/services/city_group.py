@@ -35,7 +35,9 @@ STAGES = ("planned", "foundation", "frame", "floors", "done")
 MIN_MEMBERS = 3
 
 
-async def contributions(session, user_ids):
+async def contributions(session, user_ids, weights=None):
+    """Every operator's work by kind and points; `weights` are the points per kind (settings)."""
+    weights = weights or POINTS
     ids = list(user_ids)
     facts = await evidence(session, ids)
     missions = dict(
@@ -75,14 +77,14 @@ async def contributions(session, user_ids):
             "appeals": facts[uid]["appeals"],
             "closed": facts[uid]["closed"],
         }
-        result[uid] = {**parts, "points": sum(POINTS[k] * v for k, v in parts.items())}
+        result[uid] = {**parts, "points": sum(weights[k] * v for k, v in parts.items())}
     return result
 
 
-def project_rows(total, *, exact=False, small=False):
+def project_rows(total, projects=PROJECTS, *, exact=False, small=False):
     """Every quarter's stage for `total` points; `exact` adds the points (staff only)."""
     rows, left, current = [], total, False
-    for project in PROJECTS:
+    for project in projects:
         cost = project["cost"]
         if left >= cost:
             stage, progress, left = "done", cost, left - cost
@@ -97,6 +99,12 @@ def project_rows(total, *, exact=False, small=False):
             row |= {"points": progress, "cost": cost}
         rows.append(row)
     return rows
+
+
+async def economy(session):
+    from app.services.city_economy import economy as load
+
+    return await load(session)
 
 
 async def members_of(session, group_id):
@@ -120,16 +128,20 @@ async def group_city(session, user):
     group = await session.get(Group, user.group_id)
     if not group or not group.is_active:
         return None
+    config = await economy(session)
     members = await members_of(session, group.id)
-    points = await contributions(session, [m.id for m in members] or [user.id])
+    points = await contributions(session, [m.id for m in members] or [user.id], config["points"])
     total = sum(p["points"] for p in points.values())
     small = len(members) < MIN_MEMBERS
+    mine = (
+        points.get(user.id) or (await contributions(session, [user.id], config["points"]))[user.id]
+    )
     return {
         "name": group.name,
         "small": small,
-        "projects": project_rows(total, small=small),
-        "mine": points.get(user.id) or (await contributions(session, [user.id]))[user.id],
-        "points": POINTS,
+        "projects": project_rows(total, config["projects"], small=small),
+        "mine": mine,
+        "points": config["points"],
     }
 
 
@@ -138,20 +150,21 @@ async def groups_overview(session, actor):
     query = select(Group).where(Group.is_active.is_(True)).order_by(Group.name, Group.id)
     if actor.role == Role.SUPERVISOR:
         query = query.where(Group.supervisor_id == actor.id)
+    config = await economy(session)
     items = []
     for group in await session.scalars(query):
         members = await members_of(session, group.id)
-        points = await contributions(session, [m.id for m in members])
+        points = await contributions(session, [m.id for m in members], config["points"])
         total = sum(p["points"] for p in points.values())
         items.append(
             {
                 "id": group.id,
                 "name": group.name,
                 "total": total,
-                "projects": project_rows(total, exact=True),
+                "projects": project_rows(total, config["projects"], exact=True),
                 "members": [
                     {"user_id": m.id, "full_name": m.full_name, **points[m.id]} for m in members
                 ],
             }
         )
-    return {"items": items, "points": POINTS}
+    return {"items": items, "points": config["points"]}

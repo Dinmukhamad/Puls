@@ -54,3 +54,14 @@ class CityQuest(Base):
     correct: Mapped[bool | None] = mapped_column(nullable=True)
     coins: Mapped[int] = mapped_column(default=0)
     answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CityEconomy(Base):
+    """The game's numbers as the head set them: prices, points, quarter costs, the daily reward."""
+
+    __tablename__ = "city_economy"
+    __table_args__ = (CheckConstraint("id = 1", name="singleton"),)
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    revision: Mapped[int] = mapped_column(default=1)
+    values: Mapped[dict] = mapped_column(JSON)
+    updated_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))

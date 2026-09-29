@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Query, Response
 from sqlalchemy import func, or_, select
 
-from app.core.deps import CurrentUser, LearningEditor, LearningReader, SessionDep
+from app.core.deps import CurrentUser, HeadUser, LearningEditor, LearningReader, SessionDep
 from app.core.errors import NotFoundError
 from app.models.city import CityAward
 from app.models.enums import Role
 from app.models.user import User
-from app.schemas.city import BuildInput, ClaimInput, QuestAnswer, SettingsInput
-from app.services import city, city_group, city_quests
+from app.schemas.city import BuildInput, ClaimInput, EconomyInput, QuestAnswer, SettingsInput
+from app.services import city, city_economy, city_group, city_quests
 
 router = APIRouter(tags=["Мой город"])
 
@@ -41,6 +41,21 @@ async def configure(body: SettingsInput, session: SessionDep, user: LearningEdit
 @router.post("/learning/city/quests/{slot}/answer")
 async def answer_quest(slot: int, body: QuestAnswer, session: SessionDep, user: CurrentUser):
     return await city_quests.answer(session, user, slot, body.answer)
+
+
+@router.get("/admin/learning/city/economy")
+async def economy(session: SessionDep, user: LearningReader):
+    values = await city_economy.economy(session)
+    # Names for the form; they are not part of what is saved.
+    catalogue = [
+        {"key": b["key"], "name": b["name"], "icon": b["icon"]} for b in city.BUILDINGS.values()
+    ]
+    return {**values, "catalogue": catalogue, "can_edit": user.has_role_at_least(Role.HEAD)}
+
+
+@router.put("/admin/learning/city/economy")
+async def configure_economy(body: EconomyInput, session: SessionDep, user: HeadUser):
+    return await city_economy.save(session, user, body)
 
 
 @router.get("/admin/learning/city/groups")

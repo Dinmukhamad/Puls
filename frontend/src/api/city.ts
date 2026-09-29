@@ -22,6 +22,8 @@ export interface CityGroup { name: string; small: boolean; projects: { key: stri
 export interface CityGroupOverview { id: number; name: string; total: number; projects: { key: string; name: string; stage: SiteStage; points: number; cost: number }[]; members: ({ user_id: number; full_name: string } & Record<PointKind | "points", number>)[] }
 export const SITE_STAGES: Record<SiteStage, string> = { planned: "Запланирован", foundation: "Фундамент", frame: "Каркас", floors: "Этажи", done: "Построен" };
 export const POINT_KINDS: Record<PointKind, string> = { missions: "Миссии города", materials: "Пройденные материалы", quests: "Задания дня", orders: "Учебные заказы", appeals: "Обращения CRM", closed: "Закрытые тикеты" };
+/** The game's numbers the head sets (app/services/city_economy.py); `catalogue` and `can_edit` are not saved. */
+export interface CityEconomy { revision: number; prices: Record<BuildingKey, number>; points: Record<PointKind, number>; projects: { key: string; name: string; cost: number }[]; quest_coins: number; catalogue?: { key: BuildingKey; name: string; icon: string }[]; can_edit?: boolean }
 export interface CitySettings { revision: number; missions: Record<string, MissionDefinition> }
 export interface CityReward { already_claimed: boolean; title: string; xp: number; coins: number }
 export interface CityParticipant { user_id: number; full_name: string; login: string; completed: number; total: number; ready: number; xp: number; level: number; orders: number; appeals: number; missions: Pick<CityMission, "key" | "title" | "state" | "current" | "target">[] }
@@ -31,6 +33,8 @@ export const city = {
   claim: (key: string, revision: number) => request<CityReward>(`/api/v1/learning/city/missions/${key}/claim`, { method: "POST", json: { revision } }),
   build: (plot: string, item: BuildingKey) => request<CityBuilt>(`/api/v1/learning/city/plots/${plot}/build`, { method: "POST", json: { item } }),
   answer: (slot: number, answer: number) => request<CityQuest>(`/api/v1/learning/city/quests/${slot}/answer`, { method: "POST", json: { answer } }),
+  economy: () => request<CityEconomy>("/api/v1/admin/learning/city/economy"),
+  saveEconomy: ({ catalogue: _catalogue, can_edit: _canEdit, ...json }: CityEconomy) => request<CityEconomy>("/api/v1/admin/learning/city/economy", { method: "PUT", json }),
   groups: () => request<{ items: CityGroupOverview[]; points: Record<PointKind, number> }>("/api/v1/admin/learning/city/groups"),
   settings: () => request<CitySettings>("/api/v1/admin/learning/city/settings"),
   save: (json: CitySettings) => request<CitySettings>("/api/v1/admin/learning/city/settings", { method: "PUT", json }),

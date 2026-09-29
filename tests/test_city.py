@@ -542,3 +542,62 @@ async def test_deal_places_speakers_by_their_spot_and_shuffles_options():
         for q in deal(uid, date(2026, 9, 29), [], bank_questions())
     }
     assert len(places) == 3
+
+
+async def economy_body(client, headers, **changes):
+    current = (await client.get(ADMIN + "/economy", headers=headers)).json()
+    current.pop("catalogue"), current.pop("can_edit")
+    return {**current, **changes}
+
+
+async def test_head_sets_the_game_numbers_and_they_apply(client, session, operator):
+    head = await make_user(session, login="head-economy", role=Role.HEAD)
+    trainer = await make_user(session, login="trainer-economy", role=Role.TRAINER)
+    boss, coach = auth(await login(client, head.login)), auth(await login(client, trainer.login))
+    me = auth(await login(client, operator.login))
+    current = (await client.get(ADMIN + "/economy", headers=coach)).json()
+    assert not current.pop("can_edit") and len(current.pop("catalogue")) == 8
+    assert current["revision"] == 0 and current["prices"]["garden"] == 40
+    assert current["quest_coins"] == 10 and len(current["projects"]) == 6
+    assert (await client.get(ADMIN + "/economy", headers=me)).status_code == 403
+    body = {**current, "prices": {**current["prices"], "garden": 25}, "quest_coins": 15}
+    body["points"] = {**current["points"], "appeals": 10}
+    body["projects"] = [
+        {**current["projects"][0], "name": "Квартал «Первый»", "cost": 50},
+        *current["projects"][1:],
+    ]
+    assert (await client.put(ADMIN + "/economy", headers=coach, json=body)).status_code == 403
+    saved = await client.put(ADMIN + "/economy", headers=boss, json=body)
+    assert saved.status_code == 200 and saved.json()["revision"] == 1
+    # A stale revision is a conflict; a broken set of values is rejected.
+    assert (await client.put(ADMIN + "/economy", headers=boss, json=body)).status_code == 409
+    fresh = await economy_body(client, boss)
+    for broken in (
+        {"prices": {**fresh["prices"], "garden": 0}},
+        {"prices": {k: v for k, v in fresh["prices"].items() if k != "tower"}},
+        {"points": {**fresh["points"], "extra": 1}},
+        {"projects": fresh["projects"][::-1]},
+        {"quest_coins": 5000},
+    ):
+        assert (
+            await client.put(ADMIN + "/economy", headers=boss, json={**fresh, **broken})
+        ).status_code == 422
+    # The operator's city follows: new price, new reward, the group's points and quarter.
+    group = await make_group(session, code="GE")
+    operator.group_id = group.id
+    await session.commit()
+    await appeal(session, operator.id)
+    city = (await client.get(BASE, headers=me)).json()
+    assert next(b for b in city["buildings"] if b["key"] == "garden")["price"] == 25
+    assert city["quests"]["coins"] == 15
+    assert city["group"]["mine"]["points"] == 10 and city["group"]["points"]["appeals"] == 10
+    assert city["group"]["projects"][0]["name"] == "Квартал «Первый»"
+    assert (await claim(client, me, "welcome")).status_code == 200
+    await fund(session, operator.id, 30)
+    done = await client.post(f"{BASE}/plots/academy-0/build", headers=me, json={"item": "garden"})
+    assert done.status_code == 200 and done.json()["price"] == 25 and done.json()["balance"] == 5
+    row = (await quest_rows(session, operator.id))[0]
+    answer = await client.post(
+        f"{BASE}/quests/0/answer", headers=me, json={"answer": row.snapshot["correct"]}
+    )
+    assert answer.json()["coins"] == 15

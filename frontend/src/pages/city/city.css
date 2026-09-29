@@ -197,3 +197,8 @@
 .city-quest__result{display:grid;gap:8px;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,#d0533c 8%,var(--surface-primary))}
 .city-quest__result[data-correct]{background:color-mix(in srgb,#2f9e5b 12%,var(--surface-primary))}
 .city-quest__result p{margin:0;font-size:13px;line-height:1.5;color:var(--text-secondary)}.city-quest__result small{font-size:12px;color:var(--text-secondary)}
+/* The game's numbers (staff, «Экономика игры»). */
+.city-economy fieldset{border:0;padding:0;margin:0;display:grid;gap:14px}
+.city-economy h3{margin:8px 0 0;font-size:15px}
+.city-economy__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.city-economy__projects{display:grid;gap:10px}

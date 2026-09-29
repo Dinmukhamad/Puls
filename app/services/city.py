@@ -256,6 +256,7 @@ def mission_rows(config, facts, awards):
 
 async def dashboard(session, user, *, inspecting=False):
     # The group city and the daily situations build on this module, so they are imported here.
+    from app.services.city_economy import economy
     from app.services.city_group import group_city
     from app.services.city_quests import quests
 
@@ -290,6 +291,7 @@ async def dashboard(session, user, *, inspecting=False):
         if operator
         else {}
     )
+    prices = (await economy(session))["prices"]
     return {
         "revision": config["revision"],
         "user_id": user.id,
@@ -309,7 +311,7 @@ async def dashboard(session, user, *, inspecting=False):
         # Coins reserved for shop requests cannot pay for a building.
         "available": account.available if account else 0,
         "plots": plot_rows(rows, builds),
-        "buildings": list(BUILDINGS.values()),
+        "buildings": [{**item, "price": prices[key]} for key, item in BUILDINGS.items()],
         "can_build": operator and not inspecting,
         "group": await group_city(session, user),
         "quests": await quests(session, user, inspecting=inspecting),
@@ -332,10 +334,14 @@ async def build(session, user, plot_key, item_key):
     """Pays for a building on one of the operator's own open plots, once per plot."""
     if user.role != Role.OPERATOR:
         raise PermissionDeniedError("В предварительном просмотре строить нельзя")
+    from app.services.city_economy import economy
+
     plot = next((p for p in PLOTS if p["key"] == plot_key), None)
     item = BUILDINGS.get(item_key)
     if not plot or not item:
         raise NotFoundError("Участок или постройка не найдены")
+    # The price the head set; the building keeps the price paid.
+    item = {**item, "price": (await economy(session))["prices"][item_key]}
     await lock_learner(session, user.id)
     existing = await session.get(CityBuild, (user.id, plot_key), populate_existing=True)
     if existing:

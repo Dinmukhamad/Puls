@@ -133,6 +133,12 @@ BANK = [
 ]
 
 
+async def economy(session):
+    from app.services.city_economy import economy as load
+
+    return await load(session)
+
+
 def today():
     return datetime.now(ZoneInfo(settings.TIMEZONE)).date()
 
@@ -252,7 +258,7 @@ async def quests(session, user, *, inspecting=False):
             await session.commit()
     return {
         "day": day.isoformat(),
-        "coins": COINS,
+        "coins": (await economy(session))["quest_coins"],
         "items": [public(row) for row in rows],
     }
 
@@ -269,12 +275,13 @@ async def answer(session, user, slot, choice):
     if choice >= len(row.snapshot["options"]):
         raise DomainError("Такого ответа нет")
     row.answer, row.correct, row.answered_at = choice, choice == row.snapshot["correct"], utcnow()
-    if row.correct:
-        row.coins = COINS
+    reward = (await economy(session))["quest_coins"]
+    if row.correct and reward:
+        row.coins = reward
         await post_transaction(
             session,
             user_id=user.id,
-            amount=COINS,
+            amount=reward,
             tx_type=TxType.LEARNING_REWARD,
             reason="Мой город: задание дня",
             idempotency_key=f"city-quest:{user.id}:{row.day.isoformat()}:{slot}",
