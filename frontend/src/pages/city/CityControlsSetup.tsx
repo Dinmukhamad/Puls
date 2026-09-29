@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { auth as authApi } from "../../api/endpoints";
 import type { CityControls } from "../../api/types";
 import { useAuth } from "../../auth/AuthContext";
 import { CONTROL_SCHEMES } from "./cityControls";
+
+const ORDER: CityControls[] = ["orbit", "map"];
 
 /** Мышь с подсвеченными кнопками: жёлтая — «двигать», синяя — «вращать». Кнопки мигают по очереди. */
 function MouseArt({ scheme }: { scheme: CityControls }) {
@@ -20,29 +22,47 @@ function MouseArt({ scheme }: { scheme: CityControls }) {
 /**
  * Оператор выбирает, как двигать камеру в городе. Карточка лежит поверх карты, и выбранная схема
  * сразу работает — её можно попробовать, не закрывая карточку. Выбор хранится в профиле: тот же
- * на любом компьютере. `onClose` передают, когда карточку открыли кнопкой на панели карты.
+ * на любом компьютере. Карточка управляемая: `value` — схема, которая сейчас работает на карте,
+ * `onPick` её меняет (null — вернуть сохранённую); `cancellable` — открыта кнопкой на панели
+ * карты, тогда есть «Отмена» и Escape.
  */
-export function CityControlsSetup({ value, onPreview, onClose }: { value: CityControls; onPreview: (scheme: CityControls | null) => void; onClose?: () => void }) {
+export function CityControlsSetup({ value, onPick, onClose, cancellable = false }: { value: CityControls; onPick: (scheme: CityControls | null) => void; onClose: () => void; cancellable?: boolean }) {
   const { user, applyProfile } = useAuth();
-  const [picked, setPicked] = useState<CityControls>(value);
+  const group = useRef<HTMLDivElement>(null), done = useRef<HTMLButtonElement>(null);
   const save = useMutation({
-    mutationFn: () => authApi.guide({ city_controls: picked }),
-    onSuccess: profile => { applyProfile(profile); onPreview(null); onClose?.(); },
+    mutationFn: (scheme: CityControls) => authApi.guide({ city_controls: scheme }),
+    onSuccess: profile => { applyProfile(profile); onPick(null); onClose(); },
   });
+  const busy = save.isPending;
+  // Фокус сразу на выбранном варианте: с клавиатуры можно выбирать стрелками, не ища карточку.
+  useEffect(() => { group.current?.querySelector<HTMLElement>("[aria-checked=true]")?.focus({ preventScroll: true }); }, []);
+  // Сохранение не удалось: кнопка снова доступна, и фокус возвращается на неё, а не теряется.
+  useEffect(() => { if (save.isError) done.current?.focus({ preventScroll: true }); }, [save.isError]);
   if (!user) return null;
-  function pick(scheme: CityControls) { setPicked(scheme); onPreview(scheme); save.reset(); }
-  return <section className="city-controls-setup glass glass--prominent" aria-labelledby="city-controls-title">
+  // Пока идёт сохранение, выбор заблокирован: ответ сервера не должен перебить новое нажатие.
+  function pick(scheme: CityControls) { if (busy) return; onPick(scheme); save.reset(); }
+  function cancel() { if (busy) return; onPick(null); onClose(); }
+  function keys(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape" && cancellable) { event.preventDefault(); cancel(); return; }
+    const step = ({ ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 } as Record<string, number>)[event.key];
+    if (!step || !(event.target instanceof HTMLElement) || !event.target.closest("[role=radiogroup]")) return;
+    event.preventDefault();
+    const next = ORDER[(ORDER.indexOf(value) + step + ORDER.length) % ORDER.length];
+    pick(next);
+    group.current?.querySelector<HTMLElement>(`[data-scheme="${next}"]`)?.focus();
+  }
+  return <section className="city-controls-setup glass glass--prominent" id="city-controls-setup" aria-labelledby="city-controls-title" onKeyDown={keys}>
     <div className="city-controls-setup__head">
       <h2 id="city-controls-title">Как тебе удобнее двигать камеру?</h2>
       <p>Попробуй прямо на карте — выбранная схема уже работает. Поменять можно в любой момент кнопкой с мышью на панели карты.</p>
     </div>
-    <div className="city-controls-options" role="radiogroup" aria-label="Управление камерой">
-      {(["orbit", "map"] as const).map(scheme => {
-        const s = CONTROL_SCHEMES[scheme];
-        return <button key={scheme} type="button" role="radio" aria-checked={picked === scheme} className="city-controls-option" onClick={() => pick(scheme)}>
+    <div className="city-controls-options" role="radiogroup" aria-label="Управление камерой" ref={group}>
+      {ORDER.map(scheme => {
+        const s = CONTROL_SCHEMES[scheme], checked = value === scheme;
+        return <button key={scheme} type="button" role="radio" aria-checked={checked} tabIndex={checked ? 0 : -1} data-scheme={scheme} disabled={busy} className="city-controls-option" onClick={() => pick(scheme)}>
           <MouseArt scheme={scheme} />
           <span className="city-controls-option__text">
-            <strong>{s.title}<small>{s.note}</small></strong>
+            <strong>{s.title}{" "}<small>{s.note}</small></strong>
             <span className="city-controls-keys">
               <span><kbd data-role={scheme === "orbit" ? "turn" : "move"}>ЛКМ</kbd> тянуть — {s.left}</span>
               <span><kbd data-role={scheme === "orbit" ? "move" : "turn"}>ПКМ</kbd> тянуть — {s.right}</span>
@@ -55,8 +75,8 @@ export function CityControlsSetup({ value, onPreview, onClose }: { value: CityCo
     </div>
     {save.isError && <p className="city-guide-setup__error" role="alert">{save.error.message}</p>}
     <div className="city-guide-setup__actions">
-      <button type="button" className="city-action" disabled={save.isPending} onClick={() => save.mutate()}>{save.isPending ? "Сохраняем…" : "Готово"}</button>
-      {onClose && <button type="button" className="city-secondary" onClick={() => { onPreview(null); onClose(); }}>Отмена</button>}
+      <button type="button" className="city-action" ref={done} disabled={busy} onClick={() => save.mutate(value)}>{busy ? "Сохраняем…" : "Готово"}</button>
+      {cancellable && <button type="button" className="city-secondary" disabled={busy} onClick={cancel}>Отмена</button>}
     </div>
   </section>;
 }

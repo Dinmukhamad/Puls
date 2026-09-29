@@ -29,6 +29,7 @@ export function CityPage() {
   const [guideEditing, setGuideEditing] = useState(false);
   // Камера: выбор оператора из профиля; пока карточка выбора открыта — схема, которую он пробует.
   const [controlsEditing, setControlsEditing] = useState(false), [controlsPreview, setControlsPreview] = useState<CityControls | null>(null);
+  const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "failed">("loading");
   // На телефоне панель миссии — шторка над нижним меню: свёрнута до заголовка и кнопки.
   const [expanded, setExpanded] = useState(false);
   const [focusRequest, requestFocus] = useState(0);
@@ -56,16 +57,24 @@ export function CityPage() {
   const mascot = data.inspecting ? { gender: data.gender ?? null, name: data.guide_name || DEFAULT_GUIDE } : { gender: user?.gender ?? null, name: guideName(user) };
   const labels = districtLabels(data.districts, data.missions);
   const needsGuide = !data.inspecting && !!user && (!user.gender || !user.guide_name);
-  // При первом входе город спрашивает, как двигать камеру; до выбора работает схема «как раньше».
-  const needsControls = !!user && !user.city_controls;
+  // При первом входе в свой город спрашиваем, как двигать камеру, — когда карта уже работает и схему
+  // можно сразу попробовать. До выбора работает «как раньше». В чужом городе не спрашиваем.
+  const needsControls = !data.inspecting && !!user && !user.city_controls;
   const controls: CityControls = controlsPreview ?? user?.city_controls ?? "orbit";
+  const showControls = !needsGuide && !guideEditing && ((needsControls && mapStatus === "ready") || controlsEditing);
+  function closeControls() {
+    const fromTools = controlsEditing;
+    setControlsEditing(false);
+    // Фокус — туда, откуда пришли: на кнопку панели карты или на саму карту, чтобы сразу работали клавиши.
+    window.setTimeout(() => document.querySelector<HTMLElement>(fromTools ? ".city-controls-button" : ".city-scene")?.focus({ preventScroll: true }), 0);
+  }
   const rank = data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города";
   const level = districtLevel(missions.filter(m => m.state === "completed").length, selected.soon);
   const districtPlots = data.plots.filter(p => p.district === selected.id);
   const freePlot = districtPlots.find(p => p.unlocked && !p.item);
   function openPlot(key: string) { build.reset(); setPlotKey(key); }
   return <div className="city-immersive">
-    <CityMap forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+    <CityMap forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
     <header className="city-hud glass glass--regular">
       <div className="city-hud__level">
@@ -90,7 +99,7 @@ export function CityPage() {
       {data.preview && !data.inspecting && <p className="city-note glass glass--regular">Предпросмотр для сотрудника · без наград</p>}
       {query.isError && <p className="city-note glass glass--regular" role="alert">Не удалось обновить город.<button type="button" onClick={() => query.refetch()}>Повторить</button></p>}
       {(needsGuide || guideEditing) && <CityGuideSetup onClose={needsGuide ? undefined : () => setGuideEditing(false)} />}
-      {!needsGuide && !guideEditing && (needsControls || controlsEditing) && <CityControlsSetup value={user?.city_controls ?? "orbit"} onPreview={setControlsPreview} onClose={needsControls ? undefined : () => setControlsEditing(false)} />}
+      {showControls && <CityControlsSetup value={controls} onPick={setControlsPreview} onClose={closeControls} cancellable={!needsControls} />}
     </div>
 
     <aside className="city-mission glass glass--regular" data-expanded={expanded || undefined} aria-label={`Район «${selected.name}»`}>
@@ -117,7 +126,7 @@ export function CityPage() {
           <div className="city-guide city-extra">
             {mascot.gender ? <span className="city-guide-avatar" aria-hidden="true">{GUIDE_AVATAR[mascot.gender]}</span> : <PulsarFace />}
             <p><b>{mascot.name}:</b> {guideText(mission.pulsar, mascot.name)}</p>
-            {!data.inspecting && !needsGuide && !guideEditing && <button type="button" className="city-guide-edit" onClick={() => setGuideEditing(true)} aria-label="Изменить фигуру и имя помощника" title="Изменить помощника">✎</button>}
+            {!data.inspecting && !needsGuide && !guideEditing && !showControls && <button type="button" className="city-guide-edit" onClick={() => setGuideEditing(true)} aria-label="Изменить фигуру и имя помощника" title="Изменить помощника">✎</button>}
           </div>
         </>}
       </div>
