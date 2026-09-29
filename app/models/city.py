@@ -65,3 +65,14 @@ class CityEconomy(Base):
     revision: Mapped[int] = mapped_column(default=1)
     values: Mapped[dict] = mapped_column(JSON)
     updated_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+
+class CitySituations(Base):
+    """The daily situations' own set, as trainers edit it (passed tests' questions go first)."""
+
+    __tablename__ = "city_situations"
+    __table_args__ = (CheckConstraint("id = 1", name="singleton"),)
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    revision: Mapped[int] = mapped_column(default=1)
+    items: Mapped[list] = mapped_column(JSON)
+    updated_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))

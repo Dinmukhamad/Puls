@@ -601,3 +601,47 @@ async def test_head_sets_the_game_numbers_and_they_apply(client, session, operat
         f"{BASE}/quests/0/answer", headers=me, json={"answer": row.snapshot["correct"]}
     )
     assert answer.json()["coins"] == 15
+
+
+async def test_trainers_edit_the_situations_and_new_days_use_them(client, session, operator):
+    trainer = await make_user(session, login="trainer-situations", role=Role.TRAINER)
+    sv = await make_user(session, login="sv-situations", role=Role.SUPERVISOR)
+    coach, viewer = auth(await login(client, trainer.login)), auth(await login(client, sv.login))
+    me = auth(await login(client, operator.login))
+    current = (await client.get(ADMIN + "/situations", headers=viewer)).json()
+    assert current["revision"] == 0 and len(current["items"]) == 9 and not current["can_edit"]
+    assert (await client.get(ADMIN + "/situations", headers=coach)).json()["can_edit"]
+    assert (await client.get(ADMIN + "/situations", headers=me)).status_code == 403
+    mine = [
+        {
+            "id": f"own-{i}",
+            "speaker": "Водитель",
+            "text": f"Своя ситуация номер {i}",
+            "options": ["Верно", "Неверно"],
+            "correct": 0,
+            "explanation": "Пояснение тренера",
+            "enabled": True,
+        }
+        for i in range(3)
+    ]
+    items = [{**item, "enabled": False} for item in current["items"]] + mine
+    body = {"revision": 0, "items": items}
+    assert (await client.put(ADMIN + "/situations", headers=viewer, json=body)).status_code == 403
+    saved = await client.put(ADMIN + "/situations", headers=coach, json=body)
+    assert saved.status_code == 200 and saved.json()["revision"] == 1
+    assert (await client.put(ADMIN + "/situations", headers=coach, json=body)).status_code == 409
+    fresh = {"revision": 1, "items": items}
+    for broken in (
+        [{**mine[0], "correct": 3}],
+        [{**mine[0], "options": ["Да", "Да"]}],
+        [{**mine[0], "id": "Bad Id"}],
+        [{**item, "enabled": False} for item in items],
+        [*items, mine[0]],
+    ):
+        response = await client.put(
+            ADMIN + "/situations", headers=coach, json={**fresh, "items": broken}
+        )
+        assert response.status_code == 422
+    # Today's deal (the first read) uses the enabled situations only.
+    rows = (await client.get(BASE, headers=me)).json()["quests"]["items"]
+    assert sorted(q["text"] for q in rows) == [f"Своя ситуация номер {i}" for i in range(3)]

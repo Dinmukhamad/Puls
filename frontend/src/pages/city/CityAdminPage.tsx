@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CityEconomy, type CitySettings, type PointKind } from "../../api/city";
+import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CityEconomy, type CitySettings, type CitySituation, type CitySituations, type PointKind } from "../../api/city";
 import { useAuth } from "../../auth/AuthContext";
 import { ErrorState, Skeleton } from "../../components/ui";
 import "./city.css";
@@ -9,11 +9,11 @@ import "./city.css";
 export function CityAdminPage() {
   const { user } = useAuth();
   const canEdit = ["trainer", "head", "admin"].includes(user?.role ?? "");
-  const [tab, setTab] = useState<"participants"|"groups"|"economy"|"settings">("participants");
+  const [tab, setTab] = useState<"participants"|"groups"|"economy"|"situations"|"settings">("participants");
   const settings = useQuery({ queryKey:["city-settings"], queryFn:city.settings, enabled:tab === "settings", refetchOnWindowFocus:false });
   return <div className="city-page city-admin"><header className="city-heading"><div><span className="city-eyebrow">СТУДИЯ ОБУЧЕНИЯ</span><h1>Миссии города</h1><p>Настраивайте маршрут и следите за реальным прогрессом.</p></div><Link className="city-secondary" to="/training/city">Открыть город →</Link></header>
-    <nav className="city-admin-tabs" aria-label="Управление городом"><button className="city-secondary" aria-pressed={tab==='participants'} onClick={()=>setTab('participants')}>Прогресс операторов</button><button className="city-secondary" aria-pressed={tab==='groups'} onClick={()=>setTab('groups')}>Города групп</button><button className="city-secondary" aria-pressed={tab==='economy'} onClick={()=>setTab('economy')}>Экономика игры</button><button className="city-secondary" aria-pressed={tab==='settings'} onClick={()=>setTab('settings')}>{canEdit?'Настроить миссии':'Условия миссий'}</button></nav>
-    {tab==='participants'?<Participants />:tab==='groups'?<Groups />:tab==='economy'?<Economy />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
+    <nav className="city-admin-tabs" aria-label="Управление городом"><button className="city-secondary" aria-pressed={tab==='participants'} onClick={()=>setTab('participants')}>Прогресс операторов</button><button className="city-secondary" aria-pressed={tab==='groups'} onClick={()=>setTab('groups')}>Города групп</button><button className="city-secondary" aria-pressed={tab==='situations'} onClick={()=>setTab('situations')}>Ситуации дня</button><button className="city-secondary" aria-pressed={tab==='economy'} onClick={()=>setTab('economy')}>Экономика игры</button><button className="city-secondary" aria-pressed={tab==='settings'} onClick={()=>setTab('settings')}>{canEdit?'Настроить миссии':'Условия миссий'}</button></nav>
+    {tab==='participants'?<Participants />:tab==='groups'?<Groups />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
   </div>;
 }
 
@@ -47,6 +47,40 @@ function Groups() {
       </div>
     </article>)}
   </div>;
+}
+
+const SLOTS = 3;
+/** The daily situations' own set: trainers, the head and the admin edit it; supervisors read it. */
+function Situations() {
+  const client=useQueryClient();
+  const query=useQuery({queryKey:['city-situations'],queryFn:city.situations,refetchOnWindowFocus:false});
+  const [draft,setDraft]=useState<CitySituations|null>(null),[selected,setSelected]=useState(''),[saved,setSaved]=useState(false);
+  useEffect(()=>{if(query.data){setDraft(structuredClone(query.data));setSelected(s=>s||query.data.items[0]?.id||'');}},[query.data]);
+  const mutation=useMutation({mutationFn:city.saveSituations,onSuccess:data=>{setSaved(true);client.setQueryData(['city-situations'],{...data,can_edit:query.data?.can_edit});}});
+  if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
+  if(!draft)return <Skeleton height={350}/>;
+  const canEdit=!!draft.can_edit, item=draft.items.find(i=>i.id===selected), enabled=draft.items.filter(i=>i.enabled).length;
+  const setItems=(items:CitySituation[])=>{setSaved(false);setDraft(d=>d&&({...d,items}));};
+  const change=(patch:Partial<CitySituation>)=>setItems(draft.items.map(i=>i.id===selected?{...i,...patch}:i));
+  function add(){const id=`own-${Date.now().toString(36)}`;setItems([...draft!.items,{id,speaker:'Водитель',text:'',options:['',''],correct:0,explanation:'',enabled:true}]);setSelected(id);}
+  function remove(){const rest=draft!.items.filter(i=>i.id!==selected);setItems(rest);setSelected(rest[0]?.id??'');}
+  return <form className="city-admin-edit" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
+    <p className="city-admin-warning">Каждый день оператор получает {SLOTS} ситуации. Сначала берутся вопросы из тестов, которые он уже прошёл, остальные — из этого набора. Включено: {enabled}, нужно не меньше {SLOTS}. Изменения действуют с новых заданий: сегодняшние уже розданы.{canEdit?'':' Менять ситуации могут тренер, руководитель и администратор.'}</p>
+    <div className="city-editor-fields"><label className="field"><span className="field__label">Ситуация</span><select className="input" value={selected} onChange={e=>setSelected(e.target.value)}>{draft.items.map((i,k)=><option key={i.id} value={i.id}>{k+1}. {i.enabled?'':'(выключена) '}{i.speaker?`${i.speaker}: `:''}{i.text.slice(0,70)||'Новая ситуация'}</option>)}</select></label>
+      {canEdit&&<div className="city-situations__actions"><button type="button" className="city-secondary" onClick={add}>+ Добавить</button>{item&&<button type="button" className="city-secondary" onClick={remove}>Удалить</button>}</div>}</div>
+    {item&&<fieldset disabled={!canEdit||mutation.isPending} style={{border:0,padding:0,margin:0,display:'grid',gap:16}}>
+      <label className="field"><span className="field__label">Кто обращается</span><input className="input" list="city-speakers" maxLength={60} value={item.speaker} onChange={e=>change({speaker:e.target.value})} placeholder="Водитель, Клиент…"/><datalist id="city-speakers"><option value="Водитель"/><option value="Клиент"/></datalist><small className="secondary">«Водитель» ждёт у такси автопарка, «Клиент» — у CRM-центра, остальные — у помощника.</small></label>
+      <label className="field"><span className="field__label">Что случилось</span><textarea className="input" minLength={5} maxLength={1000} required value={item.text} onChange={e=>change({text:e.target.value})}/></label>
+      <fieldset className="city-situations__options"><legend className="field__label">Варианты ответа — отметьте верный</legend>
+        {item.options.map((o,k)=><div key={k} className="city-situations__option"><input type="radio" name="city-correct" aria-label={`Вариант ${k+1} верный`} checked={item.correct===k} onChange={()=>change({correct:k})}/><input className="input" maxLength={300} required value={o} onChange={e=>change({options:item.options.map((x,j)=>j===k?e.target.value:x)})} placeholder={`Вариант ${k+1}`}/>{item.options.length>2&&<button type="button" className="city-secondary" aria-label={`Убрать вариант ${k+1}`} onClick={()=>change({options:item.options.filter((_,j)=>j!==k),correct:item.correct===k?0:item.correct>k?item.correct-1:item.correct})}>×</button>}</div>)}
+        {item.options.length<6&&<button type="button" className="city-secondary" onClick={()=>change({options:[...item.options,'']})}>+ Вариант</button>}
+      </fieldset>
+      <label className="field"><span className="field__label">Пояснение после ответа</span><textarea className="input" maxLength={1000} value={item.explanation} onChange={e=>change({explanation:e.target.value})}/></label>
+      <label className="row"><input type="checkbox" checked={item.enabled} onChange={e=>change({enabled:e.target.checked})}/> Ситуация участвует в заданиях дня</label>
+    </fieldset>}
+    {canEdit&&<button className="city-action" type="submit" disabled={mutation.isPending||enabled<SLOTS}>{mutation.isPending?'Сохраняем…':'Сохранить все ситуации'}</button>}
+    {saved&&<p role="status">Ситуации сохранены.</p>}{mutation.isError&&<ErrorState error={mutation.error}/>}
+  </form>;
 }
 
 /** The game's numbers: head and admin edit them, trainers and supervisors read them. */

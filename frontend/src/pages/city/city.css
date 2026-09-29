@@ -202,3 +202,6 @@
 .city-economy h3{margin:8px 0 0;font-size:15px}
 .city-economy__grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
 .city-economy__projects{display:grid;gap:10px}
+.city-situations__actions{display:flex;gap:8px;align-items:end}
+.city-situations__options{border:0;padding:0;margin:0;display:grid;gap:8px}
+.city-situations__option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center}

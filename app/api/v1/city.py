@@ -6,7 +6,14 @@ from app.core.errors import NotFoundError
 from app.models.city import CityAward
 from app.models.enums import Role
 from app.models.user import User
-from app.schemas.city import BuildInput, ClaimInput, EconomyInput, QuestAnswer, SettingsInput
+from app.schemas.city import (
+    BuildInput,
+    ClaimInput,
+    EconomyInput,
+    QuestAnswer,
+    SettingsInput,
+    SituationsInput,
+)
 from app.services import city, city_economy, city_group, city_quests
 
 router = APIRouter(tags=["Мой город"])
@@ -56,6 +63,17 @@ async def economy(session: SessionDep, user: LearningReader):
 @router.put("/admin/learning/city/economy")
 async def configure_economy(body: EconomyInput, session: SessionDep, user: HeadUser):
     return await city_economy.save(session, user, body)
+
+
+@router.get("/admin/learning/city/situations")
+async def situations(session: SessionDep, user: LearningReader):
+    data = await city_quests.situations(session)
+    return {**data, "can_edit": user.role in (Role.TRAINER, Role.HEAD, Role.ADMIN)}
+
+
+@router.put("/admin/learning/city/situations")
+async def configure_situations(body: SituationsInput, session: SessionDep, user: LearningEditor):
+    return await city_quests.save_situations(session, user, body)
 
 
 @router.get("/admin/learning/city/groups")

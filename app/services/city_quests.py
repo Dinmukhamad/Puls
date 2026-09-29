@@ -11,12 +11,13 @@ from copy import deepcopy
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.core.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.db.base import utcnow
-from app.models.city import CityQuest
+from app.models.city import CityQuest, CitySituations
 from app.models.enums import Role, TxType
 from app.models.learning import LearningAward, LearningContent
 from app.services.coins import post_transaction
@@ -143,20 +144,75 @@ def today():
     return datetime.now(ZoneInfo(settings.TIMEZONE)).date()
 
 
-def bank_questions():
+def default_situations():
+    """The built-in situations, as the editor lists them until a trainer saves the set."""
     return [
         {
-            "source": "bank",
-            "ref": f"bank-{i}",
-            "title": "Рабочая ситуация",
+            "id": f"bank-{i}",
             "speaker": speaker,
             "text": text,
-            "options": options,
+            "options": list(options),
             "correct": correct,
             "explanation": explanation,
+            "enabled": True,
         }
         for i, (speaker, text, options, correct, explanation) in enumerate(BANK)
     ]
+
+
+def bank_questions(items=None):
+    """The enabled situations as questions to deal."""
+    return [
+        {
+            "source": "bank",
+            "ref": item["id"],
+            "title": "Рабочая ситуация",
+            "speaker": item["speaker"],
+            "text": item["text"],
+            "options": list(item["options"]),
+            "correct": item["correct"],
+            "explanation": item["explanation"],
+        }
+        for item in (default_situations() if items is None else items)
+        if item["enabled"]
+    ]
+
+
+async def situations(session):
+    row = await session.get(CitySituations, 1)
+    return {
+        "revision": row.revision if row else 0,
+        "items": deepcopy(row.items) if row else default_situations(),
+    }
+
+
+async def save_situations(session, actor, body):
+    items = [item.model_dump() for item in body.items]
+    revision = body.revision + 1
+    if body.revision == 0:
+        session.add(CitySituations(id=1, revision=revision, items=items, updated_by_id=actor.id))
+    else:
+        result = await session.execute(
+            update(CitySituations)
+            .where(CitySituations.id == 1, CitySituations.revision == body.revision)
+            .values(revision=revision, items=items, updated_by_id=actor.id)
+        )
+        if result.rowcount != 1:
+            raise ConflictError("Ситуации уже изменили. Обновите страницу и повторите.")
+    try:
+        await write_audit(
+            session,
+            actor_id=actor.id,
+            action="city.situations",
+            entity_type="city_situations",
+            entity_id="1",
+            payload={"revision": revision, "count": len(items)},
+        )
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise ConflictError("Ситуации уже изменили. Обновите страницу.") from None
+    return {"revision": revision, "items": items}
 
 
 async def review_questions(session, user_id):
@@ -189,7 +245,7 @@ def deal(user_id, day, review, bank):
     """The day's questions: review first, the bank for the rest; the same for the same day."""
     rng = random.Random(f"{user_id}:{day.isoformat()}")
     picks = rng.sample(review, min(SLOTS, len(review)))
-    picks += rng.sample(bank, SLOTS - len(picks))
+    picks += rng.sample(bank, min(len(bank), SLOTS - len(picks)))
     # Drivers' questions wait at the depot's taxi, callers' at the CRM centre, others at the guide.
     wants = ("водител", "клиент")
     slots = [None] * SLOTS
@@ -249,7 +305,8 @@ async def quests(session, user, *, inspecting=False):
         await lock_learner(session, user.id)
         rows = await rows_for(session, user.id, day)
         if not rows:
-            picks = deal(user.id, day, await review_questions(session, user.id), bank_questions())
+            bank = bank_questions((await situations(session))["items"])
+            picks = deal(user.id, day, await review_questions(session, user.id), bank)
             rows = [
                 CityQuest(user_id=user.id, day=day, slot=slot, snapshot=deepcopy(q))
                 for slot, q in enumerate(picks)

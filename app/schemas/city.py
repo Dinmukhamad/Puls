@@ -87,3 +87,43 @@ class EconomyInput(BaseModel):
         if [p.key for p in self.projects] != [p["key"] for p in PROJECTS]:
             raise ValueError("Кварталы нельзя добавлять, удалять или менять местами")
         return self
+
+
+class SituationInput(BaseModel):
+    """One daily situation: who speaks, what happened, the options and the right one."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    id: str = Field(pattern=r"^[a-z0-9-]{1,40}$")
+    speaker: str = Field(default="", max_length=60)
+    text: str = Field(min_length=5, max_length=1000)
+    options: list[str] = Field(min_length=2, max_length=6)
+    correct: int = Field(ge=0, le=5)
+    explanation: str = Field(default="", max_length=1000)
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def valid(self):
+        self.options = [o.strip() for o in self.options]
+        if any(not o or len(o) > 300 for o in self.options):
+            raise ValueError("Вариант ответа — от 1 до 300 символов")
+        if len(set(self.options)) != len(self.options):
+            raise ValueError("Варианты ответа не должны повторяться")
+        if self.correct >= len(self.options):
+            raise ValueError("Отметьте верный вариант среди имеющихся")
+        return self
+
+
+class SituationsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=0)
+    items: list[SituationInput] = Field(min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def enough(self):
+        from app.services.city_quests import SLOTS
+
+        if len({item.id for item in self.items}) != len(self.items):
+            raise ValueError("У каждой ситуации должен быть свой номер")
+        if sum(item.enabled for item in self.items) < SLOTS:
+            raise ValueError(f"Включите хотя бы {SLOTS} ситуации: столько заданий в день")
+        return self
