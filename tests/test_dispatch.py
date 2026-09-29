@@ -113,11 +113,17 @@ async def test_thermobox_needs_the_couriers_park_and_a_fresh_single_use_code(
 ):
     headers = auth(await work_login(client, operator.login))
     courier = contractor_id("ospanova")
-    first = await act(client, headers, "/codes", driver=courier)
+    first_id = str(uuid4())
+    first = await act(client, headers, "/codes", request_id=first_id, driver=courier)
     code = first.json()["result"]["code"]
     assert len(code) == 5 and 0 < first.json()["result"]["expires_in"] <= 120
     again = await act(client, headers, "/codes", driver=courier)
     assert again.json()["result"]["code"] == code
+    # A retried request returns its own code; an id used by another action is refused.
+    repeat = await act(client, headers, "/codes", request_id=first_id, driver=courier)
+    assert repeat.status_code == 200 and repeat.json()["result"]["code"] == code
+    other = await act(client, headers, "/reset", request_id=first_id)
+    assert other.status_code == 409
     assert call(again.json()["state"], "thermobox")["active_code"]["value"] == code
     box = {"type": "eda", "code": code, "number": "ep 0812"}
     other_park = await act(client, headers, "/inventory", park="itaxi-krg", **box)
@@ -242,7 +248,11 @@ async def test_limit_answers_and_the_ooz_case_waits_for_a_crm_request(client, op
         and call(right.json()["state"], "limit_docs")["attempts"] == 2
     )
     await act(client, headers, "/calls/limit_intercity/answer", option="intercity")
+    before = (await client.get(BASE, headers=headers)).json()
+    # Which limit call needs CRM would give the answer away, so it shows after the decision.
+    assert not call(before, "limit_duration")["crm"]
     decided = await act(client, headers, "/calls/limit_duration/answer", option="ooz")
+    assert call(decided.json()["state"], "limit_duration")["crm"]
     assert call(decided.json()["state"], "limit_duration")["state"] == "crm"
     abenov = DRIVER_KEYS["abenov"]
     session.add(

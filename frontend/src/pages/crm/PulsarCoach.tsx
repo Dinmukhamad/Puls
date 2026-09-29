@@ -3,6 +3,12 @@ import { useGuide } from "../../guide";
 import { PulsarFace } from "./PulsarGuide";
 import { coachLayout, type CoachStep } from "./coachTours";
 
+/** The first matching element that is on screen: a tab kept in the background never counts. */
+function shown(selector: string) {
+  for (const element of document.querySelectorAll(selector)) if (element.getClientRects().length) return element;
+  return null;
+}
+
 export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (finished: boolean) => void }) {
   const guide = useGuide();
   const [index, setIndex] = useState(0), [missing, setMissing] = useState(false), [flying, setFlying] = useState(true);
@@ -16,8 +22,8 @@ export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (
   const next = () => {
     if (last) { onClose(true); return; }
     // An action step can do the click for the operator, then waits for the screen it opens.
-    const target = step?.autoClick && step.advanceWhen && !document.querySelector(step.advanceWhen) ? document.querySelector<HTMLElement>(step.target) : null;
-    if (target) { target.click(); return; }
+    const target = step?.autoClick && step.advanceWhen && !shown(step.advanceWhen) ? shown(step.target) : null;
+    if (target instanceof HTMLElement) { target.click(); return; }
     move(1);
   };
   const nextRef = useRef(next); nextRef.current = next;
@@ -29,14 +35,14 @@ export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (
     const landed = window.setTimeout(() => setFlying(false), 750);
     const small = window.innerWidth < 700, mascot = small ? 76 : 108;
     const tick = () => {
-      if (step.skipWhen && document.querySelector(step.skipWhen) && index < steps.length - 1) { move(1); return; }
-      if (step.when && !document.querySelector(step.when)) {
+      if (step.skipWhen && shown(step.skipWhen) && index < steps.length - 1) { move(1); return; }
+      if (step.when && !shown(step.when)) {
         if (direction.current < 0 && index === 0) direction.current = 1;
         if (direction.current > 0 && last) { onClose(true); return; }
         move(direction.current); return;
       }
-      if (step.advanceWhen && document.querySelector(step.advanceWhen)) { nextRef.current(); return; }
-      found = document.querySelector(step.target);
+      if (step.advanceWhen && shown(step.advanceWhen)) { nextRef.current(); return; }
+      found = shown(step.target);
       if (!found) {
         // Give the page a moment to render the target; otherwise move on rather than get stuck.
         if (performance.now() - started > 2500) { setMissing(true); }

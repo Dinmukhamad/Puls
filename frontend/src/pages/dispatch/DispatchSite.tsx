@@ -21,7 +21,8 @@ export const DEFAULT_PARK = "itaxi-krg";
  */
 export function DispatchSite({ route, parkId, go, onResult }: { route: FleetRoute; parkId: string; go: (path: string, park?: string) => void; onResult: (result: FleetResult & { at: number }) => void }) {
   const client = useQueryClient();
-  const query = useQuery({ queryKey: FLEET_QUERY, queryFn: api.state });
+  // While the training support has not answered a ticket, the cabinet checks back for the reply.
+  const query = useQuery({ queryKey: FLEET_QUERY, queryFn: api.state, refetchInterval: q => q.state.data?.tickets.some(t => t.mine && t.status === "В работе") ? 20_000 : false });
   const [menu, setMenu] = useState<string | null>(null), [searching, setSearching] = useState(false), [toast, setToast] = useState("");
   const main = useRef<HTMLDivElement>(null), rail = useRef<HTMLElement>(null);
   useEffect(() => { main.current?.scrollTo({ top: 0 }); setMenu(null); }, [route.page, route.id, route.tab, parkId]);

@@ -70,7 +70,7 @@ export function ParkPicker() {
   // Drivers and orders belong to a park: switching the park goes back to the park's list.
   const next = route.page === "driver" || route.page === "order" ? "contractors" : route.page;
   return <div className="fleet-park" ref={box} onKeyDown={e => { if (e.key === "Escape") setOpen(false); }}>
-    <button className="fleet-park-button" data-coach="park" data-park={park.id} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+    <button className="fleet-park-button" data-coach="fleet-park" data-park={park.id} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(o => !o)}>
       <Avatar name={park.name} color={park.color} size="s" /><span><strong>{park.name}</strong><small>{park.city}</small></span>
     </button>
     {open && <div className="fleet-park-menu" data-coach="park-menu">

@@ -14,11 +14,11 @@ from functools import cache
 from random import Random
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
-from app.core.errors import DomainError, NotFoundError
+from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.models.crm import CrmAppeal
 from app.models.dispatch import DispatchEvent
 from app.services.crm_catalog import default_categories
@@ -463,7 +463,8 @@ def build(events: list[DispatchEvent], *, user, now: datetime, utc_now: datetime
                 "question": call.get("question", ""),
                 "options": call.get("options", []),
                 "code": bool(call.get("code")),
-                "crm": bool(call.get("crm")),
+                # Which limit call needs CRM is part of the answer: it shows after the decision.
+                "crm": bool(call.get("crm")) and state != "new",
                 "driver": d["id"],
                 "driver_name": full_name(d),
                 "park": d["park"],
@@ -523,13 +524,19 @@ async def crm_limit_requests(session, user_ids) -> dict[int, set[str]]:
     if not result:
         return result
     wanted = [DRIVER_KEYS[c["driver"]] for c in CALLS if c.get("crm")]
+    # Only appeals that can name one of these drivers are read.
+    names = [CrmAppeal.comment.contains(d["id"]) for d in wanted]
+    licences = [d["license"] for d in wanted]
     rows = await session.execute(
         select(
             CrmAppeal.author_id,
             CrmAppeal.category_ids,
             CrmAppeal.comment,
             CrmAppeal.license_number,
-        ).where(CrmAppeal.author_id.in_(user_ids))
+        ).where(
+            CrmAppeal.author_id.in_(user_ids),
+            or_(*names, func.upper(func.replace(CrmAppeal.license_number, " ", "")).in_(licences)),
+        )
     )
     for uid, categories, comment, license_number in rows:
         if not limit_categories().intersection(categories):
@@ -552,10 +559,11 @@ async def solved_calls(session, user_ids) -> dict[int, set[str]]:
     )
     for uid, call in rows:
         result[uid].add(call)
-    crm = await crm_limit_requests(session, user_ids)
+    needs = {c["id"] for c in CALLS if c.get("crm")}
+    crm = await crm_limit_requests(session, [uid for uid, calls in result.items() if calls & needs])
     for uid, calls in result.items():
         for call in CALLS:
-            if call.get("crm") and call["driver"] not in crm[uid]:
+            if call.get("crm") and call["driver"] not in crm.get(uid, ()):
                 calls.discard(call["id"])
     return result
 
@@ -582,26 +590,34 @@ async def record(session, user, request_id, kind, validate):
 
     A repeated request id returns the stored outcome instead of acting twice.
     """
-    request_id = str(request_id)
-    await lock_learner(session, user.id)
-    events = await history(session, user.id)
+    request_id, uid = str(request_id), user.id
+    await lock_learner(session, uid)
+    events = await history(session, uid)
     existing = next((e for e in events if e.request_id == request_id), None)
     if existing is None:
         payload, solved = validate(events)
         existing = DispatchEvent(
-            user_id=user.id, request_id=request_id, kind=kind, payload=payload, solved=solved
+            user_id=uid, request_id=request_id, kind=kind, payload=payload, solved=solved
         )
         session.add(existing)
         try:
             await session.commit()
         except IntegrityError:
-            await session.rollback()
-            existing = await session.scalar(
-                select(DispatchEvent).where(
-                    DispatchEvent.user_id == user.id, DispatchEvent.request_id == request_id
-                )
-            )
+            existing = await stored(session, user, uid, request_id)
+    if existing.kind != kind:
+        raise ConflictError("Этот запрос уже выполнен другим действием. Обновите страницу")
     return {"state": await state(session, user), "result": existing.payload.get("result", {})}
+
+
+async def stored(session, user, uid: int, request_id: str) -> DispatchEvent:
+    """The same request came twice at once: the first one's event is the answer."""
+    await session.rollback()
+    await session.refresh(user)
+    return await session.scalar(
+        select(DispatchEvent).where(
+            DispatchEvent.user_id == uid, DispatchEvent.request_id == request_id
+        )
+    )
 
 
 def same_person_active(key: str, drivers: dict) -> dict | None:
@@ -674,19 +690,22 @@ async def save_car(session, user, driver_id: str, body):
 
 async def request_code(session, user, body):
     """The courier opens Профиль → Инвентарь → Получить код; the mascot reads it out."""
-    key = driver_key(body.driver)
-    await lock_learner(session, user.id)
-    events = await history(session, user.id)
+    key, uid, request_id = driver_key(body.driver), user.id, str(body.request_id)
+    await lock_learner(session, uid)
+    events = await history(session, uid)
     now = datetime.now(UTC)
-    current = active_code(events, key, now)
+    current = next((e for e in events if e.request_id == request_id), None)
+    if current is not None and (current.kind != "code" or current.payload["driver"] != key):
+        raise ConflictError("Этот запрос уже выполнен другим действием. Обновите страницу")
+    current = current or active_code(events, key, now)
     if current is None:
         taken = {e.payload["code"] for e in events if e.kind == "code"}
         code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(5))
         while code in taken:
             code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(5))
         current = DispatchEvent(
-            user_id=user.id,
-            request_id=str(body.request_id),
+            user_id=uid,
+            request_id=request_id,
             kind="code",
             payload={
                 "driver": key,
@@ -698,14 +717,7 @@ async def request_code(session, user, body):
         try:
             await session.commit()
         except IntegrityError:
-            # The same request came twice: the first one already made the code.
-            await session.rollback()
-            current = await session.scalar(
-                select(DispatchEvent).where(
-                    DispatchEvent.user_id == user.id,
-                    DispatchEvent.request_id == str(body.request_id),
-                )
-            )
+            current = await stored(session, user, uid, request_id)
     remaining = datetime.fromisoformat(current.payload["expires"]) - datetime.now(UTC)
     return {
         "state": await state(session, user),

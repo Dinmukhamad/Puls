@@ -9,7 +9,7 @@ export const FLEET_TOUR: CoachStep[] = [
   { target: "[data-coach=rail-people]", advanceWhen: "[data-coach=flyout]", autoClick: true, action: "Нажми", title: "Привет! Это Диспетчерская 👋", text: "Слева меню кабинета: о парке, исполнители, автомобили и помощь. Нажми на иконку — откроется список разделов." },
   { target: "[data-coach=flyout]", title: "Разделы", text: "Здесь «Исполнители», «На карте», «Условия сотрудничества» и «Инвентарь». Серые пункты в обучении не нужны." },
   { target: "[data-coach=menu-contractors]", advanceWhen: `${PAGE("contractors")} [data-coach=drivers-table]`, autoClick: true, action: "Нажми", title: "Исполнители", text: "Откроем «Исполнителей» — здесь ищут водителей и курьеров парка." },
-  { target: "[data-coach=park]", title: "Парк и город", text: "Справа вверху — парк и город. Кабинет показывает только выбранный парк, поэтому сначала уточни у водителя его парк и город." },
+  { target: "[data-coach=fleet-park]", title: "Парк и город", text: "Справа вверху — парк и город. Кабинет показывает только выбранный парк, поэтому сначала уточни у водителя его парк и город." },
   { target: "[data-coach=fleet-search]", title: "Поиск исполнителя", text: "Лупа открывает поиск по имени, номеру ВУ, телефону или госномеру — только в выбранном парке." },
   { target: "[data-coach=drivers-table]", title: "Список исполнителей", text: "ФИО и статус, телефон, баланс и лимит. Над списком — сегменты: новые, активные, отток и архив." },
   { target: "[data-coach=driver-row]", advanceWhen: "[data-coach=preview]", autoClick: true, action: "Нажми", title: "Короткая карточка", text: "Нажми на исполнителя — справа откроется короткая карточка." },
@@ -24,9 +24,9 @@ export const FLEET_TOUR: CoachStep[] = [
 ];
 
 function parkSteps(park: FleetPark): CoachStep[] {
-  const here = `[data-coach=park][data-park="${park.id}"]`;
+  const here = `[data-coach=fleet-park][data-park="${park.id}"]`;
   return [
-    { target: "[data-coach=park]", skipWhen: here, advanceWhen: `[data-coach=park-menu], ${here}`, autoClick: true, action: "Нажми", title: "Парк водителя", text: `Водитель из парка «${park.name}», ${park.city}. Открой список парков справа вверху.` },
+    { target: "[data-coach=fleet-park]", skipWhen: here, advanceWhen: `[data-coach=park-menu], ${here}`, autoClick: true, action: "Нажми", title: "Парк водителя", text: `Водитель из парка «${park.name}», ${park.city}. Открой список парков справа вверху.` },
     { target: `[data-coach=park-option][data-park="${park.id}"]`, skipWhen: here, advanceWhen: here, autoClick: true, action: "Выбери", title: "Выбери парк и город", text: "Выбери парк и город водителя: поиск и разделы покажут только исполнителей этого парка." },
   ];
 }
@@ -72,7 +72,7 @@ export function callTour(call: FleetCall, driver: FleetDriver, park: FleetPark):
       tab(driver, "car", "tariffs", "Автомобиль", "Тарифы и оклейка — во вкладке «Автомобиль»."),
       { target: "[data-coach=tariff-add]", action: "Выбери", title: "Добавь тариф", text: "В списке «Добавить» выбери «Комфорт». Остальные тарифы водителя не убирай." },
       { target: "[data-coach=wrap]", action: "Отметь", title: "Оклейка", text: "Отметь «Оклейка»: это брендинг на машине, реклама только самого Яндекса." },
-      { target: "[data-coach=car-save]", action: "Нажми", title: "Сохрани", text: "Нажми «Сохранить». Крестик у «Оклейки» значит: фотоконтроль брендинга ещё не пройден, галочка — пройден." }];
+      { target: "[data-coach=fleet-car-save]", action: "Нажми", title: "Сохрани", text: "Нажми «Сохранить». Крестик у «Оклейки» значит: фотоконтроль брендинга ещё не пройден, галочка — пройден." }];
     case "thermobox": return [...parkSteps(park), ...menu("people", "inventory", "Инвентарь", "Инвентарь — в меню исполнителей. Открой его."),
       { target: "[data-coach=inventory-add]", skipWhen: "[data-coach=inventory-dialog]", advanceWhen: "[data-coach=inventory-dialog]", autoClick: true, action: "Нажми", title: "Выдать инвентарь", text: "Нажми жёлтый «+» — откроется выдача." },
       { target: "[data-coach=inventory-type]", advanceWhen: "[data-coach=inventory-code]", action: "Выбери", title: "Тип инвентаря", text: "Яндекс Еда — жёлтый термокороб, Яндекс Доставка — чёрный. Курьер просит жёлтый." },

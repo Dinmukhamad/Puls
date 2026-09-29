@@ -52,7 +52,7 @@ export function DispatchDock({ feedback, onFeedback, onGo, onTour, onCrm }: {
     </header>
     <div className="pulsar-dock-scroll">
       {!state ? <p className="pulsar-muted">{query.isError ? query.error.message : "Загружаем звонки…"}</p>
-        : call ? <CallView call={call} state={state} busy={busy} error={error} feedback={recent} onBack={() => { setActive(null); onFeedback(null); }} onTour={() => onTour(`call:${call.id}`)} onGo={onGo} onCrm={onCrm}
+        : call ? <CallView key={call.id} call={call} state={state} updatedAt={query.dataUpdatedAt} busy={busy} error={error} feedback={recent} onBack={() => { setActive(null); onFeedback(null); }} onTour={() => onTour(`call:${call.id}`)} onGo={onGo} onCrm={onCrm}
           onCode={() => void send(() => api.code(call.driver))} onAnswer={option => void send(() => api.answer(call.id, option))} />
         : <CallList calls={calls} onOpen={id => { setActive(id); onFeedback(null); }} />}
     </div>
@@ -89,8 +89,8 @@ function CallList({ calls, onOpen }: { calls: FleetCall[]; onOpen: (id: string) 
   </div>;
 }
 
-function CallView({ call, state, busy, error, feedback, onBack, onTour, onGo, onCrm, onCode, onAnswer }: {
-  call: FleetCall; state: FleetState; busy: boolean; error: string; feedback: FleetFeedback | null;
+function CallView({ call, state, updatedAt, busy, error, feedback, onBack, onTour, onGo, onCrm, onCode, onAnswer }: {
+  call: FleetCall; state: FleetState; updatedAt: number; busy: boolean; error: string; feedback: FleetFeedback | null;
   onBack: () => void; onTour: () => void; onGo: (path: string, park: string) => void; onCrm: () => void; onCode: () => void; onAnswer: (option: string) => void;
 }) {
   const [ticks, setTicks] = useState<number[]>([]), [copied, setCopied] = useState(false);
@@ -103,7 +103,7 @@ function CallView({ call, state, busy, error, feedback, onBack, onTour, onGo, on
       <p className="pulsar-muted">Категория: Водитель → … → Запрос → Таксопарк → Обработка запросов/ООЗ → Снятие лимита. В комментарии — ссылка на аккаунт.</p>
       <div className="fleet-call-actions"><button className="crm-secondary" onClick={() => { if (!driver) return; void navigator.clipboard?.writeText(fleetLink(driver, park)).then(() => setCopied(true), () => setCopied(false)); }}>{copied ? "Ссылка скопирована ✓" : "Скопировать ссылку на аккаунт"}</button><button className="crm-primary" onClick={onCrm}>Открыть CRM →</button></div>
       {driver && !copied && <code className="fleet-call-link">{fleetLink(driver, park)}</code>}</div>}
-    {call.code && call.state !== "solved" && <CourierCode call={call} busy={busy} onCode={onCode} fresh={feedback?.code ? feedback : null} />}
+    {call.code && call.state !== "solved" && <CourierCode call={call} busy={busy} onCode={onCode} updatedAt={updatedAt} fresh={feedback?.code ? feedback : null} />}
     {call.kind === "answer" && call.state === "new" && <div className="fleet-answers" data-coach="dock-answers"><strong>{call.question}</strong>
       {call.options.map(([id, label]) => <button key={id} disabled={busy} onClick={() => onAnswer(id)}>{label}</button>)}
       {feedback?.correct === false && feedback.text && <p className="fleet-answer-hint" role="alert">{feedback.text}</p>}</div>}
@@ -119,12 +119,17 @@ function CallView({ call, state, busy, error, feedback, onBack, onTour, onGo, on
   </div>;
 }
 
-/** The courier's code from Яндекс Про: five characters that live two minutes. */
-function CourierCode({ call, busy, onCode, fresh }: { call: FleetCall; busy: boolean; onCode: () => void; fresh: FleetFeedback | null }) {
-  const source = fresh?.code ? { value: fresh.code, expires: fresh.at + (fresh.expires_in ?? 0) * 1000 } : call.active_code ? { value: call.active_code.value, expires: Date.now() + call.active_code.expires_in * 1000 } : null;
-  const [deadline, setDeadline] = useState(source), [now, setNow] = useState(Date.now());
-  useEffect(() => { if (source && source.value !== deadline?.value) setDeadline(source); }, [source?.value]); // eslint-disable-line react-hooks/exhaustive-deps
+/**
+ * The courier's code from Яндекс Про: five characters that live two minutes. The time left is
+ * counted from the moment the server answered, and a code the server no longer lists (used or
+ * expired) disappears at once, so «Попросить новый код» is always at hand.
+ */
+function CourierCode({ call, busy, onCode, fresh, updatedAt }: { call: FleetCall; busy: boolean; onCode: () => void; fresh: FleetFeedback | null; updatedAt: number }) {
+  const [now, setNow] = useState(Date.now()), [asked, setAsked] = useState(false);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  const deadline = fresh?.code && fresh.at >= updatedAt ? { value: fresh.code, expires: fresh.at + (fresh.expires_in ?? 0) * 1000 }
+    : call.active_code ? { value: call.active_code.value, expires: updatedAt + call.active_code.expires_in * 1000 } : null;
+  useEffect(() => { if (deadline) setAsked(true); }, [deadline?.value]); // eslint-disable-line react-hooks/exhaustive-deps
   const left = deadline ? Math.max(0, Math.round((deadline.expires - now) / 1000)) : 0;
   return <div className="fleet-code" data-coach="dock-code">
     <strong>Код курьера</strong>
@@ -133,8 +138,8 @@ function CourierCode({ call, busy, onCode, fresh }: { call: FleetCall; busy: boo
       <div className="fleet-code-timer"><span style={{ width: `${left / 120 * 100}%` }} /></div>
       <small>Код обновится через {countdown(left)} — успей вписать его в «Код для получения».</small>
     </> : <>
-      <p className="pulsar-muted">{deadline ? "Код устарел: в Яндекс Про он обновляется каждые 2 минуты." : "Попроси курьера продиктовать код: Яндекс Про → Профиль → Инвентарь → Получить код."}</p>
-      <button className="crm-primary" disabled={busy} onClick={onCode}>{deadline ? "Попросить новый код" : "Попросить код у курьера"}</button>
+      <p className="pulsar-muted">{asked ? "Этого кода больше нет: он устарел через 2 минуты или уже использован. Попроси новый." : "Попроси курьера продиктовать код: Яндекс Про → Профиль → Инвентарь → Получить код."}</p>
+      <button className="crm-primary" disabled={busy} onClick={onCode}>{asked ? "Попросить новый код" : "Попросить код у курьера"}</button>
     </>}
   </div>;
 }

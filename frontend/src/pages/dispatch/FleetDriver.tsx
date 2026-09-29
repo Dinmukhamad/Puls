@@ -139,7 +139,7 @@ function CarTab({ d }: { d: FleetDriver }) {
     </div>
     {(dirty || error) && <div className="fleet-savebar" role="region" aria-label="Сохранение">
       {error && <p className="fleet-error" role="alert">{error}</p>}
-      <button className="fleet-btn fleet-btn--yellow" data-coach="car-save" disabled={busy || !dirty} onClick={save}>{busy ? "Сохраняем…" : "Сохранить"}</button>
+      <button className="fleet-btn fleet-btn--yellow" data-coach="fleet-car-save" disabled={busy || !dirty} onClick={save}>{busy ? "Сохраняем…" : "Сохранить"}</button>
       <button className="fleet-btn" disabled={busy} onClick={() => { setTariffs(car.tariffs); setWrap(car.wrap); setLightbox(car.lightbox); setError(""); }}>Отменить</button>
     </div>}
   </section>;

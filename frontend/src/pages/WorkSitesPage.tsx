@@ -41,7 +41,9 @@ export function WorkSitesPage() {
   // Two browser tabs: CRM keeps its own address, the dispatch keeps `fleet` and `fpark` beside it.
   const site = params.get("site") === "dispatch" ? "dispatch" : "crm";
   const fleetRoute = parseRoute(params.get("fleet")), fleetPark = params.get("fpark") ?? DEFAULT_PARK;
-  const [fleetOpened, setFleetOpened] = useState(site === "dispatch");
+  const [fleetVisited, setFleetOpened] = useState(site === "dispatch");
+  // Browser «Back» can return to the dispatch tab after a reload, so the address alone mounts it too.
+  const fleetOpened = fleetVisited || site === "dispatch";
   const fleetQuery = useQuery({ queryKey: FLEET_QUERY, queryFn: fleetApi.state, enabled: fleetOpened });
   const [fleetFeedback, setFleetFeedback] = useState<FleetFeedback | null>(null);
   const [fleetHistory, setFleetHistory] = useState<{ back: string[]; forward: string[] }>({ back: [], forward: [] });
@@ -76,7 +78,8 @@ export function WorkSitesPage() {
   function openSite(target: "crm" | "dispatch") {
     if (target === site) return;
     const next = new URLSearchParams(params);
-    if (target === "dispatch") { next.set("site", "dispatch"); setFleetOpened(true); } else next.delete("site");
+    // Back in the dispatch, the cabinet reloads: a CRM request may have solved a call meanwhile.
+    if (target === "dispatch") { next.set("site", "dispatch"); setFleetOpened(true); client.invalidateQueries({ queryKey: FLEET_QUERY }); } else next.delete("site");
     setCoach(null); setParams(next);
   }
   function create(initial?: CrmAppeal) { if (dirty && !window.confirm("Открыть новую форму? Несохранённые изменения будут потеряны.")) return; setCopy(initial); setFormKey(k => k + 1); setForward(""); go("view=create", true); }
@@ -119,10 +122,10 @@ export function WorkSitesPage() {
     <main className="crm-main"><div className="crm-breadcrumb"><button onClick={() => go("")}>Главная</button><span>/</span>{view === "drivers" ? <><button onClick={() => openDriver()}>Учётные записи водителей</button>{currentDriver && <><span>/</span><button onClick={() => openDriver(currentDriver.id)}>{driverName(currentDriver)}</button>{driverScreen && driverScreen !== "details" && <><span>/</span><span>{driverScreenTitle[driverScreen]}</span></>}</>}</> : <><button onClick={() => go("")}>Обращения</button>{pageTitle !== "Обращения" && <><span>/</span><span>{pageTitle}</span></>}</>}{editor && view !== "drivers" && <button className="crm-manage-link" onClick={() => go("view=categories")}>Настроить категории</button>}</div>
     {notice && <div className="crm-notice" role="status">✓ {notice}<button aria-label="Закрыть уведомление" onClick={() => setNotice("")}>×</button></div>}
     {catalog.isPending && <div className="crm-empty" role="status">Открываем CRM…</div>}{catalog.isError && <div className="crm-empty" role="alert"><p>{catalog.error.message}</p><button className="crm-secondary" onClick={() => catalog.refetch()}>Повторить</button></div>}
-    {catalog.data && (view === "create" ? <CrmAppealForm key={formKey} catalog={catalog.data} initial={copy} onDirty={setFormDirty} onCategoryChange={updateSelection} onRequestHelp={() => setHelpRequest(n => n + 1)} onSaved={(appeal, duplicate) => { client.invalidateQueries({ queryKey: ["crm-appeals"] }); client.setQueryData(["crm-appeal", appeal.id], appeal); setDirty(false); if (duplicate) { setCopy(appeal); setFormKey(k => k + 1); } else go(`appeal=${appeal.id}`, true); setNotice(`Обращение #${appeal.id} сохранено и доступно всем участникам.${duplicate ? " Открыта копия; вложения нужно добавить заново." : ""}`); }} /> : view === "drivers" ? <CrmDrivers key={`${driverId ?? "list"}:${driverScreen ?? ""}`} drivers={drivers} update={updateDriver} open={openDriver} notify={setNotice} driverId={driverId} screen={driverScreen} onReset={() => { const fresh = seedDrivers(); setDrivers(fresh); saveDrivers(user?.id, fresh); setNotice("Учебные водители возвращены в исходное состояние."); }} /> : view === "categories" && editor ? <CrmCategories nodes={catalog.data.categories} /> : id > 0 ? <CrmAppealDetail id={id} editor={editor} onDuplicate={create} /> : <CrmAppealList catalog={catalog.data} onOpen={appeal => go(`appeal=${appeal}`)} onCreate={() => create()} />)}
+    {catalog.data && (view === "create" ? <CrmAppealForm key={formKey} catalog={catalog.data} initial={copy} onDirty={setFormDirty} onCategoryChange={updateSelection} onRequestHelp={() => setHelpRequest(n => n + 1)} onSaved={(appeal, duplicate) => { client.invalidateQueries({ queryKey: ["crm-appeals"] }); client.invalidateQueries({ queryKey: FLEET_QUERY }); client.setQueryData(["crm-appeal", appeal.id], appeal); setDirty(false); if (duplicate) { setCopy(appeal); setFormKey(k => k + 1); } else go(`appeal=${appeal.id}`, true); setNotice(`Обращение #${appeal.id} сохранено и доступно всем участникам.${duplicate ? " Открыта копия; вложения нужно добавить заново." : ""}`); }} /> : view === "drivers" ? <CrmDrivers key={`${driverId ?? "list"}:${driverScreen ?? ""}`} drivers={drivers} update={updateDriver} open={openDriver} notify={setNotice} driverId={driverId} screen={driverScreen} onReset={() => { const fresh = seedDrivers(); setDrivers(fresh); saveDrivers(user?.id, fresh); setNotice("Учебные водители возвращены в исходное состояние."); }} /> : view === "categories" && editor ? <CrmCategories nodes={catalog.data.categories} /> : id > 0 ? <CrmAppealDetail id={id} editor={editor} onDuplicate={create} /> : <CrmAppealList catalog={catalog.data} onOpen={appeal => go(`appeal=${appeal}`)} onCreate={() => create()} />)}
     <footer className="crm-bottom-note">Учебная CRM · Практика работы с обращениями</footer></main></div></div></div>
     {site === "crm" ? <PulsarGuide catalog={catalog.data} screen={pulsarScreen} categoryIds={selection} step={null} editor={instructionEditor} openRequest={helpRequest} onStart={() => startCoach(view === "drivers" ? "drivers" : "appeals")} onClose={() => {}} onPrevious={() => {}} onNext={() => {}} />
-      : <DispatchDock feedback={fleetFeedback} onFeedback={setFleetFeedback} onGo={(path, park) => goFleet(path, park)} onTour={tour => startFleetTour(tour)} onCrm={() => view === "create" ? openSite("crm") : create()} />}
+      : <DispatchDock feedback={fleetFeedback} onFeedback={setFleetFeedback} onGo={(path, park) => goFleet(path, park)} onTour={tour => startFleetTour(tour)} onCrm={() => { setCoach(null); if (view === "create") openSite("crm"); else create(); }} />}
     {coach && <PulsarCoach key={coach.id} steps={coach.steps} onClose={endCoach} />}
   </div>;
 }
