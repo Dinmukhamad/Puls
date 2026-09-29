@@ -16,6 +16,7 @@ from app.api.v1 import (
     cabinet,
     city,
     crm,
+    dispatch,
     driver,
     games,
     learning,
@@ -33,6 +34,7 @@ api_router = APIRouter()
 api_router.include_router(city.router)
 api_router.include_router(work_sites_access.router)
 api_router.include_router(crm.router)
+api_router.include_router(dispatch.router)
 api_router.include_router(access.router)
 api_router.include_router(auth.router)
 api_router.include_router(telegram.router)

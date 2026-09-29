@@ -15,6 +15,8 @@ from app.models.progress import Notification
 from app.models.user import CoinAccount
 from app.services.coins import post_transaction
 from app.services.crm_catalog import default_categories
+from app.services.dispatch import mission_facts, solved_calls
+from app.services.dispatch_data import MISSION_CALLS
 from app.services.learning import lock_learner
 from app.services.rules import write_audit
 
@@ -22,11 +24,12 @@ DISTRICTS = [
     {"id": "academy", "name": "Академия", "subtitle": "Начало твоего пути", "soon": False},
     {"id": "driver", "name": "Driver Simulator", "subtitle": "Путь водителя", "soon": False},
     {"id": "crm", "name": "CRM-центр", "subtitle": "На стороне водителя", "soon": False},
-    {"id": "dispatch", "name": "Диспетчерская", "subtitle": "Следующая глава", "soon": True},
+    {"id": "dispatch", "name": "Диспетчерская", "subtitle": "Кабинет таксопарка", "soon": False},
     {"id": "oktell", "name": "Oktell", "subtitle": "Будущий район", "soon": True},
 ]
 # Conditions and destinations are server-owned. Editors can tune the curriculum,
 # but cannot inject arbitrary URLs or client-side completion rules.
+DISPATCH = "/training/work-sites?site=dispatch"
 TEMPLATES = {
     "welcome": ("academy", "welcome", "/training/city", "Знакомство с городом"),
     "driver_profile": ("driver", "profile", "/simulator", "Учебный профиль водителя готов"),
@@ -35,11 +38,19 @@ TEMPLATES = {
     "crm_first": ("crm", "appeals", "/training/work-sites?view=create", "Сохранённые обращения"),
     "crm_phone": ("crm", "phone", "/training/work-sites?view=create", "Обращения «Смена номера»"),
     "crm_closed": ("crm", "closed", "/training/work-sites", "Тикеты, закрытые сотрудником"),
+    # Dispatch missions count the mascot's calls the operator solved (app/services/dispatch.py).
+    "dispatch_driver": ("dispatch", "dispatch_driver", DISPATCH, "Решённые звонки водителей"),
+    "dispatch_car": ("dispatch", "dispatch_car", DISPATCH, "Тарифы и оклейка сохранены"),
+    "dispatch_inventory": ("dispatch", "dispatch_inventory", DISPATCH, "Выданный термокороб"),
+    "dispatch_support": ("dispatch", "dispatch_support", DISPATCH, "Обращение в поддержку Яндекса"),
+    "dispatch_limit": ("dispatch", "dispatch_limit", DISPATCH, "Разобранные лимиты на вывод"),
 }
+# A dispatch mission cannot ask for more calls than its group has.
+TARGET_LIMITS = {key: len(MISSION_CALLS[key]) for key in MISSION_CALLS}
 
 # Plots of the operator's own district: four on the green belt behind every open district island.
 # A district's plots open once its first mission reward is claimed (the Academy's with the welcome).
-PLOT_DISTRICTS = ("academy", "driver", "crm")
+PLOT_DISTRICTS = ("academy", "driver", "crm", "dispatch")
 PLOTS = [{"key": f"{d}-{i}", "district": d} for d in PLOT_DISTRICTS for i in range(4)]
 # Server-owned prices: the client sends only the plot and the building, never the amount.
 BUILDINGS = {
@@ -135,6 +146,63 @@ def default_missions():
             100,
             "crm_phone",
         ),
+        (
+            "dispatch_driver",
+            "Первые звонки в Диспетчерскую",
+            "Реши два звонка водителей: найди активный аккаунт и поставь провайдера Sapar, "
+            "затем узнай в «Диагностике», что мешает выйти на линию.",
+            "Открой вкладку «Диспетчерская» в рабочих сайтах. Звонки ждут в моей панели, "
+            "а кнопка «Покажи, как» проведёт по экрану.",
+            2,
+            120,
+            40,
+            "welcome",
+        ),
+        (
+            "dispatch_car",
+            "Тарифы и оклейка",
+            "Подключи водителю тариф «Комфорт» и включи оклейку во вкладке «Автомобиль». "
+            "Без «Сохранить» изменения не применятся.",
+            "Крестик рядом с «Оклейкой» значит, что фотоконтроль брендинга ещё не пройден.",
+            1,
+            120,
+            40,
+            "dispatch_driver",
+        ),
+        (
+            "dispatch_inventory",
+            "Выдать термокороб",
+            "Выбери парк курьера, выдай жёлтый термокороб Яндекс Еды по коду из Яндекс Про "
+            "и впиши номер с короба.",
+            "Код курьера живёт две минуты — его продиктую я. Не успел — попроси новый.",
+            1,
+            150,
+            60,
+            "dispatch_car",
+        ),
+        (
+            "dispatch_support",
+            "Письмо в поддержку",
+            "Создай обращение в техподдержку Яндекса: «Вопросы об исполнителе» → «Ограничение "
+            "доступа к сервису», номер ВУ и текст «ДД! Прошу проверить…».",
+            "«Доступ: мне и моей роли» оставь выключенным, чтобы обращение видели коллеги.",
+            1,
+            180,
+            80,
+            "dispatch_inventory",
+        ),
+        (
+            "dispatch_limit",
+            "Лимит на вывод",
+            "Разбери три звонка про серую сумму на балансе: найди правило в «Антифроде», "
+            "проверь тариф заказа и дай водителю верный ответ.",
+            "Закрывающие документы проверяет только Яндекс. Короткая или дорогая поездка не по "
+            "«Межгороду» — запрос в CRM, лимит снимет ООЗ.",
+            3,
+            250,
+            120,
+            "dispatch_support",
+        ),
     ]
     return {
         key: {
@@ -153,19 +221,32 @@ def default_missions():
 
 async def settings(session):
     row = await session.get(CitySettings, 1)
+    # Missions added after a trainer saved the curriculum start with their defaults.
+    missions = {**default_missions(), **(row.missions if row else {})}
     return {
         "revision": row.revision if row else 0,
-        "missions": deepcopy(row.missions if row else default_missions()),
+        "missions": deepcopy({key: missions[key] for key in TEMPLATES}),
+    }
+
+
+def empty_facts():
+    return {
+        "welcome": 1,
+        "profile": 0,
+        "orders": 0,
+        "appeals": 0,
+        "phone": 0,
+        "closed": 0,
+        **mission_facts(set()),
     }
 
 
 async def evidence(session, user_ids):
-    result = {
-        uid: {"welcome": 1, "profile": 0, "orders": 0, "appeals": 0, "phone": 0, "closed": 0}
-        for uid in user_ids
-    }
+    result = {uid: empty_facts() for uid in user_ids}
     if not result:
         return result
+    for uid, calls in (await solved_calls(session, user_ids)).items():
+        result[uid].update(mission_facts(calls))
     profiles = await session.execute(
         select(DriverProfile.user_id, DriverProfile.stage).where(
             DriverProfile.user_id.in_(user_ids)
@@ -265,7 +346,7 @@ async def dashboard(session, user, *, inspecting=False):
     facts = (
         (await evidence(session, [user.id]))[user.id]
         if operator
-        else {"welcome": 1, "profile": 0, "orders": 0, "appeals": 0, "phone": 0, "closed": 0}
+        else empty_facts()
     )
     awards = (
         {

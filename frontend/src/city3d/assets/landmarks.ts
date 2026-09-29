@@ -137,15 +137,21 @@ export function createArchitecture() {
     if(stage>=4){for(const side of [-1,1]){box(p,.55,1.8,1.2,C.stone,side*1.98,1.22,-.2);window(p,side*1.98,.7,.42,.3,.95);}}
     return h+1.3;
   }
-  function tower(p:THREE.Object3D) {
+  // The dispatch control tower grows with every mission: taller shaft, then a radar, then side wings.
+  function tower(p:THREE.Object3D,stage:number) {
+    const lift=(Math.max(1,stage)-1)*.18;
     box(p,2.8,.8,2.2,C.stone,0,.72,0,.18);box(p,2.95,.13,2.35,C.ivory,0,1.15,0);
-    cyl(p,.68,2.55,C.stone,0,2.04,-.3,.5);
-    for(let i=0;i<8;i++){const a=i*Math.PI/4;cyl(p,.04,2.4,C.gold,Math.cos(a)*.61,2,Math.sin(a)*.61-.3);}
-    cyl(p,1.32,.15,C.ivory,0,3.23,-.3);cyl(p,1.18,.66,C.glass,0,3.65,-.3,1.27);
-    for(let i=0;i<12;i++){const a=i*Math.PI/6;box(p,.055,.67,.055,C.gold,Math.cos(a)*1.23,3.65,Math.sin(a)*1.23-.3);}
-    cyl(p,1.42,.18,C.ink,0,4.07,-.3);cyl(p,.035,.9,C.gold,0,4.6,-.3);ball(p,.1,'#dfaf57',0,5.1,-.3);
+    cyl(p,.68,2.55+lift,C.stone,0,2.04+lift/2,-.3,.5);
+    for(let i=0;i<8;i++){const a=i*Math.PI/4;cyl(p,.04,2.4+lift,C.gold,Math.cos(a)*.61,2+lift/2,Math.sin(a)*.61-.3);}
+    cyl(p,1.32,.15,C.ivory,0,3.23+lift,-.3);cyl(p,1.18,.66,C.glass,0,3.65+lift,-.3,1.27);
+    for(let i=0;i<12;i++){const a=i*Math.PI/6;box(p,.055,.67,.055,C.gold,Math.cos(a)*1.23,3.65+lift,Math.sin(a)*1.23-.3);}
+    cyl(p,1.42,.18,C.ink,0,4.07+lift,-.3);cyl(p,.035,.9,C.gold,0,4.6+lift,-.3);ball(p,.1,'#dfaf57',0,5.1+lift,-.3);
     sign(p,'CONTROL',0,.84,1.12,1.5);window(p,-.9,.5,1.12,.35,.45);window(p,.9,.5,1.12,.35,.45);
-    return 5.2;
+    if(stage>=3){const dish=new THREE.Group();dish.position.set(.95,4.3+lift,-.3);dish.rotation.set(-.5,.6,0);p.add(dish);
+      const bowl=mesh(dish,cached('dish',()=>new THREE.SphereGeometry(.55,24,12,0,Math.PI*2,0,Math.PI/2)),C.ivory,0,0,0);bowl.material=mat(C.ivory,.25,.3);bowl.scale.setScalar(.6);
+      cyl(dish,.02,.35,C.gold,0,.18,0);ball(dish,.05,C.ink,0,.36,0);}
+    if(stage>=4){for(const side of [-1,1]){box(p,.6,1.25,1.3,C.stone,side*1.95,.95,-.1,.15);box(p,.66,.1,1.36,C.ivory,side*1.95,1.62,-.1);window(p,side*1.95,.72,.56,.3,.5);}}
+    return 5.2+lift;
   }
   function oktell(p:THREE.Object3D) {
     box(p,3.4,1.35,2.45,C.stone,0,1,-.2,.25);box(p,3.55,.15,2.6,C.ivory,0,1.7,-.2,.25);
@@ -159,7 +165,7 @@ export function createArchitecture() {
   }
   function landmark(id:DistrictId,stage:number,soon:boolean) {
     const group=new THREE.Group();base(group,stage,soon);
-    const height=id==='academy'?academy(group,stage):id==='driver'?garage(group,stage):id==='crm'?crm(group,stage):id==='dispatch'?tower(group):oktell(group);
+    const height=id==='academy'?academy(group,stage):id==='driver'?garage(group,stage):id==='crm'?crm(group,stage):id==='dispatch'?tower(group,stage):oktell(group);
     if(stage>=2){for(const side of [-1,1]){for(let i=0;i<4;i++)box(group,.05,.55,.05,C.ink,side*2.55,.58,-1.55+i*.55);box(group,.06,.06,2,C.gold,side*2.55,.86,-.72);}}
     if(stage>=4){shrub(group,-2.2,-1.7,1.25);shrub(group,2.2,-1.7,1.25);}
     if(stage===5){const crown=torus(group,.25,.055,C.gold,0,height+.24,0);crown.rotation.y=Math.PI/4;}

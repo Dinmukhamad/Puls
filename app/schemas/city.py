@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.services.city import TEMPLATES
+from app.services.city import TARGET_LIMITS, TEMPLATES
 
 
 class MissionInput(BaseModel):
@@ -27,6 +27,11 @@ class SettingsInput(BaseModel):
         for key, mission in self.missions.items():
             if key in ("welcome", "driver_profile") and mission.target != 1:
                 raise ValueError("Для знакомства и профиля цель равна одному действию")
+            if key in TARGET_LIMITS and mission.target > TARGET_LIMITS[key]:
+                raise ValueError(
+                    f"В миссии «{mission.title}» можно решить не больше "
+                    f"{TARGET_LIMITS[key]} звонков"
+                )
             if key == "welcome" and (mission.coins or mission.prerequisite):
                 raise ValueError("Знакомство не выдаёт коины и не требует других миссий")
             visited = {key}

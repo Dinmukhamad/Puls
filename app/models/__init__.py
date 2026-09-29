@@ -22,6 +22,7 @@ from app.models.contest import (
     OperatorWeekResult,
 )
 from app.models.crm import CrmAppeal, CrmAttachment, CrmCategory, CrmInstruction
+from app.models.dispatch import DispatchEvent
 from app.models.driver import DriverOrder, DriverProfile, DriverSettings
 from app.models.driver_auth import DriverDevice, TelegramLink
 from app.models.driver_navigation import DriverMapRate, DriverNavigation, DriverRouteDraft
@@ -66,6 +67,7 @@ __all__ = [
     "CrmAttachment",
     "CrmCategory",
     "CrmInstruction",
+    "DispatchEvent",
     "DriverDevice",
     "DriverMapRate",
     "DriverNavigation",

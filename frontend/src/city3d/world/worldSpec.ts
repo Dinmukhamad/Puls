@@ -58,7 +58,7 @@ const DISTRICTS: WorldSpec["districts"] = [
   { id: "academy", angleDeg: ACADEMY, ring: 0, color: "#5b8def", soon: false },
   { id: "driver", angleDeg: DRIVER, ring: 0, color: "#f0a23a", soon: false },
   { id: "crm", angleDeg: CRM, ring: 0, color: "#7b5cff", soon: false },
-  { id: "dispatch", angleDeg: DISPATCH, ring: 0, color: "#35b6a6", soon: true },
+  { id: "dispatch", angleDeg: DISPATCH, ring: 0, color: "#35b6a6", soon: false },
   { id: "oktell", angleDeg: OKTELL, ring: 0, color: "#e86aa6", soon: true },
 ];
 
@@ -145,7 +145,7 @@ export const WORLD_X4: CitySpec = {
   businessAngle: 1.2,
   alleys: [144 + COAST_SHIFT],
   // Four plots on the belt behind every open district, clear of its street and car park.
-  plots: { districts: ["academy", "driver", "crm"], offsets: [-.23, -.13, .13, .23] },
+  plots: { districts: ["academy", "driver", "crm", "dispatch"], offsets: [-.23, -.13, .13, .23] },
   // Six quarters across the canal that a group builds together, the first in the default view (docs/CITY_GROUP.md).
   sites: { count: 6, within: 76.6 + COAST_SHIFT + 1, facing: 1.05 },
 };

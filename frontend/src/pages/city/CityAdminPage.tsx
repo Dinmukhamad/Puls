@@ -6,6 +6,9 @@ import { useAuth } from "../../auth/AuthContext";
 import { ErrorState, Skeleton } from "../../components/ui";
 import "./city.css";
 
+/** Dispatch missions count the calls of their group; a trainer cannot ask for more (app/services/city.py TARGET_LIMITS). */
+const DISPATCH_TARGETS: Record<string, number> = { dispatch_driver: 2, dispatch_car: 1, dispatch_inventory: 1, dispatch_support: 1, dispatch_limit: 3 };
+
 export function CityAdminPage() {
   const { user } = useAuth();
   const canEdit = ["trainer", "head", "admin"].includes(user?.role ?? "");
@@ -121,13 +124,13 @@ function MissionEditor({initial,canEdit}:{initial:CitySettings;canEdit:boolean})
   const mission=draft.missions[selected];
   function change(patch:Partial<typeof mission>){setSaved(false);setDraft(d=>({...d,missions:{...d.missions,[selected]:{...d.missions[selected],...patch}}}));}
   return <form className="city-admin-edit" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
-    <p className="city-admin-warning">Уже полученные награды и опыт сохраняются. Новые условия применяются к непройденным миссиям. Цели проверяются по данным CRM и Driver Simulator.</p>
+    <p className="city-admin-warning">Уже полученные награды и опыт сохраняются. Новые условия применяются к непройденным миссиям. Цели проверяются по данным CRM, Driver Simulator и учебной Диспетчерской: в миссиях Диспетчерской цель — число решённых звонков.</p>
     <label className="field"><span className="field__label">Миссия</span><select className="input" value={selected} onChange={e=>setSelected(e.target.value)}>{Object.entries(draft.missions).map(([key,m])=><option key={key} value={key}>{m.title}</option>)}</select></label>
     <fieldset disabled={!canEdit||mutation.isPending} style={{border:0,padding:0,margin:0,display:'grid',gap:16}}>
       <label className="field"><span className="field__label">Название</span><input className="input" value={mission.title} minLength={3} maxLength={140} required onChange={e=>change({title:e.target.value})}/></label>
       <label className="field"><span className="field__label">Задание для оператора</span><textarea className="input" value={mission.description} minLength={5} maxLength={2000} required onChange={e=>change({description:e.target.value})}/></label>
       <label className="field"><span className="field__label">Подсказка Пульсара</span><textarea className="input" value={mission.pulsar} minLength={5} maxLength={1200} required onChange={e=>change({pulsar:e.target.value})}/></label>
-      <div className="city-editor-fields"><label className="field"><span className="field__label">Цель: количество действий</span><input className="input" type="number" min={1} max={['welcome','driver_profile'].includes(selected)?1:100} value={mission.target} required onChange={e=>change({target:Number(e.target.value)})}/></label><label className="field"><span className="field__label">Опыт города, XP</span><input className="input" type="number" min={0} max={1000} value={mission.xp} required onChange={e=>change({xp:Number(e.target.value)})}/></label><label className="field"><span className="field__label">Награда, коины</span><input className="input" type="number" min={0} max={selected==='welcome'?0:1000} value={mission.coins} required onChange={e=>change({coins:Number(e.target.value)})}/></label></div>
+      <div className="city-editor-fields"><label className="field"><span className="field__label">Цель: количество действий</span><input className="input" type="number" min={1} max={['welcome','driver_profile'].includes(selected)?1:DISPATCH_TARGETS[selected]??100} value={mission.target} required onChange={e=>change({target:Number(e.target.value)})}/></label><label className="field"><span className="field__label">Опыт города, XP</span><input className="input" type="number" min={0} max={1000} value={mission.xp} required onChange={e=>change({xp:Number(e.target.value)})}/></label><label className="field"><span className="field__label">Награда, коины</span><input className="input" type="number" min={0} max={selected==='welcome'?0:1000} value={mission.coins} required onChange={e=>change({coins:Number(e.target.value)})}/></label></div>
       <label className="field"><span className="field__label">Открыть после миссии</span><select className="input" value={mission.prerequisite??''} disabled={selected==='welcome'} onChange={e=>change({prerequisite:e.target.value||null})}><option value="">Без предыдущего задания</option>{Object.entries(draft.missions).filter(([key])=>key!==selected).map(([key,m])=><option key={key} value={key}>{m.title}</option>)}</select></label>
       <label className="row"><input type="checkbox" checked={mission.enabled} onChange={e=>change({enabled:e.target.checked})}/> Миссия доступна операторам</label>
       {canEdit&&<button className="city-action" type="submit">{mutation.isPending?'Сохраняем…':'Сохранить все изменения'}</button>}

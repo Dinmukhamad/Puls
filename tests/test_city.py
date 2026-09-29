@@ -256,7 +256,7 @@ async def test_operator_builds_on_open_plots_with_coins_once(client, operator, s
         f"{BASE}/plots/{plot}/build", headers=headers, json={"item": item}
     )
     city = (await client.get(BASE, headers=headers)).json()
-    assert len(city["plots"]) == 12 and not any(p["unlocked"] for p in city["plots"])
+    assert len(city["plots"]) == 16 and not any(p["unlocked"] for p in city["plots"])
     assert {b["key"] for b in city["buildings"]} >= {"garden", "tower"} and city["can_build"]
     # Locked until the district's first mission is claimed.
     assert (await build("academy-0", "garden")).status_code == 409
@@ -317,7 +317,7 @@ async def test_staff_cannot_build_and_see_operator_plots_read_only(client, sessi
     )
     assert denied.status_code == 403
     view = (await client.get(f"{ADMIN}/operators/{operator.id}", headers=headers)).json()
-    assert len(view["plots"]) == 12 and not view["can_build"]
+    assert len(view["plots"]) == 16 and not view["can_build"]
 
 
 async def test_group_city_shows_stages_and_only_own_points(client, session, operator):

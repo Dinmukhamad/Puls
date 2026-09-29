@@ -17,6 +17,7 @@ from tests.conftest import auth, login, make_user
 pytestmark = pytest.mark.asyncio
 BASE = "/api/v1/work-sites-access"
 CRM = "/api/v1/learning/crm"
+DISPATCH = "/api/v1/learning/dispatch"
 
 
 async def issue(client, headers):
@@ -36,6 +37,15 @@ async def test_only_work_sites_are_locked_and_all_crm_endpoints_require_qr(clien
         ("GET", CRM + "/appeals/1"),
         ("GET", CRM + "/attachments/1"),
         ("POST", CRM + "/appeals"),
+        ("GET", DISPATCH),
+        ("PUT", DISPATCH + "/drivers/x/details"),
+        ("PUT", DISPATCH + "/drivers/x/car"),
+        ("POST", DISPATCH + "/codes"),
+        ("POST", DISPATCH + "/inventory"),
+        ("POST", DISPATCH + "/inventory/return"),
+        ("POST", DISPATCH + "/tickets"),
+        ("POST", DISPATCH + "/calls/gps/answer"),
+        ("POST", DISPATCH + "/reset"),
     ]:
         response = await client.request(method, path, headers=headers)
         assert response.status_code == 403, response.text
