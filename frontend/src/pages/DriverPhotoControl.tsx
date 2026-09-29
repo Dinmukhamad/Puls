@@ -15,6 +15,8 @@ import "./driver-photo.css";
 
 export interface PhotoStep {
   kind: PhotoKind; title: string; short: string;
+  /** Что совмещать с рамкой: «машину», «салон», «багажник», «документ». */
+  subject: string;
   /** Подсказка на экране камеры — её видит водитель. */
   hint: string;
   /** Что смотрит проверка на этом снимке. */
@@ -33,47 +35,47 @@ export const PHOTO_CHECK = "Фотоконтроль машины и СТС";
 
 /** Порядок плиток повторяет приложение: машина по кругу, салон, багажник, затем техпаспорт. */
 export const PHOTO_STEPS: PhotoStep[] = [
-  { kind: "front", title: "Машина спереди", short: "Спереди",
+  { kind: "front", subject: "машину", title: "Машина спереди", short: "Спереди",
     hint: "Встаньте прямо перед машиной в 3–4 шагах. Номер целиком в кадре и читается.",
     checks: ["Номер читается и совпадает с профилем", "Машина целиком, края не обрезаны"],
     mistake: "Номер грязный или обрезан краем кадра.",
     tell: "Протрите номер и отойдите на пару шагов, чтобы машина целиком встала в рамку." },
-  { kind: "left", title: "Машина слева", short: "Слева",
+  { kind: "left", subject: "машину", title: "Машина слева", short: "Слева",
     hint: "Встаньте напротив середины машины: весь бок и оба колеса в рамке. Снимайте прямо, не под углом.",
     checks: ["Кузов целиком, от фары до фонаря", "Все детали одного цвета"],
     mistake: "Снято под углом — часть машины не попала в кадр.",
     tell: "Встаньте ровно напротив водительской двери и держите телефон вертикально." },
-  { kind: "rear", title: "Машина сзади", short: "Сзади",
+  { kind: "rear", subject: "машину", title: "Машина сзади", short: "Сзади",
     hint: "Задний номер и фонари целиком. Солнце лучше держать за спиной.",
     checks: ["Задний номер читается", "Нет посторонних наклеек"],
     mistake: "Блик или тень закрывает номер.",
     tell: "Встаньте так, чтобы солнце светило в спину, и переснимите кадр." },
-  { kind: "right", title: "Машина справа", short: "Справа",
+  { kind: "right", subject: "машину", title: "Машина справа", short: "Справа",
     hint: "Вся правая сторона: двери, колёса и оклейка.",
     checks: ["Кузов чистый, без серьёзных повреждений", "Нет рекламы на боковых стёклах"],
     mistake: "Машина грязная — не видно цвета и повреждений.",
     tell: "Грязную машину проверка не пропустит: лучше пройти фотоконтроль после мойки." },
-  { kind: "seats-front", title: "Передний ряд сидений", short: "Передний ряд", dark: true,
+  { kind: "seats-front", subject: "салон", title: "Передний ряд сидений", short: "Передний ряд", dark: true,
     hint: "Откройте переднюю дверь. В салоне темно — включите вспышку.",
     checks: ["Сиденья чистые, без пятен", "Ремни на месте и не спрятаны"],
     mistake: "Темно в салоне или на сиденьях лежат вещи.",
     tell: "Откройте двери для света или включите вспышку, уберите вещи с сидений." },
-  { kind: "seats-rear", title: "Задний ряд сидений", short: "Задний ряд", dark: true,
+  { kind: "seats-rear", subject: "салон", title: "Задний ряд сидений", short: "Задний ряд", dark: true,
     hint: "Откройте заднюю дверь и снимите весь диван. Нужна вспышка.",
     checks: ["На сиденьях нет вещей", "Ремни и замки ремней не закрыты"],
     mistake: "Ремни спрятаны за спинку или замки закрыты заглушками.",
     tell: "Достаньте ремни из-за спинок и снимите заглушки: без ремней фотоконтроль не пройти." },
-  { kind: "trunk", title: "Открытый багажник", short: "Багажник",
+  { kind: "trunk", subject: "багажник", title: "Открытый багажник", short: "Багажник",
     hint: "Откройте багажник и снимите сзади. Половина места должна быть свободна.",
     checks: ["Свободна половина багажника", "Багажник чистый"],
     mistake: "Багажник заставлен вещами.",
     tell: "Для вещей пассажира должна быть свободна минимум половина багажника." },
-  { kind: "doc-front", title: "Свидетельство ТС (лицевая сторона)", short: "СТС, лицевая", doc: true,
+  { kind: "doc-front", subject: "документ", title: "Свидетельство ТС (лицевая сторона)", short: "СТС, лицевая", doc: true,
     hint: "Техпаспорт целиком в рамке, текст горизонтально. Вспышку выключите.",
     checks: ["Номер, марка и год совпадают с профилем", "Документ — оригинал, не копия и не экран"],
     mistake: "Блик от вспышки или пальцы закрывают данные.",
     tell: "Выключите вспышку, положите техпаспорт на стол и снимите сверху." },
-  { kind: "doc-back", title: "Свидетельство ТС (обратная сторона)", short: "СТС, оборот", doc: true,
+  { kind: "doc-back", subject: "документ", title: "Свидетельство ТС (обратная сторона)", short: "СТС, оборот", doc: true,
     hint: "Переверните документ. Все поля и края в рамке, без вспышки.",
     checks: ["Документ целиком, края не обрезаны", "Текст резкий и читается"],
     mistake: "Данные техпаспорта не совпадают с карточкой машины в парке.",
@@ -139,6 +141,8 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
   const count = taken.size;
   const missing = PHOTO_STEPS.map((_, i) => i).filter(i => !taken.has(i));
   const firstMissing = missing[0] ?? -1;
+  // Причину берём из журнала смены: повтор по кнопке или смена машины.
+  const restarted = [...(shift.events ?? [])].reverse().find(x => x.action === "photo_restart" || x.action === "car_select")?.action === "photo_restart";
 
   const [stage, setStage] = useState<Stage | null>(null);
   const [current, setCurrent] = useState(0);
@@ -156,6 +160,9 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
   const [uploaded, setUploaded] = useState(0);
   const [reviewed, setReviewed] = useState(0);
   const [device, setDevice] = useState<"off" | "starting" | "on">("off");
+  // Кадры с камеры устройства реально идут: без этого рамка зеленела бы над чёрным экраном.
+  const [streaming, setStreaming] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
   const [deviceNote, setDeviceNote] = useState<string | null>(null);
   const [images, setImages] = useState<Record<number, string>>(() => shotCache.get(shift.id) ?? {});
   const sawBusy = useRef(false);
@@ -164,6 +171,8 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
   const shutter = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLElement | null>(null);
+  const exampleButton = useRef<HTMLButtonElement>(null);
+  const hadExample = useRef(false);
   // Экраны профиля въезжают анимацией transform, а она запирает position: fixed внутри себя.
   // Поэтому камера выносится в корень приложения: там она закрывает и шапку, и нижнее меню.
   const anchor = useRef<HTMLSpanElement>(null);
@@ -172,7 +181,8 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
 
   const step = stage === "camera" ? PHOTO_STEPS[current] : undefined;
   const open = stage !== null;
-  const live = device === "on";
+  const cameraMode = device !== "off";
+  const live = device === "on" && streaming;
 
   useEffect(() => { onOverlay?.(open); }, [open, onOverlay]);
   useEffect(() => () => onOverlay?.(false), [onOverlay]);
@@ -198,9 +208,12 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
   useEffect(() => {
     if (saving === null) return;
     if (taken.has(saving)) {
-      setSaving(null); setShot(null); setAim(a => a + 1);
+      setSaving(null);
+      // Двигаем камеру дальше, только если это та же съёмка, что сохраняла кадр.
+      if (stage !== "camera" || retake !== null || current !== saving) return;
+      setShot(null); setAim(a => a + 1);
       const next = missing.find(i => i > saving) ?? missing[0];
-      if (next === undefined) { if (stage === "camera") close(); return; }
+      if (next === undefined) { close(); return; }
       setCurrent(next);
       return;
     }
@@ -211,9 +224,10 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
   useEffect(() => {
     if (stage !== "camera" || shot) return;
     setLocked(false);
+    if (cameraMode && !live) return;
     const timer = window.setTimeout(() => setLocked(true), reduced() ? 0 : live ? 900 : 1250);
     return () => window.clearTimeout(timer);
-  }, [stage, aim, shot, current, live]);
+  }, [stage, aim, shot, current, live, cameraMode]);
 
   // Отправка: фото «улетают» по одному, затем смена засчитывает проверку.
   useEffect(() => {
@@ -248,12 +262,32 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
       const denied = reason instanceof DOMException && (reason.name === "NotAllowedError" || reason.name === "SecurityError");
       setDeviceNote(denied ? "Браузер не дал доступ к камере. Снимаем учебную сцену." : "Камера не найдена или занята. Снимаем учебную сцену.");
     });
-    return () => { cancelled = true; stream.current?.getTracks().forEach(t => t.stop()); stream.current = null; };
+    return () => { cancelled = true; stream.current?.getTracks().forEach(t => t.stop()); stream.current = null; setStreaming(false); };
   }, [wantCamera]);
   const attachVideo = (element: HTMLVideoElement | null) => {
     video.current = element;
     if (element && stream.current && element.srcObject !== stream.current) { element.srcObject = stream.current; void element.play().catch(() => undefined); }
   };
+
+  // Пока открыта камера, остальное приложение недоступно: ни Tab, ни экранный диктор не уводят
+  // за неё — иначе можно уйти со страницы посреди отправки и потерять её.
+  useEffect(() => {
+    if (!open || !host) return;
+    const others = [...host.children].filter((x): x is HTMLElement => x instanceof HTMLElement && x !== dialog.current && !x.hasAttribute("inert"));
+    others.forEach(x => x.setAttribute("inert", ""));
+    return () => others.forEach(x => x.removeAttribute("inert"));
+  }, [open, host]);
+  // Фокус возвращается после того, как с приложения снят inert, иначе браузер его не примет.
+  // Кнопки, с которой открыли камеру, может уже не быть: после проверки «Отправить» сменяется
+  // на «Перейти к заказам». Тогда фокус встаёт на первую кнопку под сеткой или на первую плитку.
+  const restore = useRef<HTMLElement | true | null>(null);
+  useEffect(() => {
+    if (open || !restore.current) return;
+    const back = restore.current; restore.current = null;
+    const page = anchor.current?.parentElement;
+    const target = back !== true && back.isConnected ? back : page?.querySelector<HTMLElement>(".pc-shots ~ .du-choice, button.pc-shot, .pc-check");
+    target?.focus({ preventScroll: true });
+  }, [open]);
 
   // Диалог: фокус внутрь, Tab не уходит за камеру, Escape закрывает, фокус возвращается к плитке.
   useEffect(() => {
@@ -261,22 +295,27 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
     const key = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        if (example) setExample(false); else if (stage !== "sending" && stage !== "checking") close();
+        if (example) setExample(false); else if (stage !== "sending" && stage !== "checking" && saving === null) cancel();
         return;
       }
-      if (event.key !== "Tab" || !dialog.current) return;
-      const items = [...dialog.current.querySelectorAll<HTMLElement>("button:not(:disabled), [href], [tabindex]:not([tabindex='-1'])")].filter(x => x.offsetParent !== null);
-      if (!items.length) return;
+      const scope = example ? dialog.current?.querySelector<HTMLElement>(".pc-example") : dialog.current;
+      if (event.key !== "Tab" || !scope) return;
+      const items = [...scope.querySelectorAll<HTMLElement>("button:not(:disabled), [href], [tabindex]:not([tabindex='-1'])")].filter(x => x.offsetParent !== null);
+      // На экранах отправки нажимать нечего: фокус остаётся на самом окне.
+      if (!items.length) { event.preventDefault(); dialog.current?.focus({ preventScroll: true }); return; }
       const first = items[0], last = items[items.length - 1];
-      if (event.shiftKey && (document.activeElement === first || !dialog.current.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
-      else if (!event.shiftKey && (document.activeElement === last || !dialog.current.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
+      if (event.shiftKey && (document.activeElement === first || !scope.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || !scope.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   });
   useEffect(() => {
     if (!open) return;
+    const closedExample = hadExample.current && !example;
+    hadExample.current = example;
     const target = example ? dialog.current?.querySelector<HTMLElement>(".pc-example [data-autofocus]")
+      : closedExample && exampleButton.current ? exampleButton.current
       : stage === "camera" && !shot ? shutter.current : dialog.current?.querySelector<HTMLElement>("[data-autofocus]") ?? dialog.current;
     target?.focus({ preventScroll: true });
   }, [open, stage, shot, current, example]);
@@ -286,10 +325,14 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
     remember(); setError(null); setShot(null); setExample(false); setCurrent(index); setRetake(from); setAim(a => a + 1);
     setStage(count === 0 && from === null && stage === null ? "tips" : "camera");
   }
+  /** × и Escape: пересъёмка из «Отправляем?» возвращает к нему, остальное закрывает камеру. */
+  function cancel() {
+    if (stage === "camera" && retake === "summary") { setRetake(null); setShot(null); setExample(false); setError(null); setStage("summary"); return; }
+    close();
+  }
   function close() {
     setStage(null); setShot(null); setRetake(null); setExample(false); setDevice("off"); setDeviceNote(null);
-    const back = opener.current; opener.current = null;
-    window.setTimeout(() => { if (back?.isConnected) back.focus({ preventScroll: true }); }, 0);
+    restore.current = opener.current ?? true; opener.current = null;
   }
   function capture() {
     const element = video.current;
@@ -306,6 +349,7 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
   function shoot() {
     if (!step || shot || saving !== null) return;
     const image = live ? capture() : undefined;
+    if (cameraMode && !image) return;
     const quality: Quality = !locked ? "blur" : image ? "ok" : step.doc && flash ? "glare" : step.dark && !flash ? "dark" : "ok";
     setError(null); setFlashKey(k => k + 1); setShot({ step: current, quality, image });
   }
@@ -344,7 +388,7 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
       <div className="pc-hero-body">
         <span className="pc-chip" data-state={state}>{passed ? "Доступ к заказам открыт" : "Нет доступа к заказам"}</span>
         <h2>{passed ? "Все проверки пройдены" : "Пройдите фотоконтроль"}</h2>
-        <p>{passed ? "Следующая проверка машины — через 10 дней. Пройти её можно заранее, доступ не пропадёт." : "Сменился автомобиль в профиле: нужны фото машины и техпаспорта. Без них заказы не поступают."}</p>
+        <p>{passed ? "Следующая проверка машины — через 10 дней." : restarted ? "Проверка запущена заново: нужны свежие фото машины и техпаспорта. Без них заказы не поступают." : "Сменился автомобиль в профиле: нужны фото машины и техпаспорта. Без них заказы не поступают."}</p>
       </div>
     </section>
     {!passed && <>
@@ -389,7 +433,7 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
 
   const check = <>
     {head(PHOTO_CHECK, true)}
-    <p className="pc-reason">{passed ? "Проверка пройдена. Следующая — через 10 дней, пройти её можно заранее." : "Необходимо пройти проверку. Причина: сменился автомобиль — нет фото машины и СТС."}</p>
+    <p className="pc-reason">{passed ? "Проверка пройдена. Следующая — через 10 дней." : `Необходимо пройти проверку. Причина: ${restarted ? "проверка запущена заново" : "сменился автомобиль"} — нет фото машины и СТС.`}</p>
     {carRow}
     <div className="pc-meter" role="img" aria-label={`Снято ${count} из ${COUNT}`}>
       <div className="pc-meter-bar">{PHOTO_STEPS.map((x, i) => <i key={x.kind} data-done={taken.has(i)} data-now={!passed && i === firstMissing} />)}</div>
@@ -411,7 +455,11 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
     })}</div>
     {passed ? <>
       <DChoice arrow onClick={() => go("orders")}>Перейти к заказам</DChoice>
-      <DChoice disabled={busy || orderActive} onClick={() => act("photo_restart")}>Пройти фотоконтроль ещё раз</DChoice>
+      {confirmRestart ? <div className="pc-confirm" role="group" aria-label="Пройти фотоконтроль ещё раз?">
+        <p>В тренажёре повтор сбрасывает проверку: пока фото не отправлены заново, выйти на линию нельзя. В приложении пройти проверку заранее можно без потери доступа.</p>
+        <DChoice className="du-danger" disabled={busy || orderActive} onClick={() => { setConfirmRestart(false); act("photo_restart"); }}>Сбросить и снять заново</DChoice>
+        <DChoice onClick={() => setConfirmRestart(false)}>Отмена</DChoice>
+      </div> : <DChoice disabled={busy || orderActive} onClick={() => setConfirmRestart(true)}>Пройти фотоконтроль ещё раз</DChoice>}
       {orderActive && <p className="pc-note">Во время заказа проверку не перезапустить — сначала завершите поездку.</p>}
     </> : <div className="dp-bottom pc-actions">
       <DChoice onClick={() => go("photo")}>Назад</DChoice>
@@ -434,10 +482,10 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
     dark: "Темно: салон почти не виден. Включите вспышку и переснимите.",
   };
   const problem = shot ? verdict[shot.quality] : null;
-  const darkNow = !!step?.dark && !flash && !live;
-  const cue = !locked ? "Совместите машину с рамкой" : live ? "Держите телефон ровно — снимайте"
+  const darkNow = !!step?.dark && !flash && !cameraMode;
+  const cue = cameraMode && !live ? "Включаем камеру…" : !locked ? `Совместите ${step?.subject ?? "объект"} с рамкой` : live ? "Держите телефон ровно — снимайте"
     : step?.doc && flash ? "Выключите вспышку — будет блик" : darkNow ? "Темно — включите вспышку" : "Кадр ровный — снимайте";
-  const cueTone = !locked ? "aim" : (step?.doc && flash && !live) || darkNow ? "warn" : "ok";
+  const cueTone = !locked ? "aim" : (step?.doc && flash && !cameraMode) || darkNow ? "warn" : "ok";
   const coach = operatorNote(stage, step ?? review, retake !== null, count);
 
   const overlay = open && <div className="pc-overlay" ref={dialog} role="dialog" aria-modal="true" aria-label={`${PHOTO_CHECK}: камера приложения`} tabIndex={-1} data-stage={stage}>
@@ -453,19 +501,19 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
 
       {stage === "camera" && step && <div className="pc-camera" data-locked={locked} data-shot={!!shot} data-dark={darkNow} data-cue={cueTone}>
         <header className="pc-top">
-          <button type="button" className="pc-icon-btn" aria-label="Закрыть камеру" onClick={close}>×</button>
+          <button type="button" className="pc-icon-btn" aria-label={retake === "summary" ? "Назад к отправке" : "Закрыть камеру"} disabled={saving !== null} onClick={cancel}>×</button>
           <div className="pc-top-title"><strong>{step.title}</strong><span>{retake ? "Пересъёмка кадра" : `Фото ${count + 1} из ${COUNT}`}</span></div>
-          <button type="button" className="pc-icon-btn" aria-pressed={flash} aria-label={flash ? "Выключить вспышку" : "Включить вспышку"} disabled={!!shot || live} onClick={() => setFlash(!flash)}>
+          <button type="button" className="pc-icon-btn" aria-pressed={flash} aria-label="Вспышка" disabled={!!shot || cameraMode} onClick={() => setFlash(!flash)}>
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 3-7 10h5l-1 8 7-10h-5z" />{!flash && <path d="M4 4l16 16" />}</svg>
           </button>
         </header>
         <div className="pc-steps" aria-hidden="true">{PHOTO_STEPS.map((x, i) => <i key={x.kind} data-done={taken.has(i)} data-now={i === current} />)}</div>
         <div className="pc-stagebox">
           <div className="pc-finder">
-            {device !== "off" && <video className="pc-video" ref={attachVideo} playsInline muted autoPlay aria-hidden="true" />}
+            {device !== "off" && <video className="pc-video" ref={attachVideo} playsInline muted autoPlay aria-hidden="true" onPlaying={() => setStreaming(true)} onEmptied={() => setStreaming(false)} />}
             {shot ? <div className="pc-photo" data-quality={shot.quality} data-flash={flash && !shot.image}>{shot.image ? <img src={shot.image} alt={`Снимок: ${PHOTO_STEPS[shot.step].title}`} /> : <PhotoThumb kind={PHOTO_STEPS[shot.step].kind} data={art} className="pc-photo-img" />}{shot.quality === "glare" && <span className="pc-glare" aria-hidden="true" />}</div>
               : <svg className="pc-view" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                {!live && device === "off" && <g className="pc-scene" key={`${aim}-${current}`}><PhotoScene kind={step.kind} data={art} /></g>}
+                {!cameraMode && <g className="pc-scene" key={`${aim}-${current}`}><PhotoScene kind={step.kind} data={art} /></g>}
                 <g className="pc-guide"><PhotoGuide kind={step.kind} /></g>
               </svg>}
             {!shot && <span className="pc-corners" aria-hidden="true"><i /><i /><i /><i /></span>}
@@ -478,10 +526,10 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
           <p className="pc-hint" key={current}>{step.hint}</p>
           {deviceNote && <p className="pc-device-note" role="status">{deviceNote}</p>}
           <div className="pc-controls">
-            <button type="button" className="pc-side-btn" onClick={() => setExample(true)}><span className="pc-side-thumb" aria-hidden="true"><PhotoThumb kind={step.kind} data={art} /></span>Пример</button>
-            <button type="button" className="pc-shutter" ref={shutter} aria-label={`Сделать фото: ${step.title}`} onClick={shoot}><span /></button>
-            {canUseCamera() ? <button type="button" className="pc-side-btn" aria-pressed={device !== "off"} onClick={() => { setDeviceNote(null); setDevice(device === "off" ? "starting" : "off"); }}>
-              <span className="pc-side-icon" aria-hidden="true"><Glyph name="cam" /></span>{device === "off" ? "Своя камера" : device === "starting" ? "Включаем…" : "Учебная сцена"}
+            <button type="button" className="pc-side-btn" ref={exampleButton} onClick={() => setExample(true)}><span className="pc-side-thumb" aria-hidden="true"><PhotoThumb kind={step.kind} data={art} /></span>Пример</button>
+            <button type="button" className="pc-shutter" ref={shutter} aria-label={`Сделать фото: ${step.title}`} disabled={cameraMode && !live} onClick={shoot}><span /></button>
+            {canUseCamera() ? <button type="button" className="pc-side-btn" aria-pressed={device !== "off"} aria-label="Своя камера" onClick={() => { setDeviceNote(null); setDevice(device === "off" ? "starting" : "off"); }}>
+              <span className="pc-side-icon" aria-hidden="true"><Glyph name="cam" /></span>{device === "starting" ? "Включаем…" : "Своя камера"}
             </button> : <span className="pc-side-btn" aria-hidden="true" />}
           </div>
         </footer> : <footer className="pc-bottom pc-bottom--review">
@@ -526,8 +574,9 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
         <h2>{stage === "sending" ? "Отправляем фото" : "Смотрим ваши фото"}</h2>
         {stage === "sending" ? <>
           <div className="pc-upload" role="progressbar" aria-valuemin={0} aria-valuemax={COUNT} aria-valuenow={uploaded} aria-label="Загрузка фото"><i style={{ width: `${(uploaded / COUNT) * 100}%` }} /></div>
-          <p className="pc-lead" aria-live="polite">Загружено {uploaded} из {COUNT}</p>
-        </> : <ul className="pc-review" aria-live="polite">{REVIEW.map((x, i) => <li key={x} data-state={i < reviewed ? "done" : i === reviewed ? "now" : "wait"}><i aria-hidden="true" />{x}</li>)}</ul>}
+          <p className="pc-lead">Загружено {uploaded} из {COUNT}</p>
+        </> : <ul className="pc-review">{REVIEW.map((x, i) => <li key={x} data-state={i < reviewed ? "done" : i === reviewed ? "now" : "wait"}><i aria-hidden="true" />{x}<span className="sr-only">{i < reviewed ? " — проверено" : i === reviewed ? " — проверяем" : ""}</span></li>)}</ul>}
+        <p className="sr-only" role="status">{stage === "sending" ? "Отправляем фото" : reviewed >= REVIEW.length ? "Проверка закончена" : "Данные отправились. Смотрим ваши фото"}</p>
         <p className="pc-small">{stage === "sending" ? "Не закрывайте приложение, пока идёт загрузка." : "В приложении проверка занимает 5–15 минут. В тренажёре — пару секунд."}</p>
       </div>}
 
