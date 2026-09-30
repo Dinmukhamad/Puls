@@ -437,6 +437,7 @@ button.fleet-home-card:hover { box-shadow:0 6px 24px #2120200f; }
 .fleet-call-link { font-size:11px; overflow-wrap:anywhere; background:#fff; border-radius:8px; padding:6px 8px; }
 .fleet-call-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .work-sites .fleet-call-actions .crm-primary,.work-sites .fleet-code .crm-primary { background:#23252b; border-color:#23252b; border-radius:10px; padding:9px 13px; }
+.work-sites .fleet-call-actions .crm-primary:hover,.work-sites .fleet-code .crm-primary:hover { background:#3a3d45; }
 .work-sites .fleet-call-actions .crm-secondary { border-radius:10px; padding:9px 13px; }
 .fleet-answers { display:flex; flex-direction:column; gap:7px; }
 .fleet-answers strong { color:#23294a; font-size:14.5px; }

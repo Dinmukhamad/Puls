@@ -14,6 +14,8 @@ export interface CoachStep {
   when?: string;
   /** The step waits until the operator presses the lit element, then moves on (the last one ends the tour). */
   waitClick?: boolean;
+  /** With `waitClick`: after the press the step also waits for the lit element to go away, so a failed save keeps the operator here. */
+  untilGone?: boolean;
   /** Places the operator also needs during this step; the rest of the page stays locked. */
   allow?: string;
   /** Something Pulsar hands over inside his bubble, rendered by the page that runs the tour. */
@@ -71,9 +73,11 @@ export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
     { target: level(5), when: choice(4, "Жалоба"), advanceWhen: DONE, action: "Выбери", title: "На кого жалоба", text: "Выбери отдел или компанию. Для сотрудника ОТП, ОП или Регионов появится поле для его имени." },
     { target: level(5), when: choice(4, "Благодарность"), advanceWhen: DONE, action: "Выбери", title: "Кого благодарят", text: "Выбери отдел или компанию. Для сотрудника ОТП, ОП или Регионов появится поле для его имени." },
     // Other callers: walk to the last level without driver-specific advice.
-    { target: level(2), when: `${CAT}:not([data-root="Водитель"]) ${level(2)}`, advanceWhen: DONE, action: "Выбери", title: "Уточни причину", text: "Выбирай следующие категории по порядку, пока не дойдёшь до последней. Серые варианты недоступны." },
+    { target: level(2), when: `${CAT}:not([data-root="Водитель"]) ${level(2)}`, advanceWhen: DONE, allow: CAT, action: "Выбери", title: "Уточни причину", text: "Выбирай следующие категории по порядку, пока не дойдёшь до последней. Серые варианты недоступны." },
+    // Any branch without its own steps is finished here: the whole category block is open.
+    { target: CAT, when: `${CAT}:not([data-complete=true])`, advanceWhen: DONE, action: "Выбери", title: "Доведи категорию до конца", text: "Выбери оставшиеся категории по порядку, пока не дойдёшь до последней. Без неё обращение не сохранится." },
     { target: "[data-coach=context-help]", when: DONE, title: "Моя подсказка", text: "Для выбранной категории я показываю инструкцию: что проверить и что приложить. Прочитай её перед тем, как заполнять комментарий." },
-    { target: "[data-coach=extra-field]", when: "[data-coach=extra-field]", action: "Заполни", title: "Дополнительные поля", text: "Этой категории нужны отдельные поля: имя сотрудника, транзакция или новые условия. Заполни их." },
+    { target: "[data-coach=extra-field]", when: "[data-coach=extra-field]", allow: "[data-coach=extra-field]", action: "Заполни", title: "Дополнительные поля", text: "Этой категории нужны отдельные поля: имя сотрудника, транзакция или новые условия. Заполни их." },
     // The comment and files come last and depend on the chosen category.
     { target: "[data-coach=comment]", when: `${FORM}[data-rules~=phone_change]`, action: "Напиши", title: "Смена номера: комментарий", text: "Напиши старый номер, новый номер и ссылку на аккаунт водителя из диспетчерской. Без ссылки отдел не найдёт водителя." },
     { target: "[data-coach=files]", when: `${FORM}[data-rules~=phone_change]`, action: "Приложи", title: "Смена номера: скриншоты", text: "Скриншоты обязательны: Октелл и диспетчерская, номер водителя должен быть виден на обоих. Вставь их Ctrl+V или перетащи." },
@@ -83,7 +87,7 @@ export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
     { target: "[data-coach=comment]", when: `${FORM}[data-path*="/ Консультация /"]`, action: "Напиши", title: "Комментарий", text: "Коротко запиши, о чём спрашивал водитель и что ты ему ответил." },
     { target: "[data-coach=comment]", when: `${FORM}[data-rules=""]:not([data-path*="/ Консультация /"])`, action: "Напиши", title: "Комментарий", text: "Если нужно, коротко опиши обращение своими словами." },
     { target: "[data-coach=files]", when: `${FORM}[data-rules~=image]:not([data-rules~=phone_change])`, action: "Приложи", title: "Скриншот обязателен", text: "Для этой категории нужен скриншот. Нажми Ctrl+V, выбери файл или перетащи его сюда." },
-    { target: "[data-coach=save]", waitClick: true, action: "Проверь и нажми", title: "Финиш! 🎉", text: "Проверь данные и нажми «Сохранить». Обращение увидят все участники. Ты справился!" },
+    { target: "[data-coach=save]", waitClick: true, untilGone: true, action: "Проверь и нажми", title: "Финиш! 🎉", text: "Проверь данные и нажми «Сохранить». Обращение увидят все участники. Ты справился!" },
   ],
   drivers: [
     // List: find the driver and read the row.
@@ -107,7 +111,7 @@ export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
     { target: "[data-coach=car-year]", action: "Выбери", title: "Год выпуска", text: "Год выпуска из техпаспорта. От него зависит, в какие тарифы машина может попасть." },
     { target: "[data-coach=car-callsign] button", waitClick: true, action: "Нажми «Скопировать»", title: "Позывной = госномер", text: "Обязательно скопируй госномер в «Позывной» кнопкой «Скопировать госномер». Без этого машину не сохранить." },
     { target: "[data-coach=car-tariffs]", action: "Отметь", title: "Тарифы", text: "Отметь тарифы, по которым водитель будет работать на этой машине." },
-    { target: "[data-coach=car-save]", waitClick: true, action: "Нажми", title: "Сохранение", text: "Нажми «Сохранить» — машина сменится в профиле. Потом скажи водителю пройти фотоконтроль автомобиля и техпаспорта в Яндекс Про." },
+    { target: "[data-coach=car-save]", waitClick: true, untilGone: true, action: "Нажми", title: "Сохранение", text: "Нажми «Сохранить» — машина сменится в профиле. Потом скажи водителю пройти фотоконтроль автомобиля и техпаспорта в Яндекс Про." },
     { target: "[data-coach=car-back]", skipWhen: "[data-coach=drv-card]", advanceWhen: "[data-coach=drv-card]", action: "Нажми", title: "Назад к карточке", text: "Вернёмся в карточку водителя — покажу лимит на наличные заказы." },
     // Cash limit.
     { target: "[data-coach=drv-card] .drv-card-actions .drv-btn--limit", advanceWhen: "[data-coach=limit-screen]", action: "Нажми", title: "Лимит наличных", text: "Нажми «Лимит» — это управление наличными заказами водителя." },

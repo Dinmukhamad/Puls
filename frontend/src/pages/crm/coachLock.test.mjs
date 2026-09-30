@@ -5,25 +5,28 @@ import { fileURLToPath } from 'node:url';
 
 // A tiny stand-in for the DOM: just what the lock asks of elements, events and the window.
 class Element {
-  constructor(name, parent = null, box = { left: 0, top: 0, right: 0, bottom: 0 }) { this.name = name; this.parent = parent; this.box = box; this.control = null; this.clicks = 0; }
+  constructor(name, parent = null, box = { left: 0, top: 0, right: 0, bottom: 0 }) { this.name = name; this.parent = parent; this.box = box; this.control = null; this.clicks = 0; this.order = Element.count = (Element.count ?? 0) + 1; (Element.all ??= []).push(this); }
+  compareDocumentPosition(other) { return other.order > this.order ? 4 : 2; }
   contains(node) { for (let n = node; n; n = n.parent) if (n === this) return true; return false; }
   closest(selector) { for (let n = this; n; n = n.parent) if (selector.split(',').some(s => s.trim() === n.name)) return n; return null; }
-  matches(selector) { return selector.split(',').some(s => s.trim() === this.name); }
+  matches(selector) { return selector.split(',').some(s => s.trim() === this.name || s.trim().split(/[:[]/)[0] === this.name); }
   getBoundingClientRect() { return this.box; }
   click() { this.clicks++; }
   focus() { document.activeElement = this; }
   blur() { if (document.activeElement === this) document.activeElement = document.body; }
+  querySelectorAll(selector) { return Element.all.filter(e => e !== this && this.contains(e) && e.matches(selector)); }
+  getClientRects() { return [this.box]; }
 }
 class MouseEvent {}
 const listeners = new Map(), timers = [];
-Object.assign(globalThis, { Element, HTMLElement: Element, MouseEvent });
+Object.assign(globalThis, { Element, HTMLElement: Element, MouseEvent, Node: { DOCUMENT_POSITION_FOLLOWING: 4 } });
 globalThis.window = {
   addEventListener: (type, fn, options) => listeners.set(type, { fn, options }),
   removeEventListener: (type, fn, capture) => { if (listeners.get(type)?.fn === fn && capture === true) listeners.delete(type); },
   setTimeout: fn => timers.push(fn), clearTimeout: () => {},
 };
 const html = new Element('html'), body = new Element('body', html);
-globalThis.document = { body, documentElement: html, activeElement: body };
+globalThis.document = { body, documentElement: html, activeElement: body, querySelectorAll: () => [] };
 
 const built = await build({ entryPoints: [fileURLToPath(new URL('./coachLock.ts', import.meta.url))], bundle: true, platform: 'node', format: 'esm', write: false });
 const { lockPage, within } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
@@ -35,7 +38,8 @@ const search = new Element('[data-coach=search-input]', page), searchInput = new
 const label = new Element('label', page); label.control = inner;
 const log = { used: 0, blocked: 0, escape: 0 };
 let target = lit, allow;
-const lock = () => lockPage({ coach: () => coach, target: () => target, allow: () => allow, onUsed: () => log.used++, onBlocked: () => log.blocked++, onEscape: () => log.escape++ });
+let ready = true;
+const lock = () => lockPage({ coach: () => coach, target: () => target, allow: () => allow, ready: () => ready, onUsed: () => log.used++, onBlocked: () => log.blocked++, onEscape: () => log.escape++ });
 
 function send(type, node, extra = {}) {
   const event = Object.assign(/mouse|click|pointer|drop/.test(type) ? new MouseEvent() : {}, { type, target: node, isTrusted: true, stopped: false, cancelled: false, ...extra });
@@ -83,7 +87,15 @@ test('keys and typing work only in open places; Escape closes the tour alone', (
   const typed = send('keydown', other, { key: 'Enter' });
   assert.ok(typed.stopped && typed.cancelled); assert.equal(log.blocked, 1);
   assert.equal(send('keydown', other, { key: 'a', repeat: true }).cancelled, true); assert.equal(log.blocked, 1, 'held keys nudge once');
-  for (const key of ['Tab', 'Shift']) assert.equal(send('keydown', other, { key }).stopped, false, key);
+  assert.equal(send('keydown', other, { key: 'Shift' }).stopped, false);
+  // Tab never leaves the open places: the lock moves focus itself.
+  const tabbed = send('keydown', other, { key: 'Tab' });
+  assert.ok(tabbed.stopped && tabbed.cancelled);
+  const first = document.activeElement;
+  assert.ok([field, bubble].includes(first), 'Tab from outside lands in an open place');
+  send('keydown', first, { key: 'Tab' }); const second = document.activeElement;
+  assert.ok([field, bubble].includes(second) && second !== first, 'then on the other one');
+  send('keydown', second, { key: 'Tab' }); assert.equal(document.activeElement, first, 'and round again');
   const escape = send('keydown', field, { key: 'Escape' });
   assert.ok(escape.stopped && escape.cancelled, 'the page\'s own Escape handlers stay silent'); assert.equal(log.escape, 1);
   assert.equal(send('keydown', body, { key: ' ' }).stopped, false);
@@ -106,6 +118,11 @@ test('focus that lands outside the open places is dropped', () => {
   target = searchInput; timers.pop()();
   assert.equal(document.activeElement, searchInput);
   other.focus(); listeners.get('focusin').fn({ type: 'focusin', target: other }); timers.pop()();
+  assert.equal(document.activeElement, body);
+  // Between two steps nothing is judged: the next step decides once it has found its element.
+  other.focus(); ready = false; listeners.get('focusin').fn({ type: 'focusin', target: other }); timers.pop()();
+  assert.equal(document.activeElement, other);
+  ready = true; settle();
   assert.equal(document.activeElement, body);
   target = lit;
   release();

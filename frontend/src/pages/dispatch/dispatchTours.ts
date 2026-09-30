@@ -69,19 +69,19 @@ export function callTour(call: FleetCall, driver: FleetDriver, park: FleetPark):
     case "provider": return [...parkSteps(park), ...findSteps(driver, `номер ВУ ${driver.license}`, "Выбери аккаунт, который «Работает»: у водителя есть ещё архивный."),
       tab(driver, "details", "provider", "Детали", "Провайдер ЭДО — во вкладке «Детали»."),
       { target: "[data-coach=provider]", advanceWhen: '[data-coach=provider][data-value="Sapar"]', action: "Выбери", title: "Провайдер ЭДО", text: "Провайдер должен быть «Sapar». Если стоит другой — выбери Sapar в списке." },
-      { target: "[data-coach=details-save]", when: "[data-coach=details-save]", waitClick: true, action: "Нажми", title: "Сохрани", text: "Нажми «Сохранить» — без этого провайдер не сменится." }];
+      { target: "[data-coach=details-save]", when: "[data-coach=details-save]", waitClick: true, untilGone: true, action: "Нажми", title: "Сохрани", text: "Нажми «Сохранить» — без этого провайдер не сменится." }];
     case "gps": return [...parkSteps(park), ...findSteps(driver, `телефон ${driver.phone.slice(2)}`, "Нажми на водителя в результатах."), ...diagnostics(driver)];
     case "car": return [...parkSteps(park), ...findSteps(driver, surname, "Нажми на водителя в результатах."),
       tab(driver, "car", "tariffs", "Автомобиль", "Тарифы и оклейка — во вкладке «Автомобиль»."),
       { target: "[data-coach=tariff-add]", advanceWhen: '[data-coach=tariffs][data-tariffs~="Комфорт"]', action: "Выбери", title: "Добавь тариф", text: "В списке «Добавить» выбери «Комфорт». Остальные тарифы водителя не убирай." },
       { target: "[data-coach=wrap]", advanceWhen: "[data-coach=wrap] input:checked", action: "Отметь", title: "Оклейка", text: "Отметь «Оклейка»: это брендинг на машине, реклама только самого Яндекса." },
-      { target: "[data-coach=fleet-car-save]", when: "[data-coach=fleet-car-save]", waitClick: true, action: "Нажми", title: "Сохрани", text: "Нажми «Сохранить». Крестик у «Оклейки» значит: фотоконтроль брендинга ещё не пройден, галочка — пройден." }];
+      { target: "[data-coach=fleet-car-save]", when: "[data-coach=fleet-car-save]", waitClick: true, untilGone: true, action: "Нажми", title: "Сохрани", text: "Нажми «Сохранить». Крестик у «Оклейки» значит: фотоконтроль брендинга ещё не пройден, галочка — пройден." }];
     case "thermobox": return [...parkSteps(park), ...menu("people", "inventory", "Инвентарь", "Инвентарь — в меню исполнителей. Открой его."),
       { target: "[data-coach=inventory-add]", skipWhen: "[data-coach=inventory-dialog]", advanceWhen: "[data-coach=inventory-dialog]", action: "Нажми", title: "Выдать инвентарь", text: "Нажми жёлтый «+» — откроется выдача." },
       { target: "[data-coach=inventory-type]", advanceWhen: "[data-coach=inventory-type][data-value=eda]", action: "Выбери", title: "Тип инвентаря", text: "Яндекс Еда — жёлтый термокороб, Яндекс Доставка — чёрный. Курьер просит жёлтый." },
       { target: "[data-coach=inventory-code]", slot: "courier-code", action: "Впиши", title: "Код курьера", text: "Я курьер: попроси у меня код кнопкой ниже и впиши его. У курьера он в Яндекс Про → Профиль → Инвентарь, живёт 2 минуты." },
       { target: "[data-coach=inventory-number]", action: "Впиши", title: "Номер на термокоробе", text: "Напиши номер на термокоробе, например EP0812, и впиши его сюда." },
-      { target: "[data-coach=inventory-save]", waitClick: true, action: "Нажми", title: "Сохрани", text: "Нажми «Сохранить» — выдача появится в списке. Потом курьер проходит фотоконтроль термокороба." }];
+      { target: "[data-coach=inventory-save]", waitClick: true, untilGone: true, action: "Нажми", title: "Сохрани", text: "Нажми «Сохранить» — выдача появится в списке. Потом курьер проходит фотоконтроль термокороба." }];
     case "support": return [...parkSteps(park), ...findSteps(driver, `номер ВУ ${driver.license}`, "Нажми на водителя в результатах."), ...diagnostics(driver).slice(0, 1),
       { target: "[data-coach=diagnostics-panel]", title: "Ограничение", text: "Такое ограничение может снять только поддержка Яндекса. Напишем им обращение." },
       closePanel(driver, "Закрой панель крестиком — дальше откроем техподдержку."),
@@ -93,7 +93,7 @@ export function callTour(call: FleetCall, driver: FleetDriver, park: FleetPark):
       { target: "[data-coach=support-license]", action: "Впиши", title: "Номер в/у", text: `Номер ВУ возьми в аккаунте водителя: ${driver.license}.` },
       { target: "[data-coach=support-text]", action: "Напиши", title: "Текст обращения", text: "Начни с «ДД! Прошу проверить…» и коротко опиши, что случилось у водителя." },
       { target: "[data-coach=support-files]", title: "Файлы", text: "Сюда прикладывают файлы, до восьми штук. Для этого обращения они не нужны." },
-      { target: "[data-coach=support-send]", waitClick: true, action: "Нажми", title: "Отправь", text: "Нажми «Отправить». Ответ поддержки придёт в «Мои обращения»." }];
+      { target: "[data-coach=support-send]", waitClick: true, untilGone: true, action: "Нажми", title: "Отправь", text: "Нажми «Отправить». Ответ поддержки придёт в «Мои обращения»." }];
     default: return [...parkSteps(park), ...findSteps(driver, surname, "Нажми на водителя в результатах."), ...limit];
   }
 }

@@ -10,6 +10,8 @@ export interface CoachLock {
   target: () => Element | null;
   /** Selector of other places the step needs, e.g. the search field while picking a result. */
   allow: () => string | undefined;
+  /** The current step has found its element; between steps focus is left alone. */
+  ready: () => boolean;
   /** The operator clicked the lit element. */
   onUsed: () => void;
   /** An operator's click, key press or typing was swallowed. */
@@ -25,8 +27,9 @@ const POINTER = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "d
 /** These also start a default action: focus, text selection, following a link, ticking a box. */
 const CANCEL = new Set(["mousedown", "click", "dblclick", "auxclick"]);
 const KEYS = ["keydown", "keyup"], EDITS = ["beforeinput", "paste", "cut", "drop"];
-/** Moving focus and bare modifiers never change the page. */
-const FREE_KEYS = new Set(["Tab", "Shift", "Control", "Alt", "Meta"]);
+/** Bare modifiers never change the page. */
+const FREE_KEYS = new Set(["Shift", "Control", "Alt", "Meta"]);
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type=hidden]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export const within = (box: Box, x: number, y: number) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
 
@@ -70,10 +73,21 @@ export function lockPage(lock: CoachLock) {
     const target = lock.target(), at = point(e);
     if (target && at && within(target.getBoundingClientRect(), at.x, at.y)) { press(target); lock.onUsed(); } else lock.onBlocked();
   };
+  /** Tab walks only the open places: the lit element, the allowed ones and Pulsar's bubble. */
+  const tab = (back: boolean) => {
+    const zones = [lock.target(), ...(lock.allow() ? document.querySelectorAll(lock.allow()!) : []), lock.coach()].filter((z): z is Element => !!z);
+    const items = [...new Set(zones.flatMap(z => [...(z.matches(FOCUSABLE) ? [z] : []), ...z.querySelectorAll(FOCUSABLE)]))]
+      .filter((el): el is HTMLElement => el instanceof HTMLElement && el.getClientRects().length > 0)
+      .sort((a, b) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1);
+    if (!items.length) return;
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    items[at < 0 ? (back ? items.length - 1 : 0) : (at + (back ? -1 : 1) + items.length) % items.length].focus();
+  };
   const key = (e: Event) => {
     if (!e.isTrusted) return;
-    const { key: name, repeat } = e as KeyboardEvent;
+    const { key: name, repeat, shiftKey } = e as KeyboardEvent;
     if (name === "Escape") { e.preventDefault(); e.stopPropagation(); if (e.type === "keydown" && !repeat) lock.onEscape(); return; }
+    if (name === "Tab") { e.preventDefault(); e.stopPropagation(); if (e.type === "keydown") tab(shiftKey); return; }
     if (FREE_KEYS.has(name) || idle(e) || reach(e.target)) return;
     e.preventDefault(); e.stopPropagation();
     if (e.type === "keydown" && !repeat) lock.onBlocked();
@@ -84,6 +98,7 @@ export function lockPage(lock: CoachLock) {
     lock.onBlocked();
   };
   const settle = () => {
+    if (!lock.ready()) return;
     const node = document.activeElement;
     if (node instanceof HTMLElement && node !== document.body && !reach(node)) node.blur();
   };

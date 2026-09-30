@@ -44,5 +44,5 @@ test('the drivers tour walks through the card, the car editor and the cash limit
   const targets = COACH_TOURS.drivers.map((step) => step.target);
   for (const anchor of ['drv-tiles', 'car-brand', 'car-model', 'car-callsign', 'limit-on']) assert.ok(targets.some((t) => t.includes(anchor)), anchor);
   assert.ok(COACH_TOURS.drivers.find((step) => step.target.includes('car-save')).waitClick);
-  assert.ok(COACH_TOURS.appeals.at(-1).waitClick, 'the appeal tour ends when the operator saves');
+  assert.ok(COACH_TOURS.appeals.at(-1).waitClick && COACH_TOURS.appeals.at(-1).untilGone, 'the appeal tour ends when the appeal is saved');
 });

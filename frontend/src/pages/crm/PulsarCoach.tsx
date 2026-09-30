@@ -27,17 +27,27 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
   // The steps the operator has actually seen: the counter shows them and «Назад» walks them back.
   const [visited, setVisited] = useState<number[]>([]);
   const visitedRef = useRef(visited); visitedRef.current = visited;
-  const previous = (from: number) => { const list = visitedRef.current, at = list.indexOf(from); return at > 0 ? list[at - 1] : at < 0 ? list.at(-1) : undefined; };
+  // «Назад» goes to the nearest shown step that can still be shown: not one that no longer
+  // applies, one the operator is past, or a done one whose element is gone.
+  const showable = (s: CoachStep) => !(s.when && !shown(s.when)) && !(s.skipWhen && shown(s.skipWhen)) && !!shown(s.target);
+  const previous = (from: number) => {
+    const list = visitedRef.current, at = list.indexOf(from);
+    for (let i = (at < 0 ? list.length : at) - 1; i >= 0; i--) if (steps[list[i]] && showable(steps[list[i]])) return list[i];
+    return undefined;
+  };
   const back = (from = index) => { const to = previous(from); if (to === undefined) return false; direction.current = -1; setIndex(to); return true; };
+  const [canBack, setCanBack] = useState(false);
   const forward = () => { direction.current = 1; if (last) onClose(true); else setIndex(index + 1); };
   // The page lock reads the current step through refs; it lives as long as the tour.
   const lit = useRef<Element | null>(null), stepRef = useRef(step), actions = useRef({ used: () => {}, escape: () => {} });
+  // The element the operator pressed on an `untilGone` step: the step ends when it is gone.
+  const pressed = useRef<Element | null>(null), arrivedRef = useRef(false);
   stepRef.current = step;
-  actions.current = { used: () => { if (step?.waitClick) forward(); }, escape: () => onClose(false) };
+  actions.current = { used: () => { if (!step?.waitClick) return; if (step.untilGone) pressed.current = lit.current; else forward(); }, escape: () => onClose(false) };
   const lock = useRef<ReturnType<typeof lockPage> | null>(null);
   useEffect(() => {
     const current = lockPage({
-      coach: () => rootRef.current, target: () => stepRef.current?.action ? lit.current : null, allow: () => stepRef.current?.allow,
+      coach: () => rootRef.current, target: () => stepRef.current?.action ? lit.current : null, allow: () => stepRef.current?.allow, ready: () => arrivedRef.current,
       onUsed: () => actions.current.used(), onBlocked: () => setNudge(n => n + 1), onEscape: () => actions.current.escape(),
     });
     lock.current = current;
@@ -49,8 +59,8 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
     let frame = 0, found: Element | null = null, started = performance.now(), arrived = false;
     // Coming back to an action that is already done shows it with «Дальше»; going forward skips it.
     const returning = direction.current < 0;
-    let armed = !returning, ready = returning && !!step.waitClick, raised = false;
-    setMissing(false); setFlying(true); setNudge(0); setDone(ready); setTop(false); lit.current = null;
+    let armed = !returning, ready = returning && !!step.waitClick, raised = false, couldBack = false;
+    setMissing(false); setFlying(true); setNudge(0); setDone(ready); setTop(false); setCanBack(false); lit.current = null; pressed.current = null; arrivedRef.current = false;
     const landed = window.setTimeout(() => setFlying(false), 350);
     const small = window.innerWidth < 700, mascot = small ? 76 : 108;
     const tick = () => {
@@ -66,6 +76,8 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
         if (now !== ready) { ready = now; setDone(now); }
       }
       found = lit.current = shown(step.target);
+      // A save went through: its button is gone (or the form was opened anew).
+      if (pressed.current && found !== pressed.current) { forward(); return; }
       // Back over a step that is done and whose element is gone: it has nothing left to show.
       if (!found && returning && ready) { if (back()) return; forward(); return; }
       if (!found) {
@@ -75,7 +87,7 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
       }
       setMissing(false);
       if (!arrived) {
-        arrived = true;
+        arrived = arrivedRef.current = true;
         setVisited(v => v.includes(index) ? v.slice(0, v.indexOf(index) + 1) : [...v, index]);
         lock.current?.settle();
         found.scrollIntoView({ block: "center", inline: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
@@ -83,9 +95,12 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
       const rect = found.getBoundingClientRect(), dock = document.querySelector(".pulsar-dock:not(.is-compact)")?.getBoundingClientRect();
       const right = dock && dock.left > window.innerWidth / 2 && dock.height > 300 ? dock.left - 8 : window.innerWidth;
       const bubble = bubbleRef.current, bubbleW = bubble?.offsetWidth ?? 300, bubbleH = bubble?.offsetHeight ?? 160;
-      // On a phone the bubble sits at the bottom; it goes up when it would hide the lit element.
-      const up = small && rect.bottom > window.innerHeight - bubbleH - 20 && rect.top > bubbleH + 20;
+      // On a phone the bubble sits at the bottom; it goes up when it would hide less of the lit element there.
+      const hidden = (from: number, to: number) => Math.max(0, Math.min(rect.bottom, to) - Math.max(rect.top, from));
+      const up = small && hidden(12, 12 + bubbleH) < hidden(window.innerHeight - 12 - bubbleH, window.innerHeight - 12);
       if (up !== raised) { raised = up; setTop(up); }
+      const backward = previous(index) !== undefined;
+      if (backward !== couldBack) { couldBack = backward; setCanBack(backward); }
       const layout = coachLayout(rect, { width: window.innerWidth, height: window.innerHeight, right }, { mascot, bubbleW, bubbleH });
       if (mascotRef.current) { mascotRef.current.style.transform = `translate(${layout.mascot.x}px,${layout.mascot.y}px)`; mascotRef.current.dataset.flip = String(layout.mascot.flip); mascotRef.current.style.width = mascotRef.current.style.height = `${mascot}px`; }
       if (bubble) bubble.style.transform = small ? "" : `translate(${layout.bubble.x}px,${layout.bubble.y}px)`;
@@ -94,7 +109,7 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(frame); window.clearTimeout(landed); lit.current = null; };
+    return () => { cancelAnimationFrame(frame); window.clearTimeout(landed); lit.current = null; arrivedRef.current = false; };
   }, [step, index, steps.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!step) return null;
@@ -111,7 +126,7 @@ export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onC
       {!missing && extra?.(step)}
       {nudge > 0 && <p className="coach-lock">Пока идёт подсказка, работает только {step.action ? "выделенное место" : "моё окошко: прочитай и нажми «Дальше»"}. Выйти из подсказки{" "}— ✕.</p>}
       <div className="coach-actions">
-        <button className="coach-back" disabled={previous(index) === undefined} onClick={() => back()}>← Назад</button>
+        <button className="coach-back" disabled={!canBack} onClick={() => back()}>← Назад</button>
         {waiting ? <span className="coach-wait" role="status">{step.action ?? "Сделай это"} — жду тебя</span>
           : <button className="coach-next" autoFocus onClick={forward}>{last ? "Готово ✓" : "Дальше →"}</button>}
       </div>

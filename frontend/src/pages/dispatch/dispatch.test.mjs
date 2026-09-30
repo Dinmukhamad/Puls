@@ -122,7 +122,8 @@ test("every tour step has a target, an action it waits for and a short explanati
   assert.ok(tours.provider.find(s => s.target === "[data-coach=provider]").advanceWhen.includes('"Sapar"'));
   assert.ok(tours.thermobox.find(s => s.target === "[data-coach=inventory-type]").advanceWhen.includes("eda"));
   assert.equal(tours.thermobox.find(s => s.target === "[data-coach=inventory-code]").slot, "courier-code");
-  for (const name of ["provider", "car", "thermobox", "support"]) assert.ok(tours[name].at(-1).waitClick, `${name} ends when the operator saves`);
+  // The last save ends the tour only once it went through: a failed one keeps the step and its error.
+  for (const name of ["provider", "car", "thermobox", "support"]) assert.ok(tours[name].at(-1).waitClick && tours[name].at(-1).untilGone, `${name} ends when the save goes through`);
   assert.ok(tours.provider.find(s => s.title === "Нужный аккаунт").allow.includes("search-input"));
 });
 
