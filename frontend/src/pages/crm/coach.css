@@ -27,6 +27,8 @@
 .coach[data-nudge=b] .coach-bubble { animation:coach-nudge-b .32s ease-in-out; }
 .coach[data-nudge=a] .coach-spot { animation:coach-spot 1.6s ease-in-out infinite,coach-ping-a .4s ease-out; }
 .coach[data-nudge=b] .coach-spot { animation:coach-spot 1.6s ease-in-out infinite,coach-ping-b .4s ease-out; }
+.coach-wait { align-self:center; font-size:12.5px; font-weight:700; color:#6b6f78; background:#f3f4f5; padding:7px 12px; border-radius:12px; }
+.coach-bubble .fleet-code { margin:0 0 10px; }
 .coach-actions { display:flex; justify-content:space-between; gap:10px; }
 .coach-back { border:0; background:transparent; color:#93979f; font-weight:600; font-size:13px; padding:8px 4px; cursor:pointer; }
 .coach-back:disabled { opacity:.35; cursor:default; }
@@ -45,6 +47,8 @@
 @keyframes coach-tap-down { 0%,100% { transform:translateY(0); } 50% { transform:translateY(8px); } }
 @media(max-width:699px) {
   .coach-bubble { left:12px; right:12px; top:auto; bottom:12px; width:auto; transform:none!important; }
+  .coach-bubble[data-top=true] { top:12px; bottom:auto; }
+  .coach-bubble { max-height:calc(100dvh - 24px); overflow:auto; }
   .work-sites.is-coaching .pulsar-dock { display:none; }
 }
 @media(max-width:1099px) { .work-sites.is-coaching .pulsar-dock { display:none; } }

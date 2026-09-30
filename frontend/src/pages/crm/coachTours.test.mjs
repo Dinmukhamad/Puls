@@ -28,7 +28,7 @@ test('a full-width target sends Pulsar above or below, and everything stays on s
 });
 
 test('every tour step has a target and a short explanation', () => {
-  for (const steps of Object.values(COACH_TOURS)) for (const step of steps) { assert.ok(step.target && step.title); assert.ok(step.text.length > 20 && step.text.length < 200, step.title); if (step.autoClick) assert.ok(step.advanceWhen, step.title); }
+  for (const steps of Object.values(COACH_TOURS)) for (const step of steps) { assert.ok(step.target && step.title); assert.ok(step.text.length > 20 && step.text.length < 200, step.title); if (step.advanceWhen || step.waitClick) assert.ok(step.action, `${step.title} waits but the lit element is locked`); assert.equal(step.autoClick, undefined, step.title); }
 });
 
 test('the appeal tour asks for the city after the park and leaves the comment for the end', () => {
@@ -43,4 +43,6 @@ test('the appeal tour asks for the city after the park and leaves the comment fo
 test('the drivers tour walks through the card, the car editor and the cash limit', () => {
   const targets = COACH_TOURS.drivers.map((step) => step.target);
   for (const anchor of ['drv-tiles', 'car-brand', 'car-model', 'car-callsign', 'limit-on']) assert.ok(targets.some((t) => t.includes(anchor)), anchor);
+  assert.ok(COACH_TOURS.drivers.find((step) => step.target.includes('car-save')).waitClick);
+  assert.ok(COACH_TOURS.appeals.at(-1).waitClick, 'the appeal tour ends when the operator saves');
 });

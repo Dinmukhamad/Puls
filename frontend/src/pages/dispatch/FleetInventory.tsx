@@ -52,7 +52,7 @@ function InventoryDialog({ mode, onClose }: { mode: "issue" | "return"; onClose:
   }
   return <Modal title={issue ? "Выдать инвентарь" : "Вернуть инвентарь"} onClose={onClose} className="fleet-inventory-dialog">
     <form className="fleet-form" data-coach="inventory-dialog" onSubmit={e => { e.preventDefault(); void save(); }}>
-      <label className={`fleet-float${type ? " is-filled" : ""}`} data-coach="inventory-type"><span>Тип инвентаря</span>
+      <label className={`fleet-float${type ? " is-filled" : ""}`} data-coach="inventory-type" data-value={type}><span>Тип инвентаря</span>
         <select value={type} autoFocus onChange={e => setType(e.target.value as InventoryType)}><option value="" disabled hidden /> {(Object.entries(state.catalog.inventory) as [InventoryType, string][]).map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
       {type && <>
         <div className="fleet-inventory-art"><Thermobox type={type} number={number.trim().toUpperCase()} /><p>{type === "eda" ? "Жёлтый термокороб" : "Чёрный термокороб"}{issue && <><br /><small>Номер, который вы впишете, пишут на термокоробе</small></>}</p></div>

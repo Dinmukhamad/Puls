@@ -13,7 +13,7 @@ import { PulsarCoach } from "./crm/PulsarCoach";
 import { COACH_TOURS, type CoachStep, type CoachTourId } from "./crm/coachTours";
 import { fleet as fleetApi, type FleetState } from "../api/dispatch";
 import { DEFAULT_PARK, DispatchSite, FLEET_QUERY } from "./dispatch/DispatchSite";
-import { DispatchDock, type FleetFeedback } from "./dispatch/DispatchDock";
+import { CoachCourierCode, DispatchDock, type FleetFeedback } from "./dispatch/DispatchDock";
 import { FLEET_TOUR, callTour } from "./dispatch/dispatchTours";
 import { parseRoute, routePath } from "./dispatch/fleetNav";
 import "./crm/coach.css";
@@ -126,6 +126,6 @@ export function WorkSitesPage() {
     <footer className="crm-bottom-note">Учебная CRM · Практика работы с обращениями</footer></main></div></div></div>
     {site === "crm" ? <PulsarGuide catalog={catalog.data} screen={pulsarScreen} categoryIds={selection} step={null} editor={instructionEditor} openRequest={helpRequest} onStart={() => startCoach(view === "drivers" ? "drivers" : "appeals")} onClose={() => {}} onPrevious={() => {}} onNext={() => {}} />
       : <DispatchDock feedback={fleetFeedback} onFeedback={setFleetFeedback} onGo={(path, park) => goFleet(path, park)} onTour={tour => startFleetTour(tour)} onCrm={() => { setCoach(null); if (view === "create") openSite("crm"); else create(); }} />}
-    {coach && <PulsarCoach key={coach.id} steps={coach.steps} onClose={endCoach} />}
+    {coach && <PulsarCoach key={coach.id} steps={coach.steps} onClose={endCoach} extra={step => step.slot === "courier-code" && coach.id.startsWith("call:") ? <CoachCourierCode callId={coach.id.slice(5)} feedback={fleetFeedback} onFeedback={setFleetFeedback} /> : null} />}
   </div>;
 }

@@ -119,6 +119,23 @@ function CallView({ call, state, updatedAt, busy, error, feedback, onBack, onTou
   </div>;
 }
 
+/** The courier's code inside Pulsar's hint bubble: during a tour Pulsar himself hands it over. */
+export function CoachCourierCode({ callId, feedback, onFeedback }: { callId: string; feedback: FleetFeedback | null; onFeedback: (value: FleetFeedback) => void }) {
+  const client = useQueryClient(), query = useQuery({ queryKey: FLEET_QUERY, queryFn: api.state });
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const call = query.data?.calls.find(c => c.id === callId);
+  if (!call?.code) return null;
+  async function ask(driver: string) {
+    setBusy(true); setError("");
+    try { const response = await api.code(driver); client.setQueryData(FLEET_QUERY, response.state); onFeedback({ ...response.result, at: Date.now() }); }
+    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  }
+  return <>
+    <CourierCode call={call} busy={busy} onCode={() => void ask(call.driver)} updatedAt={query.dataUpdatedAt} fresh={feedback?.code ? feedback : null} />
+    {error && <p className="fleet-answer-hint" role="alert">{error}</p>}
+  </>;
+}
+
 /**
  * The courier's code from Яндекс Про: five characters that live two minutes. The time left is
  * counted from the moment the server answered, and a code the server no longer lists (used or

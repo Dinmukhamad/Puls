@@ -12,7 +12,7 @@ export function DriverPage() {
   if (!d || d.park !== park.id) return <div className="fleet-page"><FleetHead title="Исполнитель не найден" crumbs={[{ label: "Исполнители", path: "contractors" }]} />
     <div className="fleet-card fleet-empty-hint">В парке «{park.name}, {park.city}» нет такого исполнителя. Проверьте парк в правом верхнем углу.</div></div>;
   const tab = route.tab ?? "details";
-  return <div className="fleet-page fleet-driver" data-driver={d.id}>
+  return <div className="fleet-page fleet-driver" data-driver={d.id} data-panel={panel ?? ""}>
     <FleetHead title={fullName(d)} crumbs={[{ label: "Исполнители", path: "contractors" }]} />
     <div className="fleet-card fleet-driver-card">
       <p className="fleet-driver-line">{[d.employment, d.profession, d.car?.plate, d.car?.model].filter(Boolean).join(" • ")}</p>
@@ -76,7 +76,7 @@ function DetailsTab({ d }: { d: FleetDriver }) {
         <Field label="Телефон"><Fixed value={d.phone} /></Field><Field label="Адрес"><Fixed value={d.address || "Укажите адрес"} /></Field>
         <Field label="ИИН" hint={<small className="fleet-field-hint">Есть у самозанятых и ИП</small>}><Fixed value={d.iin} /></Field>
         <Field label="Источник"><Fixed value={d.source} /></Field><Field label="Статус"><Fixed value={d.works ? "Работает" : "Не работает"} /></Field>
-        <Field label="Провайдер ЭДО"><select className="fleet-input fleet-select" data-coach="provider" value={provider} onChange={e => setProvider(e.target.value)} aria-label="Провайдер ЭДО">{state.catalog.providers.map(p => <option key={p}>{p}</option>)}</select></Field>
+        <Field label="Провайдер ЭДО"><select className="fleet-input fleet-select" data-coach="provider" data-value={provider} value={provider} onChange={e => setProvider(e.target.value)} aria-label="Провайдер ЭДО">{state.catalog.providers.map(p => <option key={p}>{p}</option>)}</select></Field>
         <Field label="Дополнительно"><div className="fleet-mini-card"><strong>Инвентарь</strong><span>{d.thermobox ? `${state.catalog.inventory[d.thermobox.type]} № ${d.thermobox.number}` : "Инвентарь пока не выдан"}</span></div></Field>
       </div>
       <div>
@@ -133,7 +133,7 @@ function CarTab({ d }: { d: FleetDriver }) {
     <h2 className="fleet-section">Параметры</h2>
     <div className="fleet-form-grid"><div><Field label="Вид топлива"><Fixed value={car.fuel} /></Field><Field label="Позывной"><Fixed value={car.callsign} /></Field></div><div /></div>
     <h2 className="fleet-section">Тарифы</h2>
-    <div className="fleet-tariffs" data-coach="tariffs">
+    <div className="fleet-tariffs" data-coach="tariffs" data-tariffs={tariffs.join(" ")}>
       {tariffs.map(t => <span key={t} className="fleet-tariff">{t}<button aria-label={`Убрать тариф ${t}`} onClick={() => setTariffs(list => list.filter(x => x !== t))}><Icon name="close" /></button></span>)}
       <select className="fleet-tariff-add" data-coach="tariff-add" value="" aria-label="Добавить тариф" onChange={e => { const value = e.target.value; if (value) setTariffs(list => [...list, value]); }}><option value="">＋ Добавить</option>{missing.map(t => <option key={t}>{t}</option>)}</select>
     </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useGuide } from "../../guide";
 import { PulsarFace } from "./PulsarGuide";
 import { coachLayout, type CoachStep } from "./coachTours";
@@ -10,56 +10,82 @@ function shown(selector: string) {
   return null;
 }
 
-export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (finished: boolean) => void }) {
+/**
+ * Pulsar's guided tour. The operator does every step on the page himself: a step that asks for
+ * an action waits until it is done, and until the tour ends only the lit element answers.
+ * `extra` renders what Pulsar hands over inside his bubble, e.g. the courier's code.
+ */
+export function PulsarCoach({ steps, onClose, extra }: { steps: CoachStep[]; onClose: (finished: boolean) => void; extra?: (step: CoachStep) => ReactNode }) {
   const guide = useGuide();
   const [index, setIndex] = useState(0), [missing, setMissing] = useState(false), [flying, setFlying] = useState(true);
-  const mascotRef = useRef<HTMLDivElement>(null), bubbleRef = useRef<HTMLDivElement>(null), handRef = useRef<HTMLDivElement>(null), spotRef = useRef<HTMLDivElement>(null);
+  // «done»: the step's action is already done (the operator came back to it), so «Дальше» may move on.
+  const [done, setDone] = useState(false), [nudge, setNudge] = useState(0), [top, setTop] = useState(false);
+  const mascotRef = useRef<HTMLDivElement>(null), bubbleRef = useRef<HTMLDivElement>(null), handRef = useRef<HTMLDivElement>(null), spotRef = useRef<HTMLDivElement>(null), rootRef = useRef<HTMLDivElement>(null);
   const step = steps[index], last = index === steps.length - 1;
-  // Until the tour ends, the operator can use only the lit element (and Pulsar's bubble).
-  const rootRef = useRef<HTMLDivElement>(null), lit = useRef<Element | null>(null), stepRef = useRef(step);
-  stepRef.current = step;
-  const [nudge, setNudge] = useState(0);
-  useEffect(() => lockPage({ coach: () => rootRef.current, target: () => lit.current, allow: () => stepRef.current?.allow, onBlocked: () => setNudge(n => n + 1) }), []);
-  // Steps that do not apply are skipped in the direction the operator is moving, so «Назад» never bounces forward.
+  // Steps that do not apply are skipped in the direction the operator is moving.
   const direction = useRef(1);
-  // Branches skip steps, so the counter shows how many hints the operator has actually seen.
+  // The steps the operator has actually seen: the counter shows them and «Назад» walks them back.
   const [visited, setVisited] = useState<number[]>([]);
-  const move = (by: number) => { direction.current = by; setIndex(i => Math.max(0, Math.min(steps.length - 1, i + by))); };
-  const next = () => {
-    if (last) { onClose(true); return; }
-    // An action step can do the click for the operator, then waits for the screen it opens.
-    const target = step?.autoClick && step.advanceWhen && !shown(step.advanceWhen) ? shown(step.target) : null;
-    if (target instanceof HTMLElement) { target.click(); return; }
-    move(1);
-  };
-  const nextRef = useRef(next); nextRef.current = next;
+  const visitedRef = useRef(visited); visitedRef.current = visited;
+  const previous = (from: number) => { const list = visitedRef.current, at = list.indexOf(from); return at > 0 ? list[at - 1] : at < 0 ? list.at(-1) : undefined; };
+  const back = (from = index) => { const to = previous(from); if (to === undefined) return false; direction.current = -1; setIndex(to); return true; };
+  const forward = () => { direction.current = 1; if (last) onClose(true); else setIndex(index + 1); };
+  // The page lock reads the current step through refs; it lives as long as the tour.
+  const lit = useRef<Element | null>(null), stepRef = useRef(step), actions = useRef({ used: () => {}, escape: () => {} });
+  stepRef.current = step;
+  actions.current = { used: () => { if (step?.waitClick) forward(); }, escape: () => onClose(false) };
+  const lock = useRef<ReturnType<typeof lockPage> | null>(null);
+  useEffect(() => {
+    const current = lockPage({
+      coach: () => rootRef.current, target: () => stepRef.current?.action ? lit.current : null, allow: () => stepRef.current?.allow,
+      onUsed: () => actions.current.used(), onBlocked: () => setNudge(n => n + 1), onEscape: () => actions.current.escape(),
+    });
+    lock.current = current;
+    return () => { current.release(); lock.current = null; };
+  }, []);
 
   useEffect(() => {
     if (!step) return;
-    let frame = 0, found: Element | null = null, started = performance.now(), scrolled = false;
-    setMissing(false); setFlying(true); setNudge(0); lit.current = null;
+    let frame = 0, found: Element | null = null, started = performance.now(), arrived = false;
+    // Coming back to an action that is already done shows it with «Дальше»; going forward skips it.
+    const returning = direction.current < 0;
+    let armed = !returning, ready = returning && !!step.waitClick, raised = false;
+    setMissing(false); setFlying(true); setNudge(0); setDone(ready); setTop(false); lit.current = null;
     const landed = window.setTimeout(() => setFlying(false), 350);
     const small = window.innerWidth < 700, mascot = small ? 76 : 108;
     const tick = () => {
-      if (step.skipWhen && shown(step.skipWhen) && index < steps.length - 1) { move(1); return; }
-      if (step.when && !shown(step.when)) {
-        if (direction.current < 0 && index === 0) direction.current = 1;
-        if (direction.current > 0 && last) { onClose(true); return; }
-        move(direction.current); return;
+      const absent = step.when && !shown(step.when), past = step.skipWhen && !last && shown(step.skipWhen);
+      if (absent || past) {
+        if (direction.current < 0 && back()) return;
+        forward(); return;
       }
-      if (step.advanceWhen && shown(step.advanceWhen)) { nextRef.current(); return; }
+      if (step.advanceWhen) {
+        const now = !!shown(step.advanceWhen);
+        if (now && armed) { forward(); return; }
+        if (!now) armed = true;
+        if (now !== ready) { ready = now; setDone(now); }
+      }
       found = lit.current = shown(step.target);
+      // Back over a step that is done and whose element is gone: it has nothing left to show.
+      if (!found && returning && ready) { if (back()) return; forward(); return; }
       if (!found) {
-        // Give the page a moment to render the target; otherwise move on rather than get stuck.
-        if (performance.now() - started > 2500) { setMissing(true); }
+        // Give the page a moment to render the target; then offer to move on rather than get stuck.
+        if (performance.now() - started > 2500) setMissing(true);
         frame = requestAnimationFrame(tick); return;
       }
       setMissing(false);
-      if (!scrolled) setVisited(v => v.includes(index) ? v.slice(0, v.indexOf(index) + 1) : [...v, index]);
-      if (!scrolled) { scrolled = true; found.scrollIntoView({ block: "center", inline: "center", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); }
+      if (!arrived) {
+        arrived = true;
+        setVisited(v => v.includes(index) ? v.slice(0, v.indexOf(index) + 1) : [...v, index]);
+        lock.current?.settle();
+        found.scrollIntoView({ block: "center", inline: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      }
       const rect = found.getBoundingClientRect(), dock = document.querySelector(".pulsar-dock:not(.is-compact)")?.getBoundingClientRect();
       const right = dock && dock.left > window.innerWidth / 2 && dock.height > 300 ? dock.left - 8 : window.innerWidth;
       const bubble = bubbleRef.current, bubbleW = bubble?.offsetWidth ?? 300, bubbleH = bubble?.offsetHeight ?? 160;
+      // On a phone the bubble sits at the bottom; it goes up when it would hide the lit element.
+      const up = small && rect.bottom > window.innerHeight - bubbleH - 20 && rect.top > bubbleH + 20;
+      if (up !== raised) { raised = up; setTop(up); }
       const layout = coachLayout(rect, { width: window.innerWidth, height: window.innerHeight, right }, { mascot, bubbleW, bubbleH });
       if (mascotRef.current) { mascotRef.current.style.transform = `translate(${layout.mascot.x}px,${layout.mascot.y}px)`; mascotRef.current.dataset.flip = String(layout.mascot.flip); mascotRef.current.style.width = mascotRef.current.style.height = `${mascot}px`; }
       if (bubble) bubble.style.transform = small ? "" : `translate(${layout.bubble.x}px,${layout.bubble.y}px)`;
@@ -71,24 +97,23 @@ export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (
     return () => { cancelAnimationFrame(frame); window.clearTimeout(landed); lit.current = null; };
   }, [step, index, steps.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(false); };
-    window.addEventListener("keydown", key); return () => window.removeEventListener("keydown", key);
-  }, [onClose]);
-
   if (!step) return null;
+  // A step that asks to press or choose something waits for the operator: nobody does it for him.
+  const waiting = !missing && !done && (!!step.advanceWhen || !!step.waitClick);
   return <div ref={rootRef} className="coach" data-flying={flying} data-missing={missing} data-nudge={nudge ? (nudge % 2 ? "a" : "b") : undefined}>
     <div ref={spotRef} className="coach-spot" aria-hidden="true" />
     <div ref={handRef} className="coach-hand" aria-hidden="true"><span>👈</span>{step.action && <small>{step.action}</small>}</div>
     <div ref={mascotRef} className="coach-mascot" aria-hidden="true"><PulsarFace mood={last ? "cheer" : index === 0 ? "wave" : "point"} /></div>
-    <div ref={bubbleRef} className="coach-bubble" role="dialog" aria-live="polite" aria-label={`${guide.name}: ${guide.text(step.title)}`}>
+    <div ref={bubbleRef} className="coach-bubble" data-top={top} role="dialog" aria-live="polite" aria-label={`${guide.name}: ${guide.text(step.title)}`}>
       <div className="coach-bubble-top"><span className="coach-count">Шаг {Math.max(1, visited.length)}</span><button className="coach-close" aria-label="Закрыть подсказки" onClick={() => onClose(false)}>✕</button></div>
       <strong>{guide.text(step.title)}</strong>
       <p>{missing ? "Этого элемента сейчас нет на экране. Нажми «Дальше», и я покажу следующее." : guide.text(step.text)}</p>
-      {nudge > 0 && <p className="coach-lock">Пока идёт подсказка, работает только выделенное место. Выйти из подсказки — ✕.</p>}
+      {!missing && extra?.(step)}
+      {nudge > 0 && <p className="coach-lock">Пока идёт подсказка, работает только {step.action ? "выделенное место" : "моё окошко: прочитай и нажми «Дальше»"}. Выйти из подсказки{" "}— ✕.</p>}
       <div className="coach-actions">
-        <button className="coach-back" disabled={index === 0} onClick={() => move(-1)}>← Назад</button>
-        <button className="coach-next" autoFocus onClick={next}>{last ? "Готово ✓" : step.autoClick && !missing ? "Открыть за меня →" : step.advanceWhen && !missing ? "Пропустить →" : "Дальше →"}</button>
+        <button className="coach-back" disabled={previous(index) === undefined} onClick={() => back()}>← Назад</button>
+        {waiting ? <span className="coach-wait" role="status">{step.action ?? "Сделай это"} — жду тебя</span>
+          : <button className="coach-next" autoFocus onClick={forward}>{last ? "Готово ✓" : "Дальше →"}</button>}
       </div>
     </div>
   </div>;

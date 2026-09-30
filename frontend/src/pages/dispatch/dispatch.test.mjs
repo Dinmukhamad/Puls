@@ -100,7 +100,9 @@ test("every tour step has a target, an action it waits for and a short explanati
     for (const step of steps) {
       assert.ok(step.target && step.title, `${name}: ${step.title}`);
       assert.ok(step.text.length > 20 && step.text.length < 200, `${name}: ${step.title} — ${step.text.length}`);
-      if (step.autoClick) assert.ok(step.advanceWhen, `${name}: ${step.title} clicks without waiting`);
+      // A step that waits for the operator must let him use the lit element.
+      if (step.advanceWhen || step.waitClick) assert.ok(step.action, `${name}: ${step.title} waits but the lit element is locked`);
+      assert.equal(step.autoClick, undefined, `${name}: ${step.title} — the operator presses every button himself`);
       for (const selector of [step.target, step.advanceWhen, step.skipWhen, step.when].filter(Boolean)) assert.doesNotThrow(() => selector.split(",").forEach(s => assert.ok(s.trim())), selector);
     }
   }
@@ -110,6 +112,18 @@ test("every tour step has a target, an action it waits for and a short explanati
   assert.ok(tours.limit_duration.some(s => s.target.includes("order-tariff")));
   assert.ok(tours.provider[0].skipWhen.includes('data-park="itaxi-ast"'));
   assert.ok(tours.provider.some(s => s.target.includes('data-driver="d3"')));
+  // The section menu closes only when the operator presses «Исполнители» in it.
+  assert.ok(tours.fleet.find(s => s.target === "[data-coach=menu-contractors]").advanceWhen.includes('[data-menu=""]'));
+  // The diagnostics panel is closed by the operator before the menu it would cover.
+  const at = target => tours.support.findIndex(s => s.target.includes(target));
+  assert.ok(at("diagnostics-panel] .fleet-close") > 0 && at("diagnostics-panel] .fleet-close") < at("rail-help"));
+  assert.ok(tours.gps.at(-1).target.includes(".fleet-close"));
+  // Choices wait for the right answer; Pulsar hands over the courier's code in his bubble.
+  assert.ok(tours.provider.find(s => s.target === "[data-coach=provider]").advanceWhen.includes('"Sapar"'));
+  assert.ok(tours.thermobox.find(s => s.target === "[data-coach=inventory-type]").advanceWhen.includes("eda"));
+  assert.equal(tours.thermobox.find(s => s.target === "[data-coach=inventory-code]").slot, "courier-code");
+  for (const name of ["provider", "car", "thermobox", "support"]) assert.ok(tours[name].at(-1).waitClick, `${name} ends when the operator saves`);
+  assert.ok(tours.provider.find(s => s.title === "Нужный аккаунт").allow.includes("search-input"));
 });
 
 test("the list shows only the chosen park and the preview opens the account by name", () => {

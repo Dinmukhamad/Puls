@@ -53,7 +53,7 @@ export function DispatchSite({ route, parkId, go, onResult }: { route: FleetRout
     : route.page === "support" ? <SupportPage /> : route.page === "antifraud" ? <AntifraudPage /> : route.page === "order" ? <OrderPage />
     : route.page === "driver" ? <DriverPage key={route.id} /> : <ContractorsPage />;
   return <FleetContext.Provider value={context}>
-    <div className="fleet" data-page={route.page}>
+    <div className="fleet" data-page={route.page} data-menu={menu ?? ""}>
       <nav className="fleet-rail" ref={rail} aria-label="Разделы Диспетчерской">
         <button className="fleet-logo" aria-label="Главная" onClick={() => go("home")}><FleetLogo /></button>
         {RAIL.map(g => <button key={g.id} className={`fleet-rail-button${active === g.id ? " is-active" : ""}`} data-coach={`rail-${g.id}`} aria-label={g.title} aria-expanded={menu === g.id} onClick={() => setMenu(m => m === g.id ? null : g.id)}><Icon name={g.icon} /></button>)}

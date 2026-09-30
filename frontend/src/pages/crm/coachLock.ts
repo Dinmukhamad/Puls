@@ -1,16 +1,21 @@
 /**
- * While Pulsar shows a step, the page answers only where he points: the lit element, the places
- * the step allows besides it and his own bubble. Scrolling and hovering keep working everywhere.
+ * While Pulsar shows a step, the page answers only where he points: the element of a step that
+ * asks for an action, the places the step allows besides it and his own bubble. A step that only
+ * explains something leaves the whole page read-only. Scrolling and hovering keep working.
  */
 export interface CoachLock {
   /** Pulsar's own layer with the bubble and its buttons. */
   coach: () => Element | null;
-  /** The element the current step points at, or null while Pulsar is still looking for it. */
+  /** The element the operator must use now, or null while Pulsar explains or looks for it. */
   target: () => Element | null;
-  /** Selector of other places the step needs, e.g. Pulsar's panel with the courier code. */
+  /** Selector of other places the step needs, e.g. the search field while picking a result. */
   allow: () => string | undefined;
-  /** An operator's click or key press was swallowed. */
+  /** The operator clicked the lit element. */
+  onUsed: () => void;
+  /** An operator's click, key press or typing was swallowed. */
   onBlocked: () => void;
+  /** Escape closes the tour, and only the tour. */
+  onEscape: () => void;
 }
 
 type Box = { left: number; top: number; right: number; bottom: number };
@@ -20,8 +25,8 @@ const POINTER = ["pointerdown", "pointerup", "mousedown", "mouseup", "click", "d
 /** These also start a default action: focus, text selection, following a link, ticking a box. */
 const CANCEL = new Set(["mousedown", "click", "dblclick", "auxclick"]);
 const KEYS = ["keydown", "keyup"], EDITS = ["beforeinput", "paste", "cut", "drop"];
-/** Moving focus, closing the hint and bare modifiers never change the page. */
-const FREE_KEYS = new Set(["Tab", "Escape", "Shift", "Control", "Alt", "Meta"]);
+/** Moving focus and bare modifiers never change the page. */
+const FREE_KEYS = new Set(["Tab", "Shift", "Control", "Alt", "Meta"]);
 
 export const within = (box: Box, x: number, y: number) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
 
@@ -31,43 +36,66 @@ function point(e: Event) {
   return touch ? { x: touch.clientX, y: touch.clientY } : null;
 }
 
-/** Installs the lock on the whole window; returns the function that lifts it. */
+/** Presses the lit element the way the operator meant to: fields get focus, the rest a click. */
+function press(target: Element) {
+  if (!(target instanceof HTMLElement)) return;
+  if (target.matches("input, select, textarea")) target.focus(); else target.click();
+}
+
+/** Installs the lock on the whole window. `settle` drops focus that is outside the open places. */
 export function lockPage(lock: CoachLock) {
-  const open = (e: Event) => {
-    const node = e.target;
-    if (!(node instanceof Element) || lock.coach()?.contains(node)) return true;
+  /** "free" — Pulsar's bubble or an allowed place; "use" — the lit element itself. */
+  const reach = (node: EventTarget | null): "free" | "use" | null => {
+    if (!(node instanceof Element) || lock.coach()?.contains(node)) return "free";
     const allow = lock.allow();
-    if (allow && node.closest(allow)) return true;
+    if (allow && node.closest(allow)) return "free";
     const target = lock.target();
-    if (!target) return false;
-    if (target.contains(node)) return true;
-    // A label outside the target still works the control inside it.
+    if (!target) return null;
+    if (target.contains(node)) return "use";
+    // A label outside the target still works the control inside it; the control then gets the click.
     const control = node.closest("label")?.control;
-    if (control && target.contains(control)) return true;
-    // Whatever covers the lit place, e.g. a panel's backdrop, can be clicked through to reach it.
-    const at = point(e);
-    return !!at && within(target.getBoundingClientRect(), at.x, at.y);
+    return control && target.contains(control) ? "free" : null;
   };
   // Nothing is focused: keys scroll the page or paste into it, which changes nothing.
   const idle = (e: Event) => e.target === document.body || e.target === document.documentElement;
-  // Pulsar's own «Открыть за меня» is a synthetic click, so only the operator's events are checked.
+  // Pulsar's own clicks are synthetic, so only the operator's events are checked.
   const pointer = (e: Event) => {
-    if (!e.isTrusted || open(e)) return;
+    if (!e.isTrusted) return;
+    const why = reach(e.target);
+    if (why) { if (why === "use" && e.type === "click") lock.onUsed(); return; }
     e.stopPropagation();
     if (CANCEL.has(e.type)) e.preventDefault();
-    if (e.type === "click") lock.onBlocked();
+    if (e.type !== "click") return;
+    // A press on the lit place that lands on something covering it still reaches the lit element.
+    const target = lock.target(), at = point(e);
+    if (target && at && within(target.getBoundingClientRect(), at.x, at.y)) { press(target); lock.onUsed(); } else lock.onBlocked();
   };
   const key = (e: Event) => {
-    if (!e.isTrusted || FREE_KEYS.has((e as KeyboardEvent).key) || idle(e) || open(e)) return;
+    if (!e.isTrusted) return;
+    const { key: name, repeat } = e as KeyboardEvent;
+    if (name === "Escape") { e.preventDefault(); e.stopPropagation(); if (e.type === "keydown" && !repeat) lock.onEscape(); return; }
+    if (FREE_KEYS.has(name) || idle(e) || reach(e.target)) return;
     e.preventDefault(); e.stopPropagation();
-    if (e.type === "keydown" && !(e as KeyboardEvent).repeat) lock.onBlocked();
+    if (e.type === "keydown" && !repeat) lock.onBlocked();
   };
   const edit = (e: Event) => {
-    if (!e.isTrusted || idle(e) || open(e)) return;
+    if (!e.isTrusted || idle(e) || reach(e.target)) return;
     e.preventDefault(); e.stopPropagation();
+    lock.onBlocked();
   };
-  const listeners: [string, (e: Event) => void][] = [...POINTER.map(t => [t, pointer] as [string, typeof pointer]), ...KEYS.map(t => [t, key] as [string, typeof key]), ...EDITS.map(t => [t, edit] as [string, typeof edit])];
+  const settle = () => {
+    const node = document.activeElement;
+    if (node instanceof HTMLElement && node !== document.body && !reach(node)) node.blur();
+  };
+  // A field focused by the page itself (autofocus in a window that just opened) keeps focus only
+  // if the step that follows needs it: typing, dictation and IME cannot slip past the lock then.
+  let pending = 0;
+  const focus = () => { window.clearTimeout(pending); pending = window.setTimeout(settle, 150); };
+  const listeners: [string, (e: Event) => void][] = [...POINTER.map(t => [t, pointer] as [string, typeof pointer]), ...KEYS.map(t => [t, key] as [string, typeof key]), ...EDITS.map(t => [t, edit] as [string, typeof edit]), ["focusin", focus]];
   // The window hears events before the page and React do, so a swallowed click reaches nobody.
   for (const [type, listener] of listeners) window.addEventListener(type, listener, { capture: true, passive: type.startsWith("touch") });
-  return () => { for (const [type, listener] of listeners) window.removeEventListener(type, listener, true); };
+  return {
+    settle,
+    release: () => { window.clearTimeout(pending); for (const [type, listener] of listeners) window.removeEventListener(type, listener, true); },
+  };
 }

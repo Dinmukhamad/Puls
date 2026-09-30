@@ -4,18 +4,20 @@ export interface CoachStep {
   target: string;
   title: string;
   text: string;
-  /** Moves on by itself once this selector appears, e.g. after the operator clicks the highlighted button. */
+  /** Moves on by itself once this selector appears, e.g. after the operator clicks the highlighted button. Until then the step waits. */
   advanceWhen?: string;
   /** The step is skipped when this selector is already on screen (the operator is past it). */
   skipWhen?: string;
-  /** A hint that the operator should act, shown next to the pointing hand. */
+  /** The operator acts on the lit element: only then it is clickable. Without it the step only explains. */
   action?: string;
   /** The step applies only while this selector matches, e.g. after a particular category was chosen. */
   when?: string;
-  /** «Дальше» presses the highlighted button for the operator and waits for `advanceWhen`. */
-  autoClick?: boolean;
+  /** The step waits until the operator presses the lit element, then moves on (the last one ends the tour). */
+  waitClick?: boolean;
   /** Places the operator also needs during this step; the rest of the page stays locked. */
   allow?: string;
+  /** Something Pulsar hands over inside his bubble, rendered by the page that runs the tour. */
+  slot?: string;
 }
 export type CoachTourId = "appeals" | "drivers";
 type Side = "right" | "left" | "below" | "above";
@@ -51,8 +53,8 @@ const chosen = (n: number) => `${level(n + 1)}, ${DONE}`;
 
 export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
   appeals: [
-    { target: "[data-coach=create]", skipWhen: "[data-coach=channel]", advanceWhen: "[data-coach=channel]", autoClick: true, action: "Нажми сюда", title: "Привет! Я Пульсар 👋", text: "Покажу, как оформить обращение водителя. Начнём с кнопки «Создать обращение»." },
-    { target: "[data-coach=channel]", title: "Откуда обращение?", text: "Выбери, как связался водитель: позвонил или написал в чат." },
+    { target: "[data-coach=create]", skipWhen: "[data-coach=channel]", advanceWhen: "[data-coach=channel]", action: "Нажми сюда", title: "Привет! Я Пульсар 👋", text: "Покажу, как оформить обращение водителя. Начнём с кнопки «Создать обращение»." },
+    { target: "[data-coach=channel]", action: "Выбери", title: "Откуда обращение?", text: "Выбери, как связался водитель: позвонил или написал в чат." },
     { target: "[data-coach=phone]", action: "Заполни", title: "Телефон водителя", text: "Впиши номер, с которого водитель звонит или пишет. По нему его найдут." },
     { target: "[data-coach=license_number]", action: "Заполни", title: "Номер В/У", text: "Номер водительского удостоверения возьми из диспетчерской. ID водителя можно не заполнять." },
     { target: "[data-coach=park]", advanceWhen: "[data-coach=city]", action: "Выбери", title: "Таксопарк", text: "Выбери таксопарк водителя. Сразу после этого появится поле «Город»." },
@@ -79,15 +81,15 @@ export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
     { target: "[data-coach=comment]", when: `${FORM}[data-rules~=account_link]:not([data-rules~=phone_change]):not([data-leaf="Смена автомобиля"])`, action: "Напиши", title: "Комментарий к запросу", text: "Обязательно вставь ссылку на аккаунт водителя из диспетчерской и коротко напиши, что нужно сделать." },
     { target: "[data-coach=comment]", when: `${FORM}[data-rules~=description]:not([data-rules~=account_link])`, action: "Опиши", title: "Опиши ситуацию", text: "Подробно: что произошло, когда и с кем. Если это запрос в Яндекс — укажи номер тикета." },
     { target: "[data-coach=comment]", when: `${FORM}[data-path*="/ Консультация /"]`, action: "Напиши", title: "Комментарий", text: "Коротко запиши, о чём спрашивал водитель и что ты ему ответил." },
-    { target: "[data-coach=comment]", when: `${FORM}[data-rules=""]:not([data-path*="/ Консультация /"])`, title: "Комментарий", text: "Если нужно, коротко опиши обращение своими словами." },
+    { target: "[data-coach=comment]", when: `${FORM}[data-rules=""]:not([data-path*="/ Консультация /"])`, action: "Напиши", title: "Комментарий", text: "Если нужно, коротко опиши обращение своими словами." },
     { target: "[data-coach=files]", when: `${FORM}[data-rules~=image]:not([data-rules~=phone_change])`, action: "Приложи", title: "Скриншот обязателен", text: "Для этой категории нужен скриншот. Нажми Ctrl+V, выбери файл или перетащи его сюда." },
-    { target: "[data-coach=save]", action: "Проверь и нажми", title: "Финиш! 🎉", text: "Проверь данные и нажми «Сохранить». Обращение увидят все участники. Ты справился!" },
+    { target: "[data-coach=save]", waitClick: true, action: "Проверь и нажми", title: "Финиш! 🎉", text: "Проверь данные и нажми «Сохранить». Обращение увидят все участники. Ты справился!" },
   ],
   drivers: [
     // List: find the driver and read the row.
     { target: "[data-coach=drv-search]", action: "Вставь ссылку", title: "Поиск водителя", text: "Вставь ссылку на водителя или его ID. Я сам достану ID из части между «/contractors/» и «/details». Искать можно и по ФИО, телефону, госномеру." },
     { target: ".drv-table tbody tr:first-child", title: "Строка водителя", text: "ID и аккаунт, парк, работает ли он и статус на линии (свободен, занят, офлайн), тип: физлицо или самозанятый. Ниже — отметки о лимите и фотоконтроле." },
-    { target: ".drv-table tbody tr:first-child .drv-btn--details", advanceWhen: "[data-coach=drv-card]", autoClick: true, action: "Нажми", title: "Открой карточку", text: "Нажми «Подробнее» — покажу, что значит каждое поле в карточке водителя." },
+    { target: ".drv-table tbody tr:first-child .drv-btn--details", advanceWhen: "[data-coach=drv-card]", action: "Нажми", title: "Открой карточку", text: "Нажми «Подробнее» — покажу, что значит каждое поле в карточке водителя." },
     // Card: what each block means.
     { target: "[data-coach=drv-summary]", title: "Шапка карточки", text: "Телефон и парк водителя, тип сотрудничества, условия работы (комиссия парка), статус в CRM и дата создания аккаунта." },
     { target: "[data-coach=drv-tiles]", title: "Данные из Диспетчерской", text: "Работает ли водитель, статус на линии, баланс счёта, рейтинг, поступают ли наличные заказы и пройден ли фотоконтроль." },
@@ -96,23 +98,23 @@ export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
     { target: "[data-coach=drv-extra]", title: "Дополнительно", text: "Лимит по счёту, сколько кодов уже отправлено и ссылка на водителя. Эту ссылку вставляют в комментарий запроса." },
     { target: "[data-coach=drv-history-tab]", title: "История", text: "Здесь все действия с аккаунтом: смена машины, лимит, коды, перевод в СМЗ. Проверь её, если водитель говорит, что что-то уже меняли." },
     // Car change, field by field.
-    { target: "[data-coach=drv-card] .drv-card-actions .drv-btn--car", advanceWhen: "[data-coach=car-editor]", autoClick: true, action: "Нажми", title: "Смена автомобиля", text: "Покажу, как сменить машину водителя. Нажми «Автомобиль»." },
-    { target: "[data-coach=car-mode] button:last-child", skipWhen: "[data-coach=car-mode][data-mode=new]", advanceWhen: "[data-coach=car-mode][data-mode=new]", autoClick: true, action: "Нажми «Новый»", title: "Существующий или новый", text: "«Существующий» — поправить данные текущей машины. Чтобы сменить машину, нажми «Новый»: форма очистится." },
+    { target: "[data-coach=drv-card] .drv-card-actions .drv-btn--car", advanceWhen: "[data-coach=car-editor]", action: "Нажми", title: "Смена автомобиля", text: "Покажу, как сменить машину водителя. Нажми «Автомобиль»." },
+    { target: "[data-coach=car-mode] button:last-child", skipWhen: "[data-coach=car-mode][data-mode=new]", advanceWhen: "[data-coach=car-mode][data-mode=new]", action: "Нажми «Новый»", title: "Существующий или новый", text: "«Существующий» — поправить данные текущей машины. Чтобы сменить машину, нажми «Новый»: форма очистится." },
     { target: "[data-coach=car-plate]", action: "Впиши", title: "Госномер", text: "Госномер без пробелов, как в техпаспорте, например 803ASD02." },
     { target: "[data-coach=car-brand]", action: "Выбери", title: "Марка", text: "Выбери марку автомобиля. После этого откроется список её моделей." },
     { target: "[data-coach=car-model]", action: "Выбери", title: "Модель", text: "Выбери модель из списка выбранной марки." },
     { target: "[data-coach=car-color]", action: "Выбери", title: "Цвет", text: "Цвет — как в техпаспорте: по нему водителя узнаёт пассажир." },
     { target: "[data-coach=car-year]", action: "Выбери", title: "Год выпуска", text: "Год выпуска из техпаспорта. От него зависит, в какие тарифы машина может попасть." },
-    { target: "[data-coach=car-callsign]", action: "Нажми «Скопировать»", title: "Позывной = госномер", text: "Обязательно скопируй госномер в «Позывной» кнопкой «Скопировать госномер». Без этого машину не сохранить." },
+    { target: "[data-coach=car-callsign] button", waitClick: true, action: "Нажми «Скопировать»", title: "Позывной = госномер", text: "Обязательно скопируй госномер в «Позывной» кнопкой «Скопировать госномер». Без этого машину не сохранить." },
     { target: "[data-coach=car-tariffs]", action: "Отметь", title: "Тарифы", text: "Отметь тарифы, по которым водитель будет работать на этой машине." },
-    { target: "[data-coach=car-save]", title: "Сохранение", text: "Нажми «Сохранить» — машина сменится в профиле. Потом скажи водителю пройти фотоконтроль автомобиля и техпаспорта в Яндекс Про." },
-    { target: "[data-coach=car-back]", skipWhen: "[data-coach=drv-card]", advanceWhen: "[data-coach=drv-card]", autoClick: true, action: "Нажми", title: "Назад к карточке", text: "Вернёмся в карточку водителя — покажу лимит на наличные заказы." },
+    { target: "[data-coach=car-save]", waitClick: true, action: "Нажми", title: "Сохранение", text: "Нажми «Сохранить» — машина сменится в профиле. Потом скажи водителю пройти фотоконтроль автомобиля и техпаспорта в Яндекс Про." },
+    { target: "[data-coach=car-back]", skipWhen: "[data-coach=drv-card]", advanceWhen: "[data-coach=drv-card]", action: "Нажми", title: "Назад к карточке", text: "Вернёмся в карточку водителя — покажу лимит на наличные заказы." },
     // Cash limit.
-    { target: "[data-coach=drv-card] .drv-card-actions .drv-btn--limit", advanceWhen: "[data-coach=limit-screen]", autoClick: true, action: "Нажми", title: "Лимит наличных", text: "Нажми «Лимит» — это управление наличными заказами водителя." },
+    { target: "[data-coach=drv-card] .drv-card-actions .drv-btn--limit", advanceWhen: "[data-coach=limit-screen]", action: "Нажми", title: "Лимит наличных", text: "Нажми «Лимит» — это управление наличными заказами водителя." },
     { target: "[data-coach=limit-status]", title: "Текущий статус лимита", text: "«Отключён» — наличные заказы приходят как обычно. «Включён» — водитель получает только безналичные заказы." },
     { target: "[data-coach=limit-on]", title: "Включить лимит", text: "Включай лимит 500 000 ₸, когда водителя нужно перевести на безналичные заказы: наличные перестанут приходить." },
     { target: "[data-coach=limit-off]", title: "Отключить лимит", text: "Отключи лимит, и наличные заказы снова начнут поступать. Каждое изменение попадает в историю водителя." },
-    { target: "[data-coach=limit-back]", skipWhen: "[data-coach=drv-search]", advanceWhen: "[data-coach=drv-search]", autoClick: true, action: "Нажми", title: "К списку", text: "Вернёмся к списку водителей — там ещё две кнопки." },
+    { target: "[data-coach=limit-back]", skipWhen: "[data-coach=drv-search]", advanceWhen: "[data-coach=drv-search]", action: "Нажми", title: "К списку", text: "Вернёмся к списку водителей — там ещё две кнопки." },
     // Remaining row actions.
     { target: ".drv-table tbody tr:first-child .drv-btn--smz, .drv-table tbody tr:first-child .drv-btn--individual", title: "«СМЗ»", text: "Переводит водителя в самозанятые. Понадобятся адрес прописки и ИИН из 12 цифр. Потом водитель перезаходит в Яндекс Про." },
     { target: ".drv-table tbody tr:first-child .drv-btn--code", title: "«Код»", text: "Отправляет водителю код подтверждения для входа в Такси Про. Сначала уточни, что телефон с этим номером у него под рукой." },
