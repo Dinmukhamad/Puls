@@ -57,12 +57,20 @@ export function CrmSidebar({ view, open }: { view: string; open: (view: string) 
 
 /** Each participant's copy of the sections; answers of the head to backdated requests arrive by themselves. */
 export function useSections(userId: number | undefined, drivers: TrainingDriver[]) {
-  const [state, setState] = useState<SectionsState>(() => loadSections(userId, drivers));
-  const update = useCallback((change: (s: SectionsState) => SectionsState) => setState(previous => { const next = change(previous); saveSections(userId, next); return next; }), [userId]);
+  const [state, setState] = useState<SectionsState | null>(() => loadSections(userId, drivers));
+  const update = useCallback((change: (s: SectionsState) => SectionsState) => setState(previous => {
+    if (!previous) return previous;
+    const next = change(previous);
+    if (next !== previous) saveSections(userId, next);
+    return next;
+  }), [userId]);
+  // A first visit seeds the sections once the fleet's drivers have loaded.
+  useEffect(() => { if (!state && drivers.length) setState(loadSections(userId, drivers)); }, [state, drivers, userId]);
   useEffect(() => {
     const settle = () => update(s => {
       const now = new Date().toISOString();
-      if (!s.backdated.some(b => !b.applied && b.decideAt <= now)) return s;
+      // The answer needs the driver: it waits until the fleet has loaded.
+      if (!drivers.length || !s.backdated.some(b => !b.applied && b.decideAt <= now)) return s;
       let id = s.nextId;
       const { requests, added } = settleBackdated(s.backdated, s.participants, drivers, now, () => id++);
       return { ...s, nextId: id, backdated: requests, participants: [...added, ...s.participants] };

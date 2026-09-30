@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import {
-  CALL_STATUSES, DOC_STATUSES, OFFICE, OUTCOMES, PERIODS, REACH, REQUEST_IDS, allSigned, edoDashboard, logEdoCall, logProviderCall, managerRating, providerDashboard, refreshEdo,
+  CALL_STATUSES, DOC_STATUSES, OFFICE, OUTCOMES, PERIODS, REACH, REQUEST_IDS, allSigned, edoDashboard, fleetEdo, fleetProvider, isFleetRow, logEdoCall, logProviderCall, managerRating, providerDashboard, refreshEdo, upsert,
   type EdoCall, type EdoRow, type ProviderCall, type ProviderRow,
 } from "./edoData";
 import { Chip, Dialog, Empty, FilterActions, Field, Reset, SectionCard, Select, ruDate, ruTime, today, useFilters, usePages, type SectionProps } from "./SectionUi";
@@ -23,7 +23,7 @@ const EDO = { period: PERIODS[0], account: "", iin: "", park: "", city: "", prov
 export function EdoDrivers({ state, update, drivers, employee, notify, go }: SectionProps) {
   const f = useFilters(EDO), a = f.applied;
   const [call, setCall] = useState<EdoRow | null>(null), [history, setHistory] = useState<EdoRow | null>(null), [saved, setSaved] = useState("");
-  const rows = state.edo;
+  const rows = fleetEdo(state.edo, drivers);
   const parks = [...new Set(rows.map(r => r.park))].sort(), cities = [...new Set(rows.map(r => r.city))].sort(), managers = [...new Set(rows.map(r => r.manager).filter(Boolean))].sort();
   const ecp = [a.ecpYes && "Есть ЭЦП", a.ecpNo && "Нет ЭЦП", a.ecpExpired && "Срок действия истек"].filter(Boolean);
   const q = a.search.trim().toLowerCase(), digits = q.replace(/\D/g, "");
@@ -34,10 +34,10 @@ export function EdoDrivers({ state, update, drivers, employee, notify, go }: Sec
     && (!a.callStatus || r.callStatus === a.callStatus) && (!a.reach || r.reach === a.reach) && (!a.office || r.office === a.office) && (!a.manager || r.manager === a.manager) && (!a.priority || (a.priority === "Приоритетные") === r.priority)
     && (!q || r.name.toLowerCase().includes(q) || (digits.length >= 4 && r.phone.includes(digits))) && (!a.smz || r.smz) && (!a.corporate || r.corporate) && (!a.hideUnissued || r.docs === "Да"));
   const pages = usePages(shown, Number(a.size));
-  const change = (id: number, next: EdoRow) => update(s => ({ ...s, edo: s.edo.map(r => r.id === id ? next : r) }));
+  const change = (next: EdoRow) => update(s => ({ ...s, edo: upsert(s.edo, next) }));
   function refresh(r: EdoRow) {
     const result = refreshEdo(r, new Date().toISOString());
-    change(r.id, result.row); notify(result.changed ? `${r.name}: документы подписаны, статус обновлён из Sapar.` : `${r.name}: ${result.row.history[0].text.toLowerCase()}.`);
+    change(result.row); notify(result.changed ? `${r.name}: документы подписаны, статус обновлён из Sapar.` : `${r.name}: ${result.row.history[0].text.toLowerCase()}.`);
   }
   const apply = () => { f.apply(); pages.reset(); };
   return <SectionCard title="Электронный документооборот водителей (ЭДО)" icon="☰" wide coach="edo-list" actions={<div className="sec-head-actions"><Reset what="ЭДО" onReset={() => update(s => resetGroup(s, "edo", drivers))} /><button className="crm-secondary" data-coach="edo-dashboard-link" onClick={() => go("view=edo-dashboard")}>📊 Дашборд</button></div>}>
@@ -78,8 +78,8 @@ export function EdoDrivers({ state, update, drivers, employee, notify, go }: Sec
       </tr>)}</tbody></table></div>
     {!shown.length && <Empty>За выбранный период никого не нашли. Проверьте фильтры.</Empty>}
     {pages.pager ?? <div className="sec-pager"><span>{shown.length ? `1 to ${shown.length}` : "0"} of total {shown.length} items.</span></div>}
-    {call && <EdoCallDialog row={call} onClose={() => setCall(null)} onSave={input => { const next = logEdoCall(call, input, employee, new Date().toISOString()); change(call.id, next); setCall(null); setSaved(`Звонок ${call.name} сохранён: ${input.reach.toLowerCase()}.`); }} />}
-    {history && <History title={history.name} events={state.edo.find(r => r.id === history.id)?.history ?? []} onClose={() => setHistory(null)} />}
+    {call && <EdoCallDialog row={call} onClose={() => setCall(null)} onSave={input => { const next = logEdoCall(call, input, employee, new Date().toISOString()); change(next); setCall(null); setSaved(`Звонок ${call.name} сохранён: ${input.reach.toLowerCase()}.`); }} />}
+    {history && <History title={history.name} events={rows.find(r => r.id === history.id)?.history ?? []} onClose={() => setHistory(null)} />}
   </SectionCard>;
 }
 
@@ -98,10 +98,10 @@ function EdoCallDialog({ row, onClose, onSave }: { row: EdoRow; onClose: () => v
 
 const PROVIDER = { period: PERIODS[0], account: "", iin: "", park: "", provider: "", office: "", search: "", callStatus: "", reach: "", outcome: "", requestId: "", changed: "", hideUnissued: false };
 /** «Смена провайдера ЭДО»: the call campaign that moves drivers to Sapar. */
-export function EdoProvider({ state, update, employee }: SectionProps) {
+export function EdoProvider({ state, update, drivers, employee }: SectionProps) {
   const f = useFilters(PROVIDER), a = f.applied;
   const [call, setCall] = useState<ProviderRow | null>(null), [history, setHistory] = useState<ProviderRow | null>(null), [saved, setSaved] = useState("");
-  const rows = state.provider, parks = [...new Set(rows.map(r => r.park))].sort(), q = a.search.trim().toLowerCase();
+  const rows = fleetProvider(state.provider, drivers), parks = [...new Set(rows.map(r => r.park))].sort(), q = a.search.trim().toLowerCase();
   const shown = rows.filter(r => r.period === a.period && (!a.account || r.account.includes(a.account.trim().toLowerCase())) && (!a.iin || r.iin.includes(a.iin.trim())) && (!a.park || r.park === a.park)
     && (!a.provider || (a.provider === "sapar" ? r.provider === "sapar" : r.provider !== "sapar")) && (!a.office || r.office === a.office) && (!q || r.name.toLowerCase().includes(q) || (q.replace(/\D/g, "").length >= 4 && r.phone.includes(q.replace(/\D/g, ""))))
     && (!a.callStatus || r.callStatus === a.callStatus) && (!a.reach || r.reach === a.reach) && (!a.outcome || r.outcome === a.outcome) && (!a.requestId || r.requestId === a.requestId) && (!a.changed || r.changed === a.changed) && (!a.hideUnissued || !!r.iin));
@@ -132,8 +132,13 @@ export function EdoProvider({ state, update, employee }: SectionProps) {
       </tr>)}</tbody></table></div>
     {!shown.length && <Empty>Никого не нашли. Проверьте фильтры.</Empty>}
     {pages.pager}
-    {call && <ProviderCallDialog row={call} onClose={() => setCall(null)} onSave={input => { const next = logProviderCall(call, input, employee, new Date().toISOString()); update(s => ({ ...s, provider: s.provider.map(r => r.id === call.id ? next : r) })); setCall(null); setSaved(`Звонок ${call.name} сохранён${next.changed === "Да" ? ": провайдер сменили на Sapar" : ""}.`); }} />}
-    {history && <History title={history.name} events={state.provider.find(r => r.id === history.id)?.history ?? []} onClose={() => setHistory(null)} />}
+    {call && <ProviderCallDialog row={call} onClose={() => setCall(null)} onSave={input => {
+      const next = logProviderCall(call, input, employee, new Date().toISOString()), agreed = next.changed === "Да";
+      update(s => ({ ...s, provider: upsert(s.provider, next) })); setCall(null);
+      // A fleet driver's provider is the one «Диспетчерская» has: the operator changes it there.
+      setSaved(`Звонок ${call.name} сохранён${agreed ? isFleetRow(call) && call.provider !== "sapar" ? ". Теперь смените провайдера на Sapar в карточке водителя в Диспетчерской — тогда статус станет «Да»" : ": провайдер сменили на Sapar" : ""}.`);
+    }} />}
+    {history && <History title={history.name} events={rows.find(r => r.id === history.id)?.history ?? []} onClose={() => setHistory(null)} />}
   </SectionCard>;
 }
 
@@ -143,6 +148,7 @@ function ProviderCallDialog({ row, onClose, onSave }: { row: ProviderRow; onClos
   return <Dialog title={`Звонок: ${row.name}`} onClose={onClose} coach="provider-call-dialog" footer={<><button className="crm-primary" data-coach="provider-call-save" onClick={save}>Сохранить</button><button className="crm-secondary" onClick={onClose}>Отмена</button></>}>
     <p className="sec-muted">{row.phone} · {row.park} · провайдер: {row.provider || "не Sapar"}, {row.ecp}.</p>
     <p className="sec-note">Предложите водителю перейти на Sapar. Если согласен — запросите его ID в Sapar; когда ID получен, провайдер считается сменённым.</p>
+    {isFleetRow(row) && <p className="sec-note">Это водитель учебного автопарка: провайдера ему меняют в Диспетчерской — «Детали» → «Провайдер ЭДО».</p>}
     <Field label="Дозвон / недозвон"><select value={input.reach} onChange={e => setInput({ ...input, reach: e.target.value as ProviderCall["reach"] })}><option>Дозвон</option><option>Недозвон</option></select></Field>
     {input.reach === "Дозвон" && <>
       <Field label="Итог звонка"><Select value={input.outcome === "—" ? "" : input.outcome} onChange={v => setInput({ ...input, outcome: (v || "—") as ProviderCall["outcome"] })} options={OUTCOMES} all="— выберите —" /></Field>
@@ -161,8 +167,8 @@ const Tile = ({ label, value, tone = "", children }: { label: string; value: str
 const Meter = ({ percent, tone }: { percent: number; tone: string }) => <span className={`sec-meter sec-meter--${tone}`} role="presentation"><span style={{ width: `${Math.min(100, percent)}%` }} /></span>;
 
 /** «Дашборд смены провайдера»: how far the call campaign has got. */
-export function EdoProviderDashboard({ state, go }: SectionProps) {
-  const [p, setP] = useState(PERIODS[0]), board = providerDashboard(state.provider, p);
+export function EdoProviderDashboard({ state, drivers, go }: SectionProps) {
+  const [p, setP] = useState(PERIODS[0]), board = providerDashboard(fleetProvider(state.provider, drivers), p);
   return <div className="sec-dashboard" data-coach="provider-dashboard">
     <div className="sec-dashboard-head"><h2>Дашборд «Смена провайдера»</h2><label>Период: <select value={p} onChange={e => setP(e.target.value)}>{PERIODS.map(x => <option key={x}>{x}</option>)}</select></label></div>
     <section className="crm-panel sec-card"><div className="sec-head"><h2>📞 Общие метрики</h2></div><div className="sec-tiles" data-coach="provider-metrics">
@@ -177,9 +183,9 @@ export function EdoProviderDashboard({ state, go }: SectionProps) {
 }
 
 /** «Дашборд ЭЦП и подписаний»: signed documents, the call campaign and the call centre rating. */
-export function EdoDashboard({ state, go }: SectionProps) {
+export function EdoDashboard({ state, drivers, go }: SectionProps) {
   const [p, setP] = useState(PERIODS[0]), [filters, setFilters] = useState({ corporate: false, priority: false, hideUnissued: false });
-  const board = edoDashboard(state.edo, p, filters), rating = managerRating([...state.edo, ...state.provider], today());
+  const edo = fleetEdo(state.edo, drivers), board = edoDashboard(edo, p, filters), rating = managerRating([...edo, ...fleetProvider(state.provider, drivers)], today());
   const toggle = (key: keyof typeof filters) => setFilters(f => ({ ...f, [key]: !f[key] }));
   return <div className="sec-dashboard" data-coach="edo-dashboard">
     <div className="sec-dashboard-head"><h2>Дашборд ЭЦП и подписаний</h2><div className="sec-dashboard-filters"><label>Период: <select value={p} onChange={e => setP(e.target.value)}>{PERIODS.map(x => <option key={x}>{x}</option>)}</select></label>

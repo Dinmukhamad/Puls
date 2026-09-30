@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { fleetCrm } from "../../../api/dispatch";
 import { driverName, type TrainingDriver } from "../drivers/driverData";
 import {
   PARTICIPATION, PAYOUT, PROMOS, SOURCES, addToConditionPromo, availablePromos, backdatedErrors, backdatedStatus, connect, findDriver, payOut, profession, promoById, promoLabel, submitBackdated,
@@ -169,29 +170,32 @@ export function PromoBackdated({ state, update, drivers, employee, notify }: Sec
 }
 
 /** «Смена условий работы»: adding a driver to a promotion that changes his working conditions. */
-export function PromoConditions({ state, update, drivers, updateDriver, employee, notify }: SectionProps) {
+export function PromoConditions({ state, update, drivers, save, employee, notify }: SectionProps) {
   const promos = PROMOS.filter(p => p.kind === "condition");
-  const [promo, setPromo] = useState(promos[0].id), [account, setAccount] = useState(""), [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [promo, setPromo] = useState(promos[0].id), [account, setAccount] = useState(""), [result, setResult] = useState<{ ok: boolean; text: string } | null>(null), [busy, setBusy] = useState(false);
   const recent = state.conditionAdds.slice(0, 8);
-  function add() {
+  async function add() {
     const driver = findDriver(drivers, account);
     if (!driver) { setResult({ ok: false, text: account.trim() ? `Водитель с ID «${account.trim()}» не найден.` : "Укажите ID аккаунта водителя." }); return; }
+    if (busy) return;
+    setBusy(true);
     try {
       const at = new Date().toISOString(), id = state.nextId;
       const { row, add: entry, terms } = addToConditionPromo(state.participants, driver, promo, employee, at, id);
+      // The account itself changes: «Диспетчерская» shows the new conditions at once.
+      await save(() => fleetCrm.rule(driver.account, terms, `по акции «${title(promo)}» до ${ruDate(row.until)}`));
       update(s => ({ ...s, nextId: s.nextId + 1, participants: [row, ...s.participants], conditionAdds: [entry, ...s.conditionAdds] }));
-      updateDriver(driver.id, d => ({ ...d, conditions: terms, updatedAt: at, history: [{ at, text: `Условия работы: «${terms}» по акции «${title(promo)}» до ${ruDate(row.until)}` }, ...d.history] }));
       setResult({ ok: true, text: `${driverName(driver)} добавлен(а) в акцию «${title(promo)}» до ${ruDate(row.until)}. Условие работы: «${terms}».` });
       setAccount(""); notify(`Условия работы ${driverName(driver)} изменены на «${terms}».`);
-    } catch (e) { setResult({ ok: false, text: (e as Error).message }); }
+    } catch (e) { setResult({ ok: false, text: (e as Error).message }); } finally { setBusy(false); }
   }
   return <div className="sec-pair" data-coach="promo-conditions">
     {result && <p className={result.ok ? "sec-success" : "crm-error"} role={result.ok ? "status" : "alert"} data-coach="conditions-result">{result.text}</p>}
     <SectionCard title="Добавление водителя в акцию" icon="🎁">
-      <form onSubmit={e => { e.preventDefault(); add(); }} className="sec-stack">
+      <form onSubmit={e => { e.preventDefault(); void add(); }} className="sec-stack">
         <Field label="Акция" coach="conditions-promo"><select value={promo} onChange={e => { setPromo(e.target.value); setResult(null); }}>{promos.map(p => <option key={p.id} value={p.id}>{promoLabel(p)}</option>)}</select></Field>
         <Field label="ID аккаунта водителя" coach="conditions-account"><input value={account} placeholder="Например, 9bf8c8cfacad4ba494fd8dd0ffd72bfb" spellCheck={false} onChange={e => { setAccount(e.target.value); setResult(null); }} /><small className="sec-hint">Идентификатор профиля водителя в Диспетчерской.</small></Field>
-        <button className="crm-primary" data-coach="conditions-add">＋ Добавить</button>
+        <button className="crm-primary" data-coach="conditions-add" disabled={busy}>＋ Добавить</button>
       </form>
     </SectionCard>
     <SectionCard title="Ваши последние добавления" icon="↺" coach="conditions-recent">

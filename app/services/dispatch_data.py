@@ -23,6 +23,14 @@ PARKS = [
     {"id": "amanat-akt", "name": "Аманат", "city": "Актобе", "color": "#fbd2b4"},
     {"id": "jana-taraz", "name": "Jana Taxi", "city": "Тараз", "color": "#f6e0a6"},
     {"id": "global-ast", "name": "Global", "city": "Астана", "color": "#d6ccf5"},
+    # Parks of the CRM training accounts: one fleet serves both work sites.
+    {"id": "qazaq-ala", "name": "QAZAQ", "city": "Алматы", "color": "#f3c7c7"},
+    {"id": "itaxi-trk", "name": "iTaxi", "city": "Туркестан", "color": "#d9efb8"},
+    {"id": "chestny-ala", "name": "Честный", "city": "Алматы", "color": "#e8d3f3"},
+    {"id": "amanat-ura", "name": "Аманат", "city": "Уральск", "color": "#c6e8e1"},
+    {"id": "nol-ala", "name": "Ноль Такси", "city": "Алматы", "color": "#f7dcb9"},
+    {"id": "tenge-ast", "name": "Tenge Taxi", "city": "Астана", "color": "#cfe0f8"},
+    {"id": "eki-ala", "name": "EKI DONGELEK", "city": "Алматы", "color": "#e3e6b0"},
 ]
 PARK_IDS = {p["id"] for p in PARKS}
 for _park in PARKS:
@@ -91,6 +99,8 @@ ADDRESSES = {
         "проспект Абилкайыр хана, 44", "улица Маресьева, 95", "проспект Санкибай батыра, 22",
     ],
     "Тараз": ["улица Толе би, 7", "проспект Жамбыла, 110", "улица Сулейманова, 5"],
+    "Туркестан": ["улица Тауке хана, 15", "проспект Тауке хана, 2", "улица Байдибек би, 30"],
+    "Уральск": ["проспект Абая, 42", "улица Курмангазы, 180", "улица Сырыма Датова, 9"],
 }  # fmt: skip
 
 
@@ -115,6 +125,8 @@ def driver(key, park, last, first, middle, phone, license_no, **extra):
         "diagnostics": [], "acceptance": 30, "refuel": False, "bonus": None, "comment": "",
         "source": "Канал не указан", "device": "Redmi Note 12", "app_version": "13.69 (31712)",
         "created_days": 400, "photo_days": [6, 18], "iin": "", "address": "", "orders": 6,
+        # CRM side of the same account: its number, trip counts and CRM-only switches.
+        "crm_id": None, "driver_no": None, "stats": None, "cash_limit": False,
     }  # fmt: skip
     base.update(extra)
     seed = Random(key)
@@ -256,6 +268,99 @@ DRIVERS = [
         car=car("Kia", "Cerato", 2022, "Серый", "512AOM01", ["Эконом", "Комфорт"]),
     ),
 ]  # fmt: skip
+# The training accounts of CRM «Учётные записи водителей»; their account IDs stay as they were.
+CRM_DRIVERS = [
+    driver(
+        "baibosynov", "qazaq-ala", "Байбосынов", "Самат", "Ерланович", "+77055607794", "MR993753",
+        id="ddcd8d21379f4694aa01eff73e5aadc1", crm_id=11046706, driver_no=823544,
+        employment="Физическое лицо", rule="Для всех 2%", status="busy", rating=None,
+        created_days=8, orders=0, photo_days=[], stats=[0, 0, 0, 0],
+        car=car("Nissan", "Cefiro", 1995, "Чёрный", "803ASD02", ["Эконом", "Курьер", "Доставка"],
+                callsign="altynbek_op"),
+    ),
+    driver(
+        "zhumabekov", "itaxi-trk", "Жумабеков", "Нурлан", "Кайратович", "+77012345601", "HM945636",
+        id="19550946448b4b21a86008657bcae625", crm_id=11046705, driver_no=1006074,
+        status="offline", balance=1250.0, rating=4.7, created_days=9, stats=[3, 21, 88, 412],
+        address="г. Туркестан, ул. Тауке хана, 15", iin="880314300512",
+        car=car("Hyundai", "Accent", 2019, "Белый", "512KLM13", ["Эконом", "Курьер", "Доставка"]),
+    ),
+    driver(
+        "saparova", "itaxi-ala", "Сапарова", "Айгерим", "Маратовна", "+77471112233", "KZ897519",
+        id="2a06d17a5b00451db3b7bf91b76423da", crm_id=11046704, driver_no=1548803,
+        employment="Физическое лицо", rule="Для всех 2%", works=False, status="offline",
+        balance=-50.0, rating=4.8, segment="new", created_days=10, orders=0, stats=[0, 0, 0, 0],
+        car=car("Kia", "Rio", 2021, "Серый", "771ABE02", ["Эконом", "Курьер", "Доставка"]),
+    ),
+    driver(
+        "omarov", "itaxi-ala", "Омаров", "Ерлан", "Сериккалиевич", "+77089876543", "AA849402",
+        id="830572280daf44c89f40c56e9409b373", crm_id=11046703, driver_no=1548802,
+        employment="Физическое лицо", rule="Для всех 2%", status="free", balance=3400.0,
+        rating=4.9, created_days=11, photo_days=[], stats=[5, 34, 140, 960],
+        car=car("Toyota", "Camry", 2018, "Белый", "120BCD02", ["Эконом", "Комфорт", "Комфорт+"]),
+    ),
+    driver(
+        "kasymov", "itaxi-ala", "Касымов", "Данияр", "Болатович", "+77773334455", "MR801285",
+        id="57673c362b6041f0a9c1bb6a4629f613", crm_id=11046702, driver_no=603011,
+        employment="Физическое лицо", rule="Для всех 2%", status="offline", rating=None,
+        created_days=12, stats=[0, 12, 57, 301],
+        car=car("Chevrolet", "Cobalt", 2022, "Серебристый", "305CAT02", ["Эконом", "Курьер"]),
+    ),
+    driver(
+        "akhmetova", "chestny-ala", "Ахметова", "Динара", "Асылбековна", "+77025556677", "HM753168",
+        id="390d464b21d847f2a0b26a7143b7aa5f", crm_id=11046701, driver_no=1548801,
+        employment="Физическое лицо", rule="Для всех 2%", status="offline", balance=870.0,
+        rating=4.7, created_days=13, stats=[1, 9, 33, 75],
+        car=car("Chevrolet", "Onix", 2023, "Красный", "418DKZ02", ["Эконом", "Курьер"]),
+    ),
+    driver(
+        "tleubaev", "amanat-ura", "Тлеубаев", "Арман", "Сейтжанович", "+77057778899", "KZ705051",
+        id="ce6fef80007049aea677a3b7dda0f8db", crm_id=11046700, driver_no=1528022,
+        status="offline", balance=15.0, rating=4.8, created_days=14, photo_days=[],
+        stats=[2, 17, 61, 544], address="г. Уральск, пр. Абая, 42", iin="910705300118",
+        car=car("Lada", "Vesta", 2020, "Синий", "221ARM07", ["Эконом", "Курьер"]),
+    ),
+    driver(
+        "mukhamedzhanov", "nol-ala", "Мухамеджанов", "Руслан", "Айдарович", "+77019990011",
+        "AA656934", id="18a831202ec44b9f97ae6ee49e6068aa", crm_id=11046699, driver_no=1548800,
+        employment="Физическое лицо", rule="Для всех 2%", status="busy", balance=-30.0,
+        rating=4.9, created_days=15, stats=[7, 40, 152, 1203],
+        car=car("Hyundai", "Elantra", 2020, "Чёрный", "909RUS02", ["Эконом", "Комфорт"]),
+    ),
+    driver(
+        "ismailova", "jana-taraz", "Исмаилова", "Гульнара", "Ержановна", "+77478880022", "MR608817",
+        id="4b790a4be2bb47e2b4c7f11b9e054473", crm_id=11046698, driver_no=1548799,
+        status="busy", balance=2200.0, rating=None, created_days=16, stats=[4, 26, 97, 388],
+        address="г. Тараз, ул. Толе би, 7", iin="930211400327",
+        car=car("Kia", "K5", 2022, "Белый", "777JTZ08", ["Эконом", "Комфорт", "Комфорт+"]),
+    ),
+    driver(
+        "nurpeisov", "tenge-ast", "Нурпеисов", "Бауыржан", "Талгатович", "+77086661133", "HM560700",
+        id="f569ca4a25b84d00ae1324d34f49b48e", crm_id=11046697, driver_no=1532275,
+        employment="Физическое лицо", rule="Для всех 2%", status="busy", balance=540.0,
+        rating=4.9, created_days=17, photo_days=[], stats=[6, 31, 118, 877],
+        car=car("Skoda", "Rapid", 2019, "Серый", "045TNG01", ["Эконом", "Курьер"]),
+    ),
+    driver(
+        "abdrakhmanov", "eki-ala", "Абдрахманов", "Ильяс", "Муратович", "+77752224466", "KZ512583",
+        id="bfcb98ee71d54682be284538b31985fd", crm_id=11046696, driver_no=1548798,
+        employment="Физическое лицо", rule="Для всех 2%", status="offline", rating=4.8,
+        created_days=18, stats=[0, 3, 20, 44], cash_limit=True,
+        car=car("Volkswagen", "Polo", 2021, "Белый", "632EKI02", ["Эконом", "Курьер"]),
+    ),
+    driver(
+        "serikbaeva", "itaxi-courier-ala", "Серикбаева", "Жанар", "Кенжебековна", "+77013337799",
+        "AA464466", id="06eb1317b88c437bb52896390123f621", crm_id=11046695, driver_no=1547402,
+        employment="Физическое лицо", profession="Курьер", rule="Курьеры 1%", status="offline",
+        balance=90.0, rating=None, created_days=19, photo_days=[], stats=[0, 5, 22, 130],
+        car=car("Chevrolet", "Spark", 2020, "Жёлтый", "150DLV02", ["Курьер", "Доставка"]),
+    ),
+]  # fmt: skip
+DRIVERS += CRM_DRIVERS
+# Every fleet account has a CRM number too.
+for _index, _driver in enumerate(DRIVERS):
+    _driver["crm_id"] = _driver["crm_id"] or 11046000 + _index
+    _driver["driver_no"] = _driver["driver_no"] or 1_540_000 + _index * 37
 DRIVER_KEYS = {d["key"]: d for d in DRIVERS}
 
 # Orders that the withdrawal-limit calls are about. Their tariff decides the answer.

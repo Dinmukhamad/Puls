@@ -30,7 +30,7 @@ export function DriverPage() {
         <div className="fleet-summary-cell"><small>Термокороб</small><strong>{d.thermobox ? "Есть" : "Нет"}</strong></div>
       </div>
       <nav className="fleet-tabs" aria-label="Разделы карточки" data-coach="driver-tabs">{DRIVER_TABS.map(([id, label]) => <button key={id} className={tab === id ? "is-active" : ""} aria-current={tab === id ? "page" : undefined} data-coach={`tab-${id}`} onClick={() => go(`driver/${d.id}${id === "details" ? "" : `/${id}`}`)}>{label}</button>)}
-        <button disabled title="В обучении этот раздел не нужен">История изменений</button><button disabled title="В обучении этот раздел не нужен">Документы</button></nav>
+        <button disabled title="В обучении этот раздел не нужен">Документы</button></nav>
       <DriverTabView d={d} tab={tab} />
     </div>
     {panel === "diagnostics" && <Drawer title="Диагностика" subtitle={d.diagnostics.title} coach="diagnostics-panel" onClose={() => setPanel(null)}>
@@ -51,6 +51,7 @@ function DriverTabView({ d, tab }: { d: FleetDriver; tab: DriverTab }) {
   if (tab === "balance") return <BalanceTab d={d} />;
   if (tab === "gps") return <GpsTab d={d} />;
   if (tab === "photo") return <PhotoTab d={d} />;
+  if (tab === "history") return <HistoryTab d={d} />;
   return <DetailsTab key={d.provider} d={d} />;
 }
 
@@ -115,12 +116,12 @@ function CarTab({ d }: { d: FleetDriver }) {
   return <section className="fleet-tab-body" aria-label="Автомобиль">
     <h2 className="fleet-section fleet-caps">Выбор автомобиля</h2>
     <div className="fleet-segmented" role="group" aria-label="Автомобиль"><button className="is-on" aria-pressed="true">Существующий</button><button disabled title="В обучении новый автомобиль не добавляют">Новый</button></div>
-    <p><input className="fleet-input fleet-wide" readOnly disabled value={`${car.plate} • ${car.brand} ${car.model} ${car.year} ${car.color} • Работает`} aria-label="Автомобиль" /></p>
+    <p><input className="fleet-input fleet-wide" readOnly disabled value={`${car.plate} • ${car.brand} ${car.model} ${car.year} ${car.color} • ${car.status ?? "Работает"}`} aria-label="Автомобиль" /></p>
     <h2 className="fleet-section">Детали</h2>
     <div className="fleet-form-grid"><div>
       <Field label="Марка"><Fixed value={car.brand} /></Field><Field label="Модель"><Fixed value={car.model} /></Field><Field label="Цвет"><Fixed value={car.color} /></Field><Field label="Год"><Fixed value={String(car.year)} /></Field>
     </div><div>
-      <Field label="Госномер"><Fixed value={car.plate} /></Field><Field label="VIN"><Fixed value={car.vin} /></Field><Field label="СТС"><Fixed value="" /></Field>
+      <Field label="Госномер"><Fixed value={car.plate} /></Field><Field label="VIN"><Fixed value={car.vin} /></Field><Field label="СТС"><Fixed value={car.sts ?? ""} /></Field>
     </div></div>
     <h2 className="fleet-section">Комплектация и брендинг</h2>
     <div className="fleet-form-grid"><div><Field label="КПП"><Fixed value={car.transmission} /></Field></div>
@@ -262,11 +263,20 @@ function GpsTab({ d }: { d: FleetDriver }) {
 }
 
 const PHOTO_TILES: [PhotoKind, string][] = [["left", "Машина слева"], ["front", "Машина спереди"], ["right", "Машина справа"], ["rear", "Машина сзади"], ["trunk", "Открытый багажник"], ["seats-rear", "Задний ряд сидений"], ["seats-front", "Передний ряд сидений"]];
+/** Changes of the account on both work sites: CRM and «Диспетчерская» keep one history. */
+function HistoryTab({ d }: { d: FleetDriver }) {
+  return <section className="fleet-tab-body" aria-label="История изменений">
+    <p className="fleet-muted">Здесь всё, что меняли в учётной записи — в Диспетчерской и в CRM.</p>
+    <ol className="fleet-history">{d.history.map((item, i) => <li key={i}><time>{item.at.includes("T") ? shortDate(item.at) : dayDate(item.at)}</time><span>{item.text}</span></li>)}</ol>
+  </section>;
+}
+
 function PhotoTab({ d }: { d: FleetDriver }) {
   const [open, setOpen] = useState(0), car = d.car;
   if (!car) return <section className="fleet-tab-body"><p className="fleet-empty-hint">Фотоконтроль автомобиля не нужен: курьер без машины. Термокороб проходит свой фотоконтроль в Яндекс Про.</p></section>;
   const art = { plate: car.plate, car: `${car.brand} ${car.model}`, year: car.year };
   return <section className="fleet-tab-body" aria-label="Фотоконтроль">
+    {d.photo_control === "Требуется" && <p className="fleet-empty-hint">Автомобиль сменили: водитель ещё не прошёл фотоконтроль автомобиля и техпаспорта.</p>}
     {d.photo_checks.map((date, i) => <div key={date} className="fleet-photo-day">
       <button className="fleet-section fleet-photo-toggle" aria-expanded={open === i} onClick={() => setOpen(o => o === i ? -1 : i)}>🚘 {shortDate(date, false)} <Icon name={open === i ? "down" : "chevron"} /></button>
       {open === i && <div className="fleet-photos">{PHOTO_TILES.map(([kind, label]) => <figure key={kind} className="fleet-card"><figcaption>{label}</figcaption><PhotoThumb kind={kind} data={art} wide className="fleet-photo" /></figure>)}</div>}

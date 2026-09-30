@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.models.crm import CrmAppeal
 from app.models.dispatch import DispatchEvent
+from app.services import fleet_accounts
 from app.services.crm_catalog import default_categories
 from app.services.dispatch_data import (
     ADDRESSES,
@@ -101,13 +102,23 @@ def limit_categories() -> frozenset[str]:
 
 
 def fold(events: list[DispatchEvent]) -> dict:
-    """The seed with the events since the last reset applied, still keyed by seed keys."""
+    """The seed with the events since the last reset applied, still keyed by seed keys.
+
+    CRM's changes of the same accounts are in the log too; `history` keeps what happened to each
+    driver on both work sites.
+    """
     drivers = {d["key"]: deepcopy(d) for d in DRIVERS}
     stock = dict(STOCK)
-    moves, tickets = [], []
+    moves, tickets, history = [], [], {}
     start = max((i + 1 for i, e in enumerate(events) if e.kind == "reset"), default=0)
     for event in events[start:]:
         p = event.payload
+        if event.kind in fleet_accounts.CRM_KINDS:
+            fleet_accounts.apply(drivers, event, history)
+            continue
+        note = CABINET_NOTES.get(event.kind)
+        if note and p.get("driver") in drivers:
+            history.setdefault(p["driver"], []).append((event.created_at, note(p)))
         if event.kind == "details":
             drivers[p["driver"]]["provider"] = p["provider"]
         elif event.kind == "car":
@@ -126,7 +137,22 @@ def fold(events: list[DispatchEvent]) -> dict:
             moves.append(event)
         elif event.kind == "ticket":
             tickets.append(event)
-    return {"drivers": drivers, "stock": stock, "moves": moves, "tickets": tickets}
+    return {
+        "drivers": drivers, "stock": stock, "moves": moves, "tickets": tickets, "history": history,
+    }  # fmt: skip
+
+
+CREATED = {False: "Учётная запись создана", True: "Учётная запись создана через CRM"}
+# The cabinet's own changes as lines of the driver's history in CRM.
+CABINET_NOTES = {
+    "details": lambda p: f"Диспетчерская: провайдер ЭДО — {p['provider']}",
+    "car": lambda p: (
+        f"Диспетчерская: тарифы — {', '.join(p['tariffs'])}; "
+        f"оклейка {'есть' if p['wrap'] else 'нет'}, лайтбокс {'есть' if p['lightbox'] else 'нет'}"
+    ),
+    "issue": lambda p: f"Диспетчерская: выдан термокороб {INVENTORY[p['type']]} №{p['number']}",
+    "return": lambda p: f"Диспетчерская: принят термокороб {INVENTORY[p['type']]} №{p['number']}",
+}
 
 
 def code_status(events: list[DispatchEvent], code: str, now: datetime):
@@ -279,6 +305,15 @@ def orders(d: dict, index: int, now: datetime) -> list[dict]:
     return rows
 
 
+def trip_counts(rows: list[dict], d: dict, now: datetime) -> list[int]:
+    """Orders today, for 7 and 30 days and in all: CRM shows them on the driver's card."""
+    done = [datetime.fromisoformat(o["finished_at"]) for o in rows if o["status"] == "complete"]
+    naive = now.replace(tzinfo=None)
+    ages = [(naive - at.replace(tzinfo=None)).days for at in done]
+    within = [sum(1 for age in ages if age < n) for n in (1, 7, 30)]
+    return [*within, max(within[2], d["created_days"] * 2)]
+
+
 def build(events: list[DispatchEvent], *, user, now: datetime, utc_now: datetime, crm=frozenset()):
     """The cabinet as the client shows it. `crm` holds the drivers with a limit request in CRM."""
     cabinet = fold(events)
@@ -382,6 +417,8 @@ def build(events: list[DispatchEvent], *, user, now: datetime, utc_now: datetime
             "tariffs": "Эконом, Комфорт, Доставка, Курьер или Межгород",
         }
         issued = SEED_DAY - timedelta(days=d["license_issued_days"])
+        created = d.get("created_at") or iso(SEED_DAY - timedelta(days=d["created_days"]))
+        notes = sorted(cabinet["history"].get(d["key"], []), key=lambda n: aware(n[0]))[::-1]
         out.append(
             {
                 "id": d["id"],
@@ -392,8 +429,9 @@ def build(events: list[DispatchEvent], *, user, now: datetime, utc_now: datetime
                 "phone": d["phone"],
                 "license": d["license"],
                 "license_country": d["license_country"] if d["license"] else "",
-                "license_issued": iso(issued) if d["license"] else "",
-                "license_expires": iso(issued + timedelta(days=3652)) if d["license"] else "",
+                "license_issued": d.get("license_issued") or (iso(issued) if d["license"] else ""),
+                "license_expires": d.get("license_expires")
+                or (iso(issued + timedelta(days=3652)) if d["license"] else ""),
                 "experience_since": iso(SEED_DAY - timedelta(days=d["experience_days"]))
                 if d["license"]
                 else "",
@@ -420,9 +458,23 @@ def build(events: list[DispatchEvent], *, user, now: datetime, utc_now: datetime
                 "source": d["source"],
                 "device": d["device"],
                 "app_version": d["app_version"],
-                "created": iso(SEED_DAY - timedelta(days=d["created_days"])),
+                "created": created,
                 "photo_checks": [iso(today - timedelta(days=n)) for n in d["photo_days"]],
                 "orders": rows,
+                # The same account as CRM «Учётные записи водителей» shows it.
+                "crm_id": d["crm_id"],
+                "driver_no": d["driver_no"],
+                "cash_limit": d["cash_limit"],
+                "codes": d.get("codes", 0),
+                "photo_control": "Требуется"
+                if d.get("photo_required")
+                else "Пройден"
+                if d["photo_days"]
+                else "Нет данных",
+                "stats": d["stats"] or trip_counts(rows, d, now),
+                "history": [{"at": iso(local(at)), "text": text} for at, text in notes]
+                + [{"at": created, "text": CREATED[d["source"] == "CRM"]}],
+                "updated_at": iso(local(notes[0][0])) if notes else created,
             }
         )
     antifraud = []
@@ -579,10 +631,18 @@ async def state(session, user) -> dict:
 
 
 def driver_key(driver_id: str) -> str:
+    """Seed accounts map to their key; a driver registered in CRM is keyed by its own id."""
     key = KEY_BY_ID.get(driver_id)
-    if not key:
+    if not key and not re.fullmatch(r"[0-9a-f]{32}", driver_id):
         raise NotFoundError("Исполнитель не найден")
-    return key
+    return key or driver_id
+
+
+def folded_driver(events: list[DispatchEvent], key: str) -> tuple[dict, dict]:
+    drivers = fold(events)["drivers"]
+    if key not in drivers:
+        raise NotFoundError("Исполнитель не найден")
+    return drivers[key], drivers
 
 
 async def record(session, user, request_id, kind, validate):
@@ -635,7 +695,7 @@ async def save_details(session, user, driver_id: str, body):
     def validate(events):
         if body.provider not in PROVIDERS:
             raise DomainError("Выберите провайдера ЭДО из списка")
-        drivers = fold(events)["drivers"]
+        _, drivers = folded_driver(events, key)
         call = CALL_IDS["provider"]
         solved = "provider" if key == call["driver"] and body.provider == "Sapar" else None
         note = ""
@@ -653,7 +713,7 @@ async def save_car(session, user, driver_id: str, body):
     key = driver_key(driver_id)
 
     def validate(events):
-        d = fold(events)["drivers"][key]
+        d, _ = folded_driver(events, key)
         if not d["car"]:
             raise DomainError("У исполнителя нет автомобиля")
         tariffs = list(dict.fromkeys(body.tariffs))
@@ -693,6 +753,7 @@ async def request_code(session, user, body):
     key, uid, request_id = driver_key(body.driver), user.id, str(body.request_id)
     await lock_learner(session, uid)
     events = await history(session, uid)
+    folded_driver(events, key)
     now = datetime.now(UTC)
     current = next((e for e in events if e.request_id == request_id), None)
     if current is not None and (current.kind != "code" or current.payload["driver"] != key):
@@ -898,3 +959,61 @@ async def answer_call(session, user, call_id: str, body):
 
 async def reset(session, user, body):
     return await record(session, user, body.request_id, "reset", lambda events: ({}, None))
+
+
+async def crm_action(session, user, driver_id: str, body, kind: str, make):
+    """A CRM change of a fleet account: `make(driver, drivers)` checks it and builds the event."""
+    key = driver_key(driver_id)
+
+    def validate(events):
+        d, drivers = folded_driver(events, key)
+        return make(d, drivers), None
+
+    return await record(session, user, body.request_id, kind, validate)
+
+
+async def crm_car(session, user, driver_id: str, body):
+    make = lambda d, _: fleet_accounts.car_payload(d, body)  # noqa: E731
+    return await crm_action(session, user, driver_id, body, "crm_car", make)
+
+
+async def crm_smz(session, user, driver_id: str, body):
+    make = lambda d, _: fleet_accounts.smz_payload(d, body)  # noqa: E731
+    return await crm_action(session, user, driver_id, body, "crm_smz", make)
+
+
+async def crm_individual(session, user, driver_id: str, body):
+    make = lambda d, _: fleet_accounts.individual_payload(d)  # noqa: E731
+    return await crm_action(session, user, driver_id, body, "crm_individual", make)
+
+
+async def crm_limit(session, user, driver_id: str, body):
+    make = lambda d, _: fleet_accounts.limit_payload(d, body.enabled)  # noqa: E731
+    return await crm_action(session, user, driver_id, body, "crm_limit", make)
+
+
+async def crm_code(session, user, driver_id: str, body):
+    make = lambda d, _: fleet_accounts.code_payload(d)  # noqa: E731
+    return await crm_action(session, user, driver_id, body, "crm_code", make)
+
+
+async def crm_photo(session, user, driver_id: str, body):
+    make = lambda d, _: fleet_accounts.photo_payload(d)  # noqa: E731
+    return await crm_action(session, user, driver_id, body, "crm_photo", make)
+
+
+async def crm_rule(session, user, driver_id: str, body):
+    make = lambda d, _: fleet_accounts.rule_payload(d, body)  # noqa: E731
+    return await crm_action(session, user, driver_id, body, "crm_rule", make)
+
+
+async def crm_register(session, user, body):
+    """«Регистрация водителей» in CRM adds the driver to his park in «Диспетчерская»."""
+
+    def validate(events):
+        drivers = fold(events)["drivers"]
+        now = iso(local_now())
+        request_id = str(body.request_id)
+        return fleet_accounts.register_payload(drivers, body, user.id, request_id, now), None
+
+    return await record(session, user, body.request_id, "crm_register", validate)

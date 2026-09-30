@@ -1,4 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
+import type { FleetSave } from "../drivers/CrmDrivers";
 import type { TrainingDriver } from "../drivers/driverData";
 import type { SectionsState } from "./sectionsStore";
 
@@ -6,9 +7,11 @@ import type { SectionsState } from "./sectionsStore";
 export interface SectionProps {
   state: SectionsState;
   update: (change: (state: SectionsState) => SectionsState) => void;
+  /** The fleet accounts «Диспетчерская» shows too; `save` sends a change of them to the server. */
   drivers: TrainingDriver[];
-  updateDriver: (id: number, change: (driver: TrainingDriver) => TrainingDriver) => void;
-  addDriver: (driver: TrainingDriver) => void;
+  save: FleetSave;
+  /** The fleet's parks: `id` in «Диспетчерская», `label` as CRM names them. */
+  parks: { id: string; label: string }[];
   /** The operator's name: it goes into «Сотрудник», «Кто подал», «Ответственный менеджер». */
   employee: string;
   notify: (text: string) => void;

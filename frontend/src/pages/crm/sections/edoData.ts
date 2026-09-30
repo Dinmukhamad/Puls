@@ -1,7 +1,9 @@
 /**
  * Training copy of CRM «ЭДО»: the self-employed drivers' documents in Sapar, the call campaign
- * that brings drivers to Sapar and both dashboards. Everyone in it is fictional.
+ * that brings drivers to Sapar and both dashboards. The fleet's own self-employed drivers are in it
+ * with the provider «Диспетчерская» has for them; everyone else is fictional.
  */
+import { driverName, type TrainingDriver } from "../drivers/driverData";
 import { hex32, iinFor, phoneFor, pick } from "./fake";
 import type { TrainingEvent } from "./promoData";
 
@@ -73,6 +75,46 @@ export function seedProvider(): ProviderRow[] {
     };
   });
 }
+
+/** Rows of the fleet's drivers carry the driver's CRM number as their id; the fictional rows stay below it. */
+export const FLEET_ROW = 1_000_000;
+export const isFleetRow = (row: { id: number }) => row.id >= FLEET_ROW;
+const onSapar = (d: Pick<TrainingDriver, "provider">) => d.provider === "Sapar";
+/** A row keeps what the operator did; name, park, work status and the provider come from the account. */
+function liveEdo(row: EdoRow, d: TrainingDriver): EdoRow {
+  const sapar = onSapar(d), issued = sapar && row.docs === "Да";
+  return {
+    ...row, iin: d.iin, account: d.account, name: driverName(d), phone: d.phone, park: d.park, city: d.city, works: d.works, provider: sapar ? "sapar" : "",
+    docs: sapar ? "Да" : "Нет", avrYandex: issued ? row.avrYandex : sapar ? "Ожидает подписания" : "Не сформировано", avrPark: issued ? row.avrPark : sapar ? "Ожидает подписания" : "Не сформировано",
+  };
+}
+const fleetEdoRow = (d: TrainingDriver): EdoRow => ({
+  id: d.id, period: PERIODS[0], iin: d.iin, account: d.account, name: driverName(d), phone: d.phone, park: d.park, city: d.city, provider: "", docs: "Нет", ecp: "Нет ЭЦП",
+  works: d.works, office: "—", avrYandex: "Не сформировано", avrPark: "Не сформировано", contract: "Ожидает", commission: 110, corporate: false, smz: true, priority: false,
+  tripFrom: `${PERIODS[0]}-01`, tripTo: `${PERIODS[0]}-28`, calledAt: "", manager: "", callStatus: "Новый", reach: "—", comment: "", signedAt: "", promised: false,
+  history: [{ at: `${PERIODS[0]}-28T09:00:00.000Z`, text: onSapar(d) ? "Документы выставлены в Sapar" : "Провайдер ЭДО не Sapar: документы в Sapar не выставляются" }],
+});
+/** «ЭДО водителей» with the fleet: every self-employed account of «Учётные записи водителей» is a row. */
+export function fleetEdo(rows: EdoRow[], drivers: TrainingDriver[]): EdoRow[] {
+  const smz = drivers.filter(d => d.type === "СМЗ"), saved = new Map(rows.map(r => [r.id, r]));
+  return [...smz.map(d => liveEdo(saved.get(d.id) ?? fleetEdoRow(d), d)), ...rows.filter(r => !isFleetRow(r))];
+}
+// The account's history has this line once the provider was changed in «Диспетчерская».
+const PROVIDER_CHANGED = "Диспетчерская: провайдер ЭДО";
+/** «Смена провайдера» with the fleet: self-employed accounts not on Sapar, those already called and those moved to Sapar. */
+export function fleetProvider(rows: ProviderRow[], drivers: TrainingDriver[]): ProviderRow[] {
+  const saved = new Map(rows.map(r => [r.id, r]));
+  const inCampaign = (d: TrainingDriver) => !onSapar(d) || saved.has(d.id) || d.history.some(h => h.text.startsWith(PROVIDER_CHANGED));
+  const live = drivers.filter(d => d.type === "СМЗ" && inCampaign(d)).map((d): ProviderRow => {
+    const row = saved.get(d.id) ?? { id: d.id, period: PERIODS[0], iin: "", account: "", name: "", phone: "", park: "", provider: "", ecp: "Нет ЭЦП", calledAt: "", manager: "", office: "—", callStatus: "Новый", reach: "—", outcome: "—", requestId: "—", changed: "—", comment: "", history: [] };
+    // «Провайдер сменили» is what the account says: the provider is changed in «Диспетчерская».
+    const changed: Changed = onSapar(d) ? "Да" : row.changed === "Да" ? "—" : row.changed;
+    return { ...row, iin: d.iin, account: d.account, name: driverName(d), phone: d.phone, park: d.park, provider: onSapar(d) ? "sapar" : "", changed };
+  });
+  return [...live, ...rows.filter(r => !isFleetRow(r))];
+}
+/** Saves a row the operator worked with; a fleet row is stored on the first call. */
+export const upsert = <T extends { id: number }>(rows: T[], next: T) => rows.some(r => r.id === next.id) ? rows.map(r => r.id === next.id ? next : r) : [next, ...rows];
 
 const stamp = <T extends { history: TrainingEvent[] }>(row: T, text: string, now: string): T => ({ ...row, history: [{ at: now, text }, ...row.history] });
 export const allSigned = (r: Pick<EdoRow, "avrYandex" | "avrPark" | "contract">) => r.avrYandex === "Подписано" && r.avrPark === "Подписано" && r.contract === "Подписано";

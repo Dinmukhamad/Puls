@@ -121,6 +121,8 @@
 .drv-tariffs label { display:inline-flex; align-items:center; gap:5px; border:1px solid #d4deeb; border-radius:3px; padding:4px 8px; font-size:11.5px; cursor:pointer; }
 .drv-tariffs label.is-on { background:#3bb77e; border-color:#3bb77e; color:#fff; }
 .drv-tariffs input { width:13px!important; height:13px!important; }
+.drv-tariffs > small { flex-basis:100%; color:#d64545; font-size:11px; }
+.drv-action-error { flex-basis:100%; color:#d64545; font-size:11px; text-align:right; }
 .drv-limit-table { border-collapse:collapse; width:100%; max-width:640px; margin-bottom:6px; }
 .drv-limit-table th,.drv-limit-table td { border:1px solid #dce3ef; padding:10px 12px; text-align:left; font-size:12px; vertical-align:top; }
 .drv-limit-table th { width:210px; background:#fafbfd; }

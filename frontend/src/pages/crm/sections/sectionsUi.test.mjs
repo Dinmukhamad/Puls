@@ -2,20 +2,22 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { build } from 'esbuild';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const require = createRequire(import.meta.url);
 const here = fileURLToPath(new URL('.', import.meta.url));
-const built = await build({ stdin: { contents: `export * from './CrmSections.tsx'; export * from './sectionsStore.ts'; export * from './edoData.ts'; export * from './promoData.ts'; export { seedDrivers } from '../drivers/driverData.ts'; export { COACH_TOURS } from '../coachTours.ts';`, resolveDir: here, loader: 'tsx' },
-  bundle: true, platform: 'node', format: 'cjs', packages: 'external', jsx: 'automatic', loader: { '.css': 'empty' }, write: false });
+const built = await build({ stdin: { contents: `export * from './CrmSections.tsx'; export * from './sectionsStore.ts'; export * from './edoData.ts'; export * from './promoData.ts'; export { fromFleet, parkLabel } from '../drivers/driverData.ts'; export { COACH_TOURS } from '../coachTours.ts';`, resolveDir: here, loader: 'tsx' },
+  bundle: true, platform: 'node', format: 'cjs', packages: 'external', jsx: 'automatic', loader: { '.css': 'empty' }, write: false, define: { 'import.meta.env': '{}' } });
 const module = { exports: {} };
 new Function('require', 'module', 'exports', built.outputFiles[0].text)(require, module, module.exports);
 const kit = module.exports;
 
-const drivers = kit.seedDrivers(), state = kit.seedSections(drivers);
-const props = { state, update() {}, drivers, updateDriver() {}, addDriver() {}, employee: 'Оператор Учебный', notify() {}, openDriver() {}, go() {} };
+const fleet = JSON.parse(readFileSync(new URL('../drivers/fleet.fixture.json', import.meta.url), 'utf8'));
+const drivers = kit.fromFleet(fleet), state = kit.seedSections(drivers), parks = fleet.parks.map(p => ({ id: p.id, label: kit.parkLabel(p) }));
+const props = { state, update() {}, drivers, save: async () => { throw new Error('no server in this test'); }, parks, employee: 'Оператор Учебный', notify() {}, openDriver() {}, go() {} };
 const render = (view, query = '') => renderToStaticMarkup(React.createElement(kit.SectionPage, { ...props, view, params: new URLSearchParams(query) }));
 const count = (html, needle) => html.split(needle).length - 1;
 
@@ -59,6 +61,7 @@ test('registration: the list shows every seeded row, a draft reopens with its fi
   const form = render('registration-new', `draft=${draft.id}`);
   assert.ok(form.includes(`черновик №${draft.id}`) && form.includes(`value="${draft.lastName}"`));
   assert.ok(form.includes('Номер В/У') && form.includes('Госномер'), 'a courier on a car needs a licence and the car');
+  for (const p of parks) assert.ok(form.includes(`>${p.label}</option>`), `the form offers ${p.label}`);
   const blank = render('registration-new');
   assert.ok(!blank.includes('Номер В/У') && !blank.includes('День рождения'), 'nothing profession-specific before the profession');
   const details = render('registration', `reg=${state.registrations[0].id}`);
@@ -66,10 +69,11 @@ test('registration: the list shows every seeded row, a draft reopens with its fi
 });
 
 test('ЭДО lists the working drivers of the period, pages by 25 and the dashboard counts them', () => {
-  const html = render('edo'), shown = state.edo.filter(r => r.period === '2026-08' && r.works).length;
+  const rows = kit.fleetEdo(state.edo, drivers), html = render('edo'), shown = rows.filter(r => r.period === '2026-08' && r.works).length;
+  assert.ok(html.includes(drivers.find(d => d.type === 'СМЗ').account), 'the fleet\'s self-employed drivers come first');
   assert.equal(count(html, '⟳ Обновить статус'), Math.min(25, shown));
   assert.ok(html.includes(`of total ${shown} items.`));
-  const board = kit.edoDashboard(state.edo, '2026-08', { corporate: false, priority: false, hideUnissued: false });
+  const board = kit.edoDashboard(rows, '2026-08', { corporate: false, priority: false, hideUnissued: false });
   const dashboard = render('edo-dashboard');
   assert.ok(dashboard.includes(`${board.all.percent}%`) && dashboard.includes('Целевой уровень — 50%') && dashboard.includes('Нет данных для отображения'));
   assert.ok(render('edo-provider-dashboard').includes('Всего контактов'));

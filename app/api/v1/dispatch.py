@@ -8,9 +8,14 @@ from app.schemas.dispatch import (
     AnswerInput,
     CarInput,
     CodeInput,
+    CrmCarInput,
     DetailsInput,
     InventoryInput,
+    LimitInput,
+    RegisterInput,
     RequestInput,
+    RuleInput,
+    SmzInput,
     TicketInput,
 )
 from app.services import dispatch
@@ -62,3 +67,46 @@ async def answer_call(call_id: str, body: AnswerInput, session: SessionDep, user
 @router.post(PREFIX + "/reset")
 async def reset(body: RequestInput, session: SessionDep, user: CurrentUser):
     return await dispatch.reset(session, user, body)
+
+
+# CRM «Учётные записи водителей» changes the same accounts the cabinet shows.
+@router.put(PREFIX + "/drivers/{driver_id}/crm/car")
+async def crm_car(driver_id: str, body: CrmCarInput, session: SessionDep, user: CurrentUser):
+    return await dispatch.crm_car(session, user, driver_id, body)
+
+
+@router.post(PREFIX + "/drivers/{driver_id}/crm/smz")
+async def crm_smz(driver_id: str, body: SmzInput, session: SessionDep, user: CurrentUser):
+    return await dispatch.crm_smz(session, user, driver_id, body)
+
+
+@router.post(PREFIX + "/drivers/{driver_id}/crm/individual")
+async def crm_individual(
+    driver_id: str, body: RequestInput, session: SessionDep, user: CurrentUser
+):
+    return await dispatch.crm_individual(session, user, driver_id, body)
+
+
+@router.post(PREFIX + "/drivers/{driver_id}/crm/limit")
+async def crm_limit(driver_id: str, body: LimitInput, session: SessionDep, user: CurrentUser):
+    return await dispatch.crm_limit(session, user, driver_id, body)
+
+
+@router.post(PREFIX + "/drivers/{driver_id}/crm/code")
+async def crm_code(driver_id: str, body: RequestInput, session: SessionDep, user: CurrentUser):
+    return await dispatch.crm_code(session, user, driver_id, body)
+
+
+@router.post(PREFIX + "/drivers/{driver_id}/crm/photo")
+async def crm_photo(driver_id: str, body: RequestInput, session: SessionDep, user: CurrentUser):
+    return await dispatch.crm_photo(session, user, driver_id, body)
+
+
+@router.post(PREFIX + "/drivers/{driver_id}/crm/rule")
+async def crm_rule(driver_id: str, body: RuleInput, session: SessionDep, user: CurrentUser):
+    return await dispatch.crm_rule(session, user, driver_id, body)
+
+
+@router.post(PREFIX + "/crm/drivers")
+async def crm_register(body: RegisterInput, session: SessionDep, user: CurrentUser):
+    return await dispatch.crm_register(session, user, body)

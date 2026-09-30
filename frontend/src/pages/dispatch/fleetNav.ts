@@ -2,12 +2,12 @@
 import type { FleetDriver, FleetPark } from "../../api/dispatch";
 
 export type FleetPage = "home" | "goals" | "profile" | "contractors" | "driver" | "map" | "rules" | "inventory" | "support" | "antifraud" | "order";
-export type DriverTab = "details" | "car" | "income" | "transactions" | "orders" | "bonuses" | "balance" | "gps" | "photo";
+export type DriverTab = "details" | "car" | "income" | "transactions" | "orders" | "bonuses" | "balance" | "gps" | "photo" | "history";
 export interface FleetRoute { page: FleetPage; id?: string; tab?: DriverTab }
 
 export const DRIVER_TABS: [DriverTab, string][] = [
   ["details", "Детали"], ["car", "Автомобиль"], ["income", "Заработок"], ["transactions", "Ведомость"], ["orders", "Заказы"],
-  ["bonuses", "Бонусы"], ["balance", "История баланса"], ["gps", "GPS"], ["photo", "Фотоконтроль"],
+  ["bonuses", "Бонусы"], ["balance", "История баланса"], ["gps", "GPS"], ["photo", "Фотоконтроль"], ["history", "История изменений"],
 ];
 const PAGES: FleetPage[] = ["home", "goals", "profile", "contractors", "driver", "map", "rules", "inventory", "support", "antifraud", "order"];
 const TABS = DRIVER_TABS.map(([tab]) => tab);

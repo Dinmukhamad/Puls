@@ -91,7 +91,7 @@ export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
   ],
   drivers: [
     // List: find the driver and read the row.
-    { target: "[data-coach=drv-search]", action: "Вставь ссылку", title: "Поиск водителя", text: "Вставь ссылку на водителя или его ID. Я сам достану ID из части между «/contractors/» и «/details». Искать можно и по ФИО, телефону, госномеру." },
+    { target: "[data-coach=drv-search]", action: "Вставь ссылку", title: "Поиск водителя", text: "Вставь ссылку на водителя из Диспетчерской или его ID. Я сам достану ID из части между «/contractors/» и «/details». Искать можно и по ФИО, телефону, госномеру." },
     { target: ".drv-table tbody tr:first-child", title: "Строка водителя", text: "ID и аккаунт, парк, работает ли он и статус на линии (свободен, занят, офлайн), тип: физлицо или самозанятый. Ниже — отметки о лимите и фотоконтроле." },
     { target: ".drv-table tbody tr:first-child .drv-btn--details", advanceWhen: "[data-coach=drv-card]", action: "Нажми", title: "Открой карточку", text: "Нажми «Подробнее» — покажу, что значит каждое поле в карточке водителя." },
     // Card: what each block means.
@@ -99,7 +99,8 @@ export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
     { target: "[data-coach=drv-tiles]", title: "Данные из Диспетчерской", text: "Работает ли водитель, статус на линии, баланс счёта, рейтинг, поступают ли наличные заказы и пройден ли фотоконтроль." },
     { target: "[data-coach=drv-car]", title: "Автомобиль", text: "Марка и модель, госномер, год, цвет и тарифы, по которым водитель может брать заказы." },
     { target: "[data-coach=drv-contacts]", title: "Контакты", text: "Телефон, номер В/У, позывной (обычно это госномер), ИИН и адрес прописки — их спрашивают при переводе в СМЗ." },
-    { target: "[data-coach=drv-extra]", title: "Дополнительно", text: "Лимит по счёту, сколько кодов уже отправлено и ссылка на водителя. Эту ссылку вставляют в комментарий запроса." },
+    { target: "[data-coach=drv-extra]", title: "Дополнительно", text: "Лимит по счёту, провайдер ЭДО, сколько кодов уже отправлено и ссылка на водителя. Эту ссылку вставляют в комментарий запроса." },
+    { target: "[data-coach=drv-fleet]", title: "Тот же водитель в Диспетчерской", text: "CRM и Диспетчерская — одна учётная запись: машина, СМЗ, лимит и условия из CRM сразу видны там, а её изменения — в «Истории». Кнопка откроет водителя в Диспетчерской." },
     { target: "[data-coach=drv-history-tab]", title: "История", text: "Здесь все действия с аккаунтом: смена машины, лимит, коды, перевод в СМЗ. Проверь её, если водитель говорит, что что-то уже меняли." },
     // Car change, field by field.
     { target: "[data-coach=drv-card] .drv-card-actions .drv-btn--car", advanceWhen: "[data-coach=car-editor]", action: "Нажми", title: "Смена автомобиля", text: "Покажу, как сменить машину водителя. Нажми «Автомобиль»." },

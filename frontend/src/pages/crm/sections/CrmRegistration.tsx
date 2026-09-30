@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { CAR_BRANDS, CAR_COLORS } from "../drivers/driverData";
+import { fleetCrm } from "../../../api/dispatch";
+import { CAR_BRANDS, CAR_COLORS, fromFleet } from "../drivers/driverData";
 import {
-  ACCOUNT_LIMIT, LICENSE_COUNTRIES, PROFESSIONS, REG_PARKS, REG_STATUSES, REG_TYPES, checkDriver, checkKey, draftProblem, drives, emptyForm, normalizePhone, regErrors, registerDriver, walks,
+  ACCOUNT_LIMIT, LICENSE_COUNTRIES, PROFESSIONS, REG_STATUSES, REG_TYPES, checkDriver, checkKey, draftProblem, drives, emptyForm, normalizePhone, regErrors, registerInput, registered, walks,
   type RegErrors, type RegForm, type Registration,
 } from "./registrationData";
 import { Chip, Empty, FilterActions, Field, Reset, SectionCard, Select, ruDate, ruTime, today, useFilters, usePages, type SectionProps } from "./SectionUi";
@@ -13,7 +14,7 @@ const fullName = (r: Pick<Registration, "lastName" | "firstName" | "middleName">
 const LIST = { from: "", to: "", operator: "", park: "", status: "", result: "", profession: "", type: "", account: "", name: "", phone: "", license: "", size: "10" };
 
 /** «Регистрация водителей»: everything the team registered, drafts and registrations that failed. */
-export function RegistrationList({ state, update, drivers, go }: SectionProps) {
+export function RegistrationList({ state, update, drivers, parks, go }: SectionProps) {
   const [open, setOpen] = useState(true);
   const f = useFilters(LIST), a = f.applied;
   const operators = [...new Set(state.registrations.map(r => r.operator))].sort();
@@ -29,7 +30,7 @@ export function RegistrationList({ state, update, drivers, go }: SectionProps) {
       <Field label="Создано с"><input type="date" value={f.draft.from} onChange={e => f.set("from", e.target.value)} /></Field>
       <Field label="Создано по"><input type="date" value={f.draft.to} onChange={e => f.set("to", e.target.value)} /></Field>
       <Field label="Оператор"><Select value={f.draft.operator} onChange={v => f.set("operator", v)} options={operators} /></Field>
-      <Field label="Парк"><Select value={f.draft.park} onChange={v => f.set("park", v)} options={REG_PARKS} /></Field>
+      <Field label="Парк"><Select value={f.draft.park} onChange={v => f.set("park", v)} options={[...new Set([...parks.map(p => p.label), ...state.registrations.map(r => r.park).filter(Boolean)])]} /></Field>
       <Field label="Статус"><Select value={f.draft.status} onChange={v => f.set("status", v)} options={REG_STATUSES} /></Field>
       <Field label="Итог"><Select value={f.draft.result} onChange={v => f.set("result", v)} options={["Через CRM", "—"]} /></Field>
       <Field label="Профессия"><Select value={f.draft.profession} onChange={v => f.set("profession", v)} options={PROFESSIONS} /></Field>
@@ -73,25 +74,34 @@ export function RegistrationDetails({ state, drivers, go, openDriver, id }: Sect
 }
 
 /** «Новый водитель»: the fields follow the type and profession; «Сохранить» needs a passed check. */
-export function RegistrationForm({ state, update, drivers, addDriver, employee, notify, go, draft }: SectionProps & { draft?: number }) {
+export function RegistrationForm({ state, update, drivers, save: saveFleet, parks, employee, notify, go, draft }: SectionProps & { draft?: number }) {
   const source = draft ? state.registrations.find(r => r.id === draft) : undefined;
   const [form, setForm] = useState<RegForm>(() => source ? { ...emptyForm(), ...source, car: { ...source.car } } : emptyForm());
-  const [check, setCheck] = useState<ReturnType<typeof checkDriver> | null>(null), [errors, setErrors] = useState<RegErrors>({}), [problem, setProblem] = useState("");
+  const [check, setCheck] = useState<ReturnType<typeof checkDriver> | null>(null), [errors, setErrors] = useState<RegErrors>({}), [problem, setProblem] = useState(""), [busy, setBusy] = useState(false);
   const set = <K extends keyof RegForm>(key: K, value: RegForm[K]) => setForm(f => ({ ...f, [key]: value }));
   const setCar = (key: keyof RegForm["car"], value: string | number) => setForm(f => ({ ...f, car: { ...f.car, [key]: value, ...(key === "brand" ? { model: "" } : {}) } }));
   const checked = !!check?.ok && check.key === checkKey(form);
   const years = Array.from({ length: 20 }, (_, i) => new Date().getFullYear() - i);
-  function save() {
+  async function save() {
     const found = regErrors(form, today());
     setErrors(found); setProblem("");
     if (Object.keys(found).length) { setProblem("Проверьте выделенные поля."); return; }
-    if (!checked) { setProblem("Сначала нажмите «Проверить водителя»: без проверки водителя не регистрируют."); return; }
-    const id = source?.id ?? state.nextId, { registration, driver } = registerDriver({ ...form, phone: normalizePhone(form.phone) }, drivers, employee, new Date().toISOString(), id);
-    update(s => ({ ...s, nextId: source ? s.nextId : s.nextId + 1, registrations: [registration, ...s.registrations.filter(r => r.id !== id)] }));
-    addDriver(driver);
-    // Navigation clears the notice, so it is set after.
-    go(`view=registration&reg=${id}`);
-    notify(`${registration.lastName} ${registration.firstName} зарегистрирован(а). Учётная запись появилась в «Учётные записи водителей».`);
+    if (!checked) { setProblem(check && !check.ok && check.key === checkKey(form) ? "Такой водитель уже есть — повторно не регистрируем. Проверьте телефон, ИИН и В/У." : "Сначала нажмите «Проверить водителя»: без проверки водителя не регистрируют."); return; }
+    const park = parks.find(p => p.label === form.park);
+    if (!park) { setErrors({ park: "Выберите парк из списка." }); return; }
+    if (busy) return;
+    setBusy(true);
+    try {
+      // The server creates the account in the park of «Диспетчерская»; CRM lists the same account.
+      const response = await saveFleet(() => fleetCrm.register(registerInput(form, park.id)));
+      const driver = fromFleet(response.state).find(d => d.account === response.result.driver);
+      if (!driver) throw new Error("Учётная запись не появилась. Обновите страницу и проверьте водителя ещё раз.");
+      const id = source?.id ?? state.nextId, registration = registered(form, id, employee, new Date().toISOString(), driver);
+      update(s => ({ ...s, nextId: source ? s.nextId : s.nextId + 1, registrations: [registration, ...s.registrations.filter(r => r.id !== id)] }));
+      // Navigation clears the notice, so it is set after.
+      go(`view=registration&reg=${id}`);
+      notify(`${registration.lastName} ${registration.firstName} зарегистрирован(а). Учётная запись появилась в «Учётные записи водителей» и в парке «${park.label}» в Диспетчерской.`);
+    } catch (e) { setProblem((e as Error).message); } finally { setBusy(false); }
   }
   function saveDraft() {
     const wrong = draftProblem(form);
@@ -105,12 +115,12 @@ export function RegistrationForm({ state, update, drivers, addDriver, employee, 
   const input = (key: "lastName" | "firstName" | "middleName" | "address" | "license", label: string, placeholder = label) => <Field label={label} error={key === "middleName" ? undefined : errors[key]}><input value={form[key]} placeholder={placeholder} onChange={e => set(key, key === "license" ? e.target.value.toUpperCase() : e.target.value)} /></Field>;
   return <section className="crm-panel sec-card sec-reg" data-coach="reg-form">
     <div className="sec-head"><h2><span aria-hidden="true">＋</span> Новый водитель{source && <small> · черновик №{source.id}</small>}</h2></div>
-    <form className="sec-body sec-reg-form" onSubmit={e => { e.preventDefault(); save(); }}>
+    <form className="sec-body sec-reg-form" onSubmit={e => { e.preventDefault(); void save(); }}>
       <h3>Тип сотрудничества</h3>
       <Field label="Тип сотрудничества" error={errors.type} coach="reg-type"><select value={form.type} onChange={e => set("type", e.target.value as RegForm["type"])}><option value="">Выберите тип сотрудничества</option>{REG_TYPES.map(t => <option key={t}>{t}</option>)}</select></Field>
       {form.type === "Регистрация нового СМЗ" && <div data-coach="reg-address">{input("address", "Адрес")}</div>}
       <h3>Детали</h3>
-      <Field label="Парк" error={errors.park} coach="reg-park"><select value={form.park} onChange={e => set("park", e.target.value)}><option value="">Парк</option>{REG_PARKS.map(p => <option key={p}>{p}</option>)}</select></Field>
+      <Field label="Парк" error={errors.park} coach="reg-park"><select value={form.park} onChange={e => set("park", e.target.value)}><option value="">Парк</option>{parks.map(p => <option key={p.id}>{p.label}</option>)}</select></Field>
       <Field label="Профессия" error={errors.profession} coach="reg-profession"><select value={form.profession} onChange={e => set("profession", e.target.value as RegForm["profession"])}><option value="">Профессия</option>{PROFESSIONS.map(p => <option key={p}>{p}</option>)}</select></Field>
       <div data-coach="reg-names">{input("lastName", "Фамилия")}{input("firstName", "Имя")}{input("middleName", "Отчество")}</div>
       <div data-coach="reg-phone"><Field label="Номер телефона" error={errors.phone}><input value={form.phone} inputMode="tel" onChange={e => set("phone", e.target.value)} /></Field></div>
@@ -134,7 +144,7 @@ export function RegistrationForm({ state, update, drivers, addDriver, employee, 
         {check && <p className={check.ok && checked ? "sec-success" : "crm-error"} role="status" data-coach="reg-check-result">{check.ok && !checked ? "Данные изменились после проверки — проверьте водителя ещё раз." : check.text}</p>}</div>
       {problem && <p className="crm-error" role="alert">{problem}</p>}
       <div className="sec-reg-foot"><button type="button" className="crm-secondary" data-coach="reg-draft" onClick={saveDraft}>Сохранить черновик</button>
-        <button className="crm-primary" data-coach="reg-save" aria-disabled={!checked} title={checked ? undefined : "Сначала проверьте водителя"}>⤓ Сохранить</button></div>
+        <button className="crm-primary" data-coach="reg-save" aria-disabled={!checked || busy} title={checked ? undefined : "Сначала проверьте водителя"}>{busy ? "Сохраняем…" : "⤓ Сохранить"}</button></div>
     </form>
   </section>;
 }

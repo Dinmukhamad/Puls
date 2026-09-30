@@ -1,15 +1,15 @@
 /**
- * Training copy of CRM «Регистрация водителей». A registered driver becomes a training account
- * in «Учётные записи водителей». All people and documents are fictional.
+ * Training copy of CRM «Регистрация водителей». A registered driver becomes a fleet account: it shows
+ * in «Учётные записи водителей» and in its park in «Диспетчерская». All people and documents are fictional.
  */
-import { CAR_BRANDS, CONDITIONS, type TrainingDriver } from "../drivers/driverData";
+import type { RegisterInput } from "../../../api/dispatch";
+import { CAR_BRANDS, type TrainingDriver } from "../drivers/driverData";
 import { hex32, iinFor, phoneFor, pick } from "./fake";
 
 export const REG_TYPES = ["Регистрация нового физического лица", "Регистрация нового СМЗ"] as const;
 export const PROFESSIONS = ["Водитель", "Курьер на автомобиле", "Курьер на велосипеде/электровелосипеде или пеший курьер"] as const;
 export type RegType = typeof REG_TYPES[number];
 export type Profession = typeof PROFESSIONS[number];
-export const REG_PARKS = ["iTaxi Алматы", "iTaxi Туркестан", "iTaxi (Доставка) Алматы", "QAZAQ Алматы", "Честный Алматы", "Аманат Уральск", "Ноль Такси Алматы", "Jana Taxi Тараз", "Tenge Taxi Астана", "EKI DONGELEK Алматы", "Адал Шымкент", "Global Шымкент"];
 export const LICENSE_COUNTRIES = ["Казахстан", "Кыргызстан", "Узбекистан", "Россия"];
 export const REG_STATUSES = ["Зарегистрирован", "Черновик", "Ошибка"] as const;
 export type RegStatus = typeof REG_STATUSES[number];
@@ -92,32 +92,27 @@ export function checkDriver(f: RegForm, drivers: TrainingDriver[], registrations
   return { ok: true, key: checkKey(f), text: "Водитель не найден в базе — можно регистрировать." };
 }
 
-/** Saves the registration and creates the training account that «Учётные записи водителей» shows. */
-export function registerDriver(f: RegForm, drivers: TrainingDriver[], operator: string, now: string, id: number) {
-  const account = hex32(`registration-${id}-${phoneDigits(f.phone)}`);
-  const driverId = Math.max(0, ...drivers.map(d => d.id)) + 1, phone = normalizePhone(f.phone), smz = f.type === "Регистрация нового СМЗ";
-  const plate = f.car.plate.trim().toUpperCase();
-  const driver: TrainingDriver = {
-    id: driverId, account, driverNo: 1_600_000 + id, lastName: f.lastName.trim(), firstName: f.firstName.trim(), middleName: f.middleName.trim(), phone, park: f.park,
-    works: true, status: "Офлайн", type: smz ? "СМЗ" : "Физлицо", conditions: f.profession.startsWith("Курьер") ? "Курьеры 1%" : smz ? "Самозанятые 3%" : CONDITIONS[0], createdAt: now, updatedAt: now,
-    license: drives(f) ? f.license.trim().toUpperCase() : "", licenseCountry: drives(f) ? f.licenseCountry : "", licenseIssued: f.licenseIssued, licenseExpires: f.licenseExpires, experienceSince: f.licenseIssued,
-    address: smz ? f.address.trim() : "", iin: f.iin.trim(), balance: 0, balanceLimit: ACCOUNT_LIMIT, cashLimit: false, photoControl: "Нет данных", rating: "Нет данных",
-    callsign: plate || `${f.lastName.trim().toLowerCase()}_courier`,
-    car: drives(f) ? { status: "Работает", brand: f.car.brand, model: f.car.model, color: f.car.color, year: f.car.year, owner: "Водитель", plate, vin: "", body: "", sts: "", callsign: plate, transmission: "Автомат", wrap: false, lightbox: false, fuel: "Бензин", tariffs: f.profession === "Водитель" ? ["Эконом"] : ["Курьер", "Доставка"] }
-      : { status: "Работает", brand: "Без автомобиля", model: "", color: "", year: 0, owner: "Другое", plate: "", vin: "", body: "", sts: "", callsign: "", transmission: "", wrap: false, lightbox: false, fuel: "", tariffs: ["Доставка"] },
-    orders: [0, 0, 0, 0], codes: 0, history: [{ at: now, text: `Учётная запись создана через CRM: регистрация №${id}` }],
+/** What «Сохранить» sends; `park` is the park's id in «Диспетчерская». */
+export function registerInput(f: RegForm, park: string): RegisterInput {
+  const car = drives(f) ? { brand: f.car.brand, model: f.car.model, color: f.car.color, year: f.car.year, plate: f.car.plate.trim().toUpperCase() } : null;
+  return {
+    park, profession: f.profession, self_employed: f.type === "Регистрация нового СМЗ", last_name: f.lastName.trim(), first_name: f.firstName.trim(), middle_name: f.middleName.trim(),
+    phone: normalizePhone(f.phone), iin: f.iin.trim(), address: f.address.trim(), license: drives(f) ? f.license.trim().toUpperCase() : "",
+    license_issued: drives(f) ? f.licenseIssued : "", license_expires: drives(f) ? f.licenseExpires : "", car,
   };
-  const registration: Registration = { ...f, phone, id, status: "Зарегистрирован", result: "Через CRM", operator, createdAt: now, lastOrder: "", error: "", account, driverId };
-  return { registration, driver };
+}
+/** The registration as the list keeps it, with the fleet account the server created. */
+export function registered(f: RegForm, id: number, operator: string, now: string, driver: Pick<TrainingDriver, "account" | "id">): Registration {
+  return { ...f, phone: normalizePhone(f.phone), id, status: "Зарегистрирован", result: "Через CRM", operator, createdAt: now, lastOrder: "", error: "", account: driver.account, driverId: driver.id };
 }
 
 /** Fictional earlier registrations of the park team. */
 export function seedRegistrations(): Registration[] {
   const people: [string, string, string, string, Profession, boolean][] = [
     ["Есенов", "Диас", "Ноль Такси Алматы", "1995-03-12", "Водитель", false], ["Надыров", "Азиз", "Jana Taxi Тараз", "1990-11-02", "Водитель", false],
-    ["Ахвердиев", "Вали", "Честный Алматы", "1988-07-21", "Водитель", true], ["Шарипова", "Лятифа", "Адал Шымкент", "1993-01-30", "Водитель", false],
-    ["Касенов", "Алмас", "iTaxi (Доставка) Алматы", "2001-05-17", PROFESSIONS[2], false], ["Калиев", "Болат", "Ноль Такси Алматы", "1985-09-09", "Водитель", false],
-    ["Жанибеков", "Ернар", "iTaxi Алматы", "1999-12-04", "Курьер на автомобиле", true], ["Муратова", "Салтанат", "Global Шымкент", "1997-04-26", "Водитель", false],
+    ["Ахвердиев", "Вали", "Честный Алматы", "1988-07-21", "Водитель", true], ["Шарипова", "Лятифа", "Достойный Шымкент", "1993-01-30", "Водитель", false],
+    ["Касенов", "Алмас", "iTaxi курьер Алматы", "2001-05-17", PROFESSIONS[2], false], ["Калиев", "Болат", "Ноль Такси Алматы", "1985-09-09", "Водитель", false],
+    ["Жанибеков", "Ернар", "iTaxi Алматы", "1999-12-04", "Курьер на автомобиле", true], ["Муратова", "Салтанат", "Global Астана", "1997-04-26", "Водитель", false],
     ["Орынбаев", "Талгат", "Tenge Taxi Астана", "1991-08-15", "Водитель", false], ["Абенова", "Малика", "EKI DONGELEK Алматы", "2000-02-11", PROFESSIONS[2], false],
   ];
   const brands = Object.keys(CAR_BRANDS);

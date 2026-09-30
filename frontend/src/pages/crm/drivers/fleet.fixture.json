@@ -1,0 +1,2120 @@
+{
+ "parks": [
+  {
+   "id": "itaxi-krg",
+   "name": "iTaxi",
+   "city": "Караганда",
+   "color": "#c9ec8f",
+   "park_id": "5d7f8825d3706e4f6f4b6c18cdee7de9"
+  },
+  {
+   "id": "itaxi-ala",
+   "name": "iTaxi",
+   "city": "Алматы",
+   "color": "#f6c0e0",
+   "park_id": "9417f138119636bc837990c69f4cef12"
+  },
+  {
+   "id": "itaxi-ast",
+   "name": "iTaxi",
+   "city": "Астана",
+   "color": "#b9e4f5",
+   "park_id": "c17f26122f160ccf3ed98e7536914638"
+  },
+  {
+   "id": "itaxi-courier-ala",
+   "name": "iTaxi курьер",
+   "city": "Алматы",
+   "color": "#c7cdf7",
+   "park_id": "b76979f9f635ebbbcfaed86a0c5740e2"
+  },
+  {
+   "id": "dostoyny-shym",
+   "name": "Достойный",
+   "city": "Шымкент",
+   "color": "#aee3ef",
+   "park_id": "4e17ff0a06b172aca148a9df5e5fca35"
+  },
+  {
+   "id": "amanat-krg",
+   "name": "Аманат",
+   "city": "Караганда",
+   "color": "#bfeccb",
+   "park_id": "fb721d3cf23362a61dd42ccb21357c74"
+  },
+  {
+   "id": "amanat-akt",
+   "name": "Аманат",
+   "city": "Актобе",
+   "color": "#fbd2b4",
+   "park_id": "e750ffbbeed4e0c997e02dbaec5baa1f"
+  },
+  {
+   "id": "jana-taraz",
+   "name": "Jana Taxi",
+   "city": "Тараз",
+   "color": "#f6e0a6",
+   "park_id": "70738d450df4a3f9b296016749a2a513"
+  },
+  {
+   "id": "global-ast",
+   "name": "Global",
+   "city": "Астана",
+   "color": "#d6ccf5",
+   "park_id": "fd2bd8efa4ec3ef67f5694b2537e3951"
+  },
+  {
+   "id": "qazaq-ala",
+   "name": "QAZAQ",
+   "city": "Алматы",
+   "color": "#f3c7c7",
+   "park_id": "925de4a2ec9301eca11eaba80a4d96ad"
+  },
+  {
+   "id": "itaxi-trk",
+   "name": "iTaxi",
+   "city": "Туркестан",
+   "color": "#d9efb8",
+   "park_id": "7444867337548551665d830e2cf1b624"
+  },
+  {
+   "id": "chestny-ala",
+   "name": "Честный",
+   "city": "Алматы",
+   "color": "#e8d3f3",
+   "park_id": "32f749226bcb19a3e79792064a34c470"
+  },
+  {
+   "id": "amanat-ura",
+   "name": "Аманат",
+   "city": "Уральск",
+   "color": "#c6e8e1",
+   "park_id": "5922b2d9eab884d5a7b60285f36f697d"
+  },
+  {
+   "id": "nol-ala",
+   "name": "Ноль Такси",
+   "city": "Алматы",
+   "color": "#f7dcb9",
+   "park_id": "1d93dc1ef4d10c7a8f6a8a0e66886ddb"
+  },
+  {
+   "id": "tenge-ast",
+   "name": "Tenge Taxi",
+   "city": "Астана",
+   "color": "#cfe0f8",
+   "park_id": "a3fd9104c9ed980395aa9385d4228595"
+  },
+  {
+   "id": "eki-ala",
+   "name": "EKI DONGELEK",
+   "city": "Алматы",
+   "color": "#e3e6b0",
+   "park_id": "a77b0c06fec5844d4d184d13f10aa4e2"
+  }
+ ],
+ "rules": [
+  {
+   "name": "«Престиж» — автопарк",
+   "count": 227,
+   "default": false
+  },
+  {
+   "name": "Kaspi Gold",
+   "count": 429,
+   "default": false
+  },
+  {
+   "name": "Акция парк 0%",
+   "count": 1174,
+   "default": false
+  },
+  {
+   "name": "Брендинг (4%)",
+   "count": 38,
+   "default": false
+  },
+  {
+   "name": "Для всех 2%",
+   "count": 353,
+   "default": true
+  },
+  {
+   "name": "Новые водители",
+   "count": 37,
+   "default": false
+  },
+  {
+   "name": "Отток (не для новых регистраций)",
+   "count": 2823,
+   "default": false
+  },
+  {
+   "name": "Платный найм",
+   "count": 0,
+   "default": false
+  },
+  {
+   "name": "После акции — 4%",
+   "count": 534,
+   "default": false
+  },
+  {
+   "name": "Промо (4%)",
+   "count": 1495,
+   "default": false
+  },
+  {
+   "name": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "count": 20750,
+   "default": false
+  },
+  {
+   "name": "Курьеры 1%",
+   "count": 612,
+   "default": false
+  }
+ ],
+ "catalog": {
+  "tariffs": [
+   "Эконом",
+   "Комфорт",
+   "Комфорт+",
+   "Business",
+   "Минивэн",
+   "Электро",
+   "Межгород",
+   "Курьер",
+   "Доставка",
+   "Грузовой",
+   "Premier",
+   "VIP"
+  ]
+ },
+ "drivers": [
+  {
+   "id": "e3031e4011277110b18dc317053f8bdc",
+   "park": "itaxi-krg",
+   "last_name": "Жумабаев",
+   "first_name": "Ерлан",
+   "middle_name": "Серикович",
+   "phone": "+77014829154",
+   "license": "KA482915",
+   "license_country": "Казахстан",
+   "license_issued": "2022-06-06",
+   "license_expires": "2032-06-05",
+   "experience_since": "2018-11-18",
+   "iin": "900214300517",
+   "address": "Караганда",
+   "works": true,
+   "status": "free",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Бумажный документооборот",
+   "balance": 3450.2,
+   "account_limit": -50,
+   "rating": 4.93,
+   "car": {
+    "brand": "Toyota",
+    "model": "Camry",
+    "year": 2019,
+    "color": "Белый",
+    "plate": "512AKZ09",
+    "callsign": "512AKZ09",
+    "vin": "JTNB11HK103456781",
+    "tariffs": [
+     "Эконом",
+     "Комфорт",
+     "Курьер",
+     "Доставка"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2025-04-27",
+   "crm_id": 11046000,
+   "driver_no": 1540000,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    5,
+    5,
+    5,
+    1040
+   ],
+   "history": [
+    {
+     "at": "2025-04-27",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-04-27"
+  },
+  {
+   "id": "684561e0fa6da672bb2f8bfaada4c6d0",
+   "park": "itaxi-krg",
+   "last_name": "Жумабаев",
+   "first_name": "Ерлан",
+   "middle_name": "Серикович",
+   "phone": "+77014829154",
+   "license": "KA482915",
+   "license_country": "Казахстан",
+   "license_issued": "2022-12-19",
+   "license_expires": "2032-12-18",
+   "experience_since": "2018-04-16",
+   "iin": "900214300517",
+   "address": "",
+   "works": false,
+   "status": "offline",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Для всех 2%",
+   "provider": "Бумажный документооборот",
+   "balance": 0.0,
+   "account_limit": -50,
+   "rating": null,
+   "car": {
+    "brand": "Daewoo",
+    "model": "Nexia",
+    "year": 2012,
+    "color": "Серебристый",
+    "plate": "731BCA09",
+    "callsign": "731BCA09",
+    "vin": "",
+    "tariffs": [
+     "Эконом"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2021-01-18",
+   "crm_id": 11046001,
+   "driver_no": 1540037,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    0,
+    0,
+    0,
+    4160
+   ],
+   "history": [
+    {
+     "at": "2021-01-18",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2021-01-18"
+  },
+  {
+   "id": "02c5bf61870db9124e815df2d472d655",
+   "park": "itaxi-krg",
+   "last_name": "Ким",
+   "first_name": "Виктор",
+   "middle_name": "Андреевич",
+   "phone": "+77057314482",
+   "license": "MV305117",
+   "license_country": "Казахстан",
+   "license_issued": "2023-04-10",
+   "license_expires": "2033-04-09",
+   "experience_since": "2018-06-28",
+   "iin": "870903300218",
+   "address": "",
+   "works": true,
+   "status": "offline",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 1210.0,
+   "account_limit": -50,
+   "rating": 4.81,
+   "car": {
+    "brand": "Chevrolet",
+    "model": "Cobalt",
+    "year": 2021,
+    "color": "Белый",
+    "plate": "318KVA09",
+    "callsign": "318KVA09",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2025-11-23",
+   "crm_id": 11046002,
+   "driver_no": 1540074,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    5,
+    5,
+    5,
+    620
+   ],
+   "history": [
+    {
+     "at": "2025-11-23",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-11-23"
+  },
+  {
+   "id": "e5049bbb5dc0de5b9c69cbfc4e9501c7",
+   "park": "itaxi-krg",
+   "last_name": "Сейтказиев",
+   "first_name": "Нурлан",
+   "middle_name": "Болатович",
+   "phone": "+77022450913",
+   "license": "NB771402",
+   "license_country": "Казахстан",
+   "license_issued": "2017-12-27",
+   "license_expires": "2027-12-27",
+   "experience_since": "2012-11-20",
+   "iin": "920517300644",
+   "address": "",
+   "works": true,
+   "status": "busy",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 8755.4,
+   "account_limit": -50,
+   "rating": 4.97,
+   "car": {
+    "brand": "Toyota",
+    "model": "Camry",
+    "year": 2020,
+    "color": "Чёрный",
+    "plate": "095NBS09",
+    "callsign": "095NBS09",
+    "vin": "JTNB11HK705512390",
+    "tariffs": [
+     "Эконом",
+     "Курьер",
+     "Доставка"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2024-08-30",
+   "crm_id": 11046003,
+   "driver_no": 1540111,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    5,
+    5,
+    5,
+    1520
+   ],
+   "history": [
+    {
+     "at": "2024-08-30",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2024-08-30"
+  },
+  {
+   "id": "14e7228ca2c93193cef28025bae2a51c",
+   "park": "itaxi-krg",
+   "last_name": "Ахметов",
+   "first_name": "Данияр",
+   "middle_name": "Маратович",
+   "phone": "+77756102284",
+   "license": "KZ118456",
+   "license_country": "Казахстан",
+   "license_issued": "2020-01-25",
+   "license_expires": "2030-01-24",
+   "experience_since": "2016-02-18",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "order",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 15420.0,
+   "account_limit": -50,
+   "rating": 4.98,
+   "car": {
+    "brand": "Kia",
+    "model": "K5",
+    "year": 2022,
+    "color": "Серый",
+    "plate": "777DAK09",
+    "callsign": "777DAK09",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт",
+     "Комфорт+"
+    ],
+    "wrap": true,
+    "wrap_checked": true,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2023-06-07",
+   "crm_id": 11046004,
+   "driver_no": 1540148,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    5,
+    5,
+    5,
+    2420
+   ],
+   "history": [
+    {
+     "at": "2023-06-07",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2023-06-07"
+  },
+  {
+   "id": "8ae8cd374bd718a08aef0e7d690bff38",
+   "park": "itaxi-krg",
+   "last_name": "Баймуханова",
+   "first_name": "Салтанат",
+   "middle_name": "Ериковна",
+   "phone": "+77473390516",
+   "license": "AA630294",
+   "license_country": "Казахстан",
+   "license_issued": "2017-06-21",
+   "license_expires": "2027-06-21",
+   "experience_since": "2016-05-08",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "free",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 640.5,
+   "account_limit": -50,
+   "rating": 4.89,
+   "car": {
+    "brand": "Hyundai",
+    "model": "Accent",
+    "year": 2020,
+    "color": "Белый",
+    "plate": "406SBE09",
+    "callsign": "406SBE09",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер"
+    ],
+    "wrap": true,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-06-26",
+   "crm_id": 11046005,
+   "driver_no": 1540185,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    6,
+    6,
+    6,
+    190
+   ],
+   "history": [
+    {
+     "at": "2026-06-26",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-06-26"
+  },
+  {
+   "id": "b75540bd77cefd4c4820b0e87d6a9dfa",
+   "park": "itaxi-krg",
+   "last_name": "Ли",
+   "first_name": "Максим",
+   "middle_name": "Олегович",
+   "phone": "+77089157730",
+   "license": "MR904562",
+   "license_country": "Казахстан",
+   "license_issued": "2019-05-28",
+   "license_expires": "2029-05-27",
+   "experience_since": "2014-08-11",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "offline",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 0.0,
+   "account_limit": -50,
+   "rating": null,
+   "car": {
+    "brand": "Kia",
+    "model": "Rio",
+    "year": 2023,
+    "color": "Синий",
+    "plate": "220LMO09",
+    "callsign": "220LMO09",
+    "vin": "",
+    "tariffs": [
+     "Эконом"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-23",
+   "crm_id": 11046006,
+   "driver_no": 1540222,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    2,
+    2,
+    2,
+    12
+   ],
+   "history": [
+    {
+     "at": "2026-09-23",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-23"
+  },
+  {
+   "id": "d668dcae24c2fae5d5478e0c73bbdd8c",
+   "park": "itaxi-krg",
+   "last_name": "Сарсенбаев",
+   "first_name": "Ильяс",
+   "middle_name": "Нурланович",
+   "phone": "+77712048861",
+   "license": "HM225871",
+   "license_country": "Казахстан",
+   "license_issued": "2021-08-20",
+   "license_expires": "2031-08-20",
+   "experience_since": "2019-07-19",
+   "iin": "",
+   "address": "",
+   "works": false,
+   "status": "offline",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": -35.0,
+   "account_limit": -50,
+   "rating": 4.62,
+   "car": {
+    "brand": "Nissan",
+    "model": "Almera",
+    "year": 2016,
+    "color": "Серебристый",
+    "plate": "583IAS09",
+    "callsign": "583IAS09",
+    "vin": "",
+    "tariffs": [
+     "Эконом"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2024-01-23",
+   "crm_id": 11046007,
+   "driver_no": 1540259,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    0,
+    0,
+    0,
+    1960
+   ],
+   "history": [
+    {
+     "at": "2024-01-23",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2024-01-23"
+  },
+  {
+   "id": "183dd907709e99ee55c6642a5ed1edb9",
+   "park": "itaxi-ala",
+   "last_name": "Жаксылыков",
+   "first_name": "Арман",
+   "middle_name": "Тимурович",
+   "phone": "+77019004417",
+   "license": "AF447120",
+   "license_country": "Казахстан",
+   "license_issued": "2021-05-07",
+   "license_expires": "2031-05-07",
+   "experience_since": "2016-06-14",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "order",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 5320.0,
+   "account_limit": -50,
+   "rating": 4.95,
+   "car": {
+    "brand": "Hyundai",
+    "model": "Sonata",
+    "year": 2021,
+    "color": "Серый",
+    "plate": "144ARZ02",
+    "callsign": "144ARZ02",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2025-08-25",
+   "crm_id": 11046008,
+   "driver_no": 1540296,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    6,
+    6,
+    6,
+    800
+   ],
+   "history": [
+    {
+     "at": "2025-08-25",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-08-25"
+  },
+  {
+   "id": "26f6574a030e1a40ad828072ad1c9c67",
+   "park": "itaxi-ala",
+   "last_name": "Есенова",
+   "first_name": "Мадина",
+   "middle_name": "Кайратовна",
+   "phone": "+77776630942",
+   "license": "KZ730815",
+   "license_country": "Казахстан",
+   "license_issued": "2018-01-18",
+   "license_expires": "2028-01-18",
+   "experience_since": "2015-03-22",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "free",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 870.0,
+   "account_limit": -50,
+   "rating": 4.9,
+   "car": {
+    "brand": "Chevrolet",
+    "model": "Onix",
+    "year": 2023,
+    "color": "Красный",
+    "plate": "418MKE02",
+    "callsign": "418MKE02",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2025-08-25",
+   "crm_id": 11046009,
+   "driver_no": 1540333,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    6,
+    6,
+    6,
+    800
+   ],
+   "history": [
+    {
+     "at": "2025-08-25",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-08-25"
+  },
+  {
+   "id": "dfac8de7369d439a3ada69c72b2dab84",
+   "park": "itaxi-courier-ala",
+   "last_name": "Оспанова",
+   "first_name": "Дана",
+   "middle_name": "Ерлановна",
+   "phone": "+77771093346",
+   "license": "",
+   "license_country": "",
+   "license_issued": "",
+   "license_expires": "",
+   "experience_since": "",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "offline",
+   "employment": "Самозанятый",
+   "profession": "Курьер",
+   "rule": "Курьеры 1%",
+   "provider": "Sapar",
+   "balance": 2140.0,
+   "account_limit": -50,
+   "rating": 4.96,
+   "car": null,
+   "created": "2026-08-20",
+   "crm_id": 11046010,
+   "driver_no": 1540370,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    5,
+    5,
+    5,
+    80
+   ],
+   "history": [
+    {
+     "at": "2026-08-20",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-08-20"
+  },
+  {
+   "id": "cc36cd0bc69a91159c82e687b6e88f50",
+   "park": "itaxi-courier-ala",
+   "last_name": "Тохтаров",
+   "first_name": "Алихан",
+   "middle_name": "Нурланович",
+   "phone": "+77055218803",
+   "license": "",
+   "license_country": "",
+   "license_issued": "",
+   "license_expires": "",
+   "experience_since": "",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "order",
+   "employment": "Самозанятый",
+   "profession": "Курьер",
+   "rule": "Курьеры 1%",
+   "provider": "Sapar",
+   "balance": 6480.0,
+   "account_limit": -50,
+   "rating": 4.92,
+   "car": null,
+   "created": "2025-08-25",
+   "crm_id": 11046011,
+   "driver_no": 1540407,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    5,
+    5,
+    5,
+    800
+   ],
+   "history": [
+    {
+     "at": "2025-08-25",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-08-25"
+  },
+  {
+   "id": "abe5d4efe8e5ab2100fb066254c98921",
+   "park": "dostoyny-shym",
+   "last_name": "Мамыров",
+   "first_name": "Асхат",
+   "middle_name": "Кайратович",
+   "phone": "+77084417320",
+   "license": "RS558210",
+   "license_country": "Казахстан",
+   "license_issued": "2024-01-18",
+   "license_expires": "2034-01-17",
+   "experience_since": "2019-09-28",
+   "iin": "890412300733",
+   "address": "",
+   "works": true,
+   "status": "offline",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 4390.0,
+   "account_limit": -50,
+   "rating": 4.86,
+   "car": {
+    "brand": "Hyundai",
+    "model": "Sonata",
+    "year": 2019,
+    "color": "Серый",
+    "plate": "544HFO17",
+    "callsign": "544HFO17",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2024-12-28",
+   "crm_id": 11046012,
+   "driver_no": 1540444,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    4,
+    4,
+    4,
+    1280
+   ],
+   "history": [
+    {
+     "at": "2024-12-28",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2024-12-28"
+  },
+  {
+   "id": "b8f0206bea0ab96c30e48d6f398e0170",
+   "park": "dostoyny-shym",
+   "last_name": "Тулегенов",
+   "first_name": "Бауыржан",
+   "middle_name": "Маратович",
+   "phone": "+77019362815",
+   "license": "AT604921",
+   "license_country": "Казахстан",
+   "license_issued": "2021-02-14",
+   "license_expires": "2031-02-14",
+   "experience_since": "2018-05-11",
+   "iin": "910728300415",
+   "address": "",
+   "works": true,
+   "status": "busy",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 20691.85,
+   "account_limit": -50,
+   "rating": 4.96,
+   "car": {
+    "brand": "Kia",
+    "model": "K5",
+    "year": 2021,
+    "color": "Белый",
+    "plate": "310BTK17",
+    "callsign": "310BTK17",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2024-05-12",
+   "crm_id": 11046013,
+   "driver_no": 1540481,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    6,
+    6,
+    6,
+    1740
+   ],
+   "history": [
+    {
+     "at": "2024-05-12",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2024-05-12"
+  },
+  {
+   "id": "34a9412b6e904b7c64de7cbf33773de8",
+   "park": "itaxi-ast",
+   "last_name": "Абенов",
+   "first_name": "Руслан",
+   "middle_name": "Даулетович",
+   "phone": "+77078150244",
+   "license": "AF918350",
+   "license_country": "Казахстан",
+   "license_issued": "2023-12-23",
+   "license_expires": "2033-12-22",
+   "experience_since": "2022-06-14",
+   "iin": "930301300172",
+   "address": "",
+   "works": true,
+   "status": "free",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 5230.0,
+   "account_limit": -50,
+   "rating": 4.91,
+   "car": {
+    "brand": "Toyota",
+    "model": "Corolla",
+    "year": 2020,
+    "color": "Белый",
+    "plate": "816AMO01",
+    "callsign": "816AMO01",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2025-07-06",
+   "crm_id": 11046014,
+   "driver_no": 1540518,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    7,
+    7,
+    7,
+    900
+   ],
+   "history": [
+    {
+     "at": "2025-07-06",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-07-06"
+  },
+  {
+   "id": "e4a9c4ac562691acb796f0b61f937a25",
+   "park": "itaxi-ast",
+   "last_name": "Нуржанова",
+   "first_name": "Айгерим",
+   "middle_name": "Сапаровна",
+   "phone": "+77761420587",
+   "license": "KZ402733",
+   "license_country": "Казахстан",
+   "license_issued": "2021-09-21",
+   "license_expires": "2031-09-21",
+   "experience_since": "2020-01-19",
+   "iin": "950611400286",
+   "address": "",
+   "works": true,
+   "status": "free",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 61200.0,
+   "account_limit": -50,
+   "rating": 4.99,
+   "car": {
+    "brand": "Toyota",
+    "model": "Camry",
+    "year": 2022,
+    "color": "Чёрный",
+    "plate": "007ANS01",
+    "callsign": "007ANS01",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт",
+     "Комфорт+",
+     "Межгород"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2023-03-09",
+   "crm_id": 11046015,
+   "driver_no": 1540555,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    4,
+    5,
+    5,
+    2600
+   ],
+   "history": [
+    {
+     "at": "2023-03-09",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2023-03-09"
+  },
+  {
+   "id": "4e8ba5b8e2ee8a513b1f01af2491839b",
+   "park": "amanat-krg",
+   "last_name": "Калиев",
+   "first_name": "Айдос",
+   "middle_name": "Серикович",
+   "phone": "+77027741190",
+   "license": "HM530447",
+   "license_country": "Казахстан",
+   "license_issued": "2024-01-11",
+   "license_expires": "2034-01-10",
+   "experience_since": "2020-12-26",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "free",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 1900.0,
+   "account_limit": -50,
+   "rating": 4.9,
+   "car": {
+    "brand": "Lada",
+    "model": "Vesta",
+    "year": 2021,
+    "color": "Серый",
+    "plate": "271AKS09",
+    "callsign": "271AKS09",
+    "vin": "",
+    "tariffs": [
+     "Эконом"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2025-08-25",
+   "crm_id": 11046016,
+   "driver_no": 1540592,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    6,
+    6,
+    6,
+    800
+   ],
+   "history": [
+    {
+     "at": "2025-08-25",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-08-25"
+  },
+  {
+   "id": "97a790b6e09f1b232a7e48cd49893c64",
+   "park": "amanat-akt",
+   "last_name": "Утепова",
+   "first_name": "Жанна",
+   "middle_name": "Бекболатовна",
+   "phone": "+77762285013",
+   "license": "MR118930",
+   "license_country": "Казахстан",
+   "license_issued": "2019-06-02",
+   "license_expires": "2029-06-01",
+   "experience_since": "2015-11-21",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "offline",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 300.0,
+   "account_limit": -50,
+   "rating": 4.84,
+   "car": {
+    "brand": "Chevrolet",
+    "model": "Nexia",
+    "year": 2021,
+    "color": "Белый",
+    "plate": "630UZH04",
+    "callsign": "630UZH04",
+    "vin": "",
+    "tariffs": [
+     "Эконом"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2025-08-25",
+   "crm_id": 11046017,
+   "driver_no": 1540629,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    4,
+    4,
+    4,
+    800
+   ],
+   "history": [
+    {
+     "at": "2025-08-25",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-08-25"
+  },
+  {
+   "id": "2ce352ea06aad7a8a2ad70d90c18d252",
+   "park": "jana-taraz",
+   "last_name": "Искаков",
+   "first_name": "Бекзат",
+   "middle_name": "Ерланович",
+   "phone": "+77781504472",
+   "license": "KZ661205",
+   "license_country": "Казахстан",
+   "license_issued": "2017-09-25",
+   "license_expires": "2027-09-25",
+   "experience_since": "2012-11-01",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "order",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 2750.0,
+   "account_limit": -50,
+   "rating": 4.9,
+   "car": {
+    "brand": "Hyundai",
+    "model": "Elantra",
+    "year": 2020,
+    "color": "Чёрный",
+    "plate": "777BIE08",
+    "callsign": "777BIE08",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2025-08-25",
+   "crm_id": 11046018,
+   "driver_no": 1540666,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    6,
+    6,
+    6,
+    800
+   ],
+   "history": [
+    {
+     "at": "2025-08-25",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-08-25"
+  },
+  {
+   "id": "92010f241a04e30f390022e496ab48c1",
+   "park": "global-ast",
+   "last_name": "Омарова",
+   "first_name": "Алия",
+   "middle_name": "Нуржановна",
+   "phone": "+77016603258",
+   "license": "AA905518",
+   "license_country": "Казахстан",
+   "license_issued": "2022-01-17",
+   "license_expires": "2032-01-17",
+   "experience_since": "2020-06-26",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "free",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 4410.0,
+   "account_limit": -50,
+   "rating": 4.97,
+   "car": {
+    "brand": "Kia",
+    "model": "Cerato",
+    "year": 2022,
+    "color": "Серый",
+    "plate": "512AOM01",
+    "callsign": "512AOM01",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2025-08-25",
+   "crm_id": 11046019,
+   "driver_no": 1540703,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    6,
+    6,
+    6,
+    800
+   ],
+   "history": [
+    {
+     "at": "2025-08-25",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2025-08-25"
+  },
+  {
+   "id": "ddcd8d21379f4694aa01eff73e5aadc1",
+   "park": "qazaq-ala",
+   "last_name": "Байбосынов",
+   "first_name": "Самат",
+   "middle_name": "Ерланович",
+   "phone": "+77055607794",
+   "license": "MR993753",
+   "license_country": "Казахстан",
+   "license_issued": "2021-01-20",
+   "license_expires": "2031-01-20",
+   "experience_since": "2018-03-24",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "busy",
+   "employment": "Физическое лицо",
+   "profession": "Водитель такси",
+   "rule": "Для всех 2%",
+   "provider": "Sapar",
+   "balance": 0.0,
+   "account_limit": -50,
+   "rating": null,
+   "car": {
+    "brand": "Nissan",
+    "model": "Cefiro",
+    "year": 1995,
+    "color": "Чёрный",
+    "plate": "803ASD02",
+    "callsign": "altynbek_op",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер",
+     "Доставка"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-21",
+   "crm_id": 11046706,
+   "driver_no": 823544,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Нет данных",
+   "stats": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "history": [
+    {
+     "at": "2026-09-21",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-21"
+  },
+  {
+   "id": "19550946448b4b21a86008657bcae625",
+   "park": "itaxi-trk",
+   "last_name": "Жумабеков",
+   "first_name": "Нурлан",
+   "middle_name": "Кайратович",
+   "phone": "+77012345601",
+   "license": "HM945636",
+   "license_country": "Казахстан",
+   "license_issued": "2018-03-05",
+   "license_expires": "2028-03-04",
+   "experience_since": "2016-02-02",
+   "iin": "880314300512",
+   "address": "г. Туркестан, ул. Тауке хана, 15",
+   "works": true,
+   "status": "offline",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 1250.0,
+   "account_limit": -50,
+   "rating": 4.7,
+   "car": {
+    "brand": "Hyundai",
+    "model": "Accent",
+    "year": 2019,
+    "color": "Белый",
+    "plate": "512KLM13",
+    "callsign": "512KLM13",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер",
+     "Доставка"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-20",
+   "crm_id": 11046705,
+   "driver_no": 1006074,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    3,
+    21,
+    88,
+    412
+   ],
+   "history": [
+    {
+     "at": "2026-09-20",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-20"
+  },
+  {
+   "id": "2a06d17a5b00451db3b7bf91b76423da",
+   "park": "itaxi-ala",
+   "last_name": "Сапарова",
+   "first_name": "Айгерим",
+   "middle_name": "Маратовна",
+   "phone": "+77471112233",
+   "license": "KZ897519",
+   "license_country": "Казахстан",
+   "license_issued": "2018-01-22",
+   "license_expires": "2028-01-22",
+   "experience_since": "2016-03-27",
+   "iin": "",
+   "address": "",
+   "works": false,
+   "status": "offline",
+   "employment": "Физическое лицо",
+   "profession": "Водитель такси",
+   "rule": "Для всех 2%",
+   "provider": "Sapar",
+   "balance": -50.0,
+   "account_limit": -50,
+   "rating": 4.8,
+   "car": {
+    "brand": "Kia",
+    "model": "Rio",
+    "year": 2021,
+    "color": "Серый",
+    "plate": "771ABE02",
+    "callsign": "771ABE02",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер",
+     "Доставка"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-19",
+   "crm_id": 11046704,
+   "driver_no": 1548803,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "history": [
+    {
+     "at": "2026-09-19",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-19"
+  },
+  {
+   "id": "830572280daf44c89f40c56e9409b373",
+   "park": "itaxi-ala",
+   "last_name": "Омаров",
+   "first_name": "Ерлан",
+   "middle_name": "Сериккалиевич",
+   "phone": "+77089876543",
+   "license": "AA849402",
+   "license_country": "Казахстан",
+   "license_issued": "2018-04-20",
+   "license_expires": "2028-04-19",
+   "experience_since": "2013-04-17",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "free",
+   "employment": "Физическое лицо",
+   "profession": "Водитель такси",
+   "rule": "Для всех 2%",
+   "provider": "Sapar",
+   "balance": 3400.0,
+   "account_limit": -50,
+   "rating": 4.9,
+   "car": {
+    "brand": "Toyota",
+    "model": "Camry",
+    "year": 2018,
+    "color": "Белый",
+    "plate": "120BCD02",
+    "callsign": "120BCD02",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт",
+     "Комфорт+"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-18",
+   "crm_id": 11046703,
+   "driver_no": 1548802,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Нет данных",
+   "stats": [
+    5,
+    34,
+    140,
+    960
+   ],
+   "history": [
+    {
+     "at": "2026-09-18",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-18"
+  },
+  {
+   "id": "57673c362b6041f0a9c1bb6a4629f613",
+   "park": "itaxi-ala",
+   "last_name": "Касымов",
+   "first_name": "Данияр",
+   "middle_name": "Болатович",
+   "phone": "+77773334455",
+   "license": "MR801285",
+   "license_country": "Казахстан",
+   "license_issued": "2020-06-02",
+   "license_expires": "2030-06-02",
+   "experience_since": "2016-08-18",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "offline",
+   "employment": "Физическое лицо",
+   "profession": "Водитель такси",
+   "rule": "Для всех 2%",
+   "provider": "Sapar",
+   "balance": 0.0,
+   "account_limit": -50,
+   "rating": null,
+   "car": {
+    "brand": "Chevrolet",
+    "model": "Cobalt",
+    "year": 2022,
+    "color": "Серебристый",
+    "plate": "305CAT02",
+    "callsign": "305CAT02",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-17",
+   "crm_id": 11046702,
+   "driver_no": 603011,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    0,
+    12,
+    57,
+    301
+   ],
+   "history": [
+    {
+     "at": "2026-09-17",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-17"
+  },
+  {
+   "id": "390d464b21d847f2a0b26a7143b7aa5f",
+   "park": "chestny-ala",
+   "last_name": "Ахметова",
+   "first_name": "Динара",
+   "middle_name": "Асылбековна",
+   "phone": "+77025556677",
+   "license": "HM753168",
+   "license_country": "Казахстан",
+   "license_issued": "2017-10-10",
+   "license_expires": "2027-10-10",
+   "experience_since": "2016-06-21",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "offline",
+   "employment": "Физическое лицо",
+   "profession": "Водитель такси",
+   "rule": "Для всех 2%",
+   "provider": "Sapar",
+   "balance": 870.0,
+   "account_limit": -50,
+   "rating": 4.7,
+   "car": {
+    "brand": "Chevrolet",
+    "model": "Onix",
+    "year": 2023,
+    "color": "Красный",
+    "plate": "418DKZ02",
+    "callsign": "418DKZ02",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-16",
+   "crm_id": 11046701,
+   "driver_no": 1548801,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    1,
+    9,
+    33,
+    75
+   ],
+   "history": [
+    {
+     "at": "2026-09-16",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-16"
+  },
+  {
+   "id": "ce6fef80007049aea677a3b7dda0f8db",
+   "park": "amanat-ura",
+   "last_name": "Тлеубаев",
+   "first_name": "Арман",
+   "middle_name": "Сейтжанович",
+   "phone": "+77057778899",
+   "license": "KZ705051",
+   "license_country": "Казахстан",
+   "license_issued": "2022-11-30",
+   "license_expires": "2032-11-29",
+   "experience_since": "2020-09-08",
+   "iin": "910705300118",
+   "address": "г. Уральск, пр. Абая, 42",
+   "works": true,
+   "status": "offline",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 15.0,
+   "account_limit": -50,
+   "rating": 4.8,
+   "car": {
+    "brand": "Lada",
+    "model": "Vesta",
+    "year": 2020,
+    "color": "Синий",
+    "plate": "221ARM07",
+    "callsign": "221ARM07",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-15",
+   "crm_id": 11046700,
+   "driver_no": 1528022,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Нет данных",
+   "stats": [
+    2,
+    17,
+    61,
+    544
+   ],
+   "history": [
+    {
+     "at": "2026-09-15",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-15"
+  },
+  {
+   "id": "18a831202ec44b9f97ae6ee49e6068aa",
+   "park": "nol-ala",
+   "last_name": "Мухамеджанов",
+   "first_name": "Руслан",
+   "middle_name": "Айдарович",
+   "phone": "+77019990011",
+   "license": "AA656934",
+   "license_country": "Казахстан",
+   "license_issued": "2022-12-15",
+   "license_expires": "2032-12-14",
+   "experience_since": "2018-05-30",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "busy",
+   "employment": "Физическое лицо",
+   "profession": "Водитель такси",
+   "rule": "Для всех 2%",
+   "provider": "Sapar",
+   "balance": -30.0,
+   "account_limit": -50,
+   "rating": 4.9,
+   "car": {
+    "brand": "Hyundai",
+    "model": "Elantra",
+    "year": 2020,
+    "color": "Чёрный",
+    "plate": "909RUS02",
+    "callsign": "909RUS02",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-14",
+   "crm_id": 11046699,
+   "driver_no": 1548800,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    7,
+    40,
+    152,
+    1203
+   ],
+   "history": [
+    {
+     "at": "2026-09-14",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-14"
+  },
+  {
+   "id": "4b790a4be2bb47e2b4c7f11b9e054473",
+   "park": "jana-taraz",
+   "last_name": "Исмаилова",
+   "first_name": "Гульнара",
+   "middle_name": "Ержановна",
+   "phone": "+77478880022",
+   "license": "MR608817",
+   "license_country": "Казахстан",
+   "license_issued": "2020-07-10",
+   "license_expires": "2030-07-10",
+   "experience_since": "2015-11-09",
+   "iin": "930211400327",
+   "address": "г. Тараз, ул. Толе би, 7",
+   "works": true,
+   "status": "busy",
+   "employment": "Парковый самозанятый",
+   "profession": "Водитель такси",
+   "rule": "Свободный (Яндекс 4%, Таксопарк 4%)",
+   "provider": "Sapar",
+   "balance": 2200.0,
+   "account_limit": -50,
+   "rating": null,
+   "car": {
+    "brand": "Kia",
+    "model": "K5",
+    "year": 2022,
+    "color": "Белый",
+    "plate": "777JTZ08",
+    "callsign": "777JTZ08",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Комфорт",
+     "Комфорт+"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-13",
+   "crm_id": 11046698,
+   "driver_no": 1548799,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    4,
+    26,
+    97,
+    388
+   ],
+   "history": [
+    {
+     "at": "2026-09-13",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-13"
+  },
+  {
+   "id": "f569ca4a25b84d00ae1324d34f49b48e",
+   "park": "tenge-ast",
+   "last_name": "Нурпеисов",
+   "first_name": "Бауыржан",
+   "middle_name": "Талгатович",
+   "phone": "+77086661133",
+   "license": "HM560700",
+   "license_country": "Казахстан",
+   "license_issued": "2021-01-02",
+   "license_expires": "2031-01-02",
+   "experience_since": "2015-12-03",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "busy",
+   "employment": "Физическое лицо",
+   "profession": "Водитель такси",
+   "rule": "Для всех 2%",
+   "provider": "Sapar",
+   "balance": 540.0,
+   "account_limit": -50,
+   "rating": 4.9,
+   "car": {
+    "brand": "Skoda",
+    "model": "Rapid",
+    "year": 2019,
+    "color": "Серый",
+    "plate": "045TNG01",
+    "callsign": "045TNG01",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-12",
+   "crm_id": 11046697,
+   "driver_no": 1532275,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Нет данных",
+   "stats": [
+    6,
+    31,
+    118,
+    877
+   ],
+   "history": [
+    {
+     "at": "2026-09-12",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-12"
+  },
+  {
+   "id": "bfcb98ee71d54682be284538b31985fd",
+   "park": "eki-ala",
+   "last_name": "Абдрахманов",
+   "first_name": "Ильяс",
+   "middle_name": "Муратович",
+   "phone": "+77752224466",
+   "license": "KZ512583",
+   "license_country": "Казахстан",
+   "license_issued": "2019-09-11",
+   "license_expires": "2029-09-10",
+   "experience_since": "2018-01-14",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "offline",
+   "employment": "Физическое лицо",
+   "profession": "Водитель такси",
+   "rule": "Для всех 2%",
+   "provider": "Sapar",
+   "balance": 0.0,
+   "account_limit": -50,
+   "rating": 4.8,
+   "car": {
+    "brand": "Volkswagen",
+    "model": "Polo",
+    "year": 2021,
+    "color": "Белый",
+    "plate": "632EKI02",
+    "callsign": "632EKI02",
+    "vin": "",
+    "tariffs": [
+     "Эконом",
+     "Курьер"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-11",
+   "crm_id": 11046696,
+   "driver_no": 1548798,
+   "cash_limit": true,
+   "codes": 0,
+   "photo_control": "Пройден",
+   "stats": [
+    0,
+    3,
+    20,
+    44
+   ],
+   "history": [
+    {
+     "at": "2026-09-11",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-11"
+  },
+  {
+   "id": "06eb1317b88c437bb52896390123f621",
+   "park": "itaxi-courier-ala",
+   "last_name": "Серикбаева",
+   "first_name": "Жанар",
+   "middle_name": "Кенжебековна",
+   "phone": "+77013337799",
+   "license": "AA464466",
+   "license_country": "Казахстан",
+   "license_issued": "2022-06-25",
+   "license_expires": "2032-06-24",
+   "experience_since": "2018-09-02",
+   "iin": "",
+   "address": "",
+   "works": true,
+   "status": "offline",
+   "employment": "Физическое лицо",
+   "profession": "Курьер",
+   "rule": "Курьеры 1%",
+   "provider": "Sapar",
+   "balance": 90.0,
+   "account_limit": -50,
+   "rating": null,
+   "car": {
+    "brand": "Chevrolet",
+    "model": "Spark",
+    "year": 2020,
+    "color": "Жёлтый",
+    "plate": "150DLV02",
+    "callsign": "150DLV02",
+    "vin": "",
+    "tariffs": [
+     "Курьер",
+     "Доставка"
+    ],
+    "wrap": false,
+    "wrap_checked": false,
+    "lightbox": false,
+    "transmission": "Автоматическая",
+    "fuel": "Бензин"
+   },
+   "created": "2026-09-10",
+   "crm_id": 11046695,
+   "driver_no": 1547402,
+   "cash_limit": false,
+   "codes": 0,
+   "photo_control": "Нет данных",
+   "stats": [
+    0,
+    5,
+    22,
+    130
+   ],
+   "history": [
+    {
+     "at": "2026-09-10",
+     "text": "Учётная запись создана"
+    }
+   ],
+   "updated_at": "2026-09-10"
+  }
+ ]
+}

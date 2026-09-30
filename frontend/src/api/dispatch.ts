@@ -5,6 +5,8 @@ export interface FleetPark { id: string; name: string; city: string; color: stri
 export interface FleetCar {
   brand: string; model: string; year: number; color: string; plate: string; callsign: string; vin: string;
   tariffs: string[]; wrap: boolean; wrap_checked: boolean; lightbox: boolean; transmission: string; fuel: string;
+  /** Filled once CRM has edited the car. */
+  body?: string; sts?: string; owner?: string; status?: string;
 }
 export interface FleetOrder {
   id: string; status: "complete" | "cancelled"; cancel_reason: string; created_at: string; finished_at: string;
@@ -22,6 +24,9 @@ export interface FleetDriver {
   priority: { value: number; max: number; label: string; got: PriorityItem[]; can: PriorityItem[] };
   bonus: { done: number; target: number; amount: number; from: string; to: string; place: string; tariffs: string } | null;
   comment: string; source: string; device: string; app_version: string; created: string; photo_checks: string[]; orders: FleetOrder[];
+  /** The same account in CRM «Учётные записи водителей»: its number, CRM-only switches and the history of both sites. */
+  crm_id: number; driver_no: number; cash_limit: boolean; codes: number; photo_control: "Требуется" | "Пройден" | "Нет данных";
+  stats: [number, number, number, number]; history: { at: string; text: string }[]; updated_at: string;
 }
 export type InventoryType = "eda" | "delivery";
 export interface InventoryRow { employee: string; driver: string | null; driver_name: string; operation: string; type: InventoryType; number: string; qty: number; at: string; park: string | null }
@@ -47,6 +52,15 @@ export interface FleetResult { note?: string; checks?: { label: string; ok: bool
 export interface FleetResponse { state: FleetState; result: FleetResult }
 export interface TicketInput { park: string; kind: "text" | "call"; private: boolean; theme: string; subtheme: string; license: string; text: string; files: string[] }
 export interface InventoryInput { park: string; type: InventoryType; code: string; number: string }
+export interface CrmCarInput {
+  brand: string; model: string; color: string; year: number; plate: string; callsign: string; vin: string; body: string; sts: string;
+  owner: string; status: string; transmission: string; fuel: string; tariffs: string[]; wrap: boolean; lightbox: boolean;
+}
+export interface SmzInput { last_name: string; first_name: string; middle_name: string; address: string; iin: string; rule: string; account_limit: number }
+export interface RegisterInput {
+  park: string; profession: string; self_employed: boolean; last_name: string; first_name: string; middle_name: string; phone: string; iin: string;
+  address: string; license: string; license_issued: string; license_expires: string; car: { brand: string; model: string; color: string; year: number; plate: string } | null;
+}
 
 const BASE = "/api/v1/learning/dispatch";
 // A fresh id for every press: the server acts once even if the request is repeated.
@@ -62,4 +76,17 @@ export const fleet = {
   ticket: (input: TicketInput) => send("/tickets", "POST", input),
   answer: (call: string, option: string) => send(`/calls/${encodeURIComponent(call)}/answer`, "POST", { option }),
   reset: () => send("/reset", "POST"),
+};
+
+const account = (driver: string) => `/drivers/${encodeURIComponent(driver)}/crm`;
+/** CRM «Учётные записи водителей» and «Регистрация водителей» change the same fleet accounts. */
+export const fleetCrm = {
+  car: (driver: string, car: CrmCarInput) => send(`${account(driver)}/car`, "PUT", { car }),
+  smz: (driver: string, input: SmzInput) => send(`${account(driver)}/smz`, "POST", input),
+  individual: (driver: string) => send(`${account(driver)}/individual`, "POST"),
+  limit: (driver: string, enabled: boolean) => send(`${account(driver)}/limit`, "POST", { enabled }),
+  code: (driver: string) => send(`${account(driver)}/code`, "POST"),
+  photo: (driver: string) => send(`${account(driver)}/photo`, "POST"),
+  rule: (driver: string, rule: string, reason: string) => send(`${account(driver)}/rule`, "POST", { rule, reason }),
+  register: (input: RegisterInput) => send("/crm/drivers", "POST", input),
 };

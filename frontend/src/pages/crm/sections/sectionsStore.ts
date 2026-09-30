@@ -22,13 +22,15 @@ export function resetGroup(state: SectionsState, group: SectionGroup, drivers: T
   return { ...state, edo: fresh.edo, provider: fresh.provider };
 }
 
-export const sectionsKey = (userId?: number) => `crm-sections:v1:${userId ?? "guest"}`;
-export function loadSections(userId: number | undefined, drivers: TrainingDriver[]): SectionsState {
+// v2: the drivers are the fleet accounts of «Диспетчерская»; v1 copies named parks and accounts that are gone.
+export const sectionsKey = (userId?: number) => `crm-sections:v2:${userId ?? "guest"}`;
+/** The saved copy, or a fresh one once the fleet's drivers are known; null while they load. */
+export function loadSections(userId: number | undefined, drivers: TrainingDriver[]): SectionsState | null {
   try {
     const saved = JSON.parse(localStorage.getItem(sectionsKey(userId)) ?? "null");
     if (saved?.version === 1 && ["participants", "backdated", "conditionAdds", "registrations", "edo", "provider"].every(k => Array.isArray(saved[k]))) return saved;
   } catch { /* A broken or blocked store falls back to fresh data. */ }
-  return seedSections(drivers);
+  return drivers.length ? seedSections(drivers) : null;
 }
 export function saveSections(userId: number | undefined, state: SectionsState) {
   try { localStorage.setItem(sectionsKey(userId), JSON.stringify(state)); } catch { /* Practice still works for this visit. */ }

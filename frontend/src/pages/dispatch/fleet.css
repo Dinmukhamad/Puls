@@ -81,6 +81,10 @@
 .fleet-note { margin:0 0 12px; color:#6c6964; font-size:13px; }
 .fleet-muted { color:var(--f-muted); font-size:13px; }
 .fleet-empty-hint { color:var(--f-muted); text-align:center; padding:26px 18px; margin:0; line-height:1.6; }
+.fleet-history { list-style:none; margin:14px 0 0; padding:0; display:grid; gap:0; }
+.fleet-history li { display:grid; grid-template-columns:130px 1fr; gap:14px; padding:12px 0; border-bottom:1px solid var(--f-line, #eceff3); line-height:1.45; }
+.fleet-history time { color:var(--f-muted); font-size:13px; white-space:nowrap; }
+@media(max-width:600px) { .fleet-history li { grid-template-columns:1fr; gap:2px; } }
 .fleet-chips,.fleet-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:12px; }
 .fleet-toolbar-end { margin-left:auto; }
 .fleet-chip { display:inline-flex; align-items:center; gap:6px; min-height:32px; padding:4px 12px; border:0; border-radius:10px; background:#fff; font-size:13px; font-weight:500; }

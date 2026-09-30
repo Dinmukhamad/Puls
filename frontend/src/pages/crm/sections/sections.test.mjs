@@ -1,10 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { build } from 'esbuild';
 
-const built = await build({ stdin: { contents: `export * from './promoData.ts'; export * from './registrationData.ts'; export * from './edoData.ts'; export * from './sectionsStore.ts'; export { seedDrivers } from '../drivers/driverData.ts';`, resolveDir: new URL('.', import.meta.url).pathname, loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
+const built = await build({ stdin: { contents: `export * from './promoData.ts'; export * from './registrationData.ts'; export * from './edoData.ts'; export * from './sectionsStore.ts'; export { fromFleet, parkLabel } from '../drivers/driverData.ts';`, resolveDir: new URL('.', import.meta.url).pathname, loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
 const kit = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
-const drivers = kit.seedDrivers(), now = '2026-09-30T08:00:00.000Z', today = '2026-09-30';
+// The sections work with the fleet accounts of «Диспетчерская».
+const fleet = JSON.parse(readFileSync(new URL('../drivers/fleet.fixture.json', import.meta.url), 'utf8'));
+const drivers = kit.fromFleet(fleet), now = '2026-09-30T08:00:00.000Z', today = '2026-09-30';
 const byName = last => drivers.find(d => d.lastName === last);
 
 test('a driver is found by account ID, numeric ID or a pasted link', () => {
@@ -13,6 +16,11 @@ test('a driver is found by account ID, numeric ID or a pasted link', () => {
   assert.equal(kit.findDriver(drivers, String(d.id)), d);
   assert.equal(kit.findDriver(drivers, `https://fleet.yandex.kz/contractors/${d.account}/details?park_id=1`), d);
   assert.equal(kit.findDriver(drivers, 'ffffffffffffffffffffffffffffffff'), undefined);
+});
+
+test('promotions name the fleet\'s parks', () => {
+  assert.deepEqual([...kit.FLEET_PARKS].sort(), fleet.parks.map(kit.parkLabel).sort());
+  for (const p of kit.PROMOS) for (const park of p.parks ?? []) assert.ok(kit.FLEET_PARKS.includes(park), `${p.id}: ${park}`);
 });
 
 test('available promotions depend on the park, the driver\'s trips and profession', () => {
@@ -86,23 +94,26 @@ test('registration: fields depend on the type and profession, the IIN carries th
   assert.equal(kit.iinProblem('951332300517'), 'Первые 6 цифр ИИН — дата рождения ГГММДД.');
   assert.equal(kit.iinProblem('950312900517'), 'Седьмая цифра ИИН — век и пол, от 1 до 6.');
   assert.match(kit.regErrors({ ...form, iin: '100312500517' }, today).iin, /18 лет/);
-  const courier = { ...kit.emptyForm(), type: 'Регистрация нового физического лица', park: 'iTaxi (Доставка) Алматы', profession: kit.PROFESSIONS[2], lastName: 'Курьер', firstName: 'Тест', phone: '+77001112244', iin: '010517500123', birthday: '2001-05-18' };
+  const courier = { ...kit.emptyForm(), type: 'Регистрация нового физического лица', park: 'iTaxi курьер Алматы', profession: kit.PROFESSIONS[2], lastName: 'Курьер', firstName: 'Тест', phone: '+77001112244', iin: '010517500123', birthday: '2001-05-18' };
   assert.equal(kit.regErrors(courier, today).iin, 'Дата рождения не совпадает с ИИН.');
   assert.deepEqual(kit.regErrors({ ...courier, birthday: '2001-05-17' }, today), {}, 'walking couriers need no licence or car');
   assert.equal(kit.normalizePhone('8 700 111 22 33'), '+77001112233');
 });
 
-test('«Проверить водителя» finds an existing driver; saving creates the training account', () => {
+test('«Проверить водителя» finds an existing driver; saving sends the driver to the park of the dispatch', () => {
   const taken = { ...kit.emptyForm(), type: 'Регистрация нового физического лица', profession: 'Водитель', phone: byName('Омаров').phone, iin: '950312300517', license: 'AN898706' };
   const found = kit.checkDriver(taken, drivers, []);
   assert.equal(found.ok, false); assert.match(found.text, /Омаров Ерлан, парк «iTaxi Алматы»/);
   const fresh = { ...taken, park: 'iTaxi Алматы', lastName: 'Новый', firstName: 'Водитель', phone: '+77001112233', address: '', licenseIssued: '2020-01-10', licenseExpires: '2030-01-09', car: { brand: 'Kia', model: 'Rio', color: 'Белый', year: 2020, plate: '803ASD02' } };
   const check = kit.checkDriver(fresh, drivers, []);
   assert.equal(check.ok, true); assert.equal(check.key, kit.checkKey(fresh));
-  const { registration, driver } = kit.registerDriver(fresh, drivers, 'Оператор', now, 9001);
-  assert.equal(registration.status, 'Зарегистрирован'); assert.equal(registration.result, 'Через CRM'); assert.equal(registration.account, driver.account);
-  assert.equal(driver.type, 'Физлицо'); assert.equal(driver.balanceLimit, -50); assert.equal(driver.car.plate, '803ASD02'); assert.ok(driver.id > Math.max(...drivers.map(d => d.id)));
-  assert.equal(kit.checkDriver(fresh, [...drivers, driver], []).ok, false, 'the new driver is found next time');
+  const input = kit.registerInput({ ...fresh, phone: '8 700 111 22 33', license: 'an898706' }, 'itaxi-ala');
+  assert.deepEqual(input, { park: 'itaxi-ala', profession: 'Водитель', self_employed: false, last_name: 'Новый', first_name: 'Водитель', middle_name: '', phone: '+77001112233', iin: '950312300517',
+    address: '', license: 'AN898706', license_issued: '2020-01-10', license_expires: '2030-01-09', car: { brand: 'Kia', model: 'Rio', color: 'Белый', year: 2020, plate: '803ASD02' } });
+  const walker = kit.registerInput({ ...fresh, profession: kit.PROFESSIONS[2], type: 'Регистрация нового СМЗ', address: 'г. Алматы, ул. Учебная, 1' }, 'itaxi-courier-ala');
+  assert.equal(walker.car, null); assert.equal(walker.license, ''); assert.equal(walker.self_employed, true);
+  const registration = kit.registered(fresh, 9001, 'Оператор', now, { account: 'a'.repeat(32), id: 11050000 });
+  assert.equal(registration.status, 'Зарегистрирован'); assert.equal(registration.result, 'Через CRM'); assert.equal(registration.account, 'a'.repeat(32)); assert.equal(registration.driverId, 11050000);
   assert.equal(kit.draftProblem({ ...kit.emptyForm(), type: 'Регистрация нового СМЗ' }), 'Для черновика укажите фамилию или номер телефона.');
 });
 
@@ -151,6 +162,36 @@ test('dashboards count the period and the manager rating counts the last seven d
   const rating = kit.managerRating([{ calledAt: now, manager: 'Оператор' }, { calledAt: '2026-09-29T10:00:00.000Z', manager: 'Оператор' }, { calledAt: '2026-09-01T10:00:00.000Z', manager: 'Старый' }], today);
   assert.equal(rating.days.length, 7); assert.equal(rating.days.at(-1), today);
   assert.deepEqual(rating.rows, [{ manager: 'Оператор', perDay: [0, 0, 0, 0, 0, 1, 1], total: 2 }]);
+});
+
+test('ЭДО lists the fleet\'s self-employed accounts with the provider «Диспетчерская» has', () => {
+  const seed = kit.seedEdo(), smz = drivers.filter(d => d.type === 'СМЗ'), rows = kit.fleetEdo(seed, drivers);
+  assert.equal(rows.length, seed.length + smz.length);
+  assert.ok(rows.filter(kit.isFleetRow).every(r => smz.some(d => d.id === r.id && d.account === r.account && d.park === r.park)));
+  const paper = smz.find(d => d.provider !== 'Sapar' && d.works), row = rows.find(r => r.id === paper.id);
+  assert.equal(row.provider, ''); assert.equal(row.docs, 'Нет'); assert.equal(row.avrYandex, 'Не сформировано');
+  // The operator sets Sapar in the dispatch: the documents are issued in Sapar.
+  const switched = drivers.map(d => d === paper ? { ...d, provider: 'Sapar' } : d), live = kit.fleetEdo(seed, switched).find(r => r.id === paper.id);
+  assert.equal(live.provider, 'sapar'); assert.equal(live.docs, 'Да'); assert.equal(live.avrYandex, 'Ожидает подписания');
+  // A call is kept with the account; an account back to «Физлицо» leaves the list.
+  const called = kit.logEdoCall(live, { reach: 'Дозвонились', office: 'Придёт', comment: 'Подпишет в Sapar сегодня' }, 'Оператор', now), stored = kit.upsert(seed, called);
+  assert.equal(stored.length, seed.length + 1); assert.equal(kit.upsert(stored, called).length, stored.length);
+  assert.equal(kit.fleetEdo(stored, switched).find(r => r.id === paper.id).callStatus, 'Обработан');
+  assert.equal(kit.fleetEdo(stored, switched.map(d => d.id === paper.id ? { ...d, type: 'Физлицо' } : d)).find(r => r.id === paper.id), undefined);
+});
+
+test('«Смена провайдера»: fleet accounts off Sapar are called, and «Провайдер сменили» follows the dispatch', () => {
+  const seed = kit.seedProvider(), rows = kit.fleetProvider(seed, drivers), paper = drivers.filter(d => d.type === 'СМЗ' && d.provider !== 'Sapar');
+  assert.ok(paper.length > 0);
+  assert.deepEqual(rows.filter(kit.isFleetRow).map(r => r.id).sort(), paper.map(d => d.id).sort());
+  const row = rows.find(r => r.id === paper[0].id);
+  const agreed = kit.logProviderCall(row, { reach: 'Дозвон', outcome: 'Согласен сменить', requestId: 'Получен', office: '—', comment: '' }, 'Оператор', now), stored = kit.upsert(seed, agreed);
+  assert.equal(kit.fleetProvider(stored, drivers).find(r => r.id === row.id).changed, '—', 'not changed until the dispatch has Sapar');
+  const switched = drivers.map(d => d.id === row.id ? { ...d, provider: 'Sapar' } : d), done = kit.fleetProvider(stored, switched).find(r => r.id === row.id);
+  assert.equal(done.changed, 'Да'); assert.equal(done.provider, 'sapar'); assert.equal(done.outcome, 'Согласен сменить');
+  assert.equal(kit.fleetProvider(seed, switched).find(r => r.id === row.id), undefined, 'an account already on Sapar is not called');
+  const moved = switched.map(d => d.id === row.id ? { ...d, history: [{ at: '2026-09-30T12:00:00', text: 'Диспетчерская: провайдер ЭДО — Sapar' }, ...d.history] } : d);
+  assert.equal(kit.fleetProvider(seed, moved).find(r => r.id === row.id).changed, 'Да', 'one moved to Sapar in the dispatch stays with «Да»');
 });
 
 test('resetting one group keeps the others', () => {

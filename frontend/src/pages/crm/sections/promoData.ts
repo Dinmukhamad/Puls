@@ -1,7 +1,7 @@
 /**
  * Training copy of CRM «Акции»: connecting a driver, the participant registry, backdated
  * requests and the promotions that change working conditions. Every name, ID and amount is
- * fictional; the drivers are the training accounts of «Учётные записи водителей».
+ * fictional; the drivers are the fleet accounts that «Учётные записи водителей» and «Диспетчерская» share.
  */
 import { driverName, driverSearchQuery, type TrainingDriver } from "../drivers/driverData";
 import { hex32 } from "./fake";
@@ -18,7 +18,10 @@ export interface Promo {
   terms?: string;
 }
 
-const NOT_HONEST = ["iTaxi Алматы", "iTaxi Туркестан", "iTaxi (Доставка) Алматы", "QAZAQ Алматы", "Аманат Уральск", "Ноль Такси Алматы", "Jana Taxi Тараз", "Tenge Taxi Астана", "EKI DONGELEK Алматы", "Адал Шымкент", "Global Шымкент"];
+/** The parks of the training fleet, as CRM names them («Диспетчерская» has the same ones). */
+export const FLEET_PARKS = ["iTaxi Караганда", "iTaxi Алматы", "iTaxi Астана", "iTaxi курьер Алматы", "Достойный Шымкент", "Аманат Караганда", "Аманат Актобе", "Jana Taxi Тараз", "Global Астана", "QAZAQ Алматы", "iTaxi Туркестан", "Честный Алматы", "Аманат Уральск", "Ноль Такси Алматы", "Tenge Taxi Астана", "EKI DONGELEK Алматы"];
+// «Честный» takes part in none of the park's promotions.
+const NOT_HONEST = FLEET_PARKS.filter(p => p !== "Честный Алматы");
 export const PROMOS: Promo[] = [
   { id: "fast-start", title: "Быстрый старт", kind: "money", condition: "20 поездок / 3 дн. → 5 000 ₸", days: 3, target: 20, amount: 5000, audience: "new", parks: NOT_HONEST.filter(p => p !== "QAZAQ Алматы") },
   { id: "tenge-2000", title: "Тенге 2000 при регистрации", kind: "auto", condition: "1 поездка → 2 000 ₸", days: 14, target: 1, amount: 2000, audience: "new", parks: null },
@@ -65,7 +68,7 @@ export interface ConditionAdd { id: number; account: string; name: string; promo
 export const DAY = 86_400_000;
 export const DECISION_AFTER = 120_000;
 const addDays = (iso: string, days: number) => new Date(new Date(iso).getTime() + days * DAY).toISOString();
-export const profession = (d: Pick<TrainingDriver, "park">) => /Доставка/.test(d.park) ? "Курьер" : "Водитель";
+export const profession = (d: Pick<TrainingDriver, "profession">) => d.profession === "Курьер" ? "Курьер" : "Водитель";
 
 /** The training driver behind an account ID, a numeric ID or a pasted link to the driver. */
 export function findDriver(drivers: TrainingDriver[], raw: string) {
@@ -180,7 +183,7 @@ export function settleBackdated(requests: Backdated[], participants: Participant
 export function seedParticipants(drivers: TrainingDriver[]): Participant[] {
   const byAccount = new Map(drivers.map(d => [d.account, d]));
   const names = ["Алибеков Ерасыл", "Жаксылыков Нурбол", "Каримова Асель", "Сейткали Мирас", "Утепова Жансая", "Бекмуханов Олжас", "Тулеуов Дамир", "Ермекова Аружан", "Кенжебаев Асхат", "Мусина Дана", "Сарсенов Ильяс", "Абилов Темирлан", "Нуртаева Камила", "Оспанов Бекзат", "Жумагали Санжар", "Ахметжанов Руслан", "Искакова Мадина", "Турсынбаев Ален", "Байжанов Арсен", "Садыкова Айжан"];
-  const parks = ["iTaxi Алматы", "Ноль Такси Алматы", "Jana Taxi Тараз", "Адал Шымкент", "Global Шымкент", "iTaxi (Доставка) Алматы", "Tenge Taxi Астана"];
+  const parks = ["iTaxi Алматы", "Ноль Такси Алматы", "Jana Taxi Тараз", "Достойный Шымкент", "Global Астана", "iTaxi курьер Алматы", "Tenge Taxi Астана"];
   const plan: [string, Participation, Payout, number, string][] = [
     ["fast-start", "Ожидает первой поездки", "waiting", 0, ""], ["fast-start", "Ожидает первой поездки", "waiting", 0, ""], ["fast-start", "Выполняет условия", "waiting", 12, ""],
     ["fast-start", "Условия выполнены", "ready", 20, ""], ["fast-start", "Условия выполнены", "ready", 23, ""], ["fast-start", "Условия выполнены", "review", 20, "Часть поездок отменена пассажиром — сверяет фин. отдел"],
@@ -194,7 +197,7 @@ export function seedParticipants(drivers: TrainingDriver[]): Participant[] {
   const rows = plan.map(([promo, status, payout, progress, reason], i): Participant => {
     const p = promoById(promo)!, connectedAt = at(10 + (i * 7) % 18), paid = payout === "paid" || (payout === "auto" && status === "Завершено");
     const choice = parks[i % parks.length];
-    const park = p.audience === "courier" ? "iTaxi (Доставка) Алматы" : p.parks && !p.parks.includes(choice) ? p.parks[0] : choice;
+    const park = p.audience === "courier" ? "iTaxi курьер Алматы" : p.parks && !p.parks.includes(choice) ? p.parks[0] : choice;
     const account = hex32(`promo-participant-${i}`);
     return {
       id: 1000 + i, account, name: names[i % names.length], park, inviter: promo === "invite" ? names[(i + 7) % names.length] : "", promo, connectedAt, until: addDays(connectedAt, p.days), progress, status, payout, reason,
