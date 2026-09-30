@@ -14,6 +14,8 @@ export interface CoachStep {
   when?: string;
   /** «Дальше» presses the highlighted button for the operator and waits for `advanceWhen`. */
   autoClick?: boolean;
+  /** Places the operator also needs during this step; the rest of the page stays locked. */
+  allow?: string;
 }
 export type CoachTourId = "appeals" | "drivers";
 type Side = "right" | "left" | "below" | "above";

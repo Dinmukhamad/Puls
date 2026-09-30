@@ -1,33 +1,42 @@
 /* Pulsar the coach: flies to the element he talks about, points at it and explains it. */
 .coach { position:fixed; inset:0; z-index:70; pointer-events:none; }
-.coach-spot { position:fixed; left:0; top:0; border-radius:12px; box-shadow:0 0 0 9999px #26282b59; outline:3px solid #b4b7bd; outline-offset:0; transition:transform .45s cubic-bezier(.3,.8,.3,1),width .45s,height .45s; animation:coach-spot 1.6s ease-in-out infinite; }
+.coach-spot { position:fixed; left:0; top:0; border-radius:12px; box-shadow:0 0 0 9999px #26282b59; outline:3px solid #b4b7bd; outline-offset:0; transition:transform .25s cubic-bezier(.3,.8,.3,1),width .25s,height .25s; animation:coach-spot 1.6s ease-in-out infinite; }
 .coach[data-missing=true] .coach-spot,.coach[data-missing=true] .coach-hand { opacity:0; }
-.coach-mascot { position:fixed; left:0; top:0; width:108px; height:108px; transition:transform .7s cubic-bezier(.45,-.2,.25,1.25); filter:drop-shadow(0 12px 18px #41444940); }
+.coach-mascot { position:fixed; left:0; top:0; width:108px; height:108px; transition:transform .35s cubic-bezier(.45,-.2,.25,1.25); filter:drop-shadow(0 12px 18px #41444940); }
 .coach-mascot .pulsar-face { width:100%; height:100%; overflow:visible; transition:transform .35s; }
 .coach-mascot[data-flip=true] .pulsar-face { transform:scaleX(-1); }
-.coach[data-flying=true] .coach-mascot .pulsar-face { animation:coach-fly .7s ease-in-out; }
-.coach[data-flying=true] .coach-mascot[data-flip=true] .pulsar-face { animation:coach-fly-flip .7s ease-in-out; }
-.coach-hand { position:fixed; left:0; top:0; display:flex; flex-direction:column; align-items:center; gap:2px; transition:transform .5s cubic-bezier(.3,.8,.3,1); }
+.coach[data-flying=true] .coach-mascot .pulsar-face { animation:coach-fly .35s ease-in-out; }
+.coach[data-flying=true] .coach-mascot[data-flip=true] .pulsar-face { animation:coach-fly-flip .35s ease-in-out; }
+.coach-hand { position:fixed; left:0; top:0; display:flex; flex-direction:column; align-items:center; gap:2px; transition:transform .25s cubic-bezier(.3,.8,.3,1); }
 .coach-hand>span { font-size:32px; line-height:1; filter:drop-shadow(0 3px 4px #0003); animation:coach-tap-left .9s ease-in-out infinite; }
 .coach-hand[data-side=left]>span { animation-name:coach-tap-right; }
 .coach-hand[data-side=below]>span { animation-name:coach-tap-up; }
 .coach-hand[data-side=above]>span { animation-name:coach-tap-down; }
 .coach-hand small { background:#93979f; color:#fff; font:700 10.5px/1.15 system-ui,sans-serif; padding:4px 7px; max-width:76px; text-align:center; border-radius:8px; box-shadow:0 4px 10px #93979f50; }
 .coach[data-flying=true] .coach-hand { opacity:0; }
-.coach-bubble { position:fixed; left:0; top:0; width:min(320px,calc(100vw - 24px)); pointer-events:auto; background:#fff; color:#23294a; border-radius:18px; padding:14px 16px 12px; box-shadow:0 18px 50px #4144493d,0 0 0 2px #cdcfd3; font:14px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; transition:transform .7s cubic-bezier(.3,.8,.3,1),opacity .3s; }
-.coach[data-flying=true] .coach-bubble { opacity:.35; }
+.coach-bubble { position:fixed; left:0; top:0; width:min(320px,calc(100vw - 24px)); pointer-events:auto; background:#fff; color:#23294a; border-radius:18px; padding:14px 16px 12px; box-shadow:0 18px 50px #4144493d,0 0 0 2px #cdcfd3; font:14px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; transition:transform .3s cubic-bezier(.3,.8,.3,1); }
 .coach-bubble-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
 .coach-count { font-size:11px; font-weight:800; color:#93979f; background:#f3f4f5; padding:2px 8px; border-radius:20px; }
 .coach-close { border:0; background:transparent; color:#8a86a8; font-size:14px; width:28px; height:28px; border-radius:50%; cursor:pointer; }
 .coach-close:hover { background:#f7f7f7; }
 .coach-bubble strong { display:block; font-size:16.5px; line-height:1.3; margin-bottom:4px; }
 .coach-bubble p { margin:0 0 10px; color:#3b4262; }
+/* A click outside the lit place: the bubble shakes and explains why nothing happened. */
+.coach-lock { margin:-4px 0 10px!important; padding:6px 10px; border-radius:10px; background:#fff4d6; color:#6b4e00!important; font-size:12.5px; line-height:1.35; }
+.coach[data-nudge=a] .coach-bubble { animation:coach-nudge-a .32s ease-in-out; }
+.coach[data-nudge=b] .coach-bubble { animation:coach-nudge-b .32s ease-in-out; }
+.coach[data-nudge=a] .coach-spot { animation:coach-spot 1.6s ease-in-out infinite,coach-ping-a .4s ease-out; }
+.coach[data-nudge=b] .coach-spot { animation:coach-spot 1.6s ease-in-out infinite,coach-ping-b .4s ease-out; }
 .coach-actions { display:flex; justify-content:space-between; gap:10px; }
 .coach-back { border:0; background:transparent; color:#93979f; font-weight:600; font-size:13px; padding:8px 4px; cursor:pointer; }
 .coach-back:disabled { opacity:.35; cursor:default; }
 .coach-next { border:0; border-radius:12px; padding:9px 16px; color:#fff; font-weight:700; font-size:14px; background:linear-gradient(135deg,#afb2b8,#7d828b); box-shadow:0 5px 14px #7d828b45; cursor:pointer; }
 .coach-next:focus-visible,.coach-back:focus-visible,.coach-close:focus-visible { outline:3px solid #b4b7bd; outline-offset:2px; }
 @keyframes coach-spot { 0%,100% { outline-color:#b4b7bd; } 50% { outline-color:#d9dbde; } }
+@keyframes coach-nudge-a { 20%,60% { translate:-6px 0; } 40%,80% { translate:6px 0; } }
+@keyframes coach-nudge-b { 20%,60% { translate:-6px 0; } 40%,80% { translate:6px 0; } }
+@keyframes coach-ping-a { 50% { outline-width:7px; } }
+@keyframes coach-ping-b { 50% { outline-width:7px; } }
 @keyframes coach-fly { 0% { transform:rotate(0) scale(1); } 40% { transform:rotate(-14deg) scale(.9); } 100% { transform:rotate(0) scale(1); } }
 @keyframes coach-fly-flip { 0% { transform:scaleX(-1) rotate(0); } 40% { transform:scaleX(-1) rotate(-14deg) scale(.9); } 100% { transform:scaleX(-1) rotate(0); } }
 @keyframes coach-tap-left { 0%,100% { transform:translateX(0); } 50% { transform:translateX(-8px); } }

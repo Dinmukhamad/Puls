@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useGuide } from "../../guide";
 import { PulsarFace } from "./PulsarGuide";
 import { coachLayout, type CoachStep } from "./coachTours";
+import { lockPage } from "./coachLock";
 
 /** The first matching element that is on screen: a tab kept in the background never counts. */
 function shown(selector: string) {
@@ -14,6 +15,11 @@ export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (
   const [index, setIndex] = useState(0), [missing, setMissing] = useState(false), [flying, setFlying] = useState(true);
   const mascotRef = useRef<HTMLDivElement>(null), bubbleRef = useRef<HTMLDivElement>(null), handRef = useRef<HTMLDivElement>(null), spotRef = useRef<HTMLDivElement>(null);
   const step = steps[index], last = index === steps.length - 1;
+  // Until the tour ends, the operator can use only the lit element (and Pulsar's bubble).
+  const rootRef = useRef<HTMLDivElement>(null), lit = useRef<Element | null>(null), stepRef = useRef(step);
+  stepRef.current = step;
+  const [nudge, setNudge] = useState(0);
+  useEffect(() => lockPage({ coach: () => rootRef.current, target: () => lit.current, allow: () => stepRef.current?.allow, onBlocked: () => setNudge(n => n + 1) }), []);
   // Steps that do not apply are skipped in the direction the operator is moving, so «Назад» never bounces forward.
   const direction = useRef(1);
   // Branches skip steps, so the counter shows how many hints the operator has actually seen.
@@ -31,8 +37,8 @@ export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (
   useEffect(() => {
     if (!step) return;
     let frame = 0, found: Element | null = null, started = performance.now(), scrolled = false;
-    setMissing(false); setFlying(true);
-    const landed = window.setTimeout(() => setFlying(false), 750);
+    setMissing(false); setFlying(true); setNudge(0); lit.current = null;
+    const landed = window.setTimeout(() => setFlying(false), 350);
     const small = window.innerWidth < 700, mascot = small ? 76 : 108;
     const tick = () => {
       if (step.skipWhen && shown(step.skipWhen) && index < steps.length - 1) { move(1); return; }
@@ -42,7 +48,7 @@ export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (
         move(direction.current); return;
       }
       if (step.advanceWhen && shown(step.advanceWhen)) { nextRef.current(); return; }
-      found = shown(step.target);
+      found = lit.current = shown(step.target);
       if (!found) {
         // Give the page a moment to render the target; otherwise move on rather than get stuck.
         if (performance.now() - started > 2500) { setMissing(true); }
@@ -62,7 +68,7 @@ export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
-    return () => { cancelAnimationFrame(frame); window.clearTimeout(landed); };
+    return () => { cancelAnimationFrame(frame); window.clearTimeout(landed); lit.current = null; };
   }, [step, index, steps.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -71,7 +77,7 @@ export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (
   }, [onClose]);
 
   if (!step) return null;
-  return <div className="coach" data-flying={flying} data-missing={missing}>
+  return <div ref={rootRef} className="coach" data-flying={flying} data-missing={missing} data-nudge={nudge ? (nudge % 2 ? "a" : "b") : undefined}>
     <div ref={spotRef} className="coach-spot" aria-hidden="true" />
     <div ref={handRef} className="coach-hand" aria-hidden="true"><span>👈</span>{step.action && <small>{step.action}</small>}</div>
     <div ref={mascotRef} className="coach-mascot" aria-hidden="true"><PulsarFace mood={last ? "cheer" : index === 0 ? "wave" : "point"} /></div>
@@ -79,6 +85,7 @@ export function PulsarCoach({ steps, onClose }: { steps: CoachStep[]; onClose: (
       <div className="coach-bubble-top"><span className="coach-count">Шаг {Math.max(1, visited.length)}</span><button className="coach-close" aria-label="Закрыть подсказки" onClick={() => onClose(false)}>✕</button></div>
       <strong>{guide.text(step.title)}</strong>
       <p>{missing ? "Этого элемента сейчас нет на экране. Нажми «Дальше», и я покажу следующее." : guide.text(step.text)}</p>
+      {nudge > 0 && <p className="coach-lock">Пока идёт подсказка, работает только выделенное место. Выйти из подсказки — ✕.</p>}
       <div className="coach-actions">
         <button className="coach-back" disabled={index === 0} onClick={() => move(-1)}>← Назад</button>
         <button className="coach-next" autoFocus onClick={next}>{last ? "Готово ✓" : step.autoClick && !missing ? "Открыть за меня →" : step.advanceWhen && !missing ? "Пропустить →" : "Дальше →"}</button>

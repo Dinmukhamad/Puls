@@ -76,7 +76,7 @@ export function callTour(call: FleetCall, driver: FleetDriver, park: FleetPark):
     case "thermobox": return [...parkSteps(park), ...menu("people", "inventory", "Инвентарь", "Инвентарь — в меню исполнителей. Открой его."),
       { target: "[data-coach=inventory-add]", skipWhen: "[data-coach=inventory-dialog]", advanceWhen: "[data-coach=inventory-dialog]", autoClick: true, action: "Нажми", title: "Выдать инвентарь", text: "Нажми жёлтый «+» — откроется выдача." },
       { target: "[data-coach=inventory-type]", advanceWhen: "[data-coach=inventory-code]", action: "Выбери", title: "Тип инвентаря", text: "Яндекс Еда — жёлтый термокороб, Яндекс Доставка — чёрный. Курьер просит жёлтый." },
-      { target: "[data-coach=inventory-code]", action: "Впиши", title: "Код курьера", text: "Попроси у меня код в панели звонка: у курьера он в Яндекс Про → Профиль → Инвентарь. Код живёт 2 минуты." },
+      { target: "[data-coach=inventory-code]", allow: "[data-coach=dock-code]", action: "Впиши", title: "Код курьера", text: "Попроси у меня код в панели звонка: у курьера он в Яндекс Про → Профиль → Инвентарь. Код живёт 2 минуты." },
       { target: "[data-coach=inventory-number]", action: "Впиши", title: "Номер на термокоробе", text: "Напиши номер на термокоробе, например EP0812, и впиши его сюда." },
       { target: "[data-coach=inventory-save]", action: "Нажми", title: "Сохрани", text: "Нажми «Сохранить» — выдача появится в списке. Потом курьер проходит фотоконтроль термокороба." }];
     case "support": return [...parkSteps(park), ...findSteps(driver, `номер ВУ ${driver.license}`, "Нажми на водителя в результатах."), ...diagnostics.slice(0, 1),
