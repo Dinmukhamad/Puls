@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CityDistrict, CityGroup, CityMission, CityPlot, CityQuest, DistrictId } from "../../api/city";
-import type { CityControl, CityControlScheme, CityLabelInfo, CityMascot, CityView, TimeOfDay } from "../../city3d/types";
+import type { CityControl, CityControlScheme, CityLabelInfo, CityMascot, TimeOfDay } from "../../city3d/types";
 import { CONTROL_SCHEMES } from "./cityControls";
 import { districtLevel, grownDistricts } from "./cityLevels";
 import { useAuth } from "../../auth/AuthContext";
+import { retainedCity } from "./retainedCity";
 
 /**
  * The 3D city fills the whole screen behind the glass panels. `.city-frame` marks the part the panels
  * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
  * seen, so an upgrade is celebrated once.
  */
-export function CityMap({ districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus }: { districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
+export function CityMap({ sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus }: { sceneIdentity: string; districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
   /** The operator's plots; `onPlot` (when the viewer may build) opens the catalogue; `plotFocus` flies to a plot when it changes. */
   plots?: CityPlot[]; onPlot?: (key: string) => void; plotFocus?: { key: string; at: number };
   /** The group's quarters (null: no group, all built); `onSite` opens the group panel; `siteFocus` flies to a quarter. */
@@ -23,7 +24,7 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   /** Whether the 3D map works: the page waits for it before offering the camera choice. */
   onStatus?: (status: "loading" | "ready" | "failed") => void }) {
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
-  const host = useRef<HTMLDivElement>(null), frame = useRef<HTMLDivElement>(null);
+  const mount = useRef<HTMLDivElement>(null), host = useRef<HTMLDivElement>();
   const control = useRef<CityControl>();
   const questsKey = JSON.stringify(quests.map(q => ({ slot: q.slot, giver: q.giver, answered: q.answered }))), questsRef = useRef(quests), questRef = useRef(onQuest);
   questsRef.current = quests; questRef.current = onQuest;
@@ -35,14 +36,12 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   const canBuild = !!onPlot;
   // The city (docs/CITY_V3_TZ.md) with its full map of ten islands (?world=v1: the five-island layout).
   // The stats overlay is for staff.
-  const { atLeast } = useAuth(), staff = atLeast("supervisor");
+  const { user, atLeast } = useAuth(), staff = atLeast("supervisor");
+  const owner = `${user?.id}:${user?.role}`;
   const [params] = useSearchParams();
   const world = params.get("world") === "v1" ? "v1" : "x4";
   const showStats = staff && params.get("stats") === "1";
   const webGL = forceWebGL || params.get("backend") === "webgl";
-  const sceneKey = world;
-  const viewScene = useRef(sceneKey);
-  const view = useRef<CityView>();
   const selectRef = useRef(onSelect), selectedRef = useRef(selected);
   selectRef.current = onSelect; selectedRef.current = selected;
   const [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
@@ -56,35 +55,46 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   const trafficRef = useRef(traffic); trafficRef.current = traffic;
   const levels = Object.fromEntries(districts.map(d => [d.id, missions.filter(m => m.district === d.id && m.state === "completed").length]));
   const levelKey = JSON.stringify(levels);
+  const levelsRef = useRef(levels); levelsRef.current = levels;
+  const growthRef = useRef<() => DistrictId[]>(() => []);
+  growthRef.current = () => {
+    if (!progressKey) return [];
+    const current = Object.fromEntries(districts.map(d => [d.id, districtLevel(levelsRef.current[d.id] ?? 0, d.soon)]));
+    try {
+      const grown = grownDistricts(JSON.parse(localStorage.getItem(progressKey) ?? "null"), current) as DistrictId[];
+      localStorage.setItem(progressKey, JSON.stringify(current)); return grown;
+    } catch { return []; }
+  };
   const labelsKey = JSON.stringify(labels), labelsRef = useRef(labels);
   labelsRef.current = labels;
   useEffect(() => {
     let cancelled = false;
-    // The two worlds use different scales, so a camera must not carry from one to the other.
-    if (viewScene.current !== sceneKey) { view.current = undefined; viewScene.current = sceneKey; }
+    let release: (() => void) | undefined;
     setFailed(false); setReady(false);
-    const current = Object.fromEntries(districts.map(d => [d.id, districtLevel(JSON.parse(levelKey)[d.id] ?? 0, d.soon)]));
-    let grown: DistrictId[] = [];
-    if (progressKey) {
-      try { grown = grownDistricts(JSON.parse(localStorage.getItem(progressKey) ?? "null"), current) as DistrictId[]; localStorage.setItem(progressKey, JSON.stringify(current)); } catch { /* Celebration is optional. */ }
-    }
     void import("../../city3d").then(({ createCity }) => {
-      if (cancelled || !host.current) return;
-      control.current = createCity(host.current, {
+      if (cancelled || !mount.current) return;
+      const visit = retainedCity.acquire({
+        owner, key: JSON.stringify([sceneIdentity, world, webGL, showStats, canBuild, canQuest]),
+        mount: mount.current, traffic: trafficRef.current, create: createCity,
+        options: {
         world, forceWebGL: webGL, stats: showStats, timeOfDay: timeRef.current, controls: controlsRef.current,
-        plots: plotsRef.current, onPlot: canBuild ? key => { if (!cancelled) plotRef.current?.(key); } : undefined,
+        plots: plotsRef.current.map(({ key, unlocked, item }) => ({ key, unlocked, item })), onPlot: canBuild ? key => { if (!cancelled) plotRef.current?.(key); } : undefined,
         sites: sitesRef.current, onSite: key => { if (!cancelled) siteRef.current?.(key); },
-        quests: questsRef.current, onQuest: canQuest ? slot => { if (!cancelled) questRef.current?.(slot); } : undefined,
-        levels: JSON.parse(levelKey), selected: selectedRef.current, view: view.current, labels: labelsRef.current, grown, mascot: mascotRef.current, frame: frame.current ?? undefined,
-        onSelect: id => { if (!cancelled) selectRef.current(id); }, onView: value => { if (!cancelled) view.current = value; },
+        quests: questsRef.current.map(({ slot, giver, answered }) => ({ slot, giver, answered })), onQuest: canQuest ? slot => { if (!cancelled) questRef.current?.(slot); } : undefined,
+        levels: levelsRef.current, selected: selectedRef.current, labels: labelsRef.current, grown: growthRef.current(), mascot: mascotRef.current,
+        onSelect: id => { if (!cancelled) selectRef.current(id); }, onView: () => { /* The retained camera owns its view between visits. */ },
         onReady: () => { if (!cancelled) setReady(true); }, onLost: () => { if (!cancelled) setFailed(true); },
         onRestored: () => { if (!cancelled) setFailed(false); },
+        },
       });
-      control.current.setTraffic(trafficRef.current);
+      control.current = visit.control; host.current = visit.host; release = visit.release;
+      visit.host.setAttribute("aria-label", mapLabel(controlsRef.current));
+      setTraffic(visit.traffic); setReady(visit.status === "ready"); setFailed(visit.status === "failed");
     }).catch(() => { if (!cancelled) setFailed(true); });
-    return () => { cancelled = true; control.current?.dispose(); control.current = undefined; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- mission state and engine settings recreate the scene; labels/selection update in place
-  }, [levelKey, sceneKey, webGL, showStats, canBuild, canQuest]);
+    return () => { cancelled = true; release?.(); control.current = undefined; host.current = undefined; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- live server state updates below; only a different scene/capability creates a runtime
+  }, [owner, sceneIdentity, world, webGL, showStats, canBuild, canQuest]);
+  useEffect(() => { if (control.current) control.current.setLevels(levelsRef.current, growthRef.current()); }, [levelKey]);
   useEffect(() => { control.current?.setQuests(JSON.parse(questsKey)); }, [questsKey]);
   useEffect(() => { if (questFocus) control.current?.focusQuest(questFocus.slot); }, [questFocus?.slot, questFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setPlots(JSON.parse(plotsKey).map(([key, unlocked, item]: [string, boolean, CityPlot["item"]]) => ({ key, unlocked, item }))); }, [plotsKey]);
@@ -99,8 +109,9 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   useEffect(() => { if (mascot) control.current?.setMascot(mascot); }, [mascot?.gender, mascot?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { control.current?.setLabels(JSON.parse(labelsKey)); }, [labelsKey]);
   useEffect(() => { control.current?.setTraffic(traffic); }, [traffic]);
-  useEffect(() => { control.current?.setControls(controls); }, [controls]);
+  useEffect(() => { control.current?.setControls(controls); host.current?.setAttribute("aria-label", mapLabel(controls)); }, [controls]);
   useEffect(() => { statusRef.current?.(failed ? "failed" : ready ? "ready" : "loading"); }, [ready, failed]);
+  useEffect(() => { if (host.current) host.current.tabIndex = failed ? -1 : 0; }, [failed]);
   function key(event: KeyboardEvent) {
     // The v3 city reads its keys itself (moving, turning and tilting while held) and marks them handled.
     const c = control.current; if (!c || event.nativeEvent.defaultPrevented) return;
@@ -109,10 +120,8 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
   }
   const live = !failed && ready;
   // The mouse moves the camera as the operator chose (city3d/engine/camera.ts mouseGesture).
-  const mouse = controls === "orbit" ? "Мышь: тянуть — вращать, правая кнопка — двигать город, колесо — масштаб." : "Мышь: тянуть — двигать город, правая кнопка — поворот и наклон, колесо — масштаб.";
   return <section className={`city-world${failed ? " city-world--fallback" : ""}${live ? " is-ready" : ""}`} aria-label="Карта твоего города">
-    <div ref={host} className="city-scene" tabIndex={failed ? -1 : 0} role="application" aria-label={`3D-карта города. ${mouse} Стрелки или W, A, S, D — двигаться, Q и E — поворот, R и F — наклон, плюс и минус — масштаб, ноль — исходный вид.`} onKeyDown={key} />
-    <div ref={frame} className="city-frame" aria-hidden="true" />
+    <div ref={mount} className="city-mount" style={{ position: "absolute", inset: 0 }} onKeyDown={key} />
     {!failed && !ready && <div className="city-loading" role="status"><span>Строим твой город…</span></div>}
     {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>3D-карта недоступна на этом устройстве</strong><small>Выбирай районы на панели навыков — миссии работают как обычно.</small></div>}
     {live && <span className="city-map-hint" key={controls}>{CONTROL_SCHEMES[controls].hint}</span>}
@@ -128,5 +137,10 @@ export function CityMap({ districts, missions, labels, selected, onSelect, progr
       <button type="button" aria-label="Исходный вид" onClick={() => control.current?.reset()}>⌂</button>
     </div>}
   </section>;
+}
+
+function mapLabel(controls: CityControlScheme) {
+  const mouse = controls === "orbit" ? "Мышь: тянуть — вращать, правая кнопка — двигать город, колесо — масштаб." : "Мышь: тянуть — двигать город, правая кнопка — поворот и наклон, колесо — масштаб.";
+  return `3D-карта города. ${mouse} Стрелки или W, A, S, D — двигаться, Q и E — поворот, R и F — наклон, плюс и минус — масштаб, ноль — исходный вид.`;
 }
 

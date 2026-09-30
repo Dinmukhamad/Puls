@@ -43,6 +43,7 @@ interface Parts {
   handle: RendererHandle; quality: QualityControl; stats: Stats; loop: Loop; rig: CameraRig; picker: Picker; post: Post;
   sky: Sky; terrain: Terrain; water: Water; districts: Districts; mascot: Mascot; labels: Labels; traffic: Traffic; crowd: Crowd;
   catalogue?: Catalogue; pools?: InstancePools; observer: ResizeObserver; night: Night; lamps: LampLights; mountains: Mountains; plots: Plots; sites: Sites; quests: Quests;
+  resize: () => void;
 }
 
 export function createCity(host: HTMLDivElement, options: CityOptions): CityControl {
@@ -50,12 +51,17 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const world = generateWorld(options.world === "x4" ? WORLD_X4 : WORLD_V1);
   let disposed = false, parts: Parts | null = null, forceWebGL = !!options.forceWebGL, everReady = false;
+  let active = options.active ?? true, generation = 0;
+  const activityWaiters = new Set<() => void>();
+  const wake = () => { activityWaiters.forEach(done => done()); activityWaiters.clear(); };
+  const current = (run: number) => !disposed && run === generation;
+  const activityChanged = () => new Promise<void>(done => activityWaiters.add(done));
   // Calls before the city is up; replayed in order afterwards.
   const pending: ((p: Parts) => void)[] = [];
   let selected = options.selected, labels = options.labels, mascot = options.mascot ?? { gender: null, name: "Пульсар" }, trafficOn = !reducedMotion;
   let timeOfDay: TimeOfDay = options.timeOfDay ?? "day", plotStates: CityPlotInfo[] = options.plots ?? [], siteStates: CitySiteInfo[] | null = options.sites ?? null, questStates: CityQuestInfo[] = options.quests ?? [];
   let controls: ControlScheme = options.controls ?? "orbit";
-  const when = (fn: (p: Parts) => void) => { if (parts) fn(parts); else pending.push(fn); };
+  const when = (fn: (p: Parts) => void) => { if (disposed) return; if (parts) fn(parts); else pending.push(fn); };
   const daylight = (p: Parts) => {
     const night = timeOfDay === "night";
     p.sky.setTimeOfDay(night ? 22 : 10.5); p.water.setNight(night); p.districts.setNight(night);
@@ -69,12 +75,18 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   const choose = (id: DistrictId) => { focusDistrict(id); options.onSelect(id); };
 
   async function start() {
+    const run = ++generation;
+    // Check synchronously after every await: a release/dispose can happen in the
+    // same microtask turn that resumes startup. Waiting itself is not a lease.
+    while (!active && current(run)) await activityChanged();
+    if (!current(run)) return;
     // A fresh canvas each start: a canvas that held a WebGPU context cannot take a WebGL2 one (fallback, restore).
     const canvas = document.createElement("canvas"); canvas.className = "c3-canvas";
     const overlay = document.createElement("div"); overlay.className = "c3-overlay";
     host.replaceChildren(canvas, overlay);
     const handle = await createRenderer(canvas, { forceWebGL, mobile });
-    if (disposed) { handle.dispose(); return; }
+    while (!active && current(run)) await activityChanged();
+    if (!current(run)) { handle.dispose(); return; }
     const { renderer, backend } = handle;
     host.dataset.backend = backend === "webgpu" ? "WebGPU" : "WebGL2";
     const scene = new THREE.Scene(), camera = createCamera(world.radius);
@@ -110,11 +122,13 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       frame: options.frame, view: options.view, controls, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2], view.distance); options.onView(view); },
     });
     const first = rig.currentView(); sky.followView(first.target[0], first.target[2], first.distance); sky.setViewDistance(first.distance);
+    rig.setActive(active);
     const picker = createPicker(canvas, camera, () => districts.pickables, { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) });
     const post = createPost(ctx);
     const stats = createStats({ renderer, backend, host, visible: !!options.stats, quality, userIdKnown: true, gpu: handle.gpu, extra: () => { const s = parts?.pools?.stats(); return s ? `copies ${s.drawn}/${s.copies} · pools ${s.drawCalls} calls` : "loading models"; } });
 
     const resize = () => {
+      if (!active) return;
       const width = host.clientWidth, height = host.clientHeight; if (!width || !height) return;
       renderer.setPixelRatio(pixelRatio(mobile, quality.settings.resolution)); renderer.setSize(width, height, false);
       rig.resize(width, height); post.setSize(width, height);
@@ -125,7 +139,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
 
     let ready = false;
     const loop = createLoop({
-      host, fps: () => quality.settings.fps,
+      host, active, fps: () => quality.settings.fps,
       onGap: (gap, now) => quality.frame(gap, now),
       render(dt, now) {
         stats.beginFrame();
@@ -150,7 +164,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     });
     handle.onRestored(() => { if (!disposed) { teardown(); void start().then(() => options.onRestored?.()); } });
 
-    parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, crowd, observer, night, lamps, mountains, plots, sites, quests };
+    parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, crowd, observer, night, lamps, mountains, plots, sites, quests, resize };
     labelLayer.setLabels(labels); labelLayer.setSelected(selected); labelLayer.setMascotName(mascot.name);
     districts.select(selected); traffic.setEnabled(trafficOn); crowd.setEnabled(trafficOn); daylight(parts);
     pending.splice(0).forEach(fn => fn(parts!));
@@ -159,7 +173,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     // Models: the Kenney kits with their generated LOD copies, then the instance pools and catalogue cars.
     try {
       const models = await loadCatalogueModels(LOD_FILES);
-      if (disposed || !parts) return;
+      while (!active && current(run)) await activityChanged();
+      if (!current(run)) { disposeModels(models); return; }
       const catalogue = createCatalogue(models, night);
       parts.catalogue = catalogue;
       parts.pools = createInstancePools(ctx, catalogue, world.placements);
@@ -168,12 +183,14 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       // Every pool, near and far, has its shaders built before the city shows, so coming closer never
       // stalls or pops (at most 8 s; the renderer builds whatever is left on first use).
       await Promise.race([renderer.compileAsync(scene, camera).catch(() => undefined), new Promise(done => setTimeout(done, 8000))]);
-      if (disposed || !parts) return;
+      while (!active && current(run)) await activityChanged();
+      if (!current(run)) return;
     } catch { /* The city still shows terrain, landmarks and taxis. */ }
     loading = false; shadowWanted = true;
   }
 
   function teardown() {
+    generation++; wake();
     const p = parts; parts = null; if (!p) return;
     p.loop.dispose(); p.observer.disconnect(); p.picker.dispose(); p.rig.dispose(); p.stats.dispose(); p.quality.dispose();
     p.labels.dispose(); p.plots.dispose(); p.sites.dispose(); p.quests.dispose(); p.crowd.dispose(); p.traffic.dispose(); p.mascot.dispose(); p.districts.dispose(); p.pools?.dispose(); p.catalogue?.dispose();
@@ -183,17 +200,38 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   void start().catch(() => { if (!disposed) options.onLost(); });
 
   return {
+    setActive(value) {
+      if (disposed) return;
+      active = value; host.dataset.active = String(value);
+      if (parts) {
+        parts.rig.setActive(value);
+        parts.stats.setActive(value);
+        if (value) parts.resize();
+        parts.loop.setActive(value);
+      }
+      if (value) wake();
+    },
+    setLevels(levels, grown) {
+      options.levels = levels; options.grown = grown;
+      when(p => {
+        p.districts.setLevels(levels, grown);
+        if (everReady) {
+          const id = p.districts.startGrowth(), d = world.districts.find(item => item.id === id);
+          if (d) p.rig.focus(d.x, d.z, 48);
+        }
+      });
+    },
     focusMascot: () => when(p => p.rig.focusPoint([p.mascot.focusPoint.x, p.mascot.focusPoint.y, p.mascot.focusPoint.z], 18, 1.05)),
-    setTimeOfDay(mode) { timeOfDay = mode; when(daylight); },
+    setTimeOfDay(mode) { if (timeOfDay === mode) return; timeOfDay = mode; when(daylight); },
     setMascot(next: CityMascot) { mascot = next; when(p => { p.mascot.setMascot(next); p.labels.setMascotName(next.name); }); },
     setTraffic(enabled: boolean) { trafficOn = enabled; when(p => { p.traffic.setEnabled(enabled); p.crowd.setEnabled(enabled); }); },
     select: focusDistrict,
     setLabels(next: CityLabelInfo[]) { labels = next; when(p => p.labels.setLabels(next)); },
-    setPlots(next) { plotStates = next; when(p => p.plots.set(next)); },
+    setPlots(next) { if (JSON.stringify(plotStates) === JSON.stringify(next)) return; plotStates = next; when(p => p.plots.set(next)); },
     focusPlot: key => when(p => { const plot = p.plots.find(key); if (plot) p.rig.focusPoint([plot.x, 1, plot.z], 30, .95); }),
-    setSites(next) { siteStates = next; when(p => p.sites.set(next)); },
+    setSites(next) { if (JSON.stringify(siteStates) === JSON.stringify(next)) return; siteStates = next; when(p => p.sites.set(next)); },
     focusSite: key => when(p => { const site = p.sites.find(key); if (site) p.rig.focusPoint([site.x, 2, site.z], 55, .9); }),
-    setQuests(next) { questStates = next; when(p => p.quests.set(next)); },
+    setQuests(next) { if (JSON.stringify(questStates) === JSON.stringify(next)) return; questStates = next; when(p => p.quests.set(next)); },
     focusQuest: slot => when(p => { const spot = p.quests.spot(slot); if (spot) p.rig.focusPoint([spot.x, 1, spot.z], 26, 1.0); }),
     zoom: factor => when(p => p.rig.zoom(factor)),
     rotate: radians => when(p => p.rig.rotate(radians)),
@@ -202,4 +240,12 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     setControls(next) { controls = next; when(p => p.rig.setControls(next)); },
     dispose() { disposed = true; pending.length = 0; teardown(); host.replaceChildren(); delete host.dataset.backend; delete host.dataset.timeOfDay; },
   };
+}
+
+/** A detached loading scene can be discarded before its catalogue takes ownership of these resources. */
+function disposeModels(models: Awaited<ReturnType<typeof loadCatalogueModels>>) {
+  const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>(), textures = new Set<THREE.Texture>();
+  models.forEach(model => model.parts.forEach(part => { geometries.add(part.geometry); materials.add(part.material); }));
+  materials.forEach(material => Object.values(material).forEach(value => { if (value?.isTexture) textures.add(value); }));
+  geometries.forEach(value => value.dispose()); textures.forEach(value => value.dispose()); materials.forEach(value => value.dispose());
 }

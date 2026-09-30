@@ -20,6 +20,8 @@ export interface CityPlotInfo { key: string; unlocked: boolean; item: BuildingKe
 
 export interface CityOptions {
   levels: Record<string, number>; selected: DistrictId; view?: CityView; labels: CityLabelInfo[];
+  /** Initial activity while the renderer is being prepared asynchronously. */
+  active?: boolean;
   /** Districts that levelled up since the last visit: they grow in with a burst of confetti. */
   grown?: DistrictId[];
   mascot?: CityMascot;
@@ -51,8 +53,12 @@ export interface CityOptions {
 
 export interface CityControl {
   setTimeOfDay(mode: TimeOfDay): void;
+  /** Pauses a retained scene while its page is hidden. */
+  setActive(active: boolean): void;
   focusMascot: () => void; setMascot: (mascot: CityMascot) => void; setTraffic: (enabled: boolean) => void;
   select: (id: DistrictId) => void; setLabels: (labels: CityLabelInfo[]) => void;
+  /** Refreshes changed district buildings while retaining the live city and camera. */
+  setLevels: (levels: Record<string, number>, grown?: DistrictId[]) => void;
   setPlots: (plots: CityPlotInfo[]) => void;
   /** Flies to a plot, e.g. to show what was just built there. */
   focusPlot: (key: string) => void;

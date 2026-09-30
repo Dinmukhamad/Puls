@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
-const built = await build({ stdin: { contents: `export * from './promoData.ts'; export * from './registrationData.ts'; export * from './edoData.ts'; export * from './sectionsStore.ts'; export { fromFleet, parkLabel } from '../drivers/driverData.ts';`, resolveDir: new URL('.', import.meta.url).pathname, loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
+const built = await build({ stdin: { contents: `export * from './promoData.ts'; export * from './registrationData.ts'; export * from './edoData.ts'; export * from './sectionsStore.ts'; export { fromFleet, parkLabel } from '../drivers/driverData.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
 const kit = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 // The sections work with the fleet accounts of «Диспетчерская».
 const fleet = JSON.parse(readFileSync(new URL('../drivers/fleet.fixture.json', import.meta.url), 'utf8'));

@@ -147,6 +147,8 @@ export interface CameraRig {
   defaultView(): CityView;
   /** Switches the mouse scheme; a gesture already under way finishes the way it started. */
   setControls(scheme: ControlScheme): void;
+  /** Stops input and motion while a cached city is detached, preserving its current view. */
+  setActive(active: boolean): void;
   dispose(): void;
 }
 
@@ -162,6 +164,8 @@ interface Grip { id: number; x: number; y: number; lastX: number; lastY: number;
 export function createCameraRig(camera: THREE.PerspectiveCamera, options: CameraRigOptions): CameraRig {
   const { dom, host, frame, reducedMotion = false } = options;
   let scheme: ControlScheme = options.controls ?? "map";
+  let active = true, disposed = false, windowListening = false;
+  const canInput = () => active && !disposed && host.isConnected !== false;
   const scale = Math.max(1, options.radius / V1_RADIUS), fit = (options.ring ?? V1_RING) / V1_RING;
   const maxDistance = MAX_DISTANCE * scale, panRadius = Math.max(PAN_RADIUS * scale, options.reach ?? 0);
 
@@ -294,12 +298,25 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
 
   /** Stops glides, eased zoom and held keys: a flight or a new gesture takes over. */
   function stopInput() { gliding = false; zooming = false; held.clear(); }
+  /** Detaching must not leave captured pointers, held keys or a half-finished flight alive. */
+  function stopInteraction(publish: boolean) {
+    const save = unsaved || !!tween, pointers = [...grips.keys()];
+    tween = null; stopInput(); grips.clear(); samples.length = 0;
+    mode = "none"; travelled = 0; twisted = 0; twisting = false;
+    glide.set(0, 0); zoomAt = null; last = 0; unsaved = false;
+    delete host.dataset.dragging;
+    for (const id of pointers) {
+      try { dom.releasePointerCapture?.(id); } catch { /* Already released when the host was detached. */ }
+    }
+    if (publish && save) options.onView(currentView());
+  }
   function begin() { tween = null; gliding = false; zooming = false; unsaved = true; }
   const pair = () => { const [a, b] = grips.values(); return [a, b] as const; };
   const pointsOf = (g: Grip) => ({ last: { x: g.lastX, y: g.lastY }, now: { x: g.x, y: g.y }, start: { x: g.startX, y: g.startY } });
   function restartGrips() { for (const g of grips.values()) { g.lastX = g.startX = g.x; g.lastY = g.startY = g.y; } }
 
   const onPointerDown = (event: PointerEvent) => {
+    if (!canInput()) return;
     if (event.pointerType === "mouse" && grips.size) return;
     if (grips.size >= 2) return;
     begin();
@@ -317,6 +334,7 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   };
 
   const onPointerMove = (event: PointerEvent) => {
+    if (!canInput()) return;
     const grip = grips.get(event.pointerId);
     if (!grip || (event.clientX === grip.x && event.clientY === grip.y)) return;
     grip.x = event.clientX; grip.y = event.clientY;
@@ -360,6 +378,7 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   };
 
   const onPointerUp = (event: PointerEvent) => {
+    if (!canInput()) return;
     const grip = grips.get(event.pointerId);
     if (!grip) return;
     grips.delete(event.pointerId);
@@ -385,11 +404,12 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
     if (speed > cap) glide.multiplyScalar(cap / speed);
     gliding = true;
   }
-  const onContextMenu = (event: Event) => event.preventDefault();
+  const onContextMenu = (event: Event) => { if (canInput()) event.preventDefault(); };
   // The middle button turns or zooms the view instead of starting the browser's autoscroll.
-  const onMouseDown = (event: MouseEvent) => { if (event.button === 1) event.preventDefault(); };
+  const onMouseDown = (event: MouseEvent) => { if (canInput() && event.button === 1) event.preventDefault(); };
 
   const onWheel = (event: WheelEvent) => {
+    if (!canInput()) return;
     event.preventDefault();
     if (!zooming) zoomGoal = distance;
     begin();
@@ -403,6 +423,7 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   const editable = (el: EventTarget | null) => el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
   /** Keys work while the map (or nothing else on the page) has focus, and never while typing or with Ctrl/Cmd/Alt. */
   const onKeyDown = (event: KeyboardEvent) => {
+    if (!canInput()) return;
     if (event.ctrlKey || event.metaKey || event.altKey || editable(event.target)) return;
     if (event.target !== document.body && !(event.target instanceof Node && host.contains(event.target))) return;
     if (RESET_KEYS.has(event.code)) { event.preventDefault(); if (!event.repeat) animateTo(defaultView(), 700); return; }
@@ -413,6 +434,21 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   };
   const onKeyUp = (event: KeyboardEvent) => { held.delete(event.code); };
   const release = () => { held.clear(); };
+
+  function listenToWindow(listen: boolean) {
+    if (windowListening === listen) return;
+    windowListening = listen;
+    if (listen) {
+      // Capture, so the page sees which keys the active map already handled.
+      window.addEventListener("keydown", onKeyDown, true);
+      window.addEventListener("keyup", onKeyUp);
+      window.addEventListener("blur", release);
+    } else {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", release);
+    }
+  }
 
   function stepKeys(dt: number) {
     let forward = 0, right = 0, turn = 0, raise = 0, zoom = 0;
@@ -444,17 +480,22 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   dom.addEventListener("contextmenu", onContextMenu);
   dom.addEventListener("mousedown", onMouseDown);
   host.addEventListener("wheel", onWheel, { passive: false });
-  // Capture, so the keys the map takes are marked handled before the page's own key handlers see them.
-  window.addEventListener("keydown", onKeyDown, true);
-  window.addEventListener("keyup", onKeyUp);
-  window.addEventListener("blur", release);
+  listenToWindow(true);
   host.addEventListener("focusout", release);
   applyView(limit(options.view ?? DEFAULT_VIEW));
 
   return {
     animateTo, currentView, defaultView,
     setControls(next) { scheme = next; },
+    setActive(next) {
+      if (disposed || active === next) return;
+      active = next;
+      listenToWindow(active);
+      if (!active) stopInteraction(true);
+      else last = 0;
+    },
     update(now) {
+      if (!canInput()) return false;
       const dt = last ? clamp((now - last) / 1000, 0, .05) : 1 / 60;
       last = now;
       stepTween(now);
@@ -499,7 +540,9 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
       if (!placed) { placed = true; applyView(defaultView()); }
     },
     dispose() {
-      tween = null; stopInput(); grips.clear();
+      if (disposed) return;
+      disposed = true; active = false;
+      listenToWindow(false); stopInteraction(false);
       dom.removeEventListener("pointerdown", onPointerDown);
       dom.removeEventListener("pointermove", onPointerMove);
       dom.removeEventListener("pointerup", onPointerUp);
@@ -508,9 +551,6 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
       dom.removeEventListener("contextmenu", onContextMenu);
       dom.removeEventListener("mousedown", onMouseDown);
       host.removeEventListener("wheel", onWheel);
-      window.removeEventListener("keydown", onKeyDown, true);
-      window.removeEventListener("keyup", onKeyUp);
-      window.removeEventListener("blur", release);
       host.removeEventListener("focusout", release);
       delete host.dataset.dragging;
     },

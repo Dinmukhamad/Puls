@@ -12,8 +12,9 @@ const { THREE } = city;
 let listeners = 0;
 class FakeNode extends EventTarget {
   children = [];
-  addEventListener(...args) { listeners++; super.addEventListener(...args); }
-  removeEventListener(...args) { listeners--; super.removeEventListener(...args); }
+  // Node's EventTarget does not remove a capture listener when passed boolean true; browsers do.
+  addEventListener(type, callback, options) { listeners++; super.addEventListener(type, callback, typeof options === 'boolean' ? { capture: options } : options); }
+  removeEventListener(type, callback, options) { listeners--; super.removeEventListener(type, callback, typeof options === 'boolean' ? { capture: options } : options); }
   contains(node) { return node === this || this.children.some(child => child.contains(node)); }
 }
 class FakeElement extends FakeNode { dataset = {}; tagName = 'DIV'; isContentEditable = false; }
@@ -25,7 +26,16 @@ Object.defineProperty(performance, 'now', { value: () => clock, configurable: tr
 const W = 1600, H = 900;
 function setup(extra = {}) {
   const rect = { left: 0, top: 0, width: W, height: H, right: W, bottom: H };
-  const dom = Object.assign(new FakeElement(), { clientHeight: H, getBoundingClientRect: () => rect, setPointerCapture() {} });
+  const captured = new Set(), released = [];
+  const dom = Object.assign(new FakeElement(), {
+    clientHeight: H, getBoundingClientRect: () => rect,
+    setPointerCapture(id) { captured.add(id); },
+    releasePointerCapture(id) {
+      if (!captured.delete(id)) return;
+      released.push(id);
+      dom.dispatchEvent(Object.assign(new Event('lostpointercapture'), { pointerId: id }));
+    },
+  });
   const host = Object.assign(new FakeElement(), { getBoundingClientRect: () => rect, focus() { document.activeElement = host; } });
   host.children.push(dom);
   const camera = city.createCamera(320), views = [];
@@ -35,7 +45,7 @@ function setup(extra = {}) {
   /** Runs frames for `seconds` of the test clock. */
   const frames = (seconds = .5) => { for (let t = 0; t < seconds; t += 1 / 60) { now += 1000 / 60; clock += 1000 / 60; rig.update(now); } };
   frames(1 / 60);
-  return { dom, host, camera, rig, views, frames };
+  return { dom, host, camera, rig, views, frames, captured, released };
 }
 const pointer = (type, id, x, y, more = {}) => Object.assign(new Event(type, { cancelable: true }), { pointerId: id, clientX: x, clientY: y, pointerType: 'touch', button: 0, isPrimary: id === 1, ...more });
 const mouse = (type, x, y, more = {}) => pointer(type, 1, x, y, { pointerType: 'mouse', ...more });
@@ -395,4 +405,123 @@ test('a new gesture stops a flight, a flight stops a glide, and dispose removes 
   near(Math.cos(landed.azimuth - focus.azimuth), 1, 1e-12, 'facing the entrance (the short way round)');
   rig.dispose();
   assert.equal(listeners, before);
+});
+
+test('a paused city releases held keys and leaves CRM body shortcuts alone, then resumes without a time jump', t => {
+  const { host, rig, views, frames } = setup();
+  t.after(() => rig.dispose());
+  const activeListeners = listeners;
+  key('keydown', 'KeyW', host); frames(.1);
+  const paused = rig.currentView();
+  rig.setActive(false); rig.setActive(false);
+  assert.equal(listeners, activeListeners - 3, 'global keyboard and blur listeners are removed once');
+  host.isConnected = false;
+  for (const code of ['KeyW', 'ArrowUp', 'Home']) {
+    assert.equal(key('keydown', code, document.body).defaultPrevented, false, `${code} remains available to CRM`);
+  }
+  assert.equal(rig.update(900000), false);
+  assert.deepEqual(rig.currentView(), paused);
+  assert.deepEqual(views.at(-1), paused, 'the interrupted input view is saved');
+  host.isConnected = true;
+  rig.setActive(true); rig.setActive(true);
+  assert.equal(listeners, activeListeners);
+  rig.update(900016);
+  assert.deepEqual(rig.currentView(), paused, 'a key held before leaving is no longer held');
+  rig.setActive(false); rig.setActive(true);
+  key('keydown', 'KeyW', host);
+  rig.update(990000);
+  const next = rig.currentView();
+  near(Math.hypot(next.target[0] - paused.target[0], next.target[2] - paused.target[2]), paused.distance * 1.1 / 60, 1e-8, 'the first resumed movement uses a fresh frame dt');
+});
+
+test('pausing during a pinch releases every captured pointer and ignores old or hidden gestures', t => {
+  const { dom, host, rig, captured, released, frames } = setup();
+  t.after(() => rig.dispose());
+  gesture(dom, [[1, [700, 450, 660, 450]], [2, [900, 450, 940, 450]]]);
+  assert.equal(captured.size, 2);
+  const paused = rig.currentView();
+  rig.setActive(false);
+  assert.deepEqual(released, [1, 2]);
+  assert.equal(captured.size, 0);
+  assert.equal(host.dataset.dragging, undefined);
+  dom.dispatchEvent(pointer('pointermove', 1, 300, 200));
+  dom.dispatchEvent(pointer('pointerup', 2, 900, 450));
+  dom.dispatchEvent(mouse('pointerdown', 800, 450));
+  const wheel = Object.assign(new Event('wheel', { cancelable: true }), { deltaY: -200, deltaMode: 0, clientX: 800, clientY: 450 });
+  host.dispatchEvent(wheel);
+  assert.equal(wheel.defaultPrevented, false, 'a hidden city cannot consume scrolling');
+  assert.equal(captured.size, 0);
+  assert.deepEqual(rig.currentView(), paused);
+  rig.setActive(true);
+  dom.dispatchEvent(pointer('pointermove', 1, 100, 100));
+  frames(.3);
+  assert.deepEqual(rig.currentView(), paused, 'the old gesture cannot continue after returning');
+  dom.dispatchEvent(mouse('pointerdown', 800, 450));
+  dom.dispatchEvent(mouse('pointermove', 700, 450));
+  assert.notDeepEqual(rig.currentView(), paused, 'a new gesture works normally');
+});
+
+test('pausing a flight holds its current view across reattachment and permits a new flight', t => {
+  const { rig, views, frames } = setup();
+  t.after(() => rig.dispose());
+  rig.focus(27, 0); frames(.15);
+  const paused = rig.currentView();
+  rig.setActive(false);
+  frames(10);
+  rig.setActive(true); frames(1);
+  assert.deepEqual(rig.currentView(), paused, 'the old flight never completes in the background or jumps on return');
+  assert.deepEqual(views.at(-1), paused);
+  rig.focus(-27, 0); frames(1);
+  assert.deepEqual(rig.currentView().target, [-27, 2.5, 0]);
+});
+
+test('pausing cancels inertial dragging and eased wheel zoom at the displayed view', t => {
+  for (const motion of ['glide', 'wheel']) {
+    const { dom, host, rig, frames } = setup();
+    t.after(() => rig.dispose());
+    if (motion === 'glide') {
+      dom.dispatchEvent(mouse('pointerdown', 800, 450));
+      for (let i = 1; i <= 6; i++) { clock += 16; dom.dispatchEvent(mouse('pointermove', 800 - 20 * i, 450)); }
+      clock += 4; dom.dispatchEvent(mouse('pointerup', 680, 450));
+    } else host.dispatchEvent(Object.assign(new Event('wheel', { cancelable: true }), { deltaY: -300, deltaMode: 0, clientX: 800, clientY: 450 }));
+    frames(.05);
+    const paused = rig.currentView();
+    rig.setActive(false); frames(5); rig.setActive(true); frames(2);
+    assert.deepEqual(rig.currentView(), paused, `${motion} is canceled instead of restarting`);
+    rig.dispose();
+  }
+});
+
+test('a detached host cannot consume input even before the owner explicitly pauses it', t => {
+  const { dom, host, rig, captured } = setup();
+  t.after(() => rig.dispose());
+  const before = rig.currentView();
+  host.isConnected = false;
+  for (const code of ['Home', 'KeyW', 'ArrowLeft']) assert.equal(key('keydown', code, document.body).defaultPrevented, false);
+  const wheel = Object.assign(new Event('wheel', { cancelable: true }), { deltaY: -300, deltaMode: 0, clientX: 800, clientY: 450 });
+  host.dispatchEvent(wheel);
+  assert.equal(wheel.defaultPrevented, false);
+  dom.dispatchEvent(mouse('pointerdown', 800, 450));
+  dom.dispatchEvent(mouse('pointermove', 600, 450));
+  assert.equal(captured.size, 0);
+  assert.equal(rig.update(50000), false);
+  assert.deepEqual(rig.currentView(), before);
+  host.isConnected = true;
+  assert.equal(key('keydown', 'KeyW', document.body).defaultPrevented, true);
+});
+
+test('repeated pause/resume and disposal do not duplicate or leak global listeners', () => {
+  const before = listeners;
+  const { rig } = setup();
+  const activeListeners = listeners;
+  for (let i = 0; i < 10; i++) {
+    rig.setActive(false); rig.setActive(false);
+    assert.equal(listeners, activeListeners - 3);
+    rig.setActive(true); rig.setActive(true);
+    assert.equal(listeners, activeListeners);
+  }
+  rig.setActive(false);
+  rig.dispose(); rig.dispose(); rig.setActive(true);
+  assert.equal(listeners, before);
+  assert.equal(key('keydown', 'Home', document.body).defaultPrevented, false);
 });

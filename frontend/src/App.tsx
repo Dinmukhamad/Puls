@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useLayoutEffect } from "react";
+import { retainedCity } from "./pages/city/retainedCity";
 
 import { useAuth } from "./auth/AuthContext";
 import { useAccess } from "./auth/AccessContext";
@@ -48,6 +49,9 @@ export function App() {
   const { user, loading, atLeast, restoreError, retryRestore } = useAuth();
   const access = useAccess();
   const location = useLocation();
+  const cityOwner = user && !access.loading && !access.error && access.canPath("/training/city") ? `${user.id}:${user.role}` : null;
+  useLayoutEffect(() => { retainedCity.setOwner(cityOwner); }, [cityOwner]);
+  useLayoutEffect(() => () => retainedCity.clear(), []);
 
   if (loading) {
     return (

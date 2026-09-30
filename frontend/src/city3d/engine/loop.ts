@@ -16,6 +16,8 @@ export function shouldDraw(now: number, last: number, fps: 60 | 30) {
 export interface LoopOptions {
   /** The element whose visibility pauses the loop (the city host). */
   host: Element;
+  /** Start drawing immediately unless false, e.g. while a cached city is detached. Defaults to true. */
+  active?: boolean;
   /** Draws one frame: dt in seconds (clamped to 0.05), now in ms. */
   render: (dt: number, now: number) => void;
   fps: () => 60 | 30;
@@ -25,32 +27,43 @@ export interface LoopOptions {
 
 export interface Loop {
   readonly running: boolean;
+  /** Pauses all frames; resuming still waits for a visible document and host. */
+  setActive(active: boolean): void;
   dispose(): void;
 }
 
-export function createLoop({ host, render, fps, onGap }: LoopOptions): Loop {
-  let frame = 0, last = -1, visible = true, disposed = false;
+export function createLoop({ host, render, fps, onGap, active = true }: LoopOptions): Loop {
+  let frame: number | null = null;
+  let last = -1, visible = true, disposed = false;
+  const canDraw = () => !disposed && active && visible && !document.hidden;
+
+  function schedule() {
+    if (frame === null && canDraw()) frame = requestAnimationFrame(tick);
+  }
 
   function tick(now: number) {
-    frame = 0;
-    if (disposed || !visible || document.hidden) return;
-    if (last >= 0 && !shouldDraw(now, last, fps())) { frame = requestAnimationFrame(tick); return; }
+    frame = null;
+    if (!canDraw()) return;
+    if (last >= 0 && !shouldDraw(now, last, fps())) { schedule(); return; }
     const gap = last < 0 ? Infinity : now - last, dt = last < 0 ? 1 / 60 : Math.min(MAX_DT, gap / 1000);
     last = now;
     onGap?.(gap, now);
+    if (!canDraw()) return;
     render(dt, now);
-    frame = requestAnimationFrame(tick);
+    // A callback can deactivate or dispose the city, or resume it and already schedule its next frame.
+    schedule();
   }
   /** After a pause the next frame starts a fresh measurement instead of reporting the pause as a frame. */
   function resume() {
-    if (disposed || frame || !visible || document.hidden) return;
-    last = -1; frame = requestAnimationFrame(tick);
+    if (!canDraw() || frame !== null) return;
+    last = -1; schedule();
   }
-  function pause() { if (frame) cancelAnimationFrame(frame); frame = 0; }
+  function pause() { if (frame !== null) cancelAnimationFrame(frame); frame = null; }
 
   const onVisibility = () => { if (document.hidden) pause(); else resume(); };
   document.addEventListener("visibilitychange", onVisibility);
   const observer = typeof IntersectionObserver === "undefined" ? null : new IntersectionObserver(entries => {
+    if (!entries.length) return;
     visible = entries[entries.length - 1].isIntersecting;
     if (visible) resume(); else pause();
   });
@@ -58,7 +71,12 @@ export function createLoop({ host, render, fps, onGap }: LoopOptions): Loop {
   resume();
 
   return {
-    get running() { return frame !== 0; },
+    get running() { return frame !== null; },
+    setActive(next) {
+      if (disposed || active === next) return;
+      active = next;
+      if (active) resume(); else pause();
+    },
     dispose() {
       disposed = true; pause(); observer?.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);

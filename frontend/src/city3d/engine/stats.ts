@@ -29,7 +29,14 @@ export interface StatsOptions {
   extra?: () => string;
 }
 
-export interface Stats { beginFrame(): void; endFrame(): void; markFirstFrame(): void; dispose(): void }
+export interface Stats {
+  beginFrame(): void;
+  endFrame(): void;
+  markFirstFrame(): void;
+  /** Stops background timers and flushes the current report while a cached city is inactive. */
+  setActive(active: boolean): void;
+  dispose(): void;
+}
 
 /** Frame gaps in 1 ms bins: percentiles with no per-frame allocation. */
 class Tally {
@@ -51,7 +58,9 @@ const compact = (value: number) => value >= 1e6 ? `${round(value / 1e6, 2)} M` :
 
 export function createStats({ renderer, backend, host, visible, quality, userIdKnown, gpu = "", start = performance.now(), extra }: StatsOptions): Stats {
   const recent = new Tally(), period = new Tally();
-  let began = 0, previous = 0, firstFrame: number | null = null, calls = 0, triangles = 0, disposed = false;
+  let began: number | null = null;
+  let previous = 0, firstFrame: number | null = null, calls = 0, triangles = 0, disposed = false, active = true;
+  let refreshTimer: number | null = null, reportTimer: number | null = null;
   let overlay: HTMLDivElement | null = null;
   if (visible) {
     overlay = document.createElement("div");
@@ -63,6 +72,7 @@ export function createStats({ renderer, backend, host, visible, quality, userIdK
 
   /** Every second: frame rate of that second, 1st percentile since the last report (it needs a hundred frames or more). */
   function refresh() {
+    if (!active || disposed) return;
     const s = quality.settings, memory = renderer.info.memory;
     Object.assign(host.dataset, { fps: String(round(recent.fps)), drawCalls: String(calls), triangles: String(triangles), quality: `${s.tier}/${quality.concessions.length}` });
     if (overlay) {
@@ -90,13 +100,25 @@ export function createStats({ renderer, backend, host, visible, quality, userIdK
     try { void request(TELEMETRY_PATH, { method: "POST", json: body }).catch(() => undefined); } catch { /* ignored */ }
   }
 
-  const refreshTimer = window.setInterval(refresh, OVERLAY_EVERY), reportTimer = window.setInterval(report, REPORT_EVERY);
-  const onHidden = () => { if (document.visibilityState === "hidden") report(); };
-  window.addEventListener("pagehide", report);
+  const reportWhileActive = () => { if (active && !disposed) report(); };
+  function startTimers() {
+    if (!active || disposed) return;
+    if (refreshTimer === null) refreshTimer = window.setInterval(refresh, OVERLAY_EVERY);
+    if (reportTimer === null) reportTimer = window.setInterval(reportWhileActive, REPORT_EVERY);
+  }
+  function stopTimers() {
+    if (refreshTimer !== null) window.clearInterval(refreshTimer);
+    if (reportTimer !== null) window.clearInterval(reportTimer);
+    refreshTimer = reportTimer = null;
+  }
+  startTimers();
+  const onHidden = () => { if (document.visibilityState === "hidden") reportWhileActive(); };
+  window.addEventListener("pagehide", reportWhileActive);
   document.addEventListener("visibilitychange", onHidden);
 
   return {
     beginFrame() {
+      if (!active || disposed) return;
       began = performance.now();
       const gap = previous ? began - previous : 0;
       previous = began;
@@ -104,22 +126,31 @@ export function createStats({ renderer, backend, host, visible, quality, userIdK
       if (gap > 0 && gap <= MAX_GAP) { recent.add(gap); period.add(gap); }
     },
     endFrame() {
+      if (!active || disposed || began === null) return;
       const cpu = performance.now() - began;
+      began = null;
       recent.cpu += cpu; period.cpu += cpu;
       calls = renderer.info.render.drawCalls; triangles = renderer.info.render.triangles;
     },
     markFirstFrame() {
-      if (firstFrame !== null) return;
+      if (!active || disposed || firstFrame !== null) return;
       firstFrame = performance.now() - start;
       refresh();
+    },
+    setActive(next) {
+      if (disposed || active === next) return;
+      active = next;
+      began = null; previous = 0; recent.reset();
+      if (active) startTimers();
+      else { stopTimers(); report(); }
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       // Leaving the city inside the app is the common way out: the last report goes now.
       report();
-      clearInterval(refreshTimer); clearInterval(reportTimer);
-      window.removeEventListener("pagehide", report);
+      stopTimers();
+      window.removeEventListener("pagehide", reportWhileActive);
       document.removeEventListener("visibilitychange", onHidden);
       overlay?.remove();
       for (const key of ["fps", "drawCalls", "triangles", "quality"]) delete host.dataset[key];
