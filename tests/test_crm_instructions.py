@@ -111,3 +111,25 @@ def test_car_change_request_is_available_for_training():
         )
         assert not node["disabled"]
         assert "госномер" in node["hint"]
+
+
+async def test_promotion_registration_and_edo_screens_have_editable_instructions(
+    client, session, operator
+):
+    headers = auth(await login(client, operator.login))
+    instructions = (await client.get(BASE, headers=headers)).json()["instructions"]
+    screens = ["promo:connect", "promo:registry", "promo:backdated", "promo:conditions"]
+    screens += ["registration:list", "registration:new", "edo:list", "edo:provider"]
+    for key in [*screens, "edo:dashboard"]:
+        assert instructions[key]["steps"], key
+        assert instructions[key]["key"] == key
+    assert "«Пополнить»" in instructions["promo:registry"]["body"]
+    assert "Проверить водителя" in instructions["registration:new"]["body"]
+    staff = await make_user(session, login="sections-trainer", role=Role.TRAINER)
+    staff_headers = auth(await login(client, staff.login))
+    body = {"title": "Реестр: памятка", "body": "Только «Готово к выплате»", "steps": ["Сверьте"]}
+    body["revision"] = 0
+    response = await client.put(f"{EDIT}promo:registry", json=body, headers=staff_headers)
+    assert response.status_code == 200, response.text
+    updated = (await client.get(BASE, headers=headers)).json()["instructions"]["promo:registry"]
+    assert updated["title"] == "Реестр: памятка"

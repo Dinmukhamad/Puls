@@ -21,7 +21,7 @@ export interface CoachStep {
   /** Something Pulsar hands over inside his bubble, rendered by the page that runs the tour. */
   slot?: string;
 }
-export type CoachTourId = "appeals" | "drivers";
+export type CoachTourId = "appeals" | "drivers" | "promoConnect" | "promoRegistry" | "promoBackdated" | "promoConditions" | "registration" | "edo" | "edoProvider" | "edoDashboard" | "providerDashboard";
 type Side = "right" | "left" | "below" | "above";
 
 /** Room between the target and Pulsar, where the pointing hand sits. */
@@ -123,5 +123,80 @@ export const COACH_TOURS: Record<CoachTourId, CoachStep[]> = {
     { target: ".drv-table tbody tr:first-child .drv-btn--smz, .drv-table tbody tr:first-child .drv-btn--individual", title: "«СМЗ»", text: "Переводит водителя в самозанятые. Понадобятся адрес прописки и ИИН из 12 цифр. Потом водитель перезаходит в Яндекс Про." },
     { target: ".drv-table tbody tr:first-child .drv-btn--code", title: "«Код»", text: "Отправляет водителю код подтверждения для входа в Такси Про. Сначала уточни, что телефон с этим номером у него под рукой." },
     { target: "[data-coach=drv-reset]", title: "Практикуйся смело 💪", text: "Эти водители — учебные. Эта кнопка вернёт их в исходное состояние, если захочешь начать заново." },
+  ],
+
+  promoConnect: [
+    { target: "[data-coach=promo-search]", advanceWhen: "[data-coach=promo-driver]", action: "Впиши и найди", title: "Найди водителя", text: "Впиши ID аккаунта и нажми «Найти». Для примера — Сапарова: 2a06d17a5b00451db3b7bf91b76423da." },
+    { target: "[data-coach=promo-driver]", title: "Данные водителя", text: "Диспетчерская — это парк водителя. Смотри условие работы, Blacklist, платный найм и тип сотрудничества: от них зависят акции." },
+    { target: "[data-coach=promo-history]", title: "Его акции", text: "Текущие и прошлые акции с прогрессом и статусами. Если водитель уже в акции, второй раз её не подключают." },
+    { target: "[data-coach=promo-available]", when: "[data-coach=promo-available]", advanceWhen: "[data-coach=promo-joined]", action: "Нажми «Подключить»", title: "Подключи акцию", text: "Здесь только акции, подходящие парку и водителю. Нажми «Подключить» у нужной и назови водителю условие и срок." },
+    { target: "[data-coach=promo-none]", when: "[data-coach=promo-none]", title: "Нет подходящих акций", text: "Для парка этого водителя акций нет — так и скажи водителю. Так будет, например, у Ахметовой из «Честный Алматы»." },
+    { target: "[data-coach=side-promo-registry]", title: "Дальше — реестр", text: "Подключённый водитель появился в «Реестре участников»: там его прогресс и выплата." },
+  ],
+  promoRegistry: [
+    { target: "[data-coach=registry-banner]", title: "Только по кнопке", text: "Автоначисление приостановлено: деньги уходят только по кнопке «Пополнить». Исключение — акции вроде «Тенге 2000»: они начисляются сами." },
+    { target: "[data-coach=registry-legend]", title: "Статусы выплаты", text: "«Готово к выплате» и «Ошибка начисления» — кнопка активна. «Требует проверки» сверяет финансовый отдел, не оператор." },
+    { target: "[data-coach=registry-filters]", title: "Фильтры", text: "Найди водителя по ID, акции или статусу. Фильтры применяются кнопкой «Применить»." },
+    { target: "[data-coach=registry-pay]:not(:disabled)", when: "[data-coach=registry-pay]:not(:disabled)", advanceWhen: "[data-coach=registry-confirm]", action: "Нажми", title: "Пополнить", text: "Кнопка активна только у «Готово к выплате» и «Ошибка начисления». Нажми «Пополнить» в подсвеченной строке." },
+    { target: "[data-coach=registry-confirm] .crm-primary", waitClick: true, untilGone: true, action: "Нажми", title: "Подтверди выплату", text: "Проверь водителя, акцию и прогресс и подтверди: деньги уйдут водителю сразу." },
+    { target: "[data-coach=registry-table]", title: "Выплачено", text: "Строка стала «Выплачено»: заполнились сумма и дата выплаты. Строки «Требует проверки» не трогаем." },
+  ],
+  promoBackdated: [
+    { target: "[data-coach=backdated-note]", title: "Заявка задним числом", text: "Если водителя вовремя не добавили в акцию, подаём заявку руководителю. После подтверждения водитель попадёт в реестр." },
+    { target: "[data-coach=backdated-promo]", action: "Выбери", title: "Акция", text: "Задним числом добавляют только в денежные акции, например «Приведи друга»." },
+    { target: "[data-coach=backdated-account]", action: "Впиши", title: "ID водителя", text: "ID из карточки водителя, например Абдрахманова: bfcb98ee71d54682be284538b31985fd." },
+    { target: "[data-coach=backdated-since]", action: "Выбери дату", title: "Участник с", text: "Дата, с которой водитель должен был участвовать. Если прошло больше 14 дней, руководитель откажет." },
+    { target: "[data-coach=backdated-reason]", action: "Напиши", title: "Причина", text: "Почему водителя не добавили вовремя: например, его сообщение в WhatsApp осталось необработанным." },
+    { target: "[data-coach=backdated-files]", action: "Приложи", title: "Подтверждение", text: "Без вложения заявку не примут: нажми «Выбрать файлы» и приложи скриншот переписки." },
+    { target: "[data-coach=backdated-send]", advanceWhen: "[data-coach=backdated-sent]", action: "Нажми", title: "Отправь", text: "Отправь заявку руководителю. Если чего-то не хватает, CRM подсветит поле с ошибкой." },
+    { target: "[data-coach=backdated-list]", title: "Мои заявки", text: "Руководитель ответит через 2 минуты: «Одобрена» — водитель в реестре, «Отклонена» — с причиной." },
+  ],
+  promoConditions: [
+    { target: "[data-coach=conditions-promo]", action: "Выбери", title: "Акция", text: "Здесь акции, которые меняют условия работы, например «Неделя без комиссии — 7 дн.»." },
+    { target: "[data-coach=conditions-account]", action: "Впиши", title: "ID аккаунта", text: "ID из Диспетчерской. Попробуй Ахметову из «Честный Алматы»: 390d464b21d847f2a0b26a7143b7aa5f." },
+    { target: "[data-coach=conditions-add]", advanceWhen: "[data-coach=conditions-result]", action: "Нажми", title: "Добавить", text: "Нажми «Добавить»: CRM проверит, участвует ли парк водителя в акции." },
+    { target: "[data-coach=conditions-result]", title: "Ответ CRM", text: "Парк «Честный» в акции не участвует — добавить нельзя, объясни это водителю. Для Омарова из iTaxi Алматы всё получится." },
+    { target: "[data-coach=conditions-recent]", title: "Последние добавления", text: "Здесь твои добавления. Условие работы водителя меняется и в его учётной записи." },
+  ],
+  registration: [
+    { target: "[data-coach=reg-new]", skipWhen: "[data-coach=reg-form]", advanceWhen: "[data-coach=reg-form]", action: "Нажми", title: "Новый водитель", text: "Нажми «Новый водитель» — откроется форма регистрации." },
+    { target: "[data-coach=reg-type]", action: "Выбери", title: "Тип сотрудничества", text: "Физическое лицо или самозанятый (СМЗ). Для СМЗ появится поле «Адрес»." },
+    { target: "[data-coach=reg-address]", when: "[data-coach=reg-address]", action: "Впиши", title: "Адрес", text: "Для СМЗ нужен адрес прописки водителя." },
+    { target: "[data-coach=reg-park]", action: "Выбери", title: "Парк", text: "Парк, в котором водитель будет работать." },
+    { target: "[data-coach=reg-profession]", action: "Выбери", title: "Профессия", text: "От профессии зависят поля: водителю нужны В/У и автомобиль, вело- и пешему курьеру — дата рождения." },
+    { target: "[data-coach=reg-names]", action: "Впиши", title: "ФИО", text: "Фамилия и имя обязательны, отчество — если есть. Пиши как в документе." },
+    { target: "[data-coach=reg-phone]", action: "Впиши", title: "Телефон", text: "Номер начинается с +7, всего 11 цифр. Можно вписать с 8 — CRM поправит." },
+    { target: "[data-coach=reg-docs]", action: "Заполни", title: "Документы", text: "В/У и его даты или дата рождения, и ИИН. Первые 6 цифр ИИН — дата рождения ГГММДД." },
+    { target: "[data-coach=reg-car]", when: "[data-coach=reg-car]", action: "Заполни", title: "Автомобиль", text: "Марка, модель, цвет, год выпуска и госномер латинскими буквами." },
+    { target: "[data-coach=reg-check]", advanceWhen: "[data-coach=reg-check-result]", action: "Нажми", title: "Проверь водителя", text: "«Проверить водителя» ищет такой же телефон, ИИН или В/У. Без проверки CRM не сохранит." },
+    { target: "[data-coach=reg-check-result]", title: "Результат проверки", text: "Если водитель уже есть, повторно не регистрируй — открой его учётную запись. Если поменял данные, проверь снова." },
+    { target: "[data-coach=reg-save]", waitClick: true, untilGone: true, action: "Нажми", title: "Сохрани", text: "«Сохранить» — водитель появится в «Учётных записях водителей». Данных пока не хватает — «Сохранить черновик»." },
+  ],
+  edo: [
+    { target: "[data-coach=edo-filters]", title: "Фильтры ЭДО", text: "Период, парк, ЭЦП и статусы документов. «Только самозанятые» и «Скрыть невыставленные» сужают список." },
+    { target: "[data-coach=edo-table]", title: "Документы водителя", text: "За период: провайдер, выставлены ли документы, ЭЦП, АВР Яндекса и парка, договор. Таблица листается вправо." },
+    { target: "[data-coach=edo-refresh]", waitClick: true, action: "Нажми", title: "Обновить статус", text: "Кнопка спрашивает Sapar ещё раз. Пока водитель не подписал документы, статус не меняется." },
+    { target: "[data-coach=edo-call]", advanceWhen: "[data-coach=edo-call-dialog]", action: "Нажми", title: "Позвони водителю", text: "Трубка — звонок водителю. Напомни ему подписать документы в Sapar." },
+    { target: "[data-coach=edo-call-dialog]", advanceWhen: "[data-coach=edo-call-saved]", action: "Заполни", title: "Итог звонка", text: "Отметь дозвон, явку в офис и коротко запиши договорённость. Потом «Сохранить»." },
+    { target: "[data-coach=edo-refresh]", waitClick: true, action: "Нажми", title: "Ещё раз обнови", text: "Водитель обещал подписать — снова «Обновить статус»: документы станут «Подписано»." },
+    { target: "[data-coach=edo-history]", advanceWhen: "[data-coach=edo-history-dialog]", action: "Нажми", title: "История", text: "Стрелка открывает историю строки: звонки и обновления статуса." },
+    { target: "[data-coach=edo-history-dialog]", title: "Всё записано", text: "Здесь каждый звонок и ответ Sapar. Сводка по периоду — в «Дашборд ЭДО»." },
+  ],
+  edoProvider: [
+    { target: "[data-coach=provider-filters]", title: "Смена провайдера", text: "Обзвон водителей без ЭЦП или не на Sapar. Фильтры — по парку, статусам звонка и итогам." },
+    { target: "[data-coach=provider-table]", title: "Статусы обзвона", text: "Дозвон, итог звонка, запрос ID и «Провайдер сменили» — по каждому водителю." },
+    { target: "[data-coach=provider-call]", advanceWhen: "[data-coach=provider-call-dialog]", action: "Нажми", title: "Позвони", text: "Трубка — звонок водителю. Предложи перейти на Sapar." },
+    { target: "[data-coach=provider-call-dialog]", advanceWhen: "[data-coach=provider-call-saved]", action: "Заполни", title: "Итог звонка", text: "Согласен — отметь «Запрос ID». Когда ID получен, выбери «Получен»: провайдер сменится на Sapar." },
+    { target: "[data-coach=provider-table]", title: "Готово", text: "Статусы обновились. Сводка по кампании — в «Дашборд смены провайдера»." },
+  ],
+  edoDashboard: [
+    { target: "[data-coach=edo-signatures]", title: "ЭЦП и подписания", text: "Сколько самозанятых с поездками, у скольких валидная ЭЦП и доля подписанных АВР и договоров." },
+    { target: "[data-coach=edo-all]", title: "Все три документа", text: "Главная цифра: у скольких подписаны все три документа. Целевой уровень — 50%." },
+    { target: "[data-coach=edo-calls]", title: "Обзвон", text: "Кого нужно прозвонить (нет ЭЦП или не Sapar) и сколько контактов уже обработано." },
+    { target: "[data-coach=edo-rating]", title: "Рейтинг менеджеров", text: "Обработанные звонки по дням за последние 7 дней. Твои звонки тоже попадут сюда." },
+  ],
+  providerDashboard: [
+    { target: "[data-coach=provider-metrics]", title: "Общие метрики", text: "Всего контактов кампании, сколько обработано и процент выполнения звонков." },
+    { target: "[data-coach=provider-tables]", title: "По статусам", text: "Разбивка по обработке, дозвону, итогу звонка, запросу ID и смене провайдера." },
   ],
 };
