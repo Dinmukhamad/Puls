@@ -2,9 +2,10 @@
 
 The land is a Monopoly board (app/services/city_land.py): each city is cut into three districts of
 plots, and the operators of a district buy its plots one by one, each with what stands on it, a
-square or a house, and develop them. A house goes up stage by stage from one storey; four squares
-of one operator filling a square of plots become a park, six filling a rectangle a big park, at
-once and for free. Bands of plots open outwards from the centre as the inner ones fill up. In the
+square, a house or one of the ready houses, and develop them. A house goes up stage by stage from
+one storey; a ready house is bought as it is, at the price of its size; four squares of one
+operator filling a square of plots become a park, six filling a rectangle a big park, at once and
+for free. Bands of plots open outwards from the centre as the inner ones fill up. In the
 centre of every district stand its headquarters and its public square, where staff open shared
 projects and operators contribute to them.
 
@@ -58,7 +59,8 @@ SMALL_TEAM = 3
 
 #: What operators build on their plots. Size is in plots (columns × rows); a park is never bought,
 #: it gathers itself from `squares` of the operator's own squares (a big park also from a park
-#: and two squares).
+#: and two squares). The `ready` houses are models of the CC0 "Family House Collection"
+#: (frontend world/familyHouses.ts), bought finished, cheapest first.
 PLOT_FAMILIES = {
     "square": {
         "name": "Сквер",
@@ -84,6 +86,79 @@ PLOT_FAMILIES = {
             ("Особняк", "Третий этаж, фонтанчик у входа и вечерний свет."),
         ],
     },
+    "carport": {
+        "name": "Коттедж с навесом",
+        "icon": "🏠",
+        "size": (1, 1),
+        "ready": True,
+        "levels": [
+            (
+                "Коттедж с навесом",
+                "Одноэтажный коттедж под вальмовой крышей со слуховым окном, навес для машины "
+                "и выход в сад.",
+            )
+        ],
+    },
+    "bungalow": {
+        "name": "Бунгало",
+        "icon": "🏠",
+        "size": (1, 1),
+        "ready": True,
+        "levels": [
+            (
+                "Бунгало",
+                "Просторный одноэтажный дом под вальмовой крышей: крыльцо с колоннами и гараж.",
+            )
+        ],
+    },
+    "attic": {
+        "name": "Дом с мансардой",
+        "icon": "🏠",
+        "size": (1, 1),
+        "ready": True,
+        "levels": [
+            (
+                "Дом с мансардой",
+                "Полтора этажа: мансарда со слуховыми окнами, гараж и козырёк над входом.",
+            )
+        ],
+    },
+    "modern": {
+        "name": "Модерн с гаражом",
+        "icon": "🏠",
+        "size": (1, 1),
+        "ready": True,
+        "levels": [
+            (
+                "Модерн с гаражом",
+                "Два этажа под плоской крышей, встроенный гараж и балкон во двор.",
+            )
+        ],
+    },
+    "bayhouse": {
+        "name": "Дом с эркером",
+        "icon": "🏠",
+        "size": (1, 1),
+        "ready": True,
+        "levels": [
+            (
+                "Дом с эркером",
+                "Мансарда со слуховым окном, эркер в гостиной, гараж и балкон сбоку.",
+            )
+        ],
+    },
+    "terrace": {
+        "name": "Модерн с террасой",
+        "icon": "🏠",
+        "size": (1, 1),
+        "ready": True,
+        "levels": [
+            (
+                "Модерн с террасой",
+                "Два этажа под плоской крышей, терраса на столбах и балкон над входом.",
+            )
+        ],
+    },
     "park": {
         "name": "Парк",
         "icon": "🌲",
@@ -107,9 +182,17 @@ PLOT_FAMILIES = {
     },
 }
 #: Coins for every level of what stands on a plot (level 1 is the purchase; a park's is its merge).
+#: A ready house costs by its size: floors, footprint, garage, terrace (docs/CITY_ESTATES.md,
+#: «Готовые дома»); the land of the plot's band comes on top, as for the others.
 PLOT_PRICES = {
     "square": [40],
     "house": [120, 180, 260, 360, 500],
+    "carport": [300],
+    "bungalow": [420],
+    "attic": [480],
+    "modern": [560],
+    "bayhouse": [640],
+    "terrace": [720],
     "park": [0, 120],
     "bigpark": [0, 150, 250],
 }
@@ -435,6 +518,7 @@ def plot_catalogue(plot_prices):
             "icon": item["icon"],
             "size": list(item["size"]),
             "squares": item.get("squares"),
+            "ready": bool(item.get("ready")),
             "levels": [
                 {"level": i + 1, "name": name, "about": about, "price": plot_prices[key][i]}
                 for i, (name, about) in enumerate(item["levels"])

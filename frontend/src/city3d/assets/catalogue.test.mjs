@@ -134,3 +134,30 @@ test('residential sections: balconies near, one plain box far for every height, 
   assert.ok(at('tree-oak').lods[2], 'trees keep a far version');
   catalogue.dispose();
 });
+
+test('ready houses: each house in each finish its own model at the city scale, its windows lit from the file\'s marks', () => {
+  const map = new THREE.Texture({ width: 2, height: 1 }), sheet = new THREE.MeshStandardMaterial({ map, roughness: .85 });
+  /** A house of the file: a wall and a window quad, the window marked in _windowseed as glTF names it. */
+  const house = name => {
+    const geometry = kitGeometry(), count = geometry.getAttribute('position').count;
+    geometry.setAttribute('_windowseed', new THREE.Float32BufferAttribute(Array.from({ length: count }, (_, i) => i < 6 ? .42 : 0), 1));
+    return [name, { name, parts: [{ geometry, material: sheet, castShadow: true }], bounds: geometry.boundingBox.clone() }];
+  };
+  const catalogue = city.createCatalogue(new Map([house('family-house-3-stone'), house('family-house-1-brick')]), city.createNight());
+  const matrix = new THREE.Matrix4(), size = new THREE.Vector3();
+  const at = (variant, extra = {}) => catalogue.resolve({ kind: 'family-house', variant, x: 2, z: 3, rotation: .4, scale: 1.35, width: 4, depth: 3, ...extra }, matrix);
+  const stone = at(5), brick = at(0);
+  assert.equal(stone.id, 'family-house-3-stone'); assert.equal(brick.id, 'family-house-1-brick');
+  matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), size);
+  assert.ok(Math.abs(size.x - 1.35) < 1e-6 && Math.abs(size.y - 1.35) < 1e-6, 'the city scale, not fitted to the plot');
+  const [part] = stone.lods[0].parts;
+  assert.ok(part.geometry.getAttribute('windowSeed') && !part.geometry.getAttribute('_windowseed'), 'the file\'s marks are the windows');
+  assert.deepEqual([...part.geometry.getAttribute('windowSeed').array].slice(0, 7), [.42, .42, .42, .42, .42, .42, 0].map(v => Math.fround(v)));
+  assert.ok(part.material.emissiveNode && part.material.map === map, 'the windows glow at night on the trim sheet');
+  assert.ok(stone.lods[2] && stone.lods[2].colors?.length === 2, 'far away a box in the house\'s colours');
+  // Without the file (or a house missing from it) a plain two-storey block stands on the footprint.
+  const block = at(7, { width: 3.6, depth: 2.8 });
+  matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), size);
+  assert.ok(block && block.id === 'cottage' && Math.abs(size.x - 3.6) < 1e-6 && Math.abs(size.z - 2.8) < 1e-6 && Math.abs(size.y - 1.5) < 1e-6);
+  catalogue.dispose();
+});

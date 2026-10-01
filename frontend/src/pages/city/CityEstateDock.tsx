@@ -35,9 +35,10 @@ function useOperationKey() {
 /**
  * Building in the operator's own district, like Monopoly: a dock beside the map, not a modal, so the map stays
  * reachable. Light green plots on the map are for sale; a tap picks one, and the dock offers what can stand on it,
- * a square or a house, at the land price of its band plus the building's. A building's card shows «Сейчас / После»
- * and the next stage's price; four squares of one's own in a square become a park, six in a rectangle a big park,
- * by themselves. Buildings from the inventory after a transfer go onto free plots for free.
+ * a square, a house that grows by stages or a ready house, at the land price of its band plus the building's. A
+ * building's card shows «Сейчас / После» and the next stage's price; four squares of one's own in a square become a
+ * park, six in a rectangle a big park, by themselves. Buildings from the inventory after a transfer go onto free
+ * plots for free.
  */
 export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus }: {
   mine: MyEstate; land: DistrictEstate | null; build: BuildState; setBuild: (next: BuildState | null) => void; onClose: () => void; onFocus: (target: EstateTarget) => void;
@@ -130,8 +131,9 @@ const cellText = ([w, h]: [number, number]) => `${w} × ${h} ${w * h === 1 ? "к
 /** How the district's land works now: its bands from the centre with their price and how full they are. */
 function Overview({ land, mine, plots }: { land: DistrictEstate | null; mine: MyEstate; plots: Map<PlotFamily, PlotCatalogue> }) {
   const state = land?.land, square = plots.get("square")?.levels[0].price ?? 0, house = plots.get("house")?.levels[0].price ?? 0;
+  const ready = [...plots.values()].filter(c => c.ready).map(c => c.levels[0].price), cheapest = ready.length ? Math.min(...ready) : 0;
   return <>
-    <section className="estate-claim"><strong>Выбери участок на карте</strong><p>Светло-зелёные участки района продаются. Нажми на свободный — и поставь на нём сквер (◈ {coins(square)}) или дом (◈ {coins(house)}) вместе с землёй. Дом растёт от одноэтажного до особняка; четыре своих сквера квадратом сами станут парком, шесть прямоугольником — большим парком.</p></section>
+    <section className="estate-claim"><strong>Выбери участок на карте</strong><p>Светло-зелёные участки района продаются. Нажми на свободный — и поставь на нём сквер (◈ {coins(square)}) или дом (◈ {coins(house)}) вместе с землёй. Дом растёт от одноэтажного до особняка; четыре своих сквера квадратом сами станут парком, шесть прямоугольником — большим парком.{ready.length > 0 && ` Или купи готовый дом целиком: ${ready.length} ${plural(ready.length, "проект", "проекта", "проектов")}, от ◈ ${coins(cheapest)}.`}</p></section>
     {state && <section className="estate-section"><h3>Пояса района</h3><p className="secondary small">Земля ближе к центру дороже. Следующий пояс открывается, когда в открытых занято 70 % участков.</p>
       <ul className="estate-bands">{state.bands.map(b => <li key={b.band} data-open={b.band <= state.open_band || undefined}>
         <span>Пояс {b.band}</span><span>{b.band <= state.open_band ? `◈ ${coins(mine.land_prices[b.band - 1] ?? 0)} за участок` : "откроется позже"}</span>
@@ -142,18 +144,21 @@ function Overview({ land, mine, plots }: { land: DistrictEstate | null; mine: My
 
 /** A plot picked on the map: what can stand on it, land and building together, or why it is not for sale. */
 function PlotCard({ plot, land, plots, mine, ready, pending, error, onBuy, onBack }: { plot: PickedPlot; land: number; plots: Map<PlotFamily, PlotCatalogue>; mine: MyEstate; ready: boolean; pending: boolean; error: Error | null; onBuy: (family: PlotFamily) => void; onBack: () => void }) {
-  const options = (["square", "house"] as const).map(f => plots.get(f)!).filter(Boolean);
+  const options = (["square", "house"] as const).map(f => plots.get(f)!).filter(Boolean), houses = [...plots.values()].filter(c => c.ready);
+  const item = (c: PlotCatalogue) => {
+    const price = land + c.levels[0].price, missing = price - mine.available;
+    return <li key={c.family}><span className="estate-catalogue__icon" aria-hidden="true">{c.icon}</span>
+      <span className="estate-catalogue__text"><strong>{c.levels[0].name}</strong><small>{c.levels[0].about}</small><small>Земля ◈ {coins(land)} + {c.ready ? "дом" : c.name.toLowerCase()} ◈ {coins(c.levels[0].price)}{c.levels.length > 1 ? ` · ${c.levels.length} ${plural(c.levels.length, "ступень", "ступени", "ступеней")}` : ""}</small></span>
+      <button type="button" className="city-action" disabled={!ready || pending || !!plot.problem || missing > 0} onClick={() => onBuy(c.family)} aria-label={`${c.levels[0].name} на участке за ${price} коинов`}>{pending ? "…" : missing > 0 ? `Не хватает ${coins(missing)}` : `◈ ${coins(price)}`}</button></li>;
+  };
   return <section className="estate-card">
     <button type="button" className="estate-back" onClick={onBack}>← Весь район</button>
     <div className="estate-placing__title"><span aria-hidden="true">🟩</span><div><h2>Участок · пояс {plot.band}</h2><small>Квартал {plot.block} · земля ◈ {coins(land)}</small></div></div>
     {plot.problem ? <p className="estate-problem" role="alert">{plot.problem}</p> : !ready ? <p className="estate-note">{mine.message ?? "Стройка в районе пока закрыта."}</p> : null}
     {error && <p className="city-error" role="alert">{error.message}</p>}
-    <ul className="estate-catalogue">{options.map(c => {
-      const price = land + c.levels[0].price, missing = price - mine.available;
-      return <li key={c.family}><span className="estate-catalogue__icon" aria-hidden="true">{c.icon}</span>
-        <span className="estate-catalogue__text"><strong>{c.levels[0].name}</strong><small>{c.levels[0].about}</small><small>Земля ◈ {coins(land)} + {c.name.toLowerCase()} ◈ {coins(c.levels[0].price)}{c.levels.length > 1 ? ` · ${c.levels.length} ${plural(c.levels.length, "ступень", "ступени", "ступеней")}` : ""}</small></span>
-        <button type="button" className="city-action" disabled={!ready || pending || !!plot.problem || missing > 0} onClick={() => onBuy(c.family)} aria-label={`${c.name} на участке за ${price} коинов`}>{pending ? "…" : missing > 0 ? `Не хватает ${coins(missing)}` : `◈ ${coins(price)}`}</button></li>;
-    })}</ul>
+    <ul className="estate-catalogue">{options.map(item)}</ul>
+    {houses.length > 0 && <section className="estate-section"><h3>Готовые дома</h3><p className="secondary small">Дом покупается сразу целиком, без ступеней. Чем больше этажей и площадь, есть ли гараж и терраса — тем дороже.</p>
+      <ul className="estate-catalogue">{houses.map(item)}</ul></section>}
     <p className="city-fine">Покупка сразу списывает коины: и за землю, и за постройку. Продать участок обратно нельзя.</p>
   </section>;
 }
@@ -201,7 +206,7 @@ function OwnCard({ obj, family, mine, squares, pending, error, onUpgrade, onBack
     <dl className="estate-compare"><div><dt>Сейчас</dt><dd>{now.about}</dd></div>{next && <div><dt>После · {next.name}</dt><dd>{next.about}</dd></div>}</dl>
     {error && <p className="city-error" role="alert">{error.message}</p>}
     {next ? <button type="button" className="city-action" disabled={!ready || pending || missing > 0} onClick={onUpgrade}>{pending ? "Сохраняем…" : missing > 0 ? `Нужны ещё ${coins(missing)} коинов` : `Улучшить за ◈ ${coins(next.price)}`}</button>
-      : PLOT_LEVELS[obj.family] > 1 ? <p className="estate-ok">Последняя ступень — постройка завершена.</p> : null}
+      : PLOT_LEVELS[obj.family] > 1 ? <p className="estate-ok">Последняя ступень — постройка завершена.</p> : family.ready ? <p className="estate-ok">Готовый дом: он построен целиком, ступеней нет.</p> : null}
     {obj.family === "square" && <div className="estate-merge"><strong>Скверы собираются в парк</strong><p>Купи соседние участки под скверы: четыре своих сквера квадратом 2 × 2 станут парком, шесть прямоугольником 3 × 2 — большим парком. Сейчас у тебя скверов: {squares}.</p></div>}
     {obj.family === "park" && <div className="estate-merge"><strong>Парк может вырасти</strong><p>Ещё два своих сквера рядом, чтобы вместе с парком получился прямоугольник 3 × 2, — и он станет большим парком, сохранив ступень.</p></div>}
     <p className="city-fine">Всего вложено ◈ {coins(obj.paid)}{obj.squares > 1 ? ` · из ${obj.squares} скверов` : ""}. Это видишь только ты.</p>

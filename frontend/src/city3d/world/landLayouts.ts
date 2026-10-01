@@ -1,13 +1,15 @@
 /**
- * What stands on the plots of the team districts (docs/CITY_ESTATES.md): a square or a house on one plot, a park
- * on the four plots of the squares it gathered from, a big park on six. Built from the catalogue's procedural
- * pieces (cottages under gabled roofs, trees, hedges, benches, fountains), so a district reads from any distance
- * and costs only copies in the instance pools. Every stage of a house changes its silhouette: one storey, two, a
- * wing with a terrace, a garage, a three-storey mansion. Paths are paving over the lawns and driveways concrete,
- * both drawn above the grass (render/terrain.ts SURFACES). Pure data, no three.js.
+ * What stands on the plots of the team districts (docs/CITY_ESTATES.md): a square, a house or a ready house on one
+ * plot, a park on the four plots of the squares it gathered from, a big park on six. Built from the catalogue's
+ * procedural pieces (cottages under gabled roofs, trees, hedges, benches, fountains), so a district reads from any
+ * distance and costs only copies in the instance pools. Every stage of a house changes its silhouette: one storey,
+ * two, a wing with a terrace, a garage, a three-storey mansion. A ready house is a model of its own
+ * (world/familyHouses.ts) in the same garden. Paths are paving over the lawns and driveways concrete, both drawn
+ * above the grass (render/terrain.ts SURFACES). Pure data, no three.js.
  */
 import type { Frame } from "./land";
 import type { PlotFamily } from "./estateGrid";
+import { HOUSE_SCALE, READY_HOUSES, isReadyHouse, type ReadyHouse } from "./familyHouses";
 import type { Placement, PlacementKind, Surface, SurfaceKind } from "./types";
 
 export interface Layout { placements: Placement[]; surfaces: Surface[] }
@@ -120,6 +122,45 @@ function house(f: Lot, level: number) {
   f.put("flowerbed", x + side * 1.6, D * .7, 2, { width: .7, scale: .6 });
 }
 
+/**
+ * A ready house: the model in the back half of its plot, in brick or in stone, its front to the street. A path leads
+ * from its door and a driveway from its garage out to the street (deeper in the block, a path into the garden and a
+ * short apron), through a gap in the hedge round the garden; trees, bushes by the door, a flowerbed and a bench.
+ */
+function ready(f: Lot, family: ReadyHouse) {
+  const { W, D, random } = f, m = READY_HOUSES[family], k = HOUSE_SCALE;
+  const width = m.width * k, depth = m.depth * k, finish = Math.floor(random() * 2);
+  f.patch("lawn", 0, 0, 2 * W - .4, 2 * D - .4);
+  const w = Math.max(-D + .45 + depth / 2, -D * .2), front = w + depth / 2;
+  f.put("family-house", 0, w, 0, { variant: (m.model - 1) * 2 + finish, scale: k, width, depth });
+  const door = m.door[0] * k, doorAt = front - m.door[1] * k, out = f.street ? D - .2 : Math.max(front + 1.6, D * .45);
+  // The driveway is as wide as a car; a door right beside it shares its paving.
+  const drive = m.garage && { lo: m.garage[0] * k - .65, hi: m.garage[0] * k + .65, from: front - m.garage[1] * k, to: f.street ? D - .2 : Math.min(D - .4, front + 1.6) };
+  const shared = !!drive && door + .4 > drive.lo - .2 && door - .4 < drive.hi + .2;
+  if (!shared) f.patch("plaza", door, (doorAt + out) / 2, .8, out - doorAt);
+  if (drive) {
+    const lo = shared ? Math.min(drive.lo, door - .4) : drive.lo, hi = shared ? Math.max(drive.hi, door + .4) : drive.hi, from = shared ? Math.min(drive.from, doorAt) : drive.from;
+    f.patch("slab", (lo + hi) / 2, (from + drive.to) / 2, hi - lo, drive.to - from);
+  }
+  // The hedge round the garden: along the sides, and along the front open for the path and the driveway.
+  for (const sgn of [-1, 1]) f.put("hedge", sgn * (W - .35), 0, Math.PI / 2, { width: 2 * D - 1.2, scale: .8 });
+  const gaps = f.street ? [[door - .55, door + .55], ...(drive ? [[drive.lo - .15, drive.hi + .15]] : [])].sort((a, b) => a[0] - b[0]) : [];
+  let from = -W + .5;
+  for (const [a, b] of [...gaps, [W - .5, W - .5]]) {
+    if (Math.min(a, W - .5) - from > .6) f.put("hedge", (from + Math.min(a, W - .5)) / 2, D - .35, 0, { width: Math.min(a, W - .5) - from, scale: .8 });
+    from = Math.max(from, b);
+  }
+  // Trees on the side away from the garage: one in the front garden, two beside the house when there is room.
+  const free = drive ? (drive.lo + drive.hi > 0 ? -1 : 1) : random() < .5 ? -1 : 1, garden = (front + D) / 2;
+  tree(f, free * W * .62, garden + .15, 1.05);
+  if (W - width / 2 > 1.3) { tree(f, free * (W + width / 2) / 2, w - depth * .15, 1.1); tree(f, -free * (W + width / 2) / 2, w - depth * .3, .95); }
+  // Bushes either side of the door where the driveway leaves room, a bed and a bench in the garden, a lamp by the path.
+  [door - .8, door + .8].forEach((u, i) => { if (!drive || u < drive.lo - .3 || u > drive.hi + .3) f.put("bush", u, front + .4, i, { scale: .6 }); });
+  f.put("flowerbed", free * W * .3, garden + .3, 0, { width: .8, scale: .7 });
+  f.put("bench", free * Math.min(W - .6, width / 2 + .7), front + .5, Math.PI, { width: .9, scale: .85 });
+  if (f.street) f.put("lamp", door + (drive && drive.lo > door ? -.6 : .6), D * .72, 0);
+}
+
 /** A park on 2 × 2 plots: lawns, a cross of walks round a middle, trees round the edge and in clumps, benches, lamps. */
 function park(f: Lot, level: number) {
   const { W, D } = f;
@@ -183,6 +224,7 @@ export function plotLayout(frame: Frame, family: PlotFamily, level: number, seed
   const f = lot(frame, seed);
   if (family === "square") square(f);
   else if (family === "house") house(f, Math.max(1, Math.min(5, level)));
+  else if (isReadyHouse(family)) ready(f, family);
   else if (family === "park") park(f, Math.max(1, Math.min(2, level)));
   else bigpark(f, Math.max(1, Math.min(3, level)));
   return { placements: f.placements, surfaces: f.surfaces };

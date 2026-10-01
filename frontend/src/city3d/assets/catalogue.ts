@@ -15,8 +15,10 @@ import { createNight, type Night } from "../render/night";
 import { loadModels, type Model, type ModelPart } from "./loader";
 import { furnitureGeometry, gableGeometry, officeGeometry, SECTION_PART, SECTION_PARTS, sectionGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
 import { OFFICE_FLOOR, OFFICE_FLOORS, SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
+import { FINISHES, HOUSE_SCALE, READY_HOUSES, houseModelName } from "../world/familyHouses";
 import modelsUrl from "../../pages/city/models/city-models.glb?url";
 import vehiclesUrl from "../../pages/city/models/vehicles.glb?url";
+import familyHousesUrl from "../../pages/city/models/family-houses.glb?url";
 
 /** One detail level. `matrix` places it inside the model and `colors` tint its parts (the proxy box). */
 export interface LodLevel { parts: ModelPart[]; matrix?: THREE.Matrix4; colors?: THREE.Color[] }
@@ -71,10 +73,10 @@ const FURNITURE: FurnitureKind[] = ["bench", "slide", "swings", "climber", "sand
 /** Proxy colours when a model's texture cannot be read: [walls, roof]. */
 const FALLBACK: Record<string, [string, string]> = { s: ["#eadccb", "#b86b52"], c: ["#cfd6de", "#8e99a6"], i: ["#cdc8bd", "#8b8f95"], car: ["#d9cf6a", "#5b6068"] };
 
-/** Loads the Kenney kits and any LOD files; a file that fails is skipped (the catalogue falls back). */
+/** Loads the Kenney kits, the districts' ready houses and any LOD files; a file that fails is skipped (the catalogue falls back). */
 export async function loadCatalogueModels(lodUrls: string[] = []) {
   const models = new Map<string, Model>();
-  const files = await Promise.allSettled([modelsUrl, vehiclesUrl, ...lodUrls].map(url => loadModels(url)));
+  const files = await Promise.allSettled([modelsUrl, vehiclesUrl, familyHousesUrl, ...lodUrls].map(url => loadModels(url)));
   for (const file of files) if (file.status === "fulfilled") file.value.forEach((model, name) => models.set(name, model));
   return models;
 }
@@ -135,6 +137,16 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const houses = list(HOUSES, FALLBACK.s), offices = list(LIGHT_OFFICES, FALLBACK.c), industry = list(INDUSTRY, FALLBACK.i);
   const cars = new Map<string, CatalogueModel>();
   for (const name of new Set(PARKED.flat())) { const car = kenney(name, FALLBACK.car, false); if (car) cars.set(name, car); }
+  // The districts' ready houses (world/familyHouses.ts), every model in every finish. Their file marks the windows
+  // (glTF _WINDOWSEED), so they light at night like the kits' houses, and far away they are proxies in their colours.
+  const readyHouses = Array.from({ length: Object.keys(READY_HOUSES).length * FINISHES.length }, (_, variant) => {
+    const name = houseModelName(variant);
+    for (const part of models.get(name)?.parts ?? []) {
+      const seeds = part.geometry.getAttribute("_windowseed");
+      if (seeds && !part.geometry.hasAttribute(WINDOW)) { part.geometry.setAttribute(WINDOW, seeds); part.geometry.deleteAttribute("_windowseed"); }
+    }
+    return kenney(name, FALLBACK.s);
+  });
 
   const blocks = BLOCKS.map((kind, index) => {
     const geometry = own(blockGeometry(kind.floors));
@@ -248,6 +260,13 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
       case "tree-birch": case "tree-oak":
         out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
         return moreTrees[kind === "tree-birch" ? "birch" : "oak"];
+      case "family-house": {
+        const model = readyHouses[houseVariant(p.variant)];
+        if (model) { fitted(model, p, GROUND, out, p.scale || HOUSE_SCALE); return model; }
+        // Without the file a ready house is a plain two-storey block on its footprint.
+        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 3, 2 * SECTION_FLOOR, p.depth ?? 2.6));
+        return cottage;
+      }
       case "cottage":
         // `variant` is the floors above the ground floor: 0 a bungalow, 1 two storeys, 2 three (a district's mansion).
         out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 3, Math.min(3, Math.max(1, Math.floor(p.variant) + 1)) * SECTION_FLOOR, p.depth ?? 2.4));
@@ -293,6 +312,8 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
 }
 
 const fract = (v: number) => v - Math.floor(v);
+/** A ready house's model in the list: every house in every finish (world/familyHouses.ts houseModelName). */
+const houseVariant = (variant: number) => Math.max(0, Math.floor(variant)) % (Object.keys(READY_HOUSES).length * FINISHES.length);
 function procedural(id: string, lods: CatalogueModel["lods"], extra: Partial<CatalogueModel> = {}): CatalogueModel {
   const bounds = new THREE.Box3();
   for (const level of lods) for (const part of level?.parts ?? []) { part.geometry.computeBoundingBox(); bounds.union(part.geometry.boundingBox!); }

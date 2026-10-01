@@ -131,6 +131,10 @@ async def test_administrators_build_for_free_and_set_any_stage(client, session, 
     assert (await build(client, me, "park", FIRST, 4, 0)).json()["code"] == "recipe_only"
     assert (await build(client, me, "house", 99, 0, 0)).json()["code"] == "wrong_plot"
     assert (await build(client, me, "house", SECOND, 0, 0)).json()["code"] == "band_closed"
+    # Ready houses too, finished as they are: one stage.
+    ready = await build(client, me, "bungalow", FIRST, 1, 0)
+    assert ready.status_code == 200 and ready.json()["object"]["family"] == "bungalow"
+    assert (await level(client, me, ready.json()["object"], 2)).json()["code"] == "bad_level"
     # Free: nothing in the coin journal, not even an account for the administrator.
     assert await count(session, CoinTransaction) == 0
     stored = await session.scalar(select(CityObject).where(CityObject.id == house["id"]))

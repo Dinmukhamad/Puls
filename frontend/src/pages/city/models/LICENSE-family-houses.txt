@@ -1,0 +1,13 @@
+Ready houses of the team districts: Blend Swap #92125 "Family House Collection" (Blender 2.79, uploaded 2018-07-17).
+License: Creative Commons Zero (CC0 1.0 Universal), as stated in the license file of the download.
+https://creativecommons.org/publicdomain/zero/1.0/
+Source page: http://www.blendswap.com/blends/view/92125
+
+Original file: houses_blendswap.blend (six modern family houses, each as a detailed model and as a game model
+baked onto one trim sheet).
+Adaptation (scripts/prepare_family_houses.py, frontend/scripts/pack-city-model.mjs): every house built from its
+detailed model, the house and its windows, doors, garage doors, railings, chimneys and columns joined into one
+mesh on the collection's own trim sheets (brick and stone, 1024 × 1024, JPEG), each house in both; the ambient
+occlusion maps and the bump left off, the fifth house's glass mapped onto a pane of the sheet, a seed per window
+for the city's night lights, packed to a self-contained meshopt GLB. Free for personal, educational and
+commercial use. No remote runtime requests to the author.

@@ -61,7 +61,9 @@ export interface WorldSpec {
  *   its front (+z) where it faces; `width` is its footprint for the walkers to keep clear of.
  */
 export type PlacementKind = "house" | "office" | "industry" | "block" | "tower" | "port" | "tree-cone" | "tree-round" | "tree-birch" | "tree-oak" | "lamp" | "car-parked"
-  | "section" | "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush" | "hedge" | "planter" | "glass-tower" | "fountain" | "roof" | "cottage";
+  | "section" | "bench" | "slide" | "swings" | "climber" | "sandbox" | "goal" | "hoop" | "gazebo" | "flowerbed" | "bush" | "hedge" | "planter" | "glass-tower" | "fountain" | "roof" | "cottage"
+  /** A ready house of the districts (world/familyHouses.ts): `variant` picks the model and finish, `scale` its size. */
+  | "family-house";
 
 /**
  * One copy of a catalogue model. `variant` is a seeded integer ≥ 0 that picks a model within the kind

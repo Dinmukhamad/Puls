@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
-const compiled = await build({ stdin: { contents: `export * from './estates.ts'; export * from './land.ts'; export * from './landLayouts.ts'; export * from './cities.ts'; export { generateSalesWorld } from './sales.ts'; export { WORLD_X4 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
+const compiled = await build({ stdin: { contents: `export * from './estates.ts'; export * from './land.ts'; export * from './landLayouts.ts'; export * from './familyHouses.ts'; export * from './cities.ts'; export { generateSalesWorld } from './sales.ts'; export { WORLD_X4 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
 const E = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 const server = readFileSync(new URL('../../../../app/services/city_estate.py', import.meta.url), 'utf8');
 const GRIDS = { support: E.landGrid(E.islandWorld(E.WORLD_X4)), sales: E.landGrid(E.generateSalesWorld()) };
@@ -36,7 +36,7 @@ test('the catalogue matches the server: what stands on plots, what stands on the
   assert.deepEqual([1, 2, 3, 4].map(E.preparedLand), [true, true, true, false]);
 });
 
-const KNOWN = new Set(['tree-round', 'tree-oak', 'tree-birch', 'tree-cone', 'bench', 'flowerbed', 'bush', 'hedge', 'lamp', 'cottage', 'roof', 'planter', 'fountain', 'gazebo', 'slide', 'swings', 'sandbox']);
+const KNOWN = new Set(['tree-round', 'tree-oak', 'tree-birch', 'tree-cone', 'bench', 'flowerbed', 'bush', 'hedge', 'lamp', 'cottage', 'roof', 'planter', 'fountain', 'gazebo', 'slide', 'swings', 'sandbox', 'family-house']);
 /** Within a frame: in its own axes, inside its width and depth with `pad` to spare (negative: that far inside). */
 const within = (p, f, pad) => {
   const s = Math.sin(f.rotation), c = Math.cos(f.rotation), dx = p.x - f.x, dz = p.z - f.z;
@@ -70,7 +70,7 @@ test('everything on a plot at every level stands inside its plots and uses known
         if (!s.round) assert.ok(s.length <= (Math.abs(Math.sin(s.angle - frame.rotation)) > .5 ? frame.width : frame.depth) + .01 && s.width <= (Math.abs(Math.sin(s.angle - frame.rotation)) > .5 ? frame.depth : frame.width) + .01, `${family} ${level} ${s.kind} patch fits`);
       }
       // Houses and their garages stay clear of the edge, so neighbouring houses never touch.
-      for (const p of placements.filter(p => p.kind === 'cottage')) {
+      for (const p of placements.filter(p => p.kind === 'cottage' || p.kind === 'family-house')) {
         const s = Math.sin(frame.rotation), c = Math.cos(frame.rotation), dx = p.x - frame.x, dz = p.z - frame.z;
         assert.ok(Math.abs(dx * c - dz * s) + p.width / 2 < frame.width / 2 - .2 && Math.abs(dx * s + dz * c) + p.depth / 2 < frame.depth / 2 - .2, `${family} ${level} a house off its plot's edge`);
       }
@@ -96,6 +96,87 @@ test('a house grows at every stage: one storey, two, a wing, a garage, a three-s
   const park = E.plotLayout(E.areaFrame(block, 0, 0, 2, 2), 'park', 1, 3).placements.length, big = E.plotLayout(E.areaFrame(block, 0, 0, 3, 2), 'bigpark', 1, 3).placements.length;
   assert.ok(park > one * 2 && big > park, `${one} → ${park} → ${big}`);
   assert.ok(E.plotLayout(E.areaFrame(block, 0, 0, 2, 2), 'park', 2, 3).placements.some(p => p.kind === 'fountain'), 'a fountain in the park\'s second stage');
+});
+
+/** A layout's pieces in the plot's own axes: `u` across its width, `w` towards its front (the street). */
+const local = (frame, p) => {
+  const s = Math.sin(frame.rotation), c = Math.cos(frame.rotation), dx = p.x - frame.x, dz = p.z - frame.z;
+  return { u: dx * c - dz * s, w: dx * s + dz * c };
+};
+
+test('ready houses: the server sells exactly these, finished, and each stands in its garden facing the street', () => {
+  // The server's ready houses are this table's, cheapest first.
+  const families = server.slice(server.indexOf('PLOT_FAMILIES = {'), server.indexOf('\n}\n', server.indexOf('PLOT_FAMILIES = {')));
+  const ready = [...families.matchAll(/\n {4}"(\w+)": \{\n(?: {8}[^\n]*\n)*? {8}"ready": True,/g)].map(m => m[1]);
+  assert.deepEqual(ready, Object.keys(E.READY_HOUSES));
+  const prices = Object.fromEntries([...server.slice(server.indexOf('PLOT_PRICES = {')).matchAll(/^ {4}"(\w+)": \[(\d+)\],?$/gm)].map(m => [m[1], Number(m[2])]));
+  const costs = ready.map(f => prices[f]);
+  assert.ok(costs.every((c, i) => c > 0 && (i === 0 || c > costs[i - 1])), `prices go up: ${costs.join(', ')}`);
+  for (const family of ready) assert.ok(E.isReadyHouse(family) && E.PLOT_LEVELS[family] === 1 && E.PLOT_SIZE[family].join() === '1,1', family);
+  assert.ok(!E.isReadyHouse('house') && !E.isReadyHouse('square') && !E.isReadyHouse('toString'));
+  // Every house in every finish is its own model.
+  const names = Array.from({ length: 12 }, (_, v) => E.houseModelName(v));
+  assert.equal(new Set(names).size, 12);
+  assert.deepEqual(names.slice(0, 4), ['family-house-1-brick', 'family-house-1-stone', 'family-house-2-brick', 'family-house-2-stone']);
+  for (const block of samples()) {
+    const frame = E.areaFrame(block, 0, 0), street = { ...frame, street: true }, inner = { ...frame, street: false };
+    for (const [family, m] of Object.entries(E.READY_HOUSES)) {
+      const finishes = new Set();
+      for (const seed of [1, 2, 3, 5, 8, 13]) {
+        const { placements, surfaces } = E.plotLayout(street, family, 1, seed);
+        const [house] = placements.filter(p => p.kind === 'family-house');
+        assert.equal(placements.filter(p => p.kind === 'family-house').length, 1);
+        assert.equal(Math.floor(house.variant / 2), m.model - 1, `${family} is model ${m.model}`);
+        finishes.add(house.variant % 2);
+        // Turned like its plot (front to the street), as large as the growing houses, its front garden before it.
+        assert.ok(Math.abs(house.rotation - frame.rotation) < 1e-9 && house.scale === E.HOUSE_SCALE);
+        const at = local(frame, house), front = at.w + m.depth * E.HOUSE_SCALE / 2;
+        assert.ok(frame.depth / 2 - front > 1.4, `${family}: a front garden of ${(frame.depth / 2 - front).toFixed(2)}`);
+        // A path from the door and a driveway from the garage both reach the street.
+        const paving = surfaces.filter(x => x.kind === 'plaza' || x.kind === 'slab').map(x => ({ ...local(frame, x), kind: x.kind, along: x.length, across: x.width }));
+        const reaches = (u, from) => paving.some(x => Math.abs(x.u - u) <= x.along / 2 + 1e-6 && x.w - x.across / 2 <= from + 1e-6 && x.w + x.across / 2 >= frame.depth / 2 - .25);
+        assert.ok(reaches(m.door[0] * E.HOUSE_SCALE, front - m.door[1] * E.HOUSE_SCALE), `${family}: a path from its door`);
+        if (m.garage) assert.ok(paving.some(x => x.kind === 'slab') && reaches(m.garage[0] * E.HOUSE_SCALE, front - m.garage[1] * E.HOUSE_SCALE), `${family}: a driveway from its garage`);
+        else assert.ok(!paving.some(x => x.kind === 'slab'), `${family}: no garage, no driveway`);
+        // The front hedge leaves the way to the street open; deeper in the block it closes the garden.
+        const hedges = placements.filter(p => p.kind === 'hedge').map(p => ({ ...local(frame, p), width: p.width })).filter(h => Math.abs(h.w - (frame.depth / 2 - .35)) < 1e-6);
+        assert.ok(!hedges.some(h => Math.abs(h.u - m.door[0] * E.HOUSE_SCALE) < h.width / 2), `${family}: the hedge is open at the path`);
+        const closed = E.plotLayout(inner, family, 1, seed).placements.filter(p => p.kind === 'hedge').map(p => ({ ...local(frame, p), width: p.width })).filter(h => Math.abs(h.w - (frame.depth / 2 - .35)) < 1e-6);
+        assert.ok(closed.length === 1 && closed[0].width > frame.width - 1.2, `${family}: a closed hedge in the block`);
+      }
+      assert.equal(finishes.size, 2, `${family} comes in brick and in stone`);
+    }
+  }
+});
+
+test('the ready houses\' model: every house in both finishes, of the table\'s size, its windows marked, light, CC0', async () => {
+  const { NodeIO } = await import('@gltf-transform/core');
+  const { ALL_EXTENSIONS } = await import('@gltf-transform/extensions');
+  const { getBounds } = await import('@gltf-transform/functions');
+  const { MeshoptDecoder } = await import('meshoptimizer');
+  await MeshoptDecoder.ready;
+  const bytes = readFileSync(new URL('../../pages/city/models/family-houses.glb', import.meta.url));
+  assert.ok(bytes.length < 600 * 1024, `family-houses.glb is ${bytes.length} bytes`);
+  const doc = await new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder }).readBinary(new Uint8Array(bytes));
+  const scenes = Object.fromEntries(doc.getRoot().listScenes().map(s => [s.getName(), s]));
+  assert.deepEqual(Object.keys(scenes).sort(), Array.from({ length: 12 }, (_, v) => E.houseModelName(v)).sort());
+  for (const m of Object.values(E.READY_HOUSES)) for (const finish of E.FINISHES) {
+    const scene = scenes[`family-house-${m.model}-${finish}`], { min, max } = getBounds(scene);
+    // The middle of the footprint on the ground, the table's width, depth and height.
+    assert.ok(Math.abs(min[1]) < .01 && Math.abs(min[0] + max[0]) < .01 && Math.abs(min[2] + max[2]) < .01, `house ${m.model} ${finish} centred`);
+    for (const [k, size] of [[0, m.width], [1, m.height], [2, m.depth]]) assert.ok(Math.abs(max[k] - min[k] - size) < .01, `house ${m.model} ${finish}: ${(max[k] - min[k]).toFixed(3)} for ${size}`);
+    const primitives = scene.listChildren().flatMap(n => [n, ...n.listChildren()]).map(n => n.getMesh()).filter(Boolean).flatMap(mesh => mesh.listPrimitives());
+    assert.equal(primitives.length, 1, 'one mesh, one material');
+    const seeds = primitives[0].getAttribute('_WINDOWSEED');
+    assert.ok(seeds, 'its windows are marked');
+    const values = Array.from({ length: seeds.getCount() }, (_, i) => seeds.getElement(i, [])[0]);
+    assert.ok(values.some(v => v > 0) && values.some(v => v === 0) && values.every(v => v >= 0 && v <= 1.0001));
+    assert.ok(primitives[0].getIndices().getCount() / 3 < 1500, `house ${m.model}: ${primitives[0].getIndices().getCount() / 3} triangles`);
+    assert.equal(primitives[0].getMaterial().getName(), `family-house-${finish}`);
+  }
+  assert.equal(doc.getRoot().listTextures().length, 2, 'the brick and the stone trim sheet');
+  const license = readFileSync(new URL('../../pages/city/models/LICENSE-family-houses.txt', import.meta.url), 'utf8');
+  assert.match(license, /CC0/); assert.match(license, /blendswap\.com\/blends\/view\/92125/); assert.match(license, /Family House Collection/);
 });
 
 test('the public square: cells map to the ground and back, shared buildings stay in their cells', () => {

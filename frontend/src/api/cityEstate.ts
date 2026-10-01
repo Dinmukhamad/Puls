@@ -46,7 +46,8 @@ export interface OwnObject extends Footprint {
   squares: number;
 }
 export interface PlotLevel { level: number; name: string; about: string; price: number }
-export interface PlotCatalogue { family: PlotFamily; name: string; icon: string; size: [number, number]; squares: number | null; levels: PlotLevel[] }
+/** `ready`: a ready house, bought finished at the price of its size (world/familyHouses.ts). */
+export interface PlotCatalogue { family: PlotFamily; name: string; icon: string; size: [number, number]; squares: number | null; ready: boolean; levels: PlotLevel[] }
 export interface ProjectLevel { level: number; name: string; about: string; cost: number }
 export interface ProjectCatalogue { family: ProjectFamily; name: string; icon: string; size: [number, number]; project: "main" | "small"; levels: ProjectLevel[] }
 export type EstateStatus = "ready" | "closed" | "no_team" | "no_land" | "staff";

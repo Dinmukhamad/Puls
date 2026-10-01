@@ -18,6 +18,7 @@ import { CELL, MODULE_CELLS, cellPoint, moduleGround, objectLayout, pointCell, s
 import { areaFrame, blockCell, plotAt, type DistrictCentre, type Frame, type LandBlock, type LandGrid } from "../world/land";
 import { plotLayout } from "../world/landLayouts";
 import type { PlotFamily } from "../world/estateGrid";
+import { HOUSE_SCALE, READY_HOUSES, isReadyHouse } from "../world/familyHouses";
 import type { Placement, Surface } from "../world/types";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "../types";
 import type { DistrictEstate, PublicObject } from "../../api/cityEstate";
@@ -306,7 +307,8 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     if (!at) return;
     const mesh = new THREE.Mesh(ghost.geometry, veilMaterial.clone());
     mesh.position.set(at.x, .21, at.z); mesh.rotation.y = at.rotation; mesh.scale.set(at.width, .01, at.depth);
-    ctx.scene.add(mesh); veils.push({ mesh, age: 0, height: obj.family === "house" ? 2.4 + obj.level * .4 : 2.2 });
+    const height = obj.family === "house" ? 2.4 + obj.level * .4 : isReadyHouse(obj.family) ? READY_HOUSES[obj.family].height * HOUSE_SCALE + .4 : 2.2;
+    ctx.scene.add(mesh); veils.push({ mesh, age: 0, height });
   }
   const offFrame = ctx.onFrame(dt => {
     if (!active) return;

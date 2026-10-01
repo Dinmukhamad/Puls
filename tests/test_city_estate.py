@@ -32,6 +32,16 @@ ADMIN = "/api/v1/admin/learning/city"
 FIRST, SECOND = 3, 5
 # A plot in the first band and what it costs with a house: land 60 + house 120.
 HOUSE_PRICE, SQUARE_PRICE = 180, 100
+#: Ready houses (world/familyHouses.ts) and their prices, cheapest first.
+READY = {
+    "carport": 300,
+    "bungalow": 420,
+    "attic": 480,
+    "modern": 560,
+    "bayhouse": 640,
+    "terrace": 720,
+}
+FAMILIES = {"square", "house", *READY, "park", "bigpark"}
 
 
 def key():
@@ -125,7 +135,7 @@ async def test_construction_waits_for_the_pilot_and_staff_never_build(
     data = await estate(client, me)
     assert data["status"] == "closed" and data["district"]["id"] == "support-team-1"
     families = {c["family"]: c for c in data["catalogue"]}
-    assert set(families) == {"square", "house", "park", "bigpark"}
+    assert set(families) == FAMILIES
     assert [lv["price"] for lv in families["house"]["levels"]] == [120, 180, 260, 360, 500]
     assert [lv["name"] for lv in families["house"]["levels"]][:2] == [
         "Одноэтажный дом",
@@ -185,6 +195,46 @@ async def test_an_operator_buys_a_plot_with_a_house_and_builds_it_up(client, ses
     mine = await estate(client, me)
     assert [(o["family"], o["level"]) for o in mine["objects"]] == [("house", 5), ("house", 1)]
     assert await session.scalar(select(func.count()).select_from(CityCell)) == 2
+
+
+async def test_ready_houses_are_bought_finished_at_the_price_of_their_size(
+    client, session, head, team
+):
+    me = auth(await login(client, team.login))
+    catalogue = {c["family"]: c for c in (await estate(client, me))["catalogue"]}
+    ready = [f for f, c in catalogue.items() if c["ready"]]
+    assert ready == list(READY), "cheapest first"
+    for family, price in READY.items():
+        item = catalogue[family]
+        assert item["size"] == [1, 1] and item["squares"] is None and len(item["levels"]) == 1
+        assert item["levels"][0]["price"] == price and item["levels"][0]["name"] == item["name"]
+    assert not catalogue["house"]["ready"] and not catalogue["square"]["ready"]
+    # Land of the band plus the house, at once; it has no stages to build up.
+    r = await buy(client, me, "terrace", FIRST, 0, 0)
+    assert r.status_code == 200, r.text
+    house = r.json()["object"]
+    assert r.json()["price"] == 60 + 720 and r.json()["balance"] == 2000 - 780
+    assert (house["family"], house["level"], house["paid"], house["w"]) == ("terrace", 1, 780, 1)
+    up = await change(client, me, house, "upgrade", version=house["version"], economy_revision=0)
+    assert up.json()["code"] == "max_level"
+    # A square beside it is a square: only squares gather into parks.
+    for u, v in ((1, 0), (0, 1), (1, 1)):
+        assert not (await buy(client, me, "square", FIRST, u, v)).json()["merged"]
+    view = await district_view(client, me)
+    assert sorted(o["family"] for o in view["objects"]) == ["square", "square", "square", "terrace"]
+    # The head sets a ready house's price in the economy tab; the next purchase pays it.
+    boss = auth(await login(client, head.login))
+    economy = (await client.get(ADMIN + "/economy", headers=boss)).json()
+    economy.pop("catalogue"), economy.pop("can_edit")
+    cheaper = {**economy["estate"], "modern": [500]}
+    r = await client.put(ADMIN + "/economy", headers=boss, json={**economy, "estate": cheaper})
+    assert r.status_code == 200, r.text
+    revision = r.json()["revision"]
+    stale = await buy(client, me, "modern", FIRST, 2, 0)
+    assert stale.json()["code"] == "prices_changed"
+    r = await buy(client, me, "modern", FIRST, 2, 0, revision=revision)
+    assert r.status_code == 200 and r.json()["price"] == 60 + 500
+    assert sum(await spent(session)) == -(780 + 3 * SQUARE_PRICE + 560)
 
 
 async def test_a_repeated_key_returns_the_first_result_and_never_pays_twice(client, session, team):
@@ -769,7 +819,7 @@ async def test_the_economy_tab_sets_land_and_building_prices(client, head):
     economy = (await client.get(ADMIN + "/economy", headers=boss)).json()
     economy.pop("catalogue"), economy.pop("can_edit")
     assert economy["land"] == [60, 45, 30, 20, 10]
-    assert set(economy["estate"]) == {"square", "house", "park", "bigpark"}
+    assert set(economy["estate"]) == FAMILIES
     for bad in ({"land": [60, 45]}, {"land": [60, 45, 30, 20, -1]}):
         r = await client.put(ADMIN + "/economy", headers=boss, json={**economy, **bad})
         assert r.status_code == 422, bad

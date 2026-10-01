@@ -99,13 +99,16 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
       {plot.problem && <p className="estate-problem" role="alert">{plot.problem}</p>}
       {closed && <button type="button" className="city-secondary" disabled={pending} onClick={() => setDistrict({ open_band: plot.band }, `Открыты пояса до ${plot.band}-го.`)}>Открыть пояс {plot.band}</button>}
       {error && <p className="city-error" role="alert">{error.message}</p>}
-      <ul className="estate-catalogue">{(["square", "house"] as const).map(f => plots.get(f)).filter((c): c is PlotCatalogue => !!c).map(c => <li key={c.family}><span className="estate-catalogue__icon" aria-hidden="true">{c.icon}</span>
-        <span className="estate-catalogue__text"><strong>{c.levels[0].name}</strong><small>{c.levels[0].about}</small></span>
-        <button type="button" className="city-action" disabled={pending || !!plot.problem} aria-label={`${c.name} на участке бесплатно`} onClick={() => run({
-          run: () => citySandbox.build({ district_id: build.district, family: c.family, block: plot.block, col: plot.col, row: plot.row }),
-          text: r => r.merged ? r.object?.family === "bigpark" ? "Шесть скверов стали большим парком!" : "Четыре сквера стали парком!" : `Построено: ${c.levels[0].name}`,
-          next: r => ({ ...build, plot: null, selected: r.object?.id ?? null }),
-        })}>{pending ? "…" : "Бесплатно"}</button></li>)}</ul>
+      {[(["square", "house"] as const).map(f => plots.get(f)).filter((c): c is PlotCatalogue => !!c), [...plots.values()].filter(c => c.ready)].map((list, i) => list.length > 0 && <section className="estate-section" key={i}>
+        {i > 0 && <h3>Готовые дома</h3>}
+        <ul className="estate-catalogue">{list.map(c => <li key={c.family}><span className="estate-catalogue__icon" aria-hidden="true">{c.icon}</span>
+          <span className="estate-catalogue__text"><strong>{c.levels[0].name}</strong><small>{c.levels[0].about}</small>{c.ready && <small>В настоящем районе ◈ {coins(c.levels[0].price)} + земля</small>}</span>
+          <button type="button" className="city-action" disabled={pending || !!plot.problem} aria-label={`${c.levels[0].name} на участке бесплатно`} onClick={() => run({
+            run: () => citySandbox.build({ district_id: build.district, family: c.family, block: plot.block, col: plot.col, row: plot.row }),
+            text: r => r.merged ? r.object?.family === "bigpark" ? "Шесть скверов стали большим парком!" : "Четыре сквера стали парком!" : `Построено: ${c.levels[0].name}`,
+            next: r => ({ ...build, plot: null, selected: r.object?.id ?? null }),
+          })}>{pending ? "…" : "Бесплатно"}</button></li>)}</ul>
+      </section>)}
       <p className="city-fine">Парк не строят: четыре своих сквера квадратом сами станут парком, шесть прямоугольником — большим парком.</p>
     </section>;
   } else {
