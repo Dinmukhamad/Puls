@@ -1,4 +1,4 @@
-"""Team district land: public city state, the operator's estate, every change by idempotency key."""
+"""Team district land: public city state, the operator's plots, every change by idempotency key."""
 
 from fastapi import APIRouter, Path, Response
 
@@ -7,11 +7,9 @@ from app.schemas.city_estate import (
     KEY,
     CancelInput,
     ContributionInput,
-    MergeInput,
-    MoveInput,
+    PlaceInput,
     ProjectInput,
     PurchaseInput,
-    StoreInput,
     UpgradeInput,
 )
 from app.services import city_estate
@@ -35,19 +33,10 @@ async def estate(session: SessionDep, user: CurrentUser, response: Response):
     return await city_estate.estate(session, user)
 
 
-@router.post("/learning/city/estate")
-async def claim_estate(session: SessionDep, user: CurrentUser):
-    return await city_estate.claim_estate(session, user)
-
-
-@router.post("/learning/city/buildings")
+@router.post("/learning/city/plots")
 async def purchase(body: PurchaseInput, session: SessionDep, user: CurrentUser):
+    """A free plot of one's district with a square or a house on it."""
     return await city_estate.purchase(session, user, body)
-
-
-@router.post("/learning/city/buildings/merge")
-async def merge(body: MergeInput, session: SessionDep, user: CurrentUser):
-    return await city_estate.merge(session, user, body)
 
 
 @router.post("/learning/city/buildings/{object_id}/upgrade")
@@ -55,14 +44,10 @@ async def upgrade(object_id: int, body: UpgradeInput, session: SessionDep, user:
     return await city_estate.upgrade(session, user, object_id, body)
 
 
-@router.post("/learning/city/buildings/{object_id}/move")
-async def move(object_id: int, body: MoveInput, session: SessionDep, user: CurrentUser):
-    return await city_estate.move(session, user, object_id, body)
-
-
-@router.post("/learning/city/buildings/{object_id}/store")
-async def store(object_id: int, body: StoreInput, session: SessionDep, user: CurrentUser):
-    return await city_estate.store(session, user, object_id, body)
+@router.post("/learning/city/buildings/{object_id}/place")
+async def place(object_id: int, body: PlaceInput, session: SessionDep, user: CurrentUser):
+    """A building from the inventory (after a transfer) onto free plots of the new district."""
+    return await city_estate.place(session, user, object_id, body)
 
 
 @router.post("/learning/city/projects")

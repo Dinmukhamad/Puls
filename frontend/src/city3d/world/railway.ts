@@ -134,8 +134,8 @@ export function stationBox(line: RailLine, pad = 0) {
 }
 
 /**
- * The generated town without what stood on the railway: houses, trees, lamps and their gardens. Like
- * world/estates.ts clearDistrictLand: one pad for every copy, so the pieces of one house go together.
+ * The generated town without what stood on the railway: houses, trees, lamps and their gardens. One pad for
+ * every copy, so the pieces of one house go together.
  */
 export function clearRailway(world: { placements: Placement[]; surfaces: Surface[] }, line: RailLine) {
   world.placements = world.placements.filter(p => !onRailway(line, p, 2.5));

@@ -1,54 +1,66 @@
 /**
- * Team district land (docs/CITY_ESTATES.md). The client names a building and its cells; the server owns the
- * price, the rules and the order of operations. Every change carries an idempotency key made once per user
- * action: a retry with the same key never pays twice, and a lost answer is looked up by that key.
+ * Team district land (docs/CITY_ESTATES.md): every city is cut into three districts of plots, and operators buy
+ * them one by one, each with a square or a house on it. The client names the plot and what stands on it; the
+ * server owns the price, the rules and the order of operations. Every change carries an idempotency key made once
+ * per user action: a retry with the same key never pays twice, and a lost answer is looked up by that key.
  */
 import { ApiError, request } from "./client";
 import type { DepartmentId } from "./cityWorld";
+import type { PlotFamily, ProjectFamily } from "../city3d/world/estateGrid";
 
-export type EstateFamily = "square" | "gazebo" | "fountain" | "sports" | "park" | "house" | "tower";
-export type ModuleKind = "public" | "business" | "residential";
+export type { PlotFamily, ProjectFamily };
+/**
+ * Where a building stands: on plots `module` is the block, `u` the column and `v` the row of its first plot, and
+ * w × h are plots; on the public square (module 0) they are cells.
+ */
 export interface Footprint { module: number | null; u: number | null; v: number | null; w: number; h: number; rotation: number }
-/** A building as everyone sees it: shape and stage, never what it cost or whose it is, except "mine". */
-export interface PublicObject extends Footprint { id: number; family: EstateFamily; level: number; owner: "mine" | "resident" | "district" }
+/** A building as everyone sees it: shape and stage, never what it cost or whose it is, except "mine". The district's own stand on its square. */
+export interface PublicObject extends Footprint { id: number; family: PlotFamily | ProjectFamily; level: number; owner: "mine" | "resident" | "district" }
 export interface DistrictProject extends Footprint {
-  id: number; family: EstateFamily; name: string; level: number; level_name: string; target_id: number | null;
+  id: number; family: ProjectFamily; name: string; level: number; level_name: string; target_id: number | null;
   cost: number; status: "open" | "built" | "cancelled"; mine: number; version: number;
   /** Coarse quarters; null when the team is too small to show it without giving away one person's sum. */
   progress: number | null;
   /** Staff only. */
   funded?: number;
 }
+/** A district's land: plots for sale and taken, band by band from the centre; bands open outwards as they fill. */
+export interface DistrictLandState { plots: number; taken: number; open_band: number; bands: { band: number; plots: number; taken: number }[] }
 export interface DistrictEstate {
   id: string; name: string; number: number; construction: boolean; mine: boolean; managed: boolean;
-  modules: { slot: number; kind: ModuleKind }[];
-  estates: { total: number; taken: number };
+  /** Null where the district has no land (beyond the three of a city). */
+  land: DistrictLandState | null;
   hq: { level: number; name: string; built: number; next: { level: number; name: string; need: number } | null };
   objects: PublicObject[]; projects: DistrictProject[]; version: number;
 }
 export interface CityEstates { city: DepartmentId; districts: DistrictEstate[] }
 
 export interface OwnObject extends Footprint {
-  id: number; family: EstateFamily; level: number; state: "placed" | "stored"; district_id: string;
-  source: "purchase" | "merge" | "project" | "legacy"; paid: number; version: number; created_at: string; components: number;
+  id: number; family: PlotFamily; level: number; state: "placed" | "stored"; district_id: string;
+  source: "purchase" | "merge" | "project" | "legacy"; paid: number; version: number; created_at: string;
+  /** How many squares went into a park. */
+  squares: number;
 }
-export interface CatalogueLevel { level: number; name: string; about: string; price: number; project_cost: number | null }
-export interface CatalogueFamily { family: EstateFamily; name: string; icon: string; size: [number, number]; zone: "garden" | "house" | "lot"; project: "main" | "small" | null; recipe: boolean; levels: CatalogueLevel[] }
-export interface Lot { district_id: string; module: number; index: number; u: number; v: number }
+export interface PlotLevel { level: number; name: string; about: string; price: number }
+export interface PlotCatalogue { family: PlotFamily; name: string; icon: string; size: [number, number]; squares: number | null; levels: PlotLevel[] }
+export interface ProjectLevel { level: number; name: string; about: string; cost: number }
+export interface ProjectCatalogue { family: ProjectFamily; name: string; icon: string; size: [number, number]; project: "main" | "small"; levels: ProjectLevel[] }
 export type EstateStatus = "ready" | "closed" | "no_team" | "no_land" | "staff";
 export interface MyEstate {
   status: EstateStatus; message: string | null;
   district: { id: string; city: DepartmentId; name: string } | null;
-  estate: Lot | null; tower_lot: Lot | null; objects: OwnObject[]; catalogue: CatalogueFamily[];
+  objects: OwnObject[]; catalogue: PlotCatalogue[]; projects: ProjectCatalogue[];
+  /** Coins for a plot of each band, from the centre outwards. */
+  land_prices: number[];
   economy_revision: number; balance: number; available: number;
   legacy: { count: number; paid: number }; managed: string[];
 }
-export interface OperationResult { replayed: boolean; object?: OwnObject | PublicObject; price?: number; balance?: number; available?: number; accepted?: number; completed?: boolean; project?: DistrictProject; refunded?: number }
+export interface OperationResult { replayed: boolean; object?: OwnObject | PublicObject; merged?: boolean; price?: number; balance?: number; available?: number; accepted?: number; completed?: boolean; project?: DistrictProject; refunded?: number }
 export interface EstateReport {
-  districts: { id: string; city: DepartmentId; name: string; construction: boolean; modules: number; operators: number; estates: { total: number; taken: number }; needs_expansion: boolean; buildings: number; inventory: number; open_projects: number; hq_level: number; built_projects: number }[];
+  districts: { id: string; city: DepartmentId; name: string; construction: boolean; operators: number; builders: number; land: { plots: number; taken: number; open_band: number } | null; buildings: number; open_projects: number; hq_level: number; built_projects: number }[];
   operators_without_district: number; inventory: number;
   legacy: { buildings: number; operators: number; paid: number };
-  coins: { buildings: number; contributions: number };
+  coins: { buildings: number; contributions: number; refunded: number };
 }
 
 /** A fresh idempotency key for one user action; the same key is reused when that action is retried. */
@@ -78,13 +90,10 @@ const post = <T extends OperationResult>(path: string, json: { key: string } & R
 export const cityEstate = {
   city: (city: DepartmentId) => request<CityEstates>(`/api/v1/learning/city/cities/${city}`),
   mine: () => request<MyEstate>("/api/v1/learning/city/estate"),
-  claim: () => request<Lot>("/api/v1/learning/city/estate", { method: "POST" }),
-  purchase: (json: { key: string; family: EstateFamily; module: number; u: number; v: number; rotation: number; economy_revision: number }) => post("/buildings", json),
+  purchase: (json: { key: string; family: PlotFamily; block: number; col: number; row: number; economy_revision: number }) => post("/plots", json),
   upgrade: (id: number, json: { key: string; version: number; economy_revision: number }) => post(`/buildings/${id}/upgrade`, json),
-  move: (id: number, json: { key: string; version: number; module: number; u: number; v: number; rotation: number }) => post(`/buildings/${id}/move`, json),
-  store: (id: number, json: { key: string; version: number }) => post(`/buildings/${id}/store`, json),
-  merge: (json: { key: string; ids: number[]; economy_revision: number }) => post("/buildings/merge", json),
-  openProject: (json: { key: string; district_id: string; family: EstateFamily; economy_revision: number; target_id?: number; module?: number; u?: number; v?: number; rotation?: number }) => post("/projects", json),
+  place: (id: number, json: { key: string; version: number; block: number; col: number; row: number; rotation: number }) => post(`/buildings/${id}/place`, json),
+  openProject: (json: { key: string; district_id: string; family: ProjectFamily; economy_revision: number; target_id?: number; module?: number; u?: number; v?: number; rotation?: number }) => post("/projects", json),
   contribute: (id: number, json: { key: string; amount: number; up_to: boolean }) => post(`/projects/${id}/contributions`, json),
   cancel: (id: number, json: { key: string }) => post(`/projects/${id}/cancel`, json),
   report: () => request<EstateReport>("/api/v1/admin/learning/city/estates"),

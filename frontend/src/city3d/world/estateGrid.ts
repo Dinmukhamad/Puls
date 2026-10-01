@@ -1,24 +1,30 @@
 /**
- * The logical grid of team districts and the building catalogue's shapes, shared with the server
- * (app/services/city_estate.py) and light enough for any page: no world generation, no three.js.
+ * The shapes of the team districts' catalogue, shared with the server (app/services/city_estate.py) and light
+ * enough for any page: no world generation, no three.js. What operators build stands on plots (world/land.ts):
+ * a square or a house on one plot, parks on the plots of the squares they gathered from. What a district
+ * builds together stands on cells of its public square, a module of MODULE_CELLS × MODULE_CELLS.
  */
-export type ModuleKind = "public" | "business" | "residential";
-export type EstateFamily = "square" | "gazebo" | "fountain" | "sports" | "park" | "house" | "tower";
+export type PlotFamily = "square" | "house" | "park" | "bigpark";
+export type ProjectFamily = "square" | "gazebo" | "fountain" | "sports" | "park";
 
-/** The cells of a module side and of an estate (or tower lot) side; in an estate the house keeps the two back rows. */
-export const MODULE_CELLS = 12, LOT_CELLS = 4, HOUSE_ROWS = 2;
-/** Prepared modules of district number n (index n − 1); the server sells only there (city_estate.py PREPARED). */
-export const PREPARED = [10, 10, 10, 6, 6, 6, 0, 0, 0, 0, 0, 0] as const;
-/** Slot 0 is the district's public square, slot 1 its business quarter, the rest are residential modules. */
-export function moduleKind(slot: number): ModuleKind { return slot === 0 ? "public" : slot === 1 ? "business" : "residential"; }
+/** The public square's side in cells. */
+export const MODULE_CELLS = 12;
+/** Each city is cut into three districts; others have no land (app/data/city_land.json). */
+export const LAND_DISTRICTS = 3;
 /** Whether district number n has land to build on. */
-export const preparedLand = (number: number) => (PREPARED[number - 1] ?? 0) > 0;
+export const preparedLand = (number: number) => number >= 1 && number <= LAND_DISTRICTS;
 
-/** Footprints in cells (unturned) and levels, the same as the server catalogue (city_estate.py FAMILIES). */
-export const FAMILY_SIZE: Record<EstateFamily, [number, number]> = { square: [1, 1], gazebo: [1, 1], fountain: [2, 2], sports: [2, 2], park: [3, 2], house: [4, 2], tower: [4, 4] };
-export const FAMILY_LEVELS: Record<EstateFamily, number> = { square: 1, gazebo: 2, fountain: 2, sports: 3, park: 3, house: 5, tower: 4 };
-/** The footprint in cells of a building turned by `rotation` quarter turns. */
-export function footprint(family: EstateFamily, rotation: number): [number, number] {
-  const [w, h] = FAMILY_SIZE[family];
-  return rotation % 2 ? [h, w] : [w, h];
-}
+/** Columns × rows of plots (unturned) and levels of what operators build, as the server's PLOT_FAMILIES. */
+export const PLOT_SIZE: Record<PlotFamily, [number, number]> = { square: [1, 1], house: [1, 1], park: [2, 2], bigpark: [3, 2] };
+export const PLOT_LEVELS: Record<PlotFamily, number> = { square: 1, house: 5, park: 2, bigpark: 3 };
+/** How many of an operator's own squares gather into each park. */
+export const PARK_SQUARES: Partial<Record<PlotFamily, number>> = { park: 4, bigpark: 6 };
+/** Cells (unturned) and levels of the public square's buildings, as the server's PROJECT_FAMILIES. */
+export const PROJECT_SIZE: Record<ProjectFamily, [number, number]> = { square: [1, 1], gazebo: [1, 1], fountain: [2, 2], sports: [2, 2], park: [3, 2] };
+export const PROJECT_LEVELS: Record<ProjectFamily, number> = { square: 1, gazebo: 2, fountain: 2, sports: 3, park: 3 };
+
+const turned = ([w, h]: [number, number], rotation: number): [number, number] => rotation % 2 ? [h, w] : [w, h];
+/** Plots a building takes, turned by quarter turns (a big park stands 3 × 2 or 2 × 3). */
+export const plotFootprint = (family: PlotFamily, rotation: number) => turned(PLOT_SIZE[family], rotation);
+/** Cells of the public square a shared building takes, turned by quarter turns. */
+export const projectFootprint = (family: ProjectFamily, rotation: number) => turned(PROJECT_SIZE[family], rotation);

@@ -3,7 +3,7 @@
  * small park with a fountain, paths, benches, lamps, flowerbeds and trees. Pure data like the rest of the world:
  * the terrain draws the street, the car park's pad and the park's lawns and paths, the instance pools its cars,
  * trees and furniture. Laid out in the line's coordinates (u along the track from the buffer stop, w across it),
- * on land the district estates never take (world/railway.test.mjs checks both).
+ * on land no district plot takes (world/land.ts keeps it out; world/stationSquare.test.mjs checks it).
  *
  * The island cities (x4, v1): the station street runs across the end of the track in front of the forecourt, from
  * the avenue beside the station to the park; the car park lies behind it, the park beside the track. The lake city

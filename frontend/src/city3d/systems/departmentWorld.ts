@@ -18,10 +18,10 @@ import { createTraffic } from "./traffic";
 import { createCrowd } from "./crowd";
 import { disposeTree } from "./districts";
 import { mergeStatic } from "../assets/landmarks";
-import { generateSalesWorld, salesLand, SALES_CENTERS, supportLand, teamPositions } from "../world/sales";
-import type { DistrictLand } from "../world/estates";
-import { createEstates, type EstateFocus, type Estates } from "./estates";
-import type { CityBuildView, CityEstateView, EstatePick } from "../types";
+import { generateSalesWorld, SALES_CENTERS } from "../world/sales";
+import { landGrid, type LandGrid } from "../world/land";
+import { createEstates, type Estates } from "./estates";
+import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "../types";
 
 export interface DepartmentWorld {
   show(id: DepartmentId): void; setConfig(config: CityWorld): void;
@@ -34,7 +34,7 @@ export interface DepartmentWorld {
   /** Team district land: buildings, projects and the headquarters stage of every district of a city. */
   setEstates(city: DepartmentId, view: CityEstateView | null): void;
   setBuild(view: CityBuildView | null): void;
-  focusEstate(target: EstateFocus, distance: number, polar: number): { point: THREE.Vector3; azimuth: number } | null;
+  focusEstate(target: EstateTarget, distance: number, polar: number): { point: THREE.Vector3; azimuth: number } | null;
   dispose(): void;
 }
 const WALL = "#f0e8d6", GLASS = "#397181", DARK = "#39484b", GOLD = "#ddb04f", GREEN = "#728963";
@@ -301,12 +301,13 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
   const supportLabels = document.createElement("div"), salesLabels = document.createElement("div");
   ctx.overlay.append(supportLabels, salesLabels);
   let config: CityWorld | undefined, layoutKey = "";
-  // District land: the island city has it in its suburbs (the full map only), the lake city all round the lake.
-  const lands: Partial<Record<DepartmentId, DistrictLand>> = { sales: salesLand() };
-  if (ctx.world.spec.name === "x4") lands.support = supportLand(ctx.world.roads);
+  // District land: the island city's whole mainland (the full map only), the lake city's all round the lake, in plots.
+  const grids: Partial<Record<DepartmentId, LandGrid>> = {};
+  const supportGrid = landGrid(ctx.world);
+  if (supportGrid) grids.support = supportGrid;
   const supportLand3d = new THREE.Scene(); supportLand3d.name = "support-districts"; supportRoot.add(supportLand3d);
   const estates: Partial<Record<DepartmentId, Estates>> = {};
-  if (lands.support) { estates.support = createEstates({ ...ctx, scene: supportLand3d, overlay: supportLabels }, lands.support, onEstate); estates.support.setCatalogue(catalogue); }
+  if (grids.support) { estates.support = createEstates({ ...ctx, scene: supportLand3d, overlay: supportLabels }, grids.support, onEstate); estates.support.setCatalogue(catalogue); }
   const views: Partial<Record<DepartmentId, CityEstateView | null>> = {};
   let build: CityBuildView | null = null;
   const anchors = { support: new Map<string, THREE.Vector3>(), sales: new Map<string, THREE.Vector3>() };
@@ -340,7 +341,8 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     const rail = station(world.railway ?? RAIL_LINES.sales, "sales"); scene.add(rail.root);
     if (portalModel) rail.usePortal(portalModel);
     if (stationModels) rail.useBuilding(stationModels);
-    const land3d = createEstates(context, lands.sales!, onEstate); land3d.setCatalogue(catalogue);
+    const grid = landGrid(world)!; grids.sales = grid;
+    const land3d = createEstates(context, grid, onEstate); land3d.setCatalogue(catalogue);
     estates.sales = land3d; land3d.set(views.sales ?? null); land3d.setBuild(build && cityOf(build.district) === "sales" ? build : null);
     return { scene, frames, moves, terrain, water, hills, pools, cars, crowd, campus, teams, rail, land3d, line: world.railway ?? RAIL_LINES.sales };
   }
@@ -371,9 +373,12 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
       for (const city of config.cities) {
         const root = city.id === "support" ? supportTeams : sales?.teams; if (!root) continue;
         disposeTree(root); root.clear(); materialSets.delete(root);
-        const land = lands[city.id], points = land?.headquarters ?? teamPositions(city.districts.length, city.id === "support", ctx.world.roads.streets).map(p => ({ ...p, rotation: 0 }));
+        // A district's headquarters stand in its centre; a district beyond the three of a city has no land, and none.
+        const centres = grids[city.id]?.centres ?? [];
         city.districts.forEach((d, i) => {
-          const p = points[i], site = new THREE.Group(); site.position.set(p.x, 0, p.z); site.rotation.y = p.rotation; root.add(site);
+          const p = centres.find(c => c.district === i + 1)?.hq;
+          if (!p) { anchors[city.id].delete(d.id); return; }
+          const site = new THREE.Group(); site.position.set(p.x, 0, p.z); site.rotation.y = p.rotation; root.add(site);
           headquarters(site, stageOf(city.id, d.id), HQ_COLOURS[i % HQ_COLOURS.length]);
           anchors[city.id].set(d.id, new THREE.Vector3(p.x, [8, 9, 9, 10, 15][stageOf(city.id, d.id) - 1], p.z));
         });

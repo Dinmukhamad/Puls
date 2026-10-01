@@ -249,7 +249,8 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
         out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.setScalar(p.scale || 1));
         return moreTrees[kind === "tree-birch" ? "birch" : "oak"];
       case "cottage":
-        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 3, (p.variant ? 2 : 1) * SECTION_FLOOR, p.depth ?? 2.4));
+        // `variant` is the floors above the ground floor: 0 a bungalow, 1 two storeys, 2 three (a district's mansion).
+        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 3, Math.min(3, Math.max(1, Math.floor(p.variant) + 1)) * SECTION_FLOOR, p.depth ?? 2.4));
         return cottage;
       case "roof":
         out.compose(place.set(p.x, GROUND + (p.lift ?? 0), p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 2.6, p.scale || 1, p.depth ?? 2.4));

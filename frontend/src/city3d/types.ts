@@ -5,27 +5,33 @@ import type { DistrictId } from "../api/city";
 import type { BuildingKey } from "./world/plots";
 import type { SiteStage } from "./world/sites";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
-import type { CityEstates, Lot } from "../api/cityEstate";
-import type { EstateFamily } from "./world/estateGrid";
+import type { CityEstates } from "../api/cityEstate";
+import type { PlotFamily, ProjectFamily } from "./world/estateGrid";
 export type JourneyPhase = "departing" | "tunnel" | "arriving" | null;
 
-/** Team district land of the city on screen (api/cityEstate.ts) and the viewer's own parcels. */
-export interface CityEstateView { state: CityEstates; own: { estate: Lot | null; tower: Lot | null } | null }
+/** Team district land of the city on screen (api/cityEstate.ts): plots, buildings, projects, open bands. */
+export interface CityEstateView { state: CityEstates }
+/** A plot of a district's land: block, column and row (world/land.ts). */
+export interface PlotAddress { block: number; col: number; row: number }
 /**
- * Build mode in a district: the grid over the operator's estate, the business lots or (staff) the public
- * square; a building being placed — new, moved or put back from the inventory (`moving`); the one selected.
+ * Build mode in a district: its plots light up (those for sale in its open bands), or for staff the cells of its
+ * public square; a building from the inventory (`moving`) or a shared project being placed; the building
+ * selected; the plot picked for a purchase.
  */
 export interface CityBuildView {
-  district: string; area: "estate" | "lot" | "public";
-  placing: { family: EstateFamily; rotation: number; moving: number | null } | null;
+  district: string; area: "plots" | "public";
+  placing: { family: PlotFamily | ProjectFamily; rotation: number; moving: number | null } | null;
   selected: number | null;
+  plot: PlotAddress | null;
 }
 /** What the operator touched on district land, or where the preview stands now and why it does not fit. */
 export type EstatePick =
+  | { kind: "plot"; district: string; block: number; col: number; row: number; band: number; problem: string | null }
   | { kind: "place"; district: string; module: number; u: number; v: number; rotation: number; problem: string | null }
   | { kind: "object"; district: string; object: number }
-  | { kind: "project"; district: string; project: number }
-  | { kind: "land"; district: string; module: number; u: number; v: number };
+  | { kind: "project"; district: string; project: number };
+/** What the camera flies to: a district's centre or public square, a plot, a building. */
+export interface EstateTarget { district: string; kind: "district" | "public" | "plot" | "object"; object?: number; plot?: PlotAddress }
 
 export interface CityView { azimuth: number; polar: number; distance: number; target: [number, number, number] }
 export interface CityLabelInfo { id: DistrictId; name: string; status: string; icon: string; soon: boolean; reward: boolean; level: number }
@@ -87,8 +93,8 @@ export interface CityControl {
   setDepartmentWorld(config: CityWorld): void;
   setEstates(city: DepartmentId, view: CityEstateView | null): void;
   setBuild(view: CityBuildView | null): void;
-  /** Flies to the operator's estate, a district's square or a building. */
-  focusEstate(target: { district: string; kind: "estate" | "lot" | "public" | "object"; object?: number }): void;
+  /** Flies to a district's centre or square, a plot or a building. */
+  focusEstate(target: EstateTarget): void;
   focusWorld(id: string): void;
   travelTo(id: DepartmentId): void;
   skipTravel(): void;

@@ -11,6 +11,7 @@ from app.models.enums import Role
 from app.models.user import Group, User
 from app.services import city_estate
 from app.services.city_estate import district_index, prepared
+from app.services.city_land import has_land
 from app.services.rules import write_audit
 
 
@@ -64,7 +65,7 @@ async def world(session, actor):
                               "assigned": any(g in groups for g in d["group_ids"]),
                               "supervisor": " · ".join(sorted(supervisors)) or None,
                               "construction": d["construction"],
-                              "prepared": prepared(int(d["id"].rsplit("-", 1)[1]))})
+                              "prepared": prepared(d["id"])})
         cities.append({"id": city["id"], "name": city["name"], "districts": districts})
     return {"revision": config["revision"], "cities": cities,
             "home_city": home_city, "home_district": home_district,
@@ -89,9 +90,9 @@ async def save(session, actor, body):
     for city in cities:
         assigned_supervisors = set()
         for district in city["districts"]:
-            if district["construction"] and not prepared(int(district["id"].rsplit("-", 1)[1])):
+            if district["construction"] and not has_land(district["id"]):
                 raise DomainError(
-                    "Для этого района ещё не подготовлена территория: стройку открыть нельзя"
+                    "У этого района нет земли: город делится на три района, стройку открыть нельзя"
                 )
             if any(g not in groups for g in district["group_ids"]):
                 raise DomainError("Выбрана несуществующая или неактивная группа")

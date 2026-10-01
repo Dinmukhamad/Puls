@@ -4,15 +4,11 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
-const built = await build({ stdin: { contents: `export * from './railway.ts'; export * from './relief.ts'; export * from './estates.ts'; export * from './sales.ts'; export * from './stationSquare.ts'; export { generateWorld, insideParking, segmentDistance } from './generate.ts'; export { WORLD_X4, WORLD_V1 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
+const built = await build({ stdin: { contents: `export * from './railway.ts'; export * from './relief.ts'; export * from './estates.ts'; export * from './sales.ts'; export * from './stationSquare.ts'; export * from './land.ts'; export * from './cities.ts'; export { insideParking, segmentDistance } from './generate.ts'; export { WORLD_X4, WORLD_V1 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
 const R = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
-// The worlds as the city opens them (city3d/index.ts): district land and the railway cleared, then the square.
-const X4 = R.generateWorld(R.WORLD_X4), V1 = R.generateWorld(R.WORLD_V1), SALES = R.generateSalesWorld();
-const STREETS = { x4: [...X4.roads.streets], v1: [...V1.roads.streets] };
-const SUPPORT_LAND = R.supportLand(X4.roads);
-R.clearDistrictLand(X4, SUPPORT_LAND);
-for (const world of [X4, V1]) { R.clearRailway(world, world.railway); R.addStationSquare(world); }
+// The worlds as the city opens them (city3d/index.ts, world/cities.ts): the mainland and the railway cleared, then the square.
+const X4 = R.islandWorld(R.WORLD_X4), V1 = R.islandWorld(R.WORLD_V1), SALES = R.generateSalesWorld();
 const CITIES = { x4: X4, v1: V1, sales: SALES };
 const squareOf = (world) => R.stationSquare(world);
 const lotCorners = (lot) => [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, d]) => ({
@@ -60,27 +56,20 @@ test('every station has a small park: lawn, paths, a fountain with benches round
   }
 });
 
-test('the square keeps off the railway, the district land and the hills, and the houses there make way for it', () => {
-  const lands = { x4: SUPPORT_LAND, v1: null, sales: R.salesLand() };
+test('the square keeps off the railway, the districts\' plots and the hills, and the houses there make way for it', () => {
+  const lands = { x4: R.landGrid(X4), v1: null, sales: R.landGrid(SALES) };
   for (const [name, world] of Object.entries(CITIES)) {
     const square = squareOf(world), line = world.railway, land = R.flatLand(world);
     const points = [...square.placements, ...square.parking.flatMap(lotCorners)];
     for (const p of points) {
       assert.ok(!R.onRailway(line, p, .5), `${name}: ${p.kind ?? 'car park'} at ${p.x.toFixed(1)}, ${p.z.toFixed(1)} on the railway`);
       assert.ok(R.groundHeight(land, p.x, p.z, line) < 1e-9, `${name}: ${p.kind ?? 'car park'} at ${p.x.toFixed(1)}, ${p.z.toFixed(1)} up on the hills`);
-      if (lands[name]) assert.ok(!R.onDistrictLand(lands[name], p, 1), `${name}: ${p.kind ?? 'car park'} on district land`);
+      if (lands[name]) assert.equal(R.plotAt(lands[name], p), null, `${name}: ${p.kind ?? 'car park'} on a plot of the districts`);
     }
     // Of the town's own copies none is left on the square: houses, trees and lamps all made way.
     const own = world.placements.filter((p) => !square.placements.some((q) => q.x === p.x && q.z === p.z && q.kind === p.kind));
     for (const p of own) assert.ok(!R.onSquare(line, square, p, 0), `${name}: a ${p.kind} left on the square`);
   }
-});
-
-test('the square leaves the district land where it was', () => {
-  // index.ts lays out the land before the square; the city's own copy (systems/departmentWorld.ts) after it.
-  const before = R.supportLand({ streets: STREETS.x4, rings: X4.roads.rings }), after = R.supportLand(X4.roads);
-  assert.deepEqual(after, before);
-  assert.deepEqual(after, SUPPORT_LAND);
 });
 
 test('the station model is a light building of the city\'s size, named for each city, with its CC BY credit', async () => {

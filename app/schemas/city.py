@@ -79,13 +79,20 @@ class EconomyInput(BaseModel):
     projects: list[ProjectInput]
     quest_coins: int = Field(ge=0, le=1000)
     estate: dict[str, list[int]] | None = None
+    land: list[int] | None = None
     district: dict[str, list[int]] | None = None
     hq: list[int] | None = None
 
     @model_validator(mode="after")
     def complete(self):
         from app.services.city import BUILDINGS
-        from app.services.city_estate import ESTATE_PRICES, HQ_STEPS, PROJECT_COSTS
+        from app.services.city_estate import (
+            HQ_STEPS,
+            LAND_PRICES,
+            PLOT_FAMILIES,
+            PLOT_PRICES,
+            PROJECT_COSTS,
+        )
         from app.services.city_group import POINTS, PROJECTS
 
         if set(self.prices) != set(BUILDINGS):
@@ -99,7 +106,7 @@ class EconomyInput(BaseModel):
         if [p.key for p in self.projects] != [p["key"] for p in PROJECTS]:
             raise ValueError("Кварталы нельзя добавлять, удалять или менять местами")
         for given, default, label in (
-            (self.estate, ESTATE_PRICES, "постройки района"),
+            (self.estate, PLOT_PRICES, "постройки района"),
             (self.district, PROJECT_COSTS, "общего проекта"),
         ):
             if given is None:
@@ -109,12 +116,17 @@ class EconomyInput(BaseModel):
             ):
                 raise ValueError(f"Укажите цену каждой ступени {label}")
             for key, levels in given.items():
-                # Merging six squares is free unless the head sets a fee; other steps cost coins.
-                lowest = 0 if (key, label) == ("park", "постройки района") else 1
+                # A park gathering itself from squares is free unless the head sets a fee.
+                gathered = default is PLOT_PRICES and PLOT_FAMILIES[key].get("squares")
+                lowest = 0 if gathered else 1
                 if not lowest <= levels[0] <= 100_000 or any(
                     not 1 <= v <= 100_000 for v in levels[1:]
                 ):
                     raise ValueError("Цена ступени — от 1 до 100 000 коинов")
+        if self.land is not None and (
+            len(self.land) != len(LAND_PRICES) or any(not 0 <= v <= 100_000 for v in self.land)
+        ):
+            raise ValueError("Укажите цену участка каждого пояса — от 0 до 100 000 коинов")
         if self.hq is not None and (
             len(self.hq) != len(HQ_STEPS)
             or any(not 1 <= v <= 1000 for v in self.hq)

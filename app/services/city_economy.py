@@ -26,7 +26,8 @@ def defaults():
         "points": dict(POINTS),
         "projects": deepcopy(PROJECTS),
         "quest_coins": COINS,
-        # Team districts (docs/CITY_ESTATES.md): coins per level, project estimates, HQ steps.
+        # Team districts (docs/CITY_ESTATES.md): coins per level of what stands on a plot, the
+        # land of each band, project estimates and HQ steps.
         **estate_defaults(),
     }
 
@@ -48,8 +49,9 @@ async def economy(session):
         values["quest_coins"] = row.values["quest_coins"]
         for key in ("estate", "district"):
             values[key] |= same_shape(row.values.get(key), values[key])
-        if len(row.values.get("hq") or []) == len(values["hq"]):
-            values["hq"] = row.values["hq"]
+        for key in ("hq", "land"):
+            if len(row.values.get(key) or []) == len(values[key]):
+                values[key] = row.values[key]
     return {"revision": row.revision if row else 0, **values}
 
 

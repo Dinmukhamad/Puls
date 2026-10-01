@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CityDistrict, CityGroup, CityMission, CityPlot, CityQuest, DistrictId } from "../../api/city";
-import type { CityBuildView, CityControl, CityControlScheme, CityEstateView, CityLabelInfo, CityMascot, EstatePick, TimeOfDay } from "../../city3d/types";
+import type { CityBuildView, CityControl, CityControlScheme, CityEstateView, CityLabelInfo, CityMascot, EstatePick, EstateTarget, TimeOfDay } from "../../city3d/types";
 import { CONTROL_SCHEMES } from "./cityControls";
 import { districtLevel, grownDistricts } from "./cityLevels";
 import { useAuth } from "../../auth/AuthContext";
@@ -17,7 +17,7 @@ import { retainedCity } from "./retainedCity";
 export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
   /** Team district land of both cities, the build mode, taps on the land; `estateFocus` flies there when it changes. */
   estates?: Partial<Record<DepartmentId, CityEstateView>>; build?: CityBuildView | null; onEstate?: (pick: EstatePick) => void;
-  estateFocus?: { district: string; kind: "estate" | "lot" | "public" | "object"; object?: number; at: number };
+  estateFocus?: EstateTarget & { at: number };
   sceneIdentity: string; districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
   /** The operator's plots; `onPlot` (when the viewer may build) opens the catalogue; `plotFocus` flies to a plot when it changes. */
   plots?: CityPlot[]; onPlot?: (key: string) => void; plotFocus?: { key: string; at: number };

@@ -59,28 +59,29 @@ export function CityPage() {
   const supportLand = useQuery({ queryKey: ["city-estates", "support"], queryFn: () => cityEstate.city("support"), enabled: department === "support", refetchInterval: landPoll, refetchOnWindowFocus: true });
   const salesLand = useQuery({ queryKey: ["city-estates", "sales"], queryFn: () => cityEstate.city("sales"), enabled: department === "sales", refetchInterval: landPoll, refetchOnWindowFocus: true });
   const estateViews = useMemo(() => {
-    const own = estateQuery.data ? { estate: estateQuery.data.estate, tower: estateQuery.data.tower_lot } : null, views: Partial<Record<DepartmentId, CityEstateView>> = {};
-    if (supportLand.data) views.support = { state: supportLand.data, own };
-    if (salesLand.data) views.sales = { state: salesLand.data, own };
+    const views: Partial<Record<DepartmentId, CityEstateView>> = {};
+    if (supportLand.data) views.support = { state: supportLand.data };
+    if (salesLand.data) views.sales = { state: salesLand.data };
     return views;
-  }, [supportLand.data, salesLand.data, estateQuery.data]);
+  }, [supportLand.data, salesLand.data]);
   const [building, setBuilding] = useState<BuildState | null>(null), [estateFocus, setEstateFocus] = useState<EstateTarget & { at: number }>();
-  const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected },
-    [building?.district, building?.area, building?.placing, building?.selected]); // eslint-disable-line react-hooks/exhaustive-deps
+  const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected, plot: building.plot && { block: building.plot.block, col: building.plot.col, row: building.plot.row } },
+    [building?.district, building?.area, building?.placing, building?.selected, building?.plot]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusLand = (target: EstateTarget) => setEstateFocus({ ...target, at: Date.now() });
   const landOf = (district: string) => (district.startsWith("sales-") ? salesLand.data : supportLand.data)?.districts.find(d => d.id === district) ?? null;
   function onEstate(pick: EstatePick) {
     if (pick.kind === "place") setBuilding(b => b && { ...b, spot: { module: pick.module, u: pick.u, v: pick.v, rotation: pick.rotation, problem: pick.problem } });
+    else if (pick.kind === "plot") setBuilding(b => b && { ...b, plot: { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem }, selected: null });
     else if (pick.kind === "project") setWorldSelected(pick.district);
-    else if (pick.kind === "object") setBuilding(b => ({ district: pick.district, area: b?.district === pick.district ? b.area : "estate", placing: null, selected: pick.object, spot: null, project: false }));
+    else if (pick.kind === "object") setBuilding(b => ({ district: pick.district, area: b?.district === pick.district ? b.area : "plots", placing: null, selected: pick.object, plot: null, spot: null, project: b?.district === pick.district ? b.project : false }));
   }
   /** Opens building in the operator's own district, in whichever city it is. */
   function openBuild() {
-    const mine = estateQuery.data, home = mine?.district;
+    const home = estateQuery.data?.district;
     if (!home) return;
     if (home.city !== department) visit(home.city);
-    setBuilding({ district: home.id, area: "estate", placing: null, selected: null, spot: null, project: false });
-    focusLand({ district: home.id, kind: mine.estate ? "estate" : "public" });
+    setBuilding({ district: home.id, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false });
+    focusLand({ district: home.id, kind: "district" });
   }
   useEffect(() => {
     if (!building) return;
@@ -88,7 +89,7 @@ export function CityPage() {
     const key = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.defaultPrevented || document.querySelector(".sheet-overlay, [role=dialog][aria-modal=true]")) return;
       event.preventDefault();
-      setBuilding(b => b && (b.placing ? { ...b, placing: null, spot: null, area: b.project ? "public" : "estate" } : null));
+      setBuilding(b => b && (b.placing ? { ...b, placing: null, spot: null, area: b.project ? "public" : "plots" } : b.plot || b.selected !== null ? { ...b, plot: null, selected: null } : null));
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -201,7 +202,7 @@ export function CityPage() {
     {department === "sales" && !building && <aside className="city-sales-info glass glass--regular"><span className="city-eyebrow">ОТДЕЛ ПРОДАЖ</span><h2>{worldQuery.data?.cities.find(c => c.id === "sales")?.name ?? "ОП"}</h2><p>Учебный кампус у озера. Десять зданий зарезервированы для ресурсов отдела продаж.</p><button className="city-secondary" onClick={() => pickWorld("world")}>Районы и вокзал →</button><div className="city-sales-resources">{SALES_RESOURCES.map((name, i) => <button key={name} title={name} aria-label={name} onClick={() => pickWorld(`sales-resource-${String(i + 1).padStart(2, "0")}`)}>{i + 1}</button>)}</div></aside>}
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild ? openBuild : undefined}
-      onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
+      onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, plot: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
     {building && mineEstate && <CityEstateDock mine={mineEstate} land={landOf(building.district)} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} />}
     <CityJourney phase={journey} destination={worldQuery.data?.cities.find(c => c.id === destination)?.name ?? destination} onSkip={() => setWorldAction({ kind: "skip", target: destination, at: Date.now() })} />
 

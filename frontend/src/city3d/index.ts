@@ -14,7 +14,7 @@ import { createCamera, createCameraRig, type CameraRig, type ControlScheme } fro
 import { createPicker, type Picker } from "./engine/input";
 import { createQuality, type QualityControl } from "./engine/quality";
 import { createStats, type Stats } from "./engine/stats";
-import { generateWorld } from "./world/generate";
+import { islandWorld } from "./world/cities";
 import { WORLD_V1, WORLD_X4 } from "./world/worldSpec";
 import { createCatalogue, loadCatalogueModels, type Catalogue } from "./assets/catalogue";
 import { createInstancePools, type InstancePools } from "./render/instances";
@@ -34,10 +34,7 @@ import { createPlots, type Plots } from "./systems/plots";
 import { createSites, type Sites } from "./systems/sites";
 import { createQuests, type Quests } from "./systems/quests";
 import { createDepartmentWorld, type DepartmentWorld } from "./systems/departmentWorld";
-import { supportLand } from "./world/sales";
-import { clearDistrictLand } from "./world/estates";
-import { clearRailway, railPoint } from "./world/railway";
-import { addStationSquare } from "./world/stationSquare";
+import { railPoint } from "./world/railway";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
 import type { CityBuildView, CityEstateView, CityView, JourneyPhase } from "./types";
 import "./city3d.css";
@@ -57,12 +54,9 @@ interface Parts {
 export function createCity(host: HTMLDivElement, options: CityOptions): CityControl {
   const mobile = host.clientWidth < 600;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const world = generateWorld(options.world === "x4" ? WORLD_X4 : WORLD_V1);
-  // Team district land (world/estates.ts) stays clear of the decorative suburbs. Old plots and group quarters remain.
-  if (options.world === "x4") clearDistrictLand(world, supportLand(world.roads));
-  // The station and the line out to the hills take the place of the houses there (world/railway.ts), and so does
-  // the square round the station: its street, car park and park (world/stationSquare.ts).
-  if (world.railway) { clearRailway(world, world.railway); addStationSquare(world); }
+  // The full map's mainland is the team districts' land, cut into plots (world/land.ts): of the town only its roads,
+  // the station with its square and the group quarters stay (world/cities.ts).
+  const world = islandWorld(options.world === "x4" ? WORLD_X4 : WORLD_V1);
   let disposed = false, parts: Parts | null = null, forceWebGL = !!options.forceWebGL, everReady = false;
   let department: DepartmentId = "support", desiredDepartment = options.department ?? "support", departmentConfig = options.departmentWorld;
   const estateViews: Partial<Record<DepartmentId, CityEstateView | null>> = { ...options.estates };
@@ -269,9 +263,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     setEstates(city, view) { estateViews[city] = view; parts?.departments?.setEstates(city, view); },
     setBuild(view) { buildView = view; parts?.departments?.setBuild(view); },
     focusEstate(target) {
-      // District land lies out in the suburbs: the estates system picks a side where the city's towers stay out of
-      // the way and both the houses and the gardens in front of them are seen.
-      const distance = target.kind === "object" ? 26 : 36, polar = .86, view = parts?.departments?.focusEstate(target, distance, polar);
+      // From the street in front of the plot or the building, near enough to see it, far enough for its neighbours.
+      const distance = target.kind === "object" || target.kind === "plot" ? 30 : 48, polar = .86, view = parts?.departments?.focusEstate(target, distance, polar);
       if (view) parts?.rig.animateTo({ target: [view.point.x, view.point.y, view.point.z], distance, polar, azimuth: view.azimuth }, reducedMotion ? 0 : 700);
     },
     focusWorld(id) { const point = parts?.departments?.point(id); if (point) parts?.rig.focusPoint([point.x, point.y, point.z], id === "station" ? 38 : 46, .9); },

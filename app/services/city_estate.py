@@ -1,16 +1,23 @@
 """Building in team districts (docs/CITY_ESTATES.md) with the existing Puls coins.
 
-Rules the server owns, whatever the client sends: who may build where (only operators, only in their
-own district, only once its construction is opened for the pilot), the price (the economy revision
-the client saw must still be current), which cells are free, and the order of operations. Every
-change runs under an idempotency key: a repeated request returns the stored result instead of paying
-twice, and the same key with a different request is refused. Coins move only through the coin
-journal, in the same transaction as the building, its cells and the history entry.
+The land is a Monopoly board (app/services/city_land.py): each city is cut into three districts of
+plots, and the operators of a district buy its plots one by one, each with what stands on it, a
+square or a house, and develop them. A house goes up stage by stage from one storey; four squares
+of one operator filling a square of plots become a park, six filling a rectangle a big park, at
+once and for free. Bands of plots open outwards from the centre as the inner ones fill up. In the
+centre of every district stand its headquarters and its public square, where staff open shared
+projects and operators contribute to them.
 
-The grid is logical and shared with the client (frontend/src/city3d/world/estates.ts): a district
-has prepared modules of 12 × 12 cells (slot 0 public, 1 business, the rest residential), residential
-modules hold nine 4 × 4 estates and the business module nine 4 × 4 tower lots. In an estate the
-house keeps the back half (two rows), the garden is the front half.
+Rules the server owns, whatever the client sends: who may build where (only operators, only in
+their own district, only once its construction is opened for the pilot, only in an open band), the
+price (the economy revision the client saw must still be current), which plots are free, and the
+order of operations. Every change runs under an idempotency key: a repeated request returns the
+stored result instead of paying twice, and the same key with a different request is refused. Coins
+move only through the coin journal, in the same transaction as the building, its plots and the
+history entry.
+
+Buildings keep their place as (module, u, v): on plots module is the block, u the column and v the
+row; module 0 is the public square of 12 × 12 cells (the client draws both, frontend/src/city3d).
 """
 
 import hashlib
@@ -31,7 +38,6 @@ from app.models.city_estate import (
     CityContribution,
     CityDistrictState,
     CityEvent,
-    CityLot,
     CityObject,
     CityOperation,
     CityProject,
@@ -40,39 +46,89 @@ from app.models.coin import CoinTransaction
 from app.models.enums import Role, TxType
 from app.models.progress import Notification
 from app.models.user import CoinAccount, Group, User
+from app.services import city_land
 from app.services.coins import get_account, post_transaction
 from app.services.locking import lock_user
 from app.services.rules import write_audit
 
-MODULE_CELLS, LOT_CELLS, HOUSE_ROWS = 12, 4, 2
-#: Prepared modules of district number n (index n - 1); the client lays out the same
-#: (world/estates.ts PREPARED).
-PREPARED = (10, 10, 10, 6, 6, 6, 0, 0, 0, 0, 0, 0)
-#: The first estate given away is the front middle one, then along the front row, then further back.
-ESTATE_ORDER = (7, 6, 8, 4, 3, 5, 1, 0, 2)
+#: The public square of a district: module 0, 12 × 12 cells (frontend world/estates.ts).
+SQUARE, MODULE_CELLS = 0, 12
 #: A district this small shows only whether a project is still collecting, not how far.
 SMALL_TEAM = 3
 
-FAMILIES = {
+#: What operators build on their plots. Size is in plots (columns × rows); a park is never bought,
+#: it gathers itself from `squares` of the operator's own squares (a big park also from a park
+#: and two squares).
+PLOT_FAMILIES = {
     "square": {
         "name": "Сквер",
         "icon": "🌳",
         "size": (1, 1),
-        "zone": "garden",
-        "project": "small",
         "levels": [
             (
                 "Сквер",
-                "Газон, деревья и скамейка. "
-                "Шесть скверов прямоугольником 3 × 2 станут большим парком.",
+                "Газон, деревья, скамейка и клумба. Четыре своих сквера квадратом станут "
+                "парком, шесть прямоугольником — большим парком.",
             )
         ],
+    },
+    "house": {
+        "name": "Дом",
+        "icon": "🏡",
+        "size": (1, 1),
+        "levels": [
+            ("Одноэтажный дом", "Небольшой дом с крыльцом, дорожка и газон."),
+            ("Двухэтажный дом", "Второй этаж, живая изгородь и дерево у дома."),
+            ("Дом с террасой", "Пристройка с террасой, сад и клумбы во дворе."),
+            ("Дом с гаражом", "Гараж, подъездная дорожка и новые посадки."),
+            ("Особняк", "Третий этаж, фонтанчик у входа и вечерний свет."),
+        ],
+    },
+    "park": {
+        "name": "Парк",
+        "icon": "🌲",
+        "size": (2, 2),
+        "squares": 4,
+        "levels": [
+            ("Парк", "Четыре сквера стали одним парком: аллеи, газоны, скамейки и деревья."),
+            ("Парк с фонтаном", "Фонтан на площадке посередине и цветники вокруг."),
+        ],
+    },
+    "bigpark": {
+        "name": "Большой парк",
+        "icon": "🏞️",
+        "size": (3, 2),
+        "squares": 6,
+        "levels": [
+            ("Большой парк", "Шесть скверов стали большим парком: аллея, газоны и деревья."),
+            ("Парк отдыха", "Беседка, цветники и площадка отдыха."),
+            ("Городской парк", "Фонтан, площадь и вечерняя подсветка."),
+        ],
+    },
+}
+#: Coins for every level of what stands on a plot (level 1 is the purchase; a park's is its merge).
+PLOT_PRICES = {
+    "square": [40],
+    "house": [120, 180, 260, 360, 500],
+    "park": [0, 120],
+    "bigpark": [0, 150, 250],
+}
+#: Coins for a plot of each band, from the centre outwards; the land city has the first three.
+LAND_PRICES = [60, 45, 30, 20, 10]
+
+#: What a district builds together on its public square. Size is in cells of the square.
+PROJECT_FAMILIES = {
+    "square": {
+        "name": "Сквер",
+        "icon": "🌳",
+        "size": (1, 1),
+        "project": "small",
+        "levels": [("Сквер", "Газон, деревья и скамейка.")],
     },
     "gazebo": {
         "name": "Беседка",
         "icon": "🌷",
         "size": (1, 1),
-        "zone": "garden",
         "project": "small",
         "levels": [
             ("Беседка", "Беседка среди кустов."),
@@ -83,7 +139,6 @@ FAMILIES = {
         "name": "Площадь с фонтаном",
         "icon": "⛲",
         "size": (2, 2),
-        "zone": "garden",
         "project": "main",
         "levels": [
             ("Малый фонтан", "Фонтан и скамейки на мощёной площадке."),
@@ -94,7 +149,6 @@ FAMILIES = {
         "name": "Спортивная площадка",
         "icon": "🏀",
         "size": (2, 2),
-        "zone": "garden",
         "project": "main",
         "levels": [
             ("Площадка", "Покрытие и баскетбольные кольца."),
@@ -103,53 +157,16 @@ FAMILIES = {
         ],
     },
     "park": {
-        "name": "Большой парк",
+        "name": "Парк на площади",
         "icon": "🏞️",
         "size": (3, 2),
-        "zone": "garden",
         "project": "main",
-        "recipe": True,
         "levels": [
-            ("Большой парк", "Аллея, газоны, скамейки и деревья."),
+            ("Парк на площади", "Аллея, газоны, скамейки и деревья."),
             ("Парк отдыха", "Беседка, цветники и площадка отдыха."),
             ("Городской парк", "Фонтан, площадь и вечерняя подсветка."),
         ],
     },
-    "house": {
-        "name": "Личный дом",
-        "icon": "🏡",
-        "size": (4, 2),
-        "zone": "house",
-        "levels": [
-            ("Первый дом", "Небольшой кирпичный дом с крыльцом, дорожка и газон."),
-            ("Просторный дом", "Второй этаж, входная группа, ограда и дерево."),
-            ("Дом с двором", "Выразительный фасад, терраса и обустроенный двор с садом."),
-            ("Дом с гаражом", "Гараж, подъездная дорожка и новые посадки."),
-            ("Усадьба", "Большой дом, фонтанчик у входа и вечерний свет."),
-        ],
-    },
-    "tower": {
-        "name": "Небоскрёб",
-        "icon": "🏙️",
-        "size": (4, 4),
-        "zone": "lot",
-        "levels": [
-            ("50 этажей", "Стройная башня на подиуме с завершённой крышей."),
-            ("100 этажей", "Новые секции и расширенная входная зона."),
-            ("150 этажей", "Уступы с террасами."),
-            ("200 этажей", "Флагманский силуэт со шпилем и площадь у основания."),
-        ],
-    },
-}
-#: Coins for every level of a personal building (level 1 is the purchase; the park's is the merge).
-ESTATE_PRICES = {
-    "square": [40],
-    "gazebo": [50, 40],
-    "fountain": [90, 80],
-    "sports": [70, 60, 90],
-    "park": [0, 150, 250],
-    "house": [120, 180, 260, 360, 500],
-    "tower": [350, 600, 900, 1300],
 }
 #: The estimate of a district project for every level of a public building.
 PROJECT_COSTS = {
@@ -172,34 +189,34 @@ STAGE_NAMES = [
 
 def estate_defaults():
     return {
-        "estate": deepcopy(ESTATE_PRICES),
+        "estate": deepcopy(PLOT_PRICES),
+        "land": list(LAND_PRICES),
         "district": deepcopy(PROJECT_COSTS),
         "hq": list(HQ_STEPS),
     }
 
 
-# ---- the district grid ---------------------------------------------------------------------------
+# ---- shapes --------------------------------------------------------------------------------------
 
 
-def prepared(number):
-    return PREPARED[number - 1] if 1 <= number <= len(PREPARED) else 0
-
-
-def module_kind(slot):
-    return "public" if slot == 0 else "business" if slot == 1 else "residential"
-
-
-def lot_origin(index):
-    return (index % 3) * LOT_CELLS, (index // 3) * LOT_CELLS
-
-
-def footprint(family, rotation):
-    w, h = FAMILIES[family]["size"]
+def turned(size, rotation):
+    w, h = size
     return (h, w) if rotation % 2 else (w, h)
+
+
+def footprint(obj_or_family, rotation=0, *, public=False):
+    """Columns × rows of plots (or cells of the public square) a building takes."""
+    family = getattr(obj_or_family, "family", obj_or_family)
+    if public or getattr(obj_or_family, "owner_id", 1) is None:
+        return turned(PROJECT_FAMILIES[family]["size"], rotation)
+    return turned(PLOT_FAMILIES[family]["size"], rotation)
 
 
 def cells_of(u, v, w, h):
     return [(u + i, v + j) for i in range(w) for j in range(h)]
+
+
+# ---- districts -----------------------------------------------------------------------------------
 
 
 def district_index(config):
@@ -216,6 +233,11 @@ def district_index(config):
         for c in config["cities"]
         for d in c["districts"]
     }
+
+
+def prepared(district_id):
+    """Plots for sale in the district: the three districts of each city have land, others none."""
+    return city_land.plot_count(district_id)
 
 
 def home_district(districts, user):
@@ -243,18 +265,18 @@ async def managed(session, user, districts):
 async def construction_open(session, user):
     """Is building open in the operator's district? Then new buildings go there, not to plots."""
     home = home_district(await world_districts(session), user)
-    return bool(home and home["construction"] and prepared(home["number"]))
+    return bool(home and home["construction"] and city_land.has_land(home["id"]))
 
 
 # ---- locks, idempotency and history --------------------------------------------------------------
 
 
 async def lock_district(session, district_id):
-    """The district's row, made on first use; it serialises lots, projects and the HQ stage."""
+    """The district's row, made on first use; it serialises its bands, projects and the HQ stage."""
     insert = pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
     await session.execute(
         insert(CityDistrictState)
-        .values(district_id=district_id, hq_level=1, built_projects=0)
+        .values(district_id=district_id, hq_level=1, built_projects=0, open_band=1)
         .on_conflict_do_nothing(index_elements=["district_id"])
     )
     return await session.scalar(
@@ -301,11 +323,11 @@ async def operation(session, user, key, kind, request, perform):
         )
         await session.commit()
     except IntegrityError:
-        # The database refused a cell, a lot or the key itself: another request got there first.
+        # The database refused a plot, a cell or the key itself: another request got there first.
         await session.rollback()
         if (done := await stored_result(session, user.id, key, print_)) is not None:
             return done
-        raise ConflictError("Участок уже изменили. Обновите город и повторите.") from None
+        raise ConflictError("Участок уже заняли. Обновите город и выберите другой.") from None
     return {**result, "replayed": False}
 
 
@@ -351,8 +373,7 @@ def event(
 async def prices(session):
     from app.services.city_economy import economy
 
-    values = await economy(session)
-    return values["revision"], values["estate"], values["district"], values["hq"]
+    return await economy(session)
 
 
 def check_revision(seen, current):
@@ -371,7 +392,7 @@ def hq_stage(built, steps):
 
 
 def place_of(obj):
-    w, h = footprint(obj.family, obj.rotation)
+    w, h = footprint(obj, obj.rotation)
     return {"module": obj.module, "u": obj.u, "v": obj.v, "w": w, "h": h, "rotation": obj.rotation}
 
 
@@ -380,6 +401,11 @@ def public_object(obj, user):
         "district" if obj.owner_id is None else "mine" if obj.owner_id == user.id else "resident"
     )
     return {"id": obj.id, "family": obj.family, "level": obj.level, **place_of(obj), "owner": owner}
+
+
+def squares_in(components):
+    """How many squares went into a park: its squares, and those of a park it took in."""
+    return sum(c.get("squares", 1) for c in components or [])
 
 
 def own_object(obj):
@@ -397,32 +423,41 @@ def own_object(obj):
         "paid": obj.paid,
         "version": obj.version,
         "created_at": obj.created_at,
-        "components": len(obj.components or []),
+        "squares": squares_in(obj.components),
     }
 
 
-def catalogue(estate_prices, project_costs):
+def plot_catalogue(plot_prices):
     return [
         {
             "family": key,
             "name": item["name"],
             "icon": item["icon"],
             "size": list(item["size"]),
-            "zone": item["zone"],
-            "project": item.get("project"),
-            "recipe": bool(item.get("recipe")),
+            "squares": item.get("squares"),
             "levels": [
-                {
-                    "level": i + 1,
-                    "name": name,
-                    "about": about,
-                    "price": estate_prices[key][i],
-                    "project_cost": project_costs[key][i] if key in project_costs else None,
-                }
+                {"level": i + 1, "name": name, "about": about, "price": plot_prices[key][i]}
                 for i, (name, about) in enumerate(item["levels"])
             ],
         }
-        for key, item in FAMILIES.items()
+        for key, item in PLOT_FAMILIES.items()
+    ]
+
+
+def project_catalogue(project_costs):
+    return [
+        {
+            "family": key,
+            "name": item["name"],
+            "icon": item["icon"],
+            "size": list(item["size"]),
+            "project": item["project"],
+            "levels": [
+                {"level": i + 1, "name": name, "about": about, "cost": project_costs[key][i]}
+                for i, (name, about) in enumerate(item["levels"])
+            ],
+        }
+        for key, item in PROJECT_FAMILIES.items()
     ]
 
 
@@ -445,73 +480,72 @@ async def members(session, districts):
     return counts
 
 
+async def taken_plots(session, ids):
+    """Taken plots by district and band."""
+    out = {key: [0] * city_land.bands(city_land.split(key)[0]) for key in ids}
+    if not ids:
+        return out
+    rows = await session.execute(
+        select(CityCell.district_id, CityCell.module, func.count())
+        .where(CityCell.district_id.in_(ids), CityCell.module != SQUARE)
+        .group_by(CityCell.district_id, CityCell.module)
+    )
+    for district_id, block, count in rows:
+        band = city_land.band_of(district_id, block)
+        if band:
+            out[district_id][band - 1] += count
+    return out
+
+
+def land_view(district_id, taken, state):
+    totals = city_land.band_totals(district_id)
+    if not any(totals):
+        return None
+    return {
+        "plots": sum(totals),
+        "taken": sum(taken),
+        "open_band": state.open_band if state else 1,
+        "bands": [
+            {"band": i + 1, "plots": total, "taken": taken[i]} for i, total in enumerate(totals)
+        ],
+    }
+
+
 async def city_state(session, user, city_id):
     """What anyone may see of a city's districts: buildings and goals, never prices or names."""
     if city_id not in ("support", "sales"):
         raise NotFoundError("Город не найден")
-    from app.services.city_economy import economy
-
     all_districts = await world_districts(session)
     districts = {k: d for k, d in all_districts.items() if d["city"] == city_id}
     ids = list(districts)
-    steps = (await economy(session))["hq"]
-    objects = (
-        list(
-            await session.scalars(
-                select(CityObject)
-                .where(CityObject.district_id.in_(ids), CityObject.state == "placed")
-                .order_by(CityObject.id)
-            )
-        )
-        if ids
-        else []
+    steps = (await prices(session))["hq"]
+
+    async def listed(query):
+        return list(await session.scalars(query)) if ids else []
+
+    async def grouped(query):
+        return dict((await session.execute(query)).all()) if ids else {}
+
+    objects = await listed(
+        select(CityObject)
+        .where(CityObject.district_id.in_(ids), CityObject.state == "placed")
+        .order_by(CityObject.id)
     )
-    projects = (
-        list(
-            await session.scalars(
-                select(CityProject)
-                .where(CityProject.district_id.in_(ids), CityProject.status == "open")
-                .order_by(CityProject.id)
-            )
-        )
-        if ids
-        else []
+    projects = await listed(
+        select(CityProject)
+        .where(CityProject.district_id.in_(ids), CityProject.status == "open")
+        .order_by(CityProject.id)
     )
-    states = (
-        {
-            s.district_id: s
-            for s in await session.scalars(
-                select(CityDistrictState).where(CityDistrictState.district_id.in_(ids))
-            )
-        }
-        if ids
-        else {}
-    )
-    versions = (
-        dict(
-            (
-                await session.execute(
-                    select(CityEvent.district_id, func.max(CityEvent.id))
-                    .where(CityEvent.district_id.in_(ids))
-                    .group_by(CityEvent.district_id)
-                )
-            ).all()
+    states = {
+        s.district_id: s
+        for s in await listed(
+            select(CityDistrictState).where(CityDistrictState.district_id.in_(ids))
         )
-        if ids
-        else {}
-    )
-    taken = (
-        dict(
-            (
-                await session.execute(
-                    select(CityLot.district_id, func.count())
-                    .where(CityLot.district_id.in_(ids), CityLot.kind == "estate")
-                    .group_by(CityLot.district_id)
-                )
-            ).all()
-        )
-        if ids
-        else {}
+    }
+    versions = await grouped(
+        select(CityEvent.district_id, func.max(CityEvent.id))
+        .where(CityEvent.district_id.in_(ids))
+        .group_by(CityEvent.district_id)
     )
     mine = (
         dict(
@@ -529,6 +563,7 @@ async def city_state(session, user, city_id):
         if projects
         else {}
     )
+    taken = await taken_plots(session, ids)
     team = await members(session, districts)
     staff = await managed(session, user, districts)
     home = home_district(all_districts, user)
@@ -536,7 +571,6 @@ async def city_state(session, user, city_id):
     for key, d in districts.items():
         state = states.get(key)
         level, built = (state.hq_level, state.built_projects) if state else (1, 0)
-        modules = prepared(d["number"])
         nxt = next(((i + 2, need) for i, need in enumerate(steps) if i + 2 > level), None)
         small = team[key] < SMALL_TEAM
         items.append(
@@ -547,8 +581,7 @@ async def city_state(session, user, city_id):
                 "construction": d["construction"],
                 "mine": bool(home and home["id"] == key),
                 "managed": key in staff,
-                "modules": [{"slot": s, "kind": module_kind(s)} for s in range(modules)],
-                "estates": {"total": max(0, modules - 2) * 9, "taken": taken.get(key, 0)},
+                "land": land_view(key, taken[key], state),
                 "hq": {
                     "level": level,
                     "name": STAGE_NAMES[level - 1],
@@ -571,7 +604,7 @@ async def city_state(session, user, city_id):
 
 def project_view(project, mine, *, small, exact):
     if project.target_id is None:
-        w, h = footprint(project.family, project.rotation)
+        w, h = footprint(project.family, project.rotation, public=True)
         place = {
             "module": project.module,
             "u": project.u,
@@ -590,12 +623,13 @@ def project_view(project, mine, *, small, exact):
             "rotation": project.rotation,
         }
     share = project.funded * 100 // project.cost
+    family = PROJECT_FAMILIES[project.family]
     view = {
         "id": project.id,
         "family": project.family,
-        "name": FAMILIES[project.family]["name"],
+        "name": family["name"],
         "level": project.level,
-        "level_name": FAMILIES[project.family]["levels"][project.level - 1][0],
+        "level_name": family["levels"][project.level - 1][0],
         "target_id": project.target_id,
         **place,
         "cost": project.cost,
@@ -611,19 +645,15 @@ def project_view(project, mine, *, small, exact):
 
 
 async def estate(session, user):
-    """The operator's land, buildings, inventory and what can be built, at current prices."""
+    """The operator's buildings and inventory, the catalogue and land prices of this revision."""
     districts = await world_districts(session)
     if await needs_reconcile(session, user, districts):
         await lock_user(session, user.id)
         if await reconcile(session, user, districts):
             await session.commit()
-    revision, estate_prices, project_costs, _steps = await prices(session)
+    values = await prices(session)
     home = home_district(districts, user)
     status, message = builder_status(user, home)
-    lots = {
-        lot.kind: lot
-        for lot in await session.scalars(select(CityLot).where(CityLot.user_id == user.id))
-    }
     objects = list(
         await session.scalars(
             select(CityObject)
@@ -647,28 +677,15 @@ async def estate(session, user):
         "status": status,
         "message": message,
         "district": home and {"id": home["id"], "city": home["city"], "name": home["name"]},
-        "estate": lot_view(lots.get("estate")),
-        "tower_lot": lot_view(lots.get("tower")),
         "objects": [own_object(o) for o in objects],
-        "catalogue": catalogue(estate_prices, project_costs),
-        "economy_revision": revision,
+        "catalogue": plot_catalogue(values["estate"]),
+        "projects": project_catalogue(values["district"]),
+        "land_prices": values["land"],
+        "economy_revision": values["revision"],
         "balance": account.balance if account else 0,
         "available": account.available if account else 0,
         "legacy": {"count": legacy[0], "paid": int(legacy[1])},
         "managed": sorted(await managed(session, user, districts)),
-    }
-
-
-def lot_view(lot):
-    if lot is None:
-        return None
-    u0, v0 = lot_origin(lot.index)
-    return {
-        "district_id": lot.district_id,
-        "module": lot.module,
-        "index": lot.index,
-        "u": u0,
-        "v": v0,
     }
 
 
@@ -681,16 +698,16 @@ def builder_status(user, home):
         )
     if home is None:
         return "no_team", "Нужно назначение в команду: руководитель связывает группу с районом."
-    if not prepared(home["number"]):
+    if not city_land.has_land(home["id"]):
         return (
             "no_land",
-            "Территория района ещё готовится. Постройки появятся после расширения города.",
+            "У района пока нет земли: город делится на три района, участки есть у первых трёх.",
         )
     if not home["construction"]:
         return (
             "closed",
             "Стройка в районе откроется после пилотного запуска. "
-            "Цены и постройки уже можно посмотреть.",
+            "Цены и участки уже можно посмотреть.",
         )
     return "ready", None
 
@@ -706,39 +723,33 @@ def require_builder(user, home):
 # ---- transfers -----------------------------------------------------------------------------------
 
 
+def elsewhere(user, home):
+    """The operator's buildings standing outside their district (or anywhere, without one)."""
+    query = select(CityObject).where(CityObject.owner_id == user.id, CityObject.state == "placed")
+    return query.where(CityObject.district_id != home["id"]) if home else query
+
+
 async def needs_reconcile(session, user, districts):
     home = home_district(districts, user)
-    lots = list(
-        await session.scalars(select(CityLot.district_id).where(CityLot.user_id == user.id))
-    )
-    return any(not home or district != home["id"] for district in lots)
+    return (await session.scalar(elsewhere(user, home).limit(1))) is not None
 
 
 async def reconcile(session, user, districts=None):
-    """Personal land follows the operator: lots outside the current district are released.
+    """Personal land follows the operator: plots outside the current district are released.
 
-    Buildings from them go to the inventory; shared buildings and contributions stay in the district
+    Buildings from them go to the inventory with their level and what was paid, and can be put on
+    free plots of the new district for free; shared buildings and contributions stay in the district
     they were made for (TZ §18). Returns whether anything moved.
     """
     districts = districts if districts is not None else await world_districts(session)
     home = home_district(districts, user)
     moved = False
-    for lot in list(await session.scalars(select(CityLot).where(CityLot.user_id == user.id))):
-        if home and lot.district_id == home["id"]:
-            continue
-        objects = await session.scalars(
-            select(CityObject).where(
-                CityObject.owner_id == user.id,
-                CityObject.district_id == lot.district_id,
-                CityObject.state == "placed",
-            )
-        )
-        for obj in list(objects):
-            await release_cells(session, obj)
-            obj.state, obj.module, obj.u, obj.v = "stored", None, None, None
-            obj.version += 1
-            event(session, lot.district_id, "transfer", obj=obj, payload={"user": user.id})
-        await session.delete(lot)
+    for obj in list(await session.scalars(elsewhere(user, home))):
+        await release_cells(session, obj)
+        district_id = obj.district_id
+        obj.state, obj.module, obj.u, obj.v = "stored", None, None, None
+        obj.version += 1
+        event(session, district_id, "transfer", obj=obj, payload={"user": user.id})
         moved = True
     if moved:
         await session.flush()
@@ -753,7 +764,7 @@ async def reconcile_many(session, user_ids, districts):
             await reconcile(session, user, districts)
 
 
-# ---- cells ---------------------------------------------------------------------------------------
+# ---- plots and cells -----------------------------------------------------------------------------
 
 
 async def release_cells(session, obj):
@@ -788,164 +799,162 @@ def take_cells(session, district_id, module, cells, *, obj=None, project=None):
         )
 
 
-def estate_zone(lot, zone):
-    """The cells of an estate's zone: the house keeps the back two rows, the garden the front."""
-    u0, v0 = lot_origin(lot.index)
-    rows = range(v0, v0 + HOUSE_ROWS) if zone == "house" else range(v0 + HOUSE_ROWS, v0 + LOT_CELLS)
-    return {(u, v) for u in range(u0, u0 + LOT_CELLS) for v in rows}
-
-
-ZONE_RULES = {
-    "public": "Общие проекты строят на общественной земле района",
-    "business": "Небоскрёбы строят в деловом квартале района",
-}
-
-
-def check_module(district, module, kind):
-    if not 0 <= module < prepared(district["number"]):
-        raise ConflictError("Этого квартала в районе нет", code="wrong_zone")
-    if module_kind(module) != kind:
-        raise ConflictError(ZONE_RULES[kind], code="wrong_zone")
-
-
-async def personal_cells(session, user, home, family, module, u, v, rotation, *, moving=None):
-    """Where a personal building may stand: in its zone of the operator's land, on free cells."""
-    zone = FAMILIES[family]["zone"]
-    w, h = footprint(family, rotation)
-    cells = cells_of(u, v, w, h)
-    if zone == "lot":
-        check_module(home, module, "business")
-        if u % LOT_CELLS or v % LOT_CELLS or not (0 <= u < MODULE_CELLS and 0 <= v < MODULE_CELLS):
-            raise ConflictError("Небоскрёб занимает целый деловой участок 4 × 4", code="wrong_zone")
-        return cells
-    lot = await session.scalar(
-        select(CityLot).where(CityLot.user_id == user.id, CityLot.kind == "estate")
-    )
-    if lot is None or lot.district_id != home["id"]:
-        raise ConflictError("Сначала получи свою усадьбу в районе", code="no_estate")
-    if module != lot.module:
+async def free_plots(session, home, block, col, row, cols=1, rows=1):
+    """The plots of the area if they are the district's, in an open band and free; else why not."""
+    plots = city_land.area(home["id"], block, col, row, cols, rows)
+    if plots is None:
         raise ConflictError(
-            "Это общественная земля района"
-            if module == 0
-            else "Строить можно только на своей усадьбе",
-            code="wrong_zone",
+            "Здесь нет участков твоего района на продажу"
+            if cols * rows == 1
+            else "Постройка должна целиком помещаться на участках одного квартала",
+            code="wrong_plot",
         )
-    area = estate_zone(lot, zone)
-    if not set(cells) <= area:
+    state = await session.get(CityDistrictState, home["id"])
+    band = city_land.band_of(home["id"], block)
+    if band > (state.open_band if state else 1):
         raise ConflictError(
-            "Дом стоит в задней части усадьбы"
-            if zone == "house"
-            else "Постройка должна целиком помещаться в саду усадьбы",
-            code="wrong_zone",
+            "Этот пояс района ещё закрыт: он откроется, когда займут 70 % участков ближе к центру",
+            code="band_closed",
         )
-    if await occupied(session, home["id"], module, cells, ignore_object=moving):
-        raise ConflictError("Эти клетки уже заняты", code="cells_taken")
-    return cells
+    if await occupied(session, home["id"], block, plots):
+        raise ConflictError("Этот участок уже занят", code="plot_taken")
+    return plots, band
 
 
-async def claim_lot(session, user, home, module, u, v):
-    """A free tower lot of the business quarter for the operator; one per operator."""
-    index = (v // LOT_CELLS) * 3 + u // LOT_CELLS
-    await lock_district(session, home["id"])
-    held = await session.scalar(
-        select(CityLot).where(CityLot.user_id == user.id, CityLot.kind == "tower")
-    )
-    if held is not None and (held.district_id, held.module, held.index) == (
-        home["id"],
-        module,
-        index,
-    ):
-        return held
-    if await session.get(CityLot, (home["id"], module, index), populate_existing=True):
-        raise ConflictError("Этот деловой участок уже занят", code="cells_taken")
-    if held is not None:
-        await session.delete(held)
-        await session.flush()
-    lot = CityLot(district_id=home["id"], module=module, index=index, kind="tower", user_id=user.id)
-    session.add(lot)
-    await session.flush()
-    return lot
+async def widen(session, district_id, actor):
+    """Opens the district's next bands as the inner ones fill up; they never close again."""
+    state = await lock_district(session, district_id)
+    taken = (await taken_plots(session, [district_id]))[district_id]
+    band = city_land.open_band(city_land.band_totals(district_id), taken, state.open_band)
+    if band > state.open_band:
+        state.open_band = band
+        event(session, district_id, "band", actor=actor, payload={"band": band})
+    return state.open_band
 
 
-async def claim_estate(session, user):
-    """The operator's estate in their district: given once, free, the first left in stable order."""
-    districts = await world_districts(session)
-    await lock_user(session, user.id)
-    await reconcile(session, user, districts)
-    home = home_district(districts, user)
-    require_builder(user, home)
-    lot = await session.scalar(
-        select(CityLot).where(CityLot.user_id == user.id, CityLot.kind == "estate")
-    )
-    if lot is None:
-        await lock_district(session, home["id"])
-        taken = set(
-            (
-                await session.execute(
-                    select(CityLot.module, CityLot.index).where(
-                        CityLot.district_id == home["id"], CityLot.kind == "estate"
-                    )
+# ---- parks gather themselves ---------------------------------------------------------------------
+
+#: The shapes a park gathers in: (family, columns, rows, rotation), the big park first.
+PARK_SHAPES = (("bigpark", 3, 2, 0), ("bigpark", 2, 3, 1), ("park", 2, 2, 0))
+
+
+def park_group(objects):
+    """The first park the operator's squares (and a park) on one block fill exactly, or None.
+
+    A park is four squares in a square of plots; a big park is six squares in a 3 × 2 or 2 × 3
+    rectangle, or a park and two squares filling one. Big parks go first, then by row and column.
+    """
+    at = {}
+    for o in objects:
+        w, h = footprint(o, o.rotation)
+        for cell in cells_of(o.u, o.v, w, h):
+            at[cell] = o
+    anchors = sorted({(o.u, o.v) for o in objects}, key=lambda p: (p[1], p[0]))
+    for family, w, h, rotation in PARK_SHAPES:
+        starts = sorted(
+            {(u - du, v - dv) for u, v in anchors for du in range(w) for dv in range(h)},
+            key=lambda p: (p[1], p[0]),
+        )
+        for u0, v0 in starts:
+            cells = cells_of(u0, v0, w, h)
+            parts = {at.get(cell) for cell in cells}
+            if None in parts:
+                continue
+            fits = all(
+                o.u >= u0
+                and o.v >= v0
+                and o.u + footprint(o, o.rotation)[0] <= u0 + w
+                and o.v + footprint(o, o.rotation)[1] <= v0 + h
+                for o in parts
+            )
+            parks = [o for o in parts if o.family == "park"]
+            if fits and (not parks or (family == "bigpark" and len(parks) == 1)):
+                return family, u0, v0, rotation, sorted(parts, key=lambda o: o.id)
+    return None
+
+
+async def gather_parks(session, user, district_id, block):
+    """Turns the operator's squares on a block into parks while a group fits; the last park made."""
+    made = None
+    for _ in range(8):
+        objects = list(
+            await session.scalars(
+                select(CityObject)
+                .where(
+                    CityObject.owner_id == user.id,
+                    CityObject.district_id == district_id,
+                    CityObject.module == block,
+                    CityObject.state == "placed",
+                    CityObject.family.in_(["square", "park"]),
                 )
-            ).all()
+                .execution_options(populate_existing=True)
+            )
         )
-        free = next(
-            (
-                (m, i)
-                for m in range(2, prepared(home["number"]))
-                for i in ESTATE_ORDER
-                if (m, i) not in taken
-            ),
+        group = park_group(objects)
+        if group is None:
+            break
+        made = await merge(session, user, district_id, block, *group)
+    return made
+
+
+async def merge(session, user, district_id, block, family, u0, v0, rotation, parts):
+    """Parts into one park on their plots: they are consumed, the park keeps what they cost.
+
+    A park that grows into a big park passes on its stage, so a fountain bought is not lost.
+    """
+    level = max([1] + [o.level for o in parts if o.family == "park"])
+    park = CityObject(
+        district_id=district_id,
+        owner_id=user.id,
+        family=family,
+        level=min(level, len(PLOT_FAMILIES[family]["levels"])),
+        state="placed",
+        module=block,
+        u=u0,
+        v=v0,
+        rotation=rotation,
+        source="merge",
+        paid=sum(o.paid for o in parts),
+        components=[
+            {"id": o.id, "family": o.family, "paid": o.paid, "squares": squares_in(o.components)}
+            if o.family == "park"
+            else {"id": o.id, "family": o.family, "paid": o.paid}
+            for o in parts
+        ],
+    )
+    session.add(park)
+    await session.flush()
+    for part in parts:
+        await release_cells(session, part)
+        part.state, part.consumed_by, part.module, part.u, part.v = (
+            "consumed",
+            park.id,
+            None,
+            None,
             None,
         )
-        if free is None:
-            raise ConflictError(
-                "В районе закончились свободные усадьбы. Руководитель получит задачу расширения.",
-                code="no_free_estate",
-            )
-        lot = CityLot(
-            district_id=home["id"], module=free[0], index=free[1], kind="estate", user_id=user.id
-        )
-        session.add(lot)
-        await session.flush()
-        event(
-            session,
-            home["id"],
-            "estate",
-            actor=user,
-            payload={"module": lot.module, "index": lot.index},
-        )
-        # A house kept in the inventory after a transfer moves into the new estate at once.
-        house = await session.scalar(
-            select(CityObject).where(
-                CityObject.owner_id == user.id,
-                CityObject.family == "house",
-                CityObject.state == "stored",
-            )
-        )
-        if house is not None:
-            u0, v0 = lot_origin(lot.index)
-            house.district_id, house.module, house.u, house.v, house.rotation, house.state = (
-                home["id"],
-                lot.module,
-                u0,
-                v0,
-                0,
-                "placed",
-            )
-            house.version += 1
-            take_cells(
-                session, home["id"], lot.module, cells_of(u0, v0, *footprint("house", 0)), obj=house
-            )
-            event(session, home["id"], "place", actor=user, obj=house)
-        await write_audit(
-            session,
-            actor_id=user.id,
-            action="city.estate.claim",
-            entity_type="city_lot",
-            entity_id=f"{home['id']}:{lot.module}:{lot.index}",
-        )
-        await session.commit()
-    return lot_view(lot)
+        part.version += 1
+        event(session, district_id, "consume", actor=user, obj=part, payload={"park": park.id})
+    w, h = footprint(park, rotation)
+    take_cells(session, district_id, block, cells_of(u0, v0, w, h), obj=park)
+    event(
+        session,
+        district_id,
+        "merge",
+        actor=user,
+        obj=park,
+        payload={"parts": [o.id for o in parts]},
+    )
+    await write_audit(
+        session,
+        actor_id=user.id,
+        action="city.estate.merge",
+        entity_type="city_object",
+        entity_id=park.id,
+        payload={"family": family, "parts": [o.id for o in parts]},
+    )
+    await session.flush()
+    return park
 
 
 # ---- personal operations -------------------------------------------------------------------------
@@ -978,7 +987,7 @@ async def pay(session, user, key, price, reason, meta):
     )
 
 
-async def own_placed(session, user, object_id, version, *, states=("placed",)):
+async def own_object_row(session, user, object_id, version, *, states=("placed",)):
     obj = await session.get(CityObject, object_id, populate_existing=True)
     if obj is None or obj.owner_id != user.id or obj.state not in states:
         raise NotFoundError("Постройка не найдена")
@@ -988,50 +997,31 @@ async def own_placed(session, user, object_id, version, *, states=("placed",)):
 
 
 async def purchase(session, user, body):
+    """A free plot of the operator's district with a square or a house on it, land and all."""
+
     async def perform():
         home = await builder(session, user)
-        family = FAMILIES.get(body.family)
+        family = PLOT_FAMILIES.get(body.family)
         if family is None:
             raise NotFoundError("Такой постройки нет в каталоге")
-        if family.get("recipe"):
+        if family.get("squares"):
             raise ConflictError(
-                "Большой парк собирается из шести скверов прямоугольником 3 × 2", code="recipe_only"
+                "Парк не покупают: его собирают свои скверы — четыре квадратом или шесть "
+                "прямоугольником",
+                code="recipe_only",
             )
-        revision, estate_prices, _costs, _steps = await prices(session)
-        check_revision(body.economy_revision, revision)
-        rotation = 0 if family["zone"] == "house" else body.rotation
-        if family["zone"] == "house" and await session.scalar(
-            select(CityObject.id).where(
-                CityObject.owner_id == user.id,
-                CityObject.family == "house",
-                CityObject.state.in_(["placed", "stored"]),
-            )
-        ):
-            raise ConflictError("Дом у тебя уже есть: его можно улучшать", code="house_exists")
-        if family["zone"] == "lot" and await session.scalar(
-            select(CityObject.id).where(
-                CityObject.owner_id == user.id,
-                CityObject.family == "tower",
-                CityObject.state.in_(["placed", "stored"]),
-            )
-        ):
-            raise ConflictError(
-                "Небоскрёб у тебя уже есть: на первом запуске — одна башня на оператора",
-                code="tower_exists",
-            )
-        cells = await personal_cells(
-            session, user, home, body.family, body.module, body.u, body.v, rotation
-        )
-        if family["zone"] == "lot":
-            await claim_lot(session, user, home, body.module, body.u, body.v)
-        price = estate_prices[body.family][0]
+        values = await prices(session)
+        check_revision(body.economy_revision, values["revision"])
+        plots, band = await free_plots(session, home, body.block, body.col, body.row)
+        land, building = values["land"][band - 1], values["estate"][body.family][0]
+        price = land + building
         tx = await pay(
             session,
             user,
             body.key,
             price,
-            f"Мой район: {family['name']}",
-            {"family": body.family, "level": 1},
+            f"Мой район: участок и {family['levels'][0][0].lower()}",
+            {"family": body.family, "level": 1, "band": band, "land": land},
         )
         obj = CityObject(
             district_id=home["id"],
@@ -1039,17 +1029,17 @@ async def purchase(session, user, body):
             family=body.family,
             level=1,
             state="placed",
-            module=body.module,
-            u=body.u,
-            v=body.v,
-            rotation=rotation,
+            module=body.block,
+            u=body.col,
+            v=body.row,
+            rotation=0,
             source="purchase",
             paid=price,
-            economy_revision=revision,
+            economy_revision=values["revision"],
         )
         session.add(obj)
         await session.flush()
-        take_cells(session, home["id"], body.module, cells, obj=obj)
+        take_cells(session, home["id"], body.block, plots, obj=obj)
         event(session, home["id"], "purchase", actor=user, obj=obj, amount=price, tx=tx)
         await write_audit(
             session,
@@ -1057,10 +1047,21 @@ async def purchase(session, user, body):
             action="city.estate.purchase",
             entity_type="city_object",
             entity_id=obj.id,
-            payload={"family": body.family, "price": price},
+            payload={"family": body.family, "price": price, "land": land, "band": band},
         )
         await session.flush()
-        return {"object": own_object(obj), "price": price, **await balance(session, user.id)}
+        park = (
+            await gather_parks(session, user, home["id"], body.block)
+            if body.family == "square"
+            else None
+        )
+        await widen(session, home["id"], user)
+        return {
+            "object": own_object(park or obj),
+            "merged": park is not None,
+            "price": price,
+            **await balance(session, user.id),
+        }
 
     return await operation(
         session, user, body.key, "purchase", body.model_dump(exclude={"key"}), perform
@@ -1070,19 +1071,19 @@ async def purchase(session, user, body):
 async def upgrade(session, user, object_id, body):
     async def perform():
         await builder(session, user)
-        obj = await own_placed(session, user, object_id, body.version)
-        levels = FAMILIES[obj.family]["levels"]
+        obj = await own_object_row(session, user, object_id, body.version)
+        levels = PLOT_FAMILIES[obj.family]["levels"]
         if obj.level >= len(levels):
             raise ConflictError("Это уже последняя ступень", code="max_level")
-        revision, estate_prices, _costs, _steps = await prices(session)
-        check_revision(body.economy_revision, revision)
-        price = estate_prices[obj.family][obj.level]
+        values = await prices(session)
+        check_revision(body.economy_revision, values["revision"])
+        price = values["estate"][obj.family][obj.level]
         tx = await pay(
             session,
             user,
             body.key,
             price,
-            f"Мой район: {FAMILIES[obj.family]['name']} — {levels[obj.level][0]}",
+            f"Мой район: {PLOT_FAMILIES[obj.family]['name']} — {levels[obj.level][0]}",
             {"family": obj.family, "level": obj.level + 1, "object": obj.id},
         )
         obj.level += 1
@@ -1110,207 +1111,43 @@ async def upgrade(session, user, object_id, body):
     )
 
 
-async def move(session, user, object_id, body):
-    """Moves a building within the operator's land or places it from the inventory, for free."""
+async def place(session, user, object_id, body):
+    """Puts a building from the inventory (after a transfer) on free plots of the district, free."""
 
     async def perform():
         home = await builder(session, user)
-        obj = await own_placed(session, user, object_id, body.version, states=("placed", "stored"))
-        zone = FAMILIES[obj.family]["zone"]
-        if zone == "house" and obj.state == "placed":
-            raise ConflictError("Дом стоит на своём месте в усадьбе", code="house_fixed")
-        rotation = 0 if zone == "house" else body.rotation
-        if (
-            obj.state == "placed"
-            and obj.district_id == home["id"]
-            and (obj.module, obj.u, obj.v, obj.rotation) == (body.module, body.u, body.v, rotation)
-        ):
-            raise ConflictError("Постройка уже стоит здесь", code="same_place")
-        cells = await personal_cells(
-            session, user, home, obj.family, body.module, body.u, body.v, rotation, moving=obj.id
-        )
-        if zone == "lot":
-            await claim_lot(session, user, home, body.module, body.u, body.v)
-        kind = "move" if obj.state == "placed" else "place"
-        await release_cells(session, obj)
+        obj = await own_object_row(session, user, object_id, body.version, states=("stored",))
+        rotation = body.rotation % 2 if obj.family == "bigpark" else 0
+        w, h = footprint(obj, rotation)
+        plots, _band = await free_plots(session, home, body.block, body.col, body.row, w, h)
         obj.district_id, obj.module, obj.u, obj.v, obj.rotation, obj.state = (
             home["id"],
-            body.module,
-            body.u,
-            body.v,
+            body.block,
+            body.col,
+            body.row,
             rotation,
             "placed",
         )
         obj.version += 1
-        take_cells(session, home["id"], body.module, cells, obj=obj)
-        event(session, home["id"], kind, actor=user, obj=obj)
+        take_cells(session, home["id"], body.block, plots, obj=obj)
+        event(session, home["id"], "place", actor=user, obj=obj)
         await session.flush()
-        return {"object": own_object(obj), **await balance(session, user.id)}
+        gathers = obj.family in ("square", "park")
+        park = await gather_parks(session, user, home["id"], body.block) if gathers else None
+        await widen(session, home["id"], user)
+        return {
+            "object": own_object(park or obj),
+            "merged": park is not None,
+            **await balance(session, user.id),
+        }
 
     return await operation(
         session,
         user,
         body.key,
-        "move",
+        "place",
         {"id": object_id, **body.model_dump(exclude={"key"})},
         perform,
-    )
-
-
-async def store(session, user, object_id, body):
-    async def perform():
-        await builder(session, user)
-        obj = await own_placed(session, user, object_id, body.version)
-        if FAMILIES[obj.family]["zone"] == "house":
-            raise ConflictError(
-                "Дом нельзя убрать: усадьба держит для него место", code="house_fixed"
-            )
-        await release_cells(session, obj)
-        if obj.family == "tower":
-            lot = await session.scalar(
-                select(CityLot).where(CityLot.user_id == user.id, CityLot.kind == "tower")
-            )
-            if lot:
-                await session.delete(lot)
-        obj.state, obj.module, obj.u, obj.v = "stored", None, None, None
-        obj.version += 1
-        event(session, obj.district_id, "store", actor=user, obj=obj)
-        await session.flush()
-        return {"object": own_object(obj), **await balance(session, user.id)}
-
-    return await operation(
-        session,
-        user,
-        body.key,
-        "store",
-        {"id": object_id, **body.model_dump(exclude={"key"})},
-        perform,
-    )
-
-
-def rectangle(squares):
-    """The 3 × 2 or 2 × 3 rectangle six squares of one module fill exactly, or None."""
-    if len({o.module for o in squares}) != 1:
-        return None
-    us, vs = [o.u for o in squares], [o.v for o in squares]
-    u0, v0, w, h = min(us), min(vs), max(us) - min(us) + 1, max(vs) - min(vs) + 1
-    if (w, h) not in ((3, 2), (2, 3)) or {(o.u, o.v) for o in squares} != set(
-        cells_of(u0, v0, w, h)
-    ):
-        return None
-    return squares[0].module, u0, v0, w, h
-
-
-async def merge_squares(session, actor, squares, district_id, *, owner, key, fee):
-    """Six squares into one park on their cells: squares are consumed, the park keeps their cost."""
-    place = rectangle(squares)
-    if place is None:
-        raise ConflictError(
-            "Нужны шесть соседних скверов прямоугольником 3 × 2 или 2 × 3", code="bad_recipe"
-        )
-    module, u0, v0, w, h = place
-    tx = (
-        await pay(
-            session, actor, key, fee, "Мой район: объединение скверов в парк", {"family": "park"}
-        )
-        if owner
-        else None
-    )
-    park = CityObject(
-        district_id=district_id,
-        owner_id=owner.id if owner else None,
-        family="park",
-        level=1,
-        state="placed",
-        module=module,
-        u=u0,
-        v=v0,
-        rotation=0 if w > h else 1,
-        source="merge",
-        paid=sum(o.paid for o in squares) + (fee if owner else 0),
-        components=[{"id": o.id, "paid": o.paid} for o in squares],
-    )
-    session.add(park)
-    await session.flush()
-    for square in squares:
-        await release_cells(session, square)
-        square.state, square.consumed_by, square.module, square.u, square.v = (
-            "consumed",
-            park.id,
-            None,
-            None,
-            None,
-        )
-        square.version += 1
-        event(session, district_id, "consume", actor=actor, obj=square, payload={"park": park.id})
-    take_cells(session, district_id, module, cells_of(u0, v0, w, h), obj=park)
-    event(
-        session,
-        district_id,
-        "merge",
-        actor=actor,
-        obj=park,
-        amount=fee if owner else 0,
-        tx=tx,
-        payload={"squares": [o.id for o in squares]},
-    )
-    await write_audit(
-        session,
-        actor_id=actor.id,
-        action="city.estate.merge",
-        entity_type="city_object",
-        entity_id=park.id,
-        payload={"squares": [o.id for o in squares], "owner": owner.id if owner else None},
-    )
-    await session.flush()
-    return park
-
-
-async def recipe(session, ids, *, owner_id, district_id):
-    objects = [await session.get(CityObject, i, populate_existing=True) for i in ids]
-    if any(o is None or o.family != "square" or o.state != "placed" for o in objects):
-        raise ConflictError("Объединить можно только шесть построенных скверов", code="bad_recipe")
-    if any(o.owner_id != owner_id or o.district_id != district_id for o in objects):
-        raise ConflictError(
-            "Личные и общественные скверы смешивать нельзя: нужны шесть скверов одного владельца",
-            code="bad_recipe",
-        )
-    return objects
-
-
-async def merge(session, user, body):
-    async def perform():
-        first = await session.get(CityObject, body.ids[0])
-        if first is not None and first.owner_id is None:
-            # Public squares: the district's supervisor or the head merges them, district locked.
-            districts = await world_districts(session)
-            if first.district_id not in await managed(session, user, districts):
-                raise PermissionDeniedError(
-                    "Общественные скверы объединяют супервайзер района и руководитель"
-                )
-            await lock_district(session, first.district_id)
-            objects = await recipe(session, body.ids, owner_id=None, district_id=first.district_id)
-            park = await merge_squares(
-                session, user, objects, first.district_id, owner=None, key=body.key, fee=0
-            )
-            return {"object": public_object(park, user)}
-        home = await builder(session, user)
-        objects = await recipe(session, body.ids, owner_id=user.id, district_id=home["id"])
-        revision, estate_prices, _costs, _steps = await prices(session)
-        check_revision(body.economy_revision, revision)
-        park = await merge_squares(
-            session,
-            user,
-            objects,
-            home["id"],
-            owner=user,
-            key=body.key,
-            fee=estate_prices["park"][0],
-        )
-        return {"object": own_object(park), **await balance(session, user.id)}
-
-    return await operation(
-        session, user, body.key, "merge", body.model_dump(exclude={"key"}), perform
     )
 
 
@@ -1325,12 +1162,13 @@ async def open_project(session, user, body):
             raise NotFoundError("Район не найден")
         if body.district_id not in await managed(session, user, districts):
             raise PermissionDeniedError("Общие проекты открывают супервайзер района и руководитель")
-        if not district["construction"] or not prepared(district["number"]):
+        if not district["construction"] or not city_land.has_land(body.district_id):
             raise ConflictError("Стройка в районе ещё не открыта", code="construction_closed")
         await lock_district(session, body.district_id)
-        revision, _prices, costs, _steps = await prices(session)
-        check_revision(body.economy_revision, revision)
-        family = FAMILIES.get(body.family)
+        values = await prices(session)
+        check_revision(body.economy_revision, values["revision"])
+        costs = values["district"]
+        family = PROJECT_FAMILIES.get(body.family)
         if family is None or body.family not in costs:
             raise NotFoundError("Такого общего проекта нет в каталоге")
         target = None
@@ -1357,14 +1195,17 @@ async def open_project(session, user, body):
             level = target.level + 1
         else:
             level = 1
-            check_module(district, body.module, "public")
-            w, h = footprint(body.family, body.rotation)
+            if body.module != SQUARE:
+                raise ConflictError(
+                    "Общие проекты строят на общественной площади района", code="wrong_zone"
+                )
+            w, h = footprint(body.family, body.rotation, public=True)
             cells = cells_of(body.u, body.v, w, h)
             if any(not (0 <= u < MODULE_CELLS and 0 <= v < MODULE_CELLS) for u, v in cells):
                 raise ConflictError(
-                    "Проект должен целиком помещаться на общественной земле", code="wrong_zone"
+                    "Проект должен целиком помещаться на общественной площади", code="wrong_zone"
                 )
-            if await occupied(session, body.district_id, body.module, cells):
+            if await occupied(session, body.district_id, SQUARE, cells):
                 raise ConflictError("Эти клетки уже заняты", code="cells_taken")
         size = family["project"]
         if await session.scalar(
@@ -1385,20 +1226,20 @@ async def open_project(session, user, body):
             family=body.family,
             level=level,
             target_id=target.id if target else None,
-            module=None if target else body.module,
+            module=None if target else SQUARE,
             u=None if target else body.u,
             v=None if target else body.v,
             rotation=target.rotation if target else body.rotation,
             size=size,
             cost=costs[body.family][level - 1],
             status="open",
-            economy_revision=revision,
+            economy_revision=values["revision"],
             created_by_id=user.id,
         )
         session.add(project)
         await session.flush()
         if target is None:
-            take_cells(session, body.district_id, body.module, cells, project=project)
+            take_cells(session, body.district_id, SQUARE, cells, project=project)
         event(
             session,
             body.district_id,
@@ -1460,7 +1301,7 @@ async def contribute(session, user, project_id, body):
                     code="over_remaining",
                 )
             amount = remaining
-        name = FAMILIES[project.family]["name"]
+        name = PROJECT_FAMILIES[project.family]["name"]
         tx = await post_transaction(
             session,
             user_id=user.id,
@@ -1515,8 +1356,6 @@ async def contribute(session, user, project_id, body):
 
 async def complete(session, project, actor):
     """The last contribution builds the project: a public building or its next stage, maybe HQ."""
-    from app.services.city_economy import economy
-
     state = await lock_district(session, project.district_id)
     if project.target_id is None:
         obj = CityObject(
@@ -1545,7 +1384,7 @@ async def complete(session, project, actor):
         obj.version += 1
     project.status, project.object_id, project.closed_at = "built", obj.id, utcnow()
     state.built_projects += 1
-    stage = hq_stage(state.built_projects, (await economy(session))["hq"])
+    stage = hq_stage(state.built_projects, (await prices(session))["hq"])
     event(session, project.district_id, "project_built", actor=actor, obj=obj, project=project)
     if stage > state.hq_level:
         state.hq_level = stage
@@ -1555,7 +1394,7 @@ async def complete(session, project, actor):
             select(CityContribution.user_id).where(CityContribution.project_id == project.id)
         )
     )
-    family = FAMILIES[project.family]
+    family = PROJECT_FAMILIES[project.family]
     for user_id in contributors:
         session.add(
             Notification(
@@ -1587,7 +1426,7 @@ async def cancel_project(session, user, project_id, body):
             raise ConflictError(
                 "Отменить можно только проект, который ещё собирают", code="project_closed"
             )
-        name = FAMILIES[project.family]["name"]
+        name = PROJECT_FAMILIES[project.family]["name"]
         refunded = 0
         for item in list(
             await session.scalars(
@@ -1668,19 +1507,9 @@ async def report(session):
     async def grouped(query):
         return dict((await session.execute(query)).all())
 
-    estates = await grouped(
-        select(CityLot.district_id, func.count())
-        .where(CityLot.kind == "estate")
-        .group_by(CityLot.district_id)
-    )
     placed = await grouped(
         select(CityObject.district_id, func.count())
-        .where(CityObject.state == "placed")
-        .group_by(CityObject.district_id)
-    )
-    stored = await grouped(
-        select(CityObject.district_id, func.count())
-        .where(CityObject.state == "stored")
+        .where(CityObject.state == "placed", CityObject.owner_id.is_not(None))
         .group_by(CityObject.district_id)
     )
     open_projects = await grouped(
@@ -1688,26 +1517,27 @@ async def report(session):
         .where(CityProject.status == "open")
         .group_by(CityProject.district_id)
     )
+    owners = await grouped(
+        select(CityObject.district_id, func.count(func.distinct(CityObject.owner_id)))
+        .where(CityObject.state == "placed", CityObject.owner_id.is_not(None))
+        .group_by(CityObject.district_id)
+    )
     states = {s.district_id: s for s in await session.scalars(select(CityDistrictState))}
+    taken = await taken_plots(session, [k for k in districts if city_land.has_land(k)])
     items = []
     for key, d in districts.items():
-        modules = prepared(d["number"])
-        total = max(0, modules - 2) * 9
         state = states.get(key)
+        land = land_view(key, taken[key], state) if key in taken else None
         items.append(
             {
                 "id": key,
                 "city": d["city"],
                 "name": d["name"],
                 "construction": d["construction"],
-                "modules": modules,
                 "operators": team[key],
-                "estates": {"total": total, "taken": estates.get(key, 0)},
-                # The capacity rule of the TZ (§10.2): ceil(operators / 9) + 1 residential modules.
-                "needs_expansion": team[key] > 0
-                and (-(-team[key] // 9) + 1 > modules - 2 or estates.get(key, 0) >= total),
+                "builders": owners.get(key, 0),
+                "land": land and {k: land[k] for k in ("plots", "taken", "open_band")},
                 "buildings": placed.get(key, 0),
-                "inventory": stored.get(key, 0),
                 "open_projects": open_projects.get(key, 0),
                 "hq_level": state.hq_level if state else 1,
                 "built_projects": state.built_projects if state else 0,
@@ -1729,25 +1559,30 @@ async def report(session):
             )
         )
     ).one()
-    spent = await session.scalar(
-        select(func.coalesce(func.sum(CoinTransaction.amount), 0)).where(
-            CoinTransaction.tx_type == TxType.CITY_BUILD
+
+    async def total(tx_type, key):
+        return await session.scalar(
+            select(func.coalesce(func.sum(CoinTransaction.amount), 0)).where(
+                CoinTransaction.tx_type == tx_type, CoinTransaction.idempotency_key.like(key)
+            )
         )
-    )
-    contributed = await session.scalar(
-        select(func.coalesce(func.sum(CoinTransaction.amount), 0)).where(
-            CoinTransaction.tx_type == TxType.CITY_CONTRIBUTION
-        )
-    )
+
     homeless = await session.scalar(
         select(func.count())
         .select_from(CityObject)
         .where(CityObject.state == "stored", CityObject.owner_id.is_not(None))
+    )
+    refunds = await total(TxType.PURCHASE_REFUND, "city-refund:%") + await total(
+        TxType.PURCHASE_REFUND, "city-land-reset:%"
     )
     return {
         "districts": items,
         "operators_without_district": int(without or 0),
         "inventory": int(homeless or 0),
         "legacy": {"buildings": legacy[0], "operators": legacy[1], "paid": int(legacy[2])},
-        "coins": {"buildings": -int(spent or 0), "contributions": -int(contributed or 0)},
+        "coins": {
+            "buildings": -int(await total(TxType.CITY_BUILD, "city-op:%") or 0),
+            "contributions": -int(await total(TxType.CITY_CONTRIBUTION, "city-op:%") or 0),
+            "refunded": int(refunds or 0),
+        },
     }

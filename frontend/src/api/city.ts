@@ -25,7 +25,7 @@ export const POINT_KINDS: Record<PointKind, string> = { missions: "Миссии 
 /** The game's numbers the head sets (app/services/city_economy.py); `catalogue` and `can_edit` are not saved. */
 export interface CityEconomy { revision: number; prices: Record<BuildingKey, number>; points: Record<PointKind, number>; projects: { key: string; name: string; cost: number }[]; quest_coins: number; catalogue?: { key: BuildingKey; name: string; icon: string }[]; can_edit?: boolean;
   /** Team districts (docs/CITY_ESTATES.md): coins per level of a personal building, estimates per level of a shared one, headquarters steps. */
-  estate?: Record<string, number[]>; district?: Record<string, number[]>; hq?: number[] }
+  estate?: Record<string, number[]>; land?: number[]; district?: Record<string, number[]>; hq?: number[] }
 /** One daily situation of the editable set (app/services/city_quests.py). */
 export interface CitySituation { id: string; speaker: string; text: string; options: string[]; correct: number; explanation: string; enabled: boolean }
 export interface CitySituations { revision: number; items: CitySituation[]; can_edit?: boolean }

@@ -1,8 +1,9 @@
-"""Team district land (docs/CITY_ESTATES.md): estates, buildings, shared projects and their history.
+"""Team district land (docs/CITY_ESTATES.md): buildings on plots, shared projects and their history.
 
 Coins are never stored here: every payment, contribution and refund is an entry of the coin journal
-(`coin_transactions`), and these tables keep only references to it. Cells are rows with a composite
-primary key, so the database itself refuses two buildings (or a project) on one cell.
+(`coin_transactions`), and these tables keep only references to it. Taken plots (and cells of the
+public square) are rows with a composite primary key, so the database itself refuses two buildings
+(or a project) on one plot.
 """
 
 from datetime import datetime
@@ -13,21 +14,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base, utcnow
 
 
-class CityLot(Base):
-    """A parcel one operator holds in a district: the estate (house and garden) or a tower lot."""
-
-    __tablename__ = "city_lots"
-    __table_args__ = (UniqueConstraint("user_id", "kind"),)
-    district_id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    module: Mapped[int] = mapped_column(primary_key=True)
-    index: Mapped[int] = mapped_column(primary_key=True)
-    kind: Mapped[str] = mapped_column(String(8))
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-
 class CityObject(Base):
-    """A building on district land or in its owner's inventory; the district's own if no owner."""
+    """A building on district land or in its owner's inventory; the district's own if no owner.
+
+    Its place is (module, u, v): on plots the block, column and row of its first plot; module 0 is
+    the public square, where the district's own buildings stand on cells.
+    """
 
     __tablename__ = "city_objects"
     __table_args__ = (
@@ -46,11 +38,11 @@ class CityObject(Base):
     module: Mapped[int | None] = mapped_column(nullable=True)
     u: Mapped[int | None] = mapped_column(nullable=True)
     v: Mapped[int | None] = mapped_column(nullable=True)
-    #: Quarter turns, 0…3.
+    #: Quarter turns, 0…3; on plots only a big park turns (1: two columns, three rows).
     rotation: Mapped[int] = mapped_column(default=0)
     #: purchase, merge, project, legacy.
     source: Mapped[str] = mapped_column(String(10))
-    #: Coins the owner paid for it so far, upgrades included; a merged park keeps its squares' sum.
+    #: Coins the owner paid for it so far, land and upgrades included; a park keeps its squares'.
     paid: Mapped[int] = mapped_column(default=0)
     components: Mapped[list | None] = mapped_column(JSON, nullable=True)
     consumed_by: Mapped[int | None] = mapped_column(ForeignKey("city_objects.id"), nullable=True)
@@ -94,7 +86,10 @@ class CityProject(Base):
 
 
 class CityCell(Base):
-    """One occupied cell of a module: by a building or reserved by an open project."""
+    """A taken plot (module = block, u = column, v = row) or a cell of the public square (module 0).
+
+    Taken by a building, or reserved on the square by an open project.
+    """
 
     __tablename__ = "city_cells"
     district_id: Mapped[str] = mapped_column(String(32), primary_key=True)
@@ -127,12 +122,14 @@ class CityContribution(Base):
 
 
 class CityDistrictState(Base):
-    """What a district has achieved together: the headquarters stage only ever grows."""
+    """What a district has achieved together: its headquarters stage and open bands only grow."""
 
     __tablename__ = "city_districts"
     district_id: Mapped[str] = mapped_column(String(32), primary_key=True)
     hq_level: Mapped[int] = mapped_column(default=1)
     built_projects: Mapped[int] = mapped_column(default=0)
+    #: Plots are sold up to this band from the centre (app/services/city_land.py).
+    open_band: Mapped[int] = mapped_column(default=1, server_default="1")
 
 
 class CityOperation(Base):

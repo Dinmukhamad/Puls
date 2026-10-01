@@ -4,13 +4,11 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
-const built = await build({ stdin: { contents: `export * from './railway.ts'; export * from './relief.ts'; export * from './estates.ts'; export * from './sales.ts'; export * from './stationSquare.ts'; export { generateWorld } from './generate.ts'; export { WORLD_X4, WORLD_V1 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
+const built = await build({ stdin: { contents: `export * from './railway.ts'; export * from './relief.ts'; export * from './estates.ts'; export * from './sales.ts'; export * from './stationSquare.ts'; export * from './land.ts'; export * from './cities.ts'; export { WORLD_X4, WORLD_V1 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
 const R = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
-// The worlds as the city opens them (city3d/index.ts): district land and the railway cleared of houses, the square laid.
-const X4 = R.generateWorld(R.WORLD_X4), V1 = R.generateWorld(R.WORLD_V1), SALES = R.generateSalesWorld();
-R.clearDistrictLand(X4, R.supportLand(X4.roads));
-for (const world of [X4, V1]) { R.clearRailway(world, world.railway); R.addStationSquare(world); }
+// The worlds as the city opens them (city3d/index.ts, world/cities.ts): the mainland and the railway cleared, the square laid.
+const X4 = R.islandWorld(R.WORLD_X4), V1 = R.islandWorld(R.WORLD_V1), SALES = R.generateSalesWorld();
 const CITIES = { x4: X4, v1: V1, sales: SALES };
 const ground = (world, x, z) => R.groundHeight(R.flatLand(world), x, z, world.railway);
 const station = (line) => [[R.STATION.forecourt, R.STATION.near], [R.STATION.end, R.STATION.near], [R.STATION.end, R.STATION.far], [R.STATION.forecourt, R.STATION.far]].map(([u, w]) => R.railPoint(line, u, w));
@@ -71,10 +69,10 @@ test('streets, district land and the town keep off the railway', () => {
     for (const p of world.placements) if (!p.lift) assert.ok(!R.onRailway(line, p, 0), `${name}: ${p.kind} at ${p.x.toFixed(1)}, ${p.z.toFixed(1)} stands on the railway`);
     for (const p of world.placements) if (p.lift && p.kind.startsWith('tree-')) assert.ok(!R.onRailway(line, p, 6), `${name}: a forest tree in the cutting`);
   }
-  for (const [city, land] of [['support', R.supportLand(X4.roads)], ['sales', R.salesLand()]]) {
-    const line = city === 'support' ? X4.railway : SALES.railway;
-    for (const m of land.modules.flat()) for (const c of R.squareCorners(m.x, m.z, m.rotation)) assert.ok(!R.onRailway(line, c, 2), `${city}: module ${m.district}.${m.slot} on the railway`);
-    for (const h of land.headquarters) assert.ok(!R.onRailway(line, h, R.HQ_HALF), `${city}: a headquarters on the railway`);
+  for (const [city, world] of [['support', X4], ['sales', SALES]]) {
+    const line = world.railway, grid = R.landGrid(world);
+    for (const plot of grid.plots) for (const c of plot.corners) assert.ok(!R.onRailway(line, c, 1), `${city}: plot ${plot.district}:${plot.block}:${plot.col}:${plot.row} on the railway`);
+    for (const centre of grid.centres) for (const c of centre.area.corners) assert.ok(!R.onRailway(line, c, 2), `${city}: a district's centre on the railway`);
   }
 });
 

@@ -1,24 +1,37 @@
 import asyncio
+import importlib.util
 import json
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 
-from app.models.city_estate import CityCell, CityContribution, CityEvent, CityLot, CityObject
+from app.models.city_estate import (
+    CityCell,
+    CityContribution,
+    CityDistrictState,
+    CityEvent,
+    CityObject,
+    CityProject,
+)
 from app.models.coin import CoinTransaction
 from app.models.enums import Role, TxType
 from app.models.progress import Notification
 from app.models.user import CoinAccount
+from app.services import city_land
 from app.services.coins import post_transaction
 from tests.conftest import auth, login, make_group, make_user
 
 pytestmark = pytest.mark.asyncio
 CITY = "/api/v1/learning/city"
 ADMIN = "/api/v1/admin/learning/city"
-# The first estate given away: module 2, index 7, house rows from v = 8, garden rows from v = 10.
-HOUSE = (2, 4, 8)
+# District 1 of the island city (app/data/city_land.json): band 1 has blocks 1 (columns 4…7 free),
+# 2 (3 × 2) and 3 (6 × 2); band 2 starts with block 4, and block 5 is 8 × 4 with every plot free.
+FIRST, SECOND = 3, 5
+# A plot in the first band and what it costs with a house: land 60 + house 120.
+HOUSE_PRICE, SQUARE_PRICE = 180, 100
 
 
 def key():
@@ -55,23 +68,16 @@ async def estate(client, h):
     return r.json()
 
 
-async def claim(client, h):
-    r = await client.post(CITY + "/estate", headers=h)
-    assert r.status_code == 200, r.text
-    return r.json()
-
-
-async def buy(client, h, family, module, u, v, rotation=0, *, revision=0, op=None):
+async def buy(client, h, family, block, col, row, *, revision=0, op=None):
     return await client.post(
-        CITY + "/buildings",
+        CITY + "/plots",
         headers=h,
         json={
             "key": op or key(),
             "family": family,
-            "module": module,
-            "u": u,
-            "v": v,
-            "rotation": rotation,
+            "block": block,
+            "col": col,
+            "row": row,
             "economy_revision": revision,
         },
     )
@@ -96,6 +102,13 @@ async def district_view(client, h, city="support", district="support-team-1"):
     return next(d for d in r.json()["districts"] if d["id"] == district)
 
 
+async def open_bands(session, district_id, band):
+    session.add(
+        CityDistrictState(district_id=district_id, hq_level=1, built_projects=0, open_band=band)
+    )
+    await session.commit()
+
+
 @pytest.fixture
 async def team(client, session, head, supervisor, operator):
     await open_world(client, head, support=[operator.group_id])
@@ -112,131 +125,49 @@ async def test_construction_waits_for_the_pilot_and_staff_never_build(
     data = await estate(client, me)
     assert data["status"] == "closed" and data["district"]["id"] == "support-team-1"
     families = {c["family"]: c for c in data["catalogue"]}
-    assert set(families) == {"square", "gazebo", "fountain", "sports", "park", "house", "tower"}
+    assert set(families) == {"square", "house", "park", "bigpark"}
     assert [lv["price"] for lv in families["house"]["levels"]] == [120, 180, 260, 360, 500]
-    assert [lv["name"] for lv in families["tower"]["levels"]][-1] == "200 этажей"
-    r = await client.post(CITY + "/estate", headers=me)
-    assert r.status_code == 409 and r.json()["code"] == "construction_closed"
+    assert [lv["name"] for lv in families["house"]["levels"]][:2] == [
+        "Одноэтажный дом",
+        "Двухэтажный дом",
+    ]
+    assert (families["park"]["squares"], families["bigpark"]["squares"]) == (4, 6)
+    assert data["land_prices"] == [60, 45, 30, 20, 10]
+    assert {p["family"] for p in data["projects"]} == {
+        "square",
+        "gazebo",
+        "fountain",
+        "sports",
+        "park",
+    }
     await fund(session, operator.id, 500)
-    assert (await buy(client, me, "house", *HOUSE)).status_code == 409
+    r = await buy(client, me, "house", FIRST, 0, 0)
+    assert r.status_code == 409 and r.json()["code"] == "construction_closed"
     trainer = await make_user(session, login="trainer-estate", role=Role.TRAINER)
     t = auth(await login(client, trainer.login))
     assert (await estate(client, t))["status"] == "staff"
     await open_world(client, head, support=[operator.group_id])
-    assert (await client.post(CITY + "/estate", headers=t)).status_code == 403
-    assert (await buy(client, t, "house", *HOUSE)).status_code == 403
+    assert (await buy(client, t, "house", FIRST, 0, 0)).status_code == 403
     assert await spent(session) == []
 
 
-async def test_operator_gets_one_estate_and_buys_a_house_once(client, session, team):
+async def test_an_operator_buys_a_plot_with_a_house_and_builds_it_up(client, session, team):
     me = auth(await login(client, team.login))
-    first = await claim(client, me)
-    assert first == {"district_id": "support-team-1", "module": 2, "index": 7, "u": 4, "v": 8}
-    assert await claim(client, me) == first
-    r = await buy(client, me, "house", *HOUSE)
+    r = await buy(client, me, "house", FIRST, 0, 0)
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["price"] == 120 and data["balance"] == 1880 and not data["replayed"]
-    assert data["object"]["family"] == "house" and data["object"]["level"] == 1
-    assert (data["object"]["w"], data["object"]["h"]) == (4, 2)
-    again = await buy(client, me, "house", *HOUSE)
-    assert again.status_code == 409 and again.json()["code"] == "house_exists"
-    assert await spent(session) == [-120]
-    assert await session.scalar(select(func.count()).select_from(CityCell)) == 8
-    mine = await estate(client, me)
-    assert mine["status"] == "ready" and mine["estate"] == first and mine["available"] == 1880
-
-
-async def test_a_repeated_key_returns_the_first_result_and_never_pays_twice(client, session, team):
-    me = auth(await login(client, team.login))
-    await claim(client, me)
-    op = key()
-    first = await buy(client, me, "square", 2, 4, 10, op=op)
-    assert first.status_code == 200 and not first.json()["replayed"]
-    repeat = await buy(client, me, "square", 2, 4, 10, op=op)
-    assert repeat.status_code == 200 and repeat.json()["replayed"]
-    assert repeat.json()["object"] == first.json()["object"]
-    other = await buy(client, me, "square", 2, 5, 10, op=op)
-    assert other.status_code == 409 and other.json()["code"] == "operation_key_reused"
-    status = (await client.get(f"{CITY}/operations/{op}", headers=me)).json()
-    assert status["status"] == "done"
-    assert status["result"]["object"]["id"] == first.json()["object"]["id"]
-    unknown = (await client.get(f"{CITY}/operations/{key()}", headers=me)).json()
-    assert unknown["status"] == "unknown"
-    assert await spent(session) == [-40]
-
-
-async def test_double_click_and_two_tabs_pay_once(client, session, team):
-    me = auth(await login(client, team.login))
-    await claim(client, me)
-    op = key()
-    same = await asyncio.gather(*[buy(client, me, "fountain", 2, 4, 10, op=op) for _ in range(3)])
-    assert [r.status_code for r in same] == [200, 200, 200]
-    assert len({r.json()["object"]["id"] for r in same}) == 1
-    tabs = await asyncio.gather(*[buy(client, me, "sports", 2, 6, 10) for _ in range(3)])
-    assert sorted(r.status_code for r in tabs) == [200, 409, 409]
-    account = await session.scalar(
-        select(CoinAccount)
-        .where(CoinAccount.user_id == team.id)
-        .execution_options(populate_existing=True)
+    assert data["price"] == HOUSE_PRICE and data["balance"] == 2000 - HOUSE_PRICE
+    assert not data["replayed"] and not data["merged"]
+    house = data["object"]
+    assert (house["family"], house["level"], house["module"], house["u"], house["v"]) == (
+        "house",
+        1,
+        FIRST,
+        0,
+        0,
     )
-    assert account.balance == 2000 - 90 - 70
-    assert sorted(await spent(session)) == [-90, -70]
-
-
-async def test_buildings_keep_to_their_zone_and_the_price_the_operator_saw(
-    client, session, head, team
-):
-    me = auth(await login(client, team.login))
-    await claim(client, me)
-    for family, place in (
-        ("square", (2, 4, 8)),  # the house rows
-        ("square", (0, 0, 0)),  # public land
-        ("square", (2, 0, 10)),  # a neighbour's estate
-        ("fountain", (2, 7, 10)),  # half outside the garden
-        ("tower", (2, 4, 8)),  # towers stand in the business quarter
-        ("tower", (1, 2, 0)),  # and take a whole lot
-    ):
-        r = await buy(client, me, family, *place)
-        assert r.status_code == 409 and r.json()["code"] == "wrong_zone", (family, place, r.text)
-    assert (await buy(client, me, "castle", 2, 4, 10)).status_code == 404
-    assert (await buy(client, me, "park", 2, 4, 10)).json()["code"] == "recipe_only"
-    forged = await client.post(
-        CITY + "/buildings",
-        headers=me,
-        json={
-            "key": key(),
-            "family": "square",
-            "module": 2,
-            "u": 4,
-            "v": 10,
-            "economy_revision": 0,
-            "price": 1,
-        },
-    )
-    assert forged.status_code == 422
-    # The head changes the prices: what the operator saw is no longer the price.
-    boss = auth(await login(client, head.login))
-    economy = (await client.get(ADMIN + "/economy", headers=boss)).json()
-    economy.pop("catalogue"), economy.pop("can_edit")
-    economy["estate"]["square"] = [55]
-    assert (await client.put(ADMIN + "/economy", headers=boss, json=economy)).status_code == 200
-    stale = await buy(client, me, "square", 2, 4, 10)
-    assert stale.status_code == 409 and stale.json()["code"] == "prices_changed"
-    fresh = await buy(client, me, "square", 2, 4, 10, revision=1)
-    assert fresh.status_code == 200 and fresh.json()["price"] == 55
-    poor = await make_user(session, login="poor-estate", group_id=team.group_id)
-    p = auth(await login(client, poor.login))
-    await claim(client, p)
-    broke = await buy(client, p, "square", 2, 0, 10, revision=1)
-    assert broke.status_code == 409 and broke.json()["code"] == "insufficient_coins"
-    assert await spent(session) == [-55]
-
-
-async def test_upgrade_move_store_and_place_back(client, session, team):
-    me = auth(await login(client, team.login))
-    await claim(client, me)
-    house = (await buy(client, me, "house", *HOUSE)).json()["object"]
+    assert (house["w"], house["h"], house["paid"]) == (1, 1, HOUSE_PRICE)
+    # One storey, then two, and on to the mansion: each stage at the price of the catalogue.
     version = house["version"]
     for level, price in ((2, 180), (3, 260), (4, 360), (5, 500)):
         r = await change(client, me, house, "upgrade", version=version, economy_revision=0)
@@ -247,115 +178,194 @@ async def test_upgrade_move_store_and_place_back(client, session, team):
     assert top.json()["code"] == "max_level"
     stale = await change(client, me, house, "upgrade", version=1, economy_revision=0)
     assert stale.json()["code"] == "stale_object"
-    assert (await change(client, me, house, "store", version=version)).json()[
-        "code"
-    ] == "house_fixed"
-    gazebo = (await buy(client, me, "gazebo", 2, 4, 10)).json()["object"]
-    moved = await change(client, me, gazebo, "move", version=gazebo["version"], module=2, u=7, v=11)
-    assert moved.status_code == 200, moved.text
-    assert (moved.json()["object"]["u"], moved.json()["object"]["v"]) == (7, 11)
-    stored = await change(client, me, gazebo, "store", version=moved.json()["object"]["version"])
-    assert stored.json()["object"]["state"] == "stored"
-    # The freed cell takes something else; the gazebo comes back elsewhere with its level.
-    assert (await buy(client, me, "square", 2, 7, 11)).status_code == 200
-    gazebo = stored.json()["object"]
-    taken = await change(client, me, gazebo, "move", version=gazebo["version"], module=2, u=7, v=11)
-    assert taken.json()["code"] == "cells_taken"
-    back = await change(client, me, gazebo, "move", version=gazebo["version"], module=2, u=4, v=11)
-    assert back.status_code == 200 and back.json()["object"]["state"] == "placed"
-    objects = {(o["family"], o["state"], o["level"]) for o in (await estate(client, me))["objects"]}
-    assert objects == {("house", "placed", 5), ("gazebo", "placed", 1), ("square", "placed", 1)}
-    assert sum(await spent(session)) == -(120 + 180 + 260 + 360 + 500 + 50 + 40)
+    # Many houses: an operator may buy as many plots as there are free.
+    second = await buy(client, me, "house", FIRST, 1, 0)
+    assert second.status_code == 200, second.text
+    assert sum(await spent(session)) == -(HOUSE_PRICE * 2 + 180 + 260 + 360 + 500)
+    mine = await estate(client, me)
+    assert [(o["family"], o["level"]) for o in mine["objects"]] == [("house", 5), ("house", 1)]
+    assert await session.scalar(select(func.count()).select_from(CityCell)) == 2
 
 
-async def test_six_squares_become_one_park_with_their_history(client, session, team):
+async def test_a_repeated_key_returns_the_first_result_and_never_pays_twice(client, session, team):
     me = auth(await login(client, team.login))
-    await claim(client, me)
-    ids = []
-    for u in range(4, 7):
-        for v in (10, 11):
-            r = await buy(client, me, "square", 2, u, v)
-            ids.append(r.json()["object"]["id"])
-    body = {"ids": ids, "economy_revision": 0}
-    merged = await client.post(f"{CITY}/buildings/merge", headers=me, json={"key": key(), **body})
-    assert merged.status_code == 200, merged.text
-    park = merged.json()["object"]
-    assert park["family"] == "park" and park["level"] == 1 and park["paid"] == 240
-    assert park["components"] == 6 and (park["u"], park["v"], park["w"], park["h"]) == (4, 10, 3, 2)
-    assert merged.json()["balance"] == 2000 - 240
-    again = await client.post(f"{CITY}/buildings/merge", headers=me, json={"key": key(), **body})
-    assert again.json()["code"] == "bad_recipe"
-    squares = await session.scalars(
-        select(CityObject).where(CityObject.id.in_(ids)).execution_options(populate_existing=True)
+    op = key()
+    first = await buy(client, me, "square", FIRST, 0, 0, op=op)
+    assert first.status_code == 200 and not first.json()["replayed"]
+    repeat = await buy(client, me, "square", FIRST, 0, 0, op=op)
+    assert repeat.status_code == 200 and repeat.json()["replayed"]
+    assert repeat.json()["object"] == first.json()["object"]
+    other = await buy(client, me, "square", FIRST, 1, 0, op=op)
+    assert other.status_code == 409 and other.json()["code"] == "operation_key_reused"
+    status = (await client.get(f"{CITY}/operations/{op}", headers=me)).json()
+    assert status["status"] == "done"
+    assert status["result"]["object"]["id"] == first.json()["object"]["id"]
+    unknown = (await client.get(f"{CITY}/operations/{key()}", headers=me)).json()
+    assert unknown["status"] == "unknown"
+    assert await spent(session) == [-SQUARE_PRICE]
+
+
+async def test_double_click_and_two_tabs_pay_once(client, session, team):
+    me = auth(await login(client, team.login))
+    op = key()
+    same = await asyncio.gather(*[buy(client, me, "house", FIRST, 0, 0, op=op) for _ in range(3)])
+    assert [r.status_code for r in same] == [200, 200, 200]
+    assert len({r.json()["object"]["id"] for r in same}) == 1
+    tabs = await asyncio.gather(*[buy(client, me, "house", FIRST, 1, 0) for _ in range(3)])
+    assert sorted(r.status_code for r in tabs) == [200, 409, 409]
+    account = await session.scalar(
+        select(CoinAccount)
+        .where(CoinAccount.user_id == team.id)
+        .execution_options(populate_existing=True)
     )
-    assert all(o.state == "consumed" and o.consumed_by == park["id"] for o in squares)
-    cells = await session.scalars(select(CityCell.object_id))
-    assert set(cells) == {park["id"]}
-    view = await district_view(client, me)
-    assert [(o["family"], o["owner"]) for o in view["objects"]] == [("park", "mine")]
-    up = await change(client, me, park, "upgrade", version=park["version"], economy_revision=0)
-    assert up.json()["object"]["level"] == 2 and up.json()["price"] == 150
+    assert account.balance == 2000 - 2 * HOUSE_PRICE
+    assert sorted(await spent(session)) == [-HOUSE_PRICE, -HOUSE_PRICE]
 
 
-async def test_only_a_full_rectangle_of_ones_own_squares_merges(client, session, team):
+async def test_only_free_plots_of_ones_district_in_an_open_band_at_the_price_seen(
+    client, session, head, team
+):
     me = auth(await login(client, team.login))
-    await claim(client, me)
-    ids = []
-    for u, v in ((4, 10), (5, 10), (6, 10), (7, 10), (4, 11), (5, 11)):
-        ids.append((await buy(client, me, "square", 2, u, v)).json()["object"]["id"])
-    l_shape = await client.post(
-        f"{CITY}/buildings/merge",
+    for place, code in (
+        ((1, 0, 0), "wrong_plot"),  # a group quarter stands there
+        ((4, 3, 1), "wrong_plot"),  # the district's centre
+        ((99, 0, 0), "wrong_plot"),  # no such block
+        ((FIRST, 6, 0), "wrong_plot"),  # past the block's last column
+        ((SECOND, 0, 0), "band_closed"),  # the second band opens later
+    ):
+        r = await buy(client, me, "house", *place)
+        assert r.status_code == 409 and r.json()["code"] == code, (place, r.text)
+    assert (await buy(client, me, "castle", FIRST, 0, 0)).status_code == 404
+    assert (await buy(client, me, "park", FIRST, 0, 0)).json()["code"] == "recipe_only"
+    forged = await client.post(
+        CITY + "/plots",
         headers=me,
-        json={"key": key(), "ids": ids, "economy_revision": 0},
+        json={
+            "key": key(),
+            "family": "square",
+            "block": FIRST,
+            "col": 0,
+            "row": 0,
+            "economy_revision": 0,
+            "price": 1,
+        },
     )
-    assert l_shape.json()["code"] == "bad_recipe"
+    assert forged.status_code == 422
     neighbour = await make_user(session, login="neighbour-estate", group_id=team.group_id)
-    await fund(session, neighbour.id, 100)
+    await fund(session, neighbour.id, 500)
     n = auth(await login(client, neighbour.login))
-    await claim(client, n)
-    foreign = (await buy(client, n, "square", 2, 0, 10)).json()["object"]["id"]
-    mixed = await client.post(
-        f"{CITY}/buildings/merge",
-        headers=me,
-        json={"key": key(), "ids": [*ids[:5], foreign], "economy_revision": 0},
-    )
-    assert mixed.json()["code"] == "bad_recipe"
-    assert (
-        await session.scalar(
-            select(func.count()).select_from(CityObject).where(CityObject.state == "consumed")
-        )
-        == 0
-    )
+    assert (await buy(client, n, "square", FIRST, 0, 0)).status_code == 200
+    taken = await buy(client, me, "house", FIRST, 0, 0)
+    assert taken.json()["code"] == "plot_taken"
+    # The head changes the prices: what the operator saw is no longer the price.
+    boss = auth(await login(client, head.login))
+    economy = (await client.get(ADMIN + "/economy", headers=boss)).json()
+    economy.pop("catalogue"), economy.pop("can_edit")
+    economy["land"] = [80, 45, 30, 20, 10]
+    assert (await client.put(ADMIN + "/economy", headers=boss, json=economy)).status_code == 200
+    stale = await buy(client, me, "square", FIRST, 1, 0)
+    assert stale.status_code == 409 and stale.json()["code"] == "prices_changed"
+    fresh = await buy(client, me, "square", FIRST, 1, 0, revision=1)
+    assert fresh.status_code == 200 and fresh.json()["price"] == 80 + 40
+    poor = await make_user(session, login="poor-estate", group_id=team.group_id)
+    p = auth(await login(client, poor.login))
+    broke = await buy(client, p, "square", FIRST, 2, 0, revision=1)
+    assert broke.status_code == 409 and broke.json()["code"] == "insufficient_coins"
+    assert sorted(await spent(session)) == [-120, -SQUARE_PRICE]
 
 
-async def test_one_tower_per_operator_on_its_own_business_lot(client, session, team):
+async def test_four_squares_become_a_park_and_six_a_big_park(client, session, team):
     me = auth(await login(client, team.login))
-    tower = await buy(client, me, "tower", 1, 4, 4, rotation=1)
-    assert tower.status_code == 200, tower.text
-    assert (tower.json()["object"]["w"], tower.json()["object"]["h"]) == (4, 4)
-    assert (await buy(client, me, "tower", 1, 0, 0)).json()["code"] == "tower_exists"
-    rival = await make_user(session, login="rival-estate", group_id=team.group_id)
-    await fund(session, rival.id, 1000)
-    r = auth(await login(client, rival.login))
-    assert (await buy(client, r, "tower", 1, 4, 4)).json()["code"] == "cells_taken"
-    assert (await buy(client, r, "tower", 1, 8, 8)).status_code == 200
-    obj = tower.json()["object"]
-    moved = await change(client, me, obj, "move", version=obj["version"], module=1, u=0, v=0)
-    assert moved.status_code == 200 and (
-        moved.json()["object"]["u"],
-        moved.json()["object"]["v"],
-    ) == (0, 0)
-    # The old lot is free again.
-    lots = await session.scalars(select(CityLot.index).where(CityLot.kind == "tower"))
-    assert sorted(lots) == [0, 8]
+    results = [
+        (await buy(client, me, "square", FIRST, u, v)).json() for u, v in ((0, 0), (1, 0), (0, 1))
+    ]
+    assert [r["object"]["family"] for r in results] == ["square"] * 3
+    fourth = (await buy(client, me, "square", FIRST, 1, 1)).json()
+    park = fourth["object"]
+    assert fourth["merged"] and park["family"] == "park" and park["level"] == 1
+    assert (park["u"], park["v"], park["w"], park["h"]) == (0, 0, 2, 2)
+    assert park["paid"] == 4 * SQUARE_PRICE and park["squares"] == 4
+    up = await change(client, me, park, "upgrade", version=park["version"], economy_revision=0)
+    assert up.status_code == 200 and up.json()["object"]["level"] == 2 and up.json()["price"] == 120
+    # Two more squares beside it fill a 3 × 2 rectangle: a big park, keeping the fountain's stage.
+    assert not (await buy(client, me, "square", FIRST, 2, 0)).json()["merged"]
+    last = (await buy(client, me, "square", FIRST, 2, 1)).json()
+    big = last["object"]
+    assert last["merged"] and big["family"] == "bigpark" and big["level"] == 2
+    assert (big["u"], big["v"], big["w"], big["h"], big["rotation"]) == (0, 0, 3, 2, 0)
+    assert big["paid"] == 6 * SQUARE_PRICE + 120 and big["squares"] == 6
+    view = await district_view(client, me)
+    assert [(o["family"], o["owner"], o["w"], o["h"]) for o in view["objects"]] == [
+        ("bigpark", "mine", 3, 2)
+    ]
+    cells = list(await session.scalars(select(CityCell.object_id)))
+    assert len(cells) == 6 and set(cells) == {big["id"]}
+    consumed = await session.scalar(
+        select(func.count()).select_from(CityObject).where(CityObject.state == "consumed")
+    )
+    assert consumed == 7  # four squares into the park, then it and two squares into the big one
+    assert sum(await spent(session)) == -(6 * SQUARE_PRICE + 120)
+    top = await change(client, me, big, "upgrade", version=big["version"], economy_revision=0)
+    assert top.json()["object"]["level"] == 3 and top.json()["price"] == 250
 
 
-async def test_a_transfer_takes_personal_buildings_along(client, session, head, team):
+async def test_six_squares_in_two_columns_make_an_upright_big_park(client, session, team):
+    await open_bands(session, "support-team-1", 2)
     me = auth(await login(client, team.login))
-    await claim(client, me)
-    house = (await buy(client, me, "house", *HOUSE)).json()["object"]
+    await fund(session, team.id, 1000)
+    # In this order no four of them fill a square until the sixth fills the whole 2 × 3.
+    for u, v in ((0, 0), (0, 1), (0, 2), (1, 0), (1, 2)):
+        assert not (await buy(client, me, "square", SECOND, u, v)).json()["merged"]
+    last = (await buy(client, me, "square", SECOND, 1, 1)).json()
+    big = last["object"]
+    assert last["merged"] and big["family"] == "bigpark"
+    assert (big["u"], big["v"], big["w"], big["h"], big["rotation"]) == (0, 0, 2, 3, 1)
+    # Land of the second band is cheaper: 45 instead of 60.
+    assert big["paid"] == 6 * (45 + 40)
+
+
+async def test_squares_of_a_neighbour_or_a_house_in_the_way_do_not_merge(client, session, team):
+    me = auth(await login(client, team.login))
+    neighbour = await make_user(session, login="neighbour-merge", group_id=team.group_id)
+    await fund(session, neighbour.id, 500)
+    n = auth(await login(client, neighbour.login))
+    for u, v in ((0, 0), (1, 0), (0, 1)):
+        await buy(client, me, "square", FIRST, u, v)
+    assert not (await buy(client, n, "square", FIRST, 1, 1)).json()["merged"]
+    await buy(client, me, "house", FIRST, 2, 0)
+    assert not (await buy(client, me, "square", FIRST, 2, 1)).json()["merged"]
+    families = await session.scalars(select(CityObject.family).where(CityObject.state == "placed"))
+    assert sorted(families) == ["house", "square", "square", "square", "square", "square"]
+
+
+async def test_the_next_band_opens_as_the_first_fills_up(client, session, team):
+    me = auth(await login(client, team.login))
+    await fund(session, team.id, 4000)
+    totals = city_land.band_totals("support-team-1")
+    assert totals[0] == 26 and len(totals) == 5
+    first = [(1, u, v) for u in range(4, 8) for v in (0, 1)] + [
+        (block, u, v) for block, cols in ((2, 3), (3, 6)) for u in range(cols) for v in (0, 1)
+    ]
+    need = -(-totals[0] * 7 // 10)  # 70 % of the first band
+    for block, u, v in first[: need - 1]:
+        assert (await buy(client, me, "house", block, u, v)).status_code == 200
+    assert (await district_view(client, me))["land"]["open_band"] == 1
+    assert (await buy(client, me, "house", SECOND, 0, 0)).json()["code"] == "band_closed"
+    assert (await buy(client, me, "house", *first[need - 1])).status_code == 200
+    land = (await district_view(client, me))["land"]
+    assert land["open_band"] == 2 and land["taken"] == need and land["plots"] == sum(totals)
+    assert land["bands"][0] == {"band": 1, "plots": 26, "taken": need}
+    r = await buy(client, me, "house", SECOND, 0, 0)
+    assert r.status_code == 200 and r.json()["price"] == 45 + 120
+    bands = await session.scalars(select(CityEvent.payload).where(CityEvent.kind == "band"))
+    assert list(bands) == [{"band": 2}]
+
+
+async def test_a_transfer_takes_buildings_along_to_the_inventory(client, session, head, team):
+    me = auth(await login(client, team.login))
+    house = (await buy(client, me, "house", FIRST, 0, 0)).json()["object"]
     await change(client, me, house, "upgrade", version=house["version"], economy_revision=0)
-    await buy(client, me, "square", 2, 4, 10)
+    await buy(client, me, "square", FIRST, 1, 0)
     sales_sv = await make_user(session, login="sv-sales", role=Role.SUPERVISOR)
     sales = await make_group(session, code="GS", supervisor_id=sales_sv.id)
     await open_world(
@@ -371,20 +381,33 @@ async def test_a_transfer_takes_personal_buildings_along(client, session, head, 
     )
     assert moved.status_code == 200, moved.text
     data = await estate(client, me)
-    assert data["district"]["id"] == "sales-team-1" and data["estate"] is None
-    assert {(o["family"], o["state"]) for o in data["objects"]} == {
-        ("house", "stored"),
-        ("square", "stored"),
+    assert data["district"]["id"] == "sales-team-1"
+    assert {(o["family"], o["state"], o["level"]) for o in data["objects"]} == {
+        ("house", "stored", 2),
+        ("square", "stored", 1),
     }
     assert await session.scalar(select(func.count()).select_from(CityCell)) == 0
     assert not (await district_view(client, me))["objects"]
-    new = await claim(client, me)
-    assert new["district_id"] == "sales-team-1"
-    house = next(o for o in (await estate(client, me))["objects"] if o["family"] == "house")
-    assert house["state"] == "placed" and house["level"] == 2
-    assert (house["u"], house["v"]) == (new["u"], new["v"])
+    stored = next(o for o in data["objects"] if o["family"] == "house")
+    placed = await change(
+        client, me, stored, "place", version=stored["version"], block=1, col=0, row=0
+    )
+    assert placed.status_code == 200, placed.text
+    house = placed.json()["object"]
+    assert (house["state"], house["district_id"], house["module"], house["level"]) == (
+        "placed",
+        "sales-team-1",
+        1,
+        2,
+    )
+    again = await change(
+        client, me, house, "place", version=house["version"], block=1, col=1, row=0
+    )
+    assert again.status_code == 404
+    view = await district_view(client, me, "sales", "sales-team-1")
+    assert [(o["family"], o["owner"]) for o in view["objects"]] == [("house", "mine")]
     # Moving cost nothing: the journal has only the purchases.
-    assert sorted(await spent(session)) == [-180, -120, -40]
+    assert sorted(await spent(session)) == [-HOUSE_PRICE, -180, -SQUARE_PRICE]
     events = await session.scalars(select(CityEvent.kind).where(CityEvent.kind == "transfer"))
     assert len(list(events)) == 2
 
@@ -393,8 +416,7 @@ async def test_regrouping_districts_and_deactivation_release_land(
     client, session, head, supervisor, team
 ):
     me = auth(await login(client, team.login))
-    await claim(client, me)
-    await buy(client, me, "house", *HOUSE)
+    await buy(client, me, "house", FIRST, 0, 0)
     boss = auth(await login(client, head.login))
     world = (await client.get(ADMIN + "/world", headers=boss)).json()
     body = {"revision": world["revision"], "cities": world["cities"]}
@@ -404,13 +426,14 @@ async def test_regrouping_districts_and_deactivation_release_land(
     assert (await client.put(ADMIN + "/world", headers=boss, json=body)).status_code == 200
     data = await estate(client, me)
     assert data["district"]["id"] == "support-team-2" and data["objects"][0]["state"] == "stored"
-    await claim(client, me)
-    assert (await estate(client, me))["objects"][0]["state"] == "placed"
+    house = data["objects"][0]
+    r = await change(client, me, house, "place", version=house["version"], block=1, col=0, row=0)
+    assert r.status_code == 200, r.text
     off = await client.patch(
         f"/api/v1/admin/users/{team.id}", headers=boss, json={"is_active": False}
     )
     assert off.status_code == 200, off.text
-    assert await session.scalar(select(func.count()).select_from(CityLot)) == 0
+    assert await session.scalar(select(func.count()).select_from(CityCell)) == 0
     house = await session.scalar(select(CityObject).execution_options(populate_existing=True))
     assert house.state == "stored" and house.owner_id == team.id
 
@@ -457,7 +480,9 @@ async def test_team_funds_a_project_and_the_headquarters_grows(client, session, 
     assert done.status_code == 200 and done.json()["accepted"] == 70 and done.json()["completed"]
     view = await district_view(client, m)
     assert view["projects"] == [] and view["hq"]["level"] == 2 and view["hq"]["built"] == 1
-    assert [(o["family"], o["owner"]) for o in view["objects"]] == [("square", "district")]
+    assert [(o["family"], o["owner"], o["module"], o["w"]) for o in view["objects"]] == [
+        ("square", "district", 0, 1)
+    ]
     notes = await session.scalars(
         select(Notification.user_id).where(Notification.title == "Проект района построен")
     )
@@ -473,22 +498,18 @@ async def test_cancelled_project_returns_every_contribution(
     mate = await make_user(session, login="mate-cancel", group_id=team.group_id)
     await fund(session, mate.id, 400)
     boss = auth(await login(client, head.login))
+    body = {
+        "district_id": "support-team-1",
+        "family": "fountain",
+        "module": 0,
+        "u": 2,
+        "v": 2,
+        "economy_revision": 0,
+    }
     project = (
-        await client.post(
-            f"{CITY}/projects",
-            headers=boss,
-            json={
-                "key": key(),
-                "district_id": "support-team-1",
-                "family": "fountain",
-                "module": 0,
-                "u": 2,
-                "v": 2,
-                "economy_revision": 0,
-            },
-        )
+        await client.post(f"{CITY}/projects", headers=boss, json={"key": key(), **body})
     ).json()["project"]
-    assert project["cost"] == 300
+    assert project["cost"] == 300 and (project["w"], project["h"]) == (2, 2)
     for user, amount in ((team, 100), (mate, 150)):
         h = auth(await login(client, user.login))
         r = await client.post(
@@ -528,25 +549,15 @@ async def test_cancelled_project_returns_every_contribution(
     )
     assert again.json()["code"] == "project_closed"
     # Its cells are free for the next project.
-    reopened = await client.post(
-        f"{CITY}/projects",
-        headers=sv,
-        json={
-            "key": key(),
-            "district_id": "support-team-1",
-            "family": "fountain",
-            "module": 0,
-            "u": 2,
-            "v": 2,
-            "economy_revision": 0,
-        },
-    )
+    reopened = await client.post(f"{CITY}/projects", headers=sv, json={"key": key(), **body})
     assert reopened.status_code == 200, reopened.text
     rows = await session.scalars(select(CityContribution.refund_transaction_id))
     assert all(rows)
 
 
-async def test_projects_keep_to_public_land_limits_and_roles(client, session, supervisor, team):
+async def test_projects_keep_to_the_public_square_its_limits_and_roles(
+    client, session, supervisor, team
+):
     sv = auth(await login(client, supervisor.login))
     me = auth(await login(client, team.login))
 
@@ -584,6 +595,8 @@ async def test_projects_keep_to_public_land_limits_and_roles(client, session, su
         f"{CITY}/projects/{project}/contributions", headers=t, json={"key": key(), "amount": 10}
     )
     assert staff.status_code == 403
+    # The public square is not a plot: an operator's purchase cannot reach it.
+    assert (await buy(client, me, "house", 0, 0, 0)).status_code == 422
 
 
 async def test_concurrent_contributions_never_overfund(client, session, supervisor, team):
@@ -625,8 +638,7 @@ async def test_public_view_hides_money_names_and_small_teams_progress(
     client, session, supervisor, team
 ):
     me = auth(await login(client, team.login))
-    await claim(client, me)
-    await buy(client, me, "house", *HOUSE)
+    await buy(client, me, "house", FIRST, 0, 0)
     sv = auth(await login(client, supervisor.login))
     project = (
         await client.post(
@@ -656,13 +668,14 @@ async def test_public_view_hides_money_names_and_small_teams_progress(
     for secret in ("paid", "balance", "funded", team.full_name, team.login, "created_at"):
         assert secret not in raw, secret
     view = next(d for d in response.json()["districts"] if d["id"] == "support-team-1")
-    assert view["objects"][0]["owner"] == "resident" and view["estates"] == {
-        "total": 72,
-        "taken": 1,
-    }
+    assert view["objects"][0]["owner"] == "resident"
+    assert (view["land"]["plots"], view["land"]["taken"], view["land"]["open_band"]) == (
+        city_land.plot_count("support-team-1"),
+        1,
+        1,
+    )
     # One operator in the team: a stage change would show exactly what they gave.
     assert view["projects"][0]["progress"] is None and view["projects"][0]["mine"] == 0
-    assert [m["kind"] for m in view["modules"]][:3] == ["public", "business", "residential"]
     staff = await district_view(client, sv)
     assert staff["projects"][0]["funded"] == 60 and staff["managed"]
 
@@ -679,51 +692,57 @@ async def test_old_plots_close_once_the_team_district_opens(client, session, tea
     assert blocked.status_code == 409
 
 
-async def test_world_opens_construction_only_where_land_is_prepared(client, head):
+async def test_the_city_has_three_districts_with_land_and_only_they_open(client, head):
     boss = auth(await login(client, head.login))
     world = (await client.get(ADMIN + "/world", headers=boss)).json()
     body = {"revision": world["revision"], "cities": world["cities"]}
     districts = body["cities"][0]["districts"]
-    for n in range(4, 8):
-        districts.append(
-            {
-                "id": f"support-team-{n}",
-                "name": f"Район {n}",
-                "group_ids": [],
-                "construction": n == 7,
-            }
-        )
+    districts.append(
+        {"id": "support-team-4", "name": "Район 4", "group_ids": [], "construction": True}
+    )
     r = await client.put(ADMIN + "/world", headers=boss, json=body)
     assert r.status_code == 400
     districts[-1]["construction"] = False
-    districts[-2]["construction"] = True
+    districts[2]["construction"] = True
     r = await client.put(ADMIN + "/world", headers=boss, json=body)
     assert r.status_code == 200, r.text
     public = (await client.get(CITY + "/world", headers=boss)).json()
-    prepared = [d["prepared"] for d in public["cities"][0]["districts"]]
-    assert prepared == [10, 10, 10, 6, 6, 6, 0]
+    support = [d["prepared"] for d in public["cities"][0]["districts"]]
+    assert support == [city_land.plot_count(f"support-team-{n}") for n in (1, 2, 3)] + [0]
+    assert all(n > 1000 for n in support[:3])
+    sales = [d["prepared"] for d in public["cities"][1]["districts"]]
+    assert all(n > 150 for n in sales)
 
 
 async def test_staff_report_counts_land_and_old_purchases(client, session, head, team):
     me = auth(await login(client, team.login))
-    await claim(client, me)
-    await buy(client, me, "house", *HOUSE)
+    await buy(client, me, "house", FIRST, 0, 0)
+    await buy(client, me, "square", FIRST, 1, 0)
     await make_user(session, login="loner-estate")
     boss = auth(await login(client, head.login))
     report = (await client.get(ADMIN + "/estates", headers=boss)).json()
     first = next(d for d in report["districts"] if d["id"] == "support-team-1")
-    assert first["estates"] == {"total": 72, "taken": 1} and first["buildings"] == 1
-    assert first["operators"] == 1 and first["construction"] and not first["needs_expansion"]
+    assert first["land"] == {
+        "plots": city_land.plot_count("support-team-1"),
+        "taken": 2,
+        "open_band": 1,
+    }
+    assert (first["buildings"], first["builders"], first["operators"]) == (2, 1, 1)
+    assert first["construction"]
     assert report["operators_without_district"] == 1
-    assert report["coins"]["buildings"] == 120 and report["legacy"]["buildings"] == 0
+    assert report["coins"] == {
+        "buildings": HOUSE_PRICE + SQUARE_PRICE,
+        "contributions": 0,
+        "refunded": 0,
+    }
+    assert report["legacy"]["buildings"] == 0
     assert (await client.get(ADMIN + "/estates", headers=me)).status_code == 403
 
 
 async def test_history_is_append_only(client, session, team):
     me = auth(await login(client, team.login))
-    await claim(client, me)
-    await buy(client, me, "house", *HOUSE)
-    assert await session.scalar(select(func.count()).select_from(CityEvent)) == 2
+    await buy(client, me, "house", FIRST, 0, 0)
+    assert await session.scalar(select(func.count()).select_from(CityEvent)) == 1
     with pytest.raises(DBAPIError):
         await session.execute(text("UPDATE city_events SET amount = 0"))
     await session.rollback()
@@ -743,3 +762,177 @@ async def test_an_older_form_without_the_pilot_switch_keeps_it(client, head, tea
     public = (await client.get(CITY + "/world", headers=boss)).json()
     assert public["cities"][0]["districts"][0]["construction"]
     assert not public["cities"][0]["districts"][1]["construction"]
+
+
+async def test_the_economy_tab_sets_land_and_building_prices(client, head):
+    boss = auth(await login(client, head.login))
+    economy = (await client.get(ADMIN + "/economy", headers=boss)).json()
+    economy.pop("catalogue"), economy.pop("can_edit")
+    assert economy["land"] == [60, 45, 30, 20, 10]
+    assert set(economy["estate"]) == {"square", "house", "park", "bigpark"}
+    for bad in ({"land": [60, 45]}, {"land": [60, 45, 30, 20, -1]}):
+        r = await client.put(ADMIN + "/economy", headers=boss, json={**economy, **bad})
+        assert r.status_code == 422, bad
+    # Parks gather themselves for free unless a fee is set; buying a square costs at least a coin.
+    fine = {**economy["estate"], "park": [0, 100], "bigpark": [5, 150, 250]}
+    r = await client.put(ADMIN + "/economy", headers=boss, json={**economy, "estate": fine})
+    assert r.status_code == 200, r.text
+    economy["revision"] = r.json()["revision"]
+    free_square = {**fine, "square": [0]}
+    r = await client.put(ADMIN + "/economy", headers=boss, json={**economy, "estate": free_square})
+    assert r.status_code == 422
+    # A form of the earlier version, without land prices, keeps them.
+    older = {k: v for k, v in economy.items() if k != "land"}
+    r = await client.put(ADMIN + "/economy", headers=boss, json=older)
+    assert r.status_code == 200 and r.json()["land"] == [60, 45, 30, 20, 10]
+
+
+def reset_module():
+    path = Path(__file__).resolve().parent.parent / "alembic/versions/20261001_city_land.py"
+    spec = importlib.util.spec_from_file_location("city_land_reset", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+async def test_the_land_reset_refunds_what_was_built_and_given_once(session, supervisor, operator):
+    """What the migration does with the estates built before the plots (20261001_city_land)."""
+    await fund(session, operator.id, 1000)
+    mate = await make_user(session, login="mate-reset", group_id=operator.group_id)
+    await fund(session, mate.id, 300)
+    # Built on the old estates: a house and its stage, as the old code paid for them.
+    for amount, op in ((120, "a1"), (180, "a2")):
+        await post_transaction(
+            session,
+            user_id=operator.id,
+            amount=-amount,
+            tx_type=TxType.CITY_BUILD,
+            reason="Мой район: Личный дом",
+            idempotency_key=f"city-op:{operator.id}:{op}",
+        )
+    # A legacy plot purchase near a training centre stays as it is.
+    await post_transaction(
+        session,
+        user_id=operator.id,
+        amount=-50,
+        tx_type=TxType.CITY_BUILD,
+        reason="Мой город",
+        idempotency_key=f"city-build:{operator.id}:academy-0",
+    )
+    house = CityObject(
+        district_id="support-team-1",
+        owner_id=operator.id,
+        family="house",
+        level=2,
+        state="placed",
+        module=2,
+        u=4,
+        v=8,
+        rotation=0,
+        source="purchase",
+        paid=300,
+    )
+    project = CityProject(
+        district_id="support-team-1",
+        family="fountain",
+        level=1,
+        module=0,
+        u=2,
+        v=2,
+        rotation=0,
+        size="main",
+        cost=300,
+        funded=0,
+        status="open",
+    )
+    session.add_all([house, project])
+    await session.flush()
+    session.add_all(
+        [
+            CityCell(district_id="support-team-1", module=2, u=4, v=8, object_id=house.id),
+            CityCell(district_id="support-team-1", module=0, u=2, v=2, project_id=project.id),
+            CityDistrictState(
+                district_id="support-team-1", hq_level=3, built_projects=4, open_band=2
+            ),
+        ]
+    )
+    given = []
+    for user, amount in ((operator, 40), (mate, 70)):
+        tx = await post_transaction(
+            session,
+            user_id=user.id,
+            amount=-amount,
+            tx_type=TxType.CITY_CONTRIBUTION,
+            reason="Проект района",
+            idempotency_key=f"city-op:{user.id}:c{amount}",
+        )
+        item = CityContribution(
+            project_id=project.id, user_id=user.id, amount=amount, transaction_id=tx.id
+        )
+        session.add(item)
+        given.append(item)
+    project.funded = 110
+    await session.commit()
+    before = {
+        a.user_id: (a.balance, a.total_earned, a.total_spent)
+        for a in await session.scalars(select(CoinAccount))
+    }
+    reset = reset_module().reset_estates
+    refunded = await session.run_sync(lambda s: reset(s.connection()))
+    await session.commit()
+    assert refunded == {operator.id: 120 + 180 + 40, mate.id: 70}
+    accounts = {
+        a.user_id: a
+        for a in await session.scalars(
+            select(CoinAccount).execution_options(populate_existing=True)
+        )
+    }
+    for user_id, amount in refunded.items():
+        balance, earned, total_spent = before[user_id]
+        account = accounts[user_id]
+        assert (account.balance, account.total_earned, account.total_spent) == (
+            balance + amount,
+            earned,
+            total_spent,
+        )
+    refunds = list(
+        await session.scalars(
+            select(CoinTransaction).where(CoinTransaction.tx_type == TxType.PURCHASE_REFUND)
+        )
+    )
+    assert sorted((t.user_id, t.amount, t.idempotency_key) for t in refunds) == sorted(
+        (u, a, f"city-land-reset:{u}") for u, a in refunded.items()
+    )
+    assert all(t.balance_after == accounts[t.user_id].balance for t in refunds)
+    contributions = await session.scalars(
+        select(CityContribution).execution_options(populate_existing=True)
+    )
+    assert all(c.refund_transaction_id for c in contributions)
+    states = await session.scalars(
+        select(CityObject.state).execution_options(populate_existing=True)
+    )
+    assert set(states) == {"archived"}
+    assert await session.scalar(select(func.count()).select_from(CityCell)) == 0
+    status = await session.scalar(
+        select(CityProject.status).execution_options(populate_existing=True)
+    )
+    assert status == "cancelled"
+    state = await session.scalar(
+        select(CityDistrictState).execution_options(populate_existing=True)
+    )
+    assert (state.hq_level, state.built_projects, state.open_band) == (1, 0, 1)
+    notes = await session.scalars(
+        select(Notification.user_id).where(Notification.title == "Районы начинаются заново")
+    )
+    assert sorted(notes) == sorted(refunded)
+    resets = await session.scalars(select(CityEvent.district_id).where(CityEvent.kind == "reset"))
+    assert list(resets) == ["support-team-1"]
+    # Run again (a retried deploy): nothing more comes back.
+    assert await session.run_sync(lambda s: reset(s.connection())) == {}
+    await session.commit()
+    count = await session.scalar(
+        select(func.count())
+        .select_from(CoinTransaction)
+        .where(CoinTransaction.tx_type == TxType.PURCHASE_REFUND)
+    )
+    assert count == 2
