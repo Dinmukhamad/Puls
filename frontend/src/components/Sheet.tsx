@@ -19,7 +19,7 @@ function syncBackground() {
   }
 }
 
-function registerSheet(overlay: HTMLElement) {
+export function registerSheet(overlay: HTMLElement) {
   if (sheetStack.length === 0) {
     previousBodyOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";

@@ -42,6 +42,9 @@ export function createCityRetention() {
           ...options, frame,
           onSelect: id => { next.selected = id; next.callbacks?.onSelect(id); },
           onView: view => next.callbacks?.onView(view),
+          onWorldPick: id => next.callbacks?.onWorldPick?.(id),
+          onArrival: id => next.callbacks?.onArrival?.(id),
+          onJourney: phase => next.callbacks?.onJourney?.(phase),
           onPlot: options.onPlot ? key => next.callbacks?.onPlot?.(key) : undefined,
           onSite: options.onSite ? key => next.callbacks?.onSite?.(key) : undefined,
           onQuest: options.onQuest ? slot => next.callbacks?.onQuest?.(slot) : undefined,
@@ -67,6 +70,8 @@ export function createCityRetention() {
       current.lease = lease; current.callbacks = options;
       mount.append(current.host, current.frame);
       if (reused) {
+        current.control.setDepartment(options.department ?? "support");
+        if (options.departmentWorld) current.control.setDepartmentWorld(options.departmentWorld);
         current.control.setLevels(options.levels, options.grown);
         current.control.setLabels(options.labels);
         if (options.mascot) current.control.setMascot(options.mascot);

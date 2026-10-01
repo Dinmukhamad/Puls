@@ -77,7 +77,9 @@ export function createCrowdRoutes(world: WorldData): CrowdRoute[] {
   });
   const clear = (p: Point, margin = CLEARANCE) => {
     const radius = Math.hypot(p.x, p.z);
-    if (!world.land.islets.some(island => Math.hypot(p.x - island.x, p.z - island.z) <= island.r - margin)
+    const rect = world.land.rectangle;
+    const rectangleLand = rect && Math.abs(p.x) < rect.width / 2 - margin && Math.abs(p.z) < rect.depth / 2 - margin && radius > rect.lake + margin;
+    if (!rectangleLand && !world.land.islets.some(island => Math.hypot(p.x - island.x, p.z - island.z) <= island.r - margin)
       && !world.land.annuli.some(land => radius >= land.inner + margin && radius <= land.outer - margin)) return false;
     if (world.roads.rings.some(ring => Math.abs(radius - ring) < 1 + margin)) return false;
     if (roads.some(road => segmentDistance(p.x, p.z, road) < 1.35 + margin)) return false;

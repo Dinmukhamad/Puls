@@ -36,7 +36,7 @@ function fixture(t) {
     const canvas = new Element('canvas'), calls = [];
     host.append(canvas);
     const raw = Object.fromEntries([
-      'dispose', 'setActive', 'setLevels', 'setLabels', 'setMascot', 'setPlots',
+      'setDepartment', 'setDepartmentWorld', 'focusWorld', 'travelTo', 'skipTravel', 'dispose', 'setActive', 'setLevels', 'setLabels', 'setMascot', 'setPlots',
       'setSites', 'setQuests', 'setTimeOfDay', 'setControls', 'select', 'setTraffic',
       'focusMascot', 'focusPlot', 'focusSite', 'focusQuest', 'zoom', 'rotate', 'tilt', 'reset',
     ].map(name => [name, (...args) => calls.push([name, ...args])]));
@@ -52,7 +52,7 @@ function fixture(t) {
 
 function page(overrides = {}) {
   const events = [];
-  const callbacks = Object.fromEntries(['onSelect', 'onView', 'onPlot', 'onSite', 'onQuest', 'onReady', 'onLost', 'onRestored', 'onProgress']
+  const callbacks = Object.fromEntries(['onWorldPick', 'onArrival', 'onJourney', 'onSelect', 'onView', 'onPlot', 'onSite', 'onQuest', 'onReady', 'onLost', 'onRestored', 'onProgress']
     .map(name => [name, (...args) => events.push([name, ...args])]));
   return {
     events,
@@ -61,11 +61,28 @@ function page(overrides = {}) {
 }
 
 function emitAll(options) {
+  options.onWorldPick?.('station'); options.onArrival?.('sales'); options.onJourney?.('departing');
   options.onSelect('driver');
   options.onView({ azimuth: 2, polar: 1, distance: 40, target: [1, 2, 3] });
   options.onPlot?.('plot-1'); options.onSite?.('site-1'); options.onQuest?.(1);
   options.onProgress?.(.7); options.onLost(); options.onRestored?.(); options.onReady();
 }
+
+test('returning to the other department reuses the renderer and forwards journey events only to the current page', t => {
+  const { acquire, engines } = fixture(t), firstPage = page({ department: 'support' });
+  const first = acquire({ options: firstPage.options }), engine = engines[0];
+  first.release();
+  engine.options.onJourney('arriving'); engine.options.onArrival('sales');
+  assert.deepEqual(firstPage.events, []);
+  const config = { revision: 2, cities: [] }, nextPage = page({ department: 'sales', departmentWorld: config });
+  const next = acquire({ options: nextPage.options });
+  assert.equal(next.reused, true); assert.equal(engines.length, 1);
+  assert.deepEqual(engine.called('setDepartment').at(-1), ['setDepartment', 'sales']);
+  assert.deepEqual(engine.called('setDepartmentWorld').at(-1), ['setDepartmentWorld', config]);
+  engine.options.onWorldPick('sales-team-1'); engine.options.onJourney('departing'); engine.options.onArrival('support');
+  assert.deepEqual(nextPage.events, [['onWorldPick', 'sales-team-1'], ['onJourney', 'departing'], ['onArrival', 'support']]);
+  assert.deepEqual(firstPage.events, []);
+});
 
 test('returning to the same city keeps the engine, canvas and frame instead of rebuilding', t => {
   const { acquire, engines } = fixture(t), firstMount = new Element(), secondMount = new Element();
@@ -125,7 +142,7 @@ test('reattachment refreshes progress and callbacks but keeps traffic and an unc
   assert.deepEqual(engine.called('setLevels'), [['setLevels', newPage.options.levels, ['crm']]]);
   emitAll(engine.options);
   assert.deepEqual(oldPage.events, []);
-  assert.deepEqual(newPage.events.map(event => event[0]), ['onSelect', 'onView', 'onPlot', 'onSite', 'onQuest', 'onProgress', 'onLost', 'onReady', 'onRestored', 'onReady']);
+  assert.deepEqual(newPage.events.map(event => event[0]), ['onWorldPick', 'onArrival', 'onJourney', 'onSelect', 'onView', 'onPlot', 'onSite', 'onQuest', 'onProgress', 'onLost', 'onReady', 'onRestored', 'onReady']);
 });
 
 test('selection changes from both the page and the canvas are remembered across visits', t => {

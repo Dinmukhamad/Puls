@@ -10,6 +10,7 @@ from app.models.city import (
     CityQuest,
     CitySettings,
     CitySituations,
+    CityWorld,
 )
 from app.models.coin import CoinTransaction
 from app.models.contest import (

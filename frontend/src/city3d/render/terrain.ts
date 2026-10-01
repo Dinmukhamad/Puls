@@ -116,6 +116,22 @@ export function createTerrain(ctx: CityContext): Terrain {
 
 /** Land rings, islets, the ground beyond, the water floor, the plaza, the promenade and the parks. */
 function land(world: WorldData, flat: Mesher, solid: Mesher) {
+  if (world.land.rectangle) {
+    const { width, depth, lake } = world.land.rectangle;
+    const shape = new THREE.Shape();
+    shape.moveTo(-width / 2, -depth / 2); shape.lineTo(width / 2, -depth / 2);
+    shape.lineTo(width / 2, depth / 2); shape.lineTo(-width / 2, depth / 2); shape.closePath();
+    const hole = new THREE.Path(); hole.absarc(0, 0, lake, 0, Math.PI * 2, true); shape.holes.push(hole);
+    flat.color(GRASS).add(new THREE.ShapeGeometry(shape, 96), box.makeRotationX(-Math.PI / 2).setPosition(0, TOP, 0));
+    flat.color(FLOOR); ring(flat, 0, lake, BED);
+    solid.color(STONE); wall(solid, lake, FOOT, TOP, false);
+    flat.color(RIM); ring(flat, lake, lake + 2, TOP + .01);
+    for (const p of world.land.platforms ?? []) {
+      solid.color(STONE); slab(solid, p.x, p.z, 0, p.width, p.depth, FOOT, TOP);
+      flat.color(PLAZA); mark(flat, p.x, p.z, 0, p.width, p.depth, TOP + .01);
+    }
+    return;
+  }
   const { spec } = world, water = world.water.annuli, near = (a: number, b: number) => Math.abs(a - b) < .75;
   const wet = (r: number) => water.some(w => near(w.inner, r) || near(w.outer, r));
   // The flat land ends at the horizon, where the hills and mountains of render/mountains.ts begin.

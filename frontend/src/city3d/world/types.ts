@@ -23,7 +23,7 @@ export interface DistrictSlot {
 }
 
 export interface WorldSpec {
-  name: "v1" | "x4";
+  name: "v1" | "x4" | "sales";
   seed: number;
   /** Radius of the plaza disc and of the plaza islet. */
   plaza: number; plazaIslet: number;
@@ -94,7 +94,9 @@ export interface WorldData {
   spec: WorldSpec;
   districts: { id: string; x: number; z: number; color: string; soon: boolean }[];
   /** Land: annuli (ring land around the lagoon, mainland) and round islets (plaza, districts). */
-  land: { annuli: { inner: number; outer: number }[]; islets: { x: number; z: number; r: number }[] };
+  land: { annuli: { inner: number; outer: number }[]; islets: { x: number; z: number; r: number }[];
+    rectangle?: { width: number; depth: number; lake: number };
+    platforms?: { x: number; z: number; width: number; depth: number }[] };
   /** Water surfaces: lagoon annulus and canal annulus; the sea beyond is ground-coloured land in v1. */
   water: { annuli: { inner: number; outer: number }[] };
   roads: {

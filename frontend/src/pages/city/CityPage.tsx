@@ -1,3 +1,6 @@
+import { cityWorld, SALES_RESOURCES, type DepartmentId } from "../../api/cityWorld";
+import { CityWorldPanel, CityJourney } from "./CityWorldPanel";
+import type { JourneyPhase } from "../../city3d/types";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +25,13 @@ import { DEFAULT_GUIDE, guideName, guideText } from "../../guide";
 export function CityPage() {
   const { user } = useAuth(), client = useQueryClient();
   const [params, setParams] = useSearchParams();
+  const worldQuery = useQuery({ queryKey: ["city-world"], queryFn: cityWorld.get, refetchOnWindowFocus: true });
+  const department: DepartmentId = params.get("city") === "sales" ? "sales" : params.get("city") === "support" || params.has("operator") || params.has("district") ? "support" : worldQuery.data?.home_city ?? "support";
+  const [worldSelected, setWorldSelected] = useState<string | null>(null);
+  const [worldAction, setWorldAction] = useState<{ kind: "travel" | "skip" | "focus"; target: string; at: number }>();
+  const [journey, setJourney] = useState<JourneyPhase>(null), [destination, setDestination] = useState<DepartmentId>("sales");
+  function visit(id: DepartmentId) { const next = new URLSearchParams(params); next.set("city", id); setParams(next); setWorldSelected(null); }
+  function pickWorld(id: string) { setWorldSelected(id); if (id !== "world") setWorldAction({ kind: "focus", target: id, at: Date.now() }); }
   const operatorId = user?.role !== "operator" && /^\d+$/.test(params.get("operator") ?? "") ? Number(params.get("operator")) : null;
   const query = useQuery({ queryKey: ["city", operatorId ?? "self"], queryFn: () => operatorId ? city.operator(operatorId) : city.own(), refetchInterval: 15000, refetchOnWindowFocus: true });
   const [reward, setReward] = useState<CityReward | null>(null);
@@ -73,8 +83,8 @@ export function CityPage() {
   const districtPlots = data.plots.filter(p => p.district === selected.id);
   const freePlot = districtPlots.find(p => p.unlocked && !p.item);
   function openPlot(key: string) { build.reset(); setPlotKey(key); }
-  return <div className="city-immersive">
-    <CityMap sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+  return <div className="city-immersive" data-department={department}>
+    <CityMap department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
     <header className="city-hud glass glass--regular">
       <div className="city-hud__level">
@@ -84,11 +94,11 @@ export function CityPage() {
           <div className="city-meter" role="progressbar" aria-label="Опыт до следующего уровня города" aria-valuemin={0} aria-valuemax={data.level_target} aria-valuenow={data.level_progress}><span style={{width:`${data.level_progress/data.level_target*100}%`}} /></div>
         </div>
       </div>
-      <div className="city-hud__stat"><strong>{completed}<small> / {total}</small></strong><span className="city-hud__label">миссий пройдено</span></div>
+      <div className="city-hud__stat"><strong>{completed}<small> / {total}</small></strong><span className="city-hud__label">{department === "sales" ? "миссий в первом городе" : "миссий пройдено"}</span></div>
       {!data.preview && <div className="city-hud__coins"><span className="city-coin" aria-hidden="true">◈</span><span className="city-hud__stat"><strong>{data.balance.toLocaleString("ru-RU")}</strong><span className="city-hud__label">коинов в кошельке</span></span></div>}
       <nav className="city-hud__links" aria-label="Обучение">
-        {data.quests && data.quests.items.length > 0 && <button type="button" className="city-group-button" data-open={data.quests.items.some(q => !q.answered) || undefined} onClick={() => { const next = data.quests!.items.find(q => !q.answered) ?? data.quests!.items[0]; answer.reset(); setQuestSlot(next.slot); if (!next.answered) setQuestFocus({ slot: next.slot, at: Date.now() }); }} aria-label={`Задания дня: выполнено ${data.quests.items.filter(q => q.answered).length} из ${data.quests.items.length}`}><span aria-hidden="true">❗</span><span className="city-hud__wide">Задания</span> {data.quests.items.filter(q => q.answered).length}/{data.quests.items.length}</button>}
-        {data.group && <button type="button" className="city-group-button" onClick={() => setGroupOpen(true)} aria-label={`Город группы: ${data.group.name}`}><span aria-hidden="true">🏗️</span><span className="city-hud__wide">Группа</span></button>}
+        {department === "support" && data.quests && data.quests.items.length > 0 && <button type="button" className="city-group-button" data-open={data.quests.items.some(q => !q.answered) || undefined} onClick={() => { const next = data.quests!.items.find(q => !q.answered) ?? data.quests!.items[0]; answer.reset(); setQuestSlot(next.slot); if (!next.answered) setQuestFocus({ slot: next.slot, at: Date.now() }); }} aria-label={`Задания дня: выполнено ${data.quests.items.filter(q => q.answered).length} из ${data.quests.items.length}`}><span aria-hidden="true">❗</span><span className="city-hud__wide">Задания</span> {data.quests.items.filter(q => q.answered).length}/{data.quests.items.length}</button>}
+        {department === "support" && data.group && <button type="button" className="city-group-button" onClick={() => setGroupOpen(true)} aria-label={`Город группы: ${data.group.name}`}><span aria-hidden="true">🏗️</span><span className="city-hud__wide">Группа</span></button>}
         {user?.role !== "operator" && <Link to="/admin/learning/city" aria-label="Управление миссиями"><span aria-hidden="true">⚙︎</span><span className="city-hud__wide">Миссии</span></Link>}
         <Link to="/training" aria-label="Материалы обучения"><span aria-hidden="true">📚</span><span className="city-hud__wide">Материалы</span></Link>
       </nav>
@@ -97,12 +107,13 @@ export function CityPage() {
     <div className="city-notes">
       {data.inspecting && <p className="city-note glass glass--regular">Город оператора: <strong>{data.full_name}</strong><Link to="/admin/learning/city">← К участникам</Link></p>}
       {data.preview && !data.inspecting && <p className="city-note glass glass--regular">Предпросмотр для сотрудника · без наград</p>}
+      {worldQuery.isError && <p className="city-note glass glass--regular" role="alert">Не удалось загрузить города и районы.<button type="button" onClick={() => worldQuery.refetch()}>Повторить</button></p>}
       {query.isError && <p className="city-note glass glass--regular" role="alert">Не удалось обновить город.<button type="button" onClick={() => query.refetch()}>Повторить</button></p>}
       {(needsGuide || guideEditing) && <CityGuideSetup onClose={needsGuide ? undefined : () => setGuideEditing(false)} />}
       {showControls && <CityControlsSetup value={controls} onPick={setControlsPreview} onClose={closeControls} cancellable={!needsControls} />}
     </div>
 
-    <aside className="city-mission glass glass--regular" data-expanded={expanded || undefined} aria-label={`Район «${selected.name}»`}>
+    {department === "support" && <><aside className="city-mission glass glass--regular" data-expanded={expanded || undefined} aria-label={`Район «${selected.name}»`}>
       <button type="button" className="city-mission__handle" aria-expanded={expanded} aria-controls="city-mission-body" onClick={() => setExpanded(value => !value)}>
         <span aria-hidden="true" /><span className="sr-only">{expanded ? "Свернуть описание миссии" : "Развернуть описание миссии"}</span>
       </button>
@@ -141,7 +152,10 @@ export function CityPage() {
       </div>
     </aside>
 
-    <CitySkills labels={labels} selected={selected.id} onSelect={selectDistrict} />
+    <CitySkills labels={labels} selected={selected.id} onSelect={selectDistrict} /></>}
+    {department === "sales" && <aside className="city-sales-info glass glass--regular"><span className="city-eyebrow">ОТДЕЛ ПРОДАЖ</span><h2>{worldQuery.data?.cities.find(c => c.id === "sales")?.name ?? "ОП"}</h2><p>Учебный кампус у озера. Десять зданий зарезервированы для ресурсов отдела продаж.</p><button className="city-secondary" onClick={() => pickWorld("world")}>Районы и вокзал →</button><div className="city-sales-resources">{SALES_RESOURCES.map((name, i) => <button key={name} title={name} aria-label={name} onClick={() => pickWorld(`sales-resource-${String(i + 1).padStart(2, "0")}`)}>{i + 1}</button>)}</div></aside>}
+    {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }} />}
+    <CityJourney phase={journey} destination={worldQuery.data?.cities.find(c => c.id === destination)?.name ?? destination} onSkip={() => setWorldAction({ kind: "skip", target: destination, at: Date.now() })} />
 
     {reward && <Sheet title={reward.already_claimed ? "Эта награда уже получена" : "Миссия пройдена"} onClose={() => setReward(null)} size="s"><div className="city-celebration"><div className="city-medal" aria-hidden="true">✦</div><h2>{reward.title}</h2><p>{reward.already_claimed ? "Прогресс сохранён. Повторное начисление не требуется." : "Твой город стал немного больше. Следующая миссия уже ждёт."}</p><div className="city-rewards"><span>+{reward.xp} XP</span>{reward.coins>0&&<span>+{reward.coins} коинов</span>}</div><button className="city-action" onClick={()=>setReward(null)}>Вернуться в город →</button></div></Sheet>}
     {plotKey && <Sheet title={`Участок · ${data.districts.find(d => d.id === data.plots.find(p => p.key === plotKey)?.district)?.name ?? "район"}`} onClose={() => setPlotKey(null)}><CityCatalogue data={data} pending={build.isPending} error={build.isError ? build.error.message : null} onBuild={item => build.mutate({ plot: plotKey, item })} /></Sheet>}

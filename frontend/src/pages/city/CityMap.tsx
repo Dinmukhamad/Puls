@@ -5,6 +5,8 @@ import type { CityControl, CityControlScheme, CityLabelInfo, CityMascot, TimeOfD
 import { CONTROL_SCHEMES } from "./cityControls";
 import { districtLevel, grownDistricts } from "./cityLevels";
 import { useAuth } from "../../auth/AuthContext";
+import type { CityWorld, DepartmentId } from "../../api/cityWorld";
+import type { JourneyPhase } from "../../city3d/types";
 import { retainedCity } from "./retainedCity";
 
 /**
@@ -12,7 +14,7 @@ import { retainedCity } from "./retainedCity";
  * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
  * seen, so an upgrade is celebrated once.
  */
-export function CityMap({ sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus }: { sceneIdentity: string; districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
+export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number }; sceneIdentity: string; districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
   /** The operator's plots; `onPlot` (when the viewer may build) opens the catalogue; `plotFocus` flies to a plot when it changes. */
   plots?: CityPlot[]; onPlot?: (key: string) => void; plotFocus?: { key: string; at: number };
   /** The group's quarters (null: no group, all built); `onSite` opens the group panel; `siteFocus` flies to a quarter. */
@@ -23,6 +25,8 @@ export function CityMap({ sceneIdentity, districts, missions, labels, selected, 
   controls?: CityControlScheme; onControls?: () => void; controlsOpen?: boolean;
   /** Whether the 3D map works: the page waits for it before offering the camera choice. */
   onStatus?: (status: "loading" | "ready" | "failed") => void }) {
+  const worldRef = useRef({ department, departmentWorld, onWorldPick, onArrival, onJourney });
+  worldRef.current = { department, departmentWorld, onWorldPick, onArrival, onJourney };
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
   const mount = useRef<HTMLDivElement>(null), host = useRef<HTMLDivElement>();
   const control = useRef<CityControl>();
@@ -77,6 +81,8 @@ export function CityMap({ sceneIdentity, districts, missions, labels, selected, 
         owner, key: JSON.stringify([sceneIdentity, world, webGL, showStats, canBuild, canQuest]),
         mount: mount.current, traffic: trafficRef.current, create: createCity,
         options: {
+        department: worldRef.current.department, departmentWorld: worldRef.current.departmentWorld,
+        onWorldPick: id => worldRef.current.onWorldPick?.(id), onArrival: id => worldRef.current.onArrival?.(id), onJourney: phase => worldRef.current.onJourney?.(phase),
         world, forceWebGL: webGL, stats: showStats, timeOfDay: timeRef.current, controls: controlsRef.current,
         plots: plotsRef.current.map(({ key, unlocked, item }) => ({ key, unlocked, item })), onPlot: canBuild ? key => { if (!cancelled) plotRef.current?.(key); } : undefined,
         sites: sitesRef.current, onSite: key => { if (!cancelled) siteRef.current?.(key); },
@@ -94,6 +100,14 @@ export function CityMap({ sceneIdentity, districts, missions, labels, selected, 
     return () => { cancelled = true; release?.(); control.current = undefined; host.current = undefined; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- live server state updates below; only a different scene/capability creates a runtime
   }, [owner, sceneIdentity, world, webGL, showStats, canBuild, canQuest]);
+  useEffect(() => { control.current?.setDepartment(department); }, [department]);
+  useEffect(() => { if (departmentWorld) control.current?.setDepartmentWorld(departmentWorld); }, [departmentWorld]);
+  useEffect(() => {
+    if (!worldAction) return;
+    if (worldAction.kind === "travel") control.current?.travelTo(worldAction.target as DepartmentId);
+    else if (worldAction.kind === "skip") control.current?.skipTravel();
+    else control.current?.focusWorld(worldAction.target);
+  }, [worldAction]);
   useEffect(() => { if (control.current) control.current.setLevels(levelsRef.current, growthRef.current()); }, [levelKey]);
   useEffect(() => { control.current?.setQuests(JSON.parse(questsKey)); }, [questsKey]);
   useEffect(() => { if (questFocus) control.current?.focusQuest(questFocus.slot); }, [questFocus?.slot, questFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -127,7 +141,7 @@ export function CityMap({ sceneIdentity, districts, missions, labels, selected, 
     {live && <span className="city-map-hint" key={controls}>{CONTROL_SCHEMES[controls].hint}</span>}
     {!failed && <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="vertical">
       <button type="button" className="city-time-toggle" aria-label={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} title={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} aria-pressed={timeOfDay === "night"} onClick={() => setTimeOfDay(value => value === "day" ? "night" : "day")}><span aria-hidden="true">{timeOfDay === "day" ? "☀" : "☾"}</span><small>{timeOfDay === "day" ? "День" : "Ночь"}</small></button>
-      <button type="button" aria-label="Посмотреть помощника" onClick={() => control.current?.focusMascot()}>♙</button>
+      <button type="button" aria-label="Посмотреть помощника" disabled={department !== "support"} onClick={() => control.current?.focusMascot()}>♙</button>
       {onControls && <button type="button" className="city-controls-button" aria-label={`Управление камерой: ${CONTROL_SCHEMES[controls].title.toLowerCase()}`} title="Управление камерой" aria-expanded={controlsOpen} aria-controls={controlsOpen ? "city-controls-setup" : undefined} onClick={onControls}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="6" /><path d="M12 3v6M6.5 9h11" /><circle cx="12" cy="6.5" r=".9" /></svg>
       </button>}

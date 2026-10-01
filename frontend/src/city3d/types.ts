@@ -4,6 +4,8 @@
 import type { DistrictId } from "../api/city";
 import type { BuildingKey } from "./world/plots";
 import type { SiteStage } from "./world/sites";
+import type { CityWorld, DepartmentId } from "../api/cityWorld";
+export type JourneyPhase = "departing" | "tunnel" | "arriving" | null;
 
 export interface CityView { azimuth: number; polar: number; distance: number; target: [number, number, number] }
 export interface CityLabelInfo { id: DistrictId; name: string; status: string; icon: string; soon: boolean; reward: boolean; level: number }
@@ -19,6 +21,11 @@ export interface CityQuestInfo { slot: number; giver: string; answered: boolean 
 export interface CityPlotInfo { key: string; unlocked: boolean; item: BuildingKey | null }
 
 export interface CityOptions {
+  department?: DepartmentId;
+  departmentWorld?: CityWorld;
+  onWorldPick?: (id: string) => void;
+  onArrival?: (id: DepartmentId) => void;
+  onJourney?: (phase: JourneyPhase) => void;
   levels: Record<string, number>; selected: DistrictId; view?: CityView; labels: CityLabelInfo[];
   /** Initial activity while the renderer is being prepared asynchronously. */
   active?: boolean;
@@ -52,6 +59,11 @@ export interface CityOptions {
 }
 
 export interface CityControl {
+  setDepartment(id: DepartmentId): void;
+  setDepartmentWorld(config: CityWorld): void;
+  focusWorld(id: string): void;
+  travelTo(id: DepartmentId): void;
+  skipTravel(): void;
   setTimeOfDay(mode: TimeOfDay): void;
   /** Pauses a retained scene while its page is hidden. */
   setActive(active: boolean): void;

@@ -15,8 +15,29 @@ from app.schemas.city import (
     SituationsInput,
 )
 from app.services import city, city_economy, city_group, city_quests
+from app.services import city_world
+from app.schemas.city_world import WorldInput
 
 router = APIRouter(tags=["Мой город"])
+
+
+@router.get("/learning/city/world")
+async def department_world(session: SessionDep, user: CurrentUser, response: Response):
+    response.headers["Cache-Control"] = "private, no-store"
+    return await city_world.world(session, user)
+
+
+@router.get("/admin/learning/city/world")
+async def department_settings(session: SessionDep, user: LearningReader, response: Response):
+    response.headers["Cache-Control"] = "private, no-store"
+    config = await city_world.settings(session)
+    return {**config, "groups": await city_world.directory(session),
+            "can_edit": user.role in (Role.HEAD, Role.ADMIN)}
+
+
+@router.put("/admin/learning/city/world")
+async def configure_world(body: WorldInput, session: SessionDep, user: HeadUser):
+    return await city_world.save(session, user, body)
 
 
 @router.get("/learning/city")

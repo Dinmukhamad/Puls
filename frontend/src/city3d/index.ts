@@ -33,6 +33,10 @@ import { createMountains, type Mountains } from "./render/mountains";
 import { createPlots, type Plots } from "./systems/plots";
 import { createSites, type Sites } from "./systems/sites";
 import { createQuests, type Quests } from "./systems/quests";
+import { createDepartmentWorld, type DepartmentWorld } from "./systems/departmentWorld";
+import { teamPositions } from "./world/sales";
+import type { CityWorld, DepartmentId } from "../api/cityWorld";
+import type { CityView, JourneyPhase } from "./types";
 import "./city3d.css";
 
 /** Static shadows are redrawn only once the camera has rested this long: culling changes casters while it moves. */
@@ -44,13 +48,27 @@ interface Parts {
   sky: Sky; terrain: Terrain; water: Water; districts: Districts; mascot: Mascot; labels: Labels; traffic: Traffic; crowd: Crowd;
   catalogue?: Catalogue; pools?: InstancePools; observer: ResizeObserver; night: Night; lamps: LampLights; mountains: Mountains; plots: Plots; sites: Sites; quests: Quests;
   resize: () => void;
+  departments?: DepartmentWorld;
 }
 
 export function createCity(host: HTMLDivElement, options: CityOptions): CityControl {
   const mobile = host.clientWidth < 600;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const world = generateWorld(options.world === "x4" ? WORLD_X4 : WORLD_V1);
+  // Keep future team headquarters clear of decorative houses. Existing purchases/sites remain untouched.
+  if (options.world === "x4") {
+    const reserved = teamPositions(12, true, world.roads.streets);
+    world.placements = world.placements.filter(p => reserved.every(r => Math.hypot(p.x - r.x, p.z - r.z) > 10));
+    world.surfaces = world.surfaces.filter(p => reserved.every(r => Math.hypot(p.x - r.x, p.z - r.z) > 10));
+  }
   let disposed = false, parts: Parts | null = null, forceWebGL = !!options.forceWebGL, everReady = false;
+  let department: DepartmentId = "support", desiredDepartment = options.department ?? "support", departmentConfig = options.departmentWorld;
+  const views: Partial<Record<DepartmentId, CityView>> = {};
+  let journey: { to: DepartmentId; from: DepartmentId; elapsed: number; last?: number; swapped: boolean } | null = null;
+  let phase: JourneyPhase = null;
+  let worldMoved = true;
+  host.dataset.department = department;
+  const notifyJourney = (next: JourneyPhase) => { if (phase !== next) { phase = next; options.onJourney?.(next); } };
   let active = options.active ?? true, generation = 0;
   const activityWaiters = new Set<() => void>();
   const wake = () => { activityWaiters.forEach(done => done()); activityWaiters.clear(); };
@@ -66,13 +84,28 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const night = timeOfDay === "night";
     p.sky.setTimeOfDay(night ? 22 : 10.5); p.water.setNight(night); p.districts.setNight(night);
     p.night.set(night, reducedMotion);
+    p.departments?.setNight(night);
     host.dataset.timeOfDay = timeOfDay;
   };
   function focusDistrict(id: DistrictId) {
     selected = id;
-    when(p => { p.districts.select(id); p.labels.setSelected(id); const d = world.districts.find(item => item.id === id); if (d) p.rig.focus(d.x, d.z); });
+    when(p => { p.districts.select(id); p.labels.setSelected(id); const d = world.districts.find(item => item.id === id); if (d && department === "support") p.rig.focus(d.x, d.z); });
   }
   const choose = (id: DistrictId) => { focusDistrict(id); options.onSelect(id); };
+  function switchDepartment(next: DepartmentId, saveView = true) {
+    desiredDepartment = next;
+    const p = parts; if (!p?.departments || next === department) return;
+    if (saveView) views[department] = p.rig.currentView();
+    p.departments.show(next); department = next; host.dataset.department = next; worldMoved = true;
+    p.rig.animateTo(views[next] ?? { target: [0, 0, 0], distance: next === "sales" ? 160 : 90, azimuth: .7, polar: .82 }, 0);
+    if (next === "support") p.pools?.update();
+  }
+  function finishJourney() {
+    if (!journey || !parts) return;
+    const to = journey.to; journey = null; switchDepartment(to, false);
+    parts.rig.animateTo(views[to] ?? { target: [0, 0, 0], distance: to === "sales" ? 160 : 90, azimuth: .7, polar: .82 }, 0);
+    parts.departments?.railway(0); notifyJourney(null); options.onArrival?.(to);
+  }
 
   async function start() {
     const run = ++generation;
@@ -118,12 +151,12 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const labelLayer = createLabels(ctx, { anchors: districts.anchors, mascotAnchor: mascotSystem.nameAnchor, onSelect: choose });
     // The view may go out to the outer ring road; the shadow map follows it there.
     const rig = createCameraRig(camera, {
-      dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], reach: world.spec.roadRings[world.spec.roadRings.length - 1],
+      dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], reach: world.radius + 20,
       frame: options.frame, view: options.view, controls, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2], view.distance); options.onView(view); },
     });
     const first = rig.currentView(); sky.followView(first.target[0], first.target[2], first.distance); sky.setViewDistance(first.distance);
     rig.setActive(active);
-    const picker = createPicker(canvas, camera, () => districts.pickables, { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) });
+    const picker = createPicker(canvas, camera, () => department === "support" && !journey ? districts.pickables : [], { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) });
     const post = createPost(ctx);
     const stats = createStats({ renderer, backend, host, visible: !!options.stats, quality, userIdKnown: true, gpu: handle.gpu, extra: () => { const s = parts?.pools?.stats(); return s ? `copies ${s.drawn}/${s.copies} · pools ${s.drawCalls} calls` : "loading models"; } });
 
@@ -143,16 +176,34 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       onGap: (gap, now) => quality.frame(gap, now),
       render(dt, now) {
         stats.beginFrame();
-        if (rig.update(now)) { lastMove = now; sky.setViewDistance(rig.currentView().distance); moveCallbacks.forEach(cb => cb()); }
+        if (journey && parts?.departments) {
+          // Keep the trip short on low-FPS PCs, but don't jump after a hidden-tab pause.
+          journey.elapsed += journey.last === undefined ? dt : Math.min(.25, Math.max(0, (now - journey.last) / 1000));
+          journey.last = now;
+          if (journey.elapsed < 3.4) {
+            const point = parts.departments.railway(journey.elapsed / 3.4);
+            rig.animateTo({ target: [point.x, point.y, point.z], distance: 30, polar: 1.03, azimuth: department === "support" ? -.5 : .8 }, 0);
+            notifyJourney(journey.elapsed > 2.9 ? "tunnel" : "departing");
+          } else if (!journey.swapped) {
+            journey.swapped = true; switchDepartment(journey.to, false); notifyJourney("arriving");
+            const point = parts.departments.railway(0);
+            rig.animateTo({ target: [point.x, point.y, point.z], distance: 55, polar: 1.0 }, 0);
+            rig.animateTo(views[journey.to] ?? { target: [0, 0, 0], distance: journey.to === "sales" ? 160 : 90, azimuth: .7, polar: .82 }, 1600);
+          } else if (journey.elapsed > 5.2) finishJourney();
+        }
+        const moved = rig.update(now) || worldMoved || !!journey;
+        worldMoved = false;
+        if (moved) { lastMove = now; sky.setViewDistance(rig.currentView().distance); if (department === "support") moveCallbacks.forEach(cb => cb()); }
         night.step(dt);
-        frameCallbacks.forEach(cb => cb(dt, now));
+        if (department === "support") frameCallbacks.forEach(cb => cb(dt, now));
+        parts?.departments?.frame(dt, now, moved);
         if (shadowWanted && sun && now - lastMove > SHADOW_REST_MS) { shadowWanted = false; requestShadowRedraw(sun); }
         post.render();
         stats.endFrame();
         if (!ready && !loading) {
           ready = true; everReady = true; stats.markFirstFrame(); options.onProgress?.(1); options.onReady();
           const grown = districts.startGrowth(), d = grown ? world.districts.find(item => item.id === grown) : null;
-          if (d) rig.focus(d.x, d.z, 48);
+          if (d && department === "support") rig.focus(d.x, d.z, 48);
         }
       },
     });
@@ -172,7 +223,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
 
     // Models: the Kenney kits with their generated LOD copies, then the instance pools and catalogue cars.
     try {
-      const models = await loadCatalogueModels(LOD_FILES);
+      // The procedural catalogue, stations and campus also work when optional model downloads fail.
+      const models = await loadCatalogueModels(LOD_FILES).catch(() => new Map());
       while (!active && current(run)) await activityChanged();
       if (!current(run)) { disposeModels(models); return; }
       const catalogue = createCatalogue(models, night);
@@ -180,12 +232,16 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       parts.pools = createInstancePools(ctx, catalogue, world.placements);
       parts.plots.setCatalogue(catalogue); parts.sites.setCatalogue(catalogue);
       traffic.setVehicles(models);
+      parts.departments = createDepartmentWorld(ctx, catalogue, models, id => options.onWorldPick?.(id));
+      if (departmentConfig) parts.departments.setConfig(departmentConfig);
+      parts.departments.setTraffic(trafficOn); parts.departments.setNight(timeOfDay === "night");
+      department = "support"; switchDepartment(desiredDepartment); parts.departments.show(department);
       // Every pool, near and far, has its shaders built before the city shows, so coming closer never
       // stalls or pops (at most 8 s; the renderer builds whatever is left on first use).
       await Promise.race([renderer.compileAsync(scene, camera).catch(() => undefined), new Promise(done => setTimeout(done, 8000))]);
       while (!active && current(run)) await activityChanged();
       if (!current(run)) return;
-    } catch { /* The city still shows terrain, landmarks and taxis. */ }
+    } catch { options.onLost(); return; }
     loading = false; shadowWanted = true;
   }
 
@@ -193,6 +249,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     generation++; wake();
     const p = parts; parts = null; if (!p) return;
     p.loop.dispose(); p.observer.disconnect(); p.picker.dispose(); p.rig.dispose(); p.stats.dispose(); p.quality.dispose();
+    p.departments?.dispose();
     p.labels.dispose(); p.plots.dispose(); p.sites.dispose(); p.quests.dispose(); p.crowd.dispose(); p.traffic.dispose(); p.mascot.dispose(); p.districts.dispose(); p.pools?.dispose(); p.catalogue?.dispose();
     p.lamps.dispose(); p.mountains.dispose(); p.water.dispose(); p.terrain.dispose(); p.sky.dispose(); p.post.dispose(); p.handle.dispose();
   }
@@ -200,9 +257,19 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   void start().catch(() => { if (!disposed) options.onLost(); });
 
   return {
+    setDepartment(id) { if (journey) { journey = null; notifyJourney(null); } switchDepartment(id); },
+    setDepartmentWorld(config: CityWorld) { departmentConfig = config; parts?.departments?.setConfig(config); },
+    focusWorld(id) { const point = parts?.departments?.point(id); if (point) parts?.rig.focusPoint([point.x, point.y, point.z], id === "station" ? 38 : 46, .9); },
+    travelTo(id) {
+      if (!parts?.departments || !everReady || journey || id === department) return;
+      views[department] = parts.rig.currentView(); journey = { to: id, from: department, elapsed: 0, swapped: false };
+      if (reducedMotion) finishJourney(); else notifyJourney("departing");
+    },
+    skipTravel: finishJourney,
     setActive(value) {
       if (disposed) return;
       active = value; host.dataset.active = String(value);
+      if (!value && journey) { const from = journey.from; journey = null; switchDepartment(from, false); if (parts && views[from]) parts.rig.animateTo(views[from]!, 0); notifyJourney(null); }
       if (parts) {
         parts.rig.setActive(value);
         parts.stats.setActive(value);
@@ -217,14 +284,14 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
         p.districts.setLevels(levels, grown);
         if (everReady) {
           const id = p.districts.startGrowth(), d = world.districts.find(item => item.id === id);
-          if (d) p.rig.focus(d.x, d.z, 48);
+          if (d && department === "support") p.rig.focus(d.x, d.z, 48);
         }
       });
     },
     focusMascot: () => when(p => p.rig.focusPoint([p.mascot.focusPoint.x, p.mascot.focusPoint.y, p.mascot.focusPoint.z], 18, 1.05)),
     setTimeOfDay(mode) { if (timeOfDay === mode) return; timeOfDay = mode; when(daylight); },
     setMascot(next: CityMascot) { mascot = next; when(p => { p.mascot.setMascot(next); p.labels.setMascotName(next.name); }); },
-    setTraffic(enabled: boolean) { trafficOn = enabled; when(p => { p.traffic.setEnabled(enabled); p.crowd.setEnabled(enabled); }); },
+    setTraffic(enabled: boolean) { trafficOn = enabled; when(p => { p.traffic.setEnabled(enabled); p.crowd.setEnabled(enabled); p.departments?.setTraffic(enabled); }); },
     select: focusDistrict,
     setLabels(next: CityLabelInfo[]) { labels = next; when(p => p.labels.setLabels(next)); },
     setPlots(next) { if (JSON.stringify(plotStates) === JSON.stringify(next)) return; plotStates = next; when(p => p.plots.set(next)); },
@@ -236,7 +303,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     zoom: factor => when(p => p.rig.zoom(factor)),
     rotate: radians => when(p => p.rig.rotate(radians)),
     tilt: radians => when(p => p.rig.tilt(radians)),
-    reset: () => when(p => p.rig.reset()),
+    reset: () => when(p => { if (department === "sales") p.rig.animateTo({ target: [0, 0, 0], distance: 160, azimuth: .7, polar: .82 }, 500); else p.rig.reset(); }),
     setControls(next) { controls = next; when(p => p.rig.setControls(next)); },
     dispose() { disposed = true; pending.length = 0; teardown(); host.replaceChildren(); delete host.dataset.backend; delete host.dataset.timeOfDay; },
   };

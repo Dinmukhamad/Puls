@@ -76,3 +76,14 @@ class CitySituations(Base):
     revision: Mapped[int] = mapped_column(default=1)
     items: Mapped[list] = mapped_column(JSON)
     updated_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+
+
+class CityWorld(Base):
+    """Versioned department layout; does not modify legacy purchases or rewards."""
+
+    __tablename__ = "city_world"
+    __table_args__ = (CheckConstraint("id = 1", name="singleton"),)
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    revision: Mapped[int] = mapped_column(default=1)
+    cities: Mapped[list] = mapped_column(JSON)
+    updated_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
