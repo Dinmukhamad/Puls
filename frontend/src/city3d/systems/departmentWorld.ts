@@ -8,7 +8,9 @@ import type { Model } from "../assets/loader";
 import { createInstancePools } from "../render/instances";
 import { createMountains } from "../render/mountains";
 import { RELIEF_END } from "../world/relief";
-import { RAIL_LINES, railHeading, railPoint, type RailLine } from "../world/railway";
+import { PORTAL_AT, RAIL_LINES, railHeading, railPoint, type RailLine } from "../world/railway";
+import { loadModels } from "../assets/loader";
+import portalUrl from "../../pages/city/models/railway-portal.glb?url";
 import { createTerrain } from "../render/terrain";
 import { createWater } from "../render/water";
 import { createTraffic } from "./traffic";
@@ -141,20 +143,6 @@ function station(line: RailLine) {
   for (const w of [-.55, .55]) box(.1, .12, along, w, G + .24, middle, DARK);
   for (let u = .3; u < L + 21; u += .9) box(2.3, .08, .26, 0, G + .2, u, "#786b5b");
   box(2.2, .9, .4, 0, G + .65, -.3, "#c4423c"); lamp(.3, .3, .1, 0, G + 1.25, -.52, "#ff5a4e");
-  // The portal: piers and lintel round the opening, a lighter frame, a cap; the headwall runs from 3 before the
-  // face to 0.6 past it, over the ground's drop (FACE_GAP), and the wing walls step down beside the cutting.
-  const wall = L - 1.2;
-  for (const w of [-4.4, 4.4]) box(4.2, 8.4, 3.6, w, G + 4.2, wall, STONE);
-  box(4.6, 2.8, 3.6, 0, G + 7, wall, STONE); box(13.6, .45, 4, 0, G + 8.6, wall, STONE_DARK);
-  box(5.4, .5, .3, 0, G + 5.85, L - 3.1, "#c9c2b4"); for (const w of [-2.5, 2.5]) box(.4, 5.6, .3, w, G + 2.8, L - 3.1, "#c9c2b4");
-  for (const sign of [-1, 1]) for (const [k, height] of [[0, 6], [1, 4.4], [2, 2.8]]) {
-    const u = L - 4.3 - k * 2.7, w = sign * (6.8 + k * .65), piece = box(.8, height, 2.8, w, G + height / 2, u, STONE);
-    piece.rotation.y = Math.atan2(sign * line.side * .65, 2.7);
-  }
-  // Inside: dark walls and vault, lamps along both walls, and the far end out of sight.
-  for (const w of [-2.45, 2.45]) box(.3, 5.6, 25, w, G + 2.8, L + 9.5, TUNNEL);
-  box(5.2, .3, 25, 0, G + 5.75, L + 9.5, TUNNEL); box(5.2, 5.6, .3, 0, G + 2.8, L + 22, "#0e1416");
-  for (let u = L + 1.5; u < L + 20; u += 4) for (const w of [-2.26, 2.26]) lamp(.1, .22, .6, w, G + 4.2, u, "#ffd38a");
   // A signal on the far side before the portal: green above, red below.
   box(.15, 3.4, .15, -3.4, G + 1.7, L - 7, DARK); box(.5, 1.1, .35, -3.4, G + 3.6, L - 7, DARK);
   lamp(.22, .22, .06, -3.4, G + 3.85, L - 7.2, "#57d68d"); lamp(.22, .22, .06, -3.4, G + 3.35, L - 7.2, "#7a2a26");
@@ -165,16 +153,85 @@ function station(line: RailLine) {
     for (const du of [-1.1, 1.1]) t(1.7, .32, .5, 0, G + .42, u + du, DARK);
   }
   t(1.5, .7, .08, 0, G + 1.6, 12.61, GLASS);
-  // mergeStatic copies its source geometries; free those originals after batching.
-  const batch = (g: THREE.Group) => { const geometries = new Set<THREE.BufferGeometry>(); g.traverse(o => { if (o instanceof THREE.Mesh) geometries.add(o.geometry); }); mergeStatic(g); geometries.forEach(v => v.dispose()); };
-  batch(fixed); batch(train);
+  mergeOwned(fixed); mergeOwned(train);
+  // The portal model arrives later (railway-portal.glb); until then, or if it cannot load, a drawn one stands in.
+  let portal = drawnPortal(line); root.add(portal);
   root.position.set(line.x, 0, line.z); root.rotation.y = railHeading(line);
   // The head reaches the portal at 85 % of the trip, so the train is in the tunnel when the trip says so.
   const travel = (L - 12.6) / .85;
-  return { root, train, position(progress: number) {
-    const s = Math.max(0, Math.min(1, progress)) * travel; train.position.z = s;
-    const p = railPoint(line, 6.8 + s); return new THREE.Vector3(p.x, G + 1.4, p.z);
-  } };
+  return {
+    root, train,
+    position(progress: number) {
+      const s = Math.max(0, Math.min(1, progress)) * travel; train.position.z = s;
+      const p = railPoint(line, 6.8 + s); return new THREE.Vector3(p.x, G + 1.4, p.z);
+    },
+    /** The modelled portal takes the drawn one's place; its geometry and materials stay the model's. */
+    usePortal(model: Model) {
+      portal.removeFromParent(); disposeDrawn(portal);
+      portal = modelPortal(line, model); root.add(portal);
+    },
+  };
+}
+
+/** mergeStatic copies its source geometries; free those originals after batching. */
+function mergeOwned(g: THREE.Group) {
+  const geometries = new Set<THREE.BufferGeometry>(); g.traverse(o => { if (o instanceof THREE.Mesh) geometries.add(o.geometry); });
+  mergeStatic(g); geometries.forEach(v => v.dispose());
+}
+/** A lamp that shines day and night, in the line's frame (w across, u along). */
+function lampAt(group: THREE.Object3D, side: 1 | -1, across: number, height: number, along: number, w: number, y: number, u: number, color: string) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(across, height, along), glow(color)); mesh.position.set(-side * w, y, u); group.add(mesh);
+}
+/**
+ * The drawn portal: piers and lintel round the opening, a lighter frame, a cap; the headwall runs from 3 before the
+ * face to 0.6 past it, over the hole in the hill's face, the wing walls step down beside the cutting, and inside
+ * dark walls, floor and vault (the hill has no ground in the bore), lamps along both walls and the far end out of
+ * sight. Its own materials, freed with it.
+ */
+function drawnPortal(line: RailLine) {
+  const group = new THREE.Group(), b = builder(group), G = GROUND_Y, L = line.length, side = line.side;
+  const box = (across: number, height: number, along: number, w: number, y: number, u: number, color: string) => b(across, height, along, -side * w, y, u, color);
+  const wall = L - 1.2;
+  for (const w of [-4.4, 4.4]) box(4.2, 8.4, 3.6, w, G + 4.2, wall, STONE);
+  box(4.6, 2.8, 3.6, 0, G + 7, wall, STONE); box(13.6, .45, 4, 0, G + 8.6, wall, STONE_DARK);
+  box(5.4, .5, .3, 0, G + 5.85, L - 3.1, "#c9c2b4"); for (const w of [-2.5, 2.5]) box(.4, 5.6, .3, w, G + 2.8, L - 3.1, "#c9c2b4");
+  for (const sign of [-1, 1]) for (const [k, height] of [[0, 6], [1, 4.4], [2, 2.8]]) {
+    const u = L - 4.3 - k * 2.7, w = sign * (6.8 + k * .65), piece = box(.8, height, 2.8, w, G + height / 2, u, STONE);
+    piece.rotation.y = Math.atan2(sign * side * .65, 2.7);
+  }
+  for (const w of [-2.45, 2.45]) box(.3, 5.6, 25, w, G + 2.8, L + 9.5, TUNNEL);
+  box(5.2, .3, 25, 0, G + 5.75, L + 9.5, TUNNEL); box(5.2, .04, 25, 0, G + .02, L + 9.5, TUNNEL); box(5.2, 5.6, .3, 0, G + 2.8, L + 22, "#0e1416");
+  for (let u = L + 1.5; u < L + 20; u += 4) for (const w of [-2.26, 2.26]) lampAt(group, side, .1, .22, .6, w, G + 4.2, u, "#ffd38a");
+  mergeOwned(group);
+  return group;
+}
+/** Frees the drawn portal: its geometry and its own materials (the lamps' materials are shared). */
+function disposeDrawn(group: THREE.Group) {
+  const shared = new Set<THREE.Material>(glows.values());
+  group.traverse(o => { if (o instanceof THREE.Mesh) { o.geometry.dispose(); if (!shared.has(o.material as THREE.Material)) (o.material as THREE.Material).dispose(); } });
+  materialSets.delete(group);
+}
+/**
+ * The modelled portal (frontend/src/pages/city/models/railway-portal.glb, prepared by
+ * scripts/prepare_railway_portal.py): built in the line's frame with its origin on the track at the rail top,
+ * PORTAL_AT before the hill's face. Under the track inside, a dark floor hides the bore's curved bottom; lamps
+ * sit on the bore's walls where a ray from the track meets them.
+ */
+function modelPortal(line: RailLine, model: Model) {
+  const group = new THREE.Group(), place = new THREE.Group(), G = GROUND_Y, L = line.length;
+  place.position.set(0, G + .3, L - PORTAL_AT); group.add(place);
+  for (const part of model.parts) { const mesh = new THREE.Mesh(part.geometry, part.material); mesh.castShadow = part.castShadow; mesh.receiveShadow = true; place.add(mesh); }
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(7.4, .04, 31), new THREE.MeshStandardNodeMaterial({ color: TUNNEL, roughness: .95 }));
+  floor.position.set(0, G + .02, L + 12.5); floor.receiveShadow = true; group.add(floor);
+  group.updateMatrixWorld(true);
+  const ray = new THREE.Raycaster(), parts = place.children, lamps = new THREE.Group();
+  for (let u = L + 1.5; u < L + 24; u += 4) for (const side of [-1, 1] as const) {
+    ray.set(new THREE.Vector3(0, G + 3.6, u), new THREE.Vector3(side, 0, 0));
+    const hit = ray.intersectObjects(parts, false)[0];
+    if (hit) lampAt(lamps, -1, .1, .22, .6, side * (hit.distance - .1), G + 3.6, u, "#ffd38a");
+  }
+  if (lamps.children.length) { mergeOwned(lamps); group.add(lamps); }
+  return group;
 }
 
 export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, models: Map<string, Model>, onPick: (id: string) => void, onEstate: (pick: EstatePick) => void = () => undefined): DepartmentWorld {
@@ -184,6 +241,13 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
   supportNodes.forEach(n => supportRoot.add(n)); ctx.scene.add(supportRoot);
   const supportOverlayNodes = [...ctx.overlay.children] as HTMLElement[];
   const supportLine: RailLine = ctx.world.railway ?? RAIL_LINES.x4, supportRail = station(supportLine); ctx.scene.add(supportRail.root);
+  // The tunnel portals' model; both stations use the drawn portal until it arrives, and keep it if it cannot.
+  let portalModel: Model | null = null, disposed = false;
+  void loadModels(portalUrl).then(models => {
+    const model = models.get("railway-portal") ?? [...models.values()][0];
+    if (disposed || !model) return;
+    portalModel = model; supportRail.usePortal(model); sales?.rail.usePortal(model); ctx.requestShadowUpdate();
+  }).catch(() => undefined);
   const supportTeams = new THREE.Group(); ctx.scene.add(supportTeams);
   const supportLabels = document.createElement("div"), salesLabels = document.createElement("div");
   ctx.overlay.append(supportLabels, salesLabels);
@@ -224,6 +288,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     // The hills round the lake city, out as far as the island city's, so the fog hides their edge the same way.
     const hills = createMountains(context, { end: ctx.world.radius * RELIEF_END });
     const rail = station(world.railway ?? RAIL_LINES.sales); scene.add(rail.root);
+    if (portalModel) rail.usePortal(portalModel);
     const land3d = createEstates(context, lands.sales!, onEstate); land3d.setCatalogue(catalogue);
     estates.sales = land3d; land3d.set(views.sales ?? null); land3d.setBuild(build && cityOf(build.district) === "sales" ? build : null);
     return { scene, frames, moves, terrain, water, hills, pools, cars, crowd, campus, teams, rail, land3d, line: world.railway ?? RAIL_LINES.sales };
@@ -318,6 +383,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     setNight(value) { night = value; sales?.water.setNight(value); [supportTeams, supportRail.root, sales?.campus, sales?.teams, sales?.rail.root].forEach(root => { if (root) illuminate(root); }); },
     setTraffic(value) { traffic = value; sales?.cars.setEnabled(value); sales?.crowd.setEnabled(value); },
     dispose() {
+      disposed = true;
       estates.support?.dispose(); estates.sales?.dispose(); supportLand3d.removeFromParent();
       [...supportRoot.children].forEach(n => ctx.scene.add(n)); supportRoot.removeFromParent();
       supportLabels.remove(); salesLabels.remove(); supportRail.root.removeFromParent(); supportTeams.removeFromParent(); disposeTree(supportRail.root); disposeTree(supportTeams);

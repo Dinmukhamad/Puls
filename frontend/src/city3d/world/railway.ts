@@ -45,11 +45,31 @@ export const STATION = {
  * rock walls of 1 : ROCK over the last ROCK_RUN before the face, so the face stays close round the portal.
  */
 export const CUT_HALF = 4.5, BANK = 1.4, ROCK = .55, ROCK_RUN = 14;
+
 /**
- * The hill begins this far before the face (`length`): the ground drops to the cutting's floor over the two
- * units before it, inside the portal's headwall (systems/departmentWorld.ts), so no slope shows beside it.
+ * The portal model (frontend/src/pages/city/models/railway-portal.glb, scripts/prepare_railway_portal.py) stands
+ * with its origin on the track at the rail top PORTAL_AT before the hill's face, its hood reaching through the
+ * face. Its low side walls run WALLS.length back along the cutting from the origin, from WALLS.inner to
+ * WALLS.outer across and WALLS.top high: behind them the ground keeps to their top.
  */
-export const FACE_GAP = 1.5;
+export const PORTAL_AT = 3.5, WALLS = { length: 24.2, inner: 4.4, outer: 5.45, top: 1.5 };
+/** The rail top over the ground (systems/departmentWorld.ts: ballast and rails). */
+export const RAIL_TOP = .3;
+/**
+ * The hole in the hill's face the hood fills: half its outline as (across, height over the rail top), between
+ * the bore's opening and the hood's outer edge where the face cuts the model (measured on the model and checked
+ * by world/railway.test.mjs), straight down at its sides. Through it the bore is open; the hood hides its edge.
+ */
+export const PORTAL_HOLE: readonly (readonly [number, number])[] = [
+  [0, 6], [1, 5.85], [2, 5.55], [3, 4.9], [3.5, 4.35], [4, 3.8], [4.5, 3.4], [5, 3], [5.3, 3],
+];
+/** The hole's top at `w` across the track (over the rail top), or null outside it. */
+export function portalHole(w: number): number | null {
+  const a = Math.abs(w), last = PORTAL_HOLE[PORTAL_HOLE.length - 1];
+  if (a >= last[0]) return null;
+  const k = PORTAL_HOLE.findIndex(([x]) => x > a), [x0, h0] = PORTAL_HOLE[k - 1], [x1, h1] = PORTAL_HOLE[k];
+  return h0 + (h1 - h0) * (a - x0) / (x1 - x0);
+}
 
 /** (x, z) in the line's coordinates. */
 export function railLocal(line: RailLine, x: number, z: number) {
@@ -72,16 +92,30 @@ export function onRailway(line: RailLine, p: Point, pad: number) {
 }
 
 /**
+ * Past the face the hill comes down to the portal: from the hole's outline over the bore (the hood fills the hole)
+ * and from the cutting's walls beside it, the ground rises RISE for every unit into the hill until it meets the
+ * hill's own height. At 1 : 1 the slope stays grass (render/mountains.ts paints steeper ones as rock).
+ */
+export const RISE = 1;
+
+/**
  * The highest the ground may stand at (x, z) for the railway: level (0) on the station's yard and the cutting's
- * floor, banks rising from them; no limit inside the hill, from just before the face on.
+ * floor, banks rising from them, and past the face the slope down to the portal.
  */
 export function railCut(line: RailLine, x: number, z: number) {
   const { u, w } = railLocal(line, x, z);
-  if (u >= line.length - FACE_GAP) return Infinity;
+  if (u < line.length) return cutting(line, u, w);
+  // Beside the hole the hood's shoulders keep to its lowest until the cutting's walls rise past them.
+  const hole = portalHole(w) ?? PORTAL_HOLE[PORTAL_HOLE.length - 1][1];
+  return Math.max(cutting(line, line.length, w), RAIL_TOP + hole) + (u - line.length) * RISE;
+}
+function cutting(line: RailLine, u: number, w: number) {
   const yard = Math.hypot(Math.max(0, STATION.forecourt - u, u - STATION.end), Math.max(0, STATION.near - w, w - STATION.far));
   const track = Math.hypot(Math.max(0, Math.abs(w) - CUT_HALF), Math.max(0, STATION.forecourt - u));
-  const near = Math.min(1, Math.max(0, (u - (line.length - ROCK_RUN)) / (ROCK_RUN - FACE_GAP)));
-  return Math.min(yard / BANK, track / (BANK + (ROCK - BANK) * near));
+  const near = Math.min(1, Math.max(0, (u - (line.length - ROCK_RUN)) / ROCK_RUN)), slope = BANK + (ROCK - BANK) * near;
+  // The floor's edge belongs to the floor, whatever rounding puts it a hair outside.
+  const walled = u > line.length - PORTAL_AT - WALLS.length && Math.abs(w) > CUT_HALF + 1e-6;
+  return Math.min(yard / BANK, walled ? WALLS.top + Math.max(0, Math.abs(w) - WALLS.outer) / slope : track / slope);
 }
 
 /** The line as a corridor for laying out district land: the track from the forecourt to the face, and its half width. */

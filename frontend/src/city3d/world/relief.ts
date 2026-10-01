@@ -63,7 +63,7 @@ export function landEdge(land: FlatLand, angle: number) {
   const c = Math.abs(Math.cos(angle)), s = Math.abs(Math.sin(angle));
   return Math.min(c > 1e-9 ? land.halfX / c : Infinity, s > 1e-9 ? land.halfZ / s : Infinity);
 }
-/** The ground past a city's flat land, with its railway's yard and cutting dug into the hills. */
+/** The ground past a city's flat land, with its railway's yard and cutting dug into the hills, down to its portal. */
 export function groundHeight(land: FlatLand, x: number, z: number, line?: RailLine) {
   const h = natural(x, z, pastLand(land, x, z));
   return line && h > 0 ? Math.min(h, railCut(line, x, z)) : h;
