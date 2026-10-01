@@ -44,6 +44,7 @@ from app.schemas.user import (
     UserUpdate,
 )
 from app.services import cabinet as cabinet_service
+from app.services import city_estate
 from app.services import coins as coins_service
 from app.services import weekly as weekly_service
 from app.services.rules import write_audit
@@ -338,6 +339,9 @@ async def update_user(
         setattr(user, field, value)
     if changes.get("is_active") is False:
         await revoke_user_sessions(session, user.id)
+    if changes.keys() & {"group_id", "is_active", "role"}:
+        # A transfer or a deactivation is one operation: personal buildings leave the old district.
+        await city_estate.reconcile(session, user)
     try:
         if user.role == Role.OPERATOR:
             await coins_service.get_account(session, user.id)

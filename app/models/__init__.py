@@ -12,6 +12,16 @@ from app.models.city import (
     CitySituations,
     CityWorld,
 )
+from app.models.city_estate import (
+    CityCell,
+    CityContribution,
+    CityDistrictState,
+    CityEvent,
+    CityLot,
+    CityObject,
+    CityOperation,
+    CityProject,
+)
 from app.models.coin import CoinTransaction
 from app.models.contest import (
     ContestWeek,
@@ -56,11 +66,20 @@ __all__ = [
     "Base",
     "CityAward",
     "CityBuild",
+    "CityCell",
+    "CityContribution",
+    "CityDistrictState",
     "CityEconomy",
+    "CityEvent",
+    "CityLot",
+    "CityObject",
+    "CityOperation",
     "CityPerfReport",
+    "CityProject",
     "CityQuest",
     "CitySettings",
     "CitySituations",
+    "CityWorld",
     "CoinAccount",
     "CoinTransaction",
     "ContestWeek",

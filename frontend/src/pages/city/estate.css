@@ -1,0 +1,35 @@
+/* Стройка в районе команды: панель рядом с картой (не модальная), карточки построек и общих проектов. */
+/* Окна открываются поверх страницы, вне .city-immersive: им нужны те же цвета кнопок города. */
+.estate-district,.city-world-sheet{--city-accent:var(--btn-primary-bg);--city-on-accent:var(--btn-primary-fg);--city-soft:color-mix(in srgb,var(--text-primary) 7%,var(--surface-primary));--city-glass-soft:color-mix(in srgb,var(--surface-primary) 62%,transparent)}
+.estate-dock{position:fixed;top:var(--city-free-top);right:var(--city-right);bottom:var(--city-bottom);width:var(--city-panel);z-index:22;display:flex;flex-direction:column;border-radius:24px;overflow:hidden;color:var(--text-primary)}
+.estate-dock__head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding:16px 16px 8px}.estate-dock__head p{margin:6px 0 0;font-size:12.5px;color:var(--text-secondary)}.estate-dock__head strong{color:var(--text-primary)}
+.estate-dock__close{flex:none;width:44px;height:44px;margin:-6px -6px 0 0;border:0;border-radius:14px;background:transparent;color:var(--text-primary);font:inherit;font-size:24px;line-height:1;cursor:pointer}.estate-dock__close:hover{background:var(--surface-hover)}.estate-dock__close:focus-visible{outline:2px solid var(--accent-primary);outline-offset:-2px}
+.estate-dock__body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px 16px 16px;display:flex;flex-direction:column;gap:14px;scrollbar-width:thin}
+.estate-dock .city-secondary{min-height:44px;background:var(--city-glass-soft);border-color:var(--separator);font-size:13px}
+.estate-section{display:grid;gap:8px}.estate-section h3{margin:0;font-size:14px;font-weight:750}.estate-section>.small{margin:0;line-height:1.5}
+.estate-catalogue,.estate-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.estate-catalogue li,.estate-list li{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 8px 8px 6px;border-radius:16px;background:var(--city-glass-soft);border:1px solid var(--separator)}
+.estate-catalogue__icon,.estate-list li>span:first-child{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:color-mix(in srgb,#ffd21f 14%,var(--surface-primary));font-size:21px}
+.estate-catalogue__text,.estate-list li>span:nth-child(2){display:grid;gap:2px;min-width:0}.estate-catalogue__text strong,.estate-list strong{font-size:13px}.estate-catalogue__text small,.estate-list small{font-size:11px;line-height:1.4;color:var(--text-secondary)}
+.estate-catalogue .city-action,.estate-list .city-secondary{width:auto;min-width:76px;min-height:44px;padding:8px 12px;font-size:12px}
+.estate-note{margin:0;padding:10px 12px;border-radius:12px;border:1px dashed var(--border-strong);font-size:12.5px;line-height:1.5;color:var(--text-secondary)}
+.estate-ok{margin:0;padding:10px 12px;border-radius:12px;font-size:12.5px;line-height:1.5;background:color-mix(in srgb,#35b07a 15%,var(--surface-primary))}
+.estate-problem{margin:0;padding:10px 12px;border-radius:12px;font-size:12.5px;line-height:1.5;background:color-mix(in srgb,#e0525d 16%,var(--surface-primary))}
+.estate-claim{display:grid;gap:8px;padding:14px;border-radius:18px;background:color-mix(in srgb,#35b07a 10%,var(--surface-primary));border:1px solid var(--separator)}.estate-claim p{margin:0;font-size:12.5px;line-height:1.5;color:var(--text-secondary)}
+.estate-placing,.estate-card,.estate-hq{display:grid;gap:11px}
+.estate-placing__title{display:flex;gap:12px;align-items:center}.estate-placing__title>span{display:grid;place-items:center;flex:none;width:48px;height:48px;border-radius:15px;background:color-mix(in srgb,#ffd21f 16%,var(--surface-primary));font-size:26px}.estate-placing__title h2{margin:0;font-size:19px;line-height:1.2;overflow-wrap:anywhere}.estate-placing__title small{font-size:12px;color:var(--text-secondary)}
+.estate-placing__actions{display:flex;flex-wrap:wrap;gap:8px}.estate-placing__actions>*{flex:1 1 140px}
+.estate-stage{display:flex;gap:5px}.estate-stage i{flex:1;height:7px;border-radius:4px;background:color-mix(in srgb,var(--text-primary) 12%,transparent)}.estate-stage i[data-on]{background:#e9b23a}
+.estate-compare{display:grid;gap:8px;margin:0}.estate-compare div{padding:10px 12px;border-radius:14px;background:var(--city-glass-soft);border:1px solid var(--separator)}.estate-compare dt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary)}.estate-compare dd{margin:4px 0 0;font-size:12.5px;line-height:1.5}
+.estate-merge{display:grid;gap:8px;padding:12px;border-radius:16px;background:color-mix(in srgb,#35b07a 10%,var(--surface-primary));border:1px solid var(--separator)}.estate-merge p{margin:0;font-size:12px;line-height:1.5;color:var(--text-secondary)}
+.estate-back{justify-self:start;min-height:44px;padding:0 4px;border:0;background:none;color:var(--text-secondary);font:inherit;font-size:13px;font-weight:600;cursor:pointer}.estate-back:hover{color:var(--text-primary)}
+.estate-district{gap:12px}.estate-hq{padding:14px;border-radius:18px;background:var(--surface-primary);border:1px solid var(--separator)}.estate-hq p{margin:0}
+.estate-project{display:grid;gap:9px;padding:14px;border-radius:18px;background:var(--surface-primary);border:1px solid var(--separator)}.estate-project header{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:14px}.estate-project header span{font-size:12px;color:var(--text-secondary)}.estate-project p{margin:0}
+.estate-give{display:grid;gap:9px}.estate-give .row{display:flex;flex-wrap:nowrap;gap:8px;align-items:flex-start;line-height:1.4}.estate-give input[type=checkbox]{width:20px;height:20px;flex:none}
+.c3-estate-sign{padding:6px 12px 6px 8px;border-radius:12px;gap:8px}.c3-estate-sign>span:first-child{font-size:18px}.c3-estate-sign strong{display:block;font-size:13px}.c3-estate-sign small{display:block;font-size:11px;opacity:.85}
+@media(max-width:767px){
+  .estate-dock{top:auto;left:var(--city-left);right:var(--city-right);bottom:var(--city-dock);width:auto;max-height:min(58dvh,calc(100dvh - var(--city-dock) - var(--city-top) - var(--city-hud) - 24px));box-shadow:0 -6px 30px rgba(16,24,40,.16)}
+  .estate-dock__head{padding:12px 12px 4px}.estate-dock__body{padding:2px 12px 12px;gap:11px}
+  .estate-catalogue li,.estate-list li{grid-template-columns:36px minmax(0,1fr) auto}.estate-catalogue__icon,.estate-list li>span:first-child{width:36px;height:36px;font-size:19px}
+}
+@media(min-width:768px) and (orientation:portrait){.estate-dock{top:auto;left:var(--city-left);width:auto;height:min(46vh,480px)}}

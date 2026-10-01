@@ -36,7 +36,7 @@ function fixture(t) {
     const canvas = new Element('canvas'), calls = [];
     host.append(canvas);
     const raw = Object.fromEntries([
-      'setDepartment', 'setDepartmentWorld', 'focusWorld', 'travelTo', 'skipTravel', 'dispose', 'setActive', 'setLevels', 'setLabels', 'setMascot', 'setPlots',
+      'setDepartment', 'setDepartmentWorld', 'setEstates', 'setBuild', 'focusEstate', 'focusWorld', 'travelTo', 'skipTravel', 'dispose', 'setActive', 'setLevels', 'setLabels', 'setMascot', 'setPlots',
       'setSites', 'setQuests', 'setTimeOfDay', 'setControls', 'select', 'setTraffic',
       'focusMascot', 'focusPlot', 'focusSite', 'focusQuest', 'zoom', 'rotate', 'tilt', 'reset',
     ].map(name => [name, (...args) => calls.push([name, ...args])]));
@@ -52,7 +52,7 @@ function fixture(t) {
 
 function page(overrides = {}) {
   const events = [];
-  const callbacks = Object.fromEntries(['onWorldPick', 'onArrival', 'onJourney', 'onSelect', 'onView', 'onPlot', 'onSite', 'onQuest', 'onReady', 'onLost', 'onRestored', 'onProgress']
+  const callbacks = Object.fromEntries(['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onPlot', 'onSite', 'onQuest', 'onReady', 'onLost', 'onRestored', 'onProgress']
     .map(name => [name, (...args) => events.push([name, ...args])]));
   return {
     events,
@@ -61,7 +61,7 @@ function page(overrides = {}) {
 }
 
 function emitAll(options) {
-  options.onWorldPick?.('station'); options.onArrival?.('sales'); options.onJourney?.('departing');
+  options.onWorldPick?.('station'); options.onArrival?.('sales'); options.onJourney?.('departing'); options.onEstate?.({ kind: 'object', district: 'support-team-1', object: 1 });
   options.onSelect('driver');
   options.onView({ azimuth: 2, polar: 1, distance: 40, target: [1, 2, 3] });
   options.onPlot?.('plot-1'); options.onSite?.('site-1'); options.onQuest?.(1);
@@ -81,6 +81,20 @@ test('returning to the other department reuses the renderer and forwards journey
   assert.deepEqual(engine.called('setDepartmentWorld').at(-1), ['setDepartmentWorld', config]);
   engine.options.onWorldPick('sales-team-1'); engine.options.onJourney('departing'); engine.options.onArrival('support');
   assert.deepEqual(nextPage.events, [['onWorldPick', 'sales-team-1'], ['onJourney', 'departing'], ['onArrival', 'support']]);
+  assert.deepEqual(firstPage.events, []);
+});
+
+test('district land and the build mode follow the page into a retained scene, and land taps reach only it', t => {
+  const { acquire, engines } = fixture(t), firstPage = page();
+  const first = acquire({ options: firstPage.options }), engine = engines[0];
+  first.release();
+  const land = { state: { city: 'support', districts: [] }, own: null }, build = { district: 'support-team-1', area: 'estate', placing: null, selected: 3 };
+  const nextPage = page({ estates: { support: land }, build });
+  acquire({ options: nextPage.options });
+  assert.deepEqual(engine.called('setEstates').at(-1), ['setEstates', 'support', land]);
+  assert.deepEqual(engine.called('setBuild').at(-1), ['setBuild', build]);
+  engine.options.onEstate({ kind: 'object', district: 'support-team-1', object: 3 });
+  assert.deepEqual(nextPage.events, [['onEstate', { kind: 'object', district: 'support-team-1', object: 3 }]]);
   assert.deepEqual(firstPage.events, []);
 });
 
@@ -142,7 +156,7 @@ test('reattachment refreshes progress and callbacks but keeps traffic and an unc
   assert.deepEqual(engine.called('setLevels'), [['setLevels', newPage.options.levels, ['crm']]]);
   emitAll(engine.options);
   assert.deepEqual(oldPage.events, []);
-  assert.deepEqual(newPage.events.map(event => event[0]), ['onWorldPick', 'onArrival', 'onJourney', 'onSelect', 'onView', 'onPlot', 'onSite', 'onQuest', 'onProgress', 'onLost', 'onReady', 'onRestored', 'onReady']);
+  assert.deepEqual(newPage.events.map(event => event[0]), ['onWorldPick', 'onArrival', 'onJourney', 'onEstate', 'onSelect', 'onView', 'onPlot', 'onSite', 'onQuest', 'onProgress', 'onLost', 'onReady', 'onRestored', 'onReady']);
 });
 
 test('selection changes from both the page and the canvas are remembered across visits', t => {

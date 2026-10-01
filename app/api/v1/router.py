@@ -15,6 +15,7 @@ from app.api.v1 import (
     auth,
     cabinet,
     city,
+    city_estate,
     crm,
     dispatch,
     driver,
@@ -32,6 +33,7 @@ from app.api.v1 import (
 
 api_router = APIRouter()
 api_router.include_router(city.router)
+api_router.include_router(city_estate.router)
 api_router.include_router(work_sites_access.router)
 api_router.include_router(crm.router)
 api_router.include_router(dispatch.router)

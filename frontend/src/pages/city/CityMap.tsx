@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { CityDistrict, CityGroup, CityMission, CityPlot, CityQuest, DistrictId } from "../../api/city";
-import type { CityControl, CityControlScheme, CityLabelInfo, CityMascot, TimeOfDay } from "../../city3d/types";
+import type { CityBuildView, CityControl, CityControlScheme, CityEstateView, CityLabelInfo, CityMascot, EstatePick, TimeOfDay } from "../../city3d/types";
 import { CONTROL_SCHEMES } from "./cityControls";
 import { districtLevel, grownDistricts } from "./cityLevels";
 import { useAuth } from "../../auth/AuthContext";
@@ -14,7 +14,11 @@ import { retainedCity } from "./retainedCity";
  * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
  * seen, so an upgrade is celebrated once.
  */
-export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number }; sceneIdentity: string; districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
+export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
+  /** Team district land of both cities, the build mode, taps on the land; `estateFocus` flies there when it changes. */
+  estates?: Partial<Record<DepartmentId, CityEstateView>>; build?: CityBuildView | null; onEstate?: (pick: EstatePick) => void;
+  estateFocus?: { district: string; kind: "estate" | "lot" | "public" | "object"; object?: number; at: number };
+  sceneIdentity: string; districts: CityDistrict[]; missions: CityMission[]; labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void; progressKey?: string; mascot?: CityMascot; forceWebGL?: boolean; focusRequest?: number;
   /** The operator's plots; `onPlot` (when the viewer may build) opens the catalogue; `plotFocus` flies to a plot when it changes. */
   plots?: CityPlot[]; onPlot?: (key: string) => void; plotFocus?: { key: string; at: number };
   /** The group's quarters (null: no group, all built); `onSite` opens the group panel; `siteFocus` flies to a quarter. */
@@ -25,8 +29,8 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   controls?: CityControlScheme; onControls?: () => void; controlsOpen?: boolean;
   /** Whether the 3D map works: the page waits for it before offering the camera choice. */
   onStatus?: (status: "loading" | "ready" | "failed") => void }) {
-  const worldRef = useRef({ department, departmentWorld, onWorldPick, onArrival, onJourney });
-  worldRef.current = { department, departmentWorld, onWorldPick, onArrival, onJourney };
+  const worldRef = useRef({ department, departmentWorld, onWorldPick, onArrival, onJourney, estates, build, onEstate });
+  worldRef.current = { department, departmentWorld, onWorldPick, onArrival, onJourney, estates, build, onEstate };
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
   const mount = useRef<HTMLDivElement>(null), host = useRef<HTMLDivElement>();
   const control = useRef<CityControl>();
@@ -83,6 +87,7 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
         options: {
         department: worldRef.current.department, departmentWorld: worldRef.current.departmentWorld,
         onWorldPick: id => worldRef.current.onWorldPick?.(id), onArrival: id => worldRef.current.onArrival?.(id), onJourney: phase => worldRef.current.onJourney?.(phase),
+        estates: worldRef.current.estates, build: worldRef.current.build, onEstate: pick => { if (!cancelled) worldRef.current.onEstate?.(pick); },
         world, forceWebGL: webGL, stats: showStats, timeOfDay: timeRef.current, controls: controlsRef.current,
         plots: plotsRef.current.map(({ key, unlocked, item }) => ({ key, unlocked, item })), onPlot: canBuild ? key => { if (!cancelled) plotRef.current?.(key); } : undefined,
         sites: sitesRef.current, onSite: key => { if (!cancelled) siteRef.current?.(key); },
@@ -102,6 +107,10 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   }, [owner, sceneIdentity, world, webGL, showStats, canBuild, canQuest]);
   useEffect(() => { control.current?.setDepartment(department); }, [department]);
   useEffect(() => { if (departmentWorld) control.current?.setDepartmentWorld(departmentWorld); }, [departmentWorld]);
+  useEffect(() => { if (estates?.support) control.current?.setEstates("support", estates.support); }, [estates?.support]);
+  useEffect(() => { if (estates?.sales) control.current?.setEstates("sales", estates.sales); }, [estates?.sales]);
+  useEffect(() => { control.current?.setBuild(build); }, [build]);
+  useEffect(() => { if (estateFocus) control.current?.focusEstate(estateFocus); }, [estateFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!worldAction) return;
     if (worldAction.kind === "travel") control.current?.travelTo(worldAction.target as DepartmentId);

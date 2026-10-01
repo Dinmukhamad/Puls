@@ -34,9 +34,10 @@ import { createPlots, type Plots } from "./systems/plots";
 import { createSites, type Sites } from "./systems/sites";
 import { createQuests, type Quests } from "./systems/quests";
 import { createDepartmentWorld, type DepartmentWorld } from "./systems/departmentWorld";
-import { teamPositions } from "./world/sales";
+import { supportLand } from "./world/sales";
+import { clearDistrictLand } from "./world/estates";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
-import type { CityView, JourneyPhase } from "./types";
+import type { CityBuildView, CityEstateView, CityView, JourneyPhase } from "./types";
 import "./city3d.css";
 
 /** Static shadows are redrawn only once the camera has rested this long: culling changes casters while it moves. */
@@ -55,14 +56,12 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   const mobile = host.clientWidth < 600;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const world = generateWorld(options.world === "x4" ? WORLD_X4 : WORLD_V1);
-  // Keep future team headquarters clear of decorative houses. Existing purchases/sites remain untouched.
-  if (options.world === "x4") {
-    const reserved = teamPositions(12, true, world.roads.streets);
-    world.placements = world.placements.filter(p => reserved.every(r => Math.hypot(p.x - r.x, p.z - r.z) > 10));
-    world.surfaces = world.surfaces.filter(p => reserved.every(r => Math.hypot(p.x - r.x, p.z - r.z) > 10));
-  }
+  // Team district land (world/estates.ts) stays clear of the decorative suburbs. Old plots and group quarters remain.
+  if (options.world === "x4") clearDistrictLand(world, supportLand(world.roads));
   let disposed = false, parts: Parts | null = null, forceWebGL = !!options.forceWebGL, everReady = false;
   let department: DepartmentId = "support", desiredDepartment = options.department ?? "support", departmentConfig = options.departmentWorld;
+  const estateViews: Partial<Record<DepartmentId, CityEstateView | null>> = { ...options.estates };
+  let buildView: CityBuildView | null = options.build ?? null;
   const views: Partial<Record<DepartmentId, CityView>> = {};
   let journey: { to: DepartmentId; from: DepartmentId; elapsed: number; last?: number; swapped: boolean } | null = null;
   let phase: JourneyPhase = null;
@@ -232,8 +231,10 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       parts.pools = createInstancePools(ctx, catalogue, world.placements);
       parts.plots.setCatalogue(catalogue); parts.sites.setCatalogue(catalogue);
       traffic.setVehicles(models);
-      parts.departments = createDepartmentWorld(ctx, catalogue, models, id => options.onWorldPick?.(id));
+      parts.departments = createDepartmentWorld(ctx, catalogue, models, id => options.onWorldPick?.(id), pick => options.onEstate?.(pick));
       if (departmentConfig) parts.departments.setConfig(departmentConfig);
+      for (const city of ["support", "sales"] as const) if (estateViews[city] !== undefined) parts.departments.setEstates(city, estateViews[city] ?? null);
+      parts.departments.setBuild(buildView);
       parts.departments.setTraffic(trafficOn); parts.departments.setNight(timeOfDay === "night");
       department = "support"; switchDepartment(desiredDepartment); parts.departments.show(department);
       // Every pool, near and far, has its shaders built before the city shows, so coming closer never
@@ -259,6 +260,14 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   return {
     setDepartment(id) { if (journey) { journey = null; notifyJourney(null); } switchDepartment(id); },
     setDepartmentWorld(config: CityWorld) { departmentConfig = config; parts?.departments?.setConfig(config); },
+    setEstates(city, view) { estateViews[city] = view; parts?.departments?.setEstates(city, view); },
+    setBuild(view) { buildView = view; parts?.departments?.setBuild(view); },
+    focusEstate(target) {
+      // District land lies out in the suburbs: the estates system picks a side where the city's towers stay out of
+      // the way and both the houses and the gardens in front of them are seen.
+      const distance = target.kind === "object" ? 26 : 36, polar = .86, view = parts?.departments?.focusEstate(target, distance, polar);
+      if (view) parts?.rig.animateTo({ target: [view.point.x, view.point.y, view.point.z], distance, polar, azimuth: view.azimuth }, reducedMotion ? 0 : 700);
+    },
     focusWorld(id) { const point = parts?.departments?.point(id); if (point) parts?.rig.focusPoint([point.x, point.y, point.z], id === "station" ? 38 : 46, .9); },
     travelTo(id) {
       if (!parts?.departments || !everReady || journey || id === department) return;

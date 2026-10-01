@@ -80,6 +80,7 @@ export const TX_LABELS: Record<string, string> = {
   achievement_reward: "Достижение",
   game_reward: "Игровая награда",
   city_build: "Постройка в городе",
+  city_contribution: "Взнос в проект района",
 };
 
 export const REQUEST_STATUS_LABELS: Record<string, string> = {

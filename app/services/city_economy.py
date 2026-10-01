@@ -17,6 +17,7 @@ from app.services.rules import write_audit
 
 def defaults():
     from app.services.city import BUILDINGS
+    from app.services.city_estate import estate_defaults
     from app.services.city_group import POINTS, PROJECTS
     from app.services.city_quests import COINS
 
@@ -25,7 +26,14 @@ def defaults():
         "points": dict(POINTS),
         "projects": deepcopy(PROJECTS),
         "quest_coins": COINS,
+        # Team districts (docs/CITY_ESTATES.md): coins per level, project estimates, HQ steps.
+        **estate_defaults(),
     }
+
+
+def same_shape(saved, default):
+    """A saved list of level prices counts only while the catalogue has as many levels."""
+    return {k: v for k, v in (saved or {}).items() if k in default and len(v) == len(default[k])}
 
 
 async def economy(session):
@@ -38,11 +46,20 @@ async def economy(session):
         saved = {p["key"]: p for p in row.values["projects"]}
         values["projects"] = [saved.get(p["key"], p) for p in values["projects"]]
         values["quest_coins"] = row.values["quest_coins"]
+        for key in ("estate", "district"):
+            values[key] |= same_shape(row.values.get(key), values[key])
+        if len(row.values.get("hq") or []) == len(values["hq"]):
+            values["hq"] = row.values["hq"]
     return {"revision": row.revision if row else 0, **values}
 
 
 async def save(session, actor, body):
-    values = body.model_dump(exclude={"revision"})
+    current = await economy(session)
+    # A form of the earlier version sends no district prices: they stay as they are.
+    values = {
+        key: value if value is not None else current[key]
+        for key, value in body.model_dump(exclude={"revision"}).items()
+    }
     revision = body.revision + 1
     if body.revision == 0:
         session.add(CityEconomy(id=1, revision=revision, values=values, updated_by_id=actor.id))

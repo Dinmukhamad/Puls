@@ -45,6 +45,7 @@ export function createCityRetention() {
           onWorldPick: id => next.callbacks?.onWorldPick?.(id),
           onArrival: id => next.callbacks?.onArrival?.(id),
           onJourney: phase => next.callbacks?.onJourney?.(phase),
+          onEstate: pick => next.callbacks?.onEstate?.(pick),
           onPlot: options.onPlot ? key => next.callbacks?.onPlot?.(key) : undefined,
           onSite: options.onSite ? key => next.callbacks?.onSite?.(key) : undefined,
           onQuest: options.onQuest ? slot => next.callbacks?.onQuest?.(slot) : undefined,
@@ -72,6 +73,8 @@ export function createCityRetention() {
       if (reused) {
         current.control.setDepartment(options.department ?? "support");
         if (options.departmentWorld) current.control.setDepartmentWorld(options.departmentWorld);
+        for (const city of ["support", "sales"] as const) if (options.estates?.[city] !== undefined) current.control.setEstates(city, options.estates[city] ?? null);
+        current.control.setBuild(options.build ?? null);
         current.control.setLevels(options.levels, options.grown);
         current.control.setLabels(options.labels);
         if (options.mascot) current.control.setMascot(options.mascot);

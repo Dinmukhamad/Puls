@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CityEconomy, type CitySettings, type CitySituation, type CitySituations, type PointKind } from "../../api/city";
+import { cityEstate } from "../../api/cityEstate";
 import { useAuth } from "../../auth/AuthContext";
 import { ErrorState, Skeleton } from "../../components/ui";
 import "./city.css";
@@ -13,11 +14,11 @@ const DISPATCH_TARGETS: Record<string, number> = { dispatch_driver: 2, dispatch_
 export function CityAdminPage() {
   const { user } = useAuth();
   const canEdit = ["trainer", "head", "admin"].includes(user?.role ?? "");
-  const [tab, setTab] = useState<"participants"|"groups"|"economy"|"situations"|"settings"|"world">("participants");
+  const [tab, setTab] = useState<"participants"|"groups"|"economy"|"situations"|"settings"|"world"|"estates">("participants");
   const settings = useQuery({ queryKey:["city-settings"], queryFn:city.settings, enabled:tab === "settings", refetchOnWindowFocus:false });
   return <div className="city-page city-admin"><header className="city-heading"><div><span className="city-eyebrow">СТУДИЯ ОБУЧЕНИЯ</span><h1>Миссии города</h1><p>Настраивайте маршрут и следите за реальным прогрессом.</p></div><Link className="city-secondary" to="/training/city">Открыть город →</Link></header>
-    <nav className="city-admin-tabs" aria-label="Управление городом"><button className="city-secondary" aria-pressed={tab==='world'} onClick={()=>setTab('world')}>Города и районы</button><button className="city-secondary" aria-pressed={tab==='participants'} onClick={()=>setTab('participants')}>Прогресс операторов</button><button className="city-secondary" aria-pressed={tab==='groups'} onClick={()=>setTab('groups')}>Города групп</button><button className="city-secondary" aria-pressed={tab==='situations'} onClick={()=>setTab('situations')}>Ситуации дня</button><button className="city-secondary" aria-pressed={tab==='economy'} onClick={()=>setTab('economy')}>Экономика игры</button><button className="city-secondary" aria-pressed={tab==='settings'} onClick={()=>setTab('settings')}>{canEdit?'Настроить миссии':'Условия миссий'}</button></nav>
-    {tab==='world'?<CityWorldEditor />:tab==='participants'?<Participants />:tab==='groups'?<Groups />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
+    <nav className="city-admin-tabs" aria-label="Управление городом"><button className="city-secondary" aria-pressed={tab==='world'} onClick={()=>setTab('world')}>Города и районы</button><button className="city-secondary" aria-pressed={tab==='estates'} onClick={()=>setTab('estates')}>Стройка районов</button><button className="city-secondary" aria-pressed={tab==='participants'} onClick={()=>setTab('participants')}>Прогресс операторов</button><button className="city-secondary" aria-pressed={tab==='groups'} onClick={()=>setTab('groups')}>Города групп</button><button className="city-secondary" aria-pressed={tab==='situations'} onClick={()=>setTab('situations')}>Ситуации дня</button><button className="city-secondary" aria-pressed={tab==='economy'} onClick={()=>setTab('economy')}>Экономика игры</button><button className="city-secondary" aria-pressed={tab==='settings'} onClick={()=>setTab('settings')}>{canEdit?'Настроить миссии':'Условия миссий'}</button></nav>
+    {tab==='world'?<CityWorldEditor />:tab==='estates'?<Estates />:tab==='participants'?<Participants />:tab==='groups'?<Groups />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
   </div>;
 }
 
@@ -110,10 +111,38 @@ function Economy() {
       <div className="city-economy__projects">{draft.projects.map((p,i)=><div key={p.key} className="city-editor-fields"><label className="field"><span className="field__label">Название квартала {i+1}</span><input className="input" minLength={3} maxLength={60} required value={p.name} onChange={e=>change({projects:draft.projects.map(q=>q.key===p.key?{...q,name:e.target.value}:q)})}/></label><label className="field"><span className="field__label">Стоимость, очков</span><input className="input" type="number" min={10} max={1000000} required value={p.cost} onChange={e=>change({projects:draft.projects.map(q=>q.key===p.key?{...q,cost:number(e.target.value)}:q)})}/></label></div>)}</div>
       <h3>Задания дня</h3>
       <div className="city-economy__grid"><label className="field"><span className="field__label">Коинов за верный ответ</span><input className="input" type="number" min={0} max={1000} required value={draft.quest_coins} onChange={e=>change({quest_coins:number(e.target.value)})}/></label></div>
+      {draft.estate&&<><h3>Районы команд: личные постройки, коинов за ступень</h3>
+        <p className="city-admin-warning">Первая ступень — покупка, следующие — улучшения. Купленное не дорожает: новые цены действуют для новых операций, а открытая страница стройки попросит подтвердить новую цену.</p>
+        <div className="city-economy__projects">{Object.entries(draft.estate).map(([family,levels])=><div key={family} className="city-economy__grid">{levels.map((price,i)=><label className="field" key={i}><span className="field__label">{ESTATE_NAMES[family]??family} · {family==='park'&&i===0?'объединение (0 — бесплатно)':`ступень ${i+1}`}</span><input className="input" type="number" min={family==='park'&&i===0?0:1} max={100000} required value={price} onChange={e=>change({estate:{...draft.estate,[family]:levels.map((v,j)=>j===i?number(e.target.value):v)}})}/></label>)}</div>)}</div></>}
+      {draft.district&&<><h3>Общие проекты района: смета ступени</h3>
+        <p className="city-admin-warning">Смета фиксируется при открытии проекта; новая цена не переписывает уже открытые сборы.</p>
+        <div className="city-economy__projects">{Object.entries(draft.district).map(([family,levels])=><div key={family} className="city-economy__grid">{levels.map((cost,i)=><label className="field" key={i}><span className="field__label">{ESTATE_NAMES[family]??family} · ступень {i+1}</span><input className="input" type="number" min={1} max={100000} required value={cost} onChange={e=>change({district:{...draft.district,[family]:levels.map((v,j)=>j===i?number(e.target.value):v)}})}/></label>)}</div>)}</div></>}
+      {draft.hq&&<><h3>Штаб района: построенных общих проектов для ступени</h3>
+        <div className="city-economy__grid">{draft.hq.map((need,i)=><label className="field" key={i}><span className="field__label">Ступень {i+2}</span><input className="input" type="number" min={1} max={1000} required value={need} onChange={e=>change({hq:draft.hq!.map((v,j)=>j===i?number(e.target.value):v)})}/></label>)}</div>
+        <p className="city-admin-warning">Ступени по возрастанию. Уже полученная ступень штаба не снижается.</p></>}
       {canEdit&&<button className="city-action" type="submit">{mutation.isPending?'Сохраняем…':'Сохранить настройки'}</button>}
     </fieldset>
     {saved&&<p role="status">Настройки игры сохранены.</p>}{mutation.isError&&<ErrorState error={mutation.error}/>}
   </form>;
+}
+
+const ESTATE_NAMES:Record<string,string>={square:'🌳 Сквер',gazebo:'🌷 Беседка',fountain:'⛲ Площадь с фонтаном',sports:'🏀 Спортплощадка',park:'🏞️ Большой парк',house:'🏡 Личный дом',tower:'🏙️ Небоскрёб'};
+
+/** Staff only: land, buildings and shared projects per district, and what the old plots hold before their transfer. */
+function Estates() {
+  const query=useQuery({queryKey:['city-estates-report'],queryFn:cityEstate.report,refetchInterval:30000});
+  if(query.isError)return <ErrorState error={query.error} onRetry={()=>query.refetch()}/>;
+  if(!query.data)return <Skeleton height={250}/>;
+  const r=query.data;
+  return <div className="city-groups">
+    <p className="city-admin-warning">Стройка открывается флажком района во вкладке «Города и районы» — сначала для пилотной команды. Операторы покупают за коины Puls только в своём районе; сотрудники открывают общие проекты. Ёмкость: ⌈операторы / 9⌉ + 1 жилых кварталов по 9 усадеб.</p>
+    <div className="city-group-card__table" role="table" aria-label="Районы команд">
+      <div role="row"><span role="columnheader">Район</span><span role="columnheader">Стройка</span><span role="columnheader">Операторы</span><span role="columnheader">Усадьбы</span><span role="columnheader">Постройки</span><span role="columnheader">В инвентаре</span><span role="columnheader">Сборы</span><span role="columnheader">Штаб</span></div>
+      {r.districts.map(d=><div role="row" key={d.id}><span role="cell"><b>{d.name}</b> · {d.city==='sales'?'ОП':'Техподдержка'}{d.needs_expansion?' · нужно расширение':''}</span><span role="cell">{d.modules?d.construction?'открыта':'закрыта':'нет территории'}</span><span role="cell">{d.operators}</span><span role="cell">{d.estates.taken} / {d.estates.total}</span><span role="cell">{d.buildings}</span><span role="cell">{d.inventory}</span><span role="cell">{d.open_projects}</span><span role="cell">{d.hq_level} · {d.built_projects} пр.</span></div>)}
+    </div>
+    <p className="city-admin-warning">Операторов без района: {r.operators_without_district}. Личных построек без участка (инвентарь после перевода): {r.inventory}. Потрачено на постройки районов: {r.coins.buildings} коинов, взносы в проекты: {r.coins.contributions}.</p>
+    <p className="city-admin-warning">Прежние постройки на участках учебных центров: {r.legacy.buildings} у {r.legacy.operators} операторов, оплачено {r.legacy.paid} коинов. Они остаются на месте; перенос в районы — отдельный этап со сверкой и без повторной оплаты.</p>
+  </div>;
 }
 
 function MissionEditor({initial,canEdit}:{initial:CitySettings;canEdit:boolean}) {

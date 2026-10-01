@@ -5,7 +5,27 @@ import type { DistrictId } from "../api/city";
 import type { BuildingKey } from "./world/plots";
 import type { SiteStage } from "./world/sites";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
+import type { CityEstates, Lot } from "../api/cityEstate";
+import type { EstateFamily } from "./world/estateGrid";
 export type JourneyPhase = "departing" | "tunnel" | "arriving" | null;
+
+/** Team district land of the city on screen (api/cityEstate.ts) and the viewer's own parcels. */
+export interface CityEstateView { state: CityEstates; own: { estate: Lot | null; tower: Lot | null } | null }
+/**
+ * Build mode in a district: the grid over the operator's estate, the business lots or (staff) the public
+ * square; a building being placed — new, moved or put back from the inventory (`moving`); the one selected.
+ */
+export interface CityBuildView {
+  district: string; area: "estate" | "lot" | "public";
+  placing: { family: EstateFamily; rotation: number; moving: number | null } | null;
+  selected: number | null;
+}
+/** What the operator touched on district land, or where the preview stands now and why it does not fit. */
+export type EstatePick =
+  | { kind: "place"; district: string; module: number; u: number; v: number; rotation: number; problem: string | null }
+  | { kind: "object"; district: string; object: number }
+  | { kind: "project"; district: string; project: number }
+  | { kind: "land"; district: string; module: number; u: number; v: number };
 
 export interface CityView { azimuth: number; polar: number; distance: number; target: [number, number, number] }
 export interface CityLabelInfo { id: DistrictId; name: string; status: string; icon: string; soon: boolean; reward: boolean; level: number }
@@ -23,6 +43,10 @@ export interface CityPlotInfo { key: string; unlocked: boolean; item: BuildingKe
 export interface CityOptions {
   department?: DepartmentId;
   departmentWorld?: CityWorld;
+  /** Team district land of both cities; `onEstate` reports taps on it and the build preview. */
+  estates?: Partial<Record<DepartmentId, CityEstateView>>;
+  build?: CityBuildView | null;
+  onEstate?: (pick: EstatePick) => void;
   onWorldPick?: (id: string) => void;
   onArrival?: (id: DepartmentId) => void;
   onJourney?: (phase: JourneyPhase) => void;
@@ -61,6 +85,10 @@ export interface CityOptions {
 export interface CityControl {
   setDepartment(id: DepartmentId): void;
   setDepartmentWorld(config: CityWorld): void;
+  setEstates(city: DepartmentId, view: CityEstateView | null): void;
+  setBuild(view: CityBuildView | null): void;
+  /** Flies to the operator's estate, a district's square or a building. */
+  focusEstate(target: { district: string; kind: "estate" | "lot" | "public" | "object"; object?: number }): void;
   focusWorld(id: string): void;
   travelTo(id: DepartmentId): void;
   skipTravel(): void;

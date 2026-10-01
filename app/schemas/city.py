@@ -67,7 +67,10 @@ class ProjectInput(BaseModel):
 
 
 class EconomyInput(BaseModel):
-    """The game's numbers; every building, kind of work and quarter must be given."""
+    """The game's numbers; every building, kind of work and quarter must be given.
+
+    District prices are optional, so a form that does not know them yet keeps the saved ones.
+    """
 
     model_config = ConfigDict(extra="forbid")
     revision: int = Field(ge=0)
@@ -75,10 +78,14 @@ class EconomyInput(BaseModel):
     points: dict[str, int]
     projects: list[ProjectInput]
     quest_coins: int = Field(ge=0, le=1000)
+    estate: dict[str, list[int]] | None = None
+    district: dict[str, list[int]] | None = None
+    hq: list[int] | None = None
 
     @model_validator(mode="after")
     def complete(self):
         from app.services.city import BUILDINGS
+        from app.services.city_estate import ESTATE_PRICES, HQ_STEPS, PROJECT_COSTS
         from app.services.city_group import POINTS, PROJECTS
 
         if set(self.prices) != set(BUILDINGS):
@@ -91,6 +98,29 @@ class EconomyInput(BaseModel):
             raise ValueError("Очки за работу — от 0 до 1000")
         if [p.key for p in self.projects] != [p["key"] for p in PROJECTS]:
             raise ValueError("Кварталы нельзя добавлять, удалять или менять местами")
+        for given, default, label in (
+            (self.estate, ESTATE_PRICES, "постройки района"),
+            (self.district, PROJECT_COSTS, "общего проекта"),
+        ):
+            if given is None:
+                continue
+            if set(given) != set(default) or any(
+                len(given[k]) != len(v) for k, v in default.items()
+            ):
+                raise ValueError(f"Укажите цену каждой ступени {label}")
+            for key, levels in given.items():
+                # Merging six squares is free unless the head sets a fee; other steps cost coins.
+                lowest = 0 if (key, label) == ("park", "постройки района") else 1
+                if not lowest <= levels[0] <= 100_000 or any(
+                    not 1 <= v <= 100_000 for v in levels[1:]
+                ):
+                    raise ValueError("Цена ступени — от 1 до 100 000 коинов")
+        if self.hq is not None and (
+            len(self.hq) != len(HQ_STEPS)
+            or any(not 1 <= v <= 1000 for v in self.hq)
+            or any(a >= b for a, b in zip(self.hq, self.hq[1:], strict=False))
+        ):
+            raise ValueError("Ступени штаба — по возрастанию, от 1 до 1000 построенных проектов")
         return self
 
 

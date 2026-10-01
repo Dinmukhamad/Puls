@@ -5,7 +5,7 @@ export type MissionState = "available" | "in_progress" | "ready" | "locked" | "c
 export interface MissionDefinition { title: string; description: string; pulsar: string; target: number; xp: number; coins: number; enabled: boolean; prerequisite: string | null }
 export interface CityMission extends MissionDefinition { key: string; district: DistrictId; objective: string; path: string; current: number; state: MissionState; claimed_at: string | null }
 export interface CityDistrict { id: DistrictId; name: string; subtitle: string; soon: boolean }
-export interface CityData { revision: number; user_id: number; full_name: string; gender?: "male" | "female" | null; guide_name?: string | null; preview: boolean; inspecting: boolean; can_claim: boolean; districts: CityDistrict[]; missions: CityMission[]; xp: number; level: number; level_progress: number; level_target: number; balance: number; available: number; plots: CityPlot[]; buildings: CityBuilding[]; can_build: boolean; group: CityGroup | null; quests: CityQuests | null }
+export interface CityData { revision: number; user_id: number; full_name: string; gender?: "male" | "female" | null; guide_name?: string | null; preview: boolean; inspecting: boolean; can_claim: boolean; districts: CityDistrict[]; missions: CityMission[]; xp: number; level: number; level_progress: number; level_target: number; balance: number; available: number; plots: CityPlot[]; buildings: CityBuilding[]; can_build: boolean; plots_moved?: boolean; group: CityGroup | null; quests: CityQuests | null }
 export type BuildingKey = "garden" | "gazebo" | "playground" | "sports" | "fountain" | "cottage" | "house" | "tower";
 /** A plot of the operator's own district; `item` is what stands on it. */
 export interface CityPlot { key: string; district: DistrictId; unlocked: boolean; item: BuildingKey | null }
@@ -23,7 +23,9 @@ export interface CityGroupOverview { id: number; name: string; total: number; pr
 export const SITE_STAGES: Record<SiteStage, string> = { planned: "Запланирован", foundation: "Фундамент", frame: "Каркас", floors: "Этажи", done: "Построен" };
 export const POINT_KINDS: Record<PointKind, string> = { missions: "Миссии города", materials: "Пройденные материалы", quests: "Задания дня", orders: "Учебные заказы", appeals: "Обращения CRM", closed: "Закрытые тикеты" };
 /** The game's numbers the head sets (app/services/city_economy.py); `catalogue` and `can_edit` are not saved. */
-export interface CityEconomy { revision: number; prices: Record<BuildingKey, number>; points: Record<PointKind, number>; projects: { key: string; name: string; cost: number }[]; quest_coins: number; catalogue?: { key: BuildingKey; name: string; icon: string }[]; can_edit?: boolean }
+export interface CityEconomy { revision: number; prices: Record<BuildingKey, number>; points: Record<PointKind, number>; projects: { key: string; name: string; cost: number }[]; quest_coins: number; catalogue?: { key: BuildingKey; name: string; icon: string }[]; can_edit?: boolean;
+  /** Team districts (docs/CITY_ESTATES.md): coins per level of a personal building, estimates per level of a shared one, headquarters steps. */
+  estate?: Record<string, number[]>; district?: Record<string, number[]>; hq?: number[] }
 /** One daily situation of the editable set (app/services/city_quests.py). */
 export interface CitySituation { id: string; speaker: string; text: string; options: string[]; correct: number; explanation: string; enabled: boolean }
 export interface CitySituations { revision: number; items: CitySituation[]; can_edit?: boolean }

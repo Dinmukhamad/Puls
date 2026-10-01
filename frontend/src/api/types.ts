@@ -28,7 +28,8 @@ export type TxType =
   | "learning_reward"
   | "game_reward"
   | "achievement_reward"
-  | "city_build";
+  | "city_build"
+  | "city_contribution";
 
 export interface Token {
   access_token: string;

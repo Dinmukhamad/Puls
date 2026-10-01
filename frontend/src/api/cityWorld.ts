@@ -1,12 +1,12 @@
 import { request } from "./client";
 
 export type DepartmentId = "support" | "sales";
-export interface TeamDistrict { id: string; name: string; mine: boolean; assigned: boolean; supervisor: string | null }
+export interface TeamDistrict { id: string; name: string; mine: boolean; assigned: boolean; supervisor: string | null; construction?: boolean; prepared?: number }
 export interface DepartmentCity { id: DepartmentId; name: string; districts: TeamDistrict[] }
 export interface CityWorld { revision: number; cities: DepartmentCity[]; home_city: DepartmentId | null; home_district: string | null; currency: "coins"; can_edit: boolean }
 export interface WorldSettings {
   revision: number;
-  cities: { id: DepartmentId; name: string; districts: { id: string; name: string; group_ids: number[] }[] }[];
+  cities: { id: DepartmentId; name: string; districts: { id: string; name: string; group_ids: number[]; construction?: boolean }[] }[];
 }
 export interface WorldEditorData extends WorldSettings {
   can_edit: boolean;

@@ -1,6 +1,7 @@
 """The map's public names and explicit group assignment, never coin balances."""
 
 from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -22,6 +23,9 @@ class Named(BaseModel):
 class DistrictInput(Named):
     id: str = Field(pattern=r"^(support|sales)-team-[1-9][0-9]?$", max_length=32)
     group_ids: list[int] = Field(default_factory=list, max_length=100)
+    #: The pilot switch: operators of this district may build and contribute with coins. A form that
+    #: does not know it yet sends nothing, and the saved value stays.
+    construction: bool | None = None
 
 
 class DepartmentInput(Named):

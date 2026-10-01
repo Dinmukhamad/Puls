@@ -51,6 +51,7 @@ class TxType(StrEnum):
     GAME_REWARD = "game_reward"  # награда колеса или розыгрыша
     ACHIEVEMENT_REWARD = "achievement_reward"
     CITY_BUILD = "city_build"  # постройка на участке «Моего города»
+    CITY_CONTRIBUTION = "city_contribution"  # добровольный взнос в общий проект района
 
 
 #: Группировка типов для фильтра истории (п. 4.1.3).
@@ -69,7 +70,7 @@ TX_GROUPS: dict[str, tuple[TxType, ...]] = {
         TxType.ACHIEVEMENT_REWARD,
     ),
     "writeoff": (TxType.MANUAL_DEBIT, TxType.CORRECTION),
-    "purchase": (TxType.PURCHASE, TxType.CITY_BUILD),
+    "purchase": (TxType.PURCHASE, TxType.CITY_BUILD, TxType.CITY_CONTRIBUTION),
 }
 
 

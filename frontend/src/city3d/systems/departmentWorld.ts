@@ -12,7 +12,10 @@ import { createTraffic } from "./traffic";
 import { createCrowd } from "./crowd";
 import { disposeTree } from "./districts";
 import { mergeStatic } from "../assets/landmarks";
-import { generateSalesWorld, SALES_CENTERS, teamPositions } from "../world/sales";
+import { generateSalesWorld, salesLand, SALES_CENTERS, supportLand, teamPositions } from "../world/sales";
+import type { DistrictLand } from "../world/estates";
+import { createEstates, type EstateFocus, type Estates } from "./estates";
+import type { CityBuildView, CityEstateView, EstatePick } from "../types";
 
 export interface DepartmentWorld {
   show(id: DepartmentId): void; setConfig(config: CityWorld): void;
@@ -20,6 +23,10 @@ export interface DepartmentWorld {
   setNight(night: boolean): void; setTraffic(active: boolean): void;
   point(id: string): THREE.Vector3 | undefined;
   railway(progress: number): THREE.Vector3;
+  /** Team district land: buildings, projects and the headquarters stage of every district of a city. */
+  setEstates(city: DepartmentId, view: CityEstateView | null): void;
+  setBuild(view: CityBuildView | null): void;
+  focusEstate(target: EstateFocus, distance: number, polar: number): { point: THREE.Vector3; azimuth: number } | null;
   dispose(): void;
 }
 const WALL = "#f0e8d6", GLASS = "#397181", DARK = "#39484b", GOLD = "#ddb04f", GREEN = "#728963";
@@ -32,8 +39,49 @@ function builder(root: THREE.Object3D) {
     mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true; root.add(mesh); return mesh;
   };
 }
-function offices(root: THREE.Object3D, x: number, z: number, index: number, headquarters = false) {
-  const b = builder(root), h = headquarters ? 5.5 : 3.4 + (index % 3) * .7;
+/**
+ * A team's headquarters at one of five stages (TZ §9.1), built round its own origin with the entrance to +z:
+ * a small office, a second wing with a courtyard, a modern facade with a canopy and a square, a campus with a
+ * roof terrace and a rear block, and the flagship with its tower, crown and flag. It never leaves its site.
+ */
+function headquarters(root: THREE.Object3D, stage: number, colour: string) {
+  const b = builder(root), pad = [10, 10, 12, 14, 15][stage - 1];
+  b(pad, .3, pad, 0, .35, 0, "#d4cabb");
+  const wide = stage === 1 ? 7.6 : 6, x = stage === 1 ? 0 : 1, h = [3.4, 4.6, 4.6, 5.8, 5.8][stage - 1];
+  b(wide, h, 6, x, .5 + h / 2, 0, WALL);
+  b(wide - .8, h - .8, .12, x, .9 + (h - .8) / 2, 3.03, GLASS); b(wide - .8, h - .8, .12, x, .9 + (h - .8) / 2, -3.03, GLASS);
+  for (const dx of stage >= 3 ? [-2.6, -1.3, 0, 1.3, 2.6] : [-2.6, 0, 2.6]) b(.2, h, 6.3, x + dx * wide / 7.6, .5 + h / 2, 0, stage >= 3 ? GOLD : WALL);
+  for (let y = 1; y < h; y += 1.25) b(wide, .13, 6.3, x, .5 + y, 0, WALL);
+  b(wide + .6, .35, 6.6, x, h + .6, 0, DARK);
+  b(3.1, .2, 1.9, x, 1.8, 3.5, colour); b(2, 1.4, .15, x, 1.15, 3.2, DARK);
+  if (stage >= 2) {
+    // The second wing and a courtyard beside it.
+    b(3.2, 2.8, 4.6, -3.4, .5 + 1.4, -.6, WALL); b(2.6, 1.6, .12, -3.4, 1.6, 1.72, GLASS); b(3.6, .3, 5, -3.4, 3.45, -.6, DARK);
+    b(3, .06, 2.2, -3.4, .53, 3.2, GREEN);
+  }
+  if (stage >= 3) {
+    // A canopy over the entrance and a square in front: lawn, low hedges, two benches.
+    b(4.6, .18, 2.4, x, 3.1, 3.9, DARK); for (const dx of [-2, 2]) b(.14, 2.6, .14, x + dx, 1.8, 4.9, GOLD);
+    b(pad - 2, .05, 2.4, 0, .53, pad / 2 - 1.4, GREEN);
+    for (const dx of [-3.5, 3.5]) { b(2.2, .45, .5, dx, .75, pad / 2 - 1.4, "#557f46"); b(1, .12, .35, dx, .62, pad / 2 - 2.2, "#8b6a4b"); }
+  }
+  if (stage >= 4) {
+    // A rear block and a terrace with a green roof and a rail.
+    b(5, 3.6, 3.2, 1.6, .5 + 1.8, -4.6, WALL); b(4.4, 2.6, .12, 1.6, 2.3, -6.22, GLASS); b(5.4, .3, 3.6, 1.6, 4.45, -4.6, DARK);
+    b(wide - .6, .12, 5.4, x, h + .84, 0, GREEN); for (const dz of [-2.8, 2.8]) b(wide - .4, .5, .08, x, h + 1.1, dz, GOLD);
+  } else b(Math.min(5.6, wide - 1), .3, 4, x, h + .85, 0, GREEN);
+  if (stage === 5) {
+    // The flagship: a slim tower with a crown at the corner, a flag in the team's colour, hedges round the plaza.
+    b(2.4, 11, 2.4, -5.2, .5 + 5.5, -5.2, WALL); for (const dy of [3, 5.5, 8]) b(2.5, .14, 2.5, -5.2, .5 + dy, -5.2, GOLD);
+    b(1.6, 8, .1, -5.2, 6, -3.98, GLASS); b(2.8, .5, 2.8, -5.2, 11.75, -5.2, GOLD); b(1.4, 1.4, 1.4, -5.2, 12.7, -5.2, colour);
+    b(.1, 4.5, .1, 5.6, 2.75, 5.6, DARK); b(1.4, .8, .05, 6.3, 4.6, 5.6, colour);
+    for (const dx of [-6.6, 6.6]) b(.5, .55, 9, dx, .8, 1.5, "#557f46");
+  }
+  for (const dx of [-3.2, 3.2]) { b(1.2, .5, 1.2, x + dx * .9, .7, 3.8, WALL); b(1, .65, 1, x + dx * .9, 1.1, 3.8, GREEN); }
+}
+const HQ_COLOURS = ["#6b55c8", "#2f9e8f", "#d1823a", "#4b7fd6", "#c4568a", "#7a9a3c"];
+function offices(root: THREE.Object3D, x: number, z: number, index: number) {
+  const b = builder(root), h = 3.4 + (index % 3) * .7;
   b(10, .3, 10, x, .35, z, "#d4cabb"); b(7.6, h, 6, x, .5 + h / 2, z, WALL);
   b(6.8, h - .8, .12, x, .9 + (h - .8) / 2, z + 3.03, GLASS);
   b(6.8, h - .8, .12, x, .9 + (h - .8) / 2, z - 3.03, GLASS);
@@ -79,7 +127,7 @@ function station(support: boolean) {
   } };
 }
 
-export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, models: Map<string, Model>, onPick: (id: string) => void): DepartmentWorld {
+export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, models: Map<string, Model>, onPick: (id: string) => void, onEstate: (pick: EstatePick) => void = () => undefined): DepartmentWorld {
   let active: DepartmentId = "support", sales: ReturnType<typeof salesRoot> | undefined;
   const supportNodes = [...ctx.scene.children].filter(n => !(n instanceof THREE.Light));
   const supportRoot = new THREE.Group(); supportRoot.name = "support-city";
@@ -90,6 +138,14 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
   const supportLabels = document.createElement("div"), salesLabels = document.createElement("div");
   ctx.overlay.append(supportLabels, salesLabels);
   let config: CityWorld | undefined, layoutKey = "";
+  // District land: the island city has it in its suburbs (the full map only), the lake city all round the lake.
+  const lands: Partial<Record<DepartmentId, DistrictLand>> = { sales: salesLand() };
+  if (ctx.world.spec.name === "x4") lands.support = supportLand(ctx.world.roads);
+  const supportLand3d = new THREE.Scene(); supportLand3d.name = "support-districts"; supportRoot.add(supportLand3d);
+  const estates: Partial<Record<DepartmentId, Estates>> = {};
+  if (lands.support) { estates.support = createEstates({ ...ctx, scene: supportLand3d, overlay: supportLabels }, lands.support, onEstate); estates.support.setCatalogue(catalogue); }
+  const views: Partial<Record<DepartmentId, CityEstateView | null>> = {};
+  let build: CityBuildView | null = null;
   const anchors = { support: new Map<string, THREE.Vector3>(), sales: new Map<string, THREE.Vector3>() };
   const elements = { support: new Map<string, HTMLElement>(), sales: new Map<string, HTMLElement>() };
   let night = false, traffic = true;
@@ -116,8 +172,11 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     SALES_CENTERS.forEach((p, i) => { offices(campus, p.x, p.z, i); anchors.sales.set(p.id, new THREE.Vector3(p.x, 7, p.z)); });
     batch(campus);
     const rail = station(false); scene.add(rail.root);
-    return { scene, frames, moves, terrain, water, pools, cars, crowd, campus, teams, rail };
+    const land3d = createEstates(context, lands.sales!, onEstate); land3d.setCatalogue(catalogue);
+    estates.sales = land3d; land3d.set(views.sales ?? null); land3d.setBuild(build && cityOf(build.district) === "sales" ? build : null);
+    return { scene, frames, moves, terrain, water, pools, cars, crowd, campus, teams, rail, land3d };
   }
+  const cityOf = (district: string): DepartmentId => district.startsWith("sales-") ? "sales" : "support";
   function batch(root: THREE.Group) {
     const originals = new Set<THREE.BufferGeometry>(); root.traverse(o => { if (o instanceof THREE.Mesh) originals.add(o.geometry); });
     mergeStatic(root); originals.forEach(g => g.dispose());
@@ -135,20 +194,27 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     el.querySelector("strong")!.textContent = name; el.querySelector("small")!.textContent = status; el.querySelector("span")!.textContent = icon;
     el.setAttribute("aria-label", `${name}. ${status}`);
   }
+  /** The headquarters stage the server reports for a district (1 until its land state arrives). */
+  const stageOf = (city: DepartmentId, district: string) => views[city]?.state.districts.find(d => d.id === district)?.hq.level ?? 1;
   function configure() {
     if (!config) return;
-    const key = config.cities.map(c => `${c.id}:${c.districts.map(d => d.id).join(",")}`).join(";");
+    const key = config.cities.map(c => `${c.id}:${c.districts.map(d => `${d.id}@${stageOf(c.id, d.id)}`).join(",")}`).join(";");
     if (key !== layoutKey) {
       for (const city of config.cities) {
         const root = city.id === "support" ? supportTeams : sales?.teams; if (!root) continue;
         disposeTree(root); root.clear(); materialSets.delete(root);
-        const points = teamPositions(city.districts.length, city.id === "support", ctx.world.roads.streets);
-        city.districts.forEach((d, i) => { const p = points[i]; offices(root, p.x, p.z, i, true); anchors[city.id].set(d.id, new THREE.Vector3(p.x, 8, p.z)); }); batch(root);
+        const land = lands[city.id], points = land?.headquarters ?? teamPositions(city.districts.length, city.id === "support", ctx.world.roads.streets).map(p => ({ ...p, rotation: 0 }));
+        city.districts.forEach((d, i) => {
+          const p = points[i], site = new THREE.Group(); site.position.set(p.x, 0, p.z); site.rotation.y = p.rotation; root.add(site);
+          headquarters(site, stageOf(city.id, d.id), HQ_COLOURS[i % HQ_COLOURS.length]);
+          anchors[city.id].set(d.id, new THREE.Vector3(p.x, [8, 9, 9, 10, 15][stageOf(city.id, d.id) - 1], p.z));
+        });
+        batch(root);
       }
       layoutKey = key; ctx.requestShadowUpdate();
     }
     for (const c of config.cities) {
-      c.districts.forEach(d => label(c.id, d.id, d.name, d.supervisor ?? "Штаб · команда не назначена", "⚑"));
+      c.districts.forEach(d => label(c.id, d.id, d.name, `${d.supervisor ?? "Команда не назначена"} · штаб ${stageOf(c.id, d.id)}/5`, "⚑"));
       anchors[c.id].set("station", c.id === "support" ? new THREE.Vector3(11, 10, -5) : new THREE.Vector3(5, 10, 52));
       label(c.id, "station", "Вокзал", `Поезд в ${config.cities.find(other => other.id !== c.id)?.name ?? "другой город"}`, "▰");
     }
@@ -163,9 +229,20 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
       supportRoot.visible = id === "support"; supportOverlayNodes.forEach(n => { n.style.display = id !== "support" ? "none" : ""; });
       supportRail.root.visible = supportTeams.visible = id === "support"; supportLabels.hidden = id !== "support";
       salesLabels.hidden = id !== "sales"; if (sales) { sales.scene.visible = id === "sales"; if (id === "sales") sales.pools.update(); }
+      estates.support?.setActive(id === "support"); estates.sales?.setActive(id === "sales");
       ctx.requestShadowUpdate();
     },
     setConfig(next) { config = next; configure(); },
+    setEstates(city, view) {
+      views[city] = view; estates[city]?.set(view);
+      // A new headquarters stage rebuilds the headquarters, nothing else.
+      configure();
+    },
+    setBuild(view) {
+      build = view;
+      for (const city of ["support", "sales"] as const) estates[city]?.setBuild(view && cityOf(view.district) === city ? view : null);
+    },
+    focusEstate: (target, distance, polar) => estates[cityOf(target.district)]?.focus(target, distance, polar) ?? null,
     frame(dt, now, moved) {
       if (active === "sales" && sales) { if (moved) sales.moves.forEach(cb => cb()); sales.frames.forEach(cb => cb(dt, now)); }
       const w = ctx.overlay.clientWidth, h = ctx.overlay.clientHeight;
@@ -182,6 +259,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     setNight(value) { night = value; sales?.water.setNight(value); [supportTeams, supportRail.root, sales?.campus, sales?.teams, sales?.rail.root].forEach(root => { if (root) illuminate(root); }); },
     setTraffic(value) { traffic = value; sales?.cars.setEnabled(value); sales?.crowd.setEnabled(value); },
     dispose() {
+      estates.support?.dispose(); estates.sales?.dispose(); supportLand3d.removeFromParent();
       [...supportRoot.children].forEach(n => ctx.scene.add(n)); supportRoot.removeFromParent();
       supportLabels.remove(); salesLabels.remove(); supportRail.root.removeFromParent(); supportTeams.removeFromParent(); disposeTree(supportRail.root); disposeTree(supportTeams);
       if (sales) { sales.crowd.dispose(); sales.cars.dispose(); sales.pools.dispose(); sales.water.dispose(); sales.terrain.dispose(); disposeTree(sales.campus); disposeTree(sales.teams); disposeTree(sales.rail.root); sales.scene.removeFromParent(); }

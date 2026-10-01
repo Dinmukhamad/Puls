@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.base import Base
+from app.db.city_guards import city_guard_statements
 from app.db.guards import guard_statements
 from app.db.session import engine
 from app.models import (
@@ -296,7 +297,9 @@ async def create_schema() -> None:
     """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        for statement in guard_statements(conn.dialect.name):
+        for statement in guard_statements(conn.dialect.name) + city_guard_statements(
+            conn.dialect.name
+        ):
             await conn.execute(text(statement))
 
 

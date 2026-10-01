@@ -336,8 +336,9 @@ def mission_rows(config, facts, awards):
 
 
 async def dashboard(session, user, *, inspecting=False):
-    # The group city and the daily situations build on this module, so they are imported here.
+    # The group city, daily situations and districts build on this module: imported here.
     from app.services.city_economy import economy
+    from app.services.city_estate import construction_open
     from app.services.city_group import group_city
     from app.services.city_quests import quests
 
@@ -373,6 +374,8 @@ async def dashboard(session, user, *, inspecting=False):
         else {}
     )
     prices = (await economy(session))["prices"]
+    # Once the team district opens for building, new buildings go there; the old plots keep theirs.
+    moved = operator and await construction_open(session, user)
     return {
         "revision": config["revision"],
         "user_id": user.id,
@@ -393,7 +396,8 @@ async def dashboard(session, user, *, inspecting=False):
         "available": account.available if account else 0,
         "plots": plot_rows(rows, builds),
         "buildings": [{**item, "price": prices[key]} for key, item in BUILDINGS.items()],
-        "can_build": operator and not inspecting,
+        "can_build": operator and not inspecting and not moved,
+        "plots_moved": moved,
         "group": await group_city(session, user),
         "quests": await quests(session, user, inspecting=inspecting),
     }
@@ -416,6 +420,12 @@ async def build(session, user, plot_key, item_key):
     if user.role != Role.OPERATOR:
         raise PermissionDeniedError("В предварительном просмотре строить нельзя")
     from app.services.city_economy import economy
+    from app.services.city_estate import construction_open
+
+    if await construction_open(session, user):
+        raise ConflictError(
+            "Новые постройки теперь появляются в районе твоей команды. Прежние остаются на месте."
+        )
 
     plot = next((p for p in PLOTS if p["key"] == plot_key), None)
     item = BUILDINGS.get(item_key)
