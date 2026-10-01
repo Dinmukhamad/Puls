@@ -133,10 +133,11 @@ def issue_invitation(link, *, validity=timedelta(minutes=10)):
 
 
 async def prepare_account_invitation(session, user_id, username):
-    """Prepare an invitation without committing the account creation transaction."""
+    """Prepare a new binding within the caller's account transaction and user lock."""
     require_bot()
     occupied = await session.scalar(
         select(TelegramLink.user_id).where(
+            TelegramLink.user_id != user_id,
             or_(
                 TelegramLink.pending_username == username,
                 (func.lower(TelegramLink.username) == username)
@@ -147,8 +148,14 @@ async def prepare_account_invitation(session, user_id, username):
     if occupied is not None:
         await session.rollback()
         raise ConflictError("Этот Telegram уже указан для другого аккаунта Puls")
-    link = TelegramLink(user_id=user_id, pending_username=username, version=1, send_count=0)
-    session.add(link)
+    link = await session.get(TelegramLink, user_id)
+    if link is None:
+        link = TelegramLink(user_id=user_id, version=1, send_count=0)
+        session.add(link)
+    else:
+        clear_binding(link)
+        await revoke_devices(session, user_id)
+    link.pending_username = username
     invitation = issue_invitation(link, validity=timedelta(days=7))
     try:
         await session.flush()
@@ -156,6 +163,24 @@ async def prepare_account_invitation(session, user_id, username):
         await session.rollback()
         raise ConflictError("Этот Telegram уже указан для другого аккаунта Puls") from exc
     return invitation
+
+
+def clear_binding(link):
+    link.chat_id = None
+    link.username = None
+    link.pending_username = None
+    link.linked_at = None
+    link.link_hash = None
+    link.link_expires_at = None
+    link.link_requested_at = None
+    link.version += 1
+
+
+async def clear_account_binding(session, user_id):
+    link = await session.get(TelegramLink, user_id)
+    if link:
+        clear_binding(link)
+    await revoke_devices(session, user_id)
 
 
 async def create_link(session, user_id, password):
@@ -180,16 +205,7 @@ async def disconnect(session, user_id, password):
     user = await lock_user(session, user_id)
     if not verify_password(password, user.hashed_password):
         raise DomainError("Неверный текущий пароль Puls")
-    link = await session.get(TelegramLink, user_id)
-    if link:
-        link.chat_id = None
-        link.username = None
-        link.pending_username = None
-        link.linked_at = None
-        link.link_hash = None
-        link.link_expires_at = None
-        link.version += 1
-    await revoke_devices(session, user_id)
+    await clear_account_binding(session, user_id)
     await write_audit(
         session,
         actor_id=user_id,
@@ -229,7 +245,7 @@ async def receive_start(session, message):
                     sender.username or ""
                 ).lower() != link.pending_username:
                     reply = (
-                        "Этот Telegram не совпадает с указанным при создании аккаунта. "
+                        "Этот Telegram не совпадает с указанным для аккаунта Puls. "
                         "Откройте ссылку из нужного аккаунта Telegram."
                     )
                 elif occupied is not None:

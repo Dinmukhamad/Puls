@@ -78,6 +78,10 @@ class UserCreatedOut(UserOut):
     telegram_invitation: TelegramInvitation | None = None
 
 
+class UserUpdatedOut(UserOut):
+    telegram_invitation: TelegramInvitation | None = None
+
+
 class TrainingUserCreatedOut(TrainingUserOut):
     telegram_invitation: TelegramInvitation | None = None
 
@@ -104,14 +108,7 @@ class PhoneMixin(BaseModel):
         return normalize_phone(value)
 
 
-class UserCreate(PasswordMixin, PhoneMixin):
-    login: str = Field(min_length=3, max_length=150)
-    full_name: str = Field(min_length=3, max_length=255)
-    email: EmailStr | None = None
-    role: Role = Role.OPERATOR
-    group_id: int | None = Field(default=None, gt=0)
-    hired_on: date | None = None
-    gender: Gender | None = None
+class TelegramUsernameMixin(BaseModel):
     telegram_username: str | None = Field(default=None, max_length=32)
 
     @field_validator("telegram_username", mode="before")
@@ -128,13 +125,23 @@ class UserCreate(PasswordMixin, PhoneMixin):
             raise ValueError("Укажите Telegram в формате @username или t.me/username")
         return username.lower()
 
+
+class UserCreate(PasswordMixin, PhoneMixin, TelegramUsernameMixin):
+    login: str = Field(min_length=3, max_length=150)
+    full_name: str = Field(min_length=3, max_length=255)
+    email: EmailStr | None = None
+    role: Role = Role.OPERATOR
+    group_id: int | None = Field(default=None, gt=0)
+    hired_on: date | None = None
+    gender: Gender | None = None
+
     @field_validator("login", "full_name", mode="before")
     @classmethod
     def _trim_text(cls, value: str) -> str:
         return value.strip() if isinstance(value, str) else value
 
 
-class UserUpdate(PhoneMixin):
+class UserUpdate(PhoneMixin, TelegramUsernameMixin):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     full_name: str | None = Field(default=None, min_length=3, max_length=255)

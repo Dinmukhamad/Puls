@@ -1,6 +1,6 @@
 import { ApiError, buildQuery, request } from "./client";
 import type { Gender, DashboardOut, Page, Role, ShopRequestOut, TransactionOut, UserBrief, UserOut } from "./types";
-import type { TelegramInvitation } from "./telegram";
+import type { TelegramInvitation, TelegramStatus } from "./telegram";
 
 export interface TeamGroup {
   id: number;
@@ -20,15 +20,15 @@ export interface TeamUserInput {
   group_id: number | null;
   hired_on: string | null;
   gender?: Gender | null;
+  telegram_username?: string | null;
 }
 
 export interface TeamUserCreate extends TeamUserInput {
   login: string;
   password: string;
-  telegram_username?: string | null;
 }
 
-export interface TeamUserCreated extends UserOut {
+export interface TeamUserSaved extends UserOut {
   telegram_invitation?: TelegramInvitation | null;
 }
 
@@ -41,9 +41,10 @@ export const team = {
   users: (params: Record<string, unknown>, signal?: AbortSignal) =>
     request<Page<UserOut>>(`/api/v1/admin/users${buildQuery(params)}`, { signal }),
   user: (id: number) => request<UserOut>(`/api/v1/admin/users/${id}`),
-  createUser: (json: TeamUserCreate) => request<TeamUserCreated>("/api/v1/admin/users", { method: "POST", json }),
+  userTelegram: (id: number, signal?: AbortSignal) => request<TelegramStatus>(`/api/v1/admin/users/${id}/telegram`, { signal }),
+  createUser: (json: TeamUserCreate) => request<TeamUserSaved>("/api/v1/admin/users", { method: "POST", json }),
   updateUser: (id: number, json: Partial<TeamUserInput> & { is_active?: boolean }) =>
-    request<UserOut>(`/api/v1/admin/users/${id}`, { method: "PATCH", json }),
+    request<TeamUserSaved>(`/api/v1/admin/users/${id}`, { method: "PATCH", json }),
   resetPassword: (id: number, password: string) =>
     request<{ detail: string }>(`/api/v1/admin/users/${id}/password`, { method: "POST", json: { password } }),
   resetLogin: (id: number, login: string) =>

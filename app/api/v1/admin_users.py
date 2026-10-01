@@ -26,6 +26,7 @@ from app.core.errors import ConflictError, DomainError, NotFoundError, Permissio
 from app.core.security import hash_password
 from app.core.visibility import identity_filter, shop_request_output
 from app.models.coin import CoinTransaction
+from app.models.driver_auth import TelegramLink
 from app.models.enums import USER_VISIBILITY, Role
 from app.models.shop import ShopRequest
 from app.models.user import Group, User
@@ -45,6 +46,7 @@ from app.schemas.user import (
     UserCreatedOut,
     UserOut,
     UserUpdate,
+    UserUpdatedOut,
 )
 from app.services import cabinet as cabinet_service
 from app.services import city_estate, telegram
@@ -324,10 +326,26 @@ async def create_user(
     return output
 
 
-@router.patch("/users/{user_id}", response_model=UserOut, summary="Изменить пользователя")
+@router.get("/users/{user_id}/telegram", summary="Telegram сотрудника")
+async def user_telegram(
+    session: SessionDep, actor: HeadUser, user_id: int, response: Response
+):
+    if actor.role not in (Role.HEAD, Role.ADMIN):
+        raise PermissionDeniedError("Недостаточно прав для этой операции", code="role_required")
+    await _visible_user(session, actor, user_id)
+    response.headers["Cache-Control"] = "no-store"
+    return await telegram.status(session, user_id)
+
+
+@router.patch(
+    "/users/{user_id}",
+    response_model=UserUpdatedOut,
+    response_model_exclude_unset=True,
+    summary="Изменить пользователя",
+)
 async def update_user(
-    session: SessionDep, actor: HeadUser, user_id: int, payload: UserUpdate
-) -> User:
+    session: SessionDep, actor: HeadUser, user_id: int, payload: UserUpdate, response: Response
+) -> UserUpdatedOut:
     user = await _visible_user(session, actor, user_id)
     # Та же блокировка пользователя, что при подтверждении и привязке Telegram.
     # Смена номера не должна оставлять доверие, записанное параллельным запросом.
@@ -337,6 +355,8 @@ async def update_user(
         raise PermissionDeniedError("Учётную запись администратора изменяет только администратор")
 
     changes = payload.model_dump(exclude_unset=True)
+    telegram_requested = "telegram_username" in changes
+    telegram_username = changes.pop("telegram_username", None)
     if "role" in changes and changes["role"] not in USER_VISIBILITY[Role(actor.role)]:
         raise PermissionDeniedError("Вы не можете назначать эту роль")
     if user.id == actor.id and changes.get("is_active") is False:
@@ -352,7 +372,30 @@ async def update_user(
         if supervised is not None:
             raise ConflictError("Сначала переназначьте группы этого супервайзера")
 
+    invitation = None
     before = {field: getattr(user, field) for field in changes}
+    audit_changes = dict(changes)
+    if telegram_requested:
+        if user.id == actor.id:
+            raise PermissionDeniedError(
+                "Свой Telegram меняется в профиле, с подтверждением паролем",
+                code="self_service_required",
+            )
+        await ensure_can_manage_credentials(session, actor, user)
+        link = await session.get(TelegramLink, user.id)
+        previous = (link.pending_username or link.username) if link else None
+        changed = telegram_username != (previous.lower() if previous else None)
+        # У личного чата может не быть username; явное очищение также отзывает ссылку.
+        clearing = telegram_username is None and link and (link.chat_id or link.link_hash)
+        if changed or clearing:
+            if telegram_username:
+                invitation = await telegram.prepare_account_invitation(
+                    session, user.id, telegram_username
+                )
+            else:
+                await telegram.clear_account_binding(session, user.id)
+            before["telegram_username"] = previous
+            audit_changes["telegram_username"] = telegram_username
     if "phone" in changes and changes["phone"] != user.phone:
         await revoke_devices(session, user.id)
     for field, value in changes.items():
@@ -371,18 +414,23 @@ async def update_user(
             action="user.update",
             entity_type="user",
             entity_id=user.id,
-            payload=jsonable_encoder({"before": before, "after": changes}),
+            payload=jsonable_encoder({"before": before, "after": audit_changes}),
         )
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
         raise ConflictError("Этот email или телефон уже используется другим сотрудником") from exc
-    return await session.scalar(
+    updated = await session.scalar(
         select(User)
         .options(selectinload(User.group))
         .where(User.id == user.id)
         .execution_options(populate_existing=True)
     )
+    output = UserUpdatedOut.model_validate(updated)
+    if invitation:
+        response.headers["Cache-Control"] = "no-store"
+        output.telegram_invitation = TelegramInvitation.model_validate(invitation)
+    return output
 
 
 @router.post("/users/{user_id}/login", response_model=UserOut, summary="Сменить логин сотруднику")
