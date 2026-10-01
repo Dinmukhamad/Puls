@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Response, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -38,13 +38,16 @@ from app.schemas.user import (
     GroupUpdate,
     LoginReset,
     PasswordReset,
+    TelegramInvitation,
+    TrainingUserCreatedOut,
     TrainingUserOut,
     UserCreate,
+    UserCreatedOut,
     UserOut,
     UserUpdate,
 )
 from app.services import cabinet as cabinet_service
-from app.services import city_estate
+from app.services import city_estate, telegram
 from app.services import coins as coins_service
 from app.services import weekly as weekly_service
 from app.services.rules import write_audit
@@ -252,11 +255,14 @@ async def user_purchases(
 
 @router.post(
     "/users",
-    response_model=UserOut | TrainingUserOut,
+    response_model=UserCreatedOut | TrainingUserCreatedOut,
+    response_model_exclude_unset=True,
     status_code=status.HTTP_201_CREATED,
     summary="Создать пользователя",
 )
-async def create_user(session: SessionDep, actor: UserCreator, payload: UserCreate):
+async def create_user(
+    session: SessionDep, actor: UserCreator, payload: UserCreate, response: Response
+):
     """Создаёт учётную запись и сразу открывает коин-счёт для операторов."""
     if payload.login == settings.DEVELOPER_LOGIN:
         raise PermissionDeniedError(
@@ -267,6 +273,8 @@ async def create_user(session: SessionDep, actor: UserCreator, payload: UserCrea
     if actor.role == Role.TRAINER and payload.group_id is not None:
         raise PermissionDeniedError("Тренер не назначает группы")
     await _check_group(session, payload.group_id)
+    if payload.telegram_username:
+        telegram.require_bot()
 
     user = User(
         login=payload.login,
@@ -286,6 +294,12 @@ async def create_user(session: SessionDep, actor: UserCreator, payload: UserCrea
         await session.rollback()
         raise ConflictError("Логин, email или телефон уже заняты") from exc
 
+    invitation = None
+    if payload.telegram_username:
+        invitation = await telegram.prepare_account_invitation(
+            session, user.id, payload.telegram_username
+        )
+
     if user.role == Role.OPERATOR:
         await coins_service.get_account(session, user.id)
 
@@ -301,7 +315,13 @@ async def create_user(session: SessionDep, actor: UserCreator, payload: UserCrea
     created = await session.scalar(
         select(User).options(selectinload(User.group)).where(User.id == user.id)
     )
-    return user_output(actor, created)
+    output = (
+        TrainingUserCreatedOut if actor.role == Role.TRAINER else UserCreatedOut
+    ).model_validate(created)
+    if invitation:
+        response.headers["Cache-Control"] = "no-store"
+        output.telegram_invitation = TelegramInvitation.model_validate(invitation)
+    return output
 
 
 @router.patch("/users/{user_id}", response_model=UserOut, summary="Изменить пользователя")

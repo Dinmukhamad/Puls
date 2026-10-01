@@ -2,14 +2,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import { team, teamError, type TeamGroup, type TeamUserInput } from "../api/team";
+import { team, teamError, type TeamGroup, type TeamUserCreated, type TeamUserInput } from "../api/team";
+import type { TelegramInvitation } from "../api/telegram";
 import type { Gender, Role, UserOut } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSkeleton } from "../components/ui";
-import { ROLE_LABELS } from "../utils/format";
+import { dateTime, ROLE_LABELS } from "../utils/format";
 import "./team.css";
 
 const roles: Role[] = ["operator", "trainer", "supervisor", "head", "admin"];
@@ -116,12 +117,18 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
   const [gender, setGender] = useState<Gender | "">(target?.gender ?? "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [telegramUsername, setTelegramUsername] = useState("");
+  const [telegramError, setTelegramError] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ fullName: string; telegramUsername: string; invitation: TelegramInvitation } | null>(null);
+  const [copyError, setCopyError] = useState(false);
+  const telegramUrl = telegramUsername.trim().match(/^(?:https?:\/\/)?t\.me\/([A-Za-z][A-Za-z0-9_]{4,31})\/?$/);
+  const normalizedTelegram = (telegramUrl?.[1] ?? telegramUsername.trim().replace(/^@/, "")).toLowerCase();
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: (): Promise<TeamUserCreated> => {
       const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, phone: phone.trim() || null, role: trainer ? "operator" : role, group_id: !trainer && groupId ? Number(groupId) : null, hired_on: hiredOn || null, ...(gender ? { gender } : {}) };
-      return target ? team.updateUser(target.id, data) : team.createUser({ ...data, login: login.trim(), password });
+      return target ? team.updateUser(target.id, data) : team.createUser({ ...data, login: login.trim(), password, telegram_username: telegramUsername.trim() || null });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
       queryClient.invalidateQueries({ queryKey: ["team-groups"] });
       queryClient.invalidateQueries({ queryKey: ["team-supervisors"] });
@@ -129,10 +136,42 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
       queryClient.invalidateQueries({ queryKey: ["admin-operators"] });
       queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
       toast.success(target ? "Данные сотрудника сохранены" : "Пользователь создан");
-      onClose();
+      setPassword("");
+      setShowPassword(false);
+      if (!target && data.telegram_invitation) {
+        setCreated({ fullName: data.full_name, telegramUsername: normalizedTelegram, invitation: data.telegram_invitation });
+      } else onClose();
     },
   });
-  function submit(event: FormEvent) { event.preventDefault(); if (!save.isPending) save.mutate(); }
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (save.isPending || created) return;
+    if (!target && telegramUsername.trim() && !/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(normalizedTelegram)) {
+      setTelegramError("Укажите Telegram username: 5–32 символа, латинские буквы, цифры и _. Первый символ — буква.");
+      return;
+    }
+    setTelegramError(null);
+    save.mutate();
+  }
+  async function copyInvitation() {
+    if (!created) return;
+    setCopyError(false);
+    try {
+      await navigator.clipboard.writeText(created.invitation.url);
+      toast.success("Личная ссылка скопирована");
+    } catch {
+      setCopyError(true);
+    }
+  }
+  if (created) return <Sheet title="Пользователь создан" subtitle={created.fullName} onClose={onClose} footer={<><Button onClick={() => { void copyInvitation(); }}>Скопировать ссылку</Button><Button variant="primary" onClick={onClose}>Готово</Button></>}>
+    <div className="stack">
+      <p>Передайте сотруднику @{created.telegramUsername} эту личную ссылку для подключения Telegram.</p>
+      <label className="field"><span className="field__label">Личная ссылка на бота</span><input className="input" readOnly value={created.invitation.url} onFocus={(event) => event.currentTarget.select()} /></label>
+      <p>Сотруднику нужно открыть ссылку в своём Telegram и нажать «Запустить». Настраивать Telegram в профиле Puls не нужно.</p>
+      <p className="muted">Ссылка одноразовая и действует до {dateTime(created.invitation.expires_at)}. Подключение завершится после запуска бота.</p>
+      {copyError && <p className="field__error" role="alert">Не удалось скопировать ссылку. Выделите её и скопируйте вручную.</p>}
+    </div>
+  </Sheet>;
   return <Sheet title={target ? "Изменить сотрудника" : "Новый пользователь"} subtitle={target ? `${target.login} · ID ${target.id}` : "Создайте учётную запись и назначьте роль"} onClose={() => { if (!save.isPending) onClose(); }} footer={<><Button disabled={save.isPending} onClick={onClose}>Отмена</Button><Button form="team-user-form" type="submit" variant="primary" disabled={save.isPending || !groupsReady}>{save.isPending ? "Сохраняем…" : target ? "Сохранить" : "Создать пользователя"}</Button></>}>
     <form id="team-user-form" className="stack" onSubmit={submit}>
       {save.isError && <p role="alert" className="team-form-error">{teamError(save.error)}</p>}
@@ -142,6 +181,7 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
       {!target && <label className="field"><span className="field__label">Логин</span><input className="input" autoComplete="off" value={login} onChange={(e) => setLogin(e.target.value)} required minLength={3} maxLength={150} /></label>}
       <label className="field"><span className="field__label">Email · необязательно</span><input className="input" type="email" autoComplete="email" value={email} maxLength={255} onChange={(e) => setEmail(e.target.value)} /></label>
       <label className="field"><span className="field__label">Телефон</span><input className="input" type="tel" autoComplete="tel" placeholder="+7 700 123 45 67" value={phone} maxLength={40} onChange={(e) => setPhone(e.target.value)} /><span className="field__note">Нужен для входа в Driver Simulator. Один номер — один сотрудник. После смены номера потребуется новый код из Telegram.</span></label>
+      {!target && <label className="field"><span className="field__label">Telegram · необязательно</span><input className="input" autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="@username или https://t.me/username" value={telegramUsername} maxLength={100} disabled={save.isPending} aria-invalid={telegramError ? true : undefined} onChange={(event) => { setTelegramUsername(event.target.value); setTelegramError(null); }} /><span className="field__note">Укажите username сотрудника, а не номер телефона. После создания передайте ему личную ссылку: останется только открыть её и запустить бота.</span>{telegramError && <span className="field__error" role="alert">{telegramError}</span>}</label>}
       <div className="team-form-grid"><label className="field"><span className="field__label">Роль</span><select className="input" value={role} disabled={target?.id === actor?.id} onChange={(e) => setRole(e.target.value as Role)}>{visibleRoles(actor?.role).map((r) => <option value={r} key={r}>{ROLE_LABELS[r]}</option>)}</select></label>
         {!trainer && <label className="field"><span className="field__label">Группа</span><select className="input" value={groupId} onChange={(e) => setGroupId(e.target.value)}><option value="">Без группы</option>{groups.filter((g) => g.is_active || g.id === target?.group?.id).map((g) => <option key={g.id} value={g.id} disabled={!g.is_active}>{g.name}{g.is_active ? "" : " · архив"}</option>)}</select></label>}</div>
       <label className="field"><span className="field__label">Дата приёма · необязательно</span><input className="input" type="date" value={hiredOn} onChange={(e) => setHiredOn(e.target.value)} /></label>

@@ -1,19 +1,24 @@
 import { useEffect, useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { telegram } from "../api/telegram";
+import { telegram, type TelegramInvitation } from "../api/telegram";
+import { useAccess } from "../auth/AccessContext";
+import { parseTimestamp } from "../utils/format";
 import { Sheet } from "./Sheet";
 import { Button, Card } from "./ui";
 
 export function TelegramCard() {
   useEffect(() => { if (window.location.hash === "#telegram") document.getElementById("telegram")?.scrollIntoView({ block: "start" }); }, []);
+  const { can } = useAccess();
+  const training = can("training");
   const client = useQueryClient();
   const [mode, setMode] = useState<"link" | "disconnect" | null>(null);
   const [password, setPassword] = useState("");
-  const [invitation, setInvitation] = useState<{ url: string; expires_at: string; previous: string | null } | null>(null);
+  const [invitation, setInvitation] = useState<(TelegramInvitation & { previous: string | null }) | null>(null);
   const [now, setNow] = useState(Date.now());
   const fieldId = useId();
-  const query = useQuery({ queryKey: ["telegram-link"], queryFn: telegram.status, refetchInterval: invitation && now < Date.parse(invitation.expires_at) ? 2000 : false });
+  const invitationActive = invitation && now < parseTimestamp(invitation.expires_at).getTime();
+  const query = useQuery({ queryKey: ["telegram-link"], queryFn: telegram.status, refetchInterval: (query) => invitationActive ? 2000 : query.state.data?.pending_username ? 5000 : false });
   const link = useMutation({ mutationFn: () => telegram.link(password), onSuccess: (data) => {
     setInvitation({ ...data, previous: query.data?.linked_at ?? null }); setPassword("");
   } });
@@ -38,20 +43,21 @@ export function TelegramCard() {
   function open(next: "link" | "disconnect") {
     setMode(next); setPassword(""); setInvitation(null); link.reset(); disconnect.reset(); setNow(Date.now());
   }
-  return <Card id="telegram" title="Telegram для входа" subtitle="Коды для Driver Simulator приходят в ваш личный чат с ботом">
+  return <Card id="telegram" title={training ? "Telegram для входа" : "Telegram"} subtitle={training ? "Коды для Driver Simulator приходят в ваш личный чат с ботом" : "Подключение личного чата с ботом Puls"}>
     <div className="stack stack--tight">
       {query.isLoading ? <p role="status">Проверяем подключение…</p> : query.isError ? <><p role="alert" className="field__error">{query.error.message}</p><Button onClick={() => query.refetch()}>Повторить</Button></> : <>
         <p role="status">{query.data?.connected ? `Подключён${query.data.username ? ` · @${query.data.username}` : ""}` : "Telegram ещё не подключён"}</p>
+        {!query.data?.connected && query.data?.pending_username && <p>При создании аккаунта указан @{query.data.pending_username}. Откройте личную ссылку, которую вам передал создавший аккаунт сотрудник, и нажмите «Запустить» в Telegram. Если ссылки нет или она истекла, получите новую ниже.</p>}
         {!query.data?.configured && <p className="muted">Администратору нужно завершить настройку бота на сервере.</p>}
         <div className="stack stack--tight">
-          <Button disabled={!query.data?.configured} onClick={() => open("link")}>{query.data?.connected ? "Сменить Telegram" : "Подключить Telegram"}</Button>
+          <Button disabled={!query.data?.configured} onClick={() => open("link")}>{query.data?.connected ? "Сменить Telegram" : query.data?.pending_username ? "Получить новую личную ссылку" : "Подключить Telegram"}</Button>
           {query.data?.connected && <Button onClick={() => open("disconnect")}>Отключить</Button>}
         </div>
-        {query.data?.connected && <Link to="/simulator">Вернуться в Driver Simulator →</Link>}
+        {query.data?.connected && training && <Link to="/simulator">Вернуться в Driver Simulator →</Link>}
       </>}
     </div>
     {mode && <Sheet title={mode === "link" ? "Подключить Telegram" : "Отключить Telegram"} size="s" onClose={() => { if (!busy) { setMode(null); setPassword(""); setInvitation(null); } }}>
-      {invitation && now < Date.parse(invitation.expires_at) ? <div className="stack">
+      {invitation && invitationActive ? <div className="stack">
         <p>Откройте @{query.data?.bot_username} по этой личной ссылке и нажмите «Запустить» в Telegram. Затем вернитесь сюда.</p>
         <a className="btn btn--primary" href={invitation.url} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Открыть бота в Telegram</a>
         <p className="muted">Ссылка действует 10 минут. Не передавайте её другим людям.</p>

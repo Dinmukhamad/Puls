@@ -8,11 +8,11 @@ import secrets
 from datetime import UTC, timedelta
 
 import httpx
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
-from app.core.errors import DomainError
+from app.core.errors import ConflictError, DomainError
 from app.core.security import verify_password
 from app.db.base import utcnow
 from app.models.driver_auth import DriverDevice, TelegramLink
@@ -115,9 +115,47 @@ async def status(session, user_id):
         "configured": bot_ready(),
         "connected": bool(link and link.chat_id),
         "username": link.username if link and link.chat_id else None,
+        "pending_username": link.pending_username if link and not link.chat_id else None,
         "linked_at": as_utc(link.linked_at) if link and link.chat_id and link.linked_at else None,
         "bot_username": settings.TELEGRAM_BOT_USERNAME if bot_ready() else None,
     }
+
+
+def issue_invitation(link, *, validity=timedelta(minutes=10)):
+    token = secrets.token_urlsafe(24)
+    link.link_hash = digest("telegram-link:" + token)
+    link.link_expires_at = utcnow() + validity
+    link.link_requested_at = utcnow()
+    return {
+        "url": f"https://t.me/{settings.TELEGRAM_BOT_USERNAME}?start=link_{token}",
+        "expires_at": as_utc(link.link_expires_at),
+    }
+
+
+async def prepare_account_invitation(session, user_id, username):
+    """Prepare an invitation without committing the account creation transaction."""
+    require_bot()
+    occupied = await session.scalar(
+        select(TelegramLink.user_id).where(
+            or_(
+                TelegramLink.pending_username == username,
+                (func.lower(TelegramLink.username) == username)
+                & TelegramLink.chat_id.is_not(None),
+            )
+        )
+    )
+    if occupied is not None:
+        await session.rollback()
+        raise ConflictError("Этот Telegram уже указан для другого аккаунта Puls")
+    link = TelegramLink(user_id=user_id, pending_username=username, version=1, send_count=0)
+    session.add(link)
+    invitation = issue_invitation(link, validity=timedelta(days=7))
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise ConflictError("Этот Telegram уже указан для другого аккаунта Puls") from exc
+    return invitation
 
 
 async def create_link(session, user_id, password):
@@ -131,15 +169,11 @@ async def create_link(session, user_id, password):
         session.add(link)
     if link.link_requested_at and as_utc(link.link_requested_at) + timedelta(seconds=30) > utcnow():
         raise RateLimit("Новую ссылку можно получить через 30 секунд")
-    token = secrets.token_urlsafe(24)
-    link.link_hash = digest("telegram-link:" + token)
-    link.link_expires_at = utcnow() + timedelta(minutes=10)
-    link.link_requested_at = utcnow()
+    # Подтверждённый пароль позволяет владельцу выбрать другой Telegram.
+    link.pending_username = None
+    invitation = issue_invitation(link)
     await session.commit()
-    return {
-        "url": f"https://t.me/{settings.TELEGRAM_BOT_USERNAME}?start=link_{token}",
-        "expires_at": as_utc(link.link_expires_at),
-    }
+    return invitation
 
 
 async def disconnect(session, user_id, password):
@@ -150,6 +184,7 @@ async def disconnect(session, user_id, password):
     if link:
         link.chat_id = None
         link.username = None
+        link.pending_username = None
         link.linked_at = None
         link.link_hash = None
         link.link_expires_at = None
@@ -190,7 +225,14 @@ async def receive_start(session, message):
                         TelegramLink.chat_id == chat.id, TelegramLink.user_id != owner_id
                     )
                 )
-                if occupied is not None:
+                if link.pending_username and (
+                    sender.username or ""
+                ).lower() != link.pending_username:
+                    reply = (
+                        "Этот Telegram не совпадает с указанным при создании аккаунта. "
+                        "Откройте ссылку из нужного аккаунта Telegram."
+                    )
+                elif occupied is not None:
                     reply = (
                         "Этот Telegram уже подключён к другому аккаунту Puls. "
                         "Сначала отключите прежнюю привязку в Puls."
@@ -198,6 +240,7 @@ async def receive_start(session, message):
                 else:
                     link.chat_id = chat.id
                     link.username = sender.username
+                    link.pending_username = None
                     link.linked_at = utcnow()
                     link.link_hash = None
                     link.link_expires_at = None
@@ -215,7 +258,7 @@ async def receive_start(session, message):
                         await session.commit()
                         reply = (
                             "Telegram подключён к вашему аккаунту Puls. "
-                            "Вернитесь в Driver Simulator: коды для входа будут приходить сюда."
+                            "Коды для входа будут приходить сюда."
                         )
                     except IntegrityError:
                         await session.rollback()
@@ -227,7 +270,9 @@ async def receive_start(session, message):
     elif text.startswith("/help"):
         reply = (
             "Бот присылает коды входа и проводит учебный разбор обращения. "
-            "Подключение — в профиле Puls; обращение — Смена → Чаты → Поддержка."
+            "Для подключения откройте персональную ссылку от создателя аккаунта "
+            "или получите новую в профиле Puls. "
+            "Обращение — Смена → Чаты → Поддержка."
         )
     elif not text.startswith("/start"):
         return {}

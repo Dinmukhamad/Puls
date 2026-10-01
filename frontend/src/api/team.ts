@@ -1,5 +1,6 @@
 import { ApiError, buildQuery, request } from "./client";
 import type { Gender, DashboardOut, Page, Role, ShopRequestOut, TransactionOut, UserBrief, UserOut } from "./types";
+import type { TelegramInvitation } from "./telegram";
 
 export interface TeamGroup {
   id: number;
@@ -24,6 +25,11 @@ export interface TeamUserInput {
 export interface TeamUserCreate extends TeamUserInput {
   login: string;
   password: string;
+  telegram_username?: string | null;
+}
+
+export interface TeamUserCreated extends UserOut {
+  telegram_invitation?: TelegramInvitation | null;
 }
 
 export interface TeamGroupInput {
@@ -35,7 +41,7 @@ export const team = {
   users: (params: Record<string, unknown>, signal?: AbortSignal) =>
     request<Page<UserOut>>(`/api/v1/admin/users${buildQuery(params)}`, { signal }),
   user: (id: number) => request<UserOut>(`/api/v1/admin/users/${id}`),
-  createUser: (json: TeamUserCreate) => request<UserOut>("/api/v1/admin/users", { method: "POST", json }),
+  createUser: (json: TeamUserCreate) => request<TeamUserCreated>("/api/v1/admin/users", { method: "POST", json }),
   updateUser: (id: number, json: Partial<TeamUserInput> & { is_active?: boolean }) =>
     request<UserOut>(`/api/v1/admin/users/${id}`, { method: "PATCH", json }),
   resetPassword: (id: number, password: string) =>
@@ -70,8 +76,8 @@ export function teamError(error: unknown, fallback = "Не удалось сох
     if (error.status === 0) return "Нет соединения с сервером. Проверьте интернет и повторите попытку.";
     if (error.status === 404) return "Сотрудник или группа не найдены либо недоступны для вашей роли.";
     if (error.status === 403) return "Для этого действия недостаточно прав. Обратитесь к администратору.";
-    if (error.status === 422) return "Проверьте заполнение полей: имя, email, роль и длину пароля.";
-    if ([400, 409].includes(error.status) && typeof error.body.detail === "string") return error.body.detail;
+    if (error.status === 422) return "Проверьте заполнение полей: имя, email, роль, Telegram и длину пароля.";
+    if ([400, 409, 503].includes(error.status) && typeof error.body.detail === "string") return error.body.detail;
   }
   return fallback;
 }

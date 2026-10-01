@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from string import ascii_letters, digits
 from typing import Literal
@@ -68,6 +69,19 @@ class TrainingUserOut(ORMModel):
     created_at: datetime
 
 
+class TelegramInvitation(BaseModel):
+    url: str
+    expires_at: datetime
+
+
+class UserCreatedOut(UserOut):
+    telegram_invitation: TelegramInvitation | None = None
+
+
+class TrainingUserCreatedOut(TrainingUserOut):
+    telegram_invitation: TelegramInvitation | None = None
+
+
 class PasswordMixin(BaseModel):
     password: str
 
@@ -98,6 +112,21 @@ class UserCreate(PasswordMixin, PhoneMixin):
     group_id: int | None = Field(default=None, gt=0)
     hired_on: date | None = None
     gender: Gender | None = None
+    telegram_username: str | None = Field(default=None, max_length=32)
+
+    @field_validator("telegram_username", mode="before")
+    @classmethod
+    def _normalize_telegram(cls, value):
+        if not isinstance(value, str):
+            return value
+        value = value.strip()
+        if not value:
+            return None
+        url = re.fullmatch(r"(?:https?://)?t\.me/([A-Za-z][A-Za-z0-9_]{4,31})/?", value)
+        username = url.group(1) if url else value.removeprefix("@")
+        if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{4,31}", username):
+            raise ValueError("Укажите Telegram в формате @username или t.me/username")
+        return username.lower()
 
     @field_validator("login", "full_name", mode="before")
     @classmethod

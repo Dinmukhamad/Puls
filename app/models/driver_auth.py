@@ -15,6 +15,9 @@ class TelegramLink(Base):
     )
     chat_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, nullable=True)
     username: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pending_username: Mapped[str | None] = mapped_column(
+        String(32), unique=True, index=True, nullable=True
+    )
     linked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     link_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     link_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

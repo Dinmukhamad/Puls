@@ -79,7 +79,7 @@ export function ProfilePage() {
               ))}
             </div>
       </Card>
-      {can("training") && <Suspense fallback={<Card title="Telegram для входа"><p role="status">Загрузка…</p></Card>}><TelegramCard /></Suspense>}
+      <Suspense fallback={<Card title="Telegram"><p role="status">Загрузка…</p></Card>}><TelegramCard /></Suspense>
       <PwaInstallCard />
     </div>
     {loginOpen && <LoginSheet current={user.login} onClose={() => setLoginOpen(false)} />}
