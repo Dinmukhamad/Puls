@@ -517,6 +517,27 @@ async def city_state(session, user, city_id):
         raise NotFoundError("Город не найден")
     all_districts = await world_districts(session)
     districts = {k: d for k, d in all_districts.items() if d["city"] == city_id}
+    team = await members(session, districts)
+    staff = await managed(session, user, districts)
+    home = home_district(all_districts, user)
+    items = await describe(
+        session,
+        user,
+        districts,
+        mine=lambda key: bool(home and home["id"] == key),
+        manages=lambda key: key in staff,
+        small=lambda key: team[key] < SMALL_TEAM,
+    )
+    return {"city": city_id, "districts": items}
+
+
+async def describe(session, user, districts, *, mine, manages, small):
+    """Districts by id as the city shows them: land by band, headquarters, buildings, projects.
+
+    `mine`, `manages` and `small` say for a district id whether it is the viewer's own, whether
+    the viewer runs its projects (and sees exact sums), and whether its team is too small to show
+    a project's progress.
+    """
     ids = list(districts)
     steps = (await prices(session))["hq"]
 
@@ -547,7 +568,7 @@ async def city_state(session, user, city_id):
         .where(CityEvent.district_id.in_(ids))
         .group_by(CityEvent.district_id)
     )
-    mine = (
+    given = (
         dict(
             (
                 await session.execute(
@@ -564,23 +585,19 @@ async def city_state(session, user, city_id):
         else {}
     )
     taken = await taken_plots(session, ids)
-    team = await members(session, districts)
-    staff = await managed(session, user, districts)
-    home = home_district(all_districts, user)
     items = []
     for key, d in districts.items():
         state = states.get(key)
         level, built = (state.hq_level, state.built_projects) if state else (1, 0)
         nxt = next(((i + 2, need) for i, need in enumerate(steps) if i + 2 > level), None)
-        small = team[key] < SMALL_TEAM
         items.append(
             {
                 "id": key,
                 "name": d["name"],
                 "number": d["number"],
                 "construction": d["construction"],
-                "mine": bool(home and home["id"] == key),
-                "managed": key in staff,
+                "mine": mine(key),
+                "managed": manages(key),
                 "land": land_view(key, taken[key], state),
                 "hq": {
                     "level": level,
@@ -592,14 +609,14 @@ async def city_state(session, user, city_id):
                 },
                 "objects": [public_object(o, user) for o in objects if o.district_id == key],
                 "projects": [
-                    project_view(p, mine.get(p.id, 0), small=small, exact=key in staff)
+                    project_view(p, given.get(p.id, 0), small=small(key), exact=manages(key))
                     for p in projects
                     if p.district_id == key
                 ],
                 "version": versions.get(key, 0),
             }
         )
-    return {"city": city_id, "districts": items}
+    return items
 
 
 def project_view(project, mine, *, small, exact):
@@ -657,7 +674,11 @@ async def estate(session, user):
     objects = list(
         await session.scalars(
             select(CityObject)
-            .where(CityObject.owner_id == user.id, CityObject.state.in_(["placed", "stored"]))
+            .where(
+                CityObject.owner_id == user.id,
+                CityObject.state.in_(["placed", "stored"]),
+                real_land(),
+            )
             .order_by(CityObject.id)
         )
     )
@@ -724,9 +745,19 @@ def require_builder(user, home):
 
 
 def elsewhere(user, home):
-    """The operator's buildings standing outside their district (or anywhere, without one)."""
-    query = select(CityObject).where(CityObject.owner_id == user.id, CityObject.state == "placed")
+    """The operator's buildings standing outside their district (or anywhere, without one).
+
+    The administrators' test city (app/services/city_sandbox.py) is never anyone's district.
+    """
+    query = select(CityObject).where(
+        CityObject.owner_id == user.id, CityObject.state == "placed", real_land()
+    )
     return query.where(CityObject.district_id != home["id"]) if home else query
+
+
+def real_land():
+    """Buildings of the real city, not of the administrators' test city."""
+    return ~CityObject.district_id.startswith(city_land.SANDBOX)
 
 
 async def needs_reconcile(session, user, districts):
@@ -1570,7 +1601,7 @@ async def report(session):
     homeless = await session.scalar(
         select(func.count())
         .select_from(CityObject)
-        .where(CityObject.state == "stored", CityObject.owner_id.is_not(None))
+        .where(CityObject.state == "stored", CityObject.owner_id.is_not(None), real_land())
     )
     refunds = await total(TxType.PURCHASE_REFUND, "city-refund:%") + await total(
         TxType.PURCHASE_REFUND, "city-land-reset:%"

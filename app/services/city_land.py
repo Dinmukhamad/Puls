@@ -18,6 +18,9 @@ from functools import cache
 from pathlib import Path
 
 LAND_FILE = Path(__file__).resolve().parent.parent / "data" / "city_land.json"
+#: The administrators' test city keeps copies of the districts under ids with this prefix
+#: (app/services/city_sandbox.py); they have the same land.
+SANDBOX = "test-"
 #: The next band opens when this share of the plots of the bands before it is taken.
 OPEN_SHARE = 0.7
 
@@ -42,8 +45,8 @@ def _land():
 
 
 def split(district_id):
-    """("support", 1) for "support-team-1"."""
-    city, number = district_id.rsplit("-team-", 1)
+    """("support", 1) for "support-team-1" (and for its test copy "test-support-team-1")."""
+    city, number = district_id.removeprefix(SANDBOX).rsplit("-team-", 1)
     return city, int(number)
 
 

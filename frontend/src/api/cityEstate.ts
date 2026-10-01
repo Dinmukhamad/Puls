@@ -33,7 +33,11 @@ export interface DistrictEstate {
   hq: { level: number; name: string; built: number; next: { level: number; name: string; need: number } | null };
   objects: PublicObject[]; projects: DistrictProject[]; version: number;
 }
-export interface CityEstates { city: DepartmentId; districts: DistrictEstate[] }
+export interface CityEstates {
+  city: DepartmentId; districts: DistrictEstate[];
+  /** The administrators' test city (citySandbox below), drawn on the same land under the same district ids. */
+  sandbox?: true;
+}
 
 export interface OwnObject extends Footprint {
   id: number; family: PlotFamily; level: number; state: "placed" | "stored"; district_id: string;
@@ -97,4 +101,24 @@ export const cityEstate = {
   contribute: (id: number, json: { key: string; amount: number; up_to: boolean }) => post(`/projects/${id}/contributions`, json),
   cancel: (id: number, json: { key: string }) => post(`/projects/${id}/cancel`, json),
   report: () => request<EstateReport>("/api/v1/admin/learning/city/estates"),
+};
+
+/**
+ * The administrators' test city (app/services/city_sandbox.py): a copy of a city's three districts that only
+ * administrators see, on the same land and by the same rules, where they build for free, set any stage up or down,
+ * take buildings away, open bands, set the headquarters' stage and build or cancel shared projects at once. It never
+ * touches the real districts, operators or coins, so its changes need no idempotency key: none of them pays.
+ */
+export interface SandboxResult { object?: PublicObject; merged?: boolean; removed?: number; project?: number; cancelled?: number; open_band?: number; hq_level?: number; reset?: boolean }
+const SANDBOX = "/api/v1/admin/learning/city/sandbox";
+export const citySandbox = {
+  city: (city: DepartmentId) => request<CityEstates>(`${SANDBOX}/cities/${city}`),
+  build: (json: { district_id: string; family: PlotFamily; block: number; col: number; row: number }) => request<SandboxResult>(`${SANDBOX}/plots`, { method: "POST", json }),
+  level: (id: number, level: number) => request<SandboxResult>(`${SANDBOX}/buildings/${id}/level`, { method: "POST", json: { level } }),
+  remove: (id: number) => request<SandboxResult>(`${SANDBOX}/buildings/${id}`, { method: "DELETE" }),
+  district: (id: string, json: { open_band?: number; hq_level?: number }) => request<SandboxResult>(`${SANDBOX}/districts/${id}`, { method: "PUT", json }),
+  openProject: (json: { district_id: string; family: ProjectFamily; target_id?: number; u?: number; v?: number; rotation?: number }) => request<SandboxResult>(`${SANDBOX}/projects`, { method: "POST", json }),
+  complete: (id: number) => request<SandboxResult>(`${SANDBOX}/projects/${id}/complete`, { method: "POST" }),
+  cancel: (id: number) => request<SandboxResult>(`${SANDBOX}/projects/${id}`, { method: "DELETE" }),
+  reset: (city: DepartmentId) => request<SandboxResult>(`${SANDBOX}/cities/${city}/reset`, { method: "POST" }),
 };

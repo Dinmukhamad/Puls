@@ -403,7 +403,11 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
 
   recolour();
   return {
-    set(next) { view = next; rebuild(); },
+    set(next) {
+      // The other land on the same ground (the administrators' test city, or back from it) is a first look: nothing rises.
+      if (!!next?.state.sandbox !== !!view?.state.sandbox) seen.clear();
+      view = next; rebuild();
+    },
     setCatalogue(value) { catalogue = value; rebuildSquares(); builtKey = ""; rebuild(); },
     setBuild(next) {
       const same = build && next && build.district === next.district && build.area === next.area && build.placing?.family === next.placing?.family && build.placing?.moving === next.placing?.moving;

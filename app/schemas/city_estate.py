@@ -66,3 +66,52 @@ class ContributionInput(Keyed):
 
 class CancelInput(Keyed):
     pass
+
+
+# ---- the administrators' test city (app/services/city_sandbox.py) --------------------------------
+
+#: A district of the test city by the id of the real one it copies.
+SANDBOX_DISTRICT = r"^(support|sales)-team-[1-3]$"
+
+
+class SandboxPlotInput(Plot):
+    """A square or a house on a free plot of a test district, for free."""
+
+    model_config = ConfigDict(extra="forbid")
+    district_id: str = Field(pattern=SANDBOX_DISTRICT, max_length=32)
+    family: str = Field(pattern=r"^[a-z]{2,16}$")
+
+
+class LevelInput(BaseModel):
+    """Any stage of a test building, up or down."""
+
+    model_config = ConfigDict(extra="forbid")
+    level: int = Field(ge=1, le=9)
+
+
+class SandboxDistrictInput(BaseModel):
+    """The open band and the headquarters' stage of a test district; what is left out stays."""
+
+    model_config = ConfigDict(extra="forbid")
+    open_band: int | None = Field(default=None, ge=1, le=9)
+    hq_level: int | None = Field(default=None, ge=1, le=9)
+
+
+class SandboxProjectInput(BaseModel):
+    """A shared project of a test district: the next stage of `target_id`, or new at (u, v)."""
+
+    model_config = ConfigDict(extra="forbid")
+    district_id: str = Field(pattern=SANDBOX_DISTRICT, max_length=32)
+    family: str = Field(pattern=r"^[a-z]{2,16}$")
+    target_id: int | None = Field(default=None, ge=1)
+    u: int | None = Field(default=None, ge=0, le=11)
+    v: int | None = Field(default=None, ge=0, le=11)
+    rotation: int = Field(default=0, ge=0, le=3)
+
+    @model_validator(mode="after")
+    def place_or_target(self):
+        if self.target_id is None and None in (self.u, self.v):
+            raise ValueError("Укажите место проекта на общественной площади")
+        if self.target_id is not None and (self.u, self.v) != (None, None):
+            raise ValueError("Улучшение строится на месте постройки")
+        return self

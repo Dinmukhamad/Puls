@@ -31,12 +31,31 @@
 .estate-bands li[data-open]{color:var(--text-primary);background:color-mix(in srgb,#8fd16a 12%,var(--surface-primary))}
 .estate-bands li>span:first-child{grid-area:name;font-weight:700}.estate-bands li>span:nth-child(2){grid-area:price}.estate-bands small{grid-area:count;font-size:11.5px;color:var(--text-secondary)}
 .estate-bands__meter{grid-area:meter;display:block;height:5px;border-radius:3px;background:color-mix(in srgb,var(--text-primary) 10%,transparent);overflow:hidden}.estate-bands__meter i{display:block;height:100%;background:#5aa84b}
+/* Тестовый город администраторов: район и вкладка, ступени постройки, пояса и штаб по шагам. */
+.sandbox-dock .city-eyebrow{color:#7a5af5}
+.sandbox-switch{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px}
+.sandbox-switch button,.sandbox-levels button,.sandbox-stepper button{border:1px solid var(--separator);border-radius:12px;background:var(--city-glass-soft);color:var(--text-primary);font:inherit;cursor:pointer}
+.sandbox-switch button{display:grid;gap:1px;justify-items:center;align-content:center;min-width:0;min-height:44px;padding:6px 8px;font-size:12.5px;font-weight:650}
+.sandbox-switch small{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;font-weight:500;color:var(--text-secondary)}
+.sandbox-switch button[aria-pressed=true]{border-color:#7a5af5;background:color-mix(in srgb,#7a5af5 16%,var(--surface-primary))}
+.sandbox-switch button:focus-visible,.sandbox-levels button:focus-visible,.sandbox-stepper button:focus-visible{outline:2px solid var(--accent-primary);outline-offset:2px}
+.sandbox-stepper{display:grid;grid-template-columns:44px minmax(0,1fr) 44px;gap:8px;align-items:center}
+.sandbox-stepper button{min-height:44px;font-size:20px;font-weight:700}.sandbox-stepper button:disabled,.sandbox-levels button:disabled{opacity:.45;cursor:default}
+.sandbox-stepper span{text-align:center;font-size:13px;font-weight:650;line-height:1.35}
+.sandbox-levels{display:grid;grid-template-columns:repeat(auto-fit,minmax(56px,1fr));gap:6px}
+.sandbox-levels button{display:grid;gap:2px;justify-items:center;align-content:start;min-height:52px;padding:6px 4px}
+.sandbox-levels strong{font-size:14px}.sandbox-levels small{font-size:10px;line-height:1.2;text-align:center;overflow-wrap:anywhere;color:var(--text-secondary)}
+.sandbox-levels button[aria-pressed=true]{border-color:#e9b23a;background:color-mix(in srgb,#e9b23a 22%,var(--surface-primary))}
+.estate-dock .sandbox-remove,.estate-dock .sandbox-reset{color:#c23a45;border-color:color-mix(in srgb,#e0525d 45%,var(--separator))}
+.sandbox-note{border:1px solid color-mix(in srgb,#7a5af5 45%,var(--separator))}
 .c3-estate-sign{padding:6px 12px 6px 8px;border-radius:12px;gap:8px}.c3-estate-sign>span:first-child{font-size:18px}.c3-estate-sign strong{display:block;font-size:13px}.c3-estate-sign small{display:block;font-size:11px;opacity:.85}
 @media(max-width:767px){
   /* The dock leaves the map above it free, and the city centres what it shows there (.city-frame). */
   .city-immersive[data-building][data-department]{--city-free-bottom:calc(var(--city-dock) + min(44dvh,400px) + 10px)}
   .estate-dock{top:auto;left:var(--city-left);right:var(--city-right);bottom:var(--city-dock);width:auto;max-height:min(44dvh,400px,calc(100dvh - var(--city-dock) - var(--city-top) - var(--city-hud) - 24px));box-shadow:0 -6px 30px rgba(16,24,40,.16)}
   .estate-dock__head{padding:12px 12px 4px}.estate-dock__body{padding:2px 12px 12px;gap:11px}
+  /* The dock says it is the test city; the map above it stays free. */
+  .city-immersive[data-building] .sandbox-note{display:none}
   .estate-catalogue li,.estate-list li{grid-template-columns:36px minmax(0,1fr) auto}.estate-catalogue__icon,.estate-list li>span:first-child{width:36px;height:36px;font-size:19px}
 }
 @media(min-width:768px) and (orientation:portrait){.estate-dock{top:auto;left:var(--city-left);width:auto;height:min(46vh,480px)}}

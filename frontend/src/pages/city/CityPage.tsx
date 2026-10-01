@@ -1,7 +1,8 @@
 import { cityWorld, SALES_RESOURCES, type DepartmentId } from "../../api/cityWorld";
-import { cityEstate } from "../../api/cityEstate";
+import { cityEstate, citySandbox } from "../../api/cityEstate";
 import { CityWorldPanel, CityJourney } from "./CityWorldPanel";
 import { CityEstateDock, type BuildState, type EstateTarget } from "./CityEstateDock";
+import { CitySandboxDock } from "./CitySandboxDock";
 import type { CityEstateView, EstatePick, JourneyPhase } from "../../city3d/types";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -33,7 +34,11 @@ export function CityPage() {
   const [worldAction, setWorldAction] = useState<{ kind: "travel" | "skip" | "focus"; target: string; at: number }>();
   const [journey, setJourney] = useState<JourneyPhase>(null), [destination, setDestination] = useState<DepartmentId>("sales");
   function visit(id: DepartmentId) { const next = new URLSearchParams(params); next.set("city", id); setParams(next); setWorldSelected(null); }
-  function pickWorld(id: string) { setWorldSelected(id); if (id !== "world") setWorldAction({ kind: "focus", target: id, at: Date.now() }); }
+  function pickWorld(id: string) {
+    // In the test city a district opens its own dock, not the real district's card.
+    if (sandboxOn && new RegExp(`^${department}-team-[1-3]$`).test(id)) { setWorldSelected(null); openSandbox(id); return; }
+    setWorldSelected(id); if (id !== "world") setWorldAction({ kind: "focus", target: id, at: Date.now() });
+  }
   const operatorId = user?.role !== "operator" && /^\d+$/.test(params.get("operator") ?? "") ? Number(params.get("operator")) : null;
   const query = useQuery({ queryKey: ["city", operatorId ?? "self"], queryFn: () => operatorId ? city.operator(operatorId) : city.own(), refetchInterval: 15000, refetchOnWindowFocus: true });
   const [reward, setReward] = useState<CityReward | null>(null);
@@ -56,20 +61,28 @@ export function CityPage() {
   // 12 seconds (with a little spread) only while this page is open and visible.
   const estateQuery = useQuery({ queryKey: ["city-estate"], queryFn: cityEstate.mine, refetchOnWindowFocus: true });
   const landPoll = () => 10000 + Math.random() * 5000;
-  const supportLand = useQuery({ queryKey: ["city-estates", "support"], queryFn: () => cityEstate.city("support"), enabled: department === "support", refetchInterval: landPoll, refetchOnWindowFocus: true });
-  const salesLand = useQuery({ queryKey: ["city-estates", "sales"], queryFn: () => cityEstate.city("sales"), enabled: department === "sales", refetchInterval: landPoll, refetchOnWindowFocus: true });
+  // Administrators may switch the map to their test city (?sandbox=1): the same land, apart from the real one.
+  const sandboxOn = user?.role === "admin" && params.get("sandbox") === "1";
+  const supportLand = useQuery({ queryKey: ["city-estates", "support"], queryFn: () => cityEstate.city("support"), enabled: department === "support" && !sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
+  const salesLand = useQuery({ queryKey: ["city-estates", "sales"], queryFn: () => cityEstate.city("sales"), enabled: department === "sales" && !sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
+  const sandboxLand = useQuery({ queryKey: ["city-sandbox", department], queryFn: () => citySandbox.city(department), enabled: sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
   const estateViews = useMemo(() => {
     const views: Partial<Record<DepartmentId, CityEstateView>> = {};
+    if (sandboxOn) {
+      if (sandboxLand.data?.city === department) views[department] = { state: sandboxLand.data };
+      return views;
+    }
     if (supportLand.data) views.support = { state: supportLand.data };
     if (salesLand.data) views.sales = { state: salesLand.data };
     return views;
-  }, [supportLand.data, salesLand.data]);
+  }, [sandboxOn, department, sandboxLand.data, supportLand.data, salesLand.data]);
   const [building, setBuilding] = useState<BuildState | null>(null), [estateFocus, setEstateFocus] = useState<EstateTarget & { at: number }>();
   const buildView = useMemo(() => building && { district: building.district, area: building.area, placing: building.placing, selected: building.selected, plot: building.plot && { block: building.plot.block, col: building.plot.col, row: building.plot.row } },
     [building?.district, building?.area, building?.placing, building?.selected, building?.plot]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusLand = (target: EstateTarget) => setEstateFocus({ ...target, at: Date.now() });
   const landOf = (district: string) => (district.startsWith("sales-") ? salesLand.data : supportLand.data)?.districts.find(d => d.id === district) ?? null;
   function onEstate(pick: EstatePick) {
+    if (sandboxOn && pick.kind === "project") { openSandbox(pick.district, true); return; }
     if (pick.kind === "place") setBuilding(b => b && { ...b, spot: { module: pick.module, u: pick.u, v: pick.v, rotation: pick.rotation, problem: pick.problem } });
     else if (pick.kind === "plot") setBuilding(b => b && { ...b, plot: { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem }, selected: null });
     else if (pick.kind === "project") setWorldSelected(pick.district);
@@ -83,6 +96,22 @@ export function CityPage() {
     setBuilding({ district: home.id, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false });
     focusLand({ district: home.id, kind: "district" });
   }
+  /** The test city's dock on a district, on its plots or on its square with the shared projects. */
+  function openSandbox(district: string, square = false) {
+    setBuilding({ district, area: square ? "public" : "plots", placing: null, selected: null, plot: null, spot: null, project: square });
+    focusLand({ district, kind: square ? "public" : "district" });
+  }
+  function toggleSandbox() {
+    const next = new URLSearchParams(params);
+    if (sandboxOn) next.delete("sandbox"); else next.set("sandbox", "1");
+    setParams(next, { replace: true });
+    setWorldSelected(null);
+    if (sandboxOn) setBuilding(null); else openSandbox(`${department}-team-1`);
+  }
+  useEffect(() => {
+    // After a trip to the other city the test city's dock follows to its first district.
+    if (sandboxOn) setBuilding(b => b && !b.district.startsWith(`${department}-`) ? { district: `${department}-team-1`, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false } : b);
+  }, [sandboxOn, department]);
   useEffect(() => {
     if (!building) return;
     // Escape leaves the preview first, then the dock; it never undoes what the server already did.
@@ -142,7 +171,8 @@ export function CityPage() {
       <div className="city-hud__stat"><strong>{completed}<small> / {total}</small></strong><span className="city-hud__label">{department === "sales" ? "миссий в первом городе" : "миссий пройдено"}</span></div>
       {!data.preview && <div className="city-hud__coins"><span className="city-coin" aria-hidden="true">◈</span><span className="city-hud__stat"><strong>{data.balance.toLocaleString("ru-RU")}</strong><span className="city-hud__label">коинов в кошельке</span></span></div>}
       <nav className="city-hud__links" aria-label="Обучение">
-        {canOpenBuild && <button type="button" className="city-group-button" data-open={building ? true : undefined} aria-pressed={!!building} onClick={() => building ? setBuilding(null) : openBuild()} aria-label={mineEstate!.district!.city === department ? "Строить в своём районе" : "Мой участок в другом городе"}><span aria-hidden="true">🏡</span><span className="city-hud__wide">{mineEstate!.district!.city === department ? "Строить" : "Мой участок"}</span></button>}
+        {user?.role === "admin" && <button type="button" className="city-group-button" data-open={sandboxOn || undefined} aria-pressed={sandboxOn} onClick={toggleSandbox} aria-label={sandboxOn ? "Выйти из тестового города" : "Тестовый город администраторов"} title="Тестовый город: только для администраторов"><span aria-hidden="true">🧪</span><span className="city-hud__wide">Тест</span></button>}
+        {canOpenBuild && !sandboxOn && <button type="button" className="city-group-button" data-open={building ? true : undefined} aria-pressed={!!building} onClick={() => building ? setBuilding(null) : openBuild()} aria-label={mineEstate!.district!.city === department ? "Строить в своём районе" : "Мой участок в другом городе"}><span aria-hidden="true">🏡</span><span className="city-hud__wide">{mineEstate!.district!.city === department ? "Строить" : "Мой участок"}</span></button>}
         {department === "support" && data.quests && data.quests.items.length > 0 && <button type="button" className="city-group-button" data-open={data.quests.items.some(q => !q.answered) || undefined} onClick={() => { const next = data.quests!.items.find(q => !q.answered) ?? data.quests!.items[0]; answer.reset(); setQuestSlot(next.slot); if (!next.answered) setQuestFocus({ slot: next.slot, at: Date.now() }); }} aria-label={`Задания дня: выполнено ${data.quests.items.filter(q => q.answered).length} из ${data.quests.items.length}`}><span aria-hidden="true">❗</span><span className="city-hud__wide">Задания</span> {data.quests.items.filter(q => q.answered).length}/{data.quests.items.length}</button>}
         {department === "support" && data.group && <button type="button" className="city-group-button" onClick={() => setGroupOpen(true)} aria-label={`Город группы: ${data.group.name}`}><span aria-hidden="true">🏗️</span><span className="city-hud__wide">Группа</span></button>}
         {user?.role !== "operator" && <Link to="/admin/learning/city" aria-label="Управление миссиями"><span aria-hidden="true">⚙︎</span><span className="city-hud__wide">Миссии</span></Link>}
@@ -152,7 +182,9 @@ export function CityPage() {
 
     <div className="city-notes">
       {data.inspecting && <p className="city-note glass glass--regular">Город оператора: <strong>{data.full_name}</strong><Link to="/admin/learning/city">← К участникам</Link></p>}
-      {data.preview && !data.inspecting && <p className="city-note glass glass--regular">Предпросмотр для сотрудника · без наград</p>}
+      {data.preview && !data.inspecting && !sandboxOn && <p className="city-note glass glass--regular">Предпросмотр для сотрудника · без наград</p>}
+      {sandboxOn && <p className="city-note sandbox-note glass glass--regular" role="status"><span>🧪 <strong>Тестовый город</strong> · видят только администраторы, стройка бесплатная, настоящий город не меняется</span>{!building && <button type="button" onClick={() => openSandbox(`${department}-team-1`)}>Панель</button>}<button type="button" onClick={toggleSandbox}>Выйти</button></p>}
+      {sandboxLand.isError && sandboxOn && <p className="city-note glass glass--regular" role="alert">Не удалось загрузить тестовый город.<button type="button" onClick={() => sandboxLand.refetch()}>Повторить</button></p>}
       {worldQuery.isError && <p className="city-note glass glass--regular" role="alert">Не удалось загрузить города и районы.<button type="button" onClick={() => worldQuery.refetch()}>Повторить</button></p>}
       {query.isError && <p className="city-note glass glass--regular" role="alert">Не удалось обновить город.<button type="button" onClick={() => query.refetch()}>Повторить</button></p>}
       {(needsGuide || guideEditing) && <CityGuideSetup onClose={needsGuide ? undefined : () => setGuideEditing(false)} />}
@@ -203,7 +235,8 @@ export function CityPage() {
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild ? openBuild : undefined}
       onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, plot: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
-    {building && mineEstate && <CityEstateDock mine={mineEstate} land={landOf(building.district)} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} />}
+    {building && mineEstate && !sandboxOn && <CityEstateDock mine={mineEstate} land={landOf(building.district)} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} />}
+    {building && sandboxOn && <CitySandboxDock city={department} state={sandboxLand.data?.city === department ? sandboxLand.data : undefined} mine={mineEstate} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} />}
     <CityJourney phase={journey} destination={worldQuery.data?.cities.find(c => c.id === destination)?.name ?? destination} onSkip={() => setWorldAction({ kind: "skip", target: destination, at: Date.now() })} />
 
     {reward && <Sheet title={reward.already_claimed ? "Эта награда уже получена" : "Миссия пройдена"} onClose={() => setReward(null)} size="s"><div className="city-celebration"><div className="city-medal" aria-hidden="true">✦</div><h2>{reward.title}</h2><p>{reward.already_claimed ? "Прогресс сохранён. Повторное начисление не требуется." : "Твой город стал немного больше. Следующая миссия уже ждёт."}</p><div className="city-rewards"><span>+{reward.xp} XP</span>{reward.coins>0&&<span>+{reward.coins} коинов</span>}</div><button className="city-action" onClick={()=>setReward(null)}>Вернуться в город →</button></div></Sheet>}
