@@ -36,6 +36,7 @@ import { createQuests, type Quests } from "./systems/quests";
 import { createDepartmentWorld, type DepartmentWorld } from "./systems/departmentWorld";
 import { supportLand } from "./world/sales";
 import { clearDistrictLand } from "./world/estates";
+import { clearRailway, railPoint } from "./world/railway";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
 import type { CityBuildView, CityEstateView, CityView, JourneyPhase } from "./types";
 import "./city3d.css";
@@ -58,6 +59,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   const world = generateWorld(options.world === "x4" ? WORLD_X4 : WORLD_V1);
   // Team district land (world/estates.ts) stays clear of the decorative suburbs. Old plots and group quarters remain.
   if (options.world === "x4") clearDistrictLand(world, supportLand(world.roads));
+  // The station and the line out to the hills take the place of the houses there (world/railway.ts).
+  if (world.railway) clearRailway(world, world.railway);
   let disposed = false, parts: Parts | null = null, forceWebGL = !!options.forceWebGL, everReady = false;
   let department: DepartmentId = "support", desiredDepartment = options.department ?? "support", departmentConfig = options.departmentWorld;
   const estateViews: Partial<Record<DepartmentId, CityEstateView | null>> = { ...options.estates };
@@ -148,9 +151,10 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const sites = createSites(ctx, { states: siteStates, onPick: options.onSite });
     const quests = createQuests(ctx, { states: questStates, onPick: options.onQuest });
     const labelLayer = createLabels(ctx, { anchors: districts.anchors, mascotAnchor: mascotSystem.nameAnchor, onSelect: choose });
-    // The view may go out to the outer ring road; the shadow map follows it there.
+    // The view may go out to the outer ring road (and the tunnel's portal in the hills); the shadow map follows it there.
+    const portal = world.railway && railPoint(world.railway, world.railway.length), portalReach = portal ? Math.hypot(portal.x, portal.z) + 8 : 0;
     const rig = createCameraRig(camera, {
-      dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], reach: world.radius + 20,
+      dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], reach: Math.max(world.radius + 20, portalReach),
       frame: options.frame, view: options.view, controls, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2], view.distance); options.onView(view); },
     });
     const first = rig.currentView(); sky.followView(first.target[0], first.target[2], first.distance); sky.setViewDistance(first.distance);
@@ -181,12 +185,12 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
           journey.last = now;
           if (journey.elapsed < 3.4) {
             const point = parts.departments.railway(journey.elapsed / 3.4);
-            rig.animateTo({ target: [point.x, point.y, point.z], distance: 30, polar: 1.03, azimuth: department === "support" ? -.5 : .8 }, 0);
+            rig.animateTo({ target: [point.x, point.y, point.z], distance: 30, polar: 1.03, azimuth: parts.departments.railView().departure }, 0);
             notifyJourney(journey.elapsed > 2.9 ? "tunnel" : "departing");
           } else if (!journey.swapped) {
             journey.swapped = true; switchDepartment(journey.to, false); notifyJourney("arriving");
             const point = parts.departments.railway(0);
-            rig.animateTo({ target: [point.x, point.y, point.z], distance: 55, polar: 1.0 }, 0);
+            rig.animateTo({ target: [point.x, point.y, point.z], distance: 55, polar: 1.0, azimuth: parts.departments.railView().arrival }, 0);
             rig.animateTo(views[journey.to] ?? { target: [0, 0, 0], distance: journey.to === "sales" ? 160 : 90, azimuth: .7, polar: .82 }, 1600);
           } else if (journey.elapsed > 5.2) finishJourney();
         }

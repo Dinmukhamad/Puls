@@ -16,7 +16,8 @@ import type { CitySpec, ParkingSpec } from "./worldSpec";
 import { insideRect, layoutComplexes, type ComplexLayout } from "./complexes";
 import { insidePlot, plotSpots } from "./plots";
 import { pickSites, type Site } from "./sites";
-import { fbm, reliefHeight } from "./relief";
+import { fbm, groundHeight } from "./relief";
+import { RAIL_LINES, onRailway, railLocal, type RailLine } from "./railway";
 
 /** Every road is two lanes, one unit each; cars keep to the right, half a unit from the centre line. */
 export const ROAD_HALF = 1, LANE = .5;
@@ -336,13 +337,21 @@ function parkedCars(plan: CityPlan): Placement[] {
   return cars;
 }
 
-/** Forests on the hills past the horizon: clumps of mostly spruce, standing on the relief (lift), none up on the rock. */
-function hillForest(plan: CityPlan): Placement[] {
-  const s = plan.spec, random = stream(s.seed, -52), trees: Placement[] = [], count = Math.round(TAU * s.horizon / .6);
+/**
+ * Forests on the hills past the horizon: clumps of mostly spruce, standing on the relief (lift), none up on the
+ * rock, in the railway's cutting or on the hill right over its portal.
+ */
+function hillForest(plan: CityPlan, line: RailLine | undefined): Placement[] {
+  const s = plan.spec, random = stream(s.seed, -52), trees: Placement[] = [], count = Math.round(TAU * s.horizon / .6), land = { radius: s.horizon };
+  const clear = (p: Point) => {
+    if (!line) return true;
+    const { u, w } = railLocal(line, p.x, p.z);
+    return !onRailway(line, p, 6) && !(Math.abs(u - line.length) < 9 && Math.abs(w) < 14) && groundHeight(land, p.x, p.z) - groundHeight(land, p.x, p.z, line) < .2;
+  };
   for (let k = 0; k < count; k++) {
     const a = random() * TAU, r = s.horizon + 4 + Math.pow(random(), 1.3) * 230, p = polar(r, a), spruce = random() < .7, scale = 1.6 + random() * 1.4;
-    const lift = reliefHeight(p.x, p.z, s.horizon);
-    if (lift > 40 || fbm(p.x / 38 + 5, p.z / 38 - 2, 2) < .47) continue;
+    const lift = groundHeight(land, p.x, p.z, line);
+    if (lift > 40 || fbm(p.x / 38 + 5, p.z / 38 - 2, 2) < .47 || !clear(p)) continue;
     trees.push({ kind: spruce ? "tree-cone" : "tree-round", variant: k, x: p.x, z: p.z, rotation: a * 7.3, scale, width: 0, lift });
   }
   return trees;
@@ -412,7 +421,9 @@ export function generateWorld(spec: WorldSpec): WorldData {
   placements.push(...cars);
   for (const p of layout.placements) { const k = p.site === undefined ? undefined : siteOf.get(p.site); if (k === undefined) placements.push(p); else sites[k].placements.push(p); }
   for (const f of layout.surfaces) { const k = f.site === undefined ? undefined : siteOf.get(f.site); if (k === undefined) citySurfaces.push(f); else sites[k].surfaces.push(f); }
-  placements.push(...hillForest(plan));
+  // The railway to the other city leaves from the edge of the town (world/railway.ts).
+  const railway: RailLine | undefined = RAIL_LINES[s.name as keyof typeof RAIL_LINES];
+  placements.push(...hillForest(plan, railway));
   // Where the daily situations wait (world/types.ts questSpots): a taxi at the depot's car park, a car at the
   // CRM centre's, and the guide in the middle of the plaza.
   const stall = (lot: ParkingLot | undefined) => lot && cars.filter(car => insideParking(car, lot, .2))
@@ -430,5 +441,6 @@ export function generateWorld(spec: WorldSpec): WorldData {
     complexes: layout.complexes, surfaces: [...gardens, ...citySurfaces], walks: layout.walks, alleys: layout.alleys, plots, sites, questSpots,
     routes: trafficRoutes(plan),
     radius: s.horizon,
+    railway,
   };
 }

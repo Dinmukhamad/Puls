@@ -345,7 +345,7 @@ test('hills and mountains rise past the horizon, and the forests stand on them',
     assert.ok(Math.max(...heights.map((h) => Math.max(h[2], h[3], h[4]))) > 80, 'mountains farther out');
     for (const tree of world.placements.filter((p) => p.lift && p.kind.startsWith('tree-'))) {
       assert.ok(Math.hypot(tree.x, tree.z) > start && tree.lift < 41, 'a forest tree off the hills');
-      assert.ok(Math.abs(tree.lift - relief.reliefHeight(tree.x, tree.z, start)) < 1e-9, 'a forest tree floats or sinks');
+      assert.ok(Math.abs(tree.lift - relief.groundHeight(relief.flatLand(world), tree.x, tree.z, world.railway)) < 1e-9, 'a forest tree floats or sinks');
     }
     assert.ok(world.placements.filter((p) => p.lift && p.kind.startsWith('tree-')).length > 200, 'forests on the hills');
   }

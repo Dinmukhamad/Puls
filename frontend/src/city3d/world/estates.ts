@@ -6,6 +6,7 @@
  * a cell maps to the ground; it has no three.js.
  */
 import { segmentDistance } from "./generate";
+import { RAIL_LINES, railRoad, stationBox } from "./railway";
 import type { Placement, PlacementKind, Point, Road, Surface, SurfaceKind } from "./types";
 
 import { FAMILY_LEVELS, FAMILY_SIZE, LOT_CELLS, MODULE_CELLS, HOUSE_ROWS, PREPARED, footprint, moduleKind, type EstateFamily, type ModuleKind } from "./estateGrid";
@@ -185,13 +186,19 @@ export function clearDistrictLand(world: { placements: Placement[]; surfaces: Su
   world.surfaces = world.surfaces.filter(s => !onDistrictLand(land, s, Math.max(s.length, s.width) / 2 + 1.6, 8.5));
 }
 
-/** The railway decks (systems/departmentWorld.ts station): support runs out along +x, sales along +z. */
+/**
+ * The corridors district land keeps clear of: support's railway from its station to the hills (world/railway.ts);
+ * in sales the boulevard from the lake to the station, where the line ran before, so that no module moves.
+ */
 export const RAILWAYS: Record<DepartmentKey, { road: Road; half: number }> = {
-  support: { road: [8, 0, 336, 0], half: 2.35 },
+  support: railRoad(RAIL_LINES.x4),
   sales: { road: [0, 48, 0, 218], half: 2.35 },
 };
-/** Sales: the lake with its promenade trees, and the station with its stairs. */
-const SALES_LAKE = 56, SALES_STATION = { x0: -4, z0: 26, x1: 12, z1: 70 };
+/**
+ * Sales: the lake with its promenade trees; the campus pier and the boulevard's head, the box the old station
+ * kept out (district 6's modules were laid out round it and stay where they are).
+ */
+const SALES_LAKE = 56, SALES_PIER = { x0: -4, z0: 26, x1: 12, z1: 70 };
 /** Sales districts: B and C on the left and the right above, A along the top, then below B and C, and by the station. */
 const SALES_REGIONS = [
   { x0: -132, z0: -66, x1: -66, z1: 19 }, { x0: 66, z0: -66, x1: 132, z1: 19 }, { x0: -132, z0: -110, x1: 132, z1: -66 },
@@ -212,8 +219,8 @@ export function avenueAngles(streets: readonly Road[], r: number) {
 
 /** What a city's district land keeps clear of. */
 export function landRules(city: DepartmentKey, roads: { streets: readonly Road[]; rings: readonly number[] }): LandRules {
-  if (city === "support") return { streets: roads.streets, rings: roads.rings, corridors: [RAILWAYS.support], wedges: avenueAngles(roads.streets, 220) };
-  return { streets: roads.streets, corridors: [RAILWAYS.sales], discs: [{ x: 0, z: 0, r: SALES_LAKE }], boxes: [SALES_STATION], regions: SALES_REGIONS };
+  if (city === "support") return { streets: roads.streets, rings: roads.rings, corridors: [RAILWAYS.support], boxes: [stationBox(RAIL_LINES.x4)], wedges: avenueAngles(roads.streets, 220) };
+  return { streets: roads.streets, corridors: [RAILWAYS.sales], discs: [{ x: 0, z: 0, r: SALES_LAKE }], boxes: [SALES_PIER, stationBox(RAIL_LINES.sales)], regions: SALES_REGIONS };
 }
 
 // ---- buildings ------------------------------------------------------------------------------------------

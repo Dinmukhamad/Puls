@@ -6,6 +6,9 @@ import type { CityContext } from "../engine/context";
 import type { Catalogue } from "../assets/catalogue";
 import type { Model } from "../assets/loader";
 import { createInstancePools } from "../render/instances";
+import { createMountains } from "../render/mountains";
+import { RELIEF_END } from "../world/relief";
+import { RAIL_LINES, railHeading, railPoint, type RailLine } from "../world/railway";
 import { createTerrain } from "../render/terrain";
 import { createWater } from "../render/water";
 import { createTraffic } from "./traffic";
@@ -23,6 +26,8 @@ export interface DepartmentWorld {
   setNight(night: boolean): void; setTraffic(active: boolean): void;
   point(id: string): THREE.Vector3 | undefined;
   railway(progress: number): THREE.Vector3;
+  /** Camera azimuths for the trip in the city on screen: following the train out, and arriving at its station. */
+  railView(): { departure: number; arrival: number };
   /** Team district land: buildings, projects and the headquarters stage of every district of a city. */
   setEstates(city: DepartmentId, view: CityEstateView | null): void;
   setBuild(view: CityBuildView | null): void;
@@ -91,39 +96,84 @@ function offices(root: THREE.Object3D, x: number, z: number, index: number) {
   b(3.1, .2, 1.9, x, 1.8, z + 3.5, GOLD); b(2, 1.4, .15, x, 1.15, z + 3.2, DARK);
   for (const dx of [-3.2, 3.2]) { b(1.2, .5, 1.2, x + dx, .7, z + 3.8, WALL); b(1, .65, 1, x + dx, 1.1, z + 3.8, GREEN); }
 }
-function station(support: boolean) {
+const STONE = "#a29c8f", STONE_DARK = "#7f7a70", TUNNEL = "#20282b", PULS = "#6b55c8", GROUND_Y = .2;
+/** Lamps that shine day and night: the tunnel's lights, the signal, the buffer stop's lamp. */
+const glows = new Map<string, THREE.MeshBasicNodeMaterial>();
+function glow(color: string) {
+  if (!glows.has(color)) glows.set(color, new THREE.MeshBasicNodeMaterial({ color }));
+  return glows.get(color)!;
+}
+/**
+ * The terminus at the town's edge and the short line out into the hills (world/railway.ts): the forecourt and the
+ * head building across the end of the track, the platform under its canopy, the track in its cutting, and the
+ * portal in the hill's face, its headwall hiding where the ground drops to the cutting, wing walls on either
+ * side and the first lit metres of the tunnel. All at ground level, built in the line's own frame: u along the
+ * track from the buffer stop (local +z), w across it, positive on the station's side.
+ */
+function station(line: RailLine) {
   const root = new THREE.Group(), fixed = new THREE.Group(), train = new THREE.Group(); root.add(fixed, train);
-  const b = builder(fixed), t = builder(train);
-  const length = support ? 328 : 170;
-  // All local paths run towards +z; the support station faces +x along an elevated corridor.
-  b(4.7, .55, length, 0, 4.2, length / 2, "#c0b8a8");
-  for (const x of [-.55, .55]) b(.12, .12, length, x, 4.6, length / 2, DARK);
-  for (let z = 1; z < length; z += 2) b(2.1, .12, .3, 0, 4.5, z, "#786b5b");
-  for (let z = 12; z < length - 12; z += 18) b(1.1, 5.7, 1.2, 0, 1.1, z, "#b5b0a5");
-  b(5, .6, 17, 4.4, 4.45, 4, WALL); b(5.4, .3, 15, 4.4, 7.2, 4, DARK);
-  for (const z of [-1, 9]) for (const x of [2.6, 6.2]) b(.16, 2.5, .16, x, 5.85, z, GOLD);
-  b(4, 2, 6, 5, 5.65, -5, WALL); b(3.5, 1.25, .15, 5, 5.9, -1.9, GLASS);
-  for (let step = 0; step < 12; step++) b(4, .35 + step * .36, .6, 5, (.35 + step * .36) / 2, -15 + step * .6, WALL);
-  const portalZ = length - 4;
-  b(3.2, 10, 8, -3.7, 5, portalZ, "#888b7b"); b(3.2, 10, 8, 3.7, 5, portalZ, "#888b7b");
-  b(10.6, 3, 8, 0, 10, portalZ, "#888b7b"); b(4.2, 6.8, .3, 0, 7, portalZ + 2, "#111e22");
-  const hill = new THREE.Mesh(new THREE.ConeGeometry(24, 32, 7), new THREE.MeshStandardNodeMaterial({ color: "#6f8268", roughness: .95 }));
-  hill.position.set(-17, 13, portalZ + 6); fixed.add(hill);
-  for (let car = 0; car < 3; car++) {
-    const z = -car * 4;
-    t(1.8, 1.6, 3.6, 0, 5.6, z, WALL); t(1.88, .24, 3.65, 0, 5.25, z, "#6b55c8");
-    t(1.9, .2, 3.7, 0, 6.48, z, DARK);
-    for (const x of [-.91, .91]) for (const dz of [-1, 0, 1]) t(.06, .65, .65, x, 5.95, z + dz, GLASS);
-    t(1.5, .7, .08, 0, 5.95, z + 1.81, GLASS);
-    for (const dz of [-1.1, 1.1]) t(1.7, .32, .5, 0, 4.75, z + dz, DARK);
+  const b = builder(fixed), t = builder(train), G = GROUND_Y, L = line.length, x = (w: number) => -line.side * w;
+  const box = (across: number, height: number, along: number, w: number, y: number, u: number, color: string) => b(across, height, along, x(w), y, u, color);
+  const lamp = (across: number, height: number, along: number, w: number, y: number, u: number, color: string) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(across, height, along), glow(color)); mesh.position.set(x(w), y, u); fixed.add(mesh);
+  };
+  // The forecourt with planters and two lamps.
+  box(17.5, .06, 6, 3.75, G + .03, -13, "#d9cfbf");
+  for (const w of [-3.4, 10.9]) { box(1.3, .5, 1.3, w, G + .25, -14.2, WALL); box(1.1, .3, 1.1, w, G + .62, -14.2, GREEN); }
+  for (const w of [-1.4, 8.9]) { box(.12, 3, .12, w, G + 1.5, -15.2, DARK); box(.45, .3, .45, w, G + 3.1, -15.2, GLASS); }
+  // The head building: a long glazed hall with a taller middle, the brand stripe, a clock and the entrance canopy.
+  box(17, 4.8, 8.5, 4, G + 2.4, -5.75, WALL); box(15.6, 3.2, .12, 4, G + 2.3, -10.02, GLASS);
+  for (const w of [-4.2, -.2, 3.8, 7.8, 12.2]) box(.32, 4.8, .3, w, G + 2.4, -10.1, WALL);
+  box(17.1, .35, 8.6, 4, G + 4.25, -5.75, PULS); box(17.6, .35, 9.1, 4, G + 4.95, -5.75, DARK);
+  box(7, 2.8, 7.5, 4, G + 6.2, -5.75, WALL); box(7.6, .3, 8.1, 4, G + 7.75, -5.75, DARK);
+  for (const w of [1.65, 6.35]) box(2.3, 1.9, .12, w, G + 6.1, -9.52, GLASS);
+  box(1.5, 1.5, .14, 4, G + 6.25, -9.55, "#f7f3e8"); box(.12, .62, .06, 4, G + 6.45, -9.64, DARK); box(.5, .12, .06, 4.2, G + 6.25, -9.64, DARK);
+  box(6.5, .2, 2.4, 4, G + 3.05, -11.2, DARK); for (const w of [1.2, 6.8]) box(.14, 2.95, .14, w, G + 1.5, -12.2, GOLD);
+  box(2.6, 2.2, .14, 4, G + 1.1, -10.1, DARK);
+  // The platform along the track under its canopy, its edge marked yellow, two benches.
+  box(3.4, .85, 22, 3.6, G + .425, 9.5, "#cfc6b5"); box(.14, .02, 22, 2.12, G + .86, 9.5, "#e2b33c");
+  for (const u of [1, 6, 11, 16]) box(.16, 3.3, .16, 4.6, G + 2.5, u, GOLD);
+  box(4.6, .25, 19.5, 3.7, G + 4.3, 8.5, DARK); box(.4, .06, 18.5, 3.2, G + 4.15, 8.5, GLASS);
+  for (const u of [3.5, 13.5]) box(.5, .4, 1.4, 4.6, G + 1.05, u, "#8b6a4b");
+  // The track from the buffer stop, through the cutting, into the tunnel.
+  const along = L + 22.5, middle = (L + 21.5) / 2;
+  box(3.2, .18, along, 0, G + .09, middle, "#a59b8b");
+  for (const w of [-.55, .55]) box(.1, .12, along, w, G + .24, middle, DARK);
+  for (let u = .3; u < L + 21; u += .9) box(2.3, .08, .26, 0, G + .2, u, "#786b5b");
+  box(2.2, .9, .4, 0, G + .65, -.3, "#c4423c"); lamp(.3, .3, .1, 0, G + 1.25, -.52, "#ff5a4e");
+  // The portal: piers and lintel round the opening, a lighter frame, a cap; the headwall runs from 3 before the
+  // face to 0.6 past it, over the ground's drop (FACE_GAP), and the wing walls step down beside the cutting.
+  const wall = L - 1.2;
+  for (const w of [-4.4, 4.4]) box(4.2, 8.4, 3.6, w, G + 4.2, wall, STONE);
+  box(4.6, 2.8, 3.6, 0, G + 7, wall, STONE); box(13.6, .45, 4, 0, G + 8.6, wall, STONE_DARK);
+  box(5.4, .5, .3, 0, G + 5.85, L - 3.1, "#c9c2b4"); for (const w of [-2.5, 2.5]) box(.4, 5.6, .3, w, G + 2.8, L - 3.1, "#c9c2b4");
+  for (const sign of [-1, 1]) for (const [k, height] of [[0, 6], [1, 4.4], [2, 2.8]]) {
+    const u = L - 4.3 - k * 2.7, w = sign * (6.8 + k * .65), piece = box(.8, height, 2.8, w, G + height / 2, u, STONE);
+    piece.rotation.y = Math.atan2(sign * line.side * .65, 2.7);
   }
+  // Inside: dark walls and vault, lamps along both walls, and the far end out of sight.
+  for (const w of [-2.45, 2.45]) box(.3, 5.6, 25, w, G + 2.8, L + 9.5, TUNNEL);
+  box(5.2, .3, 25, 0, G + 5.75, L + 9.5, TUNNEL); box(5.2, 5.6, .3, 0, G + 2.8, L + 22, "#0e1416");
+  for (let u = L + 1.5; u < L + 20; u += 4) for (const w of [-2.26, 2.26]) lamp(.1, .22, .6, w, G + 4.2, u, "#ffd38a");
+  // A signal on the far side before the portal: green above, red below.
+  box(.15, 3.4, .15, -3.4, G + 1.7, L - 7, DARK); box(.5, 1.1, .35, -3.4, G + 3.6, L - 7, DARK);
+  lamp(.22, .22, .06, -3.4, G + 3.85, L - 7.2, "#57d68d"); lamp(.22, .22, .06, -3.4, G + 3.35, L - 7.2, "#7a2a26");
+  // Three cars on the rails, the head one towards the tunnel.
+  for (const u of [2.8, 6.8, 10.8]) {
+    t(1.8, 1.6, 3.6, 0, G + 1.35, u, WALL); t(1.88, .24, 3.65, 0, G + .75, u, PULS); t(1.9, .2, 3.7, 0, G + 2.25, u, DARK);
+    for (const w of [-.91, .91]) for (const du of [-1, 0, 1]) t(.06, .65, .65, w, G + 1.6, u + du, GLASS);
+    for (const du of [-1.1, 1.1]) t(1.7, .32, .5, 0, G + .42, u + du, DARK);
+  }
+  t(1.5, .7, .08, 0, G + 1.6, 12.61, GLASS);
   // mergeStatic copies its source geometries; free those originals after batching.
   const batch = (g: THREE.Group) => { const geometries = new Set<THREE.BufferGeometry>(); g.traverse(o => { if (o instanceof THREE.Mesh) geometries.add(o.geometry); }); mergeStatic(g); geometries.forEach(v => v.dispose()); };
   batch(fixed); batch(train);
-  if (support) { root.rotation.y = Math.PI / 2; root.position.x = 8; } else root.position.z = 48;
-  return { root, train, length, position(progress: number) {
-    train.position.z = Math.max(0, Math.min(1, progress)) * (length - 9);
-    root.updateMatrixWorld(true); return root.localToWorld(new THREE.Vector3(0, 6, train.position.z));
+  root.position.set(line.x, 0, line.z); root.rotation.y = railHeading(line);
+  // The head reaches the portal at 85 % of the trip, so the train is in the tunnel when the trip says so.
+  const travel = (L - 12.6) / .85;
+  return { root, train, position(progress: number) {
+    const s = Math.max(0, Math.min(1, progress)) * travel; train.position.z = s;
+    const p = railPoint(line, 6.8 + s); return new THREE.Vector3(p.x, G + 1.4, p.z);
   } };
 }
 
@@ -133,7 +183,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
   const supportRoot = new THREE.Group(); supportRoot.name = "support-city";
   supportNodes.forEach(n => supportRoot.add(n)); ctx.scene.add(supportRoot);
   const supportOverlayNodes = [...ctx.overlay.children] as HTMLElement[];
-  const supportRail = station(true); ctx.scene.add(supportRail.root);
+  const supportLine: RailLine = ctx.world.railway ?? RAIL_LINES.x4, supportRail = station(supportLine); ctx.scene.add(supportRail.root);
   const supportTeams = new THREE.Group(); ctx.scene.add(supportTeams);
   const supportLabels = document.createElement("div"), salesLabels = document.createElement("div");
   ctx.overlay.append(supportLabels, salesLabels);
@@ -171,10 +221,12 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     const campus = new THREE.Group(), teams = new THREE.Group(); scene.add(campus, teams);
     SALES_CENTERS.forEach((p, i) => { offices(campus, p.x, p.z, i); anchors.sales.set(p.id, new THREE.Vector3(p.x, 7, p.z)); });
     batch(campus);
-    const rail = station(false); scene.add(rail.root);
+    // The hills round the lake city, out as far as the island city's, so the fog hides their edge the same way.
+    const hills = createMountains(context, { end: ctx.world.radius * RELIEF_END });
+    const rail = station(world.railway ?? RAIL_LINES.sales); scene.add(rail.root);
     const land3d = createEstates(context, lands.sales!, onEstate); land3d.setCatalogue(catalogue);
     estates.sales = land3d; land3d.set(views.sales ?? null); land3d.setBuild(build && cityOf(build.district) === "sales" ? build : null);
-    return { scene, frames, moves, terrain, water, pools, cars, crowd, campus, teams, rail, land3d };
+    return { scene, frames, moves, terrain, water, hills, pools, cars, crowd, campus, teams, rail, land3d, line: world.railway ?? RAIL_LINES.sales };
   }
   const cityOf = (district: string): DepartmentId => district.startsWith("sales-") ? "sales" : "support";
   function batch(root: THREE.Group) {
@@ -215,7 +267,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     }
     for (const c of config.cities) {
       c.districts.forEach(d => label(c.id, d.id, d.name, `${d.supervisor ?? "Команда не назначена"} · штаб ${stageOf(c.id, d.id)}/5`, "⚑"));
-      anchors[c.id].set("station", c.id === "support" ? new THREE.Vector3(11, 10, -5) : new THREE.Vector3(5, 10, 52));
+      const head = railPoint(c.id === "support" ? supportLine : RAIL_LINES.sales, -5.75, 4); anchors[c.id].set("station", new THREE.Vector3(head.x, 9.5, head.z));
       label(c.id, "station", "Вокзал", `Поезд в ${config.cities.find(other => other.id !== c.id)?.name ?? "другой город"}`, "▰");
     }
     if (sales) SALES_CENTERS.forEach((p, i) => label("sales", p.id, SALES_RESOURCES[i], "Место для учебного центра", "◇"));
@@ -226,6 +278,8 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     show(id) {
       active = id;
       if (id === "sales" && !sales) { sales = salesRoot(); layoutKey = ""; configure(); }
+      // Both trains wait at their platforms: the one that just left is back for the next trip (TZ §8.1).
+      supportRail.position(0); sales?.rail.position(0);
       supportRoot.visible = id === "support"; supportOverlayNodes.forEach(n => { n.style.display = id !== "support" ? "none" : ""; });
       supportRail.root.visible = supportTeams.visible = id === "support"; supportLabels.hidden = id !== "support";
       salesLabels.hidden = id !== "sales"; if (sales) { sales.scene.visible = id === "sales"; if (id === "sales") sales.pools.update(); }
@@ -256,13 +310,18 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     },
     point: id => anchors[active].get(id),
     railway: progress => (active === "support" ? supportRail : sales!.rail).position(progress),
+    railView() {
+      const line = active === "support" ? supportLine : sales?.line ?? RAIL_LINES.sales, back = Math.atan2(-line.dx, -line.dz);
+      // Leaving: behind the train on the side away from the station. Arriving: from the hills, over the station to the town.
+      return { departure: back - line.side * 1.05, arrival: back + Math.PI + line.side * .45 };
+    },
     setNight(value) { night = value; sales?.water.setNight(value); [supportTeams, supportRail.root, sales?.campus, sales?.teams, sales?.rail.root].forEach(root => { if (root) illuminate(root); }); },
     setTraffic(value) { traffic = value; sales?.cars.setEnabled(value); sales?.crowd.setEnabled(value); },
     dispose() {
       estates.support?.dispose(); estates.sales?.dispose(); supportLand3d.removeFromParent();
       [...supportRoot.children].forEach(n => ctx.scene.add(n)); supportRoot.removeFromParent();
       supportLabels.remove(); salesLabels.remove(); supportRail.root.removeFromParent(); supportTeams.removeFromParent(); disposeTree(supportRail.root); disposeTree(supportTeams);
-      if (sales) { sales.crowd.dispose(); sales.cars.dispose(); sales.pools.dispose(); sales.water.dispose(); sales.terrain.dispose(); disposeTree(sales.campus); disposeTree(sales.teams); disposeTree(sales.rail.root); sales.scene.removeFromParent(); }
+      if (sales) { sales.crowd.dispose(); sales.cars.dispose(); sales.pools.dispose(); sales.water.dispose(); sales.terrain.dispose(); sales.hills.dispose(); disposeTree(sales.campus); disposeTree(sales.teams); disposeTree(sales.rail.root); sales.scene.removeFromParent(); }
     },
   };
 }

@@ -2,6 +2,7 @@
 import { WORLD_V1 } from "./worldSpec";
 import { makeRoute, rng, segmentDistance } from "./generate";
 import { districtLand, landRules, onDistrictLand, type DistrictLand } from "./estates";
+import { RAIL_LINES } from "./railway";
 import type { Placement, Point, Road, WorldData } from "./types";
 
 export const SALES_CENTERS = Array.from({ length: 10 }, (_, i) => ({
@@ -58,7 +59,7 @@ export function generateSalesWorld(): WorldData {
   for (let x = -120; x <= 120; x += 12) for (let z = -102; z <= 102; z += 12) {
     if (Math.abs(x) < 58 && Math.abs(z) < 59 || onDistrictLand(land, { x, z }, 6, 8.5)) continue;
     if (streets.some(([ax, az, bx]) => ax === bx ? Math.abs(x - ax) < 4 : Math.abs(z - az) < 4)) continue;
-    if (Math.abs(x) < 7 && z > 35) continue; // rail corridor
+    if (Math.abs(x) < 7 && z > 35) continue; // the boulevard from the lake to the station
     const business = z < -67, park = random() < .16;
     if (park) {
       surfaces.push({ kind: "lawn", x, z, angle: 0, width: 9, length: 9 });
@@ -76,6 +77,9 @@ export function generateSalesWorld(): WorldData {
     add(i % 4 ? "tree-round" : "lamp", x, z, 0, i % 4 ? 1.5 : 1);
   }
   for (const p of SALES_CENTERS) surfaces.push({ kind: "plaza", ...p, angle: 0, width: 11, length: 11 });
+  // The boulevard from the lake's south shore to the station at the town's edge: a walk between two rows of trees.
+  for (const [z0, z1] of [[57, INNER - 1.5], [INNER + 1.5, BOTTOM - 1.5]]) surfaces.push({ kind: "walk", x: 0, z: (z0 + z1) / 2, angle: 0, length: z1 - z0, width: 3.2 });
+  for (let z = 61; z <= 106; z += 7.5) if (Math.abs(z - INNER) > 3.5) for (const x of [-3.4, 3.4]) add("tree-round", x, z, 0, 1.15);
   const paths = [
     [{ x: -OUTER, z: TOP }, { x: OUTER, z: TOP }, { x: OUTER, z: BOTTOM }, { x: -OUTER, z: BOTTOM }],
     [{ x: -INNER, z: -INNER }, { x: INNER, z: -INNER }, { x: INNER, z: INNER }, { x: -INNER, z: INNER }],
@@ -89,5 +93,6 @@ export function generateSalesWorld(): WorldData {
     placements, parks: [], complexes: [], alleys: [], surfaces,
     walks: [Array.from({ length: 65 }, (_, i) => ({ x: Math.cos(i / 64 * Math.PI * 2) * 50, z: Math.sin(i / 64 * Math.PI * 2) * 50 }))],
     plots: [], sites: [], questSpots: [], routes: paths.map(points => ({ route: makeRoute(points.map(p => ({ points: [p] }))), cars: 8, speed: 4 })),
+    railway: RAIL_LINES.sales,
   };
 }

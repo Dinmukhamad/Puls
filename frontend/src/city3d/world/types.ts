@@ -2,6 +2,7 @@
  * Plain data describing the city, with no three.js (TZ §4). `generate(spec)` turns a WorldSpec into
  * WorldData; the renderer and systems only read WorldData. Units: 1 = one road lane.
  */
+import type { RailLine } from "./railway";
 import type { Plot } from "./plots";
 import type { Site } from "./sites";
 
@@ -92,6 +93,8 @@ export interface ParkingLot { x: number; z: number; angle: number; length: numbe
 
 export interface WorldData {
   spec: WorldSpec;
+  /** The railway to the other city: the terminus at the town's edge and the line into the hills (world/railway.ts). */
+  railway?: RailLine;
   districts: { id: string; x: number; z: number; color: string; soon: boolean }[];
   /** Land: annuli (ring land around the lagoon, mainland) and round islets (plaza, districts). */
   land: { annuli: { inner: number; outer: number }[]; islets: { x: number; z: number; r: number }[];
