@@ -3,6 +3,7 @@ import { WORLD_V1 } from "./worldSpec";
 import { makeRoute, rng, segmentDistance } from "./generate";
 import { districtLand, landRules, onDistrictLand, type DistrictLand } from "./estates";
 import { RAIL_LINES } from "./railway";
+import { addStationSquare } from "./stationSquare";
 import type { Placement, Point, Road, WorldData } from "./types";
 
 export const SALES_CENTERS = Array.from({ length: 10 }, (_, i) => ({
@@ -84,7 +85,7 @@ export function generateSalesWorld(): WorldData {
     [{ x: -OUTER, z: TOP }, { x: OUTER, z: TOP }, { x: OUTER, z: BOTTOM }, { x: -OUTER, z: BOTTOM }],
     [{ x: -INNER, z: -INNER }, { x: INNER, z: -INNER }, { x: INNER, z: INNER }, { x: -INNER, z: INNER }],
   ];
-  return {
+  const world: WorldData = {
     spec: { ...WORLD_V1, name: "sales", horizon: 190, seed: 20261001, lagoon: 46, promenade: 50, quay: 46, bank: 47, districts: [], mainland: [], roadRings: [66, 132], islet: 4, districtScale: 1 },
     districts: [], radius: 190,
     land: { annuli: [], islets: [], rectangle: { width: 284, depth: 244, lake: 46 }, platforms: [{ x: 0, z: 0, width: 38, depth: 76 }, { x: 0, z: 47, width: 4, depth: 20 }] },
@@ -95,4 +96,7 @@ export function generateSalesWorld(): WorldData {
     plots: [], sites: [], questSpots: [], routes: paths.map(points => ({ route: makeRoute(points.map(p => ({ points: [p] }))), cars: 8, speed: 4 })),
     railway: RAIL_LINES.sales,
   };
+  // The station's street, car park and park, between the bottom street and the hills (world/stationSquare.ts).
+  addStationSquare(world);
+  return world;
 }

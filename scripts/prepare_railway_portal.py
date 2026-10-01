@@ -2,7 +2,7 @@
 
 Usage (Blender 4.2 as the `bpy` module or inside Blender):
     python scripts/prepare_railway_portal.py Tunnel.blend railway-portal.glb
-then pack it with frontend/scripts/railway-portal.mjs.
+then pack it with frontend/scripts/pack-city-model.mjs.
 
 The source is a twin-bore portal with trains, overhead line and a mountain. The city's line has
 one track, so this keeps the left bore with its arch ring and walkways, and makes the stone

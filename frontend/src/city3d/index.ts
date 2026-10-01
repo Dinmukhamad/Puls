@@ -37,6 +37,7 @@ import { createDepartmentWorld, type DepartmentWorld } from "./systems/departmen
 import { supportLand } from "./world/sales";
 import { clearDistrictLand } from "./world/estates";
 import { clearRailway, railPoint } from "./world/railway";
+import { addStationSquare } from "./world/stationSquare";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
 import type { CityBuildView, CityEstateView, CityView, JourneyPhase } from "./types";
 import "./city3d.css";
@@ -59,8 +60,9 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   const world = generateWorld(options.world === "x4" ? WORLD_X4 : WORLD_V1);
   // Team district land (world/estates.ts) stays clear of the decorative suburbs. Old plots and group quarters remain.
   if (options.world === "x4") clearDistrictLand(world, supportLand(world.roads));
-  // The station and the line out to the hills take the place of the houses there (world/railway.ts).
-  if (world.railway) clearRailway(world, world.railway);
+  // The station and the line out to the hills take the place of the houses there (world/railway.ts), and so does
+  // the square round the station: its street, car park and park (world/stationSquare.ts).
+  if (world.railway) { clearRailway(world, world.railway); addStationSquare(world); }
   let disposed = false, parts: Parts | null = null, forceWebGL = !!options.forceWebGL, everReady = false;
   let department: DepartmentId = "support", desiredDepartment = options.department ?? "support", departmentConfig = options.departmentWorld;
   const estateViews: Partial<Record<DepartmentId, CityEstateView | null>> = { ...options.estates };

@@ -4,7 +4,7 @@ https://creativecommons.org/publicdomain/zero/1.0/
 Source page: http://www.blendswap.com/blends/view/81350
 
 Original file: Tunnel.blend (twin-bore portal with trains, overhead line and a mountain).
-Adaptation (scripts/prepare_railway_portal.py, frontend/scripts/railway-portal.mjs): one bore with its arch
+Adaptation (scripts/prepare_railway_portal.py, frontend/scripts/pack-city-model.mjs): one bore with its arch
 ring and walkways, the stone headwall, side walls and concrete band made symmetric round it, the bore cut
 40 units in and closed, vertex shading inside the bore, textures halved, sized to the city's track gauge,
 packed to a self-contained meshopt GLB. Trains, overhead line, track and mountain are not used.

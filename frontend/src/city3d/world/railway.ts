@@ -33,12 +33,16 @@ export const RAIL_LINES = {
 
 /**
  * The station in the line's coordinates (u along the track from the buffer stop, w across it, positive on the
- * station's side): the forecourt and the head building across the end of the track, the platform beside it.
+ * station's side): the forecourt across the end of the track, the station building behind it (its middle at
+ * `building` along and `middle` across) on a floor slab out to the platform, which runs beside the track from
+ * `platform` to `end`.
  */
 export const STATION = {
-  forecourt: -16, building: -10, platform: -1.5, end: 22,
-  /** Across: from the far side of the track to the building's outer wall. */
-  near: -5, far: 12.5,
+  forecourt: -16, building: -7.6, platform: -1.5, end: 22,
+  /** Across: from the far side of the track to the building's outer end, and the building's middle. */
+  near: -5, far: 12.5, middle: 4,
+  /** The floor slab and the platform stand this high over the ground: the floor of railway-station.glb. */
+  floor: .53,
 };
 /**
  * The cutting: its floor half as wide as this beside the track, banks of 1 : BANK rising from there, steepening to

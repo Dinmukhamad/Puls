@@ -1,0 +1,18 @@
+Railway station: Blend Swap #27438 "Gare de BlenderVille" by loran17 (Blender 2.9x).
+License: Creative Commons Attribution (CC BY), as stated on the source page. Blend Swap does not
+name the version; its CC-BY models have been published under CC BY 3.0
+(https://creativecommons.org/licenses/by/3.0/).
+Source page: https://www.blendswap.com/blend/27438
+Author's description: a small-town station of the south of France, freely reproduced after the
+JOUEF model kit "Gare de Neuvy".
+
+Changes (scripts/prepare_railway_station.py, frontend/scripts/pack-city-model.mjs): the building's
+outside only, without subdivision and bevels; doors, windows and shutters as plain boxes, benches as
+seat, back and legs, the tiled roofs as plain slabs with gutters, rake trims and a ridge; interior,
+track, platform, lamps, posters, plaques, handles, hinges, downpipes and one bench dropped; every
+material a plain colour with no textures; the name boards read the names of the Puls cities instead
+of "BLENDERVILLE" (DejaVu Sans Bold glyphs); sized to the city and packed to a meshopt GLB.
+
+Credit shown in the app (the cities panel, pages/city/CityWorldPanel.tsx): «Здание вокзала —
+«Gare de BlenderVille», автор loran17 (Blend Swap), CC BY; упрощено и перекрашено для Puls».
+No remote runtime requests to the author.

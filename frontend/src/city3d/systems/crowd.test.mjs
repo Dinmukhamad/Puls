@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
-const compiled = await build({ stdin: { contents: 'export * from "./crowd.ts"; export * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
+const compiled = await build({ stdin: { contents: 'export * from "./crowd.ts"; export * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * from "../world/railway.ts"; export * from "../world/sales.ts"; export * from "../world/stationSquare.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error' });
 const city = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 const worlds = [city.generateWorld(city.WORLD_V1), city.generateWorld(city.WORLD_X4)];
 for (const world of worlds) test(`${world.spec.name}: walking loops stay on land, outside roads, parking and the maximum landmark footprint`, () => {
@@ -22,6 +22,14 @@ for (const world of worlds) test(`${world.spec.name}: walking loops stay on land
       const x = dx*Math.cos(yaw)-dz*Math.sin(yaw), z = dx*Math.sin(yaw)+dz*Math.cos(yaw);
       assert.ok(Math.abs(x) > 2.85*world.spec.districtScale+.25 || Math.abs(z) > 3*world.spec.districtScale+.25);
     }
+  }
+});
+test('walkers stroll round the fountain in the park by each station', () => {
+  const x4 = city.generateWorld(city.WORLD_X4); city.clearRailway(x4, x4.railway); city.addStationSquare(x4);
+  for (const world of [x4, city.generateSalesWorld()]) {
+    const fountain = city.stationSquare(world).placements.find(p => p.kind === 'fountain');
+    const round = city.createCrowdRoutes(world).filter(r => r.points.every(p => Math.abs(Math.hypot(p.x - fountain.x, p.z - fountain.z) - 1.9) < .01));
+    assert.equal(round.length, 1, world.spec.name);
   }
 });
 function context({ mobile=false, reducedMotion=false }={}) {

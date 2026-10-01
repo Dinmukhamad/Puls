@@ -4,13 +4,13 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
-const built = await build({ stdin: { contents: `export * from './railway.ts'; export * from './relief.ts'; export * from './estates.ts'; export * from './sales.ts'; export { generateWorld } from './generate.ts'; export { WORLD_X4, WORLD_V1 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
+const built = await build({ stdin: { contents: `export * from './railway.ts'; export * from './relief.ts'; export * from './estates.ts'; export * from './sales.ts'; export * from './stationSquare.ts'; export { generateWorld } from './generate.ts'; export { WORLD_X4, WORLD_V1 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
 const R = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 
-// The worlds as the city opens them (city3d/index.ts): district land and the railway cleared of houses.
+// The worlds as the city opens them (city3d/index.ts): district land and the railway cleared of houses, the square laid.
 const X4 = R.generateWorld(R.WORLD_X4), V1 = R.generateWorld(R.WORLD_V1), SALES = R.generateSalesWorld();
 R.clearDistrictLand(X4, R.supportLand(X4.roads));
-for (const world of [X4, V1]) R.clearRailway(world, world.railway);
+for (const world of [X4, V1]) { R.clearRailway(world, world.railway); R.addStationSquare(world); }
 const CITIES = { x4: X4, v1: V1, sales: SALES };
 const ground = (world, x, z) => R.groundHeight(R.flatLand(world), x, z, world.railway);
 const station = (line) => [[R.STATION.forecourt, R.STATION.near], [R.STATION.end, R.STATION.near], [R.STATION.end, R.STATION.far], [R.STATION.forecourt, R.STATION.far]].map(([u, w]) => R.railPoint(line, u, w));
