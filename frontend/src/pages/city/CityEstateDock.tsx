@@ -4,6 +4,7 @@ import { cityEstate, operationKey, type DistrictEstate, type MyEstate, type Oper
 import { PLOT_LEVELS, PROJECT_LEVELS, plotFootprint, projectFootprint } from "../../city3d/world/estateGrid";
 import type { EstateTarget, PlotAddress } from "../../city3d/types";
 import { plural } from "../../utils/format";
+import { DistrictSwatch } from "./DistrictSwatch";
 import "./estate.css";
 
 export type { EstateTarget };
@@ -112,7 +113,7 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus }
 
   return <aside className="estate-dock glass glass--regular" aria-label="Стройка в районе">
     <header className="estate-dock__head">
-      <div><span className="city-eyebrow">{build.project ? "ОБЩИЙ ПРОЕКТ" : "МОЙ РАЙОН"} · {land?.name ?? mine.district?.name ?? "район"}</span>
+      <div><span className="city-eyebrow"><DistrictSwatch district={build.district} />{build.project ? "ОБЩИЙ ПРОЕКТ" : "МОЙ РАЙОН"} · {land?.name ?? mine.district?.name ?? "район"}</span>
         {!build.project && <p>Можно потратить <strong>◈ {coins(mine.available)}</strong>{mine.available < mine.balance ? " · часть в резерве магазина" : ""}</p>}</div>
       <button type="button" className="estate-dock__close" onClick={onClose} aria-label="Закрыть стройку">×</button>
     </header>

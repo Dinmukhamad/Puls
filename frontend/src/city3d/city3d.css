@@ -14,6 +14,8 @@ div.c3-label{cursor:default}
 .c3-label__status{font-size:11.5px;font-weight:600;color:#4c5767;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .c3-label[data-soon] .c3-label__status{color:#7b8494}
 .c3-label[data-reward] .c3-label__status{color:#b7791f}
+/* A team district's label in its own colour, as its border and its free land (world/estateGrid.ts DISTRICT_COLOURS). */
+.c3-label[data-team]{border-color:var(--c3-district)}.c3-label[data-team] .c3-label__icon{background:var(--c3-district);color:#fff;font-family:system-ui,sans-serif;font-size:22px}
 .c3-label[aria-pressed=true]{background:var(--c3-district);border-color:#fff;color:#fff}
 .c3-label[aria-pressed=true] .c3-label__icon{background:rgba(255,255,255,.22)}
 .c3-label[aria-pressed=true] .c3-label__status{color:rgba(255,255,255,.9)}

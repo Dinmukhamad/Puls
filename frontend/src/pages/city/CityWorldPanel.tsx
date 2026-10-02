@@ -1,6 +1,7 @@
 import { SALES_RESOURCES, type CityWorld, type DepartmentId } from "../../api/cityWorld";
 import type { CityEstates, MyEstate } from "../../api/cityEstate";
 import { CityDistrictSheet } from "./CityDistrictSheet";
+import { DistrictSwatch } from "./DistrictSwatch";
 import type { JourneyPhase } from "../../city3d/types";
 import { Sheet, registerSheet } from "../../components/Sheet";
 import { useLayoutEffect, useRef } from "react";
@@ -24,7 +25,7 @@ export function CityWorldPanel({ world, current, selected, onPick, onClose, onTr
         <div className="city-world-route" aria-hidden="true"><span>◉</span><span>━ 🚆 ▴▴▴ ━</span><span>◉</span></div>
         <div className="city-world-cards">{world.cities.map(c => <article key={c.id} data-current={c.id === current}><small>{c.id === "support" ? "ОСТРОВНОЙ ГОРОД" : "ГОРОД У ОЗЕРА"}</small><h2>{c.name}</h2><p>{c.districts.length} района · {c.id === "support" ? "Действующие учебные центры" : "10 мест для учебных центров"}</p>{world.home_city === c.id && <span className="city-world-badge">Твой отдел</span>}{c.id !== current && <button className="city-secondary" onClick={() => { onVisit(c.id); onClose(); }}>Открыть без поездки →</button>}</article>)}</div>
         <button className="city-action" disabled={!ready} onClick={() => { onTravel(other.id); onClose(); }}>{ready ? `На поезде в ${other.name} →` : "Готовим поезд…"}</button>
-        <h3>Районы · {here.name}</h3><div className="city-world-districts">{here.districts.map(d => <button className="city-secondary" key={d.id} onClick={() => onPick(d.id)}><strong>{d.name}</strong><small>{d.supervisor ?? "Команда не назначена"}{d.mine ? " · твой район" : ""}</small></button>)}</div>
+        <h3>Районы · {here.name}</h3><div className="city-world-districts">{here.districts.map(d => <button className="city-secondary" key={d.id} onClick={() => onPick(d.id)}><strong><DistrictSwatch district={d.id} />{d.name}</strong><small>{d.supervisor ?? "Команда не назначена"}{d.mine ? " · твой район" : ""}</small></button>)}</div>
         <p className="secondary small">Оба города открыты для посещения. Строить можно в своём районе за коины Puls, когда стройка в нём открыта.</p>
         <p className="secondary small city-world-credit">Здание вокзала — «Gare de BlenderVille», автор loran17 (<a href="https://www.blendswap.com/blend/27438" target="_blank" rel="noreferrer">Blend Swap</a>), лицензия <a href="https://creativecommons.org/licenses/by/3.0/deed.ru" target="_blank" rel="noreferrer">CC BY</a>; упрощено и перекрашено для Puls.</p>
       </div>}

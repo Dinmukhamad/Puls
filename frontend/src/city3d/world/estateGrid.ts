@@ -10,6 +10,16 @@ import type { ReadyHouse } from "./familyHouses";
 export type PlotFamily = "square" | "house" | ReadyHouse | "park" | "bigpark";
 export type ProjectFamily = "square" | "gazebo" | "fountain" | "sports" | "park";
 
+/**
+ * Each district's own colour, by number: its border on the ground, the tint of its free land, its headquarters'
+ * accents, its label on the map and its swatch in the lists (like the colour groups of a Monopoly board).
+ */
+export const DISTRICT_COLOURS = ["#6b55c8", "#2f9e8f", "#d1823a"];
+/** The colour of district `number` (1, 2, 3, …; a fourth and later districts reuse the first ones). */
+export const districtColour = (number: number) => DISTRICT_COLOURS[(Math.max(1, Math.floor(number)) - 1) % DISTRICT_COLOURS.length];
+/** A team district's number from its id: 2 for "support-team-2". */
+export const districtNumber = (id: string) => Number(id.split("-").at(-1)) || 0;
+
 /** The public square's side in cells. */
 export const MODULE_CELLS = 12;
 /** Each city is cut into three districts; others have no land (app/data/city_land.json). */

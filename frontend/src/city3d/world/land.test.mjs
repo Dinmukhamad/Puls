@@ -146,8 +146,99 @@ test('the island city\'s mainland is empty for the districts: no houses, yards, 
   assert.ok(!SALES.placements.some(p => p.kind === 'cottage' || p.kind === 'glass-tower'));
 });
 
-test('laying the grid out is quick', () => {
+const BORDERS = { support: L.districtBorders(GRIDS.support, SUPPORT), sales: L.districtBorders(GRIDS.sales, SALES) };
+const along = (b, t) => ({ x: b.a.x + (b.b.x - b.a.x) * t, z: b.a.z + (b.b.z - b.a.z) * t });
+const pieceLength = b => Math.hypot(b.b.x - b.a.x, b.b.z - b.a.z);
+
+test('the districts\' borders run between their blocks: on each side the land of the district named for it', () => {
+  for (const [city, grid] of Object.entries(GRIDS)) {
+    const borders = BORDERS[city], blockAt = p => grid.blocks.find(b => L.blockCell(b, p));
+    assert.deepEqual([...new Set(borders.map(b => [b.toward, b.away].sort().join(' and ')))].sort(), ['1 and 2', '1 and 3', '2 and 3'], `${city}: every two districts meet`);
+    let both = 0, samples = 0;
+    for (const b of borders) {
+      const length = pieceLength(b), steps = Math.ceil(length), dx = b.b.x - b.a.x, dz = b.b.z - b.a.z;
+      assert.ok(length >= 2 && b.toward !== b.away, `${city}: a border of ${length.toFixed(1)} between ${b.away} and ${b.toward}`);
+      assert.ok(Math.abs(Math.hypot(b.normal.x, b.normal.z) - 1) < 1e-9 && Math.abs(b.normal.x * dx + b.normal.z * dz) < 1e-9 * length, `${city}: the normal points across the border`);
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps, p = along(b, t), half = (b.gaps[0] + (b.gaps[1] - b.gaps[0]) * t) / 2, where = `${city}: at ${p.x.toFixed(1)}, ${p.z.toFixed(1)}`;
+        const side = k => blockAt({ x: p.x + b.normal.x * k, z: p.z + b.normal.z * k });
+        // The gap is no district's land; right past its edge, each side is the land of its district (or none, by a road).
+        assert.equal(side(half - .02), undefined, `${where} the gap is narrower than ${2 * half}`);
+        assert.equal(side(-half + .02), undefined, `${where} the gap is narrower than ${2 * half}`);
+        const toward = side(half + .05), away = side(-half - .05);
+        if (toward) assert.equal(toward.district, b.toward, `${where} district ${toward.district} on district ${b.toward}'s side`);
+        if (away) assert.equal(away.district, b.away, `${where} district ${away.district} on district ${b.away}'s side`);
+        samples++; if (toward && away) both++;
+      }
+    }
+    assert.ok(both > samples * .95, `${city}: land on both sides at ${both} of ${samples} points`);
+  }
+});
+
+test('a border keeps to the land: off the water, the ring roads, the streets it crosses, the railway and the station square', () => {
+  for (const [city, world] of Object.entries(CITIES)) {
+    const line = world.railway, square = L.stationSquare(world), rect = world.land.rectangle;
+    for (const b of BORDERS[city]) for (let t = 0; t <= 1; t += 1 / 64) {
+      const p = along(b, t), r = Math.hypot(p.x, p.z), where = `${city}: border at ${p.x.toFixed(1)}, ${p.z.toFixed(1)}`;
+      if (rect) assert.ok(r > rect.lake + 3 && Math.abs(p.x) < rect.width / 2 && Math.abs(p.z) < rect.depth / 2, `${where} over the lake or off the land`);
+      else assert.ok(world.land.annuli.some(a => r > a.inner && r < a.outer), `${where} over the water`);
+      // The ring roads are 2 wide and lie lower than the band; a street it crosses stands higher and would hide it.
+      for (const ring of world.roads.rings) assert.ok(Math.abs(r - ring) > 1.15, `${where} on ring road ${ring}`);
+      assert.ok(!L.onRailway(line, p, .5) && !L.onSquare(line, square, p, .5), `${where} on the railway or the station square`);
+      // Right down the middle of its street, or clear of every street.
+      const near = world.roads.streets.map(road => L.segmentDistance(p.x, p.z, road)).sort((x, y) => x - y);
+      if (b.street) assert.ok(near[0] < 1e-6 && near[1] > 1.15, `${where} off its street or on a crossing`);
+      else assert.ok(near[0] > 1.15, `${where} on a street`);
+    }
+  }
+});
+
+test('the island city\'s three borders run from the canal to the horizon at BORDERS, along the avenues where they reach', () => {
+  const mainland = SUPPORT.land.annuli.reduce((p, q) => q.outer - q.inner > p.outer - p.inner ? q : p);
+  const crossings = SUPPORT.roads.rings.filter(r => r > mainland.inner && r < mainland.outer).length;
+  const turn = (a, b) => Math.abs(((a - b) % (2 * Math.PI) + 3 * Math.PI) % (2 * Math.PI) - Math.PI);
+  L.BORDERS.forEach((angle, i) => {
+    const ours = BORDERS.support.filter(b => turn(Math.atan2(b.a.z, b.a.x), angle) < .021);
+    // District k runs counter-clockwise from BORDERS[k - 1]: the normal points that way, into it.
+    for (const b of ours) {
+      assert.ok(turn(Math.atan2(b.b.z, b.b.x), angle) < .021, 'a border runs out from the centre');
+      assert.deepEqual([b.away, b.toward], [(i + 2) % 3 + 1, i + 1]);
+      assert.ok(b.normal.x * -Math.sin(angle) + b.normal.z * Math.cos(angle) > .99, 'the normal points counter-clockwise');
+      // A street's two kerbs, or the footpath through a block: the gap between the districts is as the grid cut it.
+      assert.ok(Math.abs((b.gaps[0] + b.gaps[1]) / 2 - 2 * (b.street ? L.ROAD_GAP : L.BORDER_GAP)) < .1, `a gap of ${b.gaps.map(g => g.toFixed(2)).join(' to ')}`);
+      assert.ok(b.gaps[1] > b.gaps[0] === Math.hypot(b.b.x, b.b.z) > Math.hypot(b.a.x, b.a.z), 'the radial cut widens outwards');
+    }
+    const length = ours.reduce((sum, b) => sum + pieceLength(b), 0);
+    assert.ok(length > mainland.outer - mainland.inner - 4 * crossings - 4, `border ${i + 1}: ${length.toFixed(0)} of the mainland's ${(mainland.outer - mainland.inner).toFixed(0)}`);
+    // The middle border runs through blocks, the other two down the avenues (the first band has none on one of them).
+    const streets = ours.filter(b => b.street).length;
+    if (i === 1) assert.equal(streets, 0, 'the middle border is a footpath');
+    else assert.ok(streets >= GRIDS.support.bands - 1, `border ${i + 1}: ${streets} of ${ours.length} pieces along an avenue`);
+  });
+  assert.equal(BORDERS.support.filter(b => L.BORDERS.some(angle => turn(Math.atan2(b.a.z, b.a.x), angle) < .021)).length, BORDERS.support.length);
+});
+
+test('the lake city\'s districts meet along its streets and down the boulevard to the station, never over the lake', () => {
+  const borders = BORDERS.sales, pair = b => [b.toward, b.away].sort().join('');
+  const length = key => borders.filter(b => pair(b) === key).reduce((sum, b) => sum + pieceLength(b), 0);
+  // The top district meets the left and the right ones along the frame of streets and by the lake.
+  for (const key of ['12', '13']) {
+    assert.ok(length(key) > 150, `${key}: ${length(key).toFixed(0)}`);
+    assert.ok(borders.filter(b => pair(b) === key && b.street).reduce((sum, b) => sum + pieceLength(b), 0) > 120, `${key} along the streets`);
+  }
+  // The left and the right meet down the boulevard from the lake to the station: no street, the walk between its trees.
+  for (const b of borders.filter(b => pair(b) === '23')) assert.ok(!b.street && Math.abs(b.a.x) < 1e-9 && Math.abs(b.b.x) < 1e-9 && b.a.z > 0, 'the boulevard');
+  assert.ok(length('23') > 40, `23: ${length('23').toFixed(0)}`);
+  for (const b of borders) for (const gap of b.gaps) assert.ok(Math.abs(gap - 2 * L.ROAD_GAP) < 1e-9, `a gap of ${gap} between the blocks`);
+});
+
+test('laying the grid out and finding its borders is quick', () => {
   let best = Infinity;
   for (let k = 0; k < 3; k++) { const t = performance.now(); L.landGrid(SUPPORT); best = Math.min(best, performance.now() - t); }
   assert.ok(best < 250, `${best.toFixed(0)} ms`);
+  for (const [city, grid] of Object.entries(GRIDS)) {
+    let fastest = Infinity;
+    for (let k = 0; k < 3; k++) { const t = performance.now(); L.districtBorders(grid, CITIES[city]); fastest = Math.min(fastest, performance.now() - t); }
+    assert.ok(fastest < 40, `${city} borders: ${fastest.toFixed(1)} ms`);
+  }
 });

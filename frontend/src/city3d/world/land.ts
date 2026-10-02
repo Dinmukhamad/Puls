@@ -87,6 +87,75 @@ export function areaFrame(block: LandBlock, col: number, row: number, cols = 1, 
   };
 }
 
+/**
+ * A stretch of the border between two districts, down the middle of the avenue, street or footpath that parts their
+ * blocks: from `a` to `b`, `normal` pointing into district `toward` (the other side is district `away`), `gaps` the
+ * width between the two districts' blocks at `a` and at `b` (in between it changes evenly: the island city's cuts
+ * are radial, so they widen outwards), `street` whether a street runs down it (else a path or a boulevard).
+ */
+export interface DistrictBorder { a: Point; b: Point; normal: Point; toward: number; away: number; gaps: [number, number]; street: boolean }
+/** Blocks of two districts this close are neighbours: an avenue or a street (2 × ROAD_GAP) or a footpath between them. */
+const NEIGHBOURS = 4, STEP = 1;
+
+/**
+ * Where the districts meet, to draw on the ground (systems/estates.ts): between neighbouring blocks of two districts
+ * across an island avenue or footpath, or across a lake city street. Only over dry land: a border stops at the streets
+ * and ring roads it crosses, at the water (the lake and its shore) and on the railway and the station square.
+ */
+export function districtBorders(grid: LandGrid, world: WorldData): DistrictBorder[] {
+  type Line = Omit<DistrictBorder, "gaps"> & { gap: (p: Point) => number };
+  const lines: Line[] = [];
+  for (const A of grid.blocks) for (const B of grid.blocks) {
+    if (A.district === B.district) continue;
+    const sa = A.shape, sb = B.shape;
+    if (sa.kind === "ring" && sb.kind === "ring") {
+      // B begins just counter-clockwise of A's end, in the same band: the cut between them, on to the ring roads' middle.
+      const turn = wrap(sb.a0 - sa.a1), rm = (sa.r0 + sa.r1) / 2;
+      if (A.band !== B.band || turn * rm > NEIGHBOURS) continue;
+      const t = sa.a1 + turn / 2, c = Math.cos(t), sn = Math.sin(t), r0 = Math.min(sa.r0, sb.r0) - ROAD_GAP, r1 = Math.max(sa.r1, sb.r1) + ROAD_GAP;
+      const gap = (p: Point) => 2 * Math.hypot(p.x, p.z) * Math.sin(turn / 2);
+      lines.push({ a: { x: c * r0, z: sn * r0 }, b: { x: c * r1, z: sn * r1 }, normal: { x: -sn, z: c }, toward: B.district, away: A.district, gap, street: false });
+    } else if (sa.kind === "rect" && sb.kind === "rect") {
+      // B just past A along x (or along z), the two overlapping across: the street between them, on to the crossings.
+      const dx = sb.x0 - sa.x1, dz = sb.z0 - sa.z1;
+      if (dx >= 0 && dx <= NEIGHBOURS) {
+        const z0 = Math.max(sa.z0, sb.z0) - ROAD_GAP, z1 = Math.min(sa.z1, sb.z1) + ROAD_GAP, x = (sa.x1 + sb.x0) / 2;
+        if (z1 - z0 > 2 * ROAD_GAP) lines.push({ a: { x, z: z0 }, b: { x, z: z1 }, normal: { x: 1, z: 0 }, toward: B.district, away: A.district, gap: () => dx, street: false });
+      }
+      if (dz >= 0 && dz <= NEIGHBOURS) {
+        const x0 = Math.max(sa.x0, sb.x0) - ROAD_GAP, x1 = Math.min(sa.x1, sb.x1) + ROAD_GAP, z = (sa.z1 + sb.z0) / 2;
+        if (x1 - x0 > 2 * ROAD_GAP) lines.push({ a: { x: x0, z }, b: { x: x1, z }, normal: { x: 0, z: 1 }, toward: B.district, away: A.district, gap: () => dz, street: false });
+      }
+    }
+  }
+  const { streets, rings } = world.roads, line = world.railway, square = stationSquare(world), rect = world.land.rectangle;
+  const dry = (p: Point) => {
+    const r = Math.hypot(p.x, p.z);
+    if (rect ? Math.abs(p.x) > rect.width / 2 || Math.abs(p.z) > rect.depth / 2 || r < rect.lake + 4 : !world.land.annuli.some(a => r > a.inner + .5 && r < a.outer - .5)) return false;
+    return !(line && (onRailway(line, p, 1) || (square ? onSquare(line, square, p, 1) : false)));
+  };
+  const out: DistrictBorder[] = [];
+  for (const { gap, ...border } of lines) {
+    const dx = border.b.x - border.a.x, dz = border.b.z - border.a.z, length = Math.hypot(dx, dz), ux = dx / length, uz = dz / length;
+    // The streets that cross it, not the one it may run along.
+    const across = streets.filter(([ax, az, bx, bz]) => { const l = Math.hypot(bx - ax, bz - az) || 1; return Math.abs(ux * (bz - az) - uz * (bx - ax)) / l > .5; });
+    const mid = { x: border.a.x + dx / 2, z: border.a.z + dz / 2 };
+    border.street = streets.some(road => !across.includes(road) && segmentDistance(mid.x, mid.z, road) < .6);
+    // Ring roads are 2 wide and lie lower than the band (render/terrain.ts): it stops short of them.
+    const keep = (p: Point) => dry(p) && !rings.some(r => Math.abs(Math.hypot(p.x, p.z) - r) < 1.2) && !across.some(road => segmentDistance(p.x, p.z, road) < 1.2);
+    // Runs of kept samples become the stretches to draw, from the first of a run to its last.
+    const at = (t: number) => ({ x: border.a.x + dx * t, z: border.a.z + dz * t }), steps = Math.max(1, Math.round(length / STEP));
+    let start: number | null = null, last = 0;
+    for (let i = 0; i <= steps + 1; i++) {
+      const t = i / steps;
+      if (i <= steps && keep(at(t))) { start ??= t; last = t; continue; }
+      if (start !== null && (last - start) * length >= 2) { const a = at(start), b = at(last); out.push({ ...border, a, b, gaps: [gap(a), gap(b)] }); }
+      start = null;
+    }
+  }
+  return out;
+}
+
 /** Where a world point lies in a block, in columns (u) and rows (v) from its first corner; null off the block. */
 export function blockCell(block: LandBlock, p: Point): { u: number; v: number } | null {
   const s = block.shape;
@@ -221,7 +290,7 @@ const rectangle = (x: number, z: number, angle: number, length: number, depth: n
  * through the middle of the block between the avenues round BORDERS[1]; where an avenue does not reach a band (the
  * ones starting at the first ring road), the border runs as a footpath.
  */
-const BORDERS = [-32.7 * DEG, 90 * DEG, -146.7 * DEG];
+export const BORDERS = [-32.7 * DEG, 90 * DEG, -146.7 * DEG];
 function islandLand(world: WorldData): LandGrid {
   const line = world.railway, square = stationSquare(world), streets = world.roads.streets;
   // What stays of the city on the mainland: the station with its square, the group quarters, the training centres' car parks.

@@ -31,6 +31,8 @@
 .estate-bands li[data-open]{color:var(--text-primary);background:color-mix(in srgb,#8fd16a 12%,var(--surface-primary))}
 .estate-bands li>span:first-child{grid-area:name;font-weight:700}.estate-bands li>span:nth-child(2){grid-area:price}.estate-bands small{grid-area:count;font-size:11.5px;color:var(--text-secondary)}
 .estate-bands__meter{grid-area:meter;display:block;height:5px;border-radius:3px;background:color-mix(in srgb,var(--text-primary) 10%,transparent);overflow:hidden}.estate-bands__meter i{display:block;height:100%;background:#5aa84b}
+/* Цвет района, как на карте: его граница, оттенок земли и подпись (city3d/world/estateGrid.ts DISTRICT_COLOURS). */
+.district-swatch{display:inline-block;width:.85em;height:.85em;margin-right:.45em;border-radius:3px;background:var(--district);box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);vertical-align:-.08em}
 /* Тестовый город администраторов: район и вкладка, ступени постройки, пояса и штаб по шагам. */
 .sandbox-dock .city-eyebrow{color:#7a5af5}
 .sandbox-switch{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px}

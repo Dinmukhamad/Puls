@@ -15,9 +15,10 @@ import { createInstancePools, type InstancePools } from "../render/instances";
 import { createPatches } from "../render/terrain";
 import { TAP_DISTANCE, TAP_TIME } from "../engine/input";
 import { CELL, MODULE_CELLS, cellPoint, moduleGround, objectLayout, pointCell, siteLayout, squareProblem, plotFootprint, projectFootprint, type ProjectFamily } from "../world/estates";
-import { areaFrame, blockCell, plotAt, type DistrictCentre, type Frame, type LandBlock, type LandGrid } from "../world/land";
+import { areaFrame, blockCell, districtBorders, plotAt, type DistrictCentre, type Frame, type LandBlock, type LandGrid } from "../world/land";
+import { createBorders } from "../render/borders";
 import { plotLayout } from "../world/landLayouts";
-import type { PlotFamily } from "../world/estateGrid";
+import { districtColour, type PlotFamily } from "../world/estateGrid";
 import { HOUSE_SCALE, READY_HOUSES, isReadyHouse } from "../world/familyHouses";
 import type { Placement, Surface } from "../world/types";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "../types";
@@ -26,9 +27,8 @@ import type { DistrictEstate, PublicObject } from "../../api/cityEstate";
 /** Signs over projects show only this close. */
 const SIGN_REACH = 230;
 const OK = new THREE.Color("#35b07a"), BAD = new THREE.Color("#e0525d");
-/** Meadow of a free plot, the paving of a centre, the district tints; in build mode the plots for sale and the bands still closed. */
+/** Meadow of a free plot, the paving of a centre; in build mode the plots for sale and the bands still closed. */
 const MEADOW = new THREE.Color("#97b67c"), PAVING = new THREE.Color("#ddd4c0"), FOR_SALE = new THREE.Color("#c4e59a"), CLOSED = new THREE.Color("#7f9172");
-export const DISTRICT_TINTS = ["#6b55c8", "#2f9e8f", "#d1823a"];
 /** The plots' ground over the land, under every patch of what stands on them (render/terrain.ts TOP and its lifts). */
 const PLOT_Y = .203, INSET = .24;
 
@@ -100,6 +100,8 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
 
   // ---- the ground: plots, centres and their public squares, laid out once ----
   const ground = plotGround(grid); ctx.scene.add(ground.mesh);
+  // Where the districts meet: a band in both districts' colours and posts along it (render/borders.ts).
+  const borders = createBorders(districtBorders(grid, ctx.world), districtColour); ctx.scene.add(borders.band, borders.posts);
   const squares = grid.centres.map(c => moduleGround(c.square));
   const squarePatches = createPatches(squares.flatMap(l => l.surfaces)); ctx.scene.add(squarePatches);
   let squarePools: InstancePools | null = null;
@@ -112,8 +114,9 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     for (const block of grid.blocks) for (let col = 0; col < block.cols; col++) for (let row = 0; row < block.rows; row++) {
       const slot = ground.slots.get(plotKey(block.district, block.block, col, row));
       if (slot === undefined) continue;
-      tint.set(DISTRICT_TINTS[(block.district - 1) % DISTRICT_TINTS.length]);
-      c.copy(MEADOW).lerp(tint, own ? .04 : .09);
+      tint.set(districtColour(block.district));
+      // Every district's free land in its own shade, so its extent reads at a glance; in build mode the own district's plots are lit instead.
+      c.copy(MEADOW).lerp(tint, own ? .05 : .28);
       if (own === block.district && !taken.has(plotKey(block.district, block.block, col, row))) c.copy(block.band <= open ? FOR_SALE : CLOSED);
       else if (own && own !== block.district) c.lerp(CLOSED, .35);
       for (let k = 0; k < 4; k++) colour.setXYZ(slot + k, c.r, c.g, c.b);
@@ -438,6 +441,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       canvas.removeEventListener("pointerdown", onDown); canvas.removeEventListener("pointerup", onUp); canvas.removeEventListener("pointermove", onMove);
       layer.remove(); squarePools?.dispose(); pools?.dispose();
       for (const mesh of [ground.mesh, squarePatches, patches]) if (mesh) { ctx.scene.remove(mesh); mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose(); }
+      ctx.scene.remove(borders.band, borders.posts); borders.dispose();
       for (const item of veils.splice(0)) { ctx.scene.remove(item.mesh); (item.mesh.material as THREE.Material).dispose(); }
       ctx.scene.remove(cells, ghost, selection);
       cells.geometry.dispose(); ghost.geometry.dispose(); edges.geometry.dispose(); selection.geometry.dispose();

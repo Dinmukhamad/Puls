@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cityEstate, operationKey, type DistrictEstate, type DistrictProject, type MyEstate } from "../../api/cityEstate";
 import type { TeamDistrict } from "../../api/cityWorld";
+import { DistrictSwatch } from "./DistrictSwatch";
 import "./estate.css";
 
 const coins = (n: number) => n.toLocaleString("ru-RU");
@@ -18,7 +19,7 @@ export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, 
   const home = mine?.district?.id === team.id, canGive = home && mine?.status === "ready";
   const hq = district?.hq;
   return <div className="stack estate-district">
-    <span className="city-eyebrow">РАЙОН КОМАНДЫ · {cityName}</span>
+    <span className="city-eyebrow"><DistrictSwatch district={team.id} />РАЙОН КОМАНДЫ · {cityName}</span>
     <p>{team.supervisor ? `Супервайзер: ${team.supervisor}` : "Команда пока не назначена: руководитель связывает район с группами в настройках города."}</p>
     {team.mine && <p className="city-world-badge">Твой район</p>}
     {hq && <section className="estate-hq">

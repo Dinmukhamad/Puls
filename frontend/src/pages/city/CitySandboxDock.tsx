@@ -4,6 +4,7 @@ import { citySandbox, type CityEstates, type DistrictEstate, type MyEstate, type
 import type { DepartmentId } from "../../api/cityWorld";
 import { projectFootprint } from "../../city3d/world/estateGrid";
 import type { BuildState, EstateTarget } from "./CityEstateDock";
+import { DistrictSwatch } from "./DistrictSwatch";
 import "./estate.css";
 
 const coins = (n: number) => n.toLocaleString("ru-RU");
@@ -141,12 +142,12 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
 
   return <aside className="estate-dock sandbox-dock glass glass--regular" aria-label="Тестовый город">
     <header className="estate-dock__head">
-      <div><span className="city-eyebrow">🧪 ТЕСТОВЫЙ ГОРОД · {land?.name ?? "район"}</span><p>Бесплатно · видят только администраторы</p></div>
+      <div><span className="city-eyebrow">🧪 ТЕСТОВЫЙ ГОРОД · <DistrictSwatch district={build.district} />{land?.name ?? "район"}</span><p>Бесплатно · видят только администраторы</p></div>
       <button type="button" className="estate-dock__close" onClick={onClose} aria-label="Закрыть панель тестового города">×</button>
     </header>
     <div className="estate-dock__body">
       <div className="sandbox-switch" role="group" aria-label="Район тестового города">{(state?.districts ?? []).filter(d => d.land).map(d =>
-        <button type="button" key={d.id} aria-pressed={d.id === build.district} onClick={() => switchTo(d.id)}><strong>{d.number}</strong><small>{d.name}</small></button>)}</div>
+        <button type="button" key={d.id} aria-pressed={d.id === build.district} onClick={() => switchTo(d.id)}><strong><DistrictSwatch district={d.id} />{d.number}</strong><small>{d.name}</small></button>)}</div>
       <div className="sandbox-switch sandbox-switch--tabs" role="group" aria-label="Что строить">
         <button type="button" aria-pressed={!build.project} onClick={() => area(false)}>Участки</button>
         <button type="button" aria-pressed={build.project} onClick={() => area(true)}>Площадь и проекты</button>

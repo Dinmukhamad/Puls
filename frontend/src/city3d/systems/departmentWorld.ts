@@ -20,6 +20,7 @@ import { disposeTree } from "./districts";
 import { mergeStatic } from "../assets/landmarks";
 import { generateSalesWorld, SALES_CENTERS } from "../world/sales";
 import { landGrid, type LandGrid } from "../world/land";
+import { DISTRICT_COLOURS, districtColour, districtNumber, preparedLand } from "../world/estateGrid";
 import { createEstates, type Estates } from "./estates";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "../types";
 
@@ -87,7 +88,8 @@ function headquarters(root: THREE.Object3D, stage: number, colour: string) {
   }
   for (const dx of [-3.2, 3.2]) { b(1.2, .5, 1.2, x + dx * .9, .7, 3.8, WALL); b(1, .65, 1, x + dx * .9, 1.1, 3.8, GREEN); }
 }
-const HQ_COLOURS = ["#6b55c8", "#2f9e8f", "#d1823a", "#4b7fd6", "#c4568a", "#7a9a3c"];
+/** The headquarters' accents: the districts' own colours, then more for districts beyond the three with land. */
+const HQ_COLOURS = [...DISTRICT_COLOURS, "#4b7fd6", "#c4568a", "#7a9a3c"];
 function offices(root: THREE.Object3D, x: number, z: number, index: number) {
   const b = builder(root), h = 3.4 + (index % 3) * .7;
   b(10, .3, 10, x, .35, z, "#d4cabb"); b(7.6, h, 6, x, .5 + h / 2, z, WALL);
@@ -351,11 +353,13 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     const originals = new Set<THREE.BufferGeometry>(); root.traverse(o => { if (o instanceof THREE.Mesh) originals.add(o.geometry); });
     mergeStatic(root); originals.forEach(g => g.dispose());
   }
-  function label(city: DepartmentId, id: string, name: string, status: string, icon: string) {
+  /** A label over a place of the city; a team district's in the district's own colour (world/estateGrid.ts). */
+  function label(city: DepartmentId, id: string, name: string, status: string, icon: string, colour?: string) {
     let el = elements[city].get(id);
     if (!el) {
       el = document.createElement("button"); (el as HTMLButtonElement).type = "button"; el.className = "c3-label"; el.dataset.worldObject = id;
-      el.style.setProperty("--c3-district", city === "sales" ? "#c59437" : "#7965d5");
+      el.style.setProperty("--c3-district", colour ?? (city === "sales" ? "#c59437" : "#7965d5"));
+      if (colour) el.dataset.team = "";
       const symbol = document.createElement("span"), copy = document.createElement("span"), title = document.createElement("strong"), sub = document.createElement("small");
       symbol.className = "c3-label__icon"; symbol.setAttribute("aria-hidden", "true"); copy.className = "c3-label__text";
       title.className = "c3-label__name"; sub.className = "c3-label__status"; copy.append(title, sub); el.append(symbol, copy);
@@ -373,13 +377,14 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
       for (const city of config.cities) {
         const root = city.id === "support" ? supportTeams : sales?.teams; if (!root) continue;
         disposeTree(root); root.clear(); materialSets.delete(root);
-        // A district's headquarters stand in its centre; a district beyond the three of a city has no land, and none.
+        // A district's headquarters stand in its centre (by its number, "support-team-2" → 2); a district beyond the
+        // three of a city has no land, and none.
         const centres = grids[city.id]?.centres ?? [];
-        city.districts.forEach((d, i) => {
-          const p = centres.find(c => c.district === i + 1)?.hq;
+        city.districts.forEach(d => {
+          const number = districtNumber(d.id), p = centres.find(c => c.district === number)?.hq;
           if (!p) { anchors[city.id].delete(d.id); return; }
           const site = new THREE.Group(); site.position.set(p.x, 0, p.z); site.rotation.y = p.rotation; root.add(site);
-          headquarters(site, stageOf(city.id, d.id), HQ_COLOURS[i % HQ_COLOURS.length]);
+          headquarters(site, stageOf(city.id, d.id), HQ_COLOURS[(number - 1) % HQ_COLOURS.length]);
           anchors[city.id].set(d.id, new THREE.Vector3(p.x, [8, 9, 9, 10, 15][stageOf(city.id, d.id) - 1], p.z));
         });
         batch(root);
@@ -387,7 +392,10 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
       layoutKey = key; ctx.requestShadowUpdate();
     }
     for (const c of config.cities) {
-      c.districts.forEach(d => label(c.id, d.id, d.name, `${d.supervisor ?? "Команда не назначена"} · штаб ${stageOf(c.id, d.id)}/5`, "⚑"));
+      c.districts.forEach(d => {
+        const number = districtNumber(d.id);
+        label(c.id, d.id, d.name, `${d.supervisor ?? "Команда не назначена"} · штаб ${stageOf(c.id, d.id)}/5`, "⚑", preparedLand(number) ? districtColour(number) : undefined);
+      });
       const head = railPoint(c.id === "support" ? supportLine : RAIL_LINES.sales, STATION.building, STATION.middle); anchors[c.id].set("station", new THREE.Vector3(head.x, 9.5, head.z));
       label(c.id, "station", "Вокзал", `Поезд в ${config.cities.find(other => other.id !== c.id)?.name ?? "другой город"}`, "▰");
     }
