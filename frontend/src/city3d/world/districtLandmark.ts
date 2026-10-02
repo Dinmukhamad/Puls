@@ -1,6 +1,7 @@
 /** The team's growing community building. The whole reserved footprint stays fixed while its architecture grows. */
 import { CELL, MODULE_CELLS, cellPoint, type ModuleSlot } from "./estates";
 import type { Placement, Surface } from "./types";
+import type { DistrictCentre } from "./land";
 
 /** Models are drawn in this local frame, scaled to the actual reserved footprint by the catalogue. */
 export const LANDMARK_SIDE = 18;
@@ -16,6 +17,17 @@ export interface LandmarkBounds extends LandmarkFrame { bottom: number; height: 
 type Point3 = { x: number; y: number; z: number };
 
 export const landmarkLevel = (level: number) => Math.min(LANDMARK_LEVELS, Math.max(1, Math.floor(Number.isFinite(level) ? level : 1)));
+
+/** One main building in the reserved centre. Paid old projects keep their original square beside it. */
+export function districtMainFrame(centre: DistrictCentre, landmark: { status: "active" | "legacy_occupied" } | null | undefined): LandmarkFrame | null {
+  if (!landmark) return null;
+  const legacy = landmark.status === "legacy_occupied", at = legacy ? centre.hq : centre.area, side = legacy ? 16 : LANDMARK_SIDE;
+  return { x: at.x, z: at.z, rotation: at.rotation, width: side, depth: side };
+}
+
+export function districtMainLayout(frame: LandmarkFrame, level: number): { placements: Placement[]; surfaces: Surface[] } {
+  return { placements: [{ kind: "district-landmark", variant: landmarkLevel(level) - 1, ...frame, scale: 1 }], surfaces: [] };
+}
 
 /** A family of civic buildings: pavilion, extended office, community hall, stepped centre and flagship tower. */
 export function landmarkBoxes(level: number, detail: 0 | 1 | 2 = 2): LandmarkBox[] {

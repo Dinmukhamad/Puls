@@ -8,9 +8,9 @@ reaches operators, the staff report, the coin journal or the real districts' his
 city's views ask only for configured districts, and the operators' own views skip the prefix.
 
 There administrators build for free, set any building's stage up or down, take buildings away,
-open and close bands, set the headquarters' stage, open shared projects and build or cancel them
+set the headquarters' stage, open shared projects and build or cancel them
 at once, and clear a city's test land to start again. The rules of the land stay the real ones
-(plots for sale, free plots, the open band, parks gathering from one owner's squares), so what
+(all personal land available, free plots, parks gathering from one owner's squares), so what
 works here works in the city.
 """
 
@@ -199,14 +199,17 @@ async def remove(session, user, object_id):
 
 
 async def set_district(session, user, district_id, body):
-    """Opens or closes the test district's bands, sets its headquarters' stage."""
+    """Sets the test district's progress; all its personal land remains available."""
     key = test_id(district_id)
     district = await lock_district(session, key)
     bands = len(city_land.band_totals(key))
     if body.open_band is not None:
         if not 1 <= body.open_band <= bands:
             raise ConflictError(f"Поясов в районе: {bands}", code="bad_band")
-        district.open_band = body.open_band
+        if body.open_band != city_land.open_band(key):
+            raise ConflictError(
+                "Весь район открыт сразу: закрывать часть земли нельзя", code="all_land_open"
+            )
     if body.hq_level is not None:
         if not 1 <= body.hq_level <= len(STAGE_NAMES):
             raise ConflictError(f"Ступеней штаба: {len(STAGE_NAMES)}", code="bad_level")
@@ -329,7 +332,7 @@ async def cancel_project(session, user, project_id):
 
 
 async def reset(session, user, city):
-    """Clears a city's test land: no buildings, no projects, the first band, the first stage."""
+    """Clears a city's test buildings and progress, keeping all its personal land available."""
     if city not in CITIES:
         raise NotFoundError("Город не найден")
     keys = test_ids(city)
@@ -347,7 +350,8 @@ async def reset(session, user, city):
     for district in await session.scalars(
         select(CityDistrictState).where(CityDistrictState.district_id.in_(keys))
     ):
-        district.hq_level, district.built_projects, district.open_band = 1, 0, 1
+        district.hq_level, district.built_projects = 1, 0
+        district.open_band = city_land.open_band(district.district_id)
         district.landmark_peak_plots = 0
     for key in keys:
         event(session, key, "sandbox", actor=user, payload={"do": "reset"})

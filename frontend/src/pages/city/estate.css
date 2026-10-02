@@ -32,7 +32,7 @@
 .estate-give{display:grid;gap:9px}.estate-give .row{display:flex;flex-wrap:nowrap;gap:8px;align-items:flex-start;line-height:1.4}.estate-give input[type=checkbox]{width:20px;height:20px;flex:none}
 /* Цвет района, как на карте: его граница, оттенок земли и подпись (city3d/world/estateGrid.ts DISTRICT_COLOURS). */
 .district-swatch{display:inline-block;width:.85em;height:.85em;margin-right:.45em;border-radius:3px;background:var(--district);box-shadow:inset 0 0 0 1px rgba(0,0,0,.14);vertical-align:-.08em}
-/* Тестовый город администраторов: район и вкладка, ступени постройки, пояса и штаб по шагам. */
+/* Тестовый город администраторов: район и вкладка, ступени постройки и главного здания. */
 .sandbox-dock .city-eyebrow{color:#7a5af5}
 .sandbox-switch{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:6px}
 .sandbox-switch button,.sandbox-levels button,.sandbox-stepper button{border:1px solid var(--separator);border-radius:12px;background:var(--city-glass-soft);color:var(--text-primary);font:inherit;cursor:pointer}

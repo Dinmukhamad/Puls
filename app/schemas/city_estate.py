@@ -90,9 +90,10 @@ class LevelInput(BaseModel):
 
 
 class SandboxDistrictInput(BaseModel):
-    """The open band and the headquarters' stage of a test district; what is left out stays."""
+    """The stages of a test district; its personal land is always fully available."""
 
     model_config = ConfigDict(extra="forbid")
+    #: Compatibility with old clients: only the district's full band count is accepted.
     open_band: int | None = Field(default=None, ge=1, le=9)
     hq_level: int | None = Field(default=None, ge=1, le=9)
     landmark_level: int | None = Field(default=None, ge=1, le=5)

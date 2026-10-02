@@ -108,14 +108,14 @@ test('the community-square cell grid appears only during project placement and i
   s.estates.dispose();
 });
 
-test('personal build focus targets nearby free land in an open expansion stage, rather than the community square', () => {
-  const s = setup(), centre = grid.centres.find(c => c.district === frame.district), own = grid.plots.filter(p => p.district === frame.district && p.band === 1);
+test('personal build focus targets nearby free land across the entire district, rather than the community square', () => {
+  const s = setup(), centre = grid.centres.find(c => c.district === frame.district), own = grid.plots.filter(p => p.district === frame.district);
   const nearest = own.sort((a, b) => Math.hypot(a.x - centre.area.x, a.z - centre.area.z) - Math.hypot(b.x - centre.area.x, b.z - centre.area.z));
   const occupied = nearest[0];
   s.state([object('house', { module: occupied.block, u: occupied.col, v: occupied.row })], false, { land: { open_band: 1 } });
   s.build(null);
   const focus = s.estates.focus({ district: districtId, kind: 'district' }, 48, .86);
-  assert.ok(Math.hypot(focus.point.x - nearest[1].x, focus.point.z - nearest[1].z) < 1e-8, 'occupied and closed plots are skipped');
+  assert.ok(Math.hypot(focus.point.x - nearest[1].x, focus.point.z - nearest[1].z) < 1e-8, 'occupied plots are skipped even when old state reports band 1');
   assert.ok(Math.hypot(focus.point.x - centre.square.x, focus.point.z - centre.square.z) > 10);
   s.estates.setBuild(null);
   const overview = s.estates.focus({ district: districtId, kind: 'district' }, 48, .86);
@@ -192,14 +192,14 @@ const landmark = (level = 1, status = 'active') => ({ status, level, name: 'Па
 
 test('the growing team complex focuses its real architecture and facade clicks open district development in real and sandbox cities', () => {
   const s = setup(), centre = grid.centres.find(c => c.district === frame.district);
-  const reserved = { x: centre.square.x, z: centre.square.z, rotation: centre.square.rotation, width: 18, depth: 18 };
+  const reserved = city.districtMainFrame(centre, landmark());
   for (const sandbox of [false, true]) for (const level of [1, 5]) {
     s.state([], sandbox, { landmark: landmark(level) }); s.build(null); s.picks.length = 0;
     const bounds = city.landmarkBounds(reserved, level), focus = s.estates.focus({ district: districtId, kind: 'public' }, 48, .86);
     assert.ok(Math.abs(focus.point.y - (bounds.bottom + bounds.height / 2)) < 1e-9);
     assert.ok(Math.abs(focus.point.x - bounds.x) < 1e-9 && Math.abs(focus.point.z - bounds.z) < 1e-9);
     const invitation = s.ctx.overlay.children[0].children[0];
-    assert.equal(invitation.querySelector('strong').textContent, 'Комплекс команды');
+    assert.equal(invitation.querySelector('strong').textContent, 'Главное здание · Тестовый район');
     assert.match(invitation.attributes['aria-label'], new RegExp(`Уровень ${level} из 5`));
     invitation.onclick(); assert.deepEqual(s.picks.pop(), { kind: 'public', district: districtId });
     // Aim horizontally at the tower: no ground intersection exists, yet its visible facade must be clickable.
@@ -212,7 +212,7 @@ test('the growing team complex focuses its real architecture and facade clicks o
   }
   s.state([object('fountain', { module: 0, u: 5, v: 5, w: 2, h: 2 })], false, { landmark: landmark(5, 'legacy_occupied') });
   s.picks.length = 0; const ground = new THREE.Vector3(centre.square.x, .2, centre.square.z); s.aim(ground); s.tap(ground);
-  assert.deepEqual(s.picks, [{ kind: 'object', district: districtId, object: 7 }], 'legacy objects keep picking priority and no absent tower steals the click');
+  assert.deepEqual(s.picks, [{ kind: 'object', district: districtId, object: 7 }], 'legacy objects keep picking priority beside the main building');
   s.estates.dispose();
 });
 
@@ -240,6 +240,36 @@ test('changes to complex levels rebuild their pooled models, while occupancy-onl
   s.state([], true, { landmark: landmark(2) });
   assert.deepEqual(resolved, [0, 4, 1], 'sandbox has its own complex level');
   s.state([], false, { landmark: landmark(5, 'legacy_occupied') });
-  assert.deepEqual(resolved, [0, 4, 1], 'legacy square has no complex model');
+  assert.deepEqual(resolved, [0, 4, 1, 4], 'legacy districts also have one growing main building on the former HQ site');
   s.estates.dispose(); assert.equal(s.ctx.scene.getObjectByName('city-instances'), undefined);
+});
+
+test('every land district has exactly one main model, with old paid square coordinates preserved', () => {
+  const s = setup(), resolved = [];
+  s.ctx.quality = { lodDistances: [120, 260, 600] }; s.ctx.onQuality = () => () => {};
+  const districts = grid.centres.map(c => ({ id: `support-team-${c.district}`, name: `Район ${c.district}`, number: c.district,
+    objects: c.district === 2 ? [object('fountain', { module: 0, u: 5, v: 5, w: 2, h: 2 })] : [], projects: [], land: { open_band: 1 }, landmark: landmark(5, c.district === 2 ? 'legacy_occupied' : 'active') }));
+  s.estates.set({ state: { city: 'support', districts } });
+  s.estates.setCatalogue({ resolve(placement) { resolved.push(placement); return null; } });
+  const mains = resolved.filter(p => p.kind === 'district-landmark');
+  assert.equal(mains.length, 3);
+  for (const c of grid.centres) {
+    const expected = city.districtMainFrame(c, districts.find(d => d.number === c.district).landmark);
+    assert.equal(mains.filter(p => p.x === expected.x && p.z === expected.z && p.width === expected.width && p.depth === expected.depth).length, 1);
+  }
+  const legacy = grid.centres.find(c => c.district === 2), at = new THREE.Vector3(legacy.square.x, .2, legacy.square.z);
+  s.picks.length = 0; s.aim(at, legacy.square.rotation + .55); s.tap(at);
+  assert.deepEqual(s.picks, [{ kind: 'object', district: 'support-team-2', object: 7 }]);
+  s.estates.dispose();
+});
+
+test('outer plots can be purchased and receive inventory even when cached state still says only band 1 is open', () => {
+  const s = setup(), outer = grid.plots.find(p => p.district === frame.district && p.band === grid.bands);
+  s.state([], false, { land: { open_band: 1 } }); s.build(null);
+  const point = new THREE.Vector3(outer.x, .2, outer.z);
+  s.aim(point, outer.rotation + .55); s.tap(point);
+  assert.equal(s.picks.at(-1).kind, 'plot'); assert.equal(s.picks.at(-1).problem, null);
+  s.picks.length = 0; s.build({ family: 'house', rotation: 0, moving: 20 }); s.tap(point);
+  assert.equal(s.picks.at(-1).kind, 'place'); assert.equal(s.picks.at(-1).problem, null);
+  s.estates.dispose();
 });

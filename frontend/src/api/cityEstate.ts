@@ -24,9 +24,9 @@ export interface DistrictProject extends Footprint {
   /** Staff only. */
   funded?: number;
 }
-/** A district's land: plots for sale and taken, band by band from the centre; bands open outwards as they fill. */
+/** All personal land is available immediately; geographic zones retain their own plot prices. */
 export interface DistrictLandState { plots: number; taken: number; open_band: number; bands: { band: number; plots: number; taken: number }[] }
-/** One complex occupying the district's entire central square; its level grows with personal building. */
+/** One main building at the district centre; its level grows with occupied personal plots. */
 export interface DistrictLandmark {
   status: "active" | "legacy_occupied";
   level: number; name: string;
@@ -38,7 +38,7 @@ export interface DistrictEstate {
   id: string; name: string; number: number; construction: boolean; mine: boolean; managed: boolean;
   /** Null where the district has no land (beyond the three of a city). */
   land: DistrictLandState | null;
-  /** Null for unprepared land; previous shared buildings remain on legacy_occupied squares. */
+  /** Null for unprepared land; legacy public projects keep their original square beside the main building. */
   landmark: DistrictLandmark | null;
   hq: { level: number; name: string; built: number; next: { level: number; name: string; need: number } | null };
   objects: PublicObject[]; projects: DistrictProject[]; version: number;
@@ -72,7 +72,7 @@ export interface MyEstate {
 }
 export interface OperationResult { replayed: boolean; object?: OwnObject | PublicObject; merged?: boolean; price?: number; balance?: number; available?: number; accepted?: number; completed?: boolean; project?: DistrictProject; refunded?: number }
 export interface EstateReport {
-  districts: { id: string; city: DepartmentId; name: string; construction: boolean; operators: number; builders: number; land: { plots: number; taken: number; open_band: number } | null; buildings: number; open_projects: number; hq_level: number; built_projects: number }[];
+  districts: { id: string; city: DepartmentId; name: string; construction: boolean; operators: number; builders: number; land: { plots: number; taken: number; open_band: number } | null; buildings: number; open_projects: number; landmark_level: number; hq_level: number; built_projects: number }[];
   operators_without_district: number; inventory: number;
   legacy: { buildings: number; operators: number; paid: number };
   coins: { buildings: number; contributions: number; refunded: number };
@@ -117,7 +117,7 @@ export const cityEstate = {
 /**
  * The administrators' test city (app/services/city_sandbox.py): a copy of a city's three districts that only
  * administrators see, on the same land and by the same rules, where they build for free, set any stage up or down,
- * take buildings away, open bands, set the headquarters' stage and build or cancel shared projects at once. It never
+ * take buildings away, set the main building's stage and build or cancel legacy shared projects at once. It never
  * touches the real districts, operators or coins, so its changes need no idempotency key: none of them pays.
  */
 export interface SandboxResult { object?: PublicObject; merged?: boolean; removed?: number; project?: number; cancelled?: number; open_band?: number; hq_level?: number; landmark_level?: number; reset?: boolean }
@@ -127,7 +127,7 @@ export const citySandbox = {
   build: (json: { district_id: string; family: PlotFamily; block: number; col: number; row: number }) => request<SandboxResult>(`${SANDBOX}/plots`, { method: "POST", json }),
   level: (id: number, level: number) => request<SandboxResult>(`${SANDBOX}/buildings/${id}/level`, { method: "POST", json: { level } }),
   remove: (id: number) => request<SandboxResult>(`${SANDBOX}/buildings/${id}`, { method: "DELETE" }),
-  district: (id: string, json: { open_band?: number; hq_level?: number; landmark_level?: number }) => request<SandboxResult>(`${SANDBOX}/districts/${id}`, { method: "PUT", json }),
+  district: (id: string, json: { hq_level?: number; landmark_level?: number }) => request<SandboxResult>(`${SANDBOX}/districts/${id}`, { method: "PUT", json }),
   openProject: (json: { district_id: string; family: ProjectFamily; target_id?: number; u?: number; v?: number; rotation?: number }) => request<SandboxResult>(`${SANDBOX}/projects`, { method: "POST", json }),
   complete: (id: number) => request<SandboxResult>(`${SANDBOX}/projects/${id}/complete`, { method: "POST" }),
   cancel: (id: number) => request<SandboxResult>(`${SANDBOX}/projects/${id}`, { method: "DELETE" }),

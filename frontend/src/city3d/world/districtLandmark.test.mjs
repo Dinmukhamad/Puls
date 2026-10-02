@@ -4,13 +4,33 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const built = await build({
-  stdin: { contents: 'export * from "./districtLandmark.ts"; export * from "../assets/districtLandmark.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: 'export * from "./districtLandmark.ts"; export * from "../assets/districtLandmark.ts"; export * from "./land.ts"; export * from "./cities.ts"; export * from "./worldSpec.ts"; export { generateSalesWorld } from "./sales.ts"; export { squareCorners, polygonsOverlap } from "./estates.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
 });
 const L = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const frame = { x: 31, z: -25, rotation: 0, width: 18, depth: 18 };
 const worldPoint = (frame, x, y, z) => ({ x: frame.x + Math.cos(frame.rotation) * x + Math.sin(frame.rotation) * z, y, z: frame.z - Math.sin(frame.rotation) * x + Math.cos(frame.rotation) * z });
 const worldDirection = (frame, x, y, z) => ({ x: Math.cos(frame.rotation) * x + Math.sin(frame.rotation) * z, y, z: -Math.sin(frame.rotation) * x + Math.cos(frame.rotation) * z });
+
+test('one main building is centred in each reserved district centre, and old squares remain clear of legacy main buildings', () => {
+  for (const world of [L.islandWorld(L.WORLD_X4), L.generateSalesWorld()]) {
+    const grid = L.landGrid(world);
+    for (const centre of grid.centres) {
+      assert.equal(L.districtMainFrame(centre, null), null);
+      for (const status of ['active', 'legacy_occupied']) {
+        const frame = L.districtMainFrame(centre, { status }), at = status === 'active' ? centre.area : centre.hq;
+        assert.equal(frame.x, at.x); assert.equal(frame.z, at.z); assert.equal(frame.rotation, at.rotation);
+        assert.equal(frame.width, status === 'active' ? 18 : 16); assert.equal(frame.width, frame.depth);
+        const layout = L.districtMainLayout(frame, 5); assert.equal(layout.placements.length, 1);
+        const footprint = L.squareCorners(frame.x, frame.z, frame.rotation, frame.width / 2);
+        for (const plot of grid.plots) assert.ok(!L.polygonsOverlap(footprint, plot.corners, -.05), 'main building never consumes sold personal plots');
+        const bounds = L.landmarkBounds(frame, 5);
+        assert.ok(bounds.width < frame.width && bounds.depth < frame.depth, 'largest main stays within its reserved footprint');
+        if (status === 'legacy_occupied') assert.ok(!L.polygonsOverlap(footprint, L.squareCorners(centre.square.x, centre.square.z, centre.square.rotation, 9)), 'paid old projects retain their entire original public square');
+      }
+    }
+  }
+});
 
 test('the five centre levels grow in footprint and height while every architectural piece stays on the reserved square', () => {
   const bounds = Array.from({ length: 5 }, (_, i) => L.landmarkBounds(frame, i + 1));

@@ -20,7 +20,9 @@ const { CityEstateDock } = await load("./CityEstateDock.tsx");
 const { CityDistrictSheet } = await load("./CityDistrictSheet.tsx");
 
 const land = { plots: 90, taken: 31, open_band: 2, bands: [{ band: 1, plots: 20, taken: 18 }, { band: 2, plots: 30, taken: 12 }, { band: 3, plots: 40, taken: 1 }] };
-const district = { id: "support-team-1", name: "Район 1", number: 1, construction: true, mine: true, managed: false, land, hq: { level: 1, name: "Штаб", built: 0, next: null }, objects: [], projects: [], version: 1 };
+const landmark = { status: "legacy_occupied", level: 3, name: "Деловой центр", module: 0, u: 0, v: 0, w: 12, h: 12, rotation: 0, taken: 31, plots: 90, peak: 31,
+  next: { level: 4, name: "Комплекс команды", need: 45, remaining: 14, percent: 50 } };
+const district = { id: "support-team-1", name: "Район 1", number: 1, construction: true, mine: true, managed: false, land, landmark, hq: { level: 1, name: "Штаб", built: 0, next: null }, objects: [], projects: [], version: 1 };
 const team = { id: district.id, name: district.name, supervisor: "Гаухар", mine: true };
 const catalogue = [{ family: "house", name: "Дом", icon: "🏡", size: [1, 1], squares: null, ready: false, levels: [{ level: 1, name: "Небольшой дом", about: "Дом для начала стройки", price: 300 }] }];
 const mine = { status: "ready", message: null, district: { id: district.id, city: "support", name: district.name }, objects: [], catalogue, projects: [], land_prices: [200, 150, 100], economy_revision: 1, balance: 900, available: 850, legacy: { count: 0, paid: 0 }, managed: [] };
@@ -35,24 +37,22 @@ function render(Component, props) {
 const dockProps = { mine, land: district, build: buildState, setBuild: noop, onClose: noop, onFocus: noop };
 const sheetProps = { district, team, cityName: "Техподдержка", mine, onMyEstate: noop, onOpenProject: noop };
 
-test("unlock summary counts all open stages and excludes future land", () => {
-  assert.deepEqual(districtBuildProgress(land), { stage: 2, stages: 3, plots: 50, taken: 30, available: 20, target: 35, remaining: 5 });
-  // A park occupies several plots; the unit here must be plots, not building count.
-  const almost = { ...land, bands: land.bands.map(b => b.band === 2 ? { ...b, taken: 16 } : b) };
-  assert.equal(districtBuildProgress(almost).remaining, 1);
-  assert.equal(districtBuildProgress({ ...land, open_band: 3 }).remaining, null);
+test("land summary counts the whole district regardless of former open stages", () => {
+  assert.deepEqual(districtBuildProgress(land), { plots: 90, taken: 31, available: 59 });
+  assert.deepEqual(districtBuildProgress({ ...land, open_band: 1 }), districtBuildProgress(land));
+  assert.deepEqual(districtBuildProgress({ ...land, open_band: 3 }), districtBuildProgress(land));
+  // A park occupies several plots; count occupied land rather than buildings.
+  assert.equal(districtBuildProgress({ ...land, taken: 35 }).available, 55);
+  assert.equal(districtBuildProgress({ ...land, taken: 90 }).available, 0);
 });
 
-test("70 percent threshold rounds up and shows one clear next stage", () => {
+test("all land is available and the summary has no competing unlock progress", () => {
   const small = { plots: 8, taken: 2, open_band: 1, bands: [{ band: 1, plots: 3, taken: 2 }, { band: 2, plots: 5, taken: 0 }] };
-  assert.equal(districtBuildProgress(small).remaining, 1);
   const html = render(DistrictBuildProgress, { land: small });
-  assert.match(html, /ещё 1 участок/);
-  assert.match(html, /aria-valuemax="3" aria-valuenow="2"/);
-  assert.equal((html.match(/role="progressbar"/g) ?? []).length, 1);
-  const fullyOpen = render(DistrictBuildProgress, { land: { ...small, open_band: 2 } });
-  assert.match(fullyOpen, /Весь район открыт/);
-  assert.doesNotMatch(fullyOpen, /следующего этапа|Откроется позже|role="progressbar"/);
+  assert.match(html, /Весь район открыт/);
+  assert.match(html, /Свободно 6 участков · занято 2 из 8/);
+  assert.match(html, /любой свободный участок своего района/);
+  assert.doesNotMatch(html, /70 %|Этап застройки|расширения|Откроется позже|role="progressbar"/);
 });
 
 test("district card distinguishes personal ownership and shared projects without offering foreign building", () => {
@@ -79,16 +79,21 @@ test("purchase shows full land plus building price and respects spendable coins"
   assert.doesNotMatch(html, /пояс|Квартал/);
   const insufficient = render(CityEstateDock, { ...dockProps, mine: { ...mine, available: 400 }, build: selected });
   assert.match(insufficient, /disabled=""[^>]+aria-label="Небольшой дом на участке за 450 коинов">Не хватает 50<\/button>/);
-  const future = render(CityEstateDock, { ...dockProps, build: { ...selected, plot: { ...selected.plot, band: 3, problem: "Этот участок станет доступен после расширения района" } } });
-  assert.match(future, /До расширения — осталось занять ещё 5 участков/);
-  assert.match(future, /disabled=""[^>]+aria-label="Небольшой дом на участке за 400 коинов"/);
+  const outer = render(CityEstateDock, { ...dockProps, build: { ...selected, plot: { ...selected.plot, band: 3 } } });
+  assert.match(outer, /aria-label="Небольшой дом на участке за 400 коинов">Купить · ◈ 400/);
+  assert.doesNotMatch(outer, /До расширения|Откроется позже|Этап застройки/);
+  const occupied = render(CityEstateDock, { ...dockProps, build: { ...selected, plot: { ...selected.plot, band: 3, problem: "Здесь уже есть постройка" } } });
+  assert.match(occupied, /Здесь уже есть постройка/);
+  assert.match(occupied, /disabled=""[^>]+aria-label="Небольшой дом на участке за 400 коинов"/);
 });
 
 test("building overview gives three short steps and one district progress bar", () => {
   const html = render(CityEstateDock, dockProps);
   assert.match(html, /<ol class="estate-steps"><li>[^<]+<\/li><li>[^<]+<\/li><li>[^<]+<\/li><\/ol>/);
   assert.match(html, /Можно потратить <strong>◈ 850<\/strong>/);
-  assert.match(html, /ещё 5 участков/);
+  assert.match(html, /Весь район открыт/);
+  assert.match(html, /Свободно 59 участков/);
+  assert.match(html, /займите ещё 14 участков/);
   assert.equal((html.match(/role="progressbar"/g) ?? []).length, 1);
-  assert.doesNotMatch(html, /Пояса района|Пояс \d|estate-bands/);
+  assert.doesNotMatch(html, /Пояса района|Пояс \d|estate-bands|Этап застройки|70 %/);
 });

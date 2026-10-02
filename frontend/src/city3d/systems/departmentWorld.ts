@@ -20,7 +20,8 @@ import { disposeTree } from "./districts";
 import { mergeStatic } from "../assets/landmarks";
 import { generateSalesWorld, SALES_CENTERS } from "../world/sales";
 import { landGrid, type LandGrid } from "../world/land";
-import { DISTRICT_COLOURS, districtColour, districtNumber, preparedLand } from "../world/estateGrid";
+import { districtNumber } from "../world/estateGrid";
+import { districtMainFrame, landmarkBounds } from "../world/districtLandmark";
 import { createEstates, type Estates } from "./estates";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "../types";
 
@@ -48,48 +49,6 @@ function builder(root: THREE.Object3D) {
     mesh.position.set(x, y, z); mesh.castShadow = mesh.receiveShadow = true; root.add(mesh); return mesh;
   };
 }
-/**
- * A team's headquarters at one of five stages (TZ §9.1), built round its own origin with the entrance to +z:
- * a small office, a second wing with a courtyard, a modern facade with a canopy and a square, a campus with a
- * roof terrace and a rear block, and the flagship with its tower, crown and flag. It never leaves its site.
- */
-function headquarters(root: THREE.Object3D, stage: number, colour: string) {
-  const b = builder(root), pad = [10, 10, 12, 14, 15][stage - 1];
-  b(pad, .3, pad, 0, .35, 0, "#d4cabb");
-  const wide = stage === 1 ? 7.6 : 6, x = stage === 1 ? 0 : 1, h = [3.4, 4.6, 4.6, 5.8, 5.8][stage - 1];
-  b(wide, h, 6, x, .5 + h / 2, 0, WALL);
-  b(wide - .8, h - .8, .12, x, .9 + (h - .8) / 2, 3.03, GLASS); b(wide - .8, h - .8, .12, x, .9 + (h - .8) / 2, -3.03, GLASS);
-  for (const dx of stage >= 3 ? [-2.6, -1.3, 0, 1.3, 2.6] : [-2.6, 0, 2.6]) b(.2, h, 6.3, x + dx * wide / 7.6, .5 + h / 2, 0, stage >= 3 ? GOLD : WALL);
-  for (let y = 1; y < h; y += 1.25) b(wide, .13, 6.3, x, .5 + y, 0, WALL);
-  b(wide + .6, .35, 6.6, x, h + .6, 0, DARK);
-  b(3.1, .2, 1.9, x, 1.8, 3.5, colour); b(2, 1.4, .15, x, 1.15, 3.2, DARK);
-  if (stage >= 2) {
-    // The second wing and a courtyard beside it.
-    b(3.2, 2.8, 4.6, -3.4, .5 + 1.4, -.6, WALL); b(2.6, 1.6, .12, -3.4, 1.6, 1.72, GLASS); b(3.6, .3, 5, -3.4, 3.45, -.6, DARK);
-    b(3, .06, 2.2, -3.4, .53, 3.2, GREEN);
-  }
-  if (stage >= 3) {
-    // A canopy over the entrance and a square in front: lawn, low hedges, two benches.
-    b(4.6, .18, 2.4, x, 3.1, 3.9, DARK); for (const dx of [-2, 2]) b(.14, 2.6, .14, x + dx, 1.8, 4.9, GOLD);
-    b(pad - 2, .05, 2.4, 0, .53, pad / 2 - 1.4, GREEN);
-    for (const dx of [-3.5, 3.5]) { b(2.2, .45, .5, dx, .75, pad / 2 - 1.4, "#557f46"); b(1, .12, .35, dx, .62, pad / 2 - 2.2, "#8b6a4b"); }
-  }
-  if (stage >= 4) {
-    // A rear block and a terrace with a green roof and a rail.
-    b(5, 3.6, 3.2, 1.6, .5 + 1.8, -4.6, WALL); b(4.4, 2.6, .12, 1.6, 2.3, -6.22, GLASS); b(5.4, .3, 3.6, 1.6, 4.45, -4.6, DARK);
-    b(wide - .6, .12, 5.4, x, h + .84, 0, GREEN); for (const dz of [-2.8, 2.8]) b(wide - .4, .5, .08, x, h + 1.1, dz, GOLD);
-  } else b(Math.min(5.6, wide - 1), .3, 4, x, h + .85, 0, GREEN);
-  if (stage === 5) {
-    // The flagship: a slim tower with a crown at the corner, a flag in the team's colour, hedges round the plaza.
-    b(2.4, 11, 2.4, -5.2, .5 + 5.5, -5.2, WALL); for (const dy of [3, 5.5, 8]) b(2.5, .14, 2.5, -5.2, .5 + dy, -5.2, GOLD);
-    b(1.6, 8, .1, -5.2, 6, -3.98, GLASS); b(2.8, .5, 2.8, -5.2, 11.75, -5.2, GOLD); b(1.4, 1.4, 1.4, -5.2, 12.7, -5.2, colour);
-    b(.1, 4.5, .1, 5.6, 2.75, 5.6, DARK); b(1.4, .8, .05, 6.3, 4.6, 5.6, colour);
-    for (const dx of [-6.6, 6.6]) b(.5, .55, 9, dx, .8, 1.5, "#557f46");
-  }
-  for (const dx of [-3.2, 3.2]) { b(1.2, .5, 1.2, x + dx * .9, .7, 3.8, WALL); b(1, .65, 1, x + dx * .9, 1.1, 3.8, GREEN); }
-}
-/** The headquarters' accents: the districts' own colours, then more for districts beyond the three with land. */
-const HQ_COLOURS = [...DISTRICT_COLOURS, "#4b7fd6", "#c4568a", "#7a9a3c"];
 function offices(root: THREE.Object3D, x: number, z: number, index: number) {
   const b = builder(root), h = 3.4 + (index % 3) * .7;
   b(10, .3, 10, x, .35, z, "#d4cabb"); b(7.6, h, 6, x, .5 + h / 2, z, WALL);
@@ -302,7 +261,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
   const supportTeams = new THREE.Group(); ctx.scene.add(supportTeams);
   const supportLabels = document.createElement("div"), salesLabels = document.createElement("div");
   ctx.overlay.append(supportLabels, salesLabels);
-  let config: CityWorld | undefined, layoutKey = "";
+  let config: CityWorld | undefined;
   // District land: the island city's whole mainland (the full map only), the lake city's all round the lake, in plots.
   const grids: Partial<Record<DepartmentId, LandGrid>> = {};
   const supportGrid = landGrid(ctx.world);
@@ -368,34 +327,17 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     el.querySelector("strong")!.textContent = name; el.querySelector("small")!.textContent = status; el.querySelector("span")!.textContent = icon;
     el.setAttribute("aria-label", `${name}. ${status}`);
   }
-  /** The headquarters stage the server reports for a district (1 until its land state arrives). */
-  const stageOf = (city: DepartmentId, district: string) => views[city]?.state.districts.find(d => d.id === district)?.hq.level ?? 1;
   function configure() {
     if (!config) return;
-    const key = config.cities.map(c => `${c.id}:${c.districts.map(d => `${d.id}@${stageOf(c.id, d.id)}`).join(",")}`).join(";");
-    if (key !== layoutKey) {
-      for (const city of config.cities) {
-        const root = city.id === "support" ? supportTeams : sales?.teams; if (!root) continue;
-        disposeTree(root); root.clear(); materialSets.delete(root);
-        // A district's headquarters stand in its centre (by its number, "support-team-2" → 2); a district beyond the
-        // three of a city has no land, and none.
-        const centres = grids[city.id]?.centres ?? [];
-        city.districts.forEach(d => {
-          const number = districtNumber(d.id), p = centres.find(c => c.district === number)?.hq;
-          if (!p) { anchors[city.id].delete(d.id); return; }
-          const site = new THREE.Group(); site.position.set(p.x, 0, p.z); site.rotation.y = p.rotation; root.add(site);
-          headquarters(site, stageOf(city.id, d.id), HQ_COLOURS[(number - 1) % HQ_COLOURS.length]);
-          anchors[city.id].set(d.id, new THREE.Vector3(p.x, [8, 9, 9, 10, 15][stageOf(city.id, d.id) - 1], p.z));
-        });
-        batch(root);
-      }
-      layoutKey = key; ctx.requestShadowUpdate();
-    }
     for (const c of config.cities) {
-      c.districts.forEach(d => {
-        const number = districtNumber(d.id);
-        label(c.id, d.id, d.name, `${d.supervisor ?? "Команда не назначена"} · штаб ${stageOf(c.id, d.id)}/5`, "⚑", preparedLand(number) ? districtColour(number) : undefined);
-      });
+      for (const d of c.districts) {
+        const centre = grids[c.id]?.centres.find(centre => centre.district === districtNumber(d.id));
+        const district = views[c.id]?.state.districts.find(district => district.id === d.id);
+        const frame = centre && districtMainFrame(centre, district?.landmark);
+        if (!frame || !district?.landmark) { anchors[c.id].delete(d.id); continue; }
+        const bounds = landmarkBounds(frame, district.landmark.level);
+        anchors[c.id].set(d.id, new THREE.Vector3(bounds.x, bounds.bottom + bounds.height / 2, bounds.z));
+      }
       const head = railPoint(c.id === "support" ? supportLine : RAIL_LINES.sales, STATION.building, STATION.middle); anchors[c.id].set("station", new THREE.Vector3(head.x, 9.5, head.z));
       label(c.id, "station", "Вокзал", `Поезд в ${config.cities.find(other => other.id !== c.id)?.name ?? "другой город"}`, "▰");
     }
@@ -406,7 +348,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
   return {
     show(id) {
       active = id;
-      if (id === "sales" && !sales) { sales = salesRoot(); layoutKey = ""; configure(); }
+      if (id === "sales" && !sales) { sales = salesRoot(); configure(); }
       // Both trains wait at their platforms: the one that just left is back for the next trip (TZ §8.1).
       supportRail.position(0); sales?.rail.position(0);
       supportRoot.visible = id === "support"; supportOverlayNodes.forEach(n => { n.style.display = id !== "support" ? "none" : ""; });
@@ -418,7 +360,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     setConfig(next) { config = next; configure(); },
     setEstates(city, view) {
       views[city] = view; estates[city]?.set(view);
-      // A new headquarters stage rebuilds the headquarters, nothing else.
+      // The estate system draws the sole main building; these anchors follow its current bounds.
       configure();
     },
     setBuild(view) {

@@ -122,13 +122,13 @@ class CityContribution(Base):
 
 
 class CityDistrictState(Base):
-    """What a district has achieved together: its headquarters stage and open bands only grow."""
+    """What a district has achieved together; all its personal land is available from the start."""
 
     __tablename__ = "city_districts"
     district_id: Mapped[str] = mapped_column(String(32), primary_key=True)
     hq_level: Mapped[int] = mapped_column(default=1)
     built_projects: Mapped[int] = mapped_column(default=0)
-    #: Plots are sold up to this band from the centre (app/services/city_land.py).
+    #: Compatibility snapshot of all geographic price bands (normalised by the district lock).
     open_band: Mapped[int] = mapped_column(default=1, server_default="1")
     #: Highest number of occupied personal plots; the district's complex never loses a level.
     landmark_peak_plots: Mapped[int] = mapped_column(default=0, server_default="0")

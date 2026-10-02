@@ -9,8 +9,8 @@ while it is stale. A plot's address is (district, block, column, row); a buildin
 them as (module = block, u = column, v = row), module 0 being the district's public square of
 12 × 12 cells.
 
-Bands count outwards from the centre: land nearer the centre costs more, and a district's next band
-opens once OPEN_SHARE of its plots in the bands before it are taken.
+Bands count outwards from the centre and determine land prices. All personal plots are available
+from the start; building still requires assignment to the district and its construction flag.
 """
 
 import json
@@ -21,8 +21,6 @@ LAND_FILE = Path(__file__).resolve().parent.parent / "data" / "city_land.json"
 #: The administrators' test city keeps copies of the districts under ids with this prefix
 #: (app/services/city_sandbox.py); they have the same land.
 SANDBOX = "test-"
-#: The next band opens when this share of the plots of the bands before it is taken.
-OPEN_SHARE = 0.7
 
 
 @cache
@@ -90,12 +88,6 @@ def band_of(district_id, block):
     return b["band"] if b else None
 
 
-def open_band(totals, taken, current=1):
-    """The outermost band for sale: it never closes again, the next opens as inner ones fill."""
-    band = max(1, current)
-    while band < len(totals):
-        inner, held = sum(totals[:band]), sum(taken[:band])
-        if inner and held < OPEN_SHARE * inner:
-            break
-        band += 1
-    return band
+def open_band(district_id):
+    """The entire district is available, independent of old state or the number of taken plots."""
+    return max((b["band"] for b in blocks(district_id).values()), default=1)

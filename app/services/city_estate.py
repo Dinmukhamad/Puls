@@ -5,13 +5,12 @@ plots, and the operators of a district buy its plots one by one, each with what 
 square, a house or one of the ready houses or office towers, and develop them. A house goes up
 stage by stage from one storey; a ready building is bought as it is, at the price of its size;
 four squares of one operator filling a square of plots become a park, six filling a rectangle a
-big park, at once and for free. Bands of plots open outwards from the centre as the inner ones
-fill up. In the
-centre of every district stand its headquarters and its public square, where staff open shared
-projects and operators contribute to them.
+big park, at once and for free. All personal plots are available from the start; their geographic
+bands determine only land prices. In the centre of every district is its growing main building.
+Existing public buildings and shared projects retain their places and contributions.
 
 Rules the server owns, whatever the client sends: who may build where (only operators, only in
-their own district, only once its construction is opened for the pilot, only in an open band), the
+their own district, only once its construction is opened for the pilot), the
 price (the economy revision the client saw must still be current), which plots are free, and the
 order of operations. Every change runs under an idempotency key: a repeated request returns the
 stored result instead of paying twice, and the same key with a different request is refused. Coins
@@ -400,19 +399,27 @@ async def construction_open(session, user):
 
 
 async def lock_district(session, district_id):
-    """The district's row, made on first use; it serialises its bands, projects and the HQ stage."""
+    """The district's row, made on first use; it serialises projects and progress."""
     insert = pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
     await session.execute(
         insert(CityDistrictState)
-        .values(district_id=district_id, hq_level=1, built_projects=0, open_band=1)
+        .values(
+            district_id=district_id,
+            hq_level=1,
+            built_projects=0,
+            open_band=city_land.open_band(district_id),
+        )
         .on_conflict_do_nothing(index_elements=["district_id"])
     )
-    return await session.scalar(
+    state = await session.scalar(
         select(CityDistrictState)
         .where(CityDistrictState.district_id == district_id)
         .with_for_update()
         .execution_options(populate_existing=True)
     )
+    # Old rows can still arrive from an earlier release or a restored database.
+    state.open_band = city_land.open_band(district_id)
+    return state
 
 
 def fingerprint(kind, request):
@@ -637,7 +644,7 @@ def land_view(district_id, taken, state):
     return {
         "plots": sum(totals),
         "taken": sum(taken),
-        "open_band": state.open_band if state else 1,
+        "open_band": city_land.open_band(district_id),
         "bands": [
             {"band": i + 1, "plots": total, "taken": taken[i]} for i, total in enumerate(totals)
         ],
@@ -974,7 +981,7 @@ def take_cells(session, district_id, module, cells, *, obj=None, project=None):
 
 
 async def free_plots(session, home, block, col, row, cols=1, rows=1):
-    """The plots of the area if they are the district's, in an open band and free; else why not."""
+    """The plots of the area if they are the district's and free; else why not."""
     plots = city_land.area(home["id"], block, col, row, cols, rows)
     if plots is None:
         raise ConflictError(
@@ -983,21 +990,14 @@ async def free_plots(session, home, block, col, row, cols=1, rows=1):
             else "Постройка должна целиком помещаться на участках одного квартала",
             code="wrong_plot",
         )
-    state = await session.get(CityDistrictState, home["id"])
     band = city_land.band_of(home["id"], block)
-    if band > (state.open_band if state else 1):
-        raise ConflictError(
-            "Этот участок станет доступен после расширения района: "
-            "для следующего этапа нужно занять 70 % уже открытой земли",
-            code="band_closed",
-        )
     if await occupied(session, home["id"], block, plots):
         raise ConflictError("Этот участок уже занят", code="plot_taken")
     return plots, band
 
 
 async def widen(session, district_id, actor):
-    """Opens the district's next bands as the inner ones fill up; they never close again."""
+    """Records the district's complex progress; land is available independently of that progress."""
     state = await lock_district(session, district_id)
     taken = (await taken_plots(session, [district_id]))[district_id]
     plots = city_land.plot_count(district_id)
@@ -1015,10 +1015,6 @@ async def widen(session, district_id, actor):
             actor=actor,
             payload={"level": level, "peak": peak, "plots": plots},
         )
-    band = city_land.open_band(city_land.band_totals(district_id), taken, state.open_band)
-    if band > state.open_band:
-        state.open_band = band
-        event(session, district_id, "band", actor=actor, payload={"band": band})
     return state.open_band
 
 
@@ -1758,6 +1754,10 @@ async def report(session):
                 "buildings": placed.get(key, 0),
                 "open_projects": open_projects.get(key, 0),
                 "hq_level": state.hq_level if state else 1,
+                "landmark_level": city_landmark.level_for(
+                    land["plots"] if land else 0,
+                    max(land["taken"] if land else 0, state.landmark_peak_plots if state else 0),
+                ),
                 "built_projects": state.built_projects if state else 0,
             }
         )

@@ -11,8 +11,8 @@ import "./estate.css";
 const coins = (n: number) => n.toLocaleString("ru-RU");
 
 /**
- * A team district's card: personal building, shared projects, its headquarters and what the next stage needs, the projects still collecting with
- * coarse progress and the viewer's own contribution, and voluntary contributions. The district's supervisor and
+ * A team district's card: personal plots, its growing main building and preserved shared projects still collecting
+ * with coarse progress, the viewer's own contribution, and voluntary contributions. The district's supervisor and
  * the head open and cancel projects here; nothing shows another person's sum.
  */
 export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, onOpenProject, canManageAssignments = false }: {
@@ -20,16 +20,15 @@ export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, 
   onMyEstate?: () => void; onOpenProject?: () => void; canManageAssignments?: boolean;
 }) {
   const home = mine?.district?.id === team.id, canGive = home && mine?.status === "ready";
-  const hq = district?.hq;
   const activeComplex = district?.landmark?.status === "active";
   const progress = district?.land && districtBuildProgress(district.land);
   return <div className="stack estate-district">
     <span className="city-eyebrow"><DistrictSwatch district={team.id} />РАЙОН КОМАНДЫ · {cityName}</span>
-    <p className="estate-district__intro">Район — территория команды супервайзера. Операторы команды строят здесь за свои коины.</p>
+    <p className="estate-district__intro">Район — территория команды супервайзера. Вся земля доступна сразу: операторы команды выбирают любые свободные участки и строят за свои коины.</p>
     <p>{team.supervisor ? `Супервайзер: ${team.supervisor}` : "Команда пока не назначена: руководитель назначает супервайзера района в настройках города."}</p>
     {team.mine && <p className="city-world-badge">Твой район</p>}
     <div className="estate-areas">
-      <section className="estate-area"><span aria-hidden="true">🏡</span><div><h3>Личные постройки</h3><p>Выбери свободный участок и купи дом, офис или сквер. Постройка принадлежит тебе.</p></div>
+      <section className="estate-area"><span aria-hidden="true">🏡</span><div><h3>Личные постройки</h3><p>Договоритесь с командой, где будут дома, офисы и парки. Выбери свободный участок и купи постройку — она принадлежит тебе.</p></div>
         {home && onMyEstate && <button type="button" className="city-action" onClick={onMyEstate}>Выбрать участок →</button>}
         {!home && <small>Строить можно в районе своей команды.</small>}
       </section>
@@ -37,13 +36,8 @@ export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, 
         {district?.managed && district.construction && onOpenProject && <button type="button" className="city-secondary" onClick={onOpenProject}>Создать общий проект →</button>}
       </section>}
     </div>
-    {activeComplex && <DistrictLandmarkCard landmark={district!.landmark!} />}
+    {district?.landmark && <DistrictLandmarkCard landmark={district.landmark} />}
     {district?.landmark?.status === "legacy_occupied" && <p className="estate-note">На площади остаются прежние общие постройки и сборы команды.</p>}
-    {!activeComplex && hq && <section className="estate-hq">
-      <div className="estate-placing__title"><span aria-hidden="true">⚑</span><div><h2>Штаб: {hq.name}</h2><small>Ступень {hq.level} из 5 · построено общих проектов: {hq.built}</small></div></div>
-      <span className="estate-stage" aria-hidden="true">{[1, 2, 3, 4, 5].map(i => <i key={i} data-on={i <= hq.level || undefined} />)}</span>
-      <p className="secondary small">{hq.next ? `Следующая ступень «${hq.next.name}» — после ${hq.next.need} построенных общих проектов. Уровень штаба не снижается.` : "Штаб достиг флагманской ступени."}</p>
-    </section>}
     {progress ? <p className="secondary small">Для стройки свободно {coins(progress.available)} участков. {district!.construction ? "Стройка открыта." : "Стройка пока закрыта руководителем."}</p>
       : district ? <p className="secondary small">У района нет земли: город делится на три района.</p> : null}
     {!activeComplex && (district?.projects.length ? <section className="estate-section"><h3>Общие проекты</h3>

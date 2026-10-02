@@ -312,7 +312,7 @@ async def test_all_supplied_office_towers_are_bought_finished_on_one_plot(client
             client, me, tower, "upgrade", version=tower["version"], economy_revision=0
         )
         assert upgrade.json()["code"] == "max_level"
-    assert (await buy(client, me, "officea", SECOND, 0, 0)).json()["code"] == "band_closed"
+    assert (await buy(client, me, "officea", 4, 3, 1)).json()["code"] == "wrong_plot"
     assert (await buy(client, me, "officea", 99, 0, 0)).json()["code"] == "wrong_plot"
     assert [o["id"] for o in (await estate(client, me))["objects"]] == [o["id"] for o in purchased]
     view = await district_view(client, me)
@@ -397,7 +397,7 @@ async def test_double_click_and_two_tabs_pay_once(client, session, team):
     assert sorted(await spent(session)) == [-HOUSE_PRICE, -HOUSE_PRICE]
 
 
-async def test_only_free_plots_of_ones_district_in_an_open_band_at_the_price_seen(
+async def test_only_free_plots_of_ones_district_at_the_price_seen(
     client, session, head, team
 ):
     me = auth(await login(client, team.login))
@@ -406,7 +406,6 @@ async def test_only_free_plots_of_ones_district_in_an_open_band_at_the_price_see
         ((4, 3, 1), "wrong_plot"),  # the district's centre
         ((99, 0, 0), "wrong_plot"),  # no such block
         ((FIRST, 6, 0), "wrong_plot"),  # past the block's last column
-        ((SECOND, 0, 0), "band_closed"),  # the second band opens later
     ):
         r = await buy(client, me, "house", *place)
         assert r.status_code == 409 and r.json()["code"] == code, (place, r.text)
@@ -513,7 +512,9 @@ async def test_squares_of_a_neighbour_or_a_house_in_the_way_do_not_merge(client,
     assert sorted(families) == ["house", "square", "square", "square", "square", "square"]
 
 
-async def test_the_next_band_opens_as_the_first_fills_up(client, session, team):
+async def test_every_band_is_open_before_building_and_filling_land_does_not_unlock_it(
+    client, session, team
+):
     me = auth(await login(client, team.login))
     await fund(session, team.id, 4000)
     totals = city_land.band_totals("support-team-1")
@@ -521,19 +522,23 @@ async def test_the_next_band_opens_as_the_first_fills_up(client, session, team):
     first = [(1, u, v) for u in range(4, 8) for v in (0, 1)] + [
         (block, u, v) for block, cols in ((2, 3), (3, 6)) for u in range(cols) for v in (0, 1)
     ]
-    need = -(-totals[0] * 7 // 10)  # 70 % of the first band
+    # A team may start in the outermost part before building anything nearer the centre.
+    empty = (await district_view(client, me))["land"]
+    assert empty["open_band"] == 5 and empty["taken"] == 0
+    outer = await buy(client, me, "house", 16, 0, 0)
+    assert outer.status_code == 200 and outer.json()["price"] == 10 + 120
+    need = 19
     for block, u, v in first[: need - 1]:
         assert (await buy(client, me, "house", block, u, v)).status_code == 200
-    assert (await district_view(client, me))["land"]["open_band"] == 1
-    assert (await buy(client, me, "house", SECOND, 0, 0)).json()["code"] == "band_closed"
+    assert (await district_view(client, me))["land"]["open_band"] == 5
     assert (await buy(client, me, "house", *first[need - 1])).status_code == 200
     land = (await district_view(client, me))["land"]
-    assert land["open_band"] == 2 and land["taken"] == need and land["plots"] == sum(totals)
+    assert land["open_band"] == 5 and land["taken"] == need + 1 and land["plots"] == sum(totals)
     assert land["bands"][0] == {"band": 1, "plots": 26, "taken": need}
     r = await buy(client, me, "house", SECOND, 0, 0)
     assert r.status_code == 200 and r.json()["price"] == 45 + 120
     bands = await session.scalars(select(CityEvent.payload).where(CityEvent.kind == "band"))
-    assert list(bands) == [{"band": 2}]
+    assert list(bands) == []
 
 
 async def test_a_transfer_takes_buildings_along_to_the_inventory(
@@ -570,23 +575,23 @@ async def test_a_transfer_takes_buildings_along_to_the_inventory(
     assert not (await district_view(client, me))["objects"]
     stored = next(o for o in data["objects"] if o["family"] == "house")
     placed = await change(
-        client, me, stored, "place", version=stored["version"], block=1, col=0, row=0
+        client, me, stored, "place", version=stored["version"], block=6, col=0, row=0
     )
     assert placed.status_code == 200, placed.text
     house = placed.json()["object"]
     assert (house["state"], house["district_id"], house["module"], house["level"]) == (
         "placed",
         "sales-team-1",
-        1,
+        6,
         2,
     )
     again = await change(
-        client, me, house, "place", version=house["version"], block=1, col=1, row=0
+        client, me, house, "place", version=house["version"], block=6, col=1, row=0
     )
     assert again.status_code == 404
     office = next(o for o in data["objects"] if o["family"] == "officea")
     placed_office = await change(
-        client, me, office, "place", version=office["version"], block=1, col=1, row=0
+        client, me, office, "place", version=office["version"], block=6, col=1, row=0
     )
     assert placed_office.status_code == 200, placed_office.text
     assert placed_office.json()["object"]["state"] == "placed"
@@ -870,7 +875,7 @@ async def test_public_view_hides_money_names_and_small_teams_progress(
     assert (view["land"]["plots"], view["land"]["taken"], view["land"]["open_band"]) == (
         city_land.plot_count("support-team-1"),
         1,
-        1,
+        5,
     )
     # One operator in the team: a stage change would show exactly what they gave.
     assert view["projects"][0]["progress"] is None and view["projects"][0]["mine"] == 0
@@ -926,7 +931,7 @@ async def test_staff_report_counts_land_and_old_purchases(client, session, head,
     assert first["land"] == {
         "plots": city_land.plot_count("support-team-1"),
         "taken": 2,
-        "open_band": 1,
+        "open_band": 5,
     }
     assert (first["buildings"], first["builders"], first["operators"]) == (2, 1, 1)
     assert first["construction"]
