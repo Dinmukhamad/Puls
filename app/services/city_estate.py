@@ -339,9 +339,11 @@ def district_index(config):
         d["id"]: {
             "id": d["id"],
             "city": c["id"],
+            "head_id": c.get("head_id"),
             "number": int(d["id"].rsplit("-", 1)[1]),
             "name": d["name"],
             "group_ids": list(d["group_ids"]),
+            "supervisor_id": d.get("supervisor_id"),
             "construction": bool(d.get("construction")),
         }
         for c in config["cities"]
@@ -367,13 +369,25 @@ async def world_districts(session):
 
 
 async def managed(session, user, districts):
-    """Districts where staff run projects: all for the head and the admin, a supervisor's own."""
-    if user.role in (Role.HEAD, Role.ADMIN):
+    """Projects belong to the city's head, its assigned supervisor and administrators."""
+    if not user.is_active:
+        return set()
+    if user.role == Role.ADMIN:
         return set(districts)
+    if user.role == Role.HEAD:
+        from app.services.city_world import editable_city_ids
+
+        cities = await editable_city_ids(session, user)
+        return {key for key, district in districts.items() if district["city"] in cities}
     if user.role != Role.SUPERVISOR:
         return set()
     own = set(await session.scalars(select(Group.id).where(Group.supervisor_id == user.id)))
-    return {key for key, d in districts.items() if own & set(d["group_ids"])}
+    return {
+        key
+        for key, district in districts.items()
+        if district.get("supervisor_id") == user.id
+        or (district.get("supervisor_id") is None and own & set(district["group_ids"]))
+    }
 
 
 async def construction_open(session, user):
@@ -428,6 +442,10 @@ async def operation(session, user, key, kind, request, perform):
     if (done := await stored_result(session, user.id, key, print_)) is not None:
         return done
     await lock_user(session, user.id)
+    # Authentication happened before waiting: the operator may have moved teams meanwhile.
+    await session.refresh(user, attribute_names=["role", "is_active", "group_id"])
+    if not user.is_active:
+        raise PermissionDeniedError("Учётная запись отключена", code="account_disabled")
     if (done := await stored_result(session, user.id, key, print_)) is not None:
         return done
     try:
@@ -781,6 +799,9 @@ async def estate(session, user):
     districts = await world_districts(session)
     if await needs_reconcile(session, user, districts):
         await lock_user(session, user.id)
+        await session.refresh(user, attribute_names=["role", "is_active", "group_id"])
+        # A world save may have completed while this read waited for the operator.
+        districts = await world_districts(session)
         if await reconcile(session, user, districts):
             await session.commit()
     values = await prices(session)

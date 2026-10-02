@@ -68,16 +68,22 @@ async def fund(session, user_id, amount):
     await session.commit()
 
 
-async def open_world(client, head, *, support=(), sales=(), construction=("support-team-1",)):
-    """Assigns groups to the first district of each city and opens construction where asked."""
-    h = auth(await login(client, head.login))
+async def open_world(
+    client, admin, head, *, support=(), sales=(), construction=("support-team-1",)
+):
+    """Assigns city ownership and supervisors, opening construction where asked."""
+    h = auth(await login(client, admin.login))
     current = (await client.get(ADMIN + "/world", headers=h)).json()
     body = {"revision": current["revision"], "cities": current["cities"]}
+    directory = {g["id"]: g for g in current["groups"]}
     for city, groups in (("support", support), ("sales", sales)):
-        next(c for c in body["cities"] if c["id"] == city)["districts"][0]["group_ids"] = list(
-            groups
-        )
+        district = next(c for c in body["cities"] if c["id"] == city)["districts"][0]
+        district["group_ids"] = list(groups)
+        supervisors = {directory[g]["supervisor_id"] for g in district["group_ids"]}
+        assert len(supervisors) <= 1 and None not in supervisors
+        district["supervisor_id"] = next(iter(supervisors), None)
     for c in body["cities"]:
+        c["head_id"] = head.id
         for d in c["districts"]:
             d["construction"] = d["id"] in construction
     r = await client.put(ADMIN + "/world", headers=h, json=body)
@@ -133,18 +139,23 @@ async def open_bands(session, district_id, band):
 
 
 @pytest.fixture
-async def team(client, session, head, supervisor, operator):
-    await open_world(client, head, support=[operator.group_id])
+async def estate_admin(session):
+    return await make_user(session, login="estate-admin", role=Role.ADMIN)
+
+
+@pytest.fixture
+async def team(client, session, estate_admin, head, supervisor, operator):
+    await open_world(client, estate_admin, head, support=[operator.group_id])
     await fund(session, operator.id, 2000)
     return operator
 
 
 async def test_construction_waits_for_the_pilot_and_staff_never_build(
-    client, session, head, supervisor, operator
+    client, session, estate_admin, head, supervisor, operator
 ):
     me = auth(await login(client, operator.login))
     assert (await estate(client, me))["status"] == "no_team"
-    await open_world(client, head, support=[operator.group_id], construction=())
+    await open_world(client, estate_admin, head, support=[operator.group_id], construction=())
     data = await estate(client, me)
     assert data["status"] == "closed" and data["district"]["id"] == "support-team-1"
     families = {c["family"]: c for c in data["catalogue"]}
@@ -169,7 +180,7 @@ async def test_construction_waits_for_the_pilot_and_staff_never_build(
     trainer = await make_user(session, login="trainer-estate", role=Role.TRAINER)
     t = auth(await login(client, trainer.login))
     assert (await estate(client, t))["status"] == "staff"
-    await open_world(client, head, support=[operator.group_id])
+    await open_world(client, estate_admin, head, support=[operator.group_id])
     assert (await buy(client, t, "house", FIRST, 0, 0)).status_code == 403
     assert await spent(session) == []
 
@@ -503,7 +514,9 @@ async def test_the_next_band_opens_as_the_first_fills_up(client, session, team):
     assert list(bands) == [{"band": 2}]
 
 
-async def test_a_transfer_takes_buildings_along_to_the_inventory(client, session, head, team):
+async def test_a_transfer_takes_buildings_along_to_the_inventory(
+    client, session, estate_admin, head, team
+):
     me = auth(await login(client, team.login))
     house = (await buy(client, me, "house", FIRST, 0, 0)).json()["object"]
     await change(client, me, house, "upgrade", version=house["version"], economy_revision=0)
@@ -513,6 +526,7 @@ async def test_a_transfer_takes_buildings_along_to_the_inventory(client, session
     sales = await make_group(session, code="GS", supervisor_id=sales_sv.id)
     await open_world(
         client,
+        estate_admin,
         head,
         support=[team.group_id],
         sales=[sales.id],
@@ -576,6 +590,7 @@ async def test_regrouping_districts_and_deactivation_release_land(
     body = {"revision": world["revision"], "cities": world["cities"]}
     support = body["cities"][0]["districts"]
     support[0]["group_ids"], support[1]["group_ids"] = [], [team.group_id]
+    support[0]["supervisor_id"], support[1]["supervisor_id"] = None, supervisor.id
     support[1]["construction"] = True
     assert (await client.put(ADMIN + "/world", headers=boss, json=body)).status_code == 200
     data = await estate(client, me)
@@ -846,13 +861,16 @@ async def test_old_plots_close_once_the_team_district_opens(client, session, tea
     assert blocked.status_code == 409
 
 
-async def test_the_city_has_three_districts_with_land_and_only_they_open(client, head):
-    boss = auth(await login(client, head.login))
+async def test_the_city_has_three_districts_with_land_and_only_they_open(client, estate_admin):
+    boss = auth(await login(client, estate_admin.login))
     world = (await client.get(ADMIN + "/world", headers=boss)).json()
     body = {"revision": world["revision"], "cities": world["cities"]}
     districts = body["cities"][0]["districts"]
     districts.append(
-        {"id": "support-team-4", "name": "Район 4", "group_ids": [], "construction": True}
+        {
+            "id": "support-team-4", "name": "Район 4", "group_ids": [],
+            "supervisor_id": None, "construction": True,
+        }
     )
     r = await client.put(ADMIN + "/world", headers=boss, json=body)
     assert r.status_code == 400

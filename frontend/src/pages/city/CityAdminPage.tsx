@@ -1,6 +1,6 @@
 import { CityWorldEditor } from "./CityWorldEditor";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CityEconomy, type CitySettings, type CitySituation, type CitySituations, type PointKind } from "../../api/city";
 import { cityEstate } from "../../api/cityEstate";
@@ -13,15 +13,21 @@ import "./city.css";
 
 /** Dispatch missions count the calls of their group; a trainer cannot ask for more (app/services/city.py TARGET_LIMITS). */
 const DISPATCH_TARGETS: Record<string, number> = { dispatch_driver: 2, dispatch_car: 1, dispatch_inventory: 1, dispatch_support: 1, dispatch_limit: 3 };
+type CityAdminTab = "participants" | "groups" | "economy" | "situations" | "settings" | "world" | "estates";
+const CITY_ADMIN_TABS: CityAdminTab[] = ["participants", "groups", "economy", "situations", "settings", "world", "estates"];
 
 export function CityAdminPage() {
   const { user } = useAuth();
+  const [params] = useSearchParams();
   const canEdit = ["trainer", "head", "admin"].includes(user?.role ?? "");
-  const [tab, setTab] = useState<"participants"|"groups"|"economy"|"situations"|"settings"|"world"|"estates">("participants");
+  const [tab, setTab] = useState<CityAdminTab>(() => {
+    const requested = params.get("tab") as CityAdminTab | null;
+    return requested && CITY_ADMIN_TABS.includes(requested) ? requested : ["head", "admin"].includes(user?.role ?? "") ? "world" : "participants";
+  });
   const settings = useQuery({ queryKey:["city-settings"], queryFn:city.settings, enabled:tab === "settings", refetchOnWindowFocus:false });
-  return <div className="city-page city-admin"><header className="city-heading"><div><span className="city-eyebrow">СТУДИЯ ОБУЧЕНИЯ</span><h1>Миссии города</h1><p>Настраивайте маршрут и следите за реальным прогрессом.</p></div><Link className="city-secondary" to="/training/city">Открыть город →</Link></header>
+  return <div className="city-page city-admin"><header className="city-heading"><div><span className="city-eyebrow">СТУДИЯ ОБУЧЕНИЯ</span><h1>Управление городом</h1><p>Назначайте команды районов, настраивайте миссии и следите за прогрессом.</p></div><Link className="city-secondary" to="/training/city">Открыть город →</Link></header>
     <nav className="city-admin-tabs" aria-label="Управление городом"><button className="city-secondary" aria-pressed={tab==='world'} onClick={()=>setTab('world')}>Города и районы</button><button className="city-secondary" aria-pressed={tab==='estates'} onClick={()=>setTab('estates')}>Стройка районов</button><button className="city-secondary" aria-pressed={tab==='participants'} onClick={()=>setTab('participants')}>Прогресс операторов</button><button className="city-secondary" aria-pressed={tab==='groups'} onClick={()=>setTab('groups')}>Города групп</button><button className="city-secondary" aria-pressed={tab==='situations'} onClick={()=>setTab('situations')}>Ситуации дня</button><button className="city-secondary" aria-pressed={tab==='economy'} onClick={()=>setTab('economy')}>Экономика игры</button><button className="city-secondary" aria-pressed={tab==='settings'} onClick={()=>setTab('settings')}>{canEdit?'Настроить миссии':'Условия миссий'}</button></nav>
-    {tab==='world'?<CityWorldEditor />:tab==='estates'?<Estates />:tab==='participants'?<Participants />:tab==='groups'?<Groups />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
+    {tab==='world'?<CityWorldEditor isHead={user?.role === "head"} />:tab==='estates'?<Estates />:tab==='participants'?<Participants />:tab==='groups'?<Groups />:tab==='economy'?<Economy />:tab==='situations'?<Situations />:settings.data?<MissionEditor initial={settings.data} canEdit={canEdit} />:settings.isError?<ErrorState error={settings.error} onRetry={()=>settings.refetch()} />:<Skeleton height={350} />}
   </div>;
 }
 

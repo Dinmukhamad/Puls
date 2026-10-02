@@ -9,4 +9,8 @@ async def lock_user(session: AsyncSession, user_id: int):
     if session.get_bind().dialect.name == "sqlite":
         await session.execute(text("UPDATE users SET id = id WHERE id = :id"), {"id": user_id})
     else:
-        await session.execute(select(User.id).where(User.id == user_id).with_for_update())
+        # Serialize changes without blocking FK references from coins/notifications of other users.
+        # SQLAlchemy's key_share without read emits PostgreSQL FOR NO KEY UPDATE.
+        await session.execute(
+            select(User.id).where(User.id == user_id).with_for_update(key_share=True)
+        )

@@ -49,7 +49,7 @@ from app.schemas.user import (
     UserUpdatedOut,
 )
 from app.services import cabinet as cabinet_service
-from app.services import city_estate, telegram
+from app.services import city_estate, city_world, telegram
 from app.services import coins as coins_service
 from app.services import weekly as weekly_service
 from app.services.rules import write_audit
@@ -274,6 +274,9 @@ async def create_user(
         raise PermissionDeniedError("Вы не можете создавать пользователей с этой ролью")
     if actor.role == Role.TRAINER and payload.group_id is not None:
         raise PermissionDeniedError("Тренер не назначает группы")
+    if payload.role == Role.OPERATOR and payload.group_id is not None:
+        # A new member must not appear after a district transfer captured its operators.
+        await city_world.lock_settings(session)
     await _check_group(session, payload.group_id)
     if payload.telegram_username:
         telegram.require_bot()
@@ -327,9 +330,7 @@ async def create_user(
 
 
 @router.get("/users/{user_id}/telegram", summary="Telegram сотрудника")
-async def user_telegram(
-    session: SessionDep, actor: HeadUser, user_id: int, response: Response
-):
+async def user_telegram(session: SessionDep, actor: HeadUser, user_id: int, response: Response):
     if actor.role not in (Role.HEAD, Role.ADMIN):
         raise PermissionDeniedError("Недостаточно прав для этой операции", code="role_required")
     await _visible_user(session, actor, user_id)
@@ -346,6 +347,9 @@ async def user_telegram(
 async def update_user(
     session: SessionDep, actor: HeadUser, user_id: int, payload: UserUpdate, response: Response
 ) -> UserUpdatedOut:
+    if payload.model_fields_set & {"group_id", "role", "is_active"}:
+        # Team membership and world assignments share the configuration-before-user lock order.
+        await city_world.lock_settings(session)
     user = await _visible_user(session, actor, user_id)
     # Та же блокировка пользователя, что при подтверждении и привязке Telegram.
     # Смена номера не должна оставлять доверие, записанное параллельным запросом.
@@ -568,7 +572,11 @@ async def create_group(session: SessionDep, actor: HeadUser, payload: GroupCreat
 async def update_group(
     session: SessionDep, actor: HeadUser, group_id: int, payload: GroupUpdate
 ) -> GroupOut:
-    group = await session.get(Group, group_id)
+    membership_changed = payload.model_fields_set & {"supervisor_id", "is_active"}
+    if membership_changed:
+        # Match world saves: configuration before members, so assignments and transfers serialize.
+        await city_world.lock_settings(session)
+    group = await session.get(Group, group_id, populate_existing=True, with_for_update=True)
     if group is None:
         raise NotFoundError(f"Группа id={group_id} не найдена")
     changes = payload.model_dump(exclude_unset=True)
@@ -583,6 +591,14 @@ async def update_group(
     before = {field: getattr(group, field) for field in changes}
     for field, value in changes.items():
         setattr(group, field, value)
+    if membership_changed:
+        await session.flush()
+        members = await session.scalars(
+            select(User.id).where(User.group_id == group_id, User.role == Role.OPERATOR)
+        )
+        await city_estate.reconcile_many(
+            session, members, await city_estate.world_districts(session)
+        )
     await write_audit(
         session,
         actor_id=actor.id,

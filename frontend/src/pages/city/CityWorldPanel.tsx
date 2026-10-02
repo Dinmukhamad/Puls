@@ -6,6 +6,7 @@ import type { JourneyPhase } from "../../city3d/types";
 import { Sheet, registerSheet } from "../../components/Sheet";
 import { useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
 import "./world.css";
 
 export function CityWorldPanel({ world, current, selected, onPick, onClose, onTravel, onVisit, ready, estates, mine, onMyEstate, onOpenProject }: {
@@ -20,12 +21,13 @@ export function CityWorldPanel({ world, current, selected, onPick, onClose, onTr
   return <>
     <button className="city-world-switch glass glass--regular" type="button" onClick={() => onPick("world")} aria-label="Города и районы"><span aria-hidden="true">◈</span><strong>{here.name}</strong><span>Города ↗</span></button>
     {selected && <Sheet title={district?.name ?? (resourceIndex >= 0 ? SALES_RESOURCES[resourceIndex] : "Города Puls")} onClose={onClose}>
-      {district ? <CityDistrictSheet district={estates?.districts.find(d => d.id === district.id)} team={district} cityName={here.name} mine={mine}
+      {district ? <CityDistrictSheet district={estates?.districts.find(d => d.id === district.id)} team={district} cityName={here.name} mine={mine} canManageAssignments={world.can_edit}
         onMyEstate={onMyEstate && (() => { onClose(); onMyEstate(); })} onOpenProject={onOpenProject && (() => { onClose(); onOpenProject(district.id); })} /> : resourceIndex >= 0 ? <div className="stack city-world-sheet"><span className="city-world-badge">Зарезервировано</span><h2>{SALES_RESOURCES[resourceIndex]}</h2><p>Место в учебном кампусе отдела продаж. Ресурс откроется после подготовки системы и учебных заданий.</p><p className="secondary">Это здание не заменяет действующие CRM и Диспетчерскую Техподдержки.</p></div> : <div className="stack city-world-sheet">
         <div className="city-world-route" aria-hidden="true"><span>◉</span><span>━ 🚆 ▴▴▴ ━</span><span>◉</span></div>
         <div className="city-world-cards">{world.cities.map(c => <article key={c.id} data-current={c.id === current}><small>{c.id === "support" ? "ОСТРОВНОЙ ГОРОД" : "ГОРОД У ОЗЕРА"}</small><h2>{c.name}</h2><p>{c.districts.length} района · {c.id === "support" ? "Действующие учебные центры" : "10 мест для учебных центров"}</p>{world.home_city === c.id && <span className="city-world-badge">Твой отдел</span>}{c.id !== current && <button className="city-secondary" onClick={() => { onVisit(c.id); onClose(); }}>Открыть без поездки →</button>}</article>)}</div>
         <button className="city-action" disabled={!ready} onClick={() => { onTravel(other.id); onClose(); }}>{ready ? `На поезде в ${other.name} →` : "Готовим поезд…"}</button>
         <h3>Районы · {here.name}</h3><div className="city-world-districts">{here.districts.map(d => <button className="city-secondary" key={d.id} onClick={() => onPick(d.id)}><strong><DistrictSwatch district={d.id} />{d.name}</strong><small>{d.supervisor ?? "Команда не назначена"}{d.mine ? " · твой район" : ""}</small></button>)}</div>
+        {world.can_edit && <Link className="city-secondary" to="/admin/learning/city?tab=world">Управлять городами и районами →</Link>}
         <p className="secondary small">Оба города открыты для посещения. Строить можно в своём районе за коины Puls, когда стройка в нём открыта.</p>
         <p className="secondary small city-world-credit">Здание вокзала — «Gare de BlenderVille», автор loran17 (<a href="https://www.blendswap.com/blend/27438" target="_blank" rel="noreferrer">Blend Swap</a>), лицензия <a href="https://creativecommons.org/licenses/by/3.0/deed.ru" target="_blank" rel="noreferrer">CC BY</a>; упрощено и перекрашено для Puls.</p>
         <p className="secondary small city-world-credit">Офисные здания — «High Rise Office Buildings», автор Phoenixdraws (<a href="https://www.blendswap.com/blends/view/74984" target="_blank" rel="noreferrer">Blend Swap</a>), лицензия <a href="https://creativecommons.org/licenses/by/3.0/deed.ru" target="_blank" rel="noreferrer">CC BY 3.0</a>; разделены на модели и адаптированы для Puls.</p>

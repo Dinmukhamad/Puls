@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { cityEstate, operationKey, type DistrictEstate, type DistrictProject, type MyEstate } from "../../api/cityEstate";
 import type { TeamDistrict } from "../../api/cityWorld";
 import { DistrictSwatch } from "./DistrictSwatch";
@@ -12,15 +13,15 @@ const coins = (n: number) => n.toLocaleString("ru-RU");
  * coarse progress and the viewer's own contribution, and voluntary contributions. The district's supervisor and
  * the head open and cancel projects here; nothing shows another person's sum.
  */
-export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, onOpenProject }: {
+export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, onOpenProject, canManageAssignments = false }: {
   district: DistrictEstate | undefined; team: TeamDistrict; cityName: string; mine: MyEstate | undefined;
-  onMyEstate?: () => void; onOpenProject?: () => void;
+  onMyEstate?: () => void; onOpenProject?: () => void; canManageAssignments?: boolean;
 }) {
   const home = mine?.district?.id === team.id, canGive = home && mine?.status === "ready";
   const hq = district?.hq;
   return <div className="stack estate-district">
     <span className="city-eyebrow"><DistrictSwatch district={team.id} />РАЙОН КОМАНДЫ · {cityName}</span>
-    <p>{team.supervisor ? `Супервайзер: ${team.supervisor}` : "Команда пока не назначена: руководитель связывает район с группами в настройках города."}</p>
+    <p>{team.supervisor ? `Супервайзер: ${team.supervisor}` : "Команда пока не назначена: руководитель назначает супервайзера района в настройках города."}</p>
     {team.mine && <p className="city-world-badge">Твой район</p>}
     {hq && <section className="estate-hq">
       <div className="estate-placing__title"><span aria-hidden="true">⚑</span><div><h2>Штаб: {hq.name}</h2><small>Ступень {hq.level} из 5 · построено общих проектов: {hq.built}</small></div></div>
@@ -35,6 +36,7 @@ export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, 
     <div className="estate-placing__actions">
       {home && onMyEstate && <button type="button" className="city-action" onClick={onMyEstate}>Строить в районе →</button>}
       {district?.managed && district.construction && onOpenProject && <button type="button" className="city-secondary" onClick={onOpenProject}>Открыть общий проект</button>}
+      {canManageAssignments && <Link className="city-secondary" to="/admin/learning/city?tab=world">Управлять районами →</Link>}
     </div>
     <p className="secondary small">Взносы добровольные и видны только тебе. Завершённые общие постройки остаются в районе и при переводах сотрудников.</p>
   </div>;

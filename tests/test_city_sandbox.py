@@ -268,9 +268,9 @@ async def test_resetting_clears_only_that_test_city(client, session, me):
 
 
 async def test_the_real_city_never_sees_the_test_city(
-    client, session, head, supervisor, operator, me
+    client, session, admin, head, supervisor, operator, me
 ):
-    await open_world(client, head, support=[operator.group_id])
+    await open_world(client, admin, head, support=[operator.group_id])
     await fund(session, operator.id, 2000)
     op = auth(await login(client, operator.login))
     real = (await buy(client, op, "house", FIRST, 0, 0)).json()["object"]
