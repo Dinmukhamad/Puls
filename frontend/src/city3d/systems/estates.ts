@@ -1,9 +1,9 @@
 /**
  * Team district land in one city (docs/CITY_ESTATES.md): the plots of its three districts, laid out like a Monopoly
  * board (world/land.ts), every district's centre with its public square, and what the server reports standing on
- * them. Free plots are meadow with a thin path round each; a district's own colour tints its land a little. In
- * build mode the operator's district lights up: the plots for sale in its open bands bright, the bands still
- * closed dim; a tap picks a plot (or a building), and a building from the inventory follows the pointer with its
+ * them. Normal exploration shows natural land and each district's paved centre. Only in build mode does the
+ * operator's own plot grid appear: available plots green and later expansion stages grey; a tap picks a plot
+ * (or a building), and a building from the inventory follows the pointer with its
  * reason when it does not fit. Staff place a shared project on the cells of the public square. Buildings go
  * through instance pools of their own, so a purchase rebuilds only these copies, not the city; the server checks
  * everything again.
@@ -27,9 +27,11 @@ import type { DistrictEstate, PublicObject } from "../../api/cityEstate";
 
 /** Signs over projects show only this close. */
 const SIGN_REACH = 230;
+/** The square's invitation belongs to a close district view, rather than the whole-city skyline. */
+const SQUARE_SIGN_REACH = 85;
 const OK = new THREE.Color("#35b07a"), BAD = new THREE.Color("#e0525d");
 /** Meadow of a free plot, the paving of a centre; in build mode the plots for sale and the bands still closed. */
-const MEADOW = new THREE.Color("#97b67c"), PAVING = new THREE.Color("#ddd4c0"), FOR_SALE = new THREE.Color("#c4e59a"), CLOSED = new THREE.Color("#7f9172");
+const MEADOW = new THREE.Color("#97b67c"), PAVING = new THREE.Color("#ddd4c0"), FOR_SALE = new THREE.Color("#c4e59a"), CLOSED = new THREE.Color("#9ba1a6");
 /** The plots' ground over the land, under every patch of what stands on them (render/terrain.ts TOP and its lifts). */
 const PLOT_Y = .203, INSET = .24;
 
@@ -52,35 +54,53 @@ function objectFrame(block: LandBlock, obj: Pick<PublicObject, "u" | "v" | "w" |
   return areaFrame(block, obj.u!, obj.v!, obj.w, obj.h);
 }
 
-/** The plots' ground: every plot for sale a meadow inset from its edges, every centre's plots paved edge to edge. */
+/** Two pooled meshes: permanent centre paving and the own district's plot grid, visible only in build mode. */
 function plotGround(grid: LandGrid) {
-  const positions: number[] = [], colours: number[] = [], index: number[] = [], slots = new Map<string, number>();
+  const slots = new Map<string, number>(), indices = new Map<number, number[]>();
+  const plots = { positions: [] as number[], colours: [] as number[], index: [] as number[] };
+  const paving = { positions: [] as number[], colours: [] as number[], index: [] as number[] };
   const centres = new Map(grid.centres.map(c => [`${c.district}:${c.block}`, c]));
-  const quad = (corners: { x: number; z: number }[], colour: THREE.Color) => {
-    const base = positions.length / 3, [a, b, c] = corners;
-    for (const p of corners) { positions.push(p.x, PLOT_Y, p.z); colours.push(colour.r, colour.g, colour.b); }
+  const quad = (parts: typeof plots, corners: { x: number; z: number }[], colour: THREE.Color) => {
+    const base = parts.positions.length / 3, [a, b, c] = corners;
+    for (const p of corners) { parts.positions.push(p.x, PLOT_Y, p.z); parts.colours.push(colour.r, colour.g, colour.b); }
     // Facing up whichever way round the corners go (a ring block's run the other way from a rectangle's).
     const up = (b.z - a.z) * (c.x - a.x) - (b.x - a.x) * (c.z - a.z) > 0;
-    index.push(...(up ? [base, base + 1, base + 2, base, base + 2, base + 3] : [base, base + 2, base + 1, base, base + 3, base + 2]));
+    parts.index.push(...(up ? [base, base + 1, base + 2, base, base + 2, base + 3] : [base, base + 2, base + 1, base, base + 3, base + 2]));
     return base;
   };
   for (const block of grid.blocks) {
     const centre = centres.get(`${block.district}:${block.block}`);
     for (let c = 0; c < block.cols; c++) for (let r = 0; r < block.rows; r++) {
       const f = areaFrame(block, c, r), inCentre = centre && c >= centre.col && c < centre.col + centre.cols && r >= centre.row && r < centre.row + centre.rows;
-      if (inCentre) { quad(f.corners, PAVING); continue; }
+      if (inCentre) { quad(paving, f.corners, PAVING); continue; }
       if (block.skip.has(`${c}:${r}`)) continue;
-      slots.set(plotKey(block.district, block.block, c, r), quad(inset(f), MEADOW));
+      slots.set(plotKey(block.district, block.block, c, r), quad(plots, inset(f), MEADOW));
+      const own = indices.get(block.district) ?? [];
+      own.push(...plots.index.slice(-6)); indices.set(block.district, own);
     }
   }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(positions.map((_, i) => i % 3 === 1 ? 1 : 0), 3));
-  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colours, 3));
-  geometry.setIndex(index);
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .85, metalness: .02 }));
-  mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.name = "district-plots";
-  return { mesh, slots };
+  const meshOf = (parts: typeof plots, name: string) => {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(parts.positions, 3));
+    geometry.setAttribute("normal", new THREE.Float32BufferAttribute(parts.positions.map((_, i) => i % 3 === 1 ? 1 : 0), 3));
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(parts.colours, 3));
+    geometry.setIndex(parts.index);
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .85, metalness: .02 }));
+    mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.name = name;
+    return mesh;
+  };
+  // Keep one index buffer for the lifetime of the scene. A draw range selects the own district without
+  // creating or replacing GPU buffers whenever the dock opens, closes or changes district.
+  const ranges = new Map<number, { start: number; count: number }>();
+  plots.index = [];
+  for (const [district, own] of indices) { ranges.set(district, { start: plots.index.length, count: own.length }); plots.index.push(...own); }
+  const mesh = meshOf(plots, "district-plots"), centreMesh = meshOf(paving, "district-centres");
+  mesh.visible = false;
+  return { mesh, centreMesh, slots, show(district: number) {
+    const range = ranges.get(district);
+    mesh.visible = !!range;
+    mesh.geometry.setDrawRange(range?.start ?? 0, range?.count ?? 0);
+  } };
 }
 /** A plot's corners moved INSET in from its edges, along its own width and depth. */
 function inset(f: Frame) {
@@ -100,26 +120,24 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   const stateOf = (district: string): DistrictEstate | undefined => view?.state.districts.find(d => d.id === district);
 
   // ---- the ground: plots, centres and their public squares, laid out once ----
-  const ground = plotGround(grid); ctx.scene.add(ground.mesh);
+  const ground = plotGround(grid); ctx.scene.add(ground.mesh, ground.centreMesh);
   // Where the districts meet: a band in both districts' colours and posts along it (render/borders.ts).
   const borders = createBorders(districtBorders(grid, ctx.world), districtColour); ctx.scene.add(borders.band, borders.posts);
   const squares = grid.centres.map(c => moduleGround(c.square));
   const squarePatches = createPatches(squares.flatMap(l => l.surfaces)); ctx.scene.add(squarePatches);
   let squarePools: InstancePools | null = null;
 
-  /** Colours every plot: its district's faint tint, and in build mode what is for sale, what waits and what is taken. */
+  /** The own district's grid appears only while choosing land: available plots, later stages and occupied plots. */
   function recolour() {
-    const colour = ground.mesh.geometry.getAttribute("color") as THREE.BufferAttribute, c = new THREE.Color(), tint = new THREE.Color();
+    const colour = ground.mesh.geometry.getAttribute("color") as THREE.BufferAttribute, c = new THREE.Color();
     const own = build?.area === "plots" ? numberOf(build.district) : 0, state = build ? stateOf(build.district) : undefined, open = state?.land?.open_band ?? 1;
+    ground.show(active ? own : 0);
+    if (!own || !active) return;
     const taken = takenPlots();
-    for (const block of grid.blocks) for (let col = 0; col < block.cols; col++) for (let row = 0; row < block.rows; row++) {
+    for (const block of grid.blocks) if (block.district === own) for (let col = 0; col < block.cols; col++) for (let row = 0; row < block.rows; row++) {
       const slot = ground.slots.get(plotKey(block.district, block.block, col, row));
       if (slot === undefined) continue;
-      tint.set(districtColour(block.district));
-      // Every district's free land in its own shade, so its extent reads at a glance; in build mode the own district's plots are lit instead.
-      c.copy(MEADOW).lerp(tint, own ? .05 : .28);
-      if (own === block.district && !taken.has(plotKey(block.district, block.block, col, row))) c.copy(block.band <= open ? FOR_SALE : CLOSED);
-      else if (own && own !== block.district) c.lerp(CLOSED, .35);
+      c.copy(taken.has(plotKey(block.district, block.block, col, row)) ? MEADOW : block.band <= open ? FOR_SALE : CLOSED);
       for (let k = 0; k < 4; k++) colour.setXYZ(slot + k, c.r, c.g, c.b);
     }
     colour.needsUpdate = true;
@@ -185,7 +203,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
 
   // ---- build mode: the picked plot, the preview, the selection, the square's cells ----
   const lineMaterial = new THREE.LineBasicNodeMaterial({ color: "#ffffff", transparent: true, opacity: .8, depthWrite: false });
-  const cells = new THREE.LineSegments(new THREE.BufferGeometry(), lineMaterial); cells.visible = false; cells.renderOrder = 3;
+  const cells = new THREE.LineSegments(new THREE.BufferGeometry(), lineMaterial); cells.visible = false; cells.renderOrder = 3; cells.name = "district-project-grid";
   const ghostMaterial = new THREE.MeshBasicNodeMaterial({ color: OK, transparent: true, opacity: .4, depthWrite: false });
   const ghost = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1).translate(0, .5, 0), ghostMaterial); ghost.visible = false; ghost.renderOrder = 4;
   const edgeMaterial = new THREE.LineBasicNodeMaterial({ color: OK, transparent: true, opacity: .95, depthWrite: false });
@@ -203,7 +221,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     const state = build && stateOf(build.district);
     if (!block || col < 0 || row < 0 || col + w > block.cols || row + h > block.rows) return w * h === 1 ? "Здесь нет участков твоего района на продажу" : "Постройка должна целиком помещаться на участках одного квартала";
     for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) if (block.skip.has(`${col + i}:${row + j}`)) return w * h === 1 ? "Здесь нет участков твоего района на продажу" : "Постройка должна целиком помещаться на участках одного квартала";
-    if (block.band > (state?.land?.open_band ?? 1)) return "Этот пояс района ещё закрыт: он откроется, когда займут 70 % участков ближе к центру";
+    if (block.band > (state?.land?.open_band ?? 1)) return "Этот участок станет доступен после расширения района";
     const taken = takenPlots();
     for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) if (taken.has(plotKey(block.district, block.block, col + i, row + j))) return "Этот участок уже занят";
     return null;
@@ -244,27 +262,30 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   }
   /** The square's cells while staff place a shared project. */
   function refreshCells() {
-    const points: number[] = [], y = .29, centre = build?.area === "public" ? centreOf(build.district) : undefined;
+    const points: number[] = [], y = .29, centre = build?.area === "public" && build.placing ? centreOf(build.district) : undefined;
     if (centre) for (let k = 0; k <= MODULE_CELLS; k++) {
       for (const [a, b] of [[cellPoint(centre.square, k, 0), cellPoint(centre.square, k, MODULE_CELLS)], [cellPoint(centre.square, 0, k), cellPoint(centre.square, MODULE_CELLS, k)]]) points.push(a.x, y, a.z, b.x, y, b.z);
     }
     cells.geometry.dispose(); cells.geometry = new THREE.BufferGeometry(); cells.geometry.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
     cells.visible = points.length > 0;
   }
-  function refreshBuild() { refreshCells(); showSelection(); reported = ""; showGhost(pinned); }
+  function refreshBuild() {
+    if (!active) { cells.visible = ghost.visible = selection.visible = false; return; }
+    refreshCells(); showSelection(); reported = ""; showGhost(pinned);
+  }
 
-  // ---- signs over the projects still collecting ----
+  // ---- the community square and projects still collecting ----
   const layer = document.createElement("div"); layer.className = "c3-plots"; layer.setAttribute("role", "group"); layer.setAttribute("aria-label", "Районы команд");
   ctx.overlay.append(layer);
-  const signs = new Map<string, { el: HTMLButtonElement; point: THREE.Vector3; transform: string }>();
-  function sign(id: string, icon: string, title: string, sub: string, point: THREE.Vector3, pick: EstatePick) {
+  const signs = new Map<string, { el: HTMLButtonElement; point: THREE.Vector3; reach: number; transform: string }>();
+  function sign(id: string, icon: string, title: string, sub: string, point: THREE.Vector3, pick: EstatePick, reach = SIGN_REACH) {
     let item = signs.get(id);
     if (!item) {
       const el = document.createElement("button"); el.type = "button"; el.className = "c3-site c3-estate-sign";
       el.innerHTML = `<span aria-hidden="true"></span><span><strong></strong><small></small></span>`;
-      layer.append(el); item = { el, point: point.clone(), transform: "" }; signs.set(id, item);
+      layer.append(el); item = { el, point: point.clone(), reach, transform: "" }; signs.set(id, item);
     }
-    item.point.copy(point);
+    item.point.copy(point); item.reach = reach;
     item.el.querySelector("span")!.textContent = icon; item.el.querySelector("strong")!.textContent = title; item.el.querySelector("small")!.textContent = sub;
     item.el.setAttribute("aria-label", `${title}. ${sub}`);
     item.el.onclick = () => onPick(pick);
@@ -273,6 +294,9 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     const live = new Set<string>();
     for (const district of view?.state.districts ?? []) {
       const centre = centreOf(district.id); if (!centre) continue;
+      const id = `public-${district.id}`; live.add(id);
+      sign(id, "♧", "Площадь команды", "Общие проекты · открыть", new THREE.Vector3(centre.square.x, .5, centre.square.z), { kind: "public", district: district.id }, SQUARE_SIGN_REACH);
+      signs.get(id)!.el.setAttribute("aria-label", `Площадь команды района ${district.name ?? district.id}. Открыть общие проекты`);
       for (const project of district.projects) {
         const target = project.target_id ? district.objects.find(o => o.id === project.target_id) : project;
         if (!target || target.u === null || target.v === null) continue;
@@ -290,10 +314,10 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     if (!width || !height || !active) return;
     ctx.camera.updateMatrixWorld();
     const focal = ctx.camera.projectionMatrix.elements[5] * height / 2;
-    for (const item of signs.values()) {
+    for (const [id, item] of signs) {
       scratch.copy(item.point).applyMatrix4(ctx.camera.matrixWorldInverse);
       const depth = -scratch.z; scratch.applyMatrix4(ctx.camera.projectionMatrix);
-      const hidden = depth < ctx.camera.near || ctx.camera.position.distanceTo(item.point) > SIGN_REACH || Math.abs(scratch.x) > 1.1 || Math.abs(scratch.y) > 1.1;
+      const hidden = (id.startsWith("public-") && !!build?.placing) || depth < ctx.camera.near || ctx.camera.position.distanceTo(item.point) > item.reach || Math.abs(scratch.x) > 1.1 || Math.abs(scratch.y) > 1.1;
       item.el.style.visibility = hidden ? "hidden" : "visible";
       if (hidden) continue;
       const scale = THREE.MathUtils.clamp(focal / depth * .07, .55, 1);
@@ -391,6 +415,12 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     }
     const found = objectAt(p);
     if (found) { onPick({ kind: "object", district: found.district.id, object: found.obj.id }); return; }
+    for (const district of view?.state.districts ?? []) {
+      const cell = cellAt(district.id, p); if (!cell) continue;
+      const project = district.projects.find(o => o.u !== null && o.v !== null && cell.u >= o.u && cell.u < o.u + o.w && cell.v >= o.v && cell.v < o.v + o.h);
+      onPick(project ? { kind: "project", district: district.id, project: project.id } : { kind: "public", district: district.id });
+      return;
+    }
     if (build?.area !== "plots") return;
     const at = plotAt(grid, p);
     if (!at || at.block.district !== numberOf(build.district)) return;
@@ -439,10 +469,11 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     setBuild(next) {
       const same = build && next && build.district === next.district && build.area === next.area && build.placing?.family === next.placing?.family && build.placing?.moving === next.placing?.moving;
       build = next; if (!same) pinned = null;
-      recolour(); refreshBuild();
+      recolour(); refreshBuild(); place();
     },
     setActive(value) {
       active = value; layer.hidden = !value;
+      recolour(); refreshBuild(); place();
       if (!value) for (const item of veils.splice(0)) { ctx.scene.remove(item.mesh); (item.mesh.material as THREE.Material).dispose(); }
     },
     focus(target) {
@@ -457,6 +488,13 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
           if (frame && isOfficeBuilding(obj.family)) { const bounds = officeBuildingBounds(obj.family, frame); place = bounds; y = .2 + bounds.height / 2; }
         }
       } else if (target.kind === "public" && centre) place = { ...centre.square };
+      else if (target.kind === "district" && build?.area === "plots" && build.district === target.district) {
+        const own = grid.plots.filter(p => p.district === number), taken = takenPlots(), open = stateOf(target.district)?.land?.open_band ?? 1;
+        const available = own.filter(p => p.band <= open && !taken.has(plotKey(number, p.block, p.col, p.row)));
+        const origin = centre?.area ?? own[0];
+        const nearby = (available.length ? available : own).sort((a, b) => Math.hypot(a.x - origin.x, a.z - origin.z) - Math.hypot(b.x - origin.x, b.z - origin.z))[0];
+        if (nearby) place = nearby;
+      }
       if (!place && centre) place = { x: centre.area.x, z: centre.area.z, rotation: centre.area.rotation };
       if (!place) return null;
       // From the street in front of it, a little to the side, so its front and the plots beside it show.
@@ -466,7 +504,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       offFrame(); offMove(); if (frame) cancelAnimationFrame(frame);
       canvas.removeEventListener("pointerdown", onDown); canvas.removeEventListener("pointerup", onUp); canvas.removeEventListener("pointermove", onMove);
       layer.remove(); squarePools?.dispose(); pools?.dispose();
-      for (const mesh of [ground.mesh, squarePatches, patches]) if (mesh) { ctx.scene.remove(mesh); mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose(); }
+      for (const mesh of [ground.mesh, ground.centreMesh, squarePatches, patches]) if (mesh) { ctx.scene.remove(mesh); mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose(); }
       ctx.scene.remove(borders.band, borders.posts); borders.dispose();
       for (const item of veils.splice(0)) { ctx.scene.remove(item.mesh); (item.mesh.material as THREE.Material).dispose(); }
       ctx.scene.remove(cells, ghost, selection);

@@ -169,18 +169,32 @@ export function siteLayout(module: Pick<ModuleSlot, "x" | "z" | "rotation">, ite
   return { placements: f.placements, surfaces: f.surfaces };
 }
 
-/** The public square's ground: its lawn with a cross of walks and paving round it, trees along its edges. */
+/**
+ * One paved courtyard for shared projects, with seating and planting around its edges. The full 12 × 12
+ * playable grid stays clear: permanent furniture belongs only to the surrounding promenade. Walk paving
+ * sits below the ground patches of paid projects, so their lawns and courts replace it when built.
+ */
 export function moduleGround(module: ModuleSlot): Layout {
   const placements: Placement[] = [], surfaces: Surface[] = [], s = Math.sin(module.rotation), c = Math.cos(module.rotation), h = MODULE / 2;
   const at = (lu: number, lw: number) => ({ x: module.x + c * lu + s * lw, z: module.z - s * lu + c * lw });
   const patch = (kind: SurfaceKind, lu: number, lw: number, alongU: number, alongW: number) => surfaces.push({ kind, ...at(lu, lw), angle: module.rotation + Math.PI / 2, length: alongU, width: alongW });
+  const put = (kind: PlacementKind, lu: number, lw: number, turn = 0, scale = 1) => placements.push({ kind, variant: placements.length, ...at(lu, lw), rotation: module.rotation + turn, scale, width: 0 });
   patch("walk", 0, 0, MODULE + 2.2, MODULE + 2.2);
-  patch("lawn", 0, 0, MODULE - .2, MODULE - .2);
-  patch("plaza", 0, 0, 1.1, MODULE - .2); patch("plaza", 0, 0, MODULE - .2, 1.1);
-  // Trees in the paving round the square, clear of its corners' walks.
-  for (const k of [-.66, 0, .66]) for (const [u, w] of [[k * h, h + .75], [k * h, -h - .75], [h + .75, k * h], [-h - .75, k * h]]) {
-    placements.push({ kind: "tree-round", variant: placements.length, ...at(u, w), rotation: u + w, scale: .8, width: 0 });
+  // A subtle frame reads as one square; it never cuts the buildable area into apparent plots.
+  const edge = h + .65;
+  for (const side of [-1, 1]) {
+    patch("plaza", 0, side * edge, MODULE + 1.6, .18);
+    patch("plaza", side * edge, 0, .18, MODULE + 1.6);
+    for (const k of [-.62, .62]) {
+      put("tree-round", k * h, side * edge, k + side, .8);
+      put("tree-round", side * edge, k * h, k - side, .8);
+    }
+    for (const k of [-.29, .29]) {
+      put("bench", k * h, side * edge, side > 0 ? Math.PI : 0, .9);
+      put("bench", side * edge, k * h, side > 0 ? -Math.PI / 2 : Math.PI / 2, .9);
+    }
   }
+  for (const u of [-edge, edge]) for (const w of [-edge, edge]) put("flowerbed", u, w, 0, .6);
   return { placements, surfaces };
 }
 

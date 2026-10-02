@@ -7,6 +7,7 @@ import type { BuildState, EstateTarget } from "./CityEstateDock";
 import { DistrictSwatch } from "./DistrictSwatch";
 import { splitPlotCatalogue } from "./plotCatalogue";
 import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
+import { DistrictBuildProgress } from "./DistrictBuildProgress";
 import "./estate.css";
 
 const coins = (n: number) => n.toLocaleString("ru-RU");
@@ -99,9 +100,9 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
     const { options, houses, offices } = splitPlotCatalogue([...plots.values()]);
     body = <section className="estate-card">
       <button type="button" className="estate-back" onClick={() => go({ plot: null })}>← Весь район</button>
-      <div className="estate-placing__title"><span aria-hidden="true">🟩</span><div><h2>Участок · пояс {plot.band}</h2><small>Квартал {plot.block} · столбец {plot.col + 1}, ряд {plot.row + 1}</small></div></div>
+      <div className="estate-placing__title"><span aria-hidden="true">🟩</span><div><h2>{plot.problem ? "Выбранный участок" : "Свободный участок"}</h2><small>Постройка здесь бесплатна в тестовом городе</small></div></div>
       {plot.problem && <p className="estate-problem" role="alert">{plot.problem}</p>}
-      {closed && <button type="button" className="city-secondary" disabled={pending} onClick={() => setDistrict({ open_band: plot.band }, `Открыты пояса до ${plot.band}-го.`)}>Открыть пояс {plot.band}</button>}
+      {closed && <button type="button" className="city-secondary" disabled={pending} onClick={() => setDistrict({ open_band: plot.band }, `Открыта территория этапа ${plot.band}.`)}>Открыть этап {plot.band}</button>}
       {error && <p className="city-error" role="alert">{error.message}</p>}
       {[{ title: null, list: options }, { title: "Готовые дома", list: houses }, { title: "Офисные здания", list: offices }].map(({ title, list }, i) => list.length > 0 && <section className="estate-section" key={i}>
         {title && <h3>{title}</h3>}
@@ -120,16 +121,13 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
     const bands = land.land.bands.length, hq = land.hq;
     const listed = [...land.objects].sort((a, b) => Number(a.owner === "district") - Number(b.owner === "district") || a.id - b.id);
     body = <>
-      <section className="estate-claim"><strong>Нажми на участок или постройку</strong><p>Светло-зелёные участки открытых поясов — для стройки: скверы, дома и офисные здания ставятся бесплатно. В карточке постройки со ступенями их можно поднимать и снижать, а саму постройку можно убрать.</p></section>
+      <section className="estate-claim"><strong>Проверь стройку на карте</strong><p>Нажми на свободный участок и выбери сквер, дом или офис — здесь бесплатно. Нажми на постройку, чтобы изменить её уровень или убрать.</p></section>
       {error && <p className="city-error" role="alert">{error.message}</p>}
-      <section className="estate-section"><h3>Пояса района</h3>
-        <Stepper label="Открытые пояса" value={land.land.open_band} max={bands} pending={pending} text={`Открыт ${land.land.open_band === bands ? "весь район" : `пояс ${land.land.open_band} из ${bands}`}`}
-          onChange={band => setDistrict({ open_band: band }, band > land.land!.open_band ? `Открыты пояса до ${band}-го.` : `Пояса после ${band}-го закрыты.`)} />
-        <ul className="estate-bands">{land.land.bands.map(b => <li key={b.band} data-open={b.band <= land.land!.open_band || undefined}>
-          <span>Пояс {b.band}</span><span>{b.band <= land.land!.open_band ? "открыт" : "закрыт"}</span>
-          <span className="estate-bands__meter" aria-label={`Занято ${b.taken} из ${b.plots}`}><i style={{ width: `${b.plots ? Math.round(b.taken / b.plots * 100) : 0}%` }} /></span><small>{b.taken} / {b.plots}</small>
-        </li>)}</ul>
-        <p className="secondary small">В настоящем районе пояс открывается сам, когда в открытых занято 70 % участков, и больше не закрывается.</p></section>
+      <DistrictBuildProgress land={land.land} />
+      <section className="estate-section"><h3>Проверка этапов застройки</h3>
+        <Stepper label="Этап застройки" value={land.land.open_band} max={bands} pending={pending} text={`Этап ${land.land.open_band} из ${bands}`}
+          onChange={band => setDistrict({ open_band: band }, `В тестовом районе доступна территория до этапа ${band}.`)} />
+        <p className="secondary small">Здесь этап можно менять вручную. В настоящем районе новая территория открывается автоматически и больше не закрывается.</p></section>
       <section className="estate-section"><h3>Штаб района</h3>
         <Stepper label="Ступень штаба" value={hq.level} max={5} pending={pending} text={`${hq.name} · ступень ${hq.level} из 5`} onChange={level => setDistrict({ hq_level: level }, `Штаб: ступень ${level}.`)} />
         <p className="secondary small">Построено общих проектов: {hq.built}. В настоящем районе штаб растёт от общих проектов и не снижается.</p></section>
@@ -139,7 +137,7 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
           <button type="button" className="city-secondary" onClick={() => { go({ selected: o.id, plot: null, area: o.owner === "district" ? "public" : "plots", project: false }); onFocus({ district: build.district, kind: "object", object: o.id }); }}>Открыть</button></li>; })}</ul>
           : <p className="secondary small">Пока пусто.</p>}</section>
       <button type="button" className="city-secondary sandbox-reset" disabled={pending} onClick={() => {
-        if (window.confirm("Очистить тестовый город? Все его постройки и проекты исчезнут, пояса и штабы вернутся к началу. Настоящий город не изменится.")) run({ run: () => citySandbox.reset(city), text: () => "Тестовый город очищен.", next: () => ({ ...build, plot: null, selected: null, placing: null, spot: null }) });
+        if (window.confirm("Очистить тестовый город? Все его постройки и проекты исчезнут, этапы застройки и штабы вернутся к началу. Настоящий город не изменится.")) run({ run: () => citySandbox.reset(city), text: () => "Тестовый город очищен.", next: () => ({ ...build, plot: null, selected: null, placing: null, spot: null }) });
       }}>Очистить тестовый город</button>
     </>;
   }
@@ -153,12 +151,12 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
       <div className="sandbox-switch" role="group" aria-label="Район тестового города">{(state?.districts ?? []).filter(d => d.land).map(d =>
         <button type="button" key={d.id} aria-pressed={d.id === build.district} onClick={() => switchTo(d.id)}><strong><DistrictSwatch district={d.id} />{d.number}</strong><small>{d.name}</small></button>)}</div>
       <div className="sandbox-switch sandbox-switch--tabs" role="group" aria-label="Что строить">
-        <button type="button" aria-pressed={!build.project} onClick={() => area(false)}>Участки</button>
-        <button type="button" aria-pressed={build.project} onClick={() => area(true)}>Площадь и проекты</button>
+        <button type="button" aria-pressed={!build.project} onClick={() => area(false)}>Личные постройки</button>
+        <button type="button" aria-pressed={build.project} onClick={() => area(true)}>Площадь команды</button>
       </div>
       {notice && <p className="estate-ok" role="status">{notice}</p>}
       {body}
-      {!build.placing && <button type="button" className="city-secondary" onClick={() => onFocus({ district: build.district, kind: build.project ? "public" : "district" })}>Показать центр района</button>}
+      {!build.placing && <button type="button" className="city-secondary" onClick={() => onFocus({ district: build.district, kind: build.project ? "public" : "district" })}>{build.project ? "Показать площадь команды" : "Показать участки на карте"}</button>}
       <p className="city-fine">Тестовый город отдельный: операторы и сотрудники его не видят, коины не списываются, настоящие районы не меняются.</p>
     </div>
   </aside>;
@@ -192,7 +190,7 @@ function ObjectCard({ obj, plots, projects, land, pending, error, onLevel, onRem
     </> : <p className="secondary small">{isOfficeBuilding(obj.family) ? "Офисное здание построено целиком, ступеней нет." : "У этой постройки одна ступень."}</p>}
     {now && <p className="secondary small">{now.about}</p>}
     {error && <p className="city-error" role="alert">{error.message}</p>}
-    {district && obj.level < total && (collecting ? <p className="estate-note">Проект на следующую ступень уже открыт — он во вкладке «Площадь и проекты».</p>
+    {district && obj.level < total && (collecting ? <p className="estate-note">Проект на следующую ступень уже открыт — он во вкладке «Площадь команды».</p>
       : <button type="button" className="city-secondary" disabled={pending || busy} onClick={onProject}>{busy ? `Сначала постройте или отмените ${size === "main" ? "основной" : "малый"} проект` : "Открыть проект на следующую ступень"}</button>)}
     {obj.family === "square" && !district && <div className="estate-merge"><strong>Скверы собираются в парк</strong><p>Четыре своих сквера квадратом 2 × 2 сами станут парком, шесть прямоугольником 3 × 2 — большим парком.</p></div>}
     <button type="button" className="city-secondary sandbox-remove" disabled={pending} onClick={onRemove}>Убрать постройку</button>

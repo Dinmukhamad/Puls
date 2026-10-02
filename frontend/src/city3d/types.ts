@@ -26,6 +26,7 @@ export interface CityBuildView {
 }
 /** What the operator touched on district land, or where the preview stands now and why it does not fit. */
 export type EstatePick =
+  | { kind: "public"; district: string }
   | { kind: "plot"; district: string; block: number; col: number; row: number; band: number; problem: string | null }
   | { kind: "place"; district: string; module: number; u: number; v: number; rotation: number; problem: string | null }
   | { kind: "object"; district: string; object: number }

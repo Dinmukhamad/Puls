@@ -980,7 +980,8 @@ async def free_plots(session, home, block, col, row, cols=1, rows=1):
     band = city_land.band_of(home["id"], block)
     if band > (state.open_band if state else 1):
         raise ConflictError(
-            "Этот пояс района ещё закрыт: он откроется, когда займут 70 % участков ближе к центру",
+            "Этот участок станет доступен после расширения района: "
+            "для следующего этапа нужно занять 70 % уже открытой земли",
             code="band_closed",
         )
     if await occupied(session, home["id"], block, plots):

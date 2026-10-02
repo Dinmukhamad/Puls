@@ -278,6 +278,27 @@ test('the public square: cells map to the ground and back, shared buildings stay
   }
 });
 
+test('the community courtyard reads as one paved area and permanent decoration leaves every paid-project cell free', () => {
+  for (const grid of Object.values(GRIDS)) for (const { square } of grid.centres) {
+    const { surfaces, placements } = E.moduleGround(square), half = E.MODULE / 2;
+    assert.equal(surfaces.filter(s => s.kind === 'walk').length, 1, 'one continuous courtyard instead of four apparent plots');
+    assert.ok(!surfaces.some(s => s.kind === 'lawn'), 'default lawns do not imitate purchaseable lots');
+    const paving = surfaces.find(s => s.kind === 'walk');
+    assert.ok(paving.length >= E.MODULE && paving.width >= E.MODULE, 'the entire existing grid stays on paving');
+    assert.ok(placements.some(p => p.kind === 'bench') && placements.some(p => p.kind === 'flowerbed'));
+    assert.ok(!placements.some(p => p.kind === 'fountain' || p.kind === 'gazebo'), 'paid project buildings are never supplied as static decoration');
+    const radius = { 'tree-round': .62, bench: .51, flowerbed: .6 };
+    for (const p of placements) {
+      const at = local(square, p), extent = radius[p.kind] * p.scale;
+      assert.ok(Math.max(Math.abs(at.u), Math.abs(at.w)) - extent > half, `${grid.city} ${square.district}: ${p.kind} keeps clear of playable cells`);
+    }
+    for (const surface of surfaces.filter(s => s.kind !== 'walk')) {
+      const at = local(square, surface);
+      assert.ok(Math.abs(at.u) - surface.length / 2 >= half || Math.abs(at.w) - surface.width / 2 >= half, 'decorative edging remains outside every project footprint');
+    }
+  }
+});
+
 test('the preview of a shared project gives the server\'s reasons', () => {
   const none = () => false;
   assert.equal(E.squareProblem({ family: 'fountain', u: 10, v: 10, rotation: 0 }, none), null);
