@@ -8,6 +8,7 @@ import { DistrictSwatch } from "./DistrictSwatch";
 import { splitPlotCatalogue } from "./plotCatalogue";
 import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
 import { DistrictBuildProgress } from "./DistrictBuildProgress";
+import { DistrictLandmarkCard } from "./DistrictLandmarkCard";
 import "./estate.css";
 
 const coins = (n: number) => n.toLocaleString("ru-RU");
@@ -28,6 +29,8 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
   const client = useQueryClient();
   const [notice, setNotice] = useState<string | null>(null);
   const land = state?.districts.find(d => d.id === build.district) ?? null;
+  const activeComplex = land?.landmark?.status === "active";
+  const publicMode = build.project || (activeComplex && build.area === "public");
   const plots = new Map((mine?.catalogue ?? []).map(c => [c.family, c])), projects = new Map((mine?.projects ?? []).map(c => [c.family, c]));
   const act = useMutation({
     mutationFn: (step: Step) => step.run(),
@@ -43,12 +46,21 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
   const go = (next: Partial<BuildState>) => { act.reset(); setNotice(null); setBuild({ ...build, ...next }); };
   const area = (square: boolean) => { go({ area: square ? "public" : "plots", project: square, placing: null, spot: null, plot: null, selected: null }); onFocus({ district: build.district, kind: square ? "public" : "district" }); };
   const switchTo = (district: string) => { go({ district, placing: null, spot: null, plot: null, selected: null }); onFocus({ district, kind: build.project ? "public" : "district" }); };
-  const setDistrict = (body: { open_band?: number; hq_level?: number }, text: string) => run({ run: () => citySandbox.district(build.district, body), text: () => text });
+  const setDistrict = (body: { open_band?: number; hq_level?: number; landmark_level?: number }, text: string) => run({ run: () => citySandbox.district(build.district, body), text: () => text });
   const nameOf = (o: PublicObject) => (o.owner === "district" ? projects.get(o.family as ProjectFamily) : plots.get(o.family as PlotFamily))?.levels[o.level - 1]?.name ?? o.family;
 
   let body;
   if (!state || !mine) body = <p className="estate-note">Загружаем тестовый город…</p>;
   else if (!land?.land) body = <p className="estate-note">У этого района нет земли.</p>;
+  else if (activeComplex && publicMode) body = <>
+    <DistrictLandmarkCard landmark={land.landmark!} />
+    <section className="estate-section"><h3>Проверка уровней комплекса</h3>
+      <Stepper label="Уровень комплекса" value={land.landmark!.level} max={5} pending={pending} text={`Уровень ${land.landmark!.level} из 5`}
+        onChange={level => setDistrict({ landmark_level: level }, `Комплекс: уровень ${level}.`)} />
+      <p className="secondary small">В тестовом городе уровень можно менять вручную. В настоящем районе комплекс растёт от построек команды.</p>
+    </section>
+    {error && <p className="city-error" role="alert">{error.message}</p>}
+  </>;
   else if (build.placing) {
     const family = build.placing.family as ProjectFamily, item = projects.get(family), spot = build.spot, size = projectFootprint(family, build.placing.rotation);
     body = <section className="estate-placing" aria-live="polite">
@@ -124,20 +136,21 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
       <section className="estate-claim"><strong>Проверь стройку на карте</strong><p>Нажми на свободный участок и выбери сквер, дом или офис — здесь бесплатно. Нажми на постройку, чтобы изменить её уровень или убрать.</p></section>
       {error && <p className="city-error" role="alert">{error.message}</p>}
       <DistrictBuildProgress land={land.land} />
+      {activeComplex && <><DistrictLandmarkCard landmark={land.landmark!} compact /><button type="button" className="city-secondary" onClick={() => area(true)}>Проверить уровни комплекса →</button></>}
       <section className="estate-section"><h3>Проверка этапов застройки</h3>
         <Stepper label="Этап застройки" value={land.land.open_band} max={bands} pending={pending} text={`Этап ${land.land.open_band} из ${bands}`}
           onChange={band => setDistrict({ open_band: band }, `В тестовом районе доступна территория до этапа ${band}.`)} />
         <p className="secondary small">Здесь этап можно менять вручную. В настоящем районе новая территория открывается автоматически и больше не закрывается.</p></section>
-      <section className="estate-section"><h3>Штаб района</h3>
+      {!activeComplex && <section className="estate-section"><h3>Штаб района</h3>
         <Stepper label="Ступень штаба" value={hq.level} max={5} pending={pending} text={`${hq.name} · ступень ${hq.level} из 5`} onChange={level => setDistrict({ hq_level: level }, `Штаб: ступень ${level}.`)} />
-        <p className="secondary small">Построено общих проектов: {hq.built}. В настоящем районе штаб растёт от общих проектов и не снижается.</p></section>
+        <p className="secondary small">Построено общих проектов: {hq.built}. В настоящем районе штаб растёт от общих проектов и не снижается.</p></section>}
       <section className="estate-section"><h3>Постройки района · {listed.length}</h3>
         {listed.length ? <ul className="estate-list">{listed.map(o => { const c = o.owner === "district" ? projects.get(o.family as ProjectFamily) : plots.get(o.family as PlotFamily); return <li key={o.id}><span aria-hidden="true">{c?.icon}</span>
           <span><strong>{nameOf(o)}</strong><small>{c?.name}{(c?.levels.length ?? 1) > 1 ? ` · ступень ${o.level} из ${c!.levels.length}` : ""}{o.owner === "district" ? " · на площади" : ""}</small></span>
           <button type="button" className="city-secondary" onClick={() => { go({ selected: o.id, plot: null, area: o.owner === "district" ? "public" : "plots", project: false }); onFocus({ district: build.district, kind: "object", object: o.id }); }}>Открыть</button></li>; })}</ul>
           : <p className="secondary small">Пока пусто.</p>}</section>
       <button type="button" className="city-secondary sandbox-reset" disabled={pending} onClick={() => {
-        if (window.confirm("Очистить тестовый город? Все его постройки и проекты исчезнут, этапы застройки и штабы вернутся к началу. Настоящий город не изменится.")) run({ run: () => citySandbox.reset(city), text: () => "Тестовый город очищен.", next: () => ({ ...build, plot: null, selected: null, placing: null, spot: null }) });
+        if (window.confirm("Очистить тестовый город? Все его постройки и проекты исчезнут, этапы застройки, комплексы и штабы вернутся к началу. Настоящий город не изменится.")) run({ run: () => citySandbox.reset(city), text: () => "Тестовый город очищен.", next: () => ({ ...build, plot: null, selected: null, placing: null, spot: null }) });
       }}>Очистить тестовый город</button>
     </>;
   }
@@ -151,12 +164,12 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
       <div className="sandbox-switch" role="group" aria-label="Район тестового города">{(state?.districts ?? []).filter(d => d.land).map(d =>
         <button type="button" key={d.id} aria-pressed={d.id === build.district} onClick={() => switchTo(d.id)}><strong><DistrictSwatch district={d.id} />{d.number}</strong><small>{d.name}</small></button>)}</div>
       <div className="sandbox-switch sandbox-switch--tabs" role="group" aria-label="Что строить">
-        <button type="button" aria-pressed={!build.project} onClick={() => area(false)}>Личные постройки</button>
-        <button type="button" aria-pressed={build.project} onClick={() => area(true)}>Площадь команды</button>
+        <button type="button" aria-pressed={!publicMode} onClick={() => area(false)}>Личные постройки</button>
+        <button type="button" aria-pressed={publicMode} onClick={() => area(true)}>{activeComplex ? "Комплекс района" : "Площадь команды"}</button>
       </div>
       {notice && <p className="estate-ok" role="status">{notice}</p>}
       {body}
-      {!build.placing && <button type="button" className="city-secondary" onClick={() => onFocus({ district: build.district, kind: build.project ? "public" : "district" })}>{build.project ? "Показать площадь команды" : "Показать участки на карте"}</button>}
+      {!build.placing && <button type="button" className="city-secondary" onClick={() => onFocus({ district: build.district, kind: publicMode ? "public" : "district" })}>{publicMode ? activeComplex ? "Показать комплекс района" : "Показать площадь команды" : "Показать участки на карте"}</button>}
       <p className="city-fine">Тестовый город отдельный: операторы и сотрудники его не видят, коины не списываются, настоящие районы не меняются.</p>
     </div>
   </aside>;

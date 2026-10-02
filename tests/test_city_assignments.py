@@ -16,6 +16,7 @@ from app.models.user import CoinAccount, Group
 from app.services import city_world
 from app.services.coins import post_transaction
 from tests.conftest import auth, login, make_group, make_user
+from tests.test_city_estate import legacy_square
 
 pytestmark = pytest.mark.asyncio
 CITY = "/api/v1/learning/city"
@@ -302,6 +303,7 @@ async def test_supervisor_with_no_groups_is_assigned_and_future_group_joins_with
     assert district(world)["assigned"] and district(world)["supervisor"] == supervisor.full_name
     sv_estate = (await client.get(CITY + "/estate", headers=sv_headers)).json()
     assert "support-team-1" in sv_estate["managed"]
+    await legacy_square(session)
     opened = await project(client, sv_headers)
     assert opened.status_code == 200, opened.text
     created = await client.post(
@@ -415,6 +417,7 @@ async def test_heads_and_supervisors_manage_projects_only_in_their_assigned_city
         assert (await project(client, actor_headers, city="sales")).status_code == 403
         managed = (await client.get(CITY + "/estate", headers=actor_headers)).json()["managed"]
         assert "support-team-1" in managed and "sales-team-1" not in managed
+    await legacy_square(session, "sales-team-1")
     opened = await project(client, await headers(client, sales_sv), city="sales")
     assert opened.status_code == 200, opened.text
     denied = await client.post(
@@ -459,6 +462,7 @@ async def test_group_supervisor_patch_moves_existing_buildings_and_denies_previo
     assert await count(session, CoinTransaction) == before_transactions
     view = (await client.get(CITY + "/world", headers=me)).json()
     assert view["home_city"] == "sales" and view["home_district"] == "sales-team-1"
+    await legacy_square(session, "sales-team-1")
     previous_manager = await project(client, await headers(client, supervisor), city="sales")
     assert previous_manager.status_code == 403
     assert (await project(client, await headers(client, next_sv), city="sales")).status_code == 200
@@ -562,6 +566,7 @@ async def test_assigned_supervisor_cannot_be_disabled_before_groups_are_reassign
     assert data["revision"] == saved["revision"]
     assert district(data)["group_ids"] == [operator.group_id]
     assert supervisor.id in {item["id"] for item in data["supervisors"]}
+    await legacy_square(session)
     assert (await project(client, sv_headers)).status_code == 200
 
 

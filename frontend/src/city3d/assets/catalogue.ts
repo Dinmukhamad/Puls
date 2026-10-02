@@ -17,6 +17,8 @@ import { furnitureGeometry, gableGeometry, officeGeometry, SECTION_PART, SECTION
 import { OFFICE_FLOOR, OFFICE_FLOORS, SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
 import { FINISHES, HOUSE_SCALE, READY_HOUSES, houseModelName } from "../world/familyHouses";
 import { OFFICE_BUILDINGS, OFFICE_SCALE, officeModelName, officeVariant } from "../world/officeBuildings";
+import { LANDMARK_LEVELS, LANDMARK_SIDE, landmarkLevel } from "../world/districtLandmark";
+import { landmarkGeometry } from "./districtLandmark";
 import modelsUrl from "../../pages/city/models/city-models.glb?url";
 import vehiclesUrl from "../../pages/city/models/vehicles.glb?url";
 import familyHousesUrl from "../../pages/city/models/family-houses.glb?url";
@@ -206,6 +208,15 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
   const officeTints = OFFICE_TINTS.map(c => new THREE.Color(c)), officePart = (geometry: THREE.BufferGeometry): LodLevel => ({ parts: [{ geometry: own(geometry), material: officeMaterial, castShadow: true }] });
   const plainOffice = officePart(officeGeometry(1, 0));
   const glassTowers = OFFICE_FLOORS.map(floors => add({ id: `office-${floors}`, lods: [officePart(officeGeometry(floors, 2)), officePart(officeGeometry(floors, 1)), plainOffice], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: officeTints, tintStep: 3 }));
+  // One model per community-centre level. All distances retain its wings and stepped crown; each level has only two parts.
+  const landmarkShell = own(new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .72, metalness: .04 }));
+  const landmarkPart = (level: number, detail: 0 | 1 | 2): LodLevel => {
+    const geometry = landmarkGeometry(level, detail);
+    return { parts: [{ geometry: own(geometry.shell), material: landmarkShell, castShadow: true },
+      { geometry: own(geometry.glass), material: officeMaterial, castShadow: true }] };
+  };
+  const landmarks = Array.from({ length: LANDMARK_LEVELS }, (_, index) => add(procedural(`district-landmark-${index + 1}`,
+    [landmarkPart(index + 1, 2), landmarkPart(index + 1, 1), landmarkPart(index + 1, 0)])));
   // Cottages of the garden suburb: the plain section box (one pool with every far section) under a gabled roof.
   const cottage = add({ id: "cottage", lods: [plainSection, plainSection, plainSection], bounds: unitBox.clone(), base: new THREE.Matrix4(), tints: sectionTints, tintStep: 5 });
   // Gabled townhouse roofs: one prism, its ridge along the depth so the gable faces the street.
@@ -308,6 +319,11 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
         const index = Math.min(OFFICE_FLOORS.length - 1, Math.max(0, p.variant)), lift = p.lift ?? 0;
         out.compose(place.set(p.x, GROUND + lift, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 8, OFFICE_FLOORS[index] * OFFICE_FLOOR - lift, p.depth ?? 6));
         return glassTowers[index];
+      }
+      case "district-landmark": {
+        const width = p.width || LANDMARK_SIDE, depth = p.depth ?? LANDMARK_SIDE;
+        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(width / LANDMARK_SIDE, Math.min(width, depth) / LANDMARK_SIDE, depth / LANDMARK_SIDE));
+        return landmarks[landmarkLevel(p.variant + 1) - 1];
       }
       case "section": {
         const index = Math.min(SECTION_FLOORS.length - 1, Math.max(0, p.variant)), lift = p.lift ?? 0;

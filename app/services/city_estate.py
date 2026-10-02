@@ -48,7 +48,7 @@ from app.models.coin import CoinTransaction
 from app.models.enums import Role, TxType
 from app.models.progress import Notification
 from app.models.user import CoinAccount, Group, User
-from app.services import city_land
+from app.services import city_land, city_landmark
 from app.services.coins import get_account, post_transaction
 from app.services.locking import lock_user
 from app.services.rules import write_audit
@@ -732,6 +732,13 @@ async def describe(session, user, districts, *, mine, manages, small):
                 "mine": mine(key),
                 "managed": manages(key),
                 "land": land_view(key, taken[key], state),
+                "landmark": city_landmark.view(
+                    city_land.plot_count(key),
+                    sum(taken[key]),
+                    state.landmark_peak_plots if state else 0,
+                    legacy=any(o.district_id == key and o.module == SQUARE for o in objects)
+                    or any(p.district_id == key and p.module == SQUARE for p in projects),
+                ),
                 "hq": {
                     "level": level,
                     "name": STAGE_NAMES[level - 1],
@@ -993,11 +1000,53 @@ async def widen(session, district_id, actor):
     """Opens the district's next bands as the inner ones fill up; they never close again."""
     state = await lock_district(session, district_id)
     taken = (await taken_plots(session, [district_id]))[district_id]
+    plots = city_land.plot_count(district_id)
+    old_peak = state.landmark_peak_plots
+    peak = max(old_peak, sum(taken))
+    old_level = city_landmark.level_for(plots, old_peak)
+    level = city_landmark.level_for(plots, peak)
+    if peak > old_peak:
+        state.landmark_peak_plots = peak
+    if level > old_level:
+        event(
+            session,
+            district_id,
+            "landmark",
+            actor=actor,
+            payload={"level": level, "peak": peak, "plots": plots},
+        )
     band = city_land.open_band(city_land.band_totals(district_id), taken, state.open_band)
     if band > state.open_band:
         state.open_band = band
         event(session, district_id, "band", actor=actor, payload={"band": band})
     return state.open_band
+
+
+async def require_public_square(session, district_id):
+    """A new project can use a legacy square; an empty square belongs to its full-size complex.
+
+    The caller holds the district lock. Upgrades of existing public buildings do not need this
+    check, and open projects retain their cells, contributions and completion/cancellation flow.
+    """
+    if await session.scalar(
+        select(CityObject.id).where(
+            CityObject.district_id == district_id,
+            CityObject.state == "placed",
+            CityObject.module == SQUARE,
+        ).limit(1)
+    ) or await session.scalar(
+        select(CityProject.id).where(
+            CityProject.district_id == district_id,
+            CityProject.status == "open",
+            CityProject.module == SQUARE,
+        ).limit(1)
+    ):
+        return
+    raise ConflictError(
+        "Эту площадь занимает комплекс команды. Он растёт автоматически по мере застройки "
+        "района. Другие здания можно строить на личных участках.",
+        code="district_landmark",
+    )
 
 
 # ---- parks gather themselves ---------------------------------------------------------------------
@@ -1367,6 +1416,7 @@ async def open_project(session, user, body):
                 raise ConflictError(
                     "Общие проекты строят на общественной площади района", code="wrong_zone"
                 )
+            await require_public_square(session, body.district_id)
             w, h = footprint(body.family, body.rotation, public=True)
             cells = cells_of(body.u, body.v, w, h)
             if any(not (0 <= u < MODULE_CELLS and 0 <= v < MODULE_CELLS) for u, v in cells):

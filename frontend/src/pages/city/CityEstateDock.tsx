@@ -8,6 +8,7 @@ import { DistrictSwatch } from "./DistrictSwatch";
 import { splitPlotCatalogue, readyBuildingLabel } from "./plotCatalogue";
 import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
 import { DistrictBuildProgress } from "./DistrictBuildProgress";
+import { DistrictLandmarkCard } from "./DistrictLandmarkCard";
 import "./estate.css";
 
 export type { EstateTarget };
@@ -52,6 +53,8 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus }
   const plots = new Map(mine.catalogue.map(c => [c.family, c])), projects = new Map(mine.projects.map(c => [c.family, c]));
   const own = mine.objects, placed = own.filter(o => o.state === "placed"), stored = own.filter(o => o.state === "stored");
   const ready = mine.status === "ready" && !build.project;
+  const activeComplex = land?.landmark?.status === "active";
+  const showComplex = activeComplex && (build.project || build.area === "public");
   const refresh = async (text: string) => { keys.done(); setNotice(text); await client.invalidateQueries(); };
   const act = useMutation({
     mutationFn: async (run: () => Promise<OperationResult>) => run(),
@@ -72,7 +75,8 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus }
   const place = (o: OwnObject) => { act.reset(); setNotice(null); setBuild({ ...build, area: "plots", placing: { family: o.family, rotation: 0, moving: o.id }, plot: null, spot: null, selected: null }); };
 
   let body;
-  if (build.placing) body = <Placing build={build} plots={plots} projects={projects} pending={pending} error={act.error}
+  if (showComplex) body = <DistrictLandmarkCard landmark={land!.landmark!} />;
+  else if (build.placing) body = <Placing build={build} plots={plots} projects={projects} pending={pending} error={act.error}
     onRotate={() => setBuild({ ...build, placing: { ...build.placing!, rotation: (build.placing!.rotation + 1) % 4 } })}
     onCancel={() => { act.reset(); setBuild({ ...build, placing: null, spot: null, area: build.project ? "public" : "plots" }); }}
     onConfirm={() => {
@@ -116,15 +120,15 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus }
 
   return <aside className="estate-dock glass glass--regular" aria-label="Стройка в районе">
     <header className="estate-dock__head">
-      <div><span className="city-eyebrow"><DistrictSwatch district={build.district} />{build.project ? "ПЛОЩАДЬ КОМАНДЫ" : "ЛИЧНЫЕ ПОСТРОЙКИ"} · {land?.name ?? mine.district?.name ?? "район"}</span>
-        {!build.project && <p>Можно потратить <strong>◈ {coins(mine.available)}</strong>{mine.available < mine.balance ? " · часть в резерве магазина" : ""}</p>}</div>
+      <div><span className="city-eyebrow"><DistrictSwatch district={build.district} />{showComplex ? "КОМПЛЕКС РАЙОНА" : build.project ? "ПЛОЩАДЬ КОМАНДЫ" : "ЛИЧНЫЕ ПОСТРОЙКИ"} · {land?.name ?? mine.district?.name ?? "район"}</span>
+        {!build.project && !showComplex && <p>Можно потратить <strong>◈ {coins(mine.available)}</strong>{mine.available < mine.balance ? " · часть в резерве магазина" : ""}</p>}</div>
       <button type="button" className="estate-dock__close" onClick={onClose} aria-label="Закрыть стройку">×</button>
     </header>
     <div className="estate-dock__body">
       {notice && <p className="estate-ok" role="status">{notice}</p>}
       {body}
-      {!build.placing && !build.project && <button type="button" className="city-secondary" onClick={() => onFocus({ district: build.district, kind: "district" })}>Показать участки на карте</button>}
-      <p className="city-fine">{build.project ? "Операторы видят общий прогресс сбора, но не чужие взносы." : "Соседи видят, что и какой ступени стоит на участке, но не цену, баланс и имя."}</p>
+      {!build.placing && !build.project && !showComplex && <button type="button" className="city-secondary" onClick={() => onFocus({ district: build.district, kind: "district" })}>Показать участки на карте</button>}
+      {!showComplex && <p className="city-fine">{build.project ? "Операторы видят общий прогресс сбора, но не чужие взносы." : "Соседи видят, что и какой ступени стоит на участке, но не цену, баланс и имя."}</p>}
     </div>
   </aside>;
 }
@@ -136,8 +140,9 @@ const cellText = ([w, h]: [number, number]) => `${w} × ${h} ${w * h === 1 ? "к
 function Overview({ land }: { land: DistrictEstate | null }) {
   const state = land?.land;
   return <>
-    <section className="estate-claim"><strong>Как построить</strong><ol className="estate-steps"><li>Нажми на свободный участок своего района.</li><li>Выбери сквер, дом или офис.</li><li>Купи за коины: итоговая цена включает землю.</li></ol><p>Твои постройки видны команде. На площади у штаба команда строит общие проекты.</p></section>
+    <section className="estate-claim"><strong>Как построить</strong><ol className="estate-steps"><li>Нажми на свободный участок своего района.</li><li>Выбери сквер, дом или офис.</li><li>Купи за коины: итоговая цена включает землю.</li></ol><p>{land?.landmark?.status === "active" ? "Каждый занятый участок помогает вырасти комплексу команды рядом со штабом." : "Твои постройки видны команде. На площади у штаба команда строит общие проекты."}</p></section>
     {state && <DistrictBuildProgress land={state} />}
+    {land?.landmark?.status === "active" && <DistrictLandmarkCard landmark={land.landmark} compact />}
   </>;
 }
 

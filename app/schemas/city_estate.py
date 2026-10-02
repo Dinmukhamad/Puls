@@ -95,6 +95,7 @@ class SandboxDistrictInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     open_band: int | None = Field(default=None, ge=1, le=9)
     hq_level: int | None = Field(default=None, ge=1, le=9)
+    landmark_level: int | None = Field(default=None, ge=1, le=5)
 
 
 class SandboxProjectInput(BaseModel):

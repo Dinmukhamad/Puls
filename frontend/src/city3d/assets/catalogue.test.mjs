@@ -90,6 +90,33 @@ test('blocks, towers and port sheds light their windows at night; trees, lamp po
   catalogue.dispose();
 });
 
+test('community centre levels resolve cached lit models and retain actual stepped bounds at every distance', () => {
+  const catalogue = city.createCatalogue(new Map(), city.createNight()), matrix = new THREE.Matrix4();
+  const at = (variant, extra = {}) => catalogue.resolve({ kind: 'district-landmark', variant, x: 11, z: -9, rotation: .4, scale: 1, width: 18, depth: 18, ...extra }, matrix);
+  const levels = Array.from({ length: 5 }, (_, variant) => at(variant));
+  assert.equal(new Set(levels).size, 5);
+  for (let i = 0; i < levels.length; i++) {
+    const model = levels[i];
+    assert.equal(model.id, `district-landmark-${i + 1}`);
+    assert.equal(at(i), model, 'refreshes resolve the same cached geometry');
+    assert.ok(model.bounds.min.x > -9 && model.bounds.max.x < 9 && model.bounds.min.z > -9 && model.bounds.max.z < 9);
+    if (i) assert.ok(model.bounds.max.y > levels[i - 1].bounds.max.y);
+    for (const detail of model.lods) {
+      assert.equal(detail.parts.length, 2, 'opaque architecture and glass each use one pooled part');
+      const [shell, glass] = detail.parts;
+      assert.ok(shell.geometry.hasAttribute('color') && glass.geometry.hasAttribute('sectionPart'));
+      assert.ok(glass.material.emissiveNode, 'the facade uses the city night-window shader');
+    }
+  }
+  assert.equal(at(-2), levels[0]); assert.equal(at(99), levels[4]);
+  at(4, { width: 9, depth: 12 });
+  const position = new THREE.Vector3(), size = new THREE.Vector3(); matrix.decompose(position, new THREE.Quaternion(), size);
+  assert.deepEqual(position.toArray(), [11, .2, -9]);
+  assert.ok(Math.abs(size.x - .5) < 1e-8 && Math.abs(size.y - .5) < 1e-8 && Math.abs(size.z - 2 / 3) < 1e-8);
+  let disposed = 0; levels[4].lods[0].parts[0].geometry.addEventListener('dispose', () => disposed++);
+  catalogue.dispose(); assert.equal(disposed, 1, 'catalogue owns and disposes the centre models');
+});
+
 test('residential sections: balconies near, one plain box far for every height, arches raised; yard furniture and new trees stay dark', () => {
   const catalogue = city.createCatalogue(new Map(), city.createNight()), matrix = new THREE.Matrix4(), size = new THREE.Vector3();
   const at = (kind, extra = {}) => catalogue.resolve({ kind, variant: 0, x: 3, z: 4, rotation: .5, scale: 1, width: 0, ...extra }, matrix);

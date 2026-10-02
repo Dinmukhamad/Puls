@@ -130,6 +130,8 @@ class CityDistrictState(Base):
     built_projects: Mapped[int] = mapped_column(default=0)
     #: Plots are sold up to this band from the centre (app/services/city_land.py).
     open_band: Mapped[int] = mapped_column(default=1, server_default="1")
+    #: Highest number of occupied personal plots; the district's complex never loses a level.
+    landmark_peak_plots: Mapped[int] = mapped_column(default=0, server_default="0")
 
 
 class CityOperation(Base):

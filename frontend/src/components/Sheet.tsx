@@ -173,7 +173,9 @@ export function Sheet({
     <div
       className="overlay"
       ref={overlay}
-      onMouseDown={(event) => {
+      onPointerDown={(event) => {
+        // A sheet opened on pointerup must survive that touch's compatibility
+        // mouse events, which can target this newly mounted backdrop.
         if (event.target === event.currentTarget) onClose();
       }}
     >

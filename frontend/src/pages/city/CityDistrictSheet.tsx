@@ -5,6 +5,7 @@ import { cityEstate, operationKey, type DistrictEstate, type DistrictProject, ty
 import type { TeamDistrict } from "../../api/cityWorld";
 import { DistrictSwatch } from "./DistrictSwatch";
 import { districtBuildProgress } from "./districtProgress";
+import { DistrictLandmarkCard } from "./DistrictLandmarkCard";
 import "./estate.css";
 
 const coins = (n: number) => n.toLocaleString("ru-RU");
@@ -20,6 +21,7 @@ export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, 
 }) {
   const home = mine?.district?.id === team.id, canGive = home && mine?.status === "ready";
   const hq = district?.hq;
+  const activeComplex = district?.landmark?.status === "active";
   const progress = district?.land && districtBuildProgress(district.land);
   return <div className="stack estate-district">
     <span className="city-eyebrow"><DistrictSwatch district={team.id} />РАЙОН КОМАНДЫ · {cityName}</span>
@@ -31,22 +33,24 @@ export function CityDistrictSheet({ district, team, cityName, mine, onMyEstate, 
         {home && onMyEstate && <button type="button" className="city-action" onClick={onMyEstate}>Выбрать участок →</button>}
         {!home && <small>Строить можно в районе своей команды.</small>}
       </section>
-      <section className="estate-area"><span aria-hidden="true">⛲</span><div><h3>Площадь команды</h3><p>Место для общих проектов. Супервайзер открывает сбор, операторы добровольно вносят коины.</p></div>
+      {!activeComplex && <section className="estate-area"><span aria-hidden="true">⛲</span><div><h3>Площадь команды</h3><p>Место для общих проектов. Супервайзер открывает сбор, операторы добровольно вносят коины.</p></div>
         {district?.managed && district.construction && onOpenProject && <button type="button" className="city-secondary" onClick={onOpenProject}>Создать общий проект →</button>}
-      </section>
+      </section>}
     </div>
-    {hq && <section className="estate-hq">
+    {activeComplex && <DistrictLandmarkCard landmark={district!.landmark!} />}
+    {district?.landmark?.status === "legacy_occupied" && <p className="estate-note">На площади остаются прежние общие постройки и сборы команды.</p>}
+    {!activeComplex && hq && <section className="estate-hq">
       <div className="estate-placing__title"><span aria-hidden="true">⚑</span><div><h2>Штаб: {hq.name}</h2><small>Ступень {hq.level} из 5 · построено общих проектов: {hq.built}</small></div></div>
       <span className="estate-stage" aria-hidden="true">{[1, 2, 3, 4, 5].map(i => <i key={i} data-on={i <= hq.level || undefined} />)}</span>
       <p className="secondary small">{hq.next ? `Следующая ступень «${hq.next.name}» — после ${hq.next.need} построенных общих проектов. Уровень штаба не снижается.` : "Штаб достиг флагманской ступени."}</p>
     </section>}
     {progress ? <p className="secondary small">Для стройки свободно {coins(progress.available)} участков. {district!.construction ? "Стройка открыта." : "Стройка пока закрыта руководителем."}</p>
       : district ? <p className="secondary small">У района нет земли: город делится на три района.</p> : null}
-    {district?.projects.length ? <section className="estate-section"><h3>Общие проекты</h3>
+    {!activeComplex && (district?.projects.length ? <section className="estate-section"><h3>Общие проекты</h3>
       {district.projects.map(p => <ProjectCard key={p.id} project={p} canGive={!!canGive} available={mine?.available ?? 0} managed={district.managed} />)}
-    </section> : district ? <p className="secondary small">Сейчас нет открытых сборов.{district.managed && district.construction ? " Откройте первый проект на площади района — сквер, площадь с фонтаном или парк." : ""}</p> : null}
+    </section> : district ? <p className="secondary small">Сейчас нет открытых сборов.{district.managed && district.construction ? " Откройте первый проект на площади района — сквер, площадь с фонтаном или парк." : ""}</p> : null)}
     {canManageAssignments && <Link className="city-secondary" to="/admin/learning/city?tab=world">Управлять районами →</Link>}
-    <p className="secondary small">Взносы добровольные и видны только тебе. Завершённые общие постройки остаются в районе и при переводах сотрудников.</p>
+    {!activeComplex && <p className="secondary small">Взносы добровольные и видны только тебе. Завершённые общие постройки остаются в районе и при переводах сотрудников.</p>}
   </div>;
 }
 

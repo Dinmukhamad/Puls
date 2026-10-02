@@ -21,6 +21,7 @@ import { plotLayout } from "../world/landLayouts";
 import { districtColour, type PlotFamily } from "../world/estateGrid";
 import { HOUSE_SCALE, READY_HOUSES, isReadyHouse } from "../world/familyHouses";
 import { OFFICE_BUILDINGS, isOfficeBuilding, officeBuildingScale, officeBuildingBounds, officeBuildingRayDistance } from "../world/officeBuildings";
+import { landmarkLayout, landmarkHeight, landmarkBounds, landmarkRayDistance } from "../world/districtLandmark";
 import type { Placement, Surface } from "../world/types";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "../types";
 import type { DistrictEstate, PublicObject } from "../../api/cityEstate";
@@ -118,6 +119,11 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   const blockOf = (district: number, block: number | null) => block === null ? undefined : blocks.get(`${district}:${block}`);
   const centreOf = (district: string): DistrictCentre | undefined => grid.centres.find(c => c.district === numberOf(district));
   const stateOf = (district: string): DistrictEstate | undefined => view?.state.districts.find(d => d.id === district);
+  const landmarkFrame = (district: DistrictEstate) => {
+    const centre = centreOf(district.id), landmark = district.landmark;
+    if (!centre || landmark?.status !== "active") return null;
+    return { ...cellPoint(centre.square, landmark.u + landmark.w / 2, landmark.v + landmark.h / 2), rotation: centre.square.rotation, width: landmark.w * CELL, depth: landmark.h * CELL };
+  };
 
   // ---- the ground: plots, centres and their public squares, laid out once ----
   const ground = plotGround(grid); ctx.scene.add(ground.mesh, ground.centreMesh);
@@ -154,7 +160,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   let pools: InstancePools | null = null, patches: THREE.Mesh | null = null, builtKey = "";
   const seen = new Map<number, number>();
   function rebuild() {
-    const key = view ? JSON.stringify(view.state.districts.map(d => [d.id, d.objects.map(o => [o.id, o.family, o.level, o.module, o.u, o.v, o.rotation]), d.projects.map(p => [p.id, p.module, p.u, p.v, p.rotation])])) : "";
+    const key = view ? JSON.stringify(view.state.districts.map(d => [d.id, d.landmark && [d.landmark.status, d.landmark.level, d.landmark.u, d.landmark.v, d.landmark.w, d.landmark.h], d.objects.map(o => [o.id, o.family, o.level, o.module, o.u, o.v, o.rotation]), d.projects.map(p => [p.id, p.module, p.u, p.v, p.rotation])])) : "";
     if (key === builtKey && (pools || !catalogue)) { recolour(); refreshSigns(); refreshBuild(); return; }
     builtKey = key;
     pools?.dispose(); pools = null;
@@ -162,6 +168,10 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     const placements: Placement[] = [], surfaces: Surface[] = [];
     for (const district of view?.state.districts ?? []) {
       const centre = centreOf(district.id);
+      if (centre && district.landmark?.status === "active") {
+        const layout = landmarkLayout(centre.square, district.landmark);
+        placements.push(...layout.placements); surfaces.push(...layout.surfaces);
+      }
       for (const obj of district.objects) {
         const layout = layoutOf(district, obj, centre);
         if (!layout) continue;
@@ -237,7 +247,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
       const taken = new Set<string>(), state = stateOf(build.district);
       for (const o of state?.objects ?? []) if (onSquare(o) && o.u !== null && o.v !== null) for (let i = 0; i < o.w; i++) for (let j = 0; j < o.h; j++) taken.add(`${o.u + i}:${o.v + j}`);
       for (const p of state?.projects ?? []) if (p.u !== null && p.v !== null) for (let i = 0; i < p.w; i++) for (let j = 0; j < p.h; j++) taken.add(`${p.u + i}:${p.v + j}`);
-      problem = squareProblem({ family: family as ProjectFamily, u: at.u, v: at.v, rotation }, (u, v) => taken.has(`${u}:${v}`));
+      problem = state?.landmark?.status === "active" ? "Площадь занята комплексом команды. Он растёт, когда операторы застраивают район." : squareProblem({ family: family as ProjectFamily, u: at.u, v: at.v, rotation }, (u, v) => taken.has(`${u}:${v}`));
       const p = cellPoint(centre.square, at.u + w / 2, at.v + h / 2);
       place = { ...p, rotation: centre.square.rotation, width: w * CELL, depth: h * CELL };
     } else {
@@ -262,7 +272,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   }
   /** The square's cells while staff place a shared project. */
   function refreshCells() {
-    const points: number[] = [], y = .29, centre = build?.area === "public" && build.placing ? centreOf(build.district) : undefined;
+    const points: number[] = [], y = .29, centre = build?.area === "public" && build.placing && stateOf(build.district)?.landmark?.status !== "active" ? centreOf(build.district) : undefined;
     if (centre) for (let k = 0; k <= MODULE_CELLS; k++) {
       for (const [a, b] of [[cellPoint(centre.square, k, 0), cellPoint(centre.square, k, MODULE_CELLS)], [cellPoint(centre.square, 0, k), cellPoint(centre.square, MODULE_CELLS, k)]]) points.push(a.x, y, a.z, b.x, y, b.z);
     }
@@ -295,8 +305,10 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     for (const district of view?.state.districts ?? []) {
       const centre = centreOf(district.id); if (!centre) continue;
       const id = `public-${district.id}`; live.add(id);
-      sign(id, "♧", "Площадь команды", "Общие проекты · открыть", new THREE.Vector3(centre.square.x, .5, centre.square.z), { kind: "public", district: district.id }, SQUARE_SIGN_REACH);
-      signs.get(id)!.el.setAttribute("aria-label", `Площадь команды района ${district.name ?? district.id}. Открыть общие проекты`);
+      const landmark = district.landmark, growing = landmark?.status === "active";
+      const y = growing ? .5 + landmarkHeight(landmark.level, landmark.w * CELL, landmark.h * CELL) : .5;
+      sign(id, growing ? "▥" : "♧", growing ? "Комплекс команды" : "Площадь команды", growing ? `Уровень ${landmark.level} из 5 · развитие` : "Общие проекты · открыть", new THREE.Vector3(centre.square.x, y, centre.square.z), { kind: "public", district: district.id }, SQUARE_SIGN_REACH);
+      signs.get(id)!.el.setAttribute("aria-label", growing ? `Комплекс команды района ${district.name ?? district.id}. Уровень ${landmark.level} из 5. Открыть развитие` : `Площадь команды района ${district.name ?? district.id}. Открыть общие проекты`);
       for (const project of district.projects) {
         const target = project.target_id ? district.objects.find(o => o.id === project.target_id) : project;
         if (!target || target.u === null || target.v === null) continue;
@@ -365,14 +377,21 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     return rayAt(clientX, clientY)?.intersectPlane(plane, hit) ? { x: hit.x, z: hit.z } : null;
   }
   /** Tall facades project beyond their plots on the ground, so select their actual volume first. */
-  function officeAtRay(ray: THREE.Ray) {
-    let nearest: { district: DistrictEstate; obj: PublicObject } | null = null, distance = Infinity;
-    for (const district of view?.state.districts ?? []) for (const obj of district.objects) {
-      if (!isOfficeBuilding(obj.family)) continue;
-      const frame = placeOf(district, obj);
-      if (!frame) continue;
-      const at = officeBuildingRayDistance(obj.family, frame, ray.origin, ray.direction);
-      if (at !== null && at < distance) { distance = at; nearest = { district, obj }; }
+  function buildingAtRay(ray: THREE.Ray) {
+    let nearest: EstatePick | null = null, distance = Infinity;
+    for (const district of view?.state.districts ?? []) {
+      const landmark = district.landmark, landmarkPlace = landmarkFrame(district);
+      if (landmarkPlace && landmark) {
+        const at = landmarkRayDistance(landmarkPlace, landmark.level, ray.origin, ray.direction);
+        if (at !== null && at < distance) { distance = at; nearest = { kind: "public", district: district.id }; }
+      }
+      for (const obj of district.objects) {
+        if (!isOfficeBuilding(obj.family)) continue;
+        const frame = placeOf(district, obj);
+        if (!frame) continue;
+        const at = officeBuildingRayDistance(obj.family, frame, ray.origin, ray.direction);
+        if (at !== null && at < distance) { distance = at; nearest = { kind: "object", district: district.id, object: obj.id }; }
+      }
     }
     return nearest;
   }
@@ -436,8 +455,8 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     const ray = rayAt(event.clientX, event.clientY);
     if (!ray) return;
     if (!build?.placing) {
-      const found = officeAtRay(ray);
-      if (found) { onPick({ kind: "object", district: found.district.id, object: found.obj.id }); return; }
+      const found = buildingAtRay(ray);
+      if (found) { onPick(found); return; }
     }
     if (ray.intersectPlane(plane, hit)) pick({ x: hit.x, z: hit.z });
   };
@@ -487,7 +506,11 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
           place = frame;
           if (frame && isOfficeBuilding(obj.family)) { const bounds = officeBuildingBounds(obj.family, frame); place = bounds; y = .2 + bounds.height / 2; }
         }
-      } else if (target.kind === "public" && centre) place = { ...centre.square };
+      } else if (target.kind === "public" && centre) {
+        place = { ...centre.square };
+        const district = stateOf(target.district), frame = district && landmarkFrame(district);
+        if (frame && district?.landmark) { const bounds = landmarkBounds(frame, district.landmark.level); place = bounds; y = bounds.bottom + bounds.height / 2; }
+      }
       else if (target.kind === "district" && build?.area === "plots" && build.district === target.district) {
         const own = grid.plots.filter(p => p.district === number), taken = takenPlots(), open = stateOf(target.district)?.land?.open_band ?? 1;
         const available = own.filter(p => p.band <= open && !taken.has(plotKey(number, p.block, p.col, p.row)));

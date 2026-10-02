@@ -19,6 +19,7 @@ from tests.test_city_estate import (
     district_view,
     estate,
     fund,
+    legacy_square,
     open_world,
 )
 
@@ -201,6 +202,7 @@ async def test_bands_and_the_headquarters_are_set_at_will(client, session, me):
 
 
 async def test_projects_are_built_or_cancelled_at_once(client, session, me):
+    await legacy_square(session, "test-support-team-1")
     r = await project(client, me, "square", u=0, v=0)
     assert r.status_code == 200, r.text
     square = r.json()["project"]
@@ -217,7 +219,9 @@ async def test_projects_are_built_or_cancelled_at_once(client, session, me):
     assert (r.json()["object"]["family"], r.json()["object"]["owner"]) == ("square", "district")
     view = await sandbox(client, me)
     assert view["projects"] == [] and (view["hq"]["level"], view["hq"]["built"]) == (2, 1)
-    assert [(o["family"], o["module"]) for o in view["objects"]] == [("square", 0)]
+    assert [(o["family"], o["module"]) for o in view["objects"]] == [
+        ("square", 0), ("square", 0)
+    ]
     again = await client.post(f"{SANDBOX}/projects/{square}/complete", headers=me)
     assert again.status_code == 404
     # A public building's next stage, then one opened and cancelled.
@@ -243,6 +247,7 @@ async def test_projects_are_built_or_cancelled_at_once(client, session, me):
 
 
 async def test_resetting_clears_only_that_test_city(client, session, me):
+    await legacy_square(session, "test-support-team-1")
     await district(client, me, open_band=3, hq_level=4)
     for block in (FIRST, SECOND):
         assert (await build(client, me, "house", block, 0, 0)).status_code == 200
@@ -274,6 +279,8 @@ async def test_the_real_city_never_sees_the_test_city(
     await fund(session, operator.id, 2000)
     op = auth(await login(client, operator.login))
     real = (await buy(client, op, "house", FIRST, 0, 0)).json()["object"]
+    legacy_real = await legacy_square(session)
+    await legacy_square(session, "test-support-team-1")
     # The same plot in the test city is a plot of its own.
     test = (await build(client, me, "house", FIRST, 0, 0)).json()["object"]
     for u, v in ((2, 0), (3, 0), (2, 1), (3, 1)):
@@ -282,7 +289,7 @@ async def test_the_real_city_never_sees_the_test_city(
     await project(client, me, "fountain", u=0, v=0)
     for h in (op, me):
         view = await district_view(client, h)
-        assert [o["id"] for o in view["objects"]] == [real["id"]]
+        assert [o["id"] for o in view["objects"]] == [real["id"], legacy_real.id]
         assert view["land"]["taken"] == 1 and view["land"]["open_band"] == 1
         assert view["hq"]["level"] == 1 and view["projects"] == []
         cities = (await client.get(f"{CITY}/cities/support", headers=h)).json()["districts"]
@@ -293,7 +300,7 @@ async def test_the_real_city_never_sees_the_test_city(
     placed = await count(
         session, CityObject, CityObject.state == "placed", CityObject.district_id.like("test-%")
     )
-    assert placed == 2  # the house and the park its four squares made
+    assert placed == 3  # the house, merged park and existing public square
     report = (await client.get(f"{ADMIN}/estates", headers=me)).json()
     first = next(d for d in report["districts"] if d["id"] == "support-team-1")
     assert (first["buildings"], first["builders"], first["open_projects"]) == (1, 1, 0)
@@ -325,6 +332,8 @@ async def test_the_real_city_never_sees_the_test_city(
     ).status_code == 404
     assert (await project(client, me, "gazebo", target_id=real["id"])).status_code == 404
     await client.post(f"{SANDBOX}/cities/support/reset", headers=me)
-    assert [o["id"] for o in (await district_view(client, op))["objects"]] == [real["id"]]
+    assert [o["id"] for o in (await district_view(client, op))["objects"]] == [
+        real["id"], legacy_real.id
+    ]
     assert [p["id"] for p in (await district_view(client, op))["projects"]] == [real_project]
     assert test["id"] != real["id"]

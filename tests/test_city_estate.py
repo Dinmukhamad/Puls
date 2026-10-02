@@ -138,6 +138,28 @@ async def open_bands(session, district_id, band):
     await session.commit()
 
 
+async def legacy_square(session, district_id="support-team-1", *, family="square"):
+    """An already-built public square at an unused corner preserves the legacy project flow."""
+    obj = CityObject(
+        district_id=district_id,
+        owner_id=None,
+        family=family,
+        level=1,
+        state="placed",
+        module=0,
+        u=11,
+        v=11,
+        rotation=0,
+        source="legacy",
+        paid=0,
+    )
+    session.add(obj)
+    await session.flush()
+    session.add(CityCell(district_id=district_id, module=0, u=11, v=11, object_id=obj.id))
+    await session.commit()
+    return obj
+
+
 @pytest.fixture
 async def estate_admin(session):
     return await make_user(session, login="estate-admin", role=Role.ADMIN)
@@ -608,6 +630,7 @@ async def test_regrouping_districts_and_deactivation_release_land(
 
 
 async def test_team_funds_a_project_and_the_headquarters_grows(client, session, supervisor, team):
+    legacy = await legacy_square(session)
     mate = await make_user(session, login="mate-one", group_id=team.group_id)
     await make_user(session, login="mate-two", group_id=team.group_id)
     await fund(session, mate.id, 500)
@@ -650,8 +673,10 @@ async def test_team_funds_a_project_and_the_headquarters_grows(client, session, 
     view = await district_view(client, m)
     assert view["projects"] == [] and view["hq"]["level"] == 2 and view["hq"]["built"] == 1
     assert [(o["family"], o["owner"], o["module"], o["w"]) for o in view["objects"]] == [
-        ("square", "district", 0, 1)
+        ("square", "district", 0, 1),
+        ("square", "district", 0, 1),
     ]
+    assert view["objects"][0]["id"] == legacy.id
     notes = await session.scalars(
         select(Notification.user_id).where(Notification.title == "Проект района построен")
     )
@@ -664,6 +689,7 @@ async def test_team_funds_a_project_and_the_headquarters_grows(client, session, 
 async def test_cancelled_project_returns_every_contribution(
     client, session, head, supervisor, team
 ):
+    await legacy_square(session)
     mate = await make_user(session, login="mate-cancel", group_id=team.group_id)
     await fund(session, mate.id, 400)
     boss = auth(await login(client, head.login))
@@ -727,6 +753,7 @@ async def test_cancelled_project_returns_every_contribution(
 async def test_projects_keep_to_the_public_square_its_limits_and_roles(
     client, session, supervisor, team
 ):
+    await legacy_square(session)
     sv = auth(await login(client, supervisor.login))
     me = auth(await login(client, team.login))
 
@@ -769,6 +796,7 @@ async def test_projects_keep_to_the_public_square_its_limits_and_roles(
 
 
 async def test_concurrent_contributions_never_overfund(client, session, supervisor, team):
+    await legacy_square(session)
     mates = [await make_user(session, login=f"rush-{i}", group_id=team.group_id) for i in range(3)]
     for mate in mates:
         await fund(session, mate.id, 500)
@@ -808,6 +836,7 @@ async def test_public_view_hides_money_names_and_small_teams_progress(
 ):
     me = auth(await login(client, team.login))
     await buy(client, me, "house", FIRST, 0, 0)
+    await legacy_square(session)
     sv = auth(await login(client, supervisor.login))
     project = (
         await client.post(

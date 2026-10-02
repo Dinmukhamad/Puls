@@ -20,7 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.errors import ConflictError, NotFoundError
 from app.db.base import utcnow
 from app.models.city_estate import CityCell, CityDistrictState, CityObject, CityProject
-from app.services import city_land
+from app.services import city_land, city_landmark
 from app.services.city_estate import (
     MODULE_CELLS,
     PLOT_FAMILIES,
@@ -40,7 +40,9 @@ from app.services.city_estate import (
     prices,
     public_object,
     release_cells,
+    require_public_square,
     take_cells,
+    taken_plots,
     widen,
     world_districts,
 )
@@ -209,6 +211,10 @@ async def set_district(session, user, district_id, body):
         if not 1 <= body.hq_level <= len(STAGE_NAMES):
             raise ConflictError(f"Ступеней штаба: {len(STAGE_NAMES)}", code="bad_level")
         district.hq_level = body.hq_level
+    if body.landmark_level is not None:
+        district.landmark_peak_plots = city_landmark.needed(
+            city_land.plot_count(key), body.landmark_level
+        )
     event(
         session,
         key,
@@ -217,7 +223,13 @@ async def set_district(session, user, district_id, body):
         payload={"do": "district", **body.model_dump(exclude_none=True)},
     )
     await commit(session)
-    return {"open_band": district.open_band, "hq_level": district.hq_level}
+    result = {"open_band": district.open_band, "hq_level": district.hq_level}
+    if body.landmark_level is not None:
+        taken = (await taken_plots(session, [key]))[key]
+        result["landmark_level"] = city_landmark.level_for(
+            city_land.plot_count(key), max(district.landmark_peak_plots, sum(taken))
+        )
+    return result
 
 
 async def open_project(session, user, body):
@@ -238,6 +250,7 @@ async def open_project(session, user, body):
         level = target.level + 1
     else:
         level = 1
+        await require_public_square(session, key)
         w, h = footprint(body.family, body.rotation, public=True)
         cells = cells_of(body.u, body.v, w, h)
         if any(not (0 <= u < MODULE_CELLS and 0 <= v < MODULE_CELLS) for u, v in cells):
@@ -335,6 +348,7 @@ async def reset(session, user, city):
         select(CityDistrictState).where(CityDistrictState.district_id.in_(keys))
     ):
         district.hq_level, district.built_projects, district.open_band = 1, 0, 1
+        district.landmark_peak_plots = 0
     for key in keys:
         event(session, key, "sandbox", actor=user, payload={"do": "reset"})
     await commit(session)

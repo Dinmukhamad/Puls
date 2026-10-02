@@ -65,7 +65,9 @@ export type PlacementKind = "house" | "office" | "industry" | "block" | "tower" 
   /** A ready house of the districts (world/familyHouses.ts): `variant` picks the model and finish, `scale` its size. */
   | "family-house"
   /** A ready office tower (world/officeBuildings.ts): `variant` selects its source body, `scale` its uniform size. */
-  | "office-building";
+  | "office-building"
+  /** The growing community building (world/districtLandmark.ts): `variant` its level minus one, width/depth the reserved footprint. */
+  | "district-landmark";
 
 /**
  * One copy of a catalogue model. `variant` is a seeded integer ≥ 0 that picks a model within the kind

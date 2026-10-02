@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const built = await build({
-  stdin: { contents: 'export * from "./estates.ts"; export * from "../world/land.ts"; export * from "../world/landLayouts.ts"; export * from "../world/officeBuildings.ts"; export * from "../world/cities.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: 'export * from "./estates.ts"; export * from "../world/land.ts"; export * from "../world/landLayouts.ts"; export * from "../world/officeBuildings.ts"; export * from "../world/districtLandmark.ts"; export * from "../world/cities.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
 });
 const city = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
@@ -186,4 +186,60 @@ test('office ray bounds reject misses and behind-camera objects and order nearer
   assert.equal(city.officeBuildingRayDistance('officea', f, origin, { x: 0, y: 0, z: 1 }), null);
   assert.equal(city.officeBuildingRayDistance('officea', f, { ...origin, x: 10 }, direction), null);
   assert.equal(city.officeBuildingRayDistance('officea', f, { ...origin, y: 20 }, direction), null);
+});
+
+const landmark = (level = 1, status = 'active') => ({ status, level, name: 'Павильон команды', module: 0, u: 0, v: 0, w: 12, h: 12, rotation: 0, taken: 0, plots: 1119, peak: 0, next: null });
+
+test('the growing team complex focuses its real architecture and facade clicks open district development in real and sandbox cities', () => {
+  const s = setup(), centre = grid.centres.find(c => c.district === frame.district);
+  const reserved = { x: centre.square.x, z: centre.square.z, rotation: centre.square.rotation, width: 18, depth: 18 };
+  for (const sandbox of [false, true]) for (const level of [1, 5]) {
+    s.state([], sandbox, { landmark: landmark(level) }); s.build(null); s.picks.length = 0;
+    const bounds = city.landmarkBounds(reserved, level), focus = s.estates.focus({ district: districtId, kind: 'public' }, 48, .86);
+    assert.ok(Math.abs(focus.point.y - (bounds.bottom + bounds.height / 2)) < 1e-9);
+    assert.ok(Math.abs(focus.point.x - bounds.x) < 1e-9 && Math.abs(focus.point.z - bounds.z) < 1e-9);
+    const invitation = s.ctx.overlay.children[0].children[0];
+    assert.equal(invitation.querySelector('strong').textContent, 'Комплекс команды');
+    assert.match(invitation.attributes['aria-label'], new RegExp(`Уровень ${level} из 5`));
+    invitation.onclick(); assert.deepEqual(s.picks.pop(), { kind: 'public', district: districtId });
+    // Aim horizontally at the tower: no ground intersection exists, yet its visible facade must be clickable.
+    const local = level === 5 ? { x: 0, z: -1.05, y: 14 } : { x: 0, z: -.25, y: 1.4 };
+    const c = Math.cos(reserved.rotation), sin = Math.sin(reserved.rotation);
+    const point = new THREE.Vector3(reserved.x + c * local.x + sin * local.z, local.y, reserved.z - sin * local.x + c * local.z);
+    s.camera.position.copy(point).add(new THREE.Vector3(sin * 35, 0, c * 35)); s.camera.lookAt(point); s.camera.updateMatrixWorld(true);
+    s.tap(point);
+    assert.deepEqual(s.picks, [{ kind: 'public', district: districtId }]);
+  }
+  s.state([object('fountain', { module: 0, u: 5, v: 5, w: 2, h: 2 })], false, { landmark: landmark(5, 'legacy_occupied') });
+  s.picks.length = 0; const ground = new THREE.Vector3(centre.square.x, .2, centre.square.z); s.aim(ground); s.tap(ground);
+  assert.deepEqual(s.picks, [{ kind: 'object', district: districtId, object: 7 }], 'legacy objects keep picking priority and no absent tower steals the click');
+  s.estates.dispose();
+});
+
+test('the whole complex reservation rejects stale public placement and shows no cell grid', () => {
+  const s = setup(), centre = grid.centres.find(c => c.district === frame.district);
+  s.state([], false, { landmark: landmark() }); s.aim(new THREE.Vector3(centre.square.x, .2, centre.square.z));
+  s.estates.setBuild({ district: districtId, area: 'public', placing: { family: 'fountain', rotation: 0, moving: null }, selected: null, plot: null });
+  assert.equal(s.ctx.scene.getObjectByName('district-project-grid').visible, false);
+  s.tap(new THREE.Vector3(centre.square.x, .2, centre.square.z));
+  assert.equal(s.picks.at(-1).kind, 'place');
+  assert.match(s.picks.at(-1).problem, /Площадь занята комплексом команды/);
+  s.estates.dispose();
+});
+
+test('changes to complex levels rebuild their pooled models, while occupancy-only progress preserves geometry', () => {
+  const s = setup(), resolved = [];
+  s.ctx.quality = { lodDistances: [120, 260, 600] }; s.ctx.onQuality = () => () => {};
+  s.state([], false, { landmark: landmark() });
+  s.estates.setCatalogue({ resolve(placement) { if (placement.kind === 'district-landmark') resolved.push(placement.variant); return null; } });
+  assert.deepEqual(resolved, [0]);
+  s.state([], false, { landmark: { ...landmark(), taken: 20 } });
+  assert.deepEqual(resolved, [0], 'progress alone does not churn the model pools');
+  s.state([], false, { landmark: landmark(5) });
+  assert.deepEqual(resolved, [0, 4]);
+  s.state([], true, { landmark: landmark(2) });
+  assert.deepEqual(resolved, [0, 4, 1], 'sandbox has its own complex level');
+  s.state([], false, { landmark: landmark(5, 'legacy_occupied') });
+  assert.deepEqual(resolved, [0, 4, 1], 'legacy square has no complex model');
+  s.estates.dispose(); assert.equal(s.ctx.scene.getObjectByName('city-instances'), undefined);
 });
