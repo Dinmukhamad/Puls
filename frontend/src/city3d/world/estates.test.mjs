@@ -4,18 +4,27 @@ import { readFileSync } from 'node:fs';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
-const compiled = await build({ stdin: { contents: `export * from './estates.ts'; export * from './land.ts'; export * from './landLayouts.ts'; export * from './familyHouses.ts'; export * from './cities.ts'; export { generateSalesWorld } from './sales.ts'; export { WORLD_X4 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
+const compiled = await build({ stdin: { contents: `export * from './estates.ts'; export * from './land.ts'; export * from './landLayouts.ts'; export * from './familyHouses.ts'; export * from './officeBuildings.ts'; export * from './cities.ts'; export { generateSalesWorld } from './sales.ts'; export { WORLD_X4 } from './worldSpec.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)), loader: 'ts' }, bundle: true, platform: 'node', format: 'esm', write: false });
 const E = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
 const server = readFileSync(new URL('../../../../app/services/city_estate.py', import.meta.url), 'utf8');
 const GRIDS = { support: E.landGrid(E.islandWorld(E.WORLD_X4)), sales: E.landGrid(E.generateSalesWorld()) };
+const officeTable = server.slice(server.indexOf('OFFICE_TOWERS = {'), server.indexOf('\n}\n', server.indexOf('OFFICE_TOWERS = {')));
+const SERVER_OFFICES = Object.fromEntries([...officeTable.matchAll(/"(\w+)": \("([^"]+)", (\d+)\)/g)].map(([, family, name, price]) => [family, { name, price: Number(price) }]));
 
 /** The server's catalogue by family: footprint and how many levels (city_estate.py PLOT_FAMILIES, PROJECT_FAMILIES). */
 function catalogue(name) {
   const text = server.slice(server.indexOf(`${name} = {`), server.indexOf('\n}\n', server.indexOf(`${name} = {`)));
-  return Object.fromEntries(text.split(/\n {4}"(?=\w+": \{)/).slice(1).map(block => {
+  const families = Object.fromEntries(text.split(/\n {4}"(?=\w+": \{)/).slice(1).map(block => {
     const family = block.match(/^(\w+)"/)[1], size = block.match(/"size": \((\d), (\d)\)/);
     return [family, { size: [Number(size[1]), Number(size[2])], levels: (block.slice(block.indexOf('"levels": [')).match(/\(\s*"/g) ?? []).length }];
   }));
+  if (name === 'PLOT_FAMILIES') {
+    const office = text.match(/\*\*\{[\s\S]*?for key, \(name, _price\) in OFFICE_TOWERS\.items\(\)/)?.[0];
+    assert.ok(office, 'the server adds every source office to its plot catalogue');
+    const size = office.match(/"size": \((\d), (\d)\)/), levels = (office.slice(office.indexOf('"levels": [')).split(']')[0].match(/\(name,/g) ?? []).length;
+    for (const family of Object.keys(SERVER_OFFICES)) families[family] = { size: [Number(size[1]), Number(size[2])], levels };
+  }
+  return families;
 }
 
 test('the catalogue matches the server: what stands on plots, what stands on the square, the land of every band', () => {
@@ -36,7 +45,7 @@ test('the catalogue matches the server: what stands on plots, what stands on the
   assert.deepEqual([1, 2, 3, 4].map(E.preparedLand), [true, true, true, false]);
 });
 
-const KNOWN = new Set(['tree-round', 'tree-oak', 'tree-birch', 'tree-cone', 'bench', 'flowerbed', 'bush', 'hedge', 'lamp', 'cottage', 'roof', 'planter', 'fountain', 'gazebo', 'slide', 'swings', 'sandbox', 'family-house']);
+const KNOWN = new Set(['tree-round', 'tree-oak', 'tree-birch', 'tree-cone', 'bench', 'flowerbed', 'bush', 'hedge', 'lamp', 'cottage', 'roof', 'planter', 'fountain', 'gazebo', 'slide', 'swings', 'sandbox', 'family-house', 'office-building']);
 /** Within a frame: in its own axes, inside its width and depth with `pad` to spare (negative: that far inside). */
 const within = (p, f, pad) => {
   const s = Math.sin(f.rotation), c = Math.cos(f.rotation), dx = p.x - f.x, dz = p.z - f.z;
@@ -70,7 +79,7 @@ test('everything on a plot at every level stands inside its plots and uses known
         if (!s.round) assert.ok(s.length <= (Math.abs(Math.sin(s.angle - frame.rotation)) > .5 ? frame.width : frame.depth) + .01 && s.width <= (Math.abs(Math.sin(s.angle - frame.rotation)) > .5 ? frame.depth : frame.width) + .01, `${family} ${level} ${s.kind} patch fits`);
       }
       // Houses and their garages stay clear of the edge, so neighbouring houses never touch.
-      for (const p of placements.filter(p => p.kind === 'cottage' || p.kind === 'family-house')) {
+      for (const p of placements.filter(p => p.kind === 'cottage' || p.kind === 'family-house' || p.kind === 'office-building')) {
         const s = Math.sin(frame.rotation), c = Math.cos(frame.rotation), dx = p.x - frame.x, dz = p.z - frame.z;
         assert.ok(Math.abs(dx * c - dz * s) + p.width / 2 < frame.width / 2 - .2 && Math.abs(dx * s + dz * c) + p.depth / 2 < frame.depth / 2 - .2, `${family} ${level} a house off its plot's edge`);
       }
@@ -96,6 +105,77 @@ test('a house grows at every stage: one storey, two, a wing, a garage, a three-s
   const park = E.plotLayout(E.areaFrame(block, 0, 0, 2, 2), 'park', 1, 3).placements.length, big = E.plotLayout(E.areaFrame(block, 0, 0, 3, 2), 'bigpark', 1, 3).placements.length;
   assert.ok(park > one * 2 && big > park, `${one} → ${park} → ${big}`);
   assert.ok(E.plotLayout(E.areaFrame(block, 0, 0, 2, 2), 'park', 2, 3).placements.some(p => p.kind === 'fountain'), 'a fountain in the park\'s second stage');
+});
+
+test('all nine offices are finished one-plot purchases and fit every district plot with an entrance plaza', () => {
+  assert.deepEqual(Object.keys(SERVER_OFFICES), Object.keys(E.OFFICE_BUILDINGS));
+  assert.equal(Object.keys(SERVER_OFFICES).length, 9);
+  assert.ok(!E.isOfficeBuilding('house') && !E.isOfficeBuilding('toString'));
+  assert.equal(new Set(Array.from({ length: 9 }, (_, v) => E.officeModelName(v))).size, 9);
+  assert.equal(E.officeModelName(8), 'office-building-9');
+  const costs = Object.values(SERVER_OFFICES).map(m => m.price);
+  assert.ok(costs.every((price, i) => price > 0 && (i === 0 || price > costs[i - 1])));
+  assert.match(server, /\*\*\{key: \[price\] for key, \(_name, price\) in OFFICE_TOWERS\.items\(\)\}/);
+  for (const [family, model] of Object.entries(E.OFFICE_BUILDINGS)) {
+    assert.equal(model.name, SERVER_OFFICES[family].name);
+    assert.equal(E.PLOT_LEVELS[family], 1);
+    for (const rotation of [0, 1, 2, 3]) assert.deepEqual(E.plotFootprint(family, rotation), [1, 1]);
+    for (const grid of Object.values(GRIDS)) for (const frame of grid.plots) {
+      const layout = E.plotLayout(frame, family, 1, 19), offices = layout.placements.filter(p => p.kind === 'office-building');
+      assert.equal(offices.length, 1);
+      const [office] = offices, at = local(frame, office), front = at.w + office.depth / 2;
+      assert.equal(office.variant, model.model - 1);
+      assert.equal(office.rotation, frame.rotation);
+      assert.equal(office.scale, E.officeBuildingScale(family, frame.width, frame.depth));
+      assert.ok(office.scale > 0 && office.scale <= E.OFFICE_SCALE);
+      assert.ok(Math.abs(at.u) + office.width / 2 <= frame.width / 2 - .499, `${family} clear of side boundaries`);
+      assert.ok(at.w - office.depth / 2 >= -frame.depth / 2 + .499, `${family} clear of back boundary`);
+      assert.ok(frame.depth / 2 - front >= 1.799, `${family} leaves its entrance plaza`);
+      const path = layout.surfaces.find(s => s.kind === 'slab'), pathAt = local(frame, path);
+      assert.ok(Math.abs(pathAt.w - path.width / 2 - front) < 1e-6 && Math.abs(pathAt.w + path.width / 2 - (frame.depth / 2 - .2)) < 1e-6, `${family} entrance paving reaches plot front`);
+    }
+  }
+});
+
+test('office GLB contains all nine source bodies, matching bounds and facade markers, with repeating textures and attribution', async () => {
+  const { NodeIO } = await import('@gltf-transform/core');
+  const { ALL_EXTENSIONS } = await import('@gltf-transform/extensions');
+  const { getBounds } = await import('@gltf-transform/functions');
+  const { MeshoptDecoder } = await import('meshoptimizer');
+  await MeshoptDecoder.ready;
+  const bytes = readFileSync(new URL('../../pages/city/models/high-rise-offices.glb', import.meta.url));
+  assert.ok(bytes.length < 1024 * 1024, `high-rise-offices.glb is ${bytes.length} bytes`);
+  const doc = await new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder }).readBinary(new Uint8Array(bytes));
+  const scenes = new Map(doc.getRoot().listScenes().map(s => [s.getName(), s]));
+  assert.deepEqual([...scenes.keys()], Array.from({ length: 9 }, (_, v) => E.officeModelName(v)));
+  for (const [family, model] of Object.entries(E.OFFICE_BUILDINGS)) {
+    const scene = scenes.get(E.officeModelName(model.model - 1)), { min, max } = getBounds(scene);
+    assert.ok(Math.abs(min[1]) < .01 && Math.abs(min[0] + max[0]) < .01 && Math.abs(min[2] + max[2]) < .01, `${family} is grounded and centred`);
+    for (const [k, size] of [[0, model.width], [1, model.height], [2, model.depth]]) assert.ok(Math.abs(max[k] - min[k] - size) < .01, `${family} bounds match metadata`);
+    const primitives = [];
+    scene.traverse(node => { if (node.getMesh()) primitives.push(...node.getMesh().listPrimitives()); });
+    assert.ok(primitives.length > 0);
+    let marked = 0, dark = 0, triangles = 0;
+    for (const primitive of primitives) {
+      const seeds = primitive.getAttribute('_WINDOWSEED');
+      assert.ok(seeds, `${family} facade mask exported`);
+      for (let i = 0; i < seeds.getCount(); i++) {
+        const value = seeds.getElement(i, [])[0];
+        assert.ok(value >= 0 && value <= 1.0001);
+        if (value > 0) marked++; else dark++;
+      }
+      triangles += primitive.getIndices().getCount() / 3;
+    }
+    assert.ok(marked > 0 && dark > 0, `${family} facades marked; roofs and trim dark`);
+    assert.ok(triangles < 300, `${family} keeps its low-poly source geometry`);
+  }
+  assert.equal(doc.getRoot().listTextures().length, 6);
+  for (const material of doc.getRoot().listMaterials()) if (material.getBaseColorTexture()) {
+    const info = material.getBaseColorTextureInfo();
+    assert.equal(info.getWrapS(), 10497); assert.equal(info.getWrapT(), 10497);
+  }
+  const license = readFileSync(new URL('../../pages/city/models/LICENSE-high-rise-offices.txt', import.meta.url), 'utf8');
+  assert.match(license, /Phoenixdraws/); assert.match(license, /CC BY 3\.0/); assert.match(license, /blendswap\.com\/blends\/view\/74984/);
 });
 
 /** A layout's pieces in the plot's own axes: `u` across its width, `w` towards its front (the street). */

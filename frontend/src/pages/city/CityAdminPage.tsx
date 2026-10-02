@@ -6,6 +6,9 @@ import { city, MISSION_STATES, POINT_KINDS, SITE_STAGES, type CityEconomy, type 
 import { cityEstate } from "../../api/cityEstate";
 import { useAuth } from "../../auth/AuthContext";
 import { ErrorState, Skeleton } from "../../components/ui";
+import { isReadyHouse } from "../../city3d/world/familyHouses";
+import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
+import { estateRows, plotEconomyName, readyBuildingLabel } from "./plotCatalogue";
 import "./city.css";
 
 /** Dispatch missions count the calls of their group; a trainer cannot ask for more (app/services/city.py TARGET_LIMITS). */
@@ -112,11 +115,11 @@ function Economy() {
       <h3>Задания дня</h3>
       <div className="city-economy__grid"><label className="field"><span className="field__label">Коинов за верный ответ</span><input className="input" type="number" min={0} max={1000} required value={draft.quest_coins} onChange={e=>change({quest_coins:number(e.target.value)})}/></label></div>
       {draft.land&&<><h3>Районы команд: цена участка по поясам, коинов</h3>
-        <p className="city-admin-warning">Пояса считаются от центра города: земля ближе к центру дороже. Цена участка добавляется к цене того, что на нём строят (сквер или дом). В ОП — три пояса, используются первые три цены.</p>
+        <p className="city-admin-warning">Пояса считаются от центра города: земля ближе к центру дороже. Цена участка добавляется к цене того, что на нём строят: сквера, дома или офисного здания. В ОП — три пояса, используются первые три цены.</p>
         <div className="city-economy__grid">{draft.land.map((price,i)=><label className="field" key={i}><span className="field__label">Пояс {i+1}</span><input className="input" type="number" min={0} max={100000} required value={price} onChange={e=>change({land:draft.land!.map((v,j)=>j===i?number(e.target.value):v)})}/></label>)}</div></>}
       {draft.estate&&<><h3>Районы команд: постройки на участках, коинов за ступень</h3>
-        <p className="city-admin-warning">Первая ступень сквера и дома — покупка (вместе с участком), следующие — улучшения. Готовые дома покупаются целиком, по одной цене: чем больше этажей и площадь, есть ли гараж и терраса — тем дороже. Парк и большой парк не покупаются: их собирают свои скверы, первая ступень — сбор (0 — бесплатно). Купленное не дорожает: новые цены действуют для новых операций, а открытая страница стройки попросит подтвердить новую цену.</p>
-        <div className="city-economy__projects">{estateRows(draft.estate).map(row=><div key={row.join()} className="city-economy__grid">{row.flatMap(family=>draft.estate![family].map((price,i)=>{const levels=draft.estate![family],gathered=(family==='park'||family==='bigpark')&&i===0;return <label className="field" key={`${family}-${i}`}><span className="field__label">{PLOT_NAMES[family]??family} · {gathered?'сбор из скверов (0 — бесплатно)':READY_HOUSES.has(family)?'готовый дом':i===0?'покупка':`ступень ${i+1}`}</span><input className="input" type="number" min={gathered?0:1} max={100000} required value={price} onChange={e=>change({estate:{...draft.estate,[family]:levels.map((v,j)=>j===i?number(e.target.value):v)}})}/></label>;}))}</div>)}</div></>}
+        <p className="city-admin-warning">Первая ступень сквера и дома — покупка (вместе с участком), следующие — улучшения. Готовые дома и офисные здания покупаются целиком, по одной цене. Чем больше этажей и площадь дома, есть ли гараж и терраса — тем дороже. Парк и большой парк не покупаются: их собирают свои скверы, первая ступень — сбор (0 — бесплатно). Купленное не дорожает: новые цены действуют для новых операций, а открытая страница стройки попросит подтвердить новую цену.</p>
+        <div className="city-economy__projects">{estateRows(draft.estate).map(row=><div key={row.key}>{row.title&&<h4>{row.title}</h4>}<div className="city-economy__grid">{row.families.flatMap(family=>draft.estate![family].map((price,i)=>{const levels=draft.estate![family],gathered=(family==='park'||family==='bigpark')&&i===0;return <label className="field" key={`${family}-${i}`}><span className="field__label">{plotEconomyName(family)} · {gathered?'сбор из скверов (0 — бесплатно)':isReadyHouse(family)||isOfficeBuilding(family)?readyBuildingLabel(family):i===0?'покупка':`ступень ${i+1}`}</span><input className="input" type="number" min={gathered?0:1} max={100000} required value={price} onChange={e=>change({estate:{...draft.estate,[family]:levels.map((v,j)=>j===i?number(e.target.value):v)}})}/></label>;}))}</div></div>)}</div></>}
       {draft.district&&<><h3>Общие проекты района: смета ступени</h3>
         <p className="city-admin-warning">Смета фиксируется при открытии проекта; новая цена не переписывает уже открытые сборы.</p>
         <div className="city-economy__projects">{Object.entries(draft.district).map(([family,levels])=><div key={family} className="city-economy__grid">{levels.map((cost,i)=><label className="field" key={i}><span className="field__label">{PROJECT_NAMES[family]??family} · ступень {i+1}</span><input className="input" type="number" min={1} max={100000} required value={cost} onChange={e=>change({district:{...draft.district,[family]:levels.map((v,j)=>j===i?number(e.target.value):v)}})}/></label>)}</div>)}</div></>}
@@ -129,10 +132,6 @@ function Economy() {
   </form>;
 }
 
-/** The ready houses' single prices share one row of the economy form; every other building has a row of its own. */
-const READY_HOUSES=new Set(['carport','bungalow','attic','modern','bayhouse','terrace']);
-const estateRows=(estate:Record<string,number[]>)=>{const families=Object.keys(estate),ready=families.filter(f=>READY_HOUSES.has(f));return families.flatMap(f=>READY_HOUSES.has(f)?(f===ready[0]?[ready]:[]):[[f]]);};
-const PLOT_NAMES:Record<string,string>={square:'🌳 Сквер',house:'🏡 Дом',carport:'🏠 Коттедж с навесом',bungalow:'🏠 Бунгало',attic:'🏠 Дом с мансардой',modern:'🏠 Модерн с гаражом',bayhouse:'🏠 Дом с эркером',terrace:'🏠 Модерн с террасой',park:'🌲 Парк',bigpark:'🏞️ Большой парк'};
 const PROJECT_NAMES:Record<string,string>={square:'🌳 Сквер',gazebo:'🌷 Беседка',fountain:'⛲ Площадь с фонтаном',sports:'🏀 Спортплощадка',park:'🏞️ Парк на площади'};
 
 /** Staff only: land, buildings and shared projects per district, and what the old plots hold before their transfer. */

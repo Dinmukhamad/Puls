@@ -2,10 +2,11 @@
 
 The land is a Monopoly board (app/services/city_land.py): each city is cut into three districts of
 plots, and the operators of a district buy its plots one by one, each with what stands on it, a
-square, a house or one of the ready houses, and develop them. A house goes up stage by stage from
-one storey; a ready house is bought as it is, at the price of its size; four squares of one
-operator filling a square of plots become a park, six filling a rectangle a big park, at once and
-for free. Bands of plots open outwards from the centre as the inner ones fill up. In the
+square, a house or one of the ready houses or office towers, and develop them. A house goes up
+stage by stage from one storey; a ready building is bought as it is, at the price of its size;
+four squares of one operator filling a square of plots become a park, six filling a rectangle a
+big park, at once and for free. Bands of plots open outwards from the centre as the inner ones
+fill up. In the
 centre of every district stand its headquarters and its public square, where staff open shared
 projects and operators contribute to them.
 
@@ -57,10 +58,26 @@ SQUARE, MODULE_CELLS = 0, 12
 #: A district this small shows only whether a project is still collecting, not how far.
 SMALL_TEAM = 3
 
+#: The nine separate buildings in the supplied "High Rise Office Buildings" collection.
+#: Keys follow the source models in order (Cube.000, .001, .002, .004 through .009); .003 is
+#: part of .002. Every tower is bought finished on one plot, like a ready house.
+OFFICE_TOWERS = {
+    "officea": ("Офисная башня A", 900),
+    "officeb": ("Офисная башня B", 980),
+    "officec": ("Офисная башня C", 1060),
+    "officed": ("Офисная башня D", 1140),
+    "officee": ("Офисная башня E", 1220),
+    "officef": ("Офисная башня F", 1320),
+    "officeg": ("Офисная башня G", 1440),
+    "officeh": ("Офисная башня H", 1560),
+    "officei": ("Офисная башня I", 1700),
+}
+
 #: What operators build on their plots. Size is in plots (columns × rows); a park is never bought,
 #: it gathers itself from `squares` of the operator's own squares (a big park also from a park
 #: and two squares). The `ready` houses are models of the CC0 "Family House Collection"
-#: (frontend world/familyHouses.ts), bought finished, cheapest first.
+#: (frontend world/familyHouses.ts); ready office towers follow from the supplied collection.
+#: Both are bought finished, cheapest first within each collection.
 PLOT_FAMILIES = {
     "square": {
         "name": "Сквер",
@@ -159,6 +176,18 @@ PLOT_FAMILIES = {
             )
         ],
     },
+    **{
+        key: {
+            "name": name,
+            "icon": "🏢",
+            "size": (1, 1),
+            "ready": True,
+            "levels": [
+                (name, "Готовое высотное офисное здание. Покупается целиком на один участок.")
+            ],
+        }
+        for key, (name, _price) in OFFICE_TOWERS.items()
+    },
     "park": {
         "name": "Парк",
         "icon": "🌲",
@@ -183,7 +212,8 @@ PLOT_FAMILIES = {
 }
 #: Coins for every level of what stands on a plot (level 1 is the purchase; a park's is its merge).
 #: A ready house costs by its size: floors, footprint, garage, terrace (docs/CITY_ESTATES.md,
-#: «Готовые дома»); the land of the plot's band comes on top, as for the others.
+#: «Готовые дома»); office towers extend the ready catalogue above houses. The land of the
+#: plot's band comes on top, as for the others.
 PLOT_PRICES = {
     "square": [40],
     "house": [120, 180, 260, 360, 500],
@@ -193,6 +223,7 @@ PLOT_PRICES = {
     "modern": [560],
     "bayhouse": [640],
     "terrace": [720],
+    **{key: [price] for key, (_name, price) in OFFICE_TOWERS.items()},
     "park": [0, 120],
     "bigpark": [0, 150, 250],
 }
@@ -1112,7 +1143,7 @@ async def own_object_row(session, user, object_id, version, *, states=("placed",
 
 
 async def purchase(session, user, body):
-    """A free plot of the operator's district with a square or a house on it, land and all."""
+    """A free plot of the operator's district with a catalogue building on it, land and all."""
 
     async def perform():
         home = await builder(session, user)

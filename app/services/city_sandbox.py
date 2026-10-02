@@ -1,8 +1,9 @@
 """The administrators' test city (docs/CITY_ESTATES.md, «Тестовый город»).
 
 Every city has a copy of its three districts for administrators only: the same plots and bands, the
-same houses, squares that gather into parks, the same shared projects on the public square, kept
-apart from the real city under district ids with the prefix city_land.SANDBOX. Nothing of it
+same houses and office towers, squares that gather into parks, the same shared projects on the
+public square, kept apart from the real city under district ids with the prefix city_land.SANDBOX.
+Nothing of it
 reaches operators, the staff report, the coin journal or the real districts' history: the real
 city's views ask only for configured districts, and the operators' own views skip the prefix.
 
@@ -110,7 +111,7 @@ async def test_object(session, object_id, *, states=("placed",)):
 
 
 async def build(session, user, body):
-    """A square or a house on a free plot of a test district, free; parks gather as in the city."""
+    """A catalogue building on a free plot of a test district, free; parks gather as in the city."""
     district_id = test_id(body.district_id)
     family = PLOT_FAMILIES.get(body.family)
     if family is None:

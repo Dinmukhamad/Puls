@@ -20,6 +20,7 @@ import { createBorders } from "../render/borders";
 import { plotLayout } from "../world/landLayouts";
 import { districtColour, type PlotFamily } from "../world/estateGrid";
 import { HOUSE_SCALE, READY_HOUSES, isReadyHouse } from "../world/familyHouses";
+import { OFFICE_BUILDINGS, isOfficeBuilding, officeBuildingScale, officeBuildingBounds, officeBuildingRayDistance } from "../world/officeBuildings";
 import type { Placement, Surface } from "../world/types";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "../types";
 import type { DistrictEstate, PublicObject } from "../../api/cityEstate";
@@ -310,7 +311,8 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     if (!at) return;
     const mesh = new THREE.Mesh(ghost.geometry, veilMaterial.clone());
     mesh.position.set(at.x, .21, at.z); mesh.rotation.y = at.rotation; mesh.scale.set(at.width, .01, at.depth);
-    const height = obj.family === "house" ? 2.4 + obj.level * .4 : isReadyHouse(obj.family) ? READY_HOUSES[obj.family].height * HOUSE_SCALE + .4 : 2.2;
+    const height = obj.family === "house" ? 2.4 + obj.level * .4 : isReadyHouse(obj.family) ? READY_HOUSES[obj.family].height * HOUSE_SCALE + .4
+      : isOfficeBuilding(obj.family) ? OFFICE_BUILDINGS[obj.family].height * officeBuildingScale(obj.family, at.width, at.depth) + .4 : 2.2;
     ctx.scene.add(mesh); veils.push({ mesh, age: 0, height });
   }
   const offFrame = ctx.onFrame(dt => {
@@ -328,12 +330,27 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
 
   // ---- pointer: a tap picks a plot or a building, or pins the preview; the mouse moves the preview ----
   const canvas = ctx.renderer.domElement, raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -.2), hit = new THREE.Vector3();
-  function groundAt(clientX: number, clientY: number) {
+  function rayAt(clientX: number, clientY: number) {
     const rect = canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return null;
     pointer.set((clientX - rect.left) / rect.width * 2 - 1, -(clientY - rect.top) / rect.height * 2 + 1);
     raycaster.setFromCamera(pointer, ctx.camera);
-    return raycaster.ray.intersectPlane(plane, hit) ? { x: hit.x, z: hit.z } : null;
+    return raycaster.ray;
+  }
+  function groundAt(clientX: number, clientY: number) {
+    return rayAt(clientX, clientY)?.intersectPlane(plane, hit) ? { x: hit.x, z: hit.z } : null;
+  }
+  /** Tall facades project beyond their plots on the ground, so select their actual volume first. */
+  function officeAtRay(ray: THREE.Ray) {
+    let nearest: { district: DistrictEstate; obj: PublicObject } | null = null, distance = Infinity;
+    for (const district of view?.state.districts ?? []) for (const obj of district.objects) {
+      if (!isOfficeBuilding(obj.family)) continue;
+      const frame = placeOf(district, obj);
+      if (!frame) continue;
+      const at = officeBuildingRayDistance(obj.family, frame, ray.origin, ray.direction);
+      if (at !== null && at < distance) { distance = at; nearest = { district, obj }; }
+    }
+    return nearest;
   }
   /** The square's cell under a point, for the square of `district`. */
   function cellAt(district: string, p: { x: number; z: number }) {
@@ -386,8 +403,13 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     const tap = down && pressed === 0 && Math.hypot(event.clientX - down.x, event.clientY - down.y) < TAP_DISTANCE && performance.now() - down.time < TAP_TIME;
     if (pressed === 0) down = null;
     if (!tap || !active) return;
-    const p = groundAt(event.clientX, event.clientY);
-    if (p) pick(p);
+    const ray = rayAt(event.clientX, event.clientY);
+    if (!ray) return;
+    if (!build?.placing) {
+      const found = officeAtRay(ray);
+      if (found) { onPick({ kind: "object", district: found.district.id, object: found.obj.id }); return; }
+    }
+    if (ray.intersectPlane(plane, hit)) pick({ x: hit.x, z: hit.z });
   };
   const onMove = (event: PointerEvent) => {
     if (!build?.placing || event.pointerType !== "mouse" || event.buttons || !active) return;
@@ -425,16 +447,20 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     },
     focus(target) {
       const number = numberOf(target.district), centre = centreOf(target.district);
-      let place: { x: number; z: number; rotation: number } | null = null;
+      let place: { x: number; z: number; rotation: number } | null = null, y = 1;
       if (target.kind === "plot" && target.plot) { const block = blockOf(number, target.plot.block); if (block) place = areaFrame(block, target.plot.col, target.plot.row); }
       else if (target.kind === "object") {
         const district = stateOf(target.district), obj = district?.objects.find(o => o.id === target.object);
-        if (district && obj) place = placeOf(district, obj);
+        if (district && obj) {
+          const frame = placeOf(district, obj);
+          place = frame;
+          if (frame && isOfficeBuilding(obj.family)) { const bounds = officeBuildingBounds(obj.family, frame); place = bounds; y = .2 + bounds.height / 2; }
+        }
       } else if (target.kind === "public" && centre) place = { ...centre.square };
       if (!place && centre) place = { x: centre.area.x, z: centre.area.z, rotation: centre.area.rotation };
       if (!place) return null;
       // From the street in front of it, a little to the side, so its front and the plots beside it show.
-      return { point: new THREE.Vector3(place.x, 1, place.z), azimuth: place.rotation + .55 };
+      return { point: new THREE.Vector3(place.x, y, place.z), azimuth: place.rotation + .55 };
     },
     dispose() {
       offFrame(); offMove(); if (frame) cancelAnimationFrame(frame);

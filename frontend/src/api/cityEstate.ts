@@ -46,7 +46,7 @@ export interface OwnObject extends Footprint {
   squares: number;
 }
 export interface PlotLevel { level: number; name: string; about: string; price: number }
-/** `ready`: a ready house, bought finished at the price of its size (world/familyHouses.ts). */
+/** `ready`: a house or office building bought finished at one price (world/familyHouses.ts, officeBuildings.ts). */
 export interface PlotCatalogue { family: PlotFamily; name: string; icon: string; size: [number, number]; squares: number | null; ready: boolean; levels: PlotLevel[] }
 export interface ProjectLevel { level: number; name: string; about: string; cost: number }
 export interface ProjectCatalogue { family: ProjectFamily; name: string; icon: string; size: [number, number]; project: "main" | "small"; levels: ProjectLevel[] }

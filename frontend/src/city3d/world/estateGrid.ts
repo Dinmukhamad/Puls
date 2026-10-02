@@ -6,8 +6,9 @@
  * MODULE_CELLS × MODULE_CELLS.
  */
 import type { ReadyHouse } from "./familyHouses";
+import type { OfficeBuilding } from "./officeBuildings";
 
-export type PlotFamily = "square" | "house" | ReadyHouse | "park" | "bigpark";
+export type PlotFamily = "square" | "house" | ReadyHouse | OfficeBuilding | "park" | "bigpark";
 export type ProjectFamily = "square" | "gazebo" | "fountain" | "sports" | "park";
 
 /**
@@ -30,9 +31,11 @@ export const preparedLand = (number: number) => number >= 1 && number <= LAND_DI
 /** Columns × rows of plots (unturned) and levels of what operators build, as the server's PLOT_FAMILIES. */
 export const PLOT_SIZE: Record<PlotFamily, [number, number]> = {
   square: [1, 1], house: [1, 1], carport: [1, 1], bungalow: [1, 1], attic: [1, 1], modern: [1, 1], bayhouse: [1, 1], terrace: [1, 1], park: [2, 2], bigpark: [3, 2],
+  officea: [1, 1], officeb: [1, 1], officec: [1, 1], officed: [1, 1], officee: [1, 1], officef: [1, 1], officeg: [1, 1], officeh: [1, 1], officei: [1, 1],
 };
 export const PLOT_LEVELS: Record<PlotFamily, number> = {
   square: 1, house: 5, carport: 1, bungalow: 1, attic: 1, modern: 1, bayhouse: 1, terrace: 1, park: 2, bigpark: 3,
+  officea: 1, officeb: 1, officec: 1, officed: 1, officee: 1, officef: 1, officeg: 1, officeh: 1, officei: 1,
 };
 /** How many of an operator's own squares gather into each park. */
 export const PARK_SQUARES: Partial<Record<PlotFamily, number>> = { park: 4, bigpark: 6 };

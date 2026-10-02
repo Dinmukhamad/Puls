@@ -16,9 +16,11 @@ import { loadModels, type Model, type ModelPart } from "./loader";
 import { furnitureGeometry, gableGeometry, officeGeometry, SECTION_PART, SECTION_PARTS, sectionGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
 import { OFFICE_FLOOR, OFFICE_FLOORS, SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
 import { FINISHES, HOUSE_SCALE, READY_HOUSES, houseModelName } from "../world/familyHouses";
+import { OFFICE_BUILDINGS, OFFICE_SCALE, officeModelName, officeVariant } from "../world/officeBuildings";
 import modelsUrl from "../../pages/city/models/city-models.glb?url";
 import vehiclesUrl from "../../pages/city/models/vehicles.glb?url";
 import familyHousesUrl from "../../pages/city/models/family-houses.glb?url";
+import highRiseOfficesUrl from "../../pages/city/models/high-rise-offices.glb?url";
 
 /** One detail level. `matrix` places it inside the model and `colors` tint its parts (the proxy box). */
 export interface LodLevel { parts: ModelPart[]; matrix?: THREE.Matrix4; colors?: THREE.Color[] }
@@ -73,10 +75,10 @@ const FURNITURE: FurnitureKind[] = ["bench", "slide", "swings", "climber", "sand
 /** Proxy colours when a model's texture cannot be read: [walls, roof]. */
 const FALLBACK: Record<string, [string, string]> = { s: ["#eadccb", "#b86b52"], c: ["#cfd6de", "#8e99a6"], i: ["#cdc8bd", "#8b8f95"], car: ["#d9cf6a", "#5b6068"] };
 
-/** Loads the Kenney kits, the districts' ready houses and any LOD files; a file that fails is skipped (the catalogue falls back). */
+/** Loads the kits, ready houses and offices, and any LOD files; a failed file leaves the other models usable. */
 export async function loadCatalogueModels(lodUrls: string[] = []) {
   const models = new Map<string, Model>();
-  const files = await Promise.allSettled([modelsUrl, vehiclesUrl, familyHousesUrl, ...lodUrls].map(url => loadModels(url)));
+  const files = await Promise.allSettled([modelsUrl, vehiclesUrl, familyHousesUrl, highRiseOfficesUrl, ...lodUrls].map(url => loadModels(url)));
   for (const file of files) if (file.status === "fulfilled") file.value.forEach((model, name) => models.set(name, model));
   return models;
 }
@@ -115,9 +117,25 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     }
   }
 
+  // The office collection paints its panes in repeating facade textures. Its file marks the upright facades;
+  // a texture mask selects the dark glass within them, and a grid gives each pane its own night pattern.
+  const litOffices = new Map<THREE.Material, THREE.MeshStandardNodeMaterial>();
+  function lightOfficeWindows(parts: ModelPart[]) {
+    for (const part of parts) {
+      const kit = part.material as THREE.MeshStandardMaterial;
+      const seeds = part.geometry.getAttribute("_windowseed");
+      if (seeds) { part.geometry.setAttribute(WINDOW, seeds); part.geometry.deleteAttribute("_windowseed"); }
+      else if (!part.geometry.hasAttribute(WINDOW)) part.geometry.setAttribute(WINDOW, new THREE.Float32BufferAttribute(new Float32Array(part.geometry.getAttribute("position").count).fill(1), 1));
+      if ((kit as unknown as THREE.NodeMaterial).isNodeMaterial || !kit.isMeshStandardMaterial) continue;
+      let lit = litOffices.get(kit);
+      if (!lit) { lit = own(nodeCopy(kit)); lit.emissiveNode = officeGlow(kit.map, nightLevel); litOffices.set(kit, lit); }
+      part.material = lit;
+    }
+  }
+
   /** A loaded model with its LOD files, or the fallbacks; a name listed twice is one model drawn twice as often. */
   const byName = new Map<string, CatalogueModel | null>();
-  function kenney(name: string, colours: [string, string], windows = true) {
+  function kenney(name: string, colours: [string, string], windows = true, office = false) {
     if (byName.has(name)) return byName.get(name)!;
     const source = models.get(name);
     byName.set(name, null);
@@ -127,7 +145,9 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     // A generated LOD2 that is only the bounding box (12 triangles) takes one texel's colour, often a dark
     // window; the proxy here averages the walls and the roof, so far buildings keep their real colours.
     const boxOnly = !lod2?.parts.length || lod2.parts.every(part => (part.geometry.index?.count ?? part.geometry.attributes.position.count) <= 36);
-    if (windows) for (const model of [source, lod1, boxOnly ? null : lod2]) if (model) lightWindows(model.parts);
+    if (windows) for (const model of [source, lod1, boxOnly ? null : lod2]) if (model) {
+      if (office) lightOfficeWindows(model.parts); else lightWindows(model.parts);
+    }
     const level2: LodLevel = boxOnly ? { parts: windows ? proxy : plainProxy, ...proxyLevel(source, colours, pixels) } : { parts: lod2!.parts };
     const model = add({ id: name, lods: [level0, lod1?.parts.length ? { parts: lod1.parts } : level0, level2], bounds: source.bounds.clone(), base: footprint(source.bounds) });
     byName.set(name, model);
@@ -147,6 +167,8 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
     }
     return kenney(name, FALLBACK.s);
   });
+  const officeBuildings = Object.values(OFFICE_BUILDINGS);
+  const readyOffices = officeBuildings.map(model => kenney(officeModelName(model.model - 1), FALLBACK.c, true, true));
 
   const blocks = BLOCKS.map((kind, index) => {
     const geometry = own(blockGeometry(kind.floors));
@@ -266,6 +288,14 @@ export function createCatalogue(models: Map<string, Model>, night: Night = creat
         // Without the file a ready house is a plain two-storey block on its footprint.
         out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || 3, 2 * SECTION_FLOOR, p.depth ?? 2.6));
         return cottage;
+      }
+      case "office-building": {
+        const variant = officeVariant(p.variant), model = readyOffices[variant], scale = p.scale || OFFICE_SCALE;
+        if (model) { fitted(model, p, GROUND, out, scale); return model; }
+        // A missing file or scene keeps the office's footprint, height and lit glass facade.
+        const definition = officeBuildings[variant];
+        out.compose(place.set(p.x, GROUND, p.z), turn.setFromAxisAngle(up, p.rotation), size.set(p.width || definition.width * scale, definition.height * scale, p.depth ?? definition.depth * scale));
+        return glassTowers[2];
       }
       case "cottage":
         // `variant` is the floors above the ground floor: 0 a bungalow, 1 two storeys, 2 three (a district's mansion).
@@ -558,6 +588,19 @@ function kenneyGlow(level: Node): Node {
   const w = attribute(WINDOW, "float"), building = hash(floor(copyOrigin().mul(2).add(.5)));
   const h = hash(vec2(w.mul(97.3).add(building.mul(419.1)), w.mul(41.9).add(building.mul(263.7))));
   return varying(windowLight(h, litShare(building)).mul(step(1e-3, w)).mul(stagger(h, level)));
+}
+/** Textured office panes keep their source appearance by day; only dark glass on upright facades glows. */
+function officeGlow(map: THREE.Texture | null, level: Node): Node {
+  const n = normalWorld.normalize(), dir = n.xz.div(max(n.xz.length(), 1e-6));
+  const u = dot(positionWorld.xz, vec2(dir.y.negate(), dir.x)).div(.55), v = positionWorld.y.sub(GROUND).div(.7);
+  const wall = wallSeed(), h = hash(floor(vec2(u, v)).add(vec2(wall.mul(17.3), wall.mul(5.1))));
+  let glass: Node = pulse(u, .15, .85).mul(pulse(v, .2, .8));
+  if (map) {
+    const texel = texture(map, uv()), luminance = dot(texel.rgb, vec3(.2126, .7152, .0722));
+    glass = float(1).sub(smoothstep(.12, .32, luminance)).mul(step(texel.r.sub(.04), texel.b));
+  }
+  const mask = glass.mul(step(n.y.abs(), .5)).mul(step(1e-3, attribute(WINDOW, "float")));
+  return windowLight(h, litShare(hash(vec2(wall, 91.7)))).mul(mask).mul(stagger(h, level));
 }
 /** Block facades: the painted panes (three a floor, see facadeTexture) glow, at random per wall and pane. */
 function blockGlow(map: THREE.Texture, floors: number, level: Node): Node {

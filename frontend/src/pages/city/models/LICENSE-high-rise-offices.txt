@@ -1,0 +1,13 @@
+High Rise Office Buildings — Phoenixdraws
+Source: https://www.blendswap.com/blends/view/74984
+License: Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+https://creativecommons.org/licenses/by/3.0/
+
+The supplied City.blend contains nine building variants. They have been separated
+into individual ground-centred glTF scenes, with their packed facade textures and
+proportions preserved. Legacy shaders were converted, window markers added, and
+the output meshopt-compressed for the Puls city. Cameras, source lighting and the
+ground plane are excluded. No endorsement by the original author is implied.
+
+Conversion: scripts/prepare_high_rise_offices.py and
+frontend/scripts/pack-city-model.mjs. Models: high-rise-offices.glb.

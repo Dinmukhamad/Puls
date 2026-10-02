@@ -10,6 +10,7 @@
 import type { Frame } from "./land";
 import type { PlotFamily } from "./estateGrid";
 import { HOUSE_SCALE, READY_HOUSES, isReadyHouse, type ReadyHouse } from "./familyHouses";
+import { OFFICE_BUILDINGS, OFFICE_SETBACK, isOfficeBuilding, officeBuildingScale, type OfficeBuilding } from "./officeBuildings";
 import type { Placement, PlacementKind, Surface, SurfaceKind } from "./types";
 
 export interface Layout { placements: Placement[]; surfaces: Surface[] }
@@ -161,6 +162,23 @@ function ready(f: Lot, family: ReadyHouse) {
   if (f.street) f.put("lamp", door + (drive && drive.lo > door ? -.6 : .6), D * .72, 0);
 }
 
+/** A ready office tower, with a paved entrance plaza and planting kept clear of the building. */
+function office(f: Lot, family: OfficeBuilding) {
+  const { W, D } = f, model = OFFICE_BUILDINGS[family], scale = officeBuildingScale(family, W * 2, D * 2);
+  const width = model.width * scale, depth = model.depth * scale, w = OFFICE_SETBACK, front = w + depth / 2;
+  f.patch("plaza", 0, 0, 2 * W - .4, 2 * D - .4);
+  f.put("office-building", 0, w, 0, { variant: model.model - 1, scale, width, depth });
+  f.patch("slab", 0, (front + D - .2) / 2, 1.3, D - .2 - front);
+  for (const side of [-1, 1]) {
+    const u = side * (W - .95), z = D - .95;
+    f.patch("lawn", u, z, 1.3, 1.3);
+    tree(f, u, z, .85);
+    f.put("planter", side * Math.min(width * .32, W - .8), front + .35, 0, { width: .5, scale: .7 });
+  }
+  f.put("bench", Math.min(W - .8, width * .32), front + 1, Math.PI, { width: .9, scale: .85 });
+  f.put("lamp", -Math.min(W - .7, width * .32), D - .6, 0);
+}
+
 /** A park on 2 × 2 plots: lawns, a cross of walks round a middle, trees round the edge and in clumps, benches, lamps. */
 function park(f: Lot, level: number) {
   const { W, D } = f;
@@ -225,6 +243,7 @@ export function plotLayout(frame: Frame, family: PlotFamily, level: number, seed
   if (family === "square") square(f);
   else if (family === "house") house(f, Math.max(1, Math.min(5, level)));
   else if (isReadyHouse(family)) ready(f, family);
+  else if (isOfficeBuilding(family)) office(f, family);
   else if (family === "park") park(f, Math.max(1, Math.min(2, level)));
   else bigpark(f, Math.max(1, Math.min(3, level)));
   return { placements: f.placements, surfaces: f.surfaces };

@@ -20,7 +20,7 @@ class Plot(BaseModel):
 
 
 class PurchaseInput(Keyed, Plot):
-    #: What stands on the plot: a square or a house; parks gather themselves from squares.
+    #: A square, a house or a ready office tower; parks gather themselves from squares.
     family: str = Field(pattern=r"^[a-z]{2,16}$")
     economy_revision: int = Field(ge=0)
 
@@ -75,7 +75,7 @@ SANDBOX_DISTRICT = r"^(support|sales)-team-[1-3]$"
 
 
 class SandboxPlotInput(Plot):
-    """A square or a house on a free plot of a test district, for free."""
+    """A square, a house or an office tower on a free plot of a test district, for free."""
 
     model_config = ConfigDict(extra="forbid")
     district_id: str = Field(pattern=SANDBOX_DISTRICT, max_length=32)

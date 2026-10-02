@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 // The catalogue, the night level and three in one bundle; Vite's `?url` imports become plain paths.
 const built = await build({
-  stdin: { contents: 'export * from "./catalogue.ts"; export * from "../render/night.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: 'export * from "./catalogue.ts"; export * from "../render/night.ts"; export * from "../world/officeBuildings.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
   plugins: [{ name: 'url', setup(b) {
     b.onResolve({ filter: /\?url$/ }, a => ({ path: a.path, namespace: 'url' }));
@@ -160,4 +160,72 @@ test('ready houses: each house in each finish its own model at the city scale, i
   matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), size);
   assert.ok(block && block.id === 'cottage' && Math.abs(size.x - 3.6) < 1e-6 && Math.abs(size.z - 2.8) < 1e-6 && Math.abs(size.y - 1.5) < 1e-6);
   catalogue.dispose();
+});
+
+test('all nine ready offices preserve their source material and proportions, share lit materials and far proxies, and dispose once', () => {
+  const map = new THREE.Texture({ width: 2, height: 1 }), material = new THREE.MeshStandardMaterial({ map, roughness: .45, metalness: .1 });
+  const make = (name, model, marks = true) => {
+    const geometry = new THREE.BoxGeometry(model.width, model.height, model.depth).translate(1, model.height / 2 + .3, -2);
+    if (marks) {
+      const normal = geometry.getAttribute('normal');
+      geometry.setAttribute('_windowseed', new THREE.Float32BufferAttribute(Array.from({ length: normal.count }, (_, i) => Math.abs(normal.getY(i)) < .5 ? 1 : 0), 1));
+    }
+    geometry.computeBoundingBox();
+    return [name, { name, parts: [{ geometry, material, castShadow: true }], bounds: geometry.boundingBox.clone() }];
+  };
+  const entries = Object.values(city.OFFICE_BUILDINGS).map(model => make(city.officeModelName(model.model - 1), model));
+  entries.push(make('office-building-1__lod1', city.OFFICE_BUILDINGS.officea));
+  const models = new Map(entries), catalogue = city.createCatalogue(models, city.createNight()), matrix = new THREE.Matrix4();
+  const position = new THREE.Vector3(), rotation = new THREE.Quaternion(), scale = new THREE.Vector3();
+  const resolved = Object.values(city.OFFICE_BUILDINGS).map(definition => {
+    const placement = { kind: 'office-building', variant: definition.model - 1, x: 7, z: 4, rotation: .8, scale: 1.7, width: definition.width * 1.7, depth: definition.depth * 1.7 };
+    const model = catalogue.resolve(placement, matrix);
+    assert.equal(model.id, city.officeModelName(definition.model - 1));
+    matrix.decompose(position, rotation, scale);
+    assert.ok([scale.x, scale.y, scale.z].every(value => Math.abs(value - 1.7) < 1e-6), 'uniform source scale');
+    const actual = model.bounds.clone().applyMatrix4(matrix), center = new THREE.Vector3(1, .3, -2).applyMatrix4(matrix);
+    assert.ok(Math.abs(actual.min.y - .2) < 1e-6 && Math.abs(center.x - placement.x) < 1e-6 && Math.abs(center.z - placement.z) < 1e-6, 'grounded on and centred within its footprint');
+    const [part] = model.lods[0].parts, seeds = part.geometry.getAttribute('windowSeed');
+    assert.ok(seeds && !part.geometry.hasAttribute('_windowseed'));
+    assert.ok([...seeds.array].includes(0) && [...seeds.array].includes(1), 'facades marked and roof excluded');
+    assert.ok(part.material.isMeshStandardNodeMaterial && part.material.emissiveNode);
+    assert.equal(part.material.map, map); assert.equal(part.material.roughness, .45); assert.equal(part.material.metalness, .1);
+    assert.ok(model.lods[2]?.matrix && model.lods[2].colors.length === 2, 'far proxy retains source bounds and colours');
+    return model;
+  });
+  assert.equal(new Set(resolved.map(model => model.lods[0].parts[0].material)).size, 1, 'a shared source material gets one lit copy');
+  assert.equal(new Set(resolved.map(model => model.lods[2].parts)).size, 1, 'all office proxies share geometry and materials');
+  assert.notEqual(resolved[0].lods[0].parts, resolved[0].lods[1].parts, 'a supplied LOD1 is respected');
+  assert.ok(resolved[0].lods[1].parts[0].geometry.hasAttribute('windowSeed'), 'LOD1 gets its facade markers too');
+  assert.equal(resolved[1].lods[0], resolved[1].lods[1], 'low-poly source reused when no separate LOD1 exists');
+  const counts = { material: 0, lit: 0, texture: 0, geometry: 0 };
+  material.addEventListener('dispose', () => counts.material++);
+  resolved[0].lods[0].parts[0].material.addEventListener('dispose', () => counts.lit++);
+  map.addEventListener('dispose', () => counts.texture++);
+  resolved[0].lods[0].parts[0].geometry.addEventListener('dispose', () => counts.geometry++);
+  catalogue.dispose();
+  assert.deepEqual(counts, { material: 1, lit: 1, texture: 1, geometry: 1 });
+  assert.equal(models.size, 0);
+});
+
+test('office buildings keep lit glass and matching footprints and heights when their file or one scene is missing', () => {
+  const geometry = new THREE.BoxGeometry(2, 6, 2).translate(0, 3, 0), material = new THREE.MeshStandardMaterial({ color: '#7998aa' });
+  geometry.computeBoundingBox();
+  const catalogue = city.createCatalogue(new Map([['office-building-1', { name: 'office-building-1', parts: [{ geometry, material, castShadow: true }], bounds: geometry.boundingBox.clone() }]]), city.createNight());
+  const matrix = new THREE.Matrix4(), size = new THREE.Vector3();
+  const at = (variant, extra = {}) => catalogue.resolve({ kind: 'office-building', variant, x: 1, z: 2, rotation: .3, scale: 1.4, width: 3.2, depth: 4.1, ...extra }, matrix);
+  const loaded = at(0);
+  assert.equal(loaded.id, 'office-building-1');
+  assert.ok(loaded.lods[0].parts[0].material.emissiveNode, 'an unmarked, untextured office receives procedural night panes');
+  for (const definition of Object.values(city.OFFICE_BUILDINGS).slice(1)) {
+    const fallback = at(definition.model - 1);
+    matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), size);
+    assert.match(fallback.id, /^office-/);
+    assert.ok(fallback.lods[0].parts[0].material.emissiveNode);
+    assert.ok(Math.abs(size.x - 3.2) < 1e-6 && Math.abs(size.z - 4.1) < 1e-6 && Math.abs(size.y - definition.height * 1.4) < 1e-6, 'missing scene retains its dimensions');
+  }
+  catalogue.dispose();
+  const empty = city.createCatalogue(new Map(), city.createNight());
+  assert.ok(empty.resolve({ kind: 'office-building', variant: 8, x: 0, z: 0, rotation: 0, scale: 2, width: 4.3, depth: 4.3 }, matrix).lods[0].parts[0].material.emissiveNode, 'a failed office file leaves a usable lit building');
+  empty.dispose();
 });

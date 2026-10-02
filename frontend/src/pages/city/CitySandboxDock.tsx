@@ -5,6 +5,8 @@ import type { DepartmentId } from "../../api/cityWorld";
 import { projectFootprint } from "../../city3d/world/estateGrid";
 import type { BuildState, EstateTarget } from "./CityEstateDock";
 import { DistrictSwatch } from "./DistrictSwatch";
+import { splitPlotCatalogue } from "./plotCatalogue";
+import { isOfficeBuilding } from "../../city3d/world/officeBuildings";
 import "./estate.css";
 
 const coins = (n: number) => n.toLocaleString("ru-RU");
@@ -94,14 +96,16 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
     </>;
   } else if (build.plot) {
     const plot = build.plot, closed = plot.band > land.land.open_band;
+    const { options, houses, offices } = splitPlotCatalogue([...plots.values()]);
     body = <section className="estate-card">
       <button type="button" className="estate-back" onClick={() => go({ plot: null })}>← Весь район</button>
       <div className="estate-placing__title"><span aria-hidden="true">🟩</span><div><h2>Участок · пояс {plot.band}</h2><small>Квартал {plot.block} · столбец {plot.col + 1}, ряд {plot.row + 1}</small></div></div>
       {plot.problem && <p className="estate-problem" role="alert">{plot.problem}</p>}
       {closed && <button type="button" className="city-secondary" disabled={pending} onClick={() => setDistrict({ open_band: plot.band }, `Открыты пояса до ${plot.band}-го.`)}>Открыть пояс {plot.band}</button>}
       {error && <p className="city-error" role="alert">{error.message}</p>}
-      {[(["square", "house"] as const).map(f => plots.get(f)).filter((c): c is PlotCatalogue => !!c), [...plots.values()].filter(c => c.ready)].map((list, i) => list.length > 0 && <section className="estate-section" key={i}>
-        {i > 0 && <h3>Готовые дома</h3>}
+      {[{ title: null, list: options }, { title: "Готовые дома", list: houses }, { title: "Офисные здания", list: offices }].map(({ title, list }, i) => list.length > 0 && <section className="estate-section" key={i}>
+        {title && <h3>{title}</h3>}
+        {i === 2 && <p className="secondary small">Офисное здание строится сразу целиком, без ступеней. В настоящем районе оно покупается по одной цене.</p>}
         <ul className="estate-catalogue">{list.map(c => <li key={c.family}><span className="estate-catalogue__icon" aria-hidden="true">{c.icon}</span>
           <span className="estate-catalogue__text"><strong>{c.levels[0].name}</strong><small>{c.levels[0].about}</small>{c.ready && <small>В настоящем районе ◈ {coins(c.levels[0].price)} + земля</small>}</span>
           <button type="button" className="city-action" disabled={pending || !!plot.problem} aria-label={`${c.levels[0].name} на участке бесплатно`} onClick={() => run({
@@ -116,7 +120,7 @@ export function CitySandboxDock({ city, state, mine, build, setBuild, onClose, o
     const bands = land.land.bands.length, hq = land.hq;
     const listed = [...land.objects].sort((a, b) => Number(a.owner === "district") - Number(b.owner === "district") || a.id - b.id);
     body = <>
-      <section className="estate-claim"><strong>Нажми на участок или постройку</strong><p>Светло-зелёные участки открытых поясов — для стройки: сквер или дом ставятся бесплатно. В карточке постройки её ступень поднимается и снижается, а саму постройку можно убрать.</p></section>
+      <section className="estate-claim"><strong>Нажми на участок или постройку</strong><p>Светло-зелёные участки открытых поясов — для стройки: скверы, дома и офисные здания ставятся бесплатно. В карточке постройки со ступенями их можно поднимать и снижать, а саму постройку можно убрать.</p></section>
       {error && <p className="city-error" role="alert">{error.message}</p>}
       <section className="estate-section"><h3>Пояса района</h3>
         <Stepper label="Открытые пояса" value={land.land.open_band} max={bands} pending={pending} text={`Открыт ${land.land.open_band === bands ? "весь район" : `пояс ${land.land.open_band} из ${bands}`}`}
@@ -185,7 +189,7 @@ function ObjectCard({ obj, plots, projects, land, pending, error, onLevel, onRem
     {total > 1 ? <>
       <Stepper label="Ступень постройки" value={obj.level} max={total} pending={pending} text={`Ступень ${obj.level} из ${total}`} onChange={onLevel} />
       <div className="sandbox-levels" role="group" aria-label="Выбрать ступень">{levels.map((l, i) => <button type="button" key={l.level} aria-pressed={obj.level === i + 1} disabled={pending} onClick={() => obj.level !== i + 1 && onLevel(i + 1)} title={l.name}><strong>{i + 1}</strong><small>{l.name}</small></button>)}</div>
-    </> : <p className="secondary small">У этой постройки одна ступень.</p>}
+    </> : <p className="secondary small">{isOfficeBuilding(obj.family) ? "Офисное здание построено целиком, ступеней нет." : "У этой постройки одна ступень."}</p>}
     {now && <p className="secondary small">{now.about}</p>}
     {error && <p className="city-error" role="alert">{error.message}</p>}
     {district && obj.level < total && (collecting ? <p className="estate-note">Проект на следующую ступень уже открыт — он во вкладке «Площадь и проекты».</p>

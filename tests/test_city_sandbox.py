@@ -13,6 +13,7 @@ from tests.test_city_estate import (
     ADMIN,
     CITY,
     FIRST,
+    OFFICES,
     SECOND,
     buy,
     district_view,
@@ -161,6 +162,24 @@ async def test_squares_gather_into_parks_and_buildings_go_back(client, session, 
     assert (await build(client, me, "house", FIRST, 1, 1)).status_code == 200
     again = await client.delete(f"{SANDBOX}/buildings/{park['id']}", headers=me)
     assert again.status_code == 404
+
+
+async def test_office_towers_build_for_free_under_the_same_land_rules(client, session, me):
+    plots = [(col, row) for row in (0, 1) for col in range(6)]
+    for family, (col, row) in zip(OFFICES, plots, strict=False):
+        r = await build(client, me, family, FIRST, col, row)
+        assert r.status_code == 200, r.text
+        tower = r.json()["object"]
+        assert (tower["family"], tower["level"], tower["w"], tower["h"]) == (family, 1, 1, 1)
+        assert not r.json()["merged"]
+        assert (await level(client, me, tower, 2)).json()["code"] == "bad_level"
+    assert (await build(client, me, "officea", FIRST, 0, 0)).json()["code"] == "plot_taken"
+    assert (await build(client, me, "officea", SECOND, 0, 0)).json()["code"] == "band_closed"
+    view = await sandbox(client, me)
+    assert [o["family"] for o in view["objects"]] == list(OFFICES)
+    assert view["land"]["taken"] == len(OFFICES)
+    assert await count(session, CoinTransaction) == 0
+    assert (await estate(client, me))["objects"] == []
 
 
 async def test_bands_and_the_headquarters_are_set_at_will(client, session, me):

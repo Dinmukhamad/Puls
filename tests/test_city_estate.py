@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
 
+from app.models.city import CityEconomy
 from app.models.city_estate import (
     CityCell,
     CityContribution,
@@ -21,6 +22,7 @@ from app.models.enums import Role, TxType
 from app.models.progress import Notification
 from app.models.user import CoinAccount
 from app.services import city_land
+from app.services.city_economy import defaults as economy_defaults
 from app.services.coins import post_transaction
 from tests.conftest import auth, login, make_group, make_user
 
@@ -41,7 +43,18 @@ READY = {
     "bayhouse": 640,
     "terrace": 720,
 }
-FAMILIES = {"square", "house", *READY, "park", "bigpark"}
+OFFICES = {
+    "officea": 900,
+    "officeb": 980,
+    "officec": 1060,
+    "officed": 1140,
+    "officee": 1220,
+    "officef": 1320,
+    "officeg": 1440,
+    "officeh": 1560,
+    "officei": 1700,
+}
+FAMILIES = {"square", "house", *READY, *OFFICES, "park", "bigpark"}
 
 
 def key():
@@ -202,7 +215,7 @@ async def test_ready_houses_are_bought_finished_at_the_price_of_their_size(
 ):
     me = auth(await login(client, team.login))
     catalogue = {c["family"]: c for c in (await estate(client, me))["catalogue"]}
-    ready = [f for f, c in catalogue.items() if c["ready"]]
+    ready = [f for f, c in catalogue.items() if c["ready"] and f in READY]
     assert ready == list(READY), "cheapest first"
     for family, price in READY.items():
         item = catalogue[family]
@@ -235,6 +248,85 @@ async def test_ready_houses_are_bought_finished_at_the_price_of_their_size(
     r = await buy(client, me, "modern", FIRST, 2, 0, revision=revision)
     assert r.status_code == 200 and r.json()["price"] == 60 + 500
     assert sum(await spent(session)) == -(780 + 3 * SQUARE_PRICE + 560)
+
+
+async def test_all_supplied_office_towers_are_bought_finished_on_one_plot(client, session, team):
+    me = auth(await login(client, team.login))
+    await fund(session, team.id, 12_000)
+    catalogue = {c["family"]: c for c in (await estate(client, me))["catalogue"]}
+    assert [f for f, c in catalogue.items() if c["ready"]] == [*READY, *OFFICES]
+    plots = [(col, row) for row in (0, 1) for col in range(6)]
+    purchased = []
+    for (family, price), (col, row) in zip(OFFICES.items(), plots, strict=False):
+        item = catalogue[family]
+        assert item["size"] == [1, 1] and item["squares"] is None
+        assert len(item["levels"]) == 1 and item["levels"][0]["price"] == price
+        op = key()
+        r = await buy(client, me, family, FIRST, col, row, op=op)
+        assert r.status_code == 200, r.text
+        data = r.json()
+        tower = data["object"]
+        assert data["price"] == 60 + price and not data["merged"]
+        assert (tower["family"], tower["level"], tower["w"], tower["h"]) == (family, 1, 1, 1)
+        assert tower["paid"] == 60 + price and tower["source"] == "purchase"
+        assert (tower["module"], tower["u"], tower["v"]) == (FIRST, col, row)
+        purchased.append(tower)
+        replay = await buy(client, me, family, FIRST, col, row, op=op)
+        assert replay.status_code == 200 and replay.json()["replayed"]
+        assert replay.json()["object"] == tower
+        assert (await buy(client, me, family, FIRST, col, row)).json()["code"] == "plot_taken"
+        upgrade = await change(
+            client, me, tower, "upgrade", version=tower["version"], economy_revision=0
+        )
+        assert upgrade.json()["code"] == "max_level"
+    assert (await buy(client, me, "officea", SECOND, 0, 0)).json()["code"] == "band_closed"
+    assert (await buy(client, me, "officea", 99, 0, 0)).json()["code"] == "wrong_plot"
+    assert [o["id"] for o in (await estate(client, me))["objects"]] == [o["id"] for o in purchased]
+    view = await district_view(client, me)
+    assert [o["family"] for o in view["objects"]] == list(OFFICES)
+    assert view["land"]["taken"] == len(OFFICES)
+    assert await session.scalar(select(func.count()).select_from(CityCell)) == len(OFFICES)
+    assert sum(await spent(session)) == -sum(60 + price for price in OFFICES.values())
+
+
+async def test_saved_economies_gain_offices_and_keep_custom_prices(client, session, head, team):
+    # A row saved before office towers existed keeps its prices and gains their defaults.
+    saved = economy_defaults()
+    saved["estate"] = {f: prices for f, prices in saved["estate"].items() if f not in OFFICES}
+    saved["estate"]["terrace"] = [800]
+    saved["land"][0] = 65
+    session.add(CityEconomy(id=1, revision=3, values=saved, updated_by_id=head.id))
+    await session.commit()
+    boss = auth(await login(client, head.login))
+    me = auth(await login(client, team.login))
+    current = (await client.get(ADMIN + "/economy", headers=boss)).json()
+    current.pop("catalogue"), current.pop("can_edit")
+    assert current["revision"] == 3 and current["estate"]["terrace"] == [800]
+    assert current["land"][0] == 65
+    assert {f: current["estate"][f] for f in OFFICES} == {f: [p] for f, p in OFFICES.items()}
+    # An earlier open form must be refreshed, so it cannot silently overwrite new prices.
+    old_form = await client.put(ADMIN + "/economy", headers=boss, json={"revision": 3, **saved})
+    assert old_form.status_code == 422
+    invalid = {**current["estate"], "officea": [0]}
+    assert (
+        await client.put(ADMIN + "/economy", headers=boss, json={**current, "estate": invalid})
+    ).status_code == 422
+    # A refreshed form can customise office prices; purchases check its revision as usual.
+    current["estate"]["officea"] = [1000]
+    changed = await client.put(ADMIN + "/economy", headers=boss, json=current)
+    assert changed.status_code == 200, changed.text
+    revision = changed.json()["revision"]
+    assert (await buy(client, me, "officea", FIRST, 0, 0, revision=3)).json()["code"] == (
+        "prices_changed"
+    )
+    bought = await buy(client, me, "officea", FIRST, 0, 0, revision=revision)
+    assert bought.status_code == 200 and bought.json()["price"] == 1065
+    # Clients omitting all estate prices preserve the complete current catalogue.
+    keep = {k: v for k, v in changed.json().items() if k != "estate"}
+    retained = await client.put(ADMIN + "/economy", headers=boss, json=keep)
+    assert retained.status_code == 200 and retained.json()["estate"]["officea"] == [1000]
+    assert set(retained.json()["estate"]) == FAMILIES
+    assert await spent(session) == [-1065]
 
 
 async def test_a_repeated_key_returns_the_first_result_and_never_pays_twice(client, session, team):
@@ -416,6 +508,7 @@ async def test_a_transfer_takes_buildings_along_to_the_inventory(client, session
     house = (await buy(client, me, "house", FIRST, 0, 0)).json()["object"]
     await change(client, me, house, "upgrade", version=house["version"], economy_revision=0)
     await buy(client, me, "square", FIRST, 1, 0)
+    await buy(client, me, "officea", FIRST, 2, 0)
     sales_sv = await make_user(session, login="sv-sales", role=Role.SUPERVISOR)
     sales = await make_group(session, code="GS", supervisor_id=sales_sv.id)
     await open_world(
@@ -435,6 +528,7 @@ async def test_a_transfer_takes_buildings_along_to_the_inventory(client, session
     assert {(o["family"], o["state"], o["level"]) for o in data["objects"]} == {
         ("house", "stored", 2),
         ("square", "stored", 1),
+        ("officea", "stored", 1),
     }
     assert await session.scalar(select(func.count()).select_from(CityCell)) == 0
     assert not (await district_view(client, me))["objects"]
@@ -454,12 +548,22 @@ async def test_a_transfer_takes_buildings_along_to_the_inventory(client, session
         client, me, house, "place", version=house["version"], block=1, col=1, row=0
     )
     assert again.status_code == 404
+    office = next(o for o in data["objects"] if o["family"] == "officea")
+    placed_office = await change(
+        client, me, office, "place", version=office["version"], block=1, col=1, row=0
+    )
+    assert placed_office.status_code == 200, placed_office.text
+    assert placed_office.json()["object"]["state"] == "placed"
+    assert placed_office.json()["object"]["paid"] == 960
     view = await district_view(client, me, "sales", "sales-team-1")
-    assert [(o["family"], o["owner"]) for o in view["objects"]] == [("house", "mine")]
+    assert [(o["family"], o["owner"]) for o in view["objects"]] == [
+        ("house", "mine"),
+        ("officea", "mine"),
+    ]
     # Moving cost nothing: the journal has only the purchases.
-    assert sorted(await spent(session)) == [-HOUSE_PRICE, -180, -SQUARE_PRICE]
+    assert sorted(await spent(session)) == [-960, -HOUSE_PRICE, -180, -SQUARE_PRICE]
     events = await session.scalars(select(CityEvent.kind).where(CityEvent.kind == "transfer"))
-    assert len(list(events)) == 2
+    assert len(list(events)) == 3
 
 
 async def test_regrouping_districts_and_deactivation_release_land(

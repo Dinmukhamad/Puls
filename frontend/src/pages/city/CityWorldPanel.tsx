@@ -28,6 +28,7 @@ export function CityWorldPanel({ world, current, selected, onPick, onClose, onTr
         <h3>Районы · {here.name}</h3><div className="city-world-districts">{here.districts.map(d => <button className="city-secondary" key={d.id} onClick={() => onPick(d.id)}><strong><DistrictSwatch district={d.id} />{d.name}</strong><small>{d.supervisor ?? "Команда не назначена"}{d.mine ? " · твой район" : ""}</small></button>)}</div>
         <p className="secondary small">Оба города открыты для посещения. Строить можно в своём районе за коины Puls, когда стройка в нём открыта.</p>
         <p className="secondary small city-world-credit">Здание вокзала — «Gare de BlenderVille», автор loran17 (<a href="https://www.blendswap.com/blend/27438" target="_blank" rel="noreferrer">Blend Swap</a>), лицензия <a href="https://creativecommons.org/licenses/by/3.0/deed.ru" target="_blank" rel="noreferrer">CC BY</a>; упрощено и перекрашено для Puls.</p>
+        <p className="secondary small city-world-credit">Офисные здания — «High Rise Office Buildings», автор Phoenixdraws (<a href="https://www.blendswap.com/blends/view/74984" target="_blank" rel="noreferrer">Blend Swap</a>), лицензия <a href="https://creativecommons.org/licenses/by/3.0/deed.ru" target="_blank" rel="noreferrer">CC BY 3.0</a>; разделены на модели и адаптированы для Puls.</p>
       </div>}
     </Sheet>}
   </>;
