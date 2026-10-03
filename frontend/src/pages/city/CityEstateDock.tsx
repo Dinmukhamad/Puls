@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { cityEstate, operationKey, type DistrictEstate, type MyEstate, type OperationResult, type OwnObject, type PlotCatalogue, type PlotFamily, type ProjectCatalogue, type ProjectFamily, type PublicObject } from "../../api/cityEstate";
 import { PLOT_LEVELS, PROJECT_LEVELS, plotFootprint, projectFootprint } from "../../city3d/world/estateGrid";
@@ -28,6 +28,7 @@ export interface BuildState {
 }
 
 const coins = (n: number) => n.toLocaleString("ru-RU");
+type EstateOperation = { action: "purchase" | "place" | "upgrade" | "project"; run: () => Promise<OperationResult> };
 /** One idempotency key per action: a retry or a double click sends the same key, a new action a new one. */
 function useOperationKey() {
   const last = useRef<{ print: string; key: string } | null>(null);
@@ -45,29 +46,36 @@ function useOperationKey() {
  * park, six in a rectangle a big park, by themselves. Buildings from the inventory after a transfer go onto free
  * plots for free.
  */
-export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus }: {
+export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, onChooseFree }: {
   mine: MyEstate; land: DistrictEstate | null; build: BuildState; setBuild: (next: BuildState | null) => void; onClose: () => void; onFocus: (target: EstateTarget) => void;
+  /** Selects a real free plot in the operator's district; the page checks current land and occupied footprints. */
+  onChooseFree?: () => void;
 }) {
   const client = useQueryClient(), keys = useOperationKey();
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [notice, setNotice] = useState<string | null>(null);
   const plots = new Map(mine.catalogue.map(c => [c.family, c])), projects = new Map(mine.projects.map(c => [c.family, c]));
   const own = mine.objects, placed = own.filter(o => o.state === "placed"), stored = own.filter(o => o.state === "stored");
-  const ready = mine.status === "ready" && !build.project;
+  const ready = mine.status === "ready" && !build.project && build.district === mine.district?.id;
   const activeComplex = land?.landmark?.status === "active";
   const showComplex = activeComplex && (build.project || build.area === "public");
   const refresh = async (text: string) => { keys.done(); setNotice(text); await client.invalidateQueries(); };
   const act = useMutation({
-    mutationFn: async (run: () => Promise<OperationResult>) => run(),
-    onSuccess: async result => {
+    mutationFn: async ({ run }: EstateOperation) => run(),
+    onSuccess: async (result, operation) => {
       if (result.project) {
         await refresh(`Сбор открыт: ${result.project.target_id ? `${result.project.name} → ${result.project.level_name}` : result.project.name}, смета ◈ ${coins(result.project.cost)}. Операторы района увидят его в карточке района.`);
+        if (!mounted.current) return;
         setBuild({ ...build, placing: null, spot: null, selected: null });
         return;
       }
       const obj = result.object, family = obj && plots.get(obj.family as PlotFamily), name = family?.levels[(obj?.level ?? 1) - 1]?.name;
-      const text = result.merged ? obj?.family === "bigpark" ? "Шесть твоих скверов стали большим парком!" : "Четыре твоих сквера стали парком!"
-        : result.price ? `Готово: ${name ?? "постройка"} · −${coins(result.price)} коинов` : `Готово${name ? `: ${name}` : ""}`;
+      const action = operation.action === "purchase" ? "Построено" : operation.action === "place" ? "Постройка размещена" : operation.action === "upgrade" ? "Улучшено" : "Готово";
+      const text = result.merged ? obj?.family === "bigpark" ? "Построено: большой парк! Шесть твоих скверов объединились." : "Построено: парк! Четыре твоих сквера объединились."
+        : `${action}: ${name ?? "постройка"}${result.price ? ` · −${coins(result.price)} коинов` : ""}.`;
       await refresh(text);
+      if (!mounted.current) return;
       setBuild({ ...build, placing: null, spot: null, plot: null, selected: obj && "state" in obj && obj.state === "placed" ? obj.id : build.selected });
     },
   });
@@ -80,23 +88,24 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus }
     onRotate={() => setBuild({ ...build, placing: { ...build.placing!, rotation: (build.placing!.rotation + 1) % 4 } })}
     onCancel={() => { act.reset(); setBuild({ ...build, placing: null, spot: null, area: build.project ? "public" : "plots" }); }}
     onConfirm={() => {
+      if (!build.project && !ready) return;
       const spot = build.spot!, placing = build.placing!;
       if (build.project) {
         const body = { district_id: build.district, family: placing.family as ProjectFamily, module: 0, u: spot.u, v: spot.v, rotation: spot.rotation, economy_revision: mine.economy_revision };
-        act.mutate(() => cityEstate.openProject({ key: keys.key(body), ...body }));
+        act.mutate({ action: "project", run: () => cityEstate.openProject({ key: keys.key(body), ...body }) });
       } else {
-        const obj = own.find(o => o.id === placing.moving)!, body = { version: obj.version, block: spot.module, col: spot.u, row: spot.v, rotation: spot.rotation };
-        act.mutate(() => cityEstate.place(obj.id, { key: keys.key({ id: obj.id, ...body }), ...body }));
+        const obj = own.find(o => o.id === placing.moving)!, body = { district_id: build.district, version: obj.version, block: spot.module, col: spot.u, row: spot.v, rotation: spot.rotation };
+        act.mutate({ action: "place", run: () => cityEstate.place(obj.id, { key: keys.key({ id: obj.id, ...body }), ...body }) });
       }
     }} />;
   else if (build.selected !== null) {
     const mineObject = own.find(o => o.id === build.selected), publicObject = land?.objects.find(o => o.id === build.selected);
     body = mineObject ? <OwnCard obj={mineObject} family={plots.get(mineObject.family)!} mine={mine} pending={pending} error={act.error} squares={placed.filter(o => o.family === "square").length}
-      onUpgrade={() => { const body = { version: mineObject.version, economy_revision: mine.economy_revision }; act.mutate(() => cityEstate.upgrade(mineObject.id, { key: keys.key({ up: mineObject.id, ...body }), ...body })); }}
+      onUpgrade={() => { const body = { version: mineObject.version, economy_revision: mine.economy_revision }; act.mutate({ action: "upgrade", run: () => cityEstate.upgrade(mineObject.id, { key: keys.key({ up: mineObject.id, ...body }), ...body }) }); }}
       onBack={() => setBuild({ ...build, selected: null })} />
       : publicObject ? <PublicCard obj={publicObject} plots={plots} projects={projects} managed={!!land?.managed && land.construction} pending={pending} error={act.error}
         collecting={!!land?.projects.some(p => p.target_id === publicObject.id)} busy={!!land?.projects.some(p => projects.get(p.family)?.project === projects.get(publicObject.family as ProjectFamily)?.project)}
-        onUpgrade={() => { const body = { district_id: build.district, family: publicObject.family as ProjectFamily, target_id: publicObject.id, economy_revision: mine.economy_revision }; act.mutate(() => cityEstate.openProject({ key: keys.key(body), ...body })); }}
+        onUpgrade={() => { const body = { district_id: build.district, family: publicObject.family as ProjectFamily, target_id: publicObject.id, economy_revision: mine.economy_revision }; act.mutate({ action: "project", run: () => cityEstate.openProject({ key: keys.key(body), ...body }) }); }}
         onBack={() => setBuild({ ...build, selected: null })} />
       : <p className="secondary small">Постройка уже изменилась. Обнови город.</p>;
   } else if (build.project) {
@@ -106,11 +115,14 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus }
   } else if (build.plot) {
     const plot = build.plot, price = mine.land_prices[plot.band - 1] ?? 0;
     body = <PlotCard plot={plot} land={price} plots={plots} mine={mine} ready={ready} pending={pending} error={act.error}
-      onBuy={family => { const body = { family, block: plot.block, col: plot.col, row: plot.row, economy_revision: mine.economy_revision }; act.mutate(() => cityEstate.purchase({ key: keys.key(body), ...body })); }}
+      onBuy={family => { if (!ready || pending) return; const body = { district_id: build.district, family, block: plot.block, col: plot.col, row: plot.row, economy_revision: mine.economy_revision }; act.mutate({ action: "purchase", run: () => cityEstate.purchase({ key: keys.key(body), ...body }) }); }}
       onBack={() => { act.reset(); setBuild({ ...build, plot: null }); }} />;
   } else body = <>
     {mine.status !== "ready" && <p className="estate-note">{mine.message}</p>}
-    <Overview land={land} />
+    <Overview land={land} ready={ready} pending={pending} onChooseFree={onChooseFree && (() => {
+      if (!ready || pending) return;
+      act.reset(); setNotice(null); onChooseFree();
+    })} />
     {stored.length > 0 && <section className="estate-section"><h3>Инвентарь</h3><p className="secondary small">Постройки после перевода в другой район: уровень и история сохранились. Поставь их на свободные участки — бесплатно, вместе с землёй.</p>
       <ul className="estate-list">{stored.map(o => { const c = plots.get(o.family)!; return <li key={o.id}><span aria-hidden="true">{c.icon}</span><span><strong>{c.levels[o.level - 1].name}</strong><small>{c.name} · {sizeText(plotFootprint(o.family, 0))}</small></span><button type="button" className="city-secondary" disabled={!ready} onClick={() => place(o)}>Поставить</button></li>; })}</ul></section>}
     {placed.length > 0 && <section className="estate-section"><h3>Мои постройки · {placed.length}</h3>
@@ -137,10 +149,15 @@ const sizeText = ([w, h]: [number, number]) => w * h === 1 ? "один учас�
 const cellText = ([w, h]: [number, number]) => `${w} × ${h} ${w * h === 1 ? "клетка" : "клетки"}`;
 
 /** A short route from choosing available land to buying, and the main building's progress. */
-function Overview({ land }: { land: DistrictEstate | null }) {
+function Overview({ land, ready, pending, onChooseFree }: { land: DistrictEstate | null; ready: boolean; pending: boolean; onChooseFree?: () => void }) {
   const state = land?.land;
+  const full = !!state && state.taken >= state.plots;
   return <>
-    <section className="estate-claim"><strong>Как построить</strong><ol className="estate-steps"><li>Нажми на свободный участок своего района.</li><li>Выбери сквер, дом или офис.</li><li>Купи за коины: итоговая цена включает землю.</li></ol><p>Каждый занятый участок помогает вырасти главному зданию в центре района.</p></section>
+    <section className="estate-claim"><h2 className="estate-step-title">{ready ? "1. Выбери участок на карте" : "Как построить"}</h2>
+      <ol className="estate-steps"><li>Выбери свободный участок своего района.</li><li>Выбери сквер, дом или офис.</li><li>Купи за коины: цена включает землю.</li></ol>
+      {ready && onChooseFree && <button type="button" className="city-action estate-choose-free" disabled={pending} onClick={onChooseFree}>Выбрать свободный участок</button>}
+      {ready && !onChooseFree && <p>{full ? "Все участки района заняты. Открой свою постройку, чтобы посмотреть доступные улучшения." : "Свободные участки подсвечены зелёным. Нажми на участок на карте — здесь появится выбор зданий."}</p>}
+    </section>
     {state && <DistrictBuildProgress land={state} />}
     {land?.landmark && <DistrictLandmarkCard landmark={land.landmark} compact />}
   </>;
@@ -158,6 +175,8 @@ function PlotCard({ plot, land, plots, mine, ready, pending, error, onBuy, onBac
   return <section className="estate-card">
     <button type="button" className="estate-back" onClick={onBack}>← Весь район</button>
     <div className="estate-placing__title"><span aria-hidden="true">🟩</span><div><h2>{plot.problem ? "Выбранный участок" : "Свободный участок"}</h2><small>Земля ◈ {coins(land)} · включена в цену покупки</small></div></div>
+    <h3 className="estate-step-title">2. Выбери здание</h3>
+    <p className="secondary small">Можно выбрать другой участок на карте.</p>
     {plot.problem ? <p className="estate-problem" role="alert">{plot.problem}</p> : !ready ? <p className="estate-note">{mine.message ?? "Стройка в районе пока закрыта."}</p> : null}
     {error && <p className="city-error" role="alert">{error.message}</p>}
     <ul className="estate-catalogue">{options.map(item)}</ul>
@@ -165,7 +184,7 @@ function PlotCard({ plot, land, plots, mine, ready, pending, error, onBuy, onBac
       <ul className="estate-catalogue">{houses.map(item)}</ul></section>}
     {offices.length > 0 && <section className="estate-section"><h3>Офисные здания</h3><p className="secondary small">Офисное здание покупается сразу целиком, по одной цене, без ступеней.</p>
       <ul className="estate-catalogue">{offices.map(item)}</ul></section>}
-    <p className="city-fine">На кнопке — полная цена земли и постройки. Покупка сразу списывает коины; продать участок обратно нельзя.</p>
+    <p className="city-fine">3. Нажми «Купить» у выбранного здания. На кнопке — полная цена земли и постройки. Покупка сразу списывает коины; продать участок обратно нельзя.</p>
   </section>;
 }
 

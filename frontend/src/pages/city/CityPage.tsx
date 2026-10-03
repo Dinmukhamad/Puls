@@ -21,6 +21,8 @@ import "./city.css";
 import { DriverEntry } from "../DriverEntry";
 import { CityGuideSetup, GUIDE_AVATAR } from "./CityGuideSetup";
 import { CityControlsSetup } from "./CityControlsSetup";
+import { CityBuildEntry } from "./CityBuildEntry";
+import { districtPlotGrid, freeDistrictPlot } from "./freeDistrictPlot";
 import type { CityControls } from "../../api/types";
 import { DEFAULT_GUIDE, guideName, guideText } from "../../guide";
 
@@ -59,7 +61,7 @@ export function CityPage() {
   const claim = useMutation({ mutationFn: (key: string) => city.claim(key, query.data!.revision), onSuccess: async result => { setReward(result); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   // Team district land: the viewer's own estate, and the districts of the city on screen, refreshed about every
   // 12 seconds (with a little spread) only while this page is open and visible.
-  const estateQuery = useQuery({ queryKey: ["city-estate"], queryFn: cityEstate.mine, refetchOnWindowFocus: true });
+  const estateQuery = useQuery({ queryKey: ["city-estate"], queryFn: cityEstate.mine, refetchInterval: 15000, refetchOnWindowFocus: true });
   const landPoll = () => 10000 + Math.random() * 5000;
   // Administrators may switch the map to their test city (?sandbox=1): the same land, apart from the real one.
   const sandboxOn = user?.role === "admin" && params.get("sandbox") === "1";
@@ -81,6 +83,21 @@ export function CityPage() {
     [building?.district, building?.area, building?.placing, building?.selected, building?.plot]); // eslint-disable-line react-hooks/exhaustive-deps
   const focusLand = (target: EstateTarget) => setEstateFocus({ ...target, at: Date.now() });
   const landOf = (district: string) => (district.startsWith("sales-") ? salesLand.data : supportLand.data)?.districts.find(d => d.id === district) ?? null;
+  const homeEstate = estateQuery.data?.district;
+  const ownLand = homeEstate ? landOf(homeEstate.id) : null;
+  const suggestedPlot = useMemo(() => homeEstate && ownLand && estateQuery.data?.status === "ready"
+    ? freeDistrictPlot(districtPlotGrid(homeEstate.city), ownLand) : null,
+    [homeEstate?.id, homeEstate?.city, ownLand, estateQuery.data?.status]);
+  function chooseFreePlot() {
+    if (!homeEstate || !suggestedPlot || building?.district !== homeEstate.id || estateQuery.data?.status !== "ready") return;
+    setBuilding({ ...building, area: "plots", placing: null, selected: null, spot: null, project: false,
+      plot: { block: suggestedPlot.block, col: suggestedPlot.col, row: suggestedPlot.row, band: suggestedPlot.band, problem: null } });
+    focusLand({ district: homeEstate.id, kind: "plot", plot: suggestedPlot });
+  }
+  useEffect(() => {
+    // A transfer may arrive through polling while an old plot or inventory placement is still open.
+    if (!sandboxOn) setBuilding(current => current && !current.project && current.district !== homeEstate?.id ? null : current);
+  }, [sandboxOn, homeEstate?.id]);
   function onEstate(pick: EstatePick) {
     if (sandboxOn && (pick.kind === "project" || pick.kind === "public")) { setWorldSelected(null); openSandbox(pick.district, true); return; }
     if (pick.kind === "public") { setBuilding(null); setWorldSelected(pick.district); focusLand({ district: pick.district, kind: "public" }); return; }
@@ -94,6 +111,7 @@ export function CityPage() {
     const home = estateQuery.data?.district;
     if (!home) return;
     if (home.city !== department) visit(home.city);
+    setWorldSelected(null);
     setBuilding({ district: home.id, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false });
     focusLand({ district: home.id, kind: "district" });
   }
@@ -182,6 +200,7 @@ export function CityPage() {
     </header>
 
     <div className="city-notes">
+      {user?.role === "operator" && !data.inspecting && !building && !sandboxOn && <CityBuildEntry mine={mineEstate} loading={estateQuery.isPending} failed={estateQuery.isError} onRetry={() => { void estateQuery.refetch(); }} onBuild={openBuild} />}
       {data.inspecting && <p className="city-note glass glass--regular">Город оператора: <strong>{data.full_name}</strong><Link to="/admin/learning/city?tab=participants">← К участникам</Link></p>}
       {data.preview && !data.inspecting && !sandboxOn && <p className="city-note glass glass--regular">Предпросмотр для сотрудника · без наград</p>}
       {sandboxOn && <p className="city-note sandbox-note glass glass--regular" role="status"><span>🧪 <strong>Тестовый город</strong> · видят только администраторы, стройка бесплатная, настоящий город не меняется</span>{!building && <button type="button" onClick={() => openSandbox(`${department}-team-1`)}>Панель</button>}<button type="button" onClick={toggleSandbox}>Выйти</button></p>}
@@ -236,7 +255,7 @@ export function CityPage() {
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild ? openBuild : undefined}
       onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, plot: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
-    {building && mineEstate && !sandboxOn && <CityEstateDock mine={mineEstate} land={landOf(building.district)} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} />}
+    {building && mineEstate && !sandboxOn && <CityEstateDock mine={mineEstate} land={landOf(building.district)} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} onChooseFree={suggestedPlot && building.district === homeEstate?.id ? chooseFreePlot : undefined} />}
     {building && sandboxOn && <CitySandboxDock city={department} state={sandboxLand.data?.city === department ? sandboxLand.data : undefined} mine={mineEstate} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} />}
     <CityJourney phase={journey} destination={worldQuery.data?.cities.find(c => c.id === destination)?.name ?? destination} onSkip={() => setWorldAction({ kind: "skip", target: destination, at: Date.now() })} />
 

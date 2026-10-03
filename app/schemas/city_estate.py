@@ -20,6 +20,10 @@ class Plot(BaseModel):
 
 
 class PurchaseInput(Keyed, Plot):
+    #: The district the operator selected; omitted only by clients predating this guard.
+    district_id: str | None = Field(
+        default=None, pattern=r"^(support|sales)-team-[1-9][0-9]?$", max_length=32
+    )
     #: A square, a house or a ready office tower; parks gather themselves from squares.
     family: str = Field(pattern=r"^[a-z]{2,16}$")
     economy_revision: int = Field(ge=0)
@@ -33,6 +37,9 @@ class UpgradeInput(Keyed):
 class PlaceInput(Keyed, Plot):
     """A building from the inventory onto free plots; a big park may turn (1: 2 × 3)."""
 
+    district_id: str | None = Field(
+        default=None, pattern=r"^(support|sales)-team-[1-9][0-9]?$", max_length=32
+    )
     version: int = Field(ge=1)
     rotation: int = Field(default=0, ge=0, le=3)
 

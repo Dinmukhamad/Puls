@@ -868,17 +868,31 @@ def builder_status(user, home):
             "Сотрудники открывают общие проекты и смотрят за развитием.",
         )
     if home is None:
-        return "no_team", "Нужно назначение в команду: руководитель связывает группу с районом."
+        if user.group_id is None:
+            return (
+                "no_team",
+                "Ты пока не включён в группу. Попроси руководителя или администратора "
+                "добавить тебя в группу супервайзера, назначенного району.",
+            )
+        return (
+            "no_team",
+            "У твоей группы нет назначенного района. Попроси руководителя или администратора "
+            "проверить супервайзера группы, назначить его району в «Города и районы» "
+            "и включить «Стройка открыта».",
+        )
     if not city_land.has_land(home["id"]):
         return (
             "no_land",
-            "У района пока нет земли: город делится на три района, участки есть у первых трёх.",
+            "У назначенного района нет строительных участков. Руководитель города или "
+            "администратор должен закрепить супервайзера за одним из первых трёх районов "
+            "города, где есть земля, и открыть стройку.",
         )
     if not home["construction"]:
         return (
             "closed",
-            "Стройка в районе откроется после пилотного запуска. "
-            "Цены и участки уже можно посмотреть.",
+            "Стройка в твоём районе пока закрыта. Руководитель города или администратор "
+            "должен включить «Стройка открыта» для этого района в «Города и районы». "
+            "Участки и цены уже можно посмотреть.",
         )
     return "ready", None
 
@@ -1181,6 +1195,15 @@ async def builder(session, user):
     return home
 
 
+def require_selected_district(home, district_id):
+    """Reject stale plot coordinates after a transfer rather than use them in the new district."""
+    if district_id is not None and district_id != home["id"]:
+        raise ConflictError(
+            "Твой район изменился. Открой новый район и выбери участок заново.",
+            code="district_changed",
+        )
+
+
 async def balance(session, user_id):
     account = await get_account(session, user_id)
     return {"balance": account.balance, "available": account.available}
@@ -1214,6 +1237,7 @@ async def purchase(session, user, body):
 
     async def perform():
         home = await builder(session, user)
+        require_selected_district(home, body.district_id)
         family = PLOT_FAMILIES.get(body.family)
         if family is None:
             raise NotFoundError("Такой постройки нет в каталоге")
@@ -1277,7 +1301,12 @@ async def purchase(session, user, body):
         }
 
     return await operation(
-        session, user, body.key, "purchase", body.model_dump(exclude={"key"}), perform
+        session,
+        user,
+        body.key,
+        "purchase",
+        body.model_dump(exclude={"key"}, exclude_none=True),
+        perform,
     )
 
 
@@ -1329,6 +1358,7 @@ async def place(session, user, object_id, body):
 
     async def perform():
         home = await builder(session, user)
+        require_selected_district(home, body.district_id)
         obj = await own_object_row(session, user, object_id, body.version, states=("stored",))
         rotation = body.rotation % 2 if obj.family == "bigpark" else 0
         w, h = footprint(obj, rotation)
@@ -1359,7 +1389,7 @@ async def place(session, user, object_id, body):
         user,
         body.key,
         "place",
-        {"id": object_id, **body.model_dump(exclude={"key"})},
+        {"id": object_id, **body.model_dump(exclude={"key"}, exclude_none=True)},
         perform,
     )
 
