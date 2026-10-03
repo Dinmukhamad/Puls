@@ -22,6 +22,8 @@ import { DriverEntry } from "../DriverEntry";
 import { CityGuideSetup, GUIDE_AVATAR } from "./CityGuideSetup";
 import { CityControlsSetup } from "./CityControlsSetup";
 import { CityBuildEntry } from "./CityBuildEntry";
+import { CityPeekPanel } from "./CityPeekPanel";
+import "./cityPanelLayout.css";
 import { districtPlotGrid, freeDistrictPlot } from "./freeDistrictPlot";
 import type { CityControls } from "../../api/types";
 import { DEFAULT_GUIDE, guideName, guideText } from "../../guide";
@@ -50,8 +52,6 @@ export function CityPage() {
   const [controlsEditing, setControlsEditing] = useState(false), [controlsPreview, setControlsPreview] = useState<CityControls | null>(null);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [mapAttempt, setMapAttempt] = useState(0);
-  // На телефоне панель миссии — шторка над нижним меню: свёрнута до заголовка и кнопки.
-  const [expanded, setExpanded] = useState(false);
   const [focusRequest, requestFocus] = useState(0);
   const [plotKey, setPlotKey] = useState<string | null>(null), [built, setBuilt] = useState<CityBuilt | null>(null);
   const [plotFocus, setPlotFocus] = useState<{ key: string; at: number }>();
@@ -182,7 +182,11 @@ export function CityPage() {
     const fromTools = controlsEditing;
     setControlsEditing(false);
     // Фокус — туда, откуда пришли: на кнопку панели карты или на саму карту, чтобы сразу работали клавиши.
-    window.setTimeout(() => document.querySelector<HTMLElement>(fromTools ? ".city-controls-button" : ".city-scene")?.focus({ preventScroll: true }), 0);
+    window.setTimeout(() => {
+      const button = document.querySelector<HTMLElement>(".city-controls-button");
+      const target = fromTools ? button?.checkVisibility() ? button : document.querySelector<HTMLElement>(".city-map-peek > .city-peek__trigger") : document.querySelector<HTMLElement>(".city-scene");
+      target?.focus({ preventScroll: true });
+    }, 0);
   }
   const rank = data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города";
   const level = districtLevel(missions.filter(m => m.state === "completed").length, selected.soon);
@@ -200,6 +204,7 @@ export function CityPage() {
   return <div className="city-immersive" data-department={department} data-building={building ? true : undefined}>
     <CityMap key={mapAttempt} department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
+    <CityPeekPanel className="city-hud-peek" label="Уровень, опыт и меню" icon={data.level}>
     <header className="city-hud glass glass--regular">
       <div className="city-hud__level">
         <span className="city-hud__badge" title={`Уровень города ${data.level}`}>{data.level}</span>
@@ -219,9 +224,10 @@ export function CityPage() {
         <Link to="/training" aria-label="Материалы обучения"><span aria-hidden="true">📚</span><span className="city-hud__wide">Материалы</span></Link>
       </nav>
     </header>
+    </CityPeekPanel>
 
     <div className="city-notes">
-      {user?.role === "operator" && !data.inspecting && !building && !sandboxOn && <CityBuildEntry mine={mineEstate} loading={estateQuery.isPending} failed={estateQuery.isError} onRetry={() => { void estateQuery.refetch(); }} onBuild={openBuild} />}
+      {user?.role === "operator" && !data.inspecting && !building && !sandboxOn && <CityPeekPanel className="city-build-peek" label="Застройка района" compactLabel="Строить" icon="🏡"><CityBuildEntry mine={mineEstate} loading={estateQuery.isPending} failed={estateQuery.isError} onRetry={() => { void estateQuery.refetch(); }} onBuild={openBuild} /></CityPeekPanel>}
       {data.inspecting && <p className="city-note glass glass--regular">Город оператора: <strong>{data.full_name}</strong><Link to="/admin/learning/city?tab=participants">← К участникам</Link></p>}
       {data.preview && !data.inspecting && !sandboxOn && <p className="city-note glass glass--regular">Предпросмотр для сотрудника · без наград</p>}
       {sandboxOn && <p className="city-note sandbox-note glass glass--regular" role="status"><span>🧪 <strong>Тестовый город</strong> · видят только администраторы, стройка бесплатная, настоящий город не меняется</span>{!building && <button type="button" onClick={() => openSandbox(`${department}-team-1`)}>Панель</button>}<button type="button" onClick={toggleSandbox}>Выйти</button></p>}
@@ -232,10 +238,7 @@ export function CityPage() {
       {showControls && <CityControlsSetup value={controls} onPick={setControlsPreview} onClose={closeControls} cancellable={!needsControls} />}
     </div>
 
-    {department === "support" && !building && <><aside className="city-mission glass glass--regular" data-expanded={expanded || undefined} aria-label={`Район «${selected.name}»`}>
-      <button type="button" className="city-mission__handle" aria-expanded={expanded} aria-controls="city-mission-body" onClick={() => setExpanded(value => !value)}>
-        <span aria-hidden="true" /><span className="sr-only">{expanded ? "Свернуть описание миссии" : "Развернуть описание миссии"}</span>
-      </button>
+    {department === "support" && !building && <><CityPeekPanel className="city-mission-peek" label={`Миссии · ${selected.name}`} compactLabel="Миссии" icon={labels.find(label => label.id === selected.id)?.icon ?? "📋"} holdOpen={claim.isPending}><aside className="city-mission glass glass--regular" data-expanded="true" aria-label={`Район «${selected.name}»`}>
       <div className="city-mission__body" id="city-mission-body" aria-live="polite">
         <div className="city-mission-top"><span className="city-eyebrow">{selected.name}</span><span className="city-state" data-state={mission?.state}>{selected.soon ? "СКОРО" : mission ? MISSION_STATES[mission.state] : "Нет заданий"}</span></div>
         <div className="city-building-level city-extra" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{selected.soon ? "Район строится и откроется позже" : level < MAX_DISTRICT_LEVEL ? "Каждая пройденная миссия района улучшает здание" : "Максимальный уровень — район стал легендой"}</small></div>
@@ -269,10 +272,10 @@ export function CityPage() {
           <p className="city-fine city-extra">{selected.id === "crm" || selected.id === "dispatch" ? "Рабочие сайты открываются оператору через QR." : "Завершённые ранее действия тоже учитываются."}</p>
         </>}
       </div>
-    </aside>
+    </aside></CityPeekPanel>
 
     <CitySkills labels={labels} selected={selected.id} onSelect={selectDistrict} /></>}
-    {department === "sales" && !building && <aside className="city-sales-info glass glass--regular"><span className="city-eyebrow">ОТДЕЛ ПРОДАЖ</span><h2>{worldQuery.data?.cities.find(c => c.id === "sales")?.name ?? "ОП"}</h2><p>Учебный кампус у озера. Десять зданий зарезервированы для ресурсов отдела продаж.</p><button className="city-secondary" onClick={() => pickWorld("world")}>Районы и вокзал →</button><div className="city-sales-resources">{SALES_RESOURCES.map((name, i) => <button key={name} title={name} aria-label={name} onClick={() => pickWorld(`sales-resource-${String(i + 1).padStart(2, "0")}`)}>{i + 1}</button>)}</div></aside>}
+    {department === "sales" && !building && <CityPeekPanel className="city-sales-peek" label="Отдел продаж · учебные центры" compactLabel="Центры" icon="🏢"><aside className="city-sales-info glass glass--regular"><span className="city-eyebrow">ОТДЕЛ ПРОДАЖ</span><h2>{worldQuery.data?.cities.find(c => c.id === "sales")?.name ?? "ОП"}</h2><p>Учебный кампус у озера. Десять зданий зарезервированы для ресурсов отдела продаж.</p><button className="city-secondary" onClick={() => pickWorld("world")}>Районы и вокзал →</button><div className="city-sales-resources">{SALES_RESOURCES.map((name, i) => <button key={name} title={name} aria-label={name} onClick={() => pickWorld(`sales-resource-${String(i + 1).padStart(2, "0")}`)}>{i + 1}</button>)}</div></aside></CityPeekPanel>}
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild ? openBuild : undefined}
       onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, plot: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
@@ -289,11 +292,12 @@ export function CityPage() {
   </div>;
 }
 
-/** Нижняя панель «Твои навыки»: все районы города, на телефоне — лента под верхней панелью. */
+/** Skills stay mounted and scroll to the current district when the panel opens. */
 function CitySkills({ labels, selected, onSelect }: { labels: CityLabelInfo[]; selected: DistrictId; onSelect: (id: DistrictId) => void }) {
   const list = useRef<HTMLDivElement>(null);
-  useEffect(() => { list.current?.querySelector("[aria-pressed=true]")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [selected]);
-  return <nav className="city-skills glass glass--regular" aria-label="Районы города">
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (open) list.current?.querySelector("[aria-pressed=true]")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [selected, open]);
+  return <CityPeekPanel className="city-skills-peek" label="Твои навыки · учебные центры" compactLabel="Навыки" icon="🎓" open={open} onOpenChange={setOpen}><nav className="city-skills glass glass--regular" aria-label="Районы города">
     <div className="city-skills__title"><h2>Твои навыки</h2><p>Опыт города показывает путь обучения. Коины попадают в общий кошелёк Puls.</p></div>
     <div className="city-skills__list" ref={list}>
       {labels.map(l => <button type="button" key={l.id} className="city-skill" style={{ "--district": DISTRICT_COLORS[l.id] } as CSSProperties} aria-pressed={selected === l.id} data-soon={l.soon || undefined} data-reward={l.reward || undefined} onClick={() => onSelect(l.id)}>
@@ -301,7 +305,7 @@ function CitySkills({ labels, selected, onSelect }: { labels: CityLabelInfo[]; s
         <span className="city-skill__text"><strong>{l.name}</strong><small>{l.status}</small></span>
       </button>)}
     </div>
-  </nav>;
+  </nav></CityPeekPanel>;
 }
 
 

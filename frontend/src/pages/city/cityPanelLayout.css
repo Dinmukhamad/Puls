@@ -1,0 +1,140 @@
+/* Disclosure anchors never depend on the camera's changing free viewport. */
+.city-immersive {
+  --city-peek-size: 48px;
+  --city-peek-top: calc(var(--city-top) + 74px);
+  --city-peek-bottom: var(--city-bottom);
+  --city-reserve-left: 0px;
+  --city-reserve-right: 60px;
+  --city-reserve-top: 60px;
+  --city-reserve-bottom: 60px;
+  --city-free-left: calc(var(--city-left) + var(--city-reserve-left));
+  --city-free-top: min(calc(var(--city-top) + var(--city-reserve-top)), calc(100dvh - var(--city-peek-bottom) - 80px));
+  --city-free-right: calc(var(--city-right) + var(--city-reserve-right));
+  --city-free-bottom: min(calc(var(--city-peek-bottom) + var(--city-reserve-bottom)), calc(100dvh - var(--city-free-top) - 80px));
+}
+.city-immersive:has(.city-map-peek[data-open="true"]) { --city-reserve-right: 108px; }
+.city-immersive:has(.city-mission-peek[data-open="true"], .city-sales-peek[data-open="true"]) {
+  --city-reserve-right: min(calc(var(--city-panel) + 72px), calc(100vw - var(--city-left) - var(--city-right) - 80px));
+}
+.city-immersive:has(.city-build-peek[data-open="true"], .city-world-peek[data-open="true"]) {
+  --city-reserve-left: min(360px, calc(100vw - var(--city-left) - var(--city-right) - var(--city-reserve-right) - 80px));
+}
+.city-immersive:has(.city-hud-peek[data-open="true"]) { --city-reserve-top: 76px; }
+.city-immersive:has(.city-skills-peek[data-open="true"]) { --city-reserve-bottom: calc(var(--city-skills) + 60px); }
+.city-immersive[data-building] { --city-reserve-right: calc(var(--city-panel) + 12px); }
+.city-immersive .city-frame, .city-immersive .city-loading, .city-immersive .city-fallback { left: var(--city-free-left); right: var(--city-free-right); }
+
+.city-immersive .city-peek { position: fixed; z-index: 22; }
+.city-immersive .city-peek[data-open="true"] { z-index: 40; }
+.city-peek__icon, .city-peek__close { width: 24px; text-align: center; flex: none; }
+.city-immersive .city-peek__trigger { position: relative; z-index: 2; }
+.city-peek__label { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.city-immersive .city-peek__content { position: absolute; }
+.city-immersive .city-peek .city-hud,
+.city-immersive .city-peek .city-mission,
+.city-immersive .city-peek .city-sales-info,
+.city-immersive .city-peek .city-skills,
+.city-immersive .city-peek .city-world-switch,
+.city-immersive .city-peek .city-map-tools {
+  position: static; inset: auto; transform: none; max-width: none;
+}
+
+.city-hud-peek { top: var(--city-top); left: var(--city-left); }
+.city-hud-peek > .city-peek__content { top: 0; left: 48px; width: calc(100vw - var(--city-left) - var(--city-right) - 48px); }
+.city-immersive .city-peek .city-hud { gap: 16px; width: 100%; height: var(--city-hud); border-radius: 0 20px 20px 20px; }
+
+.city-world-peek { top: var(--city-peek-top); left: var(--city-left); }
+.city-world-peek > .city-peek__content { top: 0; left: 100%; width: 240px; }
+.city-immersive .city-peek .city-world-switch { width: 100%; min-height: 48px; padding: 12px 16px; }
+.city-immersive:has(.city-world-switch) .city-notes {
+  top: calc(var(--city-peek-top) + 60px); left: var(--city-left); right: auto;
+  width: min(360px, calc(100vw - var(--city-left) - var(--city-right) - 60px));
+  max-height: calc(100dvh - var(--city-peek-top) - var(--city-peek-bottom) - 120px);
+  overflow: visible;
+}
+.city-immersive .city-notes { top: calc(var(--city-peek-top) + 60px); z-index: 31; }
+.city-immersive .city-build-peek { position: relative; width: max-content; z-index: 22; }
+.city-immersive .city-build-peek[data-open="true"] { z-index: 30; }
+.city-build-peek > .city-peek__content { top: 48px; left: 0; width: min(360px, calc(100vw - var(--city-left) - var(--city-right) - 60px)); }
+.city-immersive .city-build-peek .city-build-entry { width: 100%; max-height: calc(100dvh - var(--city-peek-top) - 108px - var(--city-peek-bottom)); overflow-y: auto; }
+.city-notes > .city-guide-setup, .city-notes > .city-controls-setup {
+  max-height: calc(100dvh - var(--city-peek-top) - var(--city-peek-bottom) - 180px);
+  overflow-y: auto;
+}
+
+.city-mission-peek, .city-sales-peek { top: var(--city-peek-top); right: calc(var(--city-right) + 60px); }
+.city-mission-peek > .city-peek__content, .city-sales-peek > .city-peek__content { top: 48px; right: 0; width: var(--city-panel); }
+.city-immersive .city-peek .city-mission {
+  width: 100%; height: min(720px, calc(100dvh - var(--city-peek-top) - 48px - var(--city-peek-bottom) - 60px));
+  max-height: none; border-radius: 24px;
+}
+.city-immersive .city-peek .city-sales-info {
+  width: 100%; max-height: calc(100dvh - var(--city-peek-top) - 48px - var(--city-peek-bottom) - 60px); overflow-y: auto;
+}
+
+.city-skills-peek { left: var(--city-left); bottom: var(--city-peek-bottom); }
+.city-skills-peek > .city-peek__content { left: 0; bottom: 48px; width: min(1040px, calc(100vw - var(--city-left) - var(--city-right))); }
+.city-immersive .city-peek .city-skills { height: var(--city-skills); width: 100%; }
+
+.city-map-peek { top: 50%; right: var(--city-right); width: 48px; height: 48px; transform: translateY(-50%); }
+.city-map-peek > .city-peek__content { right: 48px; top: 24px; transform: translateY(-50%); }
+.city-immersive .city-peek .city-map-tools { padding: 4px; max-height: calc(100dvh - var(--city-top) - var(--city-peek-bottom) - 24px); overflow-y: auto; }
+
+/* Fill the inward corner so a direct diagonal move also stays inside the panel. */
+@media (hover: hover) and (pointer: fine) {
+  .city-map-peek > .city-peek__content::before,
+  .city-mission-peek > .city-peek__content::before,
+  .city-sales-peek > .city-peek__content::before,
+  .city-build-peek > .city-peek__content::before,
+  .city-skills-peek > .city-peek__content::before {
+    content: ""; position: absolute; pointer-events: auto;
+  }
+  .city-map-peek > .city-peek__content::before { top: 0; bottom: 0; left: 100%; width: 48px; }
+  .city-mission-peek > .city-peek__content::before,
+  .city-sales-peek > .city-peek__content::before,
+  .city-build-peek > .city-peek__content::before { bottom: 100%; left: 0; right: 0; height: 48px; }
+  .city-skills-peek > .city-peek__content::before { top: 100%; left: 0; right: 0; height: 48px; }
+}
+
+@media (max-width: 767px) {
+  .city-immersive, .shell--collapsed .city-immersive {
+    --city-peek-top: calc(var(--city-top) + 60px);
+    --city-peek-bottom: var(--city-dock);
+    --city-reserve-left: 0px;
+    --city-free-top: min(calc(var(--city-top) + var(--city-reserve-top)), calc(100dvh - var(--city-peek-bottom) - 80px));
+    --city-free-right: calc(var(--city-right) + var(--city-reserve-right));
+    --city-free-bottom: min(calc(var(--city-peek-bottom) + var(--city-reserve-bottom)), calc(100dvh - var(--city-free-top) - 80px));
+    --city-panel: min(340px, calc(100vw - var(--city-left) - var(--city-right)));
+  }
+  .city-immersive:has(.city-build-peek[data-open="true"], .city-world-peek[data-open="true"]) { --city-reserve-left: 0px; }
+  .city-immersive:has(.city-hud-peek[data-open="true"]) { --city-reserve-top: 180px; }
+  .city-hud-peek > .city-peek__content { top: 48px; left: 0; width: calc(100vw - var(--city-left) - var(--city-right)); }
+  .city-immersive .city-peek .city-hud { height: auto; min-height: 112px; padding: 12px; flex-wrap: wrap; gap: 12px; border-radius: 20px; }
+  .city-hud-peek .city-hud__level { flex: 1 1 55%; }
+  .city-hud-peek .city-hud__links { flex: 1 1 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .city-immersive .city-peek .city-hud__label { display: inline; }
+  .city-hud-peek .city-hud__stat { margin-left: auto; }
+  .city-hud-peek .city-hud__coins { margin-left: auto; }
+  .city-hud-peek .city-hud__coins .city-hud__label { display: none; }
+  .city-mission-peek, .city-sales-peek { right: var(--city-right); }
+  .city-map-peek { top: 50%; }
+  .city-immersive .city-peek .city-map-tools [data-extra] { display: block; }
+  .city-world-peek > .city-peek__content { top: 48px; left: 0; width: min(340px, calc(100vw - var(--city-left) - var(--city-right))); }
+  .city-build-peek > .city-peek__content { width: calc(100vw - var(--city-left) - var(--city-right)); }
+  .city-immersive .city-peek .city-skills { height: 66px; padding: 0 8px; }
+  .city-immersive .city-peek .city-sales-resources { display: flex; }
+  .city-immersive .city-peek .city-building-level, .city-immersive .city-peek .city-mission__footer .city-fine { display: grid; }
+  .city-immersive[data-building][data-department] { --city-free-right: var(--city-right); --city-free-bottom: min(calc(var(--city-dock) + min(44dvh, 400px) + 10px), calc(100dvh - var(--city-free-top) - 80px)); }
+}
+
+/* On short screens the whole mission scrolls, including its action and error. */
+@media (max-height: 560px) {
+  .city-immersive .city-peek .city-mission {
+    height: calc(100dvh - var(--city-peek-top) - 48px - var(--city-peek-bottom) - 12px);
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+  .city-immersive .city-peek .city-mission__body {
+    flex: none; overflow: visible; mask-image: none; -webkit-mask-image: none;
+  }
+  .city-immersive .city-map-peek { top: calc((var(--city-top) + 100dvh - var(--city-peek-bottom)) / 2); }
+}

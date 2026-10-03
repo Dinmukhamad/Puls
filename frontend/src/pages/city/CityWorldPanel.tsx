@@ -8,6 +8,7 @@ import { useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import "./world.css";
+import { CityPeekPanel } from "./CityPeekPanel";
 
 export function CityWorldPanel({ world, current, selected, onPick, onClose, onTravel, onVisit, ready, estates, mine, onMyEstate, onOpenProject }: {
   world: CityWorld; current: DepartmentId; selected: string | null; onPick: (id: string) => void; onClose: () => void;
@@ -19,7 +20,7 @@ export function CityWorldPanel({ world, current, selected, onPick, onClose, onTr
   const district = here.districts.find(d => d.id === selected);
   const resourceIndex = selected?.startsWith("sales-resource-") ? Number(selected.slice(-2)) - 1 : -1;
   return <>
-    <button className="city-world-switch glass glass--regular" type="button" onClick={() => onPick("world")} aria-label="Города и районы"><span aria-hidden="true">◈</span><strong>{here.name}</strong><span>Города ↗</span></button>
+    <CityPeekPanel className="city-world-peek" label={`Города и районы · ${here.name}`} compactLabel="Города" icon="🗺️"><button className="city-world-switch glass glass--regular" type="button" onClick={() => onPick("world")} aria-label="Города и районы"><span aria-hidden="true">◈</span><strong>{here.name}</strong><span>Города ↗</span></button></CityPeekPanel>
     {selected && <Sheet title={district?.name ?? (resourceIndex >= 0 ? SALES_RESOURCES[resourceIndex] : "Города Puls")} onClose={onClose}>
       {district ? <CityDistrictSheet district={estates?.districts.find(d => d.id === district.id)} team={district} cityName={here.name} mine={mine} canManageAssignments={world.can_edit}
         onMyEstate={onMyEstate && (() => { onClose(); onMyEstate(); })} onOpenProject={onOpenProject && (() => { onClose(); onOpenProject(district.id); })} /> : resourceIndex >= 0 ? <div className="stack city-world-sheet"><span className="city-world-badge">Зарезервировано</span><h2>{SALES_RESOURCES[resourceIndex]}</h2><p>Место в учебном кампусе отдела продаж. Ресурс откроется после подготовки системы и учебных заданий.</p><p className="secondary">Это здание не заменяет действующие CRM и Диспетчерскую Техподдержки.</p></div> : <div className="stack city-world-sheet">

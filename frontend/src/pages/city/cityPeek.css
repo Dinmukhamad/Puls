@@ -1,0 +1,47 @@
+.city-peek {
+  --city-peek-size: 48px;
+  pointer-events: auto;
+}
+
+.city-peek__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--city-peek-size);
+  height: var(--city-peek-size);
+  min-width: var(--city-peek-size);
+  padding: 0;
+  border: 1px solid var(--border, rgba(255, 255, 255, .18));
+  border-radius: 16px;
+  color: inherit;
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.city-peek__trigger:focus-visible {
+  outline: 3px solid var(--accent, #8f74ff);
+  outline-offset: 3px;
+}
+
+.city-peek--labelled > .city-peek__trigger {
+  width: auto;
+  gap: 8px;
+  padding: 0 12px;
+}
+
+.city-peek__label {
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.city-peek__close { display: none; }
+.city-peek[data-open="true"] > .city-peek__trigger .city-peek__icon { display: none; }
+.city-peek[data-open="true"] > .city-peek__trigger .city-peek__close { display: inline; }
+.city-peek__content[hidden] { display: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .city-peek, .city-peek__content { transition: none !important; }
+}

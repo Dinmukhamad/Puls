@@ -8,6 +8,7 @@ import { useAuth } from "../../auth/AuthContext";
 import type { CityWorld, DepartmentId } from "../../api/cityWorld";
 import type { JourneyPhase } from "../../city3d/types";
 import { retainedCity } from "./retainedCity";
+import { CityPeekPanel } from "./CityPeekPanel";
 
 /**
  * The 3D city fills the whole screen behind the glass panels. `.city-frame` marks the part the panels
@@ -150,7 +151,8 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
     {!failed && !ready && <div className="city-loading" role="status"><span>Строим твой город…</span></div>}
     {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>3D-карта недоступна на этом устройстве</strong><small>Выбирай районы на панели навыков — миссии работают как обычно.</small></div>}
     {live && <span className="city-map-hint" key={controls}>{CONTROL_SCHEMES[controls].hint}</span>}
-    {!failed && <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="vertical">
+    {!failed && <CityPeekPanel label="Управление картой" icon={<span aria-hidden="true">⚙</span>} className="city-map-peek">
+      <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="vertical">
       <button type="button" className="city-time-toggle" aria-label={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} title={timeOfDay === "day" ? "Включить ночной режим" : "Включить дневной режим"} aria-pressed={timeOfDay === "night"} onClick={() => setTimeOfDay(value => value === "day" ? "night" : "day")}><span aria-hidden="true">{timeOfDay === "day" ? "☀" : "☾"}</span><small>{timeOfDay === "day" ? "День" : "Ночь"}</small></button>
       <button type="button" aria-label="Посмотреть помощника" disabled={department !== "support"} onClick={() => control.current?.focusMascot()}>♙</button>
       {onControls && <button type="button" className="city-controls-button" aria-label={`Управление камерой: ${CONTROL_SCHEMES[controls].title.toLowerCase()}`} title="Управление камерой" aria-expanded={controlsOpen} aria-controls={controlsOpen ? "city-controls-setup" : undefined} onClick={onControls}>
@@ -160,7 +162,8 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
       <button type="button" aria-label="Приблизить" onClick={() => control.current?.zoom(.75)}>＋</button>
       <button type="button" aria-label="Отдалить" onClick={() => control.current?.zoom(1.33)}>－</button>
       <button type="button" aria-label="Исходный вид" onClick={() => control.current?.reset()}>⌂</button>
-    </div>}
+      </div>
+    </CityPeekPanel>}
   </section>;
 }
 
