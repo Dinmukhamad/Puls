@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { Role } from "./api/types";
 import type { AccessMap, SectionCode } from "./api/access";
-import { HomeIcon, InboxIcon, QrIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon, WheelIcon } from "./components/icons";
+import { CoinIcon, HomeIcon, InboxIcon, QrIcon, SparkIcon, StoreIcon, TrophyIcon, UserIcon, UsersIcon, WheelIcon } from "./components/icons";
 
 export interface SectionTab { to: string; label: string }
 export interface NavItem {
@@ -45,11 +45,12 @@ const performance = (admin = false) => section("performance", "Показате�
   tab("/admin/settings?tab=rules", "Правила расчёта"), tab("/admin/settings?tab=nominations", "Номинации"), tab("/rating", "Рейтинг"),
 ], ["/admin/periods", "/rating", ...(admin ? [] : ["/admin/settings"])]);
 const motivation = (supervisor = false) => section("motivation", "Мотивация", StoreIcon, [
-  ...(supervisor ? [tab("/rating", "Рейтинг")] : []), tab("/admin/wallet", "Коины"),
+  ...(supervisor ? [tab("/rating", "Рейтинг")] : []),
   tab("/admin/levels", "Уровни"), tab("/admin/settings?tab=badges", "Достижения"),
   tab("/admin/store", "Товары магазина"), tab("/admin/requests", "Заказы и выдача"),
   tab("/admin/games?tab=wheel", "Колесо WOW"), tab("/admin/games?tab=raffles", "Розыгрыши"),
-], ["/admin/wallet", "/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
+], ["/admin/levels", "/admin/store", "/admin/requests", "/admin/games", "/shop", "/games", ...(supervisor ? ["/rating"] : [])]);
+const coinHistory = section("coin_history", "История коинов", CoinIcon, [tab("/admin/wallet", "История коинов")]);
 const staffHome = section("home", "Главная", HomeIcon, [tab("/admin/summary", "Сводка"), ...personal]);
 
 /** Only major destinations enter the sidebar. Future modules extend tabs inside these sections.
@@ -76,9 +77,9 @@ export const ROLE_NAVIGATION: Record<Role, readonly NavItem[]> = {
     section("rewards", "Награды", StoreIcon, [tab("/shop", "Магазин"), tab("/games?tab=raffles", "Розыгрыши")]),
     ACCOUNT_SECTION,
   ],
-  supervisor: [staffHome, team(false, true), analytics(true), staffLearning(false), motivation(true), QR_ACCESS_SECTION, ACCOUNT_SECTION],
-  head: [staffHome, team(), analytics(), performance(), staffLearning(false), motivation(), section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")]), QR_ACCESS_SECTION],
-  admin: [staffHome, team(true), performance(true), analytics(), staffLearning(true), motivation(),
+  supervisor: [staffHome, team(false, true), analytics(true), staffLearning(false), coinHistory, motivation(true), QR_ACCESS_SECTION, ACCOUNT_SECTION],
+  head: [staffHome, team(), analytics(), performance(), staffLearning(false), coinHistory, motivation(), section("reports", "Отчёты", InboxIcon, [tab("/reports", "Отчёты и экспорт")]), QR_ACCESS_SECTION],
+  admin: [staffHome, team(true), performance(true), analytics(), staffLearning(true), coinHistory, motivation(),
     section("system", "Система", InboxIcon, [tab("/admin/access", "Доступ к разделам"), tab("/admin/sessions", "Сессии и устройства"), tab("/admin/audit", "Журнал аудита"), tab("/reports", "Отчёты и экспорт")]), QR_ACCESS_SECTION],
 };
 

@@ -28,9 +28,9 @@ test("roles expose task-specific defaults with an account entry", () => {
   // «Наград»: это ежедневное действие на минуту, и прятать его вглубь
   // значит каждый раз заставлять оператора вспоминать, где оно.
   assert.deepEqual(nav.visibleNavigation("operator").map((item) => item.label), ["Главная", "Результаты", "Обучение", "Колесо", "Награды", "Профиль"]);
-  assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "Мотивация", "QR-доступ", "Профиль"]);
-  assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Показатели", "Обучение", "Мотивация", "Отчёты", "QR-доступ", "Профиль"]);
-  assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Команда", "Показатели", "Аналитика", "Обучение", "Мотивация", "Система", "QR-доступ", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("supervisor").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Обучение", "История коинов", "Мотивация", "QR-доступ", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("head").map((item) => item.label), ["Главная", "Команда", "Аналитика", "Показатели", "Обучение", "История коинов", "Мотивация", "Отчёты", "QR-доступ", "Профиль"]);
+  assert.deepEqual(nav.visibleNavigation("admin").map((item) => item.label), ["Главная", "Команда", "Показатели", "Аналитика", "Обучение", "История коинов", "Мотивация", "Система", "QR-доступ", "Профиль"]);
   assert.equal(nav.visibleNavigation("operator")[0].to, "/cabinet");
   assert.equal(nav.visibleNavigation("head")[0].to, "/admin/summary");
 });
@@ -54,6 +54,21 @@ test("management roles do not have empty operator destinations", () => {
       assert.ok(!tabs.some((tab) => tab.to.split("?")[0] === path), `${role}: ${path}`);
       assert.equal(nav.canVisit(role, path, nav.defaultAccess(role)), false);
     }
+  }
+});
+
+test("coin history is a single staff destination and follows motivation access", () => {
+  for (const role of ["supervisor", "head", "admin"]) {
+    const sections = nav.visibleNavigation(role);
+    assert.equal(sections.find(item => item.id === "coin_history")?.label, "История коинов");
+    assert.equal(sections.flatMap(item => item.tabs).filter(item => item.to === "/admin/wallet").length, 1);
+    assert.equal(nav.currentSection(role, "/admin/wallet", "?user=42")?.id, "coin_history");
+    const denied = { ...nav.defaultAccess(role), motivation: false };
+    assert.ok(!nav.visibleNavigation(role, denied).some(item => item.id === "coin_history"));
+    assert.equal(nav.canVisit(role, "/admin/wallet", denied), false);
+  }
+  for (const role of ["operator", "trainer"]) {
+    assert.ok(!nav.visibleNavigation(role).some(item => item.id === "coin_history"));
   }
 });
 

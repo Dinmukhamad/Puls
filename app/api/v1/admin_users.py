@@ -18,13 +18,14 @@ from app.core.deps import (
     SessionDep,
     StaffUser,
     UserCreator,
+    ensure_can_manage,
     ensure_can_manage_credentials,
     visible_users_filter,
 )
 from app.core.developer import protect_developer_account
 from app.core.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 from app.core.security import hash_password
-from app.core.visibility import identity_filter, shop_request_output
+from app.core.visibility import shop_request_output
 from app.models.coin import CoinTransaction
 from app.models.driver_auth import TelegramLink
 from app.models.enums import USER_VISIBILITY, Role
@@ -205,12 +206,16 @@ async def user_dashboard(
 async def user_transactions(
     session: SessionDep, actor: StaffUser, user_id: int, pagination: PaginationDep
 ) -> Page[TransactionOut]:
-    await _visible_user(session, actor, user_id)
+    target = await _visible_user(session, actor, user_id)
+    if target.role != Role.OPERATOR:
+        raise PermissionDeniedError("История коинов доступна только для операторов")
+    if actor.role != Role.OPERATOR:
+        await ensure_can_manage(session, actor, target)
     condition = CoinTransaction.user_id == user_id
     total = int(await session.scalar(select(func.count(CoinTransaction.id)).where(condition)) or 0)
     rows = await session.execute(
         select(CoinTransaction, User.full_name)
-        .outerjoin(User, (User.id == CoinTransaction.created_by_id) & identity_filter(actor))
+        .outerjoin(User, User.id == CoinTransaction.created_by_id)
         .where(condition)
         .order_by(CoinTransaction.created_at.desc(), CoinTransaction.id.desc())
         .offset(pagination.offset)
@@ -219,7 +224,7 @@ async def user_transactions(
     items = []
     for transaction, author in rows:
         item = TransactionOut.model_validate(transaction)
-        item.author_name = author
+        item.author_name = (transaction.meta or {}).get("actor_name") or author
         items.append(item)
     return Page.build(items, total, pagination.page, pagination.size)
 

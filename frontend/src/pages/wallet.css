@@ -1,8 +1,16 @@
 .wallet-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); align-items: end; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .wallet-filters .field { margin: 0; }
+.wallet-operator-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: var(--sp-3); min-width: 0; }
+.wallet-filters .wallet-operator-picker { grid-column: 1 / -1; }
+.wallet-operator-picker > :not(.field) { grid-column: 1 / -1; }
+.wallet-operator-picker .pagination { flex-wrap: wrap; }
 .wallet-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.wallet-balance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); margin: 0; padding: var(--sp-3); background: var(--surface-secondary); border-radius: var(--radius-m); }
+.wallet-balance dt { color: var(--text-secondary); font-size: var(--text-secondary-size); }
+.wallet-balance dd { margin: var(--sp-1) 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.wallet-preview { padding: var(--sp-3); border: 1px solid var(--separator); border-radius: var(--radius-m); }
 .wallet-entry { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-4) 0; border-bottom: 1px solid var(--separator); }
 .wallet-entry:last-child { border-bottom: 0; }
 .wallet-entry__body, .wallet-entry__amount { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; overflow-wrap: anywhere; }
 .wallet-entry__amount { text-align: right; flex-shrink: 0; }
-@media (max-width: 560px) { .wallet-entry { flex-direction: column; gap: var(--sp-3); } .wallet-entry__amount { text-align: left; } }
+@media (max-width: 560px) { .wallet-operator-picker { grid-template-columns: minmax(0, 1fr); } .wallet-entry { flex-direction: column; gap: var(--sp-3); } .wallet-entry__amount { text-align: left; } }

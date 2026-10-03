@@ -16,11 +16,12 @@ from app.core.deps import (
     SessionDep,
     StaffUser,
     ensure_can_manage,
+    managed_operators_filter,
     visible_users_filter,
 )
-from app.core.visibility import identity_filter, shop_request_output
+from app.core.visibility import shop_request_output
 from app.models.coin import CoinTransaction
-from app.models.enums import ShopRequestStatus, TxType
+from app.models.enums import Role, ShopRequestStatus, TxType
 from app.models.shop import ShopRequest
 from app.models.user import User
 from app.schemas.admin import (
@@ -197,7 +198,12 @@ async def all_transactions(
     date_to: datetime | None = None,
 ) -> Page[TransactionOut]:
     """Полная история операций - доступна руководителю и администратору (п. 4.4.5)."""
-    visible_ids = select(User.id).where(await visible_users_filter(session, actor))
+    visibility = (
+        User.id == actor.id
+        if actor.role == Role.OPERATOR
+        else await managed_operators_filter(session, actor)
+    )
+    visible_ids = select(User.id).where(visibility)
     conditions = [CoinTransaction.user_id.in_(visible_ids)]
     if user_id is not None:
         conditions.append(CoinTransaction.user_id == user_id)
@@ -214,7 +220,7 @@ async def all_transactions(
         select(CoinTransaction, author.c.full_name)
         .outerjoin(
             author,
-            (author.c.id == CoinTransaction.created_by_id) & identity_filter(actor, author.c),
+            author.c.id == CoinTransaction.created_by_id,
         )
         .where(*conditions)
         .order_by(CoinTransaction.created_at.desc(), CoinTransaction.id.desc())
@@ -224,7 +230,7 @@ async def all_transactions(
     items = []
     for transaction, author_name in rows:
         item = TransactionOut.model_validate(transaction)
-        item.author_name = author_name
+        item.author_name = (transaction.meta or {}).get("actor_name") or author_name
         items.append(item)
     return Page.build(items, total, pagination.page, pagination.size)
 

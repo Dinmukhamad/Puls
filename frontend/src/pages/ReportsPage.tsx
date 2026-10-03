@@ -10,7 +10,7 @@ const reports = [
   { title: "Качество", text: "Покрытие оценками и недельная матрица", to: "/analytics?tab=quality&metric=quality" },
   { title: "Обучение", text: "Попытки, результаты и награды сотрудников", to: "/admin/learning?tab=results" },
   { title: "Driver Simulator", text: "Результаты прохождений симулятора", to: "/admin/learning?tab=results&kind=simulator" },
-  { title: "Экономика коинов", text: "Баланс команды, начисления, списания и возвраты", to: "/admin/wallet" },
+  { title: "История коинов", text: "Баланс операторов, начисления, списания и возвраты", to: "/admin/wallet" },
   { title: "Магазин", text: "Заявки, решения и выдача покупок", to: "/admin/requests" },
 ];
 

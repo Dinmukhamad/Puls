@@ -2,19 +2,32 @@ from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 
-from app.core.deps import CurrentUser, PaginationDep, SessionDep, StaffUser, visible_users_filter
+from app.core.deps import (
+    CurrentUser,
+    PaginationDep,
+    SessionDep,
+    StaffUser,
+    managed_operators_filter,
+)
 from app.core.errors import DomainError, PermissionDeniedError
-from app.core.visibility import identity_filter
 from app.models.coin import CoinTransaction
 from app.models.enums import TX_GROUPS, Role, TxType
-from app.models.user import CoinAccount, User
+from app.models.user import CoinAccount, Group, User
 from app.schemas.common import Page
-from app.schemas.wallet import WalletReport, WalletSummary, WalletTransaction
+from app.schemas.wallet import WalletOperator, WalletReport, WalletSummary, WalletTransaction
 
 router = APIRouter(tags=["Кошелёк"])
 HistoryKind = Literal["accrual", "writeoff", "refund", "purchase"]
+
+
+async def wallet_operators_filter(session, actor):
+    # Explicit section grants may open this read view to an operator, whose
+    # financial data remains personal. Supervisors see only their own teams.
+    if actor.role == Role.OPERATOR:
+        return User.id == actor.id
+    return await managed_operators_filter(session, actor)
 
 
 async def report(session, viewer, visibility, pagination, date_from, date_to, kind, user_id=None):
@@ -105,11 +118,11 @@ async def report(session, viewer, visibility, pagination, date_from, date_to, ki
     )
     author = User.__table__.alias("wallet_author")
     rows = await session.execute(
-        select(CoinTransaction, User.full_name, author.c.full_name)
+        select(CoinTransaction, User.full_name, author.c.full_name, author.c.role)
         .join(User, User.id == CoinTransaction.user_id)
         .outerjoin(
             author,
-            (author.c.id == CoinTransaction.created_by_id) & identity_filter(viewer, author.c),
+            author.c.id == CoinTransaction.created_by_id,
         )
         .where(*conditions)
         .order_by(CoinTransaction.created_at.desc(), CoinTransaction.id.desc())
@@ -117,7 +130,19 @@ async def report(session, viewer, visibility, pagination, date_from, date_to, ki
         .limit(pagination.size)
     )
     items = []
-    for transaction, name, author_name in rows:
+    for transaction, name, author_name, author_role in rows:
+        # Ledger attribution is part of the recipient's financial history; only
+        # the author's name/role are exposed, never their profile. Manual entries
+        # carry a snapshot that survives a rename or deletion of the author.
+        meta = transaction.meta or {}
+        recorded_name = meta.get("actor_name") or author_name
+        recorded_role = meta.get("actor_role") or author_role
+        is_staff_entry = (
+            transaction.created_by_id is not None
+            or recorded_name is not None
+            or transaction.tx_type
+            in (TxType.MANUAL_CREDIT, TxType.MANUAL_DEBIT, TxType.DRIVER_GRATITUDE)
+        )
         item = WalletTransaction(
             **{
                 key: getattr(transaction, key)
@@ -134,7 +159,9 @@ async def report(session, viewer, visibility, pagination, date_from, date_to, ki
                 )
             },
             full_name=name,
-            author_name=author_name,
+            author_name=recorded_name,
+            author_role=recorded_role,
+            is_system=not is_staff_entry,
         )
         items.append(item)
     return WalletReport(
@@ -174,5 +201,52 @@ async def team(
     kind: HistoryKind | None = None,
     user_id: Annotated[int | None, Query(gt=0)] = None,
 ):
-    visibility = (await visible_users_filter(session, actor)) & (User.role == Role.OPERATOR)
+    visibility = await wallet_operators_filter(session, actor)
     return await report(session, actor, visibility, pagination, date_from, date_to, kind, user_id)
+
+
+@router.get("/admin/wallet/operators", response_model=Page[WalletOperator])
+async def operators(
+    session: SessionDep,
+    actor: StaffUser,
+    pagination: PaginationDep,
+    search: Annotated[str | None, Query(max_length=150)] = None,
+    user_id: Annotated[int | None, Query(gt=0)] = None,
+):
+    conditions = [await wallet_operators_filter(session, actor)]
+    if user_id is not None:
+        conditions.append(User.id == user_id)
+    if search and (term := search.strip()):
+        # Treat SQL wildcard characters as literal search text.
+        conditions.append(
+            or_(
+                User.full_name.icontains(term, autoescape=True),
+                User.login.icontains(term, autoescape=True),
+            )
+        )
+    total = int(await session.scalar(select(func.count(User.id)).where(*conditions)) or 0)
+    balance = func.coalesce(CoinAccount.balance, 0)
+    reserved = func.coalesce(CoinAccount.reserved, 0)
+    rows = await session.execute(
+        select(
+            User.id.label("user_id"),
+            User.full_name,
+            Group.name.label("group_name"),
+            User.is_active,
+            balance.label("balance"),
+            reserved.label("reserved"),
+            (balance - reserved).label("available"),
+        )
+        .outerjoin(CoinAccount, CoinAccount.user_id == User.id)
+        .outerjoin(Group, Group.id == User.group_id)
+        .where(*conditions)
+        .order_by(User.full_name, User.id)
+        .offset(pagination.offset)
+        .limit(pagination.size)
+    )
+    return Page.build(
+        [WalletOperator(**row) for row in rows.mappings()],
+        total,
+        pagination.page,
+        pagination.size,
+    )

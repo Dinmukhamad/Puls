@@ -104,10 +104,11 @@ async def manual_transaction(
             code="amount_out_of_range",
         )
 
-    if len(cleaned) < rules.manual_reason_min_length:
+    minimum_reason_length = max(1, rules.manual_reason_min_length)
+    if len(cleaned) < minimum_reason_length:
         raise DomainError(
             f"Комментарий обязателен и должен содержать не менее "
-            f"{rules.manual_reason_min_length} символов",
+            f"{minimum_reason_length} символов",
             code="reason_required",
         )
 
