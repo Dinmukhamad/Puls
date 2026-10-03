@@ -55,7 +55,7 @@ class GamificationSettings(Base, TimestampMixin):
     )
 
     #: Ограничение на одну ручную операцию, чтобы опечатка не сломала экономику.
-    manual_max_abs_amount: Mapped[int] = mapped_column(Integer, default=100)
+    manual_max_abs_amount: Mapped[int] = mapped_column(Integer, default=9999)
     #: Минимальная длина комментария к ручной операции (п. 3.3 - комментарий обязателен).
     manual_reason_min_length: Mapped[int] = mapped_column(Integer, default=5)
 

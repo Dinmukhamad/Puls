@@ -1,16 +1,30 @@
 .wallet-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); align-items: end; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .wallet-filters .field { margin: 0; }
-.wallet-operator-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: var(--sp-3); min-width: 0; }
+.wallet-operator-picker { display: flex; flex-wrap: wrap; gap: var(--sp-2); min-width: 0; }
 .wallet-filters .wallet-operator-picker { grid-column: 1 / -1; }
-.wallet-operator-picker > :not(.field) { grid-column: 1 / -1; }
-.wallet-operator-picker .pagination { flex-wrap: wrap; }
+.wallet-operator-picker > .field, .wallet-operator-picker__results, .wallet-operator-picker__hint { width: 100%; }
+.wallet-operator-picker__results { border: 1px solid var(--separator); border-radius: var(--radius-m); overflow: hidden; }
+.wallet-operator-picker__results > p { padding: var(--sp-3); margin: 0; }
+.wallet-operator-picker__results [role="listbox"] { max-height: 240px; overflow-y: auto; }
+.wallet-operator-picker__option { display: flex; flex-direction: column; align-items: flex-start; width: 100%; min-height: 48px; padding: var(--sp-2) var(--sp-3); gap: 2px; border: 0; border-bottom: 1px solid var(--separator); background: var(--surface-secondary); color: var(--text-primary); text-align: left; cursor: pointer; font: inherit; overflow-wrap: anywhere; }
+.wallet-operator-picker__option:last-child { border-bottom: 0; }
+.wallet-operator-picker__option:hover, .wallet-operator-picker__option.is-active { background: var(--surface-tertiary, var(--surface-secondary)); box-shadow: inset 3px 0 0 var(--accent-primary); }
+.wallet-operator-picker__pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding: var(--sp-2); flex-wrap: wrap; }
+.wallet-operator-picker__selected { display: flex; align-items: center; gap: var(--sp-2); max-width: 100%; min-height: 44px; padding: 0 var(--sp-2) 0 var(--sp-3); border-radius: var(--radius-m); background: var(--surface-secondary); border: 1px solid var(--separator); }
+.wallet-operator-picker__selected > span { min-width: 0; overflow-wrap: anywhere; }
+.wallet-operator-picker__remove { border: 0; background: transparent; color: var(--text-secondary); min-width: 40px; min-height: 40px; font-size: 24px; cursor: pointer; flex-shrink: 0; }
+.wallet-group-options { display: grid; gap: var(--sp-2); max-height: 240px; overflow-y: auto; }
+.wallet-group-option { display: flex; align-items: center; min-height: 52px; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border: 1px solid var(--separator); border-radius: var(--radius-m); background: var(--surface-secondary); cursor: pointer; }
+.wallet-group-option > span { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
 .wallet-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .wallet-balance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); margin: 0; padding: var(--sp-3); background: var(--surface-secondary); border-radius: var(--radius-m); }
 .wallet-balance dt { color: var(--text-secondary); font-size: var(--text-secondary-size); }
 .wallet-balance dd { margin: var(--sp-1) 0 0; font-weight: 700; overflow-wrap: anywhere; }
 .wallet-preview { padding: var(--sp-3); border: 1px solid var(--separator); border-radius: var(--radius-m); }
+.wallet-preview p { margin: 0 0 var(--sp-2); }
+.wallet-preview p:last-child { margin-bottom: 0; }
 .wallet-entry { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-4) 0; border-bottom: 1px solid var(--separator); }
 .wallet-entry:last-child { border-bottom: 0; }
 .wallet-entry__body, .wallet-entry__amount { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; overflow-wrap: anywhere; }
 .wallet-entry__amount { text-align: right; flex-shrink: 0; }
-@media (max-width: 560px) { .wallet-operator-picker { grid-template-columns: minmax(0, 1fr); } .wallet-entry { flex-direction: column; gap: var(--sp-3); } .wallet-entry__amount { text-align: left; } }
+@media (max-width: 560px) { .wallet-entry { flex-direction: column; gap: var(--sp-3); } .wallet-entry__amount { text-align: left; } }

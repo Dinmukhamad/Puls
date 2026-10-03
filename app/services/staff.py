@@ -68,6 +68,7 @@ async def manual_transaction(
     reason: str,
     tx_type: TxType | None = None,
     request_id: str | None = None,
+    meta: dict | None = None,
 ) -> CoinTransaction:
     """
     Ручное начисление или списание коинов (п. 3.3).
@@ -98,9 +99,10 @@ async def manual_transaction(
         raise DomainError("Коины начисляются только операторам")
     if amount == 0:
         raise DomainError("Количество коинов не может быть нулевым")
-    if abs(amount) > rules.manual_max_abs_amount:
+    maximum = min(rules.manual_max_abs_amount, 9999)
+    if abs(amount) > maximum:
         raise DomainError(
-            f"Разовая операция ограничена {rules.manual_max_abs_amount} коинами",
+            f"Разовая операция ограничена {maximum} коинами",
             code="amount_out_of_range",
         )
 
@@ -120,7 +122,7 @@ async def manual_transaction(
         reason=cleaned,
         created_by_id=actor.id,
         idempotency_key=key,
-        meta={"actor_name": actor.full_name, "actor_role": str(actor.role)},
+        meta={**(meta or {}), "actor_name": actor.full_name, "actor_role": str(actor.role)},
     )
     assert transaction is not None
     session.add(

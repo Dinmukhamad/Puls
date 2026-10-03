@@ -16,7 +16,13 @@ from app.models.coin import CoinTransaction
 from app.models.enums import TX_GROUPS, Role, TxType
 from app.models.user import CoinAccount, Group, User
 from app.schemas.common import Page
-from app.schemas.wallet import WalletOperator, WalletReport, WalletSummary, WalletTransaction
+from app.schemas.wallet import (
+    WalletGroup,
+    WalletOperator,
+    WalletReport,
+    WalletSummary,
+    WalletTransaction,
+)
 
 router = APIRouter(tags=["Кошелёк"])
 HistoryKind = Literal["accrual", "writeoff", "refund", "purchase"]
@@ -250,3 +256,25 @@ async def operators(
         pagination.page,
         pagination.size,
     )
+
+
+@router.get("/admin/wallet/groups", response_model=list[WalletGroup])
+async def groups(session: SessionDep, actor: StaffUser):
+    visibility = await wallet_operators_filter(session, actor)
+    conditions = []
+    if actor.role == Role.SUPERVISOR:
+        conditions.append(Group.supervisor_id == actor.id)
+    elif actor.role not in (Role.HEAD, Role.ADMIN):
+        return []
+    rows = await session.execute(
+        select(
+            Group.id.label("group_id"),
+            Group.name,
+            func.count(User.id).label("operators_count"),
+        )
+        .outerjoin(User, (User.group_id == Group.id) & visibility)
+        .where(*conditions)
+        .group_by(Group.id, Group.name)
+        .order_by(Group.name, Group.id)
+    )
+    return [WalletGroup(**row) for row in rows.mappings()]

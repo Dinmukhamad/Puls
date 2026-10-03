@@ -101,12 +101,6 @@ export function Sheet({
     const unregister = registerSheet(layer);
     const onKey = (event: KeyboardEvent) => {
       if (sheetStack.at(-1) !== layer) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        closeRef.current();
-        return;
-      }
       if (event.key !== "Tab") return;
       const controls = focusableElements(dialog);
       const first = controls[0];
@@ -123,15 +117,24 @@ export function Sheet({
         first.focus();
       }
     };
+    // Nested controls handle their first Escape before the dialog closes.
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || sheetStack.at(-1) !== layer) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeRef.current();
+    };
     const onFocus = (event: FocusEvent) => {
       if (sheetStack.at(-1) === layer && event.target instanceof Node && !dialog.contains(event.target)) {
         dialog.focus({ preventScroll: true });
       }
     };
     document.addEventListener("keydown", onKey, true);
+    document.addEventListener("keydown", onEscape);
     document.addEventListener("focusin", onFocus);
     return () => {
       document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("keydown", onEscape);
       document.removeEventListener("focusin", onFocus);
       unregister();
       if (previousFocus?.isConnected && !previousFocus.closest("[inert]") && previousFocus.getClientRects().length > 0) {

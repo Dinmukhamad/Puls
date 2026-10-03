@@ -26,14 +26,19 @@ from app.models.shop import ShopRequest
 from app.models.user import User
 from app.schemas.admin import (
     GratitudeIn,
+    ManualCoinsApplyIn,
     ManualCoinsBulkIn,
+    ManualCoinsBulkOut,
     ManualCoinsIn,
+    ManualCoinsPreviewIn,
+    ManualCoinsPreviewOut,
     OperatorRowOut,
     SummaryOut,
 )
 from app.schemas.cabinet import TransactionOut
 from app.schemas.common import Message, Page
 from app.schemas.shop import ShopDecision, ShopRejection, ShopRequestOut
+from app.services import coin_bulk as coin_bulk_service
 from app.services import shop as shop_service
 from app.services import staff as staff_service
 from app.services import weekly as weekly_service
@@ -142,23 +147,43 @@ async def manual_coins(
 async def manual_coins_bulk(
     session: SessionDep, actor: StaffUser, payload: ManualCoinsBulkIn
 ) -> list[TransactionOut]:
-    """Начисляет одинаковую сумму с общей причиной. Выполняется одной транзакцией."""
+    """Старый формат ответа сохранён для существующих клиентов."""
+    transactions = await coin_bulk_service.apply(session, actor=actor, payload=payload)
     items: list[TransactionOut] = []
-    for user_id in payload.user_ids:
-        target = await staff_service.get_operator(session, user_id)
-        await ensure_can_manage(session, actor, target)
-        transaction = await staff_service.manual_transaction(
-            session,
-            actor=actor,
-            target=target,
-            amount=payload.amount,
-            reason=payload.reason,
-        )
+    for transaction in transactions:
         item = TransactionOut.model_validate(transaction)
-        item.author_name = actor.full_name
+        item.author_name = (transaction.meta or {}).get("actor_name") or actor.full_name
         items.append(item)
     await session.commit()
     return items
+
+
+@router.post(
+    "/coins/manual/bulk/preview",
+    response_model=ManualCoinsPreviewOut,
+    summary="Проверить получателей и доступные коины перед групповой операцией",
+)
+async def preview_manual_coins_bulk(
+    session: SessionDep, actor: StaffUser, payload: ManualCoinsPreviewIn
+) -> ManualCoinsPreviewOut:
+    return await coin_bulk_service.preview(session, actor=actor, payload=payload)
+
+
+@router.post(
+    "/coins/manual/bulk/apply",
+    response_model=ManualCoinsBulkOut,
+    summary="Начислить или списать коины выбранным операторам, группам или всем",
+)
+async def apply_manual_coins_bulk(
+    session: SessionDep, actor: StaffUser, payload: ManualCoinsApplyIn
+) -> ManualCoinsBulkOut:
+    transactions = await coin_bulk_service.apply(session, actor=actor, payload=payload)
+    await session.commit()
+    return ManualCoinsBulkOut(
+        count=len(transactions),
+        total_amount=sum(transaction.amount for transaction in transactions),
+        transaction_ids=[transaction.id for transaction in transactions],
+    )
 
 
 @router.post(

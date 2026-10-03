@@ -22,6 +22,12 @@ class WalletOperator(BaseModel):
     available: int
 
 
+class WalletGroup(BaseModel):
+    group_id: int
+    name: str
+    operators_count: int
+
+
 class WalletSummary(BaseModel):
     balance: int
     reserved: int

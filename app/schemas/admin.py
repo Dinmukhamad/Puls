@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from pydantic import BaseModel, Field, FiniteFloat, model_validator
+from pydantic import BaseModel, Field, FiniteFloat, PositiveInt, model_validator
 
 from app.models.enums import BadgeRule, MetricDirection, MetricKind
 from app.schemas.common import ORMModel
@@ -56,12 +56,63 @@ class ManualCoinsIn(BaseModel):
         return self
 
 
-class ManualCoinsBulkIn(BaseModel):
-    """Пакетное ручное начисление нескольким операторам одной причиной."""
+class ManualCoinsSelection(BaseModel):
+    """Один способ выбора получателей; групповой выбор разрешает сервер."""
 
-    user_ids: list[int] = Field(min_length=1)
+    user_ids: list[PositiveInt] = Field(default_factory=list, max_length=100_000)
+    group_ids: list[PositiveInt] = Field(default_factory=list, max_length=100_000)
+    all_operators: bool = False
+
+    @model_validator(mode="after")
+    def _one_selection(self) -> ManualCoinsSelection:
+        if sum((bool(self.user_ids), bool(self.group_ids), self.all_operators)) != 1:
+            raise ValueError("Выберите операторов, группы или всех операторов")
+        return self
+
+
+class ManualCoinsPreviewIn(ManualCoinsSelection):
+    amount: int = Field(ge=-9999, le=9999)
+
+    @model_validator(mode="after")
+    def _non_zero(self) -> ManualCoinsPreviewIn:
+        if self.amount == 0:
+            raise ValueError("Количество коинов не может быть нулевым")
+        return self
+
+
+class ManualCoinsPreviewOut(BaseModel):
+    count: int
+    eligible_count: int
+    insufficient_count: int
+    balance: int
+    reserved: int
+    available: int
+    min_available: int | None
     amount: int
+    total_amount: int
+    can_submit: bool
+    selection_token: str
+
+
+class ManualCoinsBulkIn(ManualCoinsPreviewIn):
+    """Одинаковая сумма каждому получателю; пакет проводится целиком."""
+
     reason: str = Field(min_length=1, max_length=500)
+    request_id: str | None = Field(default=None, min_length=16, max_length=80)
+    selection_token: str | None = Field(default=None, max_length=2_000_000)
+
+
+class ManualCoinsApplyIn(ManualCoinsBulkIn):
+    """Новый интерфейс обязательно подтверждает состав и защищает повтор запроса."""
+
+    request_id: str = Field(min_length=16, max_length=80)
+    selection_token: str = Field(min_length=1, max_length=2_000_000)
+
+
+class ManualCoinsBulkOut(BaseModel):
+    count: int
+    total_amount: int
+    transaction_ids: list[int]
 
 
 class GratitudeIn(BaseModel):
@@ -183,7 +234,7 @@ class RulesUpdate(BaseModel):
     driver_gratitude_bonus: int | None = Field(default=None, ge=0)
     lateness_metric_code: str | None = None
     forbidden_sites_metric_code: str | None = None
-    manual_max_abs_amount: int | None = Field(default=None, ge=1)
+    manual_max_abs_amount: int | None = Field(default=None, ge=1, le=9999)
     manual_reason_min_length: int | None = Field(default=None, ge=0)
     discipline_requires_reported: bool | None = None
     rating_show_balance_to_operators: bool | None = None
