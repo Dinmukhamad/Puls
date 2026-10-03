@@ -4,26 +4,35 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const built = await build({
-  stdin: { contents: 'export * from "./estates.ts"; export * from "../world/land.ts"; export * from "../world/landLayouts.ts"; export * from "../world/officeBuildings.ts"; export * from "../world/districtLandmark.ts"; export * from "../world/cities.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: 'export * from "./estates.ts"; export * from "../engine/camera.ts"; export * from "../assets/catalogue.ts"; export * from "../world/familyHouses.ts"; export * from "../world/land.ts"; export * from "../world/landLayouts.ts"; export * from "../world/officeBuildings.ts"; export * from "../world/districtLandmark.ts"; export * from "../world/cities.ts"; export * from "../world/worldSpec.ts"; export * as THREE from "three/webgpu";', resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
+  plugins: [{ name: 'url', setup(b) {
+    b.onResolve({ filter: /\?url$/ }, a => ({ path: a.path, namespace: 'url' }));
+    b.onLoad({ filter: /.*/, namespace: 'url' }, a => ({ contents: `export default ${JSON.stringify(a.path)};`, loader: 'js' }));
+  } }],
 });
 const city = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const { THREE } = city, world = city.islandWorld(city.WORLD_X4), grid = city.landGrid(world), frame = grid.plots[0];
 class Element extends EventTarget {
-  style = {}; clientWidth = 800; clientHeight = 800;
+  style = {}; dataset = {}; clientWidth = 800; clientHeight = 800;
   children = []; attributes = {}; nodes = new Map(); parent = null;
   setAttribute(name, value) { this.attributes[name] = value; }
   append(element) { this.children.push(element); element.parent = this; }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(child => child !== this); this.parent = null; }
   querySelector(selector) { if (!this.nodes.has(selector)) this.nodes.set(selector, new Element()); return this.nodes.get(selector); }
-  getBoundingClientRect() { return { left: 0, top: 0, width: 800, height: 800 }; }
+  getBoundingClientRect() { return { left: 0, top: 0, right: 800, bottom: 800, width: 800, height: 800 }; }
+  focus() { document.activeElement = this; }
+  setPointerCapture() {}
+  releasePointerCapture() {}
+  getContext() { return new Proxy({}, { get: (_, key) => key === 'measureText' ? () => ({ width: 0 }) : () => {}, set: () => true }); }
 }
-globalThis.document = { createElement: () => new Element() };
+globalThis.document = { createElement: () => new Element(), body: new Element(), activeElement: null };
+globalThis.window = new EventTarget(); globalThis.Node = Element; globalThis.HTMLElement = Element;
 const districtId = `support-team-${frame.district}`;
 const object = (family = 'officea', extra = {}) => ({ id: 7, family, level: 1, owner: 'mine', module: frame.block, u: frame.col, v: frame.row, w: 1, h: 1, rotation: 0, ...extra });
 function setup(targetGrid = grid) {
   const canvas = new Element(), camera = new THREE.PerspectiveCamera(36, 1, 1, 800), picks = [];
-  const ctx = { world, scene: new THREE.Scene(), renderer: { domElement: canvas }, camera, overlay: new Element(), reducedMotion: true, requestShadowUpdate() {}, onFrame: () => () => {}, onCameraMove: () => () => {} };
+  const ctx = { world, scene: new THREE.Scene(), renderer: { domElement: canvas }, camera, overlay: new Element(), quality: { lodDistances: [40, 100, 250] }, reducedMotion: true, requestShadowUpdate() {}, onFrame: () => () => {}, onCameraMove: () => () => {}, onQuality: () => () => {} };
   const estates = city.createEstates(ctx, targetGrid, pick => picks.push(pick));
   const state = (objects, sandbox = false, extra = {}) => estates.set({ state: { city: 'support', sandbox, districts: [{ id: districtId, name: 'Тестовый район', number: frame.district, objects, projects: [], land: { open_band: grid.bands }, ...extra }] } });
   const build = placing => estates.setBuild({ district: districtId, area: 'plots', placing, selected: null, plot: null });
@@ -42,6 +51,13 @@ function setup(targetGrid = grid) {
 test('normal exploration hides plot grids; personal build shows only own land and preserves permanent centre paving', () => {
   const s = setup(); s.state([]);
   const plots = s.ctx.scene.getObjectByName('district-plots'), centres = s.ctx.scene.getObjectByName('district-centres');
+  for (const ground of [plots, centres]) {
+    assert.equal(ground.material.polygonOffset, true, 'nearly coplanar terrain cannot fragment the land at a whole-district camera distance');
+    assert.ok(ground.material.polygonOffsetFactor < 0 && ground.material.polygonOffsetUnits < 0, 'ground depth is biased toward the camera');
+    assert.equal(ground.material.depthTest, true, 'houses and offices still occlude the ground');
+    assert.equal(ground.material.depthWrite, true);
+    assert.equal(ground.renderOrder, 0, 'the land keeps normal scene depth ordering');
+  }
   assert.equal(plots.visible, false);
   assert.equal(centres.visible, true);
   assert.ok(centres.geometry.index.count > 0, 'HQ and community-square paving has its own permanent mesh');
@@ -108,19 +124,47 @@ test('the community-square cell grid appears only during project placement and i
   s.estates.dispose();
 });
 
-test('personal build focus targets nearby free land across the entire district, rather than the community square', () => {
+test('personal build focus includes every own plot, including occupied land and all expansion bands', () => {
   const s = setup(), centre = grid.centres.find(c => c.district === frame.district), own = grid.plots.filter(p => p.district === frame.district);
-  const nearest = own.sort((a, b) => Math.hypot(a.x - centre.area.x, a.z - centre.area.z) - Math.hypot(b.x - centre.area.x, b.z - centre.area.z));
-  const occupied = nearest[0];
+  const occupied = own[0];
   s.state([object('house', { module: occupied.block, u: occupied.col, v: occupied.row })], false, { land: { open_band: 1 } });
   s.build(null);
   const focus = s.estates.focus({ district: districtId, kind: 'district' }, 48, .86);
-  assert.ok(Math.hypot(focus.point.x - nearest[1].x, focus.point.z - nearest[1].z) < 1e-8, 'occupied plots are skipped even when old state reports band 1');
-  assert.ok(Math.hypot(focus.point.x - centre.square.x, focus.point.z - centre.square.z) > 10);
+  assert.ok(focus.bounds, 'the runtime receives an area to fit instead of a single nearby plot');
+  for (const plot of own) for (const corner of plot.corners) {
+    assert.ok(focus.bounds.containsPoint(new THREE.Vector3(corner.x, .203, corner.z)), 'all own land remains in the camera area');
+  }
+  assert.deepEqual(focus.point.toArray(), focus.bounds.getCenter(new THREE.Vector3()).toArray());
+  s.state(own.map((plot, id) => object('house', { id, module: plot.block, u: plot.col, v: plot.row })));
+  const full = s.estates.focus({ district: districtId, kind: 'district' }, 48, .86);
+  assert.deepEqual(full.bounds, focus.bounds, 'a fully occupied district still frames its land and buildings');
+  const close = s.estates.focus({ district: districtId, kind: 'plot', plot: { block: occupied.block, col: occupied.col, row: occupied.row } }, 30, .86);
+  assert.equal(close.bounds, undefined, 'a chosen cell keeps the close purchase view');
   s.estates.setBuild(null);
   const overview = s.estates.focus({ district: districtId, kind: 'district' }, 48, .86);
+  assert.equal(overview.bounds, undefined);
   assert.ok(Math.hypot(overview.point.x - centre.area.x, overview.point.z - centre.area.z) < 1e-8, 'normal district overview still focuses the centre');
   s.estates.dispose();
+});
+
+test('taps in a fitted whole-district camera select the exact free grid address across the outer land', () => {
+  const s = setup(), canvas = s.ctx.renderer.domElement;
+  const freeFrame = { getBoundingClientRect: () => ({ left: 200, top: 30, right: 740, bottom: 670, width: 540, height: 640 }) };
+  const rig = city.createCameraRig(s.camera, { dom: canvas, host: canvas, frame: freeFrame, radius: world.radius, reach: world.radius + 20, reducedMotion: true, onView() {} });
+  rig.resize(800, 800);
+  for (const number of [1, 2, 3]) {
+    const id = `support-team-${number}`, own = grid.plots.filter(p => p.district === number);
+    s.estates.set({ state: { city: 'support', sandbox: false, districts: [{ id, number, name: 'Район', objects: [], projects: [], land: { open_band: 1 } }] } });
+    s.estates.setBuild({ district: id, area: 'plots', placing: null, selected: null, plot: null });
+    const focus = s.estates.focus({ district: id, kind: 'district' }, 48, .86);
+    rig.focusBounds(focus.bounds, focus.azimuth, .5, 0);
+    assert.ok(rig.currentView().distance > 140 * world.radius / 150, 'the actual estate picker works beyond the former camera limit');
+    for (const plot of [own[0], own[Math.floor(own.length / 2)], own.at(-1)]) {
+      s.picks.length = 0; s.tap(new THREE.Vector3(plot.x, .2, plot.z));
+      assert.deepEqual(s.picks, [{ kind: 'plot', district: id, block: plot.block, col: plot.col, row: plot.row, band: plot.band, problem: null }]);
+    }
+  }
+  rig.dispose(); s.estates.dispose();
 });
 
 test('clicking a tall office facade selects its card before the ground behind it, in the real and sandbox cities', () => {
@@ -144,6 +188,47 @@ test('clicking a tall office facade selects its card before the ground behind it
   s.tap(new THREE.Vector3(frame.x, .2, frame.z));
   assert.equal(s.picks.at(-1).kind, 'plot', 'ordinary free plots remain selectable');
   s.estates.dispose();
+});
+
+test('visible house roofs and ready-house facades select the building instead of a free cell behind it', () => {
+  const s = setup(), definition = city.READY_HOUSES.attic;
+  const geometry = new THREE.BoxGeometry(definition.width, definition.height, definition.depth).translate(1, definition.height / 2 + .3, -2);
+  geometry.computeBoundingBox();
+  const catalogue = city.createCatalogue(new Map([['family-house-3-brick', {
+    name: 'family-house-3-brick', bounds: geometry.boundingBox.clone(),
+    parts: [{ geometry, material: new THREE.MeshStandardMaterial(), castShadow: true }],
+  }]]));
+  s.estates.setCatalogue(catalogue);
+  for (const [family, level] of [['house', 1], ['house', 2], ['house', 5], ['attic', 1]]) {
+    s.state([object(family, { level })]); s.build(null);
+    s.aim(new THREE.Vector3(frame.x, 1, frame.z));
+    const layout = city.plotLayout(frame, family, level, 7), candidates = [];
+    for (const placement of layout.placements) {
+      if (placement.kind !== 'roof' && placement.kind !== 'family-house') continue;
+      const matrix = new THREE.Matrix4(), model = catalogue.resolve(placement, matrix);
+      if (!model) continue;
+      const box = model.bounds, middle = box.getCenter(new THREE.Vector3());
+      for (const z of [box.min.z + .05, box.max.z - .05]) {
+        candidates.push(new THREE.Vector3(middle.x, box.max.y - .05, z).applyMatrix4(matrix));
+      }
+    }
+    const missedRoof = candidates.find(point => {
+      const p = point.clone().project(s.camera), caster = new THREE.Raycaster();
+      if (Math.abs(p.x) >= 1 || Math.abs(p.y) >= 1) return false;
+      caster.setFromCamera(new THREE.Vector2(p.x, p.y), s.camera);
+      const ground = caster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -.2), new THREE.Vector3());
+      const at = ground && city.plotAt(grid, ground);
+      return !at || at.block.block !== frame.block || at.col !== frame.col || at.row !== frame.row;
+    });
+    assert.ok(missedRoof, `${family} level ${level} has a visible roof/facade whose old ground-only pick misses the building`);
+    s.picks.length = 0; s.tap(missedRoof);
+    assert.deepEqual(s.picks, [{ kind: 'object', district: districtId, object: 7 }]);
+    const free = grid.plots.find(p => p.district === frame.district && p.block === frame.block && p.col !== frame.col);
+    s.aim(new THREE.Vector3(free.x, 1, free.z)); s.picks.length = 0;
+    s.tap(new THREE.Vector3(free.x, .2, free.z));
+    assert.equal(s.picks.at(-1)?.kind, 'plot', 'house body bounds do not cover a neighboring free plot');
+  }
+  s.estates.dispose(); catalogue.dispose();
 });
 
 test('the nearest office facade wins over a farther office listed first, even when the ray misses the ground', () => {

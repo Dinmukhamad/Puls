@@ -110,7 +110,9 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   useEffect(() => { if (estates?.support) control.current?.setEstates("support", estates.support); }, [estates?.support]);
   useEffect(() => { if (estates?.sales) control.current?.setEstates("sales", estates.sales); }, [estates?.sales]);
   useEffect(() => { control.current?.setBuild(build); }, [build]);
-  useEffect(() => { if (estateFocus) control.current?.focusEstate(estateFocus); }, [estateFocus?.at]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A build request can arrive before the retained runtime or its land meshes exist.
+  // Replay the current request once that runtime is ready, including capability-driven recreations.
+  useEffect(() => { if (ready && estateFocus) control.current?.focusEstate(estateFocus); }, [estateFocus?.at, ready]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!worldAction) return;
     if (worldAction.kind === "travel") control.current?.travelTo(worldAction.target as DepartmentId);
@@ -166,4 +168,3 @@ function mapLabel(controls: CityControlScheme) {
   const mouse = controls === "orbit" ? "Мышь: тянуть — вращать, правая кнопка — двигать город, колесо — масштаб." : "Мышь: тянуть — двигать город, правая кнопка — поворот и наклон, колесо — масштаб.";
   return `3D-карта города. ${mouse} Стрелки или W, A, S, D — двигаться, Q и E — поворот, R и F — наклон, плюс и минус — масштаб, ноль — исходный вид.`;
 }
-

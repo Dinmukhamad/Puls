@@ -140,6 +140,8 @@ export interface CameraRig {
   focus(x: number, z: number, distance?: number): void;
   /** Flies to a point keeping the direction; `polar` defaults to the current tilt. */
   focusPoint(target: CityView["target"], distance: number, polar?: number): void;
+  /** Fits a complete land area inside the actual space left between panels. */
+  focusBounds(bounds: THREE.Box3, azimuth: number, polar?: number, duration?: number): void;
   zoom(factor: number): void; rotate(radians: number): void; tilt(radians: number): void; reset(): void;
   /** The canvas size in CSS pixels: aspect, field of view and centring in the frame. */
   resize(width: number, height: number): void;
@@ -167,7 +169,8 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   let active = true, disposed = false, windowListening = false;
   const canInput = () => active && !disposed && host.isConnected !== false;
   const scale = Math.max(1, options.radius / V1_RADIUS), fit = (options.ring ?? V1_RING) / V1_RING;
-  const maxDistance = MAX_DISTANCE * scale, panRadius = Math.max(PAN_RADIUS * scale, options.reach ?? 0);
+  let maxDistance = Math.max(MAX_DISTANCE * scale, options.view?.distance ?? 0);
+  const panRadius = Math.max(PAN_RADIUS * scale, options.reach ?? 0);
 
   // The view: the point the camera looks at (centred in the free frame) and the camera around it.
   const target = new THREE.Vector3();
@@ -178,6 +181,8 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
   let width = 0, height = 0, last = 0, moved = true, placed = !!options.view, unsaved = false;
 
   function place() {
+    const far = distance + options.radius * RELIEF_END + 50;
+    if (far > camera.far) { camera.far = far; camera.updateProjectionMatrix(); }
     camera.position.copy(target).add(offset.setFromSpherical(spherical.set(distance, polar, azimuth)));
     camera.lookAt(target);
     camera.updateMatrixWorld();
@@ -521,6 +526,24 @@ export function createCameraRig(camera: THREE.PerspectiveCamera, options: Camera
       animateTo(districtFocusView(x, z, focusDistance));
     },
     focusPoint(point, focusDistance, focusPolar) { animateTo({ target: point, distance: focusDistance, ...(focusPolar === undefined ? {} : { polar: focusPolar }) }); },
+    focusBounds(bounds, nextAzimuth, nextPolar = .5, duration = 700) {
+      if (bounds.isEmpty()) return;
+      const middle = bounds.getCenter(new THREE.Vector3()), f = frameRect();
+      const padding = 24, screenHeight = height || host.clientHeight || 1;
+      const freeWidth = Math.max(1, (f?.width ?? (width || host.clientWidth)) - padding * 2);
+      const freeHeight = Math.max(1, (f?.height ?? screenHeight) - padding * 2);
+      const tan = Math.tan(degToRad(camera.fov) / 2), tx = tan * freeWidth / screenHeight, ty = tan * freeHeight / screenHeight;
+      const n = new THREE.Vector3().setFromSpherical(new THREE.Spherical(1, nextPolar, nextAzimuth));
+      const right = new THREE.Vector3(Math.cos(nextAzimuth), 0, -Math.sin(nextAzimuth)), up = new THREE.Vector3().crossVectors(n, right);
+      let fitted = MIN_DISTANCE;
+      for (const x of [bounds.min.x, bounds.max.x]) for (const y of [bounds.min.y, bounds.max.y]) for (const z of [bounds.min.z, bounds.max.z]) {
+        const point = new THREE.Vector3(x, y, z).sub(middle);
+        fitted = Math.max(fitted, point.dot(n) + Math.max(Math.abs(point.dot(right)) / tx, Math.abs(point.dot(up)) / ty));
+      }
+      // Districts span hundreds of units. A fixed close-camera limit must not clip their overview.
+      maxDistance = Math.max(maxDistance, fitted * 1.5);
+      animateTo({ target: [middle.x, middle.y, middle.z], distance: fitted, azimuth: nextAzimuth, polar: nextPolar }, duration);
+    },
     zoom(factor) { animateTo({ distance: currentView().distance * factor }, 320); },
     rotate(radians) { animateTo({ azimuth: currentView().azimuth + radians }, 420); },
     tilt(radians) { animateTo({ polar: currentView().polar + radians }, 320); },

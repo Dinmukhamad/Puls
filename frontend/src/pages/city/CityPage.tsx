@@ -49,6 +49,7 @@ export function CityPage() {
   // Камера: выбор оператора из профиля; пока карточка выбора открыта — схема, которую он пробует.
   const [controlsEditing, setControlsEditing] = useState(false), [controlsPreview, setControlsPreview] = useState<CityControls | null>(null);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [mapAttempt, setMapAttempt] = useState(0);
   // На телефоне панель миссии — шторка над нижним меню: свёрнута до заголовка и кнопки.
   const [expanded, setExpanded] = useState(false);
   const [focusRequest, requestFocus] = useState(0);
@@ -102,18 +103,31 @@ export function CityPage() {
     if (sandboxOn && (pick.kind === "project" || pick.kind === "public")) { setWorldSelected(null); openSandbox(pick.district, true); return; }
     if (pick.kind === "public") { setBuilding(null); setWorldSelected(pick.district); focusLand({ district: pick.district, kind: "public" }); return; }
     if (pick.kind === "place") setBuilding(b => b && { ...b, spot: { module: pick.module, u: pick.u, v: pick.v, rotation: pick.rotation, problem: pick.problem } });
-    else if (pick.kind === "plot") setBuilding(b => b && { ...b, plot: { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem }, selected: null });
+    else if (pick.kind === "plot") {
+      if (building?.district !== pick.district) return;
+      setBuilding(b => b && { ...b, plot: { block: pick.block, col: pick.col, row: pick.row, band: pick.band, problem: pick.problem }, selected: null });
+      focusLand({ district: pick.district, kind: "plot", plot: { block: pick.block, col: pick.col, row: pick.row } });
+    }
     else if (pick.kind === "project") setWorldSelected(pick.district);
-    else if (pick.kind === "object") setBuilding(b => ({ district: pick.district, area: b?.district === pick.district ? b.area : "plots", placing: null, selected: pick.object, plot: null, spot: null, project: b?.district === pick.district ? b.project : false }));
+    else if (pick.kind === "object") {
+      setBuilding(b => ({ district: pick.district, area: b?.district === pick.district ? b.area : "plots", placing: null, selected: pick.object, plot: null, spot: null, project: b?.district === pick.district ? b.project : false }));
+      focusLand({ district: pick.district, kind: "object", object: pick.object });
+    }
   }
   /** Opens building in the operator's own district, in whichever city it is. */
   function openBuild() {
     const home = estateQuery.data?.district;
     if (!home) return;
-    if (home.city !== department) visit(home.city);
+    // The old five-island preview has no personal land. Building uses the full district map.
+    const next = new URLSearchParams(params);
+    next.delete("world");
+    next.set("city", home.city);
+    setParams(next);
     setWorldSelected(null);
     setBuilding({ district: home.id, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false });
     focusLand({ district: home.id, kind: "district" });
+    void estateQuery.refetch();
+    void (home.city === "sales" ? salesLand : supportLand).refetch();
   }
   /** The test city's dock on a district, on its plots or on its square with the shared projects. */
   function openSandbox(district: string, square = false) {
@@ -176,8 +190,15 @@ export function CityPage() {
   const freePlot = districtPlots.find(p => p.unlocked && !p.item);
   function openPlot(key: string) { build.reset(); setPlotKey(key); }
   const mineEstate = estateQuery.data, canOpenBuild = !!mineEstate?.district && (mineEstate.status === "ready" || mineEstate.status === "closed");
+  const buildingLandQuery = building?.district.startsWith("sales-") ? salesLand : supportLand;
+  const buildingLand = building ? landOf(building.district) : null;
+  function reloadBuildLand() {
+    void estateQuery.refetch();
+    void worldQuery.refetch();
+    void buildingLandQuery.refetch();
+  }
   return <div className="city-immersive" data-department={department} data-building={building ? true : undefined}>
-    <CityMap department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+    <CityMap key={mapAttempt} department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
     <header className="city-hud glass glass--regular">
       <div className="city-hud__level">
@@ -255,7 +276,7 @@ export function CityPage() {
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild ? openBuild : undefined}
       onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, plot: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
-    {building && mineEstate && !sandboxOn && <CityEstateDock mine={mineEstate} land={landOf(building.district)} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} onChooseFree={suggestedPlot && building.district === homeEstate?.id ? chooseFreePlot : undefined} />}
+    {building && mineEstate && !sandboxOn && <CityEstateDock mine={mineEstate} land={buildingLand} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} onChooseFree={mapStatus === "ready" && !buildingLandQuery.isError && suggestedPlot && building.district === homeEstate?.id ? chooseFreePlot : undefined} mapStatus={mapStatus} loadingLand={!buildingLand && !buildingLandQuery.isError} landError={buildingLandQuery.isError ? buildingLandQuery.error : null} onRetryLand={reloadBuildLand} onRetryMap={() => { setMapStatus("loading"); setMapAttempt(attempt => attempt + 1); }} />}
     {building && sandboxOn && <CitySandboxDock city={department} state={sandboxLand.data?.city === department ? sandboxLand.data : undefined} mine={mineEstate} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} />}
     <CityJourney phase={journey} destination={worldQuery.data?.cities.find(c => c.id === destination)?.name ?? destination} onSkip={() => setWorldAction({ kind: "skip", target: destination, at: Date.now() })} />
 

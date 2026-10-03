@@ -46,10 +46,12 @@ function useOperationKey() {
  * park, six in a rectangle a big park, by themselves. Buildings from the inventory after a transfer go onto free
  * plots for free.
  */
-export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, onChooseFree }: {
+export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, onChooseFree, mapStatus = "ready", loadingLand = false, landError = null, onRetryLand, onRetryMap }: {
   mine: MyEstate; land: DistrictEstate | null; build: BuildState; setBuild: (next: BuildState | null) => void; onClose: () => void; onFocus: (target: EstateTarget) => void;
   /** Selects a real free plot in the operator's district; the page checks current land and occupied footprints. */
   onChooseFree?: () => void;
+  mapStatus?: "loading" | "ready" | "failed"; loadingLand?: boolean; landError?: Error | null;
+  onRetryLand?: () => void; onRetryMap?: () => void;
 }) {
   const client = useQueryClient(), keys = useOperationKey();
   const mounted = useRef(true);
@@ -58,6 +60,7 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
   const plots = new Map(mine.catalogue.map(c => [c.family, c])), projects = new Map(mine.projects.map(c => [c.family, c]));
   const own = mine.objects, placed = own.filter(o => o.state === "placed"), stored = own.filter(o => o.state === "stored");
   const ready = mine.status === "ready" && !build.project && build.district === mine.district?.id;
+  const mapDataReady = mapStatus === "ready" && !!land?.land && !loadingLand && !landError;
   const activeComplex = land?.landmark?.status === "active";
   const showComplex = activeComplex && (build.project || build.area === "public");
   const refresh = async (text: string) => { keys.done(); setNotice(text); await client.invalidateQueries(); };
@@ -77,6 +80,7 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
       await refresh(text);
       if (!mounted.current) return;
       setBuild({ ...build, placing: null, spot: null, plot: null, selected: obj && "state" in obj && obj.state === "placed" ? obj.id : build.selected });
+      if (obj && "state" in obj && obj.state === "placed") onFocus({ district: obj.district_id, kind: "object", object: obj.id });
     },
   });
   const pending = act.isPending;
@@ -119,10 +123,10 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
       onBack={() => { act.reset(); setBuild({ ...build, plot: null }); }} />;
   } else body = <>
     {mine.status !== "ready" && <p className="estate-note">{mine.message}</p>}
-    <Overview land={land} ready={ready} pending={pending} onChooseFree={onChooseFree && (() => {
+    {mapDataReady && <Overview land={land} ready={ready} pending={pending} onChooseFree={onChooseFree && (() => {
       if (!ready || pending) return;
       act.reset(); setNotice(null); onChooseFree();
-    })} />
+    })} />}
     {stored.length > 0 && <section className="estate-section"><h3>Инвентарь</h3><p className="secondary small">Постройки после перевода в другой район: уровень и история сохранились. Поставь их на свободные участки — бесплатно, вместе с землёй.</p>
       <ul className="estate-list">{stored.map(o => { const c = plots.get(o.family)!; return <li key={o.id}><span aria-hidden="true">{c.icon}</span><span><strong>{c.levels[o.level - 1].name}</strong><small>{c.name} · {sizeText(plotFootprint(o.family, 0))}</small></span><button type="button" className="city-secondary" disabled={!ready} onClick={() => place(o)}>Поставить</button></li>; })}</ul></section>}
     {placed.length > 0 && <section className="estate-section"><h3>Мои постройки · {placed.length}</h3>
@@ -137,9 +141,19 @@ export function CityEstateDock({ mine, land, build, setBuild, onClose, onFocus, 
       <button type="button" className="estate-dock__close" onClick={onClose} aria-label="Закрыть стройку">×</button>
     </header>
     <div className="estate-dock__body">
+      {(mapStatus === "failed" || landError) ? <section className="estate-map-state" aria-label="Загрузка карты района">
+        {mapStatus === "failed" && <>
+          <p className="city-error" role="alert">Не удалось загрузить карту района.</p>
+          <button type="button" className="city-secondary" disabled={!onRetryMap} onClick={onRetryMap}>Повторить загрузку карты</button>
+        </>}
+        {landError && <>
+          <p className="city-error" role="alert">Не удалось загрузить свободные клетки района.</p>
+          <button type="button" className="city-secondary" disabled={!onRetryLand} onClick={onRetryLand}>Повторить загрузку участков</button>
+        </>}
+      </section> : !mapDataReady && <p className="estate-note" role="status">Загружаем карту и свободные клетки района…</p>}
       {notice && <p className="estate-ok" role="status">{notice}</p>}
       {body}
-      {!build.placing && !build.project && !showComplex && <button type="button" className="city-secondary" onClick={() => onFocus({ district: build.district, kind: "district" })}>Показать участки на карте</button>}
+      {!build.placing && !build.project && !showComplex && <button type="button" className="city-secondary" disabled={!mapDataReady} onClick={() => onFocus({ district: build.district, kind: "district" })}>Показать участки на карте</button>}
       {!showComplex && <p className="city-fine">{build.project ? "Операторы видят общий прогресс сбора, но не чужие взносы." : "Соседи видят, что и какой ступени стоит на участке, но не цену, баланс и имя."}</p>}
     </div>
   </aside>;
@@ -154,9 +168,9 @@ function Overview({ land, ready, pending, onChooseFree }: { land: DistrictEstate
   const full = !!state && state.taken >= state.plots;
   return <>
     <section className="estate-claim"><h2 className="estate-step-title">{ready ? "1. Выбери участок на карте" : "Как построить"}</h2>
-      <ol className="estate-steps"><li>Выбери свободный участок своего района.</li><li>Выбери сквер, дом или офис.</li><li>Купи за коины: цена включает землю.</li></ol>
-      {ready && onChooseFree && <button type="button" className="city-action estate-choose-free" disabled={pending} onClick={onChooseFree}>Выбрать свободный участок</button>}
-      {ready && !onChooseFree && <p>{full ? "Все участки района заняты. Открой свою постройку, чтобы посмотреть доступные улучшения." : "Свободные участки подсвечены зелёным. Нажми на участок на карте — здесь появится выбор зданий."}</p>}
+      <ol className="estate-steps"><li>Нажми на любую свободную клетку района.</li><li>Выбери сквер, дом или офис.</li><li>Купи за коины: цена включает землю.</li></ol>
+      {ready && <p>{full ? "Все участки района заняты. Открой свою постройку, чтобы посмотреть доступные улучшения." : "Все свободные клетки района уже видны на карте. Нажми на клетку — здесь появится выбор зданий."}</p>}
+      {ready && !full && onChooseFree && <button type="button" className="city-secondary estate-choose-free" disabled={pending} onClick={onChooseFree}>Подобрать свободную клетку</button>}
     </section>
     {state && <DistrictBuildProgress land={state} />}
     {land?.landmark && <DistrictLandmarkCard landmark={land.landmark} compact />}

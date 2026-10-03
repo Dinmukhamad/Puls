@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const dir = fileURLToPath(new URL('.', import.meta.url));
-const built = await build({ stdin: { contents: 'export * from "./camera.ts"; export * as THREE from "three/webgpu";', resolveDir: dir }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'silent' });
+const built = await build({ stdin: { contents: 'export * from "./camera.ts"; export { landGrid } from "../world/land.ts"; export { islandWorld } from "../world/cities.ts"; export { WORLD_X4 } from "../world/worldSpec.ts"; export { generateSalesWorld } from "../world/sales.ts"; export * as THREE from "three/webgpu";', resolveDir: dir }, bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'silent' });
 const city = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const { THREE } = city;
 
@@ -24,11 +24,11 @@ let clock = 0;
 Object.defineProperty(performance, 'now', { value: () => clock, configurable: true, writable: true });
 
 const W = 1600, H = 900;
-function setup(extra = {}) {
-  const rect = { left: 0, top: 0, width: W, height: H, right: W, bottom: H };
+function setup(extra = {}, { width = W, height = H } = {}) {
+  const rect = { left: 0, top: 0, width, height, right: width, bottom: height };
   const captured = new Set(), released = [];
   const dom = Object.assign(new FakeElement(), {
-    clientHeight: H, getBoundingClientRect: () => rect,
+    clientHeight: height, getBoundingClientRect: () => rect,
     setPointerCapture(id) { captured.add(id); },
     releasePointerCapture(id) {
       if (!captured.delete(id)) return;
@@ -40,7 +40,7 @@ function setup(extra = {}) {
   host.children.push(dom);
   const camera = city.createCamera(320), views = [];
   const rig = city.createCameraRig(camera, { dom, host, radius: 320, ring: 62.2, reach: 246, onView: view => views.push(view), ...extra });
-  rig.resize(W, H);
+  rig.resize(width, height);
   let now = 1000;
   /** Runs frames for `seconds` of the test clock. */
   const frames = (seconds = .5) => { for (let t = 0; t < seconds; t += 1 / 60) { now += 1000 / 60; clock += 1000 / 60; rig.update(now); } };
@@ -524,4 +524,64 @@ test('repeated pause/resume and disposal do not duplicate or leak global listene
   rig.dispose(); rig.dispose(); rig.setActive(true);
   assert.equal(listeners, before);
   assert.equal(key('keydown', 'Home', document.body).defaultPrevented, false);
+});
+
+const districtGrids = [city.landGrid(city.islandWorld(city.WORLD_X4)), city.landGrid(city.generateSalesWorld())];
+function districtCorners(grid, district) {
+  return grid.plots.filter(plot => plot.district === district).flatMap(plot => plot.corners.map(point => new THREE.Vector3(point.x, .203, point.z)));
+}
+const districtViewports = [
+  { name: 'desktop with a right dock', width: 1600, height: 900, left: 310, top: 120, frameWidth: 860, frameHeight: 650 },
+  { name: 'phone with a bottom dock', width: 390, height: 844, left: 16, top: 110, frameWidth: 300, frameHeight: 310 },
+];
+function districtCamera(viewport) {
+  const rect = { left: viewport.left, top: viewport.top, width: viewport.frameWidth, height: viewport.frameHeight,
+    right: viewport.left + viewport.frameWidth, bottom: viewport.top + viewport.frameHeight };
+  const frame = Object.assign(new FakeElement(), { clientWidth: rect.width, clientHeight: rect.height, getBoundingClientRect: () => rect });
+  return { ...setup({ frame }, viewport), rect };
+}
+
+for (const viewport of districtViewports) test(`all plot corners of both cities fit the free viewport on ${viewport.name}`, () => {
+  for (const grid of districtGrids) for (const district of [1, 2, 3]) {
+    const { rig, camera, rect } = districtCamera(viewport);
+    try {
+      const corners = districtCorners(grid, district), bounds = new THREE.Box3().setFromPoints(corners);
+      assert.ok(corners.length > 0, `${grid.city} district ${district} has real purchasable land`);
+      rig.focusBounds(bounds, .55, .5, 0);
+      const centre = bounds.getCenter(new THREE.Vector3()), view = rig.currentView();
+      assert.ok(new THREE.Vector3(...view.target).distanceTo(centre) < 1e-8, 'district focus targets the complete land bounds');
+      assert.ok(Number.isFinite(view.distance) && view.distance > 30, 'a district view stays farther away than an individual plot view');
+      assert.equal(camera.fov, viewport.width < 480 ? 50 : 36);
+      for (const corner of corners) {
+        const projected = corner.clone().project(camera), x = (projected.x + 1) * viewport.width / 2, y = (1 - projected.y) * viewport.height / 2;
+        const label = `${grid.city} district ${district}, corner (${corner.x.toFixed(2)}, ${corner.z.toFixed(2)})`;
+        assert.ok(x >= rect.left + 24 - 1e-6 && x <= rect.right - 24 + 1e-6, `${label} fits between the side panels with padding (x=${x})`);
+        assert.ok(y >= rect.top + 24 - 1e-6 && y <= rect.bottom - 24 + 1e-6, `${label} fits above the dock and below the header with padding (y=${y})`);
+        assert.ok(projected.z > -1 && projected.z < 1, `${label} is inside the camera's depth range`);
+      }
+    } finally { rig.dispose(); }
+  }
+});
+
+test('wide district fitting extends the camera limits, while pinch zoom and a close plot focus still work', () => {
+  const viewport = districtViewports[1], { rig, camera, dom, frames } = districtCamera(viewport);
+  try {
+    const grid = districtGrids[0], corners = districtCorners(grid, 1), bounds = new THREE.Box3().setFromPoints(corners), initialFar = camera.far;
+    rig.focusBounds(bounds, .55, .5, 0);
+    const fitted = rig.currentView(), originalMaximum = city.MAX_DISTANCE * 320 / 150;
+    assert.ok(fitted.distance > originalMaximum, 'the complete real district needs more distance than the former city limit');
+    assert.ok(camera.far > initialFar, 'far clipping expands with the district view');
+    dom.dispatchEvent(pointer('pointerdown', 1, 116, 260));
+    dom.dispatchEvent(pointer('pointerdown', 2, 216, 260));
+    dom.dispatchEvent(pointer('pointermove', 1, 86, 260));
+    dom.dispatchEvent(pointer('pointermove', 2, 246, 260));
+    dom.dispatchEvent(pointer('pointerup', 1, 86, 260));
+    dom.dispatchEvent(pointer('pointerup', 2, 246, 260));
+    assert.ok(rig.currentView().distance < fitted.distance, 'spreading two fingers zooms into the fitted district');
+    const target = grid.plots.find(plot => plot.district === 1);
+    rig.focusPoint([target.x, 1, target.z], 30, .86); frames(1);
+    const close = rig.currentView();
+    assert.ok(Math.abs(close.distance - 30) < 1e-8, 'a subsequent plot or building focus still reaches its close view');
+    assert.ok(new THREE.Vector3(...close.target).distanceTo(new THREE.Vector3(target.x, 1, target.z)) < 1e-8, 'close focus remains centred on the chosen plot');
+  } finally { rig.dispose(); }
 });

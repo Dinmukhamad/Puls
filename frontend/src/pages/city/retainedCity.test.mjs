@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 
 const compiled = await build({
   entryPoints: [fileURLToPath(new URL('./retainedCity.ts', import.meta.url))],
@@ -270,4 +271,197 @@ test('cleanup from a stale lease cannot detach or pause the current visit', t =>
   const third = acquire({ key: 'another-city', mount });
   second.release();
   assert.equal(third.host.parentNode, mount, 'an old entry cannot remove a replacement city either');
+});
+
+// Run the real engine entry point and camera while renderer/model/system factories wait under test control.
+const cityEntry = fileURLToPath(new URL('../../city3d/index.ts', import.meta.url));
+const cameraEntry = fileURLToPath(new URL('../../city3d/engine/camera.ts', import.meta.url));
+const runtimeFactories = new Map([...readFileSync(cityEntry, 'utf8').matchAll(/import\s+\{([^}]+)\}\s+from\s+"([^"]+)";/g)]
+  .filter(([, , path]) => path.startsWith('./') && !path.startsWith('./world/') && path !== './engine/camera')
+  .map(([, names, path]) => [path, names.split(',').map(name => name.trim()).filter(name => !name.startsWith('type '))]));
+const startupBundle = await build({
+  stdin: { contents: `export { createCity } from ${JSON.stringify(cityEntry)}; export * as THREE from "three/webgpu";`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error', loader: { '.css': 'empty' },
+  define: { 'import.meta.env.BASE_URL': '"/"' },
+  plugins: [{ name: 'city-startup-factories', setup(plugin) {
+    plugin.onResolve({ filter: /.*/ }, args => {
+      if (args.importer !== cityEntry) return;
+      if (args.path === './engine/camera') return { path: args.path, namespace: 'observed-camera' };
+      if (runtimeFactories.has(args.path)) return { path: args.path, namespace: 'startup-factory' };
+    });
+    plugin.onLoad({ filter: /.*/, namespace: 'startup-factory' }, args => ({
+      contents: runtimeFactories.get(args.path).map(name => `export function ${name}(...args) { return globalThis.__pulsCityStartup.factory(${JSON.stringify(name)}, args); }`).join('\n'), loader: 'js',
+    }));
+    plugin.onLoad({ filter: /.*/, namespace: 'observed-camera' }, () => ({ contents: `
+      export { createCamera } from ${JSON.stringify(cameraEntry)};
+      import { createCameraRig as realCameraRig } from ${JSON.stringify(cameraEntry)};
+      export function createCameraRig(...args) {
+        const rig = realCameraRig(...args), state = globalThis.__pulsCityStartup;
+        for (const name of ["focus", "focusBounds", "animateTo"]) {
+          const run = rig[name];
+          rig[name] = (...values) => { state.calls.push(["camera", name, ...values]); return run(...values); };
+        }
+        state.rig = rig; return rig;
+      }`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) }));
+  } }],
+});
+const startupCity = await import(`data:text/javascript;base64,${Buffer.from(startupBundle.outputFiles[0].text).toString('base64')}`);
+function deferred() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return { promise, resolve };
+}
+class RuntimeElement extends EventTarget {
+  dataset = {}; style = {}; clientWidth = 1600; clientHeight = 900; children = []; tagName = 'DIV';
+  append(...children) { this.children.push(...children); }
+  replaceChildren(...children) { this.children = children; }
+  contains(node) { return node === this || this.children.some(child => child.contains?.(node)); }
+  getBoundingClientRect() { return { left: 0, top: 0, right: this.clientWidth, bottom: this.clientHeight, width: this.clientWidth, height: this.clientHeight }; }
+}
+function startupFixture(t) {
+  const names = ['document', 'window', 'ResizeObserver', 'HTMLElement', 'Node', '__pulsCityStartup', 'setTimeout'];
+  const originals = new Map(names.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)])), timers = [];
+  const rendererReady = deferred(), modelsReady = deferred(), modelsRequested = deferred(), compiled = deferred(), calls = [];
+  const state = { calls, rig: null, render: null };
+  const noop = () => {}, piece = values => new Proxy(values ?? {}, { get: (target, key) => key === 'then' ? undefined : key in target ? target[key] : noop });
+  const realTimeout = globalThis.setTimeout;
+  const window = new EventTarget(); window.matchMedia = () => ({ matches: true });
+  Object.assign(globalThis, {
+    document: { createElement: () => new RuntimeElement(), body: new RuntimeElement(), activeElement: null }, window,
+    ResizeObserver: class { observe() {} disconnect() {} }, HTMLElement: RuntimeElement, Node: RuntimeElement,
+    __pulsCityStartup: state,
+    setTimeout(callback, delay, ...args) { const timer = realTimeout(callback, delay, ...args); if (delay === 8000) { timer.unref(); timers.push(timer); } return timer; },
+  });
+  const focusViews = new Map([
+    ['support-team-1', { bounds: new startupCity.THREE.Box3(new startupCity.THREE.Vector3(-160, .2, -30), new startupCity.THREE.Vector3(-80, .2, 30)), azimuth: .55 }],
+    ['support-team-2', { bounds: new startupCity.THREE.Box3(new startupCity.THREE.Vector3(60, .2, -30), new startupCity.THREE.Vector3(140, .2, 30)), azimuth: .75 }],
+  ]);
+  state.factory = (name, args) => {
+    if (name === 'createRenderer') {
+      calls.push(['renderer-request']);
+      return rendererReady.promise.then(() => piece({ backend: 'webgl2', gpu: 'test',
+        onRestored(callback) { state.restoreCallback = callback; return noop; },
+        renderer: piece({ compileAsync() { calls.push(['compile']); compiled.resolve(); return Promise.resolve(); } }),
+      }));
+    }
+    if (name === 'loadCatalogueModels') { calls.push(['models-request']); modelsRequested.resolve(); return modelsReady.promise; }
+    if (name === 'createLoop') { state.render = args[0].render; return piece(); }
+    if (name === 'createQuality') return piece({ settings: { fps: 60, resolution: 1 }, onChange: () => noop });
+    if (name === 'createSky') return piece({ sun: null });
+    if (name === 'createDistricts') { state.pickables = [new startupCity.THREE.Object3D()]; return piece({ anchors: new Map(), pickables: state.pickables, startGrowth() { calls.push(['growth']); return 'crm'; } }); }
+    if (name === 'createPicker') { state.learningPickables = args[2]; return piece(); }
+    if (name === 'createMascot') return piece({ nameAnchor: new startupCity.THREE.Vector3(), focusPoint: new startupCity.THREE.Vector3() });
+    if (name === 'createDepartmentWorld') return piece({
+      setEstates(city, value) { calls.push(['estates', city, value]); },
+      setBuild(value) { calls.push(['build', value]); },
+      focusEstate(target) { calls.push(['estate-focus', target]); return focusViews.get(target.district); },
+    });
+    if (name === 'pixelRatio') return 1;
+    return piece();
+  };
+  const host = new RuntimeElement(), options = page({ world: 'x4', onReady: () => calls.push(['ready']), onLost: () => calls.push(['lost']),
+    onRestored: () => { calls.push(['restored']); state.restoration?.resolve(); },
+  }).options;
+  const control = startupCity.createCity(host, options);
+  t.after(() => {
+    control.dispose(); timers.forEach(clearTimeout);
+    for (const [name, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, name, descriptor); else delete globalThis[name]; }
+  });
+  return { control, state, calls, rendererReady, modelsRequested,
+    async finishModels() {
+      modelsReady.resolve(new Map()); await compiled.promise;
+      // Let compileAsync and the real entry point's Promise.race finish before requesting its first frame.
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    },
+    async restore() {
+      state.restoration = deferred(); state.restoreCallback();
+      await state.restoration.promise;
+    },
+    frame() { state.render(1 / 60, 1000); },
+  };
+}
+const startupBuild = district => ({ district, area: 'plots', placing: null, selected: null, plot: null });
+
+test('the real city startup replays only the latest estate focus after state and growth are ready', async t => {
+  const s = startupFixture(t), first = { district: 'support-team-1', kind: 'district' }, latest = { district: 'support-team-2', kind: 'district' };
+  const estate = { state: { city: 'support', districts: [{ id: latest.district }] } }, build = startupBuild(latest.district);
+  s.control.setBuild(startupBuild(first.district)); s.control.focusEstate(first);
+  assert.deepEqual(s.calls, [['renderer-request']], 'focus cannot run before the renderer exists');
+  s.rendererReady.resolve(); await s.modelsRequested.promise;
+  s.control.setEstates('support', estate); s.control.setBuild(build); s.control.focusEstate(latest);
+  assert.deepEqual(s.state.learningPickables(), [], 'legacy learning-district volumes cannot hijack personal build taps');
+  s.frame();
+  assert.equal(s.calls.some(call => call[0] === 'estate-focus'), false, 'a loading frame cannot consume the destination');
+  await s.finishModels();
+  assert.equal(s.calls.some(call => call[0] === 'estate-focus'), false, 'model initialization alone does not mark the scene ready');
+  s.frame();
+  assert.deepEqual(s.calls.filter(call => call[0] === 'estate-focus'), [['estate-focus', latest]]);
+  const focusIndex = s.calls.findIndex(call => call[0] === 'estate-focus');
+  assert.ok(s.calls.findIndex(call => call[0] === 'estates' && call[2] === estate) < focusIndex, 'late estate state arrives before focus');
+  assert.ok(s.calls.findIndex(call => call[0] === 'build' && call[1] === build) < focusIndex, 'the latest build district arrives before focus');
+  const flights = s.calls.filter(call => call[0] === 'camera');
+  assert.deepEqual(flights.map(call => call[1]), ['focus', 'focusBounds'], 'district growth flies first; the requested build view wins afterward');
+  assert.deepEqual(s.state.rig.currentView().target, [100, .2, 0], 'the actual camera ends at the latest district, not the growth district');
+  assert.ok(s.calls.findIndex(call => call[0] === 'ready') > focusIndex, 'the page is notified only after focus replay');
+  s.frame();
+  assert.equal(s.calls.filter(call => call[0] === 'estate-focus').length, 1, 'later frames do not replay a consumed request');
+  assert.equal(s.calls.some(call => call[0] === 'lost'), false);
+});
+
+test('closing build mode while the real city is loading cancels its queued estate focus', async t => {
+  const s = startupFixture(t), target = { district: 'support-team-2', kind: 'district' };
+  s.control.setBuild(startupBuild(target.district)); s.control.focusEstate(target);
+  s.rendererReady.resolve(); await s.modelsRequested.promise;
+  assert.deepEqual(s.state.learningPickables(), []);
+  s.control.setBuild(null);
+  assert.equal(s.state.learningPickables(), s.state.pickables, 'closing build mode restores the normal learning-district picker');
+  await s.finishModels(); s.frame();
+  assert.deepEqual(s.calls.filter(call => call[0] === 'build'), [['build', null]], 'startup receives the closed build state');
+  assert.equal(s.calls.some(call => call[0] === 'estate-focus'), false, 'the canceled district never reaches the estate system');
+  assert.deepEqual(s.calls.filter(call => call[0] === 'camera').map(call => call[1]), ['focus'], 'only the normal growth focus remains');
+  assert.equal(s.calls.some(call => call[0] === 'ready'), true);
+  assert.equal(s.calls.some(call => call[0] === 'lost'), false);
+});
+
+test('context restoration rebuilds the real runtime and returns to the last estate destination after growth', async t => {
+  const s = startupFixture(t), first = { district: 'support-team-1', kind: 'district' }, latest = { district: 'support-team-2', kind: 'district' };
+  const estate = { state: { city: 'support', districts: [{ id: latest.district }] } }, build = startupBuild(latest.district);
+  s.control.setBuild(startupBuild(first.district)); s.control.focusEstate(first);
+  s.rendererReady.resolve(); await s.modelsRequested.promise;
+  s.control.setEstates('support', estate); s.control.setBuild(build); s.control.focusEstate(latest);
+  await s.finishModels(); s.frame();
+  assert.deepEqual(s.state.rig.currentView().target, [100, .2, 0]);
+  const firstRig = s.state.rig, beforeRestore = s.calls.length;
+  await s.restore();
+  assert.notEqual(s.state.rig, firstRig, 'restoration creates a fresh camera rig');
+  assert.equal(s.calls.slice(beforeRestore).some(call => call[0] === 'estate-focus'), false, 'restored models still wait for the first complete frame');
+  s.frame();
+  const restoredCalls = s.calls.slice(beforeRestore), focusIndex = restoredCalls.findIndex(call => call[0] === 'estate-focus');
+  assert.deepEqual(restoredCalls.filter(call => call[0] === 'estate-focus'), [['estate-focus', latest]], 'restoration retains the latest destination, not the first queued one');
+  assert.ok(restoredCalls.findIndex(call => call[0] === 'estates' && call[2] === estate) < focusIndex, 'fresh department geometry receives the saved estate data first');
+  assert.ok(restoredCalls.findIndex(call => call[0] === 'build' && call[1] === build) < focusIndex, 'build mode is restored before its camera destination');
+  assert.deepEqual(restoredCalls.filter(call => call[0] === 'camera').map(call => call[1]), ['focus', 'focusBounds'], 'the remembered estate view overrides the new growth focus');
+  assert.deepEqual(s.state.rig.currentView().target, [100, .2, 0], 'the actual replacement camera returns to the last district');
+  assert.ok(restoredCalls.findIndex(call => call[0] === 'ready') > focusIndex);
+  s.frame();
+  assert.equal(s.calls.slice(beforeRestore).filter(call => call[0] === 'estate-focus').length, 1, 'the restored destination is consumed once');
+  assert.equal(s.calls.some(call => call[0] === 'lost'), false);
+});
+
+test('closing build mode before context restoration removes the remembered estate destination', async t => {
+  const s = startupFixture(t), target = { district: 'support-team-2', kind: 'district' };
+  s.control.setBuild(startupBuild(target.district)); s.control.focusEstate(target);
+  s.rendererReady.resolve(); await s.modelsRequested.promise;
+  await s.finishModels(); s.frame();
+  assert.deepEqual(s.state.rig.currentView().target, [100, .2, 0]);
+  s.control.setBuild(null);
+  const beforeRestore = s.calls.length;
+  await s.restore(); s.frame();
+  const restoredCalls = s.calls.slice(beforeRestore);
+  assert.deepEqual(restoredCalls.filter(call => call[0] === 'build'), [['build', null]]);
+  assert.equal(restoredCalls.some(call => call[0] === 'estate-focus'), false, 'a closed district does not reopen after restoration');
+  assert.deepEqual(restoredCalls.filter(call => call[0] === 'camera').map(call => call[1]), ['focus'], 'only normal growth controls the replacement camera');
+  assert.notDeepEqual(s.state.rig.currentView().target, [100, .2, 0]);
+  assert.equal(restoredCalls.some(call => call[0] === 'ready'), true);
+  assert.equal(s.calls.some(call => call[0] === 'lost'), false);
 });

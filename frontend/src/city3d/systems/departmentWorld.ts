@@ -22,7 +22,7 @@ import { generateSalesWorld, SALES_CENTERS } from "../world/sales";
 import { landGrid, type LandGrid } from "../world/land";
 import { districtNumber } from "../world/estateGrid";
 import { districtMainFrame, landmarkBounds } from "../world/districtLandmark";
-import { createEstates, type Estates } from "./estates";
+import { createEstates, type Estates, type EstateFocusView } from "./estates";
 import type { CityBuildView, CityEstateView, EstatePick, EstateTarget } from "../types";
 
 export interface DepartmentWorld {
@@ -36,7 +36,7 @@ export interface DepartmentWorld {
   /** Team district land: buildings, projects and the headquarters stage of every district of a city. */
   setEstates(city: DepartmentId, view: CityEstateView | null): void;
   setBuild(view: CityBuildView | null): void;
-  focusEstate(target: EstateTarget, distance: number, polar: number): { point: THREE.Vector3; azimuth: number } | null;
+  focusEstate(target: EstateTarget, distance: number, polar: number): EstateFocusView | null;
   dispose(): void;
 }
 const WALL = "#f0e8d6", GLASS = "#397181", DARK = "#39484b", GOLD = "#ddb04f", GREEN = "#728963";

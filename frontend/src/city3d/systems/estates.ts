@@ -36,13 +36,20 @@ const MEADOW = new THREE.Color("#97b67c"), PAVING = new THREE.Color("#ddd4c0"), 
 /** The plots' ground over the land, under every patch of what stands on them (render/terrain.ts TOP and its lifts). */
 const PLOT_Y = .203, INSET = .24;
 
+export interface EstateFocusView {
+  point: THREE.Vector3;
+  azimuth: number;
+  /** All the own district's plot corners, including occupied land, for a build overview. */
+  bounds?: THREE.Box3;
+}
+
 export interface Estates {
   set(view: CityEstateView | null): void;
   setCatalogue(catalogue: Catalogue): void;
   setBuild(view: CityBuildView | null): void;
   setActive(active: boolean): void;
   /** A point to look at (a district's centre or square, a plot, a building) and the azimuth to look from. */
-  focus(target: EstateTarget, distance: number, polar: number): { point: THREE.Vector3; azimuth: number } | null;
+  focus(target: EstateTarget, distance: number, polar: number): EstateFocusView | null;
   dispose(): void;
 }
 
@@ -86,7 +93,9 @@ function plotGround(grid: LandGrid) {
     geometry.setAttribute("normal", new THREE.Float32BufferAttribute(parts.positions.map((_, i) => i % 3 === 1 ? 1 : 0), 3));
     geometry.setAttribute("color", new THREE.Float32BufferAttribute(parts.colours, 3));
     geometry.setIndex(parts.index);
-    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .85, metalness: .02 }));
+    // In a whole-district view the 0.003-unit lift loses depth precision against the terrain.
+    // Bias the ground surface toward the camera while retaining ordinary building occlusion.
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardNodeMaterial({ vertexColors: true, roughness: .85, metalness: .02, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
     mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; mesh.name = name;
     return mesh;
   };
@@ -156,12 +165,16 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
 
   // ---- buildings ----
   let pools: InstancePools | null = null, patches: THREE.Mesh | null = null, builtKey = "";
+  // The same catalogue transforms that draw houses also define their selectable bodies.
+  // Gardens, trees and paving stay out of these volumes so adjacent free cells remain selectable.
+  const houseBodies: { pick: EstatePick; bounds: THREE.Box3; matrix: THREE.Matrix4; inverse: THREE.Matrix4 }[] = [];
   const seen = new Map<number, number>();
   function rebuild() {
     rebuildSquares();
     const key = view ? JSON.stringify(view.state.districts.map(d => [d.id, d.landmark && [d.landmark.status, d.landmark.level, d.landmark.u, d.landmark.v, d.landmark.w, d.landmark.h], d.objects.map(o => [o.id, o.family, o.level, o.module, o.u, o.v, o.rotation]), d.projects.map(p => [p.id, p.module, p.u, p.v, p.rotation])])) : "";
     if (key === builtKey && (pools || !catalogue)) { recolour(); refreshSigns(); refreshBuild(); return; }
     builtKey = key;
+    houseBodies.length = 0;
     pools?.dispose(); pools = null;
     if (patches) { ctx.scene.remove(patches); patches.geometry.dispose(); (patches.material as THREE.Material).dispose(); patches = null; }
     const placements: Placement[] = [], surfaces: Surface[] = [];
@@ -176,6 +189,13 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
         const layout = layoutOf(district, obj, centre);
         if (!layout) continue;
         placements.push(...layout.placements); surfaces.push(...layout.surfaces);
+        if (catalogue && (obj.family === "house" || isReadyHouse(obj.family))) {
+          for (const placement of layout.placements) {
+            if (placement.kind !== "cottage" && placement.kind !== "roof" && placement.kind !== "family-house") continue;
+            const matrix = new THREE.Matrix4(), model = catalogue.resolve(placement, matrix);
+            if (model) houseBodies.push({ pick: { kind: "object", district: district.id, object: obj.id }, bounds: model.bounds.clone(), matrix, inverse: matrix.clone().invert() });
+          }
+        }
         // A new building or a new stage rises behind a short veil; the first look at the city shows it as it is.
         const before = seen.get(obj.id);
         if (seen.size && before !== obj.level) veil(district, obj, centre);
@@ -384,6 +404,12 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
   /** Tall facades project beyond their plots on the ground, so select their actual volume first. */
   function buildingAtRay(ray: THREE.Ray) {
     let nearest: EstatePick | null = null, distance = Infinity;
+    const local = new THREE.Ray(), at = new THREE.Vector3();
+    for (const body of houseBodies) {
+      if (!local.copy(ray).applyMatrix4(body.inverse).intersectBox(body.bounds, at)) continue;
+      const reach = at.applyMatrix4(body.matrix).distanceTo(ray.origin);
+      if (reach < distance) { distance = reach; nearest = body.pick; }
+    }
     for (const district of view?.state.districts ?? []) {
       const landmark = district.landmark, landmarkPlace = landmarkFrame(district);
       if (landmarkPlace && landmark) {
@@ -518,7 +544,7 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
     },
     focus(target) {
       const number = numberOf(target.district), centre = centreOf(target.district);
-      let place: { x: number; z: number; rotation: number } | null = null, y = 1;
+      let place: { x: number; z: number; rotation: number } | null = null, y = 1, bounds: THREE.Box3 | undefined;
       if (target.kind === "plot" && target.plot) { const block = blockOf(number, target.plot.block); if (block) place = areaFrame(block, target.plot.col, target.plot.row); }
       else if (target.kind === "object") {
         const district = stateOf(target.district), obj = district?.objects.find(o => o.id === target.object);
@@ -533,16 +559,18 @@ export function createEstates(ctx: CityContext, grid: LandGrid, onPick: (pick: E
         if (frame && district?.landmark) { const bounds = landmarkBounds(frame, district.landmark.level); place = bounds; y = bounds.bottom + bounds.height / 2; }
       }
       else if (target.kind === "district" && build?.area === "plots" && build.district === target.district) {
-        const own = grid.plots.filter(p => p.district === number), taken = takenPlots();
-        const available = own.filter(p => !taken.has(plotKey(number, p.block, p.col, p.row)));
-        const origin = centre?.area ?? own[0];
-        const nearby = (available.length ? available : own).sort((a, b) => Math.hypot(a.x - origin.x, a.z - origin.z) - Math.hypot(b.x - origin.x, b.z - origin.z))[0];
-        if (nearby) place = nearby;
+        const own = grid.plots.filter(p => p.district === number);
+        if (own.length) {
+          bounds = new THREE.Box3();
+          for (const plot of own) for (const corner of plot.corners) bounds.expandByPoint(new THREE.Vector3(corner.x, PLOT_Y, corner.z));
+          const middle = bounds.getCenter(new THREE.Vector3());
+          place = { x: middle.x, z: middle.z, rotation: centre?.area.rotation ?? own[0].rotation }; y = middle.y;
+        }
       }
       if (!place && centre) place = { x: centre.area.x, z: centre.area.z, rotation: centre.area.rotation };
       if (!place) return null;
       // From the street in front of it, a little to the side, so its front and the plots beside it show.
-      return { point: new THREE.Vector3(place.x, y, place.z), azimuth: place.rotation + .55 };
+      return { point: new THREE.Vector3(place.x, y, place.z), azimuth: place.rotation + .55, ...(bounds ? { bounds } : {}) };
     },
     dispose() {
       offFrame(); offMove(); if (frame) cancelAnimationFrame(frame);

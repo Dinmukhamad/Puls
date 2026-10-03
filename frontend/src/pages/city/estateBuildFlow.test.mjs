@@ -24,12 +24,55 @@ function render(patch = {}) {
   return html;
 }
 
-test("ready overview gives a visible first step and a large action to select actual free land", () => {
+test("ready overview directs operators to any visible free cell and keeps automatic selection as an optional fallback", () => {
   const html = render();
   assert.match(html, /<h2 class="estate-step-title">1\. Выбери участок на карте<\/h2>/);
-  assert.match(html, /<button type="button" class="city-action estate-choose-free">Выбрать свободный участок<\/button>/);
+  assert.match(html, /Нажми на любую свободную клетку района/);
+  assert.match(html, /Все свободные клетки района уже видны на карте/);
+  assert.match(html, /<button type="button" class="city-secondary estate-choose-free">Подобрать свободную клетку<\/button>/);
   const steps = html.match(/<ol class="estate-steps">(.*?)<\/ol>/s)?.[1];
   assert.equal((steps?.match(/<li>/g) ?? []).length, 3);
+  const manual = render({ onChooseFree: undefined });
+  assert.match(manual, /Нажми на любую свободную клетку района/);
+  assert.match(manual, /Все свободные клетки района уже видны на карте/);
+  assert.doesNotMatch(manual, /estate-choose-free/);
+});
+
+test("map and district loading keep the dock visible without instructing operators to click unavailable cells", () => {
+  for (const props of [{ mapStatus: "loading" }, { loadingLand: true }, { land: null }, { land: { ...land, land: null } }]) {
+    const html = render(props);
+    assert.match(html, /aria-label="Стройка в районе"/);
+    assert.match(html, /role="status">Загружаем карту и свободные клетки района…/);
+    assert.doesNotMatch(html, /Нажми на любую свободную клетку|уже видны на карте|Свободные участки подсвечены|estate-steps|estate-choose-free|Весь район открыт/);
+    assert.match(html, /<button[^>]+disabled="">Показать участки на карте<\/button>/);
+  }
+});
+
+test("map failures offer a map retry without claiming the grid is available", () => {
+  const html = render({ mapStatus: "failed", onRetryMap: noop });
+  assert.match(html, /role="alert">Не удалось загрузить карту района/);
+  assert.match(html, /<button type="button" class="city-secondary">Повторить загрузку карты<\/button>/);
+  assert.doesNotMatch(html, /Повторить загрузку участков|уже видны на карте|Нажми на любую свободную клетку|estate-choose-free/);
+});
+
+test("land failures offer a land retry even when previously loaded district data remains cached", () => {
+  for (const district of [null, land]) {
+    const html = render({ land: district, landError: new Error("Land request failed"), onRetryLand: noop });
+    assert.match(html, /role="alert">Не удалось загрузить свободные клетки района/);
+    assert.match(html, /<button type="button" class="city-secondary">Повторить загрузку участков<\/button>/);
+    assert.doesNotMatch(html, /Повторить загрузку карты|Land request failed|уже видны на карте|Нажми на любую свободную клетку|estate-choose-free/);
+  }
+});
+
+test("map and land recover independently and ready data restores direct map guidance", () => {
+  const failed = render({ mapStatus: "failed", landError: new Error("Offline"), onRetryMap: noop, onRetryLand: noop });
+  assert.match(failed, /Повторить загрузку карты/);
+  assert.match(failed, /Повторить загрузку участков/);
+  assert.equal((failed.match(/role="alert"/g) ?? []).length, 2);
+  const recovered = render({ mapStatus: "ready", loadingLand: false, landError: null });
+  assert.match(recovered, /Нажми на любую свободную клетку района/);
+  assert.match(recovered, /Все свободные клетки района уже видны на карте/);
+  assert.doesNotMatch(recovered, /Загружаем карту|Повторить загрузку/);
 });
 
 test("closed construction cannot select a purchase plot, and full land explains the next available action", () => {

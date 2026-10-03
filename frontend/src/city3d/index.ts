@@ -36,7 +36,7 @@ import { createQuests, type Quests } from "./systems/quests";
 import { createDepartmentWorld, type DepartmentWorld } from "./systems/departmentWorld";
 import { railPoint } from "./world/railway";
 import type { CityWorld, DepartmentId } from "../api/cityWorld";
-import type { CityBuildView, CityEstateView, CityView, JourneyPhase } from "./types";
+import type { CityBuildView, CityEstateView, CityView, EstateTarget, JourneyPhase } from "./types";
 import "./city3d.css";
 
 /** Static shadows are redrawn only once the camera has rested this long: culling changes casters while it moves. */
@@ -61,6 +61,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   let department: DepartmentId = "support", desiredDepartment = options.department ?? "support", departmentConfig = options.departmentWorld;
   const estateViews: Partial<Record<DepartmentId, CityEstateView | null>> = { ...options.estates };
   let buildView: CityBuildView | null = options.build ?? null;
+  let sceneReady = false, requestedEstateFocus: EstateTarget | null = null, lastEstateFocus: EstateTarget | null = null;
   const views: Partial<Record<DepartmentId, CityView>> = {};
   let journey: { to: DepartmentId; from: DepartmentId; elapsed: number; last?: number; swapped: boolean } | null = null;
   let phase: JourneyPhase = null;
@@ -104,9 +105,20 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     parts.rig.animateTo(views[to] ?? { target: [0, 0, 0], distance: to === "sales" ? 160 : 90, azimuth: .7, polar: .82 }, 0);
     parts.departments?.railway(0); notifyJourney(null); options.onArrival?.(to);
   }
+  function focusEstate(target: EstateTarget) {
+    lastEstateFocus = target;
+    // Models and departmental land arrive after the camera. Keep only the latest requested destination.
+    if (!sceneReady || !parts?.departments) { requestedEstateFocus = target; return; }
+    requestedEstateFocus = null;
+    const distance = target.kind === "object" || target.kind === "plot" ? 30 : 48, polar = .86;
+    const view = parts.departments.focusEstate(target, distance, polar);
+    if (view?.bounds) parts.rig.focusBounds(view.bounds, view.azimuth, .5, reducedMotion ? 0 : 700);
+    else if (view) parts.rig.animateTo({ target: [view.point.x, view.point.y, view.point.z], distance, polar, azimuth: view.azimuth }, reducedMotion ? 0 : 700);
+  }
 
   async function start() {
     const run = ++generation;
+    sceneReady = false;
     // Check synchronously after every await: a release/dispose can happen in the
     // same microtask turn that resumes startup. Waiting itself is not a lease.
     while (!active && current(run)) await activityChanged();
@@ -155,7 +167,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     });
     const first = rig.currentView(); sky.followView(first.target[0], first.target[2], first.distance); sky.setViewDistance(first.distance);
     rig.setActive(active);
-    const picker = createPicker(canvas, camera, () => department === "support" && !journey ? districts.pickables : [], { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) });
+    // Legacy learning-district hit volumes overlap the team land. Build taps belong to the estate picker.
+    const picker = createPicker(canvas, camera, () => department === "support" && !journey && !buildView ? districts.pickables : [], { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) });
     const post = createPost(ctx);
     const stats = createStats({ renderer, backend, host, visible: !!options.stats, quality, userIdKnown: true, gpu: handle.gpu, extra: () => { const s = parts?.pools?.stats(); return s ? `copies ${s.drawn}/${s.copies} · pools ${s.drawCalls} calls` : "loading models"; } });
 
@@ -200,9 +213,11 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
         post.render();
         stats.endFrame();
         if (!ready && !loading) {
-          ready = true; everReady = true; stats.markFirstFrame(); options.onProgress?.(1); options.onReady();
+          ready = true; everReady = true; sceneReady = true; stats.markFirstFrame(); options.onProgress?.(1);
           const grown = districts.startGrowth(), d = grown ? world.districts.find(item => item.id === grown) : null;
           if (d && department === "support") rig.focus(d.x, d.z, 48);
+          if (requestedEstateFocus) focusEstate(requestedEstateFocus);
+          options.onReady();
         }
       },
     });
@@ -247,7 +262,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   }
 
   function teardown() {
-    generation++; wake();
+    generation++; sceneReady = false; wake();
+    if (!disposed) requestedEstateFocus = lastEstateFocus;
     const p = parts; parts = null; if (!p) return;
     p.loop.dispose(); p.observer.disconnect(); p.picker.dispose(); p.rig.dispose(); p.stats.dispose(); p.quality.dispose();
     p.departments?.dispose();
@@ -261,12 +277,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     setDepartment(id) { if (journey) { journey = null; notifyJourney(null); } switchDepartment(id); },
     setDepartmentWorld(config: CityWorld) { departmentConfig = config; parts?.departments?.setConfig(config); },
     setEstates(city, view) { estateViews[city] = view; parts?.departments?.setEstates(city, view); },
-    setBuild(view) { buildView = view; parts?.departments?.setBuild(view); },
-    focusEstate(target) {
-      // From the street in front of the plot or the building, near enough to see it, far enough for its neighbours.
-      const distance = target.kind === "object" || target.kind === "plot" ? 30 : 48, polar = .86, view = parts?.departments?.focusEstate(target, distance, polar);
-      if (view) parts?.rig.animateTo({ target: [view.point.x, view.point.y, view.point.z], distance, polar, azimuth: view.azimuth }, reducedMotion ? 0 : 700);
-    },
+    setBuild(view) { if (buildView && !view) requestedEstateFocus = lastEstateFocus = null; buildView = view; parts?.departments?.setBuild(view); },
+    focusEstate,
     focusWorld(id) { const point = parts?.departments?.point(id); if (point) parts?.rig.focusPoint([point.x, point.y, point.z], id === "station" ? 38 : 46, .9); },
     travelTo(id) {
       if (!parts?.departments || !everReady || journey || id === department) return;
@@ -313,7 +325,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     tilt: radians => when(p => p.rig.tilt(radians)),
     reset: () => when(p => { if (department === "sales") p.rig.animateTo({ target: [0, 0, 0], distance: 160, azimuth: .7, polar: .82 }, 500); else p.rig.reset(); }),
     setControls(next) { controls = next; when(p => p.rig.setControls(next)); },
-    dispose() { disposed = true; pending.length = 0; teardown(); host.replaceChildren(); delete host.dataset.backend; delete host.dataset.timeOfDay; },
+    dispose() { disposed = true; requestedEstateFocus = lastEstateFocus = null; pending.length = 0; teardown(); host.replaceChildren(); delete host.dataset.backend; delete host.dataset.timeOfDay; },
   };
 }
 
