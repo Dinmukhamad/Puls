@@ -1,10 +1,14 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useContext, useEffect, useId, useRef, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { CityToolbarContext } from "./CityToolbar";
+import type { CityToolbarSlot } from "./CityToolbar";
 import "./cityPeek.css";
 
 export type CityPeekPanelProps = {
   label: string;
   compactLabel?: string;
+  toolbarSlot?: CityToolbarSlot;
   icon: ReactNode;
   children: ReactNode;
   className?: string;
@@ -16,7 +20,8 @@ export type CityPeekPanelProps = {
 };
 
 /** Map overlays keep their contents mounted while giving the city most of the screen. */
-export function CityPeekPanel({ label, compactLabel, icon, children, className = "", contentClassName = "", triggerClassName = "", open, onOpenChange, holdOpen = false }: CityPeekPanelProps) {
+export function CityPeekPanel({ label, compactLabel, toolbarSlot, icon, children, className = "", contentClassName = "", triggerClassName = "", open, onOpenChange, holdOpen = false }: CityPeekPanelProps) {
+  const toolbar = useContext(CityToolbarContext);
   const contentId = useId();
   const [localOpen, setLocalOpen] = useState(false);
   const expanded = holdOpen || (open ?? localOpen);
@@ -80,7 +85,7 @@ export function CityPeekPanel({ label, compactLabel, icon, children, className =
     if (target !== trigger.current && keyboardFocus.current) requestOpen(true);
   }
 
-  return <div ref={root} className={`city-peek ${compactLabel ? "city-peek--labelled" : ""} ${className}`.trim()} data-open={String(expanded)}
+  const panel = <div ref={root} className={`city-peek ${compactLabel ? "city-peek--labelled" : ""} ${className}`.trim()} data-open={String(expanded)}
     onPointerEnter={(event) => {
       if (event.pointerType === "touch") return;
       hovering.current = true;
@@ -120,4 +125,6 @@ export function CityPeekPanel({ label, compactLabel, icon, children, className =
       {children}
     </div>
   </div>;
+  const portalTarget = toolbarSlot ? toolbar?.target?.querySelector(`[data-city-panel="${toolbarSlot}"]`) ?? toolbar?.target : toolbar?.target;
+  return portalTarget ? createPortal(panel, portalTarget) : panel;
 }
