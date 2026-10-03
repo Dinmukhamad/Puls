@@ -78,6 +78,7 @@ export function createLabels(ctx: CityContext, { anchors, mascotAnchor, onSelect
     el.className = "c3-label"; el.dataset.district = id;
     el.style.setProperty("--c3-district", colors.get(id) ?? "#5b8def");
     if (el instanceof HTMLButtonElement) { el.type = "button"; el.setAttribute("aria-pressed", "false"); el.addEventListener("click", () => onSelect(id as DistrictId)); }
+    else { el.tabIndex = 0; el.setAttribute("role", "img"); }
     const icon = document.createElement("span"), text = document.createElement("span"), name = document.createElement("strong"), status = document.createElement("small");
     icon.className = "c3-label__icon"; icon.setAttribute("aria-hidden", "true");
     text.className = "c3-label__text"; name.className = "c3-label__name"; status.className = "c3-label__status";
@@ -88,7 +89,7 @@ export function createLabels(ctx: CityContext, { anchors, mascotAnchor, onSelect
   let tag: { item: Item; text: HTMLElement } | null = null;
   if (mascotAnchor) {
     const el = document.createElement("div"), text = document.createElement("span");
-    el.className = "c3-tag"; el.style.display = "none"; el.append(text); layer.append(el);
+    el.className = "c3-tag"; el.tabIndex = 0; el.setAttribute("role", "img"); el.style.display = "none"; el.append(text); layer.append(el);
     tag = { item: place(el, mascotAnchor, TAG), text };
   }
 
@@ -97,6 +98,7 @@ export function createLabels(ctx: CityContext, { anchors, mascotAnchor, onSelect
       const info = labels.find(l => l.id === id) ?? (isFutureDistrict(id) ? { ...FUTURE, id: id as DistrictId } : null);
       const name = info?.name ?? id;
       board.icon.textContent = info?.icon ?? ""; board.name.textContent = name; board.status.textContent = info?.status ?? "";
+      board.item.el.setAttribute("aria-label", info?.status ? `${name}. ${info.status}` : name);
       board.name.style.fontSize = `${nameSize(name)}px`;
       board.item.el.toggleAttribute("data-soon", !!info?.soon); board.item.el.toggleAttribute("data-reward", !!info?.reward);
     });
@@ -141,7 +143,7 @@ export function createLabels(ctx: CityContext, { anchors, mascotAnchor, onSelect
   return {
     setLabels,
     setSelected(id) { selectedItem = boards.get(id)?.item; boards.forEach((board, key) => { if (board.item.el instanceof HTMLButtonElement) board.item.el.setAttribute("aria-pressed", String(key === id)); }); update(); },
-    setMascotName(name) { if (tag) { tag.text.textContent = name; tag.item.el.style.display = name ? "" : "none"; } },
+    setMascotName(name) { if (tag) { tag.text.textContent = name; tag.item.el.setAttribute("aria-label", name); tag.item.el.style.display = name ? "" : "none"; } },
     dispose() {
       offFrame(); offCamera(); resize?.disconnect(); layer.remove();
       if (ownsClass) overlay.classList.remove("c3-overlay");
