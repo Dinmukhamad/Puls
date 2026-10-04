@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { lazy, Suspense, useLayoutEffect } from "react";
 import { retainedCity } from "./pages/city/retainedCity";
+import { CityRoute } from "./pages/city/CityRoute";
 
 import { useAuth } from "./auth/AuthContext";
 import { useAccess } from "./auth/AccessContext";
@@ -42,7 +43,6 @@ const SimulatorPage = lazy(() => import("./pages/SimulatorPage").then((module) =
 const WorkSitesPage = lazy(() => import("./pages/WorkSitesPage").then(module => ({ default: module.WorkSitesPage })));
 const WorkSitesGate = lazy(() => import("./pages/qr/WorkSitesGate").then(module => ({ default: module.WorkSitesGate })));
 const QrAccessPage = lazy(() => import("./pages/qr/QrAccessPage").then(module => ({ default: module.QrAccessPage })));
-const CityPage = lazy(() => import("./pages/city/CityPage").then(module => ({ default: module.CityPage })));
 const CityAdminPage = lazy(() => import("./pages/city/CityAdminPage").then(module => ({ default: module.CityAdminPage })));
 
 export function App() {
@@ -78,7 +78,7 @@ export function App() {
       <Route path="/simulator" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense></SectionGuard>} />
       <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><Suspense fallback={<Skeleton height={300} />}><SimulatorPage /></Suspense></SectionGuard>} />
       <Route element={<AppLayout />}>
-        <Route path="/training/city" element={<Suspense fallback={<Skeleton height={540} />}><CityPage /></Suspense>} />
+        <Route path="/training/city" element={<CityRoute />} />
         <Route path="/admin/learning/city" element={<Suspense fallback={<Skeleton height={400} />}><CityAdminPage /></Suspense>} />
         <Route path="/qr-access" element={<Suspense fallback={<Skeleton height={300} />}><QrAccessPage /></Suspense>} />
         <Route index element={<Navigate to={access.home} replace />} />

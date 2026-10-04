@@ -12,7 +12,7 @@ import { attribute, clamp, color, dot, float, floor, fwidth, max, mix, varyingPr
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { Placement, PlacementKind } from "../world/types";
 import { createNight, type Night } from "../render/night";
-import { loadModels, type Model, type ModelPart } from "./loader";
+import { loadModels, disposeModels, MODEL_LOAD_TIMEOUT_MS, type Model, type ModelPart, type ModelLoadOptions } from "./loader";
 import { furnitureGeometry, gableGeometry, officeGeometry, SECTION_PART, SECTION_PARTS, sectionGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
 import { OFFICE_FLOOR, OFFICE_FLOORS, SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
 import { FINISHES, HOUSE_SCALE, READY_HOUSES, houseModelName } from "../world/familyHouses";
@@ -77,11 +77,31 @@ const FURNITURE: FurnitureKind[] = ["bench", "slide", "swings", "climber", "sand
 /** Proxy colours when a model's texture cannot be read: [walls, roof]. */
 const FALLBACK: Record<string, [string, string]> = { s: ["#eadccb", "#b86b52"], c: ["#cfd6de", "#8e99a6"], i: ["#cdc8bd", "#8b8f95"], car: ["#d9cf6a", "#5b6068"] };
 
-/** Loads the kits, ready houses and offices, and any LOD files; a failed file leaves the other models usable. */
-export async function loadCatalogueModels(lodUrls: string[] = []) {
-  const models = new Map<string, Model>();
-  const files = await Promise.allSettled([modelsUrl, vehiclesUrl, familyHousesUrl, highRiseOfficesUrl, ...lodUrls].map(url => loadModels(url)));
-  for (const file of files) if (file.status === "fulfilled") file.value.forEach((model, name) => models.set(name, model));
+/** Generated kits include LOD0: prefer them over downloading and decoding the source kit again. */
+export async function loadCatalogueModels(lodUrls: string[] = [], options: ModelLoadOptions = {}) {
+  const models = new Map<string, Model>(), replaced = new Map<string, Model>();
+  const preferredModels = lodUrls.find(url => /(?:^|\/)city-models\.glb(?:[?#].*)?$/.test(url));
+  const preferredVehicles = lodUrls.find(url => /(?:^|\/)vehicles\.glb(?:[?#].*)?$/.test(url));
+  const fallbacks = new Map<string, string>();
+  if (preferredModels && preferredModels !== modelsUrl) fallbacks.set(preferredModels, modelsUrl);
+  if (preferredVehicles && preferredVehicles !== vehiclesUrl) fallbacks.set(preferredVehicles, vehiclesUrl);
+  const deadline = performance.now() + (options.timeoutMs ?? MODEL_LOAD_TIMEOUT_MS);
+  const loadOptions = () => ({ ...options, timeoutMs: Math.max(1, deadline - performance.now()) });
+  const urls = [...new Set([preferredModels ?? modelsUrl, preferredVehicles ?? vehiclesUrl, familyHousesUrl, highRiseOfficesUrl, ...lodUrls])];
+  const files = await Promise.allSettled(urls.map(async url => {
+    try { return await loadModels(url, loadOptions()); }
+    catch (error) {
+      const fallback = fallbacks.get(url);
+      // A quick missing/invalid generated file may use its source; it shares the original asset budget.
+      if (!fallback || options.signal?.aborted || performance.now() >= deadline) throw error;
+      return loadModels(fallback, loadOptions());
+    }
+  }));
+  for (const file of files) if (file.status === "fulfilled") file.value.forEach((model, name) => {
+    const old = models.get(name); if (old && old !== model) replaced.set(String(replaced.size), old);
+    models.set(name, model);
+  });
+  disposeModels(replaced, models);
   return models;
 }
 

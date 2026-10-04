@@ -29,7 +29,7 @@ export const auth = {
       form: { username: login, password },
       auth: false,
     }),
-  me: () => request<UserOut>(`${V1}/auth/me`),
+  me: (signal?: AbortSignal) => request<UserOut>(`${V1}/auth/me`, { signal, timeoutMs: 25_000 }),
   /** Свой помощник: фигура в городе и имя вместо «Пульсар». */
   guide: (json: { gender?: Gender; guide_name?: string | null; city_controls?: CityControls }) => request<UserOut>(`${V1}/auth/guide`, { method: "PUT", json }),
   changeLogin: (login: string, currentPassword: string) =>

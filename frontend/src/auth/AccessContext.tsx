@@ -13,7 +13,15 @@ const AccessContext = createContext<{
 
 export function AccessProvider({ children }: { children: ReactNode }) {
   const { user, retryRestore } = useAuth(); const client = useQueryClient();
-  const query = useQuery({ queryKey: ["my-access", user?.id], queryFn: ({ signal }) => accessApi.mine(signal), enabled: !!user, refetchInterval: 30_000, refetchOnWindowFocus: true, staleTime: 0 });
+  const query = useQuery({
+    queryKey: ["my-access", user?.id], queryFn: ({ signal }) => accessApi.mine(signal), enabled: !!user,
+    // A cold entry must leave the boot screen after a failed bounded read.
+    // Resume background checks only after permissions have loaded once.
+    retry: false, networkMode: "always", staleTime: 0,
+    refetchInterval: query => query.state.data ? 30_000 : false,
+    refetchOnWindowFocus: query => !!query.state.data,
+    refetchOnReconnect: query => !!query.state.data,
+  });
   const fingerprint = query.data ? JSON.stringify([user?.id, query.data.role, query.data.group_id, query.data.scope_groups, query.data.allowed, query.data.capabilities]) : "";
   const previous = useRef("");
   useEffect(() => {

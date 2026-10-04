@@ -114,16 +114,19 @@ export function createMascot(ctx: CityContext, initial: CityMascot = { gender: n
 
   let mixer: THREE.AnimationMixer | null = null, idle: THREE.AnimationAction | null = null, wave: THREE.AnimationAction | null = null;
   let nextWave = 0, request = 0, gender: CityMascot["gender"] | undefined, disposed = false;
+  let assetController: AbortController | null = null;
 
   function clear() {
     request++;
+    assetController?.abort(); assetController = null;
     if (mixer) { mixer.stopAllAction(); mixer.uncacheRoot(mixer.getRoot()); }
     mixer = idle = wave = null;
     for (const child of [...figure.children]) { figure.remove(child); disposeTree(child); }
   }
   function operator(next: "male" | "female") {
     const current = ++request;
-    loadCharacter(next === "female" ? femaleUrl : maleUrl).then(gltf => {
+    const controller = new AbortController(); assetController = controller;
+    loadCharacter(next === "female" ? femaleUrl : maleUrl, { signal: controller.signal }).then(gltf => {
       if (disposed || current !== request) { disposeTree(gltf.scene); return; }
       const model = gltf.scene, bounds = new THREE.Box3().setFromObject(model), size = bounds.getSize(new THREE.Vector3());
       model.scale.setScalar(2.25 / size.y);

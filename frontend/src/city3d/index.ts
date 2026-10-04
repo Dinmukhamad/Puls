@@ -41,6 +41,7 @@ import "./city3d.css";
 
 /** Static shadows are redrawn only once the camera has rested this long: culling changes casters while it moves. */
 const SHADOW_REST_MS = 250;
+const SHADER_WARMUP_MS = 4000;
 const LOD_FILES = ["city/v1/city-models.glb", "city/v1/vehicles.glb"].map(path => `${import.meta.env.BASE_URL}${path}`);
 
 interface Parts {
@@ -69,6 +70,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
   host.dataset.department = department;
   const notifyJourney = (next: JourneyPhase) => { if (phase !== next) { phase = next; options.onJourney?.(next); } };
   let active = options.active ?? true, generation = 0;
+  let startupController: AbortController | null = null, startingHandle: RendererHandle | null = null;
+  let startupDisposers: (() => void)[] = [];
   const activityWaiters = new Set<() => void>();
   const wake = () => { activityWaiters.forEach(done => done()); activityWaiters.clear(); };
   const current = (run: number) => !disposed && run === generation;
@@ -116,8 +119,20 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     else if (view) parts.rig.animateTo({ target: [view.point.x, view.point.y, view.point.z], distance, polar, azimuth: view.azimuth }, reducedMotion ? 0 : 700);
   }
 
+  function startupFailed(run: number) {
+    if (!current(run)) return;
+    if (!forceWebGL) {
+      forceWebGL = true; teardown(); launch();
+    } else { teardown(); options.onLost(); }
+  }
+  function launch() {
+    const promise = start(), run = generation;
+    void promise.catch(() => startupFailed(run));
+  }
+
   async function start() {
     const run = ++generation;
+    const controller = new AbortController(); startupController = controller;
     sceneReady = false;
     // Check synchronously after every await: a release/dispose can happen in the
     // same microtask turn that resumes startup. Waiting itself is not a lease.
@@ -127,14 +142,18 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const canvas = document.createElement("canvas"); canvas.className = "c3-canvas";
     const overlay = document.createElement("div"); overlay.className = "c3-overlay";
     host.replaceChildren(canvas, overlay);
-    const handle = await createRenderer(canvas, { forceWebGL, mobile });
-    while (!active && current(run)) await activityChanged();
+    const handle = await createRenderer(canvas, { forceWebGL, mobile, signal: controller.signal });
     if (!current(run)) { handle.dispose(); return; }
+    startingHandle = handle;
+    while (!active && current(run)) await activityChanged();
+    if (!current(run)) { handle.dispose(); if (startingHandle === handle) startingHandle = null; return; }
+    // A factory may fail before Parts exists. Remember completed modules so fallback also removes their hooks.
+    const own = <T extends { dispose(): void }>(value: T): T => { startupDisposers.push(() => value.dispose()); return value; };
     const { renderer, backend } = handle;
     host.dataset.backend = backend === "webgpu" ? "WebGPU" : "WebGL2";
     const scene = new THREE.Scene(), camera = createCamera(world.radius);
     let loading = true, shadowWanted = false, lastMove = 0;
-    const quality = createQuality({ backend, mobile, gpu: handle.gpu, busy: () => loading });
+    const quality = own(createQuality({ backend, mobile, gpu: handle.gpu, busy: () => loading }));
 
     const frameCallbacks = new Set<(dt: number, now: number) => void>(), moveCallbacks = new Set<() => void>();
     let sun: THREE.DirectionalLight | null = null;
@@ -148,29 +167,29 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       requestShadowUpdate() { shadowWanted = true; },
     };
 
-    const sky = createSky(ctx); sun = sky.sun;
-    const terrain = createTerrain(ctx), water = createWater(ctx);
-    const lamps = createLampLights(ctx), mountains = createMountains(ctx);
-    const districts = createDistricts(ctx, { levels: options.levels, grown: options.grown });
-    const mascotSystem = createMascot(ctx, mascot);
-    const traffic = createTraffic(ctx);
-    const crowd = createCrowd(ctx);
-    const plots = createPlots(ctx, { states: plotStates, onPick: options.onPlot });
-    const sites = createSites(ctx, { states: siteStates, onPick: options.onSite });
-    const quests = createQuests(ctx, { states: questStates, onPick: options.onQuest });
-    const labelLayer = createLabels(ctx, { anchors: districts.anchors, mascotAnchor: mascotSystem.nameAnchor, onSelect: choose });
+    const sky = own(createSky(ctx)); sun = sky.sun;
+    const terrain = own(createTerrain(ctx)), water = own(createWater(ctx));
+    const lamps = own(createLampLights(ctx)), mountains = own(createMountains(ctx));
+    const districts = own(createDistricts(ctx, { levels: options.levels, grown: options.grown }));
+    const mascotSystem = own(createMascot(ctx, mascot));
+    const traffic = own(createTraffic(ctx));
+    const crowd = own(createCrowd(ctx));
+    const plots = own(createPlots(ctx, { states: plotStates, onPick: options.onPlot }));
+    const sites = own(createSites(ctx, { states: siteStates, onPick: options.onSite }));
+    const quests = own(createQuests(ctx, { states: questStates, onPick: options.onQuest }));
+    const labelLayer = own(createLabels(ctx, { anchors: districts.anchors, mascotAnchor: mascotSystem.nameAnchor, onSelect: choose }));
     // The view may go out to the outer ring road (and the tunnel's portal in the hills); the shadow map follows it there.
     const portal = world.railway && railPoint(world.railway, world.railway.length), portalReach = portal ? Math.hypot(portal.x, portal.z) + 8 : 0;
-    const rig = createCameraRig(camera, {
+    const rig = own(createCameraRig(camera, {
       dom: canvas, host, radius: world.radius, ring: world.spec.roadRings[0], reach: Math.max(world.radius + 20, portalReach),
       frame: options.frame, view: options.view, controls, reducedMotion, onView: view => { sky.followView(view.target[0], view.target[2], view.distance); options.onView(view); },
-    });
+    }));
     const first = rig.currentView(); sky.followView(first.target[0], first.target[2], first.distance); sky.setViewDistance(first.distance);
     rig.setActive(active);
     // Legacy learning-district hit volumes overlap the team land. Build taps belong to the estate picker.
-    const picker = createPicker(canvas, camera, () => department === "support" && !journey && !buildView ? districts.pickables : [], { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) });
-    const post = createPost(ctx);
-    const stats = createStats({ renderer, backend, host, visible: !!options.stats, quality, userIdKnown: true, gpu: handle.gpu, extra: () => { const s = parts?.pools?.stats(); return s ? `copies ${s.drawn}/${s.copies} · pools ${s.drawCalls} calls` : "loading models"; } });
+    const picker = own(createPicker(canvas, camera, () => department === "support" && !journey && !buildView ? districts.pickables : [], { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) }));
+    const post = own(createPost(ctx));
+    const stats = own(createStats({ renderer, backend, host, visible: !!options.stats, quality, userIdKnown: true, gpu: handle.gpu, extra: () => { const s = parts?.pools?.stats(); return s ? `copies ${s.drawn}/${s.copies} · pools ${s.drawCalls} calls` : "loading models"; } }));
 
     const resize = () => {
       if (!active) return;
@@ -178,14 +197,15 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       renderer.setPixelRatio(pixelRatio(mobile, quality.settings.resolution)); renderer.setSize(width, height, false);
       rig.resize(width, height); post.setSize(width, height);
     };
-    const observer = new ResizeObserver(resize); observer.observe(host); if (options.frame) observer.observe(options.frame);
+    const observer = new ResizeObserver(resize); startupDisposers.push(() => observer.disconnect()); observer.observe(host); if (options.frame) observer.observe(options.frame);
     quality.onChange(resize);
     resize();
 
     let ready = false;
-    const loop = createLoop({
+    const loop = own(createLoop({
       host, active, fps: () => quality.settings.fps,
       onGap: (gap, now) => quality.frame(gap, now),
+      onError: () => startupFailed(run),
       render(dt, now) {
         stats.beginFrame();
         if (journey && parts?.departments) {
@@ -220,16 +240,23 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
           options.onReady();
         }
       },
-    });
+    }));
 
     // WebGPU that fails while the city is starting (driver or browser bugs) is retried once on WebGL2.
     handle.onLost(() => {
-      if (!everReady && !forceWebGL && !disposed) { forceWebGL = true; teardown(); void start().catch(() => options.onLost()); return; }
+      if (!current(run)) return;
+      if (!everReady && !forceWebGL) { startupFailed(run); return; }
       options.onLost();
     });
-    handle.onRestored(() => { if (!disposed) { teardown(); void start().then(() => options.onRestored?.()); } });
+    handle.onRestored(() => {
+      if (!current(run)) return;
+      teardown();
+      const promise = start(), nextRun = generation;
+      void promise.then(() => { if (current(nextRun)) options.onRestored?.(); }).catch(() => startupFailed(nextRun));
+    });
 
     parts = { handle, quality, stats, loop, rig, picker, post, sky, terrain, water, districts, mascot: mascotSystem, labels: labelLayer, traffic, crowd, observer, night, lamps, mountains, plots, sites, quests, resize };
+    startingHandle = null; startupDisposers = [];
     labelLayer.setLabels(labels); labelLayer.setSelected(selected); labelLayer.setMascotName(mascot.name);
     districts.select(selected); traffic.setEnabled(trafficOn); crowd.setEnabled(trafficOn); daylight(parts);
     pending.splice(0).forEach(fn => fn(parts!));
@@ -238,9 +265,10 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     // Models: the Kenney kits with their generated LOD copies, then the instance pools and catalogue cars.
     try {
       // The procedural catalogue, stations and campus also work when optional model downloads fail.
-      const models = await loadCatalogueModels(LOD_FILES).catch(() => new Map());
+      const models = await loadCatalogueModels(LOD_FILES, { signal: controller.signal }).catch(() => new Map());
       while (!active && current(run)) await activityChanged();
       if (!current(run)) { disposeModels(models); return; }
+      options.onProgress?.(.65);
       const catalogue = createCatalogue(models, night);
       parts.catalogue = catalogue;
       parts.pools = createInstancePools(ctx, catalogue, world.placements);
@@ -253,16 +281,29 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       parts.departments.setTraffic(trafficOn); parts.departments.setNight(timeOfDay === "night");
       department = "support"; switchDepartment(desiredDepartment); parts.departments.show(department);
       // Every pool, near and far, has its shaders built before the city shows, so coming closer never
-      // stalls or pops (at most 8 s; the renderer builds whatever is left on first use).
-      await Promise.race([renderer.compileAsync(scene, camera).catch(() => undefined), new Promise(done => setTimeout(done, 8000))]);
+      // stalls or pops (at most 4 s; the renderer builds whatever is left on first use).
+      options.onProgress?.(.85);
+      let compileTimer: ReturnType<typeof setTimeout> | undefined;
+      let cancelCompile = () => {};
+      try {
+        await Promise.race([
+          renderer.compileAsync(scene, camera).catch(() => undefined),
+          new Promise<void>(done => { compileTimer = setTimeout(done, SHADER_WARMUP_MS); cancelCompile = done; controller.signal.addEventListener("abort", cancelCompile, { once: true }); }),
+        ]);
+      } finally { clearTimeout(compileTimer); controller.signal.removeEventListener("abort", cancelCompile); }
       while (!active && current(run)) await activityChanged();
       if (!current(run)) return;
-    } catch { options.onLost(); return; }
+    } catch (error) { if (current(run)) throw error; return; }
+    options.onProgress?.(.95);
     loading = false; shadowWanted = true;
   }
 
   function teardown() {
     generation++; sceneReady = false; wake();
+    startupController?.abort(); startupController = null;
+    const unfinished = startupDisposers; startupDisposers = [];
+    unfinished.reverse().forEach(dispose => dispose());
+    startingHandle?.dispose(); startingHandle = null;
     if (!disposed) requestedEstateFocus = lastEstateFocus;
     const p = parts; parts = null; if (!p) return;
     p.loop.dispose(); p.observer.disconnect(); p.picker.dispose(); p.rig.dispose(); p.stats.dispose(); p.quality.dispose();
@@ -271,7 +312,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     p.lamps.dispose(); p.mountains.dispose(); p.water.dispose(); p.terrain.dispose(); p.sky.dispose(); p.post.dispose(); p.handle.dispose();
   }
 
-  void start().catch(() => { if (!disposed) options.onLost(); });
+  launch();
 
   return {
     setDepartment(id) { if (journey) { journey = null; notifyJourney(null); } switchDepartment(id); },

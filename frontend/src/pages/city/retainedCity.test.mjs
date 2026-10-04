@@ -69,6 +69,29 @@ function emitAll(options) {
   options.onProgress?.(.7); options.onLost(); options.onRestored?.(); options.onReady();
 }
 
+test('returning during startup restores progress and routes subsequent updates to the new page', t => {
+  const { acquire, engines } = fixture(t), oldPage = page(), newPage = page();
+  const first = acquire({ options: oldPage.options }), engine = engines[0];
+  engine.options.onProgress(.3); first.release();
+  engine.options.onProgress(.65);
+  const next = acquire({ options: newPage.options });
+  assert.equal(next.reused, true); assert.equal(next.progress, .65);
+  assert.deepEqual(oldPage.events, [['onProgress', .3]]);
+  engine.options.onProgress(.95);
+  assert.deepEqual(newPage.events, [['onProgress', .95]]);
+  engine.options.onReady(); next.release();
+  assert.equal(acquire().progress, 1);
+});
+
+test('invalid progress cannot corrupt a retained loading state', t => {
+  const { acquire, engines } = fixture(t), pageOne = page();
+  const first = acquire({ options: pageOne.options }), engine = engines[0];
+  engine.options.onProgress(.3); engine.options.onProgress(NaN); engine.options.onProgress(Infinity);
+  first.release();
+  assert.equal(acquire().progress, .3);
+  assert.deepEqual(pageOne.events, [['onProgress', .3]]);
+});
+
 test('returning to the other department reuses the renderer and forwards journey events only to the current page', t => {
   const { acquire, engines } = fixture(t), firstPage = page({ department: 'support' });
   const first = acquire({ options: firstPage.options }), engine = engines[0];

@@ -1,5 +1,8 @@
 import { buildQuery, request } from "./client";
 
+/** City reads must settle even when a connection or token refresh stalls. */
+export const CITY_READ_TIMEOUT_MS = 25000;
+
 export type DistrictId = "academy" | "driver" | "crm" | "dispatch" | "oktell";
 export type MissionState = "available" | "in_progress" | "ready" | "locked" | "completed" | "unavailable";
 export interface MissionDefinition { title: string; description: string; pulsar: string; target: number; xp: number; coins: number; enabled: boolean; prerequisite: string | null }
@@ -33,8 +36,8 @@ export interface CitySettings { revision: number; missions: Record<string, Missi
 export interface CityReward { already_claimed: boolean; title: string; xp: number; coins: number }
 export interface CityParticipant { user_id: number; full_name: string; login: string; completed: number; total: number; ready: number; xp: number; level: number; orders: number; appeals: number; missions: Pick<CityMission, "key" | "title" | "state" | "current" | "target">[] }
 export const city = {
-  own: () => request<CityData>("/api/v1/learning/city"),
-  operator: (id: number) => request<CityData>(`/api/v1/admin/learning/city/operators/${id}`),
+  own: (signal?: AbortSignal) => request<CityData>("/api/v1/learning/city", { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
+  operator: (id: number, signal?: AbortSignal) => request<CityData>(`/api/v1/admin/learning/city/operators/${id}`, { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   claim: (key: string, revision: number) => request<CityReward>(`/api/v1/learning/city/missions/${key}/claim`, { method: "POST", json: { revision } }),
   build: (plot: string, item: BuildingKey) => request<CityBuilt>(`/api/v1/learning/city/plots/${plot}/build`, { method: "POST", json: { item } }),
   answer: (slot: number, answer: number) => request<CityQuest>(`/api/v1/learning/city/quests/${slot}/answer`, { method: "POST", json: { answer } }),

@@ -36,7 +36,7 @@ export interface AccessPreview { revision: number; total: number; sections: Reco
 export interface UserOption { id: number; user_id: number; full_name: string; role: Role; group_name: string | null }
 
 export const accessApi = {
-  mine: (signal?: AbortSignal) => request<AccessState>("/api/v1/me/access", { signal }),
+  mine: (signal?: AbortSignal) => request<AccessState>("/api/v1/me/access", { signal, timeoutMs: 25_000 }),
   policy: (signal?: AbortSignal) => request<AccessPolicy>("/api/v1/admin/access", { signal }),
   save: (json: AccessUpdate) => request<{ revision: number; detail: string }>("/api/v1/admin/access", { method: "PUT", json }),
   preview: (json: AccessUpdate, signal?: AbortSignal) => request<AccessPreview>("/api/v1/admin/access/preview", { method: "POST", json, signal }),

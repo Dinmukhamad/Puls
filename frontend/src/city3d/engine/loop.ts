@@ -23,6 +23,8 @@ export interface LoopOptions {
   fps: () => 60 | 30;
   /** Time since the previous drawn frame, for quality; Infinity after a pause, so its window restarts. */
   onGap?: (gap: number, now: number) => void;
+  /** A failed frame stops the loop and lets the page recover instead of remaining on its loading screen. */
+  onError?: (error: unknown) => void;
 }
 
 export interface Loop {
@@ -32,7 +34,7 @@ export interface Loop {
   dispose(): void;
 }
 
-export function createLoop({ host, render, fps, onGap, active = true }: LoopOptions): Loop {
+export function createLoop({ host, render, fps, onGap, onError, active = true }: LoopOptions): Loop {
   let frame: number | null = null;
   let last = -1, visible = true, disposed = false;
   const canDraw = () => !disposed && active && visible && !document.hidden;
@@ -44,12 +46,18 @@ export function createLoop({ host, render, fps, onGap, active = true }: LoopOpti
   function tick(now: number) {
     frame = null;
     if (!canDraw()) return;
-    if (last >= 0 && !shouldDraw(now, last, fps())) { schedule(); return; }
-    const gap = last < 0 ? Infinity : now - last, dt = last < 0 ? 1 / 60 : Math.min(MAX_DT, gap / 1000);
-    last = now;
-    onGap?.(gap, now);
-    if (!canDraw()) return;
-    render(dt, now);
+    try {
+      if (last >= 0 && !shouldDraw(now, last, fps())) { schedule(); return; }
+      const gap = last < 0 ? Infinity : now - last, dt = last < 0 ? 1 / 60 : Math.min(MAX_DT, gap / 1000);
+      last = now;
+      onGap?.(gap, now);
+      if (!canDraw()) return;
+      render(dt, now);
+    } catch (error) {
+      active = false; pause();
+      if (onError) onError(error); else throw error;
+      return;
+    }
     // A callback can deactivate or dispose the city, or resume it and already schedule its next frame.
     schedule();
   }

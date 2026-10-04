@@ -5,6 +5,7 @@
  * per user action: a retry with the same key never pays twice, and a lost answer is looked up by that key.
  */
 import { ApiError, request } from "./client";
+import { CITY_READ_TIMEOUT_MS } from "./city";
 import type { DepartmentId } from "./cityWorld";
 import type { PlotFamily, ProjectFamily } from "../city3d/world/estateGrid";
 
@@ -103,8 +104,8 @@ const post = <T extends OperationResult>(path: string, json: { key: string } & R
   keyed(json.key, () => request<T>(`/api/v1/learning/city${path}`, { method: "POST", json }));
 
 export const cityEstate = {
-  city: (city: DepartmentId) => request<CityEstates>(`/api/v1/learning/city/cities/${city}`),
-  mine: () => request<MyEstate>("/api/v1/learning/city/estate"),
+  city: (city: DepartmentId, signal?: AbortSignal) => request<CityEstates>(`/api/v1/learning/city/cities/${city}`, { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
+  mine: (signal?: AbortSignal) => request<MyEstate>("/api/v1/learning/city/estate", { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   purchase: (json: { key: string; district_id: string; family: PlotFamily; block: number; col: number; row: number; economy_revision: number }) => post("/plots", json),
   upgrade: (id: number, json: { key: string; version: number; economy_revision: number }) => post(`/buildings/${id}/upgrade`, json),
   place: (id: number, json: { key: string; district_id: string; version: number; block: number; col: number; row: number; rotation: number }) => post(`/buildings/${id}/place`, json),
@@ -123,7 +124,7 @@ export const cityEstate = {
 export interface SandboxResult { object?: PublicObject; merged?: boolean; removed?: number; project?: number; cancelled?: number; open_band?: number; hq_level?: number; landmark_level?: number; reset?: boolean }
 const SANDBOX = "/api/v1/admin/learning/city/sandbox";
 export const citySandbox = {
-  city: (city: DepartmentId) => request<CityEstates>(`${SANDBOX}/cities/${city}`),
+  city: (city: DepartmentId, signal?: AbortSignal) => request<CityEstates>(`${SANDBOX}/cities/${city}`, { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   build: (json: { district_id: string; family: PlotFamily; block: number; col: number; row: number }) => request<SandboxResult>(`${SANDBOX}/plots`, { method: "POST", json }),
   level: (id: number, level: number) => request<SandboxResult>(`${SANDBOX}/buildings/${id}/level`, { method: "POST", json: { level } }),
   remove: (id: number) => request<SandboxResult>(`${SANDBOX}/buildings/${id}`, { method: "DELETE" }),

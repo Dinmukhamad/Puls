@@ -241,6 +241,36 @@ def empty_facts():
     }
 
 
+def crm_evidence_query(user_ids, phone_ids, dialect):
+    """Count appeals once per operator; an exact category match counts once per appeal."""
+    if dialect == "postgresql":
+        categories = (
+            func.json_array_elements_text(CrmAppeal.category_ids)
+            .table_valued("value")
+            .render_derived()
+        )
+    else:
+        categories = func.json_each(CrmAppeal.category_ids).table_valued("value")
+    phone = (
+        select(1).select_from(categories)
+        .where(categories.c.value.in_(phone_ids))
+        .correlate(CrmAppeal).exists()
+    )
+    return (
+        select(
+            CrmAppeal.author_id,
+            func.count(),
+            func.sum(case((phone, 1), else_=0)),
+            func.sum(case((CrmAppeal.is_ticket.is_(True), 1), else_=0)),
+            func.sum(case(
+                ((CrmAppeal.is_ticket.is_(True) & (CrmAppeal.status == "closed")), 1), else_=0,
+            )),
+        )
+        .where(CrmAppeal.author_id.in_(user_ids))
+        .group_by(CrmAppeal.author_id)
+    )
+
+
 async def evidence(session, user_ids):
     result = {uid: empty_facts() for uid in user_ids}
     if not result:
@@ -279,16 +309,11 @@ async def evidence(session, user_ids):
         if count or active:
             result[uid]["profile"] = 1
     phone_ids = {n["id"] for n in default_categories() if "phone_change" in n["rules"]}
-    appeals = await session.execute(
-        select(
-            CrmAppeal.author_id, CrmAppeal.category_ids, CrmAppeal.is_ticket, CrmAppeal.status
-        ).where(CrmAppeal.author_id.in_(user_ids))
-    )
-    for uid, categories, ticket, status in appeals:
-        result[uid]["appeals"] += 1
-        result[uid]["phone"] += int(bool(phone_ids.intersection(categories)))
-        result[uid]["closed"] += int(ticket and status == "closed")
-        result[uid]["tickets"] = result[uid].get("tickets", 0) + int(ticket)
+    appeals = await session.execute(crm_evidence_query(
+        user_ids, phone_ids, session.get_bind().dialect.name,
+    ))
+    for uid, count, phone, tickets, closed in appeals:
+        result[uid].update(appeals=count, phone=phone, tickets=tickets, closed=closed)
     return result
 
 
@@ -339,13 +364,20 @@ async def dashboard(session, user, *, inspecting=False):
     # The group city, daily situations and districts build on this module: imported here.
     from app.services.city_economy import economy
     from app.services.city_estate import construction_open
-    from app.services.city_group import group_city
+    from app.services.city_group import group_city, group_context
     from app.services.city_quests import quests
 
     config = await settings(session)
     operator = user.role == Role.OPERATOR
+    context = await group_context(session, user)
+    # The operator and active teammates need the same evidence. Read it once for both missions
+    # and the group quarters, so returning to the city does not scan the operator's history twice.
+    facts_by_user = (
+        await evidence(session, [user.id, *(m.id for m in context[1] if m.id != user.id)])
+        if operator else {}
+    )
     facts = (
-        (await evidence(session, [user.id]))[user.id]
+        facts_by_user[user.id]
         if operator
         else empty_facts()
     )
@@ -373,7 +405,8 @@ async def dashboard(session, user, *, inspecting=False):
         if operator
         else {}
     )
-    prices = (await economy(session))["prices"]
+    values = await economy(session)
+    prices = values["prices"]
     # Once the team district opens for building, new buildings go there; the old plots keep theirs.
     moved = operator and await construction_open(session, user)
     return {
@@ -398,7 +431,9 @@ async def dashboard(session, user, *, inspecting=False):
         "buildings": [{**item, "price": prices[key]} for key, item in BUILDINGS.items()],
         "can_build": operator and not inspecting and not moved,
         "plots_moved": moved,
-        "group": await group_city(session, user),
+        "group": await group_city(
+            session, user, context=context, facts=facts_by_user, config=values,
+        ),
         "quests": await quests(session, user, inspecting=inspecting),
     }
 

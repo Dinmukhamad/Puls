@@ -96,3 +96,161 @@ test("a network failure during refresh keeps the session for reconnection", asyn
   await assert.rejects(api.request("/data"), (error) => error.status === 0);
   assert.equal(api.tokenStore.refresh, oldToken.refresh_token);
 });
+
+const flush = () => new Promise(setImmediate);
+
+test("a stalled city fetch settles at its deadline and permits a fresh retry", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const api = await setup(); api.tokenStore.save(oldToken);
+  let requestSignal;
+  globalThis.fetch = (_url, options) => { requestSignal = options.signal; return deferred().promise; };
+  const failed = assert.rejects(api.request("/city", { timeoutMs: 25000 }), { status: 0, code: "request_timeout" });
+  t.mock.timers.tick(25000);
+  await failed;
+  assert.equal(requestSignal.aborted, true);
+  assert.equal(api.tokenStore.access, oldToken.access_token);
+  globalThis.fetch = async () => json({ loaded: true });
+  assert.deepEqual(await api.request("/city", { timeoutMs: 25000 }), { loaded: true });
+});
+
+test("the deadline covers stalled JSON and error response bodies", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const api = await setup();
+  for (const status of [200, 500]) {
+    globalThis.fetch = async () => ({
+      ok: status === 200, status, headers: new Headers({ "content-type": "application/json" }),
+      json: () => deferred().promise,
+    });
+    const failed = assert.rejects(api.request("/city", { timeoutMs: 25000 }), { status: 0, code: "request_timeout" });
+    await flush();
+    t.mock.timers.tick(25000);
+    await failed;
+  }
+});
+
+test("caller cancellation settles even when fetch ignores its signal", async () => {
+  const api = await setup();
+  const controller = new AbortController();
+  let requestSignal;
+  globalThis.fetch = (_url, options) => { requestSignal = options.signal; return deferred().promise; };
+  const failed = assert.rejects(api.request("/city", { signal: controller.signal }), { name: "AbortError" });
+  controller.abort();
+  await failed;
+  assert.equal(requestSignal.aborted, true);
+});
+
+test("an already cancelled request sends nothing", async () => {
+  const api = await setup();
+  const controller = new AbortController(); controller.abort();
+  let sent = 0;
+  globalThis.fetch = async () => { sent++; return json({}); };
+  await assert.rejects(api.request("/city", { signal: controller.signal }), { name: "AbortError" });
+  assert.equal(sent, 0);
+});
+
+test("successful requests clear their deadline and caller listener", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const api = await setup();
+  const controller = new AbortController();
+  const remove = t.mock.method(controller.signal, "removeEventListener");
+  let requestSignal;
+  globalThis.fetch = async (_url, options) => { requestSignal = options.signal; return json({ ok: true }); };
+  await api.request("/city", { signal: controller.signal, timeoutMs: 25000 });
+  assert.equal(remove.mock.callCount(), 1);
+  t.mock.timers.tick(25000);
+  controller.abort();
+  assert.equal(requestSignal.aborted, false);
+});
+
+test("cancelling one city query does not cancel another query's shared refresh", async () => {
+  const api = await setup(); api.tokenStore.save(oldToken);
+  const controller = new AbortController(), refresh = deferred();
+  let refreshSignal, refreshes = 0;
+  globalThis.fetch = async (url, options) => {
+    if (url.endsWith("/refresh")) { refreshSignal = options.signal; refreshes++; return refresh.promise; }
+    return options.headers.Authorization === "Bearer new-access" ? json({ ok: true }) : json({}, 401);
+  };
+  const cancelled = assert.rejects(api.request("/city", { signal: controller.signal }), { name: "AbortError" });
+  const world = api.request("/city/world");
+  await flush();
+  controller.abort();
+  await cancelled;
+  assert.equal(refreshSignal.aborted, false);
+  refresh.resolve(json(newToken));
+  assert.deepEqual(await world, { ok: true });
+  assert.equal(refreshes, 1);
+});
+
+test("a hung shared refresh times out, preserves login, and releases the next retry", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const api = await setup(); api.tokenStore.save(oldToken);
+  let refreshes = 0, firstSignal;
+  globalThis.fetch = async (url, options) => {
+    if (url.endsWith("/refresh")) {
+      refreshes++;
+      if (refreshes === 1) { firstSignal = options.signal; return deferred().promise; }
+      return json(newToken);
+    }
+    return options.headers.Authorization === "Bearer new-access" ? json({ ok: true }) : json({}, 401);
+  };
+  const pending = [api.request("/city"), api.request("/city/world")];
+  const failures = pending.map(promise => assert.rejects(promise, { status: 0, code: "request_timeout" }));
+  await flush();
+  t.mock.timers.tick(20000);
+  await Promise.all(failures);
+  assert.equal(firstSignal.aborted, true);
+  assert.equal(api.tokenStore.refresh, oldToken.refresh_token);
+  assert.deepEqual(await api.request("/city"), { ok: true });
+  assert.equal(refreshes, 2);
+});
+
+test("shared refresh also bounds a stalled token response body", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const api = await setup(); api.tokenStore.save(oldToken);
+  globalThis.fetch = async (url) => url.endsWith("/refresh")
+    ? { ok: true, json: () => deferred().promise } : json({}, 401);
+  const failed = assert.rejects(api.request("/city"), { status: 0, code: "request_timeout" });
+  await flush();
+  t.mock.timers.tick(20000);
+  await failed;
+  assert.equal(api.tokenStore.refresh, oldToken.refresh_token);
+});
+
+test("the original city deadline still applies to the replay after token rotation", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const api = await setup(); api.tokenStore.save(oldToken);
+  const first = deferred();
+  globalThis.fetch = async (url, options) => {
+    if (url.endsWith("/refresh")) return json(newToken);
+    return options.headers.Authorization === "Bearer new-access" ? deferred().promise : first.promise;
+  };
+  const failed = assert.rejects(api.request("/city", { timeoutMs: 25000 }), { status: 0, code: "request_timeout" });
+  t.mock.timers.tick(24000);
+  first.resolve(json({}, 401));
+  await flush();
+  assert.equal(api.tokenStore.access, newToken.access_token);
+  t.mock.timers.tick(1000);
+  await failed;
+});
+
+test("a replacement login starts its own refresh while an old account's refresh is pending", async () => {
+  const api = await setup(); api.tokenStore.save(oldToken);
+  const oldRefresh = deferred(), replacementRefresh = deferred();
+  const replacement = { access_token: "replacement-access", refresh_token: "replacement-refresh" };
+  const rotated = { access_token: "rotated-access", refresh_token: "rotated-refresh" };
+  globalThis.fetch = async (url, options) => {
+    if (url.endsWith("/refresh")) return JSON.parse(options.body).refresh_token === "old-refresh"
+      ? oldRefresh.promise : replacementRefresh.promise;
+    return options.headers.Authorization === "Bearer rotated-access" ? json({ account: "replacement" }) : json({}, 401);
+  };
+  const old = assert.rejects(api.request("/city"), { name: "AbortError" });
+  await flush();
+  api.tokenStore.save(replacement);
+  const current = api.request("/city");
+  await flush();
+  oldRefresh.resolve(json(newToken));
+  await old;
+  replacementRefresh.resolve(json(rotated));
+  assert.deepEqual(await current, { account: "replacement" });
+  assert.equal(api.tokenStore.access, rotated.access_token);
+});

@@ -9,13 +9,14 @@ import type { CityWorld, DepartmentId } from "../../api/cityWorld";
 import type { JourneyPhase } from "../../city3d/types";
 import { retainedCity } from "./retainedCity";
 import { CityPeekPanel } from "./CityPeekPanel";
+import { watchCityStartup } from "./startupDeadline";
 
 /**
  * The 3D city fills the whole screen behind the glass panels. `.city-frame` marks the part the panels
  * leave free, and the camera centres the city there. `progressKey` remembers the levels this viewer has
  * seen, so an upgrade is celebrated once.
  */
-export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
+export function CityMap({ department = "support", departmentWorld, onWorldPick, onArrival, onJourney, worldAction, estates, build = null, onEstate, estateFocus, sceneIdentity, districts, missions, labels, selected, onSelect, progressKey, mascot, forceWebGL = false, focusRequest = 0, plots = [], onPlot, plotFocus, sites = null, onSite, siteFocus, quests = [], onQuest, questFocus, controls = "orbit", onControls, controlsOpen = false, onStatus, onRetry }: { department?: DepartmentId; departmentWorld?: CityWorld; onWorldPick?: (id: string) => void; onArrival?: (id: DepartmentId) => void; onJourney?: (phase: JourneyPhase) => void; worldAction?: { kind: "travel" | "skip" | "focus"; target: string; at: number };
   /** Team district land of both cities, the build mode, taps on the land; `estateFocus` flies there when it changes. */
   estates?: Partial<Record<DepartmentId, CityEstateView>>; build?: CityBuildView | null; onEstate?: (pick: EstatePick) => void;
   estateFocus?: EstateTarget & { at: number };
@@ -29,7 +30,7 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   /** How the mouse moves the camera (the operator's choice); `onControls` opens the choice from the map tools. */
   controls?: CityControlScheme; onControls?: () => void; controlsOpen?: boolean;
   /** Whether the 3D map works: the page waits for it before offering the camera choice. */
-  onStatus?: (status: "loading" | "ready" | "failed") => void }) {
+  onStatus?: (status: "loading" | "ready" | "failed") => void; onRetry?: () => void }) {
   const worldRef = useRef({ department, departmentWorld, onWorldPick, onArrival, onJourney, estates, build, onEstate });
   worldRef.current = { department, departmentWorld, onWorldPick, onArrival, onJourney, estates, build, onEstate };
   const mascotRef = useRef(mascot); mascotRef.current = mascot;
@@ -54,6 +55,8 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   const selectRef = useRef(onSelect), selectedRef = useRef(selected);
   selectRef.current = onSelect; selectedRef.current = selected;
   const [ready, setReady] = useState(false), [failed, setFailed] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [reloadRequired, setReloadRequired] = useState(false);
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>(() => {
     try { return localStorage.getItem("puls.city.time-of-day") === "night" ? "night" : "day"; } catch { return "day"; }
   });
@@ -79,9 +82,20 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   useEffect(() => {
     let cancelled = false;
     let release: (() => void) | undefined;
-    setFailed(false); setReady(false);
+    let stopDeadline: (() => void) | undefined;
+    const fail = () => { if (!cancelled) { stopDeadline?.(); setReady(false); setFailed(true); } };
+    const loaded = () => { if (!cancelled) { stopDeadline?.(); setProgress(1); setFailed(false); setReady(true); } };
+    setFailed(false); setReady(false); setProgress(0); setReloadRequired(true);
+    stopDeadline = watchCityStartup(() => {
+      if (cancelled) return;
+      // Retrying must not reacquire the same stalled runtime or its late callbacks.
+      cancelled = true; release?.(); retainedCity.clear();
+      control.current = undefined; host.current = undefined;
+      setReady(false); setFailed(true);
+    });
     void import("../../city3d").then(({ createCity }) => {
       if (cancelled || !mount.current) return;
+      setReloadRequired(false);
       const visit = retainedCity.acquire({
         owner, key: JSON.stringify([sceneIdentity, world, webGL, showStats, canBuild, canQuest]),
         mount: mount.current, traffic: trafficRef.current, create: createCity,
@@ -95,15 +109,16 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
         quests: questsRef.current.map(({ slot, giver, answered }) => ({ slot, giver, answered })), onQuest: canQuest ? slot => { if (!cancelled) questRef.current?.(slot); } : undefined,
         levels: levelsRef.current, selected: selectedRef.current, labels: labelsRef.current, grown: growthRef.current(), mascot: mascotRef.current,
         onSelect: id => { if (!cancelled) selectRef.current(id); }, onView: () => { /* The retained camera owns its view between visits. */ },
-        onReady: () => { if (!cancelled) setReady(true); }, onLost: () => { if (!cancelled) setFailed(true); },
-        onRestored: () => { if (!cancelled) setFailed(false); },
+        onReady: loaded, onLost: fail, onRestored: loaded,
+        onProgress: share => { if (!cancelled) setProgress(share); },
         },
       });
       control.current = visit.control; host.current = visit.host; release = visit.release;
       visit.host.setAttribute("aria-label", mapLabel(controlsRef.current));
-      setTraffic(visit.traffic); setReady(visit.status === "ready"); setFailed(visit.status === "failed");
-    }).catch(() => { if (!cancelled) setFailed(true); });
-    return () => { cancelled = true; release?.(); control.current = undefined; host.current = undefined; };
+      setTraffic(visit.traffic); setProgress(visit.progress);
+      if (visit.status === "ready") loaded(); else if (visit.status === "failed") fail();
+    }).catch(fail);
+    return () => { cancelled = true; stopDeadline?.(); release?.(); control.current = undefined; host.current = undefined; };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- live server state updates below; only a different scene/capability creates a runtime
   }, [owner, sceneIdentity, world, webGL, showStats, canBuild, canQuest]);
   useEffect(() => { control.current?.setDepartment(department); }, [department]);
@@ -148,8 +163,8 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   // The mouse moves the camera as the operator chose (city3d/engine/camera.ts mouseGesture).
   return <section className={`city-world${failed ? " city-world--fallback" : ""}${live ? " is-ready" : ""}`} aria-label="Карта твоего города">
     <div ref={mount} className="city-mount" style={{ position: "absolute", inset: 0 }} onKeyDown={key} />
-    {!failed && !ready && <div className="city-loading" role="status"><span>Строим твой город…</span></div>}
-    {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>3D-карта недоступна на этом устройстве</strong><small>Выбирай районы на панели навыков — миссии работают как обычно.</small></div>}
+    {!failed && !ready && <div className="city-loading" role="status"><span>{progress < .3 ? "Запускаем карту…" : progress < .75 ? "Загружаем здания…" : "Подготавливаем город…"} {Math.round(progress * 100)}%</span></div>}
+    {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>Не удалось загрузить карту города</strong><small>Попробуй загрузить карту ещё раз. Миссии доступны на панели навыков.</small>{onRetry && <button type="button" className="city-secondary" onClick={() => reloadRequired ? window.location.reload() : onRetry()}>Повторить загрузку карты</button>}</div>}
     {live && <span className="city-map-hint" key={controls}>{CONTROL_SCHEMES[controls].hint}</span>}
     {!failed && <CityPeekPanel label="Управление картой" compactLabel="Карта" toolbarSlot="tools" icon={<span aria-hidden="true">⚙</span>} className="city-map-peek">
       <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="horizontal">

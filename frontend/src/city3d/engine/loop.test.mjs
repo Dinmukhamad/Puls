@@ -141,6 +141,23 @@ test('pausing or disposing inside a frame cannot resurrect its RAF chain', t => 
   assert.equal(b.queue.size, 0);
 });
 
+test('a thrown frame reports failure once and stops RAF, visibility and intersection from restarting it', t => {
+  const b = browser(t), failure = new Error('shader failed'), errors = [];
+  const { loop } = b.create({ render() { throw failure; }, onError(error) { errors.push(error); } });
+  b.advance(100);
+  assert.deepEqual(errors, [failure]); assert.equal(loop.running, false); assert.equal(b.queue.size, 0);
+  b.hide(true); b.hide(false); b.intersect(false); b.intersect(true); b.advance(1000);
+  assert.deepEqual(errors, [failure]); assert.equal(b.queue.size, 0);
+});
+
+test('failures from quality measurement also report before rendering and cannot revive a disposed loop', t => {
+  const b = browser(t), failure = new Error('quality failed'), errors = [];
+  let draws = 0, loop;
+  ({ loop } = b.create({ onGap() { throw failure; }, render() { draws++; }, onError(error) { errors.push(error); loop.dispose(); } }));
+  b.advance(100); loop.setActive(true); b.hide(false); b.advance(116);
+  assert.deepEqual(errors, [failure]); assert.equal(draws, 0); assert.equal(b.queue.size, 0);
+});
+
 test('a pause and resume inside rendering queues only one fresh frame', t => {
   const b = browser(t), gaps = [];
   let loop, draws = 0;

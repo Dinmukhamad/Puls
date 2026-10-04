@@ -1,4 +1,5 @@
 import { request } from "./client";
+import { CITY_READ_TIMEOUT_MS } from "./city";
 
 export type DepartmentId = "support" | "sales";
 export interface TeamDistrict { id: string; name: string; mine: boolean; assigned: boolean; supervisor: string | null; construction?: boolean; prepared?: number }
@@ -33,7 +34,7 @@ export function worldSavePayload(settings: WorldSettings | WorldSaveSettings): W
   })) };
 }
 export const cityWorld = {
-  get: () => request<CityWorld>("/api/v1/learning/city/world"),
+  get: (signal?: AbortSignal) => request<CityWorld>("/api/v1/learning/city/world", { signal, timeoutMs: CITY_READ_TIMEOUT_MS }),
   settings: () => request<WorldEditorData>("/api/v1/admin/learning/city/world"),
   save: (json: WorldSaveSettings) => request<WorldEditorData>("/api/v1/admin/learning/city/world", { method: "PUT", json: worldSavePayload(json) }),
 };

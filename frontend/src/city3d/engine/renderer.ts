@@ -6,6 +6,16 @@ import * as THREE from "three/webgpu";
 
 export type Backend = "webgpu" | "webgl2";
 
+/** A stalled adapter/device request must not keep the city loading indefinitely. */
+export const RENDERER_STARTUP_TIMEOUT_MS = 10_000;
+
+export interface RendererOptions {
+  forceWebGL?: boolean;
+  mobile?: boolean;
+  /** Cancels a city generation that was replaced while its GPU was starting. */
+  signal?: AbortSignal;
+}
+
 export interface RendererHandle {
   renderer: THREE.WebGPURenderer;
   backend: Backend;
@@ -35,11 +45,15 @@ export function pixelRatio(mobile: boolean, resolution = 1) {
   return Math.max(1, Math.min(dpr, mobile ? 1.5 : 2)) * resolution;
 }
 
-export async function createRenderer(canvas: HTMLCanvasElement, { forceWebGL = false, mobile = false } = {}): Promise<RendererHandle> {
+export async function createRenderer(canvas: HTMLCanvasElement, { forceWebGL = false, mobile = false, signal }: RendererOptions = {}): Promise<RendererHandle> {
+  if (signal?.aborted) throw signal.reason ?? new DOMException("City renderer startup was canceled", "AbortError");
   // Laptops with two GPUs get the fast one; phones have one anyway.
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: false, alpha: true, forceWebGL, powerPreference: mobile ? "low-power" : "high-performance" });
+  // three replaces this backend on an init failure, even when it already allocated a GPU device.
+  const initialBackend = renderer.backend as unknown as BackendInternals;
+  const releasedDevices = new Set<GPUDevice>();
   const lostListeners = new Set<() => void>(), restoredListeners = new Set<() => void>();
-  let lost = false, restored = false, disposed = false, timer = 0;
+  let lost = false, restored = false, disposed = false, initialized = false, freed = false, timer = 0;
 
   const restore = () => {
     if (disposed || !lost || restored) return;
@@ -58,6 +72,8 @@ export async function createRenderer(canvas: HTMLCanvasElement, { forceWebGL = f
   renderer.onDeviceLost = (info: LossInfo) => {
     // dispose() destroys the device on purpose: that is not a loss.
     if (disposed || lost) return;
+    // Destroying the failed WebGPU device must not report loss of its successful WebGL fallback.
+    if (info.api === "WebGPU" && (renderer.backend as unknown as BackendInternals) !== initialBackend && initialBackend.device && releasedDevices.has(initialBackend.device)) return;
     defaultLost.call(renderer, info);
     lost = true; lostListeners.forEach(cb => cb());
     if (info.api === "WebGPU") waitForAdapter();
@@ -65,13 +81,61 @@ export async function createRenderer(canvas: HTMLCanvasElement, { forceWebGL = f
   // WebGLBackend already calls preventDefault() on `webglcontextlost`, which lets the browser restore it.
   canvas.addEventListener("webglcontextrestored", restore);
 
-  try {
-    await renderer.init();
-  } catch (error) {
-    // Neither backend started (no GPU at all): the page shows its fallback. dispose() is not called here,
-    // it would await init() again and reject a second time.
-    disposed = true;
+  const detach = () => {
+    disposed = true; window.clearTimeout(timer);
+    lostListeners.clear(); restoredListeners.clear();
     canvas.removeEventListener("webglcontextrestored", restore);
+  };
+  const releaseDevice = (device?: GPUDevice) => {
+    if (!device || releasedDevices.has(device)) return;
+    releasedDevices.add(device); device.destroy();
+  };
+  const freeDevices = () => {
+    releaseDevice(initialBackend.device);
+    releaseDevice((renderer.backend as unknown as BackendInternals).device);
+  };
+  const freeRenderer = () => {
+    if (!initialized || freed) return;
+    freed = true;
+    try { renderer.dispose(); }
+    finally {
+      // three's WebGPU backend never destroys its device, which would keep GPU memory until garbage collection.
+      freeDevices();
+    }
+  };
+  try {
+    const initialization = renderer.init().then(() => {
+      initialized = true;
+      const current = renderer.backend as unknown as BackendInternals;
+      if (current !== initialBackend && current.device !== initialBackend.device) releaseDevice(initialBackend.device);
+      // Browser GPU requests cannot be aborted. A late success belongs to the discarded city generation.
+      if (disposed) freeRenderer();
+    }, error => {
+      // init is settled, so any partially allocated device can now be released safely. Calling
+      // renderer.dispose() here would make three await the rejected init() again.
+      detach(); freeDevices();
+      throw error;
+    });
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => { window.clearTimeout(startupTimer); signal?.removeEventListener("abort", abort); };
+      const abort = () => {
+        cleanup();
+        reject(signal?.reason ?? new DOMException("City renderer startup was canceled", "AbortError"));
+      };
+      const startupTimer = window.setTimeout(() => {
+        cleanup();
+        reject(new DOMException("City renderer startup timed out", "TimeoutError"));
+      }, RENDERER_STARTUP_TIMEOUT_MS);
+      signal?.addEventListener("abort", abort, { once: true });
+      // Also handles an init() implementation that synchronously canceled its owner.
+      if (signal?.aborted) abort();
+      initialization.then(() => { cleanup(); resolve(); }, error => { cleanup(); reject(error); });
+    });
+  } catch (error) {
+    detach();
+    // Native init failure must not call dispose(): three would await the rejected init() again.
+    // Pending init is freed by its success callback instead of starting a second async disposal.
+    freeRenderer();
     throw error;
   }
   const internals = renderer.backend as unknown as BackendInternals;
@@ -90,25 +154,21 @@ export async function createRenderer(canvas: HTMLCanvasElement, { forceWebGL = f
     return () => { set.delete(cb); };
   };
   return {
-    renderer, backend, gpu: await gpuName(internals),
+    renderer, backend, gpu: gpuName(internals),
     onLost: cb => subscribe(lostListeners, cb, lost),
     onRestored: cb => subscribe(restoredListeners, cb, restored),
     dispose() {
       if (disposed) return;
-      disposed = true; clearTimeout(timer);
-      lostListeners.clear(); restoredListeners.clear();
-      canvas.removeEventListener("webglcontextrestored", restore);
-      renderer.dispose();
-      // three's WebGPU backend never destroys its device, which would keep GPU memory until garbage collection.
-      internals.device?.destroy();
+      detach(); freeRenderer();
     },
   };
 }
 
-async function gpuName(backend: BackendInternals): Promise<string> {
+function gpuName(backend: BackendInternals): string {
   try {
     if (backend.isWebGPUBackend) {
-      const info = backend.device?.adapterInfo ?? (await navigator.gpu?.requestAdapter())?.info;
+      // Telemetry must never make a second unbounded adapter request after the renderer is already ready.
+      const info = backend.device?.adapterInfo;
       return info ? [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(" ") : "";
     }
     const gl = backend.gl;

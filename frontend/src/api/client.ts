@@ -106,6 +106,37 @@ interface RequestOptions {
   multipart?: FormData;
   auth?: boolean;
   signal?: AbortSignal;
+  /** An optional deadline for the full request, including refresh and the response body. */
+  timeoutMs?: number;
+}
+
+/** Bound stalled fetch/body promises, and keep caller cancellation separate from shared refresh. */
+function requestScope(signal?: AbortSignal, timeoutMs?: number) {
+  const controller = new AbortController();
+  const abort = () => controller.abort(signal?.reason ?? new DOMException("Запрос отменён", "AbortError"));
+  if (signal?.aborted) abort();
+  else signal?.addEventListener("abort", abort, { once: true });
+  const timeout = timeoutMs && Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? setTimeout(() => controller.abort(new ApiError(0, {
+      code: "request_timeout", detail: "Сервер отвечает слишком долго. Повторите попытку.",
+    })), timeoutMs) : undefined;
+  return {
+    signal: controller.signal,
+    wait<T>(promise: Promise<T>): Promise<T> {
+      return new Promise((resolve, reject) => {
+        const stop = () => { cleanup(); reject(controller.signal.reason); };
+        const cleanup = () => controller.signal.removeEventListener("abort", stop);
+        if (controller.signal.aborted) stop();
+        else controller.signal.addEventListener("abort", stop, { once: true });
+        // Attach both handlers even after cancellation: a late rejected fetch cannot leak an error.
+        promise.then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
+      });
+    },
+    dispose() {
+      if (timeout !== undefined) clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+    },
+  };
 }
 
 async function parseBody(response: Response): Promise<ApiErrorBody> {
@@ -117,40 +148,50 @@ async function parseBody(response: Response): Promise<ApiErrorBody> {
 }
 
 /** Обновление access-токена. Один общий промис на все параллельные запросы. */
-let refreshing: Promise<boolean> | null = null;
+const REFRESH_TIMEOUT_MS = 20000;
+let refreshing: { token: string; version: number; promise: Promise<boolean> } | null = null;
 
 async function refreshAccessToken(): Promise<boolean> {
   const refresh = tokenStore.refresh;
   if (!refresh) return false;
 
-  refreshing ??= (async () => {
+  if (refreshing?.token === refresh && refreshing.version === sessionVersion) return refreshing.promise;
+  const active = { token: refresh, version: sessionVersion, promise: undefined as unknown as Promise<boolean> };
+  refreshing = active;
+  active.promise = (async () => {
+    const scope = requestScope(undefined, REFRESH_TIMEOUT_MS);
     try {
-      const response = await fetch(`${BASE}/api/v1/auth/refresh`, {
+      const response = await scope.wait(fetch(`${BASE}/api/v1/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ refresh_token: refresh }),
-      });
+        signal: scope.signal,
+      }));
       if (!response.ok) return false;
-      const token = (await response.json()) as Token;
-      if (tokenStore.refresh !== refresh) return false;
+      const token = (await scope.wait(response.json())) as Token;
+      if (tokenStore.refresh !== refresh || sessionVersion !== active.version) return false;
       tokenStore.save(token, true);
       return true;
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
       throw new ApiError(0, {});
     } finally {
-      refreshing = null;
+      scope.dispose();
+      if (refreshing === active) refreshing = null;
     }
   })();
 
-  return refreshing;
+  return active.promise;
 }
 
 export async function request<T>(
   path: string,
-  { method = "GET", json, form, multipart, auth = true, signal, headers: customHeaders }: RequestOptions = {},
+  { method = "GET", json, form, multipart, auth = true, signal, timeoutMs, headers: customHeaders }: RequestOptions = {},
 ): Promise<T> {
+  const scope = requestScope(signal, timeoutMs);
   const version = sessionVersion;
   const ensureSession = () => {
+    if (scope.signal.aborted) throw scope.signal.reason;
     if (auth && version !== sessionVersion) throw new DOMException("Сеанс изменился", "AbortError");
   };
   const send = async (): Promise<Response> => {
@@ -171,46 +212,46 @@ export async function request<T>(
     const access = tokenStore.access;
     if (auth && access) headers.Authorization = `Bearer ${access}`;
 
-    return fetch(`${BASE}${path}`, { method, headers, body, signal });
+    return fetch(`${BASE}${path}`, { method, headers, body, signal: scope.signal });
   };
 
-  let response: Response;
   try {
-    response = await send();
-  } catch (error) {
-    if (signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) throw error;
-    throw new ApiError(0, {});
-  }
-  ensureSession();
-
-  // Просроченный access-токен обновляем молча и повторяем запрос один раз.
-  if (response.status === 401 && auth && tokenStore.refresh) {
-    if (await refreshAccessToken()) {
-      response = await send();
-    }
+    let response = await scope.wait(send());
     ensureSession();
-  }
 
-  if (response.status === 401 && auth) {
-    notifyUnauthorized();
-    throw new ApiError(401, { detail: "Сессия истекла, войдите заново" });
-  }
+    // Просроченный access-токен обновляем молча и повторяем запрос один раз.
+    if (response.status === 401 && auth && tokenStore.refresh) {
+      const refreshed = await scope.wait(refreshAccessToken());
+      ensureSession();
+      if (refreshed) response = await scope.wait(send());
+      ensureSession();
+    }
 
-  if (!response.ok) {
-    const error = new ApiError(response.status, await parseBody(response));
-    if (error.code === "section_denied" || error.code === "developer_required") sectionDeniedListeners.forEach((listener) => listener());
-    throw error;
-  }
+    if (response.status === 401 && auth) {
+      notifyUnauthorized();
+      throw new ApiError(401, { detail: "Сессия истекла, войдите заново" });
+    }
 
-  if (response.status === 204) return undefined as T;
+    if (!response.ok) {
+      const error = new ApiError(response.status, await scope.wait(parseBody(response)));
+      ensureSession();
+      if (error.code === "section_denied" || error.code === "developer_required") sectionDeniedListeners.forEach((listener) => listener());
+      throw error;
+    }
 
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    return (await response.text()) as T;
+    if (response.status === 204) return undefined as T;
+
+    const contentType = response.headers.get("content-type") ?? "";
+    const result = await scope.wait(contentType.includes("application/json") ? response.json() : response.text());
+    ensureSession();
+    return result as T;
+  } catch (error) {
+    if (scope.signal.aborted) throw scope.signal.reason;
+    if (error instanceof ApiError || (error instanceof DOMException && error.name === "AbortError")) throw error;
+    throw new ApiError(0, {});
+  } finally {
+    scope.dispose();
   }
-  const result = (await response.json()) as T;
-  ensureSession();
-  return result;
 }
 
 /** Скачивание файла: бэкенд отдаёт CSV вложением, а fetch нужен ради заголовка авторизации. */

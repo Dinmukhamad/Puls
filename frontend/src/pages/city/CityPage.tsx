@@ -28,12 +28,19 @@ import "./cityPanelLayout.css";
 import { districtPlotGrid, freeDistrictPlot } from "./freeDistrictPlot";
 import type { CityControls } from "../../api/types";
 import { DEFAULT_GUIDE, guideName, guideText } from "../../guide";
+import { retainedCity } from "./retainedCity";
+
+/** A startup timeout has an explicit retry button; do not silently repeat a stalled connection. */
+const retryCityRead = (failures: number, error: Error) => {
+  const problem = error as { status?: number; code?: string; name?: string };
+  return problem.code !== "request_timeout" && problem.name !== "AbortError" && !(problem.status && problem.status >= 400 && problem.status < 500) && failures < 1;
+};
 
 /** Город во весь экран: 3D-карта под стеклянными панелями, как в игре. */
 export function CityPage() {
   const { user } = useAuth(), client = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const worldQuery = useQuery({ queryKey: ["city-world"], queryFn: cityWorld.get, refetchOnWindowFocus: true });
+  const worldQuery = useQuery({ queryKey: ["city-world"], queryFn: ({ signal }) => cityWorld.get(signal), retry: retryCityRead, refetchOnWindowFocus: true });
   const department: DepartmentId = params.get("city") === "sales" ? "sales" : params.get("city") === "support" || params.has("operator") || params.has("district") ? "support" : worldQuery.data?.home_city ?? "support";
   const [worldSelected, setWorldSelected] = useState<string | null>(null);
   const [worldAction, setWorldAction] = useState<{ kind: "travel" | "skip" | "focus"; target: string; at: number }>();
@@ -45,7 +52,7 @@ export function CityPage() {
     setWorldSelected(id); if (id !== "world") setWorldAction({ kind: "focus", target: id, at: Date.now() });
   }
   const operatorId = user?.role !== "operator" && /^\d+$/.test(params.get("operator") ?? "") ? Number(params.get("operator")) : null;
-  const query = useQuery({ queryKey: ["city", operatorId ?? "self"], queryFn: () => operatorId ? city.operator(operatorId) : city.own(), refetchInterval: 15000, refetchOnWindowFocus: true });
+  const query = useQuery({ queryKey: ["city", operatorId ?? "self"], queryFn: ({ signal }) => operatorId ? city.operator(operatorId, signal) : city.own(signal), retry: retryCityRead, refetchInterval: query => query.state.data ? 15000 : false, refetchOnWindowFocus: true });
   const [reward, setReward] = useState<CityReward | null>(null);
   const [driverLaunch, setDriverLaunch] = useState(false);
   const [guideEditing, setGuideEditing] = useState(false);
@@ -53,6 +60,7 @@ export function CityPage() {
   const [controlsEditing, setControlsEditing] = useState(false), [controlsPreview, setControlsPreview] = useState<CityControls | null>(null);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [mapAttempt, setMapAttempt] = useState(0);
+  function retryMap() { retainedCity.clear(); setMapStatus("loading"); setMapAttempt(attempt => attempt + 1); }
   const [focusRequest, requestFocus] = useState(0);
   const [plotKey, setPlotKey] = useState<string | null>(null), [built, setBuilt] = useState<CityBuilt | null>(null);
   const [plotFocus, setPlotFocus] = useState<{ key: string; at: number }>();
@@ -63,13 +71,13 @@ export function CityPage() {
   const claim = useMutation({ mutationFn: (key: string) => city.claim(key, query.data!.revision), onSuccess: async result => { setReward(result); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   // Team district land: the viewer's own estate, and the districts of the city on screen, refreshed about every
   // 12 seconds (with a little spread) only while this page is open and visible.
-  const estateQuery = useQuery({ queryKey: ["city-estate"], queryFn: cityEstate.mine, refetchInterval: 15000, refetchOnWindowFocus: true });
-  const landPoll = () => 10000 + Math.random() * 5000;
+  const estateQuery = useQuery({ queryKey: ["city-estate"], queryFn: ({ signal }) => cityEstate.mine(signal), retry: retryCityRead, refetchInterval: query => query.state.data ? 15000 : false, refetchOnWindowFocus: true });
+  const landPoll = (query: { state: { data: unknown } }) => query.state.data ? 10000 + Math.random() * 5000 : false;
   // Administrators may switch the map to their test city (?sandbox=1): the same land, apart from the real one.
   const sandboxOn = user?.role === "admin" && params.get("sandbox") === "1";
-  const supportLand = useQuery({ queryKey: ["city-estates", "support"], queryFn: () => cityEstate.city("support"), enabled: department === "support" && !sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
-  const salesLand = useQuery({ queryKey: ["city-estates", "sales"], queryFn: () => cityEstate.city("sales"), enabled: department === "sales" && !sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
-  const sandboxLand = useQuery({ queryKey: ["city-sandbox", department], queryFn: () => citySandbox.city(department), enabled: sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
+  const supportLand = useQuery({ queryKey: ["city-estates", "support"], queryFn: ({ signal }) => cityEstate.city("support", signal), retry: retryCityRead, enabled: department === "support" && !sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
+  const salesLand = useQuery({ queryKey: ["city-estates", "sales"], queryFn: ({ signal }) => cityEstate.city("sales", signal), retry: retryCityRead, enabled: department === "sales" && !sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
+  const sandboxLand = useQuery({ queryKey: ["city-sandbox", department], queryFn: ({ signal }) => citySandbox.city(department, signal), retry: retryCityRead, enabled: sandboxOn, refetchInterval: landPoll, refetchOnWindowFocus: true });
   const estateViews = useMemo(() => {
     const views: Partial<Record<DepartmentId, CityEstateView>> = {};
     if (sandboxOn) {
@@ -158,7 +166,7 @@ export function CityPage() {
     return () => window.removeEventListener("keydown", key);
   }, [!!building]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!query.data) return <div className="city-immersive city-immersive--empty">
-    {query.isError ? <div className="city-empty-card glass glass--prominent"><ErrorState error={query.error} onRetry={() => query.refetch()} /></div> : <div className="city-loading" role="status"><span>Загружаем город…</span></div>}
+    {query.isError || query.fetchStatus === "paused" ? <div className="city-empty-card glass glass--prominent"><ErrorState error={query.error ?? new Error("Нет соединения. Подключись к сети и повтори загрузку города.")} onRetry={() => query.refetch()} /></div> : <div className="city-loading" role="status"><span>Загружаем данные города…</span></div>}
   </div>;
   const data = query.data;
   const selected = data.districts.find(d => d.id === params.get("district")) ?? data.districts.find(d => d.id === nextMission(data.missions)?.district) ?? data.districts[0];
@@ -204,7 +212,7 @@ export function CityPage() {
   }
   return <CityToolbarProvider><div className="city-immersive" data-department={department} data-building={building ? true : undefined}>
     <CityToolbar />
-    <CityMap key={mapAttempt} department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
+    <CityMap key={mapAttempt} department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} onRetry={retryMap} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
     <CityPeekPanel className="city-hud-peek" toolbarSlot="level" label="Уровень, опыт и меню" compactLabel="Уровень" icon={data.level}>
     <header className="city-hud glass glass--regular">
@@ -283,7 +291,7 @@ export function CityPage() {
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild ? openBuild : undefined}
       onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, plot: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
-    {building && mineEstate && !sandboxOn && <CityEstateDock mine={mineEstate} land={buildingLand} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} onChooseFree={mapStatus === "ready" && !buildingLandQuery.isError && suggestedPlot && building.district === homeEstate?.id ? chooseFreePlot : undefined} mapStatus={mapStatus} loadingLand={!buildingLand && !buildingLandQuery.isError} landError={buildingLandQuery.isError ? buildingLandQuery.error : null} onRetryLand={reloadBuildLand} onRetryMap={() => { setMapStatus("loading"); setMapAttempt(attempt => attempt + 1); }} />}
+    {building && mineEstate && !sandboxOn && <CityEstateDock mine={mineEstate} land={buildingLand} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} onChooseFree={mapStatus === "ready" && !buildingLandQuery.isError && suggestedPlot && building.district === homeEstate?.id ? chooseFreePlot : undefined} mapStatus={mapStatus} loadingLand={!buildingLand && !buildingLandQuery.isError} landError={buildingLandQuery.isError ? buildingLandQuery.error : null} onRetryLand={reloadBuildLand} onRetryMap={retryMap} />}
     {building && sandboxOn && <CitySandboxDock city={department} state={sandboxLand.data?.city === department ? sandboxLand.data : undefined} mine={mineEstate} build={building} setBuild={setBuilding} onClose={() => setBuilding(null)} onFocus={focusLand} />}
     <CityJourney phase={journey} destination={worldQuery.data?.cities.find(c => c.id === destination)?.name ?? destination} onSkip={() => setWorldAction({ kind: "skip", target: destination, at: Date.now() })} />
 

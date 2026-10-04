@@ -9,7 +9,7 @@ import { createInstancePools } from "../render/instances";
 import { createMountains } from "../render/mountains";
 import { RELIEF_END } from "../world/relief";
 import { PORTAL_AT, RAIL_LINES, STATION, railHeading, railPoint, type RailLine } from "../world/railway";
-import { loadModels } from "../assets/loader";
+import { loadModels, disposeModels } from "../assets/loader";
 import portalUrl from "../../pages/city/models/railway-portal.glb?url";
 import stationUrl from "../../pages/city/models/railway-station.glb?url";
 import { createTerrain } from "../render/terrain";
@@ -247,13 +247,14 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
   // The tunnel portals' model and the station buildings'; both stations use drawn ones until they arrive, and keep
   // them if they cannot.
   let portalModel: Model | null = null, stationModels: Map<string, Model> | null = null, disposed = false;
-  void loadModels(portalUrl).then(models => {
+  const assetController = new AbortController();
+  void loadModels(portalUrl, { signal: assetController.signal }).then(models => {
     const model = models.get("railway-portal") ?? [...models.values()][0];
-    if (disposed || !model) return;
+    if (disposed || !model) { disposeModels(models); return; }
     portalModel = model; supportRail.usePortal(model); sales?.rail.usePortal(model); ctx.requestShadowUpdate();
   }).catch(() => undefined);
-  void loadModels(stationUrl).then(models => {
-    if (disposed || !models.has("railway-station")) return;
+  void loadModels(stationUrl, { signal: assetController.signal }).then(models => {
+    if (disposed || !models.has("railway-station")) { disposeModels(models); return; }
     litWindows(models); stationModels = models; supportRail.useBuilding(models); sales?.rail.useBuilding(models);
     [supportRail.root, sales?.rail.root].forEach(root => { if (root) illuminate(root); });
     ctx.requestShadowUpdate();
@@ -389,7 +390,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     setNight(value) { night = value; sales?.water.setNight(value); [supportTeams, supportRail.root, sales?.campus, sales?.teams, sales?.rail.root].forEach(root => { if (root) illuminate(root); }); },
     setTraffic(value) { traffic = value; sales?.cars.setEnabled(value); sales?.crowd.setEnabled(value); },
     dispose() {
-      disposed = true;
+      disposed = true; assetController.abort();
       estates.support?.dispose(); estates.sales?.dispose(); supportLand3d.removeFromParent();
       [...supportRoot.children].forEach(n => ctx.scene.add(n)); supportRoot.removeFromParent();
       supportLabels.remove(); salesLabels.remove(); supportRail.root.removeFromParent(); supportTeams.removeFromParent(); disposeTree(supportRail.root); disposeTree(supportTeams);

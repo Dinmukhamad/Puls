@@ -35,11 +35,15 @@ STAGES = ("planned", "foundation", "frame", "floors", "done")
 MIN_MEMBERS = 3
 
 
-async def contributions(session, user_ids, weights=None):
+async def contributions(session, user_ids, weights=None, *, facts=None):
     """Every operator's work by kind and points; `weights` are the points per kind (settings)."""
     weights = weights or POINTS
     ids = list(user_ids)
-    facts = await evidence(session, ids)
+    if not ids:
+        return {}
+    known = facts or {}
+    facts = {uid: known[uid] for uid in ids if uid in known}
+    facts.update(await evidence(session, [uid for uid in ids if uid not in facts]))
     missions = dict(
         (
             await session.execute(
@@ -121,20 +125,30 @@ async def members_of(session, group_id):
     )
 
 
-async def group_city(session, user):
-    """What an operator (or staff inspecting one) sees of the operator's group."""
+async def group_context(session, user):
+    """Resolve the active group once for the dashboard's batch of operator evidence."""
     if user.role != Role.OPERATOR or user.group_id is None:
-        return None
+        return None, []
     group = await session.get(Group, user.group_id)
     if not group or not group.is_active:
+        return None, []
+    return group, await members_of(session, group.id)
+
+
+async def group_city(session, user, *, context=None, facts=None, config=None):
+    """What an operator (or staff inspecting one) sees of the operator's group."""
+    group, members = context if context is not None else await group_context(session, user)
+    if group is None:
         return None
-    config = await economy(session)
-    members = await members_of(session, group.id)
-    points = await contributions(session, [m.id for m in members] or [user.id], config["points"])
+    config = config if config is not None else await economy(session)
+    points = await contributions(
+        session, [m.id for m in members] or [user.id], config["points"], facts=facts,
+    )
     total = sum(p["points"] for p in points.values())
     small = len(members) < MIN_MEMBERS
     mine = (
-        points.get(user.id) or (await contributions(session, [user.id], config["points"]))[user.id]
+        points.get(user.id)
+        or (await contributions(session, [user.id], config["points"], facts=facts))[user.id]
     )
     return {
         "name": group.name,

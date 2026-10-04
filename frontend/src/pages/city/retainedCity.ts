@@ -4,7 +4,7 @@ type Factory = (host: HTMLDivElement, options: CityOptions) => CityControl;
 type Status = "loading" | "ready" | "failed";
 interface Entry {
   owner: string; key: string; host: HTMLDivElement; frame: HTMLDivElement;
-  control: CityControl; callbacks: CityOptions | null; status: Status;
+  control: CityControl; callbacks: CityOptions | null; status: Status; progress: number;
   traffic: boolean; selected: CityOptions["selected"]; lease: symbol | null;
 }
 
@@ -31,10 +31,10 @@ export function createCityRetention() {
         host.className = "city-scene"; host.tabIndex = 0; host.setAttribute("role", "application");
         frame.className = "city-frame"; frame.setAttribute("aria-hidden", "true");
         mount.append(host, frame);
-        const next = { owner, key, host, frame, callbacks: options, status: "loading", traffic, selected: options.selected, lease: null } as Entry;
+        const next = { owner, key, host, frame, callbacks: options, status: "loading", progress: 0, traffic, selected: options.selected, lease: null } as Entry;
         const status = (value: Status) => {
           next.status = value;
-          if (value === "ready") next.callbacks?.onReady();
+          if (value === "ready") { next.progress = 1; next.callbacks?.onReady(); }
           else if (value === "failed") next.callbacks?.onLost();
         };
         let raw: CityControl;
@@ -51,7 +51,11 @@ export function createCityRetention() {
           onQuest: options.onQuest ? slot => next.callbacks?.onQuest?.(slot) : undefined,
           onReady: () => status("ready"), onLost: () => status("failed"),
           onRestored: () => { status("ready"); next.callbacks?.onRestored?.(); },
-          onProgress: share => next.callbacks?.onProgress?.(share),
+          onProgress: share => {
+            if (!Number.isFinite(share)) return;
+            next.progress = Math.max(0, Math.min(1, share));
+            next.callbacks?.onProgress?.(next.progress);
+          },
         }); } catch (error) {
           // A synchronous factory failure must not leave an orphaned scene or
           // callbacks into the page; a later visit can try a clean creation.
@@ -87,7 +91,7 @@ export function createCityRetention() {
       }
       current.control.setActive(true);
       return {
-        control: current.control, host: current.host, status: current.status, traffic: current.traffic, reused,
+        control: current.control, host: current.host, status: current.status, progress: current.progress, traffic: current.traffic, reused,
         release() {
           if (entry !== current || current.lease !== lease) return;
           current.lease = null; current.callbacks = null;

@@ -73,8 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     let cancelled = false;
+    const restoreController = new AbortController();
     authApi
-      .me()
+      .me(restoreController.signal)
       .then((profile) => {
         if (!cancelled) setUser(profile);
       })
@@ -86,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     return () => {
       cancelled = true;
+      restoreController.abort();
     };
   }, [restoreAttempt]);
 
