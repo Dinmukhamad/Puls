@@ -420,6 +420,58 @@ async def test_gratitude_retries_do_not_duplicate_coins(client, session, head, o
     assert await session.scalar(select(func.count(Notification.id))) == 1
 
 
+async def test_gratitude_confirmation_rejects_changed_bonus_without_writes(
+    client, session, head, operator
+):
+    rules = await get_rules(session)
+    checked_bonus = rules.driver_gratitude_bonus
+    rules.driver_gratitude_bonus = checked_bonus + 1
+    await session.commit()
+    headers = auth(await login(client, head.login))
+    response = await client.post(
+        "/api/v1/admin/coins/gratitude", headers=headers,
+        json={
+            "user_id": operator.id, "driver_ref": "confirmation",
+            "request_id": "wallet-gratitude-checked-001", "expected_amount": checked_bonus,
+        },
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "gratitude_bonus_changed"
+    assert await session.scalar(select(func.count(CoinTransaction.id))) == 0
+    assert await session.scalar(select(func.count(Notification.id))) == 0
+    assert (await session.get(CoinAccount, operator.id)).balance == 0
+
+
+@pytest.mark.parametrize("confirmed", [False, True])
+async def test_gratitude_replay_uses_original_bonus_after_rules_change(
+    client, session, head, operator, confirmed
+):
+    rules = await get_rules(session)
+    bonus = rules.driver_gratitude_bonus
+    headers = auth(await login(client, head.login))
+    payload = {
+        "user_id": operator.id, "driver_ref": "frozen-ref",
+        "request_id": "wallet-gratitude-frozen-001",
+        **({"expected_amount": bonus} if confirmed else {}),
+    }
+    first = await client.post("/api/v1/admin/coins/gratitude", headers=headers, json=payload)
+    assert first.status_code == 200, first.text
+    rules.driver_gratitude_bonus = bonus + 1
+    await session.commit()
+    repeated = await client.post("/api/v1/admin/coins/gratitude", headers=headers, json=payload)
+    assert repeated.status_code == 200, repeated.text
+    assert repeated.json()["id"] == first.json()["id"]
+    assert repeated.json()["amount"] == bonus
+    assert await session.scalar(select(func.count(CoinTransaction.id))) == 1
+    assert await session.scalar(select(func.count(Notification.id))) == 1
+    changed_ref = await client.post(
+        "/api/v1/admin/coins/gratitude", headers=headers,
+        json={**payload, "driver_ref": "another-ref"},
+    )
+    assert changed_ref.status_code == 409
+    assert await session.scalar(select(func.count(CoinTransaction.id))) == 1
+
+
 async def test_employee_coin_progress_summary_is_scoped(client, session, supervisor, operator):
     await post_transaction(
         session,

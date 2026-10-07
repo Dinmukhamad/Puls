@@ -1,0 +1,10 @@
+.rating-personal { display: grid; gap: var(--space-4, 16px); }
+.rating-personal p { margin: 0; }
+.rating-personal__place { font-size: var(--text-xl, 22px); font-weight: 600; }
+.rating-personal__place strong { color: var(--accent-primary); }
+.rating-personal__metrics { display: flex; flex-wrap: wrap; gap: 16px 32px; margin: 0; }
+.rating-personal__metrics > div { display: grid; gap: 6px; }
+.rating-personal__metrics dt { color: var(--text-secondary); font-size: 13px; }
+.rating-personal__metrics dd { margin: 0; font-size: 18px; font-weight: 600; }
+.rating-personal__podium { display: flex; align-items: center; gap: 8px; }
+.rating-personal__gap { display: grid; gap: 6px; }

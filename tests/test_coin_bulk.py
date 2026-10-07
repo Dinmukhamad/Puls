@@ -53,6 +53,14 @@ async def test_all_operator_scope_counts_every_operator_and_records_each_author(
     assert checked["count"] == checked["eligible_count"] == 2
     assert checked["balance"] == checked["reserved"] == checked["available"] == 0
     assert checked["total_amount"] == 20 and checked["can_submit"] is True
+    assert checked["recipients"] == [
+        {"user_id": user.id, "full_name": user.full_name}
+        for user in sorted((operator, second), key=lambda item: item.id)
+    ]
+    token = jwt.decode(
+        checked["selection_token"], settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
+    )
+    assert int(datetime.fromisoformat(checked["expires_at"]).timestamp()) == token["exp"]
     assert await session.scalar(select(func.count(CoinTransaction.id))) == 0
     result = await client.post(
         BASE + "/apply", headers=headers, json=command(selection, checked)
@@ -87,6 +95,9 @@ async def test_supervisor_group_and_all_selection_are_scoped_and_deduplicated(
     group_selection = {"group_ids": [operator.group_id, second_group.id, second_group.id]}
     checked = await preview(client, headers, group_selection)
     assert checked["count"] == 2
+    assert {row["user_id"] for row in checked["recipients"]} == {operator.id, teammate.id}
+    assert all(set(row) == {"user_id", "full_name"} for row in checked["recipients"])
+    assert outsider.full_name not in [row["full_name"] for row in checked["recipients"]]
     result = await client.post(
         BASE + "/apply", headers=headers, json=command(group_selection, checked)
     )
@@ -310,6 +321,7 @@ async def test_empty_group_and_invalid_selection_never_create_coin_records(
     selection = {"group_ids": [group.id]}
     checked = await preview(client, headers, selection)
     assert checked["count"] == 0 and checked["can_submit"] is False
+    assert checked["recipients"] == []
     assert checked["min_available"] is None
     response = await client.post(
         BASE + "/apply", headers=headers, json=command(selection, checked)

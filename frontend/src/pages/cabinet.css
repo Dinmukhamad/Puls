@@ -1,4 +1,20 @@
 .cabinet-page { width: 100%; }
+.week-metrics-content { display: grid; gap: var(--sp-4); }
+.week-totals { display: grid; gap: var(--sp-3); }
+.week-totals__values { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); }
+.week-totals__values > div { min-width: 0; display: grid; gap: var(--sp-2); }
+.week-totals__values dt { color: var(--text-secondary); font-size: var(--text-secondary-size); }
+.week-totals__values dd { color: var(--text-primary); font-size: clamp(24px, 4vw, 32px); font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.week-totals__values dd.week-totals__coins { color: var(--gold-text); }
+.week-totals__coins span { font-size: var(--text-secondary-size); font-weight: 500; }
+.week-calculation { border: 1px solid var(--separator); border-radius: var(--radius-m); background: var(--surface-secondary); }
+.week-calculation > summary { min-height: 44px; padding: var(--sp-3) var(--sp-4); cursor: pointer; color: var(--text-primary); }
+.week-calculation__content { display: grid; gap: var(--sp-3); padding: 0 var(--sp-4) var(--sp-4); }
+.week-calculation__rows { display: grid; gap: var(--sp-2); }
+.week-calculation__rows > div { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-3); }
+.week-calculation__rows dt { min-width: 0; overflow-wrap: anywhere; }
+.week-calculation__rows dd { flex: none; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.week-calculation__total { border-top: 1px solid var(--separator); padding-top: var(--sp-2); font-weight: 600; }
 .week-metric-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: var(--sp-4); }
 .week-metric-group { min-width: 0; border: 1px solid var(--separator); border-radius: var(--radius-l); background: var(--surface-secondary); }
 .week-metric-group__summary { display: flex; align-items: center; gap: var(--sp-3); min-height: 76px; padding: var(--sp-4); cursor: pointer; list-style: none; border-radius: inherit; }
@@ -6,8 +22,10 @@
 .week-metric-group__summary:hover { background: var(--surface-hover); }
 .week-metric-group__sign { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: var(--radius-s); background: var(--accent-tint); color: var(--accent-ink); font-size: 22px; font-weight: 600; }
 .week-metric-group__sign--negative { background: var(--status-warning-tint); color: var(--status-warning-text); }
+.week-metric-group__sign--neutral { background: var(--surface-primary); color: var(--text-secondary); }
 .week-metric-group__label { flex: 1; min-width: 0; display: grid; gap: var(--sp-1); overflow-wrap: anywhere; }
-.week-metric-group__count { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.week-metric-group__total { flex: none; color: var(--text-primary); font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.week-metric-group__total.is-negative { color: var(--status-warning-text); }
 .week-metric-group__chevron { flex: none; color: var(--text-secondary); }
 .week-metric-group[open] > summary .week-metric-group__chevron { transform: rotate(180deg); }
 .week-metric-list { display: grid; gap: var(--sp-3); padding: 0 var(--sp-3) var(--sp-3); }
@@ -18,4 +36,5 @@
 .week-metric-tile__score strong { font-size: 20px; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .week-metric-tile__score.is-negative { color: var(--status-warning-text); }
 .week-metric-tile__score.is-missing { color: var(--text-secondary); }
+.week-metric-tile__score.is-neutral { color: var(--text-secondary); }
 @media (max-width: 767px) { .week-metric-groups { grid-template-columns: minmax(0, 1fr); } }

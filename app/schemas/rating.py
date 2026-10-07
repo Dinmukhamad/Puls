@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -83,6 +84,9 @@ class NominationOut(BaseModel):
     winner_group: str | None = None
     value: float = 0.0
     coins_awarded: int = 0
+    winner_hidden: bool = Field(
+        default=False, description="Победитель определён, но его личные данные скрыты"
+    )
 
 
 class RatingOut(BaseModel):
@@ -96,3 +100,11 @@ class RatingOut(BaseModel):
     page: int
     size: int
     my_row: RatingRowOut | None = None
+    view_mode: Literal["personal", "table"] = "table"
+    my_gap_to_podium: float | None = Field(
+        default=None, ge=0,
+        description="Разница до призового балла; равный балл тоже даёт призовое место",
+    )
+    my_podium_state: Literal[
+        "uncalculated", "not_participating", "on_podium", "outside_podium"
+    ] = "not_participating"

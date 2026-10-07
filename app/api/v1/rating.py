@@ -112,8 +112,9 @@ async def leaderboard(
     """
     Шапка конкурса, пьедестал, номинации и общая таблица одним ответом.
 
-    Оператору чужой баланс не показывается, пока руководитель не включит это
-    в настройках (п. 5 «Безопасность»).
+    Оператор получает личное представление: свою строку и безопасные агрегаты,
+    без чужих идентичностей и индивидуальных результатов. Таблица и её фильтры
+    сохраняются для сотрудников, имеющих соответствующую видимость.
     """
     week = await weekly_service.resolve_week(session, week_id, prefer_ranked=True)
     if week is None:
@@ -122,19 +123,21 @@ async def leaderboard(
     rules = await get_rules(session)
     show_balance = user.role != Role.OPERATOR or rules.rating_show_balance_to_operators
 
+    personal = user.role == Role.OPERATOR
     rows, total = await rating_service.leaderboard(
         session,
         week=week,
         viewer=user,
         show_balance=show_balance,
-        group_id=group_id,
-        search=search,
-        offset=pagination.offset,
-        limit=pagination.size,
+        group_id=None if personal else group_id,
+        search=None if personal else search,
+        offset=0 if personal else pagination.offset,
+        limit=1 if personal else pagination.size,
     )
     top = await rating_service.podium(session, week=week, viewer=user, show_balance=show_balance)
 
     my_result = await rating_service.my_row(session, week=week, user_id=user.id)
+    my_podium = await rating_service.personal_podium(session, week=week, result=my_result)
     my_row_out = None
     if my_result is not None:
         my_row_out = RatingRowOut(
@@ -176,14 +179,18 @@ async def leaderboard(
                 winner_group=n.winner_group,
                 value=n.value,
                 coins_awarded=n.coins_awarded,
+                winner_hidden=n.winner_hidden,
             )
             for n in await rating_service.nominations(session, week, user)
         ],
         rows=[_to_row(row) for row in rows],
         total=total,
-        page=pagination.page,
-        size=pagination.size,
+        page=1 if personal else pagination.page,
+        size=1 if personal else pagination.size,
         my_row=my_row_out,
+        view_mode="personal" if personal else "table",
+        my_gap_to_podium=my_podium.gap,
+        my_podium_state=my_podium.state,
     )
 
 
@@ -204,6 +211,7 @@ async def nominations(
             winner_group=n.winner_group,
             value=n.value,
             coins_awarded=n.coins_awarded,
+            winner_hidden=n.winner_hidden,
         )
         for n in await rating_service.nominations(session, week, user)
     ]

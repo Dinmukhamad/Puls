@@ -202,6 +202,7 @@ async def driver_gratitude(
         target=target,
         driver_ref=payload.driver_ref,
         request_id=payload.request_id,
+        expected_amount=payload.expected_amount,
     )
     await session.commit()
     item = TransactionOut.model_validate(transaction)

@@ -23,6 +23,7 @@ export interface WalletReport {
 }
 export interface WalletGroup { group_id: number; name: string; operators_count: number }
 export type CoinRecipients = { user_ids: number[] } | { group_ids: number[] } | { all_operators: true };
+export interface CoinRecipientIdentity { user_id: number; full_name: string }
 export interface ManualCoinsPreview {
   count: number;
   eligible_count: number;
@@ -35,6 +36,8 @@ export interface ManualCoinsPreview {
   total_amount: number;
   can_submit: boolean;
   selection_token: string;
+  recipients: CoinRecipientIdentity[];
+  expires_at: string;
 }
 export type ManualCoinsBatch = CoinRecipients & { amount: number; reason: string; request_id: string; selection_token: string };
 export interface ManualCoinsResult { count: number; total_amount: number; transaction_ids: number[] }
@@ -45,9 +48,11 @@ export const walletApi = {
     request<Page<WalletOperator>>(`/api/v1/admin/wallet/operators${buildQuery(params)}`, { signal }),
   groups: (signal?: AbortSignal) => request<WalletGroup[]>("/api/v1/admin/wallet/groups", { signal }),
   preview: (recipients: CoinRecipients, amount: number, signal?: AbortSignal) =>
-    request<ManualCoinsPreview>("/api/v1/admin/coins/manual/bulk/preview", { method: "POST", json: { ...recipients, amount }, signal }),
+    request<ManualCoinsPreview>("/api/v1/admin/coins/manual/bulk/preview", { method: "POST", json: { ...recipients, amount }, signal, timeoutMs: 25000 }),
   manualBatch: (command: ManualCoinsBatch) =>
-    request<ManualCoinsResult>("/api/v1/admin/coins/manual/bulk/apply", { method: "POST", json: command }),
+    request<ManualCoinsResult>("/api/v1/admin/coins/manual/bulk/apply", { method: "POST", json: command, timeoutMs: 30000 }),
+  gratitude: (userId: number, driverRef: string, requestId: string, expectedAmount: number) =>
+    request<TransactionOut>("/api/v1/admin/coins/gratitude", { method: "POST", json: { user_id: userId, driver_ref: driverRef || null, request_id: requestId, expected_amount: expectedAmount }, timeoutMs: 30000 }),
 };
 
 export function canManageCoins(role?: Role): boolean {

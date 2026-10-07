@@ -1,0 +1,22 @@
+.manual-coins-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--sp-3); width: 100%; min-width: 0; }
+.manual-coins-footer__total { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; overflow-wrap: anywhere; }
+.manual-coins-footer__total strong { color: var(--gold-text); font-size: 18px; font-variant-numeric: tabular-nums; }
+.manual-coins-footer__actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.manual-coins-confirmation h3 { margin: 0; font-size: 18px; }
+.manual-coins-confirmation__numbers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); margin: 0; padding: var(--sp-3); border: 1px solid var(--separator); border-radius: var(--radius-m); }
+.manual-coins-confirmation__numbers dt { color: var(--text-secondary); font-size: 13px; }
+.manual-coins-confirmation__numbers dd { margin: var(--sp-2) 0 0; font-weight: 700; font-size: 18px; overflow-wrap: anywhere; }
+.manual-coins-confirmation__numbers dd.manual-coins-total { color: var(--gold-text); }
+.manual-coins-confirmation__reason { margin: 0; padding: var(--sp-3); background: var(--surface-secondary); border-radius: var(--radius-m); white-space: pre-wrap; overflow-wrap: anywhere; }
+.manual-coins-confirmation__names { display: grid; gap: var(--sp-2); margin: 0; padding-inline-start: var(--sp-5); overflow-wrap: anywhere; }
+.manual-coins-confirmation__names li { padding-inline-start: var(--sp-1); }
+.manual-coins-confirmation__pagination { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); flex-wrap: wrap; }
+.manual-coins-confirmation [role="alert"] { margin: 0; }
+@media (max-width: 560px) {
+  .manual-coins-footer__total, .manual-coins-footer__actions { width: 100%; }
+  .manual-coins-footer__actions .btn { flex: 1; }
+  .manual-coins-confirmation__numbers { grid-template-columns: 1fr; }
+}
+@media (max-width: 380px) {
+  .manual-coins-footer__actions .btn { flex: 1 1 100%; width: 100%; white-space: normal; }
+}

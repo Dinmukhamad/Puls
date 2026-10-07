@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field, FiniteFloat, PositiveInt, model_validator
 
@@ -80,6 +80,13 @@ class ManualCoinsPreviewIn(ManualCoinsSelection):
         return self
 
 
+class ManualCoinsRecipientOut(BaseModel):
+    """Только разрешённая идентичность получателя, без чужих данных кошелька."""
+
+    user_id: int
+    full_name: str
+
+
 class ManualCoinsPreviewOut(BaseModel):
     count: int
     eligible_count: int
@@ -92,6 +99,8 @@ class ManualCoinsPreviewOut(BaseModel):
     total_amount: int
     can_submit: bool
     selection_token: str
+    recipients: list[ManualCoinsRecipientOut]
+    expires_at: datetime
 
 
 class ManualCoinsBulkIn(ManualCoinsPreviewIn):
@@ -120,6 +129,7 @@ class GratitudeIn(BaseModel):
 
     user_id: int
     request_id: str | None = Field(default=None, min_length=16, max_length=80)
+    expected_amount: int | None = Field(default=None, ge=1, le=9999)
     driver_ref: str | None = Field(
         default=None, max_length=64, description="Номер водителя или заявки"
     )

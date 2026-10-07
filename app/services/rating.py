@@ -14,6 +14,7 @@ from app.models.contest import (
     NominationWinner,
     OperatorWeekResult,
 )
+from app.models.enums import WeekStatus
 from app.models.user import CoinAccount, Group, User
 
 
@@ -44,6 +45,41 @@ class NominationRow:
     winner_group: str | None
     value: float
     coins_awarded: int
+    winner_hidden: bool = False
+
+
+@dataclass(slots=True)
+class PersonalPodium:
+    """Безопасное сравнение со своим результатом, без чужих строк и идентичностей."""
+
+    state: str
+    gap: float | None
+
+
+async def personal_podium(
+    session: AsyncSession, *, week: ContestWeek, result: OperatorWeekResult | None
+) -> PersonalPodium:
+    """До призового балла: равные баллы делят место по текущим правилам конкурса.
+
+    Порог — минимальный балл среди рангов 1–3, а не третья строка таблицы:
+    например, при местах 1, 2, 2, 4 порогом остаётся результат второго места.
+    При одном или двух участниках каждый рассчитанный результат уже призовой.
+    """
+    if week.status not in (WeekStatus.CALCULATED, WeekStatus.CLOSED):
+        return PersonalPodium("uncalculated", None)
+    if result is None or result.rank is None:
+        return PersonalPodium("not_participating", None)
+    if result.rank <= 3:
+        return PersonalPodium("on_podium", 0.0)
+    threshold = await session.scalar(
+        select(func.min(OperatorWeekResult.final_points)).where(
+            OperatorWeekResult.week_id == week.id,
+            OperatorWeekResult.rank <= 3,
+        )
+    )
+    if threshold is None:
+        return PersonalPodium("uncalculated", None)
+    return PersonalPodium("outside_podium", max(0.0, round(threshold - result.final_points, 9)))
 
 
 def _base_query(week_id: int) -> Select:
@@ -75,8 +111,9 @@ async def leaderboard(
     """
     Страница общей таблицы и общее число участников недели.
 
-    ``show_balance`` управляет видимостью чужого баланса: оператору по умолчанию
-    показываются только имя, место и результат недели (п. 5 «Безопасность»).
+    ``identity_filter`` ограничивает строки разрешёнными идентичностями:
+    оператор получает только свою строку. ``show_balance`` дополнительно
+    управляет видимостью баланса в строках, разрешённых для просмотра.
     """
     visibility = identity_filter(viewer)
     stmt = _base_query(week.id).where(visibility)
@@ -167,6 +204,13 @@ async def nominations(
         .where(NominationWinner.week_id == week.id, identity_filter(viewer))
     )
     winner_map = {w.nomination_id: (w, name, group) for w, name, group in winners}
+    # Only nomination IDs are read for hidden winners: no foreign identity or
+    # individual result is materialised into the public response.
+    winner_ids = set(
+        await session.scalars(
+            select(NominationWinner.nomination_id).where(NominationWinner.week_id == week.id)
+        )
+    )
 
     rows: list[NominationRow] = []
     for definition in definitions:
@@ -182,6 +226,7 @@ async def nominations(
                     winner_group=None,
                     value=0.0,
                     coins_awarded=0,
+                    winner_hidden=definition.id in winner_ids,
                 )
             )
             continue

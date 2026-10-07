@@ -3,7 +3,7 @@ import { Navigate, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../api/client";
 import { rating } from "../api/endpoints";
-import type { NominationOut, PodiumEntry, RatingRowOut } from "../api/types";
+import type { NominationOut, PodiumEntry, RatingOut, RatingRowOut } from "../api/types";
 import { MedalIcon, SparkIcon } from "../components/icons";
 import {
   Avatar,
@@ -17,7 +17,8 @@ import {
   Skeleton,
 } from "../components/ui";
 import { GlassSurface } from "../components/GlassSurface";
-import { WEEK_STATUS_LABELS, coins, points } from "../utils/format";
+import { WEEK_STATUS_LABELS, coins, dateOnly, points } from "../utils/format";
+import "./rating.css";
 
 const MEDAL_LABEL: Record<string, string> = {
   gold: "1 место",
@@ -28,9 +29,13 @@ const MEDAL_LABEL: Record<string, string> = {
 export function RatingPage() {
   const [params] = useSearchParams();
   if (params.get("tab") === "progress") return <Navigate to="/progress" replace />;
-  return <div className="stack"><header className="page-head"><div><h1 className="page-title">Рейтинг</h1><p className="page-subtitle">Результаты команды по неделям</p></div></header>
-    <Leaderboard />
-  </div>;
+  return <Leaderboard />;
+}
+
+function RatingHeading({ personal }: { personal?: boolean }) {
+  return <header className="page-head"><div><h1 className="page-title">Рейтинг</h1>
+    <p className="page-subtitle">{personal ? "Ваш результат по неделям" : "Результаты команды по неделям"}</p>
+  </div></header>;
 }
 
 function Leaderboard() {
@@ -51,11 +56,11 @@ function Leaderboard() {
 
   if (board.isLoading) {
     return (
-      <div className="page-skeleton">
+      <div className="stack"><RatingHeading /><div className="page-skeleton">
         <Skeleton height={36} width="34%" radius="var(--radius-s)" />
         <Skeleton height={170} radius="var(--radius-xl)" />
         <Skeleton height={300} radius="var(--radius-xl)" />
-      </div>
+      </div></div>
     );
   }
 
@@ -64,6 +69,7 @@ function Leaderboard() {
     if (board.error instanceof ApiError && board.error.status === 404) {
       return (
         <div className="stack">
+          <RatingHeading />
           <Card>
             <EmptyState
               title="Конкурс ещё не начался"
@@ -73,16 +79,18 @@ function Leaderboard() {
         </div>
       );
     }
-    return <ErrorState error={board.error} onRetry={() => board.refetch()} />;
+    return <div className="stack"><RatingHeading /><ErrorState error={board.error} onRetry={() => board.refetch()} /></div>;
   }
 
   const data = board.data!;
   const { header } = data;
+  const personal = data.view_mode === "personal";
   // Оператору чужие балансы не отдаются - колонка из одних прочерков только мешает.
   const showBalances = data.rows.some((row) => !row.is_me && row.balance !== null);
 
   return (
     <div className="stack">
+      <RatingHeading personal={personal} />
       {/* Переключатель недели: единственный фильтр рейтинга. */}
       <GlassSurface variant="regular" className="filterbar">
         <select
@@ -101,7 +109,9 @@ function Leaderboard() {
         </select>
       </GlassSurface>
 
-      {data.podium.length > 0 && (
+      {personal && <PersonalRatingCard data={data} />}
+
+      {!personal && data.podium.length > 0 && (
         <Card title="Топ-3 недели">
           <ol className="podium">
             {data.podium.map((entry) => (
@@ -121,8 +131,8 @@ function Leaderboard() {
         </Card>
       )}
 
-      {data.my_row && <Card title="Моё место" variant="highlight"><div className="row"><strong className="rank-badge">{data.my_row.rank ? `#${data.my_row.rank}` : "—"}</strong><span>{points(data.my_row.points)} баллов</span><CoinAmount value={data.my_row.coins_week} size="s" />{data.my_row.rank_delta != null && <Delta value={data.my_row.rank_delta} />}</div><p className="small secondary">Ваш результат за выбранную неделю виден здесь, на какой бы странице таблицы он ни находился.</p></Card>}
-      <Card title="Общая таблица" padded={false}>
+      {!personal && data.my_row && <PersonalRatingCard data={data} />}
+      {!personal && <Card title="Общая таблица" padded={false}>
         {data.rows.length === 0 ? (
           <EmptyState
             title="Ничего не найдено"
@@ -196,11 +206,37 @@ function Leaderboard() {
             </div>
           </>
         )}
-      </Card>
+      </Card>}
 
       {board.isFetching && <RowsSkeleton rows={1} />}
     </div>
   );
+}
+
+export function PersonalRatingCard({ data }: { data: RatingOut }) {
+  const { header, my_row: row, my_podium_state: state } = data;
+  const calculated = header.status !== "open" && state !== "uncalculated";
+  return <Card title="Моё место" variant="highlight"
+    subtitle={`${dateOnly(header.period_start)} — ${dateOnly(header.period_end)} · ${WEEK_STATUS_LABELS[header.status] ?? header.status}`}>
+    <div className="rating-personal">
+      {calculated && row?.rank != null ? <>
+        <p className="rating-personal__place">Место <strong>{row.rank}</strong> из {header.participants}</p>
+        <dl className="rating-personal__metrics">
+          <div><dt>Баллы</dt><dd>{points(row.points)}</dd></div>
+          <div><dt>{header.status === "closed" ? "Коины за неделю" : "Коины по расчёту"}</dt><dd><CoinAmount value={row.coins_week} size="s" /></dd></div>
+          {row.rank_delta != null && <div><dt>Динамика места</dt><dd><Delta value={row.rank_delta} /></dd></div>}
+        </dl>
+      </> : <>
+        <p className="rating-personal__place">{calculated ? "За эту неделю нет вашего результата" : "Место пока не рассчитано"}</p>
+        <p className="secondary small">Участников: {header.participants}. {calculated ? "Уточните у супервайзера, загружены ли ваши показатели за выбранную неделю." : "Результат появится после загрузки показателей и расчёта недели."}</p>
+      </>}
+      {calculated && state === "on_podium" && <p className="rating-personal__podium"><MedalIcon size={16} />Вы на призовом месте</p>}
+      {calculated && state === "outside_podium" && data.my_gap_to_podium != null && <div className="rating-personal__gap">
+        <p>До призового результата — <strong>{points(data.my_gap_to_podium)} баллов</strong></p>
+        <p className="secondary small">При равном количестве баллов операторы делят место. Разница рассчитана по выбранной неделе.</p>
+      </div>}
+    </div>
+  </Card>;
 }
 
 function RatingRow({ row, showBalance }: { row: RatingRowOut; showBalance: boolean }) {
@@ -278,7 +314,7 @@ function NominationItem({ nomination }: { nomination: NominationOut }) {
             </span>
           </>
         ) : (
-          <span className="nomination__meta">Победитель не определён</span>
+          <span className="nomination__meta">{nomination.winner_hidden ? "Победитель определён · личные данные скрыты" : "Победитель не определён"}</span>
         )}
       </div>
     </li>

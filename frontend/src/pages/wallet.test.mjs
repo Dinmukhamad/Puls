@@ -21,6 +21,7 @@ async function load(path, mocks = {}) {
   return module.exports;
 }
 const wallet = await load("../api/wallet.ts");
+const { ApiError } = await load("../api/client.ts");
 const { validManualCoins } = await load("../components/manualCoinsValidation.ts");
 const rules = { manual_max_abs_amount: 9999, manual_reason_min_length: 5 };
 const operator = { user_id: 17, full_name: "Оператор команды", group_name: "Первая группа", is_active: true, balance: 100, reserved: 70, available: 30 };
@@ -81,7 +82,7 @@ function hooks(initial = []) {
     useState: (initial) => { const index = stateCursor++; if (!(index in states)) states[index] = typeof initial === "function" ? initial() : initial;
       return [states[index], (value) => { states[index] = typeof value === "function" ? value(states[index]) : value; }]; },
     useRef: (initial) => { const index = refCursor++; refs[index] ??= { current: initial }; return refs[index]; } },
-    reset() { stateCursor = 0; refCursor = 0; } };
+    reset() { stateCursor = 0; refCursor = 0; }, remount() { states.length = 0; refs.length = 0; stateCursor = 0; refCursor = 0; } };
 }
 async function pickerHarness({ search = "", settled = search, page = 1, items = [operator], total = items.length, props = {} } = {}) {
   const fixture = hooks([search, settled, page, true, -1]), calls = [], signal = new AbortController().signal;
@@ -124,32 +125,46 @@ test("multiple selection excludes existing chips, accepts mouse click and closes
   find(tree, (node) => node.props.role === "combobox").props.onKeyDown({ key: "Escape", preventDefault() {}, stopPropagation() {} });
   assert.equal(find(harness.render(), (node) => node.props.role === "combobox").props["aria-expanded"], false);
 });
-function sheetHarness({ role = "supervisor", available = 30, previewCount = 1 } = {}) {
-  const fixture = hooks(); let options, calls = [], isError = false;
+let actorSerial = 100;
+function sheetHarness({ role = "supervisor", available = 30, previewCount = 1, maxAmount = 9999, freshBonus = 10, freshMaxAmount = maxAmount } = {}) {
+  const fixture = hooks(); let options, calls = [], isError = false, mutationError = null, freshChecks = 0;
+  const actorId = actorSerial++;
+  const checked = (queryKey) => {
+    const amount = queryKey[2], count = "user_ids" in queryKey[1] ? queryKey[1].user_ids.length : previewCount;
+    return { count, eligible_count: amount >= 0 || -amount <= available ? count : 0, insufficient_count: amount < 0 && -amount > available ? count : 0,
+      balance: 100 * count, available: available * count, reserved: (100 - available) * count, min_available: available, amount, total_amount: amount * count,
+      can_submit: count > 0 && (amount >= 0 || -amount <= available), selection_token: `frozen-selection-${count}`,
+      recipients: Array.from({ length: count }, (_, index) => index === 0 ? { user_id: operator.user_id, full_name: operator.full_name } : { user_id: 1000 + index, full_name: `Участник ${index + 1}` }),
+      expires_at: new Date(Date.now() + 600000).toISOString() };
+  };
   return {
-    mocks: { react: fixture.react, AuthContext: { useAuth: () => ({ user: { role } }) }, Sheet: { Sheet: FakeSheet }, Toast: { useToast: () => ({ success: () => {} }) },
-      endpoints: { admin: { gratitude: () => Promise.resolve(transaction) } },
+    mocks: { react: fixture.react, client: { ApiError }, AuthContext: { useAuth: () => ({ user: { id: actorId, role } }) }, Sheet: { Sheet: FakeSheet }, Toast: { useToast: () => ({ success: () => {} }) },
       wallet: { ...wallet, walletApi: { groups: () => Promise.resolve([]), operators: () => Promise.resolve({ items: [{ ...operator, available }], total: 1 }), preview: () => Promise.resolve({}),
+        gratitude: (userId, driverRef, requestId, expectedAmount) => { calls.push({ userId, driverRef, requestId, expectedAmount }); return Promise.resolve(transaction); },
         manualBatch: (batch) => { calls.push(structuredClone(batch)); return Promise.resolve({ count: previewCount, total_amount: batch.amount * previewCount, transaction_ids: [23] }); } } },
       "@tanstack/react-query": {
         useQueryClient: () => ({ invalidateQueries: () => Promise.resolve() }),
         useQuery: ({ queryKey }) => {
           let data;
-          if (queryKey[0] === "configuration-rules") data = { ...rules, driver_gratitude_bonus: 10 };
+          if (queryKey[0] === "configuration-rules") data = { ...rules, manual_max_abs_amount: maxAmount, driver_gratitude_bonus: 10 };
           else if (queryKey[0] === "wallet-groups") data = [{ group_id: 5, name: "Первая группа", operators_count: previewCount }];
           else if (queryKey[0] === "wallet-preview") {
-            const amount = queryKey[2], count = "user_ids" in queryKey[1] ? queryKey[1].user_ids.length : previewCount;
-            data = { count, eligible_count: amount >= 0 || -amount <= available ? count : 0, insufficient_count: amount < 0 && -amount > available ? count : 0,
-              balance: 100 * count, available: available * count, reserved: (100 - available) * count, min_available: available, amount, total_amount: amount * count,
-              can_submit: count > 0 && (amount >= 0 || -amount <= available), selection_token: `frozen-selection-${count}` };
+            data = checked(queryKey);
           } else data = { items: [{ ...operator, available }], total: 1 };
-          return { isSuccess: true, isFetching: false, data, refetch: () => Promise.resolve() };
+          return { isSuccess: true, isFetching: false, data, refetch: () => {
+            if (queryKey[0] === "wallet-preview") freshChecks++;
+            return Promise.resolve({ data: queryKey[0] === "wallet-preview" ? checked(queryKey)
+              : queryKey[0] === "configuration-rules" ? { ...data, driver_gratitude_bonus: freshBonus, manual_max_abs_amount: freshMaxAmount } : data });
+          } };
         },
-        useMutation: (configuration) => { options = configuration; return { isPending: false, isError, error: isError ? new Error("Connection lost") : null, mutate: () => { void options.mutationFn(); } }; },
+        useMutation: (configuration) => { options = configuration; return { isPending: false, isError, error: mutationError, mutate: () => { void options.mutationFn(); }, reset: () => { isError = false; mutationError = null; } }; },
       },
     },
     render(Component, props = {}) { fixture.reset(); const element = Component({ operator, onClose: () => {}, ...props }); return element.type === FakeSheet ? element : element.type(element.props); },
-    lostResponse() { available = 5; previewCount = 9; isError = true; options.onError(new Error("Connection lost")); options.onSettled(); }, get calls() { return calls; },
+    lostResponse() { available = 5; previewCount = 9; isError = true; mutationError = new Error("Connection lost"); options.onError(mutationError); options.onSettled(); },
+    reject(code, status = 409) { isError = true; mutationError = new ApiError(status, { code, detail: "Проверьте операцию ещё раз" }); options.onError(mutationError); options.onSettled(); },
+    finish() { options.onSuccess({ count: previewCount, total_amount: calls.at(-1).amount * previewCount }); options.onSettled(); },
+    changeMembers(count) { previewCount = count; }, remount() { fixture.remount(); }, get calls() { return calls; }, get checks() { return freshChecks; },
   };
 }
 function changeForm(tree, { amount, reason, direction, mode } = {}) {
@@ -158,32 +173,100 @@ function changeForm(tree, { amount, reason, direction, mode } = {}) {
   if (direction) find(tree, (node) => node.props.label === "Направление операции").props.onChange(direction);
   if (mode) find(tree, (node) => node.props.label === "Получатели коинов").props.onChange(mode);
 }
-test("debit previews protected balances and blocks duplicate submission in the same render", async () => {
+const submitForm = (tree) => find(tree, (node) => node.type === "form").props.onSubmit({ preventDefault() {} });
+const finalButton = (tree) => find(tree.props.footer, (node) => node.props.type === "submit");
+test("amount starts empty and debit check has no writes before a separate danger confirmation", async () => {
   const harness = sheetHarness(), { ManualCoinsSheet } = await load("../components/ManualCoinsSheet.tsx", harness.mocks);
+  const initial = harness.render(ManualCoinsSheet);
+  assert.equal(find(initial, (node) => node.props.type === "number").props.value, "");
+  assert.equal(finalButton(initial).props.disabled, true);
   changeForm(harness.render(ManualCoinsSheet), { direction: "debit", amount: "20", reason: "За качество" });
   const tree = harness.render(ManualCoinsSheet), html = renderToStaticMarkup(tree);
   assert.match(html, /В резерве/); assert.match(html, /Баланс после операции: <strong>80<\/strong>; доступно: <strong>10<\/strong>/); assert.doesNotMatch(html, /Исправление ошибочного начисления/);
-  const submit = find(tree, (node) => node.type === "form").props.onSubmit; submit({ preventDefault() {} }); submit({ preventDefault() {} }); assert.equal(harness.calls.length, 1);
+  await Promise.all([submitForm(tree), submitForm(tree)]); assert.equal(harness.calls.length, 0); assert.equal(harness.checks, 1);
+  const reviewed = harness.render(ManualCoinsSheet), confirmation = renderToStaticMarkup(reviewed);
+  assert.match(confirmation, /Шаг 2 из 2/); assert.match(confirmation, /Оператор команды/); assert.match(confirmation, /За качество/); assert.equal(find(reviewed, (node) => node.type === "fieldset"), undefined);
+  assert.equal(finalButton(reviewed).props.variant, "destructive"); assert.match(renderToStaticMarkup(reviewed.props.footer), /Списать 20 коинов/);
+  await Promise.all([submitForm(reviewed), submitForm(reviewed)]); assert.equal(harness.calls.length, 1);
   assert.deepEqual({ ...harness.calls[0], request_id: "saved" }, { user_ids: [17], amount: -20, reason: "За качество", request_id: "saved", selection_token: "frozen-selection-1" });
 });
 test("uncertain group debit retries exact selection after balances and membership change", async () => {
   const harness = sheetHarness({ available: 30, previewCount: 2 }), { ManualCoinsSheet } = await load("../components/ManualCoinsSheet.tsx", harness.mocks);
   changeForm(harness.render(ManualCoinsSheet), { mode: "groups", direction: "debit", amount: "20", reason: "За качество" });
   let tree = harness.render(ManualCoinsSheet); find(tree, (node) => node.type === "input" && node.props.type === "checkbox").props.onChange({ target: { checked: true } });
-  tree = harness.render(ManualCoinsSheet); find(tree, (node) => node.type === "form").props.onSubmit({ preventDefault() {} }); harness.lostResponse();
-  const retry = harness.render(ManualCoinsSheet); assert.equal(retry.props.footer.props.disabled, false); assert.equal(find(retry, (node) => node.type === "fieldset").props.disabled, true);
-  const html = renderToStaticMarkup(retry); assert.match(html, /Повторить запрос/); assert.doesNotMatch(html, /Недостаточно доступных|Общий баланс после операции/);
-  find(retry, (node) => node.type === "form").props.onSubmit({ preventDefault() {} }); assert.equal(harness.calls.length, 2); assert.deepEqual(harness.calls[1], harness.calls[0]);
+  tree = harness.render(ManualCoinsSheet); await submitForm(tree); await submitForm(harness.render(ManualCoinsSheet)); harness.lostResponse();
+  harness.remount(); const retry = harness.render(ManualCoinsSheet); assert.equal(finalButton(retry).props.disabled, false); assert.equal(find(retry, (node) => node.type === "fieldset"), undefined);
+  const html = renderToStaticMarkup(retry); assert.match(html, /Повторить: Списать 40 коинов/); assert.doesNotMatch(html, /Недостаточно доступных|Общий баланс после операции|Изменить параметры/);
+  await submitForm(retry); assert.equal(harness.calls.length, 2); assert.deepEqual(harness.calls[1], harness.calls[0]);
   assert.deepEqual(harness.calls[1].group_ids, [5]); assert.equal(harness.calls[1].selection_token, "frozen-selection-2");
 });
 test("9999 can be credited to all scoped operators but 10000 disables confirmation", async () => {
   const harness = sheetHarness({ available: 0, previewCount: 61 }), { ManualCoinsSheet } = await load("../components/ManualCoinsSheet.tsx", harness.mocks);
   changeForm(harness.render(ManualCoinsSheet), { mode: "all", amount: "9999", reason: "За качество" }); let tree = harness.render(ManualCoinsSheet);
-  assert.equal(tree.props.footer.props.disabled, false); const html = renderToStaticMarkup(tree); assert.match(html, /Получателей: <strong>61<\/strong>/); assert.match(html, /max="9999"/);
-  find(tree, (node) => node.type === "form").props.onSubmit({ preventDefault() {} }); assert.equal(harness.calls[0].all_operators, true); assert.equal(harness.calls[0].amount, 9999);
+  assert.equal(finalButton(tree).props.disabled, false); const html = renderToStaticMarkup(tree); assert.match(html, /Получателей: <strong>61<\/strong>/); assert.match(html, /max="9999"/);
+  await submitForm(tree); assert.equal(harness.calls.length, 0);
+  tree = harness.render(ManualCoinsSheet); assert.equal(find(tree, (node) => node.type === "ol").props.children.length, 20);
+  assert.match(renderToStaticMarkup(tree.props.footer), /Начислить 609\s*939 коинов/);
+  find(tree, (node) => node.props.children === "Следующие").props.onClick(); tree = harness.render(ManualCoinsSheet); assert.match(renderToStaticMarkup(tree), /Участник 21/);
+  await submitForm(tree); assert.equal(harness.calls[0].all_operators, true); assert.equal(harness.calls[0].amount, 9999);
   const another = sheetHarness({ available: 0, previewCount: 61 }), { ManualCoinsSheet: AnotherSheet } = await load("../components/ManualCoinsSheet.tsx", another.mocks);
-  changeForm(another.render(AnotherSheet), { mode: "all", amount: "10000", reason: "За качество" }); tree = another.render(AnotherSheet); assert.equal(tree.props.footer.props.disabled, true);
-  find(tree, (node) => node.type === "form").props.onSubmit({ preventDefault() {} }); assert.equal(another.calls.length, 0);
+  changeForm(another.render(AnotherSheet), { mode: "all", amount: "10000", reason: "За качество" }); tree = another.render(AnotherSheet); assert.equal(finalButton(tree).props.disabled, true);
+  await submitForm(tree); assert.equal(another.calls.length, 0);
+});
+test("editing checked parameters requires a fresh check and leaves the prior snapshot unused", async () => {
+  const harness = sheetHarness(), { ManualCoinsSheet } = await load("../components/ManualCoinsSheet.tsx", harness.mocks);
+  changeForm(harness.render(ManualCoinsSheet), { amount: "20", reason: "За качество" });
+  await submitForm(harness.render(ManualCoinsSheet)); let tree = harness.render(ManualCoinsSheet);
+  find(tree.props.footer, (node) => node.props.children === "Изменить параметры").props.onClick();
+  changeForm(harness.render(ManualCoinsSheet), { amount: "25", reason: "Обновлённая премия" });
+  tree = harness.render(ManualCoinsSheet); assert.match(renderToStaticMarkup(tree.props.footer), /Проверить/);
+  assert.equal(harness.calls.length, 0); await submitForm(tree); assert.equal(harness.checks, 2);
+  tree = harness.render(ManualCoinsSheet); assert.match(renderToStaticMarkup(tree), /Обновлённая премия/);
+  await submitForm(tree); assert.equal(harness.calls[0].amount, 25); assert.equal(harness.calls[0].reason, "Обновлённая премия");
+});
+test("known selection/balance rejection clears pending confirmation and forces another preview", async () => {
+  for (const code of ["selection_changed", "insufficient_coins", "conflict"]) {
+    const harness = sheetHarness(), { ManualCoinsSheet } = await load("../components/ManualCoinsSheet.tsx", harness.mocks);
+    changeForm(harness.render(ManualCoinsSheet), { amount: "20", reason: "За качество" });
+    await submitForm(harness.render(ManualCoinsSheet)); await submitForm(harness.render(ManualCoinsSheet)); harness.reject(code);
+    let tree = harness.render(ManualCoinsSheet); assert.equal(find(tree, (node) => node.props["aria-label"] === "Подтверждение операции с коинами"), undefined);
+    assert.match(renderToStaticMarkup(tree), /role="alert"/); assert.match(renderToStaticMarkup(tree.props.footer), /Проверить/);
+    await submitForm(tree); assert.equal(harness.checks, 2); assert.equal(harness.calls.length, 1);
+    await submitForm(harness.render(ManualCoinsSheet)); assert.notEqual(harness.calls[0].request_id, harness.calls[1].request_id);
+    assert.equal(harness.calls[1].amount, 20);
+  }
+});
+test("configured lower per-operator limit is displayed and prevents checking", async () => {
+  const harness = sheetHarness({ maxAmount: 50 }), { ManualCoinsSheet } = await load("../components/ManualCoinsSheet.tsx", harness.mocks);
+  changeForm(harness.render(ManualCoinsSheet), { amount: "51", reason: "За качество" }); const tree = harness.render(ManualCoinsSheet);
+  assert.match(renderToStaticMarkup(tree), /max="50"/); assert.match(renderToStaticMarkup(tree), /От 1 до 50/);
+  assert.equal(finalButton(tree).props.disabled, true); await submitForm(tree); assert.equal(harness.checks, 0); assert.equal(harness.calls.length, 0);
+});
+test("gratitude also requires a separate named confirmation before posting", async () => {
+  const harness = sheetHarness(), { ManualCoinsSheet } = await load("../components/ManualCoinsSheet.tsx", harness.mocks);
+  changeForm(harness.render(ManualCoinsSheet), { direction: "gratitude" });
+  await submitForm(harness.render(ManualCoinsSheet)); assert.equal(harness.calls.length, 0);
+  const reviewed = harness.render(ManualCoinsSheet); assert.match(renderToStaticMarkup(reviewed), /Благодарность от водителя/);
+  assert.match(renderToStaticMarkup(reviewed.props.footer), /Начислить 10 коинов/);
+  await submitForm(reviewed); assert.equal(harness.calls[0].userId, operator.user_id); assert.equal(harness.calls[0].requestId.length, 36); assert.equal(harness.calls[0].expectedAmount, 10);
+});
+test("gratitude check uses fresh rules and blocks a newly invalid bonus without applying", async () => {
+  const harness = sheetHarness({ freshBonus: 25 }), { ManualCoinsSheet } = await load("../components/ManualCoinsSheet.tsx", harness.mocks);
+  changeForm(harness.render(ManualCoinsSheet), { direction: "gratitude" });
+  await submitForm(harness.render(ManualCoinsSheet));
+  assert.equal(harness.calls.length, 0);
+  const reviewed = harness.render(ManualCoinsSheet);
+  assert.match(renderToStaticMarkup(reviewed.props.footer), /Начислить 25 коинов/);
+  await submitForm(reviewed); assert.equal(harness.calls[0].expectedAmount, 25);
+
+  const blocked = sheetHarness({ freshBonus: 25, freshMaxAmount: 20 });
+  const { ManualCoinsSheet: BlockedSheet } = await load("../components/ManualCoinsSheet.tsx", blocked.mocks);
+  changeForm(blocked.render(BlockedSheet), { direction: "gratitude" });
+  await submitForm(blocked.render(BlockedSheet));
+  const rejected = blocked.render(BlockedSheet);
+  assert.match(renderToStaticMarkup(rejected), /Бонус за благодарность недоступен/);
+  assert.match(renderToStaticMarkup(rejected.props.footer), /Проверить/);
+  assert.equal(blocked.calls.length, 0);
 });
 test("trainer form has no editing controls and never queries management data", async () => {
   const harness = sheetHarness({ role: "trainer" }); harness.mocks["@tanstack/react-query"] = { useQuery: () => { throw new Error("Trainer cannot load coin management data"); } };

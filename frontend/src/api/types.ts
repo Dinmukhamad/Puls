@@ -206,6 +206,7 @@ export interface NominationOut {
   winner_group: string | null;
   value: number;
   coins_awarded: number;
+  winner_hidden: boolean;
 }
 
 export interface RatingHeader {
@@ -228,6 +229,9 @@ export interface RatingOut {
   page: number;
   size: number;
   my_row: RatingRowOut | null;
+  view_mode: "personal" | "table";
+  my_gap_to_podium: number | null;
+  my_podium_state: "uncalculated" | "not_participating" | "on_podium" | "outside_podium";
 }
 
 /* --- магазин --- */

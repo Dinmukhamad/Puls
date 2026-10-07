@@ -20,6 +20,7 @@ from app.schemas.admin import (
     ManualCoinsBulkIn,
     ManualCoinsPreviewIn,
     ManualCoinsPreviewOut,
+    ManualCoinsRecipientOut,
     ManualCoinsSelection,
 )
 from app.services.locking import lock_user
@@ -87,8 +88,9 @@ async def _recipients(
     return users
 
 
-def _preview_token(actor: User, payload: ManualCoinsPreviewIn, user_ids: list[int]) -> str:
-    now = datetime.now(UTC)
+def _preview_token(
+    actor: User, payload: ManualCoinsPreviewIn, user_ids: list[int], now: datetime
+) -> str:
     return jwt.encode(
         {
             "type": _PREVIEW_TYPE,
@@ -154,6 +156,7 @@ async def preview(
     balances = sum(row[0] for row in rows)
     reserves = sum(row[1] for row in rows)
     count = len(user_ids)
+    now = datetime.now(UTC)
     return ManualCoinsPreviewOut(
         count=count,
         eligible_count=count - insufficient,
@@ -165,7 +168,14 @@ async def preview(
         amount=payload.amount,
         total_amount=payload.amount * count,
         can_submit=count > 0 and insufficient == 0,
-        selection_token=_preview_token(actor, payload, user_ids),
+        selection_token=_preview_token(actor, payload, user_ids, now),
+        recipients=[
+            ManualCoinsRecipientOut(user_id=user.id, full_name=user.full_name)
+            for user in recipients
+        ],
+        expires_at=datetime.fromtimestamp(
+            int((now + timedelta(minutes=10)).timestamp()), UTC
+        ),
     )
 
 

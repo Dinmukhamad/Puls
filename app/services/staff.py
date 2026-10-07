@@ -154,16 +154,39 @@ async def gratitude(
     target: User,
     driver_ref: str | None,
     request_id: str | None = None,
+    expected_amount: int | None = None,
 ) -> CoinTransaction:
     """Начисление за благодарность от водителя фиксированным бонусом (п. 3.2)."""
-    rules = await get_rules(session)
     suffix = f" #{driver_ref}" if driver_ref else ""
+    reason = f"Благодарность от водителя{suffix}"
+    if request_id:
+        await lock_user(session, actor.id)
+        previous = await session.scalar(
+            select(CoinTransaction).where(
+                CoinTransaction.idempotency_key == f"manual:{actor.id}:{request_id}"
+            )
+        )
+        if previous:
+            if (
+                previous.user_id != target.id
+                or previous.reason != reason
+                or previous.tx_type != TxType.DRIVER_GRATITUDE
+                or (expected_amount is not None and previous.amount != expected_amount)
+            ):
+                raise ConflictError("Этот запрос уже использован для другой операции")
+            return previous
+    rules = await get_rules(session)
+    if expected_amount is not None and expected_amount != rules.driver_gratitude_bonus:
+        raise ConflictError(
+            "Бонус за благодарность изменился. Проверьте операцию ещё раз.",
+            code="gratitude_bonus_changed",
+        )
     return await manual_transaction(
         session,
         actor=actor,
         target=target,
         amount=rules.driver_gratitude_bonus,
-        reason=f"Благодарность от водителя{suffix}",
+        reason=reason,
         tx_type=TxType.DRIVER_GRATITUDE,
         request_id=request_id,
     )

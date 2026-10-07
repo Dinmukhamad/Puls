@@ -708,7 +708,7 @@ body:has(.shell--immersive) {
 }
 
 .kpi--coin .kpi__value {
-  color: var(--coin-color);
+  color: var(--gold-text);
 }
 
 .kpi--accent .kpi__value {
