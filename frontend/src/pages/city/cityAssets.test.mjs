@@ -28,7 +28,7 @@ test('every landmark level remains finite and batches facade detail into a small
   globalThis.document={createElement:()=>({getContext:()=>({fillRect(){},fillText(){}})})};
   try {
     const kit=createArchitecture();
-    for(const id of ['academy','driver','crm','dispatch','oktell'])for(let level=1;level<=5;level++){
+    for(const id of ['academy','driver','crm','dispatch','oktell','scenarios'])for(let level=1;level<=5;level++){
       const {group,height}=kit.landmark(id,level,id==='oktell');
       let meshes=0,triangles=0;
       group.traverse(o=>{if(!o.isMesh)return;meshes++;const p=o.geometry.getAttribute('position');triangles+=p.count/3;assert.ok([...p.array].every(Number.isFinite));});

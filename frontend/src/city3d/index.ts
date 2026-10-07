@@ -93,7 +93,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     selected = id;
     when(p => { p.districts.select(id); p.labels.setSelected(id); const d = world.districts.find(item => item.id === id); if (d && department === "support") p.rig.focus(d.x, d.z); });
   }
-  const choose = (id: DistrictId) => { focusDistrict(id); options.onSelect(id); };
+  // The server supplies the districts this viewer may use (scenarios are TP only).
+  const choose = (id: DistrictId) => { if (!labels.some(label => label.id === id)) return; focusDistrict(id); options.onSelect(id); };
   function switchDepartment(next: DepartmentId, saveView = true) {
     desiredDepartment = next;
     const p = parts; if (!p?.departments || next === department) return;
@@ -187,7 +188,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const first = rig.currentView(); sky.followView(first.target[0], first.target[2], first.distance); sky.setViewDistance(first.distance);
     rig.setActive(active);
     // Legacy learning-district hit volumes overlap the team land. Build taps belong to the estate picker.
-    const picker = own(createPicker(canvas, camera, () => department === "support" && !journey && !buildView ? districts.pickables : [], { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) }));
+    const picker = own(createPicker(canvas, camera, () => department === "support" && !journey && !buildView ? districts.pickables.filter(hit => labels.some(label => label.id === hit.userData.district)) : [], { onPick: id => choose(id as DistrictId), onHover: id => districts.hover(id) }));
     const post = own(createPost(ctx));
     const stats = own(createStats({ renderer, backend, host, visible: !!options.stats, quality, userIdKnown: true, gpu: handle.gpu, extra: () => { const s = parts?.pools?.stats(); return s ? `copies ${s.drawn}/${s.copies} · pools ${s.drawCalls} calls` : "loading models"; } }));
 

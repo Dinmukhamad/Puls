@@ -32,6 +32,23 @@ const windows = root => materials(root).filter(material => material.userData.dis
 const geometryCount = root => { let total = 0; root.traverse(object => { if (object.isMesh) total++; }); return total; };
 const levels = { academy: 5, driver: 5, crm: 5, dispatch: 5, oktell: 5 };
 
+test('the scenario pavilion is selectable, grows and follows shared lighting and disposal', () => {
+  const ctx = context(), districts = createDistricts(ctx, { levels: {}, grown:['scenarios'] });
+  const root = ctx.scene.getObjectByName('city-districts');
+  const scenario = ctx.world.districts.find(d => d.id === 'scenarios');
+  assert.ok(scenario && !scenario.soon);
+  assert.ok(districts.pickables.some(hit => hit.userData.district === 'scenarios'));
+  assert.ok(districts.anchors.has('scenarios'));
+  const lowerAnchor = districts.anchors.get('scenarios').y;
+  assert.equal(districts.startGrowth(),'scenarios');
+  ctx.frame(performance.now()+2200);
+  districts.setLevels({scenarios:4},['scenarios']);
+  assert.ok(districts.anchors.get('scenarios').y > lowerAnchor);
+  districts.setNight(true); districts.startGrowth(); ctx.frame(performance.now()+2200);
+  assert.ok(windows(root).every(material => material.emissiveIntensity > 0));
+  districts.dispose(); assert.equal(ctx.listeners,0); assert.equal(ctx.scene.children.length,0);
+});
+
 test('setNight lights landmark glazing only: opaque surfaces and construction sites keep their emissive', () => {
   const ctx = context(), districts = createDistricts(ctx, { levels });
   const glass = windows(ctx.scene);

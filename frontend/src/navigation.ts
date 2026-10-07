@@ -91,7 +91,7 @@ export function defaultAccess(role: Role): AccessMap {
 
 export function routeSection(pathname: string, search = "", role: Role = "operator"): SectionCode | "account" | "access" | "developer" | "qr_access" | undefined {
   if (pathname === "/qr-access") return "qr_access";
-  if (pathname === "/training/work-sites" || pathname === "/training/city") return role === "operator" ? "training" : "learning_admin";
+  if (pathname === "/training/work-sites" || pathname === "/training/city" || pathname.startsWith("/training/scenarios/")) return role === "operator" ? "training" : "learning_admin";
   const matches = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
   if (pathname === "/trainer" || pathname === "/admin/learning-analytics") return "learning_admin";
   if (matches("/progress")) return role === "operator" ? "results" : "personal";
@@ -170,7 +170,7 @@ export function visibleNavigation(role: Role, allowed: AccessMap = defaultAccess
 export function currentSection(role: Role, pathname: string, search = "", allowed: AccessMap = defaultAccess(role), isDeveloper = false): NavItem | undefined {
   if (!canVisit(role, `${pathname}${search}`, allowed, isDeveloper)) return undefined;
   const sections = visibleNavigation(role, allowed, isDeveloper);
-  if (pathname === "/training/work-sites") return sections.find(item => item.tabs.some(tab => tab.to === "/training/city"));
+  if (pathname === "/training/work-sites" || pathname.startsWith("/training/scenarios/")) return sections.find(item => item.tabs.some(tab => tab.to === "/training/city"));
   if (role === "trainer" && ["/admin/learning", "/training", "/simulator"].some(p => pathname === p || pathname.startsWith(p + "/"))) {
     const kind = new URLSearchParams(search).get("kind");
     return sections.find(item => item.id === (kind === "simulator" || pathname.startsWith("/simulator") || (pathname === "/training/city" && new URLSearchParams(search).get("district") === "driver") ? "driver" : "training"));
@@ -195,6 +195,10 @@ export function currentSection(role: Role, pathname: string, search = "", allowe
 
 /** Query-specific tabs take precedence over generic destinations on the same route. */
 export function currentTab(item: NavItem, pathname: string, search: string): SectionTab | undefined {
+  if (pathname.startsWith("/training/scenarios/")) {
+    const cityTab = item.tabs.find(link => link.to.split("?")[0] === "/training/city");
+    if (cityTab) return cityTab;
+  }
   const params = new URLSearchParams(search);
   const candidates = item.tabs.filter((link) => { const path = link.to.split("?")[0]; return pathname === path || pathname.startsWith(`${path}/`); });
   return candidates.map((link) => {

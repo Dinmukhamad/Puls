@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 
 from app.db.base import utcnow
 from app.models.access import AccessRule
-from app.models.city import CityAward
+from app.models.city import CityAward, CitySettings, CityWorld
 from app.models.coin import CoinTransaction
 from app.models.crm import CrmAppeal
 from app.models.driver import DriverOrder, DriverProfile
@@ -105,6 +105,131 @@ async def test_city_reads_never_award_and_server_rejects_forged_progress(client,
     assert await session.scalar(select(func.count()).select_from(CityAward)) == 0
     assert (await client.get(BASE)).status_code == 401
     assert (await client.get(ADMIN + "/participants", headers=headers)).status_code == 403
+
+
+@pytest.mark.parametrize("home_city", [None, "sales", "support"])
+async def test_scenarios_district_follows_assigned_operator_city(
+    client, session, operator, supervisor, head, home_city
+):
+    from app.services.city_world import defaults
+
+    cities = defaults()
+    if home_city:
+        next(city for city in cities if city["id"] == home_city)["districts"][0][
+            "supervisor_id"
+        ] = supervisor.id
+    session.add(CityWorld(id=1, revision=1, cities=cities, updated_by_id=head.id))
+    await session.commit()
+    headers = auth(await login(client, operator.login))
+    response = await client.get(BASE, headers=headers)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    shown = home_city == "support"
+    assert ("scenarios" in {d["id"] for d in data["districts"]}) is shown
+    assert ("scenario_business_park" in {m["key"] for m in data["missions"]}) is shown
+    # Having completed some CRM or dispatch work cannot bypass the combined scenario engine.
+    await appeal(session, operator.id)
+    result = await claim(client, headers, "scenario_business_park")
+    assert result.status_code == (409 if shown else 403), result.text
+    assert await session.scalar(select(func.count()).select_from(CityAward)) == 0
+    assert await session.scalar(select(func.count()).select_from(CoinTransaction)) == 0
+    # Operator inspection retains the inspected account's city boundary.
+    staff_headers = auth(await login(client, head.login))
+    detail = (await client.get(f"{ADMIN}/operators/{operator.id}", headers=staff_headers)).json()
+    assert ("scenarios" in {d["id"] for d in detail["districts"]}) is shown
+    preview = (await client.get(BASE, headers=staff_headers)).json()
+    assert "scenarios" in {d["id"] for d in preview["districts"]}
+    assert preview["preview"] and not preview["can_claim"]
+    report = (await client.get(ADMIN + "/participants", headers=staff_headers)).json()
+    item = next(row for row in report["items"] if row["user_id"] == operator.id)
+    assert ("scenario_business_park" in {m["key"] for m in item["missions"]}) is shown
+    assert item["total"] == len(default_missions()) - (0 if shown else 1)
+
+
+async def test_new_scenario_default_merges_with_saved_curriculum(session, head):
+    from app.services.city import settings
+
+    saved = {key: value for key, value in default_missions().items()
+             if key != "scenario_business_park"}
+    saved["driver_first"]["coins"] = 321
+    saved["crm_first"]["enabled"] = False
+    session.add(CitySettings(id=1, revision=7, missions=saved, updated_by_id=head.id))
+    await session.commit()
+    current = await settings(session)
+    assert current["revision"] == 7
+    assert current["missions"]["driver_first"]["coins"] == 321
+    assert current["missions"]["crm_first"]["enabled"] is False
+    scenario = current["missions"]["scenario_business_park"]
+    assert scenario["target"] == 1 and scenario["xp"] == 0 and scenario["coins"] == 100
+    assert scenario["enabled"] and scenario["prerequisite"] is None
+
+
+async def test_scenario_city_evidence_uses_only_own_passed_nonpreview_attempts(
+    session, operator
+):
+    from app.models.scenario import ScenarioAttempt
+    from app.services.city import evidence, mission_rows
+
+    other = await make_user(session, login="scenario-other")
+    for user_id, scenario_key, state, preview in [
+        (operator.id, "business_park", "passed", True),
+        (operator.id, "business_park", "failed", False),
+        (operator.id, "business_park", "in_progress", False),
+        (operator.id, "another_scenario", "passed", False),
+        (other.id, "business_park", "passed", False),
+    ]:
+        session.add(ScenarioAttempt(
+            user_id=user_id, scenario_key=scenario_key, state=state,
+            is_preview=preview, revision=1, snapshot={},
+        ))
+    await session.commit()
+    facts = await evidence(session, [operator.id, other.id])
+    assert facts[operator.id]["scenario_business_park"] == 0
+    assert facts[other.id]["scenario_business_park"] == 1
+    session.add(ScenarioAttempt(
+        user_id=operator.id, scenario_key="business_park", state="passed",
+        is_preview=False, revision=1, snapshot={},
+    ))
+    await session.commit()
+    facts = await evidence(session, [operator.id, other.id])
+    assert facts[operator.id]["scenario_business_park"] == 1
+    rows = mission_rows({"missions": default_missions()}, facts[operator.id], {})
+    mission = next(row for row in rows if row["key"] == "scenario_business_park")
+    assert mission["current"] == 1 and mission["state"] == "ready"
+    # Reads reflect the result but never synthesize a reward or move money.
+    assert await session.scalar(select(func.count()).select_from(CityAward)) == 0
+    assert await session.scalar(select(func.count()).select_from(CoinTransaction)) == 0
+
+
+async def test_scenario_reward_can_be_configured_but_target_stays_single(
+    client, head
+):
+    headers = auth(await login(client, head.login))
+    config = {"revision": 0, "missions": default_missions()}
+    config["missions"]["scenario_business_park"]["target"] = 2
+    invalid = await client.put(ADMIN + "/settings", headers=headers, json=config)
+    assert invalid.status_code == 422, invalid.text
+    config["missions"]["scenario_business_park"]["target"] = 1
+    config["missions"]["scenario_business_park"]["coins"] = 456
+    result = await client.put(ADMIN + "/settings", headers=headers, json=config)
+    assert result.status_code == 200, result.text
+    assert result.json()["missions"]["scenario_business_park"]["coins"] == 456
+
+
+@pytest.mark.parametrize("mode", ["xp", "prerequisite", "legacy_dependency"])
+async def test_scenario_is_standalone_and_cannot_lock_sales_curriculum(
+    client, head, mode
+):
+    config = {"revision": 0, "missions": default_missions()}
+    if mode == "xp":
+        config["missions"]["scenario_business_park"]["xp"] = 1
+    elif mode == "prerequisite":
+        config["missions"]["scenario_business_park"]["prerequisite"] = "welcome"
+    else:
+        config["missions"]["crm_first"]["prerequisite"] = "scenario_business_park"
+    headers = auth(await login(client, head.login))
+    result = await client.put(ADMIN + "/settings", headers=headers, json=config)
+    assert result.status_code == 422, result.text
 
 
 async def test_real_driver_chain_ignores_foreign_cancelled_and_preview_orders(

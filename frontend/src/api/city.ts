@@ -3,7 +3,7 @@ import { buildQuery, request } from "./client";
 /** City reads must settle even when a connection or token refresh stalls. */
 export const CITY_READ_TIMEOUT_MS = 25000;
 
-export type DistrictId = "academy" | "driver" | "crm" | "dispatch" | "oktell";
+export type DistrictId = "academy" | "driver" | "crm" | "dispatch" | "oktell" | "scenarios";
 export type MissionState = "available" | "in_progress" | "ready" | "locked" | "completed" | "unavailable";
 export interface MissionDefinition { title: string; description: string; pulsar: string; target: number; xp: number; coins: number; enabled: boolean; prerequisite: string | null }
 export interface CityMission extends MissionDefinition { key: string; district: DistrictId; objective: string; path: string; current: number; state: MissionState; claimed_at: string | null }

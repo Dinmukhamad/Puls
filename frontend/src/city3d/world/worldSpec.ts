@@ -1,8 +1,8 @@
 /**
  * The two cities as data (TZ §4.1); world/generate.ts turns either into WorldData.
  * - WORLD_V1 is the first training city, five islands (`?world=v1`).
- * - WORLD_X4 is the target city: ten district islands on two lagoon rings (the five current districts
- *   and five reserved "Скоро" islands on the cross streets between them), a larger lagoon, and a
+ * - WORLD_X4 is the target city: ten district islands on two lagoon rings (six training centres
+ *   and four reserved "Скоро" islands on the cross streets between them), a larger lagoon, and a
  *   mainland built up in bands (houses, blocks, towers, suburbs) with an industrial quarter and a port,
  *   out to a horizon about twice as far. It has about four times the area and the buildings of v1.
  */
@@ -102,7 +102,7 @@ export const WORLD_X4: CitySpec = {
     ...DISTRICTS,
     { id: "future-1", angleDeg: between(ACADEMY, DRIVER), ring: 1, color: "#8f9bb3", soon: true },
     { id: "future-2", angleDeg: between(DRIVER, CRM), ring: 1, color: "#c9a36b", soon: true },
-    { id: "future-3", angleDeg: between(CRM, DISPATCH), ring: 1, color: "#6fa8c7", soon: true },
+    { id: "scenarios", angleDeg: between(CRM, DISPATCH), ring: 1, color: "#6fa8c7", soon: false },
     { id: "future-4", angleDeg: between(DISPATCH, OKTELL), ring: 1, color: "#86b07a", soon: true },
     { id: "future-5", angleDeg: between(OKTELL, ACADEMY), ring: 1, color: "#b98fb8", soon: true },
   ],

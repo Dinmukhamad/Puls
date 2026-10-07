@@ -96,6 +96,8 @@ export function createLabels(ctx: CityContext, { anchors, mascotAnchor, onSelect
   function setLabels(labels: CityLabelInfo[]) {
     boards.forEach((board, id) => {
       const info = labels.find(l => l.id === id) ?? (isFutureDistrict(id) ? { ...FUTURE, id: id as DistrictId } : null);
+      // An unavailable server district has neither a label nor a keyboard entry point.
+      board.item.el.style.display = info ? "" : "none";
       const name = info?.name ?? id;
       board.icon.textContent = info?.icon ?? ""; board.name.textContent = name; board.status.textContent = info?.status ?? "";
       board.item.el.setAttribute("aria-label", info?.status ? `${name}. ${info.status}` : name);

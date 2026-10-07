@@ -7,6 +7,19 @@ import { build } from "esbuild";
 const built = await build({ entryPoints: [fileURLToPath(new URL("./navigation.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false });
 const nav = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
 
+test("scenario routes use learning management for staff and learning access for operators", () => {
+  for (const path of ["/training/scenarios/business_park", "/training/scenarios/attempts/42"]) {
+    assert.equal(nav.canVisit("operator", path, nav.defaultAccess("operator")), true);
+    const operatorSection = nav.currentSection("operator", path);
+    assert.equal(nav.currentTab(operatorSection, path, "").to, "/training/city");
+    for (const role of ["supervisor", "head", "admin", "trainer"]) {
+      assert.equal(nav.routeSection(path, "", role), "learning_admin");
+      assert.equal(nav.canVisit(role, path, { ...nav.defaultAccess(role), training: false }), true);
+      assert.equal(nav.canVisit(role, path, { ...nav.defaultAccess(role), learning_admin: false }), false);
+    }
+  }
+});
+
 test("trainer navigation stays within learning even with explicit grants", () => {
   const all = Object.fromEntries(Object.keys(nav.defaultAccess("admin")).map(key => [key, true]));
   assert.deepEqual(nav.visibleNavigation("trainer", all).map(x => x.label), ["Главная", "Команда", "Обучение", "Симулятор", "Аналитика", "QR-доступ", "Профиль"]);

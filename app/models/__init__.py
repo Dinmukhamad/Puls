@@ -49,6 +49,7 @@ from app.models.enums import (
 from app.models.games import Raffle, RaffleEntry, WheelConfig, WheelSpin
 from app.models.learning import LearningAttempt, LearningAward, LearningContent
 from app.models.progress import Notification, ProgressLevel
+from app.models.scenario import ScenarioAttempt
 from app.models.session import LoginSession
 from app.models.settings import AuditLog, GamificationSettings
 from app.models.shop import ShopItem, ShopRequest
@@ -114,6 +115,7 @@ __all__ = [
     "Raffle",
     "RaffleEntry",
     "Role",
+    "ScenarioAttempt",
     "ShopItem",
     "ShopRequest",
     "ShopRequestStatus",

@@ -207,9 +207,13 @@ test('x4: ten district islands on two rings, four times the city, and no empty c
     close(Math.atan2(d.z, d.x), Math.atan2(V1.districts[i].z, V1.districts[i].x), 'familiar district direction stays');
     assert.ok(radius(d) >= radius(V1.districts[i]) * 1.65, 'main islands have room around the central plaza');
   });
-  const future = WORLD_X4.districts.filter((d) => d.ring === 1);
-  assert.deepEqual(future.map((d) => d.id), ['future-1', 'future-2', 'future-3', 'future-4', 'future-5']);
+  const future = WORLD_X4.districts.filter((d) => d.id.startsWith('future-'));
+  assert.deepEqual(future.map((d) => d.id), ['future-1', 'future-2', 'future-4', 'future-5']);
   assert.ok(future.every((d) => d.soon));
+  const scenario = WORLD_X4.districts.find((d) => d.id === 'scenarios');
+  assert.equal(scenario.ring, 1);
+  assert.equal(scenario.soon, false);
+  assert.equal(WORLD_X4.districts.filter((d) => !d.id.startsWith('future-')).length, 6);
   // The outer islands stand on v1's cross streets.
   const crossStreets = gen.cityPlan(WORLD_V1).avenues.map((v) => v.angle);
   for (const d of plan.districts.slice(5)) assert.ok(crossStreets.some((a) => gen.angularDistance(a, d.angle) < 1e-9), `${d.id} is off the cross streets`);

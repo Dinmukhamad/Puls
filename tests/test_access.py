@@ -13,6 +13,14 @@ from app.services.access import SECTIONS, effective_access, request_sections
 from tests.conftest import auth, login, make_group, make_user
 
 
+@pytest.mark.parametrize("role", list(Role))
+async def test_scenarios_use_the_same_section_as_city(role):
+    expected = ("training",) if role == Role.OPERATOR else ("learning_admin",)
+    for path in ("/learning/scenarios", "/learning/scenarios/business_park/start", "/learning/scenarios/attempts/7/finish"):
+        assert request_sections(path, "GET", role) == expected
+        assert request_sections(path, "POST", role) == expected
+
+
 async def administrator(client, session):
     admin = await make_user(session, login="acl-admin", role=Role.ADMIN)
     return admin, auth(await login(client, admin.login))

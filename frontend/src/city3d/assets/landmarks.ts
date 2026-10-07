@@ -163,9 +163,24 @@ export function createArchitecture() {
     cyl(dish,.025,.55,C.gold,0,.3,0);ball(dish,.06,C.ink,0,.58,0);
     sign(p,'OKTELL',0,1.55,1.16,1.25);return 3.3;
   }
+  /** A simulation studio beside CRM and dispatch: a low pavilion, not another control tower. */
+  function scenarios(p:THREE.Object3D,stage:number) {
+    const floors=stage>=4?2:1, h=1.5*floors;
+    box(p,3.5,h,2.7,C.stone,0,.35+h/2,-.25,.18);
+    box(p,3.25,h-.25,.12,C.glass,0,.43+(h-.25)/2,1.14,.03);
+    for(const x of [-1.55,-.55,.55,1.55])box(p,.065,h-.18,.15,C.gold,x,.44+(h-.18)/2,1.2,.014);
+    box(p,3.7,.15,2.9,C.roof,0,h+.45,-.25,.12);
+    box(p,1.15,1.1,.16,C.ink,0,.89,1.25,.04);
+    box(p,2,.12,.95,C.gold,0,1.62,1.55,.05);
+    sign(p,'PULS / SCENARIOS',0,h+.16,1.24,2.4);
+    if(stage>=2){for(const x of [-1.25,1.25]){box(p,.65,.4,.6,C.trim,x,.53,1.72,.06);shrub(p,x,1.72,.65);}}
+    if(stage>=3){box(p,1.05,.8,1.5,C.roof,2.16,.75,-.2,.12);window(p,2.16,.52,.57,.72,.45);}
+    if(stage===5){box(p,2.1,.12,1.65,C.leaf,0,h+.56,-.25,.08);shrub(p,-.75,-.6,.65);}
+    return h+.65;
+  }
   function landmark(id:DistrictId,stage:number,soon:boolean) {
     const group=new THREE.Group();base(group,stage,soon);
-    const height=id==='academy'?academy(group,stage):id==='driver'?garage(group,stage):id==='crm'?crm(group,stage):id==='dispatch'?tower(group,stage):oktell(group);
+    const height=id==='academy'?academy(group,stage):id==='driver'?garage(group,stage):id==='crm'?crm(group,stage):id==='dispatch'?tower(group,stage):id==='scenarios'?scenarios(group,stage):id==='oktell'?oktell(group):0;
     if(stage>=2){for(const side of [-1,1]){for(let i=0;i<4;i++)box(group,.05,.55,.05,C.ink,side*2.55,.58,-1.55+i*.55);box(group,.06,.06,2,C.gold,side*2.55,.86,-.72);}}
     if(stage>=4){shrub(group,-2.2,-1.7,1.25);shrub(group,2.2,-1.7,1.25);}
     if(stage===5){const crown=torus(group,.25,.055,C.gold,0,height+.24,0);crown.rotation.y=Math.PI/4;}

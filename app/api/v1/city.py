@@ -142,17 +142,24 @@ async def participants(
     for row in await session.scalars(select(CityAward).where(CityAward.user_id.in_(ids))):
         awards.setdefault(row.user_id, {})[row.mission_key] = row
     config = await city.settings(session)
+    from app.services.scenarios import support_group_ids
+
+    # Resolve the department map once for the whole page, using the same assignment
+    # rule as scenario authorization instead of a world lookup for every operator.
+    scenario_groups = await support_group_ids(session) if users else set()
     items = []
     for operator in users:
         claimed = awards.get(operator.id, {})
         missions = city.mission_rows(config, facts[operator.id], claimed)
+        if operator.group_id not in scenario_groups:
+            missions = [m for m in missions if m["district"] != "scenarios"]
         xp = sum(a.xp for a in claimed.values())
         items.append(
             {
                 "user_id": operator.id,
                 "full_name": operator.full_name,
                 "login": operator.login,
-                "completed": len(claimed),
+                "completed": sum(m["state"] == "completed" for m in missions),
                 "total": sum(m["enabled"] or m["state"] == "completed" for m in missions),
                 "ready": sum(m["state"] == "ready" for m in missions),
                 "xp": xp,

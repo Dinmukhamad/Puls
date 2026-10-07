@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import case, func, literal, or_, select, union_all, update
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ConflictError, NotFoundError, PermissionDeniedError
@@ -25,6 +25,7 @@ DISTRICTS = [
     {"id": "driver", "name": "Driver Simulator", "subtitle": "Путь водителя", "soon": False},
     {"id": "crm", "name": "CRM-центр", "subtitle": "На стороне водителя", "soon": False},
     {"id": "dispatch", "name": "Диспетчерская", "subtitle": "Кабинет таксопарка", "soon": False},
+    {"id": "scenarios", "name": "Сценарии ТП", "subtitle": "Диалог и практика", "soon": False},
     {"id": "oktell", "name": "Oktell", "subtitle": "Будущий район", "soon": True},
 ]
 # Conditions and destinations are server-owned. Editors can tune the curriculum,
@@ -44,9 +45,16 @@ TEMPLATES = {
     "dispatch_inventory": ("dispatch", "dispatch_inventory", DISPATCH, "Выданный термокороб"),
     "dispatch_support": ("dispatch", "dispatch_support", DISPATCH, "Обращение в поддержку Яндекса"),
     "dispatch_limit": ("dispatch", "dispatch_limit", DISPATCH, "Разобранные лимиты на вывод"),
+    "scenario_business_park": (
+        "scenarios", "scenario_business_park", "/training/scenarios/business_park",
+        "Консультация по тарифу «Бизнес» через парк завершена",
+    ),
 }
-# A dispatch mission cannot ask for more calls than its group has.
-TARGET_LIMITS = {key: len(MISSION_CALLS[key]) for key in MISSION_CALLS}
+# A mission cannot ask for more server-owned cases than its engine has.
+TARGET_LIMITS = {
+    **{key: len(MISSION_CALLS[key]) for key in MISSION_CALLS},
+    "scenario_business_park": 1,
+}
 
 # Plots of the operator's own district: four on the green belt behind every open district island.
 # A district's plots open once its first mission reward is claimed (the Academy's with the welcome).
@@ -203,6 +211,18 @@ def default_missions():
             120,
             "dispatch_support",
         ),
+        (
+            "scenario_business_park",
+            "Бизнес через парк: консультация водителя",
+            "Пройди диалог с водителем, проверь условия тарифа «Бизнес» в учебной "
+            "Диспетчерской и зафиксируй консультацию в CRM.",
+            "Сначала уточни ситуацию водителя. Практика и диалог проверяются вместе; "
+            "коины начисляются один раз после успешного прохождения.",
+            1,
+            0,
+            100,
+            None,
+        ),
     ]
     return {
         key: {
@@ -237,6 +257,7 @@ def empty_facts():
         "appeals": 0,
         "phone": 0,
         "closed": 0,
+        "scenario_business_park": 0,
         **mission_facts(set()),
     }
 
@@ -277,14 +298,34 @@ async def evidence(session, user_ids):
         return result
     for uid, calls in (await solved_calls(session, user_ids)).items():
         result[uid].update(mission_facts(calls))
+    from app.models.scenario import ScenarioAttempt
+
+    # Independent profile and scenario aggregates share one round trip; a scenario never
+    # requires a DriverProfile row. UNION ALL keeps the two sources from multiplying counts.
+    passed_scenarios = (
+        select(ScenarioAttempt.user_id, literal(None), func.count())
+        .where(
+            ScenarioAttempt.user_id.in_(user_ids),
+            ScenarioAttempt.scenario_key == "business_park",
+            ScenarioAttempt.state == "passed",
+            ScenarioAttempt.is_preview.is_(False),
+        )
+        .group_by(ScenarioAttempt.user_id)
+    )
     profiles = await session.execute(
-        select(DriverProfile.user_id, DriverProfile.stage).where(
-            DriverProfile.user_id.in_(user_ids)
+        union_all(
+            select(DriverProfile.user_id, DriverProfile.stage, literal(0)).where(
+                DriverProfile.user_id.in_(user_ids)
+            ),
+            passed_scenarios,
         )
     )
-    for uid, stage in profiles:
-        result[uid]["profile"] = int(stage == "offline")
-        result[uid]["profile_started"] = int(stage != "services")
+    for uid, stage, scenario_count in profiles:
+        if stage is None:
+            result[uid]["scenario_business_park"] = scenario_count
+        else:
+            result[uid]["profile"] = int(stage == "offline")
+            result[uid]["profile_started"] = int(stage != "services")
     orders = await session.execute(
         select(
             DriverOrder.user_id,
@@ -363,13 +404,18 @@ def mission_rows(config, facts, awards):
 async def dashboard(session, user, *, inspecting=False):
     # The group city, daily situations and districts build on this module: imported here.
     from app.services.city_economy import economy
-    from app.services.city_estate import construction_open
+    from app.services.city_estate import construction_open, district_index
     from app.services.city_group import group_city, group_context
     from app.services.city_quests import quests
+    from app.services.city_world import settings as department_settings
+    from app.services.scenarios import support_group_ids
 
     config = await settings(session)
     operator = user.role == Role.OPERATOR
     context = await group_context(session, user)
+    # Resolve department ownership once for both scenario visibility and construction.
+    # The active group is already loaded by group_context; no extra directory or group read.
+    department_config = await department_settings(session) if operator else None
     # The operator and active teammates need the same evidence. Read it once for both missions
     # and the group quarters, so returning to the city does not scan the operator's history twice.
     facts_by_user = (
@@ -390,6 +436,14 @@ async def dashboard(session, user, *, inspecting=False):
         else {}
     )
     rows = mission_rows(config, facts, awards)
+    # A staff preview includes the curriculum. An inspected operator keeps their own
+    # assignment boundary, so sales and unassigned operators never see a TP scenario.
+    scenarios_visible = not operator or bool(
+        user.is_active and context[0]
+        and user.group_id in await support_group_ids(session, config=department_config)
+    )
+    if not scenarios_visible:
+        rows = [row for row in rows if row["district"] != "scenarios"]
     xp = sum(a.xp for a in awards.values())
     account = (
         await session.scalar(select(CoinAccount).where(CoinAccount.user_id == user.id))
@@ -408,7 +462,9 @@ async def dashboard(session, user, *, inspecting=False):
     values = await economy(session)
     prices = values["prices"]
     # Once the team district opens for building, new buildings go there; the old plots keep theirs.
-    moved = operator and await construction_open(session, user)
+    moved = operator and await construction_open(
+        session, user, districts=district_index(department_config),
+    )
     return {
         "revision": config["revision"],
         "user_id": user.id,
@@ -418,7 +474,7 @@ async def dashboard(session, user, *, inspecting=False):
         "preview": not operator,
         "inspecting": inspecting,
         "can_claim": operator and not inspecting,
-        "districts": DISTRICTS,
+        "districts": [d for d in DISTRICTS if scenarios_visible or d["id"] != "scenarios"],
         "missions": rows,
         "xp": xp,
         "level": xp // 300 + 1,
@@ -518,6 +574,11 @@ async def claim(session, user, key, revision):
         raise PermissionDeniedError("В предварительном просмотре награды не начисляются")
     if key not in TEMPLATES:
         raise NotFoundError("Миссия не найдена")
+    if key == "scenario_business_park":
+        from app.services.scenarios import support_allowed
+
+        if not await support_allowed(session, user):
+            raise PermissionDeniedError("Сценарий доступен только операторам города ТП")
     await lock_learner(session, user.id)
     existing = await session.get(CityAward, (user.id, key), populate_existing=True)
     if existing:
@@ -527,6 +588,12 @@ async def claim(session, user, key, revision):
             "xp": existing.xp,
             "coins": existing.coins,
         }
+    if key == "scenario_business_park":
+        # Only the scenario engine may finish the combined dialogue/CRM/dispatch
+        # attempt and create its reward using the amount snapshotted at the start.
+        raise ConflictError(
+            "Пройдите диалог и практику в сценарии: награда начисляется автоматически."
+        )
     config = await settings(session)
     if revision != config["revision"]:
         raise ConflictError("Тренер обновил миссии. Обновите город перед получением награды.")

@@ -389,9 +389,11 @@ async def managed(session, user, districts):
     }
 
 
-async def construction_open(session, user):
+async def construction_open(session, user, *, districts=None):
     """Is building open in the operator's district? Then new buildings go there, not to plots."""
-    home = home_district(await world_districts(session), user)
+    home = home_district(
+        districts if districts is not None else await world_districts(session), user,
+    )
     return bool(home and home["construction"] and city_land.has_land(home["id"]))
 
 

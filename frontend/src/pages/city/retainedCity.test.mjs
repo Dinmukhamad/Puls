@@ -371,8 +371,8 @@ function startupFixture(t) {
     if (name === 'createLoop') { state.render = args[0].render; return piece(); }
     if (name === 'createQuality') return piece({ settings: { fps: 60, resolution: 1 }, onChange: () => noop });
     if (name === 'createSky') return piece({ sun: null });
-    if (name === 'createDistricts') { state.pickables = [new startupCity.THREE.Object3D()]; return piece({ anchors: new Map(), pickables: state.pickables, startGrowth() { calls.push(['growth']); return 'crm'; } }); }
-    if (name === 'createPicker') { state.learningPickables = args[2]; return piece(); }
+    if (name === 'createDistricts') { const hit = new startupCity.THREE.Object3D(); hit.userData.district = 'crm'; state.pickables = [hit]; return piece({ anchors: new Map(), pickables: state.pickables, startGrowth() { calls.push(['growth']); return 'crm'; } }); }
+    if (name === 'createPicker') { state.learningPickables = args[2]; state.learningPickerHandlers = args[3]; return piece(); }
     if (name === 'createMascot') return piece({ nameAnchor: new startupCity.THREE.Vector3(), focusPoint: new startupCity.THREE.Vector3() });
     if (name === 'createDepartmentWorld') return piece({
       setEstates(city, value) { calls.push(['estates', city, value]); },
@@ -437,13 +437,40 @@ test('closing build mode while the real city is loading cancels its queued estat
   s.rendererReady.resolve(); await s.modelsRequested.promise;
   assert.deepEqual(s.state.learningPickables(), []);
   s.control.setBuild(null);
-  assert.equal(s.state.learningPickables(), s.state.pickables, 'closing build mode restores the normal learning-district picker');
+  assert.deepEqual(s.state.learningPickables(), s.state.pickables, 'closing build mode restores the normal learning-district picker');
   await s.finishModels(); s.frame();
   assert.deepEqual(s.calls.filter(call => call[0] === 'build'), [['build', null]], 'startup receives the closed build state');
   assert.equal(s.calls.some(call => call[0] === 'estate-focus'), false, 'the canceled district never reaches the estate system');
   assert.deepEqual(s.calls.filter(call => call[0] === 'camera').map(call => call[1]), ['focus'], 'only the normal growth focus remains');
   assert.equal(s.calls.some(call => call[0] === 'ready'), true);
   assert.equal(s.calls.some(call => call[0] === 'lost'), false);
+});
+
+test('the real city picker follows server district access after closing build mode and live labels updates', async t => {
+  const s = startupFixture(t);
+  s.rendererReady.resolve(); await s.modelsRequested.promise;
+  const crm = s.state.pickables[0], scenario = new startupCity.THREE.Object3D();
+  scenario.userData.district = 'scenarios'; s.state.pickables.push(scenario);
+  await s.finishModels(); s.frame();
+  const cameraFlights = () => s.calls.filter(call => call[0] === 'camera').length;
+  assert.deepEqual(s.state.learningPickables(), [crm], 'a TP scenario absent from the server labels cannot receive taps');
+  const beforeDenied = cameraFlights();
+  s.state.learningPickerHandlers.onPick('scenarios');
+  assert.equal(cameraFlights(), beforeDenied, 'stale picker events cannot focus a district no longer permitted');
+  s.control.setBuild(startupBuild('support-team-1'));
+  assert.deepEqual(s.state.learningPickables(), [], 'build mode reserves all taps for the estate');
+  s.control.setBuild(null);
+  assert.deepEqual(s.state.learningPickables(), [crm], 'closing build mode restores permitted districts only');
+  s.control.setLabels([{id:'crm',name:'CRM'},{id:'scenarios',name:'Сценарии'}]);
+  assert.deepEqual(s.state.learningPickables(), [crm,scenario], 'new server access takes effect without rebuilding the runtime');
+  const beforeAllowed = cameraFlights();
+  s.state.learningPickerHandlers.onPick('scenarios');
+  assert.equal(cameraFlights(), beforeAllowed+1, 'an available scenario island receives the actual camera focus');
+  s.control.setLabels([{id:'crm',name:'CRM'}]);
+  assert.deepEqual(s.state.learningPickables(), [crm], 'revoked scenario access disappears from the picker');
+  const beforeRevoked = cameraFlights();
+  s.state.learningPickerHandlers.onPick('scenarios');
+  assert.equal(cameraFlights(), beforeRevoked, 'a queued click remains rejected after access is revoked');
 });
 
 test('context restoration rebuilds the real runtime and returns to the last estate destination after growth', async t => {

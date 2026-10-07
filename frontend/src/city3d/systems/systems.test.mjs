@@ -88,11 +88,11 @@ test('landmarks face out to the city at the world scale and share draw calls; re
   assert.ok(front.dot(new THREE.Vector3(crm.position.x, 0, crm.position.z).normalize()) > .999, 'faces out to the city, away from the plaza');
   assert.equal(crm.scale.x, worlds.x4.spec.districtScale);
   const merged = root.children.filter(o => o.isMesh && !o.isInstancedMesh && o.visible && o.geometry.type !== 'TorusGeometry');
-  assert.ok(merged.length >= 4 && merged.length <= 12, `${merged.length} draw calls for four landmarks`);
+  assert.ok(merged.length >= 4 && merged.length <= 12, `${merged.length} draw calls for five completed landmarks`);
   const tall = d => merged.some(m => { const p = m.geometry.getAttribute('position'); for (let i = 0; i < p.count; i += 5) if (p.getY(i) > 3 && Math.hypot(p.getX(i) - d.x, p.getZ(i) - d.z) < 4) return true; return false; });
   for (const d of worlds.x4.districts) if (!city.isFutureDistrict(d.id) && d.id !== 'crm') assert.ok(tall(d), `${d.id} stands at full height`);
   const site = root.children.filter(m => m.isInstancedMesh);
-  assert.ok(site.length === 1 && site[0].count === 5, 'one instanced mesh, one instance per reserved island');
+  assert.ok(site.length === 1 && site[0].count === 4, 'one instanced mesh, one instance per reserved island');
   districts.dispose();
 });
 

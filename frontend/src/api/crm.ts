@@ -14,6 +14,20 @@ export interface CrmAppeal extends Omit<CrmInput, "request_id"> {
 }
 export const CRM_STATUS: Record<string, string> = { recorded: "Зафиксировано", new: "Новый тикет", in_progress: "В работе", closed: "Закрыт" };
 export const CRM_FIELDS: Record<string, string> = { company: "Название компании", callback: "Номер для обратного звонка", service: "Предлагаемая услуга", employee: "Имя сотрудника", transaction: "Транзакция / РРН", conditions: "Условия работы", error_description: "Описание ошибки" };
+const SCENARIO_CHECK_LABELS: Record<string, string> = { classifier: "Проверка автомобиля и допуска", activation: "Этапы подключения", standards: "Дресс-код и автомобиль", commission: "Условия комиссий", diagnostics: "Диагностика и следующий шаг" };
+const SCENARIO_NEXT_LABELS: Record<string, string> = { check_pro_diagnostics: "Проверить классификатор, тарифы и диагностику Яндекс Про; прислать результат", start_business: "Начать выполнять заказы Business", wait_park: "Ждать подключения от парка" };
+/** Saved scenario evidence reads as a consultation record, never internal JSON or route IDs. */
+export function crmDetailRows(details: Record<string, string>): [string, string][] {
+  return Object.entries(details).flatMap(([key, value]): [string, string][] => {
+    if (!value || key === "scenario_attempt") return [];
+    if (key === "scenario_checks") {
+      try { const keys: unknown = JSON.parse(value); const labels = Array.isArray(keys) ? keys.filter((item): item is string => typeof item === "string").map(item => SCENARIO_CHECK_LABELS[item]).filter(Boolean) : []; return labels.length ? [["Темы консультации", labels.join("; ")]] : []; } catch { return []; }
+    }
+    if (key === "scenario_outcome") return [["Итог консультации", value === "confirmed" ? "Допуск к Business подтверждён" : "Допуск к Business не подтверждён — требуется проверка сервиса"]];
+    if (key === "scenario_next_action") return [["Следующее действие", SCENARIO_NEXT_LABELS[value] ?? "Уточнить следующее действие"]];
+    return [[CRM_FIELDS[key] ?? key, value]];
+  });
+}
 export const crm = {
   catalog: () => request<CrmCatalog>("/api/v1/learning/crm/catalog"),
   instruction: ({ key, ...input }: CrmInstruction) => request<CrmInstruction>(`/api/v1/admin/learning/crm/instructions/${encodeURIComponent(key)}`, { method: "PUT", json: input }),

@@ -27,6 +27,12 @@ class SettingsInput(BaseModel):
         for key, mission in self.missions.items():
             if key in ("welcome", "driver_profile") and mission.target != 1:
                 raise ValueError("Для знакомства и профиля цель равна одному действию")
+            if key == "scenario_business_park" and mission.target != 1:
+                raise ValueError("Для сценария цель равна одному успешному прохождению")
+            if key == "scenario_business_park" and (mission.xp or mission.prerequisite):
+                raise ValueError("Сценарий не выдаёт XP и доступен без других миссий")
+            if mission.prerequisite == "scenario_business_park":
+                raise ValueError("Общие миссии не могут зависеть от сценария только для ТП")
             if key in TARGET_LIMITS and mission.target > TARGET_LIMITS[key]:
                 raise ValueError(
                     f"В миссии «{mission.title}» можно решить не больше "

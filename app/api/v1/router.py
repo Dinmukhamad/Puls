@@ -24,6 +24,7 @@ from app.api.v1 import (
     learning,
     progress,
     rating,
+    scenarios,
     shop,
     system,
     telegram,
@@ -55,6 +56,7 @@ api_router.include_router(progress.router)
 api_router.include_router(analytics.router)
 api_router.include_router(driver.router)
 api_router.include_router(learning.router)
+api_router.include_router(scenarios.router)
 api_router.include_router(games.router)
 api_router.include_router(wallet.router)
 api_router.include_router(telemetry.router)
