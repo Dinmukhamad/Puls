@@ -33,7 +33,7 @@ const staffLearning = (admin: boolean) => section("training", "Обучение"
   tab("/admin/learning-analytics", "Аналитика обучения"),
 ]);
 const team = (admin = false, supervisor = false) => section("team", "Команда", UsersIcon, [
-  tab("/admin/users", admin ? "Пользователи" : "Операторы"), tab("/admin/groups", supervisor ? "Моя группа" : "Группы"),
+  tab("/admin/users", admin ? "Пользователи" : "Операторы"), tab("/admin/groups", supervisor ? "Моя команда" : "Супервайзеры"),
   tab("/admin/operators", "Показатели сотрудников"),
 ]);
 const analytics = (supervisor = false) => section("analytics", "Аналитика", TrophyIcon, [

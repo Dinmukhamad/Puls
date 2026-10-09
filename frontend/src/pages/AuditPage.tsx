@@ -12,6 +12,8 @@ const actions: Record<string, string> = {
   "user.create": "Создан сотрудник", "user.update": "Изменён сотрудник",
   "user.password_reset": "Сброшен пароль", "user.password_change": "Изменён пароль",
   "group.create": "Создана группа", "group.update": "Изменена группа",
+  "supervisor_team.assign": "Операторы назначены супервайзеру",
+  "supervisor_team.remove": "Операторы сняты из команды",
   "week.create": "Открыта неделя", "week.metrics_upload": "Загружены показатели",
   "week.recalculate": "Подготовлен расчёт", "week.close": "Опубликованы итоги",
   "week.close_previous": "Закрыта прошлая неделя", "session.revoke": "Завершён сеанс",

@@ -132,6 +132,7 @@ class UserCreate(PasswordMixin, PhoneMixin, TelegramUsernameMixin):
     email: EmailStr | None = None
     role: Role = Role.OPERATOR
     group_id: int | None = Field(default=None, gt=0)
+    supervisor_id: int | None = Field(default=None, gt=0)
     hired_on: date | None = None
     gender: Gender | None = None
 
@@ -148,6 +149,7 @@ class UserUpdate(PhoneMixin, TelegramUsernameMixin):
     email: EmailStr | None = None
     role: Role | None = None
     group_id: int | None = Field(default=None, gt=0)
+    supervisor_id: int | None = Field(default=None, gt=0)
     is_active: bool | None = None
     hired_on: date | None = None
     gender: Gender | None = None
@@ -254,3 +256,29 @@ class GroupOut(ORMModel):
     supervisor: UserBrief | None = None
     member_count: int = 0
     operator_count: int = 0
+
+
+class SupervisorBrief(ORMModel):
+    id: int
+    full_name: str
+    login: str
+    is_active: bool
+
+
+class SupervisorTeamOut(BaseModel):
+    supervisor: SupervisorBrief
+    group_id: int | None
+    groups: list[GroupOut]
+    operator_count: int
+
+
+class TeamOperators(BaseModel):
+    operator_ids: list[int] = Field(min_length=1, max_length=500)
+    group_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("operator_ids")
+    @classmethod
+    def _unique_positive_ids(cls, value: list[int]) -> list[int]:
+        if any(item <= 0 for item in value) or len(value) != len(set(value)):
+            raise ValueError("Выберите разных операторов с действительными идентификаторами")
+        return value

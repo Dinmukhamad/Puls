@@ -50,7 +50,7 @@ from app.schemas.user import (
     UserUpdatedOut,
 )
 from app.services import cabinet as cabinet_service
-from app.services import city_estate, city_world, telegram
+from app.services import city_estate, city_world, supervisor_teams, telegram
 from app.services import coins as coins_service
 from app.services import weekly as weekly_service
 from app.services.rules import write_audit
@@ -127,6 +127,8 @@ async def list_users(
     pagination: PaginationDep,
     role: Role | None = None,
     group_id: int | None = None,
+    supervisor_id: int | None = None,
+    unassigned: bool = False,
     search: Annotated[str | None, Query(description="Поиск по ФИО или логину")] = None,
     only_active: bool = False,
     is_active: bool | None = None,
@@ -136,6 +138,16 @@ async def list_users(
         conditions.append(User.role == role)
     if group_id is not None:
         conditions.append(User.group_id == group_id)
+    if supervisor_id is not None:
+        conditions.append(User.group_id.in_(
+            select(Group.id).where(Group.supervisor_id == supervisor_id)
+        ))
+    if unassigned:
+        conditions.append(
+            User.group_id.is_(None) | User.group_id.in_(
+                select(Group.id).where(Group.supervisor_id.is_(None))
+            )
+        )
     if only_active:
         conditions.append(User.is_active.is_(True))
     if is_active is not None:
@@ -277,12 +289,27 @@ async def create_user(
         )
     if payload.role not in USER_VISIBILITY[Role(actor.role)]:
         raise PermissionDeniedError("Вы не можете создавать пользователей с этой ролью")
-    if actor.role == Role.TRAINER and payload.group_id is not None:
+    if actor.role == Role.TRAINER and (
+        payload.group_id is not None or payload.supervisor_id is not None
+    ):
         raise PermissionDeniedError("Тренер не назначает группы")
-    if payload.role == Role.OPERATOR and payload.group_id is not None:
+    if payload.supervisor_id is not None and payload.role != Role.OPERATOR:
+        raise DomainError("Супервайзеру можно назначить только оператора")
+    if payload.role == Role.SUPERVISOR or (
+        payload.role == Role.OPERATOR and
+        (payload.group_id is not None or payload.supervisor_id is not None)
+    ):
         # A new member must not appear after a district transfer captured its operators.
         await city_world.lock_settings(session)
-    await _check_group(session, payload.group_id)
+    group_id = payload.group_id
+    if payload.supervisor_id is not None:
+        supervisor_teams.require_team_manager(actor)
+        group_id = (await supervisor_teams.destination(
+            session, payload.supervisor_id, payload.group_id
+        )).id
+    elif "supervisor_id" in payload.model_fields_set and group_id is not None:
+        raise DomainError("Выберите супервайзера для команды")
+    await _check_group(session, group_id)
     if payload.telegram_username:
         telegram.require_bot()
 
@@ -292,7 +319,7 @@ async def create_user(
         email=payload.email,
         phone=payload.phone,
         role=payload.role,
-        group_id=payload.group_id,
+        group_id=group_id,
         hired_on=payload.hired_on,
         gender=payload.gender,
         hashed_password=hash_password(payload.password),
@@ -303,6 +330,9 @@ async def create_user(
     except IntegrityError as exc:
         await session.rollback()
         raise ConflictError("Логин, email или телефон уже заняты") from exc
+
+    if user.role == Role.SUPERVISOR:
+        await supervisor_teams.ensure_team(session, user, preferred_group_id=group_id)
 
     invitation = None
     if payload.telegram_username:
@@ -352,9 +382,24 @@ async def user_telegram(session: SessionDep, actor: HeadUser, user_id: int, resp
 async def update_user(
     session: SessionDep, actor: HeadUser, user_id: int, payload: UserUpdate, response: Response
 ) -> UserUpdatedOut:
-    if payload.model_fields_set & {"group_id", "role", "is_active"}:
+    if payload.model_fields_set & {"group_id", "supervisor_id", "role", "is_active"}:
         # Team membership and world assignments share the configuration-before-user lock order.
         await city_world.lock_settings(session)
+    resolved_group = None
+    supervisor_requested = "supervisor_id" in payload.model_fields_set
+    if supervisor_requested:
+        supervisor_teams.require_team_manager(actor)
+        if payload.supervisor_id is not None:
+            # Destination ownership is locked before the operator, matching bulk assignments.
+            resolved_group = await supervisor_teams.destination(
+                session, payload.supervisor_id, payload.group_id
+            )
+        elif payload.group_id is not None:
+            raise DomainError("Выберите супервайзера для команды")
+    if payload.role == Role.SUPERVISOR and payload.group_id is not None:
+        # A promotion can adopt an unowned legacy group. Lock it before the operator,
+        # matching coin operations that lock groups before their selected members.
+        await session.get(Group, payload.group_id, populate_existing=True, with_for_update=True)
     user = await _visible_user(session, actor, user_id)
     # Та же блокировка пользователя, что при подтверждении и привязке Telegram.
     # Смена номера не должна оставлять доверие, записанное параллельным запросом.
@@ -364,6 +409,14 @@ async def update_user(
         raise PermissionDeniedError("Учётную запись администратора изменяет только администратор")
 
     changes = payload.model_dump(exclude_unset=True)
+    changes.pop("supervisor_id", None)
+    if supervisor_requested:
+        if payload.supervisor_id is not None and changes.get("role", user.role) != Role.OPERATOR:
+            raise DomainError("Супервайзеру можно назначить только оператора")
+        changes["group_id"] = resolved_group.id if resolved_group else None
+    promoting = changes.get("role") == Role.SUPERVISOR and user.role != Role.SUPERVISOR
+    if promoting and "group_id" not in changes:
+        changes["group_id"] = None
     telegram_requested = "telegram_username" in changes
     telegram_username = changes.pop("telegram_username", None)
     if "role" in changes and changes["role"] not in USER_VISIBILITY[Role(actor.role)]:
@@ -409,6 +462,10 @@ async def update_user(
         await revoke_devices(session, user.id)
     for field, value in changes.items():
         setattr(user, field, value)
+    if promoting:
+        await session.flush()
+        await supervisor_teams.ensure_team(session, user,
+                                           preferred_group_id=changes.get("group_id"))
     if changes.get("is_active") is False:
         await revoke_user_sessions(session, user.id)
     if changes.keys() & {"group_id", "is_active", "role"}:
@@ -553,6 +610,7 @@ async def list_groups(session: SessionDep, actor: StaffUser) -> list[GroupOut]:
     summary="Создать группу",
 )
 async def create_group(session: SessionDep, actor: HeadUser, payload: GroupCreate) -> GroupOut:
+    await city_world.lock_settings(session)
     await _check_supervisor(session, payload.supervisor_id)
     group = Group(**payload.model_dump())
     session.add(group)

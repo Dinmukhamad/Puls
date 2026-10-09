@@ -7,6 +7,16 @@ import { build } from "esbuild";
 const built = await build({ entryPoints: [fileURLToPath(new URL("./navigation.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", write: false });
 const nav = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString("base64")}`);
 
+test("supervisor teams are discoverable without giving trainers team administration", () => {
+  for (const role of ["admin", "head"]) {
+    const item = nav.currentSection(role, "/admin/groups");
+    assert.equal(nav.currentTab(item, "/admin/groups", "").label, "Супервайзеры");
+  }
+  const own = nav.currentSection("supervisor", "/admin/groups");
+  assert.equal(nav.currentTab(own, "/admin/groups", "").label, "Моя команда");
+  assert.equal(nav.canVisit("trainer", "/admin/groups", { ...nav.defaultAccess("trainer"), team: true }), false);
+});
+
 test("scenario routes use learning management for staff and learning access for operators", () => {
   for (const path of ["/training/scenarios/business_park", "/training/scenarios/attempts/42"]) {
     assert.equal(nav.canVisit("operator", path, nav.defaultAccess("operator")), true);

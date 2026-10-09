@@ -151,7 +151,9 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
     if path == "/telemetry/city":
         # Whoever can open the city can report how smoothly it runs.
         return ("training",) if role == Role.OPERATOR else ("learning_admin",)
-    if path in ("/learning/city", "/learning/scenarios") or path.startswith(("/learning/city/", "/learning/scenarios/")):
+    if path in ("/learning/city", "/learning/scenarios") or path.startswith(
+        ("/learning/city/", "/learning/scenarios/")
+    ):
         return ("training",) if role == Role.OPERATOR else ("learning_admin",)
     if path in ("/work-sites-access/status", "/work-sites-access/request"):
         return ("training",) if role == Role.OPERATOR else ()
@@ -192,7 +194,9 @@ def request_sections(path: str, method: str, role: Role | None = None) -> tuple[
         return ("overview",)
     if path.startswith("/admin/operators/export"):
         return ("reports",)
-    if path.startswith(("/admin/users", "/admin/groups", "/admin/operators")):
+    if path.startswith(
+        ("/admin/users", "/admin/groups", "/admin/operators", "/admin/supervisor-teams")
+    ):
         if read and path.endswith(("/transactions", "/purchases")):
             return ("motivation",)
         return ("team",)

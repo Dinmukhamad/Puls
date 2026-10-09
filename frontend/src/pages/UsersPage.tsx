@@ -12,6 +12,7 @@ import { useToast } from "../components/Toast";
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSkeleton } from "../components/ui";
 import { dateTime, ROLE_LABELS } from "../utils/format";
 import { loadTelegramDraft, normalizeTelegramUsername, telegramUpdate, type TeamTelegramDraft } from "./teamTelegram";
+import { activeTeamGroups, destinationGroupId, userTeamLabel } from "./supervisorTeams";
 import "./team.css";
 
 const roles: Role[] = ["operator", "trainer", "supervisor", "head", "admin"];
@@ -29,20 +30,28 @@ export function UsersPage() {
   const search = params.get("search") ?? "";
   const role = roles.includes(params.get("role") as Role) ? params.get("role")! : "";
   const group = params.get("group") ?? "";
+  const supervisor = params.get("supervisor") ?? "";
   const status = ["active", "archived"].includes(params.get("status") ?? "") ? params.get("status")! : "";
   const page = Math.max(1, Number(params.get("page")) || 1);
   const size = 25;
   const groups = useQuery({ queryKey: ["team-groups"], queryFn: team.groups, enabled: !trainer });
+  const teams = useQuery({ queryKey: ["team-supervisor-teams", true], queryFn: ({ signal }) => team.supervisorTeams(true, signal), enabled: !trainer });
   const users = useQuery({
-    queryKey: ["team-users", search, role, group, status, page],
-    queryFn: ({ signal }) => team.users({ search, role, group_id: group || undefined, is_active: status ? status === "active" : undefined, page, size }, signal),
+    queryKey: ["team-users", search, role, group, supervisor, status, page],
+    queryFn: ({ signal }) => team.users({ search, role, group_id: group || undefined, supervisor_id: supervisor && supervisor !== "unassigned" ? supervisor : undefined, unassigned: supervisor === "unassigned" ? true : undefined, is_active: status ? status === "active" : undefined, page, size }, signal),
   });
-  const activeFilters = [role, group, status].filter(Boolean).length;
+  const activeFilters = [role, group, supervisor, status].filter(Boolean).length;
+  const teamLabel = (user: UserOut) => {
+    if (user.role !== "supervisor") return userTeamLabel(user, groups.data ?? []);
+    const ownTeam = teams.data?.find(item => item.supervisor.id === user.id);
+    return ownTeam ? `Своя команда · ${ownTeam.operator_count} операторов` : "Своя команда";
+  };
 
   function filter(key: string, value: string) {
     setParams((current) => {
       const next = new URLSearchParams(current);
       if (value) next.set(key, value); else next.delete(key);
+      if (key === "supervisor") next.delete("group");
       if (key !== "page") next.delete("page");
       return next;
     }, { replace: key === "search" });
@@ -50,10 +59,11 @@ export function UsersPage() {
 
   function filterFields() {
     return <>
-      {!trainer && <label className="field"><span className="field__label">Группа</span><select className="input" value={group} onChange={(e) => filter("group", e.target.value)}>
-        <option value="">Все доступные группы</option>
-        {(groups.data ?? []).map((g) => <option value={g.id} key={g.id}>{g.name}{g.is_active ? "" : " · архив"}</option>)}
+      {!trainer && <label className="field"><span className="field__label">Супервайзер</span><select className="input" value={supervisor} onChange={(e) => filter("supervisor", e.target.value)}>
+        <option value="">Все доступные команды</option><option value="unassigned">Операторы без команды</option>
+        {(teams.data ?? []).map((item) => <option value={item.supervisor.id} key={item.supervisor.id}>{item.supervisor.full_name}{item.supervisor.is_active ? "" : " · архив"}</option>)}
       </select></label>}
+      {!trainer && group && <label className="field"><span className="field__label">Прежняя группа</span><select className="input" value={group} onChange={(e) => filter("group", e.target.value)}><option value="">Все группы</option>{(groups.data ?? []).map(g => <option key={g.id} value={g.id}>{g.name}{g.is_active ? "" : " · архив"}</option>)}</select></label>}
       <label className="field"><span className="field__label">Роль</span><select className="input" value={role} onChange={(e) => filter("role", e.target.value)}>
         <option value="">Все доступные роли</option>{visibleRoles(actor?.role).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
       </select></label>
@@ -80,16 +90,17 @@ export function UsersPage() {
       <Button className="team-mobile-filter-button" onClick={() => setFiltersOpen(true)}>Фильтры{activeFilters ? ` · ${activeFilters}` : ""}</Button>
       {(search || activeFilters > 0) && <Button variant="plain" size="s" onClick={() => setParams({})}>Сбросить</Button>}
     </GlassSurface>
-    {groups.isError && <ErrorState error={new Error("Не удалось загрузить список групп")} onRetry={() => groups.refetch()} />}
+    {teams.isError && <ErrorState error={new Error("Не удалось загрузить команды супервайзеров")} onRetry={() => teams.refetch()} />}
+    {groups.isError && <ErrorState error={new Error("Не удалось загрузить команды")} onRetry={() => groups.refetch()} />}
     <Card title="Команда" padded={false}>
       {users.isLoading && <div className="card__body"><RowsSkeleton /></div>}
       {users.isError && <ErrorState error={new Error(teamError(users.error, "Не удалось загрузить сотрудников"))} onRetry={() => users.refetch()} />}
       {users.data && users.data.items.length === 0 && <EmptyState title="Сотрудники не найдены" hint="Попробуйте изменить фильтры или создайте первую учётную запись." action={page > 1 ? <Button onClick={() => filter("page", "1")}>На первую страницу</Button> : undefined} />}
       {users.data && users.data.items.length > 0 && <>
-        <div className="table-wrap team-desktop-table"><table className="table"><thead><tr><th>Сотрудник</th><th>Роль</th><th>{trainer ? "Создан" : "Группа"}</th><th>Статус</th><th><span className="sr-only">Действия</span></th></tr></thead><tbody>
-          {users.data.items.map((u) => <tr key={u.id}><td><Link className="cell-person team-person-link" to={`/admin/users/${u.id}`}><Avatar name={u.full_name} id={u.id} size={36} /><span className="cell-person__text"><span className="cell-person__name">{u.full_name}</span><span className="cell-person__meta">{u.login} · ID {u.id}</span></span></Link></td><td>{ROLE_LABELS[u.role]}</td><td>{trainer ? u.created_at ? new Date(u.created_at).toLocaleDateString("ru") : "—" : u.group?.name ?? "Без группы"}</td><td><UserStatus active={u.is_active} /></td><td>{actions(u)}</td></tr>)}
+        <div className="table-wrap team-desktop-table"><table className="table"><thead><tr><th>Сотрудник</th><th>Роль</th><th>{trainer ? "Создан" : "Супервайзер · команда"}</th><th>Статус</th><th><span className="sr-only">Действия</span></th></tr></thead><tbody>
+          {users.data.items.map((u) => <tr key={u.id}><td><Link className="cell-person team-person-link" to={`/admin/users/${u.id}`}><Avatar name={u.full_name} id={u.id} size={36} /><span className="cell-person__text"><span className="cell-person__name">{u.full_name}</span><span className="cell-person__meta">{u.login} · ID {u.id}</span></span></Link></td><td>{ROLE_LABELS[u.role]}</td><td>{trainer ? u.created_at ? new Date(u.created_at).toLocaleDateString("ru") : "—" : teamLabel(u)}</td><td><UserStatus active={u.is_active} /></td><td>{actions(u)}</td></tr>)}
         </tbody></table></div>
-        <div className="team-mobile-list">{users.data.items.map((u) => <article className="team-person-card" key={u.id}><div className="team-person-card__head"><Avatar name={u.full_name} id={u.id} /><div><Link className="team-person-link" to={`/admin/users/${u.id}`}><strong>{u.full_name}</strong></Link><p className="muted micro">{u.login} · ID {u.id}</p></div></div><div className="team-meta"><span>{ROLE_LABELS[u.role]}</span>{!trainer && <span>{u.group?.name ?? "Без группы"}</span>}<UserStatus active={u.is_active} /></div>{actions(u)}</article>)}</div>
+        <div className="team-mobile-list">{users.data.items.map((u) => <article className="team-person-card" key={u.id}><div className="team-person-card__head"><Avatar name={u.full_name} id={u.id} /><div><Link className="team-person-link" to={`/admin/users/${u.id}`}><strong>{u.full_name}</strong></Link><p className="muted micro">{u.login} · ID {u.id}</p></div></div><div className="team-meta"><span>{ROLE_LABELS[u.role]}</span>{!trainer && <span>{teamLabel(u)}</span>}<UserStatus active={u.is_active} /></div>{actions(u)}</article>)}</div>
         <Pagination page={page} size={size} total={users.data.total} onChange={(p) => filter("page", String(p))} />
       </>}
     </Card>
@@ -103,7 +114,7 @@ export function UserStatus({ active }: { active: boolean }) {
   return <Badge tone={active ? "success" : "neutral"} dot={active}>{active ? "Активен" : "В архиве"}</Badge>;
 }
 
-export function UserEditor({ target, groups, groupsReady, onClose }: { target?: UserOut; groups: TeamGroup[]; groupsReady: boolean; onClose: () => void }) {
+export function UserEditor({ target, groups, groupsReady, initialRole = "operator", onClose }: { target?: UserOut; groups: TeamGroup[]; groupsReady: boolean; initialRole?: Role; onClose: () => void }) {
   const { user: actor } = useAuth();
   const trainer = actor?.role === "trainer";
   const toast = useToast();
@@ -112,8 +123,29 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
   const [login, setLogin] = useState("");
   const [email, setEmail] = useState(target?.email ?? "");
   const [phone, setPhone] = useState(target?.phone ?? "");
-  const [role, setRole] = useState<Role>(target?.role ?? "operator");
+  const [role, setRole] = useState<Role>(target?.role ?? (trainer ? "operator" : initialRole));
   const [groupId, setGroupId] = useState(target?.group ? String(target.group.id) : "");
+  const [supervisorId, setSupervisorId] = useState(() => { const owner = groups.find(g => g.id === target?.group?.id)?.supervisor; return owner ? String(owner.id) : target?.group ? "legacy" : ""; });
+  const [teamSelectionTouched, setTeamSelectionTouched] = useState(false);
+  const supervisorTeams = useQuery({ queryKey: ["team-supervisor-teams", true], queryFn: ({ signal }) => team.supervisorTeams(true, signal), enabled: !trainer });
+  useEffect(() => {
+    if (!teamSelectionTouched && groupsReady) {
+      const owner = groups.find(g => g.id === target?.group?.id)?.supervisor;
+      setSupervisorId(owner ? String(owner.id) : target?.group ? "legacy" : "");
+    }
+  }, [groups, groupsReady, target?.group?.id, teamSelectionTouched]);
+  const selectedTeam = supervisorTeams.data?.find(item => String(item.supervisor.id) === supervisorId);
+  const destinationGroups = selectedTeam ? activeTeamGroups(selectedTeam) : [];
+  const keepCurrentTeam = !teamSelectionTouched && target?.role === "operator" && role === "operator";
+  const selectedGroupId = keepCurrentTeam ? target.group?.id ?? null : selectedTeam ? destinationGroupId(selectedTeam, groupId) : supervisorId === "legacy" ? target?.group?.id ?? null : null;
+  const operatorTeamReady = trainer || role !== "operator" || (groupsReady && supervisorTeams.isSuccess && (keepCurrentTeam || !supervisorId || supervisorId === "legacy" || Boolean(selectedTeam && selectedTeam.supervisor.is_active && (selectedGroupId != null || destinationGroups.length === 0))));
+  function chooseSupervisor(value: string) {
+    setTeamSelectionTouched(true);
+    setSupervisorId(value);
+    const chosen = supervisorTeams.data?.find(item => String(item.supervisor.id) === value);
+    const destination = chosen ? destinationGroupId(chosen, "") : null;
+    setGroupId(destination == null ? "" : String(destination));
+  }
   const [hiredOn, setHiredOn] = useState(target?.hired_on ?? "");
   const [gender, setGender] = useState<Gender | "">(target?.gender ?? "");
   const [password, setPassword] = useState("");
@@ -134,17 +166,20 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
   const normalizedTelegram = normalizeTelegramUsername(telegramUsername);
   const save = useMutation({
     mutationFn: (): Promise<TeamUserSaved> => {
-      const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, phone: phone.trim() || null, role: trainer ? "operator" : role, group_id: !trainer && groupId ? Number(groupId) : null, hired_on: hiredOn || null, ...(gender ? { gender } : {}) };
+      const groupChanged = !target || role !== target.role || teamSelectionTouched || (role !== "operator" && role !== "supervisor" && groupId !== String(target.group?.id ?? ""));
+      const data: TeamUserInput = { full_name: fullName.trim(), email: email.trim() || null, phone: phone.trim() || null, role: trainer ? "operator" : role, ...(groupChanged ? { group_id: trainer || role === "supervisor" ? null : role === "operator" ? selectedGroupId : groupId ? Number(groupId) : null } : {}), ...(!trainer && role === "operator" && !keepCurrentTeam && supervisorId !== "legacy" ? { supervisor_id: Number(supervisorId) || null } : {}), hired_on: hiredOn || null, ...(gender ? { gender } : {}) };
       return target ? team.updateUser(target.id, { ...data, ...telegramUpdate(telegramDraft, ownAccount) }) : team.createUser({ ...data, login: login.trim(), password, telegram_username: normalizedTelegram || null });
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["team-users"] });
       queryClient.invalidateQueries({ queryKey: ["team-groups"] });
       queryClient.invalidateQueries({ queryKey: ["team-supervisors"] });
+      queryClient.invalidateQueries({ queryKey: ["team-supervisor-teams"] });
       queryClient.invalidateQueries({ queryKey: ["team-user", target?.id] });
       queryClient.invalidateQueries({ queryKey: ["team-user-telegram", target?.id] });
       queryClient.invalidateQueries({ queryKey: ["admin-operators"] });
       queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
+      for (const key of ["team-assignment-users", "lookup-groups", "analytics", "city", "city-world", "city-estate", "city-estates"]) void queryClient.invalidateQueries({ queryKey: [key] });
       toast.success(target ? "Данные сотрудника сохранены" : "Пользователь создан");
       setPassword("");
       setShowPassword(false);
@@ -155,7 +190,7 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
   });
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (save.isPending || savedInvitation || !groupsReady || !telegramReady) return;
+    if (save.isPending || savedInvitation || !operatorTeamReady || !telegramReady) return;
     if (!ownAccount && telegramUsername.trim() && !/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(normalizedTelegram)) {
       setTelegramError("Укажите Telegram username: 5–32 символа, латинские буквы, цифры и _. Первый символ — буква.");
       return;
@@ -182,10 +217,10 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
       {copyError && <p className="field__error" role="alert">Не удалось скопировать ссылку. Выделите её и скопируйте вручную.</p>}
     </div>
   </Sheet>;
-  return <Sheet title={target ? "Изменить сотрудника" : "Новый пользователь"} subtitle={target ? `${target.login} · ID ${target.id}` : "Создайте учётную запись и назначьте роль"} onClose={() => { if (!save.isPending) onClose(); }} footer={<><Button disabled={save.isPending} onClick={onClose}>Отмена</Button><Button form="team-user-form" type="submit" variant="primary" disabled={save.isPending || !groupsReady || !telegramReady}>{save.isPending ? "Сохраняем…" : target ? "Сохранить" : "Создать пользователя"}</Button></>}>
+  return <Sheet title={target ? "Изменить сотрудника" : "Новый пользователь"} subtitle={target ? `${target.login} · ID ${target.id}` : "Создайте учётную запись и назначьте роль"} onClose={() => { if (!save.isPending) onClose(); }} footer={<><Button disabled={save.isPending} onClick={onClose}>Отмена</Button><Button form="team-user-form" type="submit" variant="primary" disabled={save.isPending || !operatorTeamReady || !telegramReady}>{save.isPending ? "Сохраняем…" : target ? "Сохранить" : "Создать пользователя"}</Button></>}>
     <form id="team-user-form" className="stack" onSubmit={submit}>
       {save.isError && <p role="alert" className="team-form-error">{teamError(save.error)}</p>}
-      {!groupsReady && <p role="status" className="muted">Дождитесь загрузки групп. При ошибке закройте форму и повторите загрузку.</p>}
+      {!trainer && role === "operator" && (!groupsReady || supervisorTeams.isPending) && <p role="status" className="muted">Загружаем команды супервайзеров…</p>}{!trainer && role === "operator" && supervisorTeams.isError && <ErrorState error={new Error(teamError(supervisorTeams.error, "Не удалось загрузить команды"))} onRetry={() => supervisorTeams.refetch()} />}
       <label className="field"><span className="field__label">ФИО</span><input className="input" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required minLength={3} maxLength={255} /></label>
       <fieldset className="field team-gender"><legend className="field__label">Пол{target ? "" : " · для фигуры в учебном городе"}</legend><div className="segmented" role="radiogroup">{([["female", "Женский"], ["male", "Мужской"]] as const).map(([value, label]) => <label key={value} className={gender === value ? "segmented__item is-active" : "segmented__item"}><input type="radio" name="team-gender" value={value} checked={gender === value} required={!target} onChange={() => setGender(value)} />{label}</label>)}</div></fieldset>
       {!target && <label className="field"><span className="field__label">Логин</span><input className="input" autoComplete="off" value={login} onChange={(e) => setLogin(e.target.value)} required minLength={3} maxLength={150} /></label>}
@@ -202,8 +237,13 @@ export function UserEditor({ target, groups, groupsReady, onClose }: { target?: 
         </>}
       </div>}
       {target && !telegramDraft && (telegramStatus.isError ? <ErrorState error={new Error(teamError(telegramStatus.error, "Не удалось загрузить Telegram сотрудника"))} onRetry={() => { void telegramStatus.refetch(); }} /> : <p role="status" className="muted">Загружаем Telegram сотрудника…</p>)}
-      <div className="team-form-grid"><label className="field"><span className="field__label">Роль</span><select className="input" value={role} disabled={target?.id === actor?.id} onChange={(e) => setRole(e.target.value as Role)}>{visibleRoles(actor?.role).map((r) => <option value={r} key={r}>{ROLE_LABELS[r]}</option>)}</select></label>
-        {!trainer && <label className="field"><span className="field__label">Группа</span><select className="input" value={groupId} onChange={(e) => setGroupId(e.target.value)}><option value="">Без группы</option>{groups.filter((g) => g.is_active || g.id === target?.group?.id).map((g) => <option key={g.id} value={g.id} disabled={!g.is_active}>{g.name}{g.is_active ? "" : " · архив"}</option>)}</select></label>}</div>
+      <div className="team-form-grid"><label className="field"><span className="field__label">Роль</span><select className="input" value={role} disabled={target?.id === actor?.id} onChange={(e) => { setRole(e.target.value as Role); if (e.target.value === "operator" && target?.role !== "operator") chooseSupervisor(""); }}>{visibleRoles(actor?.role).map((r) => <option value={r} key={r}>{ROLE_LABELS[r]}</option>)}</select></label>
+        {!trainer && role === "operator" && <label className="field"><span className="field__label">Супервайзер · необязательно</span><select className="input" value={supervisorId} disabled={!supervisorTeams.isSuccess} onChange={e => chooseSupervisor(e.target.value)}><option value="">Пока без команды</option>{supervisorId === "legacy" && target?.group && <option value="legacy">{target.group.name} · супервайзер не назначен</option>}{(supervisorTeams.data ?? []).filter(item => item.supervisor.is_active || String(item.supervisor.id) === supervisorId).map(item => <option key={item.supervisor.id} value={item.supervisor.id} disabled={!item.supervisor.is_active}>{item.supervisor.full_name}{item.supervisor.is_active ? "" : " · архив"}</option>)}</select><span className="field__note">Операторов назначают руководитель и администратор. После назначения оператор получает доступ к команде и её району.</span></label>}
+        {!trainer && role !== "operator" && role !== "supervisor" && <label className="field"><span className="field__label">Группа · необязательно</span><select className="input" value={groupId} onChange={e => setGroupId(e.target.value)}><option value="">Без группы</option>{groups.filter(g => g.is_active || g.id === target?.group?.id).map(g => <option key={g.id} value={g.id} disabled={!g.is_active}>{g.name}{g.is_active ? "" : " · архив"}</option>)}</select></label>}
+      </div>
+      {!trainer && role === "supervisor" && <p className="field__note">У супервайзера будет своя команда. {target?.role === "supervisor" ? "Операторов можно назначить в разделе «Супервайзеры»." : "Она создастся автоматически при сохранении. Затем назначьте операторов в разделе «Супервайзеры»."}</p>}
+      {!trainer && role === "operator" && selectedTeam && destinationGroups.length > 1 && <label className="field"><span className="field__label">Группа назначения</span><select required className="input" value={groupId} onChange={e => { setTeamSelectionTouched(true); setGroupId(e.target.value); }}><option value="">Выберите группу</option>{keepCurrentTeam && target?.group && !destinationGroups.some(g => g.id === target.group!.id) && <option value={target.group.id}>{target.group.name} · текущая</option>}{destinationGroups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select><span className="field__note">У супервайзера несколько прежних групп с разными районами. Выберите, где будет работать оператор.</span></label>}
+      {!trainer && role === "operator" && target?.group && selectedGroupId !== target.group.id && <label className="team-selection-toggle"><input type="checkbox" required key={`${supervisorId}:${selectedGroupId}`} /><span>Подтверждаю {selectedGroupId == null && !supervisorId ? "снятие оператора из команды" : "перевод оператора в выбранную команду"}. Доступ к командному району будет изменён.</span></label>}
       <label className="field"><span className="field__label">Дата приёма · необязательно</span><input className="input" type="date" value={hiredOn} onChange={(e) => setHiredOn(e.target.value)} /></label>
       {!target && <label className="field"><span className="field__label">Первый пароль</span><div className="team-password"><input className="input" autoComplete="new-password" type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} maxLength={72} /><Button size="s" aria-pressed={showPassword} onClick={() => setShowPassword(!showPassword)}>{showPassword ? "Скрыть" : "Показать"}</Button></div><span className="muted micro">Не менее 8 символов. Передайте пароль сотруднику лично.</span></label>}
     </form>
@@ -220,8 +260,10 @@ export function UserArchive({ target, onClose }: { target: UserOut; onClose: () 
       queryClient.invalidateQueries({ queryKey: ["team-user", target.id] });
       queryClient.invalidateQueries({ queryKey: ["team-groups"] });
       queryClient.invalidateQueries({ queryKey: ["team-supervisors"] });
+      queryClient.invalidateQueries({ queryKey: ["team-supervisor-teams"] });
       queryClient.invalidateQueries({ queryKey: ["admin-summary"] });
       queryClient.invalidateQueries({ queryKey: ["admin-operators"] });
+      for (const key of ["team-assignment-users", "lookup-groups", "analytics", "city", "city-world", "city-estate", "city-estates"]) void queryClient.invalidateQueries({ queryKey: [key] });
       toast.success(target.is_active ? "Сотрудник перенесён в архив" : "Доступ сотрудника восстановлен"); onClose();
     },
   });

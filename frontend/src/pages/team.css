@@ -22,6 +22,23 @@
 .team-group-card__count { font-size: 30px; font-weight: 700; letter-spacing: -.04em; }
 .team-group-card .team-actions { margin-top: auto; }
 .team-group-card__supervisor { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+.team-owned-groups { display: grid; gap: 10px; }
+.team-owned-group { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); overflow-wrap: anywhere; flex-wrap: wrap; }
+.team-owned-group > :first-child { min-width: 0; }
+.team-owned-group:last-child { border-bottom: 0; }
+.team-selection-toggle { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.5; cursor: pointer; }
+.team-selection-toggle input { margin-top: 4px; flex-shrink: 0; accent-color: var(--accent-primary); }
+.team-assignment-list { display: grid; gap: 8px; }
+.team-assignment-option { display: flex; align-items: center; gap: 12px; min-height: 62px; padding: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-m); cursor: pointer; overflow-wrap: anywhere; }
+.team-assignment-option > span { min-width: 0; }
+.team-assignment-option input { flex-shrink: 0; accent-color: var(--accent-primary); }
+.team-assignment-option:has(input:checked) { border-color: var(--accent-primary); background: var(--surface-hover); }
+.team-assignment-option:has(input:focus-visible) { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.team-assignment-option.is-disabled { opacity: .65; cursor: default; }
+.team-assignment-summary { display: grid; gap: 4px; padding: 12px; border-bottom: 1px solid var(--border-subtle); overflow-wrap: anywhere; }
+.team-selected-operators { display: flex; gap: 8px; flex-wrap: wrap; }
+.team-selected-operator { display: inline-flex; align-items: center; gap: 10px; min-height: 36px; padding: 7px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-s); background: var(--surface-hover); color: var(--text-primary); font: inherit; font-size: 13px; cursor: pointer; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+.team-selected-operator span { font-size: 18px; flex-shrink: 0; }
 .team-detail-hero { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
 .team-detail-hero__body { flex: 1; min-width: 200px; overflow-wrap: anywhere; }
 .team-detail-hero .team-meta { margin-top: 12px; }

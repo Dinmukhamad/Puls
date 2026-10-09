@@ -12,12 +12,27 @@ export interface TeamGroup {
   operator_count: number;
 }
 
+export interface SupervisorTeam {
+  supervisor: { id: number; full_name: string; login: string; is_active: boolean };
+  group_id: number | null;
+  groups: TeamGroup[];
+  operator_count: number;
+}
+
+export interface TeamAssignment {
+  supervisor_id: number;
+  group_id: number;
+  assigned_count: number;
+  operator_ids: number[];
+}
+
 export interface TeamUserInput {
   phone: string | null;
   full_name: string;
   email: string | null;
   role: Role;
-  group_id: number | null;
+  group_id?: number | null;
+  supervisor_id?: number | null;
   hired_on: string | null;
   gender?: Gender | null;
   telegram_username?: string | null;
@@ -56,6 +71,12 @@ export const team = {
   purchases: (id: number, page: number) =>
     request<Page<ShopRequestOut>>(`/api/v1/admin/users/${id}/purchases${buildQuery({ page, size: 20 })}`),
   groups: () => request<TeamGroup[]>("/api/v1/admin/groups"),
+  supervisorTeams: (includeInactive = false, signal?: AbortSignal) =>
+    request<SupervisorTeam[]>(`/api/v1/admin/supervisor-teams${buildQuery({ include_inactive: includeInactive })}`, { signal }),
+  assignOperators: (supervisorId: number, operatorIds: number[], groupId?: number | null) =>
+    request<TeamAssignment>(`/api/v1/admin/supervisor-teams/${supervisorId}/operators`, { method: "POST", json: { operator_ids: operatorIds, ...(groupId != null ? { group_id: groupId } : {}) } }),
+  removeOperators: (supervisorId: number, operatorIds: number[]) =>
+    request<{ removed_count: number; operator_ids: number[] }>(`/api/v1/admin/supervisor-teams/${supervisorId}/operators/remove`, { method: "POST", json: { operator_ids: operatorIds } }),
   createGroup: (json: TeamGroupInput & { code: string }) =>
     request<TeamGroup>("/api/v1/admin/groups", { method: "POST", json }),
   updateGroup: (id: number, json: Partial<TeamGroupInput> & { is_active?: boolean }) =>

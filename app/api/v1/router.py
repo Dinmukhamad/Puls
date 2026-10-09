@@ -26,6 +26,7 @@ from app.api.v1 import (
     rating,
     scenarios,
     shop,
+    supervisor_teams,
     system,
     telegram,
     telemetry,
@@ -51,6 +52,7 @@ api_router.include_router(admin_weeks.router)
 api_router.include_router(admin_days.router)
 api_router.include_router(admin_config.router)
 api_router.include_router(admin_users.router)
+api_router.include_router(supervisor_teams.router)
 api_router.include_router(system.router)
 api_router.include_router(progress.router)
 api_router.include_router(analytics.router)
