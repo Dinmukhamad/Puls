@@ -14,6 +14,7 @@ const actions: Record<string, string> = {
   "group.create": "Создана группа", "group.update": "Изменена группа",
   "supervisor_team.assign": "Операторы назначены супервайзеру",
   "supervisor_team.remove": "Операторы сняты из команды",
+  "supervisor_team.repair": "Исправлены назначения прежних команд",
   "week.create": "Открыта неделя", "week.metrics_upload": "Загружены показатели",
   "week.recalculate": "Подготовлен расчёт", "week.close": "Опубликованы итоги",
   "week.close_previous": "Закрыта прошлая неделя", "session.revoke": "Завершён сеанс",

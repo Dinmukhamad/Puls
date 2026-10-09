@@ -16,7 +16,7 @@ from app.core.errors import register_exception_handlers
 from app.db.init_db import create_schema, seed_reference_data
 from app.db.session import SessionLocal, engine
 from app.scheduler import start_scheduler, stop_scheduler
-from app.services import telegram
+from app.services import supervisor_team_repair, telegram
 from app.services.rules import audit_ip
 
 logging.basicConfig(
@@ -43,6 +43,23 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             created = await seed_reference_data(session)
         if any(created.values()):
             logger.info("Справочники дополнены: %s", created)
+
+    if settings.PULS_SUPERVISOR_TEAM_REPAIR_PLAN:
+        try:
+            async with SessionLocal() as session:
+                repaired = await supervisor_team_repair.apply_plan(
+                    session, settings.PULS_SUPERVISOR_TEAM_REPAIR_PLAN
+                )
+            logger.info(
+                "Team ownership maintenance: %s; groups=%d, operators=%d",
+                repaired.status,
+                repaired.updated_groups,
+                repaired.reconciled_operators,
+            )
+        except Exception as exc:
+            # Do not print the plan, SQL parameters, staff identities, or validation inputs.
+            # A failed maintenance transaction is rolled back; normal authorization stays intact.
+            logger.error("Team ownership maintenance aborted (%s)", type(exc).__name__)
 
     from app.services.progress import reconcile_existing_progress
 

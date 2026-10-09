@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     BOOTSTRAP_ADMIN_LOGIN: str = "admin"
     BOOTSTRAP_ADMIN_PASSWORD: str = "admin12345"
     BOOTSTRAP_ADMIN_NAME: str = "Системный администратор"
+    #: Одноразовый согласованный план восстановления владельцев прежних команд.
+    #: Пустое значение отключает обслуживание; после выполнения защищён журналом аудита.
+    PULS_SUPERVISOR_TEAM_REPAIR_PLAN: str = ""
 
     # --- пагинация ---
     DEFAULT_PAGE_SIZE: int = 50
