@@ -4,13 +4,12 @@ import { useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { useAccess } from "../auth/AccessContext";
 import { ApiError, downloadFile } from "../api/client";
-import { admin, rating } from "../api/endpoints";
+import { admin } from "../api/endpoints";
 import type { OperatorRowOut } from "../api/types";
 import { ManualCoinsSheet } from "../components/ManualCoinsSheet";
 import { useToast } from "../components/Toast";
 import { DownloadIcon, SearchIcon } from "../components/icons";
 import { GlassSurface } from "../components/GlassSurface";
-import { WeekPicker } from "../components/WeekPicker";
 import {
   Avatar,
   Button,
@@ -29,25 +28,23 @@ export function AdminOperatorsPage() {
   const toast = useToast();
   const { can } = useAccess(); const { atLeast } = useAuth();
   const canCredit = can("motivation") && atLeast("supervisor");
-  const [weekId, setWeekId] = useState<number | undefined>();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [target, setTarget] = useState<OperatorRowOut | null>(null);
   const size = 25;
 
-  const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks(104) });
   const summary = useQuery({
-    queryKey: ["admin-summary", weekId],
-    queryFn: () => admin.summary(weekId), enabled: can("overview"),
+    queryKey: ["admin-summary", undefined],
+    queryFn: () => admin.summary(), enabled: can("overview"),
   });
   const operators = useQuery({
-    queryKey: ["admin-operators", weekId, page, search],
-    queryFn: () => admin.operators({ week_id: weekId, page, size, search: search || undefined }),
+    queryKey: ["admin-operators", undefined, page, search],
+    queryFn: () => admin.operators({ page, size, search: search || undefined }),
   });
 
   async function exportCsv() {
     try {
-      await downloadFile(admin.exportPath(weekId), `operators_${weekId ?? "current"}.csv`);
+      await downloadFile(admin.exportPath(), "operators_current.csv");
       toast.success("Файл выгружен");
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Не удалось выгрузить файл");
@@ -69,13 +66,12 @@ export function AdminOperatorsPage() {
       </div>
 
       <GlassSurface variant="regular" className="filterbar">
-        <label className="search">
+        <label className="search" style={{ flex: "1 1 100%", minWidth: 0 }}>
           <span className="search__icon">
             <SearchIcon size={16} />
           </span>
           <input
-            className="input input--s"
-            style={{ flex: "1 1 220px", maxWidth: 320 }}
+            className="input"
             placeholder="Найти оператора"
             value={search}
             aria-label="Поиск по ФИО"
@@ -85,12 +81,7 @@ export function AdminOperatorsPage() {
             }}
           />
         </label>
-        <span className="filterbar__spacer" />
-        <WeekPicker weeks={weeks.data ?? []} value={weekId}
-          resolvedWeekId={weeks.data?.find((week) => week.label === summary.data?.week_label)?.id}
-          loading={weeks.isLoading} onChange={(value) => { setWeekId(value); setPage(1); }} />
       </GlassSurface>
-      {weeks.isError && <p className="muted micro" role="status">Не удалось загрузить календарь недель. <Button size="s" variant="plain" onClick={() => void weeks.refetch()}>Повторить</Button></p>}
 
       {/* Сводная статистика - п. 4.4.1 бизнес-ТЗ */}
       {summary.isLoading && <KPISkeleton />}
