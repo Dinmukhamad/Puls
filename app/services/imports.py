@@ -151,6 +151,35 @@ def _number(value: object) -> float:
     return result
 
 
+def _metric_code(
+    reference: str,
+    codes: set[str],
+    titles: dict[str, set[str]],
+    *,
+    wide_header: bool = False,
+) -> str:
+    """Keep stable codes valid while resolving a human title without guessing."""
+    name = reference.strip()
+    if name in codes:
+        return name
+    # Older wide imports normalized every header to lowercase. Keep that
+    # interpretation stable even if a newly created title matches the header.
+    if wide_header and name.lower() in codes:
+        return name.lower()
+    matches = titles.get(name.casefold(), set())
+    if len(matches) > 1:
+        raise DomainError(
+            f"Название «{name}» используют несколько действующих показателей. "
+            "Сделайте названия уникальными в настройках показателей.",
+            code="ambiguous_metric",
+        )
+    if matches:
+        return next(iter(matches))
+    raise DomainError(
+        f"Неизвестный или отключённый показатель: {name}", code="unknown_metric"
+    )
+
+
 async def preview_file(
     session: AsyncSession,
     actor: User,
@@ -168,10 +197,11 @@ async def preview_file(
     if not rows:
         result.errors.append(ImportIssue(code="empty_file", message="Файл пуст"))
         return result
-    headers = [_ALIASES.get(_text(value).lower(), _text(value).lower()) for value in rows[0]]
+    raw_headers = [_text(value) for value in rows[0]]
+    headers = [_ALIASES.get(value.lower(), value.lower()) for value in raw_headers]
     if not any(column in headers for column in ("user_id", "login")):
         result.errors.append(
-            ImportIssue(row=1, code="missing_identity", message="Нужен столбец user_id или login")
+            ImportIssue(row=1, code="missing_identity", message="Нужна колонка «Логин»")
         )
     if any(not column for column in headers) or len(headers) != len(set(headers)):
         result.errors.append(
@@ -186,25 +216,35 @@ async def preview_file(
     if long_format and not {"metric_code", "value"}.issubset(headers):
         result.errors.append(
             ImportIssue(
-                row=1, code="missing_columns", message="Нужны оба столбца metric_code и value"
+                row=1, code="missing_columns", message="Нужны колонки «Показатель» и «Значение»"
             )
         )
-    codes = set(
-        await session.scalars(
-            select(MetricDefinition.code).where(MetricDefinition.is_active.is_(True))
+    definitions = await session.execute(
+        select(MetricDefinition.code, MetricDefinition.title).where(
+            MetricDefinition.is_active.is_(True)
         )
     )
+    codes: set[str] = set()
+    titles: dict[str, set[str]] = {}
+    for code, title in definitions:
+        codes.add(code)
+        if title.strip():
+            titles.setdefault(title.strip().casefold(), set()).add(code)
     data_columns = [column for column in headers if column not in _IDENTITY_COLUMNS]
-    unknown = set(data_columns) - ({"metric_code", "value"} if long_format else codes)
-    for column in sorted(unknown):
-        result.errors.append(
-            ImportIssue(
-                row=1,
-                field=column,
-                code="unknown_metric",
-                message=f"Неизвестный столбец или отключённый показатель: {column}",
+    wide_codes: dict[str, str] = {}
+    for column, raw_header in zip(headers, raw_headers, strict=True):
+        if column in _IDENTITY_COLUMNS or (long_format and column in {"metric_code", "value"}):
+            continue
+        try:
+            if long_format:
+                raise DomainError(
+                    f"Неизвестный столбец: {raw_header}", code="unknown_metric"
+                )
+            wide_codes[column] = _metric_code(raw_header, codes, titles, wide_header=True)
+        except DomainError as exc:
+            result.errors.append(
+                ImportIssue(row=1, field=raw_header, code=exc.code, message=exc.message)
             )
-        )
     if not data_columns:
         result.errors.append(
             ImportIssue(row=1, code="missing_columns", message="Нет столбцов показателей")
@@ -257,7 +297,9 @@ async def preview_file(
                         row=row_number,
                         field="login",
                         code="identity_mismatch",
-                        message="user_id и login не соответствуют одному доступному оператору",
+                        message=(
+                            "Идентификатор и логин не соответствуют одному доступному оператору"
+                        ),
                     )
                 )
                 continue
@@ -301,16 +343,18 @@ async def preview_file(
         cells = (
             [(_text(record["metric_code"]), record["value"])]
             if long_format
-            else [(column, record[column]) for column in data_columns]
+            else [(wide_codes[column], record[column]) for column in data_columns]
         )
-        for code, raw_value in cells:
-            if code not in codes:
+        for reference, raw_value in cells:
+            try:
+                code = _metric_code(reference, codes, titles)
+            except DomainError as exc:
                 result.errors.append(
                     ImportIssue(
                         row=row_number,
                         field="metric_code",
-                        code="unknown_metric",
-                        message=f"Неизвестный или отключённый показатель: {code}",
+                        code=exc.code,
+                        message=exc.message,
                     )
                 )
                 continue

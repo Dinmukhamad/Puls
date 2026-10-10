@@ -8,6 +8,7 @@ import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, RowsSkeleton } from "../components/ui";
 import { coins, points } from "../utils/format";
+import { createInternalCode } from "../utils/internalCode";
 import "./configuration.css";
 
 type Option = { value: string; label: string };
@@ -112,13 +113,13 @@ function DefinitionSection({ kind }: { kind: DefinitionKind }) {
   const query = useQuery({ queryKey: ["configuration", kind], queryFn: () => configuration.definitions(kind) });
   const search = params.get("search") ?? "";
   const status = params.get("status") ?? "all";
-  const items = query.data?.filter((row) => `${row.title} ${row.code}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()) && (status === "all" || row.is_active === (status === "active")));
+  const items = query.data?.filter((row) => `${row.title} ${row.description ?? ""}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()) && (status === "all" || row.is_active === (status === "active")));
   return <div className="stack">
     <div className="configuration-section-head"><h2>{sectionTitles[kind]}</h2>{atLeast("head") && <Button variant="primary" onClick={() => setEditor("new")}>{createTitles[kind]}</Button>}</div>
-    <div className="configuration-filters"><label className="field configuration-search"><span className="field__label">Поиск</span><input className="input" type="search" value={search} placeholder="Название или код" onChange={(e) => setParams({ tab: kind, search: e.target.value, status }, { replace: true })} /></label><label className="field"><span className="field__label">Статус</span><select className="input" value={status} onChange={(e) => setParams({ tab: kind, search, status: e.target.value })}><option value="all">Все</option><option value="active">Активные</option><option value="archived">Неактивные</option></select></label></div>
+    <div className="configuration-filters"><label className="field configuration-search"><span className="field__label">Поиск</span><input className="input" type="search" value={search} placeholder="Название или описание" onChange={(e) => setParams({ tab: kind, search: e.target.value, status }, { replace: true })} /></label><label className="field"><span className="field__label">Статус</span><select className="input" value={status} onChange={(e) => setParams({ tab: kind, search, status: e.target.value })}><option value="all">Все</option><option value="active">Активные</option><option value="archived">Неактивные</option></select></label></div>
     {query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={new Error(configurationError(query.error))} onRetry={() => query.refetch()} />}
     {items?.length === 0 && <EmptyState title="Записи не найдены" hint="Измените фильтры или добавьте новую запись." />}
-    <div className="configuration-cards">{items?.map((row) => <Card key={row.id} title={row.title} subtitle={row.code} className="configuration-item" action={<Badge tone={row.is_active ? "success" : "neutral"}>{row.is_active ? "Активно" : "Неактивно"}</Badge>}>
+    <div className="configuration-cards">{items?.map((row) => <Card key={row.id} title={row.title} className="configuration-item" action={<Badge tone={row.is_active ? "success" : "neutral"}>{row.is_active ? "Активно" : "Неактивно"}</Badge>}>
       {row.description && <p className="configuration-description">{row.description}</p>}
       <p className="configuration-rule-summary">{definitionSummary(kind, row)}</p>{kind === "badges" && <p className="small secondary">{Number(row.coins_reward) > 0 ? `${coins(Number(row.coins_reward))} коинов за первое получение` : "Без дополнительного начисления коинов"}</p>}
       {atLeast("head") && <div className="configuration-actions"><Button onClick={() => setEditor(row)}>Изменить</Button></div>}
@@ -142,14 +143,14 @@ function definitionSummary(kind: DefinitionKind, row: Definition) {
 }
 
 function defaultDefinition(kind: DefinitionKind): DefinitionInput {
-  const common = { code: "", title: "", description: "", is_active: true, sort_order: 100 };
+  const common = { code: createInternalCode(kind), title: "", description: "", is_active: true, sort_order: 100 };
   if (kind === "metrics") return { ...common, unit: "", kind: "positive", direction: "higher_is_better", target_value: 1, max_points: 20, penalty_per_unit: 0, allow_overachievement: false };
   if (kind === "nominations") return { ...common, metric_code: "", direction: "higher_is_better", require_zero: false, min_value: null, coins_reward: 5 };
   return { ...common, icon: "", rule_type: "top_rank", rule_params: { max_rank: 3 }, coins_reward: 0, is_repeatable: false };
 }
 
 function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; target?: Definition; onClose: () => void }) {
-  const [values, setValues] = useState<DefinitionInput>(target ? { ...target } : defaultDefinition(kind));
+  const [values, setValues] = useState<DefinitionInput>(() => target ? { ...target } : defaultDefinition(kind));
   const metrics = useQuery({ queryKey: ["configuration", "metrics"], queryFn: () => configuration.definitions("metrics"), enabled: kind !== "metrics" });
   const client = useQueryClient(); const toast = useToast();
   const options = metrics.data?.map((m) => ({ value: m.code, label: `${m.title}${m.is_active ? "" : " · неактивен"}` })) ?? [];
@@ -185,7 +186,7 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
     if (["zero_metric_streak", "metric_threshold_streak", "metric_total"].includes(rule)) badgeFields.push({ key: "metric", label: "Показатель достижения", type: "select", required: true, options });
     if (rule === "top_rank") badgeFields.push({ key: "max_rank", label: "Место не ниже", type: "number", required: true, min: 1 });
     if (["zero_metric_streak", "metric_threshold_streak"].includes(rule)) badgeFields.push({ key: "weeks", label: "Недель подряд", type: "number", required: true, min: 1 });
-    if (["metric_threshold_streak", "metric_total", "total_earned", "nomination_count", "learning_count"].includes(rule)) badgeFields.push({ key: "gte", label: rule === "learning_count" ? "Разных заданий успешно пройти" : rule === "total_earned" ? "Заработать коинов" : rule === "nomination_count" ? "Получить номинаций" : "Значение не ниже", type: "number", required: true, min: .000001, step: ["nomination_count", "total_earned", "learning_count"].includes(rule) ? 1 : "any" });
+    if (["metric_threshold_streak", "metric_total", "total_earned", "nomination_count", "learning_count"].includes(rule)) badgeFields.push({ key: "gte", label: rule === "learning_count" ? "Разных заданий успешно пройти" : rule === "total_earned" ? "Заработать коинов" : rule === "nomination_count" ? "Получить номинаций" : "Значение не ниже", type: "number", required: true, min: ["nomination_count", "total_earned", "learning_count"].includes(rule) ? 1 : .000001, step: ["nomination_count", "total_earned", "learning_count"].includes(rule) ? 1 : "any" });
   }
   const save = useMutation({ mutationFn: () => {
     const data = { ...values }; delete data.id;
@@ -221,7 +222,6 @@ function DefinitionEditor({ kind, target, onClose }: { kind: DefinitionKind; tar
       {kind === "badges" && <p className="muted">При сохранении проверяются подтверждённые результаты активных операторов. Первое выполненное условие открывает достижение и начисляет бонус. Полученные награды повторно не оплачиваются.</p>}
       {save.isError && <p role="alert" className="configuration-error">{configurationError(save.error)}</p>}
       {metrics.isError && <ErrorState error={new Error(configurationError(metrics.error))} onRetry={() => metrics.refetch()} />}
-      <ConfigurationField spec={{ key: "code", label: "Постоянный код", required: true, maxLength: 64 }} value={values.code} disabled={!!target || save.isPending} onChange={(v) => change("code", v)} />
       {fields.map((spec) => <ConfigurationField key={spec.key} spec={spec} value={values[spec.key]} disabled={save.isPending} onChange={(v) => change(spec.key, v)} />)}
       {kind === "badges" && <fieldset className="configuration-condition"><legend>Условия достижения</legend><div className="configuration-form-grid">{badgeFields.map((spec) => <ConfigurationField key={`${rule}-${spec.key}`} spec={spec} value={ruleParams[spec.key] ?? badgeDefault(spec.key, rule)} disabled={save.isPending} onChange={(v) => setValues((current) => ({ ...current, rule_params: { ...ruleParams, [spec.key]: typeof v === "number" ? v : String(v ?? "") } }))} />)}</div></fieldset>}
     </form>

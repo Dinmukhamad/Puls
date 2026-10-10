@@ -182,7 +182,6 @@ export function AdminOperatorsPage() {
                           <Avatar name={row.full_name} id={row.user_id} size={32} />
                           <span className="cell-person__text">
                             <span className="cell-person__name">{row.full_name}</span>
-                            <span className="cell-person__meta">{row.login}</span>
                           </span>
                         </span>
                       </td>
@@ -218,7 +217,7 @@ export function AdminOperatorsPage() {
                         <span className="cell-person__text">
                           <span className="cell-person__name">{row.full_name}</span>
                           <span className="cell-person__meta">
-                            {row.group_name ?? row.login}
+                            {row.group_name ?? "Без команды"}
                           </span>
                         </span>
                       </span>

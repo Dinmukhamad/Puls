@@ -9,6 +9,7 @@ import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Badge, Button, Card, EmptyState, ErrorState, KPI, Pagination, RowsSkeleton } from "../components/ui";
 import { coins } from "../utils/format";
+import { createInternalCode } from "../utils/internalCode";
 import "./configuration.css";
 
 export function StoreAdminPage() {
@@ -21,7 +22,7 @@ export function StoreAdminPage() {
   const status = ["all", "active", "archived"].includes(params.get("status") ?? "") ? params.get("status")! : "active";
   const page = Math.max(1, Math.trunc(Number(params.get("page"))) || 1);
   const size = 12;
-  const items = query.data?.filter((item) => `${item.title} ${item.code} ${item.description ?? ""}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()) && (status === "all" || item.is_active === (status === "active"))) ?? [];
+  const items = query.data?.filter((item) => `${item.title} ${item.description ?? ""}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()) && (status === "all" || item.is_active === (status === "active"))) ?? [];
   const pages = Math.max(1, Math.ceil(items.length / size));
   const currentPage = Math.min(page, pages);
   const visible = items.slice((currentPage - 1) * size, currentPage * size);
@@ -34,10 +35,10 @@ export function StoreAdminPage() {
   return <div className="stack configuration-page">
     <div className="page-head"><div><h1 className="page-title">Каталог магазина</h1><p className="page-subtitle">Бонусы, стоимость и правила выдачи</p></div><div className="page-head__actions"><Link className="btn btn--secondary btn--m" to="/admin/requests">Заявки на выдачу</Link>{atLeast("head") && <Button variant="primary" onClick={() => setEditor("new")}>Добавить бонус</Button>}</div></div>
     {query.data && <div className="kpi-grid"><KPI label="Активных бонусов" value={query.data.filter((x) => x.is_active).length} /><KPI label="В архиве" value={query.data.filter((x) => !x.is_active).length} /><KPI label="С одобрением" value={query.data.filter((x) => x.is_active && x.requires_approval).length} /><KPI label="Без лимита выдач" value={query.data.filter((x) => x.is_active && x.stock_limit === null).length} /></div>}
-    <GlassSurface variant="regular" className="configuration-filters"><label className="field configuration-search"><span className="field__label">Поиск по каталогу</span><input type="search" className="input" placeholder="Название, описание или код" value={search} onChange={(e) => filter("search", e.target.value)} /></label><label className="field"><span className="field__label">Статус</span><select className="input" value={status} onChange={(e) => filter("status", e.target.value)}><option value="active">Активные</option><option value="archived">Архив</option><option value="all">Все бонусы</option></select></label></GlassSurface>
+    <GlassSurface variant="regular" className="configuration-filters"><label className="field configuration-search"><span className="field__label">Поиск по каталогу</span><input type="search" className="input" placeholder="Название или описание" value={search} onChange={(e) => filter("search", e.target.value)} /></label><label className="field"><span className="field__label">Статус</span><select className="input" value={status} onChange={(e) => filter("status", e.target.value)}><option value="active">Активные</option><option value="archived">Архив</option><option value="all">Все бонусы</option></select></label></GlassSurface>
     {query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={new Error(configurationError(query.error))} onRetry={() => query.refetch()} />}
     {query.isSuccess && visible.length === 0 && <EmptyState title="Бонусы не найдены" hint="Измените фильтры или добавьте новый бонус." />}
-    <div className="configuration-cards">{visible.map((item) => <Card key={item.id} title={item.title} subtitle={item.code} action={<Badge tone={item.is_active ? "success" : "neutral"}>{item.is_active ? "В каталоге" : "В архиве"}</Badge>} className="configuration-item">
+    <div className="configuration-cards">{visible.map((item) => <Card key={item.id} title={item.title} action={<Badge tone={item.is_active ? "success" : "neutral"}>{item.is_active ? "В каталоге" : "В архиве"}</Badge>} className="configuration-item">
       <div className="configuration-price">{coins(item.price)} <span>коинов</span></div>
       {item.description && <p className="configuration-description">{item.description}</p>}
       <dl className="configuration-properties"><dt>Всего выдач</dt><dd>{item.stock_limit ?? "Без лимита"}</dd><dt>На сотрудника в месяц</dt><dd>{item.per_user_monthly_limit ?? "Без лимита"}</dd><dt>Одобрение</dt><dd>{item.requires_approval ? "Руководителем" : "Автоматически"}</dd></dl>
@@ -50,7 +51,7 @@ export function StoreAdminPage() {
 }
 
 function StoreItemEditor({ item, onClose }: { item?: ShopItemOut; onClose: () => void }) {
-  const [code, setCode] = useState(item?.code ?? "");
+  const [code] = useState(() => item?.code ?? createInternalCode("bonus"));
   const [title, setTitle] = useState(item?.title ?? "");
   const [description, setDescription] = useState(item?.description ?? "");
   const [price, setPrice] = useState(item ? String(item.price) : "");
@@ -70,7 +71,6 @@ function StoreItemEditor({ item, onClose }: { item?: ShopItemOut; onClose: () =>
     <form id="store-item-form" onSubmit={submit} className="stack">
       {save.isError && <p className="configuration-error" role="alert">{configurationError(save.error)}</p>}
       <label className="field"><span className="field__label">Название</span><input className="input" required maxLength={255} value={title} onChange={(e) => setTitle(e.target.value)} /></label>
-      <label className="field"><span className="field__label">Код бонуса</span><input className="input" required maxLength={64} value={code} disabled={!!item} onChange={(e) => setCode(e.target.value)} /><span className="muted micro">Уникальный постоянный код, например coffee_break.</span></label>
       <label className="field"><span className="field__label">Описание и условия выдачи</span><textarea className="input" rows={3} maxLength={5000} value={description} onChange={(e) => setDescription(e.target.value)} /></label>
       <div className="configuration-form-grid"><label className="field"><span className="field__label">Цена в коинах</span><input className="input" type="number" required min={1} step={1} value={price} onChange={(e) => setPrice(e.target.value)} /></label><label className="field"><span className="field__label">Порядок в каталоге</span><input className="input" type="number" required step={1} value={sort} onChange={(e) => setSort(e.target.value)} /></label></div>
       <div className="configuration-form-grid"><label className="field"><span className="field__label">Общий лимит выдач</span><input className="input" type="number" min={0} step={1} placeholder="Без лимита" value={stock} onChange={(e) => setStock(e.target.value)} /><span className="muted micro">За всё время, включая уже выданные бонусы. Пусто — без лимита.</span></label><label className="field"><span className="field__label">На сотрудника в месяц</span><input className="input" type="number" min={1} step={1} placeholder="Без лимита" value={monthly} onChange={(e) => setMonthly(e.target.value)} /></label></div>

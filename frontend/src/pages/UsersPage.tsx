@@ -10,7 +10,7 @@ import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
 import { Avatar, Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSkeleton, Select } from "../components/ui";
-import { dateTime, ROLE_LABELS } from "../utils/format";
+import { dateOnly, dateTime, ROLE_LABELS } from "../utils/format";
 import { loadTelegramDraft, normalizeTelegramUsername, telegramUpdate, type TeamTelegramDraft } from "./teamTelegram";
 import { activeTeamGroups, destinationGroupId, userTeamLabel } from "./supervisorTeams";
 import "./team.css";
@@ -102,9 +102,9 @@ export function UsersPage() {
       {users.data && users.data.items.length === 0 && <EmptyState title="Сотрудники не найдены" hint="Попробуйте изменить фильтры или создайте первую учётную запись." action={page > 1 ? <Button onClick={() => filter("page", "1")}>На первую страницу</Button> : undefined} />}
       {users.data && users.data.items.length > 0 && <>
         <div className="table-wrap team-desktop-table"><table className="table users-table"><thead><tr><th>Сотрудник</th><th>Роль</th><th>{trainer ? "Создан" : "Супервайзер · команда"}</th><th>Статус</th><th className="users-table__actions-heading">Действия</th></tr></thead><tbody>
-          {users.data.items.map((u) => <tr key={u.id}><td><Link className="cell-person team-person-link" to={`/admin/users/${u.id}`}><Avatar name={u.full_name} id={u.id} size={36} /><span className="cell-person__text"><span className="cell-person__name">{u.full_name}</span><span className="cell-person__meta">{u.login} · ID {u.id}</span></span></Link></td><td>{ROLE_LABELS[u.role]}</td><td>{trainer ? u.created_at ? new Date(u.created_at).toLocaleDateString("ru") : "—" : teamLabel(u)}</td><td><UserStatus active={u.is_active} /></td><td>{actions(u)}</td></tr>)}
+          {users.data.items.map((u) => <tr key={u.id}><td><Link className="cell-person team-person-link" to={`/admin/users/${u.id}`}><Avatar name={u.full_name} id={u.id} size={36} /><span className="cell-person__text"><span className="cell-person__name">{u.full_name}</span>{u.hired_on && <span className="cell-person__meta">Дата приёма: {dateOnly(u.hired_on)}</span>}</span></Link></td><td>{ROLE_LABELS[u.role]}</td><td>{trainer ? u.created_at ? new Date(u.created_at).toLocaleDateString("ru") : "—" : teamLabel(u)}</td><td><UserStatus active={u.is_active} /></td><td>{actions(u)}</td></tr>)}
         </tbody></table></div>
-        <div className="team-mobile-list">{users.data.items.map((u) => <article className="team-person-card" key={u.id}><div className="team-person-card__head"><Avatar name={u.full_name} id={u.id} /><div><Link className="team-person-link" to={`/admin/users/${u.id}`}><strong>{u.full_name}</strong></Link><p className="muted micro">{u.login} · ID {u.id}</p></div></div><div className="team-meta"><span>{ROLE_LABELS[u.role]}</span>{!trainer && <span>{teamLabel(u)}</span>}<UserStatus active={u.is_active} /></div>{actions(u)}</article>)}</div>
+        <div className="team-mobile-list">{users.data.items.map((u) => <article className="team-person-card" key={u.id}><div className="team-person-card__head"><Avatar name={u.full_name} id={u.id} /><div><Link className="team-person-link" to={`/admin/users/${u.id}`}><strong>{u.full_name}</strong></Link>{u.hired_on && <p className="muted micro">Дата приёма: {dateOnly(u.hired_on)}</p>}</div></div><div className="team-meta"><span>{ROLE_LABELS[u.role]}</span>{!trainer && <span>{teamLabel(u)}</span>}<UserStatus active={u.is_active} /></div>{actions(u)}</article>)}</div>
         <Pagination page={page} size={size} total={users.data.total} onChange={(p) => filter("page", String(p))} />
       </>}
     </Card>
@@ -221,7 +221,7 @@ export function UserEditor({ target, groups, groupsReady, initialRole = "operato
       {copyError && <p className="field__error" role="alert">Не удалось скопировать ссылку. Выделите её и скопируйте вручную.</p>}
     </div>
   </Sheet>;
-  return <Sheet title={target ? "Изменить сотрудника" : "Новый пользователь"} subtitle={target ? `${target.login} · ID ${target.id}` : "Создайте учётную запись и назначьте роль"} onClose={() => { if (!save.isPending) onClose(); }} footer={<><Button disabled={save.isPending} onClick={onClose}>Отмена</Button><Button form="team-user-form" type="submit" variant="primary" disabled={save.isPending || !operatorTeamReady || !telegramReady}>{save.isPending ? "Сохраняем…" : target ? "Сохранить" : "Создать пользователя"}</Button></>}>
+  return <Sheet title={target ? "Изменить сотрудника" : "Новый пользователь"} subtitle={target ? target.full_name : "Создайте учётную запись и назначьте роль"} onClose={() => { if (!save.isPending) onClose(); }} footer={<><Button disabled={save.isPending} onClick={onClose}>Отмена</Button><Button form="team-user-form" type="submit" variant="primary" disabled={save.isPending || !operatorTeamReady || !telegramReady}>{save.isPending ? "Сохраняем…" : target ? "Сохранить" : "Создать пользователя"}</Button></>}>
     <form id="team-user-form" className="user-editor" onSubmit={submit}>
       {save.isError && <p role="alert" className="team-form-error">{teamError(save.error)}</p>}
       {!trainer && role === "operator" && (!groupsReady || supervisorTeams.isPending) && <p role="status" className="muted">Загружаем команды супервайзеров…</p>}{!trainer && role === "operator" && supervisorTeams.isError && <ErrorState error={new Error(teamError(supervisorTeams.error, "Не удалось загрузить команды"))} onRetry={() => supervisorTeams.refetch()} />}
@@ -249,7 +249,7 @@ export function UserEditor({ target, groups, groupsReady, initialRole = "operato
       </section>
       <section className="user-editor__section" aria-labelledby="user-editor-access">
       <h3 id="user-editor-access" className="user-editor__section-title">Доступ и команда</h3>
-      {!target && <label className="field"><span className="field__label">Логин</span><input className="input" autoComplete="off" value={login} onChange={(e) => setLogin(e.target.value)} required minLength={3} maxLength={150} /></label>}
+      <label className="field"><span className="field__label">Логин для входа</span><input className="input" autoComplete="off" value={target ? target.login : login} readOnly={Boolean(target)} onChange={target ? undefined : (e) => setLogin(e.target.value)} required minLength={3} maxLength={150} />{target && <span className="field__note">{ownAccount ? <>Свой логин меняйте <Link to="/profile">в профиле</Link>.</> : "Для смены логина откройте карточку сотрудника."}</span>}</label>
       <div className="team-form-grid"><label className="field"><span className="field__label">Роль</span><Select aria-label="Роль сотрудника" value={role} disabled={target?.id === actor?.id} onChange={(value) => { setRole(value as Role); if (value === "operator" && target?.role !== "operator") chooseSupervisor(""); }} options={visibleRoles(actor?.role).map(r => ({ value: r, label: ROLE_LABELS[r] }))} /></label>
         {!trainer && role === "operator" && <label className="field"><span className="field__label">Супервайзер · необязательно</span><Select aria-label="Супервайзер сотрудника" value={supervisorId} disabled={!supervisorTeams.isSuccess} onChange={chooseSupervisor} options={[
           { value: "", label: "Пока без команды" },

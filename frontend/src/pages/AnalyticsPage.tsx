@@ -129,7 +129,7 @@ export function AnalyticsPage() {
       <label className="field"><span className="field__label">Добавить оператора · до 5</span><Select aria-label="Добавить оператора в сравнение" value="" disabled={selectedOperators.length >= 5}
         options={[{ value: "", label: "Выберите сотрудника" }, ...(value?.operators ?? []).filter((row) => !selectedOperators.includes(row.user_id)).map((row) => ({ value: row.user_id, label: row.full_name }))]}
         onChange={(id) => { if (id) update({ operators: [...selectedOperators, Number(id)].join(",") }); }} /></label>
-      <div className="analytics-picks">{selectedOperators.map((id) => <Button key={id} size="s" onClick={() => update({ operators: selectedOperators.filter((item) => item !== id).join(",") })} aria-label={`Убрать ${value?.operators.find((row) => row.user_id === id)?.full_name ?? "оператора"} из сравнения`}>{value?.operators.find((row) => row.user_id === id)?.full_name ?? id} ×</Button>)}</div>
+      <div className="analytics-picks">{selectedOperators.map((id) => <Button key={id} size="s" onClick={() => update({ operators: selectedOperators.filter((item) => item !== id).join(",") })} aria-label={`Убрать ${value?.operators.find((row) => row.user_id === id)?.full_name ?? "оператора"} из сравнения`}>{value?.operators.find((row) => row.user_id === id)?.full_name ?? "Выбранный оператор"} ×</Button>)}</div>
     </div>}
   </>;
 

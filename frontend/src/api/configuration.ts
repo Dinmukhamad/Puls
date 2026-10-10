@@ -51,7 +51,14 @@ export function configurationError(error: unknown): string {
     if (error.status === 403) return "Для изменения настроек нужны права руководителя или администратора.";
     if (error.status === 404) return "Запись больше не доступна. Обновите список.";
     if (error.status === 422) return "Проверьте обязательные поля, числовые значения и выбранные условия.";
-    if ([400, 409].includes(error.status) && typeof error.body.detail === "string") return error.body.detail;
+    if ([400, 409].includes(error.status) && typeof error.body.detail === "string") {
+      const detail = error.body.detail;
+      if (detail === "Заполните название и код") return "Заполните название и выберите обязательные условия.";
+      if (detail === "Название или код слишком длинные") return "Название слишком длинное. Сократите его и попробуйте снова.";
+      if (detail === "Этот код уже используется. Выберите другой код.") return "Не удалось добавить запись. Закройте форму и попробуйте создать её снова.";
+      if (detail === "Коды level_ зарезервированы для достижений за уровни") return "Достижения за уровни настраиваются в разделе «Уровни».";
+      return detail;
+    }
   }
   return "Не удалось выполнить действие. Попробуйте ещё раз.";
 }

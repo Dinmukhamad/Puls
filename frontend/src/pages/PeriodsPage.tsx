@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { periods, type ImportIssue, type ImportPreview } from "../api/periods";
+import { configuration } from "../api/configuration";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
@@ -25,6 +26,9 @@ function PeriodWorkspace() {
   const selected = Number(params.get("week")) || undefined;
   const weeks = useQuery({ queryKey: ["periods"], queryFn: periods.list });
   const week = weeks.data?.find((item) => item.id === selected);
+  const metrics = useQuery({ queryKey: ["configuration", "metrics"], queryFn: () => configuration.definitions("metrics"), enabled: !!selected });
+  const metricNames = new Map(metrics.data?.map(metric => [metric.code, metric.title]));
+  const missingMetricsLabel = (codes: string[]) => codes.map(code => metricNames.get(code) ?? "Название показателя недоступно").join(", ");
   const preview = useQuery({ queryKey: ["period-preview", selected],
     queryFn: () => periods.preview(selected!), enabled: !!selected });
   const queryClient = useQueryClient();
@@ -108,8 +112,8 @@ function PeriodWorkspace() {
             <input ref={fileInput} type="file" accept=".csv,.xlsx" disabled={busy} onChange={(e) => inspectFile(e.target.files?.[0])} /></label>
         </div>
         <details className="workflow-note"><summary>Как подготовить файл</summary>
-          <p>Первая строка — названия колонок. Укажите логин сотрудника в колонке login или его числовой идентификатор в user_id.</p>
-          <p>Длинный формат: login, metric_code, value. Широкий формат: login и отдельная колонка для каждого кода показателя. Пустая ячейка означает отсутствие данных.</p>
+          <p>Первая строка — названия колонок. Укажите логин сотрудника в колонке «Логин». Его можно посмотреть в карточке сотрудника.</p>
+          <p>Можно использовать колонки «Логин», «Показатель», «Значение»: в показателе укажите его название из настроек. Или создайте отдельную колонку с названием каждого показателя. Пустая ячейка означает отсутствие данных.</p>
           <p>Перед сохранением система покажет ошибки. Проверка файла не изменяет показатели.</p>
         </details>
       </Card>}
@@ -126,11 +130,11 @@ function PeriodWorkspace() {
         {preview.isError && <ErrorState error={preview.error} onRetry={() => preview.refetch()} />}
         {preview.data && <>
           <div className="kpi-grid kpi-grid--2"><KPI label="Участников" value={coins(preview.data.participants)} /><KPI label={closed ? "Коины по итогам" : "Будет начислено"} value={coins(preview.data.coins_total)} tone="coin" /></div>
-          {!!preview.data.missing_metrics.length && <p className="workflow-error">Не загружены показатели: {preview.data.missing_metrics.join(", ")}. Проверьте полноту исходных данных.</p>}
+          {!!preview.data.missing_metrics.length && <p className="workflow-error">Не загружены показатели: {missingMetricsLabel(preview.data.missing_metrics)}. Проверьте полноту исходных данных.</p>}
           {!preview.data.rows.length && <EmptyState title="Расчёт ещё не подготовлен" hint="Сохраните показатели и нажмите «Рассчитать»" />}
           <div className="workflow-results">{preview.data.rows.map((row) => <article key={row.user_id} className="workflow-result">
             <div><strong>{row.full_name}</strong><p className="small secondary">Место: {row.rank ?? "—"}</p>
-              {!!row.missing_metrics?.length && <p className="small">Нет данных: {row.missing_metrics.join(", ")}</p>}</div>
+              {!!row.missing_metrics?.length && <p className="small">Нет данных: {missingMetricsLabel(row.missing_metrics)}</p>}</div>
             <div className="workflow-stats"><span>{points(row.final_points)} баллов</span><strong>{coins(row.coins_total)} коинов</strong></div>
           </article>)}</div>
         </>}

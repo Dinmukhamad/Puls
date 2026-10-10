@@ -34,7 +34,7 @@ export function GroupsPage() {
     <div className="team-group-grid">{filtered?.map((item) => <Card key={item.supervisor.id} className="team-group-card">
       <header className="team-group-card__head">
         <Avatar name={item.supervisor.full_name} id={item.supervisor.id} size={44} />
-        <div className="team-group-card__identity"><h2 className="card__title">{item.supervisor.full_name}</h2><p className="card__subtitle">{item.supervisor.login} · Супервайзер</p></div>
+        <div className="team-group-card__identity"><h2 className="card__title">{item.supervisor.full_name}</h2><p className="card__subtitle">Супервайзер</p></div>
         <Badge dot tone={item.supervisor.is_active ? "success" : "neutral"}>{item.supervisor.is_active ? "Активен" : "Архив"}</Badge>
       </header>
       <div className="team-group-card__summary"><strong className="team-group-card__count">{item.operator_count}</strong><span className="secondary">операторов в команде</span></div>
@@ -99,7 +99,7 @@ export function OperatorAssignment({ target, remove, groups, onClose }: { target
         {!enabled && <p className="muted">Начните вводить имя — совпадения появятся ниже. Можно выбрать несколько операторов.</p>}
         {enabled && people.isLoading && <Skeleton height={120} />}{people.isError && <ErrorState error={new Error(teamError(people.error, "Не удалось найти операторов"))} onRetry={() => people.refetch()} />}
         {enabled && people.data?.items.length === 0 && <EmptyState title="Операторы не найдены" hint="Измените поисковый запрос или фильтр." />}
-        {enabled && people.data && people.data.items.length > 0 && <><div className="team-assignment-list">{people.data.items.map(user => { const alreadyAssigned = !remove && destination != null && user.group?.id === destination; return <label className={`team-assignment-option${alreadyAssigned ? " is-disabled" : ""}`} key={user.id}><input type="checkbox" checked={selected.has(user.id)} disabled={alreadyAssigned || (!selected.has(user.id) && selection.length >= selectionLimit)} onChange={() => toggle(user)} /><Avatar name={user.full_name} id={user.id} size={36} /><span><strong>{user.full_name}</strong><span className="muted small block">{user.login} · {userTeamLabel(user, groups)}</span>{alreadyAssigned && <span className="field__note">Уже в выбранной команде</span>}</span></label>; })}</div><Pagination page={page} size={20} total={people.data.total} onChange={setPage} /></>}
+        {enabled && people.data && people.data.items.length > 0 && <><div className="team-assignment-list">{people.data.items.map(user => { const alreadyAssigned = !remove && destination != null && user.group?.id === destination; return <label className={`team-assignment-option${alreadyAssigned ? " is-disabled" : ""}`} key={user.id}><input type="checkbox" checked={selected.has(user.id)} disabled={alreadyAssigned || (!selected.has(user.id) && selection.length >= selectionLimit)} onChange={() => toggle(user)} /><Avatar name={user.full_name} id={user.id} size={36} /><span><strong>{user.full_name}</strong><span className="muted small block">{userTeamLabel(user, groups)}</span>{alreadyAssigned && <span className="field__note">Уже в выбранной команде</span>}</span></label>; })}</div><Pagination page={page} size={20} total={people.data.total} onChange={setPage} /></>}
       </>}
     </form>
   </Sheet>;

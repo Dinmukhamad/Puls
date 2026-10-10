@@ -137,7 +137,7 @@ function AccessImpact({ decision, total, dirty }: { decision: AccessPreviewSecti
 }
 
 function SubjectOption({ item, checked, disabled, onChange }: { item: AccessSubject; checked: boolean; disabled: boolean; onChange: () => void }) {
-  return <label className={`access-check${checked ? " is-selected" : ""}`}><input type="checkbox" checked={checked} disabled={disabled} onChange={onChange} /><span><strong>{item.name}</strong>{item.id !== item.role && <span className="small secondary block">{item.role ? `${ROLE_LABELS[item.role]} · ` : ""}ID {item.id}{!item.is_active ? " · неактивен" : ""}</span>}</span></label>;
+  return <label className={`access-check${checked ? " is-selected" : ""}`}><input type="checkbox" checked={checked} disabled={disabled} onChange={onChange} /><span><strong>{item.name}</strong>{item.id !== item.role && (item.role || !item.is_active) && <span className="small secondary block">{[item.role ? ROLE_LABELS[item.role] : "", !item.is_active ? "Неактивен" : ""].filter(Boolean).join(" · ")}</span>}</span></label>;
 }
 
 function SubjectPicker({ kind, selected, onChange, disabled }: { kind: "user" | "group"; selected: AccessSubject[]; onChange: (value: AccessSubject[]) => void; disabled: boolean }) {
