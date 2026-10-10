@@ -1481,6 +1481,16 @@ select.input {
   font-size: var(--text-caption);
   color: var(--text-secondary);
   flex-wrap: wrap;
+  padding: 16px 20px;
+  border-top: 1px solid var(--separator);
+}
+
+.pagination__controls { display: flex; align-items: center; gap: 12px; }
+.pagination__controls .btn { min-height: 36px; }
+.pagination__page { min-width: 42px; text-align: center; }
+@media (max-width: 479px) {
+  .pagination { justify-content: center; padding: 14px 12px; gap: 10px; }
+  .pagination__info { width: 100%; text-align: center; margin-right: 0; }
 }
 
 .pagination__info {

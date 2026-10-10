@@ -10,8 +10,9 @@ import { lookups } from "../api/access";
 import { Chart } from "../components/Chart";
 import { GlassSurface } from "../components/GlassSurface";
 import { Sheet } from "../components/Sheet";
-import { Button, Card, EmptyState, ErrorState, KPISkeleton, Pagination, SegmentedControl } from "../components/ui";
-import { signed, WEEK_STATUS_LABELS } from "../utils/format";
+import { WeekPicker } from "../components/WeekPicker";
+import { Button, Card, EmptyState, ErrorState, KPISkeleton, Pagination, SegmentedControl, Select } from "../components/ui";
+import { signed } from "../utils/format";
 import { TeamPulse, TeamDistribution, MetricCards, DeviationChart, PriorityList, DisciplineCard, OperatorMatrix, OperatorDetails, GoalBar } from "./AnalyticsDashboard";
 import { assess, description, gapText, metricValue, teamInsights, matchesFilter, periodCaption, STATE_LABEL, type OperatorInsight } from "./analyticsInsights";
 import "./analytics.css";
@@ -51,7 +52,7 @@ export function useAnalyticsReport(overview = false) {
         && before.group_id === filters.group_id ? previous : undefined;
     },
   });
-  const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks(100) });
+  const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks(104) });
   const groups = useQuery({ queryKey: ["lookup-groups"], queryFn: lookups.groups });
   function update(values: Record<string, string | undefined>) {
     const next = new URLSearchParams(params);
@@ -81,17 +82,17 @@ export function ReportFilters({ report, metric = true }: { report: ReturnType<ty
   }
   const fields = <>
     <div className="field analytics-grain"><span className="field__label">Показывать по</span><SegmentedControl label="Шаг периода" options={GRAINS} value={grain} onChange={(value) => report.update({ grain: value === "week" ? undefined : value, week_id: undefined, from: undefined, to: undefined, page: undefined })} /></div>
-    {grain === "week" && <label className="field"><span className="field__label">Период</span><select className="input" value={report.filters.week_id ?? ""} onChange={(event) => report.update({ week_id: event.target.value, from: undefined, to: undefined, page: undefined })}>
-      <option value="">Последняя неделя</option>{(report.weeks.data ?? []).map((week) => <option key={week.id} value={week.id}>{week.label} · {WEEK_STATUS_LABELS[week.status]}</option>)}
-    </select></label>}
+    {grain === "week" && <div className="field"><WeekPicker label="Период" weeks={report.weeks.data ?? []} value={report.filters.week_id}
+      resolvedWeekId={report.data.data?.week?.id} latestLabel="Последняя неделя" latestPreference="latest" loading={report.weeks.isLoading}
+      onChange={(value) => report.update({ week_id: value === undefined ? undefined : String(value), from: undefined, to: undefined, page: undefined })} /></div>}
     {grain === "day" && <div className="analytics-range"><label className="field"><span className="field__label">С</span><input className="input" type="date" value={from} max={to || undefined} onChange={(event) => setDays(event.target.value, to)} /></label><label className="field"><span className="field__label">По · до {MAX_DAYS} дней</span><input className="input" type="date" value={to} min={from || undefined} onChange={(event) => setDays(from, event.target.value)} /></label></div>}
     {grain === "month" && <div className="analytics-range"><label className="field"><span className="field__label">С месяца</span><input className="input" type="month" value={from} max={to || undefined} onChange={(event) => report.update({ from: event.target.value || undefined, page: undefined })} /></label><label className="field"><span className="field__label">По месяц</span><input className="input" type="month" value={to} min={from || undefined} onChange={(event) => report.update({ to: event.target.value || undefined, page: undefined })} /></label></div>}
-    <label className="field"><span className="field__label">Группа</span><select className="input" value={report.filters.group_id ?? ""} onChange={(event) => report.update({ group_id: event.target.value, operators: undefined, group_compare: undefined, page: undefined })}>
-      <option value="">Все доступные</option>{(report.groups.data ?? []).map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
-    </select></label>
-    {metric && <label className="field"><span className="field__label">Показатель</span><select className="input" value={report.data.data?.metric_code ?? report.filters.metric_code ?? ""} onChange={(event) => report.update({ metric: event.target.value, page: undefined })}>
-      {!report.data.data?.metrics.length && <option value="">Нет показателей</option>}{(report.data.data?.metrics ?? []).map((item) => <option key={item.code} value={item.code}>{item.title}</option>)}
-    </select></label>}
+    <label className="field"><span className="field__label">Группа</span><Select aria-label="Группа" value={report.filters.group_id ?? ""}
+      options={[{ value: "", label: "Все доступные" }, ...(report.groups.data ?? []).map((group) => ({ value: group.id, label: group.name }))]}
+      onChange={(value) => report.update({ group_id: value, operators: undefined, group_compare: undefined, page: undefined })} /></label>
+    {metric && <label className="field"><span className="field__label">Показатель</span><Select aria-label="Показатель" value={report.data.data?.metric_code ?? report.filters.metric_code ?? ""}
+      options={report.data.data?.metrics.length ? report.data.data.metrics.map((item) => ({ value: item.code, label: item.title })) : [{ value: "", label: "Нет показателей" }]}
+      onChange={(value) => report.update({ metric: value, page: undefined })} /></label>}
   </>;
   return <>
     <GlassSurface className="analytics-filters" variant="regular"><div className="analytics-filters__desktop">{fields}</div><div className="analytics-filters__mobile"><span>{report.data.data ? periodCaption(report.data.data) : "Выбрать период"}</span><Button onClick={() => setMobileOpen(true)}>Фильтры</Button></div></GlassSurface>
@@ -125,16 +126,17 @@ export function AnalyticsPage() {
   const comparisonControls = <>
     <SegmentedControl label="Сравнить" value={comparisonMode} options={[{ value: "groups", label: "Группы" }, { value: "operators", label: "Операторы" }]} onChange={(compare) => update({ compare })} />
     {comparisonMode === "groups" ? <fieldset className="analytics-selection"><legend>До 5 групп</legend>{(value?.groups ?? []).map((group) => <label key={group.id}><input type="checkbox" checked={selectedGroups.includes(group.id)} disabled={selectedGroups.length >= 5 && !selectedGroups.includes(group.id)} onChange={() => update({ group_compare: (selectedGroups.includes(group.id) ? selectedGroups.filter((id) => id !== group.id) : [...selectedGroups, group.id]).join(",") || "none" })} />{group.name}</label>)}</fieldset> : <div className="analytics-selection">
-      <label className="field"><span className="field__label">Добавить оператора · до 5</span><select className="input" value="" disabled={selectedOperators.length >= 5} onChange={(event) => { if (event.target.value) update({ operators: [...selectedOperators, Number(event.target.value)].join(",") }); }}><option value="">Выберите сотрудника</option>{(value?.operators ?? []).filter((row) => !selectedOperators.includes(row.user_id)).map((row) => <option key={row.user_id} value={row.user_id}>{row.full_name}</option>)}</select></label>
+      <label className="field"><span className="field__label">Добавить оператора · до 5</span><Select aria-label="Добавить оператора в сравнение" value="" disabled={selectedOperators.length >= 5}
+        options={[{ value: "", label: "Выберите сотрудника" }, ...(value?.operators ?? []).filter((row) => !selectedOperators.includes(row.user_id)).map((row) => ({ value: row.user_id, label: row.full_name }))]}
+        onChange={(id) => { if (id) update({ operators: [...selectedOperators, Number(id)].join(",") }); }} /></label>
       <div className="analytics-picks">{selectedOperators.map((id) => <Button key={id} size="s" onClick={() => update({ operators: selectedOperators.filter((item) => item !== id).join(",") })} aria-label={`Убрать ${value?.operators.find((row) => row.user_id === id)?.full_name ?? "оператора"} из сравнения`}>{value?.operators.find((row) => row.user_id === id)?.full_name ?? id} ×</Button>)}</div>
     </div>}
   </>;
 
   const rowFilters = <div className="analytics-row-filters">
     <label className="field"><span className="field__label">Найти оператора</span><input className="input" type="search" placeholder="Имя или фамилия" value={search} onChange={e => update({ search: e.target.value, page: undefined })} /></label>
-    <label className="field"><span className="field__label">Показать</span><select className="input" value={status} onChange={e => update({ status: e.target.value, page: undefined })}>
-      <option value="all">Всех операторов</option><option value="attention">Требуют внимания</option><option value="watch">Внимание, без сильного отставания</option><option value="critical">Отклонение от 20%</option><option value="ontrack">Выполняют все цели</option><option value="down">Есть ухудшение</option><option value="up">Есть улучшение</option><option value="late">Есть опоздания</option><option value="below">Не в норме: выбранный показатель</option><option value="missing">Нет части или всех данных</option><option value="partial">Неполные данные, без отклонений</option><option value="empty">Нет ни одного показателя</option>
-    </select></label>
+    <label className="field"><span className="field__label">Показать</span><Select aria-label="Состояние операторов" value={status} onChange={(value) => update({ status: value, page: undefined })}
+      options={[{ value: "all", label: "Всех операторов" }, { value: "attention", label: "Требуют внимания" }, { value: "watch", label: "Внимание, без сильного отставания" }, { value: "critical", label: "Отклонение от 20%" }, { value: "ontrack", label: "Выполняют все цели" }, { value: "down", label: "Есть ухудшение" }, { value: "up", label: "Есть улучшение" }, { value: "late", label: "Есть опоздания" }, { value: "below", label: "Не в норме: выбранный показатель" }, { value: "missing", label: "Нет части или всех данных" }, { value: "partial", label: "Неполные данные, без отклонений" }, { value: "empty", label: "Нет ни одного показателя" }]} /></label>
     {(status !== 'all' || search) && <Button onClick={() => update({ status: undefined, search: undefined, page: undefined })}>Сбросить</Button>}
   </div>;
   return <div className="stack analytics-page analytics-lead">

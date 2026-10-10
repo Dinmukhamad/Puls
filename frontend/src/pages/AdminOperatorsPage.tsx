@@ -10,6 +10,7 @@ import { ManualCoinsSheet } from "../components/ManualCoinsSheet";
 import { useToast } from "../components/Toast";
 import { DownloadIcon, SearchIcon } from "../components/icons";
 import { GlassSurface } from "../components/GlassSurface";
+import { WeekPicker } from "../components/WeekPicker";
 import {
   Avatar,
   Button,
@@ -22,7 +23,7 @@ import {
   RowsSkeleton,
   StatusIcon,
 } from "../components/ui";
-import { WEEK_STATUS_LABELS, coins, points } from "../utils/format";
+import { coins, points } from "../utils/format";
 
 export function AdminOperatorsPage() {
   const toast = useToast();
@@ -34,7 +35,7 @@ export function AdminOperatorsPage() {
   const [target, setTarget] = useState<OperatorRowOut | null>(null);
   const size = 25;
 
-  const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks() });
+  const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks(104) });
   const summary = useQuery({
     queryKey: ["admin-summary", weekId],
     queryFn: () => admin.summary(weekId), enabled: can("overview"),
@@ -85,23 +86,11 @@ export function AdminOperatorsPage() {
           />
         </label>
         <span className="filterbar__spacer" />
-        <select
-          className="input input--s"
-          aria-label="Неделя"
-          value={weekId ?? ""}
-          onChange={(event) => {
-            setWeekId(event.target.value ? Number(event.target.value) : undefined);
-            setPage(1);
-          }}
-        >
-          <option value="">Последняя рассчитанная</option>
-          {(weeks.data ?? []).map((week) => (
-            <option key={week.id} value={week.id}>
-              {week.label} · {WEEK_STATUS_LABELS[week.status] ?? week.status}
-            </option>
-          ))}
-        </select>
+        <WeekPicker weeks={weeks.data ?? []} value={weekId}
+          resolvedWeekId={weeks.data?.find((week) => week.label === summary.data?.week_label)?.id}
+          loading={weeks.isLoading} onChange={(value) => { setWeekId(value); setPage(1); }} />
       </GlassSurface>
+      {weeks.isError && <p className="muted micro" role="status">Не удалось загрузить календарь недель. <Button size="s" variant="plain" onClick={() => void weeks.refetch()}>Повторить</Button></p>}
 
       {/* Сводная статистика - п. 4.4.1 бизнес-ТЗ */}
       {summary.isLoading && <KPISkeleton />}

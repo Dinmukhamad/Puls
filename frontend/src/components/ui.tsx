@@ -3,6 +3,8 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { AlertIcon, ArrowDownIcon, ArrowUpIcon, CheckIcon } from "./icons";
 import { coins, signed } from "../utils/format";
 
+export { Select } from "./Select";
+
 /* --------------------------------------------------------------------------
  * Кнопки. Четыре типа, больше не заводим.
  * -------------------------------------------------------------------------- */
@@ -411,15 +413,11 @@ export function Pagination({
       <span className="pagination__info">
         {from}–{to} из {total}
       </span>
-      <Button size="s" disabled={page <= 1} onClick={() => onChange(page - 1)}>
-        Назад
-      </Button>
-      <span className="pagination__page">
-        {page} / {pages}
-      </span>
-      <Button size="s" disabled={page >= pages} onClick={() => onChange(page + 1)}>
-        Вперёд
-      </Button>
+      <div className="pagination__controls">
+        <Button size="s" disabled={page <= 1} onClick={() => onChange(page - 1)}>Назад</Button>
+        <span className="pagination__page" aria-live="polite">{page} / {pages}</span>
+        <Button size="s" disabled={page >= pages} onClick={() => onChange(page + 1)}>Вперёд</Button>
+      </div>
     </nav>
   );
 }

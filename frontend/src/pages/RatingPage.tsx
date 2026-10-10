@@ -17,6 +17,7 @@ import {
   Skeleton,
 } from "../components/ui";
 import { GlassSurface } from "../components/GlassSurface";
+import { WeekPicker } from "../components/WeekPicker";
 import { WEEK_STATUS_LABELS, coins, dateOnly, points } from "../utils/format";
 import "./rating.css";
 
@@ -47,7 +48,7 @@ function Leaderboard() {
   const setPage = (value: number) => update({ page: String(value) });
   const size = 25;
 
-  const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks() });
+  const weeks = useQuery({ queryKey: ["weeks"], queryFn: () => rating.weeks(104) });
   const board = useQuery({
     queryKey: ["rating", weekId, page],
     queryFn: () => rating.leaderboard({ week_id: weekId, page, size }),
@@ -93,21 +94,11 @@ function Leaderboard() {
       <RatingHeading personal={personal} />
       {/* Переключатель недели: единственный фильтр рейтинга. */}
       <GlassSurface variant="regular" className="filterbar">
-        <select
-          className="input input--s"
-          aria-label="Неделя конкурса"
-          value={weekId ?? header.week_id}
-          onChange={(event) => {
-            update({ week: event.target.value, page: undefined });
-          }}
-        >
-          {(weeks.data ?? []).map((week) => (
-            <option key={week.id} value={week.id}>
-              {week.label} · {WEEK_STATUS_LABELS[week.status] ?? week.status}
-            </option>
-          ))}
-        </select>
+        <WeekPicker label="Неделя конкурса" weeks={weeks.data ?? []} value={weekId}
+          resolvedWeekId={header.week_id} loading={weeks.isLoading}
+          onChange={(value) => update({ week: value === undefined ? undefined : String(value), page: undefined })} />
       </GlassSurface>
+      {weeks.isError && <p className="muted micro" role="status">Не удалось загрузить календарь недель. <button type="button" className="btn btn--plain btn--s" onClick={() => void weeks.refetch()}>Повторить</button></p>}
 
       {personal && <PersonalRatingCard data={data} />}
 
