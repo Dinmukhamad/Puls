@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Annotated
 
-from pydantic import BaseModel, Field, FiniteFloat, PositiveInt, model_validator
+from pydantic import AfterValidator, BaseModel, Field, FiniteFloat, PositiveInt, model_validator
 
+from app.models.contest import TEST_SOURCE
 from app.models.enums import BadgeRule, MetricDirection, MetricKind
 from app.schemas.common import ORMModel
+
+
+def _uploaded_source(value: str) -> str:
+    if value.strip().lower() == TEST_SOURCE:
+        raise ValueError("Источник «test» зарезервирован для тестовых данных аналитики")
+    return value
+
+
+#: Источник загружаемых показателей. «test» ставит только скрипт тестовой недели.
+UploadSource = Annotated[str, Field(max_length=32), AfterValidator(_uploaded_source)]
 
 
 class SummaryOut(BaseModel):
@@ -174,7 +186,7 @@ class MetricsBulkIn(BaseModel):
     """Загрузка показателей недели (шаг 2 п. 7)."""
 
     values: list[MetricValueIn] = Field(min_length=1, max_length=100000)
-    source: str = Field(default="import", max_length=32)
+    source: UploadSource = "import"
     replace: bool = Field(
         default=False,
         description="Удалить показатели недели перед загрузкой вместо обновления",
@@ -189,7 +201,7 @@ class DayMetricsBulkIn(BaseModel):
     """Дневные показатели для аналитики; баллы недели от них не меняются."""
 
     values: list[DayMetricValueIn] = Field(min_length=1, max_length=100000)
-    source: str = Field(default="import", max_length=32)
+    source: UploadSource = "import"
 
 
 class WeekCloseReportOut(BaseModel):

@@ -17,7 +17,7 @@ from app.core.deps import (
     visible_users_filter,
 )
 from app.core.errors import ConflictError
-from app.models.contest import ContestWeek, OperatorWeekMetric, OperatorWeekResult
+from app.models.contest import TEST_SOURCE, ContestWeek, OperatorWeekMetric, OperatorWeekResult
 from app.models.enums import WeekStatus
 from app.models.user import User
 from app.schemas.admin import (
@@ -277,7 +277,11 @@ async def _preview(
     metric_rows = await session.execute(
         select(OperatorWeekMetric.user_id, OperatorWeekMetric.metric_code)
         .join(User, User.id == OperatorWeekMetric.user_id)
-        .where(OperatorWeekMetric.week_id == week.id, await visible_users_filter(session, actor))
+        .where(
+            OperatorWeekMetric.week_id == week.id,
+            OperatorWeekMetric.source != TEST_SOURCE,
+            await visible_users_filter(session, actor),
+        )
     )
     reported: dict[int, set[str]] = {}
     for user_id, code in metric_rows:

@@ -20,6 +20,7 @@ from app.core.errors import ConflictError, NotFoundError
 from app.db.base import utcnow
 from app.models.coin import CoinTransaction
 from app.models.contest import (
+    TEST_SOURCE,
     ContestWeek,
     MetricDefinition,
     NominationDefinition,
@@ -162,13 +163,13 @@ async def previous_week(session: AsyncSession, week: ContestWeek) -> ContestWeek
 async def _load_metric_values(
     session: AsyncSession, week_id: int
 ) -> dict[int, dict[str, float]]:
-    """Показатели недели, сгруппированные по операторам."""
+    """Показатели недели, сгруппированные по операторам. Тестовые значения в расчёт не идут."""
     rows = await session.execute(
         select(
             OperatorWeekMetric.user_id,
             OperatorWeekMetric.metric_code,
             OperatorWeekMetric.value,
-        ).where(OperatorWeekMetric.week_id == week_id)
+        ).where(OperatorWeekMetric.week_id == week_id, OperatorWeekMetric.source != TEST_SOURCE)
     )
     grouped: dict[int, dict[str, float]] = {}
     for user_id, code, value in rows:
@@ -673,7 +674,7 @@ async def unreported_metrics(
     reported = set(
         await session.scalars(
             select(OperatorWeekMetric.metric_code)
-            .where(OperatorWeekMetric.week_id == week_id)
+            .where(OperatorWeekMetric.week_id == week_id, OperatorWeekMetric.source != TEST_SOURCE)
             .distinct()
         )
     )

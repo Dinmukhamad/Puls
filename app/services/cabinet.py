@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.contest import (
+    TEST_SOURCE,
     ContestWeek,
     NominationDefinition,
     NominationWinner,
@@ -110,7 +111,9 @@ async def week_block(
     definitions = await weekly_service.active_metric_definitions(session)
     rows = await session.execute(
         select(OperatorWeekMetric.metric_code, OperatorWeekMetric.value).where(
-            OperatorWeekMetric.week_id == week.id, OperatorWeekMetric.user_id == user_id
+            OperatorWeekMetric.week_id == week.id,
+            OperatorWeekMetric.user_id == user_id,
+            OperatorWeekMetric.source != TEST_SOURCE,
         )
     )
     values = {code: float(value) for code, value in rows}
