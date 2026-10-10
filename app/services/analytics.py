@@ -21,7 +21,7 @@ from app.models.contest import (
     OperatorWeekMetric,
     OperatorWeekResult,
 )
-from app.models.enums import MetricDirection, Role, ShopRequestStatus, WeekStatus
+from app.models.enums import MetricDirection, MetricKind, Role, ShopRequestStatus, WeekStatus
 from app.models.shop import ShopRequest
 from app.models.user import Group, User
 from app.schemas.analytics import (
@@ -38,6 +38,8 @@ from app.services.weekly import get_week
 MONTHS = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]
 #: Longest ranges, so a page never asks for years of daily rows.
 MAX_DAYS, MAX_WEEKS, MAX_MONTHS = 31, 26, 24
+#: Рабочих дней в неделе: недельная норма 40 ч — это 5 дней по 8 ч.
+WORKDAYS_PER_WEEK = 5
 
 
 @dataclass(frozen=True)
@@ -69,12 +71,31 @@ def change(
     return delta, delta > 0 if direction == MetricDirection.HIGHER_IS_BETTER else delta < 0
 
 
-def at_target(value: float | None, metric: MetricDefinition) -> bool | None:
+def summed(metric: MetricDefinition) -> bool:
+    """Значение недели складывается из дней: часы и штуки. Проценты и «в час» — нет."""
+    unit = (metric.unit or "").strip()
+    return bool(unit) and "%" not in unit and "/" not in unit
+
+
+def target_for(metric: MetricDefinition, grain: str = "week") -> float:
+    """Цель показателя за один период аналитики.
+
+    В настройках цель задана на неделю. За день суммируемый показатель должен набрать её
+    пятую часть: 40 ч в неделю — 8 ч в день. Лимит нарушений не делится: любое нарушение
+    и так требует внимания.
+    """
+    if grain == "day" and metric.kind != MetricKind.ANTI and summed(metric):
+        return round(metric.target_value / WORKDAYS_PER_WEEK, 4)
+    return metric.target_value
+
+
+def at_target(value: float | None, metric: MetricDefinition, grain: str = "week") -> bool | None:
     if value is None:
         return None
+    target = target_for(metric, grain)
     if metric.direction == MetricDirection.LOWER_IS_BETTER:
-        return value <= metric.target_value
-    return value >= metric.target_value
+        return value <= target
+    return value >= target
 
 
 async def report(
@@ -343,6 +364,12 @@ async def report(
             "если недельных значений нет — среднее дней. В том числе опоздания: "
             "это среднее за исходный период, а не число событий за весь месяц."
         )
+    if grain == "day":
+        result.methodology += (
+            f" По дням недельная цель часов и количеств делится на {WORKDAYS_PER_WEEK} рабочих "
+            "дней: 40 ч в неделю — 8 ч в день. Цели в процентах и «в час» и лимиты нарушений "
+            "не меняются."
+        )
     for metric in definitions:
         current_values = observations(ids, metric.code, anchor)
         value = average(current_values)
@@ -356,7 +383,7 @@ async def report(
                 unit=metric.unit,
                 direction=metric.direction,
                 kind=metric.kind,
-                target=metric.target_value,
+                target=target_for(metric, grain),
                 value=value,
                 previous=previous,
                 delta=delta,
@@ -364,7 +391,9 @@ async def report(
                 reported=reported,
                 total=len(users),
                 coverage=reported / len(users) if users else None,
-                below_target=sum(at_target(value, metric) is False for value in current_values),
+                below_target=sum(
+                    at_target(value, metric, grain) is False for value in current_values
+                ),
                 description=metric.description,
                 penalty_per_unit=metric.penalty_per_unit,
                 trend=[average(observations(ids, metric.code, start)) for start in starts],
@@ -438,7 +467,7 @@ async def report(
                 previous=previous,
                 delta=delta,
                 improved=improved,
-                target_met=at_target(value, chosen),
+                target_met=at_target(value, chosen, grain),
                 points=score.final_points if score else None,
                 rank=score.rank if score else None,
                 missing_metrics=[code for code, value in values.items() if value is None],
