@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.badge import BadgeDefinition, UserBadge
 from app.models.contest import (
+    TEST_SOURCE,
     ContestWeek,
     NominationWinner,
     OperatorWeekMetric,
@@ -66,6 +67,7 @@ async def _metric_by_week(
             OperatorWeekMetric.user_id == user_id,
             OperatorWeekMetric.metric_code == metric_code,
             OperatorWeekMetric.week_id.in_(week_ids),
+            OperatorWeekMetric.source != TEST_SOURCE,
         )
     )
     return {week_id: float(value) for week_id, value in rows}
@@ -175,6 +177,7 @@ async def evaluate_badge(
             .where(
                 OperatorWeekMetric.user_id == user_id,
                 OperatorWeekMetric.metric_code == metric,
+                OperatorWeekMetric.source != TEST_SOURCE,
                 ContestWeek.status == WeekStatus.CLOSED,
             )
         )
