@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 
 export type GlassVariant = "subtle" | "regular" | "prominent";
 
@@ -18,7 +18,8 @@ export function GlassSurface({
   children,
   style,
   as: Tag = "div",
-}: {
+  ...rest
+}: HTMLAttributes<HTMLElement> & {
   variant?: GlassVariant;
   className?: string;
   children: ReactNode;
@@ -26,7 +27,7 @@ export function GlassSurface({
   as?: "div" | "aside" | "nav" | "header" | "section";
 }) {
   return (
-    <Tag className={`glass glass--${variant} ${className}`.trim()} style={style}>
+    <Tag {...rest} className={`glass glass--${variant} ${className}`.trim()} style={style}>
       {children}
     </Tag>
   );

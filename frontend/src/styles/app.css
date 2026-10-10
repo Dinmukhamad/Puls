@@ -273,18 +273,36 @@ a {
   gap: var(--sp-4);
   z-index: 30;
   border-color: var(--separator);
-  transition: width var(--motion-normal) var(--ease-standard);
+  /* Пока панель раскрывается, шапка ещё не помещается: лишнее обрезает край. */
+  overflow: hidden;
+  transition: width var(--motion-normal) var(--ease-standard),
+    box-shadow var(--motion-normal) var(--ease-standard),
+    z-index 0s linear var(--motion-normal);
 }
 
-.shell--collapsed .sidebar {
+/*
+ * Свёрнутое меню - колонка иконок. Наведение или клавиатурный фокус раскрывают
+ * его поверх страницы (.shell--peek), а содержимое остаётся на месте.
+ */
+.shell--collapsed:not(.shell--peek) .sidebar,
+.shell--collapsed:not(.shell--peek) .sidebar-user-card {
   width: var(--sidebar-collapsed);
+}
+
+/* Слой опускается только после сворачивания, иначе панели страницы перекроют уходящий край. */
+.shell--peek .sidebar,
+.shell--peek .sidebar-user-card {
+  z-index: 50;
+  box-shadow: var(--shadow-glass), var(--shadow-float);
+  transition-delay: 0s;
 }
 
 .sidebar__brand {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-2) var(--sp-2) var(--sp-1);
+  /* 5px по бокам ставят знак 32px по центру узкой колонки (42px внутри рамки), на одну ось с иконками. */
+  padding: var(--sp-2) 5px var(--sp-1);
   min-height: 40px;
 }
 
@@ -311,19 +329,58 @@ a {
   flex: none;
 }
 
-.shell--collapsed .sidebar__name {
-  display: none;
-}
-
-/* Кнопка остаётся видимой и в свёрнутом виде - иначе развернуть меню нечем. */
-.shell--collapsed .sidebar__brand {
-  flex-direction: column;
-  gap: var(--sp-2);
-  padding-bottom: var(--sp-2);
-}
-
+/* Стрелка вправо разворачивает меню, а в раскрытом наведением - закрепляет его. */
 .shell--collapsed .sidebar__toggle {
   transform: rotate(180deg);
+}
+
+/*
+ * Подписи проявляются, когда панель почти раскрылась, и гаснут сразу при
+ * сворачивании. Место за ними сохраняется, поэтому пункты не сдвигаются.
+ */
+.sidebar__name,
+.sidebar__user-text,
+.sidebar .nav-item__label {
+  transition: opacity var(--motion-fast) var(--ease-standard) 80ms;
+}
+
+.sidebar .sidebar__toggle {
+  transition: opacity var(--motion-fast) var(--ease-standard) 80ms,
+    background var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+
+/* Без переноса подпись при сворачивании уходит под край, а не прыгает на вторую строку. */
+.shell--collapsed:not(.shell--peek) :is(.sidebar__name, .sidebar__user-text, .nav-item__label) {
+  opacity: 0;
+  visibility: hidden;
+  white-space: nowrap;
+  transition: opacity var(--motion-fast) var(--ease-standard),
+    visibility 0s linear var(--motion-fast);
+}
+
+/* Мышью меню раскрывается наведением, кнопка нужна только в раскрытом виде. */
+@media (hover: hover) {
+  .shell--collapsed:not(.shell--peek) .sidebar__toggle {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity var(--motion-fast) var(--ease-standard),
+      visibility 0s linear var(--motion-fast),
+      transform var(--motion-fast) var(--ease-standard);
+  }
+}
+
+/* На сенсорном экране наведения нет: кнопка остаётся под знаком, иначе развернуть меню нечем. */
+@media (hover: none) {
+  .shell--collapsed:not(.shell--peek) .sidebar__brand {
+    flex-direction: column;
+    gap: var(--sp-2);
+    padding-bottom: var(--sp-2);
+  }
+
+  .shell--collapsed:not(.shell--peek) .sidebar__name {
+    display: none;
+  }
 }
 
 .sidebar__nav {
@@ -351,7 +408,7 @@ a {
   padding: 0 var(--sp-3) var(--sp-2);
 }
 
-.shell--collapsed .sidebar__section-title {
+.shell--collapsed:not(.shell--peek) .sidebar__section-title {
   opacity: 0;
   height: 8px;
   padding: 0;
@@ -384,13 +441,9 @@ a {
   text-overflow: ellipsis;
 }
 
-.shell--collapsed .nav-item__label {
-  display: none;
-}
-
-.shell--collapsed .nav-item {
-  justify-content: center;
-  padding: 0;
+/* 9px ставят иконку 24px по центру узкой колонки. Отступ один в обоих видах, и иконки не прыгают. */
+.sidebar .nav-item {
+  padding: 0 9px;
 }
 
 @media (hover: hover) {
@@ -431,10 +484,6 @@ a {
   flex-direction: column;
   min-width: 0;
   line-height: 1.3;
-}
-
-.shell--collapsed .sidebar__user-text {
-  display: none;
 }
 
 .sidebar__user-name {
@@ -486,19 +535,14 @@ a {
   left: calc(var(--sidebar-inset) + var(--safe-left));
   bottom: calc(var(--sidebar-inset) + var(--safe-bottom));
   width: var(--sidebar-width);
-  padding: var(--sp-2);
+  /* 11px по бокам ставят аватар по центру узкой карточки, и при раскрытии он не сдвигается. */
+  padding: var(--sp-2) 11px;
   border-radius: var(--radius-xl);
   border-color: var(--separator);
   z-index: 30;
-  transition: width var(--motion-normal) var(--ease-standard);
-}
-
-.shell--collapsed .sidebar-user-card {
-  width: var(--sidebar-collapsed);
-}
-
-.shell--collapsed .sidebar-user-card .sidebar__user {
-  justify-content: center;
+  transition: width var(--motion-normal) var(--ease-standard),
+    box-shadow var(--motion-normal) var(--ease-standard),
+    z-index 0s linear var(--motion-normal);
 }
 
 body:has(.shell--immersive) {

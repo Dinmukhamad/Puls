@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useAccess } from "../auth/AccessContext";
+import { useSidebarPeek } from "../hooks/useSidebarPeek";
 import { SectionGuard } from "./SectionGuard";
 import { ACCOUNT_SECTION, currentSection, currentTab, mobileNavigation, subsectionDestination, visibleNavigation } from "../navigation";
 import { ROLE_LABELS } from "../utils/format";
@@ -23,6 +24,7 @@ export function AppLayout() {
   // Keep the active subsection visible in the scrollable tab strip on phones.
   useEffect(() => { document.querySelector(".section-navigation__tab.is-active")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [location.pathname]);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
+  const peek = useSidebarPeek(collapsed);
   const [compactTabBar, setCompactTabBar] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuId = useId(); const lastScroll = useRef(0);
@@ -50,15 +52,15 @@ export function AppLayout() {
 
   const userLink = user && <Link to="/profile" className="sidebar__user" aria-label={`Профиль: ${user.full_name}`}><Avatar name={user.full_name} id={user.id} size={36} /><span className="sidebar__user-text"><span className="sidebar__user-name">{user.full_name}</span><span className="sidebar__user-role">{ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</span></span></Link>;
 
-  return <div className={`shell${collapsed ? " shell--collapsed" : ""}${immersive ? " shell--immersive" : ""}`}>
-    <GlassSurface as="aside" variant="regular" className="sidebar">
-      <div className="sidebar__brand"><span className="sidebar__mark"><PulsMark /></span><span className="sidebar__name">Puls</span><IconButton label={collapsed ? "Развернуть меню" : "Свернуть меню"} className="sidebar__toggle" aria-expanded={!collapsed} onClick={() => setCollapsed((value) => !value)}><ChevronLeftIcon size={18} /></IconButton></div>
+  return <div className={`shell${collapsed ? " shell--collapsed" : ""}${peek.open ? " shell--peek" : ""}${immersive ? " shell--immersive" : ""}`}>
+    <GlassSurface as="aside" variant="regular" className="sidebar" {...peek.handlers}>
+      <div className="sidebar__brand"><span className="sidebar__mark"><PulsMark /></span><span className="sidebar__name">Puls</span><IconButton label={!collapsed ? "Свернуть меню" : peek.open ? "Закрепить меню" : "Развернуть меню"} className="sidebar__toggle" aria-expanded={!collapsed} onClick={() => { setCollapsed((value) => !value); peek.settle(); }}><ChevronLeftIcon size={18} /></IconButton></div>
       <nav className="sidebar__nav" aria-label="Основные разделы">
-        {items.map((item) => <Link key={item.id} to={item.to} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}><span className="nav-item__icon"><item.icon size={20} /></span><span className="nav-item__label">{item.label}</span></Link>)}
+        {items.map((item) => <Link key={item.id} to={item.to} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} aria-label={collapsed ? item.label : undefined}><span className="nav-item__icon"><item.icon size={20} /></span><span className="nav-item__label">{item.label}</span></Link>)}
       </nav>
       {!immersive && userLink}
     </GlassSurface>
-    {immersive && userLink && <GlassSurface variant="regular" className="sidebar-user-card">{userLink}</GlassSurface>}
+    {immersive && userLink && <GlassSurface variant="regular" className="sidebar-user-card" {...peek.handlers}>{userLink}</GlassSurface>}
 
     <main className="main"><div className="main__inner">
       {active && !immersive && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p>{active.tabs.length > 1 && <nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav>}</div>}
