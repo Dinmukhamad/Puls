@@ -15,11 +15,22 @@ class SummaryOut(BaseModel):
 
     operators_total: int
     operators_active: int
-    coins_awarded_this_week: int
+    coins_awarded_this_week: int = Field(
+        description="Начислено за последние 7 дней; при фильтре дат — за выбранный период"
+    )
     new_shop_requests: int
     average_rank: float | None = None
     week_label: str | None = None
     week_status: str | None = None
+    date_from: date | None = None
+    date_to: date | None = None
+    coins_awarded_in_period: int | None = Field(
+        default=None, description="Положительные операции за точные даты выбранного периода"
+    )
+    scored_weeks_count: int = Field(
+        default=0, description="Число закрытых недель, целиком входящих в выбранный период"
+    )
+    metrics_available: bool = False
 
 
 class OperatorRowOut(BaseModel):
@@ -31,13 +42,19 @@ class OperatorRowOut(BaseModel):
     group_name: str | None = None
     rank: int | None = None
     points: float
-    coins_week: int
+    coins_week: int = Field(
+        description="Коины конкурсной недели; при фильтре дат — реальные начисления за период"
+    )
     balance: int
     reserved: int
     total_earned: int
     total_spent: int
     lateness: float
     forbidden_sites: float
+    metrics_available: bool = Field(
+        default=False, description="Есть рассчитанные показатели; иначе числовые нули — заглушки"
+    )
+    scored_weeks_count: int = 0
 
 
 class ManualCoinsIn(BaseModel):

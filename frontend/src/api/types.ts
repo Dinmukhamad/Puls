@@ -291,6 +291,11 @@ export interface SummaryOut {
   average_rank: number | null;
   week_label: string | null;
   week_status: string | null;
+  date_from?: string | null;
+  date_to?: string | null;
+  coins_awarded_in_period?: number | null;
+  scored_weeks_count?: number;
+  metrics_available?: boolean;
 }
 
 export interface OperatorRowOut {
@@ -307,6 +312,8 @@ export interface OperatorRowOut {
   total_spent: number;
   lateness: number;
   forbidden_sites: number;
+  metrics_available?: boolean;
+  scored_weeks_count?: number;
 }
 
 /** Тело ошибки, которое возвращает бэкенд для доменных исключений. */

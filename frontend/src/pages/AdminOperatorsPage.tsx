@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { useAuth } from "../auth/AuthContext";
 import { useAccess } from "../auth/AccessContext";
@@ -10,6 +10,9 @@ import { ManualCoinsSheet } from "../components/ManualCoinsSheet";
 import { useToast } from "../components/Toast";
 import { DownloadIcon, SearchIcon } from "../components/icons";
 import { GlassSurface } from "../components/GlassSurface";
+import { DateRangePicker, type DateRange } from "../components/DateRangePicker";
+import { formatDateRange, todayDateKey, validDateRange } from "../components/dateRange";
+import { calendarDate, dateKey, shiftDays } from "../components/weekCalendar";
 import {
   Avatar,
   Button,
@@ -23,28 +26,43 @@ import {
   StatusIcon,
 } from "../components/ui";
 import { coins, points } from "../utils/format";
+import "./operators.css";
 
 export function AdminOperatorsPage() {
   const toast = useToast();
   const { can } = useAccess(); const { atLeast } = useAuth();
+  const canOverview = can("overview");
   const canCredit = can("motivation") && atLeast("supervisor");
+  const [period, setPeriod] = useState<DateRange>();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [target, setTarget] = useState<OperatorRowOut | null>(null);
   const size = 25;
 
   const summary = useQuery({
-    queryKey: ["admin-summary", undefined],
-    queryFn: () => admin.summary(), enabled: can("overview"),
+    queryKey: ["admin-summary", undefined, period],
+    queryFn: () => admin.summary(undefined, period), enabled: canOverview,
   });
   const operators = useQuery({
-    queryKey: ["admin-operators", undefined, page, search],
-    queryFn: () => admin.operators({ page, size, search: search || undefined }),
+    queryKey: ["admin-operators", undefined, page, search, period],
+    queryFn: () => admin.operators({ page, size, search: search || undefined, ...period }),
+    enabled: !!period,
   });
+  const defaultRange = summary.data?.date_from && summary.data.date_to
+    ? { date_from: summary.data.date_from, date_to: summary.data.date_to }
+    : undefined;
+  const shownRange = period ?? defaultRange;
+  useEffect(() => {
+    if (period || (canOverview && !summary.data && !summary.isError)) return;
+    if (validDateRange(defaultRange)) { setPeriod(defaultRange); return; }
+    const today = todayDateKey();
+    setPeriod({ date_from: dateKey(shiftDays(calendarDate(today)!, -6)), date_to: today });
+  }, [period, canOverview, summary.data, summary.isError]);
 
   async function exportCsv() {
     try {
-      await downloadFile(admin.exportPath(), "operators_current.csv");
+      const filename = period ? `operators_${period.date_from}_${period.date_to}.csv` : "operators_current.csv";
+      await downloadFile(admin.exportPath(undefined, { ...period, search: search || undefined }), filename);
       toast.success("Файл выгружен");
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Не удалось выгрузить файл");
@@ -56,17 +74,17 @@ export function AdminOperatorsPage() {
       <div className="page-head">
         <div>
           <h1 className="page-title">Операторы</h1>
-          <p className="page-subtitle">Показатели недели, балансы и ручное начисление коинов</p>
+          <p className="page-subtitle">Показатели за период, балансы и ручное начисление коинов</p>
         </div>
         <div className="page-head__actions">
-          {can("reports") && <Button icon={<DownloadIcon size={17} />} onClick={exportCsv}>
+          {can("reports") && <Button icon={<DownloadIcon size={17} />} disabled={!period} onClick={exportCsv}>
             Выгрузить CSV
           </Button>}
         </div>
       </div>
 
-      <GlassSurface variant="regular" className="filterbar">
-        <label className="search" style={{ flex: "1 1 100%", minWidth: 0 }}>
+      <GlassSurface variant="regular" className="filterbar operators-filter">
+        <label className="search">
           <span className="search__icon">
             <SearchIcon size={16} />
           </span>
@@ -81,11 +99,18 @@ export function AdminOperatorsPage() {
             }}
           />
         </label>
+        <DateRangePicker value={period} defaultRange={defaultRange} loading={!period && summary.isLoading}
+          onChange={(value) => { setPeriod(value); setPage(1); }} />
       </GlassSurface>
+      {period && <p className="operators-period-note muted micro">
+        Коины — за выбранные даты. Баллы, место и нарушения — по завершённым неделям,
+        которые целиком входят в период. Баланс кошелька — текущий.
+      </p>}
 
       {/* Сводная статистика - п. 4.4.1 бизнес-ТЗ */}
-      {summary.isLoading && <KPISkeleton />}
-      {summary.data && (
+      {canOverview && (!period || summary.isLoading) && <KPISkeleton />}
+      {period && summary.isError && <ErrorState error={summary.error} onRetry={() => summary.refetch()} />}
+      {period && summary.data && (
         <div className="kpi-grid">
           <KPI
             label="Операторов"
@@ -93,10 +118,10 @@ export function AdminOperatorsPage() {
             hint={`Активных ${summary.data.operators_active}`}
           />
           <KPI
-            label="Начислено за неделю"
-            value={coins(summary.data.coins_awarded_this_week)}
+            label="Начислено за период"
+            value={coins(summary.data.coins_awarded_in_period ?? summary.data.coins_awarded_this_week)}
             tone="coin"
-            hint="Все положительные операции за 7 дней"
+            hint={formatDateRange(period)}
           />
           <KPI
             label="Новых заявок"
@@ -107,13 +132,15 @@ export function AdminOperatorsPage() {
           <KPI
             label="Средняя позиция"
             value={summary.data.average_rank !== null ? summary.data.average_rank.toFixed(1) : "—"}
-            hint={summary.data.week_label ? `Неделя ${summary.data.week_label}` : undefined}
+            hint={period && !summary.data.metrics_available
+              ? "Нет завершённых недель в периоде"
+              : shownRange ? formatDateRange(shownRange) : undefined}
           />
         </div>
       )}
 
       <Card title="Таблица операторов" padded={false}>
-        {operators.isLoading && (
+        {(!period || operators.isLoading) && (
           <div className="card__body">
             <RowsSkeleton />
           </div>
@@ -124,7 +151,7 @@ export function AdminOperatorsPage() {
           </div>
         )}
         {operators.data && operators.data.items.length === 0 && (
-          <EmptyState title="Ничего не найдено" hint="Измените фильтры или поисковый запрос" />
+          <EmptyState title="Ничего не найдено" hint="Измените поисковый запрос" />
         )}
 
         {operators.data && operators.data.items.length > 0 && (
@@ -137,7 +164,7 @@ export function AdminOperatorsPage() {
                     <th>Оператор</th>
                     <th>Группа</th>
                     <th className="num">Баллы</th>
-                    <th className="num">Коины</th>
+                    <th className="num">{period ? "Начислено" : "Коины"}</th>
                     <th className="num">Баланс</th>
                     <th className="num">Опоздания</th>
                     <th className="num">Сайты</th>
@@ -148,7 +175,7 @@ export function AdminOperatorsPage() {
                   {operators.data.items.map((row) => (
                     <tr key={row.user_id}>
                       <td className="num">
-                        <span className="rank-badge">{row.rank ?? "—"}</span>
+                        <span className="rank-badge">{!period || row.metrics_available ? row.rank ?? "—" : "—"}</span>
                       </td>
                       <td>
                         <span className="cell-person">
@@ -160,7 +187,7 @@ export function AdminOperatorsPage() {
                         </span>
                       </td>
                       <td className="muted" style={{ whiteSpace: "nowrap" }}>{row.group_name ?? "—"}</td>
-                      <td className="num">{points(row.points)}</td>
+                      <td className="num">{!period || row.metrics_available ? points(row.points) : "—"}</td>
                       <td className="num">{coins(row.coins_week)}</td>
                       <td className="num">
                         {coins(row.balance)}
@@ -168,8 +195,8 @@ export function AdminOperatorsPage() {
                           <span className="muted micro block">резерв {coins(row.reserved)}</span>
                         )}
                       </td>
-                      <AntiCell value={row.lateness} />
-                      <AntiCell value={row.forbidden_sites} />
+                      <AntiCell value={row.lateness} available={!period || !!row.metrics_available} />
+                      <AntiCell value={row.forbidden_sites} available={!period || !!row.metrics_available} />
                       <td className="cell-actions">
                         {canCredit && <Button size="s" onClick={() => setTarget(row)}>
                           Начислить
@@ -195,25 +222,29 @@ export function AdminOperatorsPage() {
                           </span>
                         </span>
                       </span>
-                      <span className="rank-badge">{row.rank ?? "—"}</span>
+                      <span className="rank-badge">{!period || row.metrics_available ? row.rank ?? "—" : "—"}</span>
                     </div>
                     <div className="list-card__metrics">
                       <span className="list-card__metric">
                         <span>Баллы</span>
-                        <span>{points(row.points)}</span>
+                        <span>{!period || row.metrics_available ? points(row.points) : "—"}</span>
                       </span>
+                      {period && <span className="list-card__metric">
+                        <span>Начислено</span>
+                        <span>{coins(row.coins_week)}</span>
+                      </span>}
                       <span className="list-card__metric">
                         <span>Баланс</span>
                         <span>{coins(row.balance)}</span>
                       </span>
                       <span className="list-card__metric">
                         <span>Опоздания</span>
-                        <span>{row.lateness === 0 ? "нет" : points(row.lateness)}</span>
+                        <span>{period && !row.metrics_available ? "—" : row.lateness === 0 ? "нет" : points(row.lateness)}</span>
                       </span>
                       <span className="list-card__metric">
                         <span>Сайты</span>
                         <span>
-                          {row.forbidden_sites === 0 ? "нет" : points(row.forbidden_sites)}
+                          {period && !row.metrics_available ? "—" : row.forbidden_sites === 0 ? "нет" : points(row.forbidden_sites)}
                         </span>
                       </span>
                     </div>
@@ -243,7 +274,8 @@ export function AdminOperatorsPage() {
 }
 
 /** Антипоказатель: ноль помечен галочкой, нарушения — значком и цветом. */
-function AntiCell({ value }: { value: number }) {
+function AntiCell({ value, available = true }: { value: number; available?: boolean }) {
+  if (!available) return <td className="num muted" title="Нет завершённых недель в выбранном периоде">—</td>;
   return (
     <td className="num">
       <span className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap" }}>

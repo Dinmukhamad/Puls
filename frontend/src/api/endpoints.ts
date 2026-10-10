@@ -88,12 +88,18 @@ export const shop = {
 
 /* --- админ-панель --- */
 
+interface OperatorDateFilter {
+  date_from: string;
+  date_to: string;
+}
+
 export const admin = {
-  summary: (weekId?: number) =>
-    request<SummaryOut>(`${V1}/admin/summary${buildQuery({ week_id: weekId })}`),
-  operators: (params: { week_id?: number; page?: number; size?: number; search?: string }) =>
+  summary: (weekId?: number, dates?: OperatorDateFilter) =>
+    request<SummaryOut>(`${V1}/admin/summary${buildQuery({ week_id: weekId, ...dates })}`),
+  operators: (params: { week_id?: number; page?: number; size?: number; search?: string; date_from?: string; date_to?: string }) =>
     request<Page<OperatorRowOut>>(`${V1}/admin/operators${buildQuery({ ...params })}`),
-  exportPath: (weekId?: number) => `${V1}/admin/operators/export${buildQuery({ week_id: weekId })}`,
+  exportPath: (weekId?: number, params?: Partial<OperatorDateFilter> & { search?: string }) =>
+    `${V1}/admin/operators/export${buildQuery({ week_id: weekId, ...params })}`,
 
   manualCoins: (userId: number, amount: number, reason: string, requestId?: string, correctEarnings = false) =>
     request<TransactionOut>(`${V1}/admin/coins/manual`, {

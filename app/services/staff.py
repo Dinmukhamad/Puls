@@ -9,16 +9,19 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import ColumnElement, and_, func, select
+from sqlalchemy import ColumnElement, Numeric, and_, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.selectable import Subquery
 
+from app.core.config import get_settings
 from app.core.errors import ConflictError, DomainError, NotFoundError
 from app.db.base import utcnow
 from app.models.coin import CoinTransaction
 from app.models.contest import ContestWeek, OperatorWeekResult
-from app.models.enums import Role, ShopRequestStatus, TxType
+from app.models.enums import Role, ShopRequestStatus, TxType, WeekStatus
 from app.models.progress import Notification
 from app.models.shop import ShopRequest
 from app.models.user import CoinAccount, Group, User
@@ -44,6 +47,8 @@ class OperatorRow:
     total_spent: int
     lateness: float
     forbidden_sites: float
+    metrics_available: bool = False
+    scored_weeks_count: int = 0
 
 
 @dataclass(slots=True)
@@ -57,6 +62,86 @@ class StaffSummary:
     average_rank: float | None
     week_label: str | None
     week_status: str | None
+    date_from: date | None = None
+    date_to: date | None = None
+    coins_awarded_in_period: int | None = None
+    scored_weeks_count: int = 0
+    metrics_available: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorPeriod:
+    """Inclusive business dates; transaction timestamps are compared in UTC."""
+
+    date_from: date
+    date_to: date
+
+    def utc_bounds(self) -> tuple[datetime, datetime]:
+        timezone = ZoneInfo(get_settings().TIMEZONE)
+        try:
+            return (
+                datetime.combine(self.date_from, time.min, timezone).astimezone(UTC),
+                datetime.combine(
+                    self.date_to + timedelta(days=1), time.min, timezone
+                ).astimezone(UTC),
+            )
+        except OverflowError as exc:
+            raise DomainError(
+                "Период выходит за допустимые даты", code="invalid_period"
+            ) from exc
+
+
+def operator_period(
+    date_from: date | None, date_to: date | None, *, week_id: int | None = None
+) -> OperatorPeriod | None:
+    """A custom range never silently falls back to a week or expands its dates."""
+    if date_from is None and date_to is None:
+        return None
+    if date_from is None or date_to is None:
+        raise DomainError("Укажите начало и конец периода", code="invalid_period")
+    if week_id is not None:
+        raise DomainError("Выберите период или неделю, а не оба фильтра", code="invalid_period")
+    if date_from > date_to:
+        raise DomainError("Начало периода должно быть не позже конца", code="invalid_period")
+    if date_to == date.max:
+        raise DomainError("Конец периода выходит за допустимые даты", code="invalid_period")
+    return OperatorPeriod(date_from, date_to)
+
+
+def _period_weeks(period: OperatorPeriod) -> tuple[ColumnElement[bool], ...]:
+    # Weekly snapshots cannot be split into fabricated daily values.
+    return (
+        ContestWeek.starts_on >= period.date_from,
+        ContestWeek.ends_on <= period.date_to,
+        ContestWeek.status == WeekStatus.CLOSED,
+    )
+
+
+def _period_scores(period: OperatorPeriod, visibility: ColumnElement[bool]) -> Subquery:
+    totals = (
+        select(
+            OperatorWeekResult.user_id.label("user_id"),
+            # Weekly scores use two decimal places. Normalize the sum before
+            # ranking so floating-point artifacts cannot split an equal score.
+            # PostgreSQL's round(value, precision) requires a numeric operand.
+            func.round(
+                cast(func.sum(OperatorWeekResult.final_points), Numeric), 2
+            ).label("points"),
+            func.sum(OperatorWeekResult.lateness_count).label("lateness"),
+            func.sum(OperatorWeekResult.forbidden_sites_count).label("forbidden_sites"),
+            func.count(OperatorWeekResult.id).label("scored_weeks_count"),
+        )
+        .join(ContestWeek, ContestWeek.id == OperatorWeekResult.week_id)
+        .join(User, User.id == OperatorWeekResult.user_id)
+        .where(*_period_weeks(period), User.role == Role.OPERATOR, visibility)
+        .group_by(OperatorWeekResult.user_id)
+        .subquery()
+    )
+    # Search and pagination are applied later, so an operator's rank stays stable.
+    return select(
+        *totals.c,
+        func.rank().over(order_by=totals.c.points.desc()).label("rank"),
+    ).subquery()
 
 
 async def manual_transaction(
@@ -197,12 +282,13 @@ async def operators_table(
     *,
     week: ContestWeek | None,
     visibility: ColumnElement[bool],
+    period: OperatorPeriod | None = None,
     group_id: int | None = None,
     search: str | None = None,
     offset: int = 0,
     limit: int = 50,
 ) -> tuple[list[OperatorRow], int]:
-    """Список операторов с показателями недели и балансами."""
+    """Показатели недели или полного периода; балансы всегда текущие."""
     conditions = [User.role == Role.OPERATOR, visibility]
     if group_id is not None:
         conditions.append(User.group_id == group_id)
@@ -210,6 +296,61 @@ async def operators_table(
         conditions.append(User.full_name.ilike(f"%{search.strip()}%"))
 
     total = int(await session.scalar(select(func.count(User.id)).where(*conditions)) or 0)
+
+    if period is not None:
+        scores = _period_scores(period, visibility)
+        start, stop = period.utc_bounds()
+        coins = (
+            select(
+                CoinTransaction.user_id.label("user_id"),
+                func.sum(CoinTransaction.amount).label("awarded"),
+            )
+            .where(
+                CoinTransaction.amount > 0,
+                CoinTransaction.created_at >= start,
+                CoinTransaction.created_at < stop,
+                CoinTransaction.user_id.in_(select(User.id).where(*conditions)),
+            )
+            .group_by(CoinTransaction.user_id)
+            .subquery()
+        )
+        records = await session.execute(
+            select(
+                User, Group.name, CoinAccount,
+                scores.c.points, scores.c.rank, scores.c.lateness,
+                scores.c.forbidden_sites, scores.c.scored_weeks_count, coins.c.awarded,
+            )
+            .outerjoin(Group, Group.id == User.group_id)
+            .outerjoin(CoinAccount, CoinAccount.user_id == User.id)
+            .outerjoin(scores, scores.c.user_id == User.id)
+            .outerjoin(coins, coins.c.user_id == User.id)
+            .where(*conditions)
+            .order_by(scores.c.rank.is_(None), scores.c.rank, User.full_name, User.id)
+            .offset(offset)
+            .limit(limit)
+        )
+        table = []
+        for user, group_name, account, points, rank, lateness, sites, count, awarded in records:
+            table.append(
+                OperatorRow(
+                    user_id=user.id,
+                    full_name=user.full_name,
+                    login=user.login,
+                    group_name=group_name,
+                    points=float(points or 0),
+                    rank=rank,
+                    coins_week=int(awarded or 0),
+                    balance=account.balance if account else 0,
+                    reserved=account.reserved if account else 0,
+                    total_earned=account.total_earned if account else 0,
+                    total_spent=account.total_spent if account else 0,
+                    lateness=float(lateness or 0),
+                    forbidden_sites=float(sites or 0),
+                    metrics_available=bool(count),
+                    scored_weeks_count=int(count or 0),
+                )
+            )
+        return table, total
 
     # Результат недели подтягивается левым соединением: оператор без выгруженных
     # показателей всё равно должен попасть в таблицу с нулями.
@@ -250,13 +391,16 @@ async def operators_table(
                 total_spent=account.total_spent if account else 0,
                 lateness=result.lateness_count if result else 0.0,
                 forbidden_sites=result.forbidden_sites_count if result else 0.0,
+                metrics_available=result is not None,
+                scored_weeks_count=1 if result else 0,
             )
         )
     return table, total
 
 
 async def summary(
-    session: AsyncSession, *, week: ContestWeek | None, visibility: ColumnElement[bool]
+    session: AsyncSession, *, week: ContestWeek | None, visibility: ColumnElement[bool],
+    period: OperatorPeriod | None = None,
 ) -> StaffSummary:
     """Сводка для верхнего блока админ-панели."""
     operators_total = int(
@@ -274,16 +418,21 @@ async def summary(
         or 0
     )
 
-    week_start = utcnow() - timedelta(days=7)
+    coin_conditions = [CoinTransaction.amount > 0, visibility]
+    if period is not None:
+        start, stop = period.utc_bounds()
+        coin_conditions.extend([
+            CoinTransaction.created_at >= start,
+            CoinTransaction.created_at < stop,
+            User.role == Role.OPERATOR,
+        ])
+    else:
+        coin_conditions.append(CoinTransaction.created_at >= utcnow() - timedelta(days=7))
     coins_week = int(
         await session.scalar(
             select(func.coalesce(func.sum(CoinTransaction.amount), 0))
             .join(User, User.id == CoinTransaction.user_id)
-            .where(
-                CoinTransaction.amount > 0,
-                CoinTransaction.created_at >= week_start,
-                visibility,
-            )
+            .where(*coin_conditions)
         )
         or 0
     )
@@ -298,7 +447,17 @@ async def summary(
     )
 
     average_rank = None
-    if week is not None:
+    scored_weeks_count = 0
+    if period is not None:
+        scores = _period_scores(period, visibility)
+        average_rank = await session.scalar(select(func.avg(scores.c.rank)))
+        scored_weeks_count = int(await session.scalar(
+            select(func.count(func.distinct(ContestWeek.id)))
+            .join(OperatorWeekResult, OperatorWeekResult.week_id == ContestWeek.id)
+            .join(User, User.id == OperatorWeekResult.user_id)
+            .where(*_period_weeks(period), User.role == Role.OPERATOR, visibility)
+        ) or 0)
+    elif week is not None:
         average_rank = await session.scalar(
             select(func.avg(OperatorWeekResult.rank))
             .join(User, User.id == OperatorWeekResult.user_id)
@@ -317,10 +476,17 @@ async def summary(
         average_rank=round(float(average_rank), 2) if average_rank is not None else None,
         week_label=week.label if week else None,
         week_status=str(week.status) if week else None,
+        date_from=period.date_from if period else (week.starts_on if week else None),
+        date_to=period.date_to if period else (week.ends_on if week else None),
+        coins_awarded_in_period=coins_week if period else None,
+        scored_weeks_count=scored_weeks_count,
+        metrics_available=average_rank is not None,
     )
 
 
-def operators_csv(rows: list[OperatorRow], week_label: str | None) -> str:
+def operators_csv(
+    rows: list[OperatorRow], week_label: str | None, *, period: OperatorPeriod | None = None
+) -> str:
     """
     Выгрузка таблицы операторов в CSV (п. 4.4.2).
 
@@ -331,13 +497,13 @@ def operators_csv(rows: list[OperatorRow], week_label: str | None) -> str:
     writer = csv.writer(buffer, delimiter=";", lineterminator="\r\n")
     writer.writerow(
         [
-            "Неделя",
+            "Период" if period else "Неделя",
             "ФИО",
             "Логин",
             "Группа",
             "Место",
             "Баллы",
-            "Коины за неделю",
+            "Начислено коинов за период" if period else "Коины за неделю",
             "Баланс",
             "В резерве",
             "Всего начислено",
@@ -346,22 +512,26 @@ def operators_csv(rows: list[OperatorRow], week_label: str | None) -> str:
             "Посторонние сайты",
         ]
     )
+    period_label = (
+        f"{period.date_from:%d.%m.%Y}–{period.date_to:%d.%m.%Y}" if period else week_label or ""
+    )
     for row in rows:
+        has_metrics = period is None or row.metrics_available
         writer.writerow(
             [
-                week_label or "",
+                period_label,
                 row.full_name,
                 row.login,
                 row.group_name or "",
                 row.rank if row.rank is not None else "",
-                f"{row.points:g}",
+                f"{row.points:g}" if has_metrics else "",
                 row.coins_week,
                 row.balance,
                 row.reserved,
                 row.total_earned,
                 row.total_spent,
-                f"{row.lateness:g}",
-                f"{row.forbidden_sites:g}",
+                f"{row.lateness:g}" if has_metrics else "",
+                f"{row.forbidden_sites:g}" if has_metrics else "",
             ]
         )
     return buffer.getvalue()

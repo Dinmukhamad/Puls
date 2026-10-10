@@ -1,0 +1,22 @@
+.operators-filter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 12px;
+}
+
+.operators-filter .search {
+  min-width: 0;
+  width: 100%;
+}
+
+.operators-filter .input { height: 44px; }
+
+.operators-period-note {
+  margin: -4px 0 0;
+  line-height: 1.6;
+}
+
+@media (max-width: 640px) {
+  .operators-filter { grid-template-columns: minmax(0, 1fr); }
+}

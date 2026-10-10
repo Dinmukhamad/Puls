@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Response
@@ -47,10 +47,16 @@ router = APIRouter(prefix="/admin", tags=["Админ-панель"])
 
 
 @router.get("/summary", response_model=SummaryOut, summary="Сводная статистика")
-async def summary(session: SessionDep, actor: StaffUser, week_id: int | None = None) -> SummaryOut:
-    week = await weekly_service.resolve_week(session, week_id, prefer_ranked=True)
+async def summary(
+    session: SessionDep, actor: StaffUser, week_id: int | None = None,
+    date_from: date | None = None, date_to: date | None = None,
+) -> SummaryOut:
+    period = staff_service.operator_period(date_from, date_to, week_id=week_id)
+    week = None if period else await weekly_service.resolve_week(
+        session, week_id, prefer_ranked=True
+    )
     visibility = await visible_users_filter(session, actor)
-    data = await staff_service.summary(session, week=week, visibility=visibility)
+    data = await staff_service.summary(session, week=week, visibility=visibility, period=period)
     return SummaryOut(**asdict(data))
 
 
@@ -60,15 +66,21 @@ async def operators(
     actor: StaffUser,
     pagination: PaginationDep,
     week_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     group_id: int | None = None,
     search: Annotated[str | None, Query(description="Поиск по ФИО")] = None,
 ) -> Page[OperatorRowOut]:
-    week = await weekly_service.resolve_week(session, week_id, prefer_ranked=True)
+    period = staff_service.operator_period(date_from, date_to, week_id=week_id)
+    week = None if period else await weekly_service.resolve_week(
+        session, week_id, prefer_ranked=True
+    )
     visibility = await visible_users_filter(session, actor)
     rows, total = await staff_service.operators_table(
         session,
         week=week,
         visibility=visibility,
+        period=period,
         group_id=group_id,
         search=search,
         offset=pagination.offset,
@@ -87,21 +99,32 @@ async def export_operators(
     session: SessionDep,
     actor: StaffUser,
     week_id: int | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
     group_id: int | None = None,
+    search: Annotated[str | None, Query(description="Поиск по ФИО")] = None,
 ) -> Response:
     """CSV с разделителем «;» и BOM - открывается в Excel без настройки импорта."""
-    week = await weekly_service.resolve_week(session, week_id, prefer_ranked=True)
+    period = staff_service.operator_period(date_from, date_to, week_id=week_id)
+    week = None if period else await weekly_service.resolve_week(
+        session, week_id, prefer_ranked=True
+    )
     visibility = await visible_users_filter(session, actor)
     rows, _ = await staff_service.operators_table(
         session,
         week=week,
         visibility=visibility,
+        period=period,
         group_id=group_id,
+        search=search,
         offset=0,
         limit=100_000,
     )
-    body = staff_service.operators_csv(rows, week.label if week else None)
-    filename = f"operators_{week.label if week else 'all'}.csv"
+    body = staff_service.operators_csv(rows, week.label if week else None, period=period)
+    filename = (
+        f"operators_{period.date_from}_{period.date_to}.csv" if period
+        else f"operators_{week.label if week else 'all'}.csv"
+    )
     return Response(
         content=body.encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",
