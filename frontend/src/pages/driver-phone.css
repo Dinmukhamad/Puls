@@ -1,0 +1,218 @@
+/*
+ * Driver Simulator на компьютере: приложение водителя работает в телефоне посреди экрана.
+ * Внутри рамки — обычный Puls в окне шириной с телефон, поэтому он выглядит и
+ * раскладывается ровно так, как на телефоне водителя.
+ */
+.phone-stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/*
+ * Корпус: фон — металлический обод 3px, в нём чёрная рамка 12px и экран шириной 390px.
+ * Обод и рамку учитывает phoneFit в driverPhoneFrame.ts, высоту экрана и масштаб задаёт он же.
+ */
+.phone {
+  /* Центр корпуса всегда в центре окна, даже когда без масштаба он выше окна. */
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(390px + 2 * (12px + 3px));
+  height: calc(var(--phone-screen-h) + 2 * (12px + 3px));
+  margin: calc((var(--phone-screen-h) + 2 * (12px + 3px)) / -2) 0 0 calc((390px + 2 * (12px + 3px)) / -2);
+  padding: 3px;
+  border-radius: 65px;
+  background: linear-gradient(140deg, #9a9aa1, #3d3d42 20%, #1c1c1f 48%, #434348 76%, #a3a3aa);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / .16),
+    0 34px 70px -20px rgb(0 0 0 / .55),
+    0 14px 28px -14px rgb(0 0 0 / .45);
+  /* Окно ниже телефона: он уменьшается целиком и не теряет пропорций. */
+  scale: var(--phone-scale);
+  animation: phone-rise 480ms var(--ease-standard) both;
+}
+
+.phone__screen {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border: 12px solid #000;
+  border-radius: 62px;
+  overflow: hidden;
+  isolation: isolate;
+  background: #000;
+}
+
+/* Строка состояния и полоска «домой» берут цвет приложения у краёв экрана. */
+.phone__status {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 124px 1fr;
+  align-items: center;
+  height: 50px;
+  padding-top: 4px;
+  background: var(--phone-top);
+  color: var(--phone-top-ink);
+  font: 600 16px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.01em;
+  transition: background-color var(--motion-slow) var(--ease-standard), color var(--motion-slow) var(--ease-standard);
+}
+
+.phone__time {
+  justify-self: center;
+  padding-left: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.phone__island {
+  justify-self: center;
+  width: 122px;
+  height: 35px;
+  border-radius: 18px;
+  background: #000;
+}
+
+.phone__icons {
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 8px;
+}
+
+.phone__screen iframe {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  display: block;
+  background: #080808;
+}
+
+.phone__home {
+  flex: none;
+  display: grid;
+  place-items: center;
+  height: 22px;
+  background: var(--phone-bottom);
+  transition: background-color var(--motion-slow) var(--ease-standard);
+}
+
+.phone__home span {
+  width: 134px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--phone-home);
+}
+
+/* Боковые кнопки выступают из обода на 3px. */
+.phone__key {
+  position: absolute;
+  width: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #2c2c30, #77777e 50%, #2c2c30);
+}
+
+.phone__key--action { left: -3px; top: 120px; height: 32px; }
+.phone__key--volume-up { left: -3px; top: 180px; height: 62px; }
+.phone__key--volume-down { left: -3px; top: 256px; height: 62px; }
+.phone__key--power { right: -3px; top: 210px; height: 98px; }
+
+/*
+ * Подсказка оператору из фотоконтроля. Пока открыта камера, она стоит справа от телефона,
+ * если хватает ширины; сам телефон остаётся посередине.
+ */
+.phone-coach {
+  position: absolute;
+  top: 50%;
+  left: calc(50% + 210px * var(--phone-scale) + 32px);
+  transform: translateY(-50%);
+  display: none;
+  align-content: start;
+  gap: 14px;
+  width: 330px;
+  max-height: calc((var(--phone-screen-h) + 30px) * var(--phone-scale));
+  overflow: auto;
+  padding: 24px;
+  border: 1px dashed #74765f;
+  border-radius: 26px;
+  background: #16160f;
+  color: #f5f5f3;
+  color-scheme: dark;
+  font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  animation: phone-rise 450ms var(--ease-standard) both;
+}
+
+@media (min-width: 1200px) {
+  .phone-coach {
+    display: grid;
+  }
+}
+
+.phone-coach__tag {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #ffe1281f;
+  color: #ffe128;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.phone-coach__tag::before {
+  content: "i";
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 10px;
+  font-style: italic;
+}
+
+.phone-coach h3 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.3;
+}
+
+.phone-coach b {
+  display: block;
+  margin-bottom: 4px;
+  color: #ffe128;
+  font-size: 12px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.phone-coach p {
+  margin: 0;
+  color: #d6d6cf;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+@keyframes phone-rise {
+  from {
+    opacity: 0;
+    translate: 0 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phone,
+  .phone-coach {
+    animation: none;
+  }
+}
+
+/* Puls внутри телефона: до первого кадра приложения экран остаётся тёмным, как у водителя. */
+html.in-phone body {
+  background: #080808;
+}

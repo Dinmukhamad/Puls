@@ -151,6 +151,15 @@ async function parseBody(response: Response): Promise<ApiErrorBody> {
 const REFRESH_TIMEOUT_MS = 20000;
 let refreshing: { token: string; version: number; promise: Promise<boolean> } | null = null;
 
+/**
+ * Вкладки и телефон Driver Simulator делят одну пару токенов, а сервер принимает
+ * refresh-токен только один раз. Блокировка ставит обновления разных окон в очередь.
+ */
+async function oneWindowAtATime(signal: AbortSignal, task: () => Promise<boolean>): Promise<boolean> {
+  const locks = globalThis.navigator?.locks;
+  return locks ? await locks.request("puls-token-refresh", { signal }, task) : task();
+}
+
 async function refreshAccessToken(): Promise<boolean> {
   const refresh = tokenStore.refresh;
   if (!refresh) return false;
@@ -161,17 +170,21 @@ async function refreshAccessToken(): Promise<boolean> {
   active.promise = (async () => {
     const scope = requestScope(undefined, REFRESH_TIMEOUT_MS);
     try {
-      const response = await scope.wait(fetch(`${BASE}/api/v1/auth/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refresh }),
-        signal: scope.signal,
+      return await scope.wait(oneWindowAtATime(scope.signal, async () => {
+        // Пока ждали очереди, другое окно уже обменяло этот токен: новая пара лежит в хранилище.
+        if (tokenStore.refresh !== refresh) return tokenStore.refresh !== null;
+        const response = await scope.wait(fetch(`${BASE}/api/v1/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refresh }),
+          signal: scope.signal,
+        }));
+        if (!response.ok) return false;
+        const token = (await scope.wait(response.json())) as Token;
+        if (tokenStore.refresh !== refresh || sessionVersion !== active.version) return false;
+        tokenStore.save(token, true);
+        return true;
       }));
-      if (!response.ok) return false;
-      const token = (await scope.wait(response.json())) as Token;
-      if (tokenStore.refresh !== refresh || sessionVersion !== active.version) return false;
-      tokenStore.save(token, true);
-      return true;
     } catch (error) {
       if (error instanceof ApiError) throw error;
       throw new ApiError(0, {});

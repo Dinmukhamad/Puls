@@ -16,6 +16,10 @@
       // Тема выставляется до первой отрисовки: иначе тёмный интерфейс
       // мигает белым на старте.
       (function () {
+        // Внутри телефона Driver Simulator экран тёмный с первого кадра.
+        if (window.name === "puls-phone") {
+          document.documentElement.classList.add("in-phone");
+        }
         try {
           var saved = localStorage.getItem("puls.theme") || "system";
           var dark =

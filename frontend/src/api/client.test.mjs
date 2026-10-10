@@ -8,8 +8,8 @@ const built = await transform(source, { loader: "ts", format: "esm", define: {
   "import.meta.env.DEV": "true", "import.meta.env.VITE_API_BASE_URL": '""',
 } });
 let serial = 0;
-async function setup() {
-  const storage = new Map();
+/** A fresh client module; windows of one browser pass the same storage. */
+async function setup(storage = new Map()) {
   globalThis.localStorage = { getItem: (key) => storage.get(key) ?? null,
     setItem: (key, value) => storage.set(key, value), removeItem: (key) => storage.delete(key) };
   return import(`data:text/javascript;base64,${Buffer.from(built.code).toString("base64")}#${++serial}`);
@@ -253,4 +253,44 @@ test("a replacement login starts its own refresh while an old account's refresh 
   replacementRefresh.resolve(json(rotated));
   assert.deepEqual(await current, { account: "replacement" });
   assert.equal(api.tokenStore.access, rotated.access_token);
+});
+
+/** Web Locks in miniature: requests for one name run strictly one after another. */
+function lockManager() {
+  let tail = Promise.resolve();
+  return {
+    request(name, options, task = options) {
+      const run = tail.then(() => task({ name }));
+      tail = run.catch(() => undefined);
+      return run;
+    },
+  };
+}
+
+test("a tab and the simulator phone rotate their shared refresh token once and both continue", async (t) => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", { value: { locks: lockManager() }, configurable: true });
+  t.after(() => { if (original) Object.defineProperty(globalThis, "navigator", original); else delete globalThis.navigator; });
+  const storage = new Map();
+  const tab = await setup(storage), phone = await setup(storage);
+  tab.tokenStore.save(oldToken);
+  // Like the server: only the latest refresh token is accepted, and only once.
+  let current = oldToken.refresh_token, refreshes = 0;
+  const gate = deferred();
+  globalThis.fetch = async (url, options) => {
+    if (url.endsWith("/refresh")) {
+      refreshes++;
+      await gate.promise;
+      if (JSON.parse(options.body).refresh_token !== current) return json({ detail: "Недействительный токен" }, 401);
+      current = newToken.refresh_token;
+      return json(newToken);
+    }
+    return options.headers.Authorization === "Bearer new-access" ? json({ ok: true }) : json({}, 401);
+  };
+  const results = [tab.request("/data"), phone.request("/data")];
+  await flush();
+  gate.resolve();
+  assert.deepEqual(await Promise.all(results), [{ ok: true }, { ok: true }]);
+  assert.equal(refreshes, 1, "the waiting window reuses the pair the first one received");
+  assert.equal(phone.tokenStore.refresh, newToken.refresh_token);
 });

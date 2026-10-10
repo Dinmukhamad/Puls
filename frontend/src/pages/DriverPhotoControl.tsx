@@ -4,6 +4,7 @@ import type { DriverShift, ShiftAct } from "../api/driverShift";
 import { DAction, DChoice, DExplain, DInfo } from "./DriverButtons";
 import { Confetti, SuccessMark } from "./DriverMotion";
 import { PhotoGuide, PhotoScene, PhotoThumb, plateParts, type PhotoArtData, type PhotoKind } from "./DriverPhotoArt";
+import { usePhoneCoach } from "./DriverPhone";
 import "./driver-photo.css";
 
 /* Фотоконтроль машины и СТС — так, как его проходит водитель в Яндекс Про.
@@ -489,6 +490,8 @@ export function DriverPhotoControl({ shift, busy, act, go, detail, head, orderAc
     : step?.doc && flash ? "Выключите вспышку — будет блик" : darkNow ? "Темно — включите вспышку" : "Кадр ровный — снимайте";
   const cueTone = !locked ? "aim" : (step?.doc && flash && !cameraMode) || darkNow ? "warn" : "ok";
   const coach = operatorNote(stage, step ?? review, retake !== null, count);
+  // На компьютере приложение работает в телефоне, и подсказка встаёт рядом с ним.
+  usePhoneCoach(open ? coach : null);
 
   const overlay = open && <div className="pc-overlay" ref={dialog} role="dialog" aria-modal="true" aria-label={`${PHOTO_CHECK}: камера приложения`} tabIndex={-1} data-stage={stage}>
     <div className="pc-device">

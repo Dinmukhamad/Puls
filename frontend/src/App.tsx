@@ -9,6 +9,7 @@ import { SectionGuard } from "./components/SectionGuard";
 import { appEntryRedirect } from "./navigation";
 import { LoginPage } from "./auth/LoginPage";
 import { AppLayout } from "./components/AppLayout";
+import { DriverSimulator, usePhoneFrameBridge } from "./pages/DriverPhone";
 import { ErrorState, Skeleton } from "./components/ui";
 import { AdminOperatorsPage } from "./pages/AdminOperatorsPage";
 import { AdminRequestsPage } from "./pages/AdminRequestsPage";
@@ -53,6 +54,8 @@ export function App() {
   const cityOwner = user && !access.loading && !access.error && access.canPath("/training/city") ? `${user.id}:${user.role}` : null;
   useLayoutEffect(() => { retainedCity.setOwner(cityOwner); }, [cityOwner]);
   useLayoutEffect(() => () => retainedCity.clear(), []);
+  const leavingPhone = usePhoneFrameBridge(!loading && !user && !restoreError);
+  if (leavingPhone) return null;
 
   if (loading) {
     return (
@@ -76,7 +79,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/training/work-sites" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={300} /></div>}><WorkSitesGate><WorkSitesPage /></WorkSitesGate></Suspense></SectionGuard>} />
-      <Route path="/simulator" element={<SectionGuard><Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense></SectionGuard>} />
+      <Route path="/simulator" element={<SectionGuard><DriverSimulator app={<Suspense fallback={<div className="boot"><Skeleton height={44} width={220} /></div>}><DriverAppPage /></Suspense>} /></SectionGuard>} />
       <Route path="/simulator/attempts/:attemptId" element={<SectionGuard><Suspense fallback={<Skeleton height={300} />}><SimulatorPage /></Suspense></SectionGuard>} />
       <Route element={<AppLayout />}>
         <Route path="/training/city" element={<CityRoute />} />
