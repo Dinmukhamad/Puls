@@ -2,16 +2,14 @@ import { AssignmentEditor, DriverContentEditor } from "./TrainingTools";
 import { driverShift } from "../api/driverShift";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
-import { Link, useSearchParams, useNavigate } from "react-router-dom";
-import { learning, learningKindFilter, VISIBLE_LEARNING_KINDS, attemptPath, DIFFICULTY, LEARNING_LABELS, type ContentInput, type LearningContent, type LearningKind, type LearningStep } from "../api/learning";
+import { Link, useNavigate } from "react-router-dom";
+import { learning, attemptPath, DIFFICULTY, LEARNING_LABELS, type ContentInput, type LearningContent, type LearningKind, type LearningStep } from "../api/learning";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSkeleton, SegmentedControl } from "../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, Pagination, RowsSkeleton } from "../components/ui";
 import { dateTime } from "../utils/format";
 import "./learning.css";
-import { DriverParksEditor } from "./DriverParksEditor";
-import { DriverScenarioEditor, DriverTeamResults } from "./DriverScenarioEditor";
 
 const STATUS = { draft: "Черновик", published: "Опубликовано", archived: "В архиве" };
 const newStep = (): LearningStep => ({ speaker: "", text: "", options: ["", ""], correct: 0, explanation: "" });
@@ -23,18 +21,16 @@ function inputFrom(content: LearningContent): ContentInput {
   return { kind, title, description, world, difficulty, minutes, status, is_required, deadline, allow_back, pass_percent, coins_reward, driver_config, steps: structuredClone(steps ?? []) };
 }
 
+/** Сценарии Driver Simulator: их создаёт, проверяет и назначает тренер. */
 export function LearningStudioPage() {
-  const { user, atLeast } = useAuth();
-  const canEdit = user?.role === "trainer" || atLeast("head");
-  const [params, setParams] = useSearchParams(), navigate = useNavigate();
-  const [editor, setEditor] = useState<LearningContent | LearningKind | null>(null);
+  const { user } = useAuth();
+  const canEdit = user?.role === "trainer";
+  const navigate = useNavigate();
+  const [editor, setEditor] = useState<LearningContent | null>(null);
   const [assignment, setAssignment] = useState<LearningContent | null>(null);
   const [driverEditor, setDriverEditor] = useState<LearningContent | "new" | null>(null);
   const query = useQuery({ queryKey: ["learning-definitions"], queryFn: learning.definitions });
-  const kind = learningKindFilter(params.get("kind")), tab = params.get("tab") ?? "content";
-  const resultKind = kind === "simulator" ? kind : undefined;
-  const selectTab = (tab: string) => { const next = new URLSearchParams(params); next.set("tab", tab); setParams(next); };
-  const visible = query.data?.filter((item) => kind === "all" || item.kind === kind);
+  const visible = query.data?.filter((item) => item.kind === "simulator");
   const client = useQueryClient();
   const preview = useMutation({ mutationFn: async (item: LearningContent) => {
     if (item.is_driver) {
@@ -42,17 +38,13 @@ export function LearningStudioPage() {
       client.setQueryData(["driver-profile"], data); navigate("/simulator");
     } else navigate(attemptPath(await learning.preview(item.id)));
   } });
-  return <div className="stack"><div className="page-head"><div><h1 className="page-title">{kind === "simulator" ? "Driver Simulator" : "Студия обучения"}</h1><p className="page-subtitle">Материалы, назначения и результаты операторов</p></div><Link className="btn btn--secondary" to="/training">Пройти обучение</Link></div>
-    <div className="studio-tabs"><SegmentedControl label="Раздел студии" value={tab} onChange={selectTab} options={[{ value: "content", label: "Материалы" }, { value: "results", label: "Результаты команды" }]} /><Link to="/admin/learning-analytics">Аналитика обучения →</Link></div>
-    {tab === "results" ? <>{(kind === "all" || kind === "simulator") && <DriverTeamResults />}<LearningResults key={resultKind ?? "all"} kind={resultKind} /></> : <>
-      {user?.role !== "trainer" && (kind === "all" || kind === "simulator") && <details><summary>Общие настройки Driver Simulator</summary><DriverParksEditor /><DriverScenarioEditor /></details>}
-      <div className="training-filters"><label className="field"><span className="field__label">Тип материала</span><select className="input" value={kind} onChange={(e) => setParams({ kind: e.target.value })}><option value="all">Все материалы</option>{VISIBLE_LEARNING_KINDS.map(key => [key, LEARNING_LABELS[key]]).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>{canEdit && <div className="row"><Button onClick={() => setDriverEditor("new")}>+ Сценарий водителя</Button></div>}</div>
-      {query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
-      {!visible?.length && !query.isLoading && !query.isError && <EmptyState title="Материалов пока нет" hint="Создайте задание, проверьте прохождение и назначьте операторам." />}
-      <div className="training-grid">{visible?.map((item) => <Card key={item.id} title={item.title} subtitle={`${LEARNING_LABELS[item.kind]} · версия ${item.revision}`} action={<Badge tone={item.status === "published" ? "success" : "neutral"}>{STATUS[item.status]}</Badge>}><div className="stack stack--tight"><p>{item.description}</p><p className="secondary small">{item.is_driver ? "Учебная смена" : `${item.step_count} шагов`} · {item.pass_percent}% для прохождения</p><Button onClick={() => item.is_driver && canEdit ? setDriverEditor(item) : setEditor(item)}>{canEdit ? "Открыть редактор" : "Просмотреть"}</Button><Button disabled={preview.isPending} onClick={() => preview.mutate(item)}>Пройти как оператор</Button>{canEdit && item.status === "published" && <Button variant="primary" onClick={() => setAssignment(item)}>Назначить операторам</Button>}</div></Card>)}</div>
-    </>}
+  return <div className="stack"><div className="page-head"><div><h1 className="page-title">Сценарии Driver Simulator</h1><p className="page-subtitle">Учебные смены водителя и проверка перед публикацией</p></div><Link className="btn btn--secondary" to="/admin/learning-analytics">Аналитика симулятора</Link></div>
+    {canEdit && <div className="row"><Button onClick={() => setDriverEditor("new")}>+ Сценарий водителя</Button></div>}
+    {query.isLoading && <RowsSkeleton />}{query.isError && <ErrorState error={query.error} onRetry={() => query.refetch()} />}
+    {!visible?.length && !query.isLoading && !query.isError && <EmptyState title="Сценариев пока нет" hint="Создайте сценарий и проверьте его кнопкой «Пройти как оператор»." />}
+    <div className="training-grid">{visible?.map((item) => <Card key={item.id} title={item.title} subtitle={`${LEARNING_LABELS[item.kind]} · версия ${item.revision}`} action={<Badge tone={item.status === "published" ? "success" : "neutral"}>{STATUS[item.status]}</Badge>}><div className="stack stack--tight"><p>{item.description}</p><p className="secondary small">{item.is_driver ? "Учебная смена" : `${item.step_count} шагов`} · {item.pass_percent}% для прохождения</p><Button onClick={() => item.is_driver && canEdit ? setDriverEditor(item) : setEditor(item)}>{canEdit ? "Открыть редактор" : "Просмотреть"}</Button><Button disabled={preview.isPending} onClick={() => preview.mutate(item)}>Пройти как оператор</Button>{canEdit && item.status === "published" && <Button variant="primary" onClick={() => setAssignment(item)}>Назначить операторам</Button>}</div></Card>)}</div>
     {preview.isError && <ErrorState error={preview.error} />}
-    {editor && <ContentEditor target={typeof editor === "string" ? undefined : editor} kind={typeof editor === "string" ? editor : editor.kind} onClose={() => setEditor(null)} />}
+    {editor && <ContentEditor target={editor} kind={editor.kind} onClose={() => setEditor(null)} />}
     {assignment && <AssignmentEditor content={assignment} onClose={() => setAssignment(null)} />}
     {driverEditor && <DriverContentEditor content={driverEditor === "new" ? undefined : driverEditor} onClose={() => setDriverEditor(null)} />}
   </div>;

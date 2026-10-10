@@ -31,7 +31,7 @@ export function ProgressOverview({ data, showDetails, own = false }: { data: Coi
       {nearest && <Card title="Ближайшее достижение"><Achievement item={nearest} own={own} /></Card>}
       <Card title="Как заработать коины"><div className="coin-earning-options">
         <div><h3>Работа</h3><p>Выполняйте показатели недели. После закрытия недели результат и бонусы переводятся в коины.</p>{own && <Link hideWhenDenied to="/cabinet">Посмотреть показатели →</Link>}</div>
-        <div><h3>Обучение</h3><p>Пройдите задание успешно. Размер награды указан в его карточке; за одно задание коины выдаются один раз.</p>{own && <Link hideWhenDenied to="/training">Выбрать обучение →</Link>}</div>
+        <div><h3>Обучение</h3><p>Пройдите задание успешно. Размер награды указан в его карточке; за одно задание коины выдаются один раз.</p>{own && <Link hideWhenDenied to="/training/city">Перейти к обучению →</Link>}</div>
         <div><h3>Достижения</h3><p>Выполняйте условия ниже. Бонус за первое получение приближает следующий уровень.</p><a href="#work-achievements">Посмотреть условия ↓</a></div>
       </div></Card>
       <Card title="Уровни и достижения" subtitle="При достижении порога открываются уровень и его достижение. Повторного начисления коинов за уровень нет.">

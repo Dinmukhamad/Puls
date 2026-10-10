@@ -232,7 +232,6 @@ export function CityPage() {
         {department === "support" && data.group && <button type="button" className="city-group-button" onClick={() => setGroupOpen(true)} aria-label={`Город группы: ${data.group.name}`}><span aria-hidden="true">🏗️</span><span className="city-hud__wide">Группа</span></button>}
         {department === "support" && !data.inspecting && data.districts.some(d => d.id === "scenarios") && <Link className="city-group-button" to="/training/scenarios/business_park" aria-label="Сценарий: Бизнес через парк"><span aria-hidden="true">🎭</span><span className="city-hud__wide">Сценарии</span></Link>}
         {user?.role !== "operator" && <Link to="/admin/learning/city" aria-label="Управление городом"><span aria-hidden="true">⚙︎</span><span className="city-hud__wide">Управление</span></Link>}
-        <Link to="/training" aria-label="Материалы обучения"><span aria-hidden="true">📚</span><span className="city-hud__wide">Материалы</span></Link>
       </nav>
     </header>
     <div className="city-hud__notices">

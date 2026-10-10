@@ -8,8 +8,7 @@ import { Button, Card, ErrorState } from "../components/ui";
 const reports = [
   { title: "Рабочие показатели", text: "Сводка, сравнение групп и показатели сотрудников", to: "/analytics" },
   { title: "Качество", text: "Покрытие оценками и недельная матрица", to: "/analytics?tab=quality&metric=quality" },
-  { title: "Обучение", text: "Попытки, результаты и награды сотрудников", to: "/admin/learning?tab=results" },
-  { title: "Driver Simulator", text: "Результаты прохождений симулятора", to: "/admin/learning?tab=results&kind=simulator" },
+  { title: "Аналитика симулятора", text: "Прогресс, ошибки и активность операторов в Driver Simulator", to: "/admin/learning-analytics" },
   { title: "История коинов", text: "Баланс операторов, начисления, списания и возвраты", to: "/admin/wallet" },
   { title: "Магазин", text: "Заявки, решения и выдача покупок", to: "/admin/requests" },
 ];

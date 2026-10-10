@@ -1,9 +1,7 @@
 import { DriverTripReviews } from "./DriverTripReviews";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { driver } from "../api/driver";
 import { driverShift, type DriverScenario } from "../api/driverShift";
-import { useAuth } from "../auth/AuthContext";
 import { Button, Card, ErrorState, RowsSkeleton } from "../components/ui";
 import { dateTime } from "../utils/format";
 
@@ -13,14 +11,6 @@ export function DriverTeamResults({ userId }: { userId?: number } = {}) {
   return <Card title="Driver Simulator · смены команды"><div className="stack">{query.isLoading ? <RowsSkeleton /> : query.isError ? <ErrorState error={query.error} onRetry={() => query.refetch()} /> : query.data?.items.length ? query.data.items.map(x => <details key={x.id}><summary>{x.full_name} · {x.finished_at ? x.result?.score == null ? "Свободная практика" : `${x.result.score}/100` : `В работе · ${x.completed} заказов`}</summary><p>{x.title} · {dateTime(x.created_at)}</p><DriverTripReviews trips={x.result?.trips} />{x.result?.checks.map(check => <p className="small" key={check.key}>{check.done ? "✓" : "○"} {check.title} · {check.path}</p>)}</details>) : <p className="secondary">Смены сотрудников появятся после запуска тренажёра.</p>}<div className="row"><Button disabled={page <= 1} onClick={() => setPage(page - 1)}>Назад</Button><span>{page}</span><Button disabled={page * 20 >= (query.data?.total ?? 0)} onClick={() => setPage(page + 1)}>Далее</Button></div></div></Card>;
 }
 
-export function DriverScenarioEditor() {
-  const config = useQuery({ queryKey: ["driver-scenario"], queryFn: driverShift.config });
-  const parks = useQuery({ queryKey: ["driver-parks"], queryFn: driver.parks });
-  const { atLeast } = useAuth();
-  return <Card title="Driver Simulator · сценарий смены" subtitle="Правила применяются к новым сменам. Начатая смена сохраняет свои условия.">
-    {config.isLoading ? <RowsSkeleton /> : config.isError ? <ErrorState error={config.error} onRetry={() => config.refetch()} /> : config.data && <ScenarioForm initial={config.data} parks={parks.data?.parks ?? []} readOnly={!atLeast("head")} />}
-  </Card>;
-}
 export function ScenarioForm({ initial, parks, readOnly, onSave = driverShift.saveConfig, saveLabel = "Сохранить сценарий новых смен" }: { initial: DriverScenario; parks: { id: string; name: string }[]; readOnly: boolean; onSave?: (value: DriverScenario) => Promise<DriverScenario>; saveLabel?: string }) {
   const [value, setValue] = useState(() => structuredClone(initial));
   const save = useMutation({ mutationFn: onSave, onSuccess: setValue });

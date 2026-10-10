@@ -40,9 +40,9 @@ test("trainer navigation stays within learning even with explicit grants", () =>
   for (const path of ["/admin/users/42", "/admin/learning", "/admin/learning-analytics", "/training", "/simulator", "/profile"]) {
     assert.equal(nav.canVisit("trainer", path, all), true, path);
   }
-  assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=test")?.id, "training");
-  assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=mission")?.id, "training");
-  assert.equal(nav.currentSection("trainer", "/admin/learning", "?kind=simulator")?.id, "driver");
+  // The trainer's studio holds only Driver Simulator scenarios, whatever filter an old link carries.
+  for (const search of ["", "?kind=test", "?kind=simulator"]) assert.equal(nav.currentSection("trainer", "/admin/learning", search)?.id, "driver", search);
+  assert.equal(nav.currentSection("trainer", "/admin/learning/city")?.id, "training");
   assert.equal(nav.canVisit("operator", "/admin/users", all), false);
 });
 
@@ -151,7 +151,7 @@ test("grants add discoverable destinations and revocations remove every tab", ()
     assert.equal(nav.canVisit(role, "/admin/access", {}), role === "admin");
   }
   assert.ok(nav.visibleNavigation("operator", { analytics: true }).some((item) => item.to.startsWith("/analytics")));
-  assert.ok(nav.visibleNavigation("head", { training: true }).some((item) => item.to.startsWith("/training")));
+  assert.ok(nav.visibleNavigation("head", { rewards: true }).some((item) => item.to.startsWith("/shop")));
 });
 
 test("every subsection activates its parent, including settings shared by domains", () => {
@@ -166,13 +166,13 @@ test("every subsection activates its parent, including settings shared by domain
 
 test("deep links and query filters retain the proper section", () => {
   assert.equal(nav.currentSection("admin", "/admin/users/25", "?tab=progress")?.id, "team");
-  assert.equal(nav.currentSection("operator", "/training/attempts/23")?.id, "training");
+  assert.equal(nav.currentSection("operator", "/training/city", "?district=driver")?.id, "training");
   assert.equal(nav.currentSection("head", "/profile")?.id, "profile");
   assert.equal(nav.currentSection("operator", "/admin/wallet"), undefined);
   assert.equal(nav.currentSection("supervisor", "/admin/audit"), undefined);
   assert.equal(nav.currentSection("head", "/admin/users-invalid"), undefined);
-  const learning = nav.currentSection("head", "/admin/learning");
-  assert.equal(nav.currentTab(learning, "/admin/learning", "?tab=results&kind=simulator").label, "Результаты команды");
+  const learning = nav.currentSection("head", "/admin/learning-analytics");
+  assert.equal(nav.currentTab(learning, "/admin/learning-analytics", "?dashboard=operators").label, "Аналитика симулятора");
 });
 
 test("mobile bar keeps the wheel in reach and bounds larger role menus", () => {
@@ -206,10 +206,6 @@ test("section switches preserve selected reporting periods and reset pagination"
   assert.equal(rating.get("week"), "42"); assert.equal(rating.get("tab"), "progress"); assert.equal(rating.has("page"), false);
   const analytics = to("/analytics?tab=quality", "/analytics", "?week_id=42&group_id=5&page=3");
   assert.equal(analytics.get("week_id"), "42"); assert.equal(analytics.get("group_id"), "5"); assert.equal(analytics.has("page"), false);
-  const results = to("/admin/learning?tab=results", "/admin/learning", "?kind=simulator");
-  assert.equal(results.get("kind"), "simulator");
-  const materials = to("/admin/learning?kind=test", "/admin/learning", "?tab=results&kind=simulator");
-  assert.equal(materials.get("kind"), "test"); assert.equal(materials.has("tab"), false);
 });
 
 
@@ -223,7 +219,8 @@ test("old installed launch URL resolves to an allowed home for every role and pe
       assert.ok(can(redirect ?? "/cabinet"), role);
       assert.equal(nav.appEntryRedirect("/profile", home, can), null);
       assert.equal(nav.appEntryRedirect("/admin/access", home, can), null, "Other protected routes keep their access guard");
-      assert.equal(nav.appEntryRedirect("/training/attempts/123", home, can), can("/training") ? "/training" : home);
+      // Learning materials are gone: their pages lead to the city.
+      for (const path of ["/training", "/training/attempts/123"]) assert.equal(nav.appEntryRedirect(path, home, can), can("/training/city") ? "/training/city" : home);
       assert.equal(nav.appEntryRedirect("/simulator/attempts/123", home, can), null);
     }
   }
@@ -237,7 +234,8 @@ test("legacy tests stay hidden while the new city missions are available", () =>
       assert.doesNotMatch(JSON.stringify(items), /kind=(test|mission)|Тесты|Mission Studio/);
       assert.ok(items.some(x => x.tabs.some(t => t.to === "/training/city")));
       assert.ok(items.every(x => x.tabs.every(t => !t.to.includes("work-sites"))));
-      if (role !== "operator") assert.ok(items.some(x => x.tabs.some(t => t.to.includes("kind=simulator"))));
+      if (role !== "operator") assert.ok(items.some(x => x.tabs.some(t => t.to === "/admin/learning-analytics")));
+      if (role === "trainer") assert.ok(items.some(x => x.tabs.some(t => t.to.includes("kind=simulator"))));
     }
   }
 });
@@ -260,4 +258,22 @@ test("QR scanner is available to every non-operator and never granted to operato
       assert.equal(nav.visibleNavigation(role, allowed).some(x => x.to === "/qr-access"), role !== "operator");
     }
   }
+});
+
+test("learning keeps the city and the simulator analytics, and only the trainer keeps scenarios", () => {
+  for (const role of ["supervisor", "head", "admin"]) {
+    const learning = nav.visibleNavigation(role).find((item) => item.id === "training");
+    assert.deepEqual(learning.tabs.map((tab) => tab.label), ["Миссии города", "Город оператора", "Аналитика симулятора"], role);
+    const can = (path) => nav.canVisit(role, path, nav.defaultAccess(role));
+    assert.equal(can("/admin/learning"), false, `${role}: the studio is gone`);
+    // A bookmarked studio opens the simulator analytics instead of an access error.
+    assert.equal(nav.appEntryRedirect("/admin/learning", "/admin/summary", can), "/admin/learning-analytics", role);
+  }
+  assert.deepEqual(nav.visibleNavigation("operator").find((item) => item.id === "training").tabs.map((tab) => tab.to), ["/training/city"]);
+  const trainer = nav.visibleNavigation("trainer");
+  assert.deepEqual(trainer.find((item) => item.id === "training").tabs.map((tab) => tab.label), ["Миссии города", "Город оператора"]);
+  assert.deepEqual(trainer.find((item) => item.id === "driver").tabs.map((tab) => tab.label), ["Сценарии", "Тестовый запуск в городе"]);
+  assert.deepEqual(trainer.find((item) => item.id === "learning_analytics").tabs.map((tab) => tab.label), ["Аналитика симулятора"]);
+  const trainerCan = (path) => nav.canVisit("trainer", path, nav.defaultAccess("trainer"));
+  assert.equal(nav.appEntryRedirect("/admin/learning", "/trainer", trainerCan), null, "the trainer keeps the scenarios");
 });

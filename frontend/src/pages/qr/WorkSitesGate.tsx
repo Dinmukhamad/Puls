@@ -26,7 +26,7 @@ function OperatorGate({ children }: { children: ReactNode }) {
   if (status.isPending) return <div className="qr-gate-page"><Skeleton height={350} /></div>;
   // Never mount the CRM (and its data requests) until the server grants this session.
   if (status.data?.granted) return children;
-  return <div className="qr-gate-page"><Link className="qr-back" to="/training">← Обучение</Link>
+  return <div className="qr-gate-page"><Link className="qr-back" to="/training/city">← Обучение</Link>
     <section className="qr-gate-card"><div className="qr-gate-emblem"><QrIcon size={32} /></div>
       <span className="qr-eyebrow">ДОСТУП С ПОДТВЕРЖДЕНИЕМ</span><h1>Рабочие сайты</h1>
       <p className="qr-intro">Покажите свой QR сотруднику. После подтверждения рабочее окно откроется автоматически.</p>
