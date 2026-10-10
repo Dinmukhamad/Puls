@@ -34,6 +34,88 @@
 .configuration-rule-summary { color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
 .configuration-condition { min-width: 0; padding: 20px; border: 1px solid var(--border-subtle); border-radius: var(--radius-m); }
 .configuration-condition legend { padding: 0 8px; font-weight: 600; font-size: 14px; }
+
+/* Definition cards share the same content rows; store cards keep their layout. */
+.configuration-page .page-head { align-items: center; }
+.configuration-definitions-page .configuration-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  align-items: end;
+  gap: 16px;
+  padding: 16px;
+}
+.configuration-definitions-page .configuration-filters > .field {
+  min-width: 0;
+  margin: 0;
+}
+.configuration-definitions-page .configuration-filters .input {
+  height: 44px;
+  min-height: 44px;
+}
+.configuration-definitions-page .definition-cards { grid-auto-rows: 1fr; }
+.definition-card {
+  display: grid;
+  grid-template-rows: 76px 66px 144px auto;
+  gap: 16px;
+  padding: 20px;
+  min-width: 0;
+}
+.definition-card__head { display: grid; grid-template-rows: 24px 44px; gap: 8px; min-width: 0; }
+.definition-card__status { display: flex; align-items: start; justify-content: end; }
+.definition-card__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 22px;
+  letter-spacing: -.02em;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.definition-card__description {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+.definition-card__facts { display: grid; grid-template-rows: repeat(3, 48px); margin: 0; min-width: 0; }
+.definition-card__fact {
+  display: grid;
+  grid-template-columns: minmax(80px, .8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: center;
+  padding-block: 4px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.definition-card__fact dt { font-size: 12px; line-height: 18px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.definition-card__fact dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  text-align: right;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.definition-card__footer { display: flex; align-items: end; justify-content: space-between; gap: 8px; min-width: 0; }
+.definition-card__footer > .btn { min-height: 40px; }
+.definition-card__footer > .btn:only-child { margin-left: auto; }
+.definition-details > .badge { justify-self: start; }
+.definition-details__facts { display: grid; gap: 16px; margin: 0; }
+.definition-details__facts > div { display: grid; grid-template-columns: minmax(90px, .65fr) minmax(0, 1.35fr); gap: 16px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle); }
+.definition-details__facts dt { color: var(--text-secondary); font-size: 13px; }
+.definition-details__facts dd { margin: 0; line-height: 1.6; font-weight: 600; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .configuration-form-grid { grid-template-columns: 1fr; gap: 16px; }
   .configuration-filters { padding: 12px; gap: 12px; }
@@ -41,4 +123,11 @@
   .configuration-filters > .field:not(.configuration-search) { min-width: 120px; }
   .configuration-save { align-items: stretch; flex-direction: column; }
   .configuration-actions .btn { min-height: 44px; }
+  .configuration-definitions-page .configuration-filters { grid-template-columns: minmax(0, 1fr); padding: 12px; gap: 12px; }
+  .configuration-definitions-page .definition-cards { grid-auto-rows: auto; }
+  .definition-card { grid-template-rows: auto auto auto auto; gap: 14px; padding: 18px; }
+  .definition-card__head { grid-template-rows: 24px auto; }
+  .definition-card__facts { grid-template-rows: repeat(3, minmax(44px, auto)); }
+  .definition-card__footer > .btn { min-height: 44px; }
+  .definition-details__facts > div { grid-template-columns: minmax(80px, .6fr) minmax(0, 1.4fr); gap: 12px; }
 }

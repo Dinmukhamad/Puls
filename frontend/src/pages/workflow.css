@@ -16,4 +16,13 @@
 .workflow-stats { display:flex; flex-wrap:wrap; gap:var(--sp-4); font-variant-numeric:tabular-nums; }
 .workflow-actions { display:flex; flex-wrap:wrap; gap:var(--sp-3); }
 .workflow-error { padding:var(--sp-4); border-radius:var(--radius-m); background:var(--surface-secondary); color:var(--text-primary); border-left:3px solid var(--status-danger); }
+.period-controls { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1fr) auto; align-items:end; gap:16px; }
+.period-controls .field { display:grid; grid-template-rows:18px 44px; gap:8px; min-width:0; margin:0; }
+.period-controls .field__label { height:18px; line-height:18px; margin:0; }
+.period-controls :is(.input, .btn) { height:44px; min-height:44px; }
+.periods-page .card__title { line-height:1.4; }
+.periods-page .page-head { align-items:center; }
+@media(max-width:900px) { .period-controls { grid-template-columns:repeat(2, minmax(0, 1fr)); }.period-controls > .btn { grid-column:1 / -1; width:100%; } }
+@media(max-width:600px) { .period-controls { grid-template-columns:minmax(0, 1fr); gap:16px; }.period-controls > .btn { grid-column:auto; width:100%; }.period-controls .field { min-width:0; } }
 @media(max-width:767px) { .workflow-toolbar .field { min-width:100%; } .upload-zone { padding:var(--sp-5); } .workflow-steps { gap:var(--sp-2); } .workflow-step { font-size:12px; } .workflow-step span { width:24px; height:24px; } }
+.period-controls.period-controls--readonly { grid-template-columns:minmax(0, 1fr); }

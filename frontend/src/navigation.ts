@@ -41,7 +41,7 @@ const analytics = (supervisor = false) => section("analytics", "Аналитик
   ...(supervisor ? [tab("/admin/periods", "Периоды"), tab("/admin/settings", "Правила и показатели")] : []),
 ]);
 const performance = (admin = false) => section("performance", "Показатели", InboxIcon, [
-  tab("/admin/periods", "Расчёт и история периодов"), tab("/admin/settings?tab=metrics", "Рабочие метрики"),
+  tab("/admin/periods", "Расчёт и история периодов"), tab("/admin/settings?tab=metrics", "Рабочие показатели"),
   tab("/admin/settings?tab=rules", "Правила расчёта"), tab("/admin/settings?tab=nominations", "Номинации"), tab("/rating", "Рейтинг"),
 ], ["/admin/periods", "/rating", ...(admin ? [] : ["/admin/settings"])]);
 const motivation = (supervisor = false) => section("motivation", "Мотивация", StoreIcon, [

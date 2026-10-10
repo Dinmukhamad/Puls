@@ -8,3 +8,14 @@
 .rating-personal__metrics dd { margin: 0; font-size: 18px; font-weight: 600; }
 .rating-personal__podium { display: flex; align-items: center; gap: 8px; }
 .rating-personal__gap { display: grid; gap: 6px; }
+
+/* The period and its status share the same label and control baselines. */
+.rating-filters { position:static; display:grid; grid-template-columns:minmax(0, 1fr) minmax(180px, .45fr); align-items:start; gap:16px; padding:16px; }
+.rating-filters .week-picker, .rating-filter-status { display:grid; grid-template-rows:18px 44px; gap:8px; width:100%; min-width:0; }
+.rating-filters .field__label { height:18px; line-height:18px; margin:0; }
+.rating-filters .week-picker__control { height:44px; min-height:44px; }
+.rating-filters .week-picker__arrow { min-height:42px; }
+.rating-filters .week-picker__trigger { padding:0 2px; }
+.rating-filters .week-picker__trigger small { position:absolute; width:1px; height:1px; margin:-1px; clip-path:inset(50%); overflow:hidden; white-space:nowrap; }
+.rating-filter-status > div { display:flex; align-items:center; gap:8px; }
+@media(max-width:600px) { .rating-filters { grid-template-columns:minmax(0, 1fr); }.rating-filter-status { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }.rating-filter-status .field__label { height:auto; }.rating-filter-status > div { min-height:24px; } }

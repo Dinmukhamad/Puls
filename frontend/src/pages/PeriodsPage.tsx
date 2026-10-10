@@ -6,7 +6,8 @@ import { configuration } from "../api/configuration";
 import { useAuth } from "../auth/AuthContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
-import { Badge, Button, Card, EmptyState, ErrorState, KPI, Skeleton } from "../components/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, KPI, Select, Skeleton } from "../components/ui";
+import { weekRange } from "../components/weekCalendar";
 import { coins, points, periodLabel, WEEK_STATUS_LABELS } from "../utils/format";
 import { ReportsUpload } from "./ReportsUpload";
 import "./workflow.css";
@@ -81,17 +82,15 @@ function PeriodWorkspace() {
   const step = closed ? 4 : calculate.isPending ? 3 : applied || week?.status === "calculated" ? 3 : inspected ? 2 : inspect.isPending ? 1 : 0;
   const error = create.error || inspect.error || apply.error || calculate.error;
 
-  return <div className="stack">
-    <div className="page-head"><div><h1 className="page-title">Расчёт периода</h1>
-      <p className="page-subtitle">Загрузите показатели, проверьте результат и опубликуйте итоги недели</p></div></div>
+  return <div className="stack periods-page">
+    <div className="page-head"><div><h1 className="page-title">Расчёт и история периодов</h1>
+      <p className="page-subtitle">Выберите период, загрузите показатели и проверьте итоги перед начислением коинов.</p></div></div>
     {canImport && <ReportsUpload />}
-    <Card title="Отчётная неделя">
-      <div className="workflow-toolbar">
+    <Card title="Отчётный период">
+      <div className={`workflow-toolbar period-controls${canImport ? "" : " period-controls--readonly"}`}>
         <label className="field"><span className="field__label">Период</span>
-          <select className="input" value={selected ?? ""} disabled={busy} onChange={(e) => selectWeek(Number(e.target.value) || undefined)}>
-            <option value="">Выберите неделю</option>
-            {weeks.data?.map((item) => <option key={item.id} value={item.id}>{item.label} · {WEEK_STATUS_LABELS[item.status]}</option>)}
-          </select></label>
+          <Select aria-label="Отчётный период" value={selected ?? ""} disabled={busy || weeks.isLoading} onChange={(value) => selectWeek(Number(value) || undefined)}
+            options={[{ value: "", label: "Выберите период" }, ...(weeks.data ?? []).map(item => ({ value: item.id, label: `${weekRange(item)} · ${WEEK_STATUS_LABELS[item.status]}` }))]} /></label>
         {canImport && <><label className="field"><span className="field__label">Дата внутри новой недели</span>
           <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} disabled={create.isPending || busy} /></label>
         <Button disabled={!date || create.isPending || busy} onClick={() => create.mutate()}>{create.isPending ? "Открываем…" : "Открыть неделю"}</Button></>}
@@ -147,7 +146,7 @@ function PeriodWorkspace() {
     {confirmPublish && <Sheet title="Опубликовать итоги?" onClose={() => { if (!publish.isPending) setConfirmPublish(false); }} footer={<>
       <Button disabled={publish.isPending} onClick={() => setConfirmPublish(false)}>Отмена</Button>
       <Button variant="primary" disabled={publish.isPending} onClick={() => publish.mutate()}>{publish.isPending ? "Публикуем…" : "Подтвердить публикацию"}</Button></>}>
-      <p>Период {week?.label} будет закрыт. {preview.data?.participants} участникам будут начислены {coins(preview.data?.coins_total ?? 0)} коинов. Изменить показатели закрытой недели нельзя.</p>
+      <p>Период {week ? weekRange(week) : ""} будет закрыт. {preview.data?.participants} участникам будут начислены {coins(preview.data?.coins_total ?? 0)} коинов. Изменить показатели закрытой недели нельзя.</p>
       {preview.data?.rows.some((row) => row.missing_metrics?.length) && <p className="workflow-error">У части сотрудников не хватает показателей. Вернитесь к проверке, если загрузка ещё не закончена.</p>}
       {publish.isError && <ErrorState error={publish.error} />}
     </Sheet>}
