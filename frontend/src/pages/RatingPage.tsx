@@ -7,6 +7,7 @@ import type { NominationOut, PodiumEntry, RatingOut, RatingRowOut } from "../api
 import { MedalIcon, SparkIcon } from "../components/icons";
 import {
   Avatar,
+  Badge,
   Card,
   CoinAmount,
   Delta,
@@ -93,10 +94,11 @@ function Leaderboard() {
     <div className="stack">
       <RatingHeading personal={personal} />
       {/* Переключатель недели: единственный фильтр рейтинга. */}
-      <GlassSurface variant="regular" className="filterbar">
-        <WeekPicker label="Неделя конкурса" weeks={weeks.data ?? []} value={weekId}
+      <GlassSurface variant="regular" className="filterbar rating-filters">
+        <WeekPicker label="Период" weeks={weeks.data ?? []} value={weekId}
           resolvedWeekId={header.week_id} loading={weeks.isLoading}
           onChange={(value) => update({ week: value === undefined ? undefined : String(value), page: undefined })} />
+        <div className="rating-filter-status"><span className="field__label">Статус итогов</span><div><Badge tone={header.status === "closed" ? "success" : "warning"}>{header.status === "closed" ? "Опубликованы" : header.status === "calculated" ? "Предварительный расчёт" : "Период ещё идёт"}</Badge></div></div>
       </GlassSurface>
       {weeks.isError && <p className="muted micro" role="status">Не удалось загрузить календарь недель. <button type="button" className="btn btn--plain btn--s" onClick={() => void weeks.refetch()}>Повторить</button></p>}
 

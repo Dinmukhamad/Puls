@@ -81,10 +81,10 @@ export function ReportFilters({ report, metric = true }: { report: ReturnType<ty
     report.update({ from: nextFrom || undefined, to: nextTo || undefined, page: undefined });
   }
   const fields = <>
-    <div className="field analytics-grain"><span className="field__label">Показывать по</span><SegmentedControl label="Шаг периода" options={GRAINS} value={grain} onChange={(value) => report.update({ grain: value === "week" ? undefined : value, week_id: undefined, from: undefined, to: undefined, page: undefined })} /></div>
-    {grain === "week" && <div className="field"><WeekPicker label="Период" weeks={report.weeks.data ?? []} value={report.filters.week_id}
+    <div className="field analytics-grain"><span className="field__label">Показывать по</span><SegmentedControl block label="Шаг периода" options={GRAINS} value={grain} onChange={(value) => report.update({ grain: value === "week" ? undefined : value, week_id: undefined, from: undefined, to: undefined, page: undefined })} /></div>
+    {grain === "week" && <WeekPicker label="Период" weeks={report.weeks.data ?? []} value={report.filters.week_id}
       resolvedWeekId={report.data.data?.week?.id} latestLabel="Последняя неделя" latestPreference="latest" loading={report.weeks.isLoading}
-      onChange={(value) => report.update({ week_id: value === undefined ? undefined : String(value), from: undefined, to: undefined, page: undefined })} /></div>}
+      onChange={(value) => report.update({ week_id: value === undefined ? undefined : String(value), from: undefined, to: undefined, page: undefined })} />}
     {grain === "day" && <div className="analytics-range"><label className="field"><span className="field__label">С</span><input className="input" type="date" value={from} max={to || undefined} onChange={(event) => setDays(event.target.value, to)} /></label><label className="field"><span className="field__label">По · до {MAX_DAYS} дней</span><input className="input" type="date" value={to} min={from || undefined} onChange={(event) => setDays(from, event.target.value)} /></label></div>}
     {grain === "month" && <div className="analytics-range"><label className="field"><span className="field__label">С месяца</span><input className="input" type="month" value={from} max={to || undefined} onChange={(event) => report.update({ from: event.target.value || undefined, page: undefined })} /></label><label className="field"><span className="field__label">По месяц</span><input className="input" type="month" value={to} min={from || undefined} onChange={(event) => report.update({ to: event.target.value || undefined, page: undefined })} /></label></div>}
     <label className="field"><span className="field__label">Группа</span><Select aria-label="Группа" value={report.filters.group_id ?? ""}
@@ -94,9 +94,10 @@ export function ReportFilters({ report, metric = true }: { report: ReturnType<ty
       options={report.data.data?.metrics.length ? report.data.data.metrics.map((item) => ({ value: item.code, label: item.title })) : [{ value: "", label: "Нет показателей" }]}
       onChange={(value) => report.update({ metric: value, page: undefined })} /></label>}
   </>;
+  const fieldClasses = `analytics-filter-fields analytics-filter-fields--${metric ? "report" : "summary"}${grain === "week" ? "" : " analytics-filter-fields--range"}`;
   return <>
-    <GlassSurface className="analytics-filters" variant="regular"><div className="analytics-filters__desktop">{fields}</div><div className="analytics-filters__mobile"><span>{report.data.data ? periodCaption(report.data.data) : "Выбрать период"}</span><Button onClick={() => setMobileOpen(true)}>Фильтры</Button></div></GlassSurface>
-    {mobileOpen && <Sheet onClose={() => setMobileOpen(false)} title="Фильтры аналитики"><div className="stack">{fields}<Button variant="primary" onClick={() => setMobileOpen(false)}>Показать</Button></div></Sheet>}
+    <GlassSurface className="analytics-filters" variant="regular"><div className={`analytics-filters__desktop ${fieldClasses}`}>{fields}</div><div className="analytics-filters__mobile"><span>{report.data.data ? periodCaption(report.data.data) : "Выбрать период"}</span><Button onClick={() => setMobileOpen(true)}>Фильтры</Button></div></GlassSurface>
+    {mobileOpen && <Sheet onClose={() => setMobileOpen(false)} title="Фильтры аналитики"><div className="stack"><div className={`${fieldClasses} analytics-filter-fields--sheet`}>{fields}</div><Button variant="primary" onClick={() => setMobileOpen(false)}>Показать</Button></div></Sheet>}
     {(report.weeks.isError || report.groups.isError) && <p role="status" className="analytics-muted">Не удалось загрузить часть фильтров. <button className="analytics-text-button" onClick={() => { void report.weeks.refetch(); void report.groups.refetch(); }}>Повторить</button></p>}
   </>;
 }

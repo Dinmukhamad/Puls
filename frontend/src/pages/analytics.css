@@ -1,7 +1,23 @@
 .analytics-page { min-width: 0; }
+.analytics-page .page-head { align-items: center; }
 .analytics-filters { padding: 16px; border-radius: var(--radius-l); }
-.analytics-filters__desktop { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
-.analytics-filters__desktop .field { flex: 1; min-width: 160px; max-width: 340px; }
+.analytics-filter-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.analytics-filter-fields--report { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.analytics-filter-fields--summary.analytics-filter-fields--range { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.analytics-filter-fields--report.analytics-filter-fields--range { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.analytics-filter-fields .analytics-range { display: contents; }
+.analytics-filter-fields .field, .analytics-filter-fields .week-picker { display: grid; grid-template-rows: 18px 44px; gap: 8px; min-width: 0; width: 100%; margin: 0; }
+.analytics-filter-fields .field__label { min-width: 0; height: 18px; line-height: 18px; }
+.analytics-filter-fields :is(.input, .segmented, .week-picker__control) { width: 100%; min-height: 44px; height: 44px; box-sizing: border-box; }
+.analytics-filter-fields .segmented { padding: 0; overflow: hidden; }
+.analytics-filter-fields .segmented__item { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 6px 8px; }
+.analytics-filter-fields .week-picker__arrow { min-height: 42px; }
+.analytics-filter-fields .week-picker__trigger { min-width: 0; padding: 0 2px; }
+.analytics-filter-fields .week-picker__trigger strong { overflow: hidden; text-overflow: ellipsis; }
+/* The calendar retains period statuses; a one-line filter caption keeps every
+   control on the same baseline without changing the shared week picker. */
+.analytics-filter-fields .week-picker__trigger small { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
+.analytics-filter-fields--sheet { grid-template-columns: minmax(0, 1fr) !important; }
 .analytics-filters__mobile, .analytics-mobile-list { display: none; }
 .analytics-muted, .analytics-methodology { color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
 .analytics-methodology { max-width: 1000px; }
@@ -73,9 +89,15 @@
 .analytics-summary-metric > strong { font-size: 32px; font-variant-numeric: tabular-nums; }
 @media (hover: hover) { .analytics-metric-card:hover { border-color: var(--accent-primary); } .analytics-attention:hover strong, .analytics-desktop-table a:hover, .analytics-operator-card > a:hover { color: var(--accent-primary); } }
 @media (max-width: 1100px) { .analytics-desktop-table:not(.analytics-quality-table) .analytics-delta { max-width: 140px; } }
+@media (min-width: 768px) and (max-width: 1200px) {
+  .analytics-filter-fields:not(.analytics-filter-fields--sheet) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .analytics-filter-fields--summary:not(.analytics-filter-fields--range):not(.analytics-filter-fields--sheet) > .field:last-child { grid-column: 1 / -1; }
+}
 @media (max-width: 767px) {
   .analytics-filters__desktop, .analytics-desktop-table { display: none; }
   .analytics-filters__mobile { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+  .analytics-filters__mobile > span { min-width: 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+  .analytics-filters__mobile > .btn { flex-shrink: 0; }
   .analytics-mobile-list { display: block; }
   .analytics-summary-grid { grid-template-columns: 1fr; }
   .analytics-filters { padding: 12px 16px; }
