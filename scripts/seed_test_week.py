@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import itertools
 import logging
 import random
 from dataclasses import dataclass, field
@@ -39,22 +38,22 @@ from app.models.contest import (
 from app.models.enums import MetricDirection, MetricKind, Role, WeekStatus
 from app.models.user import User
 from app.services import weekly as weekly_service
+from app.services.analytics import WORKDAYS_PER_WEEK, summed, target_for
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(message)s")
 logger = logging.getLogger("seed_test_week")
 
-DAY_HOURS, WEEK_HOURS = 8, 40
+DAY_HOURS, WEEK_HOURS = 8.0, 40.0
 
 
 def _sums(metric: MetricDefinition) -> bool:
-    """Часы и штуки за неделю складываются, проценты и «в час» усредняются."""
-    unit = metric.unit or ""
-    return metric.kind == MetricKind.ANTI or ("%" not in unit and "/" not in unit)
+    """Часы, штуки и нарушения за неделю складываются, проценты и «в час» усредняются."""
+    return metric.kind == MetricKind.ANTI or summed(metric)
 
 
 def _day_value(metric: MetricDefinition, rng: random.Random, skill: float, hours: float) -> float:
     """Значение за один рабочий день. skill от -1 до 1: слабый или сильный оператор."""
-    code, target = metric.code, metric.target_value or 1.0
+    code = metric.code
     if metric.kind == MetricKind.ANTI:
         return 1.0 if rng.random() < 0.06 - 0.03 * skill else 0.0
     if code == "hours_worked":
@@ -71,15 +70,13 @@ def _day_value(metric: MetricDefinition, rng: random.Random, skill: float, hours
         return round(max(0.0, 12 + 2 * skill + rng.gauss(0, 0.8)), 2)
     if code == "driver_gratitudes":
         return float(rng.random() < 0.35 + 0.15 * skill) + float(rng.random() < 0.1)
-    # Показатель, которого скрипт не знает: держится около цели в своих единицах.
+    # Показатель, которого скрипт не знает: держится около дневной цели в своих единицах.
     lower = metric.direction == MetricDirection.LOWER_IS_BETTER
     level = 1 + (-0.1 if lower else 0.08) * skill + rng.gauss(0, 0.04)
-    if _sums(metric):
-        return round(max(0.0, target / 5 * level), 1)
-    value = target * level
+    value = max(0.0, target_for(metric, "day") * level)
     if "%" in (metric.unit or "") and not metric.allow_overachievement:
-        value = min(value, target)
-    return round(max(0.0, value), 2)
+        value = min(value, metric.target_value)
+    return round(value, 1 if _sums(metric) else 2)
 
 
 def _week_value(
@@ -92,29 +89,18 @@ def _week_value(
     return round(sum(days.values()) / len(days), 2)
 
 
-def _meets(value: float, metric: MetricDefinition) -> bool:
-    """Как в аналитике: цель взята, если значение не хуже целевого."""
-    if metric.direction == MetricDirection.LOWER_IS_BETTER:
-        return value <= metric.target_value
-    return value >= metric.target_value
+def _reach_target(metric: MetricDefinition, values: dict[date, float]) -> dict[date, float]:
+    """Дни сильного оператора, подтянутые до дневной цели.
 
-
-def _reach_target(
-    metric: MetricDefinition, values: dict[date, float], hours: dict[date, float]
-) -> dict[date, float]:
-    """Дни сильного оператора, подтянутые так, чтобы неделя выполнила цель."""
+    Рабочих дней ровно столько, на сколько аналитика делит недельную цель, поэтому
+    неделя из таких дней выполняет и недельную цель.
+    """
     if metric.kind == MetricKind.ANTI:
         return dict.fromkeys(values, 0.0)
-    lower = metric.direction == MetricDirection.LOWER_IS_BETTER
-    if not _sums(metric):
-        target = metric.target_value
-        return {day: min(v, target) if lower else max(v, target) for day, v in values.items()}
-    values, step = dict(values), -1.0 if lower else 1.0
-    for _, day in zip(range(500), itertools.cycle(sorted(values)), strict=False):
-        if _meets(_week_value(metric, values, hours), metric):
-            break
-        values[day] = max(0.0, values[day] + step)
-    return values
+    goal = target_for(metric, "day")
+    if metric.direction == MetricDirection.LOWER_IS_BETTER:
+        return {day: min(value, goal) for day, value in values.items()}
+    return {day: max(value, goal) for day, value in values.items()}
 
 
 @dataclass
@@ -128,22 +114,21 @@ def operator_week(
 ) -> OperatorWeek:
     """Неделя одного оператора: два выходных, свой уровень и разброс по дням.
 
-    achiever — сильный оператор, который за неделю выполняет все цели.
+    achiever — сильный оператор, который выполняет все цели и за каждый рабочий день,
+    и за неделю.
     """
     rng = random.Random(seed)
-    off = set(rng.sample(range(len(days)), 2))
+    off = set(rng.sample(range(len(days)), len(days) - WORKDAYS_PER_WEEK))
     worked = [day for index, day in enumerate(days) if index not in off]
     skill = rng.uniform(0.5, 1) if achiever else rng.uniform(-1, 0.5)
     hours = {day: float(rng.choice([8, 8, 8, 8, 8, 7, 9, 10, 6])) for day in worked}
-    for day in itertools.cycle(sorted(hours)):
-        if not achiever or sum(hours.values()) >= WEEK_HOURS:
-            break
-        hours[day] += 1
+    if achiever:
+        hours = {day: max(value, DAY_HOURS) for day, value in hours.items()}
     result = OperatorWeek()
     for metric in metrics:
         values = {day: _day_value(metric, rng, skill, hours[day]) for day in worked}
         if achiever:
-            values = _reach_target(metric, values, hours)
+            values = _reach_target(metric, values)
         result.daily.update({(day, metric.code): value for day, value in values.items()})
         result.weekly[metric.code] = _week_value(metric, values, hours)
     return result

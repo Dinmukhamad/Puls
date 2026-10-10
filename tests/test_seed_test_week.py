@@ -61,6 +61,12 @@ async def test_operator_week_is_stable_and_plausible(session: AsyncSession) -> N
     meets_all = [all(at_target(week.weekly[m.code], m) for m in metrics) for week in weeks]
     assert all(meets_all[::4]), "every achiever meets all goals"
     assert meets_all.count(True) < len(weeks) / 2, meets_all
+    by_code = {metric.code: metric for metric in metrics}
+    assert all(
+        at_target(value, by_code[code], "day")
+        for week in weeks[::4]
+        for (_, code), value in week.daily.items()
+    ), "achievers also meet every goal on each day they work"
 
 
 async def test_week_fills_every_active_operator_and_keeps_real_values(
@@ -132,6 +138,8 @@ async def test_test_values_show_in_analytics_but_never_earn_anything(
         session, head, grain="day", date_from=MONDAY, date_to=worked
     )
     assert weekly.operators_with_data == daily.operators_with_data == 1
+    # The only operator is an achiever: on track by the week and by the day alike.
+    assert all(metric.below_target == 0 for metric in weekly.metrics + daily.metrics)
     assert (await weekly_service.unreported_metrics(session, week.id))[
         "missing"
     ], "test rows must not hide that real data is still missing"
