@@ -25,6 +25,10 @@ from app.models.enums import MetricDirection, MetricKind, WeekStatus
 if TYPE_CHECKING:
     from app.models.user import User
 
+#: Источник тестовых показателей (scripts/seed_test_week.py). Они видны в аналитике,
+#: но не дают баллов, мест, номинаций, значков и коинов: неделя с ними закрывается пустой.
+TEST_SOURCE = "test"
+
 
 class ContestWeek(Base, TimestampMixin):
     """Отчётная неделя конкурса. Уникальна по паре (ISO-год, ISO-неделя)."""
