@@ -26,12 +26,12 @@ import { AccessPage } from "./pages/AccessPage";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { SummaryPage } from "./pages/SummaryPage";
 import { ProgressPage } from "./pages/ProgressPage";
-import { TrainerHome, TrainingAnalyticsPage } from "./pages/TrainingTools";
+import { TrainerHome } from "./pages/TrainingTools";
+import { DriverAnalyticsPage } from "./pages/DriverAnalyticsPage";
 import { LevelsAdminPage } from "./pages/LevelsAdminPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StoreAdminPage } from "./pages/StoreAdminPage";
-import { TrainingPage } from "./pages/TrainingPage";
 import { LearningStudioPage } from "./pages/LearningStudioPage";
 import { GamesPage } from "./pages/GamesPage";
 import { WalletPage } from "./pages/WalletPage";
@@ -98,12 +98,11 @@ export function App() {
         <Route path="/progress" element={<ProgressPage />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/admin/wallet" element={<WalletPage administrative />} />
-        <Route path="/training" element={<TrainingPage />} />
         <Route path="/games" element={<GamesPage />} />
         <Route path="/admin/games" element={<GamesPage administrative />} />
         <Route path="/admin/learning" element={<LearningStudioPage />} />
         <Route path="/trainer" element={<TrainerHome />} />
-        <Route path="/admin/learning-analytics" element={<TrainingAnalyticsPage />} />
+        <Route path="/admin/learning-analytics" element={<DriverAnalyticsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/admin/summary" element={<SummaryPage />} />
