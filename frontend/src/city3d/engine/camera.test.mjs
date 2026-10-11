@@ -75,18 +75,14 @@ function gesture(dom, paths, steps = 12, more = {}) {
   }
 }
 
-test('tilted to the horizon, the gaze lifts over it so the hills, the sky and the sun show', () => {
+test('every view looks straight at its centre on the ground, even tilted to the full', () => {
   const { camera, rig, frames } = setup();
-  const pitch = () => Math.asin(camera.getWorldDirection(new THREE.Vector3()).y);
-  rig.animateTo({ ...city.DEFAULT_VIEW, target: [0, 0, 0] }, 0); frames(1 / 60);
-  // The usual views look straight at their centre on the ground.
-  const centre = screenOf(camera, new THREE.Vector3(0, 0, 0));
-  near(centre.x, W / 2, .5, 'default view centre x'); near(centre.y, H / 2, .5, 'default view centre y');
-  assert.equal(city.lookUp(city.LOOK_UP_FROM, 90), 0);
-  rig.animateTo({ ...city.DEFAULT_VIEW, polar: city.MAX_POLAR, target: [0, 0, 0] }, 0); frames(1 / 60);
-  near(pitch(), city.LOOK_UP_PITCH, 1e-3, 'at the full tilt the centre looks a little above the horizon');
-  // The ground still fills the lower part of the picture, so drags keep their grip.
-  assert.ok(groundAt(camera, W / 2, H * .9), 'ground at the bottom of the frame');
+  // Tilting only swings the camera round its centre: the gaze never lifts off it, so drags keep their grip.
+  for (const polar of [city.MIN_POLAR, city.DEFAULT_VIEW.polar, city.MAX_POLAR]) {
+    rig.animateTo({ ...city.DEFAULT_VIEW, polar, target: [0, 0, 0] }, 0); frames(1 / 60);
+    const centre = screenOf(camera, new THREE.Vector3(0, 0, 0));
+    near(centre.x, W / 2, .5, `centre x at polar ${polar}`); near(centre.y, H / 2, .5, `centre y at polar ${polar}`);
+  }
   rig.dispose();
 });
 
