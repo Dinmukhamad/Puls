@@ -1,9 +1,11 @@
-import { useEffect, useRef } from "react";
-import { fitCanvas, spinProgress, stripTarget } from "./spinPhysics";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { coins, plural } from "../utils/format";
+import { spinProgress, stripTarget } from "./spinPhysics";
 
 export interface StripSegment {
   title: string;
   weight: number;
+  coins?: number;
 }
 
 export interface SpinRequest {
@@ -15,11 +17,10 @@ export interface SpinRequest {
 
 const DURATION = 4200;
 const GAP = 12;
-const HEIGHT = 128;
 
-/** Ширина карточки: на телефоне помещается две с половиной, на широком экране — пять. */
+/** Ширина карточки: на телефоне видно две с небольшим, на широком экране — около восьми. */
 function cellWidth(width: number) {
-  return Math.round(Math.min(190, Math.max(128, width / 4.2)));
+  return Math.round(Math.min(176, Math.max(132, width / 5.4)));
 }
 
 /** Короткий щелчок при проходе карточки мимо метки. */
@@ -53,24 +54,36 @@ function makeClicker() {
   };
 }
 
+/**
+ * Лента призов: карточки в стиле сайта едут под рамкой в центре.
+ *
+ * Карточки — обычная разметка, а не рисунок на холсте: так они берут цвета,
+ * шрифты и тёмную тему из общих стилей. В кадре только видимые карточки;
+ * каждая знает свой сквозной номер, поэтому лента бесконечна.
+ */
 export function PrizeStrip({
   segments,
-  colors,
-  icons,
+  stickers,
   spin,
   muted,
   onSettled,
 }: {
   segments: StripSegment[];
-  colors: string[];
-  /** A sticker per prize, drawn above its title; the same ones as in the prize list. */
-  icons?: string[];
+  /** Стикер каждого приза — те же, что в окне «Что может выпасть». */
+  stickers?: { icon: string; color: string }[];
   spin: SpinRequest | null;
   muted: boolean;
   onSettled: () => void;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const offset = useRef(0);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(960);
+  // Положение ленты считается в карточках, а не в пикселях: какая карточка
+  // под рамкой (в пути — дробное). Поэтому новая ширина карточки, даже
+  // посреди прокрутки, не сдвигает приз из-под рамки.
+  const position = useRef(0);
+  // Кадр анимации меняет только ref; это состояние лишь просит React перерисовать ленту.
+  const [, redraw] = useState(0);
+  const [won, setWon] = useState<number | null>(null);
   const frame = useRef<number | null>(null);
   const clicker = useRef(makeClicker());
   const lastSpin = useRef<string | null>(null);
@@ -79,148 +92,53 @@ export function PrizeStrip({
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
-  function draw() {
-    const canvas = canvasRef.current;
-    if (!canvas || !segments.length) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    if (!width || !height) return;
-
-    const ratio = window.devicePixelRatio || 1;
-    fitCanvas(canvas, ratio);
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    ctx.clearRect(0, 0, width, height);
-
-    const cell = cellWidth(width);
-    const pitch = cell + GAP;
-    const cardHeight = Math.min(HEIGHT, height - 28);
-    const top = (height - cardHeight) / 2;
-    const middle = width / 2;
-
-    // Рисуем только то, что попадает в кадр, плюс по одной карточке с краёв.
-    const first = Math.floor((offset.current - middle) / pitch) - 1;
-    const last = Math.ceil((offset.current + middle) / pitch) + 1;
-    const font = getComputedStyle(document.body).fontFamily;
-
-    for (let index = first; index <= last; index += 1) {
-      const slot = ((index % segments.length) + segments.length) % segments.length;
-      const prize = segments[slot];
-      const icon = icons?.[slot];
-      const center = middle + index * pitch - offset.current;
-      const left = center - cell / 2;
-      // Карточки по краям кадра приглушены: взгляд держится на середине,
-      // где и произойдёт остановка.
-      const distance = Math.min(1, Math.abs(center - middle) / middle);
-      ctx.save();
-      ctx.globalAlpha = 0.35 + (1 - distance) * 0.65;
-      ctx.beginPath();
-      ctx.roundRect(left, top, cell, cardHeight, 16);
-      ctx.fillStyle = colors[((index % colors.length) + colors.length) % colors.length];
-      ctx.fill();
-      ctx.fillStyle = "#fff";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = `650 ${Math.max(13, cell * 0.115)}px ${font}`;
-      // Длинное название переносим по словам, иначе оно вылезает за карточку.
-      const words = prize.title.split(" ");
-      const lines: string[] = [];
-      let line = "";
-      for (const word of words) {
-        const next = line ? `${line} ${word}` : word;
-        if (ctx.measureText(next).width > cell - 20 && line) {
-          lines.push(line);
-          line = word;
-        } else {
-          line = next;
-        }
-      }
-      if (line) lines.push(line);
-      const step = Math.max(16, cell * 0.14);
-      // With a sticker the title moves to the lower part and keeps two lines.
-      const shown = lines.slice(0, icon ? 2 : 3);
-      const textCenter = icon ? top + cardHeight * 0.7 : top + cardHeight / 2;
-      const start = textCenter - ((shown.length - 1) * step) / 2;
-      shown.forEach((text, row) => ctx.fillText(text, center, start + row * step));
-      if (icon) {
-        ctx.font = `${Math.round(Math.max(24, cell * 0.2))}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", ${font}`;
-        ctx.fillText(icon, center, top + cardHeight * 0.3);
-      }
-      ctx.restore();
-    }
-
-    // Метка по центру: к ней и подъезжает выпавший приз.
-    const ink = getComputedStyle(document.body).color;
-    ctx.save();
-    ctx.strokeStyle = ink;
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(middle, 10);
-    ctx.lineTo(middle, height - 10);
-    ctx.stroke();
-    ctx.fillStyle = ink;
-    ctx.beginPath();
-    ctx.moveTo(middle - 9, 4);
-    ctx.lineTo(middle + 9, 4);
-    ctx.lineTo(middle, 19);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-  }
-
   useEffect(() => {
-    draw();
-    const observer = new ResizeObserver(() => draw());
-    if (canvasRef.current) observer.observe(canvasRef.current);
+    const stage = stageRef.current;
+    if (!stage) return;
+    const measure = () => { if (stage.clientWidth) setWidth(stage.clientWidth); };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
     return () => observer.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segments, colors, icons?.join("")]);
+  }, []);
 
   useEffect(() => {
     if (!spin || spin.id === lastSpin.current || !segments.length) return;
     lastSpin.current = spin.id;
-
-    const canvas = canvasRef.current;
-    const pitch = cellWidth(canvas?.clientWidth ?? 600) + GAP;
-    const from = offset.current;
-    const to = stripTarget(from, spin.segment, segments.length, pitch);
+    setWon(null);
+    const from = position.current;
+    const to = stripTarget(from, spin.segment, segments.length, 1);
+    const finish = () => {
+      position.current = to;
+      redraw(to);
+      setWon(to);
+      settle.current();
+    };
 
     // Системная настройка «меньше движения» выключает поездку целиком, а не
     // ускоряет её: мелькание как раз то, от чего она защищает.
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      offset.current = to;
-      draw();
-      settle.current();
+      finish();
       return;
     }
 
     const started = performance.now();
-    let passed = Math.floor(from / pitch);
-
+    let passed = Math.floor(from);
     const tick = (now: number) => {
       const t = Math.min(1, (now - started) / DURATION);
-      offset.current = from + (to - from) * spinProgress(t);
-      draw();
-
+      position.current = from + (to - from) * spinProgress(t);
+      redraw(position.current);
       // Щелчок на проходе карточки, а не по таймеру: на разгоне щелчки
       // частые, на выбеге редеют — этим и слышно торможение.
-      const crossed = Math.floor(offset.current / pitch);
+      const crossed = Math.floor(position.current);
       if (crossed !== passed) {
         passed = crossed;
         if (!mutedRef.current) clicker.current.click();
       }
-
-      if (t < 1) {
-        frame.current = requestAnimationFrame(tick);
-      } else {
-        frame.current = null;
-        settle.current();
-      }
+      if (t < 1) frame.current = requestAnimationFrame(tick);
+      else { frame.current = null; finish(); }
     };
     frame.current = requestAnimationFrame(tick);
-
     return () => {
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
@@ -228,7 +146,30 @@ export function PrizeStrip({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spin?.id]);
 
-  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); }, []);
+  const cell = cellWidth(width);
+  const pitch = cell + GAP;
+  const at = position.current;
+  const current = Math.round(at);
+  const middle = width / 2;
+  const first = Math.floor(at - middle / pitch) - 1;
+  const last = Math.ceil(at + middle / pitch) + 1;
+  const tiles = segments.length ? Array.from({ length: last - first + 1 }, (_, k) => first + k) : [];
 
-  return <canvas className="prize-strip" ref={canvasRef} aria-hidden="true" />;
+  return <div className="prize-strip" ref={stageRef} aria-hidden="true" style={{ "--cell": `${cell}px` } as CSSProperties}>
+    <div className="prize-strip__track">
+      {tiles.map(index => {
+        const slot = ((index % segments.length) + segments.length) % segments.length;
+        const prize = segments[slot];
+        const sticker = stickers?.[slot];
+        const x = middle + (index - at) * pitch - cell / 2;
+        const state = index === won ? " is-won" : index === current ? " is-current" : "";
+        return <div key={index} className={`prize-strip__tile${state}`} style={{ transform: `translateX(${x}px)` }}>
+          {sticker && <span className="prize-strip__sticker" style={{ "--sticker": sticker.color } as CSSProperties}>{sticker.icon}</span>}
+          <span className="prize-strip__title">{prize.title}</span>
+          {prize.coins ? <span className="prize-strip__reward">+{coins(prize.coins)} {plural(prize.coins, "коин", "коина", "коинов")}</span> : <span className="prize-strip__reward prize-strip__reward--none">без награды</span>}
+        </div>;
+      })}
+    </div>
+    <div className="prize-strip__window" />
+  </div>;
 }
