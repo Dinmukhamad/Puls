@@ -54,18 +54,20 @@ export function ProfilePage() {
       <Button size="s" onClick={() => open("details")}>Мои данные</Button>
     </section>
 
+    <div className="profile-columns">
     <section className="profile-section" aria-labelledby="profile-account-title">
       <h2 id="profile-account-title">Аккаунт и безопасность</h2>
       <div className="profile-settings">
+        <div className="profile-setting"><span className="profile-setting__icon"><UserIcon /></span><div className="profile-setting__text"><h3>Данные сотрудника</h3><p>{[user.phone, user.email].filter(Boolean).join(" · ") || "Контакты не указаны"}</p></div></div>
         <div ref={node => { panelTriggers.current.login = node; }} className="profile-setting"><span className="profile-setting__icon"><UserIcon /></span><div className="profile-setting__text"><h3>Логин</h3><p>{user.login}</p></div><Button size="s" aria-label="Изменить логин" onClick={() => open("login")}>Изменить</Button></div>
         <div ref={node => { panelTriggers.current.password = node; }} className="profile-setting"><span className="profile-setting__icon"><LockIcon /></span><div className="profile-setting__text"><h3>Пароль</h3><p>Безопасность входа</p></div><Button size="s" aria-label="Изменить пароль" onClick={() => open("password")}>Изменить</Button></div>
-        <Suspense fallback={<div className="profile-setting"><div className="profile-setting__text"><h3>Telegram</h3><p role="status">Проверяем подключение…</p></div></div>}><TelegramCard /></Suspense>
       </div>
     </section>
 
     <section className="profile-section" aria-labelledby="profile-preferences-title">
-      <h2 id="profile-preferences-title">Настройки Puls</h2>
+      <h2 id="profile-preferences-title">Связь и настройки</h2>
       <div className="profile-settings">
+        <Suspense fallback={<div className="profile-setting"><div className="profile-setting__text"><h3>Telegram</h3><p role="status">Проверяем подключение…</p></div></div>}><TelegramCard /></Suspense>
         <div className="profile-setting profile-setting--theme"><span className="profile-setting__icon"><DisplayIcon /></span><div className="profile-setting__text"><h3>Оформление</h3><p>{preference === "system" ? "Как на устройстве" : preference === "light" ? "Светлая тема" : "Тёмная тема"}</p></div>
           <div className="profile-theme" role="radiogroup" aria-label="Тема оформления">{THEME_OPTIONS.map((option) => <button key={option.value} type="button" role="radio" aria-label={option.label} title={option.label} aria-checked={preference === option.value} tabIndex={preference === option.value ? 0 : -1} onClick={() => setPreference(option.value)} onKeyDown={(event) => {
             const index = THEME_OPTIONS.indexOf(option);
@@ -83,8 +85,9 @@ export function ProfilePage() {
         <div ref={node => { panelTriggers.current["app-updates"] = node; }} className="profile-setting"><span className="profile-setting__icon"><DownloadIcon /></span><div className="profile-setting__text"><h3>Приложение Puls</h3><p>{user.role === "admin" ? "Установка и обновления" : "Быстрый доступ с устройства"}</p></div><Button size="s" aria-label="Открыть настройки приложения" onClick={() => open("app-updates")}>Открыть</Button></div>
       </div>
     </section>
+    </div>
 
-    <footer className="profile-footer"><span>Завершить сеанс на этом устройстве</span><Button size="s" variant="destructive" icon={<LogoutIcon size={16} />} disabled={leaving} onClick={() => { setLeaving(true); void logout(); }}>{leaving ? "Выходим…" : "Выйти из аккаунта"}</Button></footer>
+    <footer className="profile-footer"><div><strong>Выход из аккаунта</strong><p>Завершить сеанс на этом устройстве</p></div><Button size="s" variant="destructive" icon={<LogoutIcon size={16} />} disabled={leaving} onClick={() => { setLeaving(true); void logout(); }}>{leaving ? "Выходим…" : "Выйти из аккаунта"}</Button></footer>
     {panel === "details" && <Sheet title="Мои данные" size="s" onClose={close}><dl className="profile-details">{fields.map(field => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>{can("team") && user.role === "admin" ? <Link className="btn btn--secondary btn--s" to={`/admin/users/${user.id}`}>Изменить данные</Link> : <p className="profile-details__hint">Чтобы изменить имя или контакты, обратитесь к руководителю.</p>}</Sheet>}
     {panel === "login" && <LoginSheet current={user.login} onClose={close} />}
     {panel === "password" && <PasswordSheet onClose={close} />}
