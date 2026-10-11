@@ -1,7 +1,6 @@
-.wallet-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); align-items: end; gap: var(--sp-3); margin-bottom: var(--sp-3); }
+.wallet-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr); align-items: start; gap: var(--sp-3) var(--sp-4); margin-bottom: var(--sp-3); }
 .wallet-filters .field { margin: 0; }
 .wallet-operator-picker { display: flex; flex-wrap: wrap; gap: var(--sp-2); min-width: 0; }
-.wallet-filters .wallet-operator-picker { grid-column: 1 / -1; }
 .wallet-operator-picker > .field, .wallet-operator-picker__results, .wallet-operator-picker__hint { width: 100%; }
 .wallet-operator-picker__results { border: 1px solid var(--separator); border-radius: var(--radius-m); overflow: hidden; }
 .wallet-operator-picker__results > p { padding: var(--sp-3); margin: 0; }
@@ -23,8 +22,32 @@
 .wallet-preview { padding: var(--sp-3); border: 1px solid var(--separator); border-radius: var(--radius-m); }
 .wallet-preview p { margin: 0 0 var(--sp-2); }
 .wallet-preview p:last-child { margin-bottom: 0; }
-.wallet-entry { display: flex; justify-content: space-between; gap: var(--sp-4); padding: var(--sp-4) 0; border-bottom: 1px solid var(--separator); }
-.wallet-entry:last-child { border-bottom: 0; }
-.wallet-entry__body, .wallet-entry__amount { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; overflow-wrap: anywhere; }
-.wallet-entry__amount { text-align: right; flex-shrink: 0; }
-@media (max-width: 560px) { .wallet-entry { flex-direction: column; gap: var(--sp-3); } .wallet-entry__amount { text-align: left; } }
+.wallet-preview__rows { display: grid; gap: var(--sp-2); margin: 0; }
+.wallet-preview__rows > div { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); }
+.wallet-preview__rows dt { min-width: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.wallet-preview__rows dd { flex: none; margin: 0; color: var(--text-primary); font-weight: 650; font-variant-numeric: tabular-nums; text-align: right; }
+.wallet-preview__total { padding-bottom: var(--sp-2); border-bottom: 1px solid var(--separator); }
+.wallet-preview__total dd { color: var(--gold-text); }
+.wallet-preview__rows + p { margin-top: var(--sp-3); }
+.wallet-filters__note { margin: 0; }
+@media (max-width: 900px) { .wallet-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wallet-filters .wallet-operator-picker { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .wallet-filters { grid-template-columns: minmax(0, 1fr); } }
+
+/* Staff ledger: a table on wide screens, cards on phones. */
+.wallet-ledger .table { min-width: 880px; }
+.wallet-ledger .table td { vertical-align: top; }
+.wallet-ledger__person { min-width: 150px; font-weight: 550; overflow-wrap: anywhere; }
+.wallet-ledger__operation { min-width: 280px; }
+.wallet-ledger__reason { display: block; margin: 0; color: var(--text-primary); font-weight: 550; line-height: 1.4; overflow-wrap: anywhere; }
+.wallet-ledger__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1) var(--sp-2); margin-top: var(--sp-1); color: var(--text-secondary); font-size: var(--text-caption); }
+.wallet-ledger__author { min-width: 140px; overflow-wrap: anywhere; }
+.wallet-ledger__author > span { display: block; }
+.wallet-ledger__role { color: var(--text-secondary); font-size: var(--text-caption); }
+.wallet-ledger__type { padding: 1px var(--sp-2); border-radius: var(--radius-pill); background: var(--surface-tertiary); color: var(--text-primary); font-weight: 550; }
+.wallet-amount { color: var(--text-primary); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wallet-amount--up { color: var(--status-success-text); }
+.wallet-amount__unit { color: var(--text-secondary); font-size: var(--text-caption); font-weight: 500; }
+.wallet-ledger-cards .list-card__head > a { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.wallet-ledger-cards .list-card__metrics { grid-template-columns: minmax(0, 1fr); margin: 0; }
+.wallet-ledger-cards .list-card__metric dt { color: var(--text-tertiary); }
+.wallet-ledger-cards .list-card__metric dd { margin: 0; text-align: right; font-weight: 550; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }

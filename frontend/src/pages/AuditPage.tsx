@@ -3,8 +3,10 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { systemApi, type AuditEntry } from "../api/system";
 import { useAuth } from "../auth/AuthContext";
+import { DateRangePicker } from "../components/DateRangePicker";
 import { Sheet } from "../components/Sheet";
-import { Button, Card, EmptyState, ErrorState, Pagination, Skeleton } from "../components/ui";
+import { validDateRange } from "../components/dateRange";
+import { Button, Card, EmptyState, ErrorState, Pagination, Select, Skeleton } from "../components/ui";
 import { dateTime } from "../utils/format";
 import { AUDIT_ACTIONS, auditActionLabel, auditBusinessChanges, auditEntityLabel } from "./auditPresentation";
 import "./workflow.css";
@@ -23,14 +25,21 @@ export function AuditPage() {
   const [selected, setSelected] = useState<AuditEntry | null>(null);
   const page = Math.max(1, Number(params.get("page")) || 1);
   const action = params.get("action") ?? "";
-  const date = params.get("date") ?? "";
-  const entries = useQuery({ queryKey: ["audit", page, action, date], queryFn: () => systemApi.audit({ page, size: 25, action,
-    date_from: date ? `${date}T00:00:00` : undefined, date_to: date ? `${date}T23:59:59.999` : undefined }) });
+  // A single day from an older link opens as a one-day period.
+  const day = params.get("date") ?? "";
+  const chosen = { date_from: params.get("from") ?? day, date_to: params.get("to") ?? day };
+  const period = validDateRange(chosen) ? chosen : undefined;
+  const filter = (values: Record<string, string>) => {
+    const next: Record<string, string> = { action, ...(period ? { from: period.date_from, to: period.date_to } : {}), ...values };
+    setParams(Object.fromEntries(Object.entries(next).filter(([, value]) => value)));
+  };
+  const entries = useQuery({ queryKey: ["audit", page, action, period?.date_from, period?.date_to], queryFn: () => systemApi.audit({ page, size: 25, action,
+    date_from: period ? `${period.date_from}T00:00:00` : undefined, date_to: period ? `${period.date_to}T23:59:59.999` : undefined }) });
   return <div className="stack"><div className="page-head"><div><h1 className="page-title">Аудит</h1><p className="page-subtitle">Кто и когда изменял данные Puls</p></div></div>
-    <Card><div className="workflow-toolbar"><label className="field"><span className="field__label">Действие</span><select className="input" value={action} onChange={(e) => setParams({ action: e.target.value, date })}><option value="">Все действия</option>{Object.entries(AUDIT_ACTIONS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label className="field"><span className="field__label">Дата</span><input className="input" type="date" value={date} onChange={(e) => setParams({ action, date: e.target.value })} /></label><Button onClick={() => setParams({})}>Сбросить</Button></div></Card>
+    <Card><div className="workflow-toolbar"><label className="field"><span className="field__label">Действие</span><Select aria-label="Действие" value={action} options={[{ value: "", label: "Все действия" }, ...Object.entries(AUDIT_ACTIONS).map(([key, label]) => ({ value: key, label }))]} onChange={(value) => filter({ action: value })} /></label><div className="field"><span className="field__label">Период</span><DateRangePicker ariaLabel="Период событий" value={period} onChange={(next) => filter({ from: next.date_from, to: next.date_to })} /></div><Button disabled={!action && !period} onClick={() => setParams({})}>Сбросить</Button></div></Card>
     {entries.isLoading && <Skeleton height={240} />}{entries.isError && <ErrorState error={entries.error} onRetry={() => entries.refetch()} />}
     {entries.data?.items.length === 0 && <EmptyState title="События не найдены" hint="Попробуйте изменить фильтры" />}
-    <Card title="События"><div className="workflow-results">{entries.data?.items.map((entry) => <article className="workflow-result" key={entry.id}><div><strong>{auditActionLabel(entry.action)}</strong><p className="small secondary">{entry.actor_name ?? "Система"} · {dateTime(entry.created_at)}</p><p className="small secondary">{auditEntityLabel(entry.entity_type)}</p></div><Button size="s" onClick={() => setSelected(entry)}>Изменения</Button></article>)}</div>{entries.data && <Pagination page={page} size={25} total={entries.data.total} onChange={(p) => setParams({ action, date, page: String(p) })} />}</Card>
+    <Card title="События"><div className="workflow-results">{entries.data?.items.map((entry) => <article className="workflow-result" key={entry.id}><div><strong>{auditActionLabel(entry.action)}</strong><p className="small secondary">{entry.actor_name ?? "Система"} · {dateTime(entry.created_at)}</p><p className="small secondary">{auditEntityLabel(entry.entity_type)}</p></div><Button size="s" onClick={() => setSelected(entry)}>Изменения</Button></article>)}</div>{entries.data && <Pagination page={page} size={25} total={entries.data.total} onChange={(p) => filter({ page: String(p) })} />}</Card>
     {selected && <Sheet title={auditActionLabel(selected.action)} subtitle={`${selected.actor_name ?? "Система"} · ${dateTime(selected.created_at)}`} onClose={() => setSelected(null)}>
       <AuditChanges entry={selected} developer={user?.is_developer === true} />
     </Sheet>}

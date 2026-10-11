@@ -1,5 +1,5 @@
 .date-range-picker { width: 100%; min-width: 0; }
-.date-range-picker__trigger { display: flex; align-items: center; gap: 12px; width: 100%; height: 44px; padding: 0 var(--sp-4); border: 1px solid var(--control-border); border-radius: var(--radius-m); background: var(--surface-secondary); color: var(--text-primary); font: inherit; font-size: 14px; font-variant-numeric: tabular-nums; cursor: pointer; text-align: left; }
+.date-range-picker__trigger { display: flex; align-items: center; gap: 12px; width: 100%; height: 44px; padding: 0 var(--sp-4); border: 1px solid var(--control-border); border-radius: var(--radius-m); background: var(--surface-secondary); color: var(--text-primary); font: inherit; font-size: var(--text-body); font-variant-numeric: tabular-nums; cursor: pointer; text-align: left; }
 .date-range-picker__trigger:hover:not(:disabled) { background: var(--surface-tertiary); }
 .date-range-picker__trigger:disabled { opacity: .5; cursor: default; }
 .date-range-picker__trigger > svg { flex-shrink: 0; }
@@ -41,9 +41,10 @@
 .date-range-picker__error { margin: 0 0 12px; color: var(--status-danger-text); font-size: 12px; line-height: 1.4; }
 .date-range-picker__footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-top: 12px; border-top: 1px solid var(--separator); }
 .date-range-picker__footer .btn { min-width: 0; }
-@media (max-width: 767px) { .date-range-picker__field .input { height: 44px; font-size: 16px; } }
+/* The trigger matches the site's fields: same text size and, on phones, the same height. */
+@media (max-width: 767px) { .date-range-picker__trigger { height: 50px; font-size: 16px; } .date-range-picker__field .input { height: 44px; font-size: 16px; } }
 @media (max-width: 440px) {
-  .date-range-picker__trigger { gap: 8px; font-size: 13px; padding: 0 12px; }
+  .date-range-picker__trigger { gap: 8px; padding: 0 12px; }
   .date-range-picker__popup { padding: 12px; }
   .date-range-picker__inputs { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .date-range-picker__field { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: center; gap: 8px; }

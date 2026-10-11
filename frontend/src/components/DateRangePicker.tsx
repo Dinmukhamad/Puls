@@ -16,19 +16,24 @@ export interface DateRangePickerProps {
   loading?: boolean;
   className?: string;
   ariaLabel?: string;
+  /** Quick choices above the calendar; reports of whole weeks offer weeks first. */
+  presets?: readonly DateRangePreset[];
 }
 
 const usePopoverLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
-const presets: { value: DateRangePreset; label: string }[] = [
-  { value: "today", label: "Сегодня" },
-  { value: "three-days", label: "3 дня" },
-  { value: "ten-days", label: "10 дней" },
-  { value: "this-month", label: "Этот месяц" },
-  { value: "last-month", label: "Прошлый месяц" },
-];
+const PRESET_LABELS: Record<DateRangePreset, string> = {
+  "today": "Сегодня",
+  "three-days": "3 дня",
+  "ten-days": "10 дней",
+  "this-week": "Эта неделя",
+  "last-week": "Прошлая неделя",
+  "this-month": "Этот месяц",
+  "last-month": "Прошлый месяц",
+};
+const DEFAULT_PRESETS: readonly DateRangePreset[] = ["today", "three-days", "ten-days", "this-month", "last-month"];
 
 /** Dates are a draft until Apply: selecting a day never starts a data request. */
-export function DateRangePicker({ value, defaultRange, onChange, disabled = false, loading = false, className = "", ariaLabel = "Период" }: DateRangePickerProps) {
+export function DateRangePicker({ value, defaultRange, onChange, disabled = false, loading = false, className = "", ariaLabel = "Период", presets = DEFAULT_PRESETS }: DateRangePickerProps) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null), trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
   const effective = value ?? defaultRange;
@@ -152,7 +157,7 @@ export function DateRangePicker({ value, defaultRange, onChange, disabled = fals
     </button>
     {open && host && createPortal(<div ref={panel} id={`${id}-calendar`} className="date-range-picker__popup" role="dialog" aria-modal="false" aria-labelledby={`${id}-title`} style={position} {...{ popover: "manual" }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } }}>
       <header className="date-range-picker__head"><div><strong id={`${id}-title`}>Выберите период</strong><span>Нажмите дату начала и дату окончания</span></div><button type="button" className="date-range-picker__close" aria-label="Закрыть календарь" onClick={() => close(true)}>×</button></header>
-      <div className="date-range-picker__presets" role="group" aria-label="Быстрый выбор периода">{presets.map((item) => { const range = presetDateRange(item.value, today); return <button type="button" key={item.value} className="date-range-picker__preset" aria-pressed={draft.date_from === range.date_from && draft.date_to === range.date_to} onClick={() => preset(item.value)}>{item.label}</button>; })}</div>
+      <div className="date-range-picker__presets" role="group" aria-label="Быстрый выбор периода">{presets.map((item) => { const range = presetDateRange(item, today); return <button type="button" key={item} className="date-range-picker__preset" aria-pressed={draft.date_from === range.date_from && draft.date_to === range.date_to} onClick={() => preset(item)}>{PRESET_LABELS[item]}</button>; })}</div>
       <div className="date-range-picker__inputs">
         <label className="date-range-picker__field"><span>С</span><input className="input" type="date" name="date_from" aria-label="Начало периода" min="0001-01-01" max="9999-12-31" value={draft.date_from} aria-invalid={!valid || undefined} aria-describedby={error ? `${id}-error` : undefined} onChange={(event) => editDate("date_from", event.target.value)} /></label>
         <label className="date-range-picker__field"><span>По</span><input className="input" type="date" name="date_to" aria-label="Конец периода" min="0001-01-01" max="9999-12-31" value={draft.date_to} aria-invalid={!valid || undefined} aria-describedby={error ? `${id}-error` : undefined} onChange={(event) => editDate("date_to", event.target.value)} /></label>

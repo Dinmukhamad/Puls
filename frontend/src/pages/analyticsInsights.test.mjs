@@ -73,3 +73,14 @@ test('priority and disjoint distribution filters agree, including custom latenes
     assert.deepEqual(people.filter(p => matchesFilter(p, filter, quality)), people.filter(p => p.state === state));
   }
 });
+
+test('a chosen range is named by its own dates whatever step its chart uses', async () => {
+  const { periodCaption } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text).toString('base64')}`);
+  const range = (period_from, period_to, grain = 'day') => periodCaption({ grain, period_from, period_to, period_label: null, custom_range: true });
+  assert.equal(range('2026-10-05', '2026-10-11', 'week'), '5 окт. — 11 окт. 2026 г.');
+  assert.equal(range('2026-10-11', '2026-10-11'), '11 окт. 2026 г.');
+  assert.equal(range('2025-12-29', '2026-01-04'), '29 дек. 2025 г. — 4 янв. 2026 г.');
+  assert.equal(range('2026-02-01', '2026-08-31', 'month'), '1 февр. — 31 авг. 2026 г.');
+  // The last-period reports keep their former captions.
+  assert.equal(periodCaption({ grain: 'month', period_from: '2026-08-01', period_to: '2026-08-31', period_label: null }), 'август 2026 г.');
+});

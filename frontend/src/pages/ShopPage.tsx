@@ -16,6 +16,7 @@ import {
   EmptyState,
   ErrorState,
   RowsSkeleton,
+  Select,
   Skeleton,
   type Tone,
 } from "../components/ui";
@@ -30,7 +31,16 @@ const STATUS_TONE: Record<ShopRequestStatus, Tone> = {
 };
 
 
-export type ShopSort = "smart" | "cheap" | "expensive" | "closest";
+/**
+ * Только порядок по цене. «Сначала доступные» и «ближе всего к покупке»
+ * повторяли деление витрины на «Можно купить сейчас» и «Копим» и вкладки
+ * над ней: внутри каждой группы они давали тот же порядок, что и цена.
+ */
+export type ShopSort = "cheap" | "expensive";
+export const SHOP_SORTS: { value: ShopSort; label: string }[] = [
+  { value: "cheap", label: "Сначала дешёвые" },
+  { value: "expensive", label: "Сначала дорогие" },
+];
 
 export interface ShopFilters {
   search: string;
@@ -63,24 +73,9 @@ export function filterShop(items: ShopItemForOperator[], f: ShopFilters): ShopIt
     if (!needle) return true;
     return `${item.title} ${item.description ?? ""}`.toLowerCase().includes(needle);
   });
-  const order = { ready: 0, saving: 1, blocked: 2 } as const;
-  return rows.sort((a, b) => {
-    if (f.sort === "cheap") return a.price - b.price;
-    if (f.sort === "expensive") return b.price - a.price;
-    if (f.sort === "closest") {
-      // «Ближе всего» — сколько осталось добрать. Купленное сейчас считаем
-      // нулём, иначе доступное провалилось бы в конец списка.
-      const left = (x: ShopItemForOperator) => (x.can_buy ? 0 : x.missing_coins);
-      return left(a) - left(b);
-    }
-    // По умолчанию: сначала то, что можно взять, потом то, на что копится,
-    // и внутри группы — от дешёвого к дорогому. Порядок сортировки товара
-    // с сервера при этом сохраняется как последний признак.
-    const group = order[shopGroup(a)] - order[shopGroup(b)];
-    if (group !== 0) return group;
-    if (a.price !== b.price) return a.price - b.price;
-    return a.sort_order - b.sort_order;
-  });
+  // Группы «можно купить», «копим» и «недоступно» раскладывает сама витрина;
+  // здесь только цена, а при равной цене — порядок товара с сервера.
+  return rows.sort((a, b) => (f.sort === "expensive" ? b.price - a.price : a.price - b.price) || a.sort_order - b.sort_order);
 }
 
 
@@ -113,7 +108,7 @@ export function ShopPage() {
   const [chosen, setChosen] = useState<ShopItemForOperator | null>(null);
   const [comment, setComment] = useState("");
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<ShopSort>("smart");
+  const [sort, setSort] = useState<ShopSort>("cheap");
   const [view, setView] = useState<"all" | "ready" | "saving" | "blocked">("all");
 
   const catalog = useQuery({ queryKey: ["shop-catalog"], queryFn: shop.catalog });
@@ -221,12 +216,7 @@ export function ShopPage() {
           ))}
         </div>
         <input className="input shop-search" type="search" value={search} aria-label="Поиск бонуса" placeholder="Поиск бонуса" onChange={(event) => setSearch(event.target.value)} />
-        <select className="input shop-sort" aria-label="Порядок" value={sort} onChange={(event) => setSort(event.target.value as ShopSort)}>
-          <option value="smart">Сначала доступные</option>
-          <option value="closest">Ближе всего к покупке</option>
-          <option value="cheap">Сначала дешёвые</option>
-          <option value="expensive">Сначала дорогие</option>
-        </select>
+        <div className="shop-sort"><Select aria-label="Порядок бонусов" value={sort} options={SHOP_SORTS} onChange={(value) => setSort(value === "expensive" ? "expensive" : "cheap")} /></div>
       </div>
 
       {visible.length === 0 ? (

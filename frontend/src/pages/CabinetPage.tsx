@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { AccessLink as Link } from "../components/AccessLink";
 import { cabinet } from "../api/endpoints";
+import type { BadgeOut } from "../api/types";
 import { progressApi } from "../api/progress";
 import { CoinIcon, MedalIcon, SparkIcon } from "../components/icons";
-import { Card, Delta, ErrorState, Progress, RowsSkeleton, Skeleton } from "../components/ui";
+import { Button, Card, Delta, ErrorState, Progress, RowsSkeleton, Skeleton } from "../components/ui";
 import { coins } from "../utils/format";
 import { WeekMetricsCard } from "./WeekMetricsCard";
 import "./cabinet.css";
@@ -94,36 +96,65 @@ function Hero({
   );
 }
 
+/** How many achievements the cabinet shows before the full list is expanded. */
+export const NEAREST_BADGES = 3;
+
+/**
+ * The achievements an operator is closest to: the largest share of the
+ * condition already done goes first. Achievements without a measurable
+ * condition (a place in the rating) have no share and come last; equal
+ * shares keep the server order.
+ */
+export function nearestBadges(badges: BadgeOut[], count = NEAREST_BADGES): BadgeOut[] {
+  return badges
+    .map((badge, index) => ({ badge, index, share: badge.progress_target > 0 ? badge.progress_percent : -1 }))
+    .filter(({ badge }) => !badge.unlocked)
+    .sort((a, b) => b.share - a.share || a.index - b.index)
+    .slice(0, count)
+    .map(({ badge }) => badge);
+}
+
+function BadgeItem({ badge }: { badge: BadgeOut }) {
+  return (
+    <li className={badge.unlocked ? "badge-card is-unlocked" : "badge-card"}>
+      <span className="badge-card__icon">
+        {badge.unlocked ? <MedalIcon size={20} /> : <SparkIcon size={20} />}
+      </span>
+      <div className="badge-card__text">
+        <span className="badge-card__title">{badge.title}</span>
+        <span className="badge-card__hint">{badge.hint || badge.description}</span>
+        {badge.coins_reward > 0 && <span className="badge-card__hint">{badge.unlocked ? badge.coins_awarded > 0 ? `Начислено: ${badge.coins_awarded} коинов` : "Достижение получено" : `Награда: ${badge.coins_reward} коинов один раз`}</span>}
+        {/* Заблокированный бейдж показывает критерий, а не серую заглушку. */}
+        {!badge.unlocked && badge.progress_target > 0 && (
+          <Progress value={badge.progress_percent / 100} size="s" label={`Прогресс: ${badge.title}`} />
+        )}
+      </div>
+      {!badge.unlocked && badge.progress_target > 0 && <span className="badge-card__percent">{Math.round(badge.progress_percent)}%</span>}
+    </li>
+  );
+}
+
 function BadgesCard() {
   const badges = useQuery({ queryKey: ["badges"], queryFn: cabinet.badges });
+  const [expanded, setExpanded] = useState(false);
+  const all = badges.data ?? [];
+  const nearest = nearestBadges(all);
+  const unlocked = all.filter((badge) => badge.unlocked).length;
+  const hidden = all.length - nearest.length;
+  const listId = "cabinet-badges-all";
 
   return (
-    <Card title="Мои достижения">
+    <Card
+      title="Мои достижения"
+      subtitle={badges.data ? `Получено ${unlocked} из ${all.length}${nearest.length ? " · ближе всего к получению" : ""}` : undefined}
+      action={hidden > 0 ? <Button size="s" aria-expanded={expanded} aria-controls={expanded ? listId : undefined} onClick={() => setExpanded((value) => !value)}>{expanded ? "Свернуть" : `Все достижения · ${all.length}`}</Button> : undefined}
+    >
       {badges.isLoading && <RowsSkeleton rows={3} />}
       {badges.isError && <ErrorState error={badges.error} onRetry={() => badges.refetch()} />}
-      {badges.data && (
-        <ul className="badges-list">
-          {badges.data.map((badge) => (
-            <li
-              key={badge.code}
-              className={badge.unlocked ? "badge-card is-unlocked" : "badge-card"}
-            >
-              <span className="badge-card__icon">
-                {badge.unlocked ? <MedalIcon size={20} /> : <SparkIcon size={20} />}
-              </span>
-              <div className="badge-card__text">
-                <span className="badge-card__title">{badge.title}</span>
-                <span className="badge-card__hint">{badge.hint || badge.description}</span>
-                {badge.coins_reward > 0 && <span className="badge-card__hint">{badge.unlocked ? badge.coins_awarded > 0 ? `Начислено: ${badge.coins_awarded} коинов` : "Достижение получено" : `Награда: ${badge.coins_reward} коинов один раз`}</span>}
-                {/* Заблокированный бейдж показывает критерий, а не серую заглушку. */}
-                {!badge.unlocked && badge.progress_target > 0 && (
-                  <Progress value={badge.progress_percent / 100} size="s" />
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      {badges.data && !expanded && (nearest.length
+        ? <ul className="badges-list">{nearest.map((badge) => <BadgeItem key={badge.code} badge={badge} />)}</ul>
+        : <p className="small secondary">{all.length ? "Все достижения получены. Отличная работа!" : "Достижения ещё не настроены."}</p>)}
+      {badges.data && expanded && <ul className="badges-list" id={listId}>{all.map((badge) => <BadgeItem key={badge.code} badge={badge} />)}</ul>}
     </Card>
   );
 }

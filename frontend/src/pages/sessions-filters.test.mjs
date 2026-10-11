@@ -189,3 +189,9 @@ test("порядок не зависит от того, есть ли в отм�
   }));
   assert.deepEqual(ids(filterSessions(withZone, BASE, NOW)), ids(filterSessions(SESSIONS, BASE, NOW)));
 });
+
+test("фильтры сеансов — списки в стиле сайта, а не системные", () => {
+  // Системный выпадающий список выглядел чужеродно рядом с остальными полями.
+  assert.doesNotMatch(source, /<select|<option/);
+  for (const label of ["Сотрудник", "Платформа", "Активность", "Сортировка"]) assert.match(source, new RegExp(`<Select\\s+aria-label="${label}"`));
+});

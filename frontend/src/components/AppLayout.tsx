@@ -64,7 +64,8 @@ export function AppLayout() {
     {immersive && userLink && <GlassSurface variant="regular" className="sidebar-user-card" {...peek.handlers}>{userLink}</GlassSurface>}
 
     <main className="main"><div className={`main__inner${location.pathname === "/profile" ? " main__inner--profile" : ""}`}>
-      {active && !immersive && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p>{active.tabs.length > 1 && <nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav>}</div>}
+      {/* A section label alone above the page title only repeats it, so it comes with the tabs. */}
+      {active && !immersive && active.tabs.length > 1 && <div className="section-navigation"><p className="section-navigation__title">{active.label}</p><nav className="section-navigation__tabs" aria-label={`Подразделы: ${active.label}`}>{active.tabs.map((item) => <Link key={item.to} to={subsectionDestination(item, location.pathname, location.search)} className={activeTab?.to === item.to ? "section-navigation__tab is-active" : "section-navigation__tab"} aria-current={activeTab?.to === item.to ? "page" : undefined}>{item.label}</Link>)}</nav></div>}
       <SectionGuard><Outlet /></SectionGuard>
     </div></main>
 

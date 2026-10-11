@@ -99,7 +99,9 @@ export function DisciplineCard({ report, people, onOpen }: { report: AnalyticsOu
   const late = report.metrics.find(m => m.code === report.lateness_metric_code);
   const rows = late ? people.filter(p => p.late).sort((a, b) => b.row.values[late.code]! - a.row.values[late.code]!).slice(0, 6) : [];
   const maximum = late ? Math.max(1, ...rows.map(p => p.row.values[late.code]!)) : 1;
-  return <Card title="Опоздания" subtitle={report.grain === 'month' ? 'Среднее за исходный период; месячная сумма не рассчитывается' : 'Количество событий по каждому оператору'}>
+  const subtitle = report.grain === 'month' ? 'Среднее за исходный период; месячная сумма не рассчитывается'
+    : report.custom_range ? `Среднее за ${report.grain === 'day' ? 'день' : 'неделю'} выбранного периода у каждого оператора` : 'Количество событий по каждому оператору';
+  return <Card title="Опоздания" subtitle={subtitle}>
     {!late?.reported ? <EmptyState title="Данные об опозданиях отсутствуют" hint="Отсутствие записи не означает, что опозданий не было." /> : <>
       <div className="analytics-discipline-total"><strong>{people.filter(p => p.late).length}</strong><span>операторов с опозданиями<br /><small>Есть данные у {late.reported} из {late.total}</small></span></div>
       {rows.length ? <div className="analytics-late-list">{rows.map(p => <button key={p.row.user_id} onClick={() => onOpen(p.row.user_id)}><span>{p.row.full_name}</span><strong>{metricValue(p.row.values[late.code], late)}</strong><i style={{ width: `${p.row.values[late.code]! / maximum * 100}%` }} aria-hidden="true" /></button>)}</div> : <p className="analytics-muted">У операторов с данными опозданий нет.</p>}
@@ -122,7 +124,7 @@ export function OperatorDetails({ person, report, metric, onMetric }: { person: 
     <p className="analytics-muted">Есть данные по {person.reported} из {report.metrics.length} показателей. Рост и снижение сравниваются с предыдущим периодом; учитывается направление цели.</p>
     <label className="field"><span className="field__label">Показатель для графика</span><select className="input" value={metric.code} onChange={e => onMetric(e.target.value)}>{report.metrics.map(m => <option key={m.code} value={m.code}>{m.title}</option>)}</select></label>
     <Chart title={`${row.full_name} · ${metric.title}`} labels={report.trend.map(t => t.label)} series={[{ id: 'person', name: row.full_name, values: row.trends?.[metric.code] ?? row.trend }]} target={metric.target} unit={metric.unit} compact />
-    <div className="analytics-person-comparison"><span>Предыдущий: <b>{metricValue(previous, metric)}</b></span><span>Текущий: <b>{metricValue(current, metric)}</b></span></div>
+    <div className="analytics-person-comparison"><span>{report.custom_range ? "Период до этого" : "Предыдущий"}: <b>{metricValue(previous, metric)}</b></span><span>{report.custom_range ? "Выбранный период" : "Текущий"}: <b>{metricValue(current, metric)}</b></span></div>
     <div className="analytics-person-metrics">{person.cells.map(c => <article key={c.metric.code} className={`analytics-person-metric analytics-signal--${c.signal}`}><header><strong>{c.metric.title}</strong><b>{metricValue(c.value, c.metric)}</b></header><p>{description(c.metric)}</p><GoalBar value={c.value} metric={c.metric} /><span>{gapText(c.value, c.metric)}</span></article>)}</div>
     {row.points !== null && <p className="analytics-muted">Итог недельного расчёта: {shortNumber(row.points)} баллов. Это конкурсные баллы, а не финансовый результат.</p>}
   </div>;

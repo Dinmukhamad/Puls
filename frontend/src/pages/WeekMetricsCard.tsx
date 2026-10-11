@@ -41,24 +41,48 @@ function WeekTotals({ week }: { week: WeekMetricsBlock }) {
   </div>;
 }
 
+type FormulaSign = "+" | "−" | "=";
+
+/** One term of the explanation; its sign is drawn in the gap before the tile and is not read out. */
+function FormulaTerm({ sign, label, value, unit, tone }: { sign?: FormulaSign; label: string; value: string; unit?: string; tone?: "penalty" | "result" | "coins" }) {
+  return <div className={`week-formula__term${tone ? ` week-formula__term--${tone}` : ""}`}>
+    <dt>{sign && <span className="week-formula__sign" aria-hidden="true">{sign}</span>}{label}</dt>
+    <dd>{value}{unit && <span className="week-formula__unit"> {unit}</span>}</dd>
+  </div>;
+}
+
 function WeekCalculation({ week }: { week: WeekMetricsBlock }) {
   return <details className="week-calculation">
-    <summary>Как получен итог</summary>
+    <summary className="week-calculation__summary">
+      <span className="week-calculation__icon" aria-hidden="true">=</span>
+      <span className="week-calculation__label"><strong>Как получен итог</strong><span className="small secondary">Баллы, штрафы, коины и бонусы по шагам</span></span>
+      <svg className="week-calculation__chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </summary>
     <div className="week-calculation__content">
-      <dl className="week-calculation__rows">
-        <div><dt>Баллы за показатели</dt><dd>{points(week.base_points)}</dd></div>
-        <div><dt>Штрафные баллы</dt><dd>{points(week.penalty_points)}</dd></div>
-        <div><dt>Итог после вычета штрафов</dt><dd>{points(week.final_points)}</dd></div>
-      </dl>
-      <p className="small secondary">Итог не может быть ниже нуля. В группах показаны суммы серверного расчёта; баллы отображаются с точностью до сотых. «Нет данных» означает, что значение показателя не загружено.</p>
-      <dl className="week-calculation__rows">
-        <div><dt>Коины за баллы</dt><dd>{coins(week.coins_from_points)}</dd></div>
-        <div><dt>Бонус за место</dt><dd>{coins(week.coins_rank_bonus)}</dd></div>
-        <div><dt>Бонус за дисциплину</dt><dd>{coins(week.coins_discipline_bonus)}</dd></div>
-        <div><dt>Бонусы за номинации</dt><dd>{coins(week.coins_nomination_bonus)}</dd></div>
-        <div className="week-calculation__total"><dt>{week.is_final ? "Всего начислено за неделю" : "Всего по прогнозу"}</dt><dd>{coins(week.coins_total)} коинов</dd></div>
-      </dl>
-      <p className="small secondary">Коины за баллы рассчитываются по правилам недели с округлением вниз до целого коина. К ним добавляются бонусы. {week.is_final ? "Показаны сохранённые итоги закрытой недели." : "Показаны бонусы текущего расчёта; окончательный состав определяется при закрытии недели."}</p>
+      <section className="week-formula" aria-label="Как считаются баллы">
+        <h3 className="week-formula__title"><span className="week-formula__step">1</span>Баллы недели</h3>
+        <dl className="week-formula__terms">
+          <FormulaTerm label="Баллы за показатели" value={points(week.base_points)} />
+          <FormulaTerm sign="−" label="Штрафные баллы" value={points(week.penalty_points)} tone={week.penalty_points > 0 ? "penalty" : undefined} />
+          <FormulaTerm sign="=" label={week.is_final ? "Итоговый балл" : "Прогноз баллов"} value={points(week.final_points)} tone="result" />
+        </dl>
+      </section>
+      <section className="week-formula" aria-label="Как считаются коины">
+        <h3 className="week-formula__title"><span className="week-formula__step">2</span>Коины за неделю</h3>
+        <dl className="week-formula__terms week-formula__terms--coins">
+          <FormulaTerm label="Коины за баллы" value={coins(week.coins_from_points)} />
+          <FormulaTerm sign="+" label="Бонус за место" value={coins(week.coins_rank_bonus)} />
+          <FormulaTerm sign="+" label="Бонус за дисциплину" value={coins(week.coins_discipline_bonus)} />
+          <FormulaTerm sign="+" label="Бонусы за номинации" value={coins(week.coins_nomination_bonus)} />
+          <FormulaTerm sign="=" label={week.is_final ? "Всего начислено за неделю" : "Всего по прогнозу"} value={coins(week.coins_total)} unit="коинов" tone="coins" />
+        </dl>
+      </section>
+      <ul className="week-calculation__notes">
+        <li>Итог не может быть ниже нуля. Баллы показаны с точностью до сотых.</li>
+        <li>Коины за баллы считаются по курсу недели с округлением вниз до целого коина, затем добавляются бонусы.</li>
+        <li>{week.is_final ? "Показаны сохранённые итоги закрытой недели." : "Это прогноз: бонусы и итог окончательно определятся при закрытии недели."}</li>
+        <li>«Нет данных» у показателя означает, что его значение ещё не загружено.</li>
+      </ul>
     </div>
   </details>;
 }

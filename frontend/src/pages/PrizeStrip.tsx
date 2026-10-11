@@ -56,12 +56,15 @@ function makeClicker() {
 export function PrizeStrip({
   segments,
   colors,
+  icons,
   spin,
   muted,
   onSettled,
 }: {
   segments: StripSegment[];
   colors: string[];
+  /** A sticker per prize, drawn above its title; the same ones as in the prize list. */
+  icons?: string[];
   spin: SpinRequest | null;
   muted: boolean;
   onSettled: () => void;
@@ -102,7 +105,9 @@ export function PrizeStrip({
     const font = getComputedStyle(document.body).fontFamily;
 
     for (let index = first; index <= last; index += 1) {
-      const prize = segments[((index % segments.length) + segments.length) % segments.length];
+      const slot = ((index % segments.length) + segments.length) % segments.length;
+      const prize = segments[slot];
+      const icon = icons?.[slot];
       const center = middle + index * pitch - offset.current;
       const left = center - cell / 2;
       // Карточки по краям кадра приглушены: взгляд держится на середине,
@@ -133,8 +138,15 @@ export function PrizeStrip({
       }
       if (line) lines.push(line);
       const step = Math.max(16, cell * 0.14);
-      const start = top + cardHeight / 2 - ((lines.length - 1) * step) / 2;
-      lines.slice(0, 3).forEach((text, row) => ctx.fillText(text, center, start + row * step));
+      // With a sticker the title moves to the lower part and keeps two lines.
+      const shown = lines.slice(0, icon ? 2 : 3);
+      const textCenter = icon ? top + cardHeight * 0.7 : top + cardHeight / 2;
+      const start = textCenter - ((shown.length - 1) * step) / 2;
+      shown.forEach((text, row) => ctx.fillText(text, center, start + row * step));
+      if (icon) {
+        ctx.font = `${Math.round(Math.max(24, cell * 0.2))}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", ${font}`;
+        ctx.fillText(icon, center, top + cardHeight * 0.3);
+      }
       ctx.restore();
     }
 
@@ -164,7 +176,7 @@ export function PrizeStrip({
     if (canvasRef.current) observer.observe(canvasRef.current);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segments, colors]);
+  }, [segments, colors, icons?.join("")]);
 
   useEffect(() => {
     if (!spin || spin.id === lastSpin.current || !segments.length) return;
