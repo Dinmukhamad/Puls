@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // plain paths; the operator glTF cannot load in Node, which exercises the robot fallback.
 const dir = fileURLToPath(new URL('.', import.meta.url));
 const built = await build({
-  stdin: { contents: ['districts', 'traffic', 'mascot'].map(f => `export * from './${f}.ts';`).join('\n') + '\nexport * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * from "../render/night.ts"; export * from "../engine/camera.ts"; export * as THREE from "three/webgpu";', resolveDir: dir },
+  stdin: { contents: ['districts', 'traffic', 'mascot'].map(f => `export * from './${f}.ts';`).join('\n') + '\nexport * from "../world/generate.ts"; export * from "../world/worldSpec.ts"; export * from "../render/night.ts"; export * from "../engine/camera.ts"; export * from "../render/copies.ts"; export * as THREE from "three/webgpu";', resolveDir: dir },
   bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'error',
   plugins: [{ name: 'url', setup(b) {
     b.onResolve({ filter: /\?url$/ }, a => ({ path: a.path, namespace: 'url' }));
@@ -167,30 +167,33 @@ test('activeAt keeps an evenly spread share of every loop', () => {
   for (const share of [.25, .6, .75]) assert.ok(Math.abs(kept(share).length - 8 * share) <= 1);
 });
 
+/** A copy mesh's matrices (an interleaved buffer the parts of a vehicle share) and how many copies it draws. */
+const matricesOf = mesh => mesh.geometry.getAttribute('copyMatrix0').data, countOf = mesh => mesh.geometry.instanceCount;
 /** Vehicles drawn: each shared matrix buffer counted once; boats are the ones below the water line. */
 function drawn(ctx) {
   const seen = new Set();
   let cars = 0, boats = 0;
   for (const mesh of ctx.scene.getObjectByName('city-traffic').children) {
-    if (seen.has(mesh.instanceMatrix)) continue;
-    seen.add(mesh.instanceMatrix);
-    if (mesh.count && new THREE.Vector3().setFromMatrixPosition(matrixAt(mesh.instanceMatrix.array, 0)).y < -1) boats += mesh.count; else cars += mesh.count;
+    const matrices = matricesOf(mesh), count = countOf(mesh);
+    if (seen.has(matrices)) continue;
+    seen.add(matrices);
+    if (count && new THREE.Vector3().setFromMatrixPosition(matrixAt(matrices.array, 0)).y < -1) boats += count; else cars += count;
   }
-  return { cars, boats, shadows: ctx.scene.getObjectByName('city-traffic-shadows').count };
+  return { cars, boats, shadows: countOf(ctx.scene.getObjectByName('city-traffic-shadows')) };
 }
 
 test('every loop gets its cars and the canal its boats; each drawn car has one blob shadow on the road', () => {
   for (const world of Object.values(worlds)) {
     const ctx = fakeContext(world, { far: 1e4 }), traffic = city.createTraffic(ctx);
     ctx.frame(1 / 60, 0);
-    const capacity = meshes(ctx.scene.getObjectByName('city-traffic')).reduce((sum, m, i, all) => all.findIndex(o => o.instanceMatrix === m.instanceMatrix) === i ? sum + m.instanceMatrix.count : sum, 0);
+    const capacity = meshes(ctx.scene.getObjectByName('city-traffic')).reduce((sum, m, i, all) => all.findIndex(o => matricesOf(o) === matricesOf(m)) === i ? sum + matricesOf(m).count : sum, 0);
     assert.equal(capacity, world.routes.reduce((sum, r) => sum + r.cars, 0));
     const counts = drawn(ctx);
     assert.ok(counts.boats >= 2 && counts.cars > capacity * .6, `${world.spec.name}: ${JSON.stringify(counts)} of ${capacity}`);
     assert.equal(counts.shadows, counts.cars);
     const blobs = ctx.scene.getObjectByName('city-traffic-shadows'), points = world.routes.filter(r => !r.boats).flatMap(r => r.route.points);
-    for (let i = 0; i < blobs.count; i++) {
-      const p = new THREE.Vector3().setFromMatrixPosition(matrixAt(blobs.instanceMatrix.array, i));
+    for (let i = 0; i < countOf(blobs); i++) {
+      const p = new THREE.Vector3().setFromMatrixPosition(matrixAt(matricesOf(blobs).array, i));
       assert.ok([.227, .272].some(y => Math.abs(p.y - y) < 1e-6), `blob height ${p.y}`);
       assert.ok(points.some(q => Math.hypot(q.x - p.x, q.z - p.z) < 1.3), `blob off the routes at ${p.x.toFixed(1)}, ${p.z.toFixed(1)}`);
     }
@@ -213,9 +216,9 @@ test('traffic draws only what the camera sees within the far LOD distance', () =
 
 test('paused traffic stands still (the default with reduced motion) and moves again when enabled', () => {
   const ctx = fakeContext(worlds.v1, { reducedMotion: true, far: 1e4 }), traffic = city.createTraffic(ctx);
-  const blobs = ctx.scene.getObjectByName('city-traffic-shadows'), snapshot = () => Array.from(blobs.instanceMatrix.array.slice(0, blobs.count * 16)).join();
+  const blobs = ctx.scene.getObjectByName('city-traffic-shadows'), snapshot = () => Array.from(matricesOf(blobs).array.slice(0, countOf(blobs) * 16)).join();
   ctx.frame(.05, 0); const first = snapshot();
-  assert.ok(blobs.count > 0);
+  assert.ok(countOf(blobs) > 0);
   ctx.frame(.05, 50); ctx.frame(.05, 100);
   assert.equal(snapshot(), first);
   traffic.setEnabled(true); ctx.frame(.05, 150);
@@ -243,15 +246,17 @@ test('catalogue cars join the loops, unknown names drive as taxis, and the catal
   const group = ctx.scene.getObjectByName('city-traffic'), taxiOnly = group.children.length;
   traffic.setVehicles(vehicles); ctx.frame(1 / 60, 0);
   assert.equal(group.children.length, taxiOnly + 2);
-  const sedan = group.children.find(m => m.geometry === vehicles.get('sedan').parts[0].geometry);
-  assert.ok(sedan.count > 0 && !sedan.castShadow, 'cars keep to their blob shadows: the sun\'s map is static');
+  const sedan = group.children.find(m => m.geometry.getAttribute('position') === vehicles.get('sedan').parts[0].geometry.getAttribute('position'));
+  assert.ok(countOf(sedan) > 0 && !sedan.castShadow, 'cars keep to their blob shadows: the sun\'s map is static');
   assert.deepEqual(traffic.movers, [group]);
   const catalogue = [...vehicles.values()].flatMap(m => [m.parts[0].geometry, m.parts[0].material]), freed = new Set();
   catalogue.forEach(r => r.addEventListener('dispose', () => freed.add(r)));
+  // The cars' copy meshes and copy materials draw the catalogue's own buffers and stay with them.
+  const ofCatalogue = r => catalogue.some(c => c === r || (c.isMaterial ? city.copyMaterial(c) === r : r.isBufferGeometry && r.getAttribute('position') === c.getAttribute('position')));
   const resources = watchResources(ctx.scene);
   traffic.dispose();
   assert.equal(freed.size, 0);
-  assert.deepEqual([...resources].filter(([r, disposed]) => !disposed && !catalogue.includes(r)).map(([r]) => r.type), []);
+  assert.deepEqual([...resources].filter(([r, disposed]) => !disposed && !ofCatalogue(r)).map(([r]) => r.type), []);
   assert.equal(ctx.scene.children.length, 0);
   assert.equal(ctx.listeners, 0);
 });
@@ -263,28 +268,28 @@ test('at night every drawn car shows lamps and a beam ahead of it and boats thei
   const night = [lamps, beams, boats];
   ctx.frame(1 / 60, 0);
   assert.deepEqual(night.map(m => m.visible), [false, false, false], 'the day draws no lights');
-  assert.equal(lamps.count, 0);
+  assert.equal(countOf(lamps), 0);
   ctx.night.set(true, true); ctx.frame(1 / 60, 16);
   assert.deepEqual(night.map(m => m.visible), [true, true, true]);
-  assert.ok(lamps.count > 20 && lamps.count === blobs.count && beams.count === lamps.count && beams.instanceMatrix === lamps.instanceMatrix, 'one lamp set and one beam per drawn car');
-  assert.ok(boats.count >= 2 && boats.material === lamps.material && !ctx.scene.getObjectByName('city-traffic').children.includes(boats), 'boat lights share the boats\' matrices, not the shadow casters');
+  assert.ok(countOf(lamps) > 20 && countOf(lamps) === countOf(blobs) && countOf(beams) === countOf(lamps) && matricesOf(beams) === matricesOf(lamps), 'one lamp set and one beam per drawn car');
+  assert.ok(countOf(boats) >= 2 && boats.material === lamps.material && !ctx.scene.getObjectByName('city-traffic').children.includes(boats), 'boat lights share the boats\' matrices, not the shadow casters');
   // The headlights (warm white vertices, at +z of the lamp frame) lead the way: the car moves towards them.
   const colors = lamps.geometry.getAttribute('color'), positions = lamps.geometry.getAttribute('position'), head = new THREE.Vector3();
   let heads = 0;
   for (let i = 0; i < colors.count; i++) if (colors.getZ(i) > 1) { head.add(new THREE.Vector3().fromBufferAttribute(positions, i)); heads++; }
   head.divideScalar(heads);
   assert.ok(head.z > .45 && Math.abs(head.x) < .01 && heads === 72, 'two headlight boxes at the front');
-  const at = i => new THREE.Vector3().setFromMatrixPosition(matrixAt(lamps.instanceMatrix.array, i));
-  const before = Array.from({ length: lamps.count }, (_, i) => [at(i), head.clone().applyMatrix4(matrixAt(lamps.instanceMatrix.array, i))]);
+  const at = i => new THREE.Vector3().setFromMatrixPosition(matrixAt(matricesOf(lamps).array, i));
+  const before = Array.from({ length: countOf(lamps) }, (_, i) => [at(i), head.clone().applyMatrix4(matrixAt(matricesOf(lamps).array, i))]);
   ctx.frame(.05, 66);
   let ahead = 0;
-  for (let i = 0; i < lamps.count; i++) {
+  for (let i = 0; i < countOf(lamps); i++) {
     const now = at(i), [was, front] = before.reduce((best, pair) => pair[0].distanceTo(now) < best[0].distanceTo(now) ? pair : best);
     if (was.distanceTo(now) > .5) continue;
     if (now.clone().sub(was).dot(front.clone().sub(was)) > 0) ahead++;
     assert.ok(Math.abs(was.y - .215) < 1e-6 || Math.abs(was.y - .26) < 1e-6, 'the lamp frame stands on the road');
   }
-  assert.ok(ahead > lamps.count * .9, `${ahead} of ${lamps.count} cars drive towards their headlights`);
+  assert.ok(ahead > countOf(lamps) * .9, `${ahead} of ${countOf(lamps)} cars drive towards their headlights`);
   ctx.night.set(false, true); ctx.frame(1 / 60, 82);
   assert.deepEqual(night.map(m => m.visible), [false, false, false]);
   const resources = watchResources(ctx.scene);
@@ -297,9 +302,9 @@ test('lights come on with the night even while the traffic stands still', () => 
   const ctx = fakeContext(worlds.v1, { reducedMotion: true, far: 1e4 }), traffic = city.createTraffic(ctx);
   const lamps = ctx.scene.getObjectByName('city-traffic-lamps');
   ctx.frame(.05, 0); ctx.frame(.05, 50);
-  assert.equal(lamps.count, 0);
+  assert.equal(countOf(lamps), 0);
   ctx.night.set(true); ctx.night.step(.1); ctx.frame(.05, 100);
-  assert.ok(lamps.visible && lamps.count > 20);
+  assert.ok(lamps.visible && countOf(lamps) > 20);
   traffic.dispose();
 });
 

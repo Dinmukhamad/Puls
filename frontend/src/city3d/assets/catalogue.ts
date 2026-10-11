@@ -13,16 +13,13 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import type { Placement, PlacementKind } from "../world/types";
 import { createNight, type Night } from "../render/night";
 import { loadModels, disposeModels, MODEL_LOAD_TIMEOUT_MS, type Model, type ModelPart, type ModelLoadOptions } from "./loader";
+import { catalogueFiles } from "./modelFiles";
 import { furnitureGeometry, gableGeometry, officeGeometry, SECTION_PART, SECTION_PARTS, sectionGeometry, treeKindGeometry, type FurnitureKind } from "./courtyard";
 import { OFFICE_FLOOR, OFFICE_FLOORS, SECTION_FLOORS, SECTION_WIDTH } from "../world/complexes";
 import { FINISHES, HOUSE_SCALE, READY_HOUSES, houseModelName } from "../world/familyHouses";
 import { OFFICE_BUILDINGS, OFFICE_SCALE, officeModelName, officeVariant } from "../world/officeBuildings";
 import { LANDMARK_LEVELS, LANDMARK_SIDE, landmarkLevel } from "../world/districtLandmark";
 import { landmarkGeometry } from "./districtLandmark";
-import modelsUrl from "../../pages/city/models/city-models.glb?url";
-import vehiclesUrl from "../../pages/city/models/vehicles.glb?url";
-import familyHousesUrl from "../../pages/city/models/family-houses.glb?url";
-import highRiseOfficesUrl from "../../pages/city/models/high-rise-offices.glb?url";
 
 /** One detail level. `matrix` places it inside the model and `colors` tint its parts (the proxy box). */
 export interface LodLevel { parts: ModelPart[]; matrix?: THREE.Matrix4; colors?: THREE.Color[] }
@@ -85,15 +82,9 @@ const FALLBACK: Record<string, [string, string]> = { s: ["#eadccb", "#b86b52"], 
  */
 export async function loadCatalogueModels(lodUrls: string[] = [], options: ModelLoadOptions & { kits?: boolean } = {}) {
   const models = new Map<string, Model>(), replaced = new Map<string, Model>();
-  const preferredModels = lodUrls.find(url => /(?:^|\/)city-models\.glb(?:[?#].*)?$/.test(url));
-  const preferredVehicles = lodUrls.find(url => /(?:^|\/)vehicles\.glb(?:[?#].*)?$/.test(url));
-  const fallbacks = new Map<string, string>();
-  if (preferredModels && preferredModels !== modelsUrl) fallbacks.set(preferredModels, modelsUrl);
-  if (preferredVehicles && preferredVehicles !== vehiclesUrl) fallbacks.set(preferredVehicles, vehiclesUrl);
+  const { urls, fallbacks } = catalogueFiles(lodUrls, options.kits !== false);
   const deadline = performance.now() + (options.timeoutMs ?? MODEL_LOAD_TIMEOUT_MS);
   const loadOptions = () => ({ ...options, timeoutMs: Math.max(1, deadline - performance.now()) });
-  const kits = options.kits !== false;
-  const urls = [...new Set([...(kits ? [preferredModels ?? modelsUrl] : []), preferredVehicles ?? vehiclesUrl, familyHousesUrl, highRiseOfficesUrl, ...lodUrls.filter(url => kits || url !== preferredModels)])];
   const files = await Promise.allSettled(urls.map(async url => {
     try { return await loadModels(url, loadOptions()); }
     catch (error) {

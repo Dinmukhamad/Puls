@@ -7,6 +7,7 @@
 import * as THREE from "three/webgpu";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
+import { takePrefetched } from "./modelFiles";
 
 /** Download and decoding share a deadline; a stalled optional kit must not hold the map's first frame. */
 export const MODEL_LOAD_TIMEOUT_MS = 15000;
@@ -51,6 +52,8 @@ async function loadGLTF(url: string, { signal, timeoutMs = MODEL_LOAD_TIMEOUT_MS
   });
   const operation = (async () => {
     let data = fileBytes.get(url);
+    // A download the city page started (modelFiles.ts) is taken over; a failed one is tried again here.
+    if (!data) data = await takePrefetched(url)?.catch(() => undefined);
     if (!data) {
       const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) throw new Error(`Model download failed (${response.status})`);

@@ -1,6 +1,7 @@
 /**
  * Instance pools: every static copy of the world (buildings, trees, lamps, parked cars) is drawn through
- * one THREE.InstancedMesh per model part and detail level, whatever the size of the city (TZ §6.2).
+ * one copy mesh (render/copies.ts) per model part and detail level, whatever the size of the city (TZ §6.2).
+ * Copy meshes of one material share a shader build, so the city's hundred-odd pools build a few shaders.
  *
  * BatchedMesh would be the TZ's tool, but in three r180 its WebGPU backend issues one draw call per
  * instance (5130 calls for 1500 copies), while WebGL2 uses multi-draw. So culling and LOD run on the CPU
@@ -8,6 +9,8 @@
  * against the camera frustum pushed out by a margin, every copy of a visible cell picks a level by
  * distance with hysteresis, and each pool gets the matrices of its copies and a count. Draw calls stay at
  * the number of pools in view; copies beyond the last LOD distance are hidden (impostors come in stage 3).
+ * The matrices live in an instanced vertex buffer uploaded only when the pool changes, in the same render
+ * as its new count. Empty pools stay in the scene with count 0: no draw is issued.
  */
 import * as THREE from "three/webgpu";
 import type { CityContext } from "../engine/context";
@@ -16,25 +19,13 @@ import type { ModelPart } from "../assets/loader";
 import type { Catalogue, CatalogueModel } from "../assets/catalogue";
 import { FOG_END } from "../world/relief";
 import { buildGrid, createCopies, createSelector, select, shouldUpdate, type Pose, type View } from "./cells";
+import { COPY_STRIDE, copyMatrices, copyMesh, copyTints } from "./copies";
 
 /**
  * How far the culling frustum is pushed out: the shadow of the tallest block (about 15 units at a 35° sun)
  * and a 2° turn at the LOD2 distance both stay inside it, so casters just out of view still cast.
  */
 export const CULL_MARGIN = 24;
-/**
- * Every pool has room for at least 1001 copies. Three keeps up to 1000 instance matrices in a uniform buffer
- * that is uploaded every frame (and WebGL2 only promises 16 KB uniform blocks, 256 matrices); from 1001 they
- * live in an instanced vertex buffer uploaded only when the pool changes, and all pools then behave alike:
- *
- * three r180 (both backends) uploads that buffer in the render after the one where the change is noticed:
- * a render object compares versions before its InstanceNode syncs them. So a change is written one frame
- * and its counts are applied the next, when the new matrices reach the GPU: every frame shows matching
- * counts and matrices. Empty pools stay visible with count 0 (no draw is issued) so they keep in sync.
- * The static shadow map is asked for twice: in the frame of the change (the old set, which also syncs the
- * shadow pass's own buffers) and in the next one (the new set). One request would draw stale instances.
- */
-const ATTRIBUTE_MIN = 1001;
 
 export interface PoolStats { copies: number; drawn: number; drawCalls: number; triangles: number }
 export interface InstancePools {
@@ -47,7 +38,8 @@ export interface InstancePools {
 }
 
 /** One set of parts drawn together, shared by every model and level that uses the same parts. */
-interface Pool { parts: ModelPart[]; meshes: THREE.InstancedMesh[]; matrices: THREE.InstancedBufferAttribute; colors: THREE.InstancedBufferAttribute[]; capacity: number; count: number; triangles: number[] }
+type CopyMesh = THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Material>;
+interface Pool { parts: ModelPart[]; meshes: CopyMesh[]; matrices: THREE.InstancedInterleavedBuffer; colors: THREE.InstancedBufferAttribute[]; capacity: number; count: number; triangles: number[] }
 
 export function createInstancePools(ctx: CityContext, catalogue: Catalogue, placements: readonly Placement[]): InstancePools {
   // Resolve every placement to a model and a copy transform.
@@ -82,21 +74,16 @@ export function createInstancePools(ctx: CityContext, catalogue: Catalogue, plac
     return p;
   }
   models.forEach((_, m) => { for (const p of new Set(levelPool[m].filter(Boolean))) p!.capacity += perModel[m]; });
-  const colored = new Set<Pool>();
-  models.forEach((model, m) => model.lods.forEach((level, l) => { if (level && (model.tints?.length || level.colors)) colored.add(levelPool[m][l]!); }));
 
   const group = new THREE.Group(); group.name = "city-instances"; group.matrixAutoUpdate = false;
   for (const p of pools.values()) {
-    const capacity = Math.max(p.capacity, ATTRIBUTE_MIN);
-    p.matrices = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 16), 16);
+    // The parts of a pool share its matrices; every part has tints (white when the model has none), so pools of
+    // one material always share their shaders.
+    p.matrices = copyMatrices(p.capacity);
     p.parts.forEach(part => {
-      // Built empty: the pool's shared matrices replace the mesh's own.
-      const mesh = new THREE.InstancedMesh(part.geometry, part.material, 0);
-      mesh.instanceMatrix = p.matrices;
-      if (colored.has(p)) { mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3).fill(1), 3); p.colors.push(mesh.instanceColor); }
-      mesh.count = 0; mesh.frustumCulled = false; mesh.matrixAutoUpdate = false;
+      const shades = copyTints(p.capacity), mesh = copyMesh(part.geometry, part.material, p.matrices, shades);
       mesh.castShadow = part.castShadow; mesh.receiveShadow = true; mesh.name = "city-pool";
-      p.meshes.push(mesh); group.add(mesh);
+      p.colors.push(shades); p.meshes.push(mesh); group.add(mesh);
     });
   }
   ctx.scene.add(group);
@@ -109,7 +96,7 @@ export function createInstancePools(ctx: CityContext, catalogue: Catalogue, plac
   const view: View = { x: 0, y: 0, z: 0, planes, margin: CULL_MARGIN, distances: distancesFor(ctx.quality.lodDistances) };
   const white = new THREE.Color(1, 1, 1);
 
-  /** Writes the selected copies into the pools; their counts wait for the next frame (see ATTRIBUTE_MIN). */
+  /** Writes the selected copies into the pools with their counts: the next render uploads and draws them. */
   function write() {
     for (const p of pools.values()) p.count = 0;
     const { copies: list, levels, count } = selector.current;
@@ -117,17 +104,19 @@ export function createInstancePools(ctx: CityContext, catalogue: Catalogue, plac
       const c = list[k], m = modelOf[c], level = levels[k], p = levelPool[m][level];
       if (!p) continue;
       const slot = p.count++, lod = models[m].lods[level]!, out = p.matrices.array as Float32Array;
-      if (lod.matrix) multiply(matrices, c * 16, lod.matrix.elements, out, slot * 16);
-      else for (let e = 0; e < 16; e++) out[slot * 16 + e] = matrices[c * 16 + e];
+      if (lod.matrix) multiply(matrices, c * 16, lod.matrix.elements, out, slot * COPY_STRIDE);
+      else for (let e = 0; e < 16; e++) out[slot * COPY_STRIDE + e] = matrices[c * 16 + e];
       for (let part = 0; part < p.colors.length; part++) {
         const color = lod.colors?.[part] ?? white, target = p.colors[part].array as Float32Array;
         target[slot * 3] = tints[c * 3] * color.r; target[slot * 3 + 1] = tints[c * 3 + 1] * color.g; target[slot * 3 + 2] = tints[c * 3 + 2] * color.b;
       }
     }
-    // Three copies these into buffers of its own and uploads them whole: update ranges would not reach them.
-    for (const p of pools.values()) for (const attribute of [p.matrices, ...p.colors]) attribute.needsUpdate = true;
+    for (const p of pools.values()) {
+      p.matrices.needsUpdate = true;
+      for (const colors of p.colors) colors.needsUpdate = true;
+      for (const mesh of p.meshes) mesh.geometry.instanceCount = p.count;
+    }
   }
-  function applyCounts() { for (const p of pools.values()) for (const mesh of p.meshes) mesh.count = p.count; }
 
   function update() {
     camera.updateMatrixWorld();
@@ -137,12 +126,11 @@ export function createInstancePools(ctx: CityContext, catalogue: Catalogue, plac
     view.x = camera.position.x; view.y = camera.position.y; view.z = camera.position.z; view.distances = distancesFor(ctx.quality.lodDistances);
     if (!select(grid, copies, selector, view)) return;
     write();
-    counting = true;
     ctx.requestShadowUpdate();
   }
 
   // Camera moves mark the pools dirty; the next frames update them, throttled.
-  let dirty = true, last: Pose | null = null, spare: Pose = pose(0), counting = false;
+  let dirty = true, last: Pose | null = null, spare: Pose = pose(0);
   function pose(time: number, into?: Pose): Pose {
     const q = camera.quaternion, e = camera.projectionMatrix.elements, p = into ?? {} as Pose;
     p.x = camera.position.x; p.y = camera.position.y; p.z = camera.position.z; p.qx = q.x; p.qy = q.y; p.qz = q.z; p.qw = q.w;
@@ -151,8 +139,6 @@ export function createInstancePools(ctx: CityContext, catalogue: Catalogue, plac
   }
   const offMove = ctx.onCameraMove(() => { dirty = true; });
   const offFrame = ctx.onFrame((_dt, now) => {
-    // The frame after a change: its matrices reach the GPU now, with its counts; no new change this frame.
-    if (counting) { counting = false; applyCounts(); ctx.requestShadowUpdate(); return; }
     if (!dirty) return;
     const next = pose(now, spare);
     if (!shouldUpdate(last, next)) return;
@@ -167,13 +153,13 @@ export function createInstancePools(ctx: CityContext, catalogue: Catalogue, plac
     update,
     stats() {
       let drawCalls = 0, tris = 0;
-      for (const p of pools.values()) { const count = p.meshes[0]?.count ?? 0; if (count) { drawCalls += p.meshes.length; p.triangles.forEach(t => { tris += t * count; }); } }
+      for (const p of pools.values()) { const count = p.count; if (count) { drawCalls += p.meshes.length; p.triangles.forEach(t => { tris += t * count; }); } }
       return { copies: n, drawn: selector.current.count, drawCalls, triangles: tris };
     },
     dispose() {
       offMove(); offFrame(); offQuality();
+      // The copy geometries share the catalogue's buffers (see copyMesh): dropping the meshes is enough.
       ctx.scene.remove(group);
-      for (const p of pools.values()) for (const mesh of p.meshes) mesh.dispose();
       pools.clear();
     },
   };

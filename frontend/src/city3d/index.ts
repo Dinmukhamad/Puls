@@ -17,6 +17,7 @@ import { createStats, type Stats } from "./engine/stats";
 import { islandWorld } from "./world/cities";
 import { WORLD_V1, WORLD_X4 } from "./world/worldSpec";
 import { createCatalogue, loadCatalogueModels, type Catalogue } from "./assets/catalogue";
+import { lodFiles } from "./assets/modelFiles";
 import { createInstancePools, type InstancePools } from "./render/instances";
 import { createTerrain, type Terrain } from "./render/terrain";
 import { createWater, type Water } from "./render/water";
@@ -41,8 +42,13 @@ import "./city3d.css";
 
 /** Static shadows are redrawn only once the camera has rested this long: culling changes casters while it moves. */
 const SHADOW_REST_MS = 250;
+/**
+ * Shaders are built in the background before anything is drawn: a frame that meets an unbuilt one builds it on the
+ * spot and freezes the page while the driver compiles. The landscape's are built while the models download, and it
+ * shows under the progress label as soon as they are ready; the buildings' once they are placed. The city opens
+ * when both are done, or after SHADER_WARMUP_MS at most, and the renderer builds whatever is left on first use.
+ */
 const SHADER_WARMUP_MS = 4000;
-const LOD_FILES = ["city/v1/city-models.glb", "city/v1/vehicles.glb"].map(path => `${import.meta.env.BASE_URL}${path}`);
 
 interface Parts {
   handle: RendererHandle; quality: QualityControl; stats: Stats; loop: Loop; rig: CameraRig; picker: Picker; post: Post;
@@ -153,7 +159,8 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     const { renderer, backend } = handle;
     host.dataset.backend = backend === "webgpu" ? "WebGPU" : "WebGL2";
     const scene = new THREE.Scene(), camera = createCamera(world.radius);
-    let loading = true, shadowWanted = false, lastMove = 0;
+    // `drawing`: frames are drawn only while every shader of what is in the scene is built (SHADER_WARMUP_MS).
+    let loading = true, drawing = false, shadowWanted = false, lastMove = 0;
     const quality = own(createQuality({ backend, mobile, gpu: handle.gpu, busy: () => loading }));
 
     const frameCallbacks = new Set<(dt: number, now: number) => void>(), moveCallbacks = new Set<() => void>();
@@ -208,6 +215,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       onGap: (gap, now) => quality.frame(gap, now),
       onError: () => startupFailed(run),
       render(dt, now) {
+        if (!drawing) return;
         stats.beginFrame();
         if (journey && parts?.departments) {
           // Keep the trip short on low-FPS PCs, but don't jump after a hidden-tab pause.
@@ -262,16 +270,22 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
     districts.select(selected); traffic.setEnabled(trafficOn); crowd.setEnabled(trafficOn); daylight(parts);
     pending.splice(0).forEach(fn => fn(parts!));
     options.onProgress?.(.3);
+    // The landscape's shaders build while the models download; it is drawn as soon as they are ready, unless the
+    // buildings are already being placed by then.
+    let placing = false;
+    const landscape = renderer.compileAsync(scene, camera).catch(() => undefined).then(() => { if (current(run) && !placing) drawing = true; });
 
     // Models: the Kenney kits with their generated LOD copies, then the instance pools and catalogue cars.
     try {
       // The procedural catalogue, stations and campus also work when optional model downloads fail.
       // Only the five-island map places the building kit's houses, offices and industry.
       const kits = world.placements.some(p => p.kind === "house" || p.kind === "office" || p.kind === "industry");
-      const models = await loadCatalogueModels(LOD_FILES, { signal: controller.signal, kits }).catch(() => new Map());
+      const models = await loadCatalogueModels(lodFiles(), { signal: controller.signal, kits }).catch(() => new Map());
       while (!active && current(run)) await activityChanged();
       if (!current(run)) { disposeModels(models); return; }
       options.onProgress?.(.65);
+      // New materials join the scene: nothing is drawn until their shaders are built too.
+      placing = true; drawing = false;
       const catalogue = createCatalogue(models, night);
       parts.catalogue = catalogue;
       parts.pools = createInstancePools(ctx, catalogue, world.placements);
@@ -284,13 +298,13 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       parts.departments.setTraffic(trafficOn); parts.departments.setNight(timeOfDay === "night");
       department = "support"; switchDepartment(desiredDepartment); parts.departments.show(department);
       // Every pool, near and far, has its shaders built before the city shows, so coming closer never
-      // stalls or pops (at most 4 s; the renderer builds whatever is left on first use).
+      // stalls or pops; the landscape's may still be building (SHADER_WARMUP_MS).
       options.onProgress?.(.85);
       let compileTimer: ReturnType<typeof setTimeout> | undefined;
       let cancelCompile = () => {};
       try {
         await Promise.race([
-          renderer.compileAsync(scene, camera).catch(() => undefined),
+          Promise.all([landscape, renderer.compileAsync(scene, camera).catch(() => undefined)]),
           new Promise<void>(done => { compileTimer = setTimeout(done, SHADER_WARMUP_MS); cancelCompile = done; controller.signal.addEventListener("abort", cancelCompile, { once: true }); }),
         ]);
       } finally { clearTimeout(compileTimer); controller.signal.removeEventListener("abort", cancelCompile); }
@@ -298,7 +312,7 @@ export function createCity(host: HTMLDivElement, options: CityOptions): CityCont
       if (!current(run)) return;
     } catch (error) { if (current(run)) throw error; return; }
     options.onProgress?.(.95);
-    loading = false; shadowWanted = true;
+    loading = false; drawing = true; shadowWanted = true;
   }
 
   function teardown() {

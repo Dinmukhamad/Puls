@@ -43,9 +43,9 @@ test('population has a fixed rendering budget, pauses without a jump, respects r
   for (const mobile of [false,true]) {
     const ctx=context({mobile,reducedMotion:true}), crowd=city.createCrowd(ctx), group=ctx.scene.getObjectByName('city-crowd');
     assert.ok(group.userData.population > (mobile?40:60) && group.userData.population <= (mobile?56:100), `population ${group.userData.population}`);
-    const batches=group.children.filter(m=>m.isInstancedMesh); assert.ok(batches.length <= 11);
+    const batches=group.children.filter(m=>m.geometry?.isInstancedBufferGeometry); assert.ok(batches.length >= 9 && batches.length <= 11);
     assert.ok(batches.every(m=>!m.castShadow));
-    const matrices=()=>Array.from(group.getObjectByName('walker-jackets').instanceMatrix.array);
+    const matrices=()=>Array.from(group.getObjectByName('walker-jackets').geometry.getAttribute('copyMatrix0').data.array);
     const initial=matrices(); ctx.frame(.1); assert.deepEqual(matrices(),initial);
     crowd.setEnabled(true); ctx.frame(.1); assert.notDeepEqual(matrices(),initial);
     crowd.setEnabled(false); const paused=matrices(); ctx.frame(10); assert.deepEqual(matrices(),paused);
