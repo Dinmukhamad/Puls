@@ -100,6 +100,10 @@
 
   --separator: rgba(20, 24, 32, 0.08);
   --border-strong: rgba(20, 24, 32, 0.14);
+  /* Structural dividers and interactive outlines follow both theme overrides. */
+  --border-subtle: var(--separator);
+  --control-border: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  --control-border-hover: color-mix(in srgb, var(--text-primary) 46%, transparent);
 
   /* ---------------------------------------------------------------- */
   /* Liquid Glass                                                     */

@@ -102,7 +102,7 @@ export function AdminOperatorsPage() {
         <DateRangePicker value={period} defaultRange={defaultRange} loading={!period && summary.isLoading}
           onChange={(value) => { setPeriod(value); setPage(1); }} />
       </GlassSurface>
-      {period && <p className="operators-period-note muted micro">
+      {period && <p className="operators-period-note ui-note">
         Коины — за выбранные даты. Баллы, место и нарушения — по завершённым неделям,
         которые целиком входят в период. Баланс кошелька — текущий.
       </p>}

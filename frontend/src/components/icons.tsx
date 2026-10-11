@@ -222,3 +222,11 @@ export const PulsMark = ({ size = 22 }: { size?: number }) => (
     />
   </svg>
 );
+
+export const LockIcon = (p: IconProps) => (
+  <Icon {...p}><rect x="5" y="10" width="14" height="11" rx="3" /><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" /></Icon>
+);
+
+export const TelegramIcon = (p: IconProps) => (
+  <Icon {...p}><path d="m21 3-4 18-6-6-4 4v-7L3 9 21 3Z" /><path d="m7 12 9-5-5 8" /></Icon>
+);

@@ -67,7 +67,7 @@ export function ReportsUpload({ onSaved }: { onSaved?: () => void }) {
       </li>)}</ul>
       <div className="kpi-grid"><KPI label="Месяц" value={result.month} /><KPI label="Операторов найдено" value={coins(result.matched)} />
         <KPI label="Не найдено на сайте" value={coins(result.unmatched.length)} /><KPI label="Дневных значений" value={coins(result.day_values)} /></div>
-      {!!result.unmatched.length && <details className="workflow-note"><summary>Кого нет на сайте ({result.unmatched.length})</summary>
+      {!!result.unmatched.length && <details className="workflow-note ui-note"><summary>Кого нет на сайте ({result.unmatched.length})</summary>
         <p>Их данные пропущены. Проверьте ФИО в карточке сотрудника: оно должно совпадать с отчётом.</p>
         <p>{result.unmatched.join(", ")}</p></details>}
       <div><h3 className="group-title">Недели месяца</h3>
