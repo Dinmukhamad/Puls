@@ -10,7 +10,7 @@
 .analytics-filter-fields .field__label { min-width: 0; height: 18px; line-height: 18px; }
 .analytics-filter-fields :is(.input, .segmented, .week-picker__control) { width: 100%; min-height: 44px; height: 44px; box-sizing: border-box; }
 .analytics-filter-fields .segmented { padding: 0; overflow: hidden; }
-.analytics-filter-fields .segmented__item { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 6px 8px; }
+.analytics-filter-fields .segmented__item { flex: 1 1 0; min-width: 0; min-height: 42px; padding: 6px 8px; }
 .analytics-filter-fields .week-picker__arrow { min-height: 42px; }
 .analytics-filter-fields .week-picker__trigger { min-width: 0; padding: 0 2px; }
 .analytics-filter-fields .week-picker__trigger strong { overflow: hidden; text-overflow: ellipsis; }

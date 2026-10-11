@@ -110,7 +110,7 @@ function PeriodWorkspace() {
           <label className="field"><span className="field__label">или выберите на устройстве</span>
             <input ref={fileInput} type="file" accept=".csv,.xlsx" disabled={busy} onChange={(e) => inspectFile(e.target.files?.[0])} /></label>
         </div>
-        <details className="workflow-note"><summary>Как подготовить файл</summary>
+        <details className="workflow-note ui-note"><summary>Как подготовить файл</summary>
           <p>Первая строка — названия колонок. Укажите логин сотрудника в колонке «Логин». Его можно посмотреть в карточке сотрудника.</p>
           <p>Можно использовать колонки «Логин», «Показатель», «Значение»: в показателе укажите его название из настроек. Или создайте отдельную колонку с названием каждого показателя. Пустая ячейка означает отсутствие данных.</p>
           <p>Перед сохранением система покажет ошибки. Проверка файла не изменяет показатели.</p>

@@ -663,6 +663,8 @@ body:has(.shell--immersive) {
 
 .card__action {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: var(--sp-2);
   flex-wrap: wrap;
@@ -892,6 +894,7 @@ body:has(.shell--immersive) {
 
 .btn--primary {
   background: var(--btn-primary-bg);
+  border-color: var(--btn-primary-bg);
   color: var(--btn-primary-fg);
 }
 
@@ -908,7 +911,7 @@ body:has(.shell--immersive) {
 .btn--secondary {
   background: var(--surface-secondary);
   color: var(--text-primary);
-  border-color: var(--separator);
+  border-color: var(--control-border);
 }
 
 @media (hover: hover) {
@@ -921,14 +924,14 @@ body:has(.shell--immersive) {
   background: var(--glass-regular-bg);
   -webkit-backdrop-filter: blur(16px) saturate(var(--glass-saturate));
   backdrop-filter: blur(16px) saturate(var(--glass-saturate));
-  border-color: var(--glass-border);
+  border-color: var(--control-border);
   color: var(--text-primary);
 }
 
 .btn--destructive {
   background: var(--status-danger-tint);
   color: var(--status-danger-text);
-  border-color: transparent;
+  border-color: var(--status-danger-text);
 }
 
 @media (hover: hover) {
@@ -941,6 +944,14 @@ body:has(.shell--immersive) {
 .btn--plain {
   background: transparent;
   color: var(--accent-primary);
+  border-color: var(--control-border);
+}
+
+@media (hover: hover) {
+  :is(.btn--secondary, .btn--glass, .btn--plain):hover:not(:disabled) {
+    border-color: var(--control-border-hover);
+    background: var(--surface-tertiary);
+  }
 }
 
 .icon-btn {
@@ -948,7 +959,7 @@ body:has(.shell--immersive) {
   place-items: center;
   width: 36px;
   height: 36px;
-  border: none;
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-s);
   background: transparent;
   color: var(--text-secondary);
@@ -973,14 +984,16 @@ body:has(.shell--immersive) {
 
 .input {
   width: 100%;
+  min-width: 0;
   /* Same height as a medium button, so fields and buttons in one row line up. */
   height: 44px;
   padding: 0 var(--sp-4);
   background: var(--surface-secondary);
-  border: 1px solid transparent;
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-m);
   color: var(--text-primary);
   transition: background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
     box-shadow var(--motion-fast) var(--ease-standard);
 }
 
@@ -992,10 +1005,18 @@ textarea.input {
 }
 
 .input::placeholder {
-  color: var(--text-quaternary);
+  color: var(--text-tertiary);
 }
 
-/* Акцент строится на кольце фокуса, а не на постоянной рамке. */
+@media (hover: hover) {
+  .input:hover:not(:disabled):not([readonly]) { border-color: var(--control-border-hover); }
+}
+
+.input:disabled { cursor: not-allowed; opacity: .55; }
+.input[readonly] { background: var(--surface-hover); }
+.input[aria-invalid="true"] { border-color: var(--status-danger-text); }
+
+/* Focus stays distinct from the persistent outline. */
 .input:focus {
   outline: none;
   background: var(--surface-primary);
@@ -1061,7 +1082,10 @@ select.input {
 
 .field__note {
   font-weight: 400;
-  color: var(--text-tertiary);
+  font-size: var(--text-caption);
+  line-height: 1.55;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .field__req {
@@ -1083,6 +1107,9 @@ select.input {
   display: inline-flex;
   gap: 2px;
   padding: 3px;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--control-border);
   background: var(--surface-secondary);
   border-radius: var(--radius-s);
 }
@@ -1094,7 +1121,8 @@ select.input {
 
 .segmented__item {
   flex: 1;
-  border: none;
+  border: 1px solid transparent;
+  min-height: 36px;
   background: transparent;
   padding: 6px var(--sp-3);
   border-radius: 9px;
@@ -1110,6 +1138,11 @@ select.input {
   background: var(--surface-primary);
   color: var(--text-primary);
   box-shadow: var(--shadow-sm);
+  border-color: var(--control-border);
+}
+
+@media (hover: hover) {
+  .segmented__item:hover:not(.is-active) { background: var(--surface-hover); color: var(--text-primary); }
 }
 
 /* --------------------------------------------------------------------------
@@ -1805,12 +1838,17 @@ select.input {
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  line-height: 1.55;
   border-radius: var(--radius-m);
   font-size: var(--text-caption);
   margin-bottom: var(--sp-4);
 }
 
 .notice--danger {
+  border-color: var(--status-danger-text);
   background: var(--status-danger-tint);
   color: var(--status-danger-text);
 }
@@ -2487,6 +2525,21 @@ a.hero__stat-value {
   flex: 1;
 }
 
+/* Explanatory panels use a quieter outline than interactive controls. */
+.ui-note {
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-m);
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+details.ui-note > summary { cursor: pointer; color: var(--text-primary); font-weight: 600; }
+details.ui-note[open] > summary { margin-bottom: var(--sp-3); }
+
 .mobile-only {
   display: none;
 }
@@ -2918,12 +2971,12 @@ a.hero__stat-value {
 
 .shop-toggle {
   min-height: 44px; padding: 0 16px; border-radius: var(--radius-m); cursor: pointer;
-  border: 1px solid var(--separator); background: var(--surface-primary);
+  border: 1px solid var(--control-border); background: var(--surface-primary);
   color: var(--text-secondary); font: inherit; font-size: var(--text-caption); font-weight: 550;
   transition: background var(--motion-fast, .14s), color var(--motion-fast, .14s), border-color var(--motion-fast, .14s);
 }
 .shop-toggle:hover { color: var(--text-primary); }
-.shop-toggle.is-on { background: var(--accent-tint); border-color: transparent; color: var(--accent-primary); font-weight: 650; }
+.shop-toggle.is-on { background: var(--accent-tint); border-color: var(--accent-primary); color: var(--accent-primary); font-weight: 650; }
 .shop-toggle:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 
 

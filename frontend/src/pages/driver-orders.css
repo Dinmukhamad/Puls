@@ -36,7 +36,7 @@
 @media (prefers-reduced-motion:reduce) { .driver-order-search>span { animation:none; } }
 
 /* Real position and pickup are independent of the optional training diagram. */
-.driver-geo-status { display:flex; flex-direction:column; gap:6px; padding:14px; background:var(--driver-surface); border:1px solid var(--driver-border); border-radius:16px; font-size:12px; }
+.driver-geo-status { display:flex; flex-direction:column; gap:6px; padding:14px; background:var(--driver-surface); border:1px solid #494940; border-radius:16px; font-size:12px; }
 .driver-geo-status p { margin:0; color:var(--driver-muted); line-height:1.5; }.driver-geo-status small { color:var(--driver-muted); font-variant-numeric:tabular-nums; }.driver-geo-status .driver-secondary { align-self:flex-start; min-height:34px; padding:8px 12px; font-size:12px; margin-top:4px; }
 .driver-geo-warning { padding:12px; border-radius:12px; background:#a7631526; font-size:13px; line-height:1.5; }
 .sim-map--pending { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:28px; text-align:center; color:var(--driver-muted); background:var(--driver-surface); }.sim-map--pending>span { font-size:32px; }.sim-map--pending p { max-width:300px; font-size:14px; line-height:1.5; }
