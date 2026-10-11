@@ -9,7 +9,7 @@ from sqlalchemy import select
 from app.models.access import AccessRule
 from app.models.enums import Role
 from app.models.oktell import OktellEvent
-from app.services.oktell import mission_facts
+from app.services.oktell import apply, build, initial, mission_facts
 from tests.conftest import auth, login, login_with_work_sites, make_user
 
 pytestmark = pytest.mark.asyncio
@@ -309,3 +309,38 @@ async def test_training_metrics_use_server_time_for_calls_and_breaks(client, ope
     await session.commit()
     resumed = await accepted(client, headers, "resume")
     assert resumed["metrics"]["break_seconds"] >= 10
+
+
+async def test_current_pause_timer_resets_while_break_total_accumulates(operator):
+    workspace = initial()
+    started = datetime(2026, 10, 11, 12, tzinfo=UTC)
+
+    def at(seconds):
+        return started + timedelta(seconds=seconds)
+
+    apply(workspace, "login", {"login": "6600"}, str(uuid4()), at(0))
+    apply(workspace, "join", {}, str(uuid4()), at(0))
+    apply(workspace, "pause", {"reason": "break"}, str(uuid4()), at(5))
+    first = build(workspace, operator, at(15))
+    assert first["pause_seconds"] == first["metrics"]["break_seconds"] == 10
+    # A snapshot only reads elapsed server time; it cannot accumulate a pause twice.
+    assert build(workspace, operator, at(15))["metrics"] == first["metrics"]
+    apply(workspace, "resume", {}, str(uuid4()), at(15))
+    working = build(workspace, operator, at(17))
+    assert working["pause_seconds"] == 0 and working["metrics"]["break_seconds"] == 10
+
+    apply(workspace, "pause", {"reason": "break"}, str(uuid4()), at(20))
+    second = build(workspace, operator, at(24))
+    assert second["pause_seconds"] == 4 and second["metrics"]["break_seconds"] == 14
+    apply(workspace, "resume", {}, str(uuid4()), at(26))
+    after = build(workspace, operator, at(30))
+    assert after["pause_seconds"] == 0 and after["metrics"]["break_seconds"] == 16
+
+    apply(workspace, "pause", {"reason": "technical"}, str(uuid4()), at(31))
+    technical = build(workspace, operator, at(35))
+    assert technical["pause_seconds"] == 4 and technical["metrics"]["break_seconds"] == 16
+    apply(workspace, "leave", {}, str(uuid4()), at(36))
+    assert build(workspace, operator, at(40))["pause_seconds"] == 0
+    apply(workspace, "reset", {}, str(uuid4()), at(41))
+    reset = build(workspace, operator, at(45))
+    assert reset["pause_seconds"] == reset["metrics"]["break_seconds"] == 0

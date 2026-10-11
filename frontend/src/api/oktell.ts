@@ -19,7 +19,7 @@ export interface OktellState {
   operator: { name: string; login: string; number: string };
   demo_credentials: { login: string; password: string };
   logged_in: boolean; center_joined: boolean; office_status: OfficeStatus;
-  center_mode: "automatic" | "manual"; pause_reason: PauseReason | null;
+  center_mode: "automatic" | "manual"; pause_reason: PauseReason | null; pause_seconds: number;
   forward_number: string; web_phone: boolean; auto_answer: boolean;
   active_call: { id: string; contact_id: string; number: string; name: string; started_at: string } | null;
   contacts: OktellContact[]; calls: OktellCall[]; messages: OktellMessage[];

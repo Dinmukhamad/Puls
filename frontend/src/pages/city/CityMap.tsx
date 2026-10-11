@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { CityDistrict, CityGroup, CityMission, CityPlot, CityQuest, DistrictId } from "../../api/city";
 import type { CityBuildView, CityControl, CityControlScheme, CityEstateView, CityLabelInfo, CityMascot, EstatePick, EstateTarget, TimeOfDay } from "../../city3d/types";
 import { CONTROL_SCHEMES } from "./cityControls";
-import { districtLevel, grownDistricts } from "./cityLevels";
+import { completedDistrictMissions, districtLevel, grownDistricts } from "./cityLevels";
 import { useAuth } from "../../auth/AuthContext";
 import type { CityWorld, DepartmentId } from "../../api/cityWorld";
 import type { JourneyPhase } from "../../city3d/types";
@@ -65,7 +65,7 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   const statusRef = useRef(onStatus); statusRef.current = onStatus;
   const [traffic, setTraffic] = useState(() => !window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const trafficRef = useRef(traffic); trafficRef.current = traffic;
-  const levels = Object.fromEntries(districts.map(d => [d.id, missions.filter(m => m.district === d.id && m.state === "completed").length]));
+  const levels = Object.fromEntries(districts.map(d => [d.id, completedDistrictMissions(d, missions)]));
   const levelKey = JSON.stringify(levels);
   const levelsRef = useRef(levels); levelsRef.current = levels;
   const growthRef = useRef<() => DistrictId[]>(() => []);

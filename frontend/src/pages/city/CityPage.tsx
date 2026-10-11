@@ -16,7 +16,7 @@ import { ErrorState } from "../../components/ui";
 import { Sheet } from "../../components/Sheet";
 import { PulsarFace } from "../crm/PulsarGuide";
 import { CityMap } from "./CityMap";
-import { DISTRICT_LEVEL_NAMES, MAX_DISTRICT_LEVEL, districtLevel } from "./cityLevels";
+import { DISTRICT_LEVEL_NAMES, MAX_DISTRICT_LEVEL, completedDistrictMissions, districtLevel } from "./cityLevels";
 import { DISTRICT_COLORS, districtLabels } from "./cityDistricts";
 import type { CityLabelInfo } from "../../city3d/types";
 import "../crm/pulsar.css";
@@ -223,7 +223,8 @@ export function CityPage() {
     }, 0);
   }
   const rank = data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города";
-  const level = districtLevel(missions.filter(m => m.state === "completed").length, selected.soon);
+  const level = districtLevel(completedDistrictMissions(selected, missions), selected.soon);
+  const oktellDeferred = selected.id === "oktell" && missions.length === 0;
   const districtDone = missions.length > 0 && missions.every(m => m.state === "completed" || !m.enabled);
   // The mission's main button already leads to the district's tool: the second link to it is left out.
   const opensTool = !!mission && !selected.soon && selected.id !== "scenarios" && !!actionable && mission.key !== "welcome" && !data.inspecting && !(mission.state === "ready" && data.can_claim);
@@ -289,7 +290,7 @@ export function CityPage() {
     {department === "support" && !building && <><CityPeekPanel className="city-mission-peek" toolbarSlot="missions" label={`Миссии · ${selected.name}`} compactLabel="Миссии" icon={labels.find(label => label.id === selected.id)?.icon ?? "📋"} holdOpen={claim.isPending}><aside className="city-mission glass glass--regular" data-expanded="true" aria-label={`Район «${selected.name}»`}>
       <div className="city-mission__body" id="city-mission-body" aria-live="polite">
         <div className="city-mission-top"><span className="city-eyebrow">{selected.name}</span><span className="city-state" data-state={mission?.state}>{selected.soon ? "СКОРО" : mission ? MISSION_STATES[mission.state] : "Нет заданий"}</span></div>
-        <div className="city-building-level city-extra" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{selected.soon ? "Район строится и откроется позже" : level === MAX_DISTRICT_LEVEL ? "Максимальный уровень — район стал легендой" : districtDone ? "Все миссии района пройдены — здание достроено" : "Каждая пройденная миссия района улучшает здание"}</small></div>
+        <div className="city-building-level city-extra" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{oktellDeferred ? "Кабинет, телефония, сообщения и журнал. Обучение появится позже." : selected.soon ? "Район строится и откроется позже" : level === MAX_DISTRICT_LEVEL ? "Максимальный уровень — район стал легендой" : districtDone ? "Все миссии района пройдены — здание достроено" : "Каждая пройденная миссия района улучшает здание"}</small></div>
         {districtPlots.length > 0 && <CityPlotsSummary plots={districtPlots} buildings={data.buildings} canBuild={data.can_build} moved={data.plots_moved} onShow={key => setPlotFocus({ key, at: Date.now() })} onBuild={freePlot && data.can_build ? () => { setPlotFocus({ key: freePlot.key, at: Date.now() }); openPlot(freePlot.key); } : undefined} />}
         {!data.inspecting && !opensTool && selected.id === "driver" && <button className="city-secondary city-extra" onClick={() => setDriverLaunch(true)}>Открыть автопарк →</button>}
         {!data.inspecting && !opensTool && selected.id === "crm" && <Link className="city-secondary city-extra" to="/training/work-sites">Открыть CRM · рабочие сайты →</Link>}

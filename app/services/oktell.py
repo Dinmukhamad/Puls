@@ -221,6 +221,7 @@ def build(workspace: dict, user, now: datetime) -> dict:
     metrics = result["metrics"]
     metrics["center_seconds"] += elapsed(result["_center_since"], now)
     pause_seconds = elapsed(result["_pause_since"], now)
+    result["pause_seconds"] = pause_seconds
     metrics["busy_seconds"] += pause_seconds
     if result["pause_reason"] == "break":
         metrics["break_seconds"] += pause_seconds

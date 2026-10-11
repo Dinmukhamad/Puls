@@ -18,7 +18,6 @@ from app.services.crm_catalog import default_categories
 from app.services.dispatch import mission_facts, solved_calls
 from app.services.dispatch_data import MISSION_CALLS
 from app.services.learning import lock_learner
-from app.services.oktell import mission_facts as oktell_facts
 from app.services.rules import write_audit
 
 DISTRICTS = [
@@ -27,12 +26,16 @@ DISTRICTS = [
     {"id": "crm", "name": "CRM-центр", "subtitle": "На стороне водителя", "soon": False},
     {"id": "dispatch", "name": "Диспетчерская", "subtitle": "Кабинет таксопарка", "soon": False},
     {"id": "scenarios", "name": "Сценарии ТП", "subtitle": "Диалог и практика", "soon": False},
-    {"id": "oktell", "name": "Oktell", "subtitle": "Связь и смена оператора", "soon": False},
+    {"id": "oktell", "name": "Oktell", "subtitle": "Телефония и сообщения", "soon": False},
 ]
 # Conditions and destinations are server-owned. Editors can tune the curriculum,
 # but cannot inject arbitrary URLs or client-side completion rules.
 DISPATCH = "/training/work-sites?site=dispatch"
-OKTELL = "/training/work-sites?site=oktell"
+# Keep legacy award keys identifiable while the Oktell curriculum is deferred. They are
+# excluded from all effective settings, prerequisites and claims; persisted awards stay intact.
+DEFERRED_OKTELL_MISSIONS = frozenset(
+    ("oktell_ready", "oktell_call", "oktell_message", "oktell_shift")
+)
 TEMPLATES = {
     "welcome": ("academy", "welcome", "/training/city", "Знакомство с городом"),
     "driver_profile": ("driver", "profile", "/simulator", "Учебный профиль водителя готов"),
@@ -47,15 +50,6 @@ TEMPLATES = {
     "dispatch_inventory": ("dispatch", "dispatch_inventory", DISPATCH, "Выданный термокороб"),
     "dispatch_support": ("dispatch", "dispatch_support", DISPATCH, "Обращение в поддержку Яндекса"),
     "dispatch_limit": ("dispatch", "dispatch_limit", DISPATCH, "Разобранные лимиты на вывод"),
-    "oktell_ready": ("oktell", "oktell_ready", OKTELL, "Вход в call-центр и готовность к работе"),
-    "oktell_call": (
-        "oktell", "oktell_call", OKTELL + "&oscreen=phone", "Звонок завершён и заметка сохранена",
-    ),
-    "oktell_message": (
-        "oktell", "oktell_message", OKTELL + "&oscreen=messages",
-        "Сообщение супервайзеру отправлено",
-    ),
-    "oktell_shift": ("oktell", "oktell_shift", OKTELL, "Перерыв, возврат и завершение смены"),
     "scenario_business_park": (
         "scenarios", "scenario_business_park", "/training/scenarios/business_park",
         "Консультация по тарифу «Бизнес» через парк завершена",
@@ -65,7 +59,6 @@ TEMPLATES = {
 TARGET_LIMITS = {
     **{key: len(MISSION_CALLS[key]) for key in MISSION_CALLS},
     "scenario_business_park": 1,
-    **{key: 1 for key in TEMPLATES if key.startswith("oktell_")},
 }
 
 # Plots of the operator's own district: four on the green belt behind every open district island.
@@ -224,52 +217,6 @@ def default_missions():
             "dispatch_support",
         ),
         (
-            "oktell_ready",
-            "На связи в Oktell",
-            "Войди в учебный Oktell и call-центр. Включи веб-телефон "
-            "и выбери автоматический режим.",
-            "Учебные логин и пароль показаны на экране входа. Статусы и настройки телефона "
-            "открываются кнопкой внизу меню Oktell.",
-            1,
-            75,
-            20,
-            "welcome",
-        ),
-        (
-            "oktell_call",
-            "Первый звонок коллеге",
-            "Найди коллегу в «Телефоне», выполни учебный звонок и заверши его. "
-            "Открой «Журнал» и сохрани заметку к этому звонку.",
-            "Звонок выполняется внутри тренажёра. В журнале выбери запись и заполни комментарий: "
-            "это завершит упражнение.",
-            1,
-            100,
-            40,
-            "oktell_ready",
-        ),
-        (
-            "oktell_message",
-            "Сообщение супервайзеру",
-            "Открой «Сообщения», найди учебного супервайзера и отправь ему личное сообщение.",
-            "Выбери супервайзера из справочника, напиши текст и нажми «Написать». "
-            "Диалог сохранится в твоей учебной копии.",
-            1,
-            75,
-            30,
-            "oktell_call",
-        ),
-        (
-            "oktell_shift",
-            "Завершить смену правильно",
-            "Перейди в статус «Перерыв», вернись к работе и затем выйди из call-центра.",
-            "Сначала заверши активный звонок. Выбери «Перерыв» в меню статусов, "
-            "нажми «Вернуться к работе», затем «Выйти из call-центра» в кабинете.",
-            1,
-            100,
-            40,
-            "oktell_message",
-        ),
-        (
             "scenario_business_park",
             "Бизнес через парк: консультация водителя",
             "Пройди диалог с водителем, проверь условия тарифа «Бизнес» в учебной "
@@ -301,9 +248,16 @@ async def settings(session):
     row = await session.get(CitySettings, 1)
     # Missions added after a trainer saved the curriculum start with their defaults.
     missions = {**default_missions(), **(row.missions if row else {})}
+    missions = deepcopy({key: missions[key] for key in TEMPLATES})
+    # A previous editor could make an unrelated mission depend on an Oktell exercise.
+    # Removing the deferred prerequisite keeps the surviving route usable without touching
+    # the saved curriculum or any historic reward snapshot.
+    for mission in missions.values():
+        if mission["prerequisite"] in DEFERRED_OKTELL_MISSIONS:
+            mission["prerequisite"] = None
     return {
         "revision": row.revision if row else 0,
-        "missions": deepcopy({key: missions[key] for key in TEMPLATES}),
+        "missions": missions,
     }
 
 
@@ -316,7 +270,6 @@ def empty_facts():
         "phone": 0,
         "closed": 0,
         "scenario_business_park": 0,
-        **{key: 0 for key in TEMPLATES if key.startswith("oktell_")},
         **mission_facts(set()),
     }
 
@@ -357,8 +310,6 @@ async def evidence(session, user_ids):
         return result
     for uid, calls in (await solved_calls(session, user_ids)).items():
         result[uid].update(mission_facts(calls))
-    for uid, facts in (await oktell_facts(session, user_ids)).items():
-        result[uid].update(facts)
     from app.models.scenario import ScenarioAttempt
 
     # Independent profile and scenario aggregates share one round trip; a scenario never
@@ -535,7 +486,19 @@ async def dashboard(session, user, *, inspecting=False):
         "preview": not operator,
         "inspecting": inspecting,
         "can_claim": operator and not inspecting,
-        "districts": [d for d in DISTRICTS if scenarios_visible or d["id"] != "scenarios"],
+        "districts": [
+            {
+                **district,
+                # Deferred teaching is absent from the curriculum, but its earned building
+                # stages remain visible. Only persisted awards count, never workspace events.
+                **(
+                    {"completed_missions": len(DEFERRED_OKTELL_MISSIONS.intersection(awards))}
+                    if district["id"] == "oktell" else {}
+                ),
+            }
+            for district in DISTRICTS
+            if scenarios_visible or district["id"] != "scenarios"
+        ],
         "missions": rows,
         "xp": xp,
         "level": xp // 300 + 1,

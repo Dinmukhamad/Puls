@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 
 const built = await build({entryPoints:[fileURLToPath(new URL('./cityLevels.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
-const { districtLevel, grownDistricts, MAX_DISTRICT_LEVEL, DISTRICT_LEVEL_NAMES } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const { districtLevel, completedDistrictMissions, grownDistricts, MAX_DISTRICT_LEVEL, DISTRICT_LEVEL_NAMES } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 const labelsBuilt = await build({entryPoints:[fileURLToPath(new URL('./cityDistricts.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
 const {districtLabels,DISTRICT_ICONS,DISTRICT_COLORS} = await import(`data:text/javascript;base64,${Buffer.from(labelsBuilt.outputFiles[0].text).toString('base64')}`);
 
@@ -15,6 +15,22 @@ test('each completed mission raises the building by one stage, up to five', () =
 
 test('districts that are not open yet stay at their initial stage', () => {
   assert.equal(districtLevel(4, true), 1);
+});
+
+test('deferred history preserves the building stage without double-counting active missions', () => {
+  const oktell = {id:'oktell',name:'Oktell',subtitle:'Телефония и сообщения',soon:false,completed_missions:4};
+  const completed = {district:'oktell',state:'completed'};
+  assert.equal(districtLevel(completedDistrictMissions(oktell, [])), 5);
+  assert.equal(completedDistrictMissions(oktell, [completed, completed]), 4);
+  assert.equal(completedDistrictMissions({...oktell,completed_missions:1}, [completed, completed]), 2);
+  assert.equal(completedDistrictMissions({...oktell,completed_missions:undefined}, [completed]), 1);
+  assert.equal(completedDistrictMissions(oktell, [{district:'crm',state:'completed'}]), 4);
+  assert.equal(completedDistrictMissions({...oktell,completed_missions:0}, [{district:'oktell',state:'ready'}]), 0);
+  const historicalLabel = districtLabels([oktell], [])[0];
+  assert.equal(historicalLabel.level, 5);
+  assert.equal(historicalLabel.reward, false);
+  assert.equal(historicalLabel.status, 'Рабочий кабинет');
+  assert.equal(districtLabels([{...oktell,completed_missions:0}], [])[0].level, 1);
 });
 
 test('only districts that went up since the last visit celebrate', () => {

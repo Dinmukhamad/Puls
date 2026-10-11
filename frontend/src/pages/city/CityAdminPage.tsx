@@ -10,8 +10,8 @@ import { coins, plural } from "../../utils/format";
 import { FormFooter, FormStatus, Switch } from "./CityAdminControls";
 import { estateRows, plotEconomyName } from "./plotCatalogue";
 
-/** Fixed exercises and dispatch calls cannot exceed the server's curriculum. */
-const DISPATCH_TARGETS: Record<string, number> = { dispatch_driver: 2, dispatch_car: 1, dispatch_inventory: 1, dispatch_support: 1, dispatch_limit: 3, oktell_ready: 1, oktell_call: 1, oktell_message: 1, oktell_shift: 1 };
+/** Dispatch calls cannot exceed the server's curriculum. */
+const DISPATCH_TARGETS: Record<string, number> = { dispatch_driver: 2, dispatch_car: 1, dispatch_inventory: 1, dispatch_support: 1, dispatch_limit: 3 };
 type CityAdminTab = "participants" | "groups" | "economy" | "situations" | "settings" | "world" | "estates";
 const CITY_ADMIN_TABS: CityAdminTab[] = ["participants", "groups", "economy", "situations", "settings", "world", "estates"];
 
@@ -259,7 +259,7 @@ function MissionEditor({initial,canEdit}:{initial:CitySettings;canEdit:boolean})
   const missionOptions=Object.entries(draft.missions).map(([key,m])=>({value:key,label:m.title}));
   const prerequisites=[{value:'',label:'Без предыдущего задания'},...Object.entries(draft.missions).filter(([key])=>key!==selected&&!key.startsWith('scenario_')).map(([key,m])=>({value:key,label:m.title}))];
   return <form className="stack" onSubmit={e=>{e.preventDefault();if(canEdit)mutation.mutate(draft);}}>
-    <p className="ui-note">Уже полученные награды и опыт сохраняются. Новые условия применяются к непройденным миссиям. Цели проверяются по данным CRM, Driver Simulator, учебной Диспетчерской и Oktell: в Диспетчерской цель — число решённых звонков, в Oktell — выполненное упражнение. Сценарии доступны только техподдержке; их результат проверяет тренажёр диалога и практики.</p>
+    <p className="ui-note">Уже полученные награды и опыт сохраняются. Новые условия применяются к непройденным миссиям. Цели проверяются по данным CRM, Driver Simulator и учебной Диспетчерской: в Диспетчерской цель — число решённых звонков. Сценарии доступны только техподдержке; их результат проверяет тренажёр диалога и практики.</p>
     <Card title="Миссия" subtitle={`${missionOptions.length} ${plural(missionOptions.length,'миссия','миссии','миссий')} города`}>
       <label className="field city-admin-field-narrow"><span className="field__label">Выберите миссию</span><Select aria-label="Миссия" value={selected} options={missionOptions} onChange={setSelected}/></label>
     </Card>

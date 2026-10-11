@@ -7,7 +7,7 @@ export type DistrictId = "academy" | "driver" | "crm" | "dispatch" | "oktell" | 
 export type MissionState = "available" | "in_progress" | "ready" | "locked" | "completed" | "unavailable";
 export interface MissionDefinition { title: string; description: string; pulsar: string; target: number; xp: number; coins: number; enabled: boolean; prerequisite: string | null }
 export interface CityMission extends MissionDefinition { key: string; district: DistrictId; objective: string; path: string; current: number; state: MissionState; claimed_at: string | null }
-export interface CityDistrict { id: DistrictId; name: string; subtitle: string; soon: boolean }
+export interface CityDistrict { id: DistrictId; name: string; subtitle: string; soon: boolean; readonly completed_missions?: number }
 export interface CityData { revision: number; user_id: number; full_name: string; gender?: "male" | "female" | null; guide_name?: string | null; preview: boolean; inspecting: boolean; can_claim: boolean; districts: CityDistrict[]; missions: CityMission[]; xp: number; level: number; level_progress: number; level_target: number; balance: number; available: number; plots: CityPlot[]; buildings: CityBuilding[]; can_build: boolean; plots_moved?: boolean; group: CityGroup | null; quests: CityQuests | null }
 export type BuildingKey = "garden" | "gazebo" | "playground" | "sports" | "fountain" | "cottage" | "house" | "tower";
 /** A plot of the operator's own district; `item` is what stands on it. */
