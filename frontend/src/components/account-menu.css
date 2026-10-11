@@ -1,0 +1,27 @@
+.account-trigger { width: 100%; border: 1px solid transparent; background: transparent; text-align: left; }
+.account-trigger > .avatar { flex: none; }
+.account-trigger[aria-expanded="true"] { border-color: var(--control-border); background: var(--surface-secondary); }
+.account-trigger__chevron { flex: none; margin-left: auto; color: var(--text-tertiary); }
+.shell--collapsed:not(.shell--peek) .account-trigger__chevron { visibility: hidden; }
+.account-menu { position: fixed; inset: auto; margin: 0; padding: 8px; width: 320px; max-width: calc(100vw - 24px); overflow-y: auto; border: 1px solid var(--border-strong); border-radius: var(--radius-l); background: var(--surface-opaque); color: var(--text-primary); box-shadow: var(--shadow-float); z-index: 90; }
+.account-menu::backdrop { background: transparent; }
+.account-menu__identity { display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: 1px solid var(--separator); margin-bottom: 6px; }
+.account-menu__identity > .avatar { flex: none; }
+.account-menu__identity > div { min-width: 0; }
+.account-menu__identity strong { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.account-menu__identity span:not(.avatar, .avatar__initials) { display: block; margin-top: 3px; font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.account-menu nav { display: grid; gap: 2px; }
+.account-menu nav a { display: flex; gap: 10px; align-items: center; min-height: 44px; padding: 10px 12px; color: var(--text-primary); font-size: 13px; border-radius: var(--radius-s); }
+.account-menu nav a > svg { flex: none; color: var(--text-secondary); }
+.account-menu nav a > span { flex: 1; }
+.account-menu nav a:hover { background: var(--surface-hover); }
+.account-menu footer { margin-top: 6px; padding: 10px 6px 4px; border-top: 1px solid var(--separator); }
+.account-menu footer > .btn { min-height: 40px; }
+
+.mobile-account { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--separator); display: grid; gap: 12px; }
+.mobile-account__profile { display: flex; align-items: center; gap: 12px; padding: 8px; color: var(--text-primary); border-radius: var(--radius-s); }
+.mobile-account__profile > .avatar { flex: none; }
+.mobile-account__profile > span:last-child { min-width: 0; }
+.mobile-account__profile strong { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.mobile-account__profile small { display: block; margin-top: 3px; color: var(--text-secondary); font-size: 12px; }
+.mobile-account > .btn { min-height: 44px; }

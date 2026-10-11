@@ -1,11 +1,11 @@
-import { lazy, Suspense, useId, useState, type FormEvent } from "react";
+import { lazy, Suspense, useId, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { auth } from "../api/endpoints";
 import { useAccess } from "../auth/AccessContext";
 import { useAuth } from "../auth/AuthContext";
-import { DisplayIcon, LogoutIcon, MoonIcon, SunIcon } from "../components/icons";
-import { Avatar, Badge, Button, Card } from "../components/ui";
+import { DisplayIcon, LogoutIcon, MoonIcon, SunIcon, UserIcon, LockIcon, DownloadIcon } from "../components/icons";
+import { Avatar, Badge, Button } from "../components/ui";
 import { useTheme, type ThemePreference } from "../theme/ThemeContext";
 import { Sheet } from "../components/Sheet";
 import { useToast } from "../components/Toast";
@@ -25,65 +25,70 @@ export function ProfilePage() {
   const { user, logout } = useAuth();
   const { can, isDeveloper } = useAccess();
   const { preference, setPreference } = useTheme();
-  const [securityOpen, setSecurityOpen] = useState(false);
-  const [loginOpen, setLoginOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [leaving, setLeaving] = useState(false);
+  const panel = location.hash.slice(1);
+  const panelTriggers = useRef<Record<string, HTMLElement | null>>({});
+  const open = (name: string) => navigate({ pathname: location.pathname, search: location.search, hash: `#${name}` }, { replace: true, preventScrollReset: true });
+  const close = () => {
+    const target = panelTriggers.current[panel];
+    navigate({ pathname: location.pathname, search: location.search, hash: "" }, { replace: true, preventScrollReset: true });
+    requestAnimationFrame(() => target?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true }));
+  };
   if (!user) return null;
   const fields = [
+    { label: "Имя", value: user.full_name },
     { label: "Логин", value: user.login },
     { label: "Роль", value: ROLE_LABELS[user.role] },
-    { label: "Телефон", value: user.phone || "Не указан · обратитесь к руководителю" },
+    { label: "Телефон", value: user.phone || "Не указан" },
     ...(user.email ? [{ label: "Электронная почта", value: user.email }] : []),
     ...(user.group ? [{ label: "Группа", value: user.group.name }] : []),
     ...(user.hired_on ? [{ label: "В компании с", value: dateOnly(user.hired_on) }] : []),
   ];
-  return <div className="stack profile-page">
-    <header className="page-head"><div><h1 className="page-title">Мой профиль</h1><p className="page-subtitle">Данные аккаунта и настройки Puls</p></div><Button icon={<LogoutIcon size={18} />} onClick={logout}>Выйти</Button></header>
-    <Card className="profile-identity"><div className="profile-head"><Avatar name={user.full_name} id={user.id} size={56} /><div className="profile-head__text"><h2 className="profile-head__name">{user.full_name}</h2><p className="profile-head__meta">{isDeveloper ? "Разработчик Puls" : ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</p></div><Badge tone={user.is_active ? "success" : "neutral"} dot>{user.is_active ? "Активен" : "Отключён"}</Badge></div></Card>
-    <div className="profile-settings-grid">
-      <Card title="Данные аккаунта" action={can("team") && user.role === "admin" ? <Link to={`/admin/users/${user.id}`}>Изменить данные</Link> : undefined}>
-        <dl className="profile-data-grid">{fields.map((field) => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>
-        <div className="profile-account-actions">
-          <Button onClick={() => setLoginOpen(true)}>Изменить логин</Button>
-          <Button onClick={() => setSecurityOpen(true)}>Изменить пароль</Button>
+  return <div className="profile-page">
+    <header className="profile-heading"><h1 className="page-title">Профиль</h1><p>Ваш аккаунт, связь и настройки</p></header>
+    <section ref={node => { panelTriggers.current.details = node; }} className="profile-identity" aria-label="Ваш аккаунт">
+      <Avatar name={user.full_name} id={user.id} size={52} />
+      <div className="profile-identity__text"><h2>{user.full_name}</h2><p>{isDeveloper ? "Разработчик Puls" : ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</p><Badge tone={user.is_active ? "success" : "neutral"} dot>{user.is_active ? "Аккаунт активен" : "Аккаунт отключён"}</Badge></div>
+      <Button size="s" onClick={() => open("details")}>Мои данные</Button>
+    </section>
+
+    <section className="profile-section" aria-labelledby="profile-account-title">
+      <h2 id="profile-account-title">Аккаунт и безопасность</h2>
+      <div className="profile-settings">
+        <div ref={node => { panelTriggers.current.login = node; }} className="profile-setting"><span className="profile-setting__icon"><UserIcon /></span><div className="profile-setting__text"><h3>Логин</h3><p>{user.login}</p></div><Button size="s" aria-label="Изменить логин" onClick={() => open("login")}>Изменить</Button></div>
+        <div ref={node => { panelTriggers.current.password = node; }} className="profile-setting"><span className="profile-setting__icon"><LockIcon /></span><div className="profile-setting__text"><h3>Пароль</h3><p>Безопасность входа</p></div><Button size="s" aria-label="Изменить пароль" onClick={() => open("password")}>Изменить</Button></div>
+        <Suspense fallback={<div className="profile-setting"><div className="profile-setting__text"><h3>Telegram</h3><p role="status">Проверяем подключение…</p></div></div>}><TelegramCard /></Suspense>
+      </div>
+    </section>
+
+    <section className="profile-section" aria-labelledby="profile-preferences-title">
+      <h2 id="profile-preferences-title">Настройки Puls</h2>
+      <div className="profile-settings">
+        <div className="profile-setting profile-setting--theme"><span className="profile-setting__icon"><DisplayIcon /></span><div className="profile-setting__text"><h3>Оформление</h3><p>{preference === "system" ? "Как на устройстве" : preference === "light" ? "Светлая тема" : "Тёмная тема"}</p></div>
+          <div className="profile-theme" role="radiogroup" aria-label="Тема оформления">{THEME_OPTIONS.map((option) => <button key={option.value} type="button" role="radio" aria-label={option.label} title={option.label} aria-checked={preference === option.value} tabIndex={preference === option.value ? 0 : -1} onClick={() => setPreference(option.value)} onKeyDown={(event) => {
+            const index = THEME_OPTIONS.indexOf(option);
+            let next = index;
+            if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % THEME_OPTIONS.length;
+            else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index + THEME_OPTIONS.length - 1) % THEME_OPTIONS.length;
+            else if (event.key === "Home") next = 0;
+            else if (event.key === "End") next = THEME_OPTIONS.length - 1;
+            else return;
+            event.preventDefault();
+            event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+            setPreference(THEME_OPTIONS[next].value);
+          }}><option.icon size={17} /><span>{option.label}</span></button>)}</div>
         </div>
-      </Card>
-      <Card title="Внешний вид" subtitle="Выберите тему или используйте настройки системы">
-        <div className="theme-options" role="radiogroup" aria-label="Тема оформления">
-              {THEME_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={preference === option.value}
-                  tabIndex={preference === option.value ? 0 : -1}
-                  className={
-                    preference === option.value ? "theme-option is-active" : "theme-option"
-                  }
-                  onClick={() => setPreference(option.value)}
-                  onKeyDown={(event) => {
-                    const index = THEME_OPTIONS.indexOf(option);
-                    let next = index;
-                    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % THEME_OPTIONS.length;
-                    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index + THEME_OPTIONS.length - 1) % THEME_OPTIONS.length;
-                    else if (event.key === "Home") next = 0;
-                    else if (event.key === "End") next = THEME_OPTIONS.length - 1;
-                    else return;
-                    event.preventDefault();
-                    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
-                    setPreference(THEME_OPTIONS[next].value);
-                  }}
-                >
-                  <option.icon size={22} />
-                  {option.label}
-                </button>
-              ))}
-            </div>
-      </Card>
-      <Suspense fallback={<Card title="Telegram"><p role="status">Загрузка…</p></Card>}><TelegramCard /></Suspense>
-      <PwaInstallCard />
-    </div>
-    {loginOpen && <LoginSheet current={user.login} onClose={() => setLoginOpen(false)} />}
-    {securityOpen && <PasswordSheet onClose={() => setSecurityOpen(false)} />}
+        <div ref={node => { panelTriggers.current["app-updates"] = node; }} className="profile-setting"><span className="profile-setting__icon"><DownloadIcon /></span><div className="profile-setting__text"><h3>Приложение Puls</h3><p>{user.role === "admin" ? "Установка и обновления" : "Быстрый доступ с устройства"}</p></div><Button size="s" aria-label="Открыть настройки приложения" onClick={() => open("app-updates")}>Открыть</Button></div>
+      </div>
+    </section>
+
+    <footer className="profile-footer"><span>Завершить сеанс на этом устройстве</span><Button size="s" variant="destructive" icon={<LogoutIcon size={16} />} disabled={leaving} onClick={() => { setLeaving(true); void logout(); }}>{leaving ? "Выходим…" : "Выйти из аккаунта"}</Button></footer>
+    {panel === "details" && <Sheet title="Мои данные" size="s" onClose={close}><dl className="profile-details">{fields.map(field => <div key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></div>)}</dl>{can("team") && user.role === "admin" ? <Link className="btn btn--secondary btn--s" to={`/admin/users/${user.id}`}>Изменить данные</Link> : <p className="profile-details__hint">Чтобы изменить имя или контакты, обратитесь к руководителю.</p>}</Sheet>}
+    {panel === "login" && <LoginSheet current={user.login} onClose={close} />}
+    {panel === "password" && <PasswordSheet onClose={close} />}
+    {panel === "app-updates" && <Sheet title="Приложение Puls" size="s" onClose={close}><PwaInstallCard embedded /></Sheet>}
   </div>;
 }
 

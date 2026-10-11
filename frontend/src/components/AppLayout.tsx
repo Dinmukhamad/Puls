@@ -5,11 +5,11 @@ import { useAccess } from "../auth/AccessContext";
 import { useSidebarPeek } from "../hooks/useSidebarPeek";
 import { SectionGuard } from "./SectionGuard";
 import { ACCOUNT_SECTION, currentSection, currentTab, mobileNavigation, subsectionDestination, visibleNavigation } from "../navigation";
-import { ROLE_LABELS } from "../utils/format";
+import { AccountMenu } from "./AccountMenu";
 import { GlassSurface } from "./GlassSurface";
-import { ChevronLeftIcon, MenuIcon, PulsMark } from "./icons";
+import { ChevronLeftIcon, LogoutIcon, MenuIcon, PulsMark } from "./icons";
 import { Sheet } from "./Sheet";
-import { Avatar, IconButton } from "./ui";
+import { Avatar, Button, IconButton } from "./ui";
 import "./section-navigation.css";
 
 const COLLAPSE_KEY = "puls.sidebar.collapsed";
@@ -19,7 +19,7 @@ function initialCollapsed(): boolean {
 }
 
 export function AppLayout() {
-  const { user } = useAuth(); const location = useLocation();
+  const { user, logout } = useAuth(); const location = useLocation();
   const { allowed, isDeveloper } = useAccess();
   // Keep the active subsection visible in the scrollable tab strip on phones.
   useEffect(() => { document.querySelector(".section-navigation__tab.is-active")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [location.pathname]);
@@ -27,6 +27,7 @@ export function AppLayout() {
   const peek = useSidebarPeek(collapsed);
   const [compactTabBar, setCompactTabBar] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const menuId = useId(); const lastScroll = useRef(0);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   const items = user ? visibleNavigation(user.role, allowed, isDeveloper) : [];
@@ -50,7 +51,7 @@ export function AppLayout() {
     window.addEventListener("scroll", onScroll, { passive: true }); return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const userLink = user && <Link to="/profile" className="sidebar__user" aria-label={`Профиль: ${user.full_name}`}><Avatar name={user.full_name} id={user.id} size={36} /><span className="sidebar__user-text"><span className="sidebar__user-name">{user.full_name}</span><span className="sidebar__user-role">{ROLE_LABELS[user.role]}{user.group ? ` · ${user.group.name}` : ""}</span></span></Link>;
+  const userLink = user && <AccountMenu />;
 
   return <div className={`shell${collapsed ? " shell--collapsed" : ""}${peek.open ? " shell--peek" : ""}${immersive ? " shell--immersive" : ""}`}>
     <GlassSurface as="aside" variant="regular" className="sidebar" {...peek.handlers}>
@@ -71,6 +72,7 @@ export function AppLayout() {
       {primary.map((item) => <Link key={item.id} to={item.to} aria-label={item.label} aria-current={active?.id === item.id ? "page" : undefined} className={active?.id === item.id ? "tab is-active" : "tab"}><span className="tab__icon"><item.icon size={22} /></span><span className="tab__label">{item.label}</span></Link>)}
       {overflow.length > 0 && <button type="button" className={menuOpen || overflowActive ? "tab is-active" : "tab"} aria-label="Ещё разделы" aria-haspopup="dialog" aria-expanded={menuOpen} aria-controls={menuOpen ? menuId : undefined} onClick={() => setMenuOpen(true)}><span className="tab__icon"><MenuIcon size={22} /></span><span className="tab__label">Ещё</span></button>}
     </GlassSurface>
-    {menuOpen && <Sheet id={menuId} title="Разделы Puls" onClose={closeMenu} size="s"><nav className="mobile-menu" aria-label="Все основные разделы">{items.map((item) => <Link key={item.id} to={item.to} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} onClick={closeMenu}><span className="nav-item__icon"><item.icon size={20} /></span><span>{item.label}</span></Link>)}</nav>{separateProfile && <Link to={ACCOUNT_SECTION.to} className="section-navigation__account" onClick={closeMenu}>{user && <Avatar name={user.full_name} id={user.id} size={32} />}<span>Мой профиль и настройки</span></Link>}</Sheet>}
+    {menuOpen && <Sheet id={menuId} title="Разделы Puls" onClose={closeMenu} size="s"><nav className="mobile-menu" aria-label="Все основные разделы">{items.filter(item => item.id !== "profile").map((item) => <Link key={item.id} to={item.to} className={active?.id === item.id ? "nav-item is-active" : "nav-item"} aria-current={active?.id === item.id ? "page" : undefined} onClick={closeMenu}><span className="nav-item__icon"><item.icon size={20} /></span><span>{item.label}</span></Link>)}</nav><div className="mobile-account"><Link to={ACCOUNT_SECTION.to} className="mobile-account__profile" aria-current={location.pathname === "/profile" ? "page" : undefined} onClick={closeMenu}>{user && <Avatar name={user.full_name} id={user.id} size={36} />}<span><strong>{user?.full_name}</strong><small>Профиль и настройки</small></span></Link><Button block size="s" variant="destructive" icon={<LogoutIcon size={16} />} disabled={leaving} onClick={() => { setLeaving(true); void logout(); }}>{leaving ? "Выходим…" : "Выйти из аккаунта"}</Button></div></Sheet>}
+
   </div>;
 }

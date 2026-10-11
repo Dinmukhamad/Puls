@@ -170,12 +170,11 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function PwaInstallCard() {
+export function PwaInstallCard({ embedded = false }: { embedded?: boolean } = {}) {
   const pwa = useContext(PwaContext);
   const { user } = useAuth();
   if (!pwa) return null;
-  return (
-    <Card id="app-updates" title="Приложение Puls" action={<img src="/icons/puls-app-192-v4.png" width={40} height={40} alt="" style={{ margin: "-8px 0", borderRadius: 10 }} />}>
+  const content = <>
       {/* Состав выпуска — рабочий инструмент администратора. Остальным приложение
           обновляется само при следующем заходе, просить их об этом незачем. */}
       {user?.role === "admin" && <PwaReleaseDetails pwa={pwa} />}
@@ -183,8 +182,8 @@ export function PwaInstallCard() {
         <><p className="secondary small">Открывайте Puls с экрана Домой в отдельном окне.</p><Button block onClick={() => void pwa.install()} disabled={pwa.installing} className="pwa-install-button">{pwa.installing ? "Открываем установку…" : "Установить Puls"}</Button></>
       ) : <p className="secondary small">Если браузер поддерживает установку, она будет доступна в его меню.</p>}
       {pwa.installError && <p className="pwa-error" role="alert">{pwa.installError}</p>}
-    </Card>
-  );
+  </>;
+  return embedded ? <div className="profile-app-settings">{content}</div> : <Card id="app-updates" title="Приложение Puls" action={<img src="/icons/puls-app-192-v4.png" width={40} height={40} alt="" style={{ margin: "-8px 0", borderRadius: 10 }} />}>{content}</Card>;
 }
 
 function PwaReleaseDetails({ pwa }: { pwa: PwaState }) {

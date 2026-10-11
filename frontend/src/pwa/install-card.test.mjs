@@ -17,7 +17,7 @@ const built = await build({
   plugins: [{ name: "test-auth", setup(plugin) { plugin.onResolve({ filter: /\/AuthContext$/ }, () => ({ path: "test:auth", external: true })); } }],
 });
 
-function render(role) {
+function render(role, embedded = false) {
   const stubs = {
     "test:auth": { useAuth: () => ({ user: role ? { id: 1, full_name: "Тест", role } : null, loading: false }) },
     "@tanstack/react-query": { useQueryClient: () => ({ isMutating: () => 0, invalidateQueries() {} }) },
@@ -25,7 +25,7 @@ function render(role) {
   const module = { exports: {} };
   new Function("require", "module", "exports", built.outputFiles[0].text)((name) => stubs[name] ?? require(name), module, module.exports);
   const { PwaProvider, PwaInstallCard } = module.exports;
-  return renderToStaticMarkup(React.createElement(PwaProvider, null, React.createElement(PwaInstallCard)));
+  return renderToStaticMarkup(React.createElement(PwaProvider, null, React.createElement(PwaInstallCard, { embedded })));
 }
 
 const RELEASE_ONLY = [/Версия 2\.\d+\.\d+/, /Проверить обновления/, /Что нового в версии/, /Установлена актуальная версия|Обновления проверяются автоматически/];
@@ -50,4 +50,15 @@ test("ничто не подсказывает обновиться после �
     assert.doesNotMatch(html, /pwa-update-dot/, role);
     assert.doesNotMatch(html, /Обновить приложение/, role);
   }
+});
+
+
+test("the compact profile keeps release tools restricted to administrators inside its app dialog", () => {
+  for (const role of ["operator", "trainer", "supervisor", "head"]) {
+    const html = render(role, true);
+    for (const pattern of RELEASE_ONLY) assert.doesNotMatch(html, pattern, role);
+    assert.match(html, /браузер поддерживает установку/);
+  }
+  const admin = render("admin", true);
+  for (const pattern of RELEASE_ONLY) assert.match(admin, pattern);
 });
