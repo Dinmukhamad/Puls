@@ -244,7 +244,7 @@ test('catalogue cars join the loops, unknown names drive as taxis, and the catal
   traffic.setVehicles(vehicles); ctx.frame(1 / 60, 0);
   assert.equal(group.children.length, taxiOnly + 2);
   const sedan = group.children.find(m => m.geometry === vehicles.get('sedan').parts[0].geometry);
-  assert.ok(sedan.count > 0 && sedan.castShadow);
+  assert.ok(sedan.count > 0 && !sedan.castShadow, 'cars keep to their blob shadows: the sun\'s map is static');
   assert.deepEqual(traffic.movers, [group]);
   const catalogue = [...vehicles.values()].flatMap(m => [m.parts[0].geometry, m.parts[0].material]), freed = new Set();
   catalogue.forEach(r => r.addEventListener('dispose', () => freed.add(r)));

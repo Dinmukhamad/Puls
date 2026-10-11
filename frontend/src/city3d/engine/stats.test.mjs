@@ -188,3 +188,22 @@ test('a telemetry rejection or synchronous failure cannot leave background timer
     await Promise.resolve();
   }
 });
+
+test('a resting city is shown as resting: its frames, and the step out of them, are not counted', t => {
+  const b = setup(t);
+  const rest = (count, start, gap = 33) => {
+    for (let i = 0; i < count; i++) { b.advance(start + i * gap); b.stats.beginFrame(false); b.advance(start + i * gap + 3); b.stats.endFrame(); }
+  };
+  rest(25, 100); // 30 fps until 895 ms.
+  b.advance(1000);
+  assert.match(b.elements[0].textContent, /resting · .* CPU 3 ms/, 'resting frames still show their CPU time');
+  assert.equal(b.host.dataset.fps, '0');
+  // Input: full rate again. The 33 ms step from the last resting frame says nothing of the device.
+  b.frames(31, 1090, 20);
+  b.advance(2000);
+  assert.equal(b.host.dataset.fps, '50', 'only the 30 gaps between full-rate frames count');
+  assert.match(b.elements[0].textContent, /^50 fps · /m);
+  b.stats.setActive(false);
+  assert.equal(b.requests[0].json.fps_avg, 50);
+  assert.equal(b.requests[0].json.fps_p1, 50, 'no resting gap drags the 1st percentile');
+});

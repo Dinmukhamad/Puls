@@ -60,7 +60,7 @@ export function settingsFor(tier: QualityTier): QualitySettings {
     tier, resolution: 1, fps: 60,
     dynamicShadowSize: top ? 2048 : tier === "medium" ? 1024 : 0,
     staticShadowSize: top ? 4096 : tier === "medium" ? 2048 : 1024,
-    ao: top, bloom: tier !== "low", tiltShift: top,
+    ao: top, bloom: tier !== "low", tiltShift: top, antialias: top ? "smaa" : "fxaa",
     waterReflections: tier === "ultra" ? "planar" : tier === "high" ? "ssr" : "sky",
     lodDistances: tier === "ultra" ? [50, 150, 300] : tier === "high" ? [40, 120, 250] : tier === "medium" ? [32, 100, 220] : [25, 80, 180],
     crowd: tier === "low" ? .5 : 1,
@@ -74,13 +74,19 @@ export function baseSettings(tier: QualityTier, device: Pick<DeviceInfo, "mobile
   return settings;
 }
 
-/** One concession of TZ §8.2. Each sets a ceiling, so nested steps (2048 → 1024 → 0) combine in any order. */
+/** The "lod:near" concession brings every LOD switch this much closer: fewer full-detail copies. */
+export const LOD_NEAR = .75;
+/**
+ * One concession of TZ §8.2. Each sets a ceiling, so the steps combine in any order. Every one changes what
+ * the frame draws, the heaviest full-screen passes first: ambient occlusion, SMAA's three passes, the night
+ * glow's passes, then the detail of the copies around the view, the crowd, the frame rate and finally pixels.
+ */
 export interface Step { id: string; apply: (s: QualitySettings) => void }
 export const STEPS: Step[] = [
   { id: "ao", apply: s => { s.ao = false; } },
-  { id: "water:sky", apply: s => { s.waterReflections = "sky"; } },
-  { id: "shadows:1024", apply: s => { s.dynamicShadowSize = Math.min(s.dynamicShadowSize, 1024) as 0 | 1024; } },
-  { id: "shadows:0", apply: s => { s.dynamicShadowSize = 0; } },
+  { id: "aa:fxaa", apply: s => { s.antialias = "fxaa"; } },
+  { id: "bloom", apply: s => { s.bloom = false; } },
+  { id: "lod:near", apply: s => { s.lodDistances = s.lodDistances.map(d => Math.round(d * LOD_NEAR)) as QualitySettings["lodDistances"]; } },
   { id: "crowd:0.5", apply: s => { s.crowd = Math.min(s.crowd, .5); } },
   { id: "fps:30", apply: s => { s.fps = 30; } },
   { id: "resolution:0.9", apply: s => { s.resolution = Math.min(s.resolution, .9); } },
@@ -104,9 +110,10 @@ export interface Adapter {
  * not a step whose absence was too slow in the last 30 s.
  *
  * Refinements over the old city's stack of steps:
- * - 30 frames a second may stay while earlier steps come back: it changes smoothness, not the picture. So a
- *   device whose rate is capped elsewhere (Safari Low Power Mode, Chrome Energy Saver, a 30 Hz screen) or a
- *   GPU that fits a full frame into 33 ms ends at 30 fps with everything else restored. Pixels stay the last
+ * - 30 frames a second stays while the other steps come back, and is retried only after them: it changes
+ *   smoothness, not the picture. So a device whose rate is capped elsewhere (Safari Low Power Mode, Chrome
+ *   Energy Saver, a 30 Hz screen) or a GPU that fits a full frame into 33 ms ends at 30 fps with everything
+ *   else restored. Pixels stay the last
  *   resort: nothing earlier in the table returns while resolution is lowered.
  * - A concession that did not make frames faster is not blocked for 30 s, so it can come back soon.
  * - A step given back that makes frames slow again is taken back at once and blocked for 60 s, doubling with
@@ -125,12 +132,17 @@ export function createAdapter(base: QualitySettings): Adapter {
   const set = (next: Step[]) => { applied = inTable(next); settings = compose(base, applied); return true; };
   const pause = (n: number) => Math.min(RETRY_MAX, RETRY * 2 ** n);
 
+  /**
+   * The step to give back: the last one taken that changes the picture, if it is free. 30 frames a second goes
+   * last, once the picture is whole again, since a slow device most likely fails that retry and the failure
+   * pauses every give-back.
+   */
   function giveBackCandidate(now: number) {
-    for (const step of [...applied].reverse()) {
-      if ((blocked.get(step) ?? 0) <= now && differs(settings, compose(base, applied.filter(s => s !== step)))) return step;
-      if (step.id !== "fps:30") return null;
-    }
-    return null;
+    const free = (step: Step) => (blocked.get(step) ?? 0) <= now && differs(settings, compose(base, applied.filter(s => s !== step)));
+    const picture = applied.filter(step => step.id !== "fps:30"), last = picture[picture.length - 1];
+    if (last) return free(last) ? last : null;
+    const fps = applied.find(step => step.id === "fps:30");
+    return fps && free(fps) ? fps : null;
   }
 
   function judge(average: number, now: number): boolean {
@@ -188,6 +200,6 @@ function compose(base: QualitySettings, steps: Step[]): QualitySettings {
 }
 
 function differs(a: QualitySettings, b: QualitySettings) {
-  return a.ao !== b.ao || a.waterReflections !== b.waterReflections || a.dynamicShadowSize !== b.dynamicShadowSize ||
+  return a.ao !== b.ao || a.bloom !== b.bloom || a.antialias !== b.antialias || a.lodDistances.join() !== b.lodDistances.join() ||
     a.crowd !== b.crowd || a.fps !== b.fps || a.resolution !== b.resolution;
 }

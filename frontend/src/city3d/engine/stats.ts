@@ -30,7 +30,8 @@ export interface StatsOptions {
 }
 
 export interface Stats {
-  beginFrame(): void;
+  /** `measured` false: drawn at a resting or loading pace, which says nothing of the device. */
+  beginFrame(measured?: boolean): void;
   endFrame(): void;
   markFirstFrame(): void;
   /** Stops background timers and flushes the current report while a cached city is inactive. */
@@ -38,9 +39,9 @@ export interface Stats {
   dispose(): void;
 }
 
-/** Frame gaps in 1 ms bins: percentiles with no per-frame allocation. */
+/** Frame gaps in 1 ms bins: percentiles with no per-frame allocation. CPU time covers every drawn frame, resting ones too. */
 class Tally {
-  bins = new Uint32Array(MAX_GAP + 1); frames = 0; time = 0; cpu = 0;
+  bins = new Uint32Array(MAX_GAP + 1); frames = 0; time = 0; cpu = 0; drawn = 0;
   add(gap: number) { this.bins[Math.min(MAX_GAP, Math.round(gap))]++; this.frames++; this.time += gap; }
   get fps() { return this.time ? this.frames * 1000 / this.time : 0; }
   /** 1st-percentile frame rate: the rate of the frame slower than 99 % of the others. */
@@ -50,7 +51,7 @@ class Tally {
     for (let ms = MAX_GAP; ms > 0; ms--) if ((rest -= this.bins[ms]) <= 0) return 1000 / ms;
     return this.fps;
   }
-  reset() { this.bins.fill(0); this.frames = this.time = this.cpu = 0; }
+  reset() { this.bins.fill(0); this.frames = this.time = this.cpu = this.drawn = 0; }
 }
 
 const round = (value: number, digits = 1) => Math.round(value * 10 ** digits) / 10 ** digits;
@@ -59,7 +60,7 @@ const compact = (value: number) => value >= 1e6 ? `${round(value / 1e6, 2)} M` :
 export function createStats({ renderer, backend, host, visible, quality, userIdKnown, gpu = "", start = performance.now(), extra }: StatsOptions): Stats {
   const recent = new Tally(), period = new Tally();
   let began: number | null = null;
-  let previous = 0, firstFrame: number | null = null, calls = 0, triangles = 0, disposed = false, active = true;
+  let previous = 0, previousMeasured = true, firstFrame: number | null = null, calls = 0, triangles = 0, disposed = false, active = true;
   let refreshTimer: number | null = null, reportTimer: number | null = null;
   let overlay: HTMLDivElement | null = null;
   if (visible) {
@@ -70,7 +71,7 @@ export function createStats({ renderer, backend, host, visible, quality, userIdK
     host.append(overlay);
   }
 
-  /** Every second: frame rate of that second, 1st percentile since the last report (it needs a hundred frames or more). */
+  /** Every second: frame rate of that second ("resting" when the city drew only at its idle pace), 1st percentile since the last report (it needs a hundred frames or more). */
   function refresh() {
     if (!active || disposed) return;
     const s = quality.settings, memory = renderer.info.memory;
@@ -78,7 +79,7 @@ export function createStats({ renderer, backend, host, visible, quality, userIdK
     if (overlay) {
       overlay.textContent = [
         `${backend === "webgpu" ? "WebGPU" : "WebGL2"} · ${s.tier}${gpu ? ` · ${gpu.slice(0, 40)}` : ""}`,
-        `${round(recent.fps)} fps · 1% ${round(period.fpsLow)} · CPU ${recent.frames ? round(recent.cpu / recent.frames, 2) : 0} ms`,
+        `${recent.frames ? `${round(recent.fps)} fps` : "resting"} · 1% ${round(period.fpsLow)} · CPU ${recent.drawn ? round(recent.cpu / recent.drawn, 2) : 0} ms`,
         `${calls} calls · ${compact(triangles)} tris · ${memory.geometries} geo · ${memory.textures} tex`,
         `×${round(renderer.getPixelRatio(), 2)} px · ${s.fps} fps cap · ${quality.concessions.join(", ") || "no concessions"}`,
         ...(firstFrame === null ? [] : [`first frame ${Math.round(firstFrame)} ms`]),
@@ -117,19 +118,20 @@ export function createStats({ renderer, backend, host, visible, quality, userIdK
   document.addEventListener("visibilitychange", onHidden);
 
   return {
-    beginFrame() {
+    beginFrame(measured = true) {
       if (!active || disposed) return;
       began = performance.now();
-      const gap = previous ? began - previous : 0;
-      previous = began;
-      // Pauses (hidden tab, scrolled away) are not frames.
-      if (gap > 0 && gap <= MAX_GAP) { recent.add(gap); period.add(gap); }
+      const gap = previous ? began - previous : 0, counted = measured && previousMeasured;
+      previous = began; previousMeasured = measured;
+      // Pauses (hidden tab, scrolled away) are not frames, and nor is the pace of a resting or loading city,
+      // including the step from its last resting frame to the first full-rate one.
+      if (counted && gap > 0 && gap <= MAX_GAP) { recent.add(gap); period.add(gap); }
     },
     endFrame() {
       if (!active || disposed || began === null) return;
       const cpu = performance.now() - began;
       began = null;
-      recent.cpu += cpu; period.cpu += cpu;
+      recent.cpu += cpu; period.cpu += cpu; recent.drawn++; period.drawn++;
       calls = renderer.info.render.drawCalls; triangles = renderer.info.render.triangles;
     },
     markFirstFrame() {

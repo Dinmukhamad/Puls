@@ -3,7 +3,8 @@
  * boats the canal, moved on the CPU. Each model part is one InstancedMesh, and all parts of a model share
  * one matrix buffer. Every frame the vehicles in view are packed to the front of that buffer and `count`
  * cuts the rest, so far and off-screen cars cost the GPU nothing and draw calls do not grow with the city.
- * Every car has a blob shadow; cars and boats also cast into the dynamic shadow map (`movers`).
+ * Every car has a blob shadow and casts none into the sun's map: that map is static, and a moving car would
+ * leave its shadow behind on the road.
  * At night (TZ §6.7) cars show head and tail lights and a beam on the road ahead, boats their navigation
  * lights: additive glow scaled by the night level in the shaders, no light sources. All cars' lamps are one
  * InstancedMesh and their beams another, sharing one matrix buffer; boat lights are one more part of the
@@ -33,7 +34,7 @@ const BEAM = "#fff2d0", BEAM_STRENGTH = .6, BEAM_LENGTH = 1.4, BEAM_LIFT = .02;
 
 type Part = { geometry: THREE.BufferGeometry; material: THREE.Material };
 /** `size`: the model's bounds; `lights`: a night-only part (boats). */
-interface Kind { parts: (Part & { castShadow: boolean })[]; base: THREE.Matrix4; size: THREE.Vector3; lights?: Part }
+interface Kind { parts: Part[]; base: THREE.Matrix4; size: THREE.Vector3; lights?: Part }
 interface Vehicle { route: Route; s: number; speed: number; boat: boolean; active: boolean; rank: number }
 interface Fleet { kind: Kind; vehicles: Vehicle[]; matrices: THREE.InstancedBufferAttribute; meshes: THREE.InstancedMesh[] }
 
@@ -59,7 +60,7 @@ function kindOf(parts: Kind["parts"], bounds: THREE.Box3): Kind {
 function taxiKind(taxi: THREE.Object3D) {
   const parts: Kind["parts"] = [];
   taxi.updateMatrixWorld(true);
-  taxi.traverse(o => { const mesh = o as THREE.Mesh; if (mesh.isMesh) parts.push({ geometry: mesh.geometry, material: mesh.material as THREE.Material, castShadow: true }); });
+  taxi.traverse(o => { const mesh = o as THREE.Mesh; if (mesh.isMesh) parts.push({ geometry: mesh.geometry, material: mesh.material as THREE.Material }); });
   return kindOf(parts, new THREE.Box3().setFromObject(taxi));
 }
 /** [width, height, depth, x, y, z, colour, glow]: one box of a vertex-coloured part. */
@@ -93,7 +94,7 @@ function boatKind(lights: THREE.Material) {
     [.03, .07, .14, .52, .3, .66, "#ff2a18", 5], [.03, .07, .14, -.52, .3, .66, "#22ff66", 4],
     [.02, .12, .44, .31, .56, -.25, "#ffc070", 1.6], [.02, .12, .44, -.31, .56, -.25, "#ffc070", 1.6],
   ]);
-  return { ...kindOf([{ geometry, material, castShadow: true }], geometry.boundingBox!), lights: { geometry: glow, material: lights } };
+  return { ...kindOf([{ geometry, material }], geometry.boundingBox!), lights: { geometry: glow, material: lights } };
 }
 /** Head and tail lights of any car in a frame where the car is 1 wide and 1 long; heights are in model units. */
 function carLamps() {
@@ -185,7 +186,8 @@ export function createTraffic(ctx: CityContext, { vehicles }: TrafficOptions = {
         const mesh = new THREE.InstancedMesh(part.geometry, part.material, list.length);
         // One buffer for all parts: each car's matrix is written once, not once per part.
         mesh.instanceMatrix = matrices; mesh.count = 0; mesh.frustumCulled = false;
-        mesh.castShadow = part.castShadow; mesh.receiveShadow = true; group.add(mesh);
+        // The shadow map is static: a car casting into it would leave its shadow behind on the road.
+        mesh.castShadow = false; mesh.receiveShadow = true; group.add(mesh);
         return mesh;
       });
       if (k.lights) {

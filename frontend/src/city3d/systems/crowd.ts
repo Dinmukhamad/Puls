@@ -313,9 +313,10 @@ export function createCrowd(ctx: CityContext): Crowd {
   shadows.receiveShadow = false;
   const packed = new Int32Array(count).fill(-1), frustum = new THREE.Frustum(), viewProjection = new THREE.Matrix4();
   const center = new THREE.Vector3(), sphere = new THREE.Sphere(center, 1.2);
+  let recoloured = false;
   function tint(actor: number, slot: number) {
     if (packed[slot] === actor) return;
-    packed[slot] = actor;
+    packed[slot] = actor; recoloured = true;
     torso.setColorAt(slot, color.set(shirts[actor % shirts.length]));
     heads.setColorAt(slot, color.set(skinTones[(actor * 5) % skinTones.length]));
     waists.setColorAt(slot, color.set(trouserColors[actor % trouserColors.length]));
@@ -379,8 +380,10 @@ export function createCrowd(ctx: CityContext): Crowd {
     legs.count = slot * 4; shadows.count = slot;
     for (const mesh of batches) {
       mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      // Colours go up only when a slot changed hands: on most frames every walker keeps its slot.
+      if (mesh.instanceColor && recoloured) mesh.instanceColor.needsUpdate = true;
     }
+    recoloured = false;
   }
 
   const offFrame = ctx.onFrame(dt => {
