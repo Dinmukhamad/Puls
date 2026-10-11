@@ -40,13 +40,6 @@
 .city-toolbar .city-hud-peek > .city-peek__content,
 .city-toolbar .city-skills-peek > .city-peek__content { width: min(1040px, calc(100vw - var(--city-left) - var(--city-right))); }
 
-/* Connect the full toolbar to the popup, including direct diagonal movement. */
-@media (hover: hover) and (pointer: fine) {
-  .city-toolbar .city-peek__content::before {
-    content: ""; position: absolute; bottom: 100%; left: 0; width: 100%;
-    height: calc(var(--city-toolbar-height) + 6px); pointer-events: auto;
-  }
-}
 .city-immersive .city-toolbar .city-hud,
 .city-immersive .city-toolbar .city-mission,
 .city-immersive .city-toolbar .city-tasks,

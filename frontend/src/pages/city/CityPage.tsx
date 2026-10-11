@@ -26,7 +26,7 @@ import { CityGuideSetup, GUIDE_AVATAR } from "./CityGuideSetup";
 import { CityControlsSetup } from "./CityControlsSetup";
 import { CityBuildEntry } from "./CityBuildEntry";
 import { CityPeekPanel } from "./CityPeekPanel";
-import { CityToolbar, CityToolbarProvider } from "./CityToolbar";
+import { CityToolbar, CityToolbarProvider, useCityToolbarState } from "./CityToolbar";
 import "./cityPanelLayout.css";
 import { districtPlotGrid, freeDistrictPlot } from "./freeDistrictPlot";
 import type { CityControls } from "../../api/types";
@@ -54,9 +54,10 @@ export function CityPage() {
   const [worldSelected, setWorldSelected] = useState<string | null>(null);
   const [worldAction, setWorldAction] = useState<{ kind: "travel" | "skip" | "focus"; target: string; at: number }>();
   const [journey, setJourney] = useState<JourneyPhase>(null), [destination, setDestination] = useState<DepartmentId>("sales");
-  // A district's missions open when it is chosen on the map or in the skills, and on the way back from its tools (?district=).
-  const [missionsOpen, setMissionsOpen] = useState(() => params.has("district"));
-  function visit(id: DepartmentId) { const next = new URLSearchParams(params); next.set("city", id); setParams(next); setWorldSelected(null); setMissionsOpen(false); }
+  // The toolbar's open popup. A district's missions open when it is chosen on the map or in the skills, and on the
+  // way back from its tools (?district=).
+  const toolbar = useCityToolbarState(params.has("district") ? "missions" : null);
+  function visit(id: DepartmentId) { const next = new URLSearchParams(params); next.set("city", id); setParams(next); setWorldSelected(null); toolbar.setActive(null); }
   function pickWorld(id: string) {
     // In the test city a district opens its own dock, not the real district's card.
     if (sandboxOn && new RegExp(`^${department}-team-[1-3]$`).test(id)) { setWorldSelected(null); openSandbox(id); return; }
@@ -153,7 +154,7 @@ export function CityPage() {
     next.delete("world");
     next.set("city", home.city);
     setParams(next);
-    setWorldSelected(null); setMissionsOpen(false);
+    setWorldSelected(null); toolbar.setActive(null);
     setBuilding({ district: home.id, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false });
     focusLand({ district: home.id, kind: "district" });
     void estateQuery.refetch();
@@ -195,7 +196,7 @@ export function CityPage() {
   const mission = missions.find(m => m.key === params.get("mission")) ?? nextMission(missions);
   const completed = data.missions.filter(m => m.state === "completed").length;
   const total = data.missions.filter(m => m.enabled || m.state === "completed").length;
-  function selectDistrict(id: DistrictId) { const p = new URLSearchParams(params); p.set("district", id); p.delete("mission"); setParams(p, {replace:true}); requestFocus(value => value + 1); claim.reset(); setMissionsOpen(true); }
+  function selectDistrict(id: DistrictId) { const p = new URLSearchParams(params); p.set("district", id); p.delete("mission"); setParams(p, {replace:true}); requestFocus(value => value + 1); claim.reset(); toolbar.setActive("missions"); }
   function selectMission(key: string) { const p = new URLSearchParams(params); p.set("mission", key); setParams(p, {replace:true}); claim.reset(); }
   const parent = data.missions.find(m => m.key === mission?.prerequisite);
   const actionable = mission && !["locked", "unavailable"].includes(mission.state);
@@ -245,7 +246,7 @@ export function CityPage() {
     void worldQuery.refetch();
     void buildingLandQuery.refetch();
   }
-  return <CityToolbarProvider><div className="city-immersive" data-department={department} data-building={building ? true : undefined}>
+  return <CityToolbarProvider state={toolbar}><div className="city-immersive" data-department={department} data-building={building ? true : undefined}>
     <CityToolbar />
     <CityMap key={mapAttempt} department={department} departmentWorld={worldQuery.data} onWorldPick={pickWorld} onArrival={visit} onJourney={setJourney} worldAction={worldAction} estates={estateViews} build={buildView} onEstate={onEstate} estateFocus={estateFocus} sceneIdentity={`${data.user_id}:${data.inspecting ? "inspect" : "self"}`} forceWebGL={params.get("backend") === "webgl"} mascot={mascot} labels={labels} districts={data.districts} missions={data.missions} selected={selected.id} focusRequest={focusRequest} onSelect={selectDistrict} plots={data.plots} onPlot={data.can_build ? openPlot : undefined} plotFocus={plotFocus} sites={data.group?.projects ?? null} onSite={() => setGroupOpen(true)} siteFocus={siteFocus} quests={data.quests?.items ?? []} onQuest={data.inspecting ? undefined : slot => { answer.reset(); setQuestSlot(slot); }} questFocus={questFocus} controls={controls} onControls={user ? () => setControlsEditing(true) : undefined} controlsOpen={showControls} onStatus={setMapStatus} onRetry={retryMap} progressKey={!data.inspecting && !data.preview ? `city-levels:${data.user_id}` : undefined} />
 
@@ -283,9 +284,9 @@ export function CityPage() {
       {(askGuide || guideEditing) && <CityGuideSetup onClose={askGuide ? undefined : () => setGuideEditing(false)} onLater={askGuide ? () => putOff("guide") : undefined} />}
       {showControls && <CityControlsSetup value={controls} onPick={setControlsPreview} onClose={closeControls} cancellable={controlsEditing} onLater={controlsEditing ? undefined : () => { putOff("controls"); closeControls(); }} />}
     </div>
-    <OpenOnce when={welcomeAhead} onOpen={() => setMissionsOpen(true)} />
+    <OpenOnce when={welcomeAhead} onOpen={() => toolbar.setActive("missions")} />
 
-    {department === "support" && !building && <><CityPeekPanel className="city-mission-peek" toolbarSlot="missions" label={`Миссии · ${selected.name}`} compactLabel="Миссии" icon={labels.find(label => label.id === selected.id)?.icon ?? "📋"} holdOpen={claim.isPending} open={missionsOpen} onOpenChange={setMissionsOpen}><aside className="city-mission glass glass--regular" data-expanded="true" aria-label={`Район «${selected.name}»`}>
+    {department === "support" && !building && <><CityPeekPanel className="city-mission-peek" toolbarSlot="missions" label={`Миссии · ${selected.name}`} compactLabel="Миссии" icon={labels.find(label => label.id === selected.id)?.icon ?? "📋"} holdOpen={claim.isPending}><aside className="city-mission glass glass--regular" data-expanded="true" aria-label={`Район «${selected.name}»`}>
       <div className="city-mission__body" id="city-mission-body" aria-live="polite">
         <div className="city-mission-top"><span className="city-eyebrow">{selected.name}</span><span className="city-state" data-state={mission?.state}>{selected.soon ? "СКОРО" : mission ? MISSION_STATES[mission.state] : "Нет заданий"}</span></div>
         <div className="city-building-level city-extra" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{selected.soon ? "Район строится и откроется позже" : level === MAX_DISTRICT_LEVEL ? "Максимальный уровень — район стал легендой" : districtDone ? "Все миссии района пройдены — здание достроено" : "Каждая пройденная миссия района улучшает здание"}</small></div>
@@ -347,7 +348,7 @@ function CitySkills({ labels, selected, onSelect }: { labels: CityLabelInfo[]; s
   const list = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => { if (open) list.current?.querySelector("[aria-pressed=true]")?.scrollIntoView({ inline: "center", block: "nearest" }); }, [selected, open]);
-  return <CityPeekPanel className="city-skills-peek" toolbarSlot="skills" label="Твои навыки · учебные центры" compactLabel="Навыки" icon="🎓" open={open} onOpenChange={setOpen}><nav className="city-skills glass glass--regular" aria-label="Районы города">
+  return <CityPeekPanel className="city-skills-peek" toolbarSlot="skills" label="Твои навыки · учебные центры" compactLabel="Навыки" icon="🎓" onOpenChange={setOpen}><nav className="city-skills glass glass--regular" aria-label="Районы города">
     <div className="city-skills__title"><h2>Твои навыки</h2><p>Опыт города показывает путь обучения. Коины попадают в общий кошелёк Puls.</p></div>
     <div className="city-skills__list" ref={list}>
       {labels.map(l => <button type="button" key={l.id} className="city-skill" style={{ "--district": DISTRICT_COLORS[l.id] } as CSSProperties} aria-pressed={selected === l.id} data-soon={l.soon || undefined} data-reward={l.reward || undefined} onClick={() => onSelect(l.id)}>
