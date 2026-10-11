@@ -1,7 +1,6 @@
 /** Two departmental roots share the renderer, sky, camera and catalogue. Only the active root ticks. */
 import * as THREE from "three/webgpu";
 import type { CityWorld, DepartmentId } from "../../api/cityWorld";
-import { SALES_RESOURCES } from "../../api/cityWorld";
 import type { CityContext } from "../engine/context";
 import type { Catalogue } from "../assets/catalogue";
 import type { Model } from "../assets/loader";
@@ -296,7 +295,7 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
     const cars = createTraffic(context); cars.setVehicles(models); cars.setEnabled(traffic);
     const crowd = createCrowd(context); crowd.setEnabled(traffic); water.setNight(night);
     const campus = new THREE.Group(), teams = new THREE.Group(); scene.add(campus, teams);
-    SALES_CENTERS.forEach((p, i) => { offices(campus, p.x, p.z, i); anchors.sales.set(p.id, new THREE.Vector3(p.x, 7, p.z)); });
+    SALES_CENTERS.forEach((p, i) => offices(campus, p.x, p.z, i));
     batch(campus);
     // The hills round the lake city, out as far as the island city's, so the fog hides their edge the same way.
     const hills = createMountains(context, { end: ctx.world.radius * RELIEF_END });
@@ -342,7 +341,6 @@ export function createDepartmentWorld(ctx: CityContext, catalogue: Catalogue, mo
       const head = railPoint(c.id === "support" ? supportLine : RAIL_LINES.sales, STATION.building, STATION.middle); anchors[c.id].set("station", new THREE.Vector3(head.x, 9.5, head.z));
       label(c.id, "station", "Вокзал", `Поезд в ${config.cities.find(other => other.id !== c.id)?.name ?? "другой город"}`, "▰");
     }
-    if (sales) SALES_CENTERS.forEach((p, i) => label("sales", p.id, SALES_RESOURCES[i], "Место для учебного центра", "◇"));
     [supportTeams, supportRail.root, sales?.campus, sales?.teams, sales?.rail.root].forEach(root => { if (root) illuminate(root); });
   }
   const vector = new THREE.Vector3();

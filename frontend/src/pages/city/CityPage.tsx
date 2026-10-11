@@ -1,13 +1,16 @@
-import { cityWorld, SALES_RESOURCES, type DepartmentId } from "../../api/cityWorld";
+import { cityWorld, type DepartmentId } from "../../api/cityWorld";
 import { cityEstate, citySandbox } from "../../api/cityEstate";
 import { CityWorldPanel, CityJourney } from "./CityWorldPanel";
 import { CityEstateDock, type BuildState, type EstateTarget } from "./CityEstateDock";
 import { CitySandboxDock } from "./CitySandboxDock";
 import type { CityEstateView, EstatePick, JourneyPhase } from "../../city3d/types";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { city, MISSION_STATES, nextMission, POINT_KINDS, SITE_STAGES, type BuildingKey, type CityBuilt, type CityData, type CityGroup, type CityQuest, type CityReward, type DistrictId, type PointKind } from "../../api/city";
+import { attemptPath, learning, type LearningContent } from "../../api/learning";
+import { CityTasks, speakerIcon } from "./CityTasks";
+import { driverShift } from "../../api/driverShift";
 import { useAuth } from "../../auth/AuthContext";
 import { ErrorState } from "../../components/ui";
 import { Sheet } from "../../components/Sheet";
@@ -36,6 +39,12 @@ const retryCityRead = (failures: number, error: Error) => {
   return problem.code !== "request_timeout" && problem.name !== "AbortError" && !(problem.status && problem.status >= 400 && problem.status < 500) && failures < 1;
 };
 
+/** «Позже» on a first visit's card holds for the browser session: the next visit asks again. */
+type LaterCard = "guide" | "controls";
+const laterKey = (card: LaterCard) => `puls.city.later.${card}`;
+function postponed(card: LaterCard) { try { return sessionStorage.getItem(laterKey(card)) === "1"; } catch { return false; } }
+function postpone(card: LaterCard) { try { sessionStorage.setItem(laterKey(card), "1"); } catch { /* the card comes back next time */ } }
+
 /** Город во весь экран: 3D-карта под стеклянными панелями, как в игре. */
 export function CityPage() {
   const { user } = useAuth(), client = useQueryClient();
@@ -45,7 +54,9 @@ export function CityPage() {
   const [worldSelected, setWorldSelected] = useState<string | null>(null);
   const [worldAction, setWorldAction] = useState<{ kind: "travel" | "skip" | "focus"; target: string; at: number }>();
   const [journey, setJourney] = useState<JourneyPhase>(null), [destination, setDestination] = useState<DepartmentId>("sales");
-  function visit(id: DepartmentId) { const next = new URLSearchParams(params); next.set("city", id); setParams(next); setWorldSelected(null); }
+  // A district's missions open when it is chosen on the map or in the skills, and on the way back from its tools (?district=).
+  const [missionsOpen, setMissionsOpen] = useState(() => params.has("district"));
+  function visit(id: DepartmentId) { const next = new URLSearchParams(params); next.set("city", id); setParams(next); setWorldSelected(null); setMissionsOpen(false); }
   function pickWorld(id: string) {
     // In the test city a district opens its own dock, not the real district's card.
     if (sandboxOn && new RegExp(`^${department}-team-[1-3]$`).test(id)) { setWorldSelected(null); openSandbox(id); return; }
@@ -56,6 +67,7 @@ export function CityPage() {
   const [reward, setReward] = useState<CityReward | null>(null);
   const [driverLaunch, setDriverLaunch] = useState(false);
   const [guideEditing, setGuideEditing] = useState(false);
+  const [later, setLater] = useState(() => ({ guide: postponed("guide"), controls: postponed("controls") }));
   // Камера: выбор оператора из профиля; пока карточка выбора открыта — схема, которую он пробует.
   const [controlsEditing, setControlsEditing] = useState(false), [controlsPreview, setControlsPreview] = useState<CityControls | null>(null);
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "failed">("loading");
@@ -69,6 +81,15 @@ export function CityPage() {
   const [groupOpen, setGroupOpen] = useState(false), [siteFocus, setSiteFocus] = useState<{ key: string; at: number }>();
   const build = useMutation({ mutationFn: ({ plot, item }: { plot: string; item: BuildingKey }) => city.build(plot, item), onSuccess: async result => { setPlotKey(null); setBuilt(result); setPlotFocus({ key: result.plot, at: Date.now() }); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
   const claim = useMutation({ mutationFn: (key: string) => city.claim(key, query.data!.revision), onSuccess: async result => { setReward(result); await client.invalidateQueries(); }, onError: () => { void query.refetch(); } });
+  // Simulator scenarios a trainer assigned to the operator: only in the operator's own city.
+  const navigate = useNavigate();
+  const assignments = useQuery({ queryKey: ["learning"], queryFn: learning.catalog, enabled: user?.role === "operator" && operatorId === null, staleTime: 60000, refetchOnWindowFocus: true });
+  const startAssignment = useMutation({ mutationFn: async (content: LearningContent) => {
+    if (content.is_driver) {
+      const state = await driverShift.start({ id: crypto.randomUUID(), mode: "assessment", content_id: content.id });
+      client.setQueryData(["driver-profile"], state); navigate("/simulator");
+    } else navigate(attemptPath(await learning.start(content.id)));
+  } });
   // Team district land: the viewer's own estate, and the districts of the city on screen, refreshed about every
   // 12 seconds (with a little spread) only while this page is open and visible.
   const estateQuery = useQuery({ queryKey: ["city-estate"], queryFn: ({ signal }) => cityEstate.mine(signal), retry: retryCityRead, refetchInterval: query => query.state.data ? 15000 : false, refetchOnWindowFocus: true });
@@ -132,7 +153,7 @@ export function CityPage() {
     next.delete("world");
     next.set("city", home.city);
     setParams(next);
-    setWorldSelected(null);
+    setWorldSelected(null); setMissionsOpen(false);
     setBuilding({ district: home.id, area: "plots", placing: null, selected: null, plot: null, spot: null, project: false });
     focusLand({ district: home.id, kind: "district" });
     void estateQuery.refetch();
@@ -174,19 +195,22 @@ export function CityPage() {
   const mission = missions.find(m => m.key === params.get("mission")) ?? nextMission(missions);
   const completed = data.missions.filter(m => m.state === "completed").length;
   const total = data.missions.filter(m => m.enabled || m.state === "completed").length;
-  function selectDistrict(id: DistrictId) { const p = new URLSearchParams(params); p.set("district", id); p.delete("mission"); setParams(p, {replace:true}); requestFocus(value => value + 1); claim.reset(); }
+  function selectDistrict(id: DistrictId) { const p = new URLSearchParams(params); p.set("district", id); p.delete("mission"); setParams(p, {replace:true}); requestFocus(value => value + 1); claim.reset(); setMissionsOpen(true); }
   function selectMission(key: string) { const p = new URLSearchParams(params); p.set("mission", key); setParams(p, {replace:true}); claim.reset(); }
   const parent = data.missions.find(m => m.key === mission?.prerequisite);
   const actionable = mission && !["locked", "unavailable"].includes(mission.state);
   // В чужом городе — фигура и помощник того оператора, в своём — свои.
   const mascot = data.inspecting ? { gender: data.gender ?? null, name: data.guide_name || DEFAULT_GUIDE } : { gender: user?.gender ?? null, name: guideName(user) };
   const labels = districtLabels(data.districts, data.missions);
+  // Помощник и камера спрашиваются при первом входе; «Позже» откладывает вопрос до следующего визита.
   const needsGuide = !data.inspecting && !!user && (!user.gender || !user.guide_name);
-  // При первом входе в свой город спрашиваем, как двигать камеру, — когда карта уже работает и схему
-  // можно сразу попробовать. До выбора работает «как раньше». В чужом городе не спрашиваем.
+  const askGuide = needsGuide && !later.guide;
+  // Как двигать камеру, спрашиваем, когда карта уже работает и схему можно сразу попробовать. До выбора
+  // работает вращение вокруг города. В чужом городе не спрашиваем.
   const needsControls = !data.inspecting && !!user && !user.city_controls;
   const controls: CityControls = controlsPreview ?? user?.city_controls ?? "orbit";
-  const showControls = !needsGuide && !guideEditing && ((needsControls && mapStatus === "ready") || controlsEditing);
+  const showControls = !askGuide && !guideEditing && ((needsControls && !later.controls && mapStatus === "ready") || controlsEditing);
+  function putOff(card: LaterCard) { postpone(card); setLater(current => ({ ...current, [card]: true })); }
   function closeControls() {
     const fromTools = controlsEditing;
     setControlsEditing(false);
@@ -199,6 +223,17 @@ export function CityPage() {
   }
   const rank = data.level < 2 ? "Новый житель" : data.level < 4 ? "Исследователь" : "Мастер города";
   const level = districtLevel(missions.filter(m => m.state === "completed").length, selected.soon);
+  const districtDone = missions.length > 0 && missions.every(m => m.state === "completed" || !m.enabled);
+  // The mission's main button already leads to the district's tool: the second link to it is left out.
+  const opensTool = !!mission && !selected.soon && selected.id !== "scenarios" && !!actionable && mission.key !== "welcome" && !data.inspecting && !(mission.state === "ready" && data.can_claim);
+  // Today's situations and the trainer's scenarios: the toolbar counts what is still to do.
+  const quests = data.quests?.items ?? [];
+  const assigned = data.inspecting ? [] : (assignments.data ?? []).filter(item => item.assigned);
+  const todo = quests.filter(q => !q.answered).length + assigned.filter(item => !item.completed).length;
+  function openQuest(quest: CityQuest) { answer.reset(); setQuestSlot(quest.slot); if (!quest.answered && department === "support") setQuestFocus({ slot: quest.slot, at: Date.now() }); }
+  // A new operator meets the first mission as soon as the first visit's cards are answered or put off.
+  const welcomeAhead = department === "support" && !data.inspecting && !data.preview && !building && mapStatus !== "loading" && !askGuide && !showControls
+    && data.missions.some(m => m.key === "welcome" && m.state !== "completed" && m.state !== "unavailable");
   const districtPlots = data.plots.filter(p => p.district === selected.id);
   const freePlot = districtPlots.find(p => p.unlocked && !p.item);
   function openPlot(key: string) { build.reset(); setPlotKey(key); }
@@ -227,10 +262,9 @@ export function CityPage() {
       {!data.preview && <div className="city-hud__coins"><span className="city-coin" aria-hidden="true">◈</span><span className="city-hud__stat"><strong>{data.balance.toLocaleString("ru-RU")}</strong><span className="city-hud__label">коинов в кошельке</span></span></div>}
       <nav className="city-hud__links" aria-label="Обучение">
         {user?.role === "admin" && <button type="button" className="city-group-button" data-open={sandboxOn || undefined} aria-pressed={sandboxOn} onClick={toggleSandbox} aria-label={sandboxOn ? "Выйти из тестового города" : "Тестовый город администраторов"} title="Тестовый город: только для администраторов"><span aria-hidden="true">🧪</span><span className="city-hud__wide">Тест</span></button>}
-        {canOpenBuild && !sandboxOn && <button type="button" className="city-group-button" data-open={building ? true : undefined} aria-pressed={!!building} onClick={() => building ? setBuilding(null) : openBuild()} aria-label={mineEstate!.district!.city === department ? "Строить в своём районе" : "Мой участок в другом городе"}><span aria-hidden="true">🏡</span><span className="city-hud__wide">{mineEstate!.district!.city === department ? "Строить" : "Мой участок"}</span></button>}
-        {department === "support" && data.quests && data.quests.items.length > 0 && <button type="button" className="city-group-button" data-open={data.quests.items.some(q => !q.answered) || undefined} onClick={() => { const next = data.quests!.items.find(q => !q.answered) ?? data.quests!.items[0]; answer.reset(); setQuestSlot(next.slot); if (!next.answered) setQuestFocus({ slot: next.slot, at: Date.now() }); }} aria-label={`Задания дня: выполнено ${data.quests.items.filter(q => q.answered).length} из ${data.quests.items.length}`}><span aria-hidden="true">❗</span><span className="city-hud__wide">Задания</span> {data.quests.items.filter(q => q.answered).length}/{data.quests.items.length}</button>}
+        {/* Operators build from the toolbar's «Строить»; staff with land of their own, from here. */}
+        {canOpenBuild && !sandboxOn && user?.role !== "operator" && <button type="button" className="city-group-button" data-open={building ? true : undefined} aria-pressed={!!building} onClick={() => building ? setBuilding(null) : openBuild()} aria-label={mineEstate!.district!.city === department ? "Строить в своём районе" : "Мой участок в другом городе"}><span aria-hidden="true">🏡</span><span className="city-hud__wide">{mineEstate!.district!.city === department ? "Строить" : "Мой участок"}</span></button>}
         {department === "support" && data.group && <button type="button" className="city-group-button" onClick={() => setGroupOpen(true)} aria-label={`Город группы: ${data.group.name}`}><span aria-hidden="true">🏗️</span><span className="city-hud__wide">Группа</span></button>}
-        {department === "support" && !data.inspecting && data.districts.some(d => d.id === "scenarios") && <Link className="city-group-button" to="/training/scenarios/business_park" aria-label="Сценарий: Бизнес через парк"><span aria-hidden="true">🎭</span><span className="city-hud__wide">Сценарии</span></Link>}
         {user?.role !== "operator" && <Link to="/admin/learning/city" aria-label="Управление городом"><span aria-hidden="true">⚙︎</span><span className="city-hud__wide">Управление</span></Link>}
       </nav>
     </header>
@@ -246,18 +280,19 @@ export function CityPage() {
 
     {user?.role === "operator" && !data.inspecting && !building && !sandboxOn && <CityPeekPanel className="city-build-peek" toolbarSlot="build" label="Застройка района" compactLabel="Строить" icon="🏡"><CityBuildEntry mine={mineEstate} loading={estateQuery.isPending} failed={estateQuery.isError} onRetry={() => { void estateQuery.refetch(); }} onBuild={openBuild} /></CityPeekPanel>}
     <div className="city-notes">
-      {(needsGuide || guideEditing) && <CityGuideSetup onClose={needsGuide ? undefined : () => setGuideEditing(false)} />}
-      {showControls && <CityControlsSetup value={controls} onPick={setControlsPreview} onClose={closeControls} cancellable={!needsControls} />}
+      {(askGuide || guideEditing) && <CityGuideSetup onClose={askGuide ? undefined : () => setGuideEditing(false)} onLater={askGuide ? () => putOff("guide") : undefined} />}
+      {showControls && <CityControlsSetup value={controls} onPick={setControlsPreview} onClose={closeControls} cancellable={controlsEditing} onLater={controlsEditing ? undefined : () => { putOff("controls"); closeControls(); }} />}
     </div>
+    <OpenOnce when={welcomeAhead} onOpen={() => setMissionsOpen(true)} />
 
-    {department === "support" && !building && <><CityPeekPanel className="city-mission-peek" toolbarSlot="missions" label={`Миссии · ${selected.name}`} compactLabel="Миссии" icon={labels.find(label => label.id === selected.id)?.icon ?? "📋"} holdOpen={claim.isPending}><aside className="city-mission glass glass--regular" data-expanded="true" aria-label={`Район «${selected.name}»`}>
+    {department === "support" && !building && <><CityPeekPanel className="city-mission-peek" toolbarSlot="missions" label={`Миссии · ${selected.name}`} compactLabel="Миссии" icon={labels.find(label => label.id === selected.id)?.icon ?? "📋"} holdOpen={claim.isPending} open={missionsOpen} onOpenChange={setMissionsOpen}><aside className="city-mission glass glass--regular" data-expanded="true" aria-label={`Район «${selected.name}»`}>
       <div className="city-mission__body" id="city-mission-body" aria-live="polite">
         <div className="city-mission-top"><span className="city-eyebrow">{selected.name}</span><span className="city-state" data-state={mission?.state}>{selected.soon ? "СКОРО" : mission ? MISSION_STATES[mission.state] : "Нет заданий"}</span></div>
-        <div className="city-building-level city-extra" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{selected.soon ? "Район строится и откроется позже" : level < MAX_DISTRICT_LEVEL ? "Каждая пройденная миссия района улучшает здание" : "Максимальный уровень — район стал легендой"}</small></div>
+        <div className="city-building-level city-extra" aria-label={`Уровень здания ${level} из ${MAX_DISTRICT_LEVEL}`}><span>{"★".repeat(level)}<em>{"★".repeat(MAX_DISTRICT_LEVEL - level)}</em></span><strong>Здание: {DISTRICT_LEVEL_NAMES[level - 1]}</strong><small>{selected.soon ? "Район строится и откроется позже" : level === MAX_DISTRICT_LEVEL ? "Максимальный уровень — район стал легендой" : districtDone ? "Все миссии района пройдены — здание достроено" : "Каждая пройденная миссия района улучшает здание"}</small></div>
         {districtPlots.length > 0 && <CityPlotsSummary plots={districtPlots} buildings={data.buildings} canBuild={data.can_build} moved={data.plots_moved} onShow={key => setPlotFocus({ key, at: Date.now() })} onBuild={freePlot && data.can_build ? () => { setPlotFocus({ key: freePlot.key, at: Date.now() }); openPlot(freePlot.key); } : undefined} />}
-        {!data.inspecting && selected.id === "driver" && <button className="city-secondary city-extra" onClick={() => setDriverLaunch(true)}>Открыть автопарк →</button>}
-        {!data.inspecting && selected.id === "crm" && <Link className="city-secondary city-extra" to="/training/work-sites">Открыть CRM · рабочие сайты →</Link>}
-        {!data.inspecting && selected.id === "dispatch" && <Link className="city-secondary city-extra" to="/training/work-sites?site=dispatch">Открыть Диспетчерскую · рабочие сайты →</Link>}
+        {!data.inspecting && !opensTool && selected.id === "driver" && <button className="city-secondary city-extra" onClick={() => setDriverLaunch(true)}>Открыть автопарк →</button>}
+        {!data.inspecting && !opensTool && selected.id === "crm" && <Link className="city-secondary city-extra" to="/training/work-sites">Открыть CRM · рабочие сайты →</Link>}
+        {!data.inspecting && !opensTool && selected.id === "dispatch" && <Link className="city-secondary city-extra" to="/training/work-sites?site=dispatch">Открыть Диспетчерскую · рабочие сайты →</Link>}
         {selected.id === "scenarios" && <p className="city-copy city-extra">Учебные разговоры с водителем и практика в CRM и Диспетчерской. Все действия выполняются в тренажёре. Коины — за первое успешное прохождение.</p>}
         {selected.soon ? <>
           <h2>Новый район. Новые возможности.</h2>
@@ -273,7 +308,7 @@ export function CityPage() {
           <div className="city-guide city-extra">
             {mascot.gender ? <span className="city-guide-avatar" aria-hidden="true">{GUIDE_AVATAR[mascot.gender]}</span> : <PulsarFace />}
             <p><b>{mascot.name}:</b> {guideText(mission.pulsar, mascot.name)}</p>
-            {!data.inspecting && !needsGuide && !guideEditing && !showControls && <button type="button" className="city-guide-edit" onClick={() => setGuideEditing(true)} aria-label="Изменить фигуру и имя помощника" title="Изменить помощника">✎</button>}
+            {!data.inspecting && !askGuide && !guideEditing && !showControls && <button type="button" className="city-guide-edit" onClick={() => setGuideEditing(true)} aria-label="Изменить фигуру и имя помощника" title="Изменить помощника">✎</button>}
           </div>
         </>}
       </div>
@@ -288,7 +323,9 @@ export function CityPage() {
     </aside></CityPeekPanel>
 
     <CitySkills labels={labels} selected={selected.id} onSelect={selectDistrict} /></>}
-    {department === "sales" && !building && <CityPeekPanel className="city-sales-peek" toolbarSlot="missions" label="Отдел продаж · учебные центры" compactLabel="Центры" icon="🏢"><aside className="city-sales-info glass glass--regular"><span className="city-eyebrow">ОТДЕЛ ПРОДАЖ</span><h2>{worldQuery.data?.cities.find(c => c.id === "sales")?.name ?? "ОП"}</h2><p>Учебный кампус у озера. Десять зданий зарезервированы для ресурсов отдела продаж.</p><button className="city-secondary" onClick={() => pickWorld("world")}>Районы и вокзал →</button><div className="city-sales-resources">{SALES_RESOURCES.map((name, i) => <button key={name} title={name} aria-label={name} onClick={() => pickWorld(`sales-resource-${String(i + 1).padStart(2, "0")}`)}>{i + 1}</button>)}</div></aside></CityPeekPanel>}
+    {!building && (quests.length > 0 || assigned.length > 0) && <CityPeekPanel className="city-tasks-peek" toolbarSlot="quests" label={todo ? `Задания: осталось ${todo}` : "Задания: всё выполнено"} compactLabel="Задания" icon={<>❗{todo > 0 && <b className="city-count">{todo}</b>}</>} holdOpen={startAssignment.isPending}>
+      <CityTasks quests={quests} coins={data.quests?.coins ?? 0} assigned={assigned} onQuest={openQuest} onStart={item => startAssignment.mutate(item)} starting={startAssignment.isPending ? startAssignment.variables?.id ?? null : null} error={startAssignment.isError ? startAssignment.error.message : null} />
+    </CityPeekPanel>}
     {worldQuery.data && <CityWorldPanel world={worldQuery.data} current={department} selected={worldSelected} onPick={pickWorld} onClose={() => setWorldSelected(null)} ready={mapStatus === "ready"} onVisit={visit} onTravel={id => { setDestination(id); setWorldAction({ kind: "travel", target: id, at: Date.now() }); }}
       estates={department === "sales" ? salesLand.data : supportLand.data} mine={mineEstate} onMyEstate={canOpenBuild ? openBuild : undefined}
       onOpenProject={district => { setBuilding({ district, area: "public", placing: null, selected: null, plot: null, spot: null, project: true }); focusLand({ district, kind: "public" }); }} />}
@@ -351,6 +388,14 @@ function CityCatalogue({ data, pending, error, onBuild }: { data: CityData; pend
   </div>;
 }
 
+/** Calls `onOpen` the first time `when` holds while the page is open. */
+function OpenOnce({ when, onOpen }: { when: boolean; onOpen: () => void }) {
+  const done = useRef(false), open = useRef(onOpen);
+  open.current = onOpen;
+  useEffect(() => { if (when && !done.current) { done.current = true; open.current(); } }, [when]);
+  return null;
+}
+
 const STAGE_STEPS = ["foundation", "frame", "floors", "done"] as const;
 /** The group's quarters by stage, and the viewer's own points: never another operator's. */
 function CityGroupPanel({ group, own, onShow }: { group: CityGroup; own: boolean; onShow: (key: string) => void }) {
@@ -376,9 +421,6 @@ function CityGroupPanel({ group, own, onShow }: { group: CityGroup; own: boolean
   </div>;
 }
 
-const GIVER_ICONS: Record<CityQuest["giver"], string> = { driver: "🚕", client: "📞", guide: "💡" };
-/** The icon follows who speaks; a question without a speaker takes its place on the map. */
-const speakerIcon = (quest: CityQuest) => /водител/i.test(quest.speaker) ? "🚕" : /клиент|звонящ/i.test(quest.speaker) ? "📞" : GIVER_ICONS[quest.giver];
 /** One daily situation: who asks, what happened, the options; after the answer, the right one and why. */
 function CityQuestCard({ quest, reward, readOnly, pending, error, onAnswer, onNext }: { quest: CityQuest; reward: number; readOnly: boolean; pending: boolean; error: string | null; onAnswer: (choice: number) => void; onNext?: () => void }) {
   return <div className="city-quest">

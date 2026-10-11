@@ -1,4 +1,4 @@
-import { SALES_RESOURCES, type CityWorld, type DepartmentId } from "../../api/cityWorld";
+import type { CityWorld, DepartmentId } from "../../api/cityWorld";
 import type { CityEstates, MyEstate } from "../../api/cityEstate";
 import { CityDistrictSheet } from "./CityDistrictSheet";
 import { CityTravelCard } from "./CityTravelCard";
@@ -7,7 +7,7 @@ import { Sheet, registerSheet } from "../../components/Sheet";
 import { useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import "./world.css";
-import { CityPeekPanel } from "./CityPeekPanel";
+import { CityToolbarButton } from "./CityToolbar";
 
 export function CityWorldPanel({ world, current, selected, onPick, onClose, onTravel, onVisit, ready, estates, mine, onMyEstate, onOpenProject }: {
   world: CityWorld; current: DepartmentId; selected: string | null; onPick: (id: string) => void; onClose: () => void;
@@ -17,12 +17,11 @@ export function CityWorldPanel({ world, current, selected, onPick, onClose, onTr
 }) {
   const here = world.cities.find(c => c.id === current)!;
   const district = here.districts.find(d => d.id === selected);
-  const resourceIndex = selected?.startsWith("sales-resource-") ? Number(selected.slice(-2)) - 1 : -1;
   return <>
-    <CityPeekPanel className="city-world-peek" toolbarSlot="cities" label={`Города · ${here.name}`} compactLabel="Города" icon="🗺️"><button className="city-world-switch glass glass--regular" type="button" onClick={() => onPick("world")} aria-label="Выбрать город"><span aria-hidden="true">◈</span><strong>{here.name}</strong><span>Города ↗</span></button></CityPeekPanel>
-    {selected && <Sheet title={district?.name ?? (resourceIndex >= 0 ? SALES_RESOURCES[resourceIndex] : "Выбери город")} onClose={onClose}>
+    <CityToolbarButton slot="cities" label={`Города · ${here.name}. Выбрать город`} compactLabel="Города" icon="🗺️" onClick={() => onPick("world")} />
+    {selected && <Sheet title={district?.name ?? "Выбери город"} onClose={onClose}>
       {district ? <CityDistrictSheet district={estates?.districts.find(d => d.id === district.id)} team={district} cityName={here.name} mine={mine} canManageAssignments={world.can_edit}
-        onMyEstate={onMyEstate && (() => { onClose(); onMyEstate(); })} onOpenProject={onOpenProject && (() => { onClose(); onOpenProject(district.id); })} /> : resourceIndex >= 0 ? <div className="stack city-world-sheet"><span className="city-world-badge">Зарезервировано</span><h2>{SALES_RESOURCES[resourceIndex]}</h2><p>Место в учебном кампусе отдела продаж. Ресурс откроется после подготовки системы и учебных заданий.</p><p className="secondary">Это здание не заменяет действующие CRM и Диспетчерскую Техподдержки.</p></div> : <CityTravelCard cities={world.cities} current={current} ready={ready}
+        onMyEstate={onMyEstate && (() => { onClose(); onMyEstate(); })} onOpenProject={onOpenProject && (() => { onClose(); onOpenProject(district.id); })} /> : <CityTravelCard cities={world.cities} current={current} ready={ready}
         onTravel={id => { onTravel(id); onClose(); }} onVisit={id => { onVisit(id); onClose(); }}>
         <details className="city-travel-credits"><summary tabIndex={0}>Авторы моделей</summary>
         <p className="secondary small city-world-credit">Здание вокзала — «Gare de BlenderVille», автор loran17 (<a href="https://www.blendswap.com/blend/27438" target="_blank" rel="noreferrer">Blend Swap</a>), лицензия <a href="https://creativecommons.org/licenses/by/3.0/deed.ru" target="_blank" rel="noreferrer">CC BY</a>; упрощено и перекрашено для Puls.</p>

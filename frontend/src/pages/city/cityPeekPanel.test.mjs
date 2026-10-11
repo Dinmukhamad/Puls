@@ -170,7 +170,7 @@ test("panels use stable logical slots so DOM keyboard order matches visual toolb
   new Function("require", "module", "exports", built.outputFiles[0].text)(require, module, module.exports);
   const html = renderToStaticMarkup(React.createElement(module.exports.CityToolbar));
   assert.match(html, /role="toolbar" aria-label="Панели города"/);
-  assert.deepEqual([...html.matchAll(/data-city-panel="([^"]+)"/g)].map(match => match[1]), ["level", "cities", "build", "missions", "skills", "tools"]);
+  assert.deepEqual([...html.matchAll(/data-city-panel="([^"]+)"/g)].map(match => match[1]), ["level", "cities", "build", "missions", "quests", "skills", "tools"]);
 });
 
 test("keyboard focus within survives pointer leave and Escape closes without focus reopening", (t) => {

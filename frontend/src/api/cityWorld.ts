@@ -38,4 +38,3 @@ export const cityWorld = {
   settings: () => request<WorldEditorData>("/api/v1/admin/learning/city/world"),
   save: (json: WorldSaveSettings) => request<WorldEditorData>("/api/v1/admin/learning/city/world", { method: "PUT", json: worldSavePayload(json) }),
 };
-export const SALES_RESOURCES = ["Академия продаж", "CRM отдела продаж", "Телефония", "Продукты и тарифы", "Воронка продаж", "Переговоры", "Документы", "Контроль качества", "База знаний", "Новый ресурс"];

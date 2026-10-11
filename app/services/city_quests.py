@@ -1,9 +1,8 @@
 """Daily situations on the city map: three a day, answered once each, right in the city.
 
-A day's situations repeat questions from materials the operator has already passed (review of what
-was learned, so a new test's answers are never given away); a small built-in set of work situations
-fills in when there are too few. The question is frozen when the day is dealt, the answer is checked
-here, and a right answer pays a few coins once, with a key that cannot pay twice.
+A day's situations come from the set of work situations the head edits (a built-in set until the
+first save). The question is frozen when the day is dealt, the answer is checked here, and a right
+answer pays a few coins once, with a key that cannot pay twice.
 """
 
 import random
@@ -19,7 +18,6 @@ from app.core.errors import ConflictError, DomainError, NotFoundError, Permissio
 from app.db.base import utcnow
 from app.models.city import CityQuest, CitySituations
 from app.models.enums import Role, TxType
-from app.models.learning import LearningAward, LearningContent
 from app.services.coins import post_transaction
 from app.services.learning import lock_learner
 from app.services.rules import write_audit
@@ -215,37 +213,10 @@ async def save_situations(session, actor, body):
     return {"revision": revision, "items": items}
 
 
-async def review_questions(session, user_id):
-    """Questions from the published tests and missions the operator has already passed."""
-    passed = select(LearningAward.content_id).where(LearningAward.user_id == user_id)
-    contents = await session.scalars(
-        select(LearningContent).where(
-            LearningContent.id.in_(passed),
-            LearningContent.status == "published",
-            LearningContent.kind != "simulator",
-        )
-    )
-    return [
-        {
-            "source": "review",
-            "ref": f"content-{content.id}-{content.revision}-{i}",
-            "title": content.title,
-            "speaker": step.get("speaker") or "",
-            "text": step["text"],
-            "options": list(step["options"]),
-            "correct": step["correct"],
-            "explanation": step.get("explanation") or "",
-        }
-        for content in contents
-        for i, step in enumerate(content.steps or [])
-    ]
-
-
-def deal(user_id, day, review, bank):
-    """The day's questions: review first, the bank for the rest; the same for the same day."""
+def deal(user_id, day, bank):
+    """The day's questions from the bank; the same for the same day."""
     rng = random.Random(f"{user_id}:{day.isoformat()}")
-    picks = rng.sample(review, min(SLOTS, len(review)))
-    picks += rng.sample(bank, min(len(bank), SLOTS - len(picks)))
+    picks = rng.sample(bank, min(len(bank), SLOTS))
     # Drivers' questions wait at the depot's taxi, callers' at the CRM centre, others at the guide.
     wants = ("водител", "клиент")
     slots = [None] * SLOTS
@@ -306,7 +277,7 @@ async def quests(session, user, *, inspecting=False):
         rows = await rows_for(session, user.id, day)
         if not rows:
             bank = bank_questions((await situations(session))["items"])
-            picks = deal(user.id, day, await review_questions(session, user.id), bank)
+            picks = deal(user.id, day, bank)
             rows = [
                 CityQuest(user_id=user.id, day=day, slot=slot, snapshot=deepcopy(q))
                 for slot, q in enumerate(picks)

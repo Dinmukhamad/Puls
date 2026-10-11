@@ -24,9 +24,9 @@ function MouseArt({ scheme }: { scheme: CityControls }) {
  * сразу работает — её можно попробовать, не закрывая карточку. Выбор хранится в профиле: тот же
  * на любом компьютере. Карточка управляемая: `value` — схема, которая сейчас работает на карте,
  * `onPick` её меняет (null — вернуть сохранённую); `cancellable` — открыта кнопкой на панели
- * карты, тогда есть «Отмена» и Escape.
+ * карты, тогда есть «Отмена» и Escape; `onLater` — при первом входе, вопрос можно отложить.
  */
-export function CityControlsSetup({ value, onPick, onClose, cancellable = false }: { value: CityControls; onPick: (scheme: CityControls | null) => void; onClose: () => void; cancellable?: boolean }) {
+export function CityControlsSetup({ value, onPick, onClose, cancellable = false, onLater }: { value: CityControls; onPick: (scheme: CityControls | null) => void; onClose: () => void; cancellable?: boolean; onLater?: () => void }) {
   const { user, applyProfile } = useAuth();
   const group = useRef<HTMLDivElement>(null), done = useRef<HTMLButtonElement>(null);
   const save = useMutation({
@@ -42,6 +42,7 @@ export function CityControlsSetup({ value, onPick, onClose, cancellable = false 
   // Пока идёт сохранение, выбор заблокирован: ответ сервера не должен перебить новое нажатие.
   function pick(scheme: CityControls) { if (busy) return; onPick(scheme); save.reset(); }
   function cancel() { if (busy) return; onPick(null); onClose(); }
+  function putOff() { if (busy || !onLater) return; onPick(null); onLater(); }
   function keys(event: KeyboardEvent<HTMLElement>) {
     if (event.key === "Escape" && cancellable) { event.preventDefault(); cancel(); return; }
     const step = ({ ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 } as Record<string, number>)[event.key];
@@ -77,6 +78,7 @@ export function CityControlsSetup({ value, onPick, onClose, cancellable = false 
     <div className="city-guide-setup__actions">
       <button type="button" className="city-action" ref={done} disabled={busy} onClick={() => save.mutate(value)}>{busy ? "Сохраняем…" : "Готово"}</button>
       {cancellable && <button type="button" className="city-secondary" disabled={busy} onClick={cancel}>Отмена</button>}
+      {onLater && <button type="button" className="city-secondary" disabled={busy} onClick={putOff}>Позже</button>}
     </div>
   </section>;
 }

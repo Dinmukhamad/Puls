@@ -3,7 +3,7 @@ import type { CityControls } from "../../api/types";
 /** Что делает каждая кнопка мыши и палец в двух схемах камеры (city3d/engine/camera.ts mouseGesture). */
 export const CONTROL_SCHEMES: Record<CityControls, { title: string; note: string; left: string; right: string; wheel: string; touch: string; hint: string }> = {
   orbit: {
-    title: "Как раньше", note: "камера вращается вокруг города",
+    title: "Вращение", note: "камера вращается вокруг города",
     left: "вращать и наклонять", right: "двигать город", wheel: "— масштаб, зажать и тянуть — тоже",
     touch: "Один палец — вращать, два — масштаб и сдвиг",
     hint: "Тяни — вращай · правая кнопка — двигай город · колесо — масштаб · WASD, Q/E — с клавиатуры",

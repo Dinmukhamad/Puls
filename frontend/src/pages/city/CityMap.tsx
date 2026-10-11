@@ -164,7 +164,7 @@ export function CityMap({ department = "support", departmentWorld, onWorldPick, 
   return <section className={`city-world${failed ? " city-world--fallback" : ""}${live ? " is-ready" : ""}`} aria-label="Карта твоего города">
     <div ref={mount} className="city-mount" style={{ position: "absolute", inset: 0 }} onKeyDown={key} />
     {!failed && !ready && <div className="city-loading" role="status"><span>{progress < .3 ? "Запускаем карту…" : progress < .75 ? "Загружаем здания…" : "Подготавливаем город…"} {Math.round(progress * 100)}%</span></div>}
-    {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>Не удалось загрузить карту города</strong><small>Попробуй загрузить карту ещё раз. Миссии доступны на панели навыков.</small>{onRetry && <button type="button" className="city-secondary" onClick={() => reloadRequired ? window.location.reload() : onRetry()}>Повторить загрузку карты</button>}</div>}
+    {failed && <div className="city-fallback" role="status"><span aria-hidden="true">🏙️</span><strong>Не удалось загрузить карту города</strong><small>Попробуй загрузить карту ещё раз. Миссии и задания — на панели сверху.</small>{onRetry && <button type="button" className="city-secondary" onClick={() => reloadRequired ? window.location.reload() : onRetry()}>Повторить загрузку карты</button>}</div>}
     {live && <span className="city-map-hint" key={controls}>{CONTROL_SCHEMES[controls].hint}</span>}
     {!failed && <CityPeekPanel label="Управление картой" compactLabel="Карта" toolbarSlot="tools" icon={<span aria-hidden="true">⚙</span>} className="city-map-peek">
       <div className="city-map-tools glass glass--regular" role="toolbar" aria-label="Управление картой" aria-orientation="horizontal">
